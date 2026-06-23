@@ -2,8 +2,8 @@
 //!
 //! It owns the device-facing memory (descriptor, input/output offsets, state block, block array, all
 //! talc-allocated so they free with the node). Per quantum it fills the block array (so the effect can
-//! sync to tempo), calls the device's `process` wasm-to-wasm (zero copy) to transform its single input
-//! buffer into the engine-allocated mono output, and fans that to its stereo output for the next node or
+//! sync to tempo), calls the device's `process` wasm-to-wasm (zero copy) to transform its stereo input
+//! buffers into the engine-allocated stereo output, and copies that to its output for the next node or
 //! the bus. The host owns ordering: a `register_edge(upstream, this)` keeps the input fresh. When the
 //! effect has an automated parameter it pulls the global update clock (Route D) through `PULL`, so its DSP
 //! splits each block at the clock and refreshes parameters; with no automation it pulls nothing.
@@ -22,10 +22,10 @@ use transport::transport::RENDER_QUANTUM;
 use crate::param_automation::{ParamHandle, ParamSink};
 use crate::{call_device_process, DeviceReg, PULL};
 
-/// A graph node that runs an audio-EFFECT device after an upstream node (Route B). It reads its single
-/// input buffer (the upstream's mono output, taken from its `left` channel) through the device, into the
-/// engine-allocated mono output, then fans that to its stereo output for the next node / the bus. The host
-/// owns ordering: a `register_edge(upstream, this)` guarantees the input buffer is fresh when this runs.
+/// A graph node that runs an audio-EFFECT device after an upstream node (Route B). It reads the upstream's
+/// stereo output (both channels) through the device, into the engine-allocated stereo output, then copies
+/// that to its output for the next node / the bus. The host owns ordering: a `register_edge(upstream, this)`
+/// guarantees the input buffer is fresh when this runs.
 /// Pulls the global update clock through `PULL` when it has automation. All device memory is talc-allocated.
 pub(crate) struct PluginAudioEffect {
     process_index: u32,

@@ -33,7 +33,7 @@ type DeviceExports = {
     // calls `parameter_changed` to push a resolved value (initial / edit / automation). `kind` tags how the
     // f32 `value` is read (uniform 0..1 to map, or a real int / float / bool field value). Engine calls these
     // wasm-to-wasm through the shared table; JS only installs the function pointers, never invokes them.
-    init?: (statePtr: number) => void
+    init?: (statePtr: number, sampleRate: number) => void
     parameter_changed?: (statePtr: number, id: number, kind: number, value: number) => void
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void

@@ -46,5 +46,24 @@ RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-zeitgeist 
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-tidal     --release --target "$TARGET" -Zbuild-std=core
 cargo build -p sine --release --target "$TARGET"
 
+MODULES="engine device_sine device_saw device_lowpass device_transpose device_arp device_zeitgeist device_tidal sine"
+
+# Size-optimise each module with binaryen's wasm-opt (Homebrew: `brew install binaryen`). GUARDED: if it is
+# not installed the build still works, just larger. The devices are PIC side modules (a `dylink.0` section,
+# imported PIC globals, a `__wasm_apply_data_relocs` export); wasm-opt understands side modules and preserves
+# all of that. The memory is SHARED (no atomic ops), so it needs --enable-threads, plus Rust's bulk-memory /
+# mutable-globals; a feature mismatch makes wasm-opt fail loudly (a safe, build-time error). After enabling
+# this, verify the devices still load and play in the browser.
+if command -v wasm-opt >/dev/null 2>&1; then
+  for module in $MODULES; do
+    wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-mutable-globals \
+      "$OUT/$module.wasm" -o "$OUT/$module.wasm.opt"
+    mv "$OUT/$module.wasm.opt" "$OUT/$module.wasm"
+  done
+  echo "wasm-opt: optimised $MODULES"
+else
+  echo "wasm-opt not found (brew install binaryen) — shipping unoptimised modules"
+fi
+
 cp "$OUT/engine.wasm" "$OUT/device_sine.wasm" "$OUT/device_saw.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/device_arp.wasm" "$OUT/device_zeitgeist.wasm" "$OUT/device_tidal.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
 echo "built: engine.wasm + device_sine/saw/lowpass/transpose/arp/zeitgeist/tidal + sine"

@@ -57,7 +57,8 @@ pub struct Lowpass;
 impl AudioEffect for Lowpass {
     type State = LowpassState;
 
-    fn init(state: &mut LowpassState) {
+    fn init(state: &mut LowpassState, sample_rate: f32) {
+        state.sample_rate = sample_rate; // stable for the device's life
         state.cutoff_id = abi::bind_parameter(&CUTOFF_FIELD);
         state.resonance_id = abi::bind_parameter(&RESONANCE_FIELD);
     }
@@ -114,14 +115,14 @@ pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<LowpassState>::from_descriptor(desc_ptr) };
-    ports.state.sample_rate = ports.sample_rate; // stash the device's rate before the SDK dispatches
     abi::render_effect::<Lowpass>(ports);
 }
 
-/// Bind this device's parameters with the host (it records their field-paths and returns an id each).
+/// Boot hook: bind this device's parameters with the host (it records their field-paths and returns an id
+/// each) and stash the (stable) sample rate.
 #[no_mangle]
-pub extern "C" fn init(state_ptr: u32) {
-    unsafe { abi::with_state(state_ptr, <Lowpass as AudioEffect>::init) }
+pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <Lowpass as AudioEffect>::init(state, sample_rate)) }
 }
 
 /// Apply a parameter value the host resolved (initial / edit / automation), by the id `init` got back. The

@@ -1,7 +1,7 @@
 //! The sine instrument as a runtime-loadable device plugin: its own `.wasm`, sharing the engine's
 //! linear memory, called wasm-to-wasm via the `abi` descriptor (`process(desc_ptr)`). Heap-free — its
 //! per-voice state lives in the engine-assigned state block (a fixed voice array), so the engine owns
-//! all memory. Mono output (the engine fans it to stereo). DSP is safe Rust over the `abi` shim.
+//! all memory. Stereo output, each mono voice written to both channels. DSP is safe Rust over the `abi` shim.
 //!
 //! Exports: `init(sample_rate)`, `state_size()` (bytes the engine must allocate, zeroed, for the state
 //! block), `process(desc_ptr)`. The note events arrive in the descriptor already resolved to sample
@@ -13,7 +13,7 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{EventRecord, Ports, EVENT_NOTE_ON};
+use abi::{Block, BlockFlags, EventRecord, Ports, EVENT_NOTE_ON};
 use dsp::adsr::Adsr;
 use dsp::{fast_sin, midi_to_hz, PI};
 
@@ -81,7 +81,11 @@ pub struct Synth;
 impl abi::Instrument for Synth {
     type State = SynthState;
 
-    fn process_audio(state: &mut SynthState, output: [&mut [f32]; 2]) {
+    fn init(state: &mut SynthState, sample_rate: f32) {
+        state.sample_rate = sample_rate; // stable for the device's life; voices read it on note-on
+    }
+
+    fn process_audio(state: &mut SynthState, output: [&mut [f32]; 2], _block: &Block) {
         let [out_left, out_right] = output;
         for voice in state.voices.iter_mut() {
             if voice.active != 0 {
@@ -114,7 +118,7 @@ impl abi::Instrument for Synth {
     }
 }
 
-/// Host-independent entry for tests: clear the (mono) output, dispatch the supplied events through the
+/// Host-independent entry for tests: clear the stereo output, dispatch the supplied events through the
 /// SDK template, and run the post-pass. The wasm `process` path uses [`abi::render_instrument`] instead,
 /// which adds the event pull.
 pub fn render(state: &mut SynthState, events: &[EventRecord], out_left: &mut [f32], out_right: &mut [f32], sample_rate: f32) {
@@ -126,7 +130,9 @@ pub fn render(state: &mut SynthState, events: &[EventRecord], out_left: &mut [f3
     for sample in out_right.iter_mut() {
         *sample = 0.0;
     }
-    abi::dispatch_range::<Synth>(state, [&mut *out_left, &mut *out_right], events);
+    // One block spanning the whole buffer (the engine supplies real blocks in `process`).
+    let block = Block {index: 0, flags: BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: out_left.len() as u32, bpm: 120.0};
+    abi::dispatch_range::<Synth>(state, [&mut *out_left, &mut *out_right], events, &block);
     Synth::finish(state, [out_left, out_right]);
 }
 
@@ -149,6 +155,11 @@ pub extern "C" fn kind() -> u32 {
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<SynthState>::from_descriptor(desc_ptr) };
-    ports.state.sample_rate = ports.sample_rate; // stash the device's rate before the SDK dispatches
     abi::render_instrument::<Synth>(ports);
+}
+
+/// Boot hook: the engine calls this once when the device is wired, handing it the (stable) sample rate.
+#[no_mangle]
+pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <Synth as abi::Instrument>::init(state, sample_rate)) }
 }

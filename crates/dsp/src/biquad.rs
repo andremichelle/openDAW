@@ -4,8 +4,7 @@
 //! peaking `frequency`) is a NORMALISED frequency `freq / sample_rate`, so `0.5` is Nyquist — exactly the TS
 //! `unitValue` convention.
 //!
-//! Not ported: `ModulatedBiquad` (a per-sample LUT modulator; the engine drives the cutoff per clock event
-//! instead) and `BiquadCoeff.getFrequencyResponse` (a UI analysis helper, not on the audio path).
+//! Not ported: `BiquadCoeff.getFrequencyResponse` (a UI analysis helper, not on the audio path).
 
 use core::f64::consts::TAU;
 use math::clamp;
@@ -322,6 +321,14 @@ impl BiquadStack {
         self.order = value;
         self.reset();
     }
+
+    /// Cascade the active sections over `buffer[from..to]` IN PLACE with one shared `coeff` (order 0 leaves
+    /// the buffer untouched). Used by [`ModulatedBiquad`], which feeds a run of same-cutoff samples.
+    pub fn process_in_place(&mut self, coeff: &BiquadCoeff, buffer: &mut [f32], from: usize, to: usize) {
+        for section in &mut self.stack[..self.order] {
+            section.process_in_place(coeff, buffer, from, to);
+        }
+    }
 }
 
 impl BiquadProcessor for BiquadStack {
@@ -349,6 +356,64 @@ impl BiquadProcessor for BiquadStack {
             value = section.process_frame(coeff, value);
         }
         value
+    }
+}
+
+/// The number of exponential frequency steps the modulated cutoff is quantised to (mirrors the TS LUT size).
+const MODULATION_STEPS: i32 = 512;
+
+/// A low-pass biquad whose cutoff is MODULATED per sample (filter envelope, LFO, keyboard tracking) — a
+/// heap-free port of lib-dsp `ModulatedBiquad`. The cutoff arrives as a UNIT value (0..1), is quantised to
+/// [`MODULATION_STEPS`] steps mapped EXPONENTIALLY onto `[min_cutoff, max_cutoff]`, and the coefficients are
+/// recomputed only when the quantised step changes — so a smoothly-moving cutoff costs a handful of updates
+/// per block, not one per sample. `order` cascades that many sections (shared Q). Unlike the TS there is no
+/// precomputed frequency table (the frequency is computed on each step change), so the filter is valid when
+/// zeroed and needs no constructor.
+pub struct ModulatedBiquad {
+    stack: BiquadStack,
+    coeff: BiquadCoeff,
+    last_index: i32,
+    coeff_valid: bool
+}
+
+impl ModulatedBiquad {
+    pub fn new() -> Self {
+        Self {stack: BiquadStack::new(1), coeff: BiquadCoeff::new(), last_index: 0, coeff_valid: false}
+    }
+
+    /// Filter `buffer[from..to]` in place. `cutoffs[i]` is the unit cutoff (0..1) for sample `i`, mapped
+    /// exponentially onto `[min_cutoff, max_cutoff]` Hz at `sample_rate`; `resonance` is the shared Q; `order`
+    /// (>= 1) is the number of cascaded sections.
+    #[allow(clippy::too_many_arguments)]
+    pub fn process(&mut self, buffer: &mut [f32], cutoffs: &[f32], resonance: f64, order: usize,
+                   min_cutoff: f64, max_cutoff: f64, sample_rate: f32, from: usize, to: usize) {
+        self.stack.set_order(order);
+        let inv_sample_rate = 1.0 / sample_rate as f64;
+        let log_ratio = libm::log(max_cutoff / min_cutoff);
+        let last = (MODULATION_STEPS - 1) as f32;
+        let index_at = |sample: usize| (clamp(cutoffs[sample], 0.0, 1.0) * last) as i32;
+        let mut start = from;
+        while start < to {
+            let index = index_at(start);
+            if !self.coeff_valid || index != self.last_index {
+                let frequency = min_cutoff * libm::exp(index as f64 / last as f64 * log_ratio);
+                self.coeff.set_lowpass_params(frequency * inv_sample_rate, resonance);
+                self.last_index = index;
+                self.coeff_valid = true;
+            }
+            // extend the run while the quantised cutoff (hence the coefficients) stays the same.
+            let mut end = start + 1;
+            while end < to && index_at(end) == index {
+                end += 1;
+            }
+            self.stack.process_in_place(&self.coeff, buffer, start, end);
+            start = end;
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.stack.reset();
+        self.coeff_valid = false;
     }
 }
 
@@ -426,5 +491,50 @@ mod tests {
         let mut stack = BiquadStack::new(2);
         let two = run(&mut stack, &coeff, &tone);
         assert!(energy(&two[1024..]) < energy(&one[1024..]), "the 2-section stack attenuates more");
+    }
+
+    // The modulated biquad maps a UNIT cutoff (0..1) exponentially onto [20, 20000] Hz at 48 kHz.
+    const MOD_SR: f32 = 48_000.0;
+    const MOD_MIN: f64 = 20.0;
+    const MOD_MAX: f64 = 20_000.0;
+
+    #[test]
+    fn modulated_low_cutoff_attenuates_more_than_high() {
+        let input = nyquist(2048);
+        let (mut low, mut high) = (input.clone(), input.clone());
+        let cut_low = vec![0.1f32; 2048];
+        let cut_high = vec![0.9f32; 2048];
+        ModulatedBiquad::new().process(&mut low, &cut_low, BUTTERWORTH_Q, 1, MOD_MIN, MOD_MAX, MOD_SR, 0, 2048);
+        ModulatedBiquad::new().process(&mut high, &cut_high, BUTTERWORTH_Q, 1, MOD_MIN, MOD_MAX, MOD_SR, 0, 2048);
+        assert!(energy(&high) > energy(&low) * 2.0, "a higher cutoff passes more of the Nyquist tone");
+    }
+
+    #[test]
+    fn modulated_higher_order_is_steeper() {
+        let input = nyquist(2048);
+        let (mut order1, mut order4) = (input.clone(), input.clone());
+        let cut = vec![0.3f32; 2048];
+        ModulatedBiquad::new().process(&mut order1, &cut, BUTTERWORTH_Q, 1, MOD_MIN, MOD_MAX, MOD_SR, 0, 2048);
+        ModulatedBiquad::new().process(&mut order4, &cut, BUTTERWORTH_Q, 4, MOD_MIN, MOD_MAX, MOD_SR, 0, 2048);
+        assert!(energy(&order4) < energy(&order1), "more cascaded sections attenuate the stop-band more");
+    }
+
+    #[test]
+    fn a_constant_cutoff_filters_steadily() {
+        let input = nyquist(512);
+        let mut buffer = input.clone();
+        let cut = vec![0.5f32; 512];
+        ModulatedBiquad::new().process(&mut buffer, &cut, BUTTERWORTH_Q, 1, MOD_MIN, MOD_MAX, MOD_SR, 0, 512);
+        assert!(energy(&buffer) < energy(&input), "the steady low-pass attenuates the Nyquist tone");
+    }
+
+    #[test]
+    fn a_swept_cutoff_stays_bounded() {
+        // A cutoff sweeping 0 -> 1 crosses many quantisation steps, recomputing coefficients along the way.
+        let input = nyquist(512);
+        let mut buffer = input.clone();
+        let cut: Vec<f32> = (0..512).map(|index| index as f32 / 511.0).collect();
+        ModulatedBiquad::new().process(&mut buffer, &cut, BUTTERWORTH_Q, 2, MOD_MIN, MOD_MAX, MOD_SR, 0, 512);
+        assert!(buffer.iter().all(|sample| sample.abs() < 4.0), "stays finite across the sweep");
     }
 }

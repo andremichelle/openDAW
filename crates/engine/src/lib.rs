@@ -83,19 +83,20 @@ fn call_device_process_events(process_index: u32, from: f64, to: f64, flags: u32
 #[cfg(not(target_family = "wasm"))]
 fn call_device_process_events(_process_index: u32, _from: f64, _to: f64, _flags: u32, _state_ptr: u32, _out_ptr: u32, _max: u32) -> u32 { 0 }
 
-// Call a device's `init(state_ptr)` export (it binds its parameters via `host_bind_parameter`). Same
-// table-index-is-fn-pointer trick. Called once when the device is wired, NOT during render.
+// Call a device's `init(state_ptr, sample_rate)` export (it binds its parameters via `host_bind_parameter`
+// and learns the engine's sample rate, stable for its life). Same table-index-is-fn-pointer trick. Called
+// once when the device is wired, NOT during render.
 #[cfg(target_family = "wasm")]
 #[inline]
-fn call_device_init(init_index: u32, state_ptr: u32) {
+fn call_device_init(init_index: u32, state_ptr: u32, sample_rate: f32) {
     if init_index == 0 {
-        return; // the device exports no `init` (it has no parameters); index 0 is the "none" sentinel
+        return; // the device exports no `init`; index 0 is the "none" sentinel
     }
-    let init: extern "C" fn(u32) = unsafe { core::mem::transmute(init_index as usize) };
-    init(state_ptr);
+    let init: extern "C" fn(u32, f32) = unsafe { core::mem::transmute(init_index as usize) };
+    init(state_ptr, sample_rate);
 }
 #[cfg(not(target_family = "wasm"))]
-fn call_device_init(_init_index: u32, _state_ptr: u32) {}
+fn call_device_init(_init_index: u32, _state_ptr: u32, _sample_rate: f32) {}
 
 // Call a device's `parameter_changed(state_ptr, id, value)` export to push a resolved parameter value. The
 // engine calls this at build / edit time (never during the device's `process`, so it never aliases the

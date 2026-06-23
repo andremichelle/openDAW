@@ -45,8 +45,8 @@ pub struct Transpose;
 impl MidiEffect for Transpose {
     type State = TransposeState;
 
-    fn init(state: &mut TransposeState) {
-        state.semitone_id = abi::bind_parameter(&SEMITONE_FIELD);
+    fn init(state: &mut TransposeState, _sample_rate: f32) {
+        state.semitone_id = abi::bind_parameter(&SEMITONE_FIELD); // a MIDI fx: no audio, the rate is unused
     }
 
     fn parameter_changed(state: &mut TransposeState, id: u32, value: ParamValue) {
@@ -98,10 +98,11 @@ pub extern "C" fn process_events(from: f64, to: f64, flags: u32, state_ptr: u32,
     abi::render_midi_effect::<Transpose>(from, to, flags, state_ptr, out_ptr, max)
 }
 
-/// Bind this device's semitone parameter with the host (it records the field-path, returns the id).
+/// Boot hook: bind this device's semitone parameter with the host (it records the field-path, returns the
+/// id). The `sample_rate` is unused (a MIDI fx produces no audio), but the export signature is uniform.
 #[no_mangle]
-pub extern "C" fn init(state_ptr: u32) {
-    unsafe { abi::with_state(state_ptr, <Transpose as MidiEffect>::init) }
+pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <Transpose as MidiEffect>::init(state, sample_rate)) }
 }
 
 /// Apply a semitone value the host resolved (initial / edit / automation), by the id `init` got back. The

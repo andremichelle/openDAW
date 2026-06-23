@@ -13,7 +13,7 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{EventRecord, Ports, EVENT_NOTE_ON};
+use abi::{Block, EventRecord, Ports, EVENT_NOTE_ON};
 use dsp::adsr::Adsr;
 use dsp::{midi_to_hz, PI};
 
@@ -96,7 +96,11 @@ pub struct Synth;
 impl abi::Instrument for Synth {
     type State = SynthState;
 
-    fn process_audio(state: &mut SynthState, output: [&mut [f32]; 2]) {
+    fn init(state: &mut SynthState, sample_rate: f32) {
+        state.sample_rate = sample_rate; // stable for the device's life (voices + the delay length read it)
+    }
+
+    fn process_audio(state: &mut SynthState, output: [&mut [f32]; 2], _block: &Block) {
         let [out_left, out_right] = output;
         for voice in state.voices.iter_mut() {
             if voice.active != 0 {
@@ -167,6 +171,11 @@ pub extern "C" fn kind() -> u32 {
 #[no_mangle]
 pub extern "C" fn process(desc_ptr: u32) {
     let ports = unsafe { Ports::<SynthState>::from_descriptor(desc_ptr) };
-    ports.state.sample_rate = ports.sample_rate; // stash the device's rate before the SDK dispatches
     abi::render_instrument::<Synth>(ports);
+}
+
+/// Boot hook: the engine calls this once when the device is wired, handing it the (stable) sample rate.
+#[no_mangle]
+pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <Synth as abi::Instrument>::init(state, sample_rate)) }
 }

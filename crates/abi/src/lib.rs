@@ -428,15 +428,17 @@ impl<'a, S> Ports<'a, S> {
 pub trait Instrument {
     type State;
     /// Render the active state additively into the stereo `output` (`[left, right]`) for one inter-event
-    /// sub-chunk; a mono instrument writes the same samples to both. The sample rate is the device's own (it
-    /// stashed `Ports::sample_rate` in `state`), never a per-call argument.
-    fn process_audio(state: &mut Self::State, output: [&mut [f32]; 2]);
+    /// sub-chunk; a mono instrument writes the same samples to both. `block` is THIS chunk's block (like the
+    /// audio effect's): `bpm` for tempo (a voice's glide), `p0`/`p1` the chunk's pulse range, `flags` carried
+    /// (one-shot flags cleared after the first chunk), and `s0`/`s1` rebased to `0`/`len` to match the slice.
+    /// The sample rate is the device's own (it stashed `Ports::sample_rate` in `state`), never a per-call argument.
+    fn process_audio(state: &mut Self::State, output: [&mut [f32]; 2], block: &Block);
     /// Apply one note event (on / off) at its sample offset.
     fn handle_event(state: &mut Self::State, event: &EventRecord);
     /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
-    /// returned ids in `state`. Called once when the device is wired. Default: nothing (no params).
-    fn init(state: &mut Self::State) {
-        let _ = state;
+    /// returned ids in `state`. Called once when the device is wired, also receiving the engine's `sample_rate` (stable for the device's life; stash it if the DSP needs it). Default: nothing (no params).
+    fn init(state: &mut Self::State, sample_rate: f32) {
+        let _ = (state, sample_rate);
     }
     /// Apply a parameter's new typed `value` for `id` (the value `bind_parameter` returned), storing it in
     /// `state`. `value` is a [`ParamValue`]: `Unit` is the uniform `0..1` automation value to MAP to the
@@ -451,19 +453,28 @@ pub trait Instrument {
     }
 }
 
-/// Fragment `output` at the (offset-sorted, output-relative) `events` and dispatch: `process_audio` for
-/// each chunk between events, `handle_event` at each offset. Host-independent (events are supplied), so a
-/// device's DSP is unit-testable without the engine. Does not clear `output` or run `finish`.
+/// Dispatch ONE block's `events` (offset-sorted, within `[block.s0, block.s1)`) over the stereo `output`:
+/// `process_audio` for each chunk between events, `handle_event` (or a Route-D param pull) at each offset.
+/// Each chunk gets a cloned `block` with `s0`/`s1` rebased to `0`/`len`, `p0`/`p1` the chunk's pulse range,
+/// and `flags` cleared after the first chunk. Host-independent (events are supplied), so a device's DSP is
+/// unit-testable without the engine. Does not clear `output` or run `finish`.
 #[inline]
-pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 2], events: &[EventRecord]) {
+pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 2], events: &[EventRecord], block: &Block) {
     let [out_left, out_right] = output;
     let frames = out_left.len();
-    let mut cursor = 0;
+    let s0 = (block.s0 as usize).min(frames);
+    let s1 = (block.s1 as usize).min(frames);
+    let mut cursor = s0;
+    let mut chunk_p0 = block.p0; // the pulse position at `cursor`
+    let mut flags = block.flags; // one-shot flags belong to the first chunk only
     for event in events {
-        let offset = (event.offset as usize).min(frames);
+        let offset = (event.offset as usize).clamp(s0, s1);
         if offset > cursor {
-            I::process_audio(state, [&mut out_left[cursor..offset], &mut out_right[cursor..offset]]);
+            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
+            I::process_audio(state, [&mut out_left[cursor..offset], &mut out_right[cursor..offset]], &sub);
             cursor = offset;
+            chunk_p0 = event.position;
+            flags.clear_event_flags();
         }
         // A clock event (Route D) pulls the parameters changed at this position; a note event voices.
         if event.kind == EVENT_PARAM {
@@ -472,8 +483,9 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
             I::handle_event(state, event);
         }
     }
-    if cursor < frames {
-        I::process_audio(state, [&mut out_left[cursor..frames], &mut out_right[cursor..frames]]);
+    if cursor < s1 {
+        let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
+        I::process_audio(state, [&mut out_left[cursor..s1], &mut out_right[cursor..s1]], &sub);
     }
 }
 
@@ -501,31 +513,24 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
     for sample in out_right.iter_mut() {
         *sample = 0.0;
     }
-    let mut count = 0;
+    // Go block by block (like `render_effect`), so each chunk's `process_audio` gets its own block. Per block:
+    // PULL its notes (Route A) plus a param-update marker at each update position (Route D — INCLUSIVE seed,
+    // STRICT advance, none when un-automated), resolve sample offsets, sort (off -> param -> on at a tie),
+    // and dispatch. Then the once-per-quantum `finish`.
     for block in blocks {
-        if count >= event_scratch.len() {
-            break;
-        }
-        let pulled = pull_events(block.p0, block.p1, block.flags.0, &mut event_scratch[count..]);
-        count += pulled;
-        // Param-update markers at the engine's update positions in this block (none when the device has no
-        // automation — `first_update_position` returns INFINITY). The seed is INCLUSIVE (a grid point on the
-        // block start fires); the loop then advances STRICTLY. They carry the pulse position; the offset is
-        // resolved with the notes below.
+        let mut count = pull_events(block.p0, block.p1, block.flags.0, event_scratch);
         let mut position = first_update_position(block.p0);
         while position < block.p1 && count < event_scratch.len() {
             event_scratch[count] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
             count += 1;
             position = next_update_position(position);
         }
+        for record in &mut event_scratch[..count] {
+            record.offset = pulse_to_offset(record.position);
+        }
+        event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
+        dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count], block);
     }
-    // The pull chain works in pulse positions; resolve each record's sample offset, then sort the merged
-    // notes + markers into offset order (off -> param -> on at a tie) for `dispatch_range`.
-    for record in &mut event_scratch[..count] {
-        record.offset = pulse_to_offset(record.position);
-    }
-    event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
-    dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count]);
     I::finish(state, [out_left, out_right]);
 }
 
@@ -543,9 +548,9 @@ pub trait AudioEffect {
     /// own (it stashed `Ports::sample_rate`).
     fn process_audio(state: &mut Self::State, input: [&[f32]; 2], output: [&mut [f32]; 2], block: &Block);
     /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
-    /// returned ids in `state`. Called once when the device is wired. Default: nothing (no params).
-    fn init(state: &mut Self::State) {
-        let _ = state;
+    /// returned ids in `state`. Called once when the device is wired, also receiving the engine's `sample_rate` (stable for the device's life; stash it if the DSP needs it). Default: nothing (no params).
+    fn init(state: &mut Self::State, sample_rate: f32) {
+        let _ = (state, sample_rate);
     }
     /// Apply a parameter's new typed `value` for `id` (the value `bind_parameter` returned), storing it in
     /// `state`. `value` is a [`ParamValue`]: `Unit` is the uniform `0..1` automation value to MAP to the
@@ -626,9 +631,9 @@ pub trait MidiEffect {
     /// them unless the fx warps time.
     fn transform(state: &mut Self::State, input: &[EventRecord], output: &mut [EventRecord]) -> usize;
     /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
-    /// returned ids in `state`. Called once when the device is wired. Default: nothing (no params).
-    fn init(state: &mut Self::State) {
-        let _ = state;
+    /// returned ids in `state`. Called once when the device is wired, also receiving the engine's `sample_rate` (stable for the device's life; stash it if the DSP needs it). Default: nothing (no params).
+    fn init(state: &mut Self::State, sample_rate: f32) {
+        let _ = (state, sample_rate);
     }
     /// Apply a parameter's new typed `value` for `id`. `value` is a [`ParamValue`]: `Unit` is the uniform
     /// `0..1` automation value (the device maps it), `Int` / `Float` / `Bool` a box field's already-real value.
@@ -671,4 +676,105 @@ pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, state_p
         boundary = next_update_position(boundary);
     }
     count as u32
+}
+
+#[cfg(test)]
+mod tests {
+    //! The instrument dispatch (`dispatch_range`): each inter-event chunk gets its OWN cloned block, with
+    //! `s0`/`s1` rebased to the slice, `p0`/`p1` the chunk's pulse range, `bpm` carried, and the one-shot
+    //! flags cleared after the first chunk. A recording mock instrument captures what each chunk received.
+    use super::{dispatch_range, Block, BlockFlags, EventRecord, Instrument, EVENT_NOTE_ON};
+
+    struct Chunk {
+        len: usize,
+        p0: f64,
+        p1: f64,
+        bpm: f32,
+        s0: u32,
+        s1: u32,
+        flags: u32
+    }
+
+    #[derive(Default)]
+    struct Recorder {
+        chunks: Vec<Chunk>,
+        pitches: Vec<u32>
+    }
+
+    impl Instrument for Recorder {
+        type State = Recorder;
+
+        fn process_audio(state: &mut Recorder, output: [&mut [f32]; 2], block: &Block) {
+            let [left, _right] = output;
+            state.chunks.push(Chunk {
+                len: left.len(), p0: block.p0, p1: block.p1, bpm: block.bpm,
+                s0: block.s0, s1: block.s1, flags: block.flags.0
+            });
+        }
+
+        fn handle_event(state: &mut Recorder, event: &EventRecord) {
+            state.pitches.push(event.pitch);
+        }
+    }
+
+    fn note_on(offset: u32, position: f64, pitch: u32) -> EventRecord {
+        EventRecord {position, offset, kind: EVENT_NOTE_ON, id: 1, pitch, velocity: 1.0, cent: 0.0}
+    }
+
+    fn block(s0: u32, s1: u32, p0: f64, p1: f64, bpm: f32) -> Block {
+        Block {index: 0, flags: BlockFlags(0), p0, p1, s0, s1, bpm}
+    }
+
+    #[test]
+    fn a_note_splits_the_block_into_two_rebased_chunks() {
+        let mut state = Recorder::default();
+        let (mut left, mut right) = ([0.0f32; 128], [0.0f32; 128]);
+        // a 128-sample block at pulses [100, 228), 140 bpm; a note-on at sample 64 / pulse 164.
+        let event = note_on(64, 164.0, 60);
+        dispatch_range::<Recorder>(&mut state, [&mut left[..], &mut right[..]], &[event], &block(0, 128, 100.0, 228.0, 140.0));
+        assert_eq!(state.chunks.len(), 2, "the note splits the block at its offset");
+        let first = &state.chunks[0];
+        assert_eq!(first.len, 64);
+        assert_eq!((first.s0, first.s1), (0, 64), "rebased to the slice");
+        assert_eq!(first.bpm, 140.0, "bpm carried");
+        assert_eq!((first.p0, first.p1), (100.0, 164.0), "first chunk spans block start -> note");
+        let second = &state.chunks[1];
+        assert_eq!(second.len, 64);
+        assert_eq!((second.p0, second.p1), (164.0, 228.0), "second chunk spans note -> block end");
+        assert_eq!(state.pitches, vec![60], "the note is handled once, between the chunks");
+    }
+
+    #[test]
+    fn no_events_is_one_full_chunk() {
+        let mut state = Recorder::default();
+        let (mut left, mut right) = ([0.0f32; 128], [0.0f32; 128]);
+        dispatch_range::<Recorder>(&mut state, [&mut left[..], &mut right[..]], &[], &block(0, 128, 10.0, 138.0, 120.0));
+        assert_eq!(state.chunks.len(), 1);
+        assert_eq!(state.chunks[0].len, 128);
+        assert_eq!((state.chunks[0].p0, state.chunks[0].p1), (10.0, 138.0));
+    }
+
+    #[test]
+    fn the_block_sample_range_is_respected() {
+        // a block covering only samples [32, 96): one chunk, 64 long, rebased to 0..64.
+        let mut state = Recorder::default();
+        let (mut left, mut right) = ([0.0f32; 128], [0.0f32; 128]);
+        dispatch_range::<Recorder>(&mut state, [&mut left[..], &mut right[..]], &[], &block(32, 96, 0.0, 64.0, 120.0));
+        assert_eq!(state.chunks.len(), 1);
+        assert_eq!(state.chunks[0].len, 64);
+        assert_eq!((state.chunks[0].s0, state.chunks[0].s1), (0, 64));
+    }
+
+    #[test]
+    fn one_shot_flags_belong_to_the_first_chunk_only() {
+        let mut state = Recorder::default();
+        let (mut left, mut right) = ([0.0f32; 128], [0.0f32; 128]);
+        let flags = BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::DISCONTINUOUS);
+        let block = Block {index: 0, flags, p0: 0.0, p1: 128.0, s0: 0, s1: 128, bpm: 120.0};
+        dispatch_range::<Recorder>(&mut state, [&mut left[..], &mut right[..]], &[note_on(64, 64.0, 60)], &block);
+        assert_eq!(state.chunks.len(), 2);
+        assert!(state.chunks[0].flags & BlockFlags::DISCONTINUOUS != 0, "the first chunk keeps the one-shot flag");
+        assert!(state.chunks[1].flags & BlockFlags::DISCONTINUOUS == 0, "later chunks have it cleared");
+        assert!(state.chunks[1].flags & BlockFlags::TRANSPORTING != 0, "state flags persist");
+    }
 }

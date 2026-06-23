@@ -3,8 +3,8 @@
 //! It owns the device-facing memory (descriptor, IO buffers, event scratch, block array, state block, all
 //! talc-allocated so they free with the node) and drives the device once per quantum: it fills the block
 //! array, hands the device its pull context via the shared `PULL` cell, calls `process` wasm-to-wasm (zero
-//! copy), and fans the device's mono output to its stereo output for the bus. The device PULLS its own
-//! events (notes + param updates) through `host_pull_events`, so this node pushes no event list.
+//! copy), and copies the device's stereo output (both channels) into its output buffer for the bus. The
+//! device PULLS its own events (notes + param updates) through `host_pull_events`, so this node pushes no event list.
 
 use alloc::boxed::Box;
 use alloc::vec;
@@ -23,8 +23,8 @@ use crate::{call_device_process, DeviceReg, PullLink, DEVICE_MAX_EVENTS, PULL};
 /// A graph node that voices its notes through a loaded instrument device (e.g. `device_sine.wasm`). It
 /// pulls notes from its `PullLink` chain (resolved by the device via `host_pull_events`), fills the
 /// engine-allocated (shared-memory) descriptor + block array, and calls the device's `process`
-/// wasm-to-wasm (zero copy). The device renders into the engine-allocated mono output buffer, which this
-/// node fans out to its stereo output for the master bus. All device-facing memory (state, IO, descriptor)
+/// wasm-to-wasm (zero copy). The device renders into the engine-allocated stereo output buffers, which this
+/// node copies to its output for the master bus. All device-facing memory (state, IO, descriptor)
 /// is talc-allocated here, so it is freed when the instrument is dropped.
 pub(crate) struct PluginInstrument {
     process_index: u32, // the device's `process` slot in the shared function table

@@ -558,7 +558,7 @@ impl Engine {
     /// `host_bind_parameter`), observe each path's field value + automation track, hand the node its
     /// parameter set, and return the bookkeeping for teardown / re-bind.
     fn bind_device(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, sink: ParamNode) -> DeviceParams {
-        let paths = bind_paths(reg, state_ptr);
+        let paths = bind_paths(reg, state_ptr, self.sample_rate);
         let (handles, field_subs, collections, armed) = self.observe_params(device_uuid, &paths);
         sink.set_params(handles.clone(), armed);
         DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections}
@@ -649,11 +649,12 @@ impl Engine {
     }
 }
 
-/// Call a device's `init` to collect the parameter field-paths it declares (it binds them via
-/// `host_bind_parameter`, which records into `BIND`). Touches no graph, so it is a free fn.
-fn bind_paths(reg: DeviceReg, state_ptr: u32) -> Vec<FieldPath> {
+/// Call a device's `init(state_ptr, sample_rate)` to collect the parameter field-paths it declares (it binds
+/// them via `host_bind_parameter`, which records into `BIND`) and let it stash the sample rate. Touches no
+/// graph, so it is a free fn.
+fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Vec<FieldPath> {
     unsafe { BIND.get() }.clear();
-    call_device_init(reg.init_index, state_ptr);
+    call_device_init(reg.init_index, state_ptr, sample_rate);
     core::mem::take(unsafe { BIND.get() })
 }
 
