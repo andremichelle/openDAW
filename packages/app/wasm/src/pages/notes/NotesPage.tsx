@@ -1,14 +1,10 @@
 import {createElement, PageFactory} from "@opendaw/lib-jsx"
-import {ByteArrayInput, MutableObservableOption, UUID} from "@opendaw/lib-std"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
-import {AudioUnitBox, BoxIO, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox, VaporisateurDeviceBox} from "@opendaw/studio-boxes"
-import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {UUID} from "@opendaw/lib-std"
+import {AudioUnitBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox, VaporisateurDeviceBox} from "@opendaw/studio-boxes"
+import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 import {Env} from "../../Env"
-import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
-import {createEngineMemory, loadEngineModules} from "../../engine-modules"
-import workletURL from "../metronome/engine-worklet.ts?worker&url"
+import {createEngineHost} from "../../engine-host"
 
 // Notes, end to end. Mirrored regions: ONE note collection (a 1-quarter arpeggio) shared by TWO
 // regions — a 4-bar loop split at bar 2 — streamed via the unchanged SyncSource to the wasm engine,
@@ -25,24 +21,7 @@ A     [===============]                      region A ──┐
 B                     [===============]      region B ──┴── share one collection
       C4 E4 G4 C5 semiquavers, loopDuration = 1 quarter`
 
-type EngineMessage =
-    | { readonly type: "state", readonly bytes: ArrayBuffer }
-    | { readonly type: "heap", readonly heapUsed: number, readonly heapClaimed: number, readonly memoryTotal: number }
-
 export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
-    const context = new MutableObservableOption<AudioContext>()
-    const node = new MutableObservableOption<AudioWorkletNode>()
-    const log: HTMLPreElement = <pre/>
-    const append = (line: string): void => {log.textContent = `${log.textContent ?? ""}${line}\n`}
-    const state: HTMLPreElement = <pre>position: — | bpm: — | —</pre>
-    const stateIO = EngineStateSchema()
-    const showState = (bytes: ArrayBuffer): void => {
-        stateIO.read(new ByteArrayInput(bytes))
-        const {position, bpm, isPlaying} = stateIO.object
-        const beat = position / PPQN.Quarter + 1
-        state.textContent = `position: ${position.toFixed(0)} pulses (beat ${beat.toFixed(2)}) | bpm: ${bpm.toFixed(1)} | ${isPlaying ? "playing" : "stopped"}`
-    }
-
     const {boxGraph, mandatoryBoxes} = ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     const timelineBox = mandatoryBoxes.timelineBox
 
@@ -89,69 +68,7 @@ export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
     timelineBox.loopArea.enabled.setValue(true)
     boxGraph.endTransaction()
 
-    const boot = async (): Promise<void> => {
-        const ctx = new AudioContext()
-        context.wrap(ctx)
-        await ctx.audioWorklet.addModule(workletURL)
-        const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
-        const memory = createEngineMemory()
-        const workletNode = new AudioWorkletNode(ctx, "engine", {
-            outputChannelCount: [2], // stereo out; without this the node defaults to mono and drops the right channel
-            processorOptions: {
-                engineModule,
-                deviceModules,
-                deviceBoxTypes,
-                memory,
-                sampleRate: ctx.sampleRate,
-                metronome: false
-            }
-        })
-        node.wrap(workletNode)
-        workletNode.connect(ctx.destination)
-        workletNode.port.onmessage = (event: MessageEvent<EngineMessage>) => {
-            if (event.data.type === "state") {showState(event.data.bytes)}
-        }
-        const sender = new BroadcastChannel("notes-sync")
-        const receiver = new BroadcastChannel("notes-sync")
-        const target: Synchronization<BoxIO.TypeMap> = {
-            sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
-                const bytes = serializeUpdateTasks(tasks, boxGraph)
-                workletNode.port.postMessage(bytes, [bytes])
-            },
-            checksum(): Promise<void> {return Promise.resolve()}
-        }
-        lifecycle.own(Communicator.executor<Synchronization<BoxIO.TypeMap>>(Messenger.for(receiver), target))
-        lifecycle.own(new SyncSource<BoxIO.TypeMap>(boxGraph, Messenger.for(sender), true))
-        lifecycle.own({
-            terminate: () => {
-                sender.close()
-                receiver.close()
-            }
-        })
-        await ctx.suspend()
-        append(`booted @ ${ctx.sampleRate} Hz — suspended; two mirrored regions sharing one arpeggio`)
-    }
-
-    const play = async (): Promise<void> => {
-        if (context.nonEmpty()) {
-            await context.unwrap().resume()
-            append("playing")
-        }
-    }
-    const stop = async (): Promise<void> => {
-        if (context.nonEmpty()) {
-            await context.unwrap().suspend()
-            append("stopped")
-        }
-    }
-
-    lifecycle.own({
-        terminate: () => {
-            node.ifSome(workletNode => workletNode.disconnect())
-            context.ifSome(ctx => void ctx.close())
-        }
-    })
-    void boot()
+    const host = createEngineHost(boxGraph, lifecycle, {channel: "notes-sync"})
     return (
         <div className="page">
             <h2>Notes</h2>
@@ -162,11 +79,11 @@ export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
                 off.</p>
             <pre className="timeline">{TIMELINE}</pre>
             <div>
-                <button onclick={() => void play()}>▶ Play</button>
-                <button onclick={() => void stop()}>■ Stop</button>
+                <button onclick={() => void host.play()}>▶ Play</button>
+                <button onclick={() => void host.stop()}>■ Stop</button>
             </div>
-            {state}
-            {log}
+            {host.state}
+            {host.log}
         </div>
     )
 }

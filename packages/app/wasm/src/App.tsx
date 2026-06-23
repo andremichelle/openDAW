@@ -8,6 +8,7 @@ import {TempoAutomationPage} from "./pages/tempo-automation/TempoAutomationPage"
 import {NotesPage} from "./pages/notes/NotesPage"
 import {LoopTruncationPage} from "./pages/loop-truncation/LoopTruncationPage"
 import {MultiplePluginsPage} from "./pages/multiple-plugins/MultiplePluginsPage"
+import {TidalPage} from "./pages/tidal/TidalPage"
 
 export const App = () => {
     const runtime = new Terminator()
@@ -22,6 +23,7 @@ export const App = () => {
                 <LocalLink href="/notes">Notes</LocalLink>
                 <LocalLink href="/loop-truncation">Loop Truncation</LocalLink>
                 <LocalLink href="/multiple-plugins">Multiple Plugins</LocalLink>
+                <LocalLink href="/tidal">Tidal</LocalLink>
             </nav>
             <main>
                 <Router
@@ -34,7 +36,8 @@ export const App = () => {
                         {path: "/tempo-automation", factory: TempoAutomationPage},
                         {path: "/notes", factory: NotesPage},
                         {path: "/loop-truncation", factory: LoopTruncationPage},
-                        {path: "/multiple-plugins", factory: MultiplePluginsPage}
+                        {path: "/multiple-plugins", factory: MultiplePluginsPage},
+                        {path: "/tidal", factory: TidalPage}
                     ]}
                     fallback={() => <div className="page"><h2>404</h2></div>}/>
             </main>

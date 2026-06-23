@@ -60,3 +60,28 @@ main
     white-space: pre // keep the ASCII timeline on its own lines; scroll it rather than wrap
     overflow-x: auto
     line-height: 1.35
+
+  .sliders
+    display: flex
+    flex-direction: column
+    gap: 0.5rem
+    max-width: 32rem
+    margin: 1rem 0
+
+  .slider
+    display: flex
+    align-items: center
+    gap: 0.75rem
+
+    .name
+      width: 6rem
+      flex-shrink: 0
+      color: var(--color-gray)
+
+    input
+      flex: 1
+
+    .value
+      width: 3.5rem
+      text-align: right
+      color: var(--color-blue)
