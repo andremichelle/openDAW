@@ -8,6 +8,7 @@ import {
 import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 import {Env} from "../../Env"
+import {applySinePatch} from "../../sine-patch"
 import {createEngineHost} from "../../engine-host"
 
 type Note = readonly [number, number] // [position in pulses, MIDI pitch]
@@ -128,7 +129,10 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     // Lead: a sine instrument (Vaporisateur) behind a 3-stage MIDI-fx chain ordered by index:
     // arp (0) -> zeitgeist (1) -> transpose (2), panned hard RIGHT. The chord is held a full bar.
     addPart(2, 1.0, LEAD, PPQN.Bar, PPQN.Bar, unit => {
-        VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(unit.input))
+        VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(unit.input)
+            applySinePatch(box)
+        })
         ArpeggioDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(unit.midiEffects)
             box.index.setValue(0)

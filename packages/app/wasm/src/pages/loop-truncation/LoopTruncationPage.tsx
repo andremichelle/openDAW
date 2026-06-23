@@ -1,6 +1,7 @@
 import {createElement, PageFactory} from "@opendaw/lib-jsx"
 import {UUID} from "@opendaw/lib-std"
 import {AudioUnitBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox, VaporisateurDeviceBox} from "@opendaw/studio-boxes"
+import {applySinePatch} from "../../sine-patch"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 import {Env} from "../../Env"
@@ -35,7 +36,10 @@ export const LoopTruncationPage: PageFactory<Env> = ({lifecycle}) => {
     })
     // The unit's instrument: a sine (Vaporisateur) device box on the `input` host; the engine reads it from
     // the box and instantiates device_sine.wasm via the device table.
-    VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(mockAudioUnit.input))
+    VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => {
+        box.host.refer(mockAudioUnit.input)
+        applySinePatch(box)
+    })
     const mockTrack = TrackBox.create(boxGraph, UUID.generate(), box => {
         box.tracks.refer(mockAudioUnit.tracks)
         box.target.refer(mockAudioUnit)

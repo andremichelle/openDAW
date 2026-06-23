@@ -7,6 +7,7 @@
 pub mod adsr;
 pub mod biquad;
 pub mod glide;
+pub mod lfo;
 pub mod osc;
 pub mod panning;
 pub mod ppqn;
@@ -15,6 +16,10 @@ pub mod smooth;
 pub mod tidal;
 
 pub use math::{clamp, fabs, fast_sin, PI};
+
+/// The host's fixed render quantum in samples (Web Audio's 128-frame block), mirroring lib-dsp `RenderQuantum`.
+/// A device sizes its per-block scratch to this: an inter-event processing chunk never exceeds one quantum.
+pub const RENDER_QUANTUM: usize = 128;
 
 /// A MIDI pitch (note 69 = A4 = 440 Hz), with a fractional part for cents, to frequency in Hz.
 /// Mirrors lib-dsp `midiToHz` at the 440 Hz reference: `440 * 2^((note + 3)/12 - 6)`.

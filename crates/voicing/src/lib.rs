@@ -22,8 +22,9 @@ pub trait Voice {
     /// voice and passed to [`process`](Voice::process); the device owns it. `()` for a voice with none.
     type Shared;
     /// Assign a note: `frequency` Hz, normalised `gain` (0..1), stereo `spread` (-1..1, for a unison
-    /// sub-voice), and the per-note `unison` voice count (used by [`VoiceUnison`]; plain voices ignore it).
-    fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, spread: f32, unison: usize);
+    /// sub-voice), the per-note `unison` voice count (used by [`VoiceUnison`]; plain voices ignore it), and the
+    /// device's live `shared` params (read at note-on for the envelope, keyboard tracking, sample rate, …).
+    fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, spread: f32, unison: usize, shared: &Self::Shared);
     /// Note-off: release the envelope (the voice keeps sounding until it decays).
     fn stop(&mut self);
     /// Cut the voice immediately (the slot is being stolen).
@@ -48,7 +49,7 @@ pub trait Voice {
 pub trait VoicingStrategy {
     /// The per-note voice this strategy drives (its [`Voice::Shared`] is what `process` reads).
     type Voice: Voice;
-    fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, glide_duration: f64, unison: usize);
+    fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, glide_duration: f64, unison: usize, shared: &<Self::Voice as Voice>::Shared);
     fn stop(&mut self, note_id: i32, glide_duration: f64);
     fn force_stop(&mut self);
     fn process(&mut self, output: [&mut [f32]; 2], block: &Block, shared: &<Self::Voice as Voice>::Shared) -> bool;
@@ -103,11 +104,11 @@ impl<V: Voice + Default, const VOICES: usize> PolyphonicStrategy<V, VOICES> {
 impl<V: Voice + Default, const VOICES: usize> VoicingStrategy for PolyphonicStrategy<V, VOICES> {
     type Voice = V;
 
-    fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, glide_duration: f64, unison: usize) {
+    fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, glide_duration: f64, unison: usize, shared: &V::Shared) {
         let from = self.slots.iter().find(|slot| slot.active && !slot.voice.gate())
             .map(|slot| slot.voice.current_frequency());
         let index = self.allocate();
-        self.slots[index].voice.start(event, from.unwrap_or(frequency), gain, 0.0, unison);
+        self.slots[index].voice.start(event, from.unwrap_or(frequency), gain, 0.0, unison, shared);
         if from.is_some() {
             self.slots[index].voice.start_glide(frequency, glide_duration);
         }
@@ -170,7 +171,7 @@ impl<V: Voice + Default, const U: usize> Default for VoiceUnison<V, U> {
 impl<V: Voice + Default, const U: usize> Voice for VoiceUnison<V, U> {
     type Shared = V::Shared;
 
-    fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, spread: f32, unison: usize) {
+    fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, spread: f32, unison: usize, shared: &V::Shared) {
         self.active = unison.clamp(1, U);
         self.gated = true;
         for voice in &mut self.voices {
@@ -184,7 +185,7 @@ impl<V: Voice + Default, const U: usize> Voice for VoiceUnison<V, U> {
                 let fan = (index as f32 / (self.active - 1) as f32) * 2.0 - 1.0; // -1..+1 fanned across the voices
                 (1.0 - libm::fabsf(spread)) * fan + spread
             };
-            self.voices[index].start(event, frequency, normalized_gain, sub_spread, 1);
+            self.voices[index].start(event, frequency, normalized_gain, sub_spread, 1, shared);
         }
     }
 
@@ -271,7 +272,7 @@ impl<V: Voice + Default, const STACK: usize> MonophonicStrategy<V, STACK> {
 impl<V: Voice + Default, const STACK: usize> VoicingStrategy for MonophonicStrategy<V, STACK> {
     type Voice = V;
 
-    fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, glide_duration: f64, unison: usize) {
+    fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, glide_duration: f64, unison: usize, shared: &V::Shared) {
         if self.depth < STACK {
             self.held[self.depth] = HeldNote {id: event.id as i32, frequency};
             self.depth += 1;
@@ -283,7 +284,7 @@ impl<V: Voice + Default, const STACK: usize> VoicingStrategy for MonophonicStrat
         // (re)start: glide from the dying voice's pitch when there was one, else start straight on the note.
         let from = if self.active {Some(self.voice.current_frequency())} else {None};
         self.voice.force_stop();
-        self.voice.start(event, from.unwrap_or(frequency), gain, 0.0, unison);
+        self.voice.start(event, from.unwrap_or(frequency), gain, 0.0, unison, shared);
         if from.is_some() {
             self.voice.start_glide(frequency, glide_duration);
         }
@@ -386,10 +387,10 @@ impl<V: Voice + Default, const VOICES: usize, const STACK: usize> Voicing<V, VOI
     }
 
     /// Route a note-on to the active strategy (see [`VoicingStrategy::start`] for the parameters).
-    pub fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, glide_duration: f64, unison: usize) {
+    pub fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, glide_duration: f64, unison: usize, shared: &V::Shared) {
         match self.mode {
-            VoicingMode::Polyphonic => self.polyphonic.start(event, frequency, gain, glide_duration, unison),
-            VoicingMode::Monophonic => self.monophonic.start(event, frequency, gain, glide_duration, unison)
+            VoicingMode::Polyphonic => self.polyphonic.start(event, frequency, gain, glide_duration, unison, shared),
+            VoicingMode::Monophonic => self.monophonic.start(event, frequency, gain, glide_duration, unison, shared)
         }
     }
 
@@ -433,7 +434,7 @@ mod tests {
 
     impl Voice for MockVoice {
         type Shared = ();
-        fn start(&mut self, _event: &EventRecord, _frequency: f32, gain: f32, _spread: f32, _unison: usize) {
+        fn start(&mut self, _event: &EventRecord, _frequency: f32, gain: f32, _spread: f32, _unison: usize, _shared: &()) {
             self.gain = gain;
             self.gated = true;
             self.release = MOCK_RELEASE;
@@ -483,7 +484,7 @@ mod tests {
     #[test]
     fn a_note_on_sounds_on_a_free_slot() {
         let mut voicing = PolyphonicStrategy::<MockVoice, 4>::new();
-        voicing.start(&note(1), 440.0, 0.8, 0.0, 1);
+        voicing.start(&note(1), 440.0, 0.8, 0.0, 1, &());
         assert_eq!(voicing.active_count(), 1);
         assert!(render(&mut voicing)[0] > 0.0, "the voice is sounding");
     }
@@ -491,9 +492,9 @@ mod tests {
     #[test]
     fn multiple_notes_take_multiple_slots() {
         let mut voicing = PolyphonicStrategy::<MockVoice, 4>::new();
-        voicing.start(&note(1), 440.0, 0.5, 0.0, 1);
-        voicing.start(&note(2), 550.0, 0.5, 0.0, 1);
-        voicing.start(&note(3), 660.0, 0.5, 0.0, 1);
+        voicing.start(&note(1), 440.0, 0.5, 0.0, 1, &());
+        voicing.start(&note(2), 550.0, 0.5, 0.0, 1, &());
+        voicing.start(&note(3), 660.0, 0.5, 0.0, 1, &());
         assert_eq!(voicing.active_count(), 3);
         assert!((render(&mut voicing)[0] - 1.5).abs() < 1.0e-6, "three voices sum");
     }
@@ -501,7 +502,7 @@ mod tests {
     #[test]
     fn a_released_note_decays_then_frees_its_slot() {
         let mut voicing = PolyphonicStrategy::<MockVoice, 4>::new();
-        voicing.start(&note(1), 440.0, 0.8, 0.0, 1);
+        voicing.start(&note(1), 440.0, 0.8, 0.0, 1, &());
         voicing.stop(1, 0.0);
         assert_eq!(voicing.active_count(), 1, "still sounding through the release");
         for _ in 0..MOCK_RELEASE {
@@ -514,19 +515,19 @@ mod tests {
     fn a_full_pool_steals_a_released_voice() {
         let mut voicing = PolyphonicStrategy::<MockVoice, 4>::new();
         for id in 0..4 {
-            voicing.start(&note(id), 440.0, 0.5, 0.0, 1);
+            voicing.start(&note(id), 440.0, 0.5, 0.0, 1, &());
         }
         assert_eq!(voicing.active_count(), 4, "the pool is full");
         voicing.stop(0, 0.0); // release one (still active, but un-gated)
-        voicing.start(&note(99), 880.0, 0.5, 0.0, 1); // no free slot -> steals the released one
+        voicing.start(&note(99), 880.0, 0.5, 0.0, 1, &()); // no free slot -> steals the released one
         assert_eq!(voicing.active_count(), 4, "stays at capacity, no allocation");
     }
 
     #[test]
     fn reset_frees_every_slot() {
         let mut voicing = PolyphonicStrategy::<MockVoice, 4>::new();
-        voicing.start(&note(1), 440.0, 0.5, 0.0, 1);
-        voicing.start(&note(2), 550.0, 0.5, 0.0, 1);
+        voicing.start(&note(1), 440.0, 0.5, 0.0, 1, &());
+        voicing.start(&note(2), 550.0, 0.5, 0.0, 1, &());
         voicing.reset();
         assert_eq!(voicing.active_count(), 0);
     }
@@ -543,7 +544,7 @@ mod tests {
 
     impl Voice for SpreadMock {
         type Shared = ();
-        fn start(&mut self, _event: &EventRecord, _frequency: f32, _gain: f32, spread: f32, _unison: usize) {
+        fn start(&mut self, _event: &EventRecord, _frequency: f32, _gain: f32, spread: f32, _unison: usize, _shared: &()) {
             self.spread = spread;
             self.gated = true;
         }
@@ -571,10 +572,10 @@ mod tests {
     #[test]
     fn unison_energy_normalises_the_gain() {
         let mut single = VoiceUnison::<MockVoice, 5>::default();
-        single.start(&note(1), 440.0, 0.9, 0.0, 1);
+        single.start(&note(1), 440.0, 0.9, 0.0, 1, &());
         assert!((first_sample(&mut single) - 0.9).abs() < 1.0e-6, "one voice keeps the gain");
         let mut triple = VoiceUnison::<MockVoice, 5>::default();
-        triple.start(&note(1), 440.0, 0.9, 0.0, 3);
+        triple.start(&note(1), 440.0, 0.9, 0.0, 3, &());
         // three voices each at 0.9/sqrt(3) sum to 0.9*sqrt(3) (constant power, not 3x louder).
         assert!((first_sample(&mut triple) - 0.9 * libm::sqrtf(3.0)).abs() < 1.0e-4);
     }
@@ -582,10 +583,10 @@ mod tests {
     #[test]
     fn unison_fans_the_spread_symmetrically() {
         let mut centred = VoiceUnison::<SpreadMock, 5>::default();
-        centred.start(&note(1), 440.0, 1.0, 0.0, 3);
+        centred.start(&note(1), 440.0, 1.0, 0.0, 3, &());
         assert!(first_sample(&mut centred).abs() < 1.0e-6, "spreads -1, 0, +1 sum to 0 around centre");
         let mut biased = VoiceUnison::<SpreadMock, 5>::default();
-        biased.start(&note(1), 440.0, 1.0, 0.5, 3);
+        biased.start(&note(1), 440.0, 1.0, 0.5, 3, &());
         // spreads (1-0.5)*[-1,0,1] + 0.5 = [0, 0.5, 1.0], summing to 1.5.
         assert!((first_sample(&mut biased) - 1.5).abs() < 1.0e-5);
     }
@@ -593,7 +594,7 @@ mod tests {
     #[test]
     fn unison_clamps_the_count_and_finishes_together() {
         let mut unison = VoiceUnison::<MockVoice, 3>::default();
-        unison.start(&note(1), 440.0, 1.0, 0.0, 9); // 9 clamped to the max of 3
+        unison.start(&note(1), 440.0, 1.0, 0.0, 9, &()); // 9 clamped to the max of 3
         assert!(unison.gate());
         unison.force_stop();
         assert!(!unison.gate());
@@ -613,7 +614,7 @@ mod tests {
 
     impl Voice for FreqMock {
         type Shared = ();
-        fn start(&mut self, _event: &EventRecord, frequency: f32, _gain: f32, _spread: f32, _unison: usize) {
+        fn start(&mut self, _event: &EventRecord, frequency: f32, _gain: f32, _spread: f32, _unison: usize, _shared: &()) {
             self.current = frequency;
             self.gated = true;
             self.release = MOCK_RELEASE;
@@ -641,9 +642,9 @@ mod tests {
     #[test]
     fn mono_legato_glides_without_retrigger() {
         let mut mono = MonophonicStrategy::<FreqMock, 8>::new();
-        mono.start(&note(1), 100.0, 0.8, GLIDE, 1);
+        mono.start(&note(1), 100.0, 0.8, GLIDE, 1, &());
         assert!((mono.current_frequency() - 100.0).abs() < 1.0e-6);
-        mono.start(&note(2), 200.0, 0.8, GLIDE, 1); // key 1 still held -> glide, no new attack
+        mono.start(&note(2), 200.0, 0.8, GLIDE, 1, &()); // key 1 still held -> glide, no new attack
         assert!((mono.current_frequency() - 200.0).abs() < 1.0e-6, "glided to the new note");
         assert!(mono.is_active());
     }
@@ -651,8 +652,8 @@ mod tests {
     #[test]
     fn mono_release_top_glides_back_to_the_held_note() {
         let mut mono = MonophonicStrategy::<FreqMock, 8>::new();
-        mono.start(&note(1), 100.0, 0.8, GLIDE, 1);
-        mono.start(&note(2), 200.0, 0.8, GLIDE, 1);
+        mono.start(&note(1), 100.0, 0.8, GLIDE, 1, &());
+        mono.start(&note(2), 200.0, 0.8, GLIDE, 1, &());
         mono.stop(2, GLIDE); // release the top; key 1 still held
         assert!((mono.current_frequency() - 100.0).abs() < 1.0e-6, "glides back to the lower held note");
         assert!(mono.is_active());
@@ -661,7 +662,7 @@ mod tests {
     #[test]
     fn mono_releasing_the_last_note_lets_the_voice_decay() {
         let mut mono = MonophonicStrategy::<FreqMock, 8>::new();
-        mono.start(&note(1), 100.0, 0.8, GLIDE, 1);
+        mono.start(&note(1), 100.0, 0.8, GLIDE, 1, &());
         mono.stop(1, GLIDE); // last key up -> release
         for _ in 0..MOCK_RELEASE {
             mono.process([&mut [0.0; 4], &mut [0.0; 4]], &block(), &());
@@ -672,9 +673,9 @@ mod tests {
     #[test]
     fn mono_retriggers_from_a_releasing_voice() {
         let mut mono = MonophonicStrategy::<FreqMock, 8>::new();
-        mono.start(&note(1), 100.0, 0.8, GLIDE, 1);
+        mono.start(&note(1), 100.0, 0.8, GLIDE, 1, &());
         mono.stop(1, GLIDE); // releasing (gate off, not yet finished)
-        mono.start(&note(3), 300.0, 0.8, GLIDE, 1); // a new note re-triggers, gliding from the dying pitch to 300
+        mono.start(&note(3), 300.0, 0.8, GLIDE, 1, &()); // a new note re-triggers, gliding from the dying pitch to 300
         assert!((mono.current_frequency() - 300.0).abs() < 1.0e-6);
         assert!(mono.is_active());
     }
@@ -691,8 +692,8 @@ mod tests {
     fn dispatcher_defaults_to_monophonic_and_routes_one_voice() {
         let mut voicing = Voicing::<MockVoice, 4, 8>::new();
         assert_eq!(voicing.mode(), VoicingMode::Monophonic);
-        voicing.start(&note(1), 440.0, 0.5, 0.0, 1);
-        voicing.start(&note(2), 550.0, 0.5, 0.0, 1); // legato onto the same single voice
+        voicing.start(&note(1), 440.0, 0.5, 0.0, 1, &());
+        voicing.start(&note(2), 550.0, 0.5, 0.0, 1, &()); // legato onto the same single voice
         assert!((dispatch_render(&mut voicing) - 0.5).abs() < 1.0e-6, "monophonic sounds one voice");
     }
 
@@ -700,8 +701,8 @@ mod tests {
     fn dispatcher_polyphonic_sums_independent_voices() {
         let mut voicing = Voicing::<MockVoice, 4, 8>::new();
         voicing.set_mode(VoicingMode::Polyphonic);
-        voicing.start(&note(1), 440.0, 0.5, 0.0, 1);
-        voicing.start(&note(2), 550.0, 0.5, 0.0, 1);
+        voicing.start(&note(1), 440.0, 0.5, 0.0, 1, &());
+        voicing.start(&note(2), 550.0, 0.5, 0.0, 1, &());
         assert!((dispatch_render(&mut voicing) - 1.0).abs() < 1.0e-6, "two polyphonic voices sum");
     }
 
@@ -709,10 +710,10 @@ mod tests {
     fn dispatcher_switch_cuts_the_outgoing_strategy() {
         let mut voicing = Voicing::<MockVoice, 4, 8>::new();
         voicing.set_mode(VoicingMode::Polyphonic);
-        voicing.start(&note(1), 440.0, 0.5, 0.0, 1);
+        voicing.start(&note(1), 440.0, 0.5, 0.0, 1, &());
         voicing.set_mode(VoicingMode::Monophonic); // force-stops the polyphonic voice
         assert!(dispatch_render(&mut voicing).abs() < 1.0e-6, "the cut voice is silent");
-        voicing.start(&note(2), 550.0, 0.5, 0.0, 1); // a fresh monophonic note now sounds
+        voicing.start(&note(2), 550.0, 0.5, 0.0, 1, &()); // a fresh monophonic note now sounds
         assert!((dispatch_render(&mut voicing) - 0.5).abs() < 1.0e-6);
     }
 }

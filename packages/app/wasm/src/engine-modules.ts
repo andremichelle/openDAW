@@ -20,7 +20,7 @@ export const createEngineMemory = (): WebAssembly.Memory =>
 // the engine looks up its type here to find device_arp.wasm. Load order is irrelevant now (the engine reads
 // each unit's chains from the box, ordered by the device `index`); only the type mapping matters.
 const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
-    {url: "/device_sine.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
+    {url: "/device_vaporisateur.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
     {url: "/device_saw.wasm", boxType: "NanoDeviceBox"},          // instrument
     {url: "/device_lowpass.wasm", boxType: "RevampDeviceBox"},    // audio effect
     {url: "/device_tidal.wasm", boxType: "TidalDeviceBox"},       // audio effect

@@ -5,6 +5,7 @@ import {
 } from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
+import {applySinePatch} from "../../sine-patch"
 import {Env} from "../../Env"
 import {createEngineHost} from "../../engine-host"
 
@@ -23,7 +24,10 @@ export const TidalPage: PageFactory<Env> = ({lifecycle}) => {
         box.index.setValue(0)
         box.panning.setValue(0.0)
     })
-    VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(unit.input))
+    VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => {
+        box.host.refer(unit.input)
+        applySinePatch(box)
+    })
     // The Tidal effect. The box fields hold the parameters' REAL values (what the sliders write, what the
     // device reads when un-automated): slope bipolar, symmetry / depth unipolar, rate a fraction index,
     // offset / channel-offset in degrees. Set to the schema defaults so the sliders start in sync.

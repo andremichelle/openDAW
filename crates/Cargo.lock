@@ -75,6 +75,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-vaporisateur"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+ "voicing",
+]
+
+[[package]]
 name = "device-zeitgeist"
 version = "0.0.0"
 dependencies = [

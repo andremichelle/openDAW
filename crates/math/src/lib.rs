@@ -45,6 +45,11 @@ pub fn clamp<T: PartialOrd>(value: T, min: T, max: T) -> T {
     }
 }
 
+/// Clamp `value` into the unit interval `[0, 1]`, mirroring lib-std `clampUnit`.
+pub fn clamp_unit(value: f32) -> f32 {
+    clamp(value, 0.0, 1.0)
+}
+
 /// Linear interpolation from `a` to `b` by `t`. Arithmetic-generic `lerp` needs num traits and isn't
 /// worth it yet, so this stays f32 (the signal-path precision); add `lerp64` only if a caller needs it.
 pub fn lerp(a: f32, b: f32, t: f32) -> f32 {

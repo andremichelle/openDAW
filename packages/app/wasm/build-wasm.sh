@@ -5,10 +5,10 @@
 #                       shared function table (--import-table) so device side modules install their
 #                       `process` into it and the engine calls them via call_indirect. Exports device_alloc
 #                       / device_register for the worklet loader.
-#  - device_sine.wasm   a PIC SIDE MODULE (-C relocation-model=pic, --experimental-pic -shared): its data
+#  - device_saw.wasm    a PIC SIDE MODULE (-C relocation-model=pic, --experimental-pic -shared): its data
 #                   /    base is assigned by the host loader at load (env.__memory_base), so any number of
-#  - device_saw.wasm    distinct devices coexist in the one shared memory with no fixed --global-base.
-#                       Same shared-memory import as the engine. (saw = sine with a sawtooth oscillator.)
+#  - device_*.wasm      distinct devices coexist in the one shared memory with no fixed --global-base.
+#                       Same shared-memory import as the engine.
 #  - sine.wasm          the standalone step-1 sine page; its own memory, default build.
 set -e
 . "$HOME/.cargo/env"
@@ -37,16 +37,16 @@ DEVICE_TOOLCHAIN="${DEVICE_TOOLCHAIN:-nightly}"
 
 cargo rustc -p engine --release --target "$TARGET" -- \
   -C link-arg=--import-memory -C link-arg=--import-table $SHARED
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-sine      --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-saw       --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-lowpass   --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-transpose --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-arp       --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-zeitgeist --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-tidal     --release --target "$TARGET" -Zbuild-std=core
+RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-vaporisateur --release --target "$TARGET" -Zbuild-std=core
 cargo build -p sine --release --target "$TARGET"
 
-MODULES="engine device_sine device_saw device_lowpass device_transpose device_arp device_zeitgeist device_tidal sine"
+MODULES="engine device_saw device_lowpass device_transpose device_arp device_zeitgeist device_tidal device_vaporisateur sine"
 
 # Size-optimise each module with binaryen's wasm-opt (Homebrew: `brew install binaryen`). GUARDED: if it is
 # not installed the build still works, just larger. The devices are PIC side modules (a `dylink.0` section,
@@ -65,5 +65,5 @@ else
   echo "wasm-opt not found (brew install binaryen) — shipping unoptimised modules"
 fi
 
-cp "$OUT/engine.wasm" "$OUT/device_sine.wasm" "$OUT/device_saw.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/device_arp.wasm" "$OUT/device_zeitgeist.wasm" "$OUT/device_tidal.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
-echo "built: engine.wasm + device_sine/saw/lowpass/transpose/arp/zeitgeist/tidal + sine"
+cp "$OUT/engine.wasm" "$OUT/device_saw.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/device_arp.wasm" "$OUT/device_zeitgeist.wasm" "$OUT/device_tidal.wasm" "$OUT/device_vaporisateur.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
+echo "built: engine.wasm + device_saw/lowpass/transpose/arp/zeitgeist/tidal/vaporisateur + sine"
