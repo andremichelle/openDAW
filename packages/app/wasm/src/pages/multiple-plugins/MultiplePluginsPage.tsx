@@ -4,7 +4,7 @@ import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox, AudioUnitBox, BoxIO, GrooveShuffleBox, NanoDeviceBox, NoteEventBox, NoteEventCollectionBox,
-    NoteRegionBox, PitchDeviceBox, RevampDeviceBox, TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox,
+    NoteRegionBox, PitchDeviceBox, RevampDeviceBox, TidalDeviceBox, TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox,
     VaporisateurDeviceBox, ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {EngineStateSchema, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
@@ -35,7 +35,8 @@ const CUTOFF_PERIOD = 2 * PPQN.Quarter  // one sweep per half-note
 
 const TIMELINE = `unit A (bass)  C2 E2 G2 E2     quarter notes,  loop = 1 bar -> SAWTOOTH -> TEMPO-SYNC LOW-PASS
 unit B (lead)  C5+E5+G5 held chord, loop = 1 bar -> ARP (1/16) -> SHUFFLE -> TRANSPOSE +12 -> SINE
-both loop over bars 0..2 — two instruments + an audio effect + a 3-stage MIDI-fx chain, one shared memory`
+output unit    whole mix -> TIDAL TREMOLO (master audio-fx)
+loops over bars 0..2: two instruments, two audio effects, a 3-stage MIDI-fx chain, one shared memory`
 
 type EngineMessage =
     | { readonly type: "state", readonly bytes: ArrayBuffer }
@@ -171,6 +172,15 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
         // (= +12, an octave) for the second bar, repeating each loop. NO interpolation, so it jumps at the bar.
         addParamAutomation(unit, pitch.semiTones, [[0, 0.0], [PPQN.Bar, 1.0]] as const, 0)
     })
+    // A master Tidal on THE output unit's audio-fx chain, so it processes the whole mix (both parts). A
+    // tempo-synced tremolo pumping BOTH channels together (no channel offset), full depth, at an eighth-note
+    // rate. Static (no automation): the box-field defaults are the device's real values.
+    TidalDeviceBox.create(boxGraph, UUID.generate(), box => {
+        box.host.refer(mandatoryBoxes.primaryAudioUnitBox.audioEffects)
+        box.index.setValue(0)
+        box.depth.setValue(1.0)
+        box.rate.setValue(3)
+    })
     timelineBox.loopArea.from.setValue(0)
     timelineBox.loopArea.to.setValue(2 * PPQN.Bar)
     timelineBox.loopArea.enabled.setValue(true)
@@ -209,7 +219,7 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
             }
         })
         await ctx.suspend()
-        append(`booted @ ${ctx.sampleRate} Hz — suspended; auto-wah sawtooth bass (left) + shuffled arpeggiated sine chord, transposing +12 every other bar (right), six device plugins`)
+        append(`booted @ ${ctx.sampleRate} Hz — suspended; auto-wah sawtooth bass (left) + shuffled arpeggiated sine chord, transposing +12 every other bar (right), through a master Tidal tremolo, seven device plugins`)
     }
 
     const play = async (): Promise<void> => {
@@ -235,9 +245,9 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Multiple Plugins</h2>
-            <p>Two audio units playing different parts through <strong>six device plugins</strong>: two
-                instruments, an audio effect, and a three-stage MIDI-fx chain. All run from
-                <strong>one shared memory</strong>. Metronome off.</p>
+            <p>Two audio units playing different parts through <strong>seven device plugins</strong>: two
+                instruments, two audio effects (one per-unit, one on the master output), and a three-stage
+                MIDI-fx chain. All run from <strong>one shared memory</strong>. Metronome off.</p>
             <ul>
                 <li><strong>Dynamic linking.</strong> A <strong>sawtooth</strong> bass and a
                     <strong>sine</strong> lead (<code>device_sine.wasm</code>, <code>device_saw.wasm</code>)
@@ -254,6 +264,12 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
                     resolves each parameter (its curve, or its box-field default when un-automated), pushes
                     only the changed ones to the device, and the device recomputes the filter — the auto-wah
                     is data, not a hard-coded LFO.</li>
+                <li><strong>Master effect on the output unit.</strong> A <strong>Tidal tremolo</strong>
+                    (<code>device_tidal.wasm</code>) sits on THE output unit's own audio-fx chain, so it
+                    processes the whole mix: bus&nbsp;→&nbsp;effect&nbsp;→&nbsp;master strip. A tempo-synced
+                    LFO at an eighth-note rate pumps both channels together, proving devices now have true
+                    <strong>stereo I/O</strong> and that the output unit carries effects, not just instrument
+                    units.</li>
                 <li><strong>MIDI-fx pull chain (lead only).</strong> A three-stage chain sits before the lead:
                     sequencer&nbsp;←&nbsp;<code>arp</code>&nbsp;←&nbsp;<code>zeitgeist</code>&nbsp;←&nbsp;<code>transpose</code>&nbsp;←&nbsp;instrument.
                     The lead part is a single held C-E-G chord.</li>
@@ -271,8 +287,8 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
                     nodes, they produce events on demand, working in pulse positions while the instrument
                     resolves sample offsets.</li>
             </ul>
-            <p>This proves instruments, the audio-effect path, and a multi-link MIDI-effect (event pull)
-                chain all coexist and run from the one memory.</p>
+            <p>This proves instruments, the audio-effect path (per-unit and on the master output), and a
+                multi-link MIDI-effect (event pull) chain all coexist and run from the one memory.</p>
             <pre className="timeline">{TIMELINE}</pre>
             <div>
                 <button onclick={() => void play()}>▶ Play</button>

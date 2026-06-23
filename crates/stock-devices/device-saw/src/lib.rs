@@ -65,10 +65,12 @@ impl Voice {
         self.env = env;
     }
 
-    fn render(&mut self, output: &mut [f32]) {
-        for sample in output.iter_mut() {
+    fn render(&mut self, out_left: &mut [f32], out_right: &mut [f32]) {
+        for index in 0..out_left.len() {
             // The only difference from device-sine: a naive sawtooth ramp instead of a sine.
-            *sample += (self.phase * (1.0 / PI)) * self.env.next_value() * self.gain;
+            let sample = (self.phase * (1.0 / PI)) * self.env.next_value() * self.gain;
+            out_left[index] += sample;
+            out_right[index] += sample; // a mono voice, written to both channels
             self.phase += self.phase_inc;
             if self.phase > PI {
                 self.phase -= TAU;
@@ -94,10 +96,11 @@ pub struct Synth;
 impl abi::Instrument for Synth {
     type State = SynthState;
 
-    fn process_audio(state: &mut SynthState, output: &mut [f32]) {
+    fn process_audio(state: &mut SynthState, output: [&mut [f32]; 2]) {
+        let [out_left, out_right] = output;
         for voice in state.voices.iter_mut() {
             if voice.active != 0 {
-                voice.render(output);
+                voice.render(out_left, out_right);
             }
         }
     }
@@ -117,26 +120,28 @@ impl abi::Instrument for Synth {
         }
     }
 
-    fn finish(state: &mut SynthState, output: &mut [f32]) {
+    fn finish(state: &mut SynthState, output: [&mut [f32]; 2]) {
+        let [out_left, out_right] = output;
         for voice in state.voices.iter_mut() {
             if voice.active != 0 && voice.env.is_idle() {
                 voice.active = 0;
             }
         }
-        // 3/16-note feedback delay over the mono output. The buffer is exactly `length` samples
+        // 3/16-note feedback delay over the (dual-mono) output. The buffer is exactly `length` samples
         // (state_size reserved it from the sample rate) and trails the voice header in the same state
-        // block, so the ring's length IS the delay. SAFETY: the buffer follows `SynthState` in the block
-        // and does not overlap it.
+        // block, so the ring's length IS the delay. Run it on the left channel and mirror to the right (the
+        // voices are dual-mono). SAFETY: the buffer follows `SynthState` in the block and does not overlap it.
         let length = delay_samples(state.sample_rate);
         unsafe {
             let header = state as *mut SynthState;
             let delay = core::slice::from_raw_parts_mut(header.add(1) as *mut f32, length);
             let mut pos = (*header).delay_pos as usize % length;
-            for sample in output.iter_mut() {
-                let echo = *sample + delay[pos];
+            for index in 0..out_left.len() {
+                let echo = out_left[index] + delay[pos];
                 delay[pos] = echo * DELAY_FEEDBACK;
                 pos = if pos + 1 >= length { 0 } else { pos + 1 };
-                *sample = echo;
+                out_left[index] = echo;
+                out_right[index] = echo;
             }
             (*header).delay_pos = pos as u32;
         }

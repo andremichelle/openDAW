@@ -41,7 +41,7 @@ const RESONANCE_MAPPING: Exponential = Exponential {min: core::f32::consts::FRAC
 /// a `dirty` flag set when either changed (so the coefficients are recomputed on the next chunk), and the
 /// parameter ids `bind_parameter` returned. Valid when zeroed (silent until the engine pushes the defaults).
 pub struct LowpassState {
-    biquad: BiquadMono,
+    biquads: [BiquadMono; 2], // one filter per channel ([left, right]), sharing `coeff`
     coeff: BiquadCoeff,
     cutoff_hz: f32,
     resonance_q: f32,
@@ -82,16 +82,20 @@ impl AudioEffect for Lowpass {
         state.dirty = true;
     }
 
-    fn process_audio(state: &mut LowpassState, input: &[f32], output: &mut [f32], _block: &Block) {
+    fn process_audio(state: &mut LowpassState, input: [&[f32]; 2], output: [&mut [f32]; 2], _block: &Block) {
         // Recompute the coefficients only when a parameter changed. The biquad's cutoff is a NORMALISED
         // frequency (Hz / sample_rate), so the filter behaves the same at any rate. This filter is driven by
-        // automated parameters, so it ignores the block's tempo / position.
+        // automated parameters, so it ignores the block's tempo / position. One biquad per channel (shared
+        // coefficients), so each channel keeps its own history.
+        let [in_left, in_right] = input;
+        let [out_left, out_right] = output;
         if state.dirty {
             let normalized = (state.cutoff_hz / state.sample_rate) as f64;
             state.coeff.set_lowpass_params(normalized, state.resonance_q as f64);
             state.dirty = false;
         }
-        state.biquad.process(&state.coeff, input, output, 0, input.len());
+        state.biquads[0].process(&state.coeff, in_left, out_left, 0, in_left.len());
+        state.biquads[1].process(&state.coeff, in_right, out_right, 0, in_right.len());
     }
 }
 
@@ -167,19 +171,21 @@ mod tests {
     #[test]
     fn attenuates_nyquist_at_a_low_cutoff() {
         let input = nyquist(512);
-        let mut output = vec![0.0f32; 512];
-        Lowpass::process_audio(&mut state_at(300.0, 0.707), &input, &mut output, &block(512));
-        assert!(energy(&output) < energy(&input) * 0.05, "the Nyquist tone is strongly attenuated");
+        let mut out_left = vec![0.0f32; 512];
+        let mut out_right = vec![0.0f32; 512];
+        Lowpass::process_audio(&mut state_at(300.0, 0.707), [&input, &input], [&mut out_left, &mut out_right], &block(512));
+        assert!(energy(&out_left) < energy(&input) * 0.05, "the Nyquist tone is strongly attenuated");
+        assert_eq!(out_left, out_right, "a dual-mono input filters identically on both channels");
     }
 
     #[test]
     fn cutoff_parameter_drives_the_filter() {
         let input = nyquist(2048);
-        let mut high = vec![0.0f32; 2048];
-        let mut low = vec![0.0f32; 2048];
-        Lowpass::process_audio(&mut state_at(1120.0, 0.707), &input, &mut high, &block(2048));
-        Lowpass::process_audio(&mut state_at(80.0, 0.707), &input, &mut low, &block(2048));
-        assert!(energy(&high) > energy(&low) * 2.0, "a higher cutoff passes more of the Nyquist tone");
+        let (mut high_l, mut high_r) = (vec![0.0f32; 2048], vec![0.0f32; 2048]);
+        let (mut low_l, mut low_r) = (vec![0.0f32; 2048], vec![0.0f32; 2048]);
+        Lowpass::process_audio(&mut state_at(1120.0, 0.707), [&input, &input], [&mut high_l, &mut high_r], &block(2048));
+        Lowpass::process_audio(&mut state_at(80.0, 0.707), [&input, &input], [&mut low_l, &mut low_r], &block(2048));
+        assert!(energy(&high_l) > energy(&low_l) * 2.0, "a higher cutoff passes more of the Nyquist tone");
     }
 
     #[test]

@@ -6,6 +6,9 @@
 
 pub mod adsr;
 pub mod biquad;
+pub mod ppqn;
+pub mod smooth;
+pub mod tidal;
 
 pub use math::{fabs, fast_sin, PI};
 

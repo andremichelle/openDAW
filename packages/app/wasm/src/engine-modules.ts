@@ -23,6 +23,7 @@ const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/device_sine.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
     {url: "/device_saw.wasm", boxType: "NanoDeviceBox"},          // instrument
     {url: "/device_lowpass.wasm", boxType: "RevampDeviceBox"},    // audio effect
+    {url: "/device_tidal.wasm", boxType: "TidalDeviceBox"},       // audio effect
     {url: "/device_arp.wasm", boxType: "ArpeggioDeviceBox"},      // midi effect
     {url: "/device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"}, // midi effect
     {url: "/device_transpose.wasm", boxType: "PitchDeviceBox"}    // midi effect

@@ -24,6 +24,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell, UnsafeCell};
+use bindings::indexed_collection::IndexedCollection;
 use bindings::value_collection::ValueCollection;
 use boxgraph::address::Address;
 use boxgraph::boxes::Registry;
@@ -121,7 +122,7 @@ mod plugin_audio_effect;
 mod plugin_midi_effect;
 use plugin_midi_effect::PluginMidiEffect; // named in the PullLink::MidiFx variant defined here
 mod audio_unit;
-use audio_unit::{AudioUnitBinding, Members};
+use audio_unit::{AudioUnitBinding, DeviceParams, Members};
 mod param_automation;
 use param_automation::ParamHandle;
 
@@ -468,6 +469,8 @@ struct Engine {
     master_id: NodeId,
     audio_units: Vec<AudioUnitBinding>, // one per connected AudioUnitBox, maintained reactively
     unit_changes: Rc<RefCell<Members>>, // recorded by the audio-units membership observer, drained by reconcile
+    output_audio: Option<IndexedCollection>, // THE output unit's audio-fx chain (built once at bind, see output_strip)
+    output_device_params: Vec<DeviceParams>, // the output-fx devices' bound params, retained so they stay observed
     sample_rate: f32,
     blocks: Vec<Block>,
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
@@ -490,6 +493,8 @@ impl Engine {
             master_id: 0,
             audio_units: Vec::new(),
             unit_changes: Rc::new(RefCell::new(Members::default())),
+            output_audio: None,
+            output_device_params: Vec::new(),
             sample_rate,
             blocks: Vec::new(),
             devices: Vec::new(),

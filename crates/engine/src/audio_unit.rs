@@ -176,7 +176,7 @@ struct WiredCluster {
 /// `handles` are clones the engine reads for the build / edit push (sharing the node's `Rc<Cell>`s, so the
 /// `last`-value diff stays consistent with the clock pull); `field_subs` + `collections` are the graph
 /// observations to drop on teardown / re-bind.
-struct DeviceParams {
+pub(crate) struct DeviceParams {
     device_uuid: Uuid,
     reg: DeviceReg,
     state_ptr: u32,
@@ -289,11 +289,41 @@ impl Engine {
         self.graph.catchup_and_subscribe(Address::of(uuid, vec![14]), move |value| {
             if let Some(value) = value.as_bool() { mute.mute.set(value) }
         });
+        // THE output unit's own audio-effect chain (e.g. a master Tidal), wired between the summing bus and
+        // the master strip: bus -> fx0 -> ... -> strip, ordered by device index. Each device binds its
+        // parameters like an instrument unit's, and the initial values are pushed below. Built once at bind
+        // (the output unit is a fixed singleton), so the chain is not reactive yet.
+        let mut source = master_output;
+        let mut source_id = self.master_id;
+        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), DEVICE_INDEX_KEY);
+        let mut device_params: Vec<DeviceParams> = Vec::new();
+        for device_uuid in audio.sorted() {
+            let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
+            let device = match resolved {
+                Some(device) if device.kind == DEVICE_KIND_AUDIO_EFFECT => device,
+                _ => continue
+            };
+            let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
+            let node_state = node.borrow().state_ptr();
+            let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
+            device_params.push(self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink)));
+            node.borrow_mut().set_audio_source(source);
+            source = node.borrow().audio_output();
+            let node_id = self.context.register_processor(node);
+            self.context.register_edge(source_id, node_id);
+            source_id = node_id;
+        }
+        let position = self.transport.position();
+        for params in &device_params {
+            refresh_params(&params.handles, params.reg, params.state_ptr, position);
+        }
+        self.output_audio = Some(audio);
+        self.output_device_params = device_params;
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(params, self.sample_rate)));
-        strip.borrow_mut().set_audio_source(master_output);
+        strip.borrow_mut().set_audio_source(source);
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
-        self.context.register_edge(self.master_id, strip_id); // the bus sums first, then the master strip
+        self.context.register_edge(source_id, strip_id); // the (effected) summing bus feeds the master strip
         strip_output
     }
 

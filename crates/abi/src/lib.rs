@@ -57,10 +57,6 @@ pub const DEVICE_KIND_INSTRUMENT: u32 = 0;
 pub const DEVICE_KIND_AUDIO_EFFECT: u32 = 1;
 pub const DEVICE_KIND_MIDI_EFFECT: u32 = 2;
 
-// WASM CONTRACT: pulses-per-quarter-note, mirror of lib-dsp (PPQN = 960). Devices doing musical timing
-// (tempo-synced LFOs, arpeggiator rates) convert pulses with it.
-pub const PPQN_QUARTER: f64 = 960.0;
-
 /// Per-block transport flags (`BlockFlag` in TS, core-processors `processing.ts`), shared by the host and
 /// devices. State flags (`TRANSPORTING`, `PLAYING`) persist across a block's sub-chunks; event flags
 /// (`DISCONTINUOUS`, `BPM_CHANGED`) are one-shot, cleared after the first chunk via `EVENT_MASK`.
@@ -317,6 +313,12 @@ impl<'a> Inputs<'a> {
         let offset = self.offsets[index];
         unsafe { slice::from_raw_parts(offset as *const f32, self.frames) }
     }
+
+    /// The two input channels `[left, right]`, mirroring TS `StereoMatrix.Channels`. Requires a stereo input.
+    #[inline]
+    pub fn channels(&self) -> [&'a [f32]; 2] {
+        [self.get(0), self.get(1)]
+    }
 }
 
 /// Everything a device needs for one `process` call, as safe references. Built once by
@@ -324,7 +326,10 @@ impl<'a> Inputs<'a> {
 pub struct Ports<'a, S> {
     pub frames: usize,
     pub inputs: Inputs<'a>,
-    pub output: &'a mut [f32],
+    /// The output channels, mirroring TS `StereoMatrix.Channels`: `output[0]` = left, `output[1]` = right,
+    /// pointing at distinct `f32[frames]` buffers so the two `&mut` slices never alias. A mono device writes
+    /// the same samples to both.
+    pub output: [&'a mut [f32]; 2],
     pub params: &'a [f32],
     pub state: &'a mut S,
     /// The quantum's render blocks (the `ProcessInfo`). The device pulls each block's events and may
@@ -370,10 +375,21 @@ impl<'a, S> Ports<'a, S> {
         } else {
             slice::from_raw_parts(in_offsets_ptr, in_count)
         };
-        let output = if out_count == 0 {
-            slice::from_raw_parts_mut(NonNull::<f32>::dangling().as_ptr(), 0)
+        // The two output channels live at out_offsets[0] / [1] (distinct buffers, so the `&mut`s never alias).
+        let out_offsets = if out_count == 0 {
+            slice::from_raw_parts(NonNull::<u32>::dangling().as_ptr(), 0)
         } else {
-            slice::from_raw_parts_mut(*out_offsets_ptr as *mut f32, frames)
+            slice::from_raw_parts(out_offsets_ptr, out_count)
+        };
+        let output_left = if out_count >= 1 {
+            slice::from_raw_parts_mut(out_offsets[0] as *mut f32, frames)
+        } else {
+            slice::from_raw_parts_mut(NonNull::<f32>::dangling().as_ptr(), 0)
+        };
+        let output_right = if out_count >= 2 {
+            slice::from_raw_parts_mut(out_offsets[1] as *mut f32, frames)
+        } else {
+            slice::from_raw_parts_mut(NonNull::<f32>::dangling().as_ptr(), 0)
         };
         let params = if param_count == 0 {
             slice::from_raw_parts(NonNull::<f32>::dangling().as_ptr(), 0)
@@ -393,7 +409,7 @@ impl<'a, S> Ports<'a, S> {
         Self {
             frames,
             inputs: Inputs {offsets: in_offsets, frames},
-            output,
+            output: [output_left, output_right],
             params,
             state: &mut *state_ptr,
             blocks,
@@ -411,9 +427,10 @@ impl<'a, S> Ports<'a, S> {
 /// run a delay). `State` is the device's instance state, interpreted from the engine-allocated block.
 pub trait Instrument {
     type State;
-    /// Render the active state additively into `output` for one inter-event sub-chunk. The sample rate is the
-    /// device's own (it stashed `Ports::sample_rate` in `state`), never a per-call argument.
-    fn process_audio(state: &mut Self::State, output: &mut [f32]);
+    /// Render the active state additively into the stereo `output` (`[left, right]`) for one inter-event
+    /// sub-chunk; a mono instrument writes the same samples to both. The sample rate is the device's own (it
+    /// stashed `Ports::sample_rate` in `state`), never a per-call argument.
+    fn process_audio(state: &mut Self::State, output: [&mut [f32]; 2]);
     /// Apply one note event (on / off) at its sample offset.
     fn handle_event(state: &mut Self::State, event: &EventRecord);
     /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
@@ -428,8 +445,8 @@ pub trait Instrument {
     fn parameter_changed(state: &mut Self::State, id: u32, value: ParamValue) {
         let _ = (state, id, value);
     }
-    /// Once per quantum, after all blocks. Default: nothing.
-    fn finish(state: &mut Self::State, output: &mut [f32]) {
+    /// Once per quantum, after all blocks (e.g. a feedback delay over the whole stereo `output`). Default: nothing.
+    fn finish(state: &mut Self::State, output: [&mut [f32]; 2]) {
         let _ = (state, output);
     }
 }
@@ -438,13 +455,14 @@ pub trait Instrument {
 /// each chunk between events, `handle_event` at each offset. Host-independent (events are supplied), so a
 /// device's DSP is unit-testable without the engine. Does not clear `output` or run `finish`.
 #[inline]
-pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: &mut [f32], events: &[EventRecord]) {
-    let frames = output.len();
+pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 2], events: &[EventRecord]) {
+    let [out_left, out_right] = output;
+    let frames = out_left.len();
     let mut cursor = 0;
     for event in events {
         let offset = (event.offset as usize).min(frames);
         if offset > cursor {
-            I::process_audio(state, &mut output[cursor..offset]);
+            I::process_audio(state, [&mut out_left[cursor..offset], &mut out_right[cursor..offset]]);
             cursor = offset;
         }
         // A clock event (Route D) pulls the parameters changed at this position; a note event voices.
@@ -455,7 +473,7 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: &mut [f32], e
         }
     }
     if cursor < frames {
-        I::process_audio(state, &mut output[cursor..frames]);
+        I::process_audio(state, [&mut out_left[cursor..frames], &mut out_right[cursor..frames]]);
     }
 }
 
@@ -475,35 +493,40 @@ fn record_rank(kind: u32) -> u8 {
 /// every record's sample offset, sort, dispatch the quantum (`dispatch_range` voices notes and refreshes
 /// parameters at the markers), then run the once-per-quantum `finish`.
 pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
-    for sample in ports.output.iter_mut() {
+    let Ports {output, state, blocks, event_scratch, ..} = ports;
+    let [out_left, out_right] = output;
+    for sample in out_left.iter_mut() {
+        *sample = 0.0;
+    }
+    for sample in out_right.iter_mut() {
         *sample = 0.0;
     }
     let mut count = 0;
-    for block in ports.blocks {
-        if count >= ports.event_scratch.len() {
+    for block in blocks {
+        if count >= event_scratch.len() {
             break;
         }
-        let pulled = pull_events(block.p0, block.p1, block.flags.0, &mut ports.event_scratch[count..]);
+        let pulled = pull_events(block.p0, block.p1, block.flags.0, &mut event_scratch[count..]);
         count += pulled;
         // Param-update markers at the engine's update positions in this block (none when the device has no
         // automation — `first_update_position` returns INFINITY). The seed is INCLUSIVE (a grid point on the
         // block start fires); the loop then advances STRICTLY. They carry the pulse position; the offset is
         // resolved with the notes below.
         let mut position = first_update_position(block.p0);
-        while position < block.p1 && count < ports.event_scratch.len() {
-            ports.event_scratch[count] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+        while position < block.p1 && count < event_scratch.len() {
+            event_scratch[count] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
             count += 1;
             position = next_update_position(position);
         }
     }
     // The pull chain works in pulse positions; resolve each record's sample offset, then sort the merged
     // notes + markers into offset order (off -> param -> on at a tie) for `dispatch_range`.
-    for record in &mut ports.event_scratch[..count] {
+    for record in &mut event_scratch[..count] {
         record.offset = pulse_to_offset(record.position);
     }
-    ports.event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
-    dispatch_range::<I>(ports.state, ports.output, &ports.event_scratch[..count]);
-    I::finish(ports.state, ports.output);
+    event_scratch[..count].sort_unstable_by(|a, b| a.offset.cmp(&b.offset).then(record_rank(a.kind).cmp(&record_rank(b.kind))));
+    dispatch_range::<I>(state, [&mut *out_left, &mut *out_right], &event_scratch[..count]);
+    I::finish(state, [out_left, out_right]);
 }
 
 /// The device-SDK template for an AUDIO EFFECT (the TS `AudioEffectDeviceProcessor` analog). It reads one
@@ -512,12 +535,13 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
 /// (the TS `AudioProcessor` split loop). `State` is the effect's instance state (e.g. a filter's history).
 pub trait AudioEffect {
     type State;
-    /// Transform `input` into `output` (same length) for one inter-event sub-chunk. `block` is THIS chunk's
-    /// block: its `p0`/`p1` are the chunk's pulse range, `bpm`/`flags` carry over (one-shot flags cleared
-    /// after the first chunk), and `s0`/`s1` are rebased to `0`/`output.len()` to match the sliced buffers.
-    /// An effect locks to tempo via `block`; one driven purely by automated parameters ignores it and reads
-    /// what `parameter_changed` set. The sample rate is the device's own (it stashed `Ports::sample_rate`).
-    fn process_audio(state: &mut Self::State, input: &[f32], output: &mut [f32], block: &Block);
+    /// Transform the stereo `input` (`[left, right]`) into `output` (`[left, right]`, same length) for one
+    /// inter-event sub-chunk. `block` is THIS chunk's block: its `p0`/`p1` are the chunk's pulse range,
+    /// `bpm`/`flags` carry over (one-shot flags cleared after the first chunk), and `s0`/`s1` are rebased to
+    /// `0`/`len` to match the sliced buffers. An effect locks to tempo via `block`; one driven purely by
+    /// automated parameters ignores it and reads what `parameter_changed` set. The sample rate is the device's
+    /// own (it stashed `Ports::sample_rate`).
+    fn process_audio(state: &mut Self::State, input: [&[f32]; 2], output: [&mut [f32]; 2], block: &Block);
     /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
     /// returned ids in `state`. Called once when the device is wired. Default: nothing (no params).
     fn init(state: &mut Self::State) {
@@ -539,19 +563,25 @@ pub trait AudioEffect {
 /// silence; with no transport blocks (not playing) it passes the input through. A device with no automation
 /// gets no update positions (INFINITY) and runs whole blocks.
 pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
-    let frames = ports.output.len();
-    if ports.inputs.is_empty() {
-        for sample in ports.output.iter_mut() {
+    let Ports {inputs, output, state, blocks, ..} = ports;
+    let [out_left, out_right] = output;
+    let frames = out_left.len();
+    if inputs.is_empty() {
+        for sample in out_left.iter_mut() {
+            *sample = 0.0;
+        }
+        for sample in out_right.iter_mut() {
             *sample = 0.0;
         }
         return;
     }
-    let input = ports.inputs.get(0);
-    if ports.blocks.is_empty() {
-        ports.output.copy_from_slice(&input[..frames]);
+    let [in_left, in_right] = inputs.channels();
+    if blocks.is_empty() {
+        out_left.copy_from_slice(&in_left[..frames]);
+        out_right.copy_from_slice(&in_right[..frames]);
         return;
     }
-    for block in ports.blocks {
+    for block in blocks {
         let s0 = (block.s0 as usize).min(frames);
         let s1 = (block.s1 as usize).min(frames);
         if s1 <= s0 {
@@ -565,17 +595,17 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
             let offset = (pulse_to_offset(position) as usize).clamp(s0, s1);
             if offset > cursor {
                 let sub = Block {index: block.index, flags, p0: chunk_p0, p1: position, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
-                E::process_audio(ports.state, &input[cursor..offset], &mut ports.output[cursor..offset], &sub);
+                E::process_audio(state, [&in_left[cursor..offset], &in_right[cursor..offset]], [&mut out_left[cursor..offset], &mut out_right[cursor..offset]], &sub);
                 cursor = offset;
                 chunk_p0 = position;
                 flags.clear_event_flags();
             }
-            apply_param_changes::<E::State>(ports.state, position, E::parameter_changed);
+            apply_param_changes::<E::State>(state, position, E::parameter_changed);
             position = next_update_position(position);
         }
         if cursor < s1 {
             let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
-            E::process_audio(ports.state, &input[cursor..s1], &mut ports.output[cursor..s1], &sub);
+            E::process_audio(state, [&in_left[cursor..s1], &in_right[cursor..s1]], [&mut out_left[cursor..s1], &mut out_right[cursor..s1]], &sub);
         }
     }
 }

@@ -52,9 +52,11 @@ impl Voice {
         self.env = env;
     }
 
-    fn render(&mut self, output: &mut [f32]) {
-        for sample in output.iter_mut() {
-            *sample += fast_sin(self.phase) * self.env.next_value() * self.gain;
+    fn render(&mut self, out_left: &mut [f32], out_right: &mut [f32]) {
+        for index in 0..out_left.len() {
+            let sample = fast_sin(self.phase) * self.env.next_value() * self.gain;
+            out_left[index] += sample;
+            out_right[index] += sample; // a mono voice, written to both channels
             self.phase += self.phase_inc;
             if self.phase > PI {
                 self.phase -= TAU;
@@ -79,10 +81,11 @@ pub struct Synth;
 impl abi::Instrument for Synth {
     type State = SynthState;
 
-    fn process_audio(state: &mut SynthState, output: &mut [f32]) {
+    fn process_audio(state: &mut SynthState, output: [&mut [f32]; 2]) {
+        let [out_left, out_right] = output;
         for voice in state.voices.iter_mut() {
             if voice.active != 0 {
-                voice.render(output);
+                voice.render(out_left, out_right);
             }
         }
     }
@@ -102,7 +105,7 @@ impl abi::Instrument for Synth {
         }
     }
 
-    fn finish(state: &mut SynthState, _output: &mut [f32]) {
+    fn finish(state: &mut SynthState, _output: [&mut [f32]; 2]) {
         for voice in state.voices.iter_mut() {
             if voice.active != 0 && voice.env.is_idle() {
                 voice.active = 0;
@@ -114,14 +117,17 @@ impl abi::Instrument for Synth {
 /// Host-independent entry for tests: clear the (mono) output, dispatch the supplied events through the
 /// SDK template, and run the post-pass. The wasm `process` path uses [`abi::render_instrument`] instead,
 /// which adds the event pull.
-pub fn render(state: &mut SynthState, events: &[EventRecord], output: &mut [f32], sample_rate: f32) {
+pub fn render(state: &mut SynthState, events: &[EventRecord], out_left: &mut [f32], out_right: &mut [f32], sample_rate: f32) {
     use abi::Instrument;
     state.sample_rate = sample_rate;
-    for sample in output.iter_mut() {
+    for sample in out_left.iter_mut() {
         *sample = 0.0;
     }
-    abi::dispatch_range::<Synth>(state, output, events);
-    Synth::finish(state, output);
+    for sample in out_right.iter_mut() {
+        *sample = 0.0;
+    }
+    abi::dispatch_range::<Synth>(state, [&mut *out_left, &mut *out_right], events);
+    Synth::finish(state, [out_left, out_right]);
 }
 
 // ---- The device ABI: shared with the engine, called wasm-to-wasm. ----

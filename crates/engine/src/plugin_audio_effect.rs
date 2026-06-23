@@ -41,7 +41,7 @@ pub(crate) struct PluginAudioEffect {
     // `Rc<RefCell<AudioBuffer>>` never moves, so the captured pointer stays valid.
     #[allow(dead_code)]
     input: Option<SharedAudioBuffer>,
-    device_output: Box<[f32]>,
+    device_output: [Box<[f32]>; 2], // the device's stereo output buffers ([left, right])
     in_offsets: Box<[u32]>,
     #[allow(dead_code)]
     out_offsets: Box<[u32]>,
@@ -52,20 +52,23 @@ pub(crate) struct PluginAudioEffect {
 
 impl PluginAudioEffect {
     pub(crate) fn new(sample_rate: f32, device: DeviceReg) -> Self {
-        let device_output = vec![0.0f32; RENDER_QUANTUM].into_boxed_slice();
+        let device_output = [
+            vec![0.0f32; RENDER_QUANTUM].into_boxed_slice(),
+            vec![0.0f32; RENDER_QUANTUM].into_boxed_slice()
+        ];
         let state_size = device.state_size as usize;
         // u64-backed so the block is 8-aligned for any device state struct (e.g. a biquad's f64 fields); a
         // 4-aligned block would be misaligned for those.
         let device_state = vec![0u64; state_size.div_ceil(8)].into_boxed_slice();
-        let in_offsets = vec![0u32].into_boxed_slice(); // input buffer ptr, set by set_audio_source
-        let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
-        // descriptor (see `abi`): frames, in_count/ptr (1), out_count/ptr (1), no params, state, NO event
-        // scratch (the effect no longer pulls notes; it fragments at the engine's update positions), no out
-        // events, block_count/ptr (set per quantum from the ProcessInfo for tempo sync), sample_rate.
+        let in_offsets = vec![0u32, 0u32].into_boxed_slice(); // L, R input ptrs, set by set_audio_source
+        let out_offsets = vec![device_output[0].as_ptr() as u32, device_output[1].as_ptr() as u32].into_boxed_slice();
+        // descriptor (see `abi`): frames, in_count/ptr (2, stereo), out_count/ptr (2, stereo), no params, state,
+        // NO event scratch (the effect no longer pulls notes; it fragments at the engine's update positions),
+        // no out events, block_count/ptr (set per quantum from the ProcessInfo for tempo sync), sample_rate.
         let descriptor = vec![
             RENDER_QUANTUM as u32,
-            1, in_offsets.as_ptr() as u32,
-            1, out_offsets.as_ptr() as u32,
+            2, in_offsets.as_ptr() as u32,
+            2, out_offsets.as_ptr() as u32,
             0, 0,
             device_state.as_ptr() as u32,
             0, 0,
@@ -109,7 +112,10 @@ impl EventReceiver for PluginAudioEffect {
 
 impl AudioInput for PluginAudioEffect {
     fn set_audio_source(&mut self, source: SharedAudioBuffer) {
-        self.in_offsets[0] = source.borrow().left.as_ptr() as u32;
+        let buffer = source.borrow();
+        self.in_offsets[0] = buffer.left.as_ptr() as u32;
+        self.in_offsets[1] = buffer.right.as_ptr() as u32;
+        drop(buffer);
         self.input = Some(source);
     }
 }
@@ -152,9 +158,8 @@ impl Processor for PluginAudioEffect {
         }
         let mut output = self.output.borrow_mut();
         for index in 0..RENDER_QUANTUM {
-            let sample = self.device_output[index];
-            output.left[index] = sample;
-            output.right[index] = sample;
+            output.left[index] = self.device_output[0][index];
+            output.right[index] = self.device_output[1][index];
         }
     }
 }

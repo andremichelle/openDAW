@@ -34,6 +34,7 @@ body
 
 main
   flex: 1
+  min-width: 0 // allow the flex item to shrink below its content's width, so wide <pre> lines don't overflow the page
   padding: 1.5rem
 
 .page
@@ -48,11 +49,14 @@ main
 
   pre
     color: var(--color-blue)
+    white-space: pre-wrap // wrap long log / state messages instead of forcing the page wider
+    overflow-wrap: anywhere
 
   pre.timeline
     color: var(--color-gray)
     background: var(--color-panel-background)
     padding: 0.75rem
     border-radius: 4px
+    white-space: pre // keep the ASCII timeline on its own lines; scroll it rather than wrap
     overflow-x: auto
     line-height: 1.35

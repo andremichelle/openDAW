@@ -12,3 +12,4 @@ abi = {path = "../abi"}
 boxgraph = {path = "../boxgraph"}
 value = {path = "../value"}
 math = {path = "../math"}
+dsp = {path = "../dsp"}

@@ -36,7 +36,7 @@ pub(crate) struct PluginInstrument {
     clock_armed: bool,
     events: EventBuffer,
     output: SharedAudioBuffer,
-    device_output: Box<[f32]>,
+    device_output: [Box<[f32]>; 2], // the device's stereo output buffers ([left, right])
     // `device_events` (the event scratch the device pulls into), `device_state`, and `out_offsets` are
     // referenced only by raw address inside `descriptor`; they must stay alive (dropping them frees the
     // memory the device reads/writes), so keep the fields even though Rust sees no direct reads. The block
@@ -53,19 +53,23 @@ pub(crate) struct PluginInstrument {
 
 impl PluginInstrument {
     pub(crate) fn new(sample_rate: f32, device: DeviceReg) -> Self {
-        let device_output = vec![0.0f32; RENDER_QUANTUM].into_boxed_slice();
+        let device_output = [
+            vec![0.0f32; RENDER_QUANTUM].into_boxed_slice(),
+            vec![0.0f32; RENDER_QUANTUM].into_boxed_slice()
+        ];
         let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
         let device_events = vec![blank; DEVICE_MAX_EVENTS].into_boxed_slice();
         let state_size = device.state_size as usize;
         let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice(); // 4-aligned, >= state_size bytes
-        let out_offsets = vec![device_output.as_ptr() as u32].into_boxed_slice();
-        // descriptor words (see the `abi` layout): frames, in_count/ptr, out_count/ptr, param_count/ptr,
-        // state_ptr, in_event_cap/ptr (pull scratch), out_event_cap/ptr (0, instrument has no event out),
-        // block_count/ptr (set per quantum from the ProcessInfo), sample_rate (f32 bits).
+        // Two output offsets (L, R) -> the two device output buffers; the engine is stereo.
+        let out_offsets = vec![device_output[0].as_ptr() as u32, device_output[1].as_ptr() as u32].into_boxed_slice();
+        // descriptor words (see the `abi` layout): frames, in_count/ptr, out_count/ptr (2, stereo),
+        // param_count/ptr, state_ptr, in_event_cap/ptr (pull scratch), out_event_cap/ptr (0, instrument has no
+        // event out), block_count/ptr (set per quantum from the ProcessInfo), sample_rate (f32 bits).
         let descriptor = vec![
             RENDER_QUANTUM as u32,
             0, 0,
-            1, out_offsets.as_ptr() as u32,
+            2, out_offsets.as_ptr() as u32,
             0, 0,
             device_state.as_ptr() as u32,
             DEVICE_MAX_EVENTS as u32, device_events.as_ptr() as u32,
@@ -151,9 +155,8 @@ impl Processor for PluginInstrument {
         }
         let mut output = self.output.borrow_mut();
         for index in 0..RENDER_QUANTUM {
-            let sample = self.device_output[index];
-            output.left[index] = sample;
-            output.right[index] = sample;
+            output.left[index] = self.device_output[0][index];
+            output.right[index] = self.device_output[1][index];
         }
     }
 }
