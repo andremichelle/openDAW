@@ -163,50 +163,18 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Multiple Plugins</h2>
-            <p>Two audio units playing different parts through <strong>six device plugins</strong>: two
-                instruments, an audio effect, and a three-stage MIDI-fx chain. All run from
-                <strong>one shared memory</strong>. Metronome off.</p>
+            <p>Two audio units through six plugins from one shared memory: a sampler bass and a sine lead,
+                an automated low-pass on the bass, and a three-stage MIDI-fx pull chain on the lead.</p>
+            {host.element}
             <ul>
-                <li><strong>Dynamic linking.</strong> A <strong>sampler</strong> bass and a
-                    <strong>sine</strong> lead (<code>device_nano.wasm</code>, <code>device_vaporisateur.wasm</code>)
-                    load as position-independent side modules at host-assigned bases in the shared memory;
-                    the engine calls each unit's device through the shared function table.</li>
-                <li><strong>Audio effect with two automated parameters (bass only).</strong> A
-                    <strong>biquad low-pass</strong> (<code>device_lowpass.wasm</code>) is inserted after the
-                    bass: instrument&nbsp;→&nbsp;effect&nbsp;→&nbsp;bus. Its <strong>cutoff</strong> and
-                    <strong>resonance</strong> are <strong>real parameters driven by automation</strong>,
-                    bound 1:1 to the device's <code>lowPass.frequency</code> and <code>lowPass.q</code> fields.
-                    The cutoff follows a sine sweep (points every 1/32 triplet, mapped exponentially to
-                    80–1120&nbsp;Hz); the resonance sits at its default through the first bar then opens up to
-                    a sharp peak by the loop end. On the <strong>global update clock</strong> the engine
-                    resolves each parameter (its curve, or its box-field default when un-automated), pushes
-                    only the changed ones to the device, and the device recomputes the filter — the auto-wah
-                    is data, not a hard-coded LFO.</li>
-                <li><strong>MIDI-fx pull chain (lead only).</strong> A three-stage chain sits before the lead:
-                    sequencer&nbsp;←&nbsp;<code>arp</code>&nbsp;←&nbsp;<code>zeitgeist</code>&nbsp;←&nbsp;<code>transpose</code>&nbsp;←&nbsp;instrument.
-                    The lead part is a single held C-E-G chord.</li>
-                <li><strong>Arpeggiator.</strong> Holds the chord in its state block and emits a 1/16 stepped
-                    sequence (a few held notes become a stream, NOT one-to-one), and keeps stepping across
-                    blocks with no new input.</li>
-                <li><strong>Zeitgeist.</strong> Shuffles the stream with a swing groove: it pulls its upstream
-                    over an un-warped range and warps the positions back.</li>
-                <li><strong>Transpose with an automated parameter.</strong> Shifts every step by its
-                    <code>semiTones</code> parameter, which is <strong>automated</strong>: 0 through the first
-                    bar, then a stepped jump to +12 (an octave) for the second bar, repeating. This is a
-                    <strong>MIDI-fx</strong> parameter — the fx splits its pull at the update clock and
-                    refreshes the value per sub-range, so a midi effect automates just like an audio one.</li>
-                <li><strong>Pull model.</strong> Each pull cascades up the chain; the MIDI fx are not audio
-                    nodes, they produce events on demand, working in pulse positions while the instrument
-                    resolves sample offsets.</li>
+                <li><strong>Bass:</strong> sampler → automated biquad low-pass (cutoff sweep + resonance,
+                    both real automated parameters) → bus.</li>
+                <li><strong>Lead:</strong> a held C-E-G chord pulled through arp → zeitgeist (swing) →
+                    transpose (automated +12 every other bar) → sine.</li>
+                <li>Proves instruments, the audio-effect path, and a multi-link MIDI-fx event-pull chain
+                    coexisting in one memory.</li>
             </ul>
-            <p>This proves instruments, the audio-effect path, and a multi-link MIDI-effect (event pull)
-                chain all coexist and run from the one memory.</p>
             <pre className="timeline">{TIMELINE}</pre>
-            <div>
-                <button onclick={() => void host.play()}>▶ Play</button>
-                <button onclick={() => void host.stop()}>■ Stop</button>
-            </div>
-            {host.state}
             {host.log}
         </div>
     )

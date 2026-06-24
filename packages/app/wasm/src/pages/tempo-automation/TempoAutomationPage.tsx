@@ -54,15 +54,9 @@ export const TempoAutomationPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Tempo Automation</h2>
-            <p>Tempo events on the TimelineBox tempo track: 30 bpm at bar 0 rising to 1000 bpm at bar 4,
-                with a curve on the first event so it accelerates gently at first. A 4-bar loop wraps it
-                back to the start. Turn tempo automation off to hear the fixed bpm from the slider
-                instead. Position, bpm, and transport state come from the engine's EngineState
-                back-channel (~30 Hz), decoded with the real EngineStateSchema.</p>
-            <div>
-                <button onclick={() => void host.play()}>▶ Play</button>
-                <button onclick={() => void host.stop()}>■ Stop</button>
-            </div>
+            <p>A tempo track ramps 30→1000 bpm over a 4-bar loop. Turn it off for the fixed slider bpm. The
+                readout decodes the engine's EngineState back-channel.</p>
+            {host.element}
             <div>
                 <label>
                     <input type="checkbox" checked={true}
@@ -75,7 +69,6 @@ export const TempoAutomationPage: PageFactory<Env> = ({lifecycle}) => {
                 <input type="range" min="40" max="240" value="120"
                        oninput={(event: Event) => setBpm(parseInt((event.target as HTMLInputElement).value, 10))}/>
             </div>
-            {host.state}
             {host.log}
         </div>
     )

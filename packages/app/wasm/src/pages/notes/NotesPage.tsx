@@ -76,17 +76,10 @@ export const NotesPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Notes</h2>
-            <p>A C-major arpeggio (C4 E4 G4 C5) in semiquavers, looping every quarter. It lives in one
-                note collection shared by <strong>two mirrored regions</strong> — a 4-bar loop split at
-                bar 2 into two 2-bar halves — so the same arpeggio plays in both halves. The NoteSequencer
-                plays each region; if region sharing were broken, bars 2–4 would fall silent. Metronome
-                off.</p>
+            <p>A C-major semiquaver arpeggio in one note collection shared by two mirrored regions, proving
+                region sharing across a split 4-bar loop.</p>
+            {host.element}
             <pre className="timeline">{TIMELINE}</pre>
-            <div>
-                <button onclick={() => void host.play()}>▶ Play</button>
-                <button onclick={() => void host.stop()}>■ Stop</button>
-            </div>
-            {host.state}
             {host.log}
         </div>
     )

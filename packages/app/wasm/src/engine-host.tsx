@@ -6,7 +6,7 @@ import {BoxIO} from "@opendaw/studio-boxes"
 import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {AudioData, PPQN} from "@opendaw/lib-dsp"
 import {SampleInfo, SampleLoader} from "./sample-loader"
-import {EngineProtocol, TransportListener} from "./engine-protocol"
+import {EngineProtocol, HeapListener, HeapStats, TransportListener} from "./engine-protocol"
 import {loadSample} from "./sample-fetch"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {createEngineMemory, loadEngineModules} from "./engine-modules"
@@ -16,12 +16,13 @@ import processorURL from "./engine-processor.ts?worker&url"
 type EngineBoxGraph = ReturnType<typeof ProjectSkeleton.empty>["boxGraph"]
 
 /// The shared engine host every page mounts: it boots the AudioWorklet engine, loads the device modules,
-/// streams the page's box graph into it through the unchanged `SyncSource`, and decodes the engine-state
-/// back-channel. Pages get the `state` / `log` elements and `play` / `stop`; the boot, sync wiring, and
-/// teardown live here once instead of being copy-pasted per page.
+/// streams the page's box graph into it through the unchanged `SyncSource`, and decodes the engine-state and
+/// heap back-channels. Pages drop `{host.element}` at the top (the Resume / Suspend AudioContext buttons, the
+/// engine-state grid, and the heap grid) and `{host.log}` at the bottom, identically across every page. The
+/// boot, sync wiring, and teardown live here once instead of being copy-pasted per page.
 export interface EngineHost {
-    readonly state: HTMLPreElement
-    readonly log: HTMLPreElement
+    readonly element: HTMLElement // the HUD panel: transport buttons + state grid + heap grid
+    readonly log: HTMLPreElement  // the scrolling boot / sample log, rendered at the bottom of the page
     append(line: string): void
     play(): Promise<void>
     stop(): Promise<void>
@@ -35,19 +36,59 @@ export interface EngineHostOptions {
 export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle, options: EngineHostOptions): EngineHost => {
     const context = new MutableObservableOption<AudioContext>()
     const node = new MutableObservableOption<AudioWorkletNode>()
-    const log: HTMLPreElement = <pre/>
+    const log: HTMLPreElement = <pre className="engine-log"/>
     const append = (line: string): void => {log.textContent = `${log.textContent ?? ""}${line}\n`}
-    const state: HTMLPreElement = <pre>position: — | bpm: — | —</pre>
+    const led: HTMLSpanElement = <span className="engine-led"/>
+    // Each metric is its own right-aligned value cell so a changing digit count cannot shift the layout; cells
+    // start as a dash and stay dashed until the back-channel delivers a real value.
+    const audioStateValue: HTMLSpanElement = <span className="value">—</span>
+    const transportValue: HTMLSpanElement = <span className="value">—</span>
+    const positionValue: HTMLSpanElement = <span className="value">—</span>
+    const beatValue: HTMLSpanElement = <span className="value">—</span>
+    const tempoValue: HTMLSpanElement = <span className="value">—</span>
+    const heapUsedValue: HTMLSpanElement = <span className="value">—</span>
+    const heapClaimedValue: HTMLSpanElement = <span className="value">—</span>
+    const memoryTotalValue: HTMLSpanElement = <span className="value">—</span>
+    const metric = (label: string, value: HTMLElement, unit: string = ""): ReadonlyArray<HTMLElement> =>
+        [<span className="label">{label}</span>, value, <span className="unit">{unit}</span>]
     const stateIO = EngineStateSchema()
     const showState = (bytes: ArrayBuffer): void => {
         stateIO.read(new ByteArrayInput(bytes))
         const {position, bpm, isPlaying} = stateIO.object
-        const beat = position / PPQN.Quarter + 1
-        state.textContent = `position: ${position.toFixed(0)} pulses (beat ${beat.toFixed(2)}) | bpm: ${bpm.toFixed(1)} | ${isPlaying ? "playing" : "stopped"}`
+        positionValue.textContent = position.toFixed(0)
+        beatValue.textContent = (position / PPQN.Quarter + 1).toFixed(2)
+        tempoValue.textContent = bpm.toFixed(1)
+        transportValue.textContent = isPlaying ? "playing" : "stopped"
+    }
+    const kb = (bytes: number): string => (bytes / 1024).toFixed(1)
+    const showMemory = ({heapUsed, heapClaimed, memoryTotal}: HeapStats): void => {
+        heapUsedValue.textContent = kb(heapUsed)
+        heapClaimedValue.textContent = kb(heapClaimed)
+        memoryTotalValue.textContent = kb(memoryTotal)
+    }
+    // The transport buttons actually toggle the AudioContext (suspend / resume), so they are labelled and gated
+    // by its real state: nothing to resume before boot, no double-resume while running.
+    const resumeButton: HTMLButtonElement = <button onclick={() => void play()}>Resume</button>
+    const suspendButton: HTMLButtonElement = <button onclick={() => void stop()}>Suspend</button>
+    const showAudioState = (): void => {
+        if (!context.nonEmpty()) {
+            audioStateValue.textContent = "—"
+            resumeButton.disabled = true
+            suspendButton.disabled = true
+            return
+        }
+        const {state} = context.unwrap()
+        audioStateValue.textContent = state
+        audioStateValue.classList.toggle("on", state === "running")
+        led.classList.toggle("on", state === "running")
+        resumeButton.disabled = state === "running"
+        suspendButton.disabled = state !== "running"
     }
     const boot = async (): Promise<void> => {
         const ctx = new AudioContext()
         context.wrap(ctx)
+        ctx.addEventListener("statechange", () => showAudioState())
+        showAudioState()
         await ctx.audioWorklet.addModule(processorURL)
         const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
         const memory = createEngineMemory()
@@ -68,6 +109,9 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         })
         lifecycle.own(Communicator.executor<TransportListener>(messenger.channel("transport"), new class implements TransportListener {
             state(bytes: ArrayBuffer): void {showState(bytes)}
+        }))
+        lifecycle.own(Communicator.executor<HeapListener>(messenger.channel("heap"), new class implements HeapListener {
+            heap(stats: HeapStats): void {showMemory(stats)}
         }))
         // Route F: the sample loader. The worklet drives the handshake; this executor fetches + decodes a sample
         // and writes its PLANAR frames into the SAB at the engine-allocated pointer.
@@ -121,16 +165,10 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         append(`booted @ ${ctx.sampleRate} Hz — suspended`)
     }
     const play = async (): Promise<void> => {
-        if (context.nonEmpty()) {
-            await context.unwrap().resume()
-            append("playing")
-        }
+        if (context.nonEmpty()) {await context.unwrap().resume()}
     }
     const stop = async (): Promise<void> => {
-        if (context.nonEmpty()) {
-            await context.unwrap().suspend()
-            append("stopped")
-        }
+        if (context.nonEmpty()) {await context.unwrap().suspend()}
     }
     lifecycle.own({
         terminate: () => {
@@ -138,6 +176,29 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
             context.ifSome(ctx => void ctx.close())
         }
     })
+    const element: HTMLElement = (
+        <div className="engine-panel">
+            <div className="engine-transport">
+                <div className="engine-id">{led}<span className="engine-title">Engine</span></div>
+                <div className="engine-buttons">{resumeButton}{suspendButton}</div>
+            </div>
+            <div className="engine-readout">
+                <div className="engine-grid">
+                    {metric("Audio", audioStateValue)}
+                    {metric("Transport", transportValue)}
+                    {metric("Position", positionValue, "pulses")}
+                    {metric("Beat", beatValue)}
+                    {metric("Tempo", tempoValue, "bpm")}
+                </div>
+                <div className="engine-grid">
+                    {metric("Heap used", heapUsedValue, "KB")}
+                    {metric("Heap claimed", heapClaimedValue, "KB")}
+                    {metric("Linear memory", memoryTotalValue, "KB")}
+                </div>
+            </div>
+        </div>
+    )
+    showAudioState()
     void boot()
-    return {state, log, append, play, stop}
+    return {element, log, append, play, stop}
 }

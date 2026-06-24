@@ -37,6 +37,9 @@ main
   min-width: 0 // allow the flex item to shrink below its content's width, so wide <pre> lines don't overflow the page
   padding: 1.5rem
 
+code
+  color: var(--color-blue)
+
 .page
   h2
     color: var(--color-bright)
@@ -85,3 +88,135 @@ main
       width: 3.5rem
       text-align: right
       color: var(--color-blue)
+
+  .engine-panel
+    display: flex
+    flex-direction: column
+    max-width: 26rem
+    margin: 0 0 1.5rem
+    border: 1px solid var(--color-panel-background-bright)
+    border-radius: 8px
+    overflow: hidden
+    background: linear-gradient(180deg, var(--color-panel-background-bright), var(--color-panel-background-dark))
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 6px 20px rgba(0, 0, 0, 0.35)
+
+    .engine-transport
+      display: flex
+      align-items: center
+      justify-content: space-between
+      padding: 0.6rem 0.85rem
+      border-bottom: 1px solid var(--color-panel-background-bright)
+      background: rgba(0, 0, 0, 0.2)
+
+      .engine-id
+        display: flex
+        align-items: center
+        gap: 0.55rem
+
+      .engine-title
+        text-transform: uppercase
+        letter-spacing: 0.18em
+        font-size: 0.7rem
+        color: var(--color-gray)
+
+      .engine-led
+        width: 0.6rem
+        height: 0.6rem
+        border-radius: 50%
+        background: var(--color-shadow)
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4) inset
+        transition: background 0.15s, box-shadow 0.15s
+
+        &.on
+          background: var(--color-green)
+          box-shadow: 0 0 6px var(--color-green)
+
+      .engine-buttons
+        display: flex
+        gap: 0.4rem
+
+      button
+        margin: 0
+        padding: 0.3em 0.9em
+        font-size: 0.75rem
+        text-transform: uppercase
+        letter-spacing: 0.06em
+        color: var(--color-bright)
+        background: var(--color-panel-background)
+        border: 1px solid var(--color-panel-background-bright)
+        border-radius: 4px
+
+        &:hover:not(:disabled)
+          border-color: var(--color-blue)
+          color: var(--color-blue)
+
+        &:disabled
+          cursor: default
+          opacity: 0.35
+
+    .engine-readout
+      display: grid
+      grid-template-columns: max-content 1fr max-content
+      column-gap: 1rem
+
+      .engine-grid
+        display: grid
+        grid-column: 1 / -1
+        grid-template-columns: subgrid
+        row-gap: 0.3rem
+        padding: 0.7rem 0.95rem
+
+        & + .engine-grid
+          border-top: 1px solid var(--color-panel-background-bright)
+
+        .label
+          align-self: center
+          text-transform: uppercase
+          letter-spacing: 0.05em
+          font-size: 0.7rem
+          color: var(--color-gray)
+
+        .value
+          text-align: right
+          font-variant-numeric: tabular-nums
+          color: var(--color-bright)
+
+          &.on
+            color: var(--color-green)
+
+        .unit
+          align-self: center
+          font-size: 0.7rem
+          color: var(--color-shadow)
+
+  .metro-controls
+    display: flex
+    flex-wrap: wrap
+    align-items: center
+    gap: 0.6rem
+    margin: 0 0 1rem
+
+    label
+      color: var(--color-gray)
+
+    select
+      font: inherit
+      color: var(--color-bright)
+      background: var(--color-panel-background)
+      border: 1px solid var(--color-panel-background-bright)
+      border-radius: 4px
+      padding: 0.2em 0.4em
+
+  .engine-log
+    margin: 1.5rem 0 0
+    padding: 0.6rem 0.85rem
+    max-width: 40rem
+    max-height: 12rem
+    overflow-y: auto
+    border: 1px solid var(--color-panel-background-bright)
+    border-radius: 6px
+    background: var(--color-panel-background-dark)
+    font-family: ui-monospace, monospace
+    font-size: 0.7rem
+    line-height: 1.5
+    color: var(--color-gray)

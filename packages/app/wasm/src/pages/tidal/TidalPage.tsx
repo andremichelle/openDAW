@@ -96,15 +96,9 @@ export const TidalPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Tidal</h2>
-            <p>A sine synth playing a <strong>semiquaver</strong> arpeggio through a <strong>Tidal</strong>
-                audio effect (a tempo-synced LFO that shapes each channel's gain). The sliders edit the
-                device's parameters <strong>live</strong>: each writes the box field, the SyncSource streams
-                it to the engine, and the engine re-pushes the value to the device. Raise <strong>Ch. Offset</strong>
-                to move the two channels apart into an auto-pan. Metronome off.</p>
-            <div>
-                <button onclick={() => void host.play()}>▶ Play</button>
-                <button onclick={() => void host.stop()}>■ Stop</button>
-            </div>
+            <p>A sine arpeggio through the Tidal audio effect (a tempo-synced gain LFO). The sliders edit its
+                parameters live; raise Ch. Offset to spread the channels into an auto-pan.</p>
+            {host.element}
             <div className="sliders">
                 {slider("Slope", -1, 1, 0.01, -0.25, value => tidal.slope.setValue(value))}
                 {slider("Symmetry", 0, 1, 0.01, 0.5, value => tidal.symmetry.setValue(value))}
@@ -113,7 +107,6 @@ export const TidalPage: PageFactory<Env> = ({lifecycle}) => {
                 {slider("Offset", -180, 180, 1, 0, value => tidal.offset.setValue(value))}
                 {slider("Ch. Offset", -180, 180, 1, 0, value => tidal.channelOffset.setValue(value))}
             </div>
-            {host.state}
             {host.log}
         </div>
     )

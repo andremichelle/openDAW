@@ -81,16 +81,10 @@ export const LoopTruncationPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Loop Truncation</h2>
-            <p>A bar-looping region with a downbeat blip (C6) on beat 1 and a sustained note (C4)
-                entering on beat 4 that is two quarters long. It would ring into the next bar, but the
-                transport loops the bar, so the loop-wrap discontinuity must cut it off at the bar line.
-                The note should stop exactly when the next downbeat fires, not bleed across the wrap.</p>
+            <p>A bar loop with a note that would ring past the bar line: the loop-wrap discontinuity must cut
+                it off exactly at the wrap, not bleed into the next bar.</p>
+            {host.element}
             <pre className="timeline">{TIMELINE}</pre>
-            <div>
-                <button onclick={() => void host.play()}>▶ Play</button>
-                <button onclick={() => void host.stop()}>■ Stop</button>
-            </div>
-            {host.state}
             {host.log}
         </div>
     )
