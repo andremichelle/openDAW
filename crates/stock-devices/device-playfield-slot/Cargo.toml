@@ -1,0 +1,13 @@
+[package]
+name = "device-playfield-slot"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+abi = {path = "../../abi"}
+math = {path = "../../math"}
+libm = "0.2"

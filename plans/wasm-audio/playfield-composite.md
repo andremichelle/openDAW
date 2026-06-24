@@ -197,9 +197,11 @@ about 160 KB, negligible next to the sample buffers.
 
 ## Edge cases (decided)
 
-- **Gate.Loop with zero-length window** (`sampleStart==sampleEnd`, so `distance==0`): the TS `while position
-  >= end` would spin forever. Guard it by **ending the voice**. Off and On modes self-terminate at a
-  zero-length window already, only Loop needs the guard.
+- **Zero-length window** (`sampleStart==sampleEnd`, so `distance==0` and `sign==0`): the read head cannot
+  advance. In TS the gate logic (including the Loop `while`) is nested under the `sign>0` / `sign<0`
+  branches, so `sign==0` skips all of it: not an infinite loop (an earlier reading was wrong), but the voice
+  never reaches its end and a gate-Off voice would stick at a DC offset. Guard it by **ending the voice**
+  across all gate modes.
 - **Two slots sharing the same `index`**: the **first slot in collection order wins**, deterministically.
 - **Sample not resident at note-on**: **drop the note**, no voice, matching TS's empty-data early return.
   Fine with async Route F loading, the pad simply does not sound until its sample is resident.

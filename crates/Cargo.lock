@@ -61,6 +61,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-playfield-slot"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-sine"
 version = "0.0.0"
 dependencies = [
