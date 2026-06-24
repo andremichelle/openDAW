@@ -56,4 +56,5 @@ export enum Pointers {
     VoltageConnection,
     WarpMarkers,
     NeuralAmpModel,
+    CompositeCell,
 }

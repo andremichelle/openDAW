@@ -8,6 +8,7 @@ import {TempoAutomationPage} from "./pages/tempo-automation/TempoAutomationPage"
 import {NotesPage} from "./pages/notes/NotesPage"
 import {LoopTruncationPage} from "./pages/loop-truncation/LoopTruncationPage"
 import {MultiplePluginsPage} from "./pages/multiple-plugins/MultiplePluginsPage"
+import {CompositePage} from "./pages/composite/CompositePage"
 import {TidalPage} from "./pages/tidal/TidalPage"
 import {LoadFilePage} from "./pages/load-file/LoadFilePage"
 
@@ -24,6 +25,7 @@ export const App = () => {
                 <LocalLink href="/notes">Notes</LocalLink>
                 <LocalLink href="/loop-truncation">Loop Truncation</LocalLink>
                 <LocalLink href="/multiple-plugins">Multiple Plugins</LocalLink>
+                <LocalLink href="/composite">Composite</LocalLink>
                 <LocalLink href="/tidal">Tidal</LocalLink>
                 <LocalLink href="/load-file">Load File</LocalLink>
             </nav>
@@ -39,6 +41,7 @@ export const App = () => {
                         {path: "/notes", factory: NotesPage},
                         {path: "/loop-truncation", factory: LoopTruncationPage},
                         {path: "/multiple-plugins", factory: MultiplePluginsPage},
+                        {path: "/composite", factory: CompositePage},
                         {path: "/tidal", factory: TidalPage},
                         {path: "/load-file", factory: LoadFilePage}
                     ]}

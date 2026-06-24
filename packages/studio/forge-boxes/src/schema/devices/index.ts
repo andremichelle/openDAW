@@ -33,6 +33,8 @@ import {WerkstattSampleBox} from "./audio-effects/WerkstattSampleBox"
 import {SpielwerkDeviceBox} from "./midi-effects/SpielwerkDeviceBox"
 import {ApparatDeviceBox} from "./instruments/ApparatDeviceBox"
 import {NoopInstrumentBox} from "./instruments/NoopInstrumentBox"
+import {CompositeDeviceBox} from "./instruments/CompositeDeviceBox"
+import {CompositeCellBox} from "./instruments/CompositeCellBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -71,5 +73,7 @@ export const DeviceDefinitions = [
     WerkstattSampleBox,
     SpielwerkDeviceBox,
     ApparatDeviceBox,
-    NoopInstrumentBox
+    NoopInstrumentBox,
+    CompositeDeviceBox,
+    CompositeCellBox
 ]

@@ -72,7 +72,13 @@ pub(crate) struct CompositeSpec {
     box_type: String,
     pub(crate) children_field: u16,
     pub(crate) index_key: u16,
-    pub(crate) exclude_key: u16 // a child's choke-group flag field (0 = the composite has no choke groups)
+    pub(crate) exclude_key: u16, // a child's choke-group flag field (0 = the composite has no choke groups)
+    // When a composite hosts CELLS (a generic wrapper holding one instrument + its own chains) rather than
+    // direct instruments, these are the cell box's fixed field keys: the hosted instrument, and the cell's midi
+    // / audio fx-host collections. All zero means the children are direct instruments (e.g. Playfield slots).
+    pub(crate) cell_instrument_field: u16,
+    pub(crate) cell_midi_field: u16,
+    pub(crate) cell_audio_field: u16
 }
 
 // Call a device's `process` through the shared function table: a wasm function pointer IS a table index,
@@ -681,8 +687,11 @@ impl Engine {
     /// Register a composite box type: a device box that hosts a child collection (its `children_field`) of its
     /// own instruments, each child ordered / routed by `index_key`. Like `set_device_box_type`, this is the
     /// whole composite glue — the host registers it once and the engine learns nothing else about it.
-    fn register_composite(&mut self, box_type: String, children_field: u16, index_key: u16, exclude_key: u16) {
-        self.composites.push(CompositeSpec {box_type, children_field, index_key, exclude_key});
+    #[allow(clippy::too_many_arguments)] // one positional field key per composite facet, matching the loader
+    fn register_composite(&mut self, box_type: String, children_field: u16, index_key: u16, exclude_key: u16,
+                          cell_instrument_field: u16, cell_midi_field: u16, cell_audio_field: u16) {
+        self.composites.push(CompositeSpec {box_type, children_field, index_key, exclude_key,
+            cell_instrument_field, cell_midi_field, cell_audio_field});
     }
 
     /// The composite spec for a box TYPE, if it is a registered composite host (else `None`, a leaf device).
@@ -1065,7 +1074,9 @@ pub extern "C" fn device_set_box_type(device_id: u32, name_len: usize) {
 /// collection's host field key + the child index/routing key. Mirrors `device_set_box_type`; the engine reads
 /// no composite specifics beyond this, so a composite box plays with zero engine changes.
 #[no_mangle]
-pub extern "C" fn composite_register(name_len: usize, children_field: u32, index_key: u32, exclude_key: u32) {
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn composite_register(name_len: usize, children_field: u32, index_key: u32, exclude_key: u32,
+                                     cell_instrument_field: u32, cell_midi_field: u32, cell_audio_field: u32) {
     unsafe {
         let engine = match ENGINE.get().as_mut() {
             Some(engine) => engine,
@@ -1073,7 +1084,8 @@ pub extern "C" fn composite_register(name_len: usize, children_field: u32, index
         };
         let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), name_len);
         if let Ok(name) = core::str::from_utf8(bytes) {
-            engine.register_composite(String::from(name), children_field as u16, index_key as u16, exclude_key as u16);
+            engine.register_composite(String::from(name), children_field as u16, index_key as u16, exclude_key as u16,
+                cell_instrument_field as u16, cell_midi_field as u16, cell_audio_field as u16);
         }
     }
 }

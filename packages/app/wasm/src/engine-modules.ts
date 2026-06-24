@@ -6,7 +6,12 @@
 // than mapping to a single plugin. The engine learns it as data (registered like a device box type): the
 // child collection's host field, and the child box field its order / routing reads. No engine code is
 // composite-specific. The child plugin (e.g. PlayfieldSampleBox) is a normal entry in DEVICES.
-export type CompositeSpec = { boxType: string, childrenField: number, indexKey: number, excludeKey: number }
+export type CompositeSpec = {
+    boxType: string, childrenField: number, indexKey: number, excludeKey: number,
+    // When the composite hosts CELLS (a generic wrapper holding one instrument + its own chains), the cell box's
+    // fixed field keys: the hosted instrument, its midi-fx host, its audio-fx host. All 0 = direct instruments.
+    cellInstrumentField: number, cellMidiField: number, cellAudioField: number
+}
 
 export type EngineModules = {
     engineModule: WebAssembly.Module
@@ -42,7 +47,13 @@ const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
 // `index` field (key 15) and its choke-group flag is `exclude` (key 42). The slot plugin itself is the
 // PlayfieldSampleBox entry in DEVICES above.
 const COMPOSITES: ReadonlyArray<CompositeSpec> = [
-    {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42}
+    // Playfield: direct children (self-hosting slots, device-declared chains), routed by note index + choke.
+    {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
+        cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0},
+    // A generic instrument bundle: children are CELLS (CompositeCellBox) at field 10, each wrapping one
+    // instrument (field 2) plus its midi-fx (3) and audio-fx (4) chains. No routing index, no choke.
+    {boxType: "CompositeDeviceBox", childrenField: 10, indexKey: 0, excludeKey: 0,
+        cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4}
 ]
 
 export const loadEngineModules = async (): Promise<EngineModules> => {

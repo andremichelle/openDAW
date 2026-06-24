@@ -87,14 +87,18 @@ impl Engine {
         let mut nested = Vec::new();
         // Read each child's routing note (`index_key`) and choke-group flag (`exclude_key`) from the box once.
         // The choke group is every exclude child's note, so an exclude child receives a CHOKE when any OTHER
-        // exclude child fires. A child with no index gets the whole stream (a full instrument).
+        // exclude child fires. A child with no index gets the whole stream (a full instrument), and `index_key`
+        // 0 means the composite has no routing at all (a generic instrument bundle), so every child is full.
         let infos: Vec<(Uuid, Option<i32>, bool)> = child_uuids.iter().map(|&uuid| {
-            let index = self.graph.field_value(&Address::of(uuid, vec![spec.index_key])).and_then(|value| value.as_int32());
+            let index = if spec.index_key == 0 { None } else {
+                self.graph.field_value(&Address::of(uuid, vec![spec.index_key])).and_then(|value| value.as_int32())
+            };
             let exclude = spec.exclude_key != 0
                 && self.graph.field_value(&Address::of(uuid, vec![spec.exclude_key])).and_then(|value| value.as_bool()).unwrap_or(false);
             (uuid, index, exclude)
         }).collect();
         let exclude_notes: Vec<i32> = infos.iter().filter(|(_, _, exclude)| *exclude).filter_map(|(_, index, _)| *index).collect();
+        let cell_based = spec.cell_instrument_field != 0;
         for (child_uuid, index, exclude) in infos {
             // The child's choke group is every OTHER exclude child's note (it filters its own note itself).
             let choke: Rc<[i32]> = if exclude {
@@ -102,7 +106,15 @@ impl Engine {
             } else {
                 Rc::from(Vec::new())
             };
-            if let Some((child, child_chains, child_binding)) = self.build_instrument(track_sets, child_uuid, choke) {
+            // A cell-based composite wraps each child in a generic cell (instrument + its own chains); a direct
+            // composite builds the child box itself (a leaf voice, e.g. a Playfield slot, with device-declared
+            // chains). Both yield the same cluster + chain-observation shape.
+            let built = if cell_based {
+                self.build_cell(track_sets, child_uuid, spec)
+            } else {
+                self.build_instrument(track_sets, child_uuid, choke)
+            };
+            if let Some((child, child_chains, child_binding)) = built {
                 sum.borrow_mut().add_audio_source(child.output);
                 self.context.register_edge(child.output_node, sum_id);
                 edges.push((child.output_node, sum_id));
@@ -169,5 +181,37 @@ impl Engine {
         observation.take_dirty();
         chains.push(observation);
         sorted
+    }
+
+    /// Build one CELL child: a generic wrapper (`spec.cell_*` field keys) holding ONE instrument plus its own
+    /// midi / audio fx chains, the way an audio unit hosts an instrument and its chains. The instrument and the
+    /// effects are unchanged plugins that attach to the cell by their normal `host` pointers, so a leaf device
+    /// needs no per-composite knowledge. Reads the cell's hosted instrument (first member of its instrument host)
+    /// and folds the cell's chains around it with the shared `build_cluster`, on the full broadcast stream (a
+    /// generic composite has no per-cell note routing). Returns `None` for an empty cell or an unresolved /
+    /// non-instrument device, unsubscribing whatever it observed.
+    fn build_cell(&mut self, track_sets: &SharedTrackSets, cell_uuid: Uuid, spec: &CompositeSpec)
+        -> Option<(BuiltCluster, Vec<IndexedCollection>, Option<CompositeBinding>)> {
+        let instrument_obs = IndexedCollection::observe(&mut self.graph, Address::of(cell_uuid, vec![spec.cell_instrument_field]), 0);
+        instrument_obs.take_dirty();
+        let instrument_uuid = match instrument_obs.sorted().first().copied() {
+            Some(uuid) => uuid,
+            None => { instrument_obs.terminate(&mut self.graph); return None; }
+        };
+        let name = match self.graph.find_box(&instrument_uuid) {
+            Some(device_box) => device_box.name.clone(),
+            None => { instrument_obs.terminate(&mut self.graph); return None; }
+        };
+        let device = match self.device_for_type(&name).filter(|device| device.kind == DEVICE_KIND_INSTRUMENT) {
+            Some(device) => device,
+            None => { instrument_obs.terminate(&mut self.graph); return None; }
+        };
+        let sequencer: SharedNoteEventSource =
+            Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: track_sets.clone()}))));
+        let mut chains = vec![instrument_obs];
+        let midi = self.observe_child_chain(cell_uuid, spec.cell_midi_field, &mut chains);
+        let audio = self.observe_child_chain(cell_uuid, spec.cell_audio_field, &mut chains);
+        let cluster = self.build_cluster(PullLink::Source(sequencer), instrument_uuid, device, &midi, &audio);
+        Some((cluster, chains, None))
     }
 }
