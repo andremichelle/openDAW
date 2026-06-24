@@ -85,7 +85,7 @@ pub fn registry() -> Registry {
         ("ApparatDeviceBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::String), (3u16, FieldType::String), (4u16, FieldType::Boolean), (5u16, FieldType::Boolean), (10u16, FieldType::String), (11u16, FieldType::Hook), (12u16, FieldType::Hook)])),
         ("NoopInstrumentBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::String), (3u16, FieldType::String), (4u16, FieldType::Boolean), (5u16, FieldType::Boolean)])),
         ("CompositeDeviceBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::String), (3u16, FieldType::String), (4u16, FieldType::Boolean), (5u16, FieldType::Boolean), (10u16, FieldType::Hook)])),
-        ("CompositeCellBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::Hook), (3u16, FieldType::Hook), (4u16, FieldType::Hook)])),
+        ("CompositeCellBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::Hook), (3u16, FieldType::Hook), (4u16, FieldType::Hook), (5u16, FieldType::Int32)])),
         ("ModularBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::Hook), (3u16, FieldType::Hook), (11u16, FieldType::Hook), (12u16, FieldType::Hook), (13u16, FieldType::String)])),
         ("ModuleConnectionBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::Pointer), (3u16, FieldType::Pointer)])),
         ("ModularAudioInputBox".to_string(), Schema::from([(1u16, FieldType::Object(Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::String), (3u16, FieldType::Int32), (4u16, FieldType::Int32), (5u16, FieldType::Boolean), (6u16, FieldType::Boolean)]))), (10u16, FieldType::Hook)])),

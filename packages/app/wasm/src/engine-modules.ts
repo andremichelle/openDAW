@@ -51,8 +51,9 @@ const COMPOSITES: ReadonlyArray<CompositeSpec> = [
     {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
         cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0},
     // A generic instrument bundle: children are CELLS (CompositeCellBox) at field 10, each wrapping one
-    // instrument (field 2) plus its midi-fx (3) and audio-fx (4) chains. No routing index, no choke.
-    {boxType: "CompositeDeviceBox", childrenField: 10, indexKey: 0, excludeKey: 0,
+    // instrument (field 2) plus its midi-fx (3) and audio-fx (4) chains, ordered by the cell's own `index`
+    // (field 5, UI position + engine sort). No note routing, no choke.
+    {boxType: "CompositeDeviceBox", childrenField: 10, indexKey: 5, excludeKey: 0,
         cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4}
 ]
 

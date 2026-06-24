@@ -14,7 +14,8 @@ export const CompositeCellBox: BoxSchema<Pointers> = {
             1: {type: "pointer", name: "composite", pointerType: Pointers.CompositeCell, mandatory: true},
             2: {type: "field", name: "instrument", pointerRules: {accepts: [Pointers.InstrumentHost], mandatory: true}},
             3: {type: "field", name: "midi-effects", pointerRules: {accepts: [Pointers.MIDIEffectHost], mandatory: false}},
-            4: {type: "field", name: "audio-effects", pointerRules: {accepts: [Pointers.AudioEffectHost], mandatory: false}}
+            4: {type: "field", name: "audio-effects", pointerRules: {accepts: [Pointers.AudioEffectHost], mandatory: false}},
+            5: {type: "int32", name: "index", constraints: "index", unit: ""} // position in the composite (UI order)
         }
     },
     pointerRules: {accepts: [Pointers.Selection], mandatory: false}

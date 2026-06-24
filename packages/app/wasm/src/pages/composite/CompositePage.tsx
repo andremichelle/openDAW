@@ -37,7 +37,10 @@ export const CompositePage: PageFactory<Env> = ({lifecycle}) => {
     // Cell 1: a Vaporisateur (sine) with an Arp on the cell's own MIDI-fx chain, so only the Vapo is
     // arpeggiated (it pulls the held chord through the arp into a 1/16 sequence) while the Nano plays the chord
     // straight. The Arp is an unchanged MIDI-fx plugin attached to the cell by its normal `host` pointer.
-    const vapoCell = CompositeCellBox.create(boxGraph, UUID.generate(), box => box.composite.refer(composite.cells))
+    const vapoCell = CompositeCellBox.create(boxGraph, UUID.generate(), box => {
+        box.composite.refer(composite.cells)
+        box.index.setValue(0)
+    })
     VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => {
         box.host.refer(vapoCell.instrument)
         applySinePatch(box)
@@ -54,7 +57,10 @@ export const CompositePage: PageFactory<Env> = ({lifecycle}) => {
         box.startInSeconds.setValue(0)
         box.endInSeconds.setValue(2.0)
     })
-    const nanoCell = CompositeCellBox.create(boxGraph, UUID.generate(), box => box.composite.refer(composite.cells))
+    const nanoCell = CompositeCellBox.create(boxGraph, UUID.generate(), box => {
+        box.composite.refer(composite.cells)
+        box.index.setValue(1)
+    })
     NanoDeviceBox.create(boxGraph, UUID.generate(), box => {
         box.host.refer(nanoCell.instrument)
         box.file.refer(sample)
@@ -93,14 +99,9 @@ export const CompositePage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Composite</h2>
-            <p>One audio unit whose instrument is a generic <code>CompositeDeviceBox</code> bundling two full
-                instruments, each in its own <code>CompositeCellBox</code>: a Vaporisateur (sine) and a Nano
-                (ToyPiano sample) into a Delay on the Nano cell's own audio-fx chain. The instrument and the
-                delay attach to their cell by their normal <code>host</code> pointers, with no plugin changes.
-                The composite broadcasts the held C-E-G chord to both cells: the Vapo cell arpeggiates it through
-                an Arp on its own MIDI-fx chain (1/16 steps), while the Nano plays the chord straight and echoes
-                through a Delay on its own audio-fx chain. A test of per-child midi and audio chains in a
-                composite, each instrument and effect an unchanged plugin.</p>
+            <p>A generic <code>CompositeDeviceBox</code> hosts two instruments, each in its own cell with its own
+                chains: a Vaporisateur arpeggiated by a per-cell Arp, and a Nano (ToyPiano) echoed by a per-cell
+                Delay. Both play the same broadcast chord; every instrument and effect is an unchanged plugin.</p>
             {host.element}
         </div>
     )
