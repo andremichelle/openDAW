@@ -140,7 +140,7 @@ pub fn render(state: &mut SynthState, events: &[EventRecord], out_left: &mut [f3
 
 /// Bytes the engine must allocate (zeroed) for one instance's state block. The sine's state is a fixed
 /// voice array, so the size does not depend on `sample_rate`; the parameter keeps the ABI uniform with
-/// devices whose state IS rate-sized (e.g. device-saw's delay buffer).
+/// devices whose state IS rate-sized (e.g. a device with a sample-rate-sized delay buffer).
 #[no_mangle]
 pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
     core::mem::size_of::<SynthState>() as u32
