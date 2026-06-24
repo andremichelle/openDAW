@@ -8,13 +8,12 @@ import {createEngineHost} from "../../engine-host"
 // fetch the bytes, `ProjectSkeleton.decode` them into a box graph, and stream it through the unchanged
 // `SyncSource` (the same path every other page uses). The dropdown lists every project under public/projects;
 // switching disposes the whole engine (its own child lifecycle) and boots a fresh one for the new file.
-const FILES = import.meta.glob("/public/projects/*.od", {
-    query: "?url",
-    import: "default",
-    eager: true
-}) as Record<string, string>
-const PROJECTS = Object.entries(FILES)
-    .map(([path, url]) => ({name: path.slice(path.lastIndexOf("/") + 1).replace(/\.od$/, ""), url}))
+const FILES = import.meta.glob("/public/projects/*.od", {query: "?url", import: "default"})
+const PROJECTS = Object.keys(FILES)
+    .map(path => ({
+        name: path.slice(path.lastIndexOf("/") + 1).replace(/\.od$/, ""),
+        url: path.replace(/^\/public/, "")
+    }))
     .sort((left, right) => left.name.localeCompare(right.name))
 
 export const LoadFilePage: PageFactory<Env> = ({lifecycle}) => {
