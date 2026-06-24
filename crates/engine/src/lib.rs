@@ -31,7 +31,7 @@ use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::{decode_forward, Update};
-use abi::{EventRecord, ParamChange, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use abi::{EventRecord, ParamChange, EVENT_CHOKE, EVENT_NOTE_OFF, EVENT_NOTE_ON};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::block::Block;
@@ -55,7 +55,22 @@ struct DeviceReg {
     state_size: u32,               // bytes the engine must allocate (zeroed) per instance
     kind: u32,                     // DEVICE_KIND_INSTRUMENT / DEVICE_KIND_AUDIO_EFFECT (from the `kind` export)
     init_index: u32,               // slot of the device's `init` export (binds params); 0 if it has none
-    parameter_changed_index: u32   // slot of the device's `parameter_changed` export; 0 if it has none
+    parameter_changed_index: u32,  // slot of the device's `parameter_changed` export; 0 if it has none
+    field_changed_index: u32,      // slot of the device's `field_changed` export (observed plain fields); 0 if none
+    sample_changed_index: u32      // slot of the device's `sample_changed` export (observed samples); 0 if none
+}
+
+/// A registered COMPOSITE box type (e.g. Playfield): a device box that hosts a CHILD COLLECTION of its own
+/// instruments rather than a single DSP. The engine learns this as data (registered like a device box type),
+/// so it stays mapping-agnostic — no composite box name or field key is hardcoded. `children_field` is the
+/// host field whose pointer hub holds the children; `index_key` is the child box field their order / routing
+/// reads. Each child is realized generically by its OWN box type (a leaf device, or a nested composite).
+#[derive(Clone)]
+pub(crate) struct CompositeSpec {
+    box_type: String,
+    pub(crate) children_field: u16,
+    pub(crate) index_key: u16,
+    pub(crate) exclude_key: u16 // a child's choke-group flag field (0 = the composite has no choke groups)
 }
 
 // Call a device's `process` through the shared function table: a wasm function pointer IS a table index,
@@ -113,8 +128,42 @@ fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, i
 #[cfg(not(target_family = "wasm"))]
 fn call_device_parameter_changed(_parameter_changed_index: u32, _state_ptr: u32, _id: u32, _kind: u32, _value: f32) {}
 
+// Call a device's `field_changed(state_ptr, id, value)` export to deliver an observed plain field's value
+// (catch-up + edits). Called only inside a transaction (the `catchup_and_subscribe` callback), never during
+// `process`, so it never aliases the state the render path borrows.
+#[cfg(target_family = "wasm")]
+#[inline]
+fn call_device_field_changed(field_changed_index: u32, state_ptr: u32, id: u32, kind: u32, bits: u32, len: u32) {
+    if field_changed_index == 0 {
+        return; // the device exports no `field_changed`; index 0 is the "none" sentinel
+    }
+    let field_changed: extern "C" fn(u32, u32, u32, u32, u32) = unsafe { core::mem::transmute(field_changed_index as usize) };
+    field_changed(state_ptr, id, kind, bits, len);
+}
+#[cfg(not(target_family = "wasm"))]
+fn call_device_field_changed(_field_changed_index: u32, _state_ptr: u32, _id: u32, _kind: u32, _bits: u32, _len: u32) {}
+
+// Call a device's `sample_changed(state_ptr, id, handle, present)` export to deliver an observed sample (the
+// resolved handle, or `present == 0` when the pointer is unbound). Called only inside a transaction (the
+// pointer observer), never during `process`.
+#[cfg(target_family = "wasm")]
+#[inline]
+fn call_device_sample_changed(sample_changed_index: u32, state_ptr: u32, id: u32, handle: u32, present: u32) {
+    if sample_changed_index == 0 {
+        return; // the device exports no `sample_changed`; index 0 is the "none" sentinel
+    }
+    let sample_changed: extern "C" fn(u32, u32, u32, u32) = unsafe { core::mem::transmute(sample_changed_index as usize) };
+    sample_changed(state_ptr, id, handle, present);
+}
+#[cfg(not(target_family = "wasm"))]
+fn call_device_sample_changed(_sample_changed_index: u32, _state_ptr: u32, _id: u32, _handle: u32, _present: u32) {}
+
 const DEVICE_MAX_EVENTS: usize = 256; // per-quantum event scratch the device pulls into
-const DEVICE_INDEX_KEY: u16 = 2; // device box `index` field (DeviceFactory): the chain order within a host
+// The `index` field of an EFFECT device box (DeviceFactory's midi-effect / audio-effect attributes), giving
+// the chain order within a host. ONLY effects have it: an instrument box has no `index` (its key 2 is `label`),
+// and a composite child (e.g. a PlayfieldSampleBox slot) carries its own index at its own key (the composite's
+// `index_key`, not this). So this is used solely for the midi / audio effect chains.
+const EFFECT_INDEX_KEY: u16 = 2;
 
 mod metronome;
 use metronome::Metronome;
@@ -124,6 +173,7 @@ mod plugin_midi_effect;
 use plugin_midi_effect::PluginMidiEffect; // named in the PullLink::MidiFx variant defined here
 mod audio_unit;
 use audio_unit::{AudioUnitBinding, DeviceParams, Members};
+mod composite;
 mod param_automation;
 use param_automation::ParamHandle;
 mod sample;
@@ -179,14 +229,18 @@ static BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
 // aliases the `&mut Engine` the render path holds. Mutated only off-render (the load handshake + box
 // observer), read-only during render, so the single-threaded engine never overlaps a borrow.
 static SAMPLES: Shared<SampleResource> = Shared::new(SampleResource::new());
-// The sample-bind recorder the `host_bind_sample` export appends to: each device's sample pointer-field path
-// (e.g. Nano's `file` at `[15]`). After `init`, the engine resolves each path's pointer to the AudioFileBox,
-// requests its frames, and pushes the resolved sample HANDLE to the device via `parameter_changed`. Held in
-// its OWN cell (NOT `ENGINE`) so the re-entrant `host_bind_sample` call from `init` never aliases `&mut Engine`.
-static SAMPLE_BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
-// Tags a sample-binding id so it never collides with a parameter id (parameter ids are small indices). The
-// device gets this id from `host_bind_sample` and matches it in `parameter_changed` to read the sample handle.
-const SAMPLE_ID_TAG: u32 = 0x8000_0000;
+// The sample-observe recorder the `host_observe_sample` export appends to: each device's sample pointer-field
+// path (e.g. Nano's `file` at `[15]`). After `init`, the engine REACTIVELY tracks each pointer (catch-up +
+// subscribe), resolving its target to the AudioFileBox, requesting its frames, and delivering the handle (or
+// "unbound") to the device via `sample_changed`. Its OWN cell (NOT `ENGINE`) so the re-entrant
+// `host_observe_sample` call from `init` never aliases `&mut Engine`.
+static SAMPLE_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+
+// The field-observe recorder the `host_observe_field` export appends to: each device's PLAIN box-field path it
+// wants to track (e.g. a Playfield slot's `index` at `[15]`). After `init`, the engine `catchup_and_subscribe`s
+// each path and delivers values through the device's `field_changed` export. Its own cell (NOT `ENGINE`) so the
+// re-entrant `host_observe_field` call from `init` never aliases `&mut Engine`.
+static FIELD_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
 
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
 /// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` wraps a
@@ -196,6 +250,10 @@ const SAMPLE_ID_TAG: u32 = 0x8000_0000;
 #[derive(Clone)]
 enum PullLink {
     Source(SharedNoteEventSource),
+    // A composite child's choke injector over a shared note source: pass every note through (the child device
+    // filters to its own note), and ADD a `CHOKE` record when a note in `choke` (its sibling choke group) fires.
+    // A leaf link like `Source`. `choke` is an `Rc` so cloning the link (each pull) does not allocate.
+    SlotRoute { upstream: SharedNoteEventSource, choke: Rc<[i32]> },
     MidiFx { effect: Rc<PluginMidiEffect>, upstream: Rc<PullLink> }
 }
 
@@ -256,6 +314,7 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
     let link = { unsafe { PULL.get() }.current.clone() };
     match link {
         Some(PullLink::Source(ref source)) => pull_from_source(source, from, to, flags, out_ptr, max),
+        Some(PullLink::SlotRoute {ref upstream, ref choke}) => pull_from_slot_route(upstream, choke, from, to, flags, out_ptr, max),
         Some(PullLink::MidiFx {effect, upstream}) => {
             // Descend into the fx: swap in ITS params + clock-armed state + the upstream link, so the fx's own
             // `host_update_parameters` / `next_update_position` see the fx's automation and its upstream pull
@@ -328,16 +387,28 @@ pub extern "C" fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32 {
     (bind.len() - 1) as u32
 }
 
-/// Host import a device calls from its `init` to declare its SAMPLE reference by the box pointer-field PATH
-/// (e.g. `[15]` for Nano's `file`). It only RECORDS the path (into `SAMPLE_BIND`) and returns a tagged id;
-/// after `init` the engine resolves the pointer to the AudioFileBox, requests the sample, and pushes the
-/// handle via `parameter_changed` under this id. Touches no graph and no `&mut Engine`, so it is safe from `init`.
+/// Host import a device calls from its `init` to OBSERVE its SAMPLE reference by the box pointer-field PATH
+/// (e.g. `[15]` for Nano's `file`). It only RECORDS the path (into `SAMPLE_OBS`) and returns its id; after
+/// `init` the engine reactively tracks the pointer, resolving + requesting the sample and delivering the handle
+/// via `sample_changed`. Touches no graph and no `&mut Engine`, so it is safe from `init`.
 #[no_mangle]
-pub extern "C" fn host_bind_sample(path_ptr: u32, path_len: u32) -> u32 {
+pub extern "C" fn host_observe_sample(path_ptr: u32, path_len: u32) -> u32 {
     let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
-    let bind = unsafe { SAMPLE_BIND.get() };
-    bind.push(path.to_vec());
-    SAMPLE_ID_TAG | (bind.len() as u32 - 1)
+    let obs = unsafe { SAMPLE_OBS.get() };
+    obs.push(path.to_vec());
+    obs.len() as u32 - 1
+}
+
+/// Host import a device calls from its `init` to OBSERVE one of its plain box fields by its field-key PATH.
+/// Only RECORDS the path (into `FIELD_OBS`) and returns its id; after `init` the engine `catchup_and_subscribe`s
+/// it and delivers the value through the device's `field_changed`. NOT a parameter (no automation). Touches no
+/// `&mut Engine`, so it is safe from `init`.
+#[no_mangle]
+pub extern "C" fn host_observe_field(path_ptr: u32, path_len: u32) -> u32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let obs = unsafe { FIELD_OBS.get() };
+    obs.push(path.to_vec());
+    obs.len() as u32 - 1
 }
 
 /// Host import a device calls (on a clock event) to pull its AUTOMATED parameters that changed at `position`.
@@ -431,6 +502,43 @@ fn pull_from_source(source: &SharedNoteEventSource, from: f64, to: f64, flags: u
     count as u32
 }
 
+/// Resolve a composite child's choke injector: pull the unit's full note stream and pass every note through
+/// (the child DEVICE filters to its own note, by the `index` it observed), ADDING a `CHOKE` record when a note
+/// in this child's choke group (`choke`) fires. The choke is emitted just before that note (and the device
+/// re-sorts CHOKE before note-on anyway), so the child's voices release before any simultaneous own note. Same
+/// layering as `pull_from_source`. Used only for a child that is in a choke group; others use `Source`.
+fn pull_from_slot_route(upstream: &SharedNoteEventSource, choke: &[i32], from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
+    let pull = unsafe { PULL.get() };
+    pull.scratch.clear();
+    upstream.borrow_mut().process_notes(from, to, BlockFlags(flags), &mut |event| pull.scratch.push(event));
+    pull.scratch.sort_by(compare_lifecycle);
+    let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
+    let mut count = 0;
+    for event in &pull.scratch {
+        if count >= out.len() {
+            break;
+        }
+        match *event {
+            Event::NoteStart {id, position, pitch, cent, velocity, ..} => {
+                if choke.contains(&(pitch as i32)) {
+                    out[count] = EventRecord {position, offset: 0, kind: EVENT_CHOKE, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+                    count += 1;
+                    if count >= out.len() {
+                        break;
+                    }
+                }
+                out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_ON, id: id as u32, pitch: pitch as u32, velocity, cent};
+            }
+            Event::NoteComplete {id, position, pitch} => {
+                out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_OFF, id: id as u32, pitch: pitch as u32, velocity: 0.0, cent: 0.0};
+            }
+            Event::Update {..} => continue
+        }
+        count += 1;
+    }
+    count as u32
+}
+
 // WASM CONTRACT: EngineStateSchema byte layout (studio-adapters/EngineStateSchema.ts), big-endian.
 // We expose the raw schema payload (no SyncStream Atomics header — the harness is single main-thread);
 // JS decodes it with `EngineStateSchema().read(...)`. Field order = byte order.
@@ -503,6 +611,7 @@ struct Engine {
     blocks: Vec<Block>,
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
     device_box_types: Vec<(String, usize)>, // box-type name -> index into `devices`: the ONLY device glue.
+    composites: Vec<CompositeSpec>,    // registered composite box types (host of a child collection); data, not code
     device_allocs: Vec<Box<[u8]>>,     // talc-owned regions handed to devices (data + stacks); kept alive
     controls: Rc<Controls>
 }
@@ -527,6 +636,7 @@ impl Engine {
             blocks: Vec::new(),
             devices: Vec::new(),
             device_box_types: Vec::new(),
+            composites: Vec::new(),
             device_allocs: Vec::new(),
             controls: Rc::new(Controls::new())
         }
@@ -544,9 +654,10 @@ impl Engine {
 
     /// Register a loaded device: the table slot holding its `process` and the bytes its state block needs.
     /// Returns the device id (its index). The host calls this once per device, before `bind`.
-    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32) -> u32 {
+    #[allow(clippy::too_many_arguments)] // one slot per device export; positional to match the loader's call
+    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32) -> u32 {
         let id = self.devices.len() as u32;
-        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index});
+        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index});
         id
     }
 
@@ -562,6 +673,19 @@ impl Engine {
     fn device_for_type(&self, box_type: &str) -> Option<DeviceReg> {
         let id = self.device_box_types.iter().find(|(name, _)| name == box_type).map(|(_, id)| *id)?;
         self.devices.get(id).copied()
+    }
+
+    /// Register a composite box type: a device box that hosts a child collection (its `children_field`) of its
+    /// own instruments, each child ordered / routed by `index_key`. Like `set_device_box_type`, this is the
+    /// whole composite glue — the host registers it once and the engine learns nothing else about it.
+    fn register_composite(&mut self, box_type: String, children_field: u16, index_key: u16, exclude_key: u16) {
+        self.composites.push(CompositeSpec {box_type, children_field, index_key, exclude_key});
+    }
+
+    /// The composite spec for a box TYPE, if it is a registered composite host (else `None`, a leaf device).
+    /// Cloned so a caller can use it while it also holds `&mut self` to build the children.
+    pub(crate) fn composite_for_type(&self, box_type: &str) -> Option<CompositeSpec> {
+        self.composites.iter().find(|spec| spec.box_type == box_type).cloned()
     }
 
     /// Apply one forward-only transaction, returning the resulting checksum (or `Err` on a
@@ -905,10 +1029,10 @@ pub extern "C" fn device_alloc(size: u32) -> u32 {
 /// `init_index` / `parameter_changed_index` its parameter-hook slots (0 when the device exports none).
 /// Returns the device id. Call once per device, before `bind` (which builds the graph and wires devices).
 #[no_mangle]
-pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32) -> u32 {
+pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32) -> u32 {
     unsafe {
         match ENGINE.get().as_mut() {
-            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index),
+            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index),
             None => 0
         }
     }
@@ -928,6 +1052,24 @@ pub extern "C" fn device_set_box_type(device_id: u32, name_len: usize) {
         let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), name_len);
         if let Ok(name) = core::str::from_utf8(bytes) {
             engine.set_device_box_type(String::from(name), device_id as usize);
+        }
+    }
+}
+
+/// Register a COMPOSITE box type: a device box that hosts a child collection of its own instruments. The host
+/// writes the UTF-8 composite box name into the input buffer (first `name_len` bytes) and passes the child
+/// collection's host field key + the child index/routing key. Mirrors `device_set_box_type`; the engine reads
+/// no composite specifics beyond this, so a composite box plays with zero engine changes.
+#[no_mangle]
+pub extern "C" fn composite_register(name_len: usize, children_field: u32, index_key: u32, exclude_key: u32) {
+    unsafe {
+        let engine = match ENGINE.get().as_mut() {
+            Some(engine) => engine,
+            None => return
+        };
+        let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), name_len);
+        if let Ok(name) = core::str::from_utf8(bytes) {
+            engine.register_composite(String::from(name), children_field as u16, index_key as u16, exclude_key as u16);
         }
     }
 }

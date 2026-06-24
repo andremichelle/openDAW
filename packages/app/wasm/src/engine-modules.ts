@@ -2,10 +2,17 @@
 // the device PLUGINS (PIC side modules the engine loads at host-assigned bases). All are handed to the
 // "engine" AudioWorkletProcessor via processorOptions; the worklet links the devices into the engine.
 
+// A COMPOSITE device box (e.g. Playfield): a box that hosts a child collection of its own instruments rather
+// than mapping to a single plugin. The engine learns it as data (registered like a device box type): the
+// child collection's host field, and the child box field its order / routing reads. No engine code is
+// composite-specific. The child plugin (e.g. PlayfieldSampleBox) is a normal entry in DEVICES.
+export type CompositeSpec = { boxType: string, childrenField: number, indexKey: number, excludeKey: number }
+
 export type EngineModules = {
     engineModule: WebAssembly.Module
     deviceModules: ReadonlyArray<WebAssembly.Module> // PIC side modules, in load order (device 0, 1, ...)
     deviceBoxTypes: ReadonlyArray<string> // parallel to deviceModules: the device-box type each plugin realizes
+    composites: ReadonlyArray<CompositeSpec> // composite box types the engine should host as child collections
 }
 
 // The engine's single linear memory: SHARED, so the main thread can see the WASM heap (e.g. to write
@@ -27,12 +34,20 @@ const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/device_delay.wasm", boxType: "DelayDeviceBox"},       // audio effect
     {url: "/device_arp.wasm", boxType: "ArpeggioDeviceBox"},      // midi effect
     {url: "/device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"}, // midi effect
-    {url: "/device_transpose.wasm", boxType: "PitchDeviceBox"}    // midi effect
+    {url: "/device_transpose.wasm", boxType: "PitchDeviceBox"},   // midi effect
+    {url: "/device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"} // composite child (one Playfield slot)
+]
+
+// The composite box types. Playfield hosts its slots in the `samples` field (key 10); each slot's note is its
+// `index` field (key 15) and its choke-group flag is `exclude` (key 42). The slot plugin itself is the
+// PlayfieldSampleBox entry in DEVICES above.
+const COMPOSITES: ReadonlyArray<CompositeSpec> = [
+    {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42}
 ]
 
 export const loadEngineModules = async (): Promise<EngineModules> => {
     const urls = ["/engine.wasm", ...DEVICES.map(device => device.url)]
     const buffers = await Promise.all(urls.map(url => fetch(url).then(response => response.arrayBuffer())))
     const [engineModule, ...deviceModules] = await Promise.all(buffers.map(bytes => WebAssembly.compile(bytes)))
-    return {engineModule, deviceModules, deviceBoxTypes: DEVICES.map(device => device.boxType)}
+    return {engineModule, deviceModules, deviceBoxTypes: DEVICES.map(device => device.boxType), composites: COMPOSITES}
 }

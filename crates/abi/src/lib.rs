@@ -48,6 +48,11 @@ pub const EVENT_NOTE_OFF: u32 = 1;
 /// the parameter index, `velocity` the new value. At an equal position the device-SDK applies it between
 /// note-off and note-on (see the engine's event ordering), so a note starting there sees the new value.
 pub const EVENT_PARAM: u32 = 2;
+/// A choke: force-release all of the receiving instrument's voices fast (the 5 ms ramp), click-free. The
+/// composite tags a note-on as a choke for the sibling slots in a note-on's choke group (event-tagging, not
+/// inter-slot firing); the slot's `handle_event` treats it as a forced release. Carried in the event stream
+/// like a note event, so it is sample-accurate via the same sub-block split.
+pub const EVENT_CHOKE: u32 = 3;
 
 /// What a device IS, so the host knows how to wire it into the graph (it reads this from the device's
 /// `kind` export at load). An instrument voices notes into audio; an effect transforms an input buffer; a
@@ -143,7 +148,8 @@ extern "C" {
     fn host_first_update_position(at: f64) -> f64;
     fn host_next_update_position(after: f64) -> f64;
     fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32;
-    fn host_bind_sample(path_ptr: u32, path_len: u32) -> u32;
+    fn host_observe_sample(path_ptr: u32, path_len: u32) -> u32;
+    fn host_observe_field(path_ptr: u32, path_len: u32) -> u32;
 }
 
 /// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the
@@ -218,6 +224,48 @@ impl ParamValue {
     }
 }
 
+pub const FIELD_KIND_INT: u32 = 0;
+pub const FIELD_KIND_FLOAT: u32 = 1;
+pub const FIELD_KIND_BOOL: u32 = 2;
+pub const FIELD_KIND_STRING: u32 = 3;
+
+/// A PLAIN box-field value handed to a device's [`Instrument::field_changed`], ALREADY TYPED (the analog of
+/// [`ParamValue`] for observed fields, not parameters). Mirrors the box graph's field primitives one-to-one:
+/// `Int` / `Float` / `Bool`, and `String` as a `&str` borrowed from the shared linear memory for the duration
+/// of the call (the device must copy it if it keeps it; it is NOT valid after `field_changed` returns). The
+/// SDK builds this from the wire `(kind, bits, len)` via [`FieldValue::from_wire`]. A device matches the
+/// variant it expects and PANICS on any other, never coercing.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FieldValue<'a> {
+    Int(i32),
+    Float(f32),
+    Bool(bool),
+    String(&'a str)
+}
+
+impl<'a> FieldValue<'a> {
+    /// Decode the wire `(kind, bits, len)`: `bits` carries the numeric value's raw bits, or (for a string) the
+    /// pointer to its UTF-8 bytes in the shared memory with `len` their length. Panics on an unknown kind or
+    /// invalid UTF-8 (the engine is the only writer, so either is a contract drift, never live input).
+    ///
+    /// # Safety
+    /// For a string, `bits`/`len` must point at `len` valid, initialized UTF-8 bytes that stay alive and
+    /// unmoved for the whole call. The engine guarantees this (it passes a live box-field string).
+    #[inline]
+    pub unsafe fn from_wire(kind: u32, bits: u32, len: u32) -> Self {
+        match kind {
+            FIELD_KIND_INT => FieldValue::Int(bits as i32),
+            FIELD_KIND_FLOAT => FieldValue::Float(f32::from_bits(bits)),
+            FIELD_KIND_BOOL => FieldValue::Bool(bits != 0),
+            FIELD_KIND_STRING => {
+                let bytes = slice::from_raw_parts(bits as *const u8, len as usize);
+                FieldValue::String(core::str::from_utf8(bytes).expect("field string is not valid UTF-8"))
+            }
+            _ => panic!("unknown field kind")
+        }
+    }
+}
+
 /// A resolved sample (Route F): decoded PLANAR f32 frames resident in the shared linear memory. `frames_ptr`
 /// points at channel 0's frames; channel `c` is at `frames_ptr + c * frame_count * 4` (each plane is
 /// `frame_count` consecutive f32). The host fills this from a sample handle via [`resolve_sample`]; a handle
@@ -264,15 +312,30 @@ pub fn resolve_sample(handle: u32) -> Option<SampleRef> {
     }
 }
 
-/// Declare this device's sample reference by its box pointer-field PATH (e.g. `[15]` for Nano's `file`),
-/// returning an id. The host resolves that pointer to the AudioFileBox it targets, requests the sample's
-/// frames (Route F), and pushes the resolved sample HANDLE to the device through `parameter_changed` under
-/// this id (the device reuses its parameter hook, matching the id and reading the handle from the value). A
-/// device calls this from `init`, like [`bind_parameter`]. Native stub returns 0.
+/// Observe this device's sample reference by its box pointer-field PATH (e.g. `[11]` for a Playfield slot's
+/// `file`), returning an id the device matches in [`Instrument::sample_changed`]. The host REACTIVELY tracks
+/// that pointer: on catch-up and whenever it is set / repointed / cleared (inside a transaction, never during
+/// render) it resolves the target to the AudioFileBox, requests its frames (Route F), and delivers the handle
+/// through `sample_changed` (a resident handle, or "unbound" when the pointer has no target). NOT a parameter.
+/// A device calls this from `init`. Native stub returns 0.
 #[inline]
-pub fn bind_sample(path: &[u16]) -> u32 {
+pub fn observe_sample(path: &[u16]) -> u32 {
     #[cfg(target_family = "wasm")]
-    { unsafe { host_bind_sample(path.as_ptr() as u32, path.len() as u32) } }
+    { unsafe { host_observe_sample(path.as_ptr() as u32, path.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = path; 0 }
+}
+
+/// Observe one of THIS device's PLAIN box fields by its field-key PATH (e.g. `[15]` for a Playfield slot's
+/// `index`), returning an id the device matches in [`Instrument::field_changed`]. The host `catchup`s the
+/// current value immediately and `subscribe`s for later edits, delivering each through `field_changed` (NEVER
+/// during render, only inside a transaction). This is NOT a parameter: no automation, no mapping, no clock
+/// pull, the device just reads its own field and keeps a copy. A device calls this from `init`. Native stub
+/// returns 0.
+#[inline]
+pub fn observe_field(path: &[u16]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_observe_field(path.as_ptr() as u32, path.len() as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = path; 0 }
 }
@@ -508,6 +571,21 @@ pub trait Instrument {
     fn parameter_changed(state: &mut Self::State, id: u32, value: ParamValue) {
         let _ = (state, id, value);
     }
+    /// Apply a PLAIN box field's new typed `value` for `id` (the value [`observe_field`] returned), storing it
+    /// in `state`. Distinct from `parameter_changed`: this is a raw field copy ([`FieldValue`], the device
+    /// matches the variant it expects and panics on any other), never a parameter, so the device owns knowing
+    /// things like its own routing note. Delivered on catch-up and on edits, only inside a transaction (never
+    /// during render). Default: nothing.
+    fn field_changed(state: &mut Self::State, id: u32, value: FieldValue) {
+        let _ = (state, id, value);
+    }
+    /// Apply this device's observed SAMPLE reference for `id` (the value [`observe_sample`] returned), storing
+    /// it in `state`. `sample` is `Some(handle)` to later [`resolve_sample`] when the pointer targets a sample,
+    /// or `None` when it is unbound (cleared) and the device should stop playing it. Delivered on catch-up and
+    /// on add / remove / repoint, only inside a transaction. Default: nothing (no samples).
+    fn sample_changed(state: &mut Self::State, id: u32, sample: Option<u32>) {
+        let _ = (state, id, sample);
+    }
     /// Once per quantum, after all blocks (e.g. a feedback delay over the whole stereo `output`). Default: nothing.
     fn finish(state: &mut Self::State, output: [&mut [f32]; 2]) {
         let _ = (state, output);
@@ -554,7 +632,7 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
 /// param-update -> note-on, so a note starting at an update position sees the refreshed parameter.
 fn record_rank(kind: u32) -> u8 {
     match kind {
-        EVENT_NOTE_OFF => 0,
+        EVENT_NOTE_OFF | EVENT_CHOKE => 0, // releases first, so a choke at a position precedes any note-on there
         EVENT_PARAM => 1,
         _ => 2 // EVENT_NOTE_ON
     }

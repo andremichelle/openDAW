@@ -20,7 +20,7 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{Block, EventRecord, Instrument, ParamValue, Ports, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use abi::{Block, EventRecord, FieldValue, Instrument, ParamValue, Ports, EVENT_CHOKE, EVENT_NOTE_OFF, EVENT_NOTE_ON};
 use math::value_mapping::{Exponential, Linear, LinearInteger, ValueMapping};
 
 mod voice;
@@ -36,10 +36,12 @@ fn panic(_: &PanicInfo) -> ! {
 /// unbounded; a fixed pool is the real-time requirement, with oldest-voice stealing when full.
 const MAX_VOICES: usize = 16;
 
-// The PlayfieldSampleBox field-key paths (the stable schema keys, frozen). `file` (the sample pointer), and
-// the voice parameters: `polyphone`, `gate`, `pitch` (cents), `sample-start` / `sample-end` (unipolar), and
-// `attack` / `release` (seconds). The cross-slot fields (mute / solo / exclude) are the composite's, not here.
-const FILE_FIELD: [u16; 1] = [11];
+// The PlayfieldSampleBox field-key paths (the stable schema keys, frozen). `file` (the sample pointer),
+// `index` (the MIDI note this slot plays, observed as a plain field, NOT a parameter), and the voice
+// parameters: `polyphone`, `gate`, `pitch` (cents), `sample-start` / `sample-end` (unipolar), `attack` /
+// `release` (seconds). The cross-slot fields (mute / solo / exclude) are the composite's.
+const SAMPLE_POINTER: [u16; 1] = [11];
+const INDEX_FIELD: [u16; 1] = [15];
 const POLYPHONE_FIELD: [u16; 1] = [43];
 const GATE_FIELD: [u16; 1] = [44];
 const PITCH_FIELD: [u16; 1] = [45];
@@ -92,8 +94,9 @@ fn bool_value(value: ParamValue) -> bool {
 pub struct PlayfieldSlotState {
     voices: [SlotVoice; MAX_VOICES],
     sample_rate: f32,
-    sample_handle: u32,
-    has_sample: bool,
+    sample: Option<u32>, // the resolved sample handle while the `file` pointer is bound; `None` when unbound
+    note_index: i32, // the MIDI note this slot plays; a note-on with a different pitch is ignored. Observed,
+    note_index_id: u32,   // not a parameter: the device `observe_field`s `index` and stores the value here.
     gate: i32,
     pitch_cents: f32,
     sample_start: f32,
@@ -103,11 +106,11 @@ pub struct PlayfieldSlotState {
     polyphone: bool,
     seq: u64,
     gate_id: u32,
-    pitch_id: u32,
-    start_id: u32,
-    end_id: u32,
-    attack_id: u32,
-    release_id: u32,
+    pitch_cents_id: u32,
+    sample_start_id: u32,
+    sample_end_id: u32,
+    attack_seconds_id: u32,
+    release_seconds_id: u32,
     polyphone_id: u32,
     sample_id: u32
 }
@@ -128,21 +131,28 @@ impl Instrument for PlayfieldSlot {
         state.attack_seconds = 0.001;
         state.release_seconds = 0.020;
         state.polyphone = false;
+        state.note_index = 60; // PlayfieldSampleBox default; the engine catches up the real value right after init
+        state.note_index_id = abi::observe_field(&INDEX_FIELD); // a plain field observation, NOT a parameter
         state.gate_id = abi::bind_parameter(&GATE_FIELD);
-        state.pitch_id = abi::bind_parameter(&PITCH_FIELD);
-        state.start_id = abi::bind_parameter(&SAMPLE_START_FIELD);
-        state.end_id = abi::bind_parameter(&SAMPLE_END_FIELD);
-        state.attack_id = abi::bind_parameter(&ATTACK_FIELD);
-        state.release_id = abi::bind_parameter(&RELEASE_FIELD);
+        state.pitch_cents_id = abi::bind_parameter(&PITCH_FIELD);
+        state.sample_start_id = abi::bind_parameter(&SAMPLE_START_FIELD);
+        state.sample_end_id = abi::bind_parameter(&SAMPLE_END_FIELD);
+        state.attack_seconds_id = abi::bind_parameter(&ATTACK_FIELD);
+        state.release_seconds_id = abi::bind_parameter(&RELEASE_FIELD);
         state.polyphone_id = abi::bind_parameter(&POLYPHONE_FIELD);
-        state.sample_id = abi::bind_sample(&FILE_FIELD);
+        state.sample = None; // no sample until the engine catches up the `file` pointer right after init
+        state.sample_id = abi::observe_sample(&SAMPLE_POINTER);
     }
 
     fn handle_event(state: &mut PlayfieldSlotState, event: &EventRecord) {
         if event.kind == EVENT_NOTE_ON {
+            // This slot plays only its own note. The composite broadcasts every note to every slot; the slot
+            // filters here, by the `index` it observed from its box (so a full instrument, which observes none,
+            // would play everything). Choke events are not notes and pass this check.
+            if event.pitch as i32 != state.note_index {return}
             // The window is in source frames, so the sample must be resident to start a voice (the TS drops
             // the note when the loader has no data). A two-frame minimum keeps the interpolation in range.
-            let sample = if state.has_sample {abi::resolve_sample(state.sample_handle)} else {None};
+            let sample = state.sample.and_then(abi::resolve_sample);
             let Some(sample) = sample else {return};
             let num_frames = sample.frame_count as usize;
             if num_frames < 2 {return}
@@ -163,12 +173,19 @@ impl Instrument for PlayfieldSlot {
             if let Some(voice) = state.voices.iter_mut().find(|voice| voice.is_used() && voice.id() == event.id) {
                 voice.release();
             }
+        } else if event.kind == EVENT_CHOKE {
+            // Choke: another slot in this slot's choke group fired, so force-release every voice here fast.
+            for voice in state.voices.iter_mut() {
+                if voice.is_used() {
+                    voice.force_release();
+                }
+            }
         }
     }
 
     fn process_audio(state: &mut PlayfieldSlotState, output: [&mut [f32]; 2], _block: &Block) {
         let [out_left, out_right] = output;
-        let sample = if state.has_sample {abi::resolve_sample(state.sample_handle)} else {None};
+        let sample = state.sample.and_then(abi::resolve_sample);
         let Some(sample) = sample else {
             // No sample resident yet (still loading, or none bound): drop the voices and stay silent, as the
             // TS does when the loader has no data.
@@ -193,27 +210,35 @@ impl Instrument for PlayfieldSlot {
     fn parameter_changed(state: &mut PlayfieldSlotState, id: u32, value: ParamValue) {
         if id == state.gate_id {
             state.gate = int_value(value, &GATE_MAPPING);
-        } else if id == state.pitch_id {
+        } else if id == state.pitch_cents_id {
             state.pitch_cents = float_value(value, &PITCH_MAPPING);
-        } else if id == state.start_id {
+        } else if id == state.sample_start_id {
             state.sample_start = float_value(value, &UNIPOLAR);
-        } else if id == state.end_id {
+        } else if id == state.sample_end_id {
             state.sample_end = float_value(value, &UNIPOLAR);
-        } else if id == state.attack_id {
+        } else if id == state.attack_seconds_id {
             state.attack_seconds = float_value(value, &ATTACK_MAPPING);
-        } else if id == state.release_id {
+        } else if id == state.release_seconds_id {
             state.release_seconds = float_value(value, &RELEASE_MAPPING);
         } else if id == state.polyphone_id {
             state.polyphone = bool_value(value);
-        } else if id == state.sample_id {
-            // The engine pushes the resolved sample HANDLE here (as an int) under the tagged sample id.
-            state.sample_handle = match value {
-                ParamValue::Int(handle) => handle as u32,
-                ParamValue::Unit(unit) => unit as u32,
-                ParamValue::Float(real) => real as u32,
-                ParamValue::Bool(_) => 0
+        }
+    }
+
+    fn field_changed(state: &mut PlayfieldSlotState, id: u32, value: FieldValue) {
+        // The slot's MIDI note (a plain int32 box field this device observes), delivered on catch-up + edits.
+        if id == state.note_index_id {
+            state.note_index = match value {
+                FieldValue::Int(note) => note,
+                _ => panic!("Playfield slot index must be an int field")
             };
-            state.has_sample = true;
+        }
+    }
+
+    fn sample_changed(state: &mut PlayfieldSlotState, id: u32, sample: Option<u32>) {
+        // The slot's sample (its `file` pointer), reactively delivered: a resident handle, or `None` on remove.
+        if id == state.sample_id {
+            state.sample = sample;
         }
     }
 }
@@ -280,6 +305,22 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
     unsafe { abi::with_state(state_ptr, |state| <PlayfieldSlot as Instrument>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
 }
 
+/// Apply an observed plain field's value (its `index`), by the id `observe_field` returned. Driven by the
+/// host's `catchup_and_subscribe`, only inside a transaction. The wire `(kind, bits, len)` decodes to a typed
+/// `FieldValue` (`len` is the string length for `FIELD_KIND_STRING`, unused otherwise).
+#[no_mangle]
+pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, len: u32) {
+    unsafe { abi::with_state(state_ptr, |state| <PlayfieldSlot as Instrument>::field_changed(state, id, FieldValue::from_wire(kind, bits, len))) }
+}
+
+/// Apply an observed sample reference (its `file` pointer), by the id `observe_sample` returned. Driven by the
+/// host's pointer observer; `present != 0` means a resident `handle`, `0` means the pointer is unbound.
+#[no_mangle]
+pub extern "C" fn sample_changed(state_ptr: u32, id: u32, handle: u32, present: u32) {
+    let sample = if present != 0 {Some(handle)} else {None};
+    unsafe { abi::with_state(state_ptr, |state| <PlayfieldSlot as Instrument>::sample_changed(state, id, sample)) }
+}
+
 #[cfg(test)]
 mod tests {
     //! The voice DSP is covered in `voice.rs`. Here: with no sample resident (the native `resolve_sample` stub
@@ -295,7 +336,7 @@ mod tests {
     #[test]
     fn silent_without_a_resident_sample() {
         let mut state: PlayfieldSlotState = unsafe { core::mem::zeroed() };
-        state.has_sample = true; // a handle is bound, but the native resolve stub returns none (not resident)
+        state.sample = Some(1); // a handle is bound, but the native resolve stub returns none (not resident)
         let (mut left, mut right) = (vec![0.0f32; 512], vec![0.0f32; 512]);
         render(&mut state, &[note_on(1, 60)], &mut left, &mut right, SR);
         assert_eq!(left.iter().fold(0.0f32, |acc, value| acc.max(value.abs())), 0.0, "no audio until a sample is resident");

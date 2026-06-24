@@ -34,7 +34,7 @@ const MAX_VOICES: usize = 64;
 // The Nano box's field-key paths (the stable schema keys): volume `[10]` (decibel), the sample `file` pointer
 // `[15]`, and release `[20]` (seconds, exponential).
 const VOLUME_FIELD: [u16; 1] = [10];
-const SAMPLE_FIELD: [u16; 1] = [15];
+const SAMPLE_POINTER: [u16; 1] = [15];
 const RELEASE_FIELD: [u16; 1] = [20];
 
 const VOLUME_MAPPING: Decibel = Decibel::default_volume();
@@ -58,8 +58,7 @@ pub struct NanoState {
     gain: f32,
     release: u32, // release length in samples
     sample_rate: f32,
-    sample_handle: u32,
-    has_sample: bool,
+    sample: Option<u32>, // the resolved sample handle while the `file` pointer is bound; `None` when unbound
     volume_id: u32,
     release_id: u32,
     sample_id: u32
@@ -75,9 +74,10 @@ impl Instrument for Nano {
         state.sample_rate = sample_rate; // stable for the device's life
         state.gain = 1.0; // TS defaults; the engine pushes the real values right after
         state.release = sample_rate as u32; // 1 s
+        state.sample = None; // no sample until the engine catches up the `file` pointer right after init
         state.volume_id = abi::bind_parameter(&VOLUME_FIELD);
         state.release_id = abi::bind_parameter(&RELEASE_FIELD);
-        state.sample_id = abi::bind_sample(&SAMPLE_FIELD);
+        state.sample_id = abi::observe_sample(&SAMPLE_POINTER);
     }
 
     fn handle_event(state: &mut NanoState, event: &EventRecord) {
@@ -93,7 +93,7 @@ impl Instrument for Nano {
 
     fn process_audio(state: &mut NanoState, output: [&mut [f32]; 2], _block: &Block) {
         let [out_left, out_right] = output;
-        let sample = if state.has_sample {abi::resolve_sample(state.sample_handle)} else {None};
+        let sample = state.sample.and_then(abi::resolve_sample);
         let Some(sample) = sample else {
             // No sample resident yet (still loading, or none bound): the TS drops the voices when the loader
             // has no data, so free them and stay silent until a sample arrives.
@@ -119,15 +119,13 @@ impl Instrument for Nano {
             state.gain = db_to_gain(float_value(value, &VOLUME_MAPPING));
         } else if id == state.release_id {
             state.release = (float_value(value, &RELEASE_MAPPING) * state.sample_rate) as u32;
-        } else if id == state.sample_id {
-            // The engine pushes the resolved sample HANDLE here (as an int) under the tagged sample id.
-            state.sample_handle = match value {
-                ParamValue::Int(handle) => handle as u32,
-                ParamValue::Unit(unit) => unit as u32,
-                ParamValue::Float(real) => real as u32,
-                ParamValue::Bool(_) => 0
-            };
-            state.has_sample = true;
+        }
+    }
+
+    fn sample_changed(state: &mut NanoState, id: u32, sample: Option<u32>) {
+        // The sample (its `file` pointer), reactively delivered: a resident handle, or `None` on remove.
+        if id == state.sample_id {
+            state.sample = sample;
         }
     }
 }
@@ -174,11 +172,18 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Nano as Instrument>::init(state, sample_rate)) }
 }
 
-/// Apply a parameter value the host resolved (initial / edit / automation, or the sample handle under the
-/// tagged sample id), by the id `init` got back.
+/// Apply a parameter value the host resolved (initial / edit / automation), by the id `init` got back.
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Nano as Instrument>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Apply an observed sample reference (its `file` pointer), by the id `observe_sample` returned. `present != 0`
+/// means a resident `handle`, `0` means the pointer is unbound.
+#[no_mangle]
+pub extern "C" fn sample_changed(state_ptr: u32, id: u32, handle: u32, present: u32) {
+    let sample = if present != 0 {Some(handle)} else {None};
+    unsafe { abi::with_state(state_ptr, |state| <Nano as Instrument>::sample_changed(state, id, sample)) }
 }
 
 #[cfg(test)]
@@ -196,7 +201,7 @@ mod tests {
     #[test]
     fn silent_without_a_resident_sample() {
         let mut state: NanoState = unsafe { core::mem::zeroed() };
-        state.has_sample = true; // a handle is bound, but the native resolve stub returns none (not resident)
+        state.sample = Some(1); // a handle is bound, but the native resolve stub returns none (not resident)
         let (mut left, mut right) = (vec![0.0f32; 512], vec![0.0f32; 512]);
         render(&mut state, &[note_on(1, 60)], &mut left, &mut right, SR);
         assert_eq!(left.iter().fold(0.0f32, |acc, value| acc.max(value.abs())), 0.0, "no audio until a sample is resident");

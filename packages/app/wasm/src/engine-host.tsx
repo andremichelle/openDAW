@@ -90,11 +90,11 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         ctx.addEventListener("statechange", () => showAudioState())
         showAudioState()
         await ctx.audioWorklet.addModule(processorURL)
-        const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
+        const {engineModule, deviceModules, deviceBoxTypes, composites} = await loadEngineModules()
         const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
             outputChannelCount: [2], // STEREO out; without this the node defaults to mono and drops the right channel
-            processorOptions: {engineModule, deviceModules, deviceBoxTypes, memory, sampleRate: ctx.sampleRate, metronome: options.metronome ?? false}
+            processorOptions: {engineModule, deviceModules, deviceBoxTypes, composites, memory, sampleRate: ctx.sampleRate, metronome: options.metronome ?? false}
         })
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)

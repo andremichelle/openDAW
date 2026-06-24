@@ -11,6 +11,7 @@
 
 import {UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {CompositeSpec} from "./engine-modules"
 import {SampleInfo, SampleLoader} from "./sample-loader"
 import {EngineProtocol, HeapListener, HeapStats, TransportListener} from "./engine-protocol"
 
@@ -21,6 +22,7 @@ type BootOptions = {
     engineModule: WebAssembly.Module
     deviceModules: ReadonlyArray<WebAssembly.Module> // PIC side modules, in load order (device 0, 1, ...)
     deviceBoxTypes: ReadonlyArray<string> // parallel to deviceModules: the device-box type each plugin realizes
+    composites: ReadonlyArray<CompositeSpec> // composite box types the engine hosts as child collections
     memory: WebAssembly.Memory // SHARED, created on the main thread so it can see the WASM heap
     sampleRate: number
     metronome?: boolean // default true; the note's page sets false to hear only the instrument
@@ -40,6 +42,8 @@ type DeviceExports = {
     // wasm-to-wasm through the shared table; JS only installs the function pointers, never invokes them.
     init?: (statePtr: number, sampleRate: number) => void
     parameter_changed?: (statePtr: number, id: number, kind: number, value: number) => void
+    field_changed?: (statePtr: number, id: number, kind: number, bits: number, len: number) => void
+    sample_changed?: (statePtr: number, id: number, handle: number, present: number) => void
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void
 }
@@ -47,10 +51,14 @@ type DeviceExports = {
 type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
-    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number) => number
+    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number, fieldChangedIndex: number, sampleChangedIndex: number) => number
     // Map a device-box type to the just-registered device: the box-type UTF-8 name is written into the
     // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
     device_set_box_type: (deviceId: number, nameLen: number) => void
+    // Register a composite box type (a box hosting a child collection of its own instruments): the composite
+    // box-type UTF-8 name is written into the input buffer (nameLen bytes) first, then its child collection's
+    // host field key + the child index/routing key are passed. Mirrors device_set_box_type.
+    composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number) => void
     input_ptr: () => number
     input_capacity: () => number
     input_reserve: (len: number) => number // ensure the input scratch holds `len`, grow if needed, return its (current) ptr
@@ -84,7 +92,8 @@ type EngineExports = {
     // -1), `sample_allocate` reserves the decoded byte length and returns the pointer, `sample_set_ready`
     // marks it resolvable once the frames are written.
     host_resolve_sample: (handle: number, outPtr: number) => number
-    host_bind_sample: (pathPtr: number, pathLen: number) => number
+    host_observe_sample: (pathPtr: number, pathLen: number) => number
+    host_observe_field: (pathPtr: number, pathLen: number) => number
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number
     sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
@@ -138,7 +147,7 @@ class EngineProcessor extends AudioWorkletProcessor {
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
-        const {engineModule, deviceModules, deviceBoxTypes, memory, sampleRate, metronome}: BootOptions = options?.processorOptions
+        const {engineModule, deviceModules, deviceBoxTypes, composites, memory, sampleRate, metronome}: BootOptions = options?.processorOptions
         this.#sampleRate = sampleRate
         // the one SHARED linear memory, created on the main thread and handed in (so the main thread can
         // see the WASM heap). talc grows it on demand; shared memory grows in place without detaching.
@@ -153,6 +162,15 @@ class EngineProcessor extends AudioWorkletProcessor {
         engine.init(sampleRate)
         // load each device PIC side module at a host-assigned base, register it, and map its box type.
         deviceModules.forEach((deviceModule, index) => this.#loadDevice(deviceModule, deviceBoxTypes[index], sampleRate))
+        // register each composite box type: write its name into the input buffer, then map its child collection
+        // (the child plugin itself is a normal device above). Box-type names are ASCII identifiers.
+        composites.forEach(({boxType, childrenField, indexKey, excludeKey}) => {
+            const length = boxType.length
+            const pointer = engine.input_reserve(length)
+            const bytes = new Uint8Array(this.#memory.buffer, pointer, length)
+            for (let index = 0; index < length; index++) {bytes[index] = boxType.charCodeAt(index) & 0xff}
+            engine.composite_register(length, childrenField, indexKey, excludeKey)
+        })
         if (metronome === false) {engine.set_metronome_enabled(0)}
         // ONE Messenger over the engine port, split into typed Communicator protocols, one per named channel
         // (each channel is a single sender -> executor direction): `engine` receives the SyncSource transaction
@@ -224,7 +242,8 @@ class EngineProcessor extends AudioWorkletProcessor {
                 // Route F: the device resolves a sample handle to its frames during render, and declares its
                 // sample reference (its box file-pointer path) from `init`.
                 host_resolve_sample: engine.host_resolve_sample,
-                host_bind_sample: engine.host_bind_sample
+                host_observe_sample: engine.host_observe_sample,
+                host_observe_field: engine.host_observe_field
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()
@@ -239,7 +258,9 @@ class EngineProcessor extends AudioWorkletProcessor {
         // slots are grown above the engine's own functions, so a real hook is never at 0).
         const initIndex = this.#installOptional(device.init)
         const parameterChangedIndex = this.#installOptional(device.parameter_changed)
-        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind(), initIndex, parameterChangedIndex)
+        const fieldChangedIndex = this.#installOptional(device.field_changed)
+        const sampleChangedIndex = this.#installOptional(device.sample_changed)
+        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind(), initIndex, parameterChangedIndex, fieldChangedIndex, sampleChangedIndex)
         // Register the device table entry: write the box-type name into the input buffer, then map it.
         // Box-type names are ASCII identifiers, so encode byte-per-char (no TextEncoder in the worklet scope).
         const length = boxType.length

@@ -18,13 +18,13 @@ use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
-use abi::{DEVICE_KIND_AUDIO_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
+use abi::{DEVICE_KIND_AUDIO_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, FIELD_KIND_BOOL, FIELD_KIND_FLOAT, FIELD_KIND_INT, FIELD_KIND_STRING, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
 use bindings::indexed_collection::IndexedCollection;
 use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
 use boxgraph::address::{Address, Uuid};
 use boxgraph::graph::BoxGraph;
-use boxgraph::subscription::{HubEvent, SubscriptionId};
+use boxgraph::subscription::{HubEvent, Propagation, SubscriptionId};
 use boxgraph::updates::Update;
 use engine_env::audio_buffer::SharedAudioBuffer;
 use engine_env::audio_generator::AudioGenerator;
@@ -42,7 +42,8 @@ use crate::param_automation::{FieldPath, ParamCurve, ParamHandle, ParamSink, Val
 use crate::plugin_audio_effect::PluginAudioEffect;
 use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
-use crate::{call_device_init, call_device_parameter_changed, DeviceReg, Engine, PullLink, BIND, SAMPLE_BIND, SAMPLE_ID_TAG, SAMPLES, DEVICE_INDEX_KEY};
+use crate::composite::CompositeBinding;
+use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, EFFECT_INDEX_KEY};
 
 /// One bound note region: its loopable span plus a shared handle to its `NoteEventCollection` (the cache's
 /// canonical observation — see `CollectionCache`). Keyed by uuid so the region cascade can remove it.
@@ -177,13 +178,13 @@ struct WiredCluster {
 /// caller appends its own tail (an audio unit appends the channel strip -> master; a composite child appends
 /// the per-child sum). The bookkeeping (`nodes` / `edges` / `device_params` / `device_uuids`) folds into the
 /// caller's `WiredCluster` and the unit's automation set.
-struct BuiltCluster {
-    output: SharedAudioBuffer,
-    output_node: NodeId,
-    nodes: Vec<NodeId>,
-    edges: Vec<(NodeId, NodeId)>,
-    device_params: Vec<DeviceParams>,
-    device_uuids: Vec<Uuid>
+pub(crate) struct BuiltCluster {
+    pub(crate) output: SharedAudioBuffer,
+    pub(crate) output_node: NodeId,
+    pub(crate) nodes: Vec<NodeId>,
+    pub(crate) edges: Vec<(NodeId, NodeId)>,
+    pub(crate) device_params: Vec<DeviceParams>,
+    pub(crate) device_uuids: Vec<Uuid>
 }
 
 /// One device's bound parameters: enough to re-observe and re-push them on a runtime automation change. The
@@ -198,7 +199,8 @@ pub(crate) struct DeviceParams {
     paths: Vec<FieldPath>, // the parameter field-paths the device declared in `init`
     handles: Vec<ParamHandle>,
     field_subs: Vec<SubscriptionId>,
-    collections: Vec<ValueCollection>
+    collections: Vec<ValueCollection>,
+    observe_subs: Vec<SubscriptionId> // the device's PLAIN field observations (`observe_field`), dropped on teardown
 }
 
 /// Where bound parameters are pushed: an audio node (instrument / audio-fx, mutated through its
@@ -237,6 +239,10 @@ pub(crate) struct AudioUnitBinding {
     input: IndexedCollection,
     midi: IndexedCollection,
     audio: IndexedCollection,
+    // When the unit's instrument is a COMPOSITE (e.g. Playfield), its child-collection cascade (owned by the
+    // `composite` module). `None` for a leaf instrument or no instrument. A slot add / remove raises its
+    // `take_dirty`, so the unit re-wires; teardown terminates it. The engine knows nothing else about it.
+    composite: Option<CompositeBinding>,
     wired: Option<WiredCluster>,
     // Runtime automation reactivity. `device_uuids` is the unit's automatable device boxes (instrument +
     // audio-fx), kept in sync by `rewire_unit`; `automation_sub` is an all-updates observer that sets
@@ -309,7 +315,7 @@ impl Engine {
         // (the output unit is a fixed singleton), so the chain is not reactive yet.
         let mut source = master_output;
         let mut source_id = self.master_id;
-        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), DEVICE_INDEX_KEY);
+        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), EFFECT_INDEX_KEY);
         let mut device_params: Vec<DeviceParams> = Vec::new();
         for device_uuid in audio.sorted() {
             let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
@@ -372,7 +378,8 @@ impl Engine {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
             reconcile_tracks(&mut self.graph, unit);
-            let dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty();
+            let composite_dirty = unit.composite.as_ref().is_some_and(|composite| composite.take_dirty());
+            let dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty() | composite_dirty;
             if dirty {
                 self.rewire_unit(unit); // a full rewire re-gathers automation, so it also clears the flag
             } else if unit.automation_dirty.get() {
@@ -402,6 +409,9 @@ impl Engine {
         binding.input.terminate(&mut self.graph);
         binding.midi.terminate(&mut self.graph);
         binding.audio.terminate(&mut self.graph);
+        if let Some(composite) = binding.composite {
+            composite.terminate(&mut self.graph);
+        }
     }
 
     /// Drop a wired cluster's processor graph: unwire its output from the master bus, remove its edges, and
@@ -415,6 +425,14 @@ impl Engine {
         }
         for node in &wired.nodes {
             self.context.remove_processor(*node);
+        }
+    }
+
+    /// Drop the unit's composite cascade, if any (a leaf instrument or no instrument has none). The
+    /// `CompositeBinding` lives in the `composite` module; this just terminates it and clears the field.
+    fn drop_composite(&mut self, unit: &mut AudioUnitBinding) {
+        if let Some(composite) = unit.composite.take() {
+            composite.terminate(&mut self.graph);
         }
     }
 
@@ -433,9 +451,12 @@ impl Engine {
                 HubEvent::Removed(source) => recorder.borrow_mut().removed.push(source.uuid)
             }
         }));
-        let input = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![22]), DEVICE_INDEX_KEY);
-        let midi = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![21]), DEVICE_INDEX_KEY);
-        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), DEVICE_INDEX_KEY);
+        // The instrument `input` host holds ONE instrument, which has no `index` field (only effects do). So it
+        // is never ordered: key `0` is a non-field, read back as 0 for every member, and the collection is used
+        // only for membership + `.first()`. The midi (21) and audio (23) chains ARE effects, ordered by index.
+        let input = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![22]), 0);
+        let midi = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![21]), EFFECT_INDEX_KEY);
+        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), EFFECT_INDEX_KEY);
         // The channel strip's parameters, kept in sync with the unit's box: volume (12, dB), panning (13),
         // mute (14). Reactive but no rewire needed — the strip reads these Cells each block.
         let strip_params = Rc::new(StripParams::new());
@@ -469,7 +490,7 @@ impl Engine {
         AudioUnitBinding {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
-            input, midi, audio, wired: None, device_uuids, automation_dirty, automation_sub
+            input, midi, audio, composite: None, wired: None, device_uuids, automation_dirty, automation_sub
         }
     }
 
@@ -485,20 +506,43 @@ impl Engine {
         }
         let instrument_uuid = match unit.input.sorted().first().copied() {
             Some(uuid) => uuid,
-            None => return // no instrument yet: the unit stays silent until its `input` device box appears
+            None => {
+                self.drop_composite(unit);
+                return // no instrument yet: the unit stays silent until its `input` device box appears
+            }
         };
-        let instrument_device = match self.graph.find_box(&instrument_uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
-            Some(device) if device.kind == DEVICE_KIND_INSTRUMENT => device,
-            _ => return
+        let box_name = match self.graph.find_box(&instrument_uuid) {
+            Some(device_box) => device_box.name.clone(),
+            None => {
+                self.drop_composite(unit);
+                return
+            }
         };
-        // The pull-chain leaf: a sequencer over the unit's per-track region collections. It reads
-        // `track_sets` live, so track / region changes need no rewire. `build_cluster` folds the midi-fx
-        // chain on top in index order and builds the instrument + audio-fx chain.
-        let sequencer: SharedNoteEventSource =
-            Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}))));
-        let midi = unit.midi.sorted();
-        let audio = unit.audio.sorted();
-        let mut cluster = self.build_cluster(PullLink::Source(sequencer), instrument_uuid, instrument_device, &midi, &audio);
+        let mut cluster = if let Some(spec) = self.composite_for_type(&box_name) {
+            // A COMPOSITE instrument (e.g. Playfield): the `composite` module builds one child per slot and
+            // sums them. The engine stays mapping-agnostic — `spec` (a registered entry) names the slot
+            // collection; nothing Playfield-specific lives here. The unit's own midi / audio chains are not
+            // wrapped around a composite yet (a composite's effects live per child, step 5).
+            self.drop_composite(unit);
+            let track_sets = unit.track_sets.clone();
+            let (cluster, binding) = self.build_composite(&track_sets, instrument_uuid, &spec);
+            unit.composite = Some(binding);
+            cluster
+        } else {
+            self.drop_composite(unit); // a leaf instrument: drop any stale composite cascade
+            let instrument_device = match self.device_for_type(&box_name) {
+                Some(device) if device.kind == DEVICE_KIND_INSTRUMENT => device,
+                _ => return
+            };
+            // The pull-chain leaf: a sequencer over the unit's per-track region collections. It reads
+            // `track_sets` live, so track / region changes need no rewire. `build_cluster` folds the midi-fx
+            // chain on top in index order and builds the instrument + audio-fx chain.
+            let sequencer: SharedNoteEventSource =
+                Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}))));
+            let midi = unit.midi.sorted();
+            let audio = unit.audio.sorted();
+            self.build_cluster(PullLink::Source(sequencer), instrument_uuid, instrument_device, &midi, &audio)
+        };
         // The channel strip terminates the unit's chain: instrument/fx -> STRIP -> master. It applies the
         // unit's volume / panning / mute (read from the shared StripParams), then feeds the master bus.
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
@@ -532,7 +576,7 @@ impl Engine {
     /// and last node so the caller appends its own tail (a unit appends the channel strip then master, a
     /// composite child appends the per-child sum), plus the node / edge / param bookkeeping. The only
     /// per-device knowledge is the box-type -> plugin table, so any cluster host reuses this verbatim.
-    fn build_cluster(&mut self, source: PullLink, instrument_uuid: Uuid, instrument_device: DeviceReg,
+    pub(crate) fn build_cluster(&mut self, source: PullLink, instrument_uuid: Uuid, instrument_device: DeviceReg,
                      midi: &[Uuid], audio: &[Uuid]) -> BuiltCluster {
         let mut device_params: Vec<DeviceParams> = Vec::new();
         let mut device_uuids: Vec<Uuid> = Vec::new();
@@ -589,27 +633,61 @@ impl Engine {
     /// parameter set, and return the bookkeeping for teardown / re-bind.
     fn bind_device(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, sink: ParamNode) -> DeviceParams {
         let paths = bind_paths(reg, state_ptr, self.sample_rate);
-        let sample_paths = core::mem::take(unsafe { SAMPLE_BIND.get() }); // recorded by host_bind_sample during init
+        let sample_paths = core::mem::take(unsafe { SAMPLE_OBS.get() }); // recorded by host_observe_sample during init
+        let field_paths = core::mem::take(unsafe { FIELD_OBS.get() }); // recorded by host_observe_field during init
         let (handles, field_subs, collections, armed) = self.observe_params(device_uuid, &paths);
         sink.set_params(handles.clone(), armed);
-        self.bind_samples(device_uuid, reg, state_ptr, &sample_paths);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections}
+        // The device's plain-field and sample observations both unsubscribe the same way, so keep one list.
+        let mut observe_subs = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
+        observe_subs.extend(self.observe_samples(device_uuid, reg, state_ptr, &sample_paths));
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs}
     }
 
-    /// Resolve each sample reference a device declared (a box pointer-field path) to the AudioFileBox it
-    /// targets, request that sample's frames, and push the resolved HANDLE to the device through its
-    /// `parameter_changed` hook under the tagged id (so the device reuses its parameter hook). A path with no
-    /// resolved target is skipped (the device's handle stays unset and `resolve_sample` yields nothing). An
-    /// imported AND a recorded sample both arrive as an AudioFileBox, so this one path covers both.
-    fn bind_samples(&self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, paths: &[Vec<u16>]) {
+    /// Wire each PLAIN field a device asked to observe (`observe_field`): `catchup_and_subscribe` the field on
+    /// the device's box and deliver its value through the device's `field_changed` export, by the id (the
+    /// observation's index) the device got back. The callback runs on catch-up and on edits, only inside a
+    /// transaction, never during render, so calling the device is safe. Returns the subscriptions for teardown.
+    fn observe_fields(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, paths: &[Vec<u16>]) -> Vec<SubscriptionId> {
+        let mut subs = Vec::new();
         for (index, path) in paths.iter().enumerate() {
-            let Some(target) = self.graph.target_of(&Address::of(device_uuid, path.clone())) else {
-                continue;
-            };
-            let handle = unsafe { SAMPLES.get() }.request(target.uuid);
-            let id = SAMPLE_ID_TAG | index as u32;
-            call_device_parameter_changed(reg.parameter_changed_index, state_ptr, id, PARAM_KIND_INT, handle as f32);
+            let id = index as u32;
+            let field_changed_index = reg.field_changed_index;
+            let sub = self.graph.catchup_and_subscribe(Address::of(device_uuid, path.clone()), move |value| {
+                // Encode the field's typed value onto the wire `(kind, bits, len)`: numeric bits, or a string's
+                // pointer + length into the shared memory (valid for the synchronous call).
+                if let Some(value) = value.as_int32() {
+                    call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_INT, value as u32, 0);
+                } else if let Some(value) = value.as_float32() {
+                    call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_FLOAT, value.to_bits(), 0);
+                } else if let Some(value) = value.as_bool() {
+                    call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_BOOL, value as u32, 0);
+                } else if let Some(value) = value.as_str() {
+                    call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_STRING, value.as_ptr() as u32, value.len() as u32);
+                }
+            });
+            subs.push(sub);
         }
+        subs
+    }
+
+    /// Wire each sample a device asked to observe (`observe_sample`): catch up to the `file` pointer's current
+    /// target and subscribe to that pointer field, so a set / repoint / clear (inside a transaction, never
+    /// during render) re-resolves and re-delivers through the device's `sample_changed` export. Returns the
+    /// subscriptions for teardown.
+    fn observe_samples(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, paths: &[Vec<u16>]) -> Vec<SubscriptionId> {
+        let mut subs = Vec::new();
+        for (index, path) in paths.iter().enumerate() {
+            let id = index as u32;
+            let sample_changed_index = reg.sample_changed_index;
+            resolve_and_deliver_sample(&self.graph, device_uuid, path, sample_changed_index, state_ptr, id);
+            let owned_path = path.clone();
+            let sub = self.graph.subscribe_vertex(Propagation::This, Address::of(device_uuid, path.clone()),
+                Box::new(move |graph, _update| {
+                    resolve_and_deliver_sample(graph, device_uuid, &owned_path, sample_changed_index, state_ptr, id);
+                }));
+            subs.push(sub);
+        }
+        subs
     }
 
     /// Observe each parameter field's value (a reactive `Rc<Cell>`) and its automation track, returning the
@@ -660,6 +738,9 @@ impl Engine {
             for sub in params.field_subs {
                 self.graph.unsubscribe(sub);
             }
+            for sub in params.observe_subs {
+                self.graph.unsubscribe(sub);
+            }
             for collection in params.collections {
                 collection.terminate(&mut self.graph);
             }
@@ -689,7 +770,8 @@ impl Engine {
             refresh_params(&handles, params.reg, params.state_ptr, position);
             rebound.push(DeviceParams {
                 device_uuid: params.device_uuid, reg: params.reg, state_ptr: params.state_ptr,
-                sink: params.sink, paths: params.paths, handles, field_subs, collections
+                sink: params.sink, paths: params.paths, handles, field_subs, collections,
+                observe_subs: params.observe_subs // a re-bind doesn't touch the plain field observations
             });
         }
         wired.device_params = rebound;
@@ -702,7 +784,8 @@ impl Engine {
 /// graph, so it is a free fn.
 fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Vec<FieldPath> {
     unsafe { BIND.get() }.clear();
-    unsafe { SAMPLE_BIND.get() }.clear();
+    unsafe { SAMPLE_OBS.get() }.clear();
+    unsafe { FIELD_OBS.get() }.clear();
     call_device_init(reg.init_index, state_ptr, sample_rate);
     core::mem::take(unsafe { BIND.get() })
 }
@@ -719,6 +802,20 @@ fn refresh_params(handles: &[ParamHandle], reg: DeviceReg, state_ptr: u32, posit
             handle.last.set(value);
             call_device_parameter_changed(reg.parameter_changed_index, state_ptr, handle.id, kind, value);
         }
+    }
+}
+
+/// Resolve a device's observed sample pointer to a handle and deliver it via `sample_changed`: a resident
+/// handle when the `file` pointer targets an `AudioFileBox` (the frames are requested through `SAMPLES`), or
+/// "unbound" (`present = 0`) when the pointer has no target (cleared). Touches `SAMPLES` (its own cell) and the
+/// device, never `&mut Engine`, so it is safe from a transaction observer.
+fn resolve_and_deliver_sample(graph: &BoxGraph, device_uuid: Uuid, path: &[u16], sample_changed_index: u32, state_ptr: u32, id: u32) {
+    match graph.target_of(&Address::of(device_uuid, path.to_vec())) {
+        Some(target) => {
+            let handle = unsafe { SAMPLES.get() }.request(target.uuid);
+            call_device_sample_changed(sample_changed_index, state_ptr, id, handle, 1);
+        }
+        None => call_device_sample_changed(sample_changed_index, state_ptr, id, 0, 0)
     }
 }
 
