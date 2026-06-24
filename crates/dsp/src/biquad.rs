@@ -383,11 +383,13 @@ impl ModulatedBiquad {
 
     /// Filter `buffer[from..to]` in place. `cutoffs[i]` is the unit cutoff (0..1) for sample `i`, mapped
     /// exponentially onto `[min_cutoff, max_cutoff]` Hz at `sample_rate`; `resonance` is the shared Q; `order`
-    /// (>= 1) is the number of cascaded sections.
+    /// (>= 1) is the number of cascaded sections. The Q is reduced by `order^1.25` (TS `ModulatedBiquad`), so
+    /// the stacked identical sections do not compound into an ever-larger resonant peak as the order rises.
     #[allow(clippy::too_many_arguments)]
     pub fn process(&mut self, buffer: &mut [f32], cutoffs: &[f32], resonance: f64, order: usize,
                    min_cutoff: f64, max_cutoff: f64, sample_rate: f32, from: usize, to: usize) {
         self.stack.set_order(order);
+        let q_reduced = resonance / libm::pow(self.stack.order() as f64, 1.25);
         let inv_sample_rate = 1.0 / sample_rate as f64;
         let log_ratio = libm::log(max_cutoff / min_cutoff);
         let last = (MODULATION_STEPS - 1) as f32;
@@ -397,7 +399,7 @@ impl ModulatedBiquad {
             let index = index_at(start);
             if !self.coeff_valid || index != self.last_index {
                 let frequency = min_cutoff * libm::exp(index as f64 / last as f64 * log_ratio);
-                self.coeff.set_lowpass_params(frequency * inv_sample_rate, resonance);
+                self.coeff.set_lowpass_params(frequency * inv_sample_rate, q_reduced);
                 self.last_index = index;
                 self.coeff_valid = true;
             }
@@ -536,5 +538,35 @@ mod tests {
         let cut: Vec<f32> = (0..512).map(|index| index as f32 / 511.0).collect();
         ModulatedBiquad::new().process(&mut buffer, &cut, BUTTERWORTH_Q, 2, MOD_MIN, MOD_MAX, MOD_SR, 0, 512);
         assert!(buffer.iter().all(|sample| sample.abs() < 4.0), "stays finite across the sweep");
+    }
+
+    #[test]
+    fn modulated_reduces_resonance_by_order() {
+        // Regression for the Vaporisateur "way louder + brighter" multi-pole bug: the cascade applies ONE
+        // coefficient through `order` sections, so the Q must be reduced by `order^1.25` (TS `ModulatedBiquad`)
+        // or the stacked sections compound into a huge resonant peak. Drive a sine at the filter's resolved
+        // resonant frequency and confirm the reduced-Q path is far quieter than the un-reduced cascade.
+        let q = 8.0_f64; // well above Butterworth, so the resonance is audible
+        let order = 2usize;
+        let unit = 0.5f32; // a constant mid cutoff
+        let last = (MODULATION_STEPS - 1) as f64;
+        let index = (unit * last as f32) as i32;
+        let log_ratio = libm::log(MOD_MAX / MOD_MIN);
+        let freq_norm = MOD_MIN * libm::exp(index as f64 / last * log_ratio) / MOD_SR as f64;
+        let input: Vec<f32> = (0..2048)
+            .map(|sample| libm::sinf(2.0 * core::f32::consts::PI * freq_norm as f32 * sample as f32))
+            .collect();
+        // The fixed path: ModulatedBiquad reduces the Q by order^1.25 internally.
+        let mut reduced = input.clone();
+        let cut = vec![unit; 2048];
+        ModulatedBiquad::new().process(&mut reduced, &cut, q, order, MOD_MIN, MOD_MAX, MOD_SR, 0, 2048);
+        // The pre-fix reference: the SAME cascade, but the full un-reduced Q fed into every section.
+        let mut full = input.clone();
+        let mut coeff = BiquadCoeff::new();
+        coeff.set_lowpass_params(freq_norm, q);
+        BiquadStack::new(order).process_in_place(&coeff, &mut full, 0, 2048);
+        assert!(energy(&reduced) < energy(&full) * 0.5,
+                "the order^1.25 Q reduction tames the stacked resonance ({} reduced vs {} full)",
+                energy(&reduced), energy(&full));
     }
 }

@@ -16,7 +16,7 @@ whether it glides back down the held stack on release.
 
 ## How it surfaced
 
-Loading `project.od` (a monophonic Vaporisateur patch with glide) on the Load File page. The mono glide-back
+Loading `vaporisateur.od` (a monophonic Vaporisateur patch with glide) on the Load File page. The mono glide-back
 fires correctly for **staggered** releases (the stabs, and the first chord glides 67 → 63 → 60 as its notes
 end at different times). But the **final chord** (62/65/69) ends all three notes at the same instant: the
 wasm releases them low → high, so the released note is only ever the stack "top" on the last one, and the
@@ -29,7 +29,7 @@ ordering, not the strategy.
 
 ## Repro files
 
-- `packages/app/wasm/public/project.od` — where it first surfaced (the Load File page).
+- `packages/app/wasm/public/projects/vaporisateur.od` — where it first surfaced (the Load File page).
 - `packages/app/wasm/public/vapo-release-issue.od` — a focused case for A/B comparing wasm vs TS: load it in
   both engines and compare the release of the simultaneous-ending chord.
 
