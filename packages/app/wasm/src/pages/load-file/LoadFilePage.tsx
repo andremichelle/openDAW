@@ -7,7 +7,7 @@ import {createEngineHost} from "../../engine-host"
 // graph in code: fetch the bytes, `ProjectSkeleton.decode` them into a box graph, and stream it through the
 // unchanged `SyncSource` (the same path every other page uses). The project contains a single Vaporisateur
 // instrument on one note track, with the preset baked into the file, so it plays with no patching here.
-const PROJECT_OD_FILE = "/nano.od"
+const PROJECT_OD_FILE = "/project.od"
 
 export const LoadFilePage: PageFactory<Env> = ({lifecycle}) => {
     const status: HTMLParagraphElement = <p>Loading <code>wasm.od</code>…</p>
