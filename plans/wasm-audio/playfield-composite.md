@@ -221,7 +221,10 @@ addressable output, nothing extra to build.
   "device from the unit's device-host field" to "device from any device-tagged box."
 - A **filter pull-link** (index or range) inserted ahead of a child's voice plugin.
 - **Control-field role declaration**: a host import for the plugin to register role-tagged FieldKeys
-  (`mute`, `solo`, `filter-index`) at init, alongside `host_bind_parameter` / `host_bind_sample`.
+  (`mute`, `solo`, `exclude`, `filter-index`) at init, alongside `host_bind_parameter` / `host_bind_sample`.
+- A **`forceRelease`** entry on the voice plugin (fast 5 ms kill), one method behind choke, monophonic
+  retrigger, and panic / discontinuity.
+- A **`CHOKE` event kind** tagged by the router, dispatched by the same sub-block split as note-on / off.
 - A **sum node** for the composite output, with per-child ramped gain for mute/solo.
 - A multi-level cascade: watch the children collection (add / remove / reorder), and per child watch its
   fx collections, control fields, and parameters.
@@ -239,26 +242,31 @@ target }`. The audio-unit becomes one consumer of it, a composite child becomes 
 ## Build order
 
 1. Lift the chain-cluster builder out of `rewire_unit`, audio-unit still green through it.
-2. The `playfield-voice` device: sample voice DSP, native unit-tested for gate modes, reverse, window,
-   envelope, polyphony, resolved through Route F. Prove it as a single normal instrument first.
+2. The `playfield-voice` device: sample voice DSP per the parity checklist (f64 position, f32 ordinary
+   math, snapshot-at-note-on, `Math.sign`-matching sign, plain AR envelope, write the final sample, gate
+   modes with the Loop zero-distance guard, reverse), a fixed 16-voice pool with steal-oldest, and the
+   `forceRelease` entry (choke / mono / panic), resolved through Route F. Native-tested. Prove it as a
+   single normal instrument first.
 3. Composite host and cascade: recognize `PlayfieldDeviceBox`, instantiate one voice child per slot rooted
    at the slot box, bind FieldKeys, sum into the composite output. Start with broadcast and no filter.
-4. Filter pull-link, route each slot by its `index`.
+4. Filter pull-link, route each slot by its `index` (first slot wins on a duplicate index).
 5. Per-slot audio-fx chains from field 13.
-6. Mute / Solo gate at the sum, then Choke force-stop, evaluated on the update tick.
-7. Control-field role declaration so mute / solo / filter-index are plugin-declared, not hardcoded.
-8. A Playfield page proving several pads on one note-track, each with its own fx chain, with mute, solo,
+6. Mute / Solo as a ramped per-child gain at the sum.
+7. Choke: tag note-ons as `PLAY` / `CHOKE` from the exclude table in the router, dispatched by sub-block
+   split into `forceRelease`.
+8. Control-field role declaration so mute / solo / exclude / filter-index are plugin-declared, not hardcoded.
+9. A Playfield page proving several pads on one note-track, each with its own fx chain, with mute, solo,
    and choke live.
-9. Optional: light up per-slot midi-fx (field 12) as pull-chain links.
+10. Optional: light up per-slot midi-fx (field 12) as pull-chain links.
 
 ## Open questions and deferrals
 
-- Whether to ship per-slot midi-fx (field 12) in the first cut or defer it. The pull model makes it cheap.
+- Whether to ship per-slot midi-fx (field 12) in the first cut or defer it (currently the optional last
+  step). The pull model makes it cheap.
 - Whether a general composite box (several arbitrary instruments on one note-track) is worth wiring now,
   or left as an enabled capability until a box type for it exists. Playfield is the only composite box
   today.
-- Polyphony budget per slot and the global voice cap across a composite.
-- Declick ramp length for the mute/solo gate, align with the channel-strip ramp.
+- The exact declick ramp length for the mute/solo gain, to reuse the channel-strip ramp.
 
 ## Out of scope (this milestone)
 
