@@ -33,6 +33,25 @@ Still open within memory/composition (deferred, not blocking):
 - **Scriptable devices:** shared-memory layout for note events + params handed to scripts; telemetry
   write-back path. [scriptable-devices]
 
+## 🟡 Composite devices (Playfield)
+
+The generic composite mechanism ships (broadcast + child-side note filter, choke/exclude, per-child
+fx chains with device-declared host keys). Open from the requirements audit:
+
+- **Mute / solo:** not implemented. The child boxes carry `mute` (40) / `solo` (41), but the composite
+  sum applies no per-child gain. Plan calls for a per-child ramped gain at the sum (a mini channel
+  strip), `silent = mute || (anySolo && !thisSolo)`, evaluated continuously, mirroring Bitwig. Queued.
+  [playfield-composite]
+- **Exclude / choke ownership — reopen.** Today the choke `index_key` / `exclude_key` come from the
+  JS-registered `CompositeSpec`, while the per-child fx host keys are exported by the child DEVICE
+  itself. The plan wants ALL control-field roles (mute / solo / exclude / filter-index) declared by the
+  plugin (one source of truth), so the composite reads them off the child, not the spec. Rework the
+  exclude path onto device-declared roles like the fx keys. [playfield-composite]
+- **Sidechain through a composite — to be tested.** Flattening registers each child and per-child fx
+  node in the one global graph by box UUID, so a child output feeding an external sidechain, or a
+  Playfield used as a sidechain source, should work for free. Not yet exercised. [playfield-composite,
+  device-processing]
+
 ## 🟡 Boundary & sync
 
 - **Box sync granularity:** full project reload vs incremental deltas to the Rust-side graph. [04]
