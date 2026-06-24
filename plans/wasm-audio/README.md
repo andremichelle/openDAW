@@ -28,6 +28,7 @@ WASM core is free to restructure; it just has to produce the same audio.
 
 - [**Feature inventory**](feature-inventory.md) — the master list of engine mechanics to port, one at a time
 - [**Open questions**](open-questions.md) — consolidated, prioritized (spike-blockers first)
+- [**Playfield and composite devices**](playfield-composite.md): the composite-device mechanism (flattening container, generic), with Playfield as its first user
 1. [Language choice](01-language.md) — **decided: Rust**
 2. [Source layout / repo](02-repo-layout.md) — **decided: monorepo, `crates/`**
 3. [Threading model](03-threading.md) — **decided: single-threaded**
