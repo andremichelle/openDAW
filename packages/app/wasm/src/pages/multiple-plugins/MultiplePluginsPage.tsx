@@ -167,8 +167,8 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
                 instruments, an audio effect, and a three-stage MIDI-fx chain. All run from
                 <strong>one shared memory</strong>. Metronome off.</p>
             <ul>
-                <li><strong>Dynamic linking.</strong> A <strong>sawtooth</strong> bass and a
-                    <strong>sine</strong> lead (<code>device_sine.wasm</code>, <code>device_saw.wasm</code>)
+                <li><strong>Dynamic linking.</strong> A <strong>sampler</strong> bass and a
+                    <strong>sine</strong> lead (<code>device_nano.wasm</code>, <code>device_vaporisateur.wasm</code>)
                     load as position-independent side modules at host-assigned bases in the shared memory;
                     the engine calls each unit's device through the shared function table.</li>
                 <li><strong>Audio effect with two automated parameters (bass only).</strong> A
