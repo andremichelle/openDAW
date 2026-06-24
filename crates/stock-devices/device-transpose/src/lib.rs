@@ -33,7 +33,7 @@ const SEMITONE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 12};
 /// (0 semitones = no shift) until the engine pushes the field / automation value.
 pub struct TransposeState {
     semitones: i32,
-    semitone_id: u32
+    semitones_id: u32
 }
 
 /// The transform, plugged into the SDK's `MidiEffect` template ([`abi::render_midi_effect`]), which owns the
@@ -46,11 +46,11 @@ impl MidiEffect for Transpose {
     type State = TransposeState;
 
     fn init(state: &mut TransposeState, _sample_rate: f32) {
-        state.semitone_id = abi::bind_parameter(&SEMITONE_FIELD); // a MIDI fx: no audio, the rate is unused
+        state.semitones_id = abi::bind_parameter(&SEMITONE_FIELD); // a MIDI fx: no audio, the rate is unused
     }
 
     fn parameter_changed(state: &mut TransposeState, id: u32, value: ParamValue) {
-        if id == state.semitone_id {
+        if id == state.semitones_id {
             // `Unit` => map the uniform 0..1 through the LinearInteger mapping, which yields a real `i32`
             // semitone; `Int` => the box field's real semitone value, used directly. Semitones are an integer
             // parameter, so any other variant is a contract error.
@@ -120,7 +120,7 @@ mod tests {
     use abi::{EventRecord, MidiEffect, ParamValue, EVENT_NOTE_ON};
 
     fn state_at(semitones: i32) -> TransposeState {
-        TransposeState {semitones, semitone_id: 0}
+        TransposeState {semitones, semitones_id: 0}
     }
 
     fn note_on(id: u32, offset: u32, pitch: u32) -> EventRecord {
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn parameter_changed_maps_a_unit_value_but_takes_a_real_value_directly() {
         let mut state = state_at(0);
-        let id = state.semitone_id;
+        let id = state.semitones_id;
         // Unit: the uniform 1.0 maps through LinearInteger(0, 12) -> 12 semitones.
         Transpose::parameter_changed(&mut state, id, ParamValue::Unit(1.0));
         assert_eq!(state.semitones, 12, "a unit value is mapped to a whole semitone");
@@ -178,7 +178,7 @@ mod tests {
     #[should_panic]
     fn parameter_changed_rejects_a_mismatched_type() {
         let mut state = state_at(0);
-        let id = state.semitone_id;
+        let id = state.semitones_id;
         Transpose::parameter_changed(&mut state, id, ParamValue::Float(1.5));
     }
 }

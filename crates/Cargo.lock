@@ -5,6 +5,9 @@ version = 4
 [[package]]
 name = "abi"
 version = "0.0.0"
+dependencies = [
+ "math",
+]
 
 [[package]]
 name = "allocator-api2"

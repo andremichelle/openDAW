@@ -1,7 +1,7 @@
 import {createElement, PageFactory} from "@opendaw/lib-jsx"
 import {Iterables, UUID} from "@opendaw/lib-std"
 import {
-    ArpeggioDeviceBox, AudioUnitBox, GrooveShuffleBox, NanoDeviceBox, NoteEventBox, NoteEventCollectionBox,
+    ArpeggioDeviceBox, AudioUnitBox, GrooveShuffleBox, NoteEventBox, NoteEventCollectionBox,
     NoteRegionBox, PitchDeviceBox, RevampDeviceBox, TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox,
     VaporisateurDeviceBox, ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
@@ -9,6 +9,7 @@ import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {PPQN} from "@opendaw/lib-dsp"
 import {Env} from "../../Env"
 import {applySinePatch} from "../../sine-patch"
+import {applySawBassPatch} from "../../saw-bass-patch"
 import {createEngineHost} from "../../engine-host"
 
 type Note = readonly [number, number] // [position in pulses, MIDI pitch]
@@ -105,10 +106,13 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     }
 
     boxGraph.beginTransaction()
-    // Bass: a sawtooth instrument (Nano) into a low-pass audio effect (Revamp) with TWO automated parameters,
-    // panned hard LEFT.
+    // Bass: a sawtooth instrument (Vaporisateur) into a low-pass audio effect (Revamp) with TWO automated
+    // parameters, panned hard LEFT.
     addPart(1, -1.0, BASS, PPQN.Bar, PPQN.Quarter / 2, unit => {
-        NanoDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(unit.input))
+        VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(unit.input)
+            applySawBassPatch(box)
+        })
         const revamp = RevampDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(unit.audioEffects)
             box.index.setValue(0)
@@ -163,11 +167,11 @@ export const MultiplePluginsPage: PageFactory<Env> = ({lifecycle}) => {
     return (
         <div className="page">
             <h2>Multiple Plugins</h2>
-            <p>Two audio units through six plugins from one shared memory: a sampler bass and a sine lead,
+            <p>Two audio units through six plugins from one shared memory: a sawtooth bass and a sine lead,
                 an automated low-pass on the bass, and a three-stage MIDI-fx pull chain on the lead.</p>
             {host.element}
             <ul>
-                <li><strong>Bass:</strong> sampler → automated biquad low-pass (cutoff sweep + resonance,
+                <li><strong>Bass:</strong> sawtooth synth → automated biquad low-pass (cutoff sweep + resonance,
                     both real automated parameters) → bus.</li>
                 <li><strong>Lead:</strong> a held C-E-G chord pulled through arp → zeitgeist (swing) →
                     transpose (automated +12 every other bar) → sine.</li>

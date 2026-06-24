@@ -20,8 +20,8 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{Block, EventRecord, FieldValue, Instrument, ParamValue, Ports, EVENT_CHOKE, EVENT_NOTE_OFF, EVENT_NOTE_ON};
-use math::value_mapping::{Exponential, Linear, LinearInteger, ValueMapping};
+use abi::{bool_value, float_value, int_value, Block, EventRecord, FieldValue, Instrument, ParamValue, Ports, EVENT_CHOKE, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use math::value_mapping::{Exponential, Linear, LinearInteger};
 
 mod voice;
 use voice::SlotVoice;
@@ -55,37 +55,6 @@ const PITCH_MAPPING: Linear = Linear {min: -1200.0, max: 1200.0}; // cents
 const UNIPOLAR: Linear = Linear::unipolar();
 const ATTACK_MAPPING: Exponential = Exponential {min: 0.001, max: 5.0}; // seconds
 const RELEASE_MAPPING: Exponential = Exponential {min: 0.001, max: 5.0}; // seconds
-
-/// Resolve a float parameter: map a uniform automation value through `mapping`, else take the real value.
-fn float_value<M: ValueMapping<f32>>(value: ParamValue, mapping: &M) -> f32 {
-    match value {
-        ParamValue::Unit(unit) => mapping.y(unit),
-        ParamValue::Float(real) => real,
-        ParamValue::Int(real) => real as f32,
-        ParamValue::Bool(flag) => if flag {1.0} else {0.0}
-    }
-}
-
-/// Resolve an int parameter: map a uniform automation value through `mapping`, else take the real value.
-fn int_value<M: ValueMapping<i32>>(value: ParamValue, mapping: &M) -> i32 {
-    match value {
-        ParamValue::Unit(unit) => mapping.y(unit),
-        ParamValue::Int(real) => real,
-        ParamValue::Float(real) => real as i32,
-        ParamValue::Bool(flag) => if flag {1} else {0}
-    }
-}
-
-/// Resolve a bool parameter: a uniform automation value is true at / above the halfway point, else take the
-/// real value.
-fn bool_value(value: ParamValue) -> bool {
-    match value {
-        ParamValue::Bool(flag) => flag,
-        ParamValue::Unit(unit) => unit >= 0.5,
-        ParamValue::Int(real) => real != 0,
-        ParamValue::Float(real) => real != 0.0
-    }
-}
 
 /// The device's per-instance state, interpreted from the engine-allocated (zeroed) block: the fixed voice
 /// pool, the engine sample rate, the bound sample handle, the current parameter values the engine pushes (only

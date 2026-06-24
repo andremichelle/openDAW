@@ -15,7 +15,7 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{AudioEffect, Block, ParamValue, Ports};
+use abi::{float_value, AudioEffect, Block, ParamValue, Ports};
 use dsp::ppqn;
 use dsp::smooth::Smooth;
 use dsp::tidal::TidalComputer;
@@ -71,24 +71,14 @@ pub struct TidalState {
     needs_update: bool,
     slope_id: u32,
     symmetry_id: u32,
-    rate_id: u32,
+    rate_index_id: u32,
     depth_id: u32,
-    offset_id: u32,
-    channel_offset_id: u32
+    offset_degrees_id: u32,
+    channel_offset_degrees_id: u32
 }
 
 /// The DSP, plugged into the SDK's `AudioEffect` template ([`abi::render_effect`]).
 pub struct Tidal;
-
-/// Resolve a float parameter: map a uniform automation value through `mapping`, or take a real field value
-/// directly. A wrong type for a float parameter is a contract error.
-fn float_value(value: ParamValue, mapping: Linear) -> f32 {
-    match value {
-        ParamValue::Unit(unit) => mapping.y(unit),
-        ParamValue::Float(real) => real,
-        _ => panic!("tidal expects a unit or float value")
-    }
-}
 
 impl AudioEffect for Tidal {
     type State = TidalState;
@@ -97,10 +87,10 @@ impl AudioEffect for Tidal {
         state.sample_rate = sample_rate; // stable for the device's life
         state.slope_id = abi::bind_parameter(&SLOPE_FIELD);
         state.symmetry_id = abi::bind_parameter(&SYMMETRY_FIELD);
-        state.rate_id = abi::bind_parameter(&RATE_FIELD);
+        state.rate_index_id = abi::bind_parameter(&RATE_FIELD);
         state.depth_id = abi::bind_parameter(&DEPTH_FIELD);
-        state.offset_id = abi::bind_parameter(&OFFSET_FIELD);
-        state.channel_offset_id = abi::bind_parameter(&CHANNEL_OFFSET_FIELD);
+        state.offset_degrees_id = abi::bind_parameter(&OFFSET_FIELD);
+        state.channel_offset_degrees_id = abi::bind_parameter(&CHANNEL_OFFSET_FIELD);
         state.needs_update = true; // recompute the LFO shape on the first block
     }
 
@@ -108,19 +98,19 @@ impl AudioEffect for Tidal {
         // depth / slope / symmetry reshape the LFO (recomputed lazily on the next block); rate / offset /
         // channel-offset are read per sample, so they only update the stored value.
         if id == state.slope_id {
-            state.slope = float_value(value, SLOPE_MAPPING);
+            state.slope = float_value(value, &SLOPE_MAPPING);
             state.needs_update = true;
         } else if id == state.symmetry_id {
-            state.symmetry = float_value(value, SYMMETRY_MAPPING);
+            state.symmetry = float_value(value, &SYMMETRY_MAPPING);
             state.needs_update = true;
         } else if id == state.depth_id {
-            state.depth = float_value(value, DEPTH_MAPPING);
+            state.depth = float_value(value, &DEPTH_MAPPING);
             state.needs_update = true;
-        } else if id == state.offset_id {
-            state.offset_degrees = float_value(value, OFFSET_MAPPING);
-        } else if id == state.channel_offset_id {
-            state.channel_offset_degrees = float_value(value, CHANNEL_OFFSET_MAPPING);
-        } else if id == state.rate_id {
+        } else if id == state.offset_degrees_id {
+            state.offset_degrees = float_value(value, &OFFSET_MAPPING);
+        } else if id == state.channel_offset_degrees_id {
+            state.channel_offset_degrees = float_value(value, &CHANNEL_OFFSET_MAPPING);
+        } else if id == state.rate_index_id {
             state.rate_index = match value {
                 ParamValue::Unit(unit) => RATE_MAPPING.y(unit),
                 ParamValue::Float(real) => real as i32,

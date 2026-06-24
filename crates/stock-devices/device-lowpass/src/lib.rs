@@ -46,8 +46,8 @@ pub struct LowpassState {
     cutoff_hz: f32,
     resonance_q: f32,
     dirty: bool,
-    cutoff_id: u32,
-    resonance_id: u32,
+    cutoff_hz_id: u32,
+    resonance_q_id: u32,
     sample_rate: f32 // the device's own rate, stashed from `Ports::sample_rate` each `process`
 }
 
@@ -59,21 +59,21 @@ impl AudioEffect for Lowpass {
 
     fn init(state: &mut LowpassState, sample_rate: f32) {
         state.sample_rate = sample_rate; // stable for the device's life
-        state.cutoff_id = abi::bind_parameter(&CUTOFF_FIELD);
-        state.resonance_id = abi::bind_parameter(&RESONANCE_FIELD);
+        state.cutoff_hz_id = abi::bind_parameter(&CUTOFF_FIELD);
+        state.resonance_q_id = abi::bind_parameter(&RESONANCE_FIELD);
     }
 
     fn parameter_changed(state: &mut LowpassState, id: u32, value: ParamValue) {
         // `Unit` => the uniform 0..1 automation value, mapped through this device's mapping; `Float` => the box
         // field's already-real value (Hz / Q), used directly. Both are f32 parameters, so anything else is a
         // contract error. Either way mark the coefficients stale.
-        if id == state.cutoff_id {
+        if id == state.cutoff_hz_id {
             state.cutoff_hz = match value {
                 ParamValue::Unit(unit) => CUTOFF_MAPPING.y(unit),
                 ParamValue::Float(hz) => hz,
                 _ => panic!("lowpass cutoff expects a unit or float value")
             };
-        } else if id == state.resonance_id {
+        } else if id == state.resonance_q_id {
             state.resonance_q = match value {
                 ParamValue::Unit(unit) => RESONANCE_MAPPING.y(unit),
                 ParamValue::Float(q) => q,
@@ -192,8 +192,8 @@ mod tests {
     #[test]
     fn parameter_changed_maps_a_unit_value_but_takes_a_real_value_directly() {
         let mut state = empty_state();
-        state.cutoff_id = 0;
-        state.resonance_id = 1;
+        state.cutoff_hz_id = 0;
+        state.resonance_q_id = 1;
         // Unit: the uniform value is mapped (exp 80..1120, so 1.0 -> 1120 Hz).
         Lowpass::parameter_changed(&mut state, 0, ParamValue::Unit(1.0));
         assert_eq!(state.cutoff_hz, CUTOFF_MAPPING.y(1.0), "a unit value is mapped");

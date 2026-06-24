@@ -224,6 +224,41 @@ impl ParamValue {
     }
 }
 
+/// Resolve a FLOAT parameter from its [`ParamValue`]: a uniform automation value mapped through `mapping`, or
+/// a real `Float` field value used directly. PANICS on an `Int` / `Bool` wire — a float parameter never
+/// carries those, so it can only be a contract drift; the value is never silently coerced. Shared by all
+/// plugins (the device just supplies its own `mapping`).
+#[inline]
+pub fn float_value<M: math::value_mapping::ValueMapping<f32>>(value: ParamValue, mapping: &M) -> f32 {
+    match value {
+        ParamValue::Unit(unit) => mapping.y(unit),
+        ParamValue::Float(real) => real,
+        ParamValue::Int(_) | ParamValue::Bool(_) => panic!("expected a float parameter")
+    }
+}
+
+/// Resolve an INT parameter: a uniform automation value mapped through `mapping`, or a real `Int` value.
+/// PANICS on a `Float` / `Bool` wire.
+#[inline]
+pub fn int_value<M: math::value_mapping::ValueMapping<i32>>(value: ParamValue, mapping: &M) -> i32 {
+    match value {
+        ParamValue::Unit(unit) => mapping.y(unit),
+        ParamValue::Int(real) => real,
+        ParamValue::Float(_) | ParamValue::Bool(_) => panic!("expected an int parameter")
+    }
+}
+
+/// Resolve a BOOL parameter: a uniform automation value (true at / above the halfway point), or a real `Bool`
+/// value. PANICS on an `Int` / `Float` wire.
+#[inline]
+pub fn bool_value(value: ParamValue) -> bool {
+    match value {
+        ParamValue::Unit(unit) => unit >= 0.5,
+        ParamValue::Bool(flag) => flag,
+        ParamValue::Int(_) | ParamValue::Float(_) => panic!("expected a bool parameter")
+    }
+}
+
 pub const FIELD_KIND_INT: u32 = 0;
 pub const FIELD_KIND_FLOAT: u32 = 1;
 pub const FIELD_KIND_BOOL: u32 = 2;

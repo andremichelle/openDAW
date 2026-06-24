@@ -14,7 +14,7 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{AudioEffect, Block, ParamValue, Ports};
+use abi::{float_value, AudioEffect, Block, ParamValue, Ports};
 use math::db_to_gain;
 use math::value_mapping::{Decibel, Exponential, Linear, LinearInteger, Power, ValueMapping};
 use dsp::ppqn::pulses_to_samples;
@@ -74,16 +74,6 @@ const BIPOLAR: Linear = Linear::bipolar();
 const LFO_SPEED_MAPPING: Exponential = Exponential {min: LFO_SPEED_MIN, max: LFO_SPEED_MAX};
 const LFO_DEPTH_MAPPING: Power = Power {exp: 4.0, min: 0.0, max: LFO_DEPTH_MAX as f32}; // power(4, 0, 50)
 const VOLUME_MAPPING: Decibel = Decibel::default_volume();
-
-/// Resolve a float parameter: map a uniform automation value through `mapping`, else take the real value.
-fn float_value<M: ValueMapping<f32>>(value: ParamValue, mapping: &M) -> f32 {
-    match value {
-        ParamValue::Unit(unit) => mapping.y(unit),
-        ParamValue::Float(real) => real,
-        ParamValue::Int(real) => real as f32,
-        ParamValue::Bool(flag) => if flag {1.0} else {0.0}
-    }
-}
 
 /// Resolve a sync-time fraction index (a `linearInteger`): the automation value snapped, else the real int.
 fn sync_index(value: ParamValue) -> i32 {

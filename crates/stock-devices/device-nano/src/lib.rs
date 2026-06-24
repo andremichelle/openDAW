@@ -16,9 +16,9 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{Block, EventRecord, Instrument, ParamValue, Ports, EVENT_NOTE_ON};
+use abi::{float_value, Block, EventRecord, Instrument, ParamValue, Ports, EVENT_NOTE_ON};
 use math::db_to_gain;
-use math::value_mapping::{Decibel, Exponential, ValueMapping};
+use math::value_mapping::{Decibel, Exponential};
 
 mod voice;
 use voice::NanoVoice;
@@ -40,16 +40,6 @@ const RELEASE_FIELD: [u16; 1] = [20];
 const VOLUME_MAPPING: Decibel = Decibel::default_volume();
 const RELEASE_MAPPING: Exponential = Exponential {min: 0.001, max: 8.0}; // seconds
 
-/// Resolve a float parameter: map a uniform automation value through `mapping`, else take the real value.
-fn float_value<M: ValueMapping<f32>>(value: ParamValue, mapping: &M) -> f32 {
-    match value {
-        ParamValue::Unit(unit) => mapping.y(unit),
-        ParamValue::Float(real) => real,
-        ParamValue::Int(real) => real as f32,
-        ParamValue::Bool(flag) => if flag {1.0} else {0.0}
-    }
-}
-
 /// The device's per-instance state, interpreted from the engine-allocated (zeroed) block: a fixed voice pool,
 /// the resolved gain / release, the sample rate, the bound sample handle (+ whether one is bound), and the
 /// parameter / sample binding ids the engine pushes against.
@@ -59,7 +49,7 @@ pub struct NanoState {
     release: u32, // release length in samples
     sample_rate: f32,
     sample: Option<u32>, // the resolved sample handle while the `file` pointer is bound; `None` when unbound
-    volume_id: u32,
+    gain_id: u32,
     release_id: u32,
     sample_id: u32
 }
@@ -75,7 +65,7 @@ impl Instrument for Nano {
         state.gain = 1.0; // TS defaults; the engine pushes the real values right after
         state.release = sample_rate as u32; // 1 s
         state.sample = None; // no sample until the engine catches up the `file` pointer right after init
-        state.volume_id = abi::bind_parameter(&VOLUME_FIELD);
+        state.gain_id = abi::bind_parameter(&VOLUME_FIELD);
         state.release_id = abi::bind_parameter(&RELEASE_FIELD);
         state.sample_id = abi::observe_sample(&SAMPLE_POINTER);
     }
@@ -115,7 +105,7 @@ impl Instrument for Nano {
     }
 
     fn parameter_changed(state: &mut NanoState, id: u32, value: ParamValue) {
-        if id == state.volume_id {
+        if id == state.gain_id {
             state.gain = db_to_gain(float_value(value, &VOLUME_MAPPING));
         } else if id == state.release_id {
             state.release = (float_value(value, &RELEASE_MAPPING) * state.sample_rate) as u32;

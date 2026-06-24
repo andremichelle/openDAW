@@ -21,7 +21,7 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{Block, EventRecord, Instrument, ParamValue, Ports, EVENT_NOTE_ON};
+use abi::{float_value, int_value, Block, EventRecord, Instrument, ParamValue, Ports, EVENT_NOTE_ON};
 use dsp::osc::ClassicWaveform;
 use dsp::{midi_to_hz, ppqn};
 use math::value_mapping::{Decibel, Exponential, Linear, LinearInteger, Values, ValueMapping};
@@ -90,26 +90,6 @@ mod param {
     pub const LFO_TARGET_CUTOFF: usize = 25;
     pub const LFO_TARGET_VOLUME: usize = 26;
     pub const COUNT: usize = 27;
-}
-
-/// Resolve a float parameter: map a uniform automation value through `mapping`, else take the real value.
-fn float_value<M: ValueMapping<f32>>(value: ParamValue, mapping: &M) -> f32 {
-    match value {
-        ParamValue::Unit(unit) => mapping.y(unit),
-        ParamValue::Float(real) => real,
-        ParamValue::Int(real) => real as f32,
-        ParamValue::Bool(flag) => if flag {1.0} else {0.0}
-    }
-}
-
-/// Resolve an integer parameter: map a uniform automation value through `mapping`, else take the real value.
-fn int_value<M: ValueMapping<i32>>(value: ParamValue, mapping: &M) -> i32 {
-    match value {
-        ParamValue::Unit(unit) => mapping.y(unit),
-        ParamValue::Int(real) => real,
-        ParamValue::Float(real) => real as i32,
-        ParamValue::Bool(flag) => if flag {1} else {0}
-    }
 }
 
 /// Resolve the cutoff as a UNIT value (0..1): the automation value directly, or a real Hz mapped back to the
