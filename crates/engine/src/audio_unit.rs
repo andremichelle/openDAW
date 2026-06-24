@@ -172,6 +172,20 @@ struct WiredCluster {
     device_params: Vec<DeviceParams>
 }
 
+/// The reusable result of `build_cluster`: an instrument plus its midi-fx pull chain and audio-fx chain,
+/// wired into the global graph. `output` is the chain's final buffer and `output_node` its last node, so a
+/// caller appends its own tail (an audio unit appends the channel strip -> master; a composite child appends
+/// the per-child sum). The bookkeeping (`nodes` / `edges` / `device_params` / `device_uuids`) folds into the
+/// caller's `WiredCluster` and the unit's automation set.
+struct BuiltCluster {
+    output: SharedAudioBuffer,
+    output_node: NodeId,
+    nodes: Vec<NodeId>,
+    edges: Vec<(NodeId, NodeId)>,
+    device_params: Vec<DeviceParams>,
+    device_uuids: Vec<Uuid>
+}
+
 /// One device's bound parameters: enough to re-observe and re-push them on a runtime automation change. The
 /// `handles` are clones the engine reads for the build / edit push (sharing the node's `Rc<Cell>`s, so the
 /// `last`-value diff stays consistent with the clock pull); `field_subs` + `collections` are the graph
@@ -477,16 +491,54 @@ impl Engine {
             Some(device) if device.kind == DEVICE_KIND_INSTRUMENT => device,
             _ => return
         };
-        let mut device_params: Vec<DeviceParams> = Vec::new();
-        let mut device_uuids: Vec<Uuid> = Vec::new();
-        // The pull chain: sequencer (over the unit's per-track region collections) at the leaf, each midi-fx
-        // folded on top in index order, so the instrument pulls the highest-index fx, which pulls the next,
-        // down to the sequencer. The sequencer reads `track_sets` live, so track / region changes need no rewire.
-        // Each midi-fx binds its parameters too, so a midi-fx parameter is automatable like an audio device's.
+        // The pull-chain leaf: a sequencer over the unit's per-track region collections. It reads
+        // `track_sets` live, so track / region changes need no rewire. `build_cluster` folds the midi-fx
+        // chain on top in index order and builds the instrument + audio-fx chain.
         let sequencer: SharedNoteEventSource =
             Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}))));
-        let mut chain = PullLink::Source(sequencer);
-        for device_uuid in unit.midi.sorted() {
+        let midi = unit.midi.sorted();
+        let audio = unit.audio.sorted();
+        let mut cluster = self.build_cluster(PullLink::Source(sequencer), instrument_uuid, instrument_device, &midi, &audio);
+        // The channel strip terminates the unit's chain: instrument/fx -> STRIP -> master. It applies the
+        // unit's volume / panning / mute (read from the shared StripParams), then feeds the master bus.
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
+        strip.borrow_mut().set_audio_source(cluster.output);
+        let strip_output = strip.borrow().audio_output();
+        let strip_id = self.context.register_processor(strip);
+        self.context.register_edge(cluster.output_node, strip_id);
+        cluster.edges.push((cluster.output_node, strip_id));
+        cluster.nodes.push(strip_id);
+        let master = self.master.as_ref().unwrap();
+        master.borrow_mut().add_audio_source(strip_output.clone());
+        self.context.register_edge(strip_id, self.master_id);
+        cluster.edges.push((strip_id, self.master_id));
+        // Now that every device node exists and its params are bound, push each parameter's initial value
+        // (the box-field default, or its automation at the current position) to the device.
+        let position = self.transport.position();
+        for params in &cluster.device_params {
+            refresh_params(&params.handles, params.reg, params.state_ptr, position);
+        }
+        // Publish the automatable devices to the runtime observer and clear any pending flag.
+        *unit.device_uuids.borrow_mut() = cluster.device_uuids;
+        unit.automation_dirty.set(false);
+        unit.wired = Some(WiredCluster {
+            nodes: cluster.nodes, edges: cluster.edges, output_buffer: strip_output, device_params: cluster.device_params
+        });
+    }
+
+    /// Build one processor cluster: an instrument plus its midi-fx pull chain (folded onto `source` in index
+    /// order, so the instrument pulls the highest-index fx down to the source) and its audio-fx chain
+    /// (instrument -> fx0 -> fx1 -> ...), wired into the global graph. Returns the chain's final output buffer
+    /// and last node so the caller appends its own tail (a unit appends the channel strip then master, a
+    /// composite child appends the per-child sum), plus the node / edge / param bookkeeping. The only
+    /// per-device knowledge is the box-type -> plugin table, so any cluster host reuses this verbatim.
+    fn build_cluster(&mut self, source: PullLink, instrument_uuid: Uuid, instrument_device: DeviceReg,
+                     midi: &[Uuid], audio: &[Uuid]) -> BuiltCluster {
+        let mut device_params: Vec<DeviceParams> = Vec::new();
+        let mut device_uuids: Vec<Uuid> = Vec::new();
+        // Each midi-fx binds its parameters too, so a midi-fx parameter is automatable like an audio device's.
+        let mut chain = source;
+        for device_uuid in midi.iter().copied() {
             let device = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
             match device {
                 Some(device) if device.kind == DEVICE_KIND_MIDI_EFFECT => {
@@ -510,7 +562,7 @@ impl Engine {
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut output_node = instrument_id;
         // The audio-fx chain in index order: instrument -> fx0 -> fx1 -> ... Each reads the previous output.
-        for device_uuid in unit.audio.sorted() {
+        for device_uuid in audio.iter().copied() {
             let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
             let device = match resolved {
                 Some(device) if device.kind == DEVICE_KIND_AUDIO_EFFECT => device,
@@ -529,29 +581,7 @@ impl Engine {
             nodes.push(node_id);
             output_node = node_id;
         }
-        // The channel strip terminates the unit's chain: instrument/fx -> STRIP -> master. It applies the
-        // unit's volume / panning / mute (read from the shared StripParams), then feeds the master bus.
-        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
-        strip.borrow_mut().set_audio_source(output);
-        let strip_output = strip.borrow().audio_output();
-        let strip_id = self.context.register_processor(strip);
-        self.context.register_edge(output_node, strip_id);
-        edges.push((output_node, strip_id));
-        nodes.push(strip_id);
-        let master = self.master.as_ref().unwrap();
-        master.borrow_mut().add_audio_source(strip_output.clone());
-        self.context.register_edge(strip_id, self.master_id);
-        edges.push((strip_id, self.master_id));
-        // Now that every device node exists and its params are bound, push each parameter's initial value
-        // (the box-field default, or its automation at the current position) to the device.
-        let position = self.transport.position();
-        for params in &device_params {
-            refresh_params(&params.handles, params.reg, params.state_ptr, position);
-        }
-        // Publish the automatable devices to the runtime observer and clear any pending flag.
-        *unit.device_uuids.borrow_mut() = device_uuids;
-        unit.automation_dirty.set(false);
-        unit.wired = Some(WiredCluster {nodes, edges, output_buffer: strip_output, device_params});
+        BuiltCluster {output, output_node, nodes, edges, device_params, device_uuids}
     }
 
     /// Bind one device's parameters: call its `init` (which records its parameter field-paths via

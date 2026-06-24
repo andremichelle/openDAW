@@ -6,7 +6,7 @@ not a line port. This is the engine design we settled on in discussion, written 
 
 ## Principle
 
-A composite device is a **flattening container, not a nested engine**. It owns no private sub-graph.
+A composite device is a **flattening host, not a nested engine**. It owns no private sub-graph.
 Every node it creates (each child's voice plugin, each child's audio-fx chain, the sum node) is
 registered in the one global processor graph, keyed by box UUID, exactly like an audio-unit's nodes.
 
@@ -36,7 +36,7 @@ note source --> [filter] --> [midi-fx pull chain] --> voice plugin --> [audio-fx
 - All children sum into the composite output, which then continues into the unit's own audio-fx chain
   and channel strip like any instrument.
 
-For Playfield the child is a sample-player slot, the voice plugin is `playfield-voice.wasm`, and the
+For Playfield the child is a sample-player slot, the voice plugin is `device-playfield-slot.wasm`, and the
 filter narrows to the slot's note.
 
 ## Box mapping
@@ -53,7 +53,7 @@ The engine keys off box type. Neither box describes the other.
 So the only Playfield-specific engine knowledge is two facts in the registry:
 
 1. `PlayfieldDeviceBox` is a composite host whose children live in field 10.
-2. The composite routes notes to children and pins `playfield-voice` as the child plugin.
+2. The composite routes notes to children and pins `device-playfield-slot` as the child plugin.
 
 Everything else is the generic composite cascade plus the standard "device box to plugin, bind FieldKeys,
 build its fx chain" treatment, rooted at the child box instead of the unit.
@@ -133,14 +133,14 @@ no child has to run before another and nothing is produced during render.
 `forceRelease` is one method with three callers: choke, monophonic retrigger (`polyphone=false`), and
 panic / discontinuity. The voice plugin stays generic, it only knows `PLAY` versus `CHOKE`. The only
 composite-side state is each child's choke-trigger set, derived from the `exclude` flags and indices,
-refreshed off the hot path and re-evaluated per block if `exclude` is automated. Any container can define
+refreshed off the hot path and re-evaluated per block if `exclude` is automated. Any composite can define
 choke groups this way by tagging.
 
-Because choke is solved generically here, Playfield stays a **pure container of independent child nodes**.
+Because choke is solved generically here, Playfield stays a **pure composite of independent child nodes**.
 The single multi-output voice device (which would make choke trivial internal state but is Playfield-specific)
 was considered and rejected, it is not needed once choke is event-tagging plus `forceRelease`.
 
-## The voice plugin DSP (playfield-voice)
+## The voice plugin DSP (device-playfield-slot)
 
 A new device crate under `stock-devices`, a sample voice richer than Nano:
 
@@ -189,7 +189,7 @@ full a note-on steals the oldest voice through `forceRelease` (the 5 ms ramp, cl
 is the one accepted **deviation** from the TS engine, whose per-slot polyphony is unbounded, it is never
 reached in normal drum use and the steal keeps it graceful.
 
-Memory is per actual slot, not per MIDI note. Only the slots wired into the container (the
+Memory is per actual slot, not per MIDI note. Only the slots wired into the composite (the
 `PlayfieldSampleBox` children) get an instance. A voice's state is the playback and envelope scalars only
 (the sample frames stay in shared memory, read by offset), about 64 bytes, so a slot's pool is about 1 KB
 plus a small header, roughly 1.25 KB per slot. A 16-pad kit is about 20 KB, the theoretical full 128 slots
@@ -242,7 +242,7 @@ target }`. The audio-unit becomes one consumer of it, a composite child becomes 
 ## Build order
 
 1. Lift the chain-cluster builder out of `rewire_unit`, audio-unit still green through it.
-2. The `playfield-voice` device: sample voice DSP per the parity checklist (f64 position, f32 ordinary
+2. The `device-playfield-slot` device: sample voice DSP per the parity checklist (f64 position, f32 ordinary
    math, snapshot-at-note-on, `Math.sign`-matching sign, plain AR envelope, write the final sample, gate
    modes with the Loop zero-distance guard, reverse), a fixed 16-voice pool with steal-oldest, and the
    `forceRelease` entry (choke / mono / panic), resolved through Route F. Native-tested. Prove it as a
