@@ -36,5 +36,10 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
 
+      # The parity test imports the @opendaw/* workspace packages, which resolve to their (gitignored)
+      # dist/. Running `npm run test` directly skips turbo's `^build`, so build app-wasm's deps first.
+      - name: 🏗️ Build workspace dependencies
+        run: npx turbo run build --filter=@opendaw/app-wasm^...
+
       - name: 🧪 All Rust tests (cargo workspace) + wasm parity null-test
         run: npm run test -w @opendaw/app-wasm
