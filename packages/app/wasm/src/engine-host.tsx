@@ -74,13 +74,21 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         const held = new Map<string, AudioData>()
         const sampleLoader: SampleLoader = new class implements SampleLoader {
             async decode(uuid: UUID.Bytes): Promise<SampleInfo> {
-                const data = await loadSample(uuid)
-                held.set(UUID.toString(uuid), data)
-                return {
-                    byteLength: data.numberOfFrames * data.numberOfChannels * Float32Array.BYTES_PER_ELEMENT,
-                    frameCount: data.numberOfFrames,
-                    channelCount: data.numberOfChannels,
-                    sampleRate: data.sampleRate
+                const id = UUID.toString(uuid)
+                append(`sample ${id}: requesting…`)
+                try {
+                    const data = await loadSample(uuid)
+                    held.set(id, data)
+                    append(`sample ${id}: decoded ${data.numberOfFrames} frames, ${data.numberOfChannels}ch @ ${data.sampleRate} Hz`)
+                    return {
+                        byteLength: data.numberOfFrames * data.numberOfChannels * Float32Array.BYTES_PER_ELEMENT,
+                        frameCount: data.numberOfFrames,
+                        channelCount: data.numberOfChannels,
+                        sampleRate: data.sampleRate
+                    }
+                } catch (error) {
+                    append(`sample ${id}: FAILED ${error instanceof Error ? error.message : String(error)}`)
+                    throw error
                 }
             }
             async write(uuid: UUID.Bytes, pointer: number): Promise<void> {
@@ -91,6 +99,7 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
                     const offset = pointer + channel * frames * Float32Array.BYTES_PER_ELEMENT
                     new Float32Array(memory.buffer, offset, frames).set(data.frames[channel])
                 }
+                append(`sample ${key}: written @ ptr ${pointer} (${frames * data.numberOfChannels * Float32Array.BYTES_PER_ELEMENT} bytes)`)
                 held.delete(key)
             }
         }

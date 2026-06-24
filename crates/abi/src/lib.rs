@@ -143,6 +143,7 @@ extern "C" {
     fn host_first_update_position(at: f64) -> f64;
     fn host_next_update_position(after: f64) -> f64;
     fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32;
+    fn host_bind_sample(path_ptr: u32, path_len: u32) -> u32;
 }
 
 /// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the
@@ -231,6 +232,17 @@ pub struct SampleRef {
     pub sample_rate: f32
 }
 
+impl SampleRef {
+    /// The PLANAR frames of `channel` (0-based) as a safe slice (`frame_count` f32 at
+    /// `frames_ptr + channel * frame_count * 4`). The one `unsafe` stays here in the shim; device DSP reads
+    /// frames as a slice. The slice borrows the resident sample memory, valid while the sample stays resident.
+    #[inline]
+    pub fn plane(&self, channel: u32) -> &[f32] {
+        let offset = self.frames_ptr as usize + channel as usize * self.frame_count as usize * 4;
+        unsafe { slice::from_raw_parts(offset as *const f32, self.frame_count as usize) }
+    }
+}
+
 /// Resolve a sample `handle` (Route F) to its resident PLANAR frames, or `None` when not yet resident (the
 /// device skips that sample for the block). The host writes a [`SampleRef`] into an on-stack scratch and
 /// returns 1 when resident. Native stub returns `None` (native device tests supply samples directly).
@@ -250,6 +262,19 @@ pub fn resolve_sample(handle: u32) -> Option<SampleRef> {
         let _ = handle;
         None
     }
+}
+
+/// Declare this device's sample reference by its box pointer-field PATH (e.g. `[15]` for Nano's `file`),
+/// returning an id. The host resolves that pointer to the AudioFileBox it targets, requests the sample's
+/// frames (Route F), and pushes the resolved sample HANDLE to the device through `parameter_changed` under
+/// this id (the device reuses its parameter hook, matching the id and reading the handle from the value). A
+/// device calls this from `init`, like [`bind_parameter`]. Native stub returns 0.
+#[inline]
+pub fn bind_sample(path: &[u16]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_bind_sample(path.as_ptr() as u32, path.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = path; 0 }
 }
 
 /// Register one of THIS device's parameters with the host by its stable FIELD-KEY PATH on the device box

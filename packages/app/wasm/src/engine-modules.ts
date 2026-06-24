@@ -21,7 +21,7 @@ export const createEngineMemory = (): WebAssembly.Memory =>
 // each unit's chains from the box, ordered by the device `index`); only the type mapping matters.
 const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/device_vaporisateur.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
-    {url: "/device_saw.wasm", boxType: "NanoDeviceBox"},          // instrument
+    {url: "/device_nano.wasm", boxType: "NanoDeviceBox"},         // instrument (sampler)
     {url: "/device_lowpass.wasm", boxType: "RevampDeviceBox"},    // audio effect
     {url: "/device_tidal.wasm", boxType: "TidalDeviceBox"},       // audio effect
     {url: "/device_arp.wasm", boxType: "ArpeggioDeviceBox"},      // midi effect

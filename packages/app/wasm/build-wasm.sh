@@ -44,9 +44,10 @@ RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-arp       
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-zeitgeist --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-tidal     --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-vaporisateur --release --target "$TARGET" -Zbuild-std=core
+RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-nano       --release --target "$TARGET" -Zbuild-std=core
 cargo build -p sine --release --target "$TARGET"
 
-MODULES="engine device_saw device_lowpass device_transpose device_arp device_zeitgeist device_tidal device_vaporisateur sine"
+MODULES="engine device_saw device_lowpass device_transpose device_arp device_zeitgeist device_tidal device_vaporisateur device_nano sine"
 
 # Size-optimise each module with binaryen's wasm-opt (Homebrew: `brew install binaryen`). GUARDED: if it is
 # not installed the build still works, just larger. The devices are PIC side modules (a `dylink.0` section,
@@ -65,5 +66,5 @@ else
   echo "wasm-opt not found (brew install binaryen) — shipping unoptimised modules"
 fi
 
-cp "$OUT/engine.wasm" "$OUT/device_saw.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/device_arp.wasm" "$OUT/device_zeitgeist.wasm" "$OUT/device_tidal.wasm" "$OUT/device_vaporisateur.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
-echo "built: engine.wasm + device_saw/lowpass/transpose/arp/zeitgeist/tidal/vaporisateur + sine"
+cp "$OUT/engine.wasm" "$OUT/device_saw.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/device_arp.wasm" "$OUT/device_zeitgeist.wasm" "$OUT/device_tidal.wasm" "$OUT/device_vaporisateur.wasm" "$OUT/device_nano.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
+echo "built: engine.wasm + device_saw/lowpass/transpose/arp/zeitgeist/tidal/vaporisateur/nano + sine"

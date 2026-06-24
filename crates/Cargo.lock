@@ -42,6 +42,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-nano"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-saw"
 version = "0.0.0"
 dependencies = [

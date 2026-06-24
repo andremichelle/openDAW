@@ -84,6 +84,7 @@ type EngineExports = {
     // -1), `sample_allocate` reserves the decoded byte length and returns the pointer, `sample_set_ready`
     // marks it resolvable once the frames are written.
     host_resolve_sample: (handle: number, outPtr: number) => number
+    host_bind_sample: (pathPtr: number, pathLen: number) => number
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number
     sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
@@ -220,8 +221,10 @@ class EngineProcessor extends AudioWorkletProcessor {
                 host_update_parameters: engine.host_update_parameters,
                 host_first_update_position: engine.host_first_update_position,
                 host_next_update_position: engine.host_next_update_position,
-                // Route F: the device resolves a sample handle to its resident frames during render.
-                host_resolve_sample: engine.host_resolve_sample
+                // Route F: the device resolves a sample handle to its frames during render, and declares its
+                // sample reference (its box file-pointer path) from `init`.
+                host_resolve_sample: engine.host_resolve_sample,
+                host_bind_sample: engine.host_bind_sample
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()

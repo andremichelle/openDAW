@@ -42,7 +42,7 @@ use crate::param_automation::{FieldPath, ParamCurve, ParamHandle, ParamSink, Val
 use crate::plugin_audio_effect::PluginAudioEffect;
 use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
-use crate::{call_device_init, call_device_parameter_changed, DeviceReg, Engine, PullLink, BIND, DEVICE_INDEX_KEY};
+use crate::{call_device_init, call_device_parameter_changed, DeviceReg, Engine, PullLink, BIND, SAMPLE_BIND, SAMPLE_ID_TAG, SAMPLES, DEVICE_INDEX_KEY};
 
 /// One bound note region: its loopable span plus a shared handle to its `NoteEventCollection` (the cache's
 /// canonical observation — see `CollectionCache`). Keyed by uuid so the region cascade can remove it.
@@ -559,9 +559,27 @@ impl Engine {
     /// parameter set, and return the bookkeeping for teardown / re-bind.
     fn bind_device(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, sink: ParamNode) -> DeviceParams {
         let paths = bind_paths(reg, state_ptr, self.sample_rate);
+        let sample_paths = core::mem::take(unsafe { SAMPLE_BIND.get() }); // recorded by host_bind_sample during init
         let (handles, field_subs, collections, armed) = self.observe_params(device_uuid, &paths);
         sink.set_params(handles.clone(), armed);
+        self.bind_samples(device_uuid, reg, state_ptr, &sample_paths);
         DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections}
+    }
+
+    /// Resolve each sample reference a device declared (a box pointer-field path) to the AudioFileBox it
+    /// targets, request that sample's frames, and push the resolved HANDLE to the device through its
+    /// `parameter_changed` hook under the tagged id (so the device reuses its parameter hook). A path with no
+    /// resolved target is skipped (the device's handle stays unset and `resolve_sample` yields nothing). An
+    /// imported AND a recorded sample both arrive as an AudioFileBox, so this one path covers both.
+    fn bind_samples(&self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, paths: &[Vec<u16>]) {
+        for (index, path) in paths.iter().enumerate() {
+            let Some(target) = self.graph.target_of(&Address::of(device_uuid, path.clone())) else {
+                continue;
+            };
+            let handle = unsafe { SAMPLES.get() }.request(target.uuid);
+            let id = SAMPLE_ID_TAG | index as u32;
+            call_device_parameter_changed(reg.parameter_changed_index, state_ptr, id, PARAM_KIND_INT, handle as f32);
+        }
     }
 
     /// Observe each parameter field's value (a reactive `Rc<Cell>`) and its automation track, returning the
@@ -654,6 +672,7 @@ impl Engine {
 /// graph, so it is a free fn.
 fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Vec<FieldPath> {
     unsafe { BIND.get() }.clear();
+    unsafe { SAMPLE_BIND.get() }.clear();
     call_device_init(reg.init_index, state_ptr, sample_rate);
     core::mem::take(unsafe { BIND.get() })
 }

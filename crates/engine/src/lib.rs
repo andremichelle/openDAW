@@ -179,6 +179,14 @@ static BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
 // aliases the `&mut Engine` the render path holds. Mutated only off-render (the load handshake + box
 // observer), read-only during render, so the single-threaded engine never overlaps a borrow.
 static SAMPLES: Shared<SampleResource> = Shared::new(SampleResource::new());
+// The sample-bind recorder the `host_bind_sample` export appends to: each device's sample pointer-field path
+// (e.g. Nano's `file` at `[15]`). After `init`, the engine resolves each path's pointer to the AudioFileBox,
+// requests its frames, and pushes the resolved sample HANDLE to the device via `parameter_changed`. Held in
+// its OWN cell (NOT `ENGINE`) so the re-entrant `host_bind_sample` call from `init` never aliases `&mut Engine`.
+static SAMPLE_BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+// Tags a sample-binding id so it never collides with a parameter id (parameter ids are small indices). The
+// device gets this id from `host_bind_sample` and matches it in `parameter_changed` to read the sample handle.
+const SAMPLE_ID_TAG: u32 = 0x8000_0000;
 
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
 /// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` wraps a
@@ -318,6 +326,18 @@ pub extern "C" fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32 {
     let bind = unsafe { BIND.get() };
     bind.push(path.to_vec());
     (bind.len() - 1) as u32
+}
+
+/// Host import a device calls from its `init` to declare its SAMPLE reference by the box pointer-field PATH
+/// (e.g. `[15]` for Nano's `file`). It only RECORDS the path (into `SAMPLE_BIND`) and returns a tagged id;
+/// after `init` the engine resolves the pointer to the AudioFileBox, requests the sample, and pushes the
+/// handle via `parameter_changed` under this id. Touches no graph and no `&mut Engine`, so it is safe from `init`.
+#[no_mangle]
+pub extern "C" fn host_bind_sample(path_ptr: u32, path_len: u32) -> u32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let bind = unsafe { SAMPLE_BIND.get() };
+    bind.push(path.to_vec());
+    SAMPLE_ID_TAG | (bind.len() as u32 - 1)
 }
 
 /// Host import a device calls (on a clock event) to pull its AUTOMATED parameters that changed at `position`.
