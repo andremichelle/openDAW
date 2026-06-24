@@ -1,13 +1,16 @@
 import {createElement} from "@opendaw/lib-jsx"
-import {ByteArrayInput, Lifecycle, MutableObservableOption} from "@opendaw/lib-std"
+import {asDefined, ByteArrayInput, Lifecycle, MutableObservableOption, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
-import {PPQN} from "@opendaw/lib-dsp"
+import {AudioData, PPQN} from "@opendaw/lib-dsp"
+import {SampleInfo, SampleLoader} from "./sample-loader"
+import {EngineProtocol, TransportListener} from "./engine-protocol"
+import {loadSample} from "./sample-fetch"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {createEngineMemory, loadEngineModules} from "./engine-modules"
-import workletURL from "./pages/metronome/engine-worklet.ts?worker&url"
+import processorURL from "./engine-processor.ts?worker&url"
 
 // The box graph type ProjectSkeleton hands back; every page drives the engine from one of these.
 type EngineBoxGraph = ReturnType<typeof ProjectSkeleton.empty>["boxGraph"]
@@ -45,7 +48,7 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
     const boot = async (): Promise<void> => {
         const ctx = new AudioContext()
         context.wrap(ctx)
-        await ctx.audioWorklet.addModule(workletURL)
+        await ctx.audioWorklet.addModule(processorURL)
         const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
         const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
@@ -54,16 +57,51 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         })
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
-        workletNode.port.onmessage = (event: MessageEvent<{type: string, bytes?: ArrayBuffer}>) => {
-            if (event.data.type === "state" && event.data.bytes !== undefined) {showState(event.data.bytes)}
+        // ONE Messenger over the worklet port, split into typed Communicator protocols, one per named channel:
+        // `engine` sends the SyncSource transaction bytes (this side dispatches), `transport` receives the
+        // back-channel (this side executes), `samples` is the sample-load RPC (this side executes). (The worklet
+        // also emits a `heap` channel, observed only by the metronome page.)
+        const messenger = Messenger.for(workletNode.port)
+        lifecycle.own(messenger)
+        const engine = Communicator.sender<EngineProtocol>(messenger.channel("engine"), dispatcher => new class implements EngineProtocol {
+            applyUpdates(bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.applyUpdates, Communicator.makeTransferable(bytes))}
+        })
+        lifecycle.own(Communicator.executor<TransportListener>(messenger.channel("transport"), new class implements TransportListener {
+            state(bytes: ArrayBuffer): void {showState(bytes)}
+        }))
+        // Route F: the sample loader. The worklet drives the handshake; this executor fetches + decodes a sample
+        // and writes its PLANAR frames into the SAB at the engine-allocated pointer.
+        const held = new Map<string, AudioData>()
+        const sampleLoader: SampleLoader = new class implements SampleLoader {
+            async decode(uuid: UUID.Bytes): Promise<SampleInfo> {
+                const data = await loadSample(uuid)
+                held.set(UUID.toString(uuid), data)
+                return {
+                    byteLength: data.numberOfFrames * data.numberOfChannels * Float32Array.BYTES_PER_ELEMENT,
+                    frameCount: data.numberOfFrames,
+                    channelCount: data.numberOfChannels,
+                    sampleRate: data.sampleRate
+                }
+            }
+            async write(uuid: UUID.Bytes, pointer: number): Promise<void> {
+                const key = UUID.toString(uuid)
+                const data = asDefined(held.get(key), "sample not decoded")
+                const frames = data.numberOfFrames
+                for (let channel = 0; channel < data.numberOfChannels; channel++) {
+                    const offset = pointer + channel * frames * Float32Array.BYTES_PER_ELEMENT
+                    new Float32Array(memory.buffer, offset, frames).set(data.frames[channel])
+                }
+                held.delete(key)
+            }
         }
+        lifecycle.own(Communicator.executor<SampleLoader>(messenger.channel("samples"), sampleLoader))
         // SyncSource (unchanged) -> local BroadcastChannel loopback -> serialize (this graph's schema) -> worklet bytes.
         const sender = new BroadcastChannel(options.channel)
         const receiver = new BroadcastChannel(options.channel)
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
                 const bytes = serializeUpdateTasks(tasks, boxGraph)
-                workletNode.port.postMessage(bytes, [bytes])
+                engine.applyUpdates(bytes)
             },
             checksum(): Promise<void> {return Promise.resolve()}
         }

@@ -142,6 +142,7 @@ extern "C" {
     fn host_update_parameters(position: f64, out_ptr: u32, max: u32) -> u32;
     fn host_first_update_position(at: f64) -> f64;
     fn host_next_update_position(after: f64) -> f64;
+    fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32;
 }
 
 /// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the
@@ -213,6 +214,41 @@ impl ParamValue {
             PARAM_KIND_BOOL => ParamValue::Bool(value != 0.0),
             _ => panic!("unknown parameter kind")
         }
+    }
+}
+
+/// A resolved sample (Route F): decoded PLANAR f32 frames resident in the shared linear memory. `frames_ptr`
+/// points at channel 0's frames; channel `c` is at `frames_ptr + c * frame_count * 4` (each plane is
+/// `frame_count` consecutive f32). The host fills this from a sample handle via [`resolve_sample`]; a handle
+/// that is not yet resident resolves to `None`. `#[repr(C)]` so the engine writes it straight into the
+/// device's out pointer.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SampleRef {
+    pub frames_ptr: u32,
+    pub frame_count: u32,
+    pub channel_count: u32,
+    pub sample_rate: f32
+}
+
+/// Resolve a sample `handle` (Route F) to its resident PLANAR frames, or `None` when not yet resident (the
+/// device skips that sample for the block). The host writes a [`SampleRef`] into an on-stack scratch and
+/// returns 1 when resident. Native stub returns `None` (native device tests supply samples directly).
+#[inline]
+pub fn resolve_sample(handle: u32) -> Option<SampleRef> {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = SampleRef {frames_ptr: 0, frame_count: 0, channel_count: 0, sample_rate: 0.0};
+        if unsafe { host_resolve_sample(handle, &mut out as *mut SampleRef as u32) } != 0 {
+            Some(out)
+        } else {
+            None
+        }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let _ = handle;
+        None
     }
 }
 

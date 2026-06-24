@@ -9,6 +9,11 @@
 // The engine holds the wasm BoxGraph mirror; the main thread serializes SyncSource's UpdateTask[] into
 // bytes and posts them here. Each batch -> apply_updates, then bind() once the TimelineBox exists.
 
+import {UUID} from "@opendaw/lib-std"
+import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {SampleInfo, SampleLoader} from "./sample-loader"
+import {EngineProtocol, HeapListener, HeapStats, TransportListener} from "./engine-protocol"
+
 const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~42)
 const DEVICE_STACK_SIZE = 256 * 1024 // talc-allocated stack handed to each loaded device
 
@@ -73,6 +78,15 @@ type EngineExports = {
     host_update_parameters: (position: number, outPtr: number, max: number) => number
     host_first_update_position: (at: number) => number
     host_next_update_position: (after: number) => number
+    // Route F (samples). A device imports `host_resolve_sample` from `env` to resolve a sample handle to its
+    // resident frames during render. The other three are the off-render load handshake the worklet drives:
+    // `sample_take_request` pops a queued load (writing its 16-byte uuid to outPtr, returning the handle or
+    // -1), `sample_allocate` reserves the decoded byte length and returns the pointer, `sample_set_ready`
+    // marks it resolvable once the frames are written.
+    host_resolve_sample: (handle: number, outPtr: number) => number
+    sample_take_request: (outPtr: number) => number
+    sample_allocate: (handle: number, byteLength: number) => number
+    sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
 }
 
 // Read a varuint32 (LEB128) at `pos`; returns [value, nextPos].
@@ -117,6 +131,9 @@ class EngineProcessor extends AudioWorkletProcessor {
     #bound: boolean = false
     #sinceStats: number = 0
     #sinceState: number = 0
+    #transport!: TransportListener // transport-state back-channel sender (set in the constructor)
+    #heap!: HeapListener // heap-stats back-channel sender (set in the constructor)
+    #loader!: SampleLoader // the sample-load RPC sender (set in the constructor)
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
@@ -136,7 +153,46 @@ class EngineProcessor extends AudioWorkletProcessor {
         // load each device PIC side module at a host-assigned base, register it, and map its box type.
         deviceModules.forEach((deviceModule, index) => this.#loadDevice(deviceModule, deviceBoxTypes[index], sampleRate))
         if (metronome === false) {engine.set_metronome_enabled(0)}
-        this.port.onmessage = (event: MessageEvent) => this.#applyUpdates(event.data as ArrayBuffer)
+        // ONE Messenger over the engine port, split into typed Communicator protocols, one per named channel
+        // (each channel is a single sender -> executor direction): `engine` receives the SyncSource transaction
+        // bytes (this side EXECUTES), `transport` / `heap` push the back-channels out (this side SENDS), and
+        // `samples` drives the sample-load RPC (this side SENDS). The senders are set up here, so they are ready
+        // before any transport-state tick or AudioFileBox load.
+        const processor = this
+        const messenger = Messenger.for(this.port)
+        Communicator.executor<EngineProtocol>(messenger.channel("engine"), new class implements EngineProtocol {
+            applyUpdates(bytes: ArrayBuffer): void {processor.#applyUpdates(bytes)}
+        })
+        this.#transport = Communicator.sender<TransportListener>(messenger.channel("transport"), dispatcher => new class implements TransportListener {
+            state(bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.state, Communicator.makeTransferable(bytes))}
+        })
+        this.#heap = Communicator.sender<HeapListener>(messenger.channel("heap"), dispatcher => new class implements HeapListener {
+            heap(stats: HeapStats): void {dispatcher.dispatchAndForget(this.heap, stats)}
+        })
+        this.#loader = Communicator.sender<SampleLoader>(messenger.channel("samples"), dispatcher => new class implements SampleLoader {
+            decode(uuid: UUID.Bytes): Promise<SampleInfo> {return dispatcher.dispatchAndReturn(this.decode, uuid)}
+            write(uuid: UUID.Bytes, pointer: number): Promise<void> {return dispatcher.dispatchAndReturn(this.write, uuid, pointer)}
+        })
+    }
+
+    // Pop every sample the engine queued (on seeing an AudioFileBox) and run the load handshake for each:
+    // decode (main fetches + decodes, reports the size), allocate the engine storage, write the planar frames
+    // into the SAB, mark ready. Each runs as its own async chain off the render path; a wrong sample never
+    // blocks the others. The 16-byte uuid is copied out of the (reused) input scratch BEFORE any await.
+    #drainSampleRequests(): void {
+        const loader = this.#loader
+        for (; ;) {
+            const outPtr = this.#engine.input_reserve(16)
+            const handle = this.#engine.sample_take_request(outPtr)
+            if (handle < 0) {break}
+            const uuid = new Uint8Array(this.#memory.buffer, outPtr, 16).slice()
+            void (async () => {
+                const info = await loader.decode(uuid)
+                const pointer = this.#engine.sample_allocate(handle, info.byteLength)
+                await loader.write(uuid, pointer)
+                this.#engine.sample_set_ready(handle, info.frameCount, info.channelCount, info.sampleRate)
+            })()
+        }
     }
 
     // Link one PIC device side module into the engine: assign it memory + table + stack bases from talc,
@@ -163,7 +219,9 @@ class EngineProcessor extends AudioWorkletProcessor {
                 host_bind_parameter: engine.host_bind_parameter,
                 host_update_parameters: engine.host_update_parameters,
                 host_first_update_position: engine.host_first_update_position,
-                host_next_update_position: engine.host_next_update_position
+                host_next_update_position: engine.host_next_update_position,
+                // Route F: the device resolves a sample handle to its resident frames during render.
+                host_resolve_sample: engine.host_resolve_sample
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()
@@ -207,6 +265,8 @@ class EngineProcessor extends AudioWorkletProcessor {
         new Uint8Array(this.#memory.buffer, pointer, array.length).set(array)
         this.#engine.apply_updates(array.length)
         if (!this.#bound && this.#engine.bind() === 0) {this.#bound = true}
+        // A transaction may have added AudioFileBoxes (the engine queued their loads); dispatch them.
+        this.#drainSampleRequests()
     }
 
     process(_inputs: Array<Array<Float32Array>>, outputs: Array<Array<Float32Array>>): boolean {
@@ -225,13 +285,12 @@ class EngineProcessor extends AudioWorkletProcessor {
             this.#sinceState = 0
             const length = this.#engine.engine_state_len()
             const bytes = new Uint8Array(buffer, this.#engine.engine_state_ptr(), length).slice().buffer
-            this.port.postMessage({type: "state", bytes}, [bytes])
+            this.#transport.state(bytes)
         }
         this.#sinceStats += frames
         if (this.#sinceStats >= this.#sampleRate) { // ~once per second of audio
             this.#sinceStats = 0
-            this.port.postMessage({
-                type: "heap",
+            this.#heap.heap({
                 heapUsed: this.#engine.heap_used(),
                 heapClaimed: this.#engine.heap_claimed(),
                 memoryTotal: this.#memory.buffer.byteLength

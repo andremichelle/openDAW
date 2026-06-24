@@ -30,7 +30,7 @@ use boxgraph::address::Address;
 use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
-use boxgraph::updates::decode_forward;
+use boxgraph::updates::{decode_forward, Update};
 use abi::{EventRecord, ParamChange, EVENT_NOTE_OFF, EVENT_NOTE_ON};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
@@ -126,6 +126,8 @@ mod audio_unit;
 use audio_unit::{AudioUnitBinding, DeviceParams, Members};
 mod param_automation;
 use param_automation::ParamHandle;
+mod sample;
+use sample::SampleResource;
 
 const INPUT_CAPACITY: usize = 1 << 20; // initial input scratch (1 MiB); grows on demand, keeps the high-water mark
 
@@ -172,6 +174,11 @@ static PULL: Shared<PullContext> = Shared::new(PullContext::new());
 // clears it, calls a device's `init` (which binds its params), then drains it and observes each. Held in its
 // OWN cell (NOT `ENGINE`), so the re-entrant `host_bind_parameter` call never aliases the `&mut Engine`.
 static BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+// The sample resource (Route F): decoded frames resident in shared memory, keyed by AudioFileBox uuid. Held
+// in its OWN cell (NOT `ENGINE`) so a device's re-entrant `host_resolve_sample` call during render never
+// aliases the `&mut Engine` the render path holds. Mutated only off-render (the load handshake + box
+// observer), read-only during render, so the single-threaded engine never overlaps a borrow.
+static SAMPLES: Shared<SampleResource> = Shared::new(SampleResource::new());
 
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
 /// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` wraps a
@@ -676,7 +683,30 @@ impl Engine {
         self.master = Some(master);
         self.output_bus = Some(self.output_strip(output_buffer)); // master strip output (or the bus, if no output unit)
         self.observe_audio_units();
+        self.observe_audio_files();
         0
+    }
+
+    /// Observe the `AudioFileBox` lifecycle: request a sample load for every box already present and for each
+    /// one created later, and free it when its box is removed. An imported AND a recorded sample both arrive
+    /// as an `AudioFileBox` (the audio thread never produces sample data), so this one observer covers both.
+    /// The engine only REQUESTS here (off render); the worklet drains the queue and the main thread delivers
+    /// the frames into the `SAMPLES` storage.
+    fn observe_audio_files(&mut self) {
+        for file in self.graph.find_all_by_name("AudioFileBox") {
+            unsafe { SAMPLES.get() }.request(file.uuid);
+        }
+        self.graph.subscribe_all(Box::new(|_graph, update| {
+            match update {
+                Update::New {uuid, name, ..} if name == "AudioFileBox" => {
+                    unsafe { SAMPLES.get() }.request(*uuid);
+                }
+                Update::Delete {uuid, name, ..} if name == "AudioFileBox" => {
+                    unsafe { SAMPLES.get() }.free(*uuid);
+                }
+                _ => {}
+            }
+        }));
     }
 }
 
@@ -880,6 +910,48 @@ pub extern "C" fn device_set_box_type(device_id: u32, name_len: usize) {
             engine.set_device_box_type(String::from(name), device_id as usize);
         }
     }
+}
+
+/// Resolve a sample handle (Route F) for a device DURING render: write a `SampleRef` to `out_ptr` and return
+/// 1 if the sample is resident (ready), else 0. Bound into each device's `env` like the other `host_*`
+/// imports; reads the `SAMPLES` cell read-only, so it never aliases the `&mut Engine` the render path holds.
+#[no_mangle]
+pub extern "C" fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32 {
+    match unsafe { SAMPLES.get() }.resolve(handle) {
+        Some(sample_ref) => {
+            unsafe { *(out_ptr as *mut abi::SampleRef) = sample_ref; }
+            1
+        }
+        None => 0
+    }
+}
+
+/// Pop the next sample awaiting a load (the engine queued it on seeing an `AudioFileBox`): write its 16-byte
+/// uuid to `out_ptr` and return its handle, or return -1 when none are pending. The worklet drains these
+/// after applying a transaction and dispatches each to the main-thread loader. Off-render.
+#[no_mangle]
+pub extern "C" fn sample_take_request(out_ptr: u32) -> i32 {
+    match unsafe { SAMPLES.get() }.take_pending() {
+        Some((handle, uuid)) => {
+            unsafe { core::ptr::copy_nonoverlapping(uuid.as_ptr(), out_ptr as *mut u8, 16); }
+            handle as i32
+        }
+        None => -1
+    }
+}
+
+/// Reserve `byte_len` zeroed bytes for the sample's planar f32 frames and return the pointer the loader
+/// writes into. Off-render (the worklet calls it once the loader reports the decoded size).
+#[no_mangle]
+pub extern "C" fn sample_allocate(handle: u32, byte_len: u32) -> u32 {
+    unsafe { SAMPLES.get() }.allocate(handle, byte_len as usize)
+}
+
+/// Mark a sample ready once the loader has written its frames: `channel_count` planes of `frame_count` f32
+/// each, at `sample_rate`. After this the sample resolves for devices. Off-render.
+#[no_mangle]
+pub extern "C" fn sample_set_ready(handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
+    unsafe { SAMPLES.get() }.set_ready(handle, frame_count, channel_count, sample_rate);
 }
 
 // Dynamic heap: talc claims linear memory via `memory.grow` on demand (no fixed arena) and reclaims

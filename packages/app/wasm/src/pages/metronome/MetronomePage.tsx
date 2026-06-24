@@ -7,7 +7,8 @@ import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {Env} from "../../Env"
 import {serializeUpdateTasks} from "../../sync/serialize-update-tasks"
 import {createEngineMemory, loadEngineModules} from "../../engine-modules"
-import workletURL from "./engine-worklet.ts?worker&url"
+import {EngineProtocol, HeapListener, HeapStats} from "../../engine-protocol"
+import processorURL from "../../engine-processor.ts?worker&url"
 
 // Live metronome: a real project (TimelineBox) on the main thread; the unchanged SyncSource ships
 // every transaction to the wasm engine in the AudioWorklet, which advances the transport and renders
@@ -26,7 +27,6 @@ export const MetronomePage: PageFactory<Env> = ({lifecycle}) => {
 
     const memory: HTMLPreElement = <pre>memory: waiting…</pre>
     const kb = (bytes: number): string => `${(bytes / 1024).toFixed(1)} KB`
-    type HeapStats = {heapUsed: number, heapClaimed: number, memoryTotal: number}
     const showMemory = ({heapUsed, heapClaimed, memoryTotal}: HeapStats): void => {
         memory.textContent = `heap: ${kb(heapUsed)} used / ${kb(heapClaimed)} claimed | linear memory: ${kb(memoryTotal)}`
     }
@@ -43,7 +43,7 @@ export const MetronomePage: PageFactory<Env> = ({lifecycle}) => {
     const boot = async (): Promise<void> => {
         const ctx = new AudioContext()
         context.wrap(ctx)
-        await ctx.audioWorklet.addModule(workletURL)
+        await ctx.audioWorklet.addModule(processorURL)
         const {engineModule, deviceModules, deviceBoxTypes} = await loadEngineModules()
         const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
@@ -52,16 +52,24 @@ export const MetronomePage: PageFactory<Env> = ({lifecycle}) => {
         })
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
-        workletNode.port.onmessage = (event: MessageEvent) => {
-            if ((event.data as {type: string}).type === "heap") {showMemory(event.data as HeapStats)}
-        }
+        // ONE Messenger over the worklet port, split into typed Communicator protocols, one per named channel:
+        // `engine` sends the SyncSource transaction bytes (this side dispatches), `heap` receives the heap-stats
+        // back-channel (this side executes).
+        const messenger = Messenger.for(workletNode.port)
+        lifecycle.own(messenger)
+        const engine = Communicator.sender<EngineProtocol>(messenger.channel("engine"), dispatcher => new class implements EngineProtocol {
+            applyUpdates(bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.applyUpdates, Communicator.makeTransferable(bytes))}
+        })
+        lifecycle.own(Communicator.executor<HeapListener>(messenger.channel("heap"), new class implements HeapListener {
+            heap(stats: HeapStats): void {showMemory(stats)}
+        }))
         // SyncSource (unchanged) -> local loopback -> serialize (this graph's schema) -> worklet bytes
         const sender = new BroadcastChannel("metronome-sync")
         const receiver = new BroadcastChannel("metronome-sync")
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
                 const bytes = serializeUpdateTasks(tasks, boxGraph)
-                workletNode.port.postMessage(bytes, [bytes])
+                engine.applyUpdates(bytes)
             },
             checksum(): Promise<void> {return Promise.resolve()}
         }
