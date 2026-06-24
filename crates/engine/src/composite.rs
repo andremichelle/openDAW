@@ -27,30 +27,38 @@ use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_sequencer::NoteSequencer;
 use crate::audio_unit::{BoundNoteRegions, BuiltCluster, SharedTrackSets};
-use crate::{CompositeSpec, Engine, PullLink};
+use crate::{CompositeSpec, Engine, PullLink, EFFECT_INDEX_KEY};
 
 /// A composite's reactive cascade, owned by the unit whose instrument is the composite: the child-collection
 /// observation plus the bindings of any nested composites. `take_dirty` returns whether the child set (at any
 /// depth) changed since the last reconcile; `terminate` unsubscribes the whole tree on rewire / teardown.
 pub(crate) struct CompositeBinding {
     children: IndexedCollection,
+    chains: Vec<IndexedCollection>, // each leaf child's own midi + audio fx-chain observations, flat
     nested: Vec<CompositeBinding>
 }
 
 impl CompositeBinding {
-    /// Whether a child was added / removed / reordered at this level OR in any nested composite. Consumes the
-    /// flag at every level (no short-circuit), so one dirty does not mask another.
+    /// Whether a child was added / removed / reordered at this level, a child's own fx chain changed, OR
+    /// anything changed in a nested composite. Consumes the flag at every level (no short-circuit), so one
+    /// dirty does not mask another.
     pub(crate) fn take_dirty(&self) -> bool {
         let mut dirty = self.children.take_dirty();
+        for chain in &self.chains {
+            dirty |= chain.take_dirty();
+        }
         for child in &self.nested {
             dirty |= child.take_dirty();
         }
         dirty
     }
 
-    /// Unsubscribe the child collection and every nested composite (rewire / teardown).
+    /// Unsubscribe the child collection, every child's fx-chain observations, and every nested composite.
     pub(crate) fn terminate(self, graph: &mut BoxGraph) {
         self.children.terminate(graph);
+        for chain in self.chains {
+            chain.terminate(graph);
+        }
         for child in self.nested {
             child.terminate(graph);
         }
@@ -75,6 +83,7 @@ impl Engine {
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut device_params = Vec::new();
         let mut device_uuids = Vec::new();
+        let mut chains = Vec::new();
         let mut nested = Vec::new();
         // Read each child's routing note (`index_key`) and choke-group flag (`exclude_key`) from the box once.
         // The choke group is every exclude child's note, so an exclude child receives a CHOKE when any OTHER
@@ -93,7 +102,7 @@ impl Engine {
             } else {
                 Rc::from(Vec::new())
             };
-            if let Some((child, child_binding)) = self.build_instrument(track_sets, child_uuid, choke) {
+            if let Some((child, child_chains, child_binding)) = self.build_instrument(track_sets, child_uuid, choke) {
                 sum.borrow_mut().add_audio_source(child.output);
                 self.context.register_edge(child.output_node, sum_id);
                 edges.push((child.output_node, sum_id));
@@ -101,38 +110,64 @@ impl Engine {
                 edges.extend(child.edges);
                 device_params.extend(child.device_params);
                 device_uuids.extend(child.device_uuids);
+                chains.extend(child_chains);
                 if let Some(binding) = child_binding {
                     nested.push(binding);
                 }
             }
         }
         (BuiltCluster {output: sum_buffer, output_node: sum_id, nodes, edges, device_params, device_uuids},
-         CompositeBinding {children, nested})
+         CompositeBinding {children, chains, nested})
     }
 
     /// Build one child instrument node for `box_uuid`, dispatching on its OWN box type: a nested composite
-    /// (recurse) or a leaf voice device. A leaf reads the unit's regions through its own sequencer, filtered to
-    /// its routing note (`filter_index`) when the composite assigns one. Returns the cluster plus an optional
-    /// nested cascade, or `None` if the box has no plugin / composite spec (the child is silently skipped).
+    /// (recurse) or a leaf voice device. A leaf reads the unit's regions through its own sequencer, then folds
+    /// its OWN midi / audio fx chains on top. The fx-host field keys are declared by the child DEVICE itself
+    /// (`DeviceReg.midi_effects_field` / `audio_effects_field`), so different child instruments may host their
+    /// chains at different keys and nothing box-specific is hardcoded here. Returns the cluster, the leaf's
+    /// fx-chain observations (empty for a nested composite), and an optional nested cascade, or `None` if the
+    /// box has no plugin / composite spec (silently skipped).
     fn build_instrument(&mut self, track_sets: &SharedTrackSets, box_uuid: Uuid, choke: Rc<[i32]>)
-        -> Option<(BuiltCluster, Option<CompositeBinding>)> {
+        -> Option<(BuiltCluster, Vec<IndexedCollection>, Option<CompositeBinding>)> {
         let name = self.graph.find_box(&box_uuid)?.name.clone();
         if let Some(spec) = self.composite_for_type(&name) {
             // A nested composite routes its own children internally, so it takes the full stream here.
             let (cluster, binding) = self.build_composite(track_sets, box_uuid, &spec);
-            return Some((cluster, Some(binding)));
+            return Some((cluster, Vec::new(), Some(binding)));
         }
         let device = self.device_for_type(&name).filter(|device| device.kind == DEVICE_KIND_INSTRUMENT)?;
         let sequencer: SharedNoteEventSource =
             Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: track_sets.clone()}))));
         // EVERY child gets the full broadcast stream and filters its own note itself (a Playfield slot by its
         // observed `index`; a full instrument filters nothing and plays all). A child in a choke group also gets
-        // its sibling chokes injected. Per-child fx chains come later (step 5).
+        // its sibling chokes injected.
         let source = if choke.is_empty() {
             PullLink::Source(sequencer)
         } else {
             PullLink::SlotRoute {upstream: sequencer, choke}
         };
-        Some((self.build_cluster(source, box_uuid, device, &[], &[]), None))
+        // The child's OWN fx chains: observe its midi / audio effect host collections at the field keys the
+        // device declares, ordered like a unit's chains by EFFECT_INDEX_KEY. The observations go to the binding
+        // so a live add / remove of a child effect re-dirties the unit. A device that hosts no chains (key 0)
+        // observes nothing and folds no fx.
+        let mut chains = Vec::new();
+        let midi = self.observe_child_chain(box_uuid, device.midi_effects_field, &mut chains);
+        let audio = self.observe_child_chain(box_uuid, device.audio_effects_field, &mut chains);
+        let cluster = self.build_cluster(source, box_uuid, device, &midi, &audio);
+        Some((cluster, chains, None))
+    }
+
+    /// Observe one of a child's fx-host collections (`field` = the device-declared host key, 0 = the device
+    /// hosts no chain there) and return its members sorted by `EFFECT_INDEX_KEY`. A live observation is pushed
+    /// to `chains` for the binding's reactivity / teardown; key 0 yields an empty chain and no observation.
+    fn observe_child_chain(&mut self, box_uuid: Uuid, field: u16, chains: &mut Vec<IndexedCollection>) -> Vec<Uuid> {
+        if field == 0 {
+            return Vec::new();
+        }
+        let observation = IndexedCollection::observe(&mut self.graph, Address::of(box_uuid, vec![field]), EFFECT_INDEX_KEY);
+        let sorted = observation.sorted();
+        observation.take_dirty();
+        chains.push(observation);
+        sorted
     }
 }

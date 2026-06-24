@@ -42,6 +42,10 @@ const MAX_VOICES: usize = 16;
 // `release` (seconds). The cross-slot fields (mute / solo / exclude) are the composite's.
 const SAMPLE_POINTER: [u16; 1] = [11];
 const INDEX_FIELD: [u16; 1] = [15];
+// This slot hosts its OWN midi / audio fx chains (it is a composite child): the box keys the composite observes
+// and folds the chains around this device. A leaf instrument with no own chains would export 0.
+const MIDI_EFFECTS_FIELD: u32 = 12;
+const AUDIO_EFFECTS_FIELD: u32 = 13;
 const POLYPHONE_FIELD: [u16; 1] = [43];
 const GATE_FIELD: [u16; 1] = [44];
 const PITCH_FIELD: [u16; 1] = [45];
@@ -253,6 +257,18 @@ pub extern "C" fn kind() -> u32 {
 #[no_mangle]
 pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
     core::mem::size_of::<PlayfieldSlotState>() as u32
+}
+
+/// The box field keys hosting this device's OWN midi / audio fx chains when it runs as a composite child. The
+/// composite reads these to observe each chain and fold it around the device, so the keys live with the device.
+#[no_mangle]
+pub extern "C" fn midi_effects_field() -> u32 {
+    MIDI_EFFECTS_FIELD
+}
+
+#[no_mangle]
+pub extern "C" fn audio_effects_field() -> u32 {
+    AUDIO_EFFECTS_FIELD
 }
 
 #[no_mangle]

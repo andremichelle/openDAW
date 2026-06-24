@@ -57,7 +57,9 @@ struct DeviceReg {
     init_index: u32,               // slot of the device's `init` export (binds params); 0 if it has none
     parameter_changed_index: u32,  // slot of the device's `parameter_changed` export; 0 if it has none
     field_changed_index: u32,      // slot of the device's `field_changed` export (observed plain fields); 0 if none
-    sample_changed_index: u32      // slot of the device's `sample_changed` export (observed samples); 0 if none
+    sample_changed_index: u32,     // slot of the device's `sample_changed` export (observed samples); 0 if none
+    midi_effects_field: u16,       // the device's OWN midi-fx host field key when hosted as a composite child; 0 if none
+    audio_effects_field: u16       // the device's OWN audio-fx host field key when hosted as a composite child; 0 if none
 }
 
 /// A registered COMPOSITE box type (e.g. Playfield): a device box that hosts a CHILD COLLECTION of its own
@@ -655,9 +657,10 @@ impl Engine {
     /// Register a loaded device: the table slot holding its `process` and the bytes its state block needs.
     /// Returns the device id (its index). The host calls this once per device, before `bind`.
     #[allow(clippy::too_many_arguments)] // one slot per device export; positional to match the loader's call
-    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32) -> u32 {
+    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, midi_effects_field: u32, audio_effects_field: u32) -> u32 {
         let id = self.devices.len() as u32;
-        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index});
+        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index,
+            midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16});
         id
     }
 
@@ -1029,10 +1032,11 @@ pub extern "C" fn device_alloc(size: u32) -> u32 {
 /// `init_index` / `parameter_changed_index` its parameter-hook slots (0 when the device exports none).
 /// Returns the device id. Call once per device, before `bind` (which builds the graph and wires devices).
 #[no_mangle]
-pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32) -> u32 {
+#[allow(clippy::too_many_arguments)] // one positional arg per device export, matching the loader's call
+pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, midi_effects_field: u32, audio_effects_field: u32) -> u32 {
     unsafe {
         match ENGINE.get().as_mut() {
-            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index),
+            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, midi_effects_field, audio_effects_field),
             None => 0
         }
     }
