@@ -82,7 +82,8 @@ different keys in a different complex plugin. So the **child plugin declares its
 the host at init, role-tagged, the same way it binds parameters and samples. The composite reads those
 declarations to know what to observe and act on. Roles:
 
-- `mute`, `solo`: consumed by the composite for gating (below).
+- `mute`, `solo`: consumed by the composite for the per-child output gain (below).
+- `exclude`: consumed by the composite to build each child's choke-trigger set (below).
 - `filter-index` (or a range): consumed to build the filter link.
 
 Nothing is hardcoded. The engine composite stays fully generic, the plugin owns its field map, and a
@@ -99,18 +100,45 @@ pull-chain links, so lighting it up is just inserting the child's midi-fx links 
 voice plugin. We can include it from the start since it is nearly free given the pull model, or defer it.
 Either way it needs no schema change.
 
-## Mute, Solo, Choke
+## Mute and Solo
 
-All three are composite-level, not in the voice plugin.
+Mute and Solo are a **per-child gain applied at the sum**, a mini channel strip per child, ramped to
+declick. The composite watches every child's declared `mute`/`solo` fields and computes audibility per
+child: `silent = mute || (anySolo && !thisSolo)`. They are automatable booleans, evaluated continuously,
+not only on box edit. A child that is fully silent with no active voices can skip rendering.
 
-- Mute and Solo are a **per-child gain applied at the sum**, ramped to declick. The composite watches
-  every child's declared `mute`/`solo` fields and computes audibility per child:
-  `silent = mute || (anySolo && !thisSolo)`. They are automatable booleans, so evaluate them on the
-  update tick, not only on box edit. A child that is fully silent with no active voices can skip
-  rendering entirely.
-- Choke (`exclude`) is a cheap engine signal. On a child note-on, the composite force-stops the voices of
-  sibling children in the same choke relation. With one composite owning the children this is a direct
-  call, not host-mediated cross-device coordination.
+This is a **deliberate deviation** from the TS Playfield, accepted as backwards-incompatible. TS gates at
+note-on: a muted slot creates no voice and a sounding voice keeps ringing when you mute. We instead mute at
+the output, so muting fades a sounding voice. That mirrors Bitwig (a Drum Machine pad's mute/solo behave
+like channel mutes) and our own channel strip, and it keeps mute/solo uniform with the rest of the engine
+instead of being a special note-onset rule.
+
+## Choke (exclude)
+
+Choke is voice arbitration, it must actually stop sibling voices, so it cannot be a mix gain. It is
+**event-tagging in the router, not inter-slot firing**, which keeps it generic and free of ordering
+hazards. Choke timing is a function of the note stream, which is fully known before any child renders, so
+no child has to run before another and nothing is produced during render.
+
+- The composite fetches the block's note events and checks each note-on against the choke (exclude) table.
+- A note-on that matches a sibling in a child's choke group is passed to that child tagged as `CHOKE`
+  instead of `PLAY`. The triggering child itself gets a normal `PLAY` (its own retrigger is the separate
+  `polyphone` rule).
+- Dispatch is by **sub-block split**, the same fragmentation the SDK already does for note-on/off. The
+  block is split at the choke offset and the voice plugin's `forceRelease` is called at the boundary, so
+  the plugin never tracks event offsets, it only renders contiguous ranges. `forceRelease` applies the
+  fast 5 ms release (`FAST_RELEASE`), click-free, and the ramp plays out across the remaining samples and
+  usually into the next block.
+
+`forceRelease` is one method with three callers: choke, monophonic retrigger (`polyphone=false`), and
+panic / discontinuity. The voice plugin stays generic, it only knows `PLAY` versus `CHOKE`. The only
+composite-side state is each child's choke-trigger set, derived from the `exclude` flags and indices,
+refreshed off the hot path and re-evaluated per block if `exclude` is automated. Any container can define
+choke groups this way by tagging.
+
+Because choke is solved generically here, Playfield stays a **pure container of independent child nodes**.
+The single multi-output voice device (which would make choke trivial internal state but is Playfield-specific)
+was considered and rejected, it is not needed once choke is event-tagging plus `forceRelease`.
 
 ## The voice plugin DSP (playfield-voice)
 
@@ -125,6 +153,58 @@ A new device crate under `stock-devices`, a sample voice richer than Nano:
 It resolves its sample through Route F (`host_resolve_sample` / `host_bind_sample`) from field 11, exactly
 like Nano. The reusable sample-playback primitives go in the shared `dsp` crate so Nano, Tape, Playfield,
 and Soundfont share them.
+
+Parameters are snapshotted at note-on (`gate`, `gain = velocityToGain(velocity)`, `attack`, `release`,
+`sampleStart`, `sampleEnd`), so automation of them affects only the next note. Only `pitch` is read live,
+once per sub-block. `velocityToGain` is ported exactly from lib-dsp.
+
+### Parity checklist
+
+The DSP is a straight port, the care is in a few places where Rust would silently diverge from the TS
+`Number` semantics:
+
+- **Precision: f32 for the ordinary math** (envelope, gain, interpolation, rate ratio), but the **read-head
+  position stays f64**. The position accumulates fractional steps across the whole sample, and in f32 the
+  sub-sample fraction degrades as it grows, drifting the pitch on long samples. This matches the engine
+  rule, control in f32, absolute positions in f64. Envelope counters are fine in f32, bounded by the ~10 s
+  max envelope, inside f32's exact-integer range.
+- **`sign` must match `Math.sign`**, returning 0 at 0, not `f64::signum` (which returns +1 at 0). The
+  zero-distance case (`sampleStart==sampleEnd`) relies on `sign==0` freezing the read head.
+- **Envelope behaves identically, implemented plainly.** A simple AR with sustain at 1. No reliance on an
+  `Infinity` sentinel, a `released` flag plus computing the release term only once released gives the same
+  result in a couple of branches.
+- **Write the final sample.** TS ends the voice before writing the sample that crosses the end, we write it
+  then end. A deliberate one-sample-better deviation.
+- **Transcendentals are epsilon, not bit-exact, vs TS.** `2^(pitch/1200)` goes through libm, which can
+  differ from V8's `Math.pow` by a few ULP, a sub-sample pitch drift over time, inaudible. Our libm path
+  guarantees wasm matches the Rust host exactly, unpitched playback stays bit-exact, pitched playback is
+  epsilon-equal to TS.
+
+## Voice pool and polyphony
+
+No allocation on the audio thread, so voices live in a fixed pre-allocated pool in the plugin's zeroed
+state, like Nano's `[NanoVoice; MAX_VOICES]`. Each slot is its own voice-plugin instance, so the pool is
+per-slot and needs no cross-slot arbitration. **`MAX_VOICES = 16` per slot**, decided. When the pool is
+full a note-on steals the oldest voice through `forceRelease` (the 5 ms ramp, click-free). The fixed cap
+is the one accepted **deviation** from the TS engine, whose per-slot polyphony is unbounded, it is never
+reached in normal drum use and the steal keeps it graceful.
+
+Memory is per actual slot, not per MIDI note. Only the slots wired into the container (the
+`PlayfieldSampleBox` children) get an instance. A voice's state is the playback and envelope scalars only
+(the sample frames stay in shared memory, read by offset), about 64 bytes, so a slot's pool is about 1 KB
+plus a small header, roughly 1.25 KB per slot. A 16-pad kit is about 20 KB, the theoretical full 128 slots
+about 160 KB, negligible next to the sample buffers.
+
+## Edge cases (decided)
+
+- **Gate.Loop with zero-length window** (`sampleStart==sampleEnd`, so `distance==0`): the TS `while position
+  >= end` would spin forever. Guard it by **ending the voice**. Off and On modes self-terminate at a
+  zero-length window already, only Loop needs the guard.
+- **Two slots sharing the same `index`**: the **first slot in collection order wins**, deterministically.
+- **Sample not resident at note-on**: **drop the note**, no voice, matching TS's empty-data early return.
+  Fine with async Route F loading, the pad simply does not sound until its sample is resident.
+- **Per-slot `enabled` (22) and `midi-effects` (12)**: stay **dormant** for now (the TS processor reads
+  neither), kept in mind as later additions, no schema change needed to light them up.
 
 ## Sidechain and addressability
 
