@@ -93,3 +93,12 @@
 - A Load File page: loads a serialized openDAW project, a .od file, straight into the wasm engine through ProjectSkeleton.decode and the unchanged SyncSource, instead of building the box graph in code. The Vaporisateur is wired as the real device behind the VaporisateurDeviceBox type, and a small helper gives a freshly created box an audible sine preset since the schema defaults its oscillators to silent. The placeholder device_sine plugin was retired. Done.
 - A monophonic glide-back parity question, analysed and parked: loading a mono glide patch revealed that the wasm glides the voice back down a held chord on staggered note releases (matching TS) but just releases at the top note when a chord's notes all end on the same instant, because the order of simultaneous note events is not pinned down in the device dispatch. Confirmed by replaying the project's notes through the real sequencer and strategy that the glide-back logic is a faithful port and the divergence is purely this tie ordering. Recorded in future-plans with repro files for a later TS comparison. Done.
 - Still ahead: samples and the audio-data path, the timeline query and the Tape device, sidechain, and composite devices.
+
+## Day 7 (2026-06-24): the audio-data path, Nano, and the Delay
+
+- The audio-data path (Route F): the engine requests a sample per AudioFileBox, allocates the block off the hot path, and the main thread writes the decoded planar frames into the shared memory. The audio thread only consumes, import and recording both deliver the same way. Done.
+- Typed worklet to main channels via the lib-runtime Communicator, no more raw port.onmessage. Done.
+- Nano, a sampler instrument ported to the letter, requests its sample and plays it the moment it loads. Done.
+- The Delay, a stereo tempo-syncable effect ported to the letter, rate-sized buffers in the device's zeroed tail. Done.
+- A shared engine HUD across every page: Resume / Suspend gated by the real AudioContext state, the engine state and heap in aligned grid tables, the log at the foot. Sine and Metronome redesigned onto it. Done.
+- Still ahead: the Playfield drum sampler with a per-slot audio-fx chain, the Tape device, the timeline query, sidechain, and composite devices.
