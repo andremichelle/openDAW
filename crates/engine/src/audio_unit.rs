@@ -43,7 +43,7 @@ use crate::plugin_audio_effect::PluginAudioEffect;
 use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::composite::CompositeBinding;
-use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, EFFECT_INDEX_KEY};
+use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SIDECHAIN_BIND, EFFECT_INDEX_KEY};
 
 /// One bound note region: its loopable span plus a shared handle to its `NoteEventCollection` (the cache's
 /// canonical observation — see `CollectionCache`). Keyed by uuid so the region cascade can remove it.
@@ -200,7 +200,18 @@ pub(crate) struct DeviceParams {
     handles: Vec<ParamHandle>,
     field_subs: Vec<SubscriptionId>,
     collections: Vec<ValueCollection>,
-    observe_subs: Vec<SubscriptionId> // the device's PLAIN field observations (`observe_field`), dropped on teardown
+    observe_subs: Vec<SubscriptionId>, // the device's PLAIN field observations (`observe_field`), dropped on teardown
+    sidechain_paths: Vec<Vec<u16>> // the audio effect's declared sidechain pointer paths (`bind_sidechain`), in order
+}
+
+/// A composite-graph edge to wire AFTER all units are (re)built: an audio effect that declared sidechain ports,
+/// the node it became, and the pointer paths to resolve. The engine collects these during a rewire and resolves
+/// them once every unit's output is registered (so a sidechain may target ANY unit, regardless of build order).
+pub(crate) struct PendingSidechain {
+    pub(crate) effect: Rc<RefCell<PluginAudioEffect>>,
+    pub(crate) node_id: NodeId,
+    pub(crate) device_uuid: Uuid,
+    pub(crate) ports: Vec<(u32, Vec<u16>)> // (port id, pointer path) still to resolve; resolved ports are removed
 }
 
 /// Where bound parameters are pushed: an audio node (instrument / audio-fx, mutated through its
@@ -388,6 +399,40 @@ impl Engine {
             }
         }
         self.audio_units = units;
+        // Every unit's output is now registered, so resolve the sidechains collected during the rewires: for
+        // each declared port, find the pointer's target unit, look up its output, hand the effect the buffer and
+        // add a producer -> consumer edge so the topsort computes the source first.
+        self.resolve_sidechains();
+    }
+
+    /// Resolve the sidechain ports collected during the rewires. For each effect's declared pointer, `target_of`
+    /// the pointer, normalise to the target BOX address (mirroring the TS `box.address`), look its output up in
+    /// the registry, and if found feed the effect that buffer at its port and order the source before it. A port
+    /// whose pointer is unset OR whose target unit is not built yet stays PENDING and is retried on the next
+    /// reconcile, so a sidechain resolves regardless of the order units stream in during a project load.
+    fn resolve_sidechains(&mut self) {
+        let pending = core::mem::take(&mut self.pending_sidechains);
+        let mut still_pending = Vec::new();
+        for mut entry in pending {
+            let mut unresolved = Vec::new();
+            for (port_id, path) in core::mem::take(&mut entry.ports) {
+                let target = self.graph.target_of(&Address::of(entry.device_uuid, path.clone())).cloned();
+                let output = target.and_then(|target| self.output_registry.resolve(&Address::of(target.uuid, vec![]))
+                    .map(|output| (output.buffer.clone(), output.processor)));
+                match output {
+                    Some((buffer, source_node)) => {
+                        entry.effect.borrow_mut().set_sidechain(port_id, buffer);
+                        self.context.register_edge(source_node, entry.node_id);
+                    }
+                    None => unresolved.push((port_id, path)) // pointer unset or target not built yet: retry next reconcile
+                }
+            }
+            if !unresolved.is_empty() {
+                entry.ports = unresolved;
+                still_pending.push(entry);
+            }
+        }
+        self.pending_sidechains = still_pending;
     }
 
     /// Remove a unit entirely: drop its wired cluster (edges, nodes, bus source), unsubscribe its tracks
@@ -552,6 +597,9 @@ impl Engine {
         self.context.register_edge(cluster.output_node, strip_id);
         cluster.edges.push((cluster.output_node, strip_id));
         cluster.nodes.push(strip_id);
+        // Register the unit's OUTPUT (its strip) by box address, so a sidechain pointing at this unit resolves to
+        // this buffer + node in the post-build pass.
+        self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
         let master = self.master.as_ref().unwrap();
         master.borrow_mut().add_audio_source(strip_output.clone());
         self.context.register_edge(strip_id, self.master_id);
@@ -615,11 +663,19 @@ impl Engine {
             let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
             let node_state = node.borrow().state_ptr();
             let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
-            device_params.push(self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink)));
+            let params = self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink));
+            let sidechain_paths = params.sidechain_paths.clone();
+            device_params.push(params);
             device_uuids.push(device_uuid);
             node.borrow_mut().set_audio_source(output);
             output = node.borrow().audio_output();
-            let node_id = self.context.register_processor(node);
+            let node_id = self.context.register_processor(node.clone());
+            // Defer this effect's sidechain ports to the post-build pass (the source unit may not be built yet).
+            // Port ids start at 2 (after MAIN_INPUT) in declaration order.
+            if !sidechain_paths.is_empty() {
+                let ports = sidechain_paths.into_iter().enumerate().map(|(index, path)| (index as u32 + 2, path)).collect();
+                self.pending_sidechains.push(PendingSidechain {effect: node, node_id, device_uuid, ports});
+            }
             self.context.register_edge(output_node, node_id);
             edges.push((output_node, node_id));
             nodes.push(node_id);
@@ -635,12 +691,13 @@ impl Engine {
         let paths = bind_paths(reg, state_ptr, self.sample_rate);
         let sample_paths = core::mem::take(unsafe { SAMPLE_OBS.get() }); // recorded by host_observe_sample during init
         let field_paths = core::mem::take(unsafe { FIELD_OBS.get() }); // recorded by host_observe_field during init
+        let sidechain_paths = core::mem::take(unsafe { SIDECHAIN_BIND.get() }); // recorded by host_bind_sidechain during init
         let (handles, field_subs, collections, armed) = self.observe_params(device_uuid, &paths);
         sink.set_params(handles.clone(), armed);
         // The device's plain-field and sample observations both unsubscribe the same way, so keep one list.
         let mut observe_subs = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
         observe_subs.extend(self.observe_samples(device_uuid, reg, state_ptr, &sample_paths));
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, sidechain_paths}
     }
 
     /// Wire each PLAIN field a device asked to observe (`observe_field`): `catchup_and_subscribe` the field on
@@ -771,7 +828,8 @@ impl Engine {
             rebound.push(DeviceParams {
                 device_uuid: params.device_uuid, reg: params.reg, state_ptr: params.state_ptr,
                 sink: params.sink, paths: params.paths, handles, field_subs, collections,
-                observe_subs: params.observe_subs // a re-bind doesn't touch the plain field observations
+                observe_subs: params.observe_subs, // a re-bind doesn't touch the plain field observations
+                sidechain_paths: params.sidechain_paths // nor the sidechain ports (no rewire = no re-resolve)
             });
         }
         wired.device_params = rebound;
@@ -786,6 +844,7 @@ fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Vec<FieldPath
     unsafe { BIND.get() }.clear();
     unsafe { SAMPLE_OBS.get() }.clear();
     unsafe { FIELD_OBS.get() }.clear();
+    unsafe { SIDECHAIN_BIND.get() }.clear();
     call_device_init(reg.init_index, state_ptr, sample_rate);
     core::mem::take(unsafe { BIND.get() })
 }

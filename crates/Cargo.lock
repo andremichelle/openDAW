@@ -46,6 +46,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-gate"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-lowpass"
 version = "0.0.0"
 dependencies = [

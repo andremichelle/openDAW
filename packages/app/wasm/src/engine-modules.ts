@@ -37,6 +37,7 @@ const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/device_lowpass.wasm", boxType: "RevampDeviceBox"},    // audio effect
     {url: "/device_tidal.wasm", boxType: "TidalDeviceBox"},       // audio effect
     {url: "/device_delay.wasm", boxType: "DelayDeviceBox"},       // audio effect
+    {url: "/device_gate.wasm", boxType: "GateDeviceBox"},         // audio effect (sidechain)
     {url: "/device_arp.wasm", boxType: "ArpeggioDeviceBox"},      // midi effect
     {url: "/device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"}, // midi effect
     {url: "/device_transpose.wasm", boxType: "PitchDeviceBox"},   // midi effect

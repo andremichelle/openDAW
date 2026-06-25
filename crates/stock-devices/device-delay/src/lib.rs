@@ -152,7 +152,9 @@ impl AudioEffect for Delay {
         state.ids[param::DRY] = abi::bind_parameter(&DRY_FIELD);
     }
 
-    fn process_audio(state: &mut DelayState, input: [&[f32]; 2], output: [&mut [f32]; 2], block: &Block) {
+    fn process_audio(state: &mut DelayState, output: [&mut [f32]; 2], block: &Block) {
+        let Some(input) = abi::resolve_input(abi::MAIN_INPUT) else {return};
+        let (s0, s1) = (block.s0 as usize, block.s1 as usize);
         let sample_rate = state.sample_rate;
         let bpm = block.bpm;
         // Recompute the three offsets against the current tempo (the setters no-op when unchanged, and glide
@@ -173,9 +175,11 @@ impl AudioEffect for Delay {
         if block.flags.discontinuous() {
             state.delay_dsp.reset([delay_l, delay_r], [pre_l, pre_r]);
         }
-        let [input_l, input_r] = input;
+        let [input_l, input_r] = input.channels();
         let [output_l, output_r] = output;
-        state.delay_dsp.process([input_l, input_r], [output_l, output_r], [delay_l, delay_r], [pre_l, pre_r]);
+        // The sub-chunk to process this call (absolute quantum coords); the delay line state persists across
+        // chunks, so slicing each sub-range advances it exactly once over the quantum.
+        state.delay_dsp.process([&input_l[s0..s1], &input_r[s0..s1]], [&mut output_l[s0..s1], &mut output_r[s0..s1]], [delay_l, delay_r], [pre_l, pre_r]);
     }
 
     fn parameter_changed(state: &mut DelayState, id: u32, value: ParamValue) {

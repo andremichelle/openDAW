@@ -20,7 +20,7 @@ use engine_env::process_info::ProcessInfo;
 use engine_env::processor::Processor;
 use transport::transport::RENDER_QUANTUM;
 use crate::param_automation::{ParamHandle, ParamSink};
-use crate::{call_device_process, DeviceReg, PULL};
+use crate::{call_device_process, DeviceReg, INPUTS, PULL};
 
 /// A graph node that runs an audio-EFFECT device after an upstream node (Route B). It reads the upstream's
 /// stereo output (both channels) through the device, into the engine-allocated stereo output, then copies
@@ -41,6 +41,13 @@ pub(crate) struct PluginAudioEffect {
     // `Rc<RefCell<AudioBuffer>>` never moves, so the captured pointer stays valid.
     #[allow(dead_code)]
     input: Option<SharedAudioBuffer>,
+    // The device's audio input PORTS (id, left_ptr, right_ptr): port 1 the through-signal (set by
+    // `set_audio_source`), ports 2+ the resolved sidechains (set by `set_sidechain`). Swapped into `INPUTS`
+    // per `process` so `host_resolve_input` finds them. The sidechain source buffers are kept alive so their
+    // captured pointers stay valid.
+    input_ports: Vec<(u32, u32, u32)>,
+    #[allow(dead_code)]
+    sidechain_buffers: Vec<SharedAudioBuffer>,
     device_output: [Box<[f32]>; 2], // the device's stereo output buffers ([left, right])
     in_offsets: Box<[u32]>,
     #[allow(dead_code)]
@@ -84,6 +91,8 @@ impl PluginAudioEffect {
             clock_armed: false,
             output: shared_audio_buffer(),
             input: None,
+            input_ports: vec![(abi::MAIN_INPUT, 0, 0)], // port 1 = the through-signal, ptrs set by set_audio_source
+            sidechain_buffers: Vec::new(),
             device_output,
             in_offsets,
             out_offsets,
@@ -113,10 +122,25 @@ impl EventReceiver for PluginAudioEffect {
 impl AudioInput for PluginAudioEffect {
     fn set_audio_source(&mut self, source: SharedAudioBuffer) {
         let buffer = source.borrow();
-        self.in_offsets[0] = buffer.left.as_ptr() as u32;
-        self.in_offsets[1] = buffer.right.as_ptr() as u32;
+        let (left, right) = (buffer.left.as_ptr() as u32, buffer.right.as_ptr() as u32);
+        self.in_offsets[0] = left;
+        self.in_offsets[1] = right;
+        self.input_ports[0] = (abi::MAIN_INPUT, left, right); // port 1, the through-signal resolve_input(1) returns
         drop(buffer);
         self.input = Some(source);
+    }
+}
+
+impl PluginAudioEffect {
+    /// Wire a resolved sidechain SOURCE as the input port `port_id` (the id `bind_sidechain` returned, 2+). The
+    /// source buffer is kept alive so its captured pointer stays valid; `host_resolve_input(port_id)` then hands
+    /// the device these channels for the quantum. Called by the engine's sidechain-resolution pass.
+    pub(crate) fn set_sidechain(&mut self, port_id: u32, source: SharedAudioBuffer) {
+        let buffer = source.borrow();
+        let (left, right) = (buffer.left.as_ptr() as u32, buffer.right.as_ptr() as u32);
+        drop(buffer);
+        self.input_ports.push((port_id, left, right));
+        self.sidechain_buffers.push(source);
     }
 }
 
@@ -147,6 +171,9 @@ impl Processor for PluginAudioEffect {
             pull.sample_rate = self.sample_rate;
             pull.clock_armed = self.clock_armed;
             core::mem::swap(&mut self.params, &mut pull.params);
+            // Swap in this effect's input ports so `host_resolve_input` resolves port 1 (the through-signal)
+            // and any sidechains for THIS device's call.
+            core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
         {
@@ -155,6 +182,7 @@ impl Processor for PluginAudioEffect {
             pull.block_count = 0;
             pull.clock_armed = false;
             core::mem::swap(&mut self.params, &mut pull.params);
+            core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
         let mut output = self.output.borrow_mut();
         for index in 0..RENDER_QUANTUM {

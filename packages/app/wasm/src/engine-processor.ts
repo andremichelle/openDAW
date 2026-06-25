@@ -98,6 +98,11 @@ type EngineExports = {
     host_resolve_sample: (handle: number, outPtr: number) => number
     host_observe_sample: (pathPtr: number, pathLen: number) => number
     host_observe_field: (pathPtr: number, pathLen: number) => number
+    // Route B/C (audio input ports). A device imports these: `host_bind_sidechain` declares a sidechain port by
+    // its pointer field-key path (returns the port id 2+); `host_resolve_input` resolves a port id to its
+    // stereo buffer during render (id 1 the through-signal).
+    host_bind_sidechain: (pathPtr: number, pathLen: number) => number
+    host_resolve_input: (id: number, outPtr: number) => number
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number
     sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
@@ -247,7 +252,9 @@ class EngineProcessor extends AudioWorkletProcessor {
                 // sample reference (its box file-pointer path) from `init`.
                 host_resolve_sample: engine.host_resolve_sample,
                 host_observe_sample: engine.host_observe_sample,
-                host_observe_field: engine.host_observe_field
+                host_observe_field: engine.host_observe_field,
+                host_bind_sidechain: engine.host_bind_sidechain,
+                host_resolve_input: engine.host_resolve_input
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()

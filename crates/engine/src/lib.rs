@@ -34,6 +34,7 @@ use boxgraph::updates::{decode_forward, Update};
 use abi::{EventRecord, ParamChange, EVENT_CHOKE, EVENT_NOTE_OFF, EVENT_NOTE_ON};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
+use engine_env::audio_output_buffer_registry::AudioOutputBufferRegistry;
 use engine_env::block::Block;
 use engine_env::block_flags::BlockFlags;
 use engine_env::engine_context::{EngineContext, NodeId};
@@ -180,7 +181,7 @@ mod plugin_audio_effect;
 mod plugin_midi_effect;
 use plugin_midi_effect::PluginMidiEffect; // named in the PullLink::MidiFx variant defined here
 mod audio_unit;
-use audio_unit::{AudioUnitBinding, DeviceParams, Members};
+use audio_unit::{AudioUnitBinding, DeviceParams, Members, PendingSidechain};
 mod composite;
 mod param_automation;
 use param_automation::ParamHandle;
@@ -249,6 +250,18 @@ static SAMPLE_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
 // each path and delivers values through the device's `field_changed` export. Its own cell (NOT `ENGINE`) so the
 // re-entrant `host_observe_field` call from `init` never aliases `&mut Engine`.
 static FIELD_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+
+// The sidechain-bind recorder the `host_bind_sidechain` export appends to: each audio effect's sidechain
+// pointer FIELD-KEY path (e.g. the Gate's `side-chain` at `[30]`), in declaration order. After `init` the
+// engine resolves each to a source's output and feeds it in as an input PORT (id 2, 3, ...). Its own cell (NOT
+// `ENGINE`) so the re-entrant `host_bind_sidechain` call from `init` never aliases `&mut Engine`.
+static SIDECHAIN_BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+
+// The CURRENT effect's audio input PORTS (id, left_ptr, right_ptr), swapped in by `PluginAudioEffect::process`
+// for the device call so `host_resolve_input` resolves a port to its buffer: id `1` is the through-signal, ids
+// `2, 3, ...` the resolved sidechains. Its own cell (NOT `ENGINE`); read-only during render, never aliases the
+// graph, exactly like `host_resolve_sample` reading `SAMPLES`.
+static INPUTS: Shared<Vec<(u32, u32, u32)>> = Shared::new(Vec::new());
 
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
 /// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` wraps a
@@ -417,6 +430,34 @@ pub extern "C" fn host_observe_field(path_ptr: u32, path_len: u32) -> u32 {
     let obs = unsafe { FIELD_OBS.get() };
     obs.push(path.to_vec());
     obs.len() as u32 - 1
+}
+
+/// Host import an audio effect calls from `init` to declare a SIDECHAIN input port by its pointer field-key
+/// path. Records the path (the engine resolves it after `init`) and returns the device-facing PORT id: `2` for
+/// the first sidechain, `3` for the next, and so on, after the reserved `MAIN_INPUT` (1). Touches no
+/// `&mut Engine`, so it is safe from `init`.
+#[no_mangle]
+pub extern "C" fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let bind = unsafe { SIDECHAIN_BIND.get() };
+    bind.push(path.to_vec());
+    (bind.len() - 1) as u32 + 2
+}
+
+/// Host import an effect calls DURING render to resolve an audio input PORT by id: write an `AudioInputRef` to
+/// `out_ptr` and return 1 if the port is wired, else 0. `INPUTS` holds the current effect's ports (swapped in
+/// by `PluginAudioEffect::process`): id 1 the through-signal, ids 2+ its resolved sidechains. Reads `INPUTS`
+/// read-only, so it never aliases the `&mut Engine` the render path holds, exactly like `host_resolve_sample`.
+#[no_mangle]
+pub extern "C" fn host_resolve_input(id: u32, out_ptr: u32) -> u32 {
+    let ports = unsafe { INPUTS.get() };
+    for &(port_id, left, right) in ports.iter() {
+        if port_id == id {
+            unsafe { *(out_ptr as *mut abi::AudioInputRef) = abi::AudioInputRef {left, right, frames: RENDER_QUANTUM as u32}; }
+            return 1;
+        }
+    }
+    0
 }
 
 /// Host import a device calls (on a clock event) to pull its AUTOMATED parameters that changed at `position`.
@@ -615,6 +656,11 @@ struct Engine {
     unit_changes: Rc<RefCell<Members>>, // recorded by the audio-units membership observer, drained by reconcile
     output_audio: Option<IndexedCollection>, // THE output unit's audio-fx chain (built once at bind, see output_strip)
     output_device_params: Vec<DeviceParams>, // the output-fx devices' bound params, retained so they stay observed
+    // The audio-output registry (Route C): each unit's strip output keyed by its box address, so a sidechain
+    // pointer resolves to the buffer to read and the node to depend on. `pending_sidechains` collects each
+    // effect's declared sidechain ports during a rewire; they are resolved once all units are (re)built.
+    output_registry: AudioOutputBufferRegistry<NodeId>,
+    pending_sidechains: Vec<PendingSidechain>,
     sample_rate: f32,
     blocks: Vec<Block>,
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
@@ -640,6 +686,8 @@ impl Engine {
             unit_changes: Rc::new(RefCell::new(Members::default())),
             output_audio: None,
             output_device_params: Vec::new(),
+            output_registry: AudioOutputBufferRegistry::new(),
+            pending_sidechains: Vec::new(),
             sample_rate,
             blocks: Vec::new(),
             devices: Vec::new(),

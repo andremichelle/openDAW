@@ -115,6 +115,10 @@ impl Engine {
                 self.build_instrument(track_sets, child_uuid, choke)
             };
             if let Some((child, child_chains, child_binding)) = built {
+                // Register the child's output by its box address (flattening), so a sidechain pointing at THIS
+                // child (e.g. the Gate sidechained to a Playfield slot) resolves to the buffer to read and the
+                // node to depend on, exactly as a unit's output is registered.
+                self.output_registry.register(Address::of(child_uuid, vec![]), child.output.clone(), child.output_node);
                 sum.borrow_mut().add_audio_source(child.output);
                 self.context.register_edge(child.output_node, sum_id);
                 edges.push((child.output_node, sum_id));

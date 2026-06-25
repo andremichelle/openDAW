@@ -119,22 +119,34 @@ impl AudioEffect for Tidal {
         }
     }
 
-    fn process_audio(state: &mut TidalState, input: [&[f32]; 2], output: [&mut [f32]; 2], block: &Block) {
-        let [in_left, in_right] = input;
+    fn process_audio(state: &mut TidalState, output: [&mut [f32]; 2], block: &Block) {
+        let Some(input) = abi::resolve_input(abi::MAIN_INPUT) else {return};
+        let [in_left, in_right] = input.channels();
         let [out_left, out_right] = output;
+        Tidal::dsp(state, in_left, in_right, out_left, out_right, block.s0 as usize, block.s1 as usize, block.p0, block.bpm);
+    }
+}
+
+impl Tidal {
+    /// The pure per-range DSP (unit-tested directly): a tempo-synced LFO gain per channel over `[s0, s1)`. The
+    /// LFO phase reads the song position, locking to tempo; `p0` is the pulse at sample `s0`, so the phase at
+    /// absolute sample `i` advances by `(i - s0)` from there. A per-channel degree offset pans left and right
+    /// apart, one smoothed gain per channel.
+    #[allow(clippy::too_many_arguments)]
+    fn dsp(state: &mut TidalState, in_left: &[f32], in_right: &[f32], out_left: &mut [f32], out_right: &mut [f32], s0: usize, s1: usize, p0: f64, bpm: f32) {
         if state.needs_update {
             state.computer.set(state.depth as f64, state.slope as f64, state.symmetry as f64);
             state.needs_update = false;
         }
         let smooth_coeff = Smooth::coefficient(SMOOTH_TIME_SECONDS, state.sample_rate as f64);
-        let delta = ppqn::samples_to_pulses(1.0, block.bpm, state.sample_rate); // pulses advanced per sample
+        let delta = ppqn::samples_to_pulses(1.0, bpm, state.sample_rate); // pulses advanced per sample
         let index = state.rate_index.clamp(0, RATE_FRACTIONS.len() as i32 - 1) as usize;
         let (numerator, denominator) = RATE_FRACTIONS[index];
         let rate_inverse = 1.0 / ppqn::from_signature(numerator, denominator);
         let offset0 = state.offset_degrees as f64 / 360.0;
         let offset1 = offset0 + state.channel_offset_degrees as f64 / 360.0;
-        for sample in 0..out_left.len() {
-            let position = block.p0 + sample as f64 * delta;
+        for sample in s0..s1 {
+            let position = p0 + (sample - s0) as f64 * delta;
             // `compute` takes the fractional part of the phase itself, so no floor is needed here.
             let gain_left = state.smooth[0].process(smooth_coeff, state.computer.compute(position * rate_inverse + offset0));
             let gain_right = state.smooth[1].process(smooth_coeff, state.computer.compute(position * rate_inverse + offset1));
@@ -182,7 +194,6 @@ mod tests {
     //! the output traces the LFO; a per-channel offset moves left and right apart (auto-pan). In-crate so it
     //! can set the private state.
     use super::{Tidal, TidalState};
-    use abi::{AudioEffect, Block, BlockFlags};
 
     const SR: f32 = 48_000.0;
 
@@ -199,9 +210,6 @@ mod tests {
     }
 
     // One block covering `frames` samples starting at pulse `p0`, at `bpm`.
-    fn block(p0: f64, frames: usize, bpm: f32) -> Block {
-        Block {index: 0, flags: BlockFlags(0), p0, p1: p0 + frames as f64, s0: 0, s1: frames as u32, bpm}
-    }
 
     #[test]
     fn modulates_a_dc_input_with_the_lfo() {
@@ -211,7 +219,7 @@ mod tests {
         let frames = 24_000;
         let input = vec![1.0f32; frames];
         let (mut left, mut right) = (vec![0.0f32; frames], vec![0.0f32; frames]);
-        Tidal::process_audio(&mut state, [&input, &input], [&mut left, &mut right], &block(0.0, frames, 120.0));
+        Tidal::dsp(&mut state, &input, &input, &mut left, &mut right, 0, frames, 0.0, 120.0);
         let min = left.iter().cloned().fold(f32::INFINITY, f32::min);
         let max = left.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         assert!(min < 0.1, "the trough nearly closes the gain");
@@ -226,7 +234,7 @@ mod tests {
         let frames = 2_000;
         let input = vec![1.0f32; frames];
         let (mut left, mut right) = (vec![0.0f32; frames], vec![0.0f32; frames]);
-        Tidal::process_audio(&mut state, [&input, &input], [&mut left, &mut right], &block(0.0, frames, 120.0));
+        Tidal::dsp(&mut state, &input, &input, &mut left, &mut right, 0, frames, 0.0, 120.0);
         assert!(left != right, "a channel offset separates the two channels");
     }
 
@@ -238,7 +246,7 @@ mod tests {
         let frames = 1_000;
         let input = vec![0.7f32; frames];
         let (mut left, mut right) = (vec![0.0f32; frames], vec![0.0f32; frames]);
-        Tidal::process_audio(&mut state, [&input, &input], [&mut left, &mut right], &block(0.0, frames, 120.0));
+        Tidal::dsp(&mut state, &input, &input, &mut left, &mut right, 0, frames, 0.0, 120.0);
         // The gain is a constant 1.0, smoothed from 0, so it converges to the input; the tail is unchanged.
         assert!((left[frames - 1] - 0.7).abs() < 1.0e-3, "full pass-through once the smoother settles");
     }

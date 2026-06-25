@@ -15,6 +15,10 @@
 //!   [12] block_count    [13] blocks_ptr       (-> Block[block_count]; the quantum's ProcessInfo)
 //!   [14] sample_rate (f32 bits)               (the engine's render sample rate; passed in, never a global)
 //!
+//! An effect's audio inputs are NOT in the descriptor: they are resolved by PORT id through the
+//! `host_resolve_input` import (Route B/C), the through-signal at `MAIN_INPUT` and each `bind_sidechain`
+//! port at `2, 3, ...`, exactly as a sampler resolves a sample handle.
+//!
 //! The engine no longer PUSHES a resolved event array. A device PULLS its own input event stream for a
 //! pulse range through the `host_pull_events` host import (bound to the engine's export by the loader),
 //! into its `[8]/[9]` scratch, and times its own sub-blocks over the `[12]/[13]` blocks.
@@ -150,6 +154,8 @@ extern "C" {
     fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32;
     fn host_observe_sample(path_ptr: u32, path_len: u32) -> u32;
     fn host_observe_field(path_ptr: u32, path_len: u32) -> u32;
+    fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
+    fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
 }
 
 /// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the
@@ -388,6 +394,44 @@ pub fn bind_parameter(path: &[u16]) -> u32 {
     { let _ = path; 0 }
 }
 
+/// Declare one of THIS effect's SIDECHAIN input PORTS by its pointer FIELD-KEY PATH on the device box (e.g.
+/// `[30]` for the Gate's `side-chain`). Returns the PORT id (`2, 3, ...`, after the reserved [`MAIN_INPUT`]),
+/// which the device passes to [`resolve_input`] during its DSP. The host resolves the pointer to the targeted
+/// box's audio output and orders that producer before this effect. An effect may declare ANY number of
+/// sidechains; an unconnected one simply resolves to `None`. A device calls this from `init`. Native stub
+/// returns 0.
+#[inline]
+pub fn bind_sidechain(path: &[u16]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_bind_sidechain(path.as_ptr() as u32, path.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = path; 0 }
+}
+
+/// Resolve an audio input PORT by id to its stereo buffer for the current quantum (Route B/C): [`MAIN_INPUT`]
+/// for the through-signal, or a `bind_sidechain` port id. `Some` when the port is wired, `None` when it is not
+/// (an unconnected sidechain, or no upstream). The device reads the returned channels in absolute quantum
+/// coordinates. Like [`resolve_sample`], it reads an engine cell the host swaps in for this `process`, so it
+/// is O(1) and safe to call from the DSP. Native stub returns `None` (effect DSP is unit-tested via the pure
+/// per-sample path, not through the host).
+#[inline]
+pub fn resolve_input(id: u32) -> Option<AudioInputRef> {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = AudioInputRef {left: 0, right: 0, frames: 0};
+        if unsafe { host_resolve_input(id, &mut out as *mut AudioInputRef as u32) } != 0 {
+            Some(out)
+        } else {
+            None
+        }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let _ = id;
+        None
+    }
+}
+
 /// Pull THIS device's parameters that CHANGED at pulse `position` into `out` (the host resolves each — its
 /// automation curve, else its field value — and diffs against the last value it handed out), returning the
 /// number written. The device applies each via its `parameter_changed`. Called by the SDK on a clock event.
@@ -478,6 +522,33 @@ impl<'a> Inputs<'a> {
     pub fn channels(&self) -> [&'a [f32]; 2] {
         [self.get(0), self.get(1)]
     }
+}
+
+/// The well-known PORT id of an effect's main input, the through-signal the engine always wires from the
+/// upstream node. Resolve it with [`resolve_input`] exactly like a sidechain port; `bind_sidechain` ports are
+/// numbered from `2`.
+pub const MAIN_INPUT: u32 = 1;
+
+/// A resolved audio input port (Route B/C): the source's stereo buffer for the WHOLE quantum, addressed by
+/// pointers. The device indexes it in absolute quantum coordinates (the same `block.s0..s1` it writes to
+/// `output`). Mirrors [`SampleRef`]: a thin handle whose accessors hand back safe slices.
+#[derive(Clone, Copy)]
+pub struct AudioInputRef {
+    pub left: u32,
+    pub right: u32,
+    pub frames: u32,
+}
+
+impl AudioInputRef {
+    #[inline]
+    pub fn left(&self) -> &[f32] { unsafe { slice::from_raw_parts(self.left as *const f32, self.frames as usize) } }
+
+    #[inline]
+    pub fn right(&self) -> &[f32] { unsafe { slice::from_raw_parts(self.right as *const f32, self.frames as usize) } }
+
+    /// Both channels `[left, right]`, mirroring TS `StereoMatrix.Channels`.
+    #[inline]
+    pub fn channels(&self) -> [&[f32]; 2] { [self.left(), self.right()] }
 }
 
 /// Everything a device needs for one `process` call, as safe references. Built once by
@@ -720,9 +791,16 @@ pub trait AudioEffect {
     /// `0`/`len` to match the sliced buffers. An effect locks to tempo via `block`; one driven purely by
     /// automated parameters ignores it and reads what `parameter_changed` set. The sample rate is the device's
     /// own (it stashed `Ports::sample_rate`).
-    fn process_audio(state: &mut Self::State, input: [&[f32]; 2], output: [&mut [f32]; 2], block: &Block);
-    /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
-    /// returned ids in `state`. Called once when the device is wired, also receiving the engine's `sample_rate` (stable for the device's life; stash it if the DSP needs it). Default: nothing (no params).
+    /// Transform this sub-chunk's audio into `output` (`[left, right]`, the WHOLE quantum buffers). The device
+    /// resolves its inputs by PORT id with [`resolve_input`] ([`MAIN_INPUT`] for the through-signal, any
+    /// `bind_sidechain` port for analysis), and reads / writes in ABSOLUTE quantum coordinates: the range to
+    /// process is `block.s0..block.s1`, and a resolved input's channels are indexed by the same `i`. `block`'s
+    /// `p0`/`p1` are the chunk's pulse range, `bpm`/`flags` carry over. The sample rate is the device's own.
+    fn process_audio(state: &mut Self::State, output: [&mut [f32]; 2], block: &Block);
+    /// Register this device's automatable parameters with the host via [`bind_parameter`] (and any sidechain
+    /// input ports via [`bind_sidechain`]), stashing the returned ids in `state`. Called once when the device
+    /// is wired, also receiving the engine's `sample_rate` (stable for the device's life; stash it if the DSP
+    /// needs it). Default: nothing (no params).
     fn init(state: &mut Self::State, sample_rate: f32) {
         let _ = (state, sample_rate);
     }
@@ -735,29 +813,27 @@ pub trait AudioEffect {
     }
 }
 
-/// The per-quantum effect path a device calls from `process`: run input 0 through the effect PER BLOCK,
-/// and within each block split the sample range at the engine's update positions (Route D) — `process_audio`
-/// for the chunk before each, refresh the parameters there — the TS `AudioProcessor` loop, with the split
-/// points generated from `next_update_position` rather than injected events. With no input it outputs
-/// silence; with no transport blocks (not playing) it passes the input through. A device with no automation
-/// gets no update positions (INFINITY) and runs whole blocks.
+/// The most sidechains an effect's `process_audio` receives per call; declared sidechains beyond this are
+/// dropped (no real effect needs more, and the slice stays on the stack).
+/// The per-quantum effect path a device calls from `process`: run the effect PER BLOCK, and within each block
+/// split the sample range at the engine's update positions (Route D) — `process_audio` for the chunk before
+/// each, refresh the parameters there — the TS `AudioProcessor` loop, with the split points from
+/// `next_update_position` rather than injected events. The device resolves its OWN inputs by port id; this
+/// template only resolves [`MAIN_INPUT`] to handle the degenerate cases (no upstream -> silence; not playing,
+/// i.e. no transport blocks -> pass the input through). The sub-blocks carry ABSOLUTE `s0`/`s1`, so the device
+/// reads / writes the whole-quantum buffers by absolute index and a resolved input lines up sample-for-sample.
 pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
-    let Ports {inputs, output, state, blocks, ..} = ports;
+    let Ports {output, state, blocks, ..} = ports;
     let [out_left, out_right] = output;
     let frames = out_left.len();
-    if inputs.is_empty() {
-        for sample in out_left.iter_mut() {
-            *sample = 0.0;
-        }
-        for sample in out_right.iter_mut() {
-            *sample = 0.0;
-        }
+    let Some(input) = resolve_input(MAIN_INPUT) else {
+        out_left.fill(0.0);
+        out_right.fill(0.0);
         return;
-    }
-    let [in_left, in_right] = inputs.channels();
+    };
     if blocks.is_empty() {
-        out_left.copy_from_slice(&in_left[..frames]);
-        out_right.copy_from_slice(&in_right[..frames]);
+        out_left.copy_from_slice(&input.left()[..frames]);
+        out_right.copy_from_slice(&input.right()[..frames]);
         return;
     }
     for block in blocks {
@@ -773,8 +849,8 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
         while position < block.p1 {
             let offset = (pulse_to_offset(position) as usize).clamp(s0, s1);
             if offset > cursor {
-                let sub = Block {index: block.index, flags, p0: chunk_p0, p1: position, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
-                E::process_audio(state, [&in_left[cursor..offset], &in_right[cursor..offset]], [&mut out_left[cursor..offset], &mut out_right[cursor..offset]], &sub);
+                let sub = Block {index: block.index, flags, p0: chunk_p0, p1: position, s0: cursor as u32, s1: offset as u32, bpm: block.bpm};
+                E::process_audio(state, [&mut *out_left, &mut *out_right], &sub);
                 cursor = offset;
                 chunk_p0 = position;
                 flags.clear_event_flags();
@@ -783,8 +859,8 @@ pub fn render_effect<E: AudioEffect>(ports: Ports<E::State>) {
             position = next_update_position(position);
         }
         if cursor < s1 {
-            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
-            E::process_audio(state, [&in_left[cursor..s1], &in_right[cursor..s1]], [&mut out_left[cursor..s1], &mut out_right[cursor..s1]], &sub);
+            let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: cursor as u32, s1: s1 as u32, bpm: block.bpm};
+            E::process_audio(state, [&mut *out_left, &mut *out_right], &sub);
         }
     }
 }
