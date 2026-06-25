@@ -221,6 +221,10 @@ impl Instrument for Vaporisateur {
             _ => {}
         }
     }
+
+    fn reset(state: &mut VaporisateurState) {
+        state.voicing.reset();
+    }
 }
 
 /// Host-independent entry for tests: clear the stereo output, dispatch the supplied events through the SDK
@@ -272,6 +276,12 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Vaporisateur as Instrument>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Transport STOP: drop every voice (force-stop the voicing) so playback starts silent.
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, |state| <Vaporisateur as Instrument>::reset(state)) }
 }
 
 #[cfg(test)]

@@ -45,6 +45,8 @@ enum Action {
 
 pub struct Transport {
     position: f64,     // pulses (ppqn) — f64 for sample-accuracy over a long timeline
+    free_running: f64, // pulses — tracks `position` while playing, then free-runs (advances) while paused, so
+                       // the paused quantum still has a real advancing range (mirrors TS `#freeRunningPosition`)
     bpm: f32,          // the live (effective) bpm: the nominal bpm, or the tempo map's value while automating
     nominal_bpm: f32,  // the configured bpm (TimelineBox.bpm); the live bpm when no tempo automation drives it
     sample_rate: f32,
@@ -56,7 +58,7 @@ pub struct Transport {
 
 impl Transport {
     pub fn new(sample_rate: f32, bpm: f32) -> Self {
-        Self {position: 0.0, bpm, nominal_bpm: bpm, sample_rate, playing: false, loop_enabled: false, loop_from: 0.0, loop_to: 0.0}
+        Self {position: 0.0, free_running: 0.0, bpm, nominal_bpm: bpm, sample_rate, playing: false, loop_enabled: false, loop_from: 0.0, loop_to: 0.0}
     }
 
     pub fn position(&self) -> f64 {self.position}
@@ -75,11 +77,23 @@ impl Transport {
     pub fn stop(&mut self, reset: bool) {
         self.playing = false;
         if reset {
-            self.position = 0.0
+            self.position = 0.0;
+            self.free_running = 0.0
         }
     }
 
-    pub fn seek(&mut self, position: f64) {self.position = position}
+    pub fn seek(&mut self, position: f64) {self.position = position; self.free_running = position}
+
+    /// Build the free-running block for a PAUSED quantum: `position` stays frozen, but the pulse range
+    /// keeps advancing (a real quantum length) so the graph renders one more block — active voices flush
+    /// to release and effect tails ring out, while the NON-playing flags stop the sequencer reading new
+    /// notes. Mirrors the `else` (not-transporting) branch of TS `BlockRenderer.process`.
+    pub fn render_paused(&mut self) -> Block {
+        let p0 = self.free_running;
+        let p1 = p0 + samples_to_pulses(RENDER_QUANTUM as f64, self.bpm, self.sample_rate);
+        self.free_running = p1;
+        Block {p0, p1, s0: 0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous: false}
+    }
 
     /// Advance one 128-sample quantum and return its block. Fixed bpm with no events → exactly one
     /// block spanning the whole quantum (the no-event path of the TS block loop). The per-quantum
@@ -162,6 +176,7 @@ impl Transport {
             }
         }
         self.position = p0;
+        self.free_running = p0;
     }
 
     /// Emit the block from `p0` to `action_position` (if it spans any samples) and return the new

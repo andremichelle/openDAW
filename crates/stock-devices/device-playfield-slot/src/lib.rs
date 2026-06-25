@@ -214,6 +214,12 @@ impl Instrument for PlayfieldSlot {
             state.sample = sample;
         }
     }
+
+    fn reset(state: &mut PlayfieldSlotState) {
+        for voice in state.voices.iter_mut() {
+            voice.free();
+        }
+    }
 }
 
 /// The index of the oldest active voice (lowest note-on sequence), stolen when the pool is full.
@@ -296,6 +302,12 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
 #[no_mangle]
 pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, len: u32) {
     unsafe { abi::with_state(state_ptr, |state| <PlayfieldSlot as Instrument>::field_changed(state, id, FieldValue::from_wire(kind, bits, len))) }
+}
+
+/// Transport STOP: drop every voice so the slot starts silent.
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, |state| <PlayfieldSlot as Instrument>::reset(state)) }
 }
 
 /// Apply an observed sample reference (its `file` pointer), by the id `observe_sample` returned. Driven by the

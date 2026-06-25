@@ -118,6 +118,14 @@ impl EngineContext {
         self.emit(ProcessPhase::After);
     }
 
+    /// Reset every processor (a transport STOP): each device clears its runtime state, and the buses / channel
+    /// strips clear their buffers, so the next playback starts silent. Outside render.
+    pub fn reset_all(&mut self) {
+        for processor in self.processors.values() {
+            processor.borrow_mut().reset();
+        }
+    }
+
     fn emit(&mut self, phase: ProcessPhase) {
         for observer in &mut self.phase_observers {
             observer(phase);

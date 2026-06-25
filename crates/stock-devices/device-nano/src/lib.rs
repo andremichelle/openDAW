@@ -118,6 +118,12 @@ impl Instrument for Nano {
             state.sample = sample;
         }
     }
+
+    fn reset(state: &mut NanoState) {
+        for voice in state.voices.iter_mut() {
+            voice.force_stop();
+        }
+    }
 }
 
 /// Host-independent entry for tests: clear the stereo output, dispatch the supplied events through the SDK
@@ -174,6 +180,12 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
 pub extern "C" fn sample_changed(state_ptr: u32, id: u32, handle: u32, present: u32) {
     let sample = if present != 0 {Some(handle)} else {None};
     unsafe { abi::with_state(state_ptr, |state| <Nano as Instrument>::sample_changed(state, id, sample)) }
+}
+
+/// Transport STOP: drop every voice so playback starts silent.
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, |state| <Nano as Instrument>::reset(state)) }
 }
 
 #[cfg(test)]

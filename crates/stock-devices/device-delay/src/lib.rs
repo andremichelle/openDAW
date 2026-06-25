@@ -204,6 +204,16 @@ impl AudioEffect for Delay {
             _ => {}
         }
     }
+
+    fn reset(state: &mut DelayState) {
+        // Zero the four rate-sized delay lines (the main L/R + pre-delay L/R) out of the engine-allocated tail.
+        let size = state.buffer_size;
+        let tail = unsafe { core::slice::from_raw_parts_mut(state.tail.as_mut_ptr(), 4 * size) };
+        let (delay_l, rest) = tail.split_at_mut(size);
+        let (delay_r, rest) = rest.split_at_mut(size);
+        let (pre_l, pre_r) = rest.split_at_mut(size);
+        state.delay_dsp.reset([delay_l, delay_r], [pre_l, pre_r]);
+    }
 }
 
 // ---- The device ABI: shared with the engine, called wasm-to-wasm. ----
@@ -231,6 +241,12 @@ pub extern "C" fn process(desc_ptr: u32) {
 #[no_mangle]
 pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Delay as AudioEffect>::init(state, sample_rate)) }
+}
+
+/// Transport STOP: zero the delay lines so the echo tail does not resume on the next playback.
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, |state| <Delay as AudioEffect>::reset(state)) }
 }
 
 /// Apply a parameter value the host resolved (initial / edit / automation), by the id `init` got back.

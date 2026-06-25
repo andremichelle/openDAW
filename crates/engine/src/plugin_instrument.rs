@@ -18,7 +18,7 @@ use engine_env::process_info::ProcessInfo;
 use engine_env::processor::Processor;
 use transport::transport::RENDER_QUANTUM;
 use crate::param_automation::{ParamHandle, ParamSink};
-use crate::{call_device_process, DeviceReg, PullLink, DEVICE_MAX_EVENTS, PULL};
+use crate::{call_device_process, call_device_reset, DeviceReg, PullLink, DEVICE_MAX_EVENTS, PULL};
 
 /// A graph node that voices its notes through a loaded instrument device (e.g. `device_sine.wasm`). It
 /// pulls notes from its `PullLink` chain (resolved by the device via `host_pull_events`), fills the
@@ -28,6 +28,7 @@ use crate::{call_device_process, DeviceReg, PullLink, DEVICE_MAX_EVENTS, PULL};
 /// is talc-allocated here, so it is freed when the instrument is dropped.
 pub(crate) struct PluginInstrument {
     process_index: u32, // the device's `process` slot in the shared function table
+    reset_index: u32,   // the device's `reset` slot (clears voices on STOP); 0 if none
     sample_rate: f32,
     pull_chain: Option<PullLink>, // the top of this unit's event pull chain (sequencer, or a midi-fx over it)
     // This device's bound parameters, swapped into `PULL` for the device call so `host_update_parameters`
@@ -79,6 +80,7 @@ impl PluginInstrument {
         ].into_boxed_slice();
         Self {
             process_index: device.process_index,
+            reset_index: device.reset_index,
             sample_rate,
             pull_chain: None,
             params: Vec::new(),
@@ -123,6 +125,9 @@ impl AudioGenerator for PluginInstrument {
 
 impl Processor for PluginInstrument {
     fn reset(&mut self) {
+        // Transport STOP: drop every active voice (the device clears its voice pool / envelopes), and clear the
+        // buffered events.
+        call_device_reset(self.reset_index, self.device_state.as_ptr() as u32);
         self.events.clear();
     }
 

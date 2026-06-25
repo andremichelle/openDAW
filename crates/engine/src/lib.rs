@@ -59,6 +59,7 @@ struct DeviceReg {
     parameter_changed_index: u32,  // slot of the device's `parameter_changed` export; 0 if it has none
     field_changed_index: u32,      // slot of the device's `field_changed` export (observed plain fields); 0 if none
     sample_changed_index: u32,     // slot of the device's `sample_changed` export (observed samples); 0 if none
+    reset_index: u32,              // slot of the device's `reset` export (clears runtime state on STOP); 0 if none
     midi_effects_field: u16,       // the device's OWN midi-fx host field key when hosted as a composite child; 0 if none
     audio_effects_field: u16       // the device's OWN audio-fx host field key when hosted as a composite child; 0 if none
 }
@@ -166,6 +167,20 @@ fn call_device_sample_changed(sample_changed_index: u32, state_ptr: u32, id: u32
 }
 #[cfg(not(target_family = "wasm"))]
 fn call_device_sample_changed(_sample_changed_index: u32, _state_ptr: u32, _id: u32, _handle: u32, _present: u32) {}
+
+// Call a device's `reset(state_ptr)` export to clear its runtime state on a transport STOP. Called outside
+// render, never during `process`.
+#[cfg(target_family = "wasm")]
+#[inline]
+fn call_device_reset(reset_index: u32, state_ptr: u32) {
+    if reset_index == 0 {
+        return; // the device exports no `reset`; index 0 is the "none" sentinel
+    }
+    let reset: extern "C" fn(u32) = unsafe { core::mem::transmute(reset_index as usize) };
+    reset(state_ptr);
+}
+#[cfg(not(target_family = "wasm"))]
+fn call_device_reset(_reset_index: u32, _state_ptr: u32) {}
 
 const DEVICE_MAX_EVENTS: usize = 256; // per-quantum event scratch the device pulls into
 // The `index` field of an EFFECT device box (DeviceFactory's midi-effect / audio-effect attributes), giving
@@ -711,9 +726,9 @@ impl Engine {
     /// Register a loaded device: the table slot holding its `process` and the bytes its state block needs.
     /// Returns the device id (its index). The host calls this once per device, before `bind`.
     #[allow(clippy::too_many_arguments)] // one slot per device export; positional to match the loader's call
-    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, midi_effects_field: u32, audio_effects_field: u32) -> u32 {
+    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32) -> u32 {
         let id = self.devices.len() as u32;
-        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index,
+        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, reset_index,
             midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16});
         id
     }
@@ -772,8 +787,8 @@ impl Engine {
         transport.set_loop_to(controls.loop_to.get());
         metronome.set_nominator(controls.nominator.get() as u32);
         metronome.set_denominator(controls.denominator.get() as u32);
+        blocks.clear();
         if transport.is_playing() {
-            blocks.clear();
             // use the tempo map only when automation is enabled and non-empty, else the fixed bpm
             let events = if controls.tempo_automation_enabled.get() {
                 tempo.as_ref().map(|tempo| tempo.events())
@@ -795,14 +810,30 @@ impl Engine {
                     bpm: block.bpm
                 });
             });
-            // drive the processor graph over those blocks, then mix the output unit's buffer in
-            context.process(&ProcessInfo {blocks: blocks.as_slice()});
-            if let Some(buffer) = output_bus.as_ref() {
-                let buffer = buffer.borrow();
-                for index in 0..RENDER_QUANTUM {
-                    output[index] += buffer.left[index];
-                    output[RENDER_QUANTUM + index] += buffer.right[index];
-                }
+        } else {
+            // PAUSED: still process the graph for one free-running quantum (the song `position` is frozen, but
+            // the pulse range keeps ADVANCING) so the sequencer flushes its held notes into note-offs (its
+            // NON-playing pull triggers `release_all`), active voices go to release, and effect tails ring out,
+            // while no new notes are read. This mirrors the not-transporting branch of TS `BlockRenderer`, and
+            // avoids the click of an abrupt cut. The metronome stays silent (it only ticks on a moving block).
+            let paused = transport.render_paused();
+            blocks.push(Block {
+                index: 0,
+                flags: BlockFlags::create(false, false, false, false),
+                p0: paused.p0,
+                p1: paused.p1,
+                s0: paused.s0 as u32,
+                s1: paused.s1 as u32,
+                bpm: paused.bpm
+            });
+        }
+        // drive the processor graph over the quantum's blocks (advancing or static), then mix the output bus in
+        context.process(&ProcessInfo {blocks: blocks.as_slice()});
+        if let Some(buffer) = output_bus.as_ref() {
+            let buffer = buffer.borrow();
+            for index in 0..RENDER_QUANTUM {
+                output[index] += buffer.left[index];
+                output[RENDER_QUANTUM + index] += buffer.right[index];
             }
         }
         write_engine_state(transport, state);
@@ -812,8 +843,22 @@ impl Engine {
         self.transport.play()
     }
 
-    fn stop(&mut self) {
+    /// PAUSE: freeze the transport where it is, keeping all plugin / buffer state, so PLAY resumes seamlessly.
+    fn pause(&mut self) {
         self.transport.stop(false)
+    }
+
+    /// STOP: pause, rewind the transport to 0, and reset every plugin (drop voices, clear delay / reverb tails,
+    /// filter + detector state) and the bus / strip buffers, so PLAY starts clean. The output bus is zeroed so
+    /// no residual leaks into the final mix while stopped.
+    fn stop(&mut self) {
+        self.transport.stop(true);
+        self.context.reset_all();
+        if let Some(buffer) = self.output_bus.as_ref() {
+            let mut buffer = buffer.borrow_mut();
+            buffer.left.fill(0.0);
+            buffer.right.fill(0.0);
+        }
     }
 
     fn set_metronome_enabled(&mut self, enabled: bool) {
@@ -1013,11 +1058,11 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
     }
 }
 
-/// Initialize the engine for `sample_rate`: empty graph, a playing transport, and a metronome.
+/// Initialize the engine for `sample_rate`: empty graph, a STOPPED transport (the UI starts playback with
+/// `play`), and a metronome.
 #[no_mangle]
 pub extern "C" fn init(sample_rate: f32) {
-    let mut engine = Engine::new(sample_rate);
-    engine.play();
+    let engine = Engine::new(sample_rate);
     unsafe {
         *ENGINE.get() = Some(engine);
         INPUT.get().reserve(INPUT_CAPACITY); // pre-allocate the input scratch (len stays 0; this is capacity)
@@ -1039,6 +1084,15 @@ pub extern "C" fn play() {
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.play()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn pause() {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.pause()
         }
     }
 }
@@ -1090,10 +1144,10 @@ pub extern "C" fn device_alloc(size: u32) -> u32 {
 /// Returns the device id. Call once per device, before `bind` (which builds the graph and wires devices).
 #[no_mangle]
 #[allow(clippy::too_many_arguments)] // one positional arg per device export, matching the loader's call
-pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, midi_effects_field: u32, audio_effects_field: u32) -> u32 {
+pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32) -> u32 {
     unsafe {
         match ENGINE.get().as_mut() {
-            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, midi_effects_field, audio_effects_field),
+            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, reset_index, midi_effects_field, audio_effects_field),
             None => 0
         }
     }

@@ -44,6 +44,7 @@ type DeviceExports = {
     parameter_changed?: (statePtr: number, id: number, kind: number, value: number) => void
     field_changed?: (statePtr: number, id: number, kind: number, bits: number, len: number) => void
     sample_changed?: (statePtr: number, id: number, handle: number, present: number) => void
+    reset?: (statePtr: number) => void
     // The box field keys hosting this device's OWN midi / audio fx chains when it runs as a composite child
     // (e.g. a Playfield slot). Absent / 0 means the device hosts no chains of its own.
     midi_effects_field?: () => number
@@ -55,7 +56,7 @@ type DeviceExports = {
 type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
-    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number, fieldChangedIndex: number, sampleChangedIndex: number, midiEffectsField: number, audioEffectsField: number) => number
+    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number, fieldChangedIndex: number, sampleChangedIndex: number, resetIndex: number, midiEffectsField: number, audioEffectsField: number) => number
     // Map a device-box type to the just-registered device: the box-type UTF-8 name is written into the
     // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
     device_set_box_type: (deviceId: number, nameLen: number) => void
@@ -75,6 +76,10 @@ type EngineExports = {
     engine_state_ptr: () => number
     engine_state_len: () => number
     set_metronome_enabled: (enabled: number) => void
+    // Transport: `play` starts advancing, `pause` freezes (state kept), `stop` rewinds to 0 + resets all plugins.
+    play: () => void
+    pause: () => void
+    stop: () => void
     // A device imports this from `env`; the loader binds it so the device PULLS its own input events for a
     // pulse range (Route A), writing EventRecords into the descriptor scratch and returning the count.
     host_pull_events: (from: number, to: number, flags: number, outPtr: number, max: number) => number
@@ -190,6 +195,9 @@ class EngineProcessor extends AudioWorkletProcessor {
         const messenger = Messenger.for(this.port)
         Communicator.executor<EngineProtocol>(messenger.channel("engine"), new class implements EngineProtocol {
             applyUpdates(bytes: ArrayBuffer): void {processor.#applyUpdates(bytes)}
+            play(): void {processor.#engine?.play()}
+            pause(): void {processor.#engine?.pause()}
+            stop(): void {processor.#engine?.stop()}
         })
         this.#transport = Communicator.sender<TransportListener>(messenger.channel("transport"), dispatcher => new class implements TransportListener {
             state(bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.state, Communicator.makeTransferable(bytes))}
@@ -271,11 +279,12 @@ class EngineProcessor extends AudioWorkletProcessor {
         const parameterChangedIndex = this.#installOptional(device.parameter_changed)
         const fieldChangedIndex = this.#installOptional(device.field_changed)
         const sampleChangedIndex = this.#installOptional(device.sample_changed)
+        const resetIndex = this.#installOptional(device.reset)
         // These are plain field-key VALUES the device returns (like kind()), not table slots: call directly,
         // defaulting to 0 when the device hosts no fx chains of its own.
         const midiEffectsField = device.midi_effects_field?.() ?? 0
         const audioEffectsField = device.audio_effects_field?.() ?? 0
-        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind(), initIndex, parameterChangedIndex, fieldChangedIndex, sampleChangedIndex, midiEffectsField, audioEffectsField)
+        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind(), initIndex, parameterChangedIndex, fieldChangedIndex, sampleChangedIndex, resetIndex, midiEffectsField, audioEffectsField)
         // Register the device table entry: write the box-type name into the input buffer, then map it.
         // Box-type names are ASCII identifiers, so encode byte-per-char (no TextEncoder in the worklet scope).
         const length = boxType.length

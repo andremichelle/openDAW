@@ -25,6 +25,7 @@ export interface EngineHost {
     readonly log: HTMLPreElement  // the scrolling boot / sample log, rendered at the bottom of the page
     append(line: string): void
     play(): Promise<void>
+    pause(): Promise<void>
     stop(): Promise<void>
 }
 
@@ -35,6 +36,7 @@ export interface EngineHostOptions {
 
 export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle, options: EngineHostOptions): EngineHost => {
     const context = new MutableObservableOption<AudioContext>()
+    const engineRef = new MutableObservableOption<EngineProtocol>()
     const node = new MutableObservableOption<AudioWorkletNode>()
     const log: HTMLPreElement = <pre className="engine-log"/>
     const append = (line: string): void => {log.textContent = `${log.textContent ?? ""}${line}\n`}
@@ -59,6 +61,8 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         beatValue.textContent = (position / PPQN.Quarter + 1).toFixed(2)
         tempoValue.textContent = bpm.toFixed(1)
         transportValue.textContent = isPlaying ? "playing" : "stopped"
+        playButton.disabled = isPlaying
+        pauseButton.disabled = !isPlaying
     }
     const kb = (bytes: number): string => (bytes / 1024).toFixed(1)
     const showMemory = ({heapUsed, heapClaimed, memoryTotal}: HeapStats): void => {
@@ -66,23 +70,20 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         heapClaimedValue.textContent = kb(heapClaimed)
         memoryTotalValue.textContent = kb(memoryTotal)
     }
-    // The transport buttons actually toggle the AudioContext (suspend / resume), so they are labelled and gated
-    // by its real state: nothing to resume before boot, no double-resume while running.
-    const resumeButton: HTMLButtonElement = <button onclick={() => void play()}>Resume</button>
-    const suspendButton: HTMLButtonElement = <button onclick={() => void stop()}>Suspend</button>
+    // Real transport controls. Play also resumes the AudioContext (so the first Play un-suspends the audio),
+    // Pause freezes the position, Stop rewinds and resets every plugin + clears the buffers.
+    const playButton: HTMLButtonElement = <button onclick={() => void play()}>Play</button>
+    const pauseButton: HTMLButtonElement = <button onclick={() => void pause()}>Pause</button>
+    const stopButton: HTMLButtonElement = <button onclick={() => void stop()}>Stop</button>
     const showAudioState = (): void => {
         if (!context.nonEmpty()) {
             audioStateValue.textContent = "—"
-            resumeButton.disabled = true
-            suspendButton.disabled = true
             return
         }
         const {state} = context.unwrap()
         audioStateValue.textContent = state
         audioStateValue.classList.toggle("on", state === "running")
         led.classList.toggle("on", state === "running")
-        resumeButton.disabled = state === "running"
-        suspendButton.disabled = state !== "running"
     }
     const boot = async (): Promise<void> => {
         const ctx = new AudioContext()
@@ -106,7 +107,11 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         lifecycle.own(messenger)
         const engine = Communicator.sender<EngineProtocol>(messenger.channel("engine"), dispatcher => new class implements EngineProtocol {
             applyUpdates(bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.applyUpdates, Communicator.makeTransferable(bytes))}
+            play(): void {dispatcher.dispatchAndForget(this.play)}
+            pause(): void {dispatcher.dispatchAndForget(this.pause)}
+            stop(): void {dispatcher.dispatchAndForget(this.stop)}
         })
+        engineRef.wrap(engine)
         lifecycle.own(Communicator.executor<TransportListener>(messenger.channel("transport"), new class implements TransportListener {
             state(bytes: ArrayBuffer): void {showState(bytes)}
         }))
@@ -164,11 +169,17 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         await ctx.suspend()
         append(`booted @ ${ctx.sampleRate} Hz — suspended`)
     }
+    // Real transport. `play` also resumes the AudioContext (browsers start it suspended, needing a gesture);
+    // `pause` / `stop` leave the audio running so playback can resume instantly. `stop` rewinds + resets plugins.
     const play = async (): Promise<void> => {
         if (context.nonEmpty()) {await context.unwrap().resume()}
+        engineRef.ifSome(engine => engine.play())
+    }
+    const pause = async (): Promise<void> => {
+        engineRef.ifSome(engine => engine.pause())
     }
     const stop = async (): Promise<void> => {
-        if (context.nonEmpty()) {await context.unwrap().suspend()}
+        engineRef.ifSome(engine => engine.stop())
     }
     lifecycle.own({
         terminate: () => {
@@ -180,7 +191,7 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         <div className="engine-panel">
             <div className="engine-transport">
                 <div className="engine-id">{led}<span className="engine-title">Engine</span></div>
-                <div className="engine-buttons">{resumeButton}{suspendButton}</div>
+                <div className="engine-buttons">{playButton}{pauseButton}{stopButton}</div>
             </div>
             <div className="engine-readout">
                 <div className="engine-grid">
@@ -200,5 +211,5 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
     )
     showAudioState()
     void boot()
-    return {element, log, append, play, stop}
+    return {element, log, append, play, pause, stop}
 }

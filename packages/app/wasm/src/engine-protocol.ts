@@ -2,9 +2,14 @@
 // own named channel (a channel carries a single sender -> executor direction). The sample-load RPC lives in
 // sample-loader.ts.
 
-// main -> worklet: stream the SyncSource's serialized transaction bytes into the engine's box graph.
+// main -> worklet: stream the SyncSource's serialized transaction bytes into the engine's box graph, and the
+// transport controls. `play` starts the transport, `pause` freezes it (state kept), `stop` rewinds to 0 and
+// resets every plugin + clears the buffers.
 export interface EngineProtocol {
     applyUpdates(bytes: ArrayBuffer): void
+    play(): void
+    pause(): void
+    stop(): void
 }
 
 // worklet -> main: the ~30 Hz transport-state back-channel (position / bpm / playing), raw EngineState bytes.

@@ -152,6 +152,13 @@ impl AudioEffect for Gate {
             state.inverse = bool_value(value);
         }
     }
+
+    fn reset(state: &mut GateState) {
+        state.envelope = 0.0;
+        state.inp_max = 0.0;
+        state.gate_open = false;
+        state.hold_counter = 0.0;
+    }
 }
 
 impl Gate {
@@ -228,6 +235,12 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Gate as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Transport STOP: clear the detector / envelope so the gate starts closed and silent next playback.
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, |state| <Gate as AudioEffect>::reset(state)) }
 }
 
 #[cfg(test)]

@@ -665,6 +665,13 @@ pub trait Instrument {
     fn process_audio(state: &mut Self::State, output: [&mut [f32]; 2], block: &Block);
     /// Apply one note event (on / off) at its sample offset.
     fn handle_event(state: &mut Self::State, event: &EventRecord);
+    /// Reset the device's RUNTIME state to silence on a transport STOP: drop every active voice, clear
+    /// envelopes / read heads / filter history, so the next playback starts clean. Keep the bindings (the param
+    /// / sample / field ids and the resolved parameter values, the sample rate) — only the sounding state is
+    /// cleared. Called outside render, never during `process`. Default: nothing.
+    fn reset(state: &mut Self::State) {
+        let _ = state;
+    }
     /// Register this device's automatable parameters with the host via [`bind_parameter`], stashing the
     /// returned ids in `state`. Called once when the device is wired, also receiving the engine's `sample_rate` (stable for the device's life; stash it if the DSP needs it). Default: nothing (no params).
     fn init(state: &mut Self::State, sample_rate: f32) {
@@ -811,10 +818,14 @@ pub trait AudioEffect {
     fn parameter_changed(state: &mut Self::State, id: u32, value: ParamValue) {
         let _ = (state, id, value);
     }
+    /// Reset the effect's RUNTIME state to silence on a transport STOP: clear delay lines / reverb tails /
+    /// filter history / detector + envelope state, so the next playback starts clean. Keep the bindings (param
+    /// ids, resolved values, sample rate). Called outside render, never during `process`. Default: nothing.
+    fn reset(state: &mut Self::State) {
+        let _ = state;
+    }
 }
 
-/// The most sidechains an effect's `process_audio` receives per call; declared sidechains beyond this are
-/// dropped (no real effect needs more, and the slice stays on the stack).
 /// The per-quantum effect path a device calls from `process`: run the effect PER BLOCK, and within each block
 /// split the sample range at the engine's update positions (Route D) — `process_audio` for the chunk before
 /// each, refresh the parameters there — the TS `AudioProcessor` loop, with the split points from

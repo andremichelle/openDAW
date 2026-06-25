@@ -20,7 +20,7 @@ use engine_env::process_info::ProcessInfo;
 use engine_env::processor::Processor;
 use transport::transport::RENDER_QUANTUM;
 use crate::param_automation::{ParamHandle, ParamSink};
-use crate::{call_device_process, DeviceReg, INPUTS, PULL};
+use crate::{call_device_process, call_device_reset, DeviceReg, INPUTS, PULL};
 
 /// A graph node that runs an audio-EFFECT device after an upstream node (Route B). It reads the upstream's
 /// stereo output (both channels) through the device, into the engine-allocated stereo output, then copies
@@ -29,6 +29,7 @@ use crate::{call_device_process, DeviceReg, INPUTS, PULL};
 /// Pulls the global update clock through `PULL` when it has automation. All device memory is talc-allocated.
 pub(crate) struct PluginAudioEffect {
     process_index: u32,
+    reset_index: u32,
     sample_rate: f32,
     events: EventBuffer, // unused here (the device PULLS its events) but required by `Processor: EventReceiver`
     // This effect's bound parameters, swapped into `PULL` for the device call so `host_update_parameters`
@@ -85,6 +86,7 @@ impl PluginAudioEffect {
         ].into_boxed_slice();
         Self {
             process_index: device.process_index,
+            reset_index: device.reset_index,
             sample_rate,
             events: EventBuffer::new(),
             params: Vec::new(),
@@ -151,7 +153,11 @@ impl AudioGenerator for PluginAudioEffect {
 }
 
 impl Processor for PluginAudioEffect {
-    fn reset(&mut self) {}
+    fn reset(&mut self) {
+        // Transport STOP: clear the device's runtime state (delay lines, filter history, detector / envelope),
+        // keeping its bindings. Also drop the buffered input residual.
+        call_device_reset(self.reset_index, self.device_state.as_ptr() as u32);
+    }
 
     fn process(&mut self, info: &ProcessInfo) {
         // Point the descriptor straight at the engine's per-quantum block array (shared wire type, in

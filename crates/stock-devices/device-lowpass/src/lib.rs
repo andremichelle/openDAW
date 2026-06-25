@@ -89,6 +89,11 @@ impl AudioEffect for Lowpass {
         let [out_left, out_right] = output;
         Lowpass::dsp(state, in_left, in_right, out_left, out_right, block.s0 as usize, block.s1 as usize);
     }
+
+    fn reset(state: &mut LowpassState) {
+        state.biquads[0].reset();
+        state.biquads[1].reset();
+    }
 }
 
 impl Lowpass {
@@ -134,6 +139,11 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 
 /// Apply a parameter value the host resolved (initial / edit / automation), by the id `init` got back. The
 /// `kind` tag tells the SDK how to type the f32 `value` into a `ParamValue` (uniform to map, or a real Hz/Q).
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, |state| <Lowpass as AudioEffect>::reset(state)) }
+}
+
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Lowpass as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
