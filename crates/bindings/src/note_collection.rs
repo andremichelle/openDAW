@@ -39,6 +39,12 @@ impl State {
     }
 
     fn upsert(&mut self, graph: &BoxGraph, note_uuid: Uuid) {
+        // The per-note edit monitor is `Parent` on the note box, so it also fires when the box is DELETED
+        // (its own deletion is an update at its address). The box is gone by dispatch time, so reading its
+        // mandatory fields would panic — skip; the hub `Removed` that follows drops the note from the set.
+        if graph.find_box(&note_uuid).is_none() {
+            return;
+        }
         let note = read_note_event(graph, note_uuid);
         if let Some(previous) = self.index.insert(note_uuid, note) {
             self.events.remove(&previous);

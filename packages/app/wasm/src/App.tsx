@@ -11,6 +11,7 @@ import {MultiplePluginsPage} from "./pages/multiple-plugins/MultiplePluginsPage"
 import {CompositePage} from "./pages/composite/CompositePage"
 import {TidalPage} from "./pages/tidal/TidalPage"
 import {LoadFilePage} from "./pages/load-file/LoadFilePage"
+import {SyncLogPage} from "./pages/sync-log/SyncLogPage"
 
 export const App = () => {
     const runtime = new Terminator()
@@ -28,6 +29,7 @@ export const App = () => {
                 <LocalLink href="/composite">Composite</LocalLink>
                 <LocalLink href="/tidal">Tidal</LocalLink>
                 <LocalLink href="/load-file">Load File</LocalLink>
+                <LocalLink href="/sync-log">Sync Log</LocalLink>
             </nav>
             <main>
                 <Router
@@ -43,7 +45,8 @@ export const App = () => {
                         {path: "/multiple-plugins", factory: MultiplePluginsPage},
                         {path: "/composite", factory: CompositePage},
                         {path: "/tidal", factory: TidalPage},
-                        {path: "/load-file", factory: LoadFilePage}
+                        {path: "/load-file", factory: LoadFilePage},
+                        {path: "/sync-log", factory: SyncLogPage}
                     ]}
                     fallback={() => <div className="page"><h2>404</h2></div>}/>
             </main>

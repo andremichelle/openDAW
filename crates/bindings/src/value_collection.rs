@@ -60,6 +60,12 @@ impl State {
     /// event's interpolation INCLUDING any attached curve box's slope, so an upsert always reflects the
     /// current curve.
     fn upsert(&mut self, graph: &BoxGraph, event_uuid: Uuid) {
+        // The per-event `Parent` monitor (and a curve box's monitor) can fire when the event box is being
+        // DELETED; it is gone by dispatch time, so reading its mandatory fields would panic — skip. The hub
+        // `Removed` that follows drops the event from the set.
+        if graph.find_box(&event_uuid).is_none() {
+            return;
+        }
         let value_event = read_value_event(graph, event_uuid);
         if let Some(previous) = self.index.insert(event_uuid, value_event) {
             self.events.remove(&previous);
