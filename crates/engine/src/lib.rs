@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell, UnsafeCell};
 use bindings::indexed_collection::IndexedCollection;
 use bindings::value_collection::ValueCollection;
-use boxgraph::address::Address;
+use boxgraph::address::{Address, Uuid};
 use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
@@ -196,7 +196,7 @@ mod plugin_audio_effect;
 mod plugin_midi_effect;
 use plugin_midi_effect::PluginMidiEffect; // named in the PullLink::MidiFx variant defined here
 mod audio_unit;
-use audio_unit::{AudioUnitBinding, DeviceParams, Members, PendingSidechain};
+use audio_unit::{AudioUnitBinding, DeviceParams, Members};
 mod composite;
 mod param_automation;
 use param_automation::ParamHandle;
@@ -669,13 +669,13 @@ struct Engine {
     master_id: NodeId,
     audio_units: Vec<AudioUnitBinding>, // one per connected AudioUnitBox, maintained reactively
     unit_changes: Rc<RefCell<Members>>, // recorded by the audio-units membership observer, drained by reconcile
+    dirty_units: Rc<RefCell<Vec<Uuid>>>, // unit uuids a related edit touched; reconcile rewires ONLY these, not all
     output_audio: Option<IndexedCollection>, // THE output unit's audio-fx chain (built once at bind, see output_strip)
     output_device_params: Vec<DeviceParams>, // the output-fx devices' bound params, retained so they stay observed
     // The audio-output registry (Route C): each unit's strip output keyed by its box address, so a sidechain
-    // pointer resolves to the buffer to read and the node to depend on. `pending_sidechains` collects each
-    // effect's declared sidechain ports during a rewire; they are resolved once all units are (re)built.
+    // pointer resolves to the buffer to read and the node to depend on. Each unit keeps its own persistent
+    // sidechain bindings (see `AudioUnitBinding::sidechains`); the resolve pass re-resolves them per reconcile.
     output_registry: AudioOutputBufferRegistry<NodeId>,
-    pending_sidechains: Vec<PendingSidechain>,
     sample_rate: f32,
     blocks: Vec<Block>,
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
@@ -699,10 +699,10 @@ impl Engine {
             master_id: 0,
             audio_units: Vec::new(),
             unit_changes: Rc::new(RefCell::new(Members::default())),
+            dirty_units: Rc::new(RefCell::new(Vec::new())),
             output_audio: None,
             output_device_params: Vec::new(),
             output_registry: AudioOutputBufferRegistry::new(),
-            pending_sidechains: Vec::new(),
             sample_rate,
             blocks: Vec::new(),
             devices: Vec::new(),
@@ -945,7 +945,7 @@ impl Engine {
         for file in self.graph.find_all_by_name("AudioFileBox") {
             unsafe { SAMPLES.get() }.request(file.uuid);
         }
-        self.graph.subscribe_all(Box::new(|_graph, update| {
+        self.graph.subscribe_box_lifecycle(Box::new(|_graph, update| {
             match update {
                 Update::New {uuid, name, ..} if name == "AudioFileBox" => {
                     unsafe { SAMPLES.get() }.request(*uuid);

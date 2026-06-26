@@ -15,7 +15,7 @@ use value::value::{Interpolation, ValueEvent};
 pub const COLLECTION_EVENTS: u16 = 1; // ValueEventCollectionBox.events (hub)
 const EVENT_POSITION: u16 = 10; // ValueEventBox.position (Int32 pulses)
 const EVENT_INDEX: u16 = 11; // ValueEventBox.index (Int32)
-const EVENT_INTERPOLATION: u16 = 12; // ValueEventBox.interpolation (Int32: 0 none, 1 linear)
+pub const EVENT_INTERPOLATION: u16 = 12; // ValueEventBox.interpolation (Int32: 0 none, 1 linear); curve pointers attach here
 const EVENT_VALUE: u16 = 13; // ValueEventBox.value (Float32)
 const CURVE_EVENT: u16 = 1; // ValueEventCurveBox.event (pointer at an event's interpolation field)
 const CURVE_SLOPE: u16 = 2; // ValueEventCurveBox.slope (Float32)

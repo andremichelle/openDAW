@@ -25,7 +25,6 @@ use bindings::value_collection::ValueCollection;
 use boxgraph::address::{Address, Uuid};
 use boxgraph::graph::BoxGraph;
 use boxgraph::subscription::{HubEvent, Propagation, SubscriptionId};
-use boxgraph::updates::Update;
 use engine_env::audio_buffer::SharedAudioBuffer;
 use engine_env::audio_generator::AudioGenerator;
 use engine_env::audio_input::AudioInput;
@@ -44,6 +43,40 @@ use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::composite::CompositeBinding;
 use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SIDECHAIN_BIND, EFFECT_INDEX_KEY};
+
+/// The handle a unit's subscriptions use to enqueue THAT unit for reconcile when its scope changes, so a
+/// related edit reconciles one unit instead of sweeping all units (the Rust analog of TS's per-unit
+/// `invalidateWiring`). `units` is the engine's shared `dirty_units` queue; `unit` is this unit's uuid.
+#[derive(Clone)]
+pub(crate) struct DirtyMark {
+    units: Rc<RefCell<Vec<Uuid>>>,
+    unit: Uuid
+}
+
+impl DirtyMark {
+    /// Enqueue this unit (de-duplicated) for the next reconcile.
+    fn mark(&self) {
+        let mut units = self.units.borrow_mut();
+        if !units.contains(&self.unit) {
+            units.push(self.unit);
+        }
+    }
+
+    /// A bare `Fn()` form for the binders (`IndexedCollection`, composite) that take an opaque dirty signal.
+    fn signal(&self) -> Rc<dyn Fn()> {
+        let mark = self.clone();
+        Rc::new(move || mark.mark())
+    }
+}
+
+/// The signal a unit's PARAMETER subscriptions fire when automation attaches / detaches / edits: set the
+/// unit's `automation_dirty` flag and enqueue the unit, so `reconcile_one` re-binds its automation (no
+/// rewire). Distinct from `DirtyMark::signal` (chain / sidechain), which only enqueues.
+fn automation_invalidate(unit: &AudioUnitBinding) -> Rc<dyn Fn()> {
+    let dirty = unit.automation_dirty.clone();
+    let mark = unit.mark.clone();
+    Rc::new(move || {dirty.set(true); mark.mark();})
+}
 
 /// One bound note region: its loopable span plus a shared handle to its `NoteEventCollection` (the cache's
 /// canonical observation — see `CollectionCache`). Keyed by uuid so the region cascade can remove it.
@@ -141,23 +174,24 @@ pub(crate) struct Members {
     pub(crate) removed: Vec<Uuid>
 }
 
-/// One bound note region in the cascade: its uuid (its entry in the track's region collection) and the
-/// collection it references (so the cache ref can be released when the region leaves).
+/// One bound note region in the cascade: its uuid (its entry in the track's region collection), the
+/// collection it references (so the cache ref can be released when the region leaves), and a TARGETED
+/// `Parent` subscription on the region box that re-sorts the track when this region's own span is edited.
 struct RegionBinding {
     region_uuid: Uuid,
-    collection_uuid: Uuid
+    collection_uuid: Uuid,
+    edit_sub: SubscriptionId
 }
 
-/// A track BINDING: owns this track's sorted region collection (`regions_set`, shared with the sequencer),
-/// observes its `regions` membership (add / remove), and re-sorts the collection when a member region's
-/// span (position / duration / loop) is edited (`edit_sub`).
+/// A track BINDING: owns this track's sorted region collection (`regions_set`, shared with the sequencer)
+/// and observes its `regions` membership (add / remove). A member region's span edit is observed per-region
+/// (see `RegionBinding`), so no track-wide listener is needed.
 struct TrackBinding {
     track_uuid: Uuid,
     regions_set: SharedTrackRegions,
     region_bindings: Vec<RegionBinding>,
     region_changes: Rc<RefCell<Members>>,
-    region_sub: SubscriptionId,
-    edit_sub: SubscriptionId
+    region_sub: SubscriptionId
 }
 
 /// The processor nodes + edges the engine wired for one unit (its teardown set, the analog of TS
@@ -184,7 +218,7 @@ pub(crate) struct BuiltCluster {
     pub(crate) nodes: Vec<NodeId>,
     pub(crate) edges: Vec<(NodeId, NodeId)>,
     pub(crate) device_params: Vec<DeviceParams>,
-    pub(crate) device_uuids: Vec<Uuid>
+    pub(crate) sidechains: Vec<SidechainBinding> // sidechain bindings collected from this cluster's audio fx
 }
 
 /// One device's bound parameters: enough to re-observe and re-push them on a runtime automation change. The
@@ -204,14 +238,26 @@ pub(crate) struct DeviceParams {
     sidechain_paths: Vec<Vec<u16>> // the audio effect's declared sidechain pointer paths (`bind_sidechain`), in order
 }
 
-/// A composite-graph edge to wire AFTER all units are (re)built: an audio effect that declared sidechain ports,
-/// the node it became, and the pointer paths to resolve. The engine collects these during a rewire and resolves
-/// them once every unit's output is registered (so a sidechain may target ANY unit, regardless of build order).
-pub(crate) struct PendingSidechain {
+/// A persistent sidechain binding kept by the owning unit: an audio effect that declared sidechain ports, the
+/// node it became, and one `SidechainPort` per declared pointer. Unlike a one-shot resolve, this survives so
+/// the resolution pass can RE-resolve every reconcile that did work — handling re-pointing, detach, a source
+/// unit (re)building, and build order, all by diffing each port's current target against `resolved`.
+pub(crate) struct SidechainBinding {
     pub(crate) effect: Rc<RefCell<PluginAudioEffect>>,
     pub(crate) node_id: NodeId,
     pub(crate) device_uuid: Uuid,
-    pub(crate) ports: Vec<(u32, Vec<u16>)> // (port id, pointer path) still to resolve; resolved ports are removed
+    pub(crate) ports: Vec<SidechainPort>
+}
+
+/// One declared sidechain port: its id (2+), the device-relative pointer path to follow, the source node it
+/// is currently wired to (`None` = unresolved, kept so the resolve pass can diff + tear down the old edge),
+/// and a TARGETED `This` monitor on the device's sidechain pointer field so a re-point / detach enqueues the
+/// owning unit (no all-updates listener).
+pub(crate) struct SidechainPort {
+    pub(crate) port_id: u32,
+    pub(crate) path: Vec<u16>,
+    pub(crate) resolved: Option<NodeId>,
+    pub(crate) pointer_sub: SubscriptionId
 }
 
 /// Where bound parameters are pushed: an audio node (instrument / audio-fx, mutated through its
@@ -255,13 +301,16 @@ pub(crate) struct AudioUnitBinding {
     // `take_dirty`, so the unit re-wires; teardown terminates it. The engine knows nothing else about it.
     composite: Option<CompositeBinding>,
     wired: Option<WiredCluster>,
-    // Runtime automation reactivity. `device_uuids` is the unit's automatable device boxes (instrument +
-    // audio-fx), kept in sync by `rewire_unit`; `automation_sub` is an all-updates observer that sets
-    // `automation_dirty` when a Value track attaches / detaches a parameter of one of them, or a value
-    // region's track membership changes. `reconcile_units` then re-binds the unit's curves (no rewire).
-    device_uuids: Rc<RefCell<Vec<Uuid>>>,
+    // Set by a parameter's TARGETED automation subscriptions (see `observe_params` / `automation_invalidate`)
+    // when a Value track attaches / detaches or its data changes; `reconcile_one` then re-binds the unit's
+    // curves (no rewire) and clears it.
     automation_dirty: Rc<Cell<bool>>,
-    automation_sub: SubscriptionId
+    // Enqueues THIS unit for a targeted reconcile when any of its scope subscriptions (chains, tracks,
+    // regions, automation, composite, sidechain pointers) fire — so a related edit rewires one unit.
+    mark: DirtyMark,
+    // The unit's persistent sidechain bindings (this unit's audio fx + its composite children's), re-resolved
+    // by the resolve pass. Each port carries its own TARGETED pointer monitor (see `SidechainPort`).
+    sidechains: Vec<SidechainBinding>
 }
 
 impl Engine {
@@ -328,6 +377,9 @@ impl Engine {
         let mut source_id = self.master_id;
         let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), EFFECT_INDEX_KEY);
         let mut device_params: Vec<DeviceParams> = Vec::new();
+        // THE output unit is a fixed singleton built once at bind, not reconciled, so its parameters need no
+        // runtime re-bind: a no-op invalidate (its static values are pushed by `refresh_params` below).
+        let noop: Rc<dyn Fn()> = Rc::new(|| {});
         for device_uuid in audio.sorted() {
             let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
             let device = match resolved {
@@ -337,7 +389,7 @@ impl Engine {
             let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
             let node_state = node.borrow().state_ptr();
             let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
-            device_params.push(self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink)));
+            device_params.push(self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink), &noop));
             node.borrow_mut().set_audio_source(source);
             source = node.borrow().audio_output();
             let node_id = self.context.register_processor(node);
@@ -358,15 +410,19 @@ impl Engine {
         strip_output
     }
 
-    /// Apply recorded membership changes top-down: tear down / build audio units, CASCADE into each unit's
-    /// tracks and regions, then RE-WIRE only the units whose device chains changed. Called on bind (catch-up)
-    /// and after every transaction; with nothing changed it is a cheap no-op (the per-unit dirty flags gate
-    /// the rewire), so a unit's wiring stays stable until the user edits its scope.
+    /// Apply a transaction's recorded changes: tear down / build audio units whose MEMBERSHIP changed, then
+    /// reconcile ONLY the units a related edit touched (each subscription enqueues its own unit into
+    /// `dirty_units` via `DirtyMark`, mirroring TS's per-unit `invalidateWiring`). Called on bind (catch-up)
+    /// and after every transaction; a transaction that touched no unit drains nothing, so it is a true no-op
+    /// instead of a sweep over every unit and track.
     pub(crate) fn reconcile_units(&mut self) {
         if self.master.is_none() {
             return;
         }
         let changes = core::mem::take(&mut *self.unit_changes.borrow_mut());
+        // A membership change is structural: a unit appearing / disappearing can resolve or strand a sidechain
+        // pointing at it, so the resolve pass must run even if no unit was otherwise enqueued.
+        let structural = !changes.added.is_empty() || !changes.removed.is_empty();
         for uuid in changes.removed {
             if let Some(index) = self.audio_units.iter().position(|binding| binding.unit == uuid) {
                 let binding = self.audio_units.remove(index);
@@ -381,58 +437,86 @@ impl Engine {
                 continue; // THE output unit is a fixed singleton, wired statically at bind (see `output_strip`)
             }
             let binding = self.build_unit(uuid);
+            binding.mark.mark(); // a new unit reconciles itself once (wires its instrument even with no tracks)
             self.audio_units.push(binding);
         }
-        // Take the bindings out so the per-unit work can borrow `&mut self` (graph, context, master) without
-        // aliasing `self.audio_units`. Cascade the tracks -> regions, then re-wire any unit whose device
-        // chains (input / midi / audio) reported dirty — using `|` so all three dirty flags are consumed.
+        // Reconcile only the enqueued units. Take the bindings out so each unit's work can borrow `&mut self`
+        // (graph, context, master) without aliasing `self.audio_units`. A rewire's composite catch-up cannot
+        // re-enqueue (its signal is wired after the catch-up is consumed), so one drain suffices.
+        let dirty = core::mem::take(&mut *self.dirty_units.borrow_mut());
+        let did_work = structural || !dirty.is_empty();
+        if !dirty.is_empty() {
+            let mut units = core::mem::take(&mut self.audio_units);
+            for uuid in dirty {
+                if let Some(unit) = units.iter_mut().find(|binding| binding.unit == uuid) {
+                    self.reconcile_one(unit);
+                }
+            }
+            self.audio_units = units;
+        }
+        // Every unit's output is now (re)registered, so re-resolve all sidechains — but ONLY if this reconcile
+        // did work (a membership change or an enqueued unit, e.g. a sidechain pointer re-point marks its unit).
+        // An idle transaction skips it entirely. The pass itself is diff-based, so it no-ops per unchanged port.
+        if did_work {
+            self.resolve_sidechains();
+        }
+    }
+
+    /// Reconcile ONE unit (it was enqueued because a related edit touched its scope): cascade its tracks ->
+    /// regions, then re-wire if a device chain or its composite changed (`|` so all dirty flags are consumed),
+    /// else re-bind its automation curves if those attached / detached. A full rewire re-gathers automation,
+    /// so it also clears that flag.
+    fn reconcile_one(&mut self, unit: &mut AudioUnitBinding) {
+        reconcile_tracks(&mut self.graph, unit);
+        let composite_dirty = unit.composite.as_ref().is_some_and(|composite| composite.take_dirty());
+        let dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty() | composite_dirty;
+        if dirty {
+            self.rewire_unit(unit);
+        } else if unit.automation_dirty.get() {
+            self.rebind_automation(unit);
+            unit.automation_dirty.set(false);
+        }
+    }
+
+    /// Re-resolve EVERY unit's sidechain bindings against the current graph, diff-based so it is a no-op when
+    /// nothing moved. For each declared port: follow the device pointer to its target box, look that box's
+    /// output up in the registry, and if the source NODE differs from what is wired, swap the producer ->
+    /// consumer edge. Then, if any port changed, rebuild the effect's sidechain set from the currently-resolved
+    /// ports. An unresolved port (pointer unset / target not built / target gone) clears its edge and is absent
+    /// from the rebuilt set, so the device falls back to MAIN. This one pass handles re-pointing, detach, a
+    /// source unit (re)building with a new buffer, and load build order uniformly. Run only when a reconcile
+    /// did work (a membership change or an enqueued unit), so an idle transaction does nothing here.
+    fn resolve_sidechains(&mut self) {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
-            reconcile_tracks(&mut self.graph, unit);
-            let composite_dirty = unit.composite.as_ref().is_some_and(|composite| composite.take_dirty());
-            let dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty() | composite_dirty;
-            if dirty {
-                self.rewire_unit(unit); // a full rewire re-gathers automation, so it also clears the flag
-            } else if unit.automation_dirty.get() {
-                self.rebind_automation(unit); // automation attached / detached: re-bind curves, no rewire
-                unit.automation_dirty.set(false);
+            for binding in &mut unit.sidechains {
+                let mut changed = false;
+                let mut sources: Vec<(u32, SharedAudioBuffer)> = Vec::new();
+                for port in &mut binding.ports {
+                    let target = self.graph.target_of(&Address::of(binding.device_uuid, port.path.clone())).cloned();
+                    let resolution = target.and_then(|target| self.output_registry.resolve(&Address::of(target.uuid, vec![]))
+                        .map(|output| (output.processor, output.buffer.clone())));
+                    let source_node = resolution.as_ref().map(|(node, _)| *node);
+                    if source_node != port.resolved {
+                        if let Some(old) = port.resolved {
+                            self.context.remove_edge(old, binding.node_id);
+                        }
+                        if let Some(new) = source_node {
+                            self.context.register_edge(new, binding.node_id);
+                        }
+                        port.resolved = source_node;
+                        changed = true;
+                    }
+                    if let Some((_, buffer)) = resolution {
+                        sources.push((port.port_id, buffer));
+                    }
+                }
+                if changed {
+                    binding.effect.borrow_mut().set_sidechains(&sources);
+                }
             }
         }
         self.audio_units = units;
-        // Every unit's output is now registered, so resolve the sidechains collected during the rewires: for
-        // each declared port, find the pointer's target unit, look up its output, hand the effect the buffer and
-        // add a producer -> consumer edge so the topsort computes the source first.
-        self.resolve_sidechains();
-    }
-
-    /// Resolve the sidechain ports collected during the rewires. For each effect's declared pointer, `target_of`
-    /// the pointer, normalise to the target BOX address (mirroring the TS `box.address`), look its output up in
-    /// the registry, and if found feed the effect that buffer at its port and order the source before it. A port
-    /// whose pointer is unset OR whose target unit is not built yet stays PENDING and is retried on the next
-    /// reconcile, so a sidechain resolves regardless of the order units stream in during a project load.
-    fn resolve_sidechains(&mut self) {
-        let pending = core::mem::take(&mut self.pending_sidechains);
-        let mut still_pending = Vec::new();
-        for mut entry in pending {
-            let mut unresolved = Vec::new();
-            for (port_id, path) in core::mem::take(&mut entry.ports) {
-                let target = self.graph.target_of(&Address::of(entry.device_uuid, path.clone())).cloned();
-                let output = target.and_then(|target| self.output_registry.resolve(&Address::of(target.uuid, vec![]))
-                    .map(|output| (output.buffer.clone(), output.processor)));
-                match output {
-                    Some((buffer, source_node)) => {
-                        entry.effect.borrow_mut().set_sidechain(port_id, buffer);
-                        self.context.register_edge(source_node, entry.node_id);
-                    }
-                    None => unresolved.push((port_id, path)) // pointer unset or target not built yet: retry next reconcile
-                }
-            }
-            if !unresolved.is_empty() {
-                entry.ports = unresolved;
-                still_pending.push(entry);
-            }
-        }
-        self.pending_sidechains = still_pending;
     }
 
     /// Remove a unit entirely: drop its wired cluster (edges, nodes, bus source), unsubscribe its tracks
@@ -442,8 +526,8 @@ impl Engine {
             self.teardown_wired(&wired);
             self.teardown_device_params(wired.device_params);
         }
+        self.teardown_sidechains(core::mem::take(&mut binding.sidechains));
         self.graph.unsubscribe(binding.track_sub);
-        self.graph.unsubscribe(binding.automation_sub);
         for sub in &binding.strip_subs {
             self.graph.unsubscribe(*sub);
         }
@@ -456,6 +540,16 @@ impl Engine {
         binding.audio.terminate(&mut self.graph);
         if let Some(composite) = binding.composite {
             composite.terminate(&mut self.graph);
+        }
+    }
+
+    /// Drop a unit's sidechain bindings: unsubscribe each port's TARGETED pointer monitor. The resolved
+    /// producer -> consumer edges are removed with the effect nodes by `teardown_wired`.
+    fn teardown_sidechains(&mut self, sidechains: Vec<SidechainBinding>) {
+        for binding in sidechains {
+            for port in binding.ports {
+                self.graph.unsubscribe(port.pointer_sub);
+            }
         }
     }
 
@@ -487,14 +581,17 @@ impl Engine {
     /// `index` (field 2). No processor nodes yet; the first `reconcile` rewires it (the collections are dirty
     /// from catch-up). No per-device-type logic: the device table (`device_for_type`) maps each box to its plugin.
     fn build_unit(&mut self, uuid: Uuid) -> AudioUnitBinding {
+        let mark = DirtyMark {units: self.dirty_units.clone(), unit: uuid};
         let track_sets: SharedTrackSets = Rc::new(RefCell::new(Vec::new()));
         let track_changes = Rc::new(RefCell::new(Members::default()));
         let recorder = track_changes.clone();
+        let track_mark = mark.clone();
         let track_sub = self.graph.subscribe_pointer_hub(Address::of(uuid, vec![20]), Box::new(move |_graph, event| {
             match event {
                 HubEvent::Added(source) => recorder.borrow_mut().added.push(source.uuid),
                 HubEvent::Removed(source) => recorder.borrow_mut().removed.push(source.uuid)
             }
+            track_mark.mark();
         }));
         // The instrument `input` host holds ONE instrument, which has no `index` field (only effects do). So it
         // is never ordered: key `0` is a non-field, read back as 0 for every member, and the collection is used
@@ -502,6 +599,11 @@ impl Engine {
         let input = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![22]), 0);
         let midi = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![21]), EFFECT_INDEX_KEY);
         let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), EFFECT_INDEX_KEY);
+        // A chain edit (add / remove / reorder a device) enqueues this unit for a targeted reconcile. Wired
+        // after `observe` so the catch-up members do not fire it; the new unit enqueues itself once below.
+        input.set_on_dirty(mark.signal());
+        midi.set_on_dirty(mark.signal());
+        audio.set_on_dirty(mark.signal());
         // The channel strip's parameters, kept in sync with the unit's box: volume (12, dB), panning (13),
         // mute (14). Reactive but no rewire needed — the strip reads these Cells each block.
         let strip_params = Rc::new(StripParams::new());
@@ -517,25 +619,16 @@ impl Engine {
         let mute_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![14]), move |value| {
             if let Some(value) = value.as_bool() { mute.mute.set(value) }
         });
-        // Runtime automation observer: flag when a structural automation change touches one of this unit's
-        // devices (filled by `rewire_unit`). Once flagged it short-circuits until `reconcile_units` re-binds.
-        let device_uuids: Rc<RefCell<Vec<Uuid>>> = Rc::new(RefCell::new(Vec::new()));
+        // Automation reactivity is per-parameter and TARGETED (see `observe_params`): each parameter's field
+        // value, its automation pointer-hub, and its track's region hub fire `automation_invalidate`, which
+        // sets this flag + enqueues the unit, so `reconcile_one` re-binds the unit's curves (no rewire). No
+        // per-unit all-updates observer.
         let automation_dirty = Rc::new(Cell::new(false));
-        let dirty_flag = automation_dirty.clone();
-        let observed = device_uuids.clone();
-        let automation_sub = self.graph.subscribe_all(Box::new(move |graph, update| {
-            if dirty_flag.get() {
-                return;
-            }
-            let devices = observed.borrow();
-            if touches_unit_automation(graph, update, &devices) {
-                dirty_flag.set(true);
-            }
-        }));
         AudioUnitBinding {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
-            input, midi, audio, composite: None, wired: None, device_uuids, automation_dirty, automation_sub
+            input, midi, audio, composite: None, wired: None, automation_dirty, mark,
+            sidechains: Vec::new()
         }
     }
 
@@ -549,6 +642,7 @@ impl Engine {
             self.teardown_wired(&wired);
             self.teardown_device_params(wired.device_params);
         }
+        self.teardown_sidechains(core::mem::take(&mut unit.sidechains)); // drop the old ports' pointer monitors
         let instrument_uuid = match unit.input.sorted().first().copied() {
             Some(uuid) => uuid,
             None => {
@@ -563,6 +657,11 @@ impl Engine {
                 return
             }
         };
+        // Enqueues this unit when a chain / child / sidechain pointer of its scope changes (the targeted
+        // subscriptions' notify), plus the parameter `invalidate` (which also sets `automation_dirty`).
+        // Both threaded through the whole cluster build.
+        let signal = unit.mark.signal();
+        let invalidate = automation_invalidate(unit);
         let mut cluster = if let Some(spec) = self.composite_for_type(&box_name) {
             // A COMPOSITE instrument (e.g. Playfield): the `composite` module builds one child per slot and
             // sums them. The engine stays mapping-agnostic — `spec` (a registered entry) names the slot
@@ -570,7 +669,7 @@ impl Engine {
             // wrapped around a composite yet (a composite's effects live per child, step 5).
             self.drop_composite(unit);
             let track_sets = unit.track_sets.clone();
-            let (cluster, binding) = self.build_composite(&track_sets, instrument_uuid, &spec);
+            let (cluster, binding) = self.build_composite(&track_sets, instrument_uuid, &spec, &signal, &invalidate);
             unit.composite = Some(binding);
             cluster
         } else {
@@ -586,7 +685,7 @@ impl Engine {
                 Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}))));
             let midi = unit.midi.sorted();
             let audio = unit.audio.sorted();
-            self.build_cluster(PullLink::Source(sequencer), instrument_uuid, instrument_device, &midi, &audio)
+            self.build_cluster(PullLink::Source(sequencer), instrument_uuid, instrument_device, &midi, &audio, &signal, &invalidate)
         };
         // The channel strip terminates the unit's chain: instrument/fx -> STRIP -> master. It applies the
         // unit's volume / panning / mute (read from the shared StripParams), then feeds the master bus.
@@ -610,9 +709,11 @@ impl Engine {
         for params in &cluster.device_params {
             refresh_params(&params.handles, params.reg, params.state_ptr, position);
         }
-        // Publish the automatable devices to the runtime observer and clear any pending flag.
-        *unit.device_uuids.borrow_mut() = cluster.device_uuids;
+        // The fresh per-parameter automation subscriptions are now live; clear any pending flag.
         unit.automation_dirty.set(false);
+        // Keep the fresh bindings (resolved = None, each port already carrying its targeted pointer monitor)
+        // for the resolve pass to wire up.
+        unit.sidechains = core::mem::take(&mut cluster.sidechains);
         unit.wired = Some(WiredCluster {
             nodes: cluster.nodes, edges: cluster.edges, output_buffer: strip_output, device_params: cluster.device_params
         });
@@ -625,9 +726,8 @@ impl Engine {
     /// composite child appends the per-child sum), plus the node / edge / param bookkeeping. The only
     /// per-device knowledge is the box-type -> plugin table, so any cluster host reuses this verbatim.
     pub(crate) fn build_cluster(&mut self, source: PullLink, instrument_uuid: Uuid, instrument_device: DeviceReg,
-                     midi: &[Uuid], audio: &[Uuid]) -> BuiltCluster {
+                     midi: &[Uuid], audio: &[Uuid], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> BuiltCluster {
         let mut device_params: Vec<DeviceParams> = Vec::new();
-        let mut device_uuids: Vec<Uuid> = Vec::new();
         // Each midi-fx binds its parameters too, so a midi-fx parameter is automatable like an audio device's.
         let mut chain = source;
         for device_uuid in midi.iter().copied() {
@@ -635,8 +735,7 @@ impl Engine {
             match device {
                 Some(device) if device.kind == DEVICE_KIND_MIDI_EFFECT => {
                     let effect = Rc::new(PluginMidiEffect::new(device));
-                    device_params.push(self.bind_device(device_uuid, device, effect.state_ptr(), ParamNode::Midi(effect.clone())));
-                    device_uuids.push(device_uuid);
+                    device_params.push(self.bind_device(device_uuid, device, effect.state_ptr(), ParamNode::Midi(effect.clone()), invalidate));
                     chain = PullLink::MidiFx {effect, upstream: Rc::new(chain)};
                 }
                 _ => {}
@@ -645,13 +744,13 @@ impl Engine {
         let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, instrument_device)));
         let instrument_state = instrument.borrow().state_ptr();
         let instrument_sink: Rc<RefCell<dyn ParamSink>> = instrument.clone();
-        device_params.push(self.bind_device(instrument_uuid, instrument_device, instrument_state, ParamNode::Audio(instrument_sink)));
-        device_uuids.push(instrument_uuid);
+        device_params.push(self.bind_device(instrument_uuid, instrument_device, instrument_state, ParamNode::Audio(instrument_sink), invalidate));
         instrument.borrow_mut().set_pull_chain(chain);
         let mut output = instrument.borrow().audio_output();
         let instrument_id = self.context.register_processor(instrument);
         let mut nodes = vec![instrument_id];
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut sidechains: Vec<SidechainBinding> = Vec::new();
         let mut output_node = instrument_id;
         // The audio-fx chain in index order: instrument -> fx0 -> fx1 -> ... Each reads the previous output.
         for device_uuid in audio.iter().copied() {
@@ -663,36 +762,42 @@ impl Engine {
             let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
             let node_state = node.borrow().state_ptr();
             let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
-            let params = self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink));
+            let params = self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink), invalidate);
             let sidechain_paths = params.sidechain_paths.clone();
             device_params.push(params);
-            device_uuids.push(device_uuid);
             node.borrow_mut().set_audio_source(output);
             output = node.borrow().audio_output();
             let node_id = self.context.register_processor(node.clone());
-            // Defer this effect's sidechain ports to the post-build pass (the source unit may not be built yet).
-            // Port ids start at 2 (after MAIN_INPUT) in declaration order.
+            // Keep this effect's declared sidechain ports as a persistent binding (resolved by the post-build
+            // pass, re-resolved on later edits). Each port gets a TARGETED `This` monitor on its pointer
+            // field, so a re-point / detach enqueues the unit. Port ids start at 2 (after MAIN_INPUT).
             if !sidechain_paths.is_empty() {
-                let ports = sidechain_paths.into_iter().enumerate().map(|(index, path)| (index as u32 + 2, path)).collect();
-                self.pending_sidechains.push(PendingSidechain {effect: node, node_id, device_uuid, ports});
+                let mut ports = Vec::new();
+                for (index, path) in sidechain_paths.into_iter().enumerate() {
+                    let port_signal = signal.clone();
+                    let pointer_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(device_uuid, path.clone()),
+                        Box::new(move |_graph, _update| port_signal()));
+                    ports.push(SidechainPort {port_id: index as u32 + 2, path, resolved: None, pointer_sub});
+                }
+                sidechains.push(SidechainBinding {effect: node, node_id, device_uuid, ports});
             }
             self.context.register_edge(output_node, node_id);
             edges.push((output_node, node_id));
             nodes.push(node_id);
             output_node = node_id;
         }
-        BuiltCluster {output, output_node, nodes, edges, device_params, device_uuids}
+        BuiltCluster {output, output_node, nodes, edges, device_params, sidechains}
     }
 
     /// Bind one device's parameters: call its `init` (which records its parameter field-paths via
     /// `host_bind_parameter`), observe each path's field value + automation track, hand the node its
     /// parameter set, and return the bookkeeping for teardown / re-bind.
-    fn bind_device(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, sink: ParamNode) -> DeviceParams {
+    fn bind_device(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, sink: ParamNode, invalidate: &Rc<dyn Fn()>) -> DeviceParams {
         let paths = bind_paths(reg, state_ptr, self.sample_rate);
         let sample_paths = core::mem::take(unsafe { SAMPLE_OBS.get() }); // recorded by host_observe_sample during init
         let field_paths = core::mem::take(unsafe { FIELD_OBS.get() }); // recorded by host_observe_field during init
         let sidechain_paths = core::mem::take(unsafe { SIDECHAIN_BIND.get() }); // recorded by host_bind_sidechain during init
-        let (handles, field_subs, collections, armed) = self.observe_params(device_uuid, &paths);
+        let (handles, field_subs, collections, armed) = self.observe_params(device_uuid, &paths, invalidate);
         sink.set_params(handles.clone(), armed);
         // The device's plain-field and sample observations both unsubscribe the same way, so keep one list.
         let mut observe_subs = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
@@ -751,9 +856,9 @@ impl Engine {
     /// per-parameter handles, the field subscriptions + curve collections (for teardown), and whether ANY
     /// parameter is automated (so the node arms the clock). The id is the parameter's index, matching the
     /// id `host_bind_parameter` returned the device.
-    fn observe_params(&mut self, device_uuid: Uuid, paths: &[FieldPath]) -> (Vec<ParamHandle>, Vec<SubscriptionId>, Vec<ValueCollection>, bool) {
+    fn observe_params(&mut self, device_uuid: Uuid, paths: &[FieldPath], invalidate: &Rc<dyn Fn()>) -> (Vec<ParamHandle>, Vec<SubscriptionId>, Vec<ValueCollection>, bool) {
         let mut handles = Vec::new();
-        let mut field_subs = Vec::new();
+        let mut subs = Vec::new();
         let mut collections = Vec::new();
         let mut armed = false;
         for (index, path) in paths.iter().enumerate() {
@@ -768,25 +873,35 @@ impl Engine {
             });
             let field = Rc::new(core::cell::Cell::new(0.0f32));
             let cell = field.clone();
-            let sub = self.graph.catchup_and_subscribe(address, move |value| {
-                // Read whichever primitive the field holds into the f32 transport (the kind tag, captured
-                // above, tells the device how to read it back).
+            // The field VALUE: keep the live cell in sync, and invalidate so reconcile re-pushes the device
+            // (a static parameter's new value must reach it; an automated one re-resolves harmlessly).
+            let field_invalidate = invalidate.clone();
+            subs.push(self.graph.catchup_and_subscribe(address.clone(), move |value| {
                 let real = value.as_float32()
                     .or_else(|| value.as_int32().map(|value| value as f32))
                     .or_else(|| value.as_bool().map(|value| if value {1.0} else {0.0}));
                 if let Some(real) = real {
                     cell.set(real);
+                    field_invalidate();
                 }
-            });
-            field_subs.push(sub);
-            let (track, mut track_collections) = build_param_track(&mut self.graph, device_uuid, path);
+            }));
+            // Automation ATTACH / DETACH: incoming pointers at the parameter field (a Value track's `target`).
+            let attach_invalidate = invalidate.clone();
+            subs.push(self.graph.subscribe_pointer_hub(address, Box::new(move |_graph, _event| attach_invalidate())));
+            let (track, track_uuid, mut track_collections) = build_param_track(&mut self.graph, device_uuid, path);
             if track.is_some() {
                 armed = true;
+            }
+            // Value-region join / leave on the automation track (so the curve's region set stays current).
+            if let Some(track_uuid) = track_uuid {
+                let region_invalidate = invalidate.clone();
+                subs.push(self.graph.subscribe_pointer_hub(Address::of(track_uuid, vec![TRACK_REGIONS_KEY]),
+                    Box::new(move |_graph, _event| region_invalidate())));
             }
             collections.append(&mut track_collections);
             handles.push(ParamHandle {id: index as u32, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN))});
         }
-        (handles, field_subs, collections, armed)
+        (handles, subs, collections, armed)
     }
 
     /// Unsubscribe each device's field observers and terminate its curve collections (a rewire / teardown).
@@ -809,6 +924,7 @@ impl Engine {
     /// them on the node (re-arming or disarming the clock), and push the resolved values. Mirrors TS
     /// `bindParameter` reacting to a parameter's automation pointer hub.
     fn rebind_automation(&mut self, unit: &mut AudioUnitBinding) {
+        let invalidate = automation_invalidate(unit);
         let mut wired = match unit.wired.take() {
             Some(wired) => wired,
             None => return
@@ -822,14 +938,14 @@ impl Engine {
             for collection in params.collections {
                 collection.terminate(&mut self.graph);
             }
-            let (handles, field_subs, collections, armed) = self.observe_params(params.device_uuid, &params.paths);
+            let (handles, field_subs, collections, armed) = self.observe_params(params.device_uuid, &params.paths, &invalidate);
             params.sink.set_params(handles.clone(), armed);
             refresh_params(&handles, params.reg, params.state_ptr, position);
             rebound.push(DeviceParams {
                 device_uuid: params.device_uuid, reg: params.reg, state_ptr: params.state_ptr,
                 sink: params.sink, paths: params.paths, handles, field_subs, collections,
                 observe_subs: params.observe_subs, // a re-bind doesn't touch the plain field observations
-                sidechain_paths: params.sidechain_paths // nor the sidechain ports (no rewire = no re-resolve)
+                sidechain_paths: params.sidechain_paths // nor the declared sidechain paths (an automation rebind is not a rewire)
             });
         }
         wired.device_params = rebound;
@@ -881,7 +997,7 @@ fn resolve_and_deliver_sample(graph: &BoxGraph, device_uuid: Uuid, path: &[u16],
 /// The automation curve for a device parameter, if a Value track targets `(device_uuid, path)`: build a
 /// `ParamCurve` over that track's value regions and return it with the collections to terminate. `None` (and
 /// no collections) when the parameter has no automation track.
-fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16]) -> (Option<ParamCurve>, Vec<ValueCollection>) {
+fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16]) -> (Option<ParamCurve>, Option<Uuid>, Vec<ValueCollection>) {
     let track_uuid = {
         let mut found = None;
         for track in graph.find_all_by_name("TrackBox") {
@@ -896,7 +1012,7 @@ fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16]) -> (
     };
     let track_uuid = match track_uuid {
         Some(uuid) => uuid,
-        None => return (None, Vec::new())
+        None => return (None, None, Vec::new())
     };
     let mut regions = RegionCollection::new();
     let mut collections = Vec::new();
@@ -909,7 +1025,7 @@ fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16]) -> (
         });
         collections.push(collection);
     }
-    (Some(ParamCurve::new(regions)), collections)
+    (Some(ParamCurve::new(regions)), Some(track_uuid), collections)
 }
 
 // ---- The track / region cascade beneath an audio unit. Free functions taking `&mut BoxGraph`: they only
@@ -921,6 +1037,7 @@ fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16]) -> (
 /// region collection is registered into the unit's shared `track_sets` (so the sequencer sees it); a
 /// removed track's collection is unregistered.
 fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding) {
+    let mark = unit.mark.clone();
     let changes = core::mem::take(&mut *unit.track_changes.borrow_mut());
     for track_uuid in changes.removed {
         if let Some(index) = unit.tracks.iter().position(|track| track.track_uuid == track_uuid) {
@@ -935,7 +1052,7 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding) {
         if track_type(graph, track_uuid) == TRACK_TYPE_VALUE {
             continue; // a Value (automation) track is read per-device by `device_automation`, not the note cascade
         }
-        let track = build_track(graph, track_uuid);
+        let track = build_track(graph, track_uuid, &mark);
         unit.track_sets.borrow_mut().push(track.regions_set.clone());
         unit.tracks.push(track);
     }
@@ -947,42 +1064,28 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding) {
 /// Build a track binding: its own sorted region collection (`regions_set`), a subscription to the track's
 /// `regions` membership (key 3), and an edit subscription that re-sorts the collection when a member
 /// region's span (position / duration / loop fields) changes — so a moved region lands at the right place.
-fn build_track(graph: &mut BoxGraph, track_uuid: Uuid) -> TrackBinding {
+fn build_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMark) -> TrackBinding {
     let regions_set: SharedTrackRegions = Rc::new(RefCell::new(RegionCollection::new()));
     let region_changes = Rc::new(RefCell::new(Members::default()));
     let recorder = region_changes.clone();
+    let region_mark = mark.clone();
     let region_sub = graph.subscribe_pointer_hub(Address::of(track_uuid, vec![3]), Box::new(move |_graph, event| {
         match event {
             HubEvent::Added(source) => recorder.borrow_mut().added.push(source.uuid),
             HubEvent::Removed(source) => recorder.borrow_mut().removed.push(source.uuid)
         }
+        region_mark.mark();
     }));
-    // Re-sort on a member region's edit: re-read its span and re-sort the collection (TS onIndexingChanged).
-    let edit_regions = regions_set.clone();
-    let edit_sub = graph.subscribe_all(Box::new(move |graph, update| {
-        let uuid = affected_uuid(update);
-        let mut set = edit_regions.borrow_mut();
-        let mut moved = false;
-        for bound in set.iter_mut() {
-            if bound.region_uuid == uuid {
-                bound.region = read_note_region(graph, uuid);
-                moved = true;
-            }
-        }
-        if moved {
-            set.resort();
-        }
-    }));
-    TrackBinding {track_uuid, regions_set, region_bindings: Vec::new(), region_changes, region_sub, edit_sub}
+    TrackBinding {track_uuid, regions_set, region_bindings: Vec::new(), region_changes, region_sub}
 }
 
 /// Tear down a track: unsubscribe its membership + edit observers, unregister its region collection from the
 /// unit's `track_sets`, and release each region's note-event cache reference.
 fn teardown_track(graph: &mut BoxGraph, track_sets: &SharedTrackSets, collections: &mut CollectionCache, track: TrackBinding) {
     graph.unsubscribe(track.region_sub);
-    graph.unsubscribe(track.edit_sub);
     track_sets.borrow_mut().retain(|set| !Rc::ptr_eq(set, &track.regions_set));
     for region in track.region_bindings {
+        graph.unsubscribe(region.edit_sub);
         collections.release(graph, region.collection_uuid);
     }
 }
@@ -995,6 +1098,7 @@ fn reconcile_regions(graph: &mut BoxGraph, collections: &mut CollectionCache, tr
         if let Some(index) = track.region_bindings.iter().position(|region| region.region_uuid == region_uuid) {
             let region = track.region_bindings.remove(index);
             track.regions_set.borrow_mut().retain(|bound| bound.region_uuid != region_uuid);
+            graph.unsubscribe(region.edit_sub);
             collections.release(graph, region.collection_uuid);
         }
     }
@@ -1016,7 +1120,23 @@ fn build_region(graph: &mut BoxGraph, regions_set: &SharedTrackRegions, collecti
     let collection_uuid = graph.target_of(&Address::of(region_uuid, vec![2]))?.uuid;
     let collection = collections.acquire(graph, collection_uuid);
     regions_set.borrow_mut().add(BoundRegion {region_uuid, region, collection});
-    Some(RegionBinding {region_uuid, collection_uuid})
+    // Targeted: a `Parent` sub on the region box re-reads THIS region's span and re-sorts the track's set
+    // when (and only when) one of this region's own fields is edited (TS `onIndexingChanged`, per-region).
+    let edit_regions = regions_set.clone();
+    let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(region_uuid), Box::new(move |graph, _update| {
+        let mut set = edit_regions.borrow_mut();
+        let mut moved = false;
+        for bound in set.iter_mut() {
+            if bound.region_uuid == region_uuid {
+                bound.region = read_note_region(graph, region_uuid);
+                moved = true;
+            }
+        }
+        if moved {
+            set.resort();
+        }
+    }));
+    Some(RegionBinding {region_uuid, collection_uuid, edit_sub})
 }
 
 /// Read a region's loopable span from the box graph (position 10, duration 11, loopOffset 12, loopDuration 13).
@@ -1026,14 +1146,6 @@ fn read_note_region(graph: &BoxGraph, region_uuid: Uuid) -> NoteRegion {
         duration: region_pulses(graph, region_uuid, 11),
         loop_offset: region_pulses(graph, region_uuid, 12),
         loop_duration: region_pulses(graph, region_uuid, 13)
-    }
-}
-
-/// The box uuid an update targets (its own box for new/delete, the address' box for field edits).
-fn affected_uuid(update: &Update) -> Uuid {
-    match update {
-        Update::Primitive {address, ..} | Update::Pointer {address, ..} => address.uuid,
-        Update::New {uuid, ..} | Update::Delete {uuid, ..} => *uuid
     }
 }
 
@@ -1051,6 +1163,7 @@ fn region_pulses(graph: &BoxGraph, uuid: Uuid, key: u16) -> f64 {
 const TRACK_TYPE_VALUE: i32 = 3;
 const TRACK_TYPE_KEY: u16 = 11;
 const TRACK_TARGET_KEY: u16 = 2;        // TrackBox.target -> the automated parameter field (Automation pointer)
+const TRACK_REGIONS_KEY: u16 = 3;       // TrackBox.regions -> the hub value regions attach to (membership)
 const VALUE_REGION_TRACK_KEY: u16 = 1;  // ValueRegionBox.regions -> the track's region collection
 const VALUE_REGION_EVENTS_KEY: u16 = 2; // ValueRegionBox.events -> the ValueEventCollectionBox
 
@@ -1091,52 +1204,23 @@ fn track_type(graph: &BoxGraph, track_uuid: Uuid) -> i32 {
     graph.field_value(&Address::of(track_uuid, vec![TRACK_TYPE_KEY])).and_then(|value| value.as_int32()).unwrap_or(0)
 }
 
-/// Whether an update requires a unit (whose automatable devices are `devices`) to re-bind its parameters:
-/// an automation pointer attaching to / detaching from a device's parameter field, a value region's
-/// `regions` pointer joining / leaving a track that targets one of them, or a device's own field VALUE
-/// being edited (a static parameter's new value must be pushed). Value-event edits within an already-bound
-/// curve are NOT included — the `ValueCollection` keeps those live and the clock pull picks them up.
-fn touches_unit_automation(graph: &BoxGraph, update: &Update, devices: &[Uuid]) -> bool {
-    match update {
-        Update::Pointer {address, old, new} => {
-            // (a) attach / detach: a pointer whose target is (or was) a field of one of our device boxes.
-            if [old, new].into_iter().flatten().any(|target| devices.contains(&target.uuid)) {
-                return true;
-            }
-            // (b) a value region's track membership changed: follow its `regions` pointer to the track, then
-            // the track's `target` to a device of this unit.
-            if address.field_keys.len() == 1 && address.field_keys[0] == VALUE_REGION_TRACK_KEY {
-                return [old, new].into_iter().flatten().any(|track_regions| {
-                    graph.target_of(&Address::of(track_regions.uuid, vec![TRACK_TARGET_KEY]))
-                        .map(|device| devices.contains(&device.uuid)).unwrap_or(false)
-                });
-            }
-            false
-        }
-        // (c) a device's own field value edited: a static parameter's new value must be re-pushed.
-        Update::Primitive {address, ..} => devices.contains(&address.uuid),
-        _ => false
-    }
-}
 
 #[cfg(test)]
 mod tests {
     //! Mirrored regions: a NoteEventCollectionBox is observed ONCE by the cache and shared by every region
     //! that references it; the observation survives until the last region leaves. Two regions sharing a
     //! collection both read the same events, and removing one leaves the other reading it.
-    use super::{build_param_track, touches_unit_automation, CollectionCache};
+    use super::{build_param_track, CollectionCache};
     use boxgraph::address::{Address, Uuid};
     use boxgraph::boxes::GraphBox;
     use boxgraph::field::{FieldValue, Fields};
     use boxgraph::graph::BoxGraph;
-    use boxgraph::updates::Update;
 
     const COLLECTION: Uuid = [1u8; 16];
     const NOTE: Uuid = [2u8; 16];
     const DEVICE: Uuid = [9u8; 16];
     const TRACK: Uuid = [8u8; 16];
     const REGION: Uuid = [7u8; 16];
-    const OTHER: Uuid = [5u8; 16];
     const VCOLLECTION: Uuid = [6u8; 16];
     const EVENT: Uuid = [4u8; 16];
 
@@ -1192,36 +1276,6 @@ mod tests {
         assert_eq!(graph.subscription_count(), base, "the last release unsubscribes the observation");
     }
 
-    #[test]
-    fn automation_attach_detach_is_structural_but_a_value_edit_is_not() {
-        // Branch (a) needs no graph: a pointer whose new/old target is one of the unit's device boxes.
-        let graph = BoxGraph::from_boxes(vec![]);
-        let devices = [DEVICE];
-        let device_field = Address::of(DEVICE, vec![16, 10]); // the device's cutoff parameter field
-        let attach = Update::Pointer {address: Address::of(TRACK, vec![2]), old: None, new: Some(device_field.clone())};
-        let detach = Update::Pointer {address: Address::of(TRACK, vec![2]), old: Some(device_field), new: None};
-        let unrelated = Update::Pointer {address: Address::of(TRACK, vec![2]), old: None, new: Some(Address::of(OTHER, vec![3]))};
-        let value_edit = Update::Primitive {address: Address::of(REGION, vec![13]), old: FieldValue::Float32(0.0), new: FieldValue::Float32(0.5)};
-        assert!(touches_unit_automation(&graph, &attach, &devices), "attaching automation to a device param");
-        assert!(touches_unit_automation(&graph, &detach, &devices), "detaching it");
-        assert!(!touches_unit_automation(&graph, &unrelated, &devices), "a pointer to another box is irrelevant");
-        assert!(!touches_unit_automation(&graph, &value_edit, &devices), "editing a curve value is not structural");
-    }
-
-    #[test]
-    fn value_region_joining_a_targeting_track_is_structural() {
-        // Branch (b): a value region's `regions` pointer joins a track whose `target` is our device.
-        let graph = BoxGraph::from_boxes(vec![
-            graph_box(TRACK, "TrackBox", &[(2, FieldValue::Pointer(Some(Address::of(DEVICE, vec![16, 10]))))])
-        ]);
-        let devices = [DEVICE];
-        let join = Update::Pointer {address: Address::of(REGION, vec![1]), old: None, new: Some(Address::of(TRACK, vec![3]))};
-        assert!(touches_unit_automation(&graph, &join, &devices), "a region under a track that targets our device");
-        // A region joining a track that targets some other box is ignored.
-        let other_join = Update::Pointer {address: Address::of(REGION, vec![1]), old: None, new: Some(Address::of(OTHER, vec![3]))};
-        assert!(!touches_unit_automation(&graph, &other_join, &devices));
-    }
-
     // A full automation chain (Value track -> region -> ValueEventCollection -> one event) whose track
     // `target` reaches a parameter at `path` on the device. Used to prove the key is the path at any depth.
     fn deep_automation_graph(path: &[u16]) -> BoxGraph {
@@ -1250,12 +1304,13 @@ mod tests {
         // A three-level path — deeper than the old packed u32 key could ever represent — resolves the track.
         let deep = [16u16, 5, 10];
         let mut graph = deep_automation_graph(&deep);
-        let (curve, collections) = build_param_track(&mut graph, DEVICE, &deep);
+        let (curve, track_uuid, collections) = build_param_track(&mut graph, DEVICE, &deep);
         let curve = curve.expect("the parameter at the deep path has an automation track");
+        assert_eq!(track_uuid, Some(TRACK), "the targeting track is found (its region hub is then watched)");
         assert_eq!(collections.len(), 1, "its one value region's collection is observed");
         assert_eq!(curve.value_at(0.0, -1.0), 0.7, "and the curve reads its event through that path");
         // A different path on the same device has no track.
-        let (none, _) = build_param_track(&mut graph, DEVICE, &[16, 5, 11]);
+        let (none, _, _) = build_param_track(&mut graph, DEVICE, &[16, 5, 11]);
         assert!(none.is_none(), "an unbound path has no automation track");
     }
 }

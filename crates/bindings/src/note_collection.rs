@@ -11,8 +11,7 @@ use alloc::vec::Vec;
 use core::cell::{Ref, RefCell};
 use boxgraph::address::{Address, Uuid};
 use boxgraph::graph::BoxGraph;
-use boxgraph::subscription::{HubEvent, SubscriptionId};
-use boxgraph::updates::Update;
+use boxgraph::subscription::{HubEvent, Propagation, SubscriptionId};
 use value::event::EventCollection;
 use value::note::NoteEvent;
 use crate::note_events::{read_note_event, COLLECTION_EVENTS};
@@ -25,16 +24,18 @@ pub struct NoteCollection {
     subscriptions: Vec<SubscriptionId>
 }
 
-/// The shared cache the observers maintain: the position-sorted collection plus a uuid → note index
-/// (so an edit can remove / replace a note by uuid, since the collection is keyed by position).
+/// The shared cache the observers maintain: the position-sorted collection, a uuid → note index (so an
+/// edit can remove / replace a note by uuid, since the collection is keyed by position), and the per-note
+/// TARGETED edit subscription (one `Parent` monitor per member note) to drop when the note leaves.
 struct State {
     events: EventCollection<NoteEvent>,
-    index: BTreeMap<Uuid, NoteEvent>
+    index: BTreeMap<Uuid, NoteEvent>,
+    edit_subs: BTreeMap<Uuid, SubscriptionId>
 }
 
 impl State {
     fn new() -> Self {
-        Self {events: EventCollection::new(), index: BTreeMap::new()}
+        Self {events: EventCollection::new(), index: BTreeMap::new(), edit_subs: BTreeMap::new()}
     }
 
     fn upsert(&mut self, graph: &BoxGraph, note_uuid: Uuid) {
@@ -50,38 +51,40 @@ impl State {
             self.events.remove(&previous);
         }
     }
-
-    /// The member note an update affects, if any (its own box; notes have no satellite boxes).
-    fn affected(&self, update: &Update) -> Option<Uuid> {
-        let uuid = affected_uuid(update);
-        if self.index.contains_key(&uuid) {Some(uuid)} else {None}
-    }
 }
 
 impl NoteCollection {
-    /// Subscribe to the collection and build it from the pointer-hub catch-up (`Added` per existing
-    /// member) plus all-updates edits to member notes.
+    /// Observe a note-event collection: membership via the pointer-hub, and a TARGETED per-note edit
+    /// subscription added when a note joins (deferred, applied after dispatch / reconcile) and dropped when
+    /// it leaves. No all-updates listener — a note edit dispatches only to that note's own monitor.
     pub fn observe(graph: &mut BoxGraph, collection: Uuid) -> Self {
         let state = Rc::new(RefCell::new(State::new()));
         let mut subscriptions = Vec::new();
 
         let hub_state = state.clone();
+        let deferred = graph.deferred();
         subscriptions.push(graph.subscribe_pointer_hub(
             Address::of(collection, vec![COLLECTION_EVENTS]),
             Box::new(move |graph, event| match event {
-                HubEvent::Added(source) => hub_state.borrow_mut().upsert(graph, source.uuid),
-                HubEvent::Removed(source) => hub_state.borrow_mut().remove(source.uuid)
+                HubEvent::Added(source) => {
+                    let note_uuid = source.uuid;
+                    hub_state.borrow_mut().upsert(graph, note_uuid);
+                    let edit_state = hub_state.clone();
+                    let id = deferred.subscribe_vertex(Propagation::Parent, Address::box_of(note_uuid),
+                        Box::new(move |graph, _update| edit_state.borrow_mut().upsert(graph, note_uuid)));
+                    hub_state.borrow_mut().edit_subs.insert(note_uuid, id);
+                }
+                HubEvent::Removed(source) => {
+                    hub_state.borrow_mut().remove(source.uuid);
+                    if let Some(id) = hub_state.borrow_mut().edit_subs.remove(&source.uuid) {
+                        deferred.unsubscribe(id);
+                    }
+                }
             })
         ));
-
-        let edit_state = state.clone();
-        subscriptions.push(graph.subscribe_all(Box::new(move |graph, update| {
-            let affected = edit_state.borrow().affected(update);
-            if let Some(uuid) = affected {
-                edit_state.borrow_mut().upsert(graph, uuid)
-            }
-        })));
-
+        // The catch-up above queued a per-note edit sub for each existing member; register them now (we
+        // hold `&mut graph`, outside any dispatch). Later joins are flushed by the transaction's dispatch.
+        graph.apply_deferred();
         Self {state, subscriptions}
     }
 
@@ -98,18 +101,13 @@ impl NoteCollection {
         self.state.borrow().events.is_empty()
     }
 
-    /// Unsubscribe the observers from `graph` (mirrors the TS adapter's `terminate`).
+    /// Unsubscribe the hub observer and every per-note edit monitor (mirrors the TS adapter's `terminate`).
     pub fn terminate(self, graph: &mut BoxGraph) {
         for id in self.subscriptions {
             graph.unsubscribe(id);
         }
-    }
-}
-
-/// The subject uuid of an update (the box it concerns).
-fn affected_uuid(update: &Update) -> Uuid {
-    match update {
-        Update::Primitive {address, ..} | Update::Pointer {address, ..} => address.uuid,
-        Update::New {uuid, ..} | Update::Delete {uuid, ..} => *uuid
+        for (_, id) in core::mem::take(&mut self.state.borrow_mut().edit_subs) {
+            graph.unsubscribe(id);
+        }
     }
 }

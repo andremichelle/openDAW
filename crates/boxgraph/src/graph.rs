@@ -14,7 +14,7 @@ use crate::boxes::{GraphBox, Registry};
 use crate::bytes::{ByteReader, ByteWriter};
 use crate::checksum::{checksum_fields, Checksum};
 use crate::field::{read_fields, FieldValue};
-use crate::subscription::{HubEvent, HubObserver, Propagation, SubscriptionId, Subscriptions, UpdateObserver};
+use crate::subscription::{Deferred, DeferredOp, HubEvent, HubObserver, Propagation, SubscriptionId, Subscriptions, UpdateObserver};
 use crate::updates::Update;
 use crate::Error;
 
@@ -186,6 +186,38 @@ impl BoxGraph {
             subscriptions.dispatch_hubs(self, &currents);
         }
         self.subscriptions = subscriptions;
+        // Apply any (un)subscriptions observers queued reactively during dispatch (mirrors lib-box deferred
+        // monitors): now that dispatch is done and `subscriptions` is back, we again hold `&mut`.
+        self.apply_deferred();
+    }
+
+    /// A handle for binders to capture (at subscribe time) and use to add / drop targeted subscriptions
+    /// REACTIVELY from inside an observer — applied after the transaction's dispatch. See `Deferred`.
+    pub fn deferred(&self) -> Deferred {
+        self.subscriptions.deferred()
+    }
+
+    /// Apply every queued `DeferredOp`. Vertex / unsubscribe ops touch only `subscriptions`; a hub op needs
+    /// the graph's `incoming` to catch up its initial members, so application lives here (not in
+    /// `Subscriptions`). Loops while ops remain, since a hub op's catch-up may queue further reactive subs.
+    /// Called after every transaction's dispatch, and by a binder after an out-of-transaction `observe`.
+    pub fn apply_deferred(&mut self) {
+        while self.subscriptions.has_deferred() {
+            for op in self.subscriptions.drain_deferred() {
+                match op {
+                    DeferredOp::Subscribe {id, propagation, address, observer} =>
+                        self.subscriptions.register_vertex(id, propagation, address, observer),
+                    DeferredOp::SubscribeHub {id, target, mut observer} => {
+                        let current: Vec<Address> = self.incoming(&target).into_iter().cloned().collect();
+                        for source in &current {
+                            observer(self, &HubEvent::Added(source.clone()));
+                        }
+                        self.subscriptions.register_hub(id, target, current, observer);
+                    }
+                    DeferredOp::Unsubscribe {id} => {self.subscriptions.unsubscribe(id);}
+                }
+            }
+        }
     }
 
     /// Subscribe to the pointers aiming at `target` (a hub), the analog of TS `PointerHub.subscribe`.
@@ -203,6 +235,12 @@ impl BoxGraph {
     /// Subscribe to every applied update. Returns a handle for `unsubscribe`.
     pub fn subscribe_all(&mut self, observer: UpdateObserver) -> SubscriptionId {
         self.subscriptions.subscribe_all(observer)
+    }
+
+    /// Subscribe to box creation / deletion only (the observer fires just for `New` / `Delete`). For
+    /// watching "any box of a class" (e.g. `AudioFileBox`), where there is no address to target.
+    pub fn subscribe_box_lifecycle(&mut self, observer: UpdateObserver) -> SubscriptionId {
+        self.subscriptions.subscribe_lifecycle(observer)
     }
 
     /// Subscribe to updates at `address`, filtered by `propagation` (This / Parent / Children).

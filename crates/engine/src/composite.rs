@@ -70,19 +70,20 @@ impl Engine {
     /// build one child per member, and sum them into one bus. Returns the wired cluster (its `output` is the
     /// sum buffer, `output_node` the sum node, so the caller appends its own tail) plus the `CompositeBinding`
     /// the unit stores for reactivity. Generic over any composite — the only composite-specific input is `spec`.
-    pub(crate) fn build_composite(&mut self, track_sets: &SharedTrackSets, composite_uuid: Uuid, spec: &CompositeSpec)
+    pub(crate) fn build_composite(&mut self, track_sets: &SharedTrackSets, composite_uuid: Uuid, spec: &CompositeSpec, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
         -> (BuiltCluster, CompositeBinding) {
         let children = IndexedCollection::observe(&mut self.graph,
             Address::of(composite_uuid, vec![spec.children_field]), spec.index_key);
         let child_uuids = children.sorted();
         children.take_dirty(); // consume the catch-up flag: we build from the current members now
+        children.set_on_dirty(signal.clone()); // a later child add / remove / reorder enqueues the owning unit
         let sum_buffer = shared_audio_buffer();
         let sum = Rc::new(RefCell::new(AudioBusProcessor::new(sum_buffer.clone())));
         let sum_id = self.context.register_processor(sum.clone());
         let mut nodes = vec![sum_id];
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut device_params = Vec::new();
-        let mut device_uuids = Vec::new();
+        let mut sidechains = Vec::new();
         let mut chains = Vec::new();
         let mut nested = Vec::new();
         // Read each child's routing note (`index_key`) and choke-group flag (`exclude_key`) from the box once.
@@ -110,9 +111,9 @@ impl Engine {
             // composite builds the child box itself (a leaf voice, e.g. a Playfield slot, with device-declared
             // chains). Both yield the same cluster + chain-observation shape.
             let built = if cell_based {
-                self.build_cell(track_sets, child_uuid, spec)
+                self.build_cell(track_sets, child_uuid, spec, signal, invalidate)
             } else {
-                self.build_instrument(track_sets, child_uuid, choke)
+                self.build_instrument(track_sets, child_uuid, choke, signal, invalidate)
             };
             if let Some((child, child_chains, child_binding)) = built {
                 // Register the child's output by its box address (flattening), so a sidechain pointing at THIS
@@ -125,14 +126,14 @@ impl Engine {
                 nodes.extend(child.nodes);
                 edges.extend(child.edges);
                 device_params.extend(child.device_params);
-                device_uuids.extend(child.device_uuids);
+                sidechains.extend(child.sidechains);
                 chains.extend(child_chains);
                 if let Some(binding) = child_binding {
                     nested.push(binding);
                 }
             }
         }
-        (BuiltCluster {output: sum_buffer, output_node: sum_id, nodes, edges, device_params, device_uuids},
+        (BuiltCluster {output: sum_buffer, output_node: sum_id, nodes, edges, device_params, sidechains},
          CompositeBinding {children, chains, nested})
     }
 
@@ -143,12 +144,12 @@ impl Engine {
     /// chains at different keys and nothing box-specific is hardcoded here. Returns the cluster, the leaf's
     /// fx-chain observations (empty for a nested composite), and an optional nested cascade, or `None` if the
     /// box has no plugin / composite spec (silently skipped).
-    fn build_instrument(&mut self, track_sets: &SharedTrackSets, box_uuid: Uuid, choke: Rc<[i32]>)
+    fn build_instrument(&mut self, track_sets: &SharedTrackSets, box_uuid: Uuid, choke: Rc<[i32]>, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
         -> Option<(BuiltCluster, Vec<IndexedCollection>, Option<CompositeBinding>)> {
         let name = self.graph.find_box(&box_uuid)?.name.clone();
         if let Some(spec) = self.composite_for_type(&name) {
             // A nested composite routes its own children internally, so it takes the full stream here.
-            let (cluster, binding) = self.build_composite(track_sets, box_uuid, &spec);
+            let (cluster, binding) = self.build_composite(track_sets, box_uuid, &spec, signal, invalidate);
             return Some((cluster, Vec::new(), Some(binding)));
         }
         let device = self.device_for_type(&name).filter(|device| device.kind == DEVICE_KIND_INSTRUMENT)?;
@@ -167,22 +168,23 @@ impl Engine {
         // so a live add / remove of a child effect re-dirties the unit. A device that hosts no chains (key 0)
         // observes nothing and folds no fx.
         let mut chains = Vec::new();
-        let midi = self.observe_child_chain(box_uuid, device.midi_effects_field, &mut chains);
-        let audio = self.observe_child_chain(box_uuid, device.audio_effects_field, &mut chains);
-        let cluster = self.build_cluster(source, box_uuid, device, &midi, &audio);
+        let midi = self.observe_child_chain(box_uuid, device.midi_effects_field, &mut chains, signal);
+        let audio = self.observe_child_chain(box_uuid, device.audio_effects_field, &mut chains, signal);
+        let cluster = self.build_cluster(source, box_uuid, device, &midi, &audio, signal, invalidate);
         Some((cluster, chains, None))
     }
 
     /// Observe one of a child's fx-host collections (`field` = the device-declared host key, 0 = the device
     /// hosts no chain there) and return its members sorted by `EFFECT_INDEX_KEY`. A live observation is pushed
     /// to `chains` for the binding's reactivity / teardown; key 0 yields an empty chain and no observation.
-    fn observe_child_chain(&mut self, box_uuid: Uuid, field: u16, chains: &mut Vec<IndexedCollection>) -> Vec<Uuid> {
+    fn observe_child_chain(&mut self, box_uuid: Uuid, field: u16, chains: &mut Vec<IndexedCollection>, signal: &Rc<dyn Fn()>) -> Vec<Uuid> {
         if field == 0 {
             return Vec::new();
         }
         let observation = IndexedCollection::observe(&mut self.graph, Address::of(box_uuid, vec![field]), EFFECT_INDEX_KEY);
         let sorted = observation.sorted();
         observation.take_dirty();
+        observation.set_on_dirty(signal.clone()); // a live add / remove of a child effect enqueues the owning unit
         chains.push(observation);
         sorted
     }
@@ -194,10 +196,11 @@ impl Engine {
     /// and folds the cell's chains around it with the shared `build_cluster`, on the full broadcast stream (a
     /// generic composite has no per-cell note routing). Returns `None` for an empty cell or an unresolved /
     /// non-instrument device, unsubscribing whatever it observed.
-    fn build_cell(&mut self, track_sets: &SharedTrackSets, cell_uuid: Uuid, spec: &CompositeSpec)
+    fn build_cell(&mut self, track_sets: &SharedTrackSets, cell_uuid: Uuid, spec: &CompositeSpec, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
         -> Option<(BuiltCluster, Vec<IndexedCollection>, Option<CompositeBinding>)> {
         let instrument_obs = IndexedCollection::observe(&mut self.graph, Address::of(cell_uuid, vec![spec.cell_instrument_field]), 0);
         instrument_obs.take_dirty();
+        instrument_obs.set_on_dirty(signal.clone()); // swapping the cell's hosted instrument enqueues the owning unit
         let instrument_uuid = match instrument_obs.sorted().first().copied() {
             Some(uuid) => uuid,
             None => { instrument_obs.terminate(&mut self.graph); return None; }
@@ -213,9 +216,9 @@ impl Engine {
         let sequencer: SharedNoteEventSource =
             Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: track_sets.clone()}))));
         let mut chains = vec![instrument_obs];
-        let midi = self.observe_child_chain(cell_uuid, spec.cell_midi_field, &mut chains);
-        let audio = self.observe_child_chain(cell_uuid, spec.cell_audio_field, &mut chains);
-        let cluster = self.build_cluster(PullLink::Source(sequencer), instrument_uuid, device, &midi, &audio);
+        let midi = self.observe_child_chain(cell_uuid, spec.cell_midi_field, &mut chains, signal);
+        let audio = self.observe_child_chain(cell_uuid, spec.cell_audio_field, &mut chains, signal);
+        let cluster = self.build_cluster(PullLink::Source(sequencer), instrument_uuid, device, &midi, &audio, signal, invalidate);
         Some((cluster, chains, None))
     }
 }

@@ -1,0 +1,272 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1160" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#546170"/>
+    </marker>
+    <style>
+      .lab  { font-size: 12px; font-weight: 700; letter-spacing: 1.2px; }
+      .nt   { font-size: 13px; font-weight: 700; }
+      .ns   { font-size: 10.5px; }
+      .fl   { font-size: 10px; fill: #546170; font-style: italic; }
+      .arrow{ fill: none; stroke: #546170; stroke-width: 1.7; }
+      .darrow{ fill: none; stroke: #8a97a6; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="1160" fill="#ffffff"/>
+
+  <!-- ============ TITLE ============ -->
+  <text x="34" y="44" font-size="26" font-weight="800" fill="#1a1a1a">openDAW · WASM Audio Engine — Flow State</text>
+  <text x="35" y="66" font-size="13" fill="#7a7a7a">Day 8 · 2026-06-25  —  box-graph edits stream in, 128-frame quanta render out, devices are PIC side-modules in one shared memory</text>
+
+  <!-- ============ BAND 1 · MAIN THREAD ============ -->
+  <rect x="30" y="86" width="1140" height="150" rx="12" fill="#eef5fc" stroke="#b9d4ef" stroke-width="1.5"/>
+  <text x="48" y="108" class="lab" fill="#1c4e80">MAIN THREAD · page / UI</text>
+
+  <rect x="48" y="118" width="252" height="98" rx="8" fill="#fff" stroke="#4a8fd1" stroke-width="1.4"/>
+  <text x="60" y="142" class="nt" fill="#1c4e80">Box graph</text>
+  <text x="60" y="162" class="ns" fill="#37536e">ProjectSkeleton (.od)</text>
+  <text x="60" y="178" class="ns" fill="#37536e">SyncSource streams every edit</text>
+  <text x="60" y="200" class="ns" fill="#7a93a8">live, reactive to box changes</text>
+
+  <rect x="312" y="118" width="186" height="98" rx="8" fill="#fff" stroke="#4a8fd1" stroke-width="1.4"/>
+  <text x="324" y="142" class="nt" fill="#1c4e80">Transport UI</text>
+  <text x="324" y="162" class="ns" fill="#37536e">Play / Pause / Stop</text>
+  <text x="324" y="182" class="ns" fill="#7a93a8">+ live HUD readout</text>
+
+  <rect x="510" y="118" width="214" height="98" rx="8" fill="#fff" stroke="#4a8fd1" stroke-width="1.4"/>
+  <text x="522" y="142" class="nt" fill="#1c4e80">serialize-update-tasks</text>
+  <text x="522" y="162" class="ns" fill="#37536e">transaction → bytes</text>
+  <text x="522" y="182" class="ns" fill="#7a93a8">for this graph's schema</text>
+
+  <rect x="736" y="118" width="200" height="98" rx="8" fill="#fff" stroke="#4a8fd1" stroke-width="1.4"/>
+  <text x="748" y="142" class="nt" fill="#1c4e80">Sample loader</text>
+  <text x="748" y="162" class="ns" fill="#37536e">fetch + decode audio</text>
+  <text x="748" y="182" class="ns" fill="#37536e">write planar frames → SAB</text>
+
+  <rect x="948" y="118" width="206" height="98" rx="8" fill="#fff" stroke="#4a8fd1" stroke-width="1.4"/>
+  <text x="960" y="142" class="nt" fill="#1c4e80">Engine HUD</text>
+  <text x="960" y="162" class="ns" fill="#37536e">transport state · position</text>
+  <text x="960" y="182" class="ns" fill="#37536e">heap · linear memory</text>
+
+  <!-- ============ BAND 2 · COMMUNICATOR BRIDGE ============ -->
+  <rect x="30" y="256" width="1140" height="112" rx="12" fill="#f1ecfa" stroke="#d3c4ef" stroke-width="1.5"/>
+  <text x="48" y="278" class="lab" fill="#4527a0">lib-runtime COMMUNICATOR · typed channels over the worklet port (one direction each)</text>
+
+  <rect x="48" y="296" width="168" height="40" rx="8" fill="#fff" stroke="#7e57c2" stroke-width="1.4"/>
+  <text x="58" y="313" class="nt" fill="#4527a0">engine  ↓</text>
+  <text x="58" y="329" class="ns" fill="#5a4a7a">applyUpdates · play/pause/stop</text>
+
+  <rect x="224" y="296" width="168" height="40" rx="8" fill="#fff" stroke="#7e57c2" stroke-width="1.4"/>
+  <text x="234" y="313" class="nt" fill="#4527a0">samples  ↕</text>
+  <text x="234" y="329" class="ns" fill="#5a4a7a">decode RPC · write frames</text>
+
+  <rect x="400" y="296" width="156" height="40" rx="8" fill="#fff" stroke="#7e57c2" stroke-width="1.4"/>
+  <text x="410" y="313" class="nt" fill="#4527a0">transport  ↑</text>
+  <text x="410" y="329" class="ns" fill="#5a4a7a">state ~30 Hz</text>
+
+  <rect x="564" y="296" width="150" height="40" rx="8" fill="#fff" stroke="#7e57c2" stroke-width="1.4"/>
+  <text x="574" y="313" class="nt" fill="#4527a0">heap  ↑</text>
+  <text x="574" y="329" class="ns" fill="#5a4a7a">stats ~1 Hz</text>
+
+  <rect x="736" y="290" width="418" height="52" rx="8" fill="#fffbe9" stroke="#f0c33c" stroke-width="1.6"/>
+  <text x="750" y="310" class="nt" fill="#9a6b00">Shared linear memory · SharedArrayBuffer</text>
+  <text x="750" y="328" class="ns" fill="#9a7a2a">audio data written by main thread, read on the audio thread — never copied</text>
+
+  <!-- ============ BAND 3 · ENGINE HOST ============ -->
+  <rect x="30" y="388" width="1140" height="172" rx="12" fill="#fdf2e6" stroke="#f0d3ad" stroke-width="1.5"/>
+  <text x="48" y="410" class="lab" fill="#b35e10">AUDIOWORKLET · engine.wasm — Rust dynamic-linker host (talc allocator, no alloc in render)</text>
+
+  <rect x="48" y="424" width="180" height="116" rx="8" fill="#fff" stroke="#e08a2e" stroke-width="1.4"/>
+  <text x="60" y="448" class="nt" fill="#b35e10">EngineProcessor</text>
+  <text x="60" y="468" class="ns" fill="#8a5a1e">TS worklet shell</text>
+  <text x="60" y="484" class="ns" fill="#8a5a1e">loads device modules</text>
+  <text x="60" y="500" class="ns" fill="#8a5a1e">routes the channels</text>
+  <text x="60" y="524" class="ns" fill="#b08a55">process() → render()</text>
+
+  <rect x="244" y="424" width="216" height="116" rx="8" fill="#fff" stroke="#e08a2e" stroke-width="1.4"/>
+  <text x="256" y="448" class="nt" fill="#b35e10">Engine.applyUpdates</text>
+  <text x="256" y="468" class="ns" fill="#8a5a1e">BoxGraph transaction</text>
+  <text x="256" y="484" class="ns" fill="#8a5a1e">reconcile → build graph</text>
+  <text x="256" y="500" class="ns" fill="#8a5a1e">units · devices · chains</text>
+  <text x="256" y="524" class="ns" fill="#b08a55">topological sort</text>
+
+  <rect x="476" y="424" width="206" height="116" rx="8" fill="#fff" stroke="#e08a2e" stroke-width="1.4"/>
+  <text x="488" y="448" class="nt" fill="#b35e10">Transport</text>
+  <text x="488" y="468" class="ns" fill="#8a5a1e">position (pulses) · bpm</text>
+  <text x="488" y="484" class="ns" fill="#8a5a1e">loop · tempo map</text>
+  <text x="488" y="500" class="ns" fill="#8a5a1e">render_quantum (playing)</text>
+  <text x="488" y="516" class="ns" fill="#8a5a1e">render_paused (free-run)</text>
+
+  <rect x="698" y="424" width="244" height="116" rx="8" fill="#fff" stroke="#e08a2e" stroke-width="1.4"/>
+  <text x="710" y="448" class="nt" fill="#b35e10">Render loop · 128 frames</text>
+  <text x="710" y="468" class="ns" fill="#8a5a1e">split into blocks (tempo/loop)</text>
+  <text x="710" y="484" class="ns" fill="#8a5a1e">context.process(blocks)</text>
+  <text x="710" y="500" class="ns" fill="#8a5a1e">sum output_bus → out L | R</text>
+  <text x="710" y="524" class="ns" fill="#b08a55">metronome per moving block</text>
+
+  <rect x="958" y="424" width="196" height="116" rx="8" fill="#fff" stroke="#e08a2e" stroke-width="1.4"/>
+  <text x="970" y="448" class="nt" fill="#b35e10">write_engine_state</text>
+  <text x="970" y="468" class="ns" fill="#8a5a1e">position · bpm · playing</text>
+  <text x="970" y="484" class="ns" fill="#8a5a1e">→ transport channel</text>
+  <text x="970" y="508" class="ns" fill="#b08a55">heap stats → heap channel</text>
+
+  <!-- ============ BAND 4 · PROCESSOR GRAPH (signal flow) ============ -->
+  <rect x="30" y="580" width="1140" height="196" rx="12" fill="#eaf6ec" stroke="#c0e2c6" stroke-width="1.5"/>
+  <text x="48" y="602" class="lab" fill="#1f7a36">PROCESSOR GRAPH · per audio-unit chain (pulses in the MIDI domain, sample offsets resolved last)</text>
+
+  <!-- chain -->
+  <rect x="48" y="616" width="118" height="74" rx="8" fill="#fff" stroke="#3fa052" stroke-width="1.4"/>
+  <text x="58" y="640" class="nt" fill="#1f7a36">NoteRegionBox</text>
+  <text x="58" y="660" class="ns" fill="#2f6a40">timeline notes</text>
+  <text x="58" y="678" class="ns" fill="#6a9a78">loop / cycles</text>
+
+  <rect x="190" y="616" width="138" height="74" rx="8" fill="#fff" stroke="#3fa052" stroke-width="1.4"/>
+  <text x="200" y="640" class="nt" fill="#1f7a36">Note sequencer</text>
+  <text x="200" y="660" class="ns" fill="#2f6a40">pull for [from,to)</text>
+  <text x="200" y="678" class="ns" fill="#2f6a40">retainer flushes on pause</text>
+
+  <rect x="352" y="616" width="138" height="74" rx="8" fill="#fff" stroke="#3fa052" stroke-width="1.4"/>
+  <text x="362" y="640" class="nt" fill="#1f7a36">MIDI-fx chain</text>
+  <text x="362" y="660" class="ns" fill="#2f6a40">pull links</text>
+  <text x="362" y="678" class="ns" fill="#6a9a78">transpose · arp · groove</text>
+
+  <rect x="514" y="616" width="138" height="74" rx="8" fill="#fff" stroke="#3fa052" stroke-width="1.4"/>
+  <text x="524" y="640" class="nt" fill="#1f7a36">Instrument</text>
+  <text x="524" y="660" class="ns" fill="#2f6a40">voices → stereo</text>
+  <text x="524" y="678" class="ns" fill="#6a9a78">or a Composite</text>
+
+  <rect x="676" y="616" width="138" height="74" rx="8" fill="#fff" stroke="#3fa052" stroke-width="1.4"/>
+  <text x="686" y="640" class="nt" fill="#1f7a36">Audio-fx chain</text>
+  <text x="686" y="660" class="ns" fill="#2f6a40">in-place stereo</text>
+  <text x="686" y="678" class="ns" fill="#6a9a78">lowpass · delay · gate</text>
+
+  <rect x="838" y="616" width="126" height="74" rx="8" fill="#fff" stroke="#3fa052" stroke-width="1.4"/>
+  <text x="848" y="640" class="nt" fill="#1f7a36">Channel strip</text>
+  <text x="848" y="660" class="ns" fill="#2f6a40">dB · pan · mute</text>
+  <text x="848" y="678" class="ns" fill="#6a9a78">ramped</text>
+
+  <rect x="988" y="616" width="166" height="74" rx="8" fill="#fff" stroke="#2e7d32" stroke-width="1.8"/>
+  <text x="998" y="640" class="nt" fill="#1f7a36">Master bus</text>
+  <text x="998" y="660" class="ns" fill="#2f6a40">sums every unit</text>
+  <text x="998" y="678" class="ns" fill="#2f6a40">→ output-unit fx → out</text>
+
+  <!-- composite / sidechain sub-row -->
+  <rect x="514" y="706" width="138" height="50" rx="8" fill="#f3fbf4" stroke="#7cc189" stroke-width="1.3"/>
+  <text x="524" y="726" class="nt" fill="#1f7a36">Composite</text>
+  <text x="524" y="744" class="ns" fill="#2f6a40">cells, each a full instrument, summed</text>
+
+  <rect x="676" y="706" width="478" height="50" rx="8" fill="#f3fbf4" stroke="#7cc189" stroke-width="1.3"/>
+  <text x="686" y="726" class="nt" fill="#1f7a36">Sidechain</text>
+  <text x="686" y="744" class="ns" fill="#2f6a40">resolve_input(port) ← Audio-output buffer registry (box address → buffer) · retried each reconcile, build-order free</text>
+
+  <!-- ============ BAND 5 · ABI HOST IMPORTS ============ -->
+  <rect x="30" y="796" width="1140" height="72" rx="12" fill="#eef1f3" stroke="#cfd8dc" stroke-width="1.5"/>
+  <text x="48" y="818" class="lab" fill="#37474f">ABI HOST IMPORTS · wasm ⇄ wasm via call_indirect (shared memory + function table) — the engine stays mapping-agnostic</text>
+  <text x="48" y="842" class="ns" fill="#455a64">pull_events &#160;·&#160; resolve_sample &#160;·&#160; resolve_input &#160;·&#160; bind_sidechain &#160;·&#160; bind_parameter &#160;·&#160; update_parameters &#160;·&#160; pulse_to_offset</text>
+  <text x="48" y="860" class="ns" fill="#455a64">observe_field &#160;·&#160; observe_sample &#160;·&#160; first_update_position &#160;·&#160; next_update_position &#160;&#8195; + trait hooks: init · process_audio · handle_event · parameter_changed · reset</text>
+
+  <!-- ============ BAND 6 · DEVICE PLUGINS ============ -->
+  <rect x="30" y="888" width="1140" height="212" rx="12" fill="#fce9f1" stroke="#f3c9dc" stroke-width="1.5"/>
+  <text x="48" y="910" class="lab" fill="#98215a">DEVICE PLUGINS · PIC side-modules — own cdylib crates behind the ABI, loaded into the one shared memory</text>
+
+  <!-- Instruments group -->
+  <rect x="48" y="922" width="356" height="166" rx="8" fill="#fff" stroke="#d05a8c" stroke-width="1.3"/>
+  <text x="60" y="944" class="nt" fill="#98215a">Instruments</text>
+  <rect x="60" y="956" width="104" height="58" rx="7" fill="#fdf0f6" stroke="#c2487f" stroke-width="1.2"/>
+  <text x="71" y="980" class="nt" fill="#98215a">Nano</text>
+  <text x="71" y="998" class="ns" fill="#9a4570">sampler</text>
+  <rect x="172" y="956" width="116" height="58" rx="7" fill="#fdf0f6" stroke="#c2487f" stroke-width="1.2"/>
+  <text x="183" y="980" class="nt" fill="#98215a">Vaporisateur</text>
+  <text x="183" y="998" class="ns" fill="#9a4570">2-osc subtractive</text>
+  <rect x="296" y="956" width="100" height="58" rx="7" fill="#fdf0f6" stroke="#c2487f" stroke-width="1.2"/>
+  <text x="307" y="980" class="nt" fill="#98215a">Playfield</text>
+  <text x="307" y="998" class="ns" fill="#9a4570">slot · choke</text>
+  <text x="60" y="1042" class="ns" fill="#b07090">voicing crate: poly / mono / unison, voices in zeroed state — no alloc per note</text>
+  <text x="60" y="1060" class="ns" fill="#b07090">Composite (generic) hosts CompositeCellBox children, each with its own fx</text>
+
+  <!-- Audio FX group -->
+  <rect x="420" y="922" width="446" height="166" rx="8" fill="#fff" stroke="#d05a8c" stroke-width="1.3"/>
+  <text x="432" y="944" class="nt" fill="#98215a">Audio effects</text>
+  <rect x="432" y="956" width="100" height="58" rx="7" fill="#fdf0f6" stroke="#c2487f" stroke-width="1.2"/>
+  <text x="443" y="980" class="nt" fill="#98215a">Lowpass</text>
+  <text x="443" y="998" class="ns" fill="#9a4570">biquad ×2</text>
+  <rect x="540" y="956" width="100" height="58" rx="7" fill="#fdf0f6" stroke="#c2487f" stroke-width="1.2"/>
+  <text x="551" y="980" class="nt" fill="#98215a">Delay</text>
+  <text x="551" y="998" class="ns" fill="#9a4570">tempo-sync</text>
+  <rect x="648" y="956" width="100" height="58" rx="7" fill="#fdf0f6" stroke="#c2487f" stroke-width="1.2"/>
+  <text x="659" y="980" class="nt" fill="#98215a">Tidal</text>
+  <text x="659" y="998" class="ns" fill="#9a4570">auto-pan LFO</text>
+  <rect x="756" y="956" width="100" height="58" rx="7" fill="#fdf0f6" stroke="#c2487f" stroke-width="1.2"/>
+  <text x="767" y="980" class="nt" fill="#98215a">Gate</text>
+  <text x="767" y="998" class="ns" fill="#9a4570">sidechain duck</text>
+  <text x="432" y="1042" class="ns" fill="#b07090">process_audio gets its Block (pulse range, tempo, flags); sample indices rebased</text>
+  <text x="432" y="1060" class="ns" fill="#b07090">parameters bound by stable field-key path, mapped to real types by the device</text>
+
+  <!-- MIDI FX group -->
+  <rect x="882" y="922" width="270" height="166" rx="8" fill="#fff" stroke="#d05a8c" stroke-width="1.3"/>
+  <text x="894" y="944" class="nt" fill="#98215a">MIDI effects</text>
+  <rect x="894" y="956" width="118" height="58" rx="7" fill="#fdf0f6" stroke="#c2487f" stroke-width="1.2"/>
+  <text x="905" y="980" class="nt" fill="#98215a">Transpose</text>
+  <text x="905" y="998" class="ns" fill="#9a4570">shift semitones</text>
+  <rect x="1022" y="956" width="118" height="58" rx="7" fill="#fdf0f6" stroke="#c2487f" stroke-width="1.2"/>
+  <text x="1033" y="980" class="nt" fill="#98215a">Arp</text>
+  <text x="1033" y="998" class="ns" fill="#9a4570">chord → steps</text>
+  <rect x="894" y="1022" width="246" height="50" rx="7" fill="#fdf0f6" stroke="#c2487f" stroke-width="1.2"/>
+  <text x="905" y="1044" class="nt" fill="#98215a">Zeitgeist</text>
+  <text x="905" y="1062" class="ns" fill="#9a4570">groove · warps note positions in time</text>
+
+  <!-- ============ FLOW ARROWS ============ -->
+  <!-- horizontal: engine host control flow -->
+  <path class="arrow" d="M228,482 L242,482" marker-end="url(#arr)"/>
+  <path class="arrow" d="M460,482 L474,482" marker-end="url(#arr)"/>
+  <path class="arrow" d="M682,482 L696,482" marker-end="url(#arr)"/>
+
+  <!-- horizontal: signal chain -->
+  <path class="arrow" d="M166,653 L188,653" marker-end="url(#arr)"/>
+  <path class="arrow" d="M328,653 L350,653" marker-end="url(#arr)"/>
+  <path class="arrow" d="M490,653 L512,653" marker-end="url(#arr)"/>
+  <path class="arrow" d="M652,653 L674,653" marker-end="url(#arr)"/>
+  <path class="arrow" d="M814,653 L836,653" marker-end="url(#arr)"/>
+  <path class="arrow" d="M964,653 L986,653" marker-end="url(#arr)"/>
+
+  <!-- vertical: main -> bridge -> engine (edits) -->
+  <path class="arrow" d="M617,216 L617,294" marker-end="url(#arr)"/>
+  <path class="arrow" d="M132,294 L132,260 M132,260 L132,216" />
+  <path class="arrow" d="M132,336 L132,422" marker-end="url(#arr)"/>
+  <text x="138" y="252" class="fl">update bytes</text>
+  <text x="623" y="252" class="fl">control + edits</text>
+
+  <!-- sample loader -> SAB -->
+  <path class="arrow" d="M836,216 L900,288" marker-end="url(#arr)"/>
+  <text x="846" y="256" class="fl">frames</text>
+
+  <!-- back-channels engine -> main (up) -->
+  <path class="arrow" d="M1052,422 L1052,340" />
+  <path class="arrow" d="M1052,296 L1052,216" marker-end="url(#arr)"/>
+  <text x="1058" y="252" class="fl">state · heap ↑</text>
+
+  <!-- engine render loop -> processor graph -->
+  <path class="arrow" d="M820,540 L820,614" marker-end="url(#arr)"/>
+  <text x="826" y="572" class="fl">context.process(blocks)</text>
+
+  <!-- master bus -> render loop output (mix up) -->
+  <path class="arrow" d="M1071,616 L1071,542" marker-end="url(#arr)"/>
+  <text x="1077" y="576" class="fl">mix ↑</text>
+
+  <!-- processor graph <-> ABI <-> devices (double-headed) -->
+  <path class="arrow" d="M260,690 L260,794" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="180" y="730" class="fl">pull notes</text>
+  <path class="arrow" d="M583,690 L583,794" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="588" y="730" class="fl">trait calls · samples · params</text>
+  <path class="arrow" d="M745,756 L745,794" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="750" y="784" class="fl">resolve_input</text>
+
+  <path class="darrow" d="M226,868 L226,920" marker-end="url(#arr)"/>
+  <path class="darrow" d="M620,868 L620,920" marker-end="url(#arr)"/>
+  <path class="darrow" d="M1000,868 L1000,920" marker-end="url(#arr)"/>
+
+  <!-- SAB -> devices (audio frames, far right dashed) -->
+  <path class="darrow" d="M1160,342 L1160,956 L1144,956" marker-end="url(#arr)"/>
+  <text x="1112" y="640" class="fl" transform="rotate(90 1112 640)">sample frames → samplers</text>
+</svg>

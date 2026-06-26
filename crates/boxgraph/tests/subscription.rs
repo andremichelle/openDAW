@@ -101,6 +101,61 @@ fn observers_fire_in_subscription_order() {
 }
 
 #[test]
+fn indexed_dispatch_picks_only_matches_in_subscription_order() {
+    // Many monitors at different addresses, subscribed OUT of address order: a dispatch must fire only
+    // the exact-address matches, and in subscription (id) order, regardless of the sorted index layout.
+    let uuid = [7u8; 16];
+    let graph = BoxGraph::from_boxes(vec![]);
+    let mut subscriptions = Subscriptions::new();
+    let log = Rc::new(RefCell::new(Vec::<u16>::new()));
+    // Subscribe addresses 5,1,3,1,9,1 in that order (note three monitors at key 1, ids 1,3,5 below).
+    for (tag, key) in [(0u16, 5u16), (1, 1), (2, 3), (3, 1), (4, 9), (5, 1)] {
+        let recorder = log.clone();
+        subscriptions.subscribe_vertex(Propagation::This, Address::of(uuid, vec![key]),
+            Box::new(move |_, _| recorder.borrow_mut().push(tag)));
+    }
+    subscriptions.dispatch(&graph, &primitive_at(Address::of(uuid, vec![1u16])));
+    assert_eq!(*log.borrow(), vec![1, 3, 5]); // only key-1 monitors, in subscription order
+    log.borrow_mut().clear();
+    subscriptions.dispatch(&graph, &primitive_at(Address::of(uuid, vec![5u16])));
+    assert_eq!(*log.borrow(), vec![0]);
+    log.borrow_mut().clear();
+    subscriptions.dispatch(&graph, &primitive_at(Address::of(uuid, vec![7u16]))); // no monitor
+    assert!(log.borrow().is_empty());
+}
+
+#[test]
+fn deferred_subscription_applies_after_dispatch_not_during() {
+    // An observer that, when it fires, queues a NEW targeted subscription via the deferred handle. The new
+    // monitor must NOT fire for the current transaction (it did not exist when dispatch began) but MUST fire
+    // on the next one — mirroring lib-box deferred monitors. Driven through real transactions so the graph
+    // applies the deferred op after each dispatch.
+    let uuid = [8u8; 16];
+    let mut fields = Fields::new();
+    fields.insert(1u16, FieldValue::Int32(0));
+    fields.insert(2u16, FieldValue::Int32(0));
+    let mut graph = BoxGraph::from_boxes(vec![GraphBox {creation_index: 0, name: "Test".to_string(), uuid, fields}]);
+    let trigger = Address::of(uuid, vec![1u16]);
+    let late = Address::of(uuid, vec![2u16]);
+    let registry = Registry::new();
+    let deferred = graph.deferred();
+    let hits = Rc::new(RefCell::new(0));
+    let recorder = hits.clone();
+    let late_addr = late.clone();
+    graph.subscribe_vertex(Propagation::This, trigger.clone(), Box::new(move |_, _| {
+        let recorder = recorder.clone();
+        deferred.subscribe_vertex(Propagation::This, late_addr.clone(), Box::new(move |_, _| *recorder.borrow_mut() += 1));
+    }));
+    // Edit `trigger`: fires the trigger observer, which queues the late monitor; the graph applies it after
+    // dispatch — so it does NOT fire for this transaction.
+    graph.transaction(&[primitive_at(trigger)], &registry).unwrap();
+    assert_eq!(*hits.borrow(), 0);
+    // Now editing `late` fires the newly-registered monitor.
+    graph.transaction(&[primitive_at(late)], &registry).unwrap();
+    assert_eq!(*hits.borrow(), 1);
+}
+
+#[test]
 fn unsubscribe_stops_notifications_and_frees_the_observer() {
     let uuid = [6u8; 16];
     let address = Address::of(uuid, vec![1u16]);

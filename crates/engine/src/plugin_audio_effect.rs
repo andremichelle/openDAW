@@ -134,15 +134,21 @@ impl AudioInput for PluginAudioEffect {
 }
 
 impl PluginAudioEffect {
-    /// Wire a resolved sidechain SOURCE as the input port `port_id` (the id `bind_sidechain` returned, 2+). The
-    /// source buffer is kept alive so its captured pointer stays valid; `host_resolve_input(port_id)` then hands
-    /// the device these channels for the quantum. Called by the engine's sidechain-resolution pass.
-    pub(crate) fn set_sidechain(&mut self, port_id: u32, source: SharedAudioBuffer) {
-        let buffer = source.borrow();
-        let (left, right) = (buffer.left.as_ptr() as u32, buffer.right.as_ptr() as u32);
-        drop(buffer);
-        self.input_ports.push((port_id, left, right));
-        self.sidechain_buffers.push(source);
+    /// REPLACE this effect's resolved sidechains with `sources` (each `(port_id, buffer)`, the id
+    /// `bind_sidechain` returned, 2+). Rebuilds from scratch: keeps the MAIN through-signal at index 0 and
+    /// drops every previous sidechain, so a re-point / detach leaves no stale port — an unbound port simply
+    /// vanishes, and `host_resolve_input(port_id)` returns 0 (the device falls back to MAIN). Source buffers
+    /// are kept alive so their captured pointers stay valid. Called by the engine's sidechain-resolution pass.
+    pub(crate) fn set_sidechains(&mut self, sources: &[(u32, SharedAudioBuffer)]) {
+        self.input_ports.truncate(1); // index 0 is MAIN (set by set_audio_source); drop the previous sidechains
+        self.sidechain_buffers.clear();
+        for (port_id, source) in sources {
+            let buffer = source.borrow();
+            let (left, right) = (buffer.left.as_ptr() as u32, buffer.right.as_ptr() as u32);
+            drop(buffer);
+            self.input_ports.push((*port_id, left, right));
+            self.sidechain_buffers.push(source.clone());
+        }
     }
 }
 

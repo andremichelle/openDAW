@@ -5,18 +5,20 @@
 //! it is edited, exposing the member uuids sorted by `index`. The consumer (the engine) maps each uuid to a
 //! device bridge and wires the chain in that order, re-wiring whenever `sorted()` changes.
 //!
-//! Like the other binders, observers receive `&BoxGraph` only, so this never subscribes per-member from
-//! inside an observer: one `subscribe_all` re-reads the affected member's `index` (mirrors `NoteCollection`'s
-//! edit path), and the hub monitor handles add / remove.
+//! Subscriptions are fully TARGETED (no all-updates listener): the hub monitor handles membership, and each
+//! member gets a `This` monitor on its own `index` field for reorders. Since an observer holds only
+//! `&BoxGraph` and cannot subscribe mid-callback, the per-member monitors are queued on the graph's deferred
+//! handle (from the hub observer) and registered after the transaction's dispatch (mirrors lib-box's
+//! per-member `indexField.subscribe` inside `onAdded`).
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use boxgraph::address::{Address, Uuid};
 use boxgraph::graph::BoxGraph;
-use boxgraph::subscription::{HubEvent, SubscriptionId};
-use boxgraph::updates::Update;
+use boxgraph::subscription::{HubEvent, Propagation, SubscriptionId};
 
 pub struct IndexedCollection {
     state: Rc<RefCell<State>>,
@@ -30,7 +32,9 @@ pub struct IndexedCollection {
 struct State {
     index_key: u16,
     entries: Vec<Entry>,
-    dirty: bool
+    dirty: bool,
+    on_dirty: Option<Rc<dyn Fn()>>,    // fired when the order changes, so the owning unit can enqueue itself
+    index_subs: BTreeMap<Uuid, SubscriptionId> // per-member TARGETED monitor on its `index` field (reorder)
 }
 
 struct Entry {
@@ -40,7 +44,16 @@ struct Entry {
 
 impl State {
     fn new(index_key: u16) -> Self {
-        Self {index_key, entries: Vec::new(), dirty: false}
+        Self {index_key, entries: Vec::new(), dirty: false, on_dirty: None, index_subs: BTreeMap::new()}
+    }
+
+    /// Raise the dirty flag and notify the optional observer (TS `invalidateWiring`'s notify): the consumer
+    /// re-wires only this chain's scope, and the observer lets the owning unit enqueue itself for reconcile.
+    fn raise(&mut self) {
+        self.dirty = true;
+        if let Some(signal) = &self.on_dirty {
+            signal();
+        }
     }
 
     fn read_index(&self, graph: &BoxGraph, uuid: Uuid) -> i32 {
@@ -56,14 +69,14 @@ impl State {
         let index = self.read_index(graph, uuid);
         self.entries.push(Entry {uuid, index});
         self.sort();
-        self.dirty = true;
+        self.raise();
     }
 
     fn remove(&mut self, uuid: Uuid) {
         let before = self.entries.len();
         self.entries.retain(|entry| entry.uuid != uuid);
         if self.entries.len() != before {
-            self.dirty = true;
+            self.raise();
         }
     }
 
@@ -75,13 +88,9 @@ impl State {
             if entry.index != index {
                 entry.index = index;
                 self.sort();
-                self.dirty = true;
+                self.raise();
             }
         }
-    }
-
-    fn is_member(&self, uuid: Uuid) -> bool {
-        self.entries.iter().any(|entry| entry.uuid == uuid)
     }
 
     // Stable sort by index, so equal indices keep insertion order (deterministic, matching TS's stable sort).
@@ -92,24 +101,43 @@ impl State {
 
 impl IndexedCollection {
     /// Observe the device boxes whose `host` points at `host` (a unit's host field, e.g. `midi-effects`),
-    /// reading each device's `index` from field `index_key`. Catches up to the current members, then keeps
-    /// the order live as members connect / disconnect and as any member's `index` is edited.
+    /// reading each device's `index` from field `index_key`. Membership is the pointer-hub; a member's
+    /// reorder is a TARGETED `This` monitor on that member's `index` field, added when it joins (deferred)
+    /// and dropped when it leaves — no all-updates listener. `index_key` 0 means the host is unordered (the
+    /// single-instrument `input`), so no reorder monitor is needed.
     pub fn observe(graph: &mut BoxGraph, host: Address, index_key: u16) -> Self {
         let state = Rc::new(RefCell::new(State::new(index_key)));
         let mut subscriptions = Vec::new();
         let hub_state = state.clone();
+        let deferred = graph.deferred();
         subscriptions.push(graph.subscribe_pointer_hub(host, Box::new(move |graph, event| match event {
-            HubEvent::Added(source) => hub_state.borrow_mut().add(graph, source.uuid),
-            HubEvent::Removed(source) => hub_state.borrow_mut().remove(source.uuid)
-        })));
-        let edit_state = state.clone();
-        subscriptions.push(graph.subscribe_all(Box::new(move |graph, update| {
-            let uuid = affected_uuid(update);
-            if edit_state.borrow().is_member(uuid) {
-                edit_state.borrow_mut().refresh(graph, uuid);
+            HubEvent::Added(source) => {
+                let member = source.uuid;
+                hub_state.borrow_mut().add(graph, member);
+                if index_key != 0 {
+                    let edit_state = hub_state.clone();
+                    let id = deferred.subscribe_vertex(Propagation::This, Address::of(member, alloc::vec![index_key]),
+                        Box::new(move |graph, _update| edit_state.borrow_mut().refresh(graph, member)));
+                    hub_state.borrow_mut().index_subs.insert(member, id);
+                }
+            }
+            HubEvent::Removed(source) => {
+                hub_state.borrow_mut().remove(source.uuid);
+                if let Some(id) = hub_state.borrow_mut().index_subs.remove(&source.uuid) {
+                    deferred.unsubscribe(id);
+                }
             }
         })));
+        // Register the reorder monitors the catch-up queued for existing members (we hold `&mut graph`).
+        graph.apply_deferred();
         Self {state, subscriptions}
+    }
+
+    /// Wire a callback fired whenever this chain's order changes (an `invalidateWiring`-style notify). The
+    /// owning unit passes a closure that enqueues itself, so a chain edit reconciles ONE unit instead of a
+    /// sweep. Set AFTER the catch-up so the initial members do not fire it (the unit enqueues itself once).
+    pub fn set_on_dirty(&self, signal: Rc<dyn Fn()>) {
+        self.state.borrow_mut().on_dirty = Some(signal);
     }
 
     /// The member uuids, ordered by `index`.
@@ -139,17 +167,13 @@ impl IndexedCollection {
         dirty
     }
 
-    /// Unsubscribe from `graph` (mirrors the TS adapter's `terminate`).
+    /// Unsubscribe the hub observer and every per-member reorder monitor (mirrors the TS adapter's `terminate`).
     pub fn terminate(self, graph: &mut BoxGraph) {
         for id in self.subscriptions {
             graph.unsubscribe(id);
         }
-    }
-}
-
-fn affected_uuid(update: &Update) -> Uuid {
-    match update {
-        Update::Primitive {address, ..} | Update::Pointer {address, ..} => address.uuid,
-        Update::New {uuid, ..} | Update::Delete {uuid, ..} => *uuid
+        for (_, id) in core::mem::take(&mut self.state.borrow_mut().index_subs) {
+            graph.unsubscribe(id);
+        }
     }
 }
