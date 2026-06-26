@@ -1,6 +1,6 @@
 # openDAW Error Triage — index
 
-Snapshot of https://logs.opendaw.studio. **57 unresolved** reports across **33 signatures**, grouped into **23 error-groups** (one file each). Scanned 914 rows, ids 1..1001.
+Snapshot of https://logs.opendaw.studio. **5 unresolved** reports (ids 1014–1018, 3 new signatures) on top of the earlier batch. Scanned 931 rows, ids 1..1018; `status.php` now reports Total 931 / Unfixed 5 / 99% fixed. The 5 open reports are the three new groups below (Open — new).
 
 Each error-group has its own file in this folder. Priority: **P1** highest-value real bugs · **P2** real bugs · **P3** lower/needs-context · **ENV** environmental/transient. (Nothing is marked RESOLVED — see note below; a silenced/reworded panic is not a fix.)
 
@@ -8,6 +8,12 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 
 > **Cross-cutting fix (ErrorHandler):** `processError` no longer treats an unhandled **promise rejection** as fatal — previously ANY non-ignored rejection ran `AnimationFrame.terminate()` + the recovery dialog, killing the whole app over a single async failure (even a reason-less one). Rejections are now reported once and the session stays alive; only synchronous `error` events remain fatal. This is the root cause behind much of the rejection-based "crash" class below; the per-error `#tryIgnore` handlers (storage, monaco, file-picker, …) remain as defence-in-depth and for friendly messages.
 
+
+## Open — new (ids 1014–1018)
+
+- [Copy-device Output-unit undefined](P1-copy-device-output-unit-undefined.md) — FIXED (code + test; deploy pending) · **P1** · 3× · ids [1016, 1017, 1018]
+- [Device-delete no-device-host](P2-device-delete-no-device-host.md) — OPEN (mechanism identified) · **P2** · 1× · ids [1015]
+- [Undo/abort rollback PointerField missing](P2-undo-rollback-pointerfield-missing.md) — OPEN (rollback path exposed) · **P2** · 1× · ids [1014]
 
 ## P1
 
