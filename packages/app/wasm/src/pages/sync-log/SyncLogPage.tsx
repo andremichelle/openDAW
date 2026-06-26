@@ -1,10 +1,9 @@
 import {createElement, PageFactory} from "@opendaw/lib-jsx"
-import {DefaultObservableValue, int, MutableObservableOption, Terminator} from "@opendaw/lib-std"
-import {Update} from "@opendaw/lib-box"
+import {DefaultObservableValue, MutableObservableOption, Terminator} from "@opendaw/lib-std"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {Env} from "../../Env"
 import {createEngineHost} from "../../engine-host"
-import {COMMIT_INIT, decodeSteps, readCommits, stepBackward, stepForward} from "./sync-log"
+import {COMMIT_INIT, createStepper, decodeSteps, readCommits} from "./sync-log"
 
 // Walk through a recorded Sync Log (.odsl) transaction by transaction, with rewind / fast-forward, driving
 // the wasm engine live. A Sync Log is a commit stream: the first commit (Init) carries the serialized
@@ -46,48 +45,20 @@ export const SyncLogPage: PageFactory<Env> = ({lifecycle}) => {
         const engine = createEngineHost(boxGraph, terminator, {channel: `sync-log-${url}`})
         host.append(engine.element)
         logs.append(engine.log)
-        // `step` is the transaction the project is currently AT (0 = just the Init project); `target` is where
-        // the user wants to be. A single async driver moves `step` toward `target` one transaction at a time,
-        // YIELDING after each — because the engine sync is a real async pipeline (`createEngineHost`'s
-        // SyncSource ships each transaction over a channel and serializes it against this graph on the other
-        // side). Applying a burst synchronously would race that pipeline against the box graph (it would
-        // serialize tasks for boxes a later transaction already deleted); yielding lets each transaction
-        // settle before the next, exactly as the canonical `SyncLogReader` yields during replay. The driver
-        // re-reads `target` each step, so a click or a slider scrub mid-flight just redirects it.
+        // `step` mirrors the transaction the project is currently AT (0 = just the Init project) for the UI.
+        // The stepper queues each request onto a promise chain, traversing toward one target at a time and
+        // draining the engine-sync pipeline between each transaction, so a scrub follows the drag one position
+        // at a time without racing the async engine sync (see `createStepper` in `./sync-log`).
         const step = new DefaultObservableValue(0)
-        const target = new DefaultObservableValue(0)
-        const driver = {running: false}
-        const alive = {value: true} // cleared on teardown so the async driver stops touching a disposed graph
-        terminator.own({terminate: () => {alive.value = false}})
-        // The COMPLETE applied-update list captured per forward step (recorded updates + the graph's deferred
-        // pointer resolutions), so a backward step inverts exactly what was applied — see `./sync-log`.
-        const applied: Array<ReadonlyArray<Update>> = []
-        const drive = async (): Promise<void> => {
-            while (step.getValue() !== target.getValue() && alive.value) {
-                const at = step.getValue()
-                if (at < target.getValue()) {
-                    applied[at] = stepForward(boxGraph, steps[at])
-                    step.setValue(at + 1)
-                } else {
-                    stepBackward(boxGraph, applied[at - 1])
-                    step.setValue(at - 1)
-                }
-                await new Promise(resolve => setTimeout(resolve)) // let the async engine-sync pipeline drain
-            }
-        }
-        const request = (to: int): void => {
-            target.setValue(Math.max(0, Math.min(steps.length, to)))
-            if (driver.running) {return} // a driver is already pumping toward `target`; it will pick up the change
-            driver.running = true
-            void drive().finally(() => {driver.running = false})
-        }
+        const stepper = createStepper(boxGraph, steps, at => step.setValue(at))
+        terminator.own({terminate: () => stepper.dispose()})
         const slider: HTMLInputElement = <input type="range" min="0" max={String(steps.length)} value="0"
-            oninput={(event: Event) => request(parseInt((event.target as HTMLInputElement).value, 10))}/>
+            oninput={(event: Event) => stepper.request(parseInt((event.target as HTMLInputElement).value, 10))}/>
         const label: HTMLSpanElement = <span className="value"/>
-        const first: HTMLButtonElement = <button onclick={() => request(0)} title="rewind to start">⏮</button>
-        const prev: HTMLButtonElement = <button onclick={() => request(target.getValue() - 1)} title="step back">◀</button>
-        const next: HTMLButtonElement = <button onclick={() => request(target.getValue() + 1)} title="step forward">▶</button>
-        const last: HTMLButtonElement = <button onclick={() => request(steps.length)} title="fast-forward to end">⏭</button>
+        const first: HTMLButtonElement = <button onclick={() => stepper.request(0)} title="rewind to start">⏮</button>
+        const prev: HTMLButtonElement = <button onclick={() => stepper.request(step.getValue() - 1)} title="step back">◀</button>
+        const next: HTMLButtonElement = <button onclick={() => stepper.request(step.getValue() + 1)} title="step forward">▶</button>
+        const last: HTMLButtonElement = <button onclick={() => stepper.request(steps.length)} title="fast-forward to end">⏭</button>
         terminator.own(step.catchupAndSubscribe(owner => {
             const at = owner.getValue()
             label.textContent = `step ${at} / ${steps.length}`
@@ -108,15 +79,15 @@ export const SyncLogPage: PageFactory<Env> = ({lifecycle}) => {
         <div className="page">
             <h2>Sync Log</h2>
             <p>Walks through a recorded Sync Log (an <code>.odsl</code> from <code>public/odsl</code>) one
-                transaction at a time. The first commit loads the project; each step applies / inverts one
+                transaction at a time. Each step applies / inverts one
                 transaction on the box graph, streamed live to the engine. Rewind, scrub, or fast-forward —
                 then press Play to hear the project at that step.</p>
             <div className="metro-controls">
                 <label>Sync Log </label>
                 {select}
             </div>
-            {controls}
             {host}
+            {controls}
             {status}
             {logs}
         </div>

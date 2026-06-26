@@ -57,3 +57,44 @@ export const stepBackward = (graph: BoxGraph, applied: ReadonlyArray<Update>): v
     for (let index = applied.length - 1; index >= 0; index--) {applied[index].inverse(graph)}
     graph.endTransaction()
 }
+
+export type SyncLogStepper = {
+    request(target: int): void     // queue a traversal toward transaction `target` (clamped)
+    whenIdle(): Promise<void>      // resolves once every queued traversal so far has fully settled
+    dispose(): void                // stop the driver so it no longer touches a disposed graph
+}
+
+// Move the project to a target one transaction at a time, draining the async engine-sync pipeline between
+// each (a forward/backward step is a real transaction that `createEngineHost` ships over a channel and
+// serialises against the graph on the other side; running ahead would race it). Each `request` APPENDS its
+// traversal to a promise chain, so the traversals run strictly sequentially — every one is monotonic (it
+// only steps toward its own captured target) and fully settles before the next begins. A scrub therefore
+// follows the drag one position per `oninput` without ever placing a forward and a backward back to back
+// mid-flight, which is the race. (A jump is one long monotonic traversal, equally safe.)
+export const createStepper = (graph: BoxGraph, steps: ReadonlyArray<ReadonlyArray<Update>>,
+                              onStep: (at: int) => void): SyncLogStepper => {
+    const applied: Array<ReadonlyArray<Update>> = []
+    const state = {at: 0, alive: true}
+    const advanceTo = async (target: int): Promise<void> => {
+        while (state.at !== target && state.alive) {
+            if (state.at < target) {
+                applied[state.at] = stepForward(graph, steps[state.at])
+                state.at += 1
+            } else {
+                stepBackward(graph, applied[state.at - 1])
+                state.at -= 1
+            }
+            onStep(state.at)
+            await new Promise(resolve => setTimeout(resolve)) // drain this transaction before the next
+        }
+    }
+    let chain: Promise<void> = Promise.resolve()
+    return {
+        request: (target: int): void => {
+            const to = Math.max(0, Math.min(steps.length, target))
+            chain = chain.then(() => advanceTo(to))
+        },
+        whenIdle: (): Promise<void> => chain,
+        dispose: (): void => {state.alive = false}
+    }
+}
