@@ -315,6 +315,13 @@ class EngineProcessor extends AudioWorkletProcessor {
         if (!this.#bound && this.#engine.bind() === 0) {this.#bound = true}
         // A transaction may have added AudioFileBoxes (the engine queued their loads); dispatch them.
         this.#drainSampleRequests()
+        // Emit heap stats off-render so the panel updates while the context is suspended (a scrub never
+        // calls `process`); a delete that frees a sample is then visible as Heap-used dropping at once.
+        this.#heap.heap({
+            heapUsed: this.#engine.heap_used(),
+            heapClaimed: this.#engine.heap_claimed(),
+            memoryTotal: this.#memory.buffer.byteLength
+        })
     }
 
     process(_inputs: Array<Array<Float32Array>>, outputs: Array<Array<Float32Array>>): boolean {

@@ -767,7 +767,19 @@ impl Engine {
     /// decode/apply failure). The value/note caches update themselves inside `transaction`.
     fn apply_updates(&mut self, input: &[u8]) -> Result<[u8; 32], ()> {
         let mut reader = ByteReader::new(input);
-        let updates = decode_forward(&mut reader).map_err(|_| ())?;
+        let mut updates = decode_forward(&mut reader).map_err(|_| ())?;
+        // The wire delete task carries only the uuid (frozen contract), so `decode_forward` leaves the name
+        // empty. Resolve each box's class name from the still-present graph (it is removed inside
+        // `transaction`) so lifecycle observers can match it (e.g. the `AudioFileBox` sample free).
+        for update in &mut updates {
+            if let Update::Delete {uuid, name, ..} = update {
+                if name.is_empty() {
+                    if let Some(found) = self.graph.find_box(uuid) {
+                        *name = found.name.clone();
+                    }
+                }
+            }
+        }
         self.graph.transaction(&updates, &self.registry).map_err(|_| ())?;
         Ok(self.graph.checksum())
     }
