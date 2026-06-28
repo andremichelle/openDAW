@@ -95,8 +95,42 @@ updates per transaction and visibly drops on the backward step that deletes the 
 2. Manual: open the Sync Log page, scrub across step 32, watch Heap used rise on the way in and fall on
    the way out (relies on fix 2 to refresh the readout while suspended).
 
+## Requirement: no retained sample data anywhere
+
+An unreferenced sample must be removed from EVERY layer, not just the engine heap. Do NOT cache decoded
+audio on the main thread to make a re-reference cheap: that keeps an unused sample resident, which is the
+opposite of the goal. Re-fetch + re-decode on a forward re-scrub is the correct cost of having truly
+released the sample (the scrub page is a test harness, not a scenario to optimise for). The host already
+deletes its decoded copy right after writing (`engine-host.tsx` `held.delete`); the audit confirms no
+other layer retains it.
+
+## Retention audit (whole wasm app)
+
+Every place that can hold sample PCM:
+
+- Engine heap (`SampleResource`): freed on `AudioFileBox` delete (the fix above). OK.
+- Host `held` map (`engine-host.tsx`): set on `decode`, deleted on `write` (`held.delete`). Transient,
+  per-boot, owned by the boot closure. OK.
+- `loadSample` (`sample-fetch.ts`): fetches + decodes fresh on every call, no module-level cache. OK.
+- `SampleLoader` (`sample-loader.ts`): an RPC interface, holds no data; contract says "release the held
+  copy" after write. OK.
+- No module-level `Map`/`Cache`/`AudioData` state anywhere in `src/`. The wasm app does NOT use the
+  studio `SampleManager`/loader caches; it has its own minimal loader. OK.
+
+Conclusion: nothing retains an unused sample. The only resident copy is the engine heap, now released.
+
+## Follow-up found by the audit: delete-during-load race (correctness, not retention)
+
+If an `AudioFileBox` is deleted while its load is in flight (e.g. scrub forward past step 32 then
+immediately back), the engine has already freed the slot, so `sample_allocate(handle)` returns 0
+(`sample.rs` missing-slot path). The worklet passes that 0 to `loader.write(uuid, 0)`, which writes
+PLANAR frames to wasm offset 0 — corrupting low memory — and `held` is released, while `sample_set_ready`
+on the gone slot is a silent no-op. Not a leak, but a bad write.
+
+Fix (separate change): guard the host `write` on a null pointer — `if (pointer === 0) {held.delete(key);
+return}` — so the held copy is still released but no frames are written into a freed slot. Confirm the
+engine returns 0 (not a stale pointer) for every not-`Allocated` slot.
+
 ## Out of scope
 
-- Caching decoded audio on the main thread to skip re-decode when a sample is re-referenced on a
-  forward scrub (separate optimization; does not affect engine memory).
 - Soundfont sample boxes (same delete-name fix benefits any future lifecycle observer for free).
