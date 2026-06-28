@@ -60,6 +60,7 @@ pub(crate) struct PluginAudioEffect {
 
 impl PluginAudioEffect {
     pub(crate) fn new(sample_rate: f32, device: DeviceReg) -> Self {
+        crate::note_device_build();
         let device_output = [
             vec![0.0f32; RENDER_QUANTUM].into_boxed_slice(),
             vec![0.0f32; RENDER_QUANTUM].into_boxed_slice()

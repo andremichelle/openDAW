@@ -14,6 +14,7 @@
 //! engine struct + its render path stay in `lib.rs`; this module is the structure beneath a unit.
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
 use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -42,7 +43,7 @@ use crate::plugin_audio_effect::PluginAudioEffect;
 use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::composite::CompositeBinding;
-use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SIDECHAIN_BIND, EFFECT_INDEX_KEY};
+use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, CompositeSpec, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SIDECHAIN_BIND, EFFECT_INDEX_KEY};
 
 /// The handle a unit's subscriptions use to enqueue THAT unit for reconcile when its scope changes, so a
 /// related edit reconciles one unit instead of sweeping all units (the Rust analog of TS's per-unit
@@ -194,17 +195,63 @@ struct TrackBinding {
     region_sub: SubscriptionId
 }
 
-/// The processor nodes + edges the engine wired for one unit (its teardown set, the analog of TS
-/// `AudioDeviceChain`'s `#disconnector`): everything to drop before a rebuild. `output_buffer` is the last
-/// node's buffer, fed into the master bus.
-struct WiredCluster {
-    nodes: Vec<NodeId>,
-    edges: Vec<(NodeId, NodeId)>,
-    output_buffer: SharedAudioBuffer,
-    // The bound parameters of each device in this cluster (instrument + audio-fx). Owned here so a rewire /
-    // teardown unsubscribes the field observers + terminates the curve collections, and so a runtime
-    // automation change can re-observe + re-push WITHOUT rewiring the audio graph (`rebind_automation`).
-    device_params: Vec<DeviceParams>
+/// What the engine wired for one unit. A LEAF-instrument unit owns its device processors PERSISTENTLY (the
+/// analog of TS `AudioDeviceChain`'s `#effects`): a chain edit keeps the survivors and only creates joiners /
+/// terminates leavers, re-wiring EDGES ONLY (the `#disconnector` analog), so no survivor's DSP state is reset.
+/// A COMPOSITE-instrument unit keeps the older whole-cluster bundle (its instrument is a child cascade, not a
+/// single processor; per-child lifecycle lives in the `composite` module).
+enum Wired {
+    Leaf(LeafChain),
+    Composite(CompositeWired)
+}
+
+/// A held device processor, kept alive across rewires so its DSP state (voices, delay tails, filter history)
+/// survives a chain edit. The `Rc` is also how a rewire re-points the survivor (`set_audio_source` /
+/// `set_pull_chain`) without recreating it.
+enum ProcHandle {
+    Instrument(Rc<RefCell<PluginInstrument>>),
+    Audio(Rc<RefCell<PluginAudioEffect>>),
+    Midi(Rc<PluginMidiEffect>)
+}
+
+/// One persistent chain member: its device box uuid, the held processor, its graph node (none for a midi-fx,
+/// which is folded into the instrument's PULL chain and has no audio node), its audio output (for wiring the
+/// next node), its bound parameters (bound ONCE on join, reused untouched on survive — re-binding re-runs the
+/// device `init`, which resets DSP), and an audio-fx's optional sidechain binding.
+struct Member {
+    uuid: Uuid,
+    proc: ProcHandle,
+    node_id: Option<NodeId>,
+    output: Option<SharedAudioBuffer>,
+    params: DeviceParams,
+    sidechain: Option<SidechainBinding>
+}
+
+/// A leaf unit's persistent chain: the instrument, its midi-fx (pull-chain order) and audio-fx (graph order)
+/// members, the channel strip, and the CURRENT edge set (rebuilt edge-only each reconcile). Members persist
+/// across reconciles; only the diff (joiners / leavers) and the edges change.
+struct LeafChain {
+    instrument: Member,
+    // The instrument's note SOURCE. It holds per-block state (notes retained across blocks), so it persists
+    // and is REUSED while the instrument survives — recreating it mid-play would drop the held notes (stuck /
+    // re-triggered notes). Rebuilt only when the instrument itself changes.
+    sequencer: SharedNoteEventSource,
+    midi: Vec<Member>,
+    audio: Vec<Member>,
+    strip: Rc<RefCell<ChannelStripProcessor>>,
+    strip_id: NodeId,
+    strip_output: SharedAudioBuffer,
+    edges: Vec<(NodeId, NodeId)>
+}
+
+/// A composite-instrument unit's wiring: the persistent per-child `CompositeBinding` (which owns the children's
+/// processors, params, and sidechains, and reconciles them per child), plus the unit's own tail — the channel
+/// strip and the `sum -> strip -> master` edges. The strip persists across child edits (the sum bus is stable).
+struct CompositeWired {
+    binding: CompositeBinding,
+    strip_id: NodeId,
+    strip_output: SharedAudioBuffer,
+    tail_edges: Vec<(NodeId, NodeId)> // sum -> strip, strip -> master
 }
 
 /// The reusable result of `build_cluster`: an instrument plus its midi-fx pull chain and audio-fx chain,
@@ -296,21 +343,18 @@ pub(crate) struct AudioUnitBinding {
     input: IndexedCollection,
     midi: IndexedCollection,
     audio: IndexedCollection,
-    // When the unit's instrument is a COMPOSITE (e.g. Playfield), its child-collection cascade (owned by the
-    // `composite` module). `None` for a leaf instrument or no instrument. A slot add / remove raises its
-    // `take_dirty`, so the unit re-wires; teardown terminates it. The engine knows nothing else about it.
-    composite: Option<CompositeBinding>,
-    wired: Option<WiredCluster>,
+    // The wired processor graph: a leaf unit's persistent per-member chain, or a composite unit's bundle.
+    // `None` until the first reconcile (or a unit with no resolvable instrument). The instrument's composite
+    // cascade, the sidechain bindings, and the bound parameters all live INSIDE this now (per member for a
+    // leaf, in the bundle for a composite), so they survive a chain edit exactly as far as the wiring does.
+    wired: Option<Wired>,
     // Set by a parameter's TARGETED automation subscriptions (see `observe_params` / `automation_invalidate`)
     // when a Value track attaches / detaches or its data changes; `reconcile_one` then re-binds the unit's
     // curves (no rewire) and clears it.
     automation_dirty: Rc<Cell<bool>>,
     // Enqueues THIS unit for a targeted reconcile when any of its scope subscriptions (chains, tracks,
     // regions, automation, composite, sidechain pointers) fire — so a related edit rewires one unit.
-    mark: DirtyMark,
-    // The unit's persistent sidechain bindings (this unit's audio fx + its composite children's), re-resolved
-    // by the resolve pass. Each port carries its own TARGETED pointer monitor (see `SidechainPort`).
-    sidechains: Vec<SidechainBinding>
+    mark: DirtyMark
 }
 
 impl Engine {
@@ -468,14 +512,31 @@ impl Engine {
     /// so it also clears that flag.
     fn reconcile_one(&mut self, unit: &mut AudioUnitBinding) {
         reconcile_tracks(&mut self.graph, unit);
-        let composite_dirty = unit.composite.as_ref().is_some_and(|composite| composite.take_dirty());
-        let dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty() | composite_dirty;
-        if dirty {
-            self.rewire_unit(unit);
-        } else if unit.automation_dirty.get() {
-            self.rebind_automation(unit);
-            unit.automation_dirty.set(false);
+        // A REAL automation change (a Value track attach / detach / curve edit on an EXISTING parameter) sets
+        // this flag BEFORE this reconcile runs. A joiner's initial parameter catch-up ALSO sets it during the
+        // chain reconcile below — but that is spurious (the joiner is bound + refreshed at build), so it must
+        // NOT trigger a broad re-bind that would re-push every SURVIVING plugin's parameters (which would, e.g.,
+        // glide a delay's offset). So capture it first and only re-bind for a genuine pre-existing change.
+        let automation_changed = unit.automation_dirty.get();
+        let unit_dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty();
+        if unit_dirty {
+            // The unit's own chain changed (instrument swapped, or a unit-level fx joined / left): reconcile the
+            // whole chain (a composite instrument is rebuilt; a leaf reconciles per member). Survivors untouched.
+            self.reconcile_chain(unit);
+        } else if matches!(&unit.wired, Some(Wired::Composite(_))) {
+            // The instrument is an UNCHANGED composite; reconcile its children per member (a slot add / remove /
+            // reorder, or a child's own fx edit). A no-op when nothing changed.
+            let signal = unit.mark.signal();
+            let invalidate = automation_invalidate(unit);
+            let track_sets = unit.track_sets.clone();
+            if let Some(Wired::Composite(composite)) = &mut unit.wired {
+                self.reconcile_composite_children(&mut composite.binding, &track_sets, &signal, &invalidate);
+            }
         }
+        if automation_changed {
+            self.rebind_automation(unit);
+        }
+        unit.automation_dirty.set(false); // consume the joiner catch-up flags + the handled real change
     }
 
     /// Re-resolve EVERY unit's sidechain bindings against the current graph, diff-based so it is a no-op when
@@ -489,44 +550,59 @@ impl Engine {
     fn resolve_sidechains(&mut self) {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
-            for binding in &mut unit.sidechains {
-                let mut changed = false;
-                let mut sources: Vec<(u32, SharedAudioBuffer)> = Vec::new();
-                for port in &mut binding.ports {
-                    let target = self.graph.target_of(&Address::of(binding.device_uuid, port.path.clone())).cloned();
-                    let resolution = target.and_then(|target| self.output_registry.resolve(&Address::of(target.uuid, vec![]))
-                        .map(|output| (output.processor, output.buffer.clone())));
-                    let source_node = resolution.as_ref().map(|(node, _)| *node);
-                    if source_node != port.resolved {
-                        if let Some(old) = port.resolved {
-                            self.context.remove_edge(old, binding.node_id);
+            match &mut unit.wired {
+                Some(Wired::Leaf(chain)) => {
+                    for member in &mut chain.audio {
+                        if let Some(binding) = &mut member.sidechain {
+                            self.resolve_one_sidechain(binding);
                         }
-                        if let Some(new) = source_node {
-                            self.context.register_edge(new, binding.node_id);
-                        }
-                        port.resolved = source_node;
-                        changed = true;
-                    }
-                    if let Some((_, buffer)) = resolution {
-                        sources.push((port.port_id, buffer));
                     }
                 }
-                if changed {
-                    binding.effect.borrow_mut().set_sidechains(&sources);
+                Some(Wired::Composite(composite)) => {
+                    composite.binding.for_each_sidechain(&mut |binding| self.resolve_one_sidechain(binding));
                 }
+                None => {}
             }
         }
         self.audio_units = units;
+    }
+
+    /// Resolve ONE sidechain binding against the current graph: for each port follow the device pointer to its
+    /// target's output, swap the producer -> consumer edge if the source node changed, and (if any port moved)
+    /// push the device its current sidechain sources. See `resolve_sidechains` for the why.
+    fn resolve_one_sidechain(&mut self, binding: &mut SidechainBinding) {
+        let mut changed = false;
+        let mut sources: Vec<(u32, SharedAudioBuffer)> = Vec::new();
+        for port in &mut binding.ports {
+            let target = self.graph.target_of(&Address::of(binding.device_uuid, port.path.clone())).cloned();
+            let resolution = target.and_then(|target| self.output_registry.resolve(&Address::of(target.uuid, vec![]))
+                .map(|output| (output.processor, output.buffer.clone())));
+            let source_node = resolution.as_ref().map(|(node, _)| *node);
+            if source_node != port.resolved {
+                if let Some(old) = port.resolved {
+                    self.context.remove_edge(old, binding.node_id);
+                }
+                if let Some(new) = source_node {
+                    self.context.register_edge(new, binding.node_id);
+                }
+                port.resolved = source_node;
+                changed = true;
+            }
+            if let Some((_, buffer)) = resolution {
+                sources.push((port.port_id, buffer));
+            }
+        }
+        if changed {
+            binding.effect.borrow_mut().set_sidechains(&sources);
+        }
     }
 
     /// Remove a unit entirely: drop its wired cluster (edges, nodes, bus source), unsubscribe its tracks
     /// membership + track cascade, and terminate its three device-chain collections.
     fn teardown_unit(&mut self, mut binding: AudioUnitBinding) {
         if let Some(wired) = binding.wired.take() {
-            self.teardown_wired(&wired);
-            self.teardown_device_params(wired.device_params);
+            self.teardown_wired_value(wired);
         }
-        self.teardown_sidechains(core::mem::take(&mut binding.sidechains));
         self.graph.unsubscribe(binding.track_sub);
         for sub in &binding.strip_subs {
             self.graph.unsubscribe(*sub);
@@ -538,41 +614,60 @@ impl Engine {
         binding.input.terminate(&mut self.graph);
         binding.midi.terminate(&mut self.graph);
         binding.audio.terminate(&mut self.graph);
-        if let Some(composite) = binding.composite {
-            composite.terminate(&mut self.graph);
+    }
+
+    /// Drop a unit's whole wired graph (full teardown, the analog of TS `#disconnector.terminate` plus
+    /// terminating every `#effects` entry): unwire from the master, remove its edges + nodes, and terminate
+    /// each member's params + sidechain monitors. Used when a unit is removed, or its instrument changes kind.
+    fn teardown_unit_wired(&mut self, unit: &mut AudioUnitBinding) {
+        if let Some(wired) = unit.wired.take() {
+            self.teardown_wired_value(wired);
         }
     }
 
-    /// Drop a unit's sidechain bindings: unsubscribe each port's TARGETED pointer monitor. The resolved
-    /// producer -> consumer edges are removed with the effect nodes by `teardown_wired`.
-    fn teardown_sidechains(&mut self, sidechains: Vec<SidechainBinding>) {
-        for binding in sidechains {
-            for port in binding.ports {
-                self.graph.unsubscribe(port.pointer_sub);
+    fn teardown_wired_value(&mut self, wired: Wired) {
+        match wired {
+            Wired::Leaf(chain) => {
+                if let Some(master) = &self.master {
+                    master.borrow_mut().remove_audio_source(&chain.strip_output);
+                }
+                for (source, target) in &chain.edges {
+                    self.context.remove_edge(*source, *target);
+                }
+                self.context.remove_processor(chain.strip_id);
+                self.terminate_member(chain.instrument);
+                for member in chain.midi {
+                    self.terminate_member(member);
+                }
+                for member in chain.audio {
+                    self.terminate_member(member);
+                }
+            }
+            Wired::Composite(composite) => {
+                if let Some(master) = &self.master {
+                    master.borrow_mut().remove_audio_source(&composite.strip_output);
+                }
+                for (source, target) in &composite.tail_edges {
+                    self.context.remove_edge(*source, *target);
+                }
+                self.context.remove_processor(composite.strip_id);
+                self.teardown_composite(composite.binding);
             }
         }
     }
 
-    /// Drop a wired cluster's processor graph: unwire its output from the master bus, remove its edges, and
-    /// remove its nodes. The teardown set, the analog of TS `AudioDeviceChain`'s `#disconnector.terminate`.
-    fn teardown_wired(&mut self, wired: &WiredCluster) {
-        if let Some(master) = &self.master {
-            master.borrow_mut().remove_audio_source(&wired.output_buffer);
+    /// Terminate ONE leaf chain member (a leaver, or a full teardown): remove its processor node (a midi-fx
+    /// has none), drop its sidechain ports' pointer monitors, and unsubscribe its parameter observations.
+    fn terminate_member(&mut self, member: Member) {
+        if let Some(node_id) = member.node_id {
+            self.context.remove_processor(node_id);
         }
-        for (source, target) in &wired.edges {
-            self.context.remove_edge(*source, *target);
+        if let Some(sidechain) = member.sidechain {
+            for port in sidechain.ports {
+                self.graph.unsubscribe(port.pointer_sub);
+            }
         }
-        for node in &wired.nodes {
-            self.context.remove_processor(*node);
-        }
-    }
-
-    /// Drop the unit's composite cascade, if any (a leaf instrument or no instrument has none). The
-    /// `CompositeBinding` lives in the `composite` module; this just terminates it and clears the field.
-    fn drop_composite(&mut self, unit: &mut AudioUnitBinding) {
-        if let Some(composite) = unit.composite.take() {
-            composite.terminate(&mut self.graph);
-        }
+        self.teardown_device_params(vec![member.params]);
     }
 
     /// Build a unit binding: its per-track region collections list (`track_sets`, shared with the
@@ -627,96 +722,247 @@ impl Engine {
         AudioUnitBinding {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
-            input, midi, audio, composite: None, wired: None, automation_dirty, mark,
-            sidechains: Vec::new()
+            input, midi, audio, wired: None, automation_dirty, mark
         }
     }
 
-    /// (Re)build a unit's processor cluster from the current device table + the sorted chains: instrument
-    /// (the `input` device), the midi-fx pull chain folded in index order under it, and the audio-fx chain
-    /// wired instrument -> fx0 -> ... -> bus in index order. Tears down the old cluster first. A unit with no
-    /// resolvable instrument is left silent (wired = None). The whole device set is realized this way; the
-    /// only per-device knowledge is the box-type -> plugin table.
-    fn rewire_unit(&mut self, unit: &mut AudioUnitBinding) {
-        if let Some(wired) = unit.wired.take() {
-            self.teardown_wired(&wired);
-            self.teardown_device_params(wired.device_params);
-        }
-        self.teardown_sidechains(core::mem::take(&mut unit.sidechains)); // drop the old ports' pointer monitors
+    /// Reconcile a unit's processor graph to its current chains. Resolve the instrument; dispatch to the
+    /// per-member LEAF path (instrument + midi-fx + audio-fx) or the COMPOSITE path. A unit with no resolvable
+    /// instrument is left silent (its wiring fully torn down). The only per-device knowledge is the
+    /// box-type -> plugin table.
+    fn reconcile_chain(&mut self, unit: &mut AudioUnitBinding) {
         let instrument_uuid = match unit.input.sorted().first().copied() {
             Some(uuid) => uuid,
-            None => {
-                self.drop_composite(unit);
-                return // no instrument yet: the unit stays silent until its `input` device box appears
-            }
+            None => return self.teardown_unit_wired(unit) // no instrument: silent until its `input` box appears
         };
         let box_name = match self.graph.find_box(&instrument_uuid) {
             Some(device_box) => device_box.name.clone(),
-            None => {
-                self.drop_composite(unit);
-                return
-            }
+            None => return self.teardown_unit_wired(unit)
         };
-        // Enqueues this unit when a chain / child / sidechain pointer of its scope changes (the targeted
-        // subscriptions' notify), plus the parameter `invalidate` (which also sets `automation_dirty`).
-        // Both threaded through the whole cluster build.
+        // Enqueues this unit when a chain / child / sidechain pointer of its scope changes, plus the parameter
+        // `invalidate` (which also sets `automation_dirty`). Both threaded through the whole build.
         let signal = unit.mark.signal();
         let invalidate = automation_invalidate(unit);
-        let mut cluster = if let Some(spec) = self.composite_for_type(&box_name) {
-            // A COMPOSITE instrument (e.g. Playfield): the `composite` module builds one child per slot and
-            // sums them. The engine stays mapping-agnostic — `spec` (a registered entry) names the slot
-            // collection; nothing Playfield-specific lives here. The unit's own midi / audio chains are not
-            // wrapped around a composite yet (a composite's effects live per child, step 5).
-            self.drop_composite(unit);
-            let track_sets = unit.track_sets.clone();
-            let (cluster, binding) = self.build_composite(&track_sets, instrument_uuid, &spec, &signal, &invalidate);
-            unit.composite = Some(binding);
-            cluster
+        if let Some(spec) = self.composite_for_type(&box_name) {
+            self.reconcile_composite(unit, instrument_uuid, spec, &signal, &invalidate);
         } else {
-            self.drop_composite(unit); // a leaf instrument: drop any stale composite cascade
-            let instrument_device = match self.device_for_type(&box_name) {
-                Some(device) if device.kind == DEVICE_KIND_INSTRUMENT => device,
-                _ => return
-            };
-            // The pull-chain leaf: a sequencer over the unit's per-track region collections. It reads
-            // `track_sets` live, so track / region changes need no rewire. `build_cluster` folds the midi-fx
-            // chain on top in index order and builds the instrument + audio-fx chain.
-            let sequencer: SharedNoteEventSource =
-                Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}))));
-            let midi = unit.midi.sorted();
-            let audio = unit.audio.sorted();
-            self.build_cluster(PullLink::Source(sequencer), instrument_uuid, instrument_device, &midi, &audio, &signal, &invalidate)
-        };
-        // The channel strip terminates the unit's chain: instrument/fx -> STRIP -> master. It applies the
-        // unit's volume / panning / mute (read from the shared StripParams), then feeds the master bus.
+            match self.device_for_type(&box_name) {
+                Some(device) if device.kind == DEVICE_KIND_INSTRUMENT =>
+                    self.reconcile_leaf(unit, instrument_uuid, device, &signal, &invalidate),
+                _ => self.teardown_unit_wired(unit) // not a buildable instrument: silent
+            }
+        }
+    }
+
+    /// The COMPOSITE-instrument path (e.g. Playfield): tear down the old wiring and rebuild the child cascade
+    /// wholesale (per-child lifecycle is internal to the `composite` module). The composite's own midi / audio
+    /// unit chains are not wrapped around it yet. Mapping-agnostic — `spec` names the slot collection.
+    fn reconcile_composite(&mut self, unit: &mut AudioUnitBinding, instrument_uuid: Uuid, spec: CompositeSpec,
+                           signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) {
+        self.teardown_unit_wired(unit);
+        let track_sets = unit.track_sets.clone();
+        let binding = self.build_composite(&track_sets, instrument_uuid, &spec, signal, invalidate);
+        // The unit's tail: the composite's sum bus -> channel strip -> master. The strip + these edges persist
+        // across later per-child reconciles (the sum bus is stable).
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
-        strip.borrow_mut().set_audio_source(cluster.output);
+        strip.borrow_mut().set_audio_source(binding.sum_buffer.clone());
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
-        self.context.register_edge(cluster.output_node, strip_id);
-        cluster.edges.push((cluster.output_node, strip_id));
-        cluster.nodes.push(strip_id);
-        // Register the unit's OUTPUT (its strip) by box address, so a sidechain pointing at this unit resolves to
-        // this buffer + node in the post-build pass.
+        let mut tail_edges = Vec::new();
+        self.context.register_edge(binding.sum_id, strip_id);
+        tail_edges.push((binding.sum_id, strip_id));
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
         let master = self.master.as_ref().unwrap();
         master.borrow_mut().add_audio_source(strip_output.clone());
         self.context.register_edge(strip_id, self.master_id);
-        cluster.edges.push((strip_id, self.master_id));
-        // Now that every device node exists and its params are bound, push each parameter's initial value
-        // (the box-field default, or its automation at the current position) to the device.
-        let position = self.transport.position();
-        for params in &cluster.device_params {
-            refresh_params(&params.handles, params.reg, params.state_ptr, position);
+        tail_edges.push((strip_id, self.master_id));
+        // Each child's parameters are pushed as it is built (a joiner), inside `build_one_child`; no blanket
+        // re-push here, so a per-child reconcile never touches an existing slot's parameters.
+        unit.wired = Some(Wired::Composite(CompositeWired {binding, strip_id, strip_output, tail_edges}));
+    }
+
+    /// The LEAF-instrument per-member path, mirroring TS `AudioDeviceChain`: keep the existing device
+    /// processors, create only the joiners, terminate only the leavers, then re-wire EDGES ONLY. A processor
+    /// that survives keeps its instance (and so its DSP state — voices, delay tails, filter history); only
+    /// joiners are built + bound (re-binding re-runs the device `init`, which resets DSP, so survivors must be
+    /// left untouched). The channel strip persists across reconciles too.
+    fn reconcile_leaf(&mut self, unit: &mut AudioUnitBinding, instrument_uuid: Uuid, instrument_device: DeviceReg,
+                      signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) {
+        // Pool the previous leaf members so survivors can be reused; remove the previous edges (the
+        // `#disconnector` analog — edge-only teardown, NODES KEPT). A stale composite / none is fully removed.
+        let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
+        let mut strip_keep: Option<(Rc<RefCell<ChannelStripProcessor>>, NodeId, SharedAudioBuffer)> = None;
+        let mut sequencer_keep: Option<(Uuid, SharedNoteEventSource)> = None;
+        match unit.wired.take() {
+            Some(Wired::Leaf(chain)) => {
+                for (source, target) in &chain.edges {
+                    self.context.remove_edge(*source, *target);
+                }
+                if let Some(master) = &self.master {
+                    master.borrow_mut().remove_audio_source(&chain.strip_output);
+                }
+                sequencer_keep = Some((chain.instrument.uuid, chain.sequencer));
+                pool.insert(chain.instrument.uuid, chain.instrument);
+                for member in chain.midi {
+                    pool.insert(member.uuid, member);
+                }
+                for member in chain.audio {
+                    pool.insert(member.uuid, member);
+                }
+                strip_keep = Some((chain.strip, chain.strip_id, chain.strip_output));
+            }
+            Some(other) => self.teardown_wired_value(other),
+            None => {}
         }
-        // The fresh per-parameter automation subscriptions are now live; clear any pending flag.
-        unit.automation_dirty.set(false);
-        // Keep the fresh bindings (resolved = None, each port already carrying its targeted pointer monitor)
-        // for the resolve pass to wire up.
-        unit.sidechains = core::mem::take(&mut cluster.sidechains);
-        unit.wired = Some(WiredCluster {
-            nodes: cluster.nodes, edges: cluster.edges, output_buffer: strip_output, device_params: cluster.device_params
-        });
+        // Build the desired chain, reusing survivors from the pool (joiners are created + bound).
+        let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, instrument_device, invalidate);
+        let mut midi_members: Vec<Member> = Vec::new();
+        for uuid in unit.midi.sorted() {
+            let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
+            if let Some(device) = device {
+                if device.kind == DEVICE_KIND_MIDI_EFFECT {
+                    midi_members.push(self.take_or_build_midi(&mut pool, uuid, device, invalidate));
+                }
+            }
+        }
+        let mut audio_members: Vec<Member> = Vec::new();
+        for uuid in unit.audio.sorted() {
+            let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
+            if let Some(device) = device {
+                if device.kind == DEVICE_KIND_AUDIO_EFFECT {
+                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, signal, invalidate));
+                }
+            }
+        }
+        // Whatever remains pooled left the chain (a leaver): terminate it (node + sidechain monitors + params).
+        for (_, member) in core::mem::take(&mut pool) {
+            self.terminate_member(member);
+        }
+        // Reuse the instrument's note source if the instrument SURVIVED (it holds notes retained across blocks;
+        // recreating it mid-play would drop them — stuck / re-triggered notes). Build a fresh one only when the
+        // instrument itself is a joiner. Then fold the midi-fx PULL chain over it (reused midi effects keep
+        // their state; only the pull wrappers are rebuilt).
+        let sequencer: SharedNoteEventSource = match sequencer_keep {
+            Some((uuid, kept)) if uuid == instrument_uuid => kept,
+            _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}))))
+        };
+        let mut pull = PullLink::Source(sequencer.clone());
+        for member in &midi_members {
+            if let ProcHandle::Midi(effect) = &member.proc {
+                pull = PullLink::MidiFx {effect: effect.clone(), upstream: Rc::new(pull)};
+            }
+        }
+        if let ProcHandle::Instrument(processor) = &instrument.proc {
+            processor.borrow_mut().set_pull_chain(pull);
+        }
+        // Edge-only re-wire: instrument -> fx0 -> ... -> strip -> master, in chain order.
+        let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut output = instrument.output.clone().unwrap();
+        let mut output_node = instrument.node_id.unwrap();
+        for member in &audio_members {
+            if let ProcHandle::Audio(node) = &member.proc {
+                node.borrow_mut().set_audio_source(output.clone());
+            }
+            let node_id = member.node_id.unwrap();
+            self.context.register_edge(output_node, node_id);
+            edges.push((output_node, node_id));
+            output = member.output.clone().unwrap();
+            output_node = node_id;
+        }
+        // The channel strip terminates the chain; reuse it across reconciles (it carries no DSP state, just the
+        // shared volume / panning / mute), re-pointing its source at the new tail.
+        let (strip, strip_id, strip_output) = match strip_keep {
+            Some(existing) => existing,
+            None => {
+                let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
+                let strip_output = strip.borrow().audio_output();
+                let strip_id = self.context.register_processor(strip.clone());
+                (strip, strip_id, strip_output)
+            }
+        };
+        strip.borrow_mut().set_audio_source(output);
+        self.context.register_edge(output_node, strip_id);
+        edges.push((output_node, strip_id));
+        self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
+        let master = self.master.as_ref().unwrap();
+        master.borrow_mut().add_audio_source(strip_output.clone());
+        self.context.register_edge(strip_id, self.master_id);
+        edges.push((strip_id, self.master_id));
+        // Parameters are pushed ONLY to JOINERS (at build, in `take_or_build_*`). Survivors are NOT touched — a
+        // reorder / add / remove must leave every existing plugin's parameters exactly as they are (re-pushing
+        // would, e.g., glide a delay's offset). A real automation change re-binds via `rebind_automation`.
+        unit.wired = Some(Wired::Leaf(LeafChain {
+            instrument, sequencer, midi: midi_members, audio: audio_members, strip, strip_id, strip_output, edges
+        }));
+    }
+
+    /// Reuse the pooled instrument processor (a survivor: its voices live on) or build + bind a fresh one (a
+    /// joiner). A pooled entry of a different role under this uuid is terminated and rebuilt.
+    fn take_or_build_instrument(&mut self, pool: &mut BTreeMap<Uuid, Member>, uuid: Uuid, device: DeviceReg,
+                                invalidate: &Rc<dyn Fn()>) -> Member {
+        if let Some(existing) = pool.remove(&uuid) {
+            if matches!(existing.proc, ProcHandle::Instrument(_)) {
+                return existing;
+            }
+            self.terminate_member(existing);
+        }
+        let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, device)));
+        let state_ptr = instrument.borrow().state_ptr();
+        let sink: Rc<RefCell<dyn ParamSink>> = instrument.clone();
+        let params = self.bind_device(uuid, device, state_ptr, ParamNode::Audio(sink), invalidate);
+        refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
+        let output = instrument.borrow().audio_output();
+        let node_id = self.context.register_processor(instrument.clone());
+        Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), output: Some(output), params, sidechain: None}
+    }
+
+    /// Reuse the pooled midi-fx (a survivor) or build + bind a fresh one (a joiner). A midi-fx has no audio
+    /// node; it is folded into the instrument's pull chain.
+    fn take_or_build_midi(&mut self, pool: &mut BTreeMap<Uuid, Member>, uuid: Uuid, device: DeviceReg,
+                          invalidate: &Rc<dyn Fn()>) -> Member {
+        if let Some(existing) = pool.remove(&uuid) {
+            if matches!(existing.proc, ProcHandle::Midi(_)) {
+                return existing;
+            }
+            self.terminate_member(existing);
+        }
+        let effect = Rc::new(PluginMidiEffect::new(device));
+        let params = self.bind_device(uuid, device, effect.state_ptr(), ParamNode::Midi(effect.clone()), invalidate);
+        refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
+        Member {uuid, proc: ProcHandle::Midi(effect), node_id: None, output: None, params, sidechain: None}
+    }
+
+    /// Reuse the pooled audio-fx (a survivor: its delay tail / filter history live on) or build + bind a fresh
+    /// one (a joiner), creating its sidechain ports + their targeted pointer monitors. The resolve pass wires
+    /// the sidechain edges.
+    fn take_or_build_audio(&mut self, pool: &mut BTreeMap<Uuid, Member>, uuid: Uuid, device: DeviceReg,
+                           signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> Member {
+        if let Some(existing) = pool.remove(&uuid) {
+            if matches!(existing.proc, ProcHandle::Audio(_)) {
+                return existing;
+            }
+            self.terminate_member(existing);
+        }
+        let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
+        let state_ptr = node.borrow().state_ptr();
+        let sink: Rc<RefCell<dyn ParamSink>> = node.clone();
+        let params = self.bind_device(uuid, device, state_ptr, ParamNode::Audio(sink), invalidate);
+        refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
+        let output = node.borrow().audio_output();
+        let node_id = self.context.register_processor(node.clone());
+        let sidechain = if params.sidechain_paths.is_empty() {
+            None
+        } else {
+            let mut ports = Vec::new();
+            for (index, path) in params.sidechain_paths.iter().cloned().enumerate() {
+                let port_signal = signal.clone();
+                let pointer_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, path.clone()),
+                    Box::new(move |_graph, _update| port_signal()));
+                ports.push(SidechainPort {port_id: index as u32 + 2, path, resolved: None, pointer_sub});
+            }
+            Some(SidechainBinding {effect: node.clone(), node_id, device_uuid: uuid, ports})
+        };
+        Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), output: Some(output), params, sidechain}
     }
 
     /// Build one processor cluster: an instrument plus its midi-fx pull chain (folded onto `source` in index
@@ -904,8 +1150,17 @@ impl Engine {
         (handles, subs, collections, armed)
     }
 
+    /// Push the initial parameter values of freshly built devices (JOINERS) to them. Survivors are NEVER passed
+    /// here — a chain edit (reorder / add / remove) must leave every existing plugin's parameters untouched.
+    pub(crate) fn refresh_joiner_params(&self, device_params: &[DeviceParams]) {
+        let position = self.transport.position();
+        for params in device_params {
+            refresh_params(&params.handles, params.reg, params.state_ptr, position);
+        }
+    }
+
     /// Unsubscribe each device's field observers and terminate its curve collections (a rewire / teardown).
-    fn teardown_device_params(&mut self, device_params: Vec<DeviceParams>) {
+    pub(crate) fn teardown_device_params(&mut self, device_params: Vec<DeviceParams>) {
         for params in device_params {
             for sub in params.field_subs {
                 self.graph.unsubscribe(sub);
@@ -925,31 +1180,53 @@ impl Engine {
     /// `bindParameter` reacting to a parameter's automation pointer hub.
     fn rebind_automation(&mut self, unit: &mut AudioUnitBinding) {
         let invalidate = automation_invalidate(unit);
+        let position = self.transport.position();
         let mut wired = match unit.wired.take() {
             Some(wired) => wired,
             None => return
         };
-        let position = self.transport.position();
-        let mut rebound: Vec<DeviceParams> = Vec::new();
-        for params in core::mem::take(&mut wired.device_params) {
-            for sub in params.field_subs {
-                self.graph.unsubscribe(sub);
+        match &mut wired {
+            Wired::Leaf(chain) => {
+                self.rebind_one(&mut chain.instrument.params, &invalidate, position);
+                for member in &mut chain.midi {
+                    self.rebind_one(&mut member.params, &invalidate, position);
+                }
+                for member in &mut chain.audio {
+                    self.rebind_one(&mut member.params, &invalidate, position);
+                }
             }
-            for collection in params.collections {
-                collection.terminate(&mut self.graph);
+            Wired::Composite(composite) => {
+                composite.binding.for_each_params(&mut |params| self.rebind_one(params, &invalidate, position));
             }
-            let (handles, field_subs, collections, armed) = self.observe_params(params.device_uuid, &params.paths, &invalidate);
-            params.sink.set_params(handles.clone(), armed);
-            refresh_params(&handles, params.reg, params.state_ptr, position);
-            rebound.push(DeviceParams {
-                device_uuid: params.device_uuid, reg: params.reg, state_ptr: params.state_ptr,
-                sink: params.sink, paths: params.paths, handles, field_subs, collections,
-                observe_subs: params.observe_subs, // a re-bind doesn't touch the plain field observations
-                sidechain_paths: params.sidechain_paths // nor the declared sidechain paths (an automation rebind is not a rewire)
-            });
         }
-        wired.device_params = rebound;
         unit.wired = Some(wired);
+    }
+
+    /// Re-observe ONE device's automation in place: drop the old field subscriptions + curve collections,
+    /// re-observe the (unchanged) parameter field-paths, re-set the params on the node (re-arm / disarm the
+    /// clock), and push the resolved values. Touches neither the audio graph nor the plain-field / sidechain
+    /// observations.
+    fn rebind_one(&mut self, params: &mut DeviceParams, invalidate: &Rc<dyn Fn()>, position: f64) {
+        // Preserve each parameter's last-pushed value across the re-observe (the paths are unchanged, so the new
+        // handles line up by index). Fresh handles start at `last = NaN`, which would re-push EVERY parameter;
+        // carrying `last` over means `refresh_params` only pushes the ones whose value actually changed — so a
+        // parameter (or whole plugin) unaffected by this automation edit is never re-pushed (and never glides).
+        let previous_last: Vec<f32> = params.handles.iter().map(|handle| handle.last.get()).collect();
+        for sub in core::mem::take(&mut params.field_subs) {
+            self.graph.unsubscribe(sub);
+        }
+        for collection in core::mem::take(&mut params.collections) {
+            collection.terminate(&mut self.graph);
+        }
+        let (handles, field_subs, collections, armed) = self.observe_params(params.device_uuid, &params.paths, invalidate);
+        for (handle, last) in handles.iter().zip(previous_last) {
+            handle.last.set(last);
+        }
+        params.sink.set_params(handles.clone(), armed);
+        refresh_params(&handles, params.reg, params.state_ptr, position);
+        params.handles = handles;
+        params.field_subs = field_subs;
+        params.collections = collections;
     }
 }
 
@@ -1297,6 +1574,253 @@ mod tests {
                 (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.7))
             ])
         ])
+    }
+
+    // ---- Per-member processor lifecycle ----
+    // Adding an effect to a unit's audio chain must KEEP the existing processors (instrument + surviving
+    // effects), creating only the joiner — not tear down and rebuild the whole cluster, which would reset
+    // every survivor's DSP state. We prove identity by NodeId: ids are handed out monotonically and never
+    // reused, so a rebuilt processor always gets a fresh (larger) id. A survivor keeping its id == its
+    // processor instance was kept.
+    use alloc::rc::Rc;
+    use core::cell::RefCell;
+    use crate::{DeviceReg, Engine, EFFECT_INDEX_KEY};
+    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT};
+    use abi::DEVICE_KIND_AUDIO_EFFECT;
+    use boxgraph::updates::Update;
+    use engine_env::engine_context::NodeId;
+    use engine_env::audio_buffer::shared_audio_buffer;
+    use engine_env::audio_bus_processor::AudioBusProcessor;
+
+    // The instrument node id + the audio-fx node ids (in chain order) of a reconciled leaf unit.
+    fn leaf_nodes(unit: &AudioUnitBinding) -> (NodeId, Vec<NodeId>) {
+        match unit.wired.as_ref().expect("wired after reconcile") {
+            Wired::Leaf(chain) => (
+                chain.instrument.node_id.expect("instrument node"),
+                chain.audio.iter().map(|member| member.node_id.expect("audio node")).collect()
+            ),
+            _ => panic!("expected a leaf chain")
+        }
+    }
+
+    fn leaf_sequencer(unit: &AudioUnitBinding) -> engine_env::note_event_instrument::SharedNoteEventSource {
+        match unit.wired.as_ref().expect("wired after reconcile") {
+            Wired::Leaf(chain) => chain.sequencer.clone(),
+            _ => panic!("expected a leaf chain")
+        }
+    }
+
+    const UNIT: Uuid = [10u8; 16];
+    const INSTR: Uuid = [11u8; 16];
+    const FX_A: Uuid = [12u8; 16];
+    const FX_B: Uuid = [13u8; 16];
+    const HOST_KEY: u16 = 1; // the device's `host` pointer field (-> the unit's chain hub)
+
+    fn stub_device(kind: u32) -> DeviceReg {
+        DeviceReg {
+            process_index: 0, state_size: 64, kind, init_index: 0, parameter_changed_index: 0,
+            field_changed_index: 0, sample_changed_index: 0, reset_index: 0,
+            midi_effects_field: 0, audio_effects_field: 0
+        }
+    }
+
+    // A unit with an instrument on `input` (host 22) and ONE audio effect (FX_A, index 0) on the audio
+    // chain (host 23). FX_B exists but is not yet connected (host pointer None), so it joins later.
+    fn unit_graph() -> BoxGraph {
+        BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (20, FieldValue::Hook), (21, FieldValue::Hook), (22, FieldValue::Hook), (23, FieldValue::Hook)
+            ]),
+            graph_box(INSTR, "TestInstrument", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![22]))))
+            ]),
+            graph_box(FX_A, "TestEffect", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![23])))),
+                (EFFECT_INDEX_KEY, FieldValue::Int32(0))
+            ]),
+            graph_box(FX_B, "TestEffect", &[
+                (HOST_KEY, FieldValue::Pointer(None)),
+                (EFFECT_INDEX_KEY, FieldValue::Int32(1))
+            ])
+        ])
+    }
+
+    fn engine_with_devices() -> Engine {
+        let mut engine = Engine::new(48_000.0);
+        engine.devices = vec![stub_device(DEVICE_KIND_INSTRUMENT), stub_device(DEVICE_KIND_AUDIO_EFFECT)];
+        engine.device_box_types = vec![("TestInstrument".to_string(), 0), ("TestEffect".to_string(), 1)];
+        let output_buffer = shared_audio_buffer();
+        let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer)));
+        engine.master_id = engine.context.register_processor(master.clone());
+        engine.master = Some(master);
+        engine
+    }
+
+    #[test]
+    fn adding_an_effect_keeps_the_existing_processors() {
+        let mut engine = engine_with_devices();
+        engine.graph = unit_graph();
+        let mut unit = engine.build_unit(UNIT);
+        // First reconcile builds the chain: instrument + FX_A.
+        engine.reconcile_one(&mut unit);
+        let (instr_node, audio_before) = leaf_nodes(&unit);
+        assert_eq!(audio_before.len(), 1, "one audio effect (FX_A) before");
+        let fx_a_node = audio_before[0];
+
+        // Connect FX_B (index 1) to the audio chain via a real pointer transaction, so the audio
+        // IndexedCollection observes the join and marks the unit dirty.
+        let connect = Update::Pointer {
+            address: Address::of(FX_B, vec![HOST_KEY]),
+            old: None,
+            new: Some(Address::of(UNIT, vec![23]))
+        };
+        engine.graph.transaction(&[connect], &engine.registry).expect("connect FX_B");
+        assert_eq!(unit.audio.sorted(), vec![FX_A, FX_B], "FX_B joined the audio chain in index order");
+
+        // Second reconcile: FX_B joins. The instrument and FX_A must be the SAME processors (same ids).
+        engine.reconcile_one(&mut unit);
+        let (instr_after, audio_after) = leaf_nodes(&unit);
+        assert_eq!(audio_after.len(), 2, "FX_A + FX_B after");
+        assert_eq!(instr_after, instr_node, "instrument processor identity preserved across chain edit");
+        assert_eq!(audio_after[0], fx_a_node, "surviving effect FX_A processor identity preserved");
+        assert!(audio_after[1] > fx_a_node, "the joiner FX_B is a freshly created processor");
+    }
+
+    #[test]
+    fn reordering_effects_keeps_their_processors() {
+        let mut engine = engine_with_devices();
+        engine.graph = unit_graph();
+        let mut unit = engine.build_unit(UNIT);
+        // Connect FX_B (index 1) so the chain is [FX_A(0), FX_B(1)].
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(FX_B, vec![HOST_KEY]), old: None, new: Some(Address::of(UNIT, vec![23]))
+        }], &engine.registry).expect("connect FX_B");
+        engine.reconcile_one(&mut unit);
+        let (_, audio_before) = leaf_nodes(&unit);
+        assert_eq!(audio_before.len(), 2);
+        let (fx_a_node, fx_b_node) = (audio_before[0], audio_before[1]);
+
+        // SWAP the indices (a pure reorder): FX_A -> 1, FX_B -> 0, so the chain becomes [FX_B, FX_A].
+        engine.graph.transaction(&[
+            Update::Primitive {address: Address::of(FX_A, vec![EFFECT_INDEX_KEY]), old: FieldValue::Int32(0), new: FieldValue::Int32(1)},
+            Update::Primitive {address: Address::of(FX_B, vec![EFFECT_INDEX_KEY]), old: FieldValue::Int32(1), new: FieldValue::Int32(0)}
+        ], &engine.registry).expect("swap indices");
+        assert_eq!(unit.audio.sorted(), vec![FX_B, FX_A], "the chain reordered");
+
+        // A reorder must ONLY rewire edges: both processors keep their identity (no rebuild -> no DSP reset /
+        // delay-offset glide). The order of the node list follows the new chain order.
+        let sequencer_before = leaf_sequencer(&unit);
+        engine.reconcile_one(&mut unit);
+        let (_, audio_after) = leaf_nodes(&unit);
+        assert_eq!(audio_after, vec![fx_b_node, fx_a_node],
+            "reorder keeps the SAME processors, just re-ordered (FX_B then FX_A)");
+        // And it must reuse the instrument's note source: recreating it would drop the notes held across blocks
+        // (stuck / re-triggered notes while playing).
+        assert!(Rc::ptr_eq(&sequencer_before, &leaf_sequencer(&unit)),
+            "reorder reuses the instrument's note sequencer (held notes preserved)");
+    }
+
+    // ---- Composite per-child lifecycle ----
+    // A composite (Playfield) unit: adding a child slot must KEEP the existing slots' processors. Same
+    // identity-by-NodeId proof as the leaf case, one level down.
+    use crate::CompositeSpec;
+
+    const COMPOSITE: Uuid = [30u8; 16];
+    const CHILD_A: Uuid = [31u8; 16];
+    const CHILD_B: Uuid = [32u8; 16];
+    const CHILDREN_FIELD: u16 = 30; // the composite's child-slot host hub
+
+    // A unit whose instrument is a composite hosting direct-instrument children (no choke, no routing). CHILD_A
+    // is connected; CHILD_B exists but joins later. The children are `TestInstrument` voices.
+    fn composite_graph() -> BoxGraph {
+        BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (20, FieldValue::Hook), (21, FieldValue::Hook), (22, FieldValue::Hook), (23, FieldValue::Hook)
+            ]),
+            graph_box(COMPOSITE, "TestComposite", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![22])))),
+                (CHILDREN_FIELD, FieldValue::Hook)
+            ]),
+            graph_box(CHILD_A, "TestInstrument", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD]))))
+            ]),
+            graph_box(CHILD_B, "TestInstrument", &[
+                (HOST_KEY, FieldValue::Pointer(None))
+            ])
+        ])
+    }
+
+    fn child_instrument_node(unit: &AudioUnitBinding, child: Uuid) -> Option<NodeId> {
+        match unit.wired.as_ref().expect("wired after reconcile") {
+            Wired::Composite(composite) => composite.binding.child_instrument_node(child),
+            _ => panic!("expected a composite chain")
+        }
+    }
+
+    // How many child outputs the composite's summing bus currently mixes (a removed child must leave the sum,
+    // else its stale buffer keeps sounding).
+    fn composite_sum_sources(unit: &AudioUnitBinding) -> usize {
+        match unit.wired.as_ref().expect("wired after reconcile") {
+            Wired::Composite(composite) => composite.binding.sum.borrow().audio_source_count(),
+            _ => panic!("expected a composite chain")
+        }
+    }
+
+    fn composite_engine() -> Engine {
+        let mut engine = engine_with_devices(); // TestInstrument + TestEffect device table
+        engine.composites = vec![CompositeSpec {
+            box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
+            cell_instrument_field: 0, cell_midi_field: 0, cell_audio_field: 0 // direct instruments, no choke
+        }];
+        engine
+    }
+
+    #[test]
+    fn adding_a_composite_child_keeps_the_existing_children() {
+        let mut engine = composite_engine();
+        engine.graph = composite_graph();
+        let mut unit = engine.build_unit(UNIT);
+        // First reconcile builds the composite with CHILD_A summed.
+        engine.reconcile_one(&mut unit);
+        let child_a_node = child_instrument_node(&unit, CHILD_A).expect("CHILD_A built");
+
+        // Connect CHILD_B to the composite's child hub, so the children collection observes the join.
+        let connect = Update::Pointer {
+            address: Address::of(CHILD_B, vec![HOST_KEY]),
+            old: None,
+            new: Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD]))
+        };
+        engine.graph.transaction(&[connect], &engine.registry).expect("connect CHILD_B");
+
+        // Second reconcile: CHILD_B joins. CHILD_A's instrument processor must be the SAME (its voices live on).
+        engine.reconcile_one(&mut unit);
+        let child_a_after = child_instrument_node(&unit, CHILD_A).expect("CHILD_A survives");
+        let child_b_node = child_instrument_node(&unit, CHILD_B).expect("CHILD_B joined");
+        assert_eq!(child_a_after, child_a_node, "existing composite child keeps its processor identity");
+        assert!(child_b_node > child_a_node, "the joining child is a freshly created processor");
+    }
+
+    #[test]
+    fn removing_a_composite_child_keeps_the_others() {
+        let mut engine = composite_engine();
+        engine.graph = composite_graph();
+        let mut unit = engine.build_unit(UNIT);
+        // Connect CHILD_B so both A and B are children.
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(CHILD_B, vec![HOST_KEY]), old: None, new: Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD]))
+        }], &engine.registry).expect("connect CHILD_B");
+        engine.reconcile_one(&mut unit);
+        let child_b_node = child_instrument_node(&unit, CHILD_B).expect("CHILD_B built");
+        assert_eq!(composite_sum_sources(&unit), 2, "both children feed the sum");
+
+        // Disconnect CHILD_A: it leaves, CHILD_B must survive untouched.
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(CHILD_A, vec![HOST_KEY]), old: Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])), new: None
+        }], &engine.registry).expect("disconnect CHILD_A");
+        engine.reconcile_one(&mut unit);
+        assert_eq!(child_instrument_node(&unit, CHILD_A), None, "the removed child is gone");
+        assert_eq!(child_instrument_node(&unit, CHILD_B), Some(child_b_node), "the surviving child keeps its processor");
+        assert_eq!(composite_sum_sources(&unit), 1, "the removed child no longer feeds the sum (no stale buffer)");
     }
 
     #[test]

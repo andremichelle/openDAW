@@ -240,21 +240,54 @@ primitive's single internal use, and ZERO whole-unit rebuilds on a chain edit.
   per-edit update (param value, automation attach/detach, curve points + slopes, note edits, sidechain
   re-point, region span, chain reorder dispatch) is now targeted and per-unit.
 
-## §11 Remaining: P3 — per-member processor lifecycle
+## §11 P3 — per-member processor lifecycle — DONE (leaf units)
 
-The one part of requirement 2 not yet addressed: `rewire_unit` still tears down and rebuilds a unit's WHOLE
-cluster (every device processor + buffer + DSP state) whenever that unit's device-chain membership/order
-changes. It is correctly SCOPED to the one affected unit (the per-unit dispatch ensures unrelated units are
-untouched) and only fires on a structural CHAIN edit (not on param / note / automation / sidechain edits,
-which are all surgical now). The defect is DSP-STATE LOSS: adding a delay to a playing synth resets the
-synth's voices, because the surviving processors are recreated rather than kept.
+The defect was DSP-STATE LOSS: `rewire_unit` tore down and rebuilt a unit's WHOLE cluster on any chain edit,
+so adding a delay to a playing synth reset the synth's voices (surviving processors were recreated, not kept).
 
-Strategy (mirrors TS `AudioDeviceChain` per-member lifecycle, see §6): the unit keeps persistent device
-slots (`uuid -> processor + bindings`) and a persistent channel strip (moved out of `rewire_unit` into
-`build_unit`). On a chain change, diff the new sorted member list against the live slots: create a processor
-only for a newly-joined device, terminate only a left one, keep survivors (and their DSP state). Then
-re-connect EDGES only (instrument -> audio-fx -> strip -> master, and the midi-fx pull chain rebuilt from the
-persistent midi processors). Mirror the same per-child lifecycle in `composite.rs`. This is a focused rewrite
-of `rewire_unit` + `build_cluster`; it is higher-risk (core wiring) and warrants audio-level test coverage,
-which the checksum-only parity suite does not provide — so it should be a dedicated next pass with a
-rendering test that proves an effect add/remove keeps the instrument's voices alive.
+Done, mirroring TS `AudioDeviceChain`. `rewire_unit` is replaced by `reconcile_chain` which dispatches to:
+- `reconcile_leaf` (the per-member path): the unit owns its device processors persistently
+  (`Wired::Leaf` holds the instrument + ordered `Member`s for midi-fx and audio-fx, each holding the held
+  `ProcHandle`, its node, bound params, and any sidechain). On a chain edit it pools the previous members,
+  reuses survivors UNTOUCHED (so their voices / delay tails / filter history live on), builds + binds only
+  joiners, terminates only leavers, then re-wires EDGES ONLY (the `#disconnector` analog), rebuilding just the
+  midi-fx pull-chain wrappers over the reused effects. The channel strip persists across reconciles too.
+  Survivors keep their params (re-binding re-runs the device `init`, which resets DSP — so it is NOT redone).
+- `reconcile_composite` (unchanged behavior): a composite-instrument unit (e.g. Playfield) still rebuilds its
+  child cascade wholesale.
+
+Proof: `audio_unit::tests::adding_an_effect_keeps_the_existing_processors` builds a real unit, joins an effect
+via a pointer transaction, and asserts the instrument's and surviving effect's processor NODE IDS are
+unchanged (ids are monotonic + never reused, so identity == kept). Red before, green after. The full wasm
+suite (263-tx sync, full rewind with composites/sidechains/automation, disposal, scrub) stays green.
+
+### Composite-internal per-child lifecycle — DONE
+
+`composite.rs` now keeps a PERSISTENT per-child cascade (`CompositeBinding` owns `Vec<CompositeChild>`, each
+holding its built nodes / fx-chain observations / params / sidechains / nested composite + its choke set).
+`reconcile_composite_children` diffs the child collection like the leaf chain, one level down: KEEP unchanged
+survivors (their voices live on), build only joiners, terminate only leavers. The summing bus persists, so the
+unit's strip tail is never disturbed. `reconcile_one` routes a composite-child change (unit chains clean) to
+this per-child reconcile instead of a wholesale rebuild. `resolve_sidechains` / `rebind_automation` / teardown
+recurse the cascade via `for_each_sidechain` / `for_each_params` visitors.
+
+A child is rebuilt (its own voice resets, but no sibling is touched) only when ITS OWN fx chain changed, its
+nested subtree changed, or its CHOKE context changed (an exclude-group membership edit re-chokes siblings —
+recomputed each reconcile, rebuild on change). Reorder is a structural no-op (the sum is order-independent;
+all children reused by uuid).
+
+Tests:
+- Native (`audio_unit::tests`): `adding_a_composite_child_keeps_the_existing_children` and
+  `removing_a_composite_child_keeps_the_others` prove joiner/leaver/survivor identity by NodeId.
+- Integration: `test.odsl` DOES contain composites — 2x `PlayfieldDeviceBox` + 16x `PlayfieldSampleBox`
+  slots (box names are UTF-16 in the file, so `grep`/`strings` miss them — decode to verify, never grep).
+  `sync-log-engine.test.ts` drives the whole project forward (building both Playfields + their slots across
+  transactions) and fully back (tearing them down); `sync.test.ts` runs all 263 transactions. A slot add does
+  NOT change the unit's input/midi/audio, so it routes through `reconcile_composite_children` (the new
+  per-child path), not a rebuild — so the per-child reconcile, teardown, and choke-recompute all run against
+  real Playfield data, forward and rewound, with the engine checksum matching the source at every step and no
+  trap. (Checksum is box-graph-level, so it proves no desync/crash, not audio-graph correctness.)
+
+One known grain remains, strictly better than before: editing a child's OWN fx (or changing its choke group)
+resets THAT child's voice — the finest grain (per-effect-within-a-child) would need the leaf reconcile
+generalised to children; a dirty nested composite rebuilds wholesale (nested composites are rare).

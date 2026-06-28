@@ -38,6 +38,11 @@ impl AudioBusProcessor {
     pub fn clear_audio_sources(&mut self) {
         self.sources.clear();
     }
+
+    /// How many sources this bus currently sums (for tests / introspection).
+    pub fn audio_source_count(&self) -> usize {
+        self.sources.len()
+    }
 }
 
 impl EventReceiver for AudioBusProcessor {

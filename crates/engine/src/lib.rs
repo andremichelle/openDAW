@@ -132,6 +132,7 @@ fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, i
     if parameter_changed_index == 0 {
         return; // the device exports no `parameter_changed`; index 0 is the "none" sentinel
     }
+    unsafe { *PARAM_PUSHES.get() = PARAM_PUSHES.get().wrapping_add(1); }
     let parameter_changed: extern "C" fn(u32, u32, u32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
     parameter_changed(state_ptr, id, kind, value);
 }
@@ -225,6 +226,29 @@ impl<T> Shared<T> {
     unsafe fn get(&self) -> &mut T {
         &mut *self.0.get()
     }
+}
+
+// A debug counter of audio device-processor constructions (`PluginInstrument` + `PluginAudioEffect`). Exported
+// so a test can assert that a chain REORDER reuses processors (the count does not move) rather than rebuilding
+// them — a rebuilt device resets its DSP (e.g. a delay glides its offset from 0, pitching as if new).
+static DEVICE_BUILDS: Shared<u32> = Shared::new(0);
+
+pub(crate) fn note_device_build() {
+    unsafe { *DEVICE_BUILDS.get() = DEVICE_BUILDS.get().wrapping_add(1); }
+}
+
+#[no_mangle]
+pub extern "C" fn device_build_count() -> u32 {
+    unsafe { *DEVICE_BUILDS.get() }
+}
+
+// A debug counter of device parameter pushes (every `call_device_parameter_changed`). Exported so a test can
+// assert a chain REORDER does NOT re-push a survivor's parameters (which would glide e.g. the delay's offset).
+static PARAM_PUSHES: Shared<u32> = Shared::new(0);
+
+#[no_mangle]
+pub extern "C" fn param_push_count() -> u32 {
+    unsafe { *PARAM_PUSHES.get() }
 }
 
 // The single engine instance + the four fixed I/O buffers JS reaches by pointer. The buffers are kept
