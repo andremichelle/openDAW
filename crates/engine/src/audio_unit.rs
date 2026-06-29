@@ -207,7 +207,10 @@ struct TrackBinding {
     regions_set: SharedTrackRegions,
     region_bindings: Vec<RegionBinding>,
     region_changes: Rc<RefCell<Members>>,
-    region_sub: SubscriptionId
+    region_sub: SubscriptionId,
+    // A TARGETED `This` monitor on the track's `enabled` field: toggling it re-derives the unit's active
+    // note-track set (a disabled track's regions are excluded), exactly like a device `enabled` toggle.
+    enabled_sub: SubscriptionId
 }
 
 /// What the engine wired for one unit. A LEAF-instrument unit owns its device processors PERSISTENTLY (the
@@ -1204,6 +1207,10 @@ impl Engine {
                 let region_invalidate = invalidate.clone();
                 subs.push(self.graph.subscribe_pointer_hub(Address::of(track_uuid, vec![TRACK_REGIONS_KEY]),
                     Box::new(move |_graph, _event| region_invalidate())));
+                // Re-bind when the automation track is enabled / disabled, so the curve is applied or dropped.
+                let enabled_invalidate = invalidate.clone();
+                subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(track_uuid, vec![TRACK_ENABLED_KEY]),
+                    Box::new(move |_graph, _update| enabled_invalidate())));
             }
             collections.append(&mut track_collections);
             handles.push(ParamHandle {id: index as u32, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN))});
@@ -1356,6 +1363,12 @@ fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16]) -> (
         Some(uuid) => uuid,
         None => return (None, None, Vec::new())
     };
+    // A DISABLED automation track applies no curve: the parameter falls back to its own field value (mirrors
+    // TS `TrackBoxAdapter.valueAt` returning the fallback when `!enabled`). The track uuid is still returned so
+    // `observe_params` keeps the `enabled` monitor armed and re-binds when it is toggled back on.
+    if !track_enabled(graph, track_uuid) {
+        return (None, Some(track_uuid), Vec::new());
+    }
     let mut regions = RegionCollection::new();
     let mut collections = Vec::new();
     for spec in value_regions_of_track(graph, track_uuid) {
@@ -1395,8 +1408,19 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding) {
             continue; // a Value (automation) track is read per-device by `device_automation`, not the note cascade
         }
         let track = build_track(graph, track_uuid, &mark);
-        unit.track_sets.borrow_mut().push(track.regions_set.clone());
         unit.tracks.push(track);
+    }
+    // Re-derive the active note-track set: a track feeds the sequencer its regions IFF enabled. Rebuilding
+    // here (not only on add) is what makes an `enabled` toggle take effect edge-only — no region rebuild, the
+    // disabled track's collection is simply dropped from `track_sets` (and restored on re-enable).
+    {
+        let mut sets = unit.track_sets.borrow_mut();
+        sets.clear();
+        for track in &unit.tracks {
+            if track_enabled(graph, track.track_uuid) {
+                sets.push(track.regions_set.clone());
+            }
+        }
     }
     for track in &mut unit.tracks {
         reconcile_regions(graph, &mut unit.collections, track);
@@ -1418,13 +1442,17 @@ fn build_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMark) -> Trac
         }
         region_mark.mark();
     }));
-    TrackBinding {track_uuid, regions_set, region_bindings: Vec::new(), region_changes, region_sub}
+    let enabled_mark = mark.clone();
+    let enabled_sub = graph.subscribe_vertex(Propagation::This, Address::of(track_uuid, vec![TRACK_ENABLED_KEY]),
+        Box::new(move |_graph, _update| enabled_mark.mark()));
+    TrackBinding {track_uuid, regions_set, region_bindings: Vec::new(), region_changes, region_sub, enabled_sub}
 }
 
 /// Tear down a track: unsubscribe its membership + edit observers, unregister its region collection from the
 /// unit's `track_sets`, and release each region's note-event cache reference.
 fn teardown_track(graph: &mut BoxGraph, track_sets: &SharedTrackSets, collections: &mut CollectionCache, track: TrackBinding) {
     graph.unsubscribe(track.region_sub);
+    graph.unsubscribe(track.enabled_sub);
     track_sets.borrow_mut().retain(|set| !Rc::ptr_eq(set, &track.regions_set));
     for region in track.region_bindings {
         graph.unsubscribe(region.edit_sub);
@@ -1504,6 +1532,7 @@ fn region_pulses(graph: &BoxGraph, uuid: Uuid, key: u16) -> f64 {
 // automation (Note / Audio tracks and the unset default go through the note cascade).
 const TRACK_TYPE_VALUE: i32 = 3;
 const TRACK_TYPE_KEY: u16 = 11;
+const TRACK_ENABLED_KEY: u16 = 20;      // TrackBox.enabled (WASM CONTRACT): a disabled track contributes nothing
 const TRACK_TARGET_KEY: u16 = 2;        // TrackBox.target -> the automated parameter field (Automation pointer)
 const TRACK_REGIONS_KEY: u16 = 3;       // TrackBox.regions -> the hub value regions attach to (membership)
 const VALUE_REGION_EVENTS_KEY: u16 = 2; // ValueRegionBox.events -> the ValueEventCollectionBox
@@ -1544,6 +1573,10 @@ fn value_regions_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<RegionSpec>
 /// A track's `type` (field 11), defaulting to 0 (Undefined) when unset.
 fn track_type(graph: &BoxGraph, track_uuid: Uuid) -> i32 {
     graph.field_value(&Address::of(track_uuid, vec![TRACK_TYPE_KEY])).and_then(|value| value.as_int32()).unwrap_or(0)
+}
+
+fn track_enabled(graph: &BoxGraph, track_uuid: Uuid) -> bool {
+    graph.field_value(&Address::of(track_uuid, vec![TRACK_ENABLED_KEY])).and_then(|value| value.as_bool()).unwrap_or(true)
 }
 
 
@@ -1650,7 +1683,7 @@ mod tests {
     use alloc::rc::Rc;
     use core::cell::RefCell;
     use crate::{DeviceReg, Engine, EFFECT_INDEX_KEY};
-    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT, UNIT_MIDI_KEY, UNIT_INPUT_KEY, UNIT_AUDIO_KEY, UNIT_TRACKS_KEY, DEVICE_ENABLED_KEY};
+    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT, UNIT_MIDI_KEY, UNIT_INPUT_KEY, UNIT_AUDIO_KEY, UNIT_TRACKS_KEY, DEVICE_ENABLED_KEY, TRACK_ENABLED_KEY, TRACK_TYPE_KEY, TRACK_REGIONS_KEY};
     use abi::DEVICE_KIND_AUDIO_EFFECT;
     use boxgraph::updates::Update;
     use engine_env::engine_context::NodeId;
@@ -1832,6 +1865,41 @@ mod tests {
         let (_, audio_after) = leaf_nodes(&unit);
         assert_eq!(audio_after, vec![fx_a, fx_b], "same processor instances (edge-only re-wire, no rebuild)");
         assert!(node_in_path(&leaf_edges(&unit), fx_b), "FX_B is now wired into the signal path");
+    }
+
+    #[test]
+    fn a_disabled_note_track_contributes_no_regions_and_re_enabling_restores_it() {
+        const TRACK: Uuid = [20u8; 16];
+        let mut engine = engine_with_devices();
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+                (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+            ]),
+            graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+            graph_box(TRACK, "TrackBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))), // tracks -> unit.tracks
+                (TRACK_TYPE_KEY, FieldValue::Int32(0)),                                   // a NOTE track
+                (TRACK_REGIONS_KEY, FieldValue::Hook),
+                (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+            ])
+        ]);
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        assert_eq!(unit.track_sets.borrow().len(), 1, "an enabled note track feeds its regions to the sequencer");
+
+        // Disable the track: edge-only — its region collection is dropped from the sequencer's set, nothing rebuilt.
+        let toggle = |engine: &mut Engine, from: bool, to: bool| engine.graph.transaction(&[Update::Primitive {
+            address: Address::of(TRACK, vec![TRACK_ENABLED_KEY]),
+            old: FieldValue::Boolean(from), new: FieldValue::Boolean(to)
+        }], &engine.registry).expect("toggle track enabled");
+        toggle(&mut engine, true, false);
+        engine.reconcile_one(&mut unit);
+        assert_eq!(unit.track_sets.borrow().len(), 0, "a disabled note track contributes no regions");
+
+        toggle(&mut engine, false, true);
+        engine.reconcile_one(&mut unit);
+        assert_eq!(unit.track_sets.borrow().len(), 1, "re-enabling restores the track's regions");
     }
 
     // ---- Composite per-child lifecycle ----
