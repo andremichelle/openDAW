@@ -56,6 +56,9 @@ const UNIT_INPUT_KEY: u16 = 22;    // instrument (input) host
 const UNIT_AUDIO_KEY: u16 = 23;    // audio-effect chain host
 // RootBox.audio-units hub (unit membership) — a different box, same ordinal.
 const ROOT_AUDIO_UNITS_KEY: u16 = 20;
+// A unit-level device box's `enabled` BooleanField (WASM CONTRACT: the base device schema; a disabled
+// audio / midi effect is bypassed — skipped in the chain wiring). Composite-child enabled is separate.
+const DEVICE_ENABLED_KEY: u16 = 4;
 
 /// The handle a unit's subscriptions use to enqueue THAT unit for reconcile when its scope changes, so a
 /// related edit reconciles one unit instead of sweeping all units (the Rust analog of TS's per-unit
@@ -236,7 +239,10 @@ struct Member {
     node_id: Option<NodeId>,
     output: Option<SharedAudioBuffer>,
     params: DeviceParams,
-    sidechain: Option<SidechainBinding>
+    sidechain: Option<SidechainBinding>,
+    // A TARGETED `This` monitor on the device's `enabled` field: toggling it re-wires the unit (edge-only —
+    // a disabled effect is skipped in the chain, its processor + params + DSP state left untouched).
+    enabled_sub: SubscriptionId
 }
 
 /// A leaf unit's persistent chain: the instrument, its midi-fx (pull-chain order) and audio-fx (graph order)
@@ -364,6 +370,10 @@ pub(crate) struct AudioUnitBinding {
     // when a Value track attaches / detaches or its data changes; `reconcile_one` then re-binds the unit's
     // curves (no rewire) and clears it.
     automation_dirty: Rc<Cell<bool>>,
+    // Set by a device's `enabled` monitor: the chain membership did not change, but the unit must RE-WIRE
+    // (skip / include the toggled effect). `reconcile_one` treats it like a chain-dirty so reconcile_leaf runs
+    // its edge-only re-wire (survivors reused — no param push, no reset).
+    wiring_dirty: Rc<Cell<bool>>,
     // Enqueues THIS unit for a targeted reconcile when any of its scope subscriptions (chains, tracks,
     // regions, automation, composite, sidechain pointers) fire — so a related edit rewires one unit.
     mark: DirtyMark
@@ -530,7 +540,8 @@ impl Engine {
         // NOT trigger a broad re-bind that would re-push every SURVIVING plugin's parameters (which would, e.g.,
         // glide a delay's offset). So capture it first and only re-bind for a genuine pre-existing change.
         let automation_changed = unit.automation_dirty.get();
-        let unit_dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty();
+        // `wiring_dirty` (a device `enabled` toggle) re-wires the chain edge-only without a membership change.
+        let unit_dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty() | unit.wiring_dirty.replace(false);
         if unit_dirty {
             // The unit's own chain changed (instrument swapped, or a unit-level fx joined / left): reconcile the
             // whole chain (a composite instrument is rebuilt; a leaf reconciles per member). Survivors untouched.
@@ -679,6 +690,7 @@ impl Engine {
                 self.graph.unsubscribe(port.pointer_sub);
             }
         }
+        self.graph.unsubscribe(member.enabled_sub);
         self.teardown_device_params(vec![member.params]);
     }
 
@@ -731,11 +743,24 @@ impl Engine {
         // sets this flag + enqueues the unit, so `reconcile_one` re-binds the unit's curves (no rewire). No
         // per-unit all-updates observer.
         let automation_dirty = Rc::new(Cell::new(false));
+        let wiring_dirty = Rc::new(Cell::new(false));
         AudioUnitBinding {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
-            input, midi, audio, wired: None, automation_dirty, mark
+            input, midi, audio, wired: None, automation_dirty, wiring_dirty, mark
         }
+    }
+
+    /// The closure each device's `enabled` monitor fires: mark the unit for a re-wire and enqueue it. A
+    /// re-wire reconcile reuses every member (edge-only — no param push, no reset), so a bypass costs nothing
+    /// but the connection.
+    fn rewire_signal(unit: &AudioUnitBinding) -> Rc<dyn Fn()> {
+        let flag = unit.wiring_dirty.clone();
+        let mark = unit.mark.clone();
+        Rc::new(move || {
+            flag.set(true);
+            mark.mark();
+        })
     }
 
     /// Reconcile a unit's processor graph to its current chains. Resolve the instrument; dispatch to the
@@ -755,12 +780,13 @@ impl Engine {
         // `invalidate` (which also sets `automation_dirty`). Both threaded through the whole build.
         let signal = unit.mark.signal();
         let invalidate = automation_invalidate(unit);
+        let rewire = Self::rewire_signal(unit); // a device `enabled` toggle re-wires the chain edge-only
         if let Some(spec) = self.composite_for_type(&box_name) {
             self.reconcile_composite(unit, instrument_uuid, spec, &signal, &invalidate);
         } else {
             match self.device_for_type(&box_name) {
                 Some(device) if device.kind == DEVICE_KIND_INSTRUMENT =>
-                    self.reconcile_leaf(unit, instrument_uuid, device, &signal, &invalidate),
+                    self.reconcile_leaf(unit, instrument_uuid, device, &signal, &invalidate, &rewire),
                 _ => self.teardown_unit_wired(unit) // not a buildable instrument: silent
             }
         }
@@ -799,7 +825,7 @@ impl Engine {
     /// joiners are built + bound (re-binding re-runs the device `init`, which resets DSP, so survivors must be
     /// left untouched). The channel strip persists across reconciles too.
     fn reconcile_leaf(&mut self, unit: &mut AudioUnitBinding, instrument_uuid: Uuid, instrument_device: DeviceReg,
-                      signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) {
+                      signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) {
         // Pool the previous leaf members so survivors can be reused; remove the previous edges (the
         // `#disconnector` analog — edge-only teardown, NODES KEPT). A stale composite / none is fully removed.
         let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
@@ -827,13 +853,13 @@ impl Engine {
             None => {}
         }
         // Build the desired chain, reusing survivors from the pool (joiners are created + bound).
-        let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, instrument_device, invalidate);
+        let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, instrument_device, invalidate, rewire);
         let mut midi_members: Vec<Member> = Vec::new();
         for uuid in unit.midi.sorted() {
             let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
             if let Some(device) = device {
                 if device.kind == DEVICE_KIND_MIDI_EFFECT {
-                    midi_members.push(self.take_or_build_midi(&mut pool, uuid, device, invalidate));
+                    midi_members.push(self.take_or_build_midi(&mut pool, uuid, device, invalidate, rewire));
                 }
             }
         }
@@ -842,7 +868,7 @@ impl Engine {
             let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
             if let Some(device) = device {
                 if device.kind == DEVICE_KIND_AUDIO_EFFECT {
-                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, signal, invalidate));
+                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, signal, invalidate, rewire));
                 }
             }
         }
@@ -860,6 +886,9 @@ impl Engine {
         };
         let mut pull = PullLink::Source(sequencer.clone());
         for member in &midi_members {
+            if !self.device_enabled(member.uuid) {
+                continue; // a disabled midi-fx is bypassed (left out of the pull chain); its state is untouched
+            }
             if let ProcHandle::Midi(effect) = &member.proc {
                 pull = PullLink::MidiFx {effect: effect.clone(), upstream: Rc::new(pull)};
             }
@@ -872,6 +901,9 @@ impl Engine {
         let mut output = instrument.output.clone().unwrap();
         let mut output_node = instrument.node_id.unwrap();
         for member in &audio_members {
+            if !self.device_enabled(member.uuid) {
+                continue; // a disabled audio-fx is BYPASSED: not wired into the signal path; processor untouched
+            }
             if let ProcHandle::Audio(node) = &member.proc {
                 node.borrow_mut().set_audio_source(output.clone());
             }
@@ -908,10 +940,24 @@ impl Engine {
         }));
     }
 
+    /// Whether a device box is `enabled` (default true): a disabled audio / midi effect is bypassed — skipped
+    /// in the chain wiring, its processor + params + DSP state left fully intact.
+    fn device_enabled(&self, uuid: Uuid) -> bool {
+        self.graph.field_value(&Address::of(uuid, vec![DEVICE_ENABLED_KEY])).and_then(|value| value.as_bool()).unwrap_or(true)
+    }
+
+    /// A TARGETED `This` monitor on a device's `enabled` field: a toggle fires `rewire` (mark + enqueue the
+    /// unit), so `reconcile_leaf` re-wires the chain edge-only, skipping / including the toggled effect.
+    fn subscribe_enabled(&mut self, uuid: Uuid, rewire: &Rc<dyn Fn()>) -> SubscriptionId {
+        let rewire = rewire.clone();
+        self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, vec![DEVICE_ENABLED_KEY]),
+            Box::new(move |_graph, _update| rewire()))
+    }
+
     /// Reuse the pooled instrument processor (a survivor: its voices live on) or build + bind a fresh one (a
     /// joiner). A pooled entry of a different role under this uuid is terminated and rebuilt.
     fn take_or_build_instrument(&mut self, pool: &mut BTreeMap<Uuid, Member>, uuid: Uuid, device: DeviceReg,
-                                invalidate: &Rc<dyn Fn()>) -> Member {
+                                invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> Member {
         if let Some(existing) = pool.remove(&uuid) {
             if matches!(existing.proc, ProcHandle::Instrument(_)) {
                 return existing;
@@ -925,13 +971,14 @@ impl Engine {
         refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
         let output = instrument.borrow().audio_output();
         let node_id = self.context.register_processor(instrument.clone());
-        Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), output: Some(output), params, sidechain: None}
+        let enabled_sub = self.subscribe_enabled(uuid, rewire);
+        Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), output: Some(output), params, sidechain: None, enabled_sub}
     }
 
     /// Reuse the pooled midi-fx (a survivor) or build + bind a fresh one (a joiner). A midi-fx has no audio
     /// node; it is folded into the instrument's pull chain.
     fn take_or_build_midi(&mut self, pool: &mut BTreeMap<Uuid, Member>, uuid: Uuid, device: DeviceReg,
-                          invalidate: &Rc<dyn Fn()>) -> Member {
+                          invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> Member {
         if let Some(existing) = pool.remove(&uuid) {
             if matches!(existing.proc, ProcHandle::Midi(_)) {
                 return existing;
@@ -941,14 +988,15 @@ impl Engine {
         let effect = Rc::new(PluginMidiEffect::new(device));
         let params = self.bind_device(uuid, device, effect.state_ptr(), ParamNode::Midi(effect.clone()), invalidate);
         refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
-        Member {uuid, proc: ProcHandle::Midi(effect), node_id: None, output: None, params, sidechain: None}
+        let enabled_sub = self.subscribe_enabled(uuid, rewire);
+        Member {uuid, proc: ProcHandle::Midi(effect), node_id: None, output: None, params, sidechain: None, enabled_sub}
     }
 
     /// Reuse the pooled audio-fx (a survivor: its delay tail / filter history live on) or build + bind a fresh
     /// one (a joiner), creating its sidechain ports + their targeted pointer monitors. The resolve pass wires
     /// the sidechain edges.
     fn take_or_build_audio(&mut self, pool: &mut BTreeMap<Uuid, Member>, uuid: Uuid, device: DeviceReg,
-                           signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> Member {
+                           signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> Member {
         if let Some(existing) = pool.remove(&uuid) {
             if matches!(existing.proc, ProcHandle::Audio(_)) {
                 return existing;
@@ -974,7 +1022,8 @@ impl Engine {
             }
             Some(SidechainBinding {effect: node.clone(), node_id, device_uuid: uuid, ports})
         };
-        Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), output: Some(output), params, sidechain}
+        let enabled_sub = self.subscribe_enabled(uuid, rewire);
+        Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), output: Some(output), params, sidechain, enabled_sub}
     }
 
     /// Build one processor cluster: an instrument plus its midi-fx pull chain (folded onto `source` in index
@@ -1601,7 +1650,7 @@ mod tests {
     use alloc::rc::Rc;
     use core::cell::RefCell;
     use crate::{DeviceReg, Engine, EFFECT_INDEX_KEY};
-    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT, UNIT_MIDI_KEY, UNIT_INPUT_KEY, UNIT_AUDIO_KEY, UNIT_TRACKS_KEY};
+    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT, UNIT_MIDI_KEY, UNIT_INPUT_KEY, UNIT_AUDIO_KEY, UNIT_TRACKS_KEY, DEVICE_ENABLED_KEY};
     use abi::DEVICE_KIND_AUDIO_EFFECT;
     use boxgraph::updates::Update;
     use engine_env::engine_context::NodeId;
@@ -1624,6 +1673,17 @@ mod tests {
             Wired::Leaf(chain) => chain.sequencer.clone(),
             _ => panic!("expected a leaf chain")
         }
+    }
+
+    // The wired signal-path edges of a leaf unit. `node_in_path` says whether a processor node is connected.
+    fn leaf_edges(unit: &AudioUnitBinding) -> Vec<(NodeId, NodeId)> {
+        match unit.wired.as_ref().expect("wired after reconcile") {
+            Wired::Leaf(chain) => chain.edges.clone(),
+            _ => panic!("expected a leaf chain")
+        }
+    }
+    fn node_in_path(edges: &[(NodeId, NodeId)], node: NodeId) -> bool {
+        edges.iter().any(|(source, target)| *source == node || *target == node)
     }
 
     const UNIT: Uuid = [10u8; 16];
@@ -1734,6 +1794,44 @@ mod tests {
         // (stuck / re-triggered notes while playing).
         assert!(Rc::ptr_eq(&sequencer_before, &leaf_sequencer(&unit)),
             "reorder reuses the instrument's note sequencer (held notes preserved)");
+    }
+
+    #[test]
+    fn a_disabled_effect_is_bypassed_and_re_enabling_re_wires_it_edge_only() {
+        let mut engine = engine_with_devices();
+        // Unit: instrument + FX_A (enabled, index 0) + FX_B (DISABLED, index 1).
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+                (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+            ]),
+            graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+            graph_box(FX_A, "TestEffect", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))), (EFFECT_INDEX_KEY, FieldValue::Int32(0))
+            ]),
+            graph_box(FX_B, "TestEffect", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))), (EFFECT_INDEX_KEY, FieldValue::Int32(1)),
+                (DEVICE_ENABLED_KEY, FieldValue::Boolean(false)) // disabled
+            ])
+        ]);
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        let (_, audio) = leaf_nodes(&unit);
+        assert_eq!(audio.len(), 2, "BOTH effects are built (a disabled effect's processor persists)");
+        let (fx_a, fx_b) = (audio[0], audio[1]);
+        let edges = leaf_edges(&unit);
+        assert!(node_in_path(&edges, fx_a), "FX_A (enabled) is in the signal path");
+        assert!(!node_in_path(&edges, fx_b), "FX_B (disabled) is BYPASSED — no edge touches it");
+
+        // Enable FX_B: this must RE-WIRE edges only — the SAME processors, no rebuild, no param push.
+        engine.graph.transaction(&[Update::Primitive {
+            address: Address::of(FX_B, vec![DEVICE_ENABLED_KEY]),
+            old: FieldValue::Boolean(false), new: FieldValue::Boolean(true)
+        }], &engine.registry).expect("enable FX_B");
+        engine.reconcile_one(&mut unit);
+        let (_, audio_after) = leaf_nodes(&unit);
+        assert_eq!(audio_after, vec![fx_a, fx_b], "same processor instances (edge-only re-wire, no rebuild)");
+        assert!(node_in_path(&leaf_edges(&unit), fx_b), "FX_B is now wired into the signal path");
     }
 
     // ---- Composite per-child lifecycle ----
