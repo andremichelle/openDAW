@@ -421,7 +421,10 @@ export class PresetService {
         }
         const encodeOptions: Parameters<typeof PresetEncoder.encode>[1] =
             options?.excludeEffects === true
-                ? {includeTimeline: dialog.value.includeTimeline, excludeEffect: DeviceBoxUtils.isEffectDeviceBox}
+                ? {
+                    includeTimeline: dialog.value.includeTimeline,
+                    excludeEffect: (box: Box) => DeviceBoxUtils.isChainEffectOf(box, audioUnitBox)
+                }
                 : {includeTimeline: dialog.value.includeTimeline}
         await PresetStorage.save(meta, PresetEncoder.encode(audioUnitBox, encodeOptions))
     }
@@ -495,7 +498,7 @@ export class PresetService {
             : PresetEncoder.encode(audioUnitBox, {
                 includeTimeline,
                 excludeEffect: (box: Box) =>
-                    DeviceBoxUtils.isEffectDeviceBox(box) && !keep.has(UUID.toString(box.address.uuid))
+                    DeviceBoxUtils.isChainEffectOf(box, audioUnitBox) && !keep.has(UUID.toString(box.address.uuid))
             })
         await PresetStorage.save(meta, bytes)
     }
