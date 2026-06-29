@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.154](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.153...@opendaw/app-studio@0.0.154) (2026-06-29)
+
+### Bug Fixes
+
+- **presets:** keep Playfield sample-slot effects in instrument presets ([#265](https://github.com/andremichelle/openDAW/issues/265)) ([445b7f5](https://github.com/andremichelle/openDAW/commit/445b7f5124fa73345d34049e2f51435275b27f02))
+- **studio:** guard copy-device against the Output unit ([#1016](https://github.com/andremichelle/openDAW/issues/1016)-1018) ([ed83bf6](https://github.com/andremichelle/openDAW/commit/ed83bf64c1de4b79f76f839a00659a62410a9afa)), closes [#1016-1018](https://github.com/andremichelle/openDAW/issues/1016-1018) [#1016-1018](https://github.com/andremichelle/openDAW/issues/1016-1018)
+
 ## [0.0.153](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.152...@opendaw/app-studio@0.0.153) (2026-06-23)
 
 ### Bug Fixes
