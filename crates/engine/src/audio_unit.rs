@@ -1895,4 +1895,45 @@ mod tests {
         assert_eq!(cols_b.len(), 1, "param B observes ONLY its own track's value region");
         assert_eq!(curve_b.expect("curve B").value_at(0.0, -1.0), 0.3);
     }
+
+    #[test]
+    fn param_curve_holds_boundary_values_around_and_between_regions() {
+        // Two value regions on one track: A spans [0,100) holding 0.2, B spans [200,300) holding 0.8.
+        // `ParamCurve::value_at` must (TS `TrackBoxAdapter.valueAt`): before the first region read its
+        // INCOMING value; inside a region read its curve; OUTSIDE a region (the gap after it, or past the
+        // last) HOLD that region's OUTGOING value — never jump to the next region early or fall back.
+        const REGION_A: Uuid = [20u8; 16];
+        const COLL_A: Uuid = [21u8; 16];
+        const EVENT_A: Uuid = [22u8; 16];
+        const REGION_B: Uuid = [23u8; 16];
+        const COLL_B: Uuid = [24u8; 16];
+        const EVENT_B: Uuid = [25u8; 16];
+        let path = [5u16];
+        // One constant-value region: events collection with a single event (held) at local 0.
+        let region = |region: Uuid, collection: Uuid, event: Uuid, position: i32, value: f32| vec![
+            graph_box(region, "ValueRegionBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![3])))),
+                (2, FieldValue::Pointer(Some(Address::of(collection, vec![2])))),
+                (10, FieldValue::Int32(position)), (11, FieldValue::Int32(100)), (12, FieldValue::Int32(0)), (13, FieldValue::Int32(0))
+            ]),
+            graph_box(collection, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+            graph_box(event, "ValueEventBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(collection, vec![1])))), (10, FieldValue::Int32(0)), (13, FieldValue::Float32(value))
+            ])
+        ];
+        let mut boxes = vec![
+            graph_box(DEVICE, "RevampDeviceBox", &[]),
+            graph_box(TRACK, "TrackBox", &[(2, FieldValue::Pointer(Some(Address::of(DEVICE, path.to_vec())))), (3, FieldValue::Hook)])
+        ];
+        boxes.extend(region(REGION_A, COLL_A, EVENT_A, 0, 0.2));
+        boxes.extend(region(REGION_B, COLL_B, EVENT_B, 200, 0.8));
+        let mut graph = BoxGraph::from_boxes(boxes);
+        let curve = build_param_track(&mut graph, DEVICE, &path).0.expect("two regions -> a curve");
+
+        assert_eq!(curve.value_at(-10.0, -1.0), 0.2, "before the first region: its incoming value");
+        assert_eq!(curve.value_at(50.0, -1.0), 0.2, "inside region A");
+        assert_eq!(curve.value_at(150.0, -1.0), 0.2, "in the gap after A: A's HELD outgoing value, not B's");
+        assert_eq!(curve.value_at(250.0, -1.0), 0.8, "inside region B");
+        assert_eq!(curve.value_at(500.0, -1.0), 0.8, "past the last region: B's HELD outgoing value");
+    }
 }
