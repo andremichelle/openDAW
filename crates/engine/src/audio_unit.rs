@@ -218,6 +218,7 @@ struct TrackBinding {
 /// terminates leavers, re-wiring EDGES ONLY (the `#disconnector` analog), so no survivor's DSP state is reset.
 /// A COMPOSITE-instrument unit keeps the older whole-cluster bundle (its instrument is a child cascade, not a
 /// single processor; per-child lifecycle lives in the `composite` module).
+#[allow(clippy::large_enum_variant)] // the common variant is the live one; boxing it would add a per-build heap allocation
 enum Wired {
     Leaf(LeafChain),
     Composite(CompositeWired)
@@ -327,11 +328,10 @@ struct CompositeWired {
     enabled_sub: SubscriptionId
 }
 
-/// The reusable result of `build_cluster`: an instrument plus its midi-fx pull chain and audio-fx chain,
-/// wired into the global graph. `output` is the chain's final buffer and `output_node` its last node, so a
-/// caller appends its own tail (an audio unit appends the channel strip -> master; a composite child appends
-/// the per-child sum). The bookkeeping (`nodes` / `edges` / `device_params` / `device_uuids`) folds into the
-/// caller's `WiredCluster` and the unit's automation set.
+/// The result of `build_cluster` (the wholesale CELL composite-child path; a leaf unit and a direct slot use the
+/// edge-only `wire_cluster` instead): an instrument plus its midi-fx pull chain and audio-fx chain, wired into the
+/// global graph. `output` is the chain's final buffer and `output_node` its last node, so the caller appends its
+/// own tail (the per-child sum). The `nodes` / `edges` / `device_params` / `sidechains` fold into the child's body.
 pub(crate) struct BuiltCluster {
     pub(crate) output: SharedAudioBuffer,
     pub(crate) output_node: NodeId,
@@ -682,7 +682,7 @@ impl Engine {
     /// membership + track cascade, and terminate its three device-chain collections.
     fn teardown_unit(&mut self, mut binding: AudioUnitBinding) {
         if let Some(wired) = binding.wired.take() {
-            self.teardown_wired_value(wired);
+            self.teardown_wired_value(binding.unit, wired);
         }
         self.graph.unsubscribe(binding.track_sub);
         for sub in &binding.strip_subs {
@@ -702,11 +702,14 @@ impl Engine {
     /// each member's params + sidechain monitors. Used when a unit is removed, or its instrument changes kind.
     fn teardown_unit_wired(&mut self, unit: &mut AudioUnitBinding) {
         if let Some(wired) = unit.wired.take() {
-            self.teardown_wired_value(wired);
+            self.teardown_wired_value(unit.unit, wired);
         }
     }
 
-    fn teardown_wired_value(&mut self, wired: Wired) {
+    fn teardown_wired_value(&mut self, unit_uuid: Uuid, wired: Wired) {
+        // The unit's strip output is registered for sidechain resolution; drop it so a torn-down unit can never
+        // hand a sidechain a stale buffer. A rebuild (kind change) re-registers it immediately after.
+        self.output_registry.remove(&Address::of(unit_uuid, vec![]));
         match wired {
             Wired::Leaf(chain) => {
                 if let Some(master) = &self.master {
@@ -912,7 +915,7 @@ impl Engine {
                 }
                 strip_keep = Some((chain.strip, chain.strip_id, chain.strip_output));
             }
-            Some(other) => self.teardown_wired_value(other),
+            Some(other) => self.teardown_wired_value(unit.unit, other),
             None => {}
         }
         // Build the desired chain, reusing survivors from the pool (joiners are created + bound).
@@ -1110,6 +1113,7 @@ impl Engine {
     /// reuse the note source while the instrument survives, then re-wire (skipping disabled devices). Mirrors
     /// `reconcile_leaf` minus the channel-strip tail (the caller appends the slot's sum edge). `rewire` is the
     /// slot's own re-wire signal (a member `enabled` toggle re-runs THIS, not the unit chain).
+    #[allow(clippy::too_many_arguments)] // the reconcile cascade threads its signal/invalidate/rewire context
     pub(crate) fn reconcile_slot_cluster(&mut self, prev: Option<SlotCluster>, instrument_uuid: Uuid, device: DeviceReg,
                                          midi_uuids: &[Uuid], audio_uuids: &[Uuid], track_sets: &SharedTrackSets,
                                          choke: &[i32], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> SlotCluster {
@@ -1169,6 +1173,7 @@ impl Engine {
     /// and last node so the caller appends its own tail (a unit appends the channel strip then master, a
     /// composite child appends the per-child sum), plus the node / edge / param bookkeeping. The only
     /// per-device knowledge is the box-type -> plugin table, so any cluster host reuses this verbatim.
+    #[allow(clippy::too_many_arguments)] // a cluster builder takes one input per facet (instrument + midi + audio + signals)
     pub(crate) fn build_cluster(&mut self, source: PullLink, instrument_uuid: Uuid, instrument_device: DeviceReg,
                      midi: &[Uuid], audio: &[Uuid], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> BuiltCluster {
         let mut device_params: Vec<DeviceParams> = Vec::new();
@@ -1691,8 +1696,10 @@ fn value_regions_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<RegionSpec>
     let regions_hub = Address::of(track_uuid, vec![TRACK_REGIONS_KEY]);
     for source in graph.incoming(&regions_hub) {
         let region_uuid = source.uuid;
-        if !graph.find_box(&region_uuid).is_some_and(|graph_box| graph_box.name == "ValueRegionBox") {
-            continue; // a note/audio region could share the hub key; only value regions carry automation
+        // a note/audio region could share the hub key; only value regions carry automation
+        let Some(graph_box) = graph.find_box(&region_uuid) else { continue; };
+        if graph_box.name != "ValueRegionBox" {
+            continue;
         }
         if let Some(collection) = graph.target_of(&Address::of(region_uuid, vec![VALUE_REGION_EVENTS_KEY])).map(|address| address.uuid) {
             specs.push(RegionSpec {

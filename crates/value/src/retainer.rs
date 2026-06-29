@@ -13,7 +13,8 @@ pub struct EventSpanRetainer<E: EventSpan> {
 
 impl<E: EventSpan> EventSpanRetainer<E> {
     pub fn new() -> Self {
-        Self {events: Vec::new()}
+        // Pre-reserve a polyphony's worth so holding notes across blocks never reallocs on the render path.
+        Self {events: Vec::with_capacity(64)}
     }
 
     pub fn is_empty(&self) -> bool {

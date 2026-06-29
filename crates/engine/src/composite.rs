@@ -4,9 +4,10 @@
 //! collection's host field + index key); no box name or field key is hardcoded here. Playfield is just one
 //! registration.
 //!
-//! A composite is built recursively: each child is realized by its OWN box type through `build_instrument`,
-//! which dispatches a leaf voice device to `build_cluster` (the shared leaf builder in `audio_unit`) or a
-//! nested composite back to `build_composite`. So a composite may contain composites, with no special case.
+//! A composite is built recursively: `build_one_child` realizes each child by its OWN box type — a direct
+//! instrument slot becomes an edge-only `SlotCluster` (reconciled in place, like a leaf unit), a cell becomes a
+//! wholesale cluster (`build_cluster`), and a nested composite recurses through `build_composite`. So a composite
+//! may contain composites, with no special case.
 //!
 //! The `CompositeBinding` is the PERSISTENT per-child cascade the owning unit keeps: the child-collection
 //! observation plus one record per child (its processors, fx-chain observations, choke set, nested cascade).
@@ -51,6 +52,7 @@ pub(crate) struct CompositeBinding {
 /// What a composite child IS. A direct-instrument child (e.g. a Playfield slot) is an edge-only `SlotCluster`
 /// reconciled in place (its fx-chain edits + effect `enabled` toggles keep every survivor's DSP state). A cell
 /// child and a nested composite are rebuilt wholesale (rarer; no edge-only path).
+#[allow(clippy::large_enum_variant)] // Slot is the common variant; boxing it would add a per-slot heap allocation
 enum ChildBody {
     Slot {cluster: SlotCluster, device: DeviceReg, midi_obs: Option<IndexedCollection>, audio_obs: Option<IndexedCollection>},
     Cell {chains: Vec<IndexedCollection>, nodes: Vec<NodeId>, edges: Vec<(NodeId, NodeId)>, device_params: Vec<DeviceParams>, sidechains: Vec<SidechainBinding>},
@@ -67,9 +69,28 @@ struct CompositeChild {
     output: SharedAudioBuffer,              // the child's output buffer, summed into the bus
     output_node: NodeId,                    // the node feeding the sum (sum edge: output_node -> sum_id)
     summed: bool,                           // whether `output` is currently a source of the sum (false = disabled)
-    enabled: bool,
     enabled_sub: Option<SubscriptionId>,    // monitor on the child's OWN `enabled` field (None if unsupported)
     effects_dirty: Rc<Cell<bool>>           // set by a slot member's `enabled` toggle -> reconcile this slot
+}
+
+/// Sync a child's sum membership to its `enabled`: add its output as a source when it should be summed but is
+/// not, remove it when it should not be but is. Returns the new `summed` state. The one bypass invariant, shared
+/// by the build / slot-reconcile / wholesale-reconcile paths.
+fn sync_sum(sum: &Rc<RefCell<AudioBusProcessor>>, output: &SharedAudioBuffer, summed: bool, enabled: bool) -> bool {
+    if enabled && !summed {
+        sum.borrow_mut().add_audio_source(output.clone());
+    } else if !enabled && summed {
+        sum.borrow_mut().remove_audio_source(output);
+    }
+    enabled
+}
+
+/// Whether a slot's own fx chains or a member `enabled` toggle changed, consuming every flag (no short-circuit,
+/// so one dirty does not mask another). Shared by the in-place reconcile and the nested-subtree dirty check.
+fn slot_obs_dirty(midi_obs: &Option<IndexedCollection>, audio_obs: &Option<IndexedCollection>, effects_dirty: &Cell<bool>) -> bool {
+    midi_obs.as_ref().is_some_and(|obs| obs.take_dirty())
+        | audio_obs.as_ref().is_some_and(|obs| obs.take_dirty())
+        | effects_dirty.replace(false)
 }
 
 impl CompositeBinding {
@@ -112,7 +133,7 @@ impl CompositeBinding {
         for child in &mut self.members {
             match &mut child.body {
                 ChildBody::Slot {cluster, ..} => cluster.for_each_params(visit),
-                ChildBody::Cell {device_params, ..} => device_params.iter_mut().for_each(|params| visit(params)),
+                ChildBody::Cell {device_params, ..} => for params in device_params.iter_mut() { visit(params); },
                 ChildBody::Nested {binding} => binding.for_each_params(visit)
             }
         }
@@ -124,7 +145,7 @@ impl CompositeBinding {
         for child in &mut self.members {
             match &mut child.body {
                 ChildBody::Slot {cluster, ..} => cluster.for_each_sidechain(visit),
-                ChildBody::Cell {sidechains, ..} => sidechains.iter_mut().for_each(|binding| visit(binding)),
+                ChildBody::Cell {sidechains, ..} => for binding in sidechains.iter_mut() { visit(binding); },
                 ChildBody::Nested {binding} => binding.for_each_sidechain(visit)
             }
         }
@@ -207,16 +228,14 @@ impl Engine {
     /// synced to its own `enabled`. A CELL / NESTED child rebuilds wholesale if its subtree changed, else just
     /// syncs its sum membership. Returns the reconciled child (always `Some`, except a wholesale rebuild that finds
     /// the child no longer buildable).
+    #[allow(clippy::too_many_arguments)] // threads the reconcile cascade context
     fn reconcile_one_child(&mut self, binding: &mut CompositeBinding, child: CompositeChild, choke: Vec<i32>,
                            spec: &CompositeSpec, track_sets: &SharedTrackSets, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> Option<CompositeChild> {
-        let CompositeChild {uuid, choke: old_choke, body, output, output_node, summed, enabled: _, enabled_sub, effects_dirty} = child;
+        let CompositeChild {uuid, choke: old_choke, body, output, output_node, summed, enabled_sub, effects_dirty} = child;
         let choke_changed = old_choke != choke;
         match body {
             ChildBody::Slot {cluster, device, midi_obs, audio_obs} => {
-                let dirty = midi_obs.as_ref().map_or(false, |obs| obs.take_dirty())
-                    | audio_obs.as_ref().map_or(false, |obs| obs.take_dirty())
-                    | effects_dirty.replace(false)
-                    | choke_changed;
+                let dirty = slot_obs_dirty(&midi_obs, &audio_obs, &effects_dirty) | choke_changed;
                 let (cluster, output, output_node, summed) = if dirty {
                     // Edge-only re-wire: drop the old sum wiring, reconcile the cluster (reusing survivors), re-wire.
                     if summed { binding.sum.borrow_mut().remove_audio_source(&output); }
@@ -232,24 +251,22 @@ impl Engine {
                 } else {
                     (cluster, output, output_node, summed)
                 };
-                let enabled = self.child_enabled(uuid, spec.child_enabled_key);
-                if enabled && !summed { binding.sum.borrow_mut().add_audio_source(output.clone()); }
-                else if !enabled && summed { binding.sum.borrow_mut().remove_audio_source(&output); }
+                let summed = sync_sum(&binding.sum, &output, summed, self.child_enabled(uuid, spec.child_enabled_key));
                 Some(CompositeChild {uuid, choke, body: ChildBody::Slot {cluster, device, midi_obs, audio_obs},
-                    output, output_node, summed: enabled, enabled, enabled_sub, effects_dirty})
+                    output, output_node, summed, enabled_sub, effects_dirty})
             }
             ChildBody::Cell {chains, nodes, edges, device_params, sidechains} => {
                 let dirty = chains.iter().fold(false, |acc, chain| acc | chain.take_dirty()) | choke_changed;
                 let child = CompositeChild {uuid, choke: if dirty {choke.clone()} else {choke},
                     body: ChildBody::Cell {chains, nodes, edges, device_params, sidechains},
-                    output, output_node, summed, enabled: summed, enabled_sub, effects_dirty};
+                    output, output_node, summed, enabled_sub, effects_dirty};
                 self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, signal, invalidate)
             }
             ChildBody::Nested {binding: nested} => {
                 let dirty = self.composite_dirty(&nested) | choke_changed;
                 let child = CompositeChild {uuid, choke: if dirty {choke.clone()} else {choke},
                     body: ChildBody::Nested {binding: nested},
-                    output, output_node, summed, enabled: summed, enabled_sub, effects_dirty};
+                    output, output_node, summed, enabled_sub, effects_dirty};
                 self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, signal, invalidate)
             }
         }
@@ -257,6 +274,7 @@ impl Engine {
 
     /// A cell / nested child: rebuild wholesale if its subtree changed (its voice resets, but no sibling is
     /// touched), else just sync its sum membership to its own `enabled`.
+    #[allow(clippy::too_many_arguments)] // threads the reconcile cascade context
     fn reconcile_wholesale_child(&mut self, binding: &mut CompositeBinding, mut child: CompositeChild, dirty: bool,
                                  spec: &CompositeSpec, track_sets: &SharedTrackSets, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> Option<CompositeChild> {
         if dirty {
@@ -266,11 +284,7 @@ impl Engine {
             self.teardown_child(child);
             return self.build_one_child(binding.sum.clone(), binding.sum_id, track_sets, uuid, choke, spec, signal, invalidate);
         }
-        let enabled = self.child_enabled(child.uuid, spec.child_enabled_key);
-        if enabled && !child.summed { binding.sum.borrow_mut().add_audio_source(child.output.clone()); }
-        else if !enabled && child.summed { binding.sum.borrow_mut().remove_audio_source(&child.output); }
-        child.summed = enabled;
-        child.enabled = enabled;
+        child.summed = sync_sum(&binding.sum, &child.output, child.summed, self.child_enabled(child.uuid, spec.child_enabled_key));
         Some(child)
     }
 
@@ -316,10 +330,7 @@ impl Engine {
     /// Consumes the flags at every level (no short-circuit) so one dirty does not mask another.
     fn child_changed(&self, child: &CompositeChild) -> bool {
         match &child.body {
-            ChildBody::Slot {midi_obs, audio_obs, ..} =>
-                midi_obs.as_ref().map_or(false, |obs| obs.take_dirty())
-                    | audio_obs.as_ref().map_or(false, |obs| obs.take_dirty())
-                    | child.effects_dirty.replace(false),
+            ChildBody::Slot {midi_obs, audio_obs, ..} => slot_obs_dirty(midi_obs, audio_obs, &child.effects_dirty),
             ChildBody::Cell {chains, ..} => chains.iter().fold(false, |acc, chain| acc | chain.take_dirty()),
             ChildBody::Nested {binding} => self.composite_dirty(binding)
         }
@@ -339,6 +350,7 @@ impl Engine {
     /// (reconciled in place), a cell becomes a wholesale cluster, a nested composite recurses. Registers its
     /// output (so a sidechain can target it), then wires it into the sum (the source is withheld while disabled).
     /// `None` if the child has no plugin / composite (silently skipped).
+    #[allow(clippy::too_many_arguments)] // threads the reconcile cascade context
     fn build_one_child(&mut self, sum: Rc<RefCell<AudioBusProcessor>>, sum_id: NodeId, track_sets: &SharedTrackSets,
                        child_uuid: Uuid, choke: Vec<i32>, spec: &CompositeSpec, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
         -> Option<CompositeChild> {
@@ -371,13 +383,10 @@ impl Engine {
             }
         };
         self.output_registry.register(Address::of(child_uuid, vec![]), output.clone(), output_node);
-        let enabled = self.child_enabled(child_uuid, spec.child_enabled_key);
-        if enabled {
-            sum.borrow_mut().add_audio_source(output.clone());
-        }
+        let summed = sync_sum(&sum, &output, false, self.child_enabled(child_uuid, spec.child_enabled_key));
         self.context.register_edge(output_node, sum_id);
         let enabled_sub = self.subscribe_child_enabled(child_uuid, spec.child_enabled_key, signal);
-        Some(CompositeChild {uuid: child_uuid, choke, body, output, output_node, summed: enabled, enabled, enabled_sub, effects_dirty})
+        Some(CompositeChild {uuid: child_uuid, choke, body, output, output_node, summed, enabled_sub, effects_dirty})
     }
 
     /// Observe one fx-host collection of a child (`field` = the device-declared host key; 0 = none), sorted by
@@ -442,15 +451,10 @@ impl Engine {
     /// hosts no chain there) and return its members sorted by `EFFECT_INDEX_KEY`. A live observation is pushed
     /// to `chains` for the binding's reactivity / teardown; key 0 yields an empty chain and no observation.
     fn observe_child_chain(&mut self, box_uuid: Uuid, field: u16, chains: &mut Vec<IndexedCollection>, signal: &Rc<dyn Fn()>) -> Vec<Uuid> {
-        if field == 0 {
-            return Vec::new();
+        match self.observe_chain_opt(box_uuid, field, signal) {
+            Some(observation) => { let sorted = observation.sorted(); chains.push(observation); sorted }
+            None => Vec::new()
         }
-        let observation = IndexedCollection::observe(&mut self.graph, Address::of(box_uuid, vec![field]), EFFECT_INDEX_KEY);
-        let sorted = observation.sorted();
-        observation.take_dirty();
-        observation.set_on_dirty(signal.clone()); // a live add / remove of a child effect enqueues the owning unit
-        chains.push(observation);
-        sorted
     }
 
     /// Build one CELL child: a generic wrapper (`spec.cell_*` field keys) holding ONE instrument plus its own

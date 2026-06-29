@@ -88,7 +88,7 @@ impl Metronome {
     pub fn new(sample_rate: f32) -> Self {
         Self {
             sounds: [ClickSound::create(880.0, sample_rate), ClickSound::create(440.0, sample_rate)],
-            clicks: Vec::new(),
+            clicks: Vec::with_capacity(8), // a few simultaneous click tails at most; pre-reserved so render never reallocs
             nominator: 4,
             denominator: 4,
             sample_rate,

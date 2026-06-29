@@ -188,6 +188,7 @@ fn call_device_reset(reset_index: u32, state_ptr: u32) {
 fn call_device_reset(_reset_index: u32, _state_ptr: u32) {}
 
 const DEVICE_MAX_EVENTS: usize = 256; // per-quantum event scratch the device pulls into
+const MAX_BLOCKS_PER_QUANTUM: usize = 16; // a 128-frame quantum rarely splits past a few blocks; pre-reserved so render never reallocs
 // The `index` field of an EFFECT device box (DeviceFactory's midi-effect / audio-effect attributes), giving
 // the chain order within a host. ONLY effects have it: an instrument box has no `index` (its key 2 is `label`),
 // and a composite child (e.g. a PlayfieldSampleBox slot) carries its own index at its own key (the composite's
@@ -732,7 +733,7 @@ impl Engine {
             output_device_params: Vec::new(),
             output_registry: AudioOutputBufferRegistry::new(),
             sample_rate,
-            blocks: Vec::new(),
+            blocks: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM), // a quantum splits into a few blocks (tempo / loop); never realloc on the render path
             devices: Vec::new(),
             device_box_types: Vec::new(),
             composites: Vec::new(),
@@ -1106,6 +1107,7 @@ pub extern "C" fn init(sample_rate: f32) {
     unsafe {
         *ENGINE.get() = Some(engine);
         INPUT.get().reserve(INPUT_CAPACITY); // pre-allocate the input scratch (len stays 0; this is capacity)
+        PULL.get().scratch.reserve(DEVICE_MAX_EVENTS); // the note-pull scratch never grows past the device's cap
     }
 }
 
@@ -1359,7 +1361,7 @@ mod tests {
 
     #[test]
     fn earlier_position_always_precedes_regardless_of_kind() {
-        let mut events = vec![note_on(5.0), note_off(20.0), update(1.0)];
+        let mut events = [note_on(5.0), note_off(20.0), update(1.0)];
         events.sort_by(compare_lifecycle);
         assert_eq!(events.iter().map(Event::position).collect::<Vec<_>>(), vec![1.0, 5.0, 20.0]);
     }

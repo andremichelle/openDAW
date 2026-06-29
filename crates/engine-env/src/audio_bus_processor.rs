@@ -41,11 +41,6 @@ impl AudioBusProcessor {
         self.sources.retain(|existing| !Rc::ptr_eq(existing, source));
     }
 
-    /// Drop all sources (e.g. before a re-wire).
-    pub fn clear_audio_sources(&mut self) {
-        self.sources.clear();
-    }
-
     /// How many sources this bus currently sums (for tests / introspection).
     pub fn audio_source_count(&self) -> usize {
         self.sources.len()
