@@ -1,6 +1,6 @@
 import {createElement, PageFactory} from "@opendaw/lib-jsx"
 import {MutableObservableOption, Terminator} from "@opendaw/lib-std"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {DeviceBox, DeviceBoxUtils, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {Env} from "../../Env"
 import {createEngineHost} from "../../engine-host"
 
@@ -16,14 +16,22 @@ const PROJECTS = Object.keys(FILES)
     }))
     .sort((left, right) => left.name.localeCompare(right.name))
 
+// A device's display name: its user `label`, falling back to the box class name when the label is unset.
+const deviceLabel = (device: DeviceBox): string => {
+    const label = device.label.getValue()
+    return label.length > 0 ? label : device.name
+}
+
 export const LoadFilePage: PageFactory<Env> = ({lifecycle}) => {
     const status: HTMLParagraphElement = <p/>
     const host: HTMLDivElement = <div/>
+    const plugins: HTMLDivElement = <div/>
     const logs: HTMLDivElement = <div/>
     const current = new MutableObservableOption<Terminator>()
     const load = async (url: string): Promise<void> => {
         current.ifSome(terminator => terminator.terminate())
         host.replaceChildren()
+        plugins.replaceChildren()
         logs.replaceChildren()
         const terminator = lifecycle.spawn()
         current.wrap(terminator)
@@ -33,6 +41,24 @@ export const LoadFilePage: PageFactory<Env> = ({lifecycle}) => {
         const engine = createEngineHost(boxGraph, terminator, {channel: "load-file-sync"})
         host.append(engine.element)
         logs.append(engine.log)
+        // Every plugin (instrument + audio / midi effect) in this project, each with a checkbox bound to its
+        // `enabled` field. Toggling runs a box-graph transaction, which streams through the SAME SyncSource as
+        // every other edit, so the engine bypasses / re-wires the device edge-only (no rebuild, no param reset).
+        const devices = boxGraph.boxes().filter(DeviceBoxUtils.isDeviceBox)
+            .sort((left, right) => deviceLabel(left).localeCompare(deviceLabel(right)))
+        if (devices.length > 0) {
+            const rows = devices.map(device => {
+                const checkbox: HTMLInputElement = <input type="checkbox"/>
+                checkbox.onchange = () => {
+                    boxGraph.beginTransaction()
+                    device.enabled.setValue(checkbox.checked)
+                    boxGraph.endTransaction()
+                }
+                terminator.own(device.enabled.catchupAndSubscribe(field => checkbox.checked = field.getValue()))
+                return <label className="plugin-row">{checkbox}<span>{deviceLabel(device)}</span></label>
+            })
+            plugins.append(<div className="plugin-list"><h3>Plugins</h3>{rows}</div>)
+        }
         status.textContent = `Loaded ${PROJECTS.find(project => project.url === url)?.name ?? url}`
     }
     const select: HTMLSelectElement = (
@@ -52,6 +78,7 @@ export const LoadFilePage: PageFactory<Env> = ({lifecycle}) => {
                 {select}
             </div>
             {host}
+            {plugins}
             {status}
             {logs}
         </div>

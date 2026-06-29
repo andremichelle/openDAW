@@ -235,6 +235,30 @@ code
       font-variant-numeric: tabular-nums
       letter-spacing: 0.03em
 
+  .plugin-list
+    margin: 1rem 0 1.5rem
+    max-width: 40rem
+
+    h3
+      color: var(--color-bright)
+      margin: 0 0 0.5rem
+      font-size: 0.95rem
+
+    .plugin-row
+      display: flex
+      align-items: center
+      gap: 0.5rem
+      padding: 0.25rem 0.5rem
+      color: var(--color-gray)
+      cursor: pointer
+
+      input[type="checkbox"]
+        accent-color: var(--color-blue)
+        cursor: pointer
+
+      &:hover
+        color: var(--color-bright)
+
   .engine-log
     margin: 1.5rem 0 0
     padding: 0.6rem 0.85rem
