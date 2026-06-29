@@ -62,6 +62,15 @@ describe("ScriptDeclaration", () => {
         it("throws on unknown mapping", () => {
             expect(() => ScriptDeclaration.parseParams("// @param x 0.5 0 1 cubic")).toThrow()
         })
+        it("throws on name starting with a digit", () => {
+            expect(() => ScriptDeclaration.parseParams("// @param 1/32th")).toThrow(/not a valid identifier/)
+        })
+        it("throws on name with non-identifier characters", () => {
+            expect(() => ScriptDeclaration.parseParams("// @param foo-bar 0.5")).toThrow(/not a valid identifier/)
+        })
+        it("accepts identifiers with leading underscore and digits", () => {
+            expect(ScriptDeclaration.parseParams("// @param _osc1")[0].label).toBe("_osc1")
+        })
     })
 
     describe("parseSamples", () => {
@@ -76,6 +85,9 @@ describe("ScriptDeclaration", () => {
         })
         it("ignores sample line with no name", () => {
             expect(ScriptDeclaration.parseSamples("// @sample ")).toEqual([])
+        })
+        it("throws on name that is not a valid identifier", () => {
+            expect(() => ScriptDeclaration.parseSamples("// @sample 1kick")).toThrow(/not a valid identifier/)
         })
     })
 
