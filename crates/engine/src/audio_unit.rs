@@ -45,6 +45,18 @@ use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::composite::CompositeBinding;
 use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, CompositeSpec, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SIDECHAIN_BIND, EFFECT_INDEX_KEY};
 
+// AudioUnitBox field keys (WASM CONTRACT: mirror the TS AudioUnitBox schema). The unit carries its strip
+// params and hosts its instrument / effect chains / tracks at these hub keys.
+const UNIT_VOLUME_KEY: u16 = 12;
+const UNIT_PANNING_KEY: u16 = 13;
+const UNIT_MUTE_KEY: u16 = 14;
+const UNIT_TRACKS_KEY: u16 = 20;   // track-membership hub
+const UNIT_MIDI_KEY: u16 = 21;     // midi-effect chain host
+const UNIT_INPUT_KEY: u16 = 22;    // instrument (input) host
+const UNIT_AUDIO_KEY: u16 = 23;    // audio-effect chain host
+// RootBox.audio-units hub (unit membership) — a different box, same ordinal.
+const ROOT_AUDIO_UNITS_KEY: u16 = 20;
+
 /// The handle a unit's subscriptions use to enqueue THAT unit for reconcile when its scope changes, so a
 /// related edit reconciles one unit instead of sweeping all units (the Rust analog of TS's per-unit
 /// `invalidateWiring`). `units` is the engine's shared `dirty_units` queue; `unit` is this unit's uuid.
@@ -368,7 +380,7 @@ impl Engine {
         // hub source's uuid IS the audio unit. We do not order the units (order is not audible).
         if let Some(root) = self.graph.find_by_name("RootBox") {
             let changes = self.unit_changes.clone();
-            self.graph.subscribe_pointer_hub(Address::of(root.uuid, vec![20]), Box::new(move |_graph, event| {
+            self.graph.subscribe_pointer_hub(Address::of(root.uuid, vec![ROOT_AUDIO_UNITS_KEY]), Box::new(move |_graph, event| {
                 match event {
                     HubEvent::Added(source) => changes.borrow_mut().added.push(source.uuid),
                     HubEvent::Removed(source) => changes.borrow_mut().removed.push(source.uuid)
@@ -402,15 +414,15 @@ impl Engine {
         };
         let params = Rc::new(StripParams::new());
         let volume = params.clone();
-        self.graph.catchup_and_subscribe(Address::of(uuid, vec![12]), move |value| {
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![UNIT_VOLUME_KEY]), move |value| {
             if let Some(value) = value.as_float32() { volume.volume_db.set(value) }
         });
         let panning = params.clone();
-        self.graph.catchup_and_subscribe(Address::of(uuid, vec![13]), move |value| {
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![UNIT_PANNING_KEY]), move |value| {
             if let Some(value) = value.as_float32() { panning.panning.set(value) }
         });
         let mute = params.clone();
-        self.graph.catchup_and_subscribe(Address::of(uuid, vec![14]), move |value| {
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![UNIT_MUTE_KEY]), move |value| {
             if let Some(value) = value.as_bool() { mute.mute.set(value) }
         });
         // THE output unit's own audio-effect chain (e.g. a master Tidal), wired between the summing bus and
@@ -419,7 +431,7 @@ impl Engine {
         // (the output unit is a fixed singleton), so the chain is not reactive yet.
         let mut source = master_output;
         let mut source_id = self.master_id;
-        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), EFFECT_INDEX_KEY);
+        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUDIO_KEY]), EFFECT_INDEX_KEY);
         let mut device_params: Vec<DeviceParams> = Vec::new();
         // THE output unit is a fixed singleton built once at bind, not reconciled, so its parameters need no
         // runtime re-bind: a no-op invalidate (its static values are pushed by `refresh_params` below).
@@ -681,7 +693,7 @@ impl Engine {
         let track_changes = Rc::new(RefCell::new(Members::default()));
         let recorder = track_changes.clone();
         let track_mark = mark.clone();
-        let track_sub = self.graph.subscribe_pointer_hub(Address::of(uuid, vec![20]), Box::new(move |_graph, event| {
+        let track_sub = self.graph.subscribe_pointer_hub(Address::of(uuid, vec![UNIT_TRACKS_KEY]), Box::new(move |_graph, event| {
             match event {
                 HubEvent::Added(source) => recorder.borrow_mut().added.push(source.uuid),
                 HubEvent::Removed(source) => recorder.borrow_mut().removed.push(source.uuid)
@@ -691,9 +703,9 @@ impl Engine {
         // The instrument `input` host holds ONE instrument, which has no `index` field (only effects do). So it
         // is never ordered: key `0` is a non-field, read back as 0 for every member, and the collection is used
         // only for membership + `.first()`. The midi (21) and audio (23) chains ARE effects, ordered by index.
-        let input = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![22]), 0);
-        let midi = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![21]), EFFECT_INDEX_KEY);
-        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![23]), EFFECT_INDEX_KEY);
+        let input = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_INPUT_KEY]), 0);
+        let midi = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_MIDI_KEY]), EFFECT_INDEX_KEY);
+        let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUDIO_KEY]), EFFECT_INDEX_KEY);
         // A chain edit (add / remove / reorder a device) enqueues this unit for a targeted reconcile. Wired
         // after `observe` so the catch-up members do not fire it; the new unit enqueues itself once below.
         input.set_on_dirty(mark.signal());
@@ -703,15 +715,15 @@ impl Engine {
         // mute (14). Reactive but no rewire needed — the strip reads these Cells each block.
         let strip_params = Rc::new(StripParams::new());
         let volume = strip_params.clone();
-        let volume_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![12]), move |value| {
+        let volume_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![UNIT_VOLUME_KEY]), move |value| {
             if let Some(value) = value.as_float32() { volume.volume_db.set(value) }
         });
         let panning = strip_params.clone();
-        let panning_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![13]), move |value| {
+        let panning_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![UNIT_PANNING_KEY]), move |value| {
             if let Some(value) = value.as_float32() { panning.panning.set(value) }
         });
         let mute = strip_params.clone();
-        let mute_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![14]), move |value| {
+        let mute_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![UNIT_MUTE_KEY]), move |value| {
             if let Some(value) = value.as_bool() { mute.mute.set(value) }
         });
         // Automation reactivity is per-parameter and TARGETED (see `observe_params`): each parameter's field
@@ -1275,6 +1287,10 @@ fn resolve_and_deliver_sample(graph: &BoxGraph, device_uuid: Uuid, path: &[u16],
 /// `ParamCurve` over that track's value regions and return it with the collections to terminate. `None` (and
 /// no collections) when the parameter has no automation track.
 fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16]) -> (Option<ParamCurve>, Option<Uuid>, Vec<ValueCollection>) {
+    // Find the Value track whose `target` points at this parameter. NOTE: this scans every TrackBox — it can
+    // NOT use `graph.incoming(param)`, because a parameter address is a device-internal field path that is not
+    // always a RESOLVED graph vertex (deep param paths), so the track's target edge is "dangling" and absent
+    // from `incoming`. The cost is O(TrackBoxes), smaller than the value-region scan below (now targeted).
     let track_uuid = {
         let mut found = None;
         for track in graph.find_all_by_name("TrackBox") {
@@ -1346,7 +1362,7 @@ fn build_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMark) -> Trac
     let region_changes = Rc::new(RefCell::new(Members::default()));
     let recorder = region_changes.clone();
     let region_mark = mark.clone();
-    let region_sub = graph.subscribe_pointer_hub(Address::of(track_uuid, vec![3]), Box::new(move |_graph, event| {
+    let region_sub = graph.subscribe_pointer_hub(Address::of(track_uuid, vec![TRACK_REGIONS_KEY]), Box::new(move |_graph, event| {
         match event {
             HubEvent::Added(source) => recorder.borrow_mut().added.push(source.uuid),
             HubEvent::Removed(source) => recorder.borrow_mut().removed.push(source.uuid)
@@ -1441,7 +1457,6 @@ const TRACK_TYPE_VALUE: i32 = 3;
 const TRACK_TYPE_KEY: u16 = 11;
 const TRACK_TARGET_KEY: u16 = 2;        // TrackBox.target -> the automated parameter field (Automation pointer)
 const TRACK_REGIONS_KEY: u16 = 3;       // TrackBox.regions -> the hub value regions attach to (membership)
-const VALUE_REGION_TRACK_KEY: u16 = 1;  // ValueRegionBox.regions -> the track's region collection
 const VALUE_REGION_EVENTS_KEY: u16 = 2; // ValueRegionBox.events -> the ValueEventCollectionBox
 
 /// One value region of an automation track: its `events` collection and loopable span.
@@ -1454,22 +1469,23 @@ struct RegionSpec {
 }
 
 /// Every value region of an automation track: the `ValueRegionBox`es whose `regions` points at `track_uuid`,
-/// with their `events` collection and span (position 10, duration 11, loopOffset 12, loopDuration 13).
+/// with their `events` collection and span (position 10, duration 11, loopOffset 12, loopDuration 13). Read
+/// from the track's `regions` hub (the incoming pointers) — O(regions on this track) — not a full-graph scan.
 fn value_regions_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<RegionSpec> {
     let mut specs = Vec::new();
-    for region in graph.find_all_by_name("ValueRegionBox") {
-        let on_track = graph.target_of(&Address::of(region.uuid, vec![VALUE_REGION_TRACK_KEY]))
-            .map(|address| address.uuid) == Some(track_uuid);
-        if !on_track {
-            continue;
+    let regions_hub = Address::of(track_uuid, vec![TRACK_REGIONS_KEY]);
+    for source in graph.incoming(&regions_hub) {
+        let region_uuid = source.uuid;
+        if !graph.find_box(&region_uuid).is_some_and(|graph_box| graph_box.name == "ValueRegionBox") {
+            continue; // a note/audio region could share the hub key; only value regions carry automation
         }
-        if let Some(collection) = graph.target_of(&Address::of(region.uuid, vec![VALUE_REGION_EVENTS_KEY])).map(|address| address.uuid) {
+        if let Some(collection) = graph.target_of(&Address::of(region_uuid, vec![VALUE_REGION_EVENTS_KEY])).map(|address| address.uuid) {
             specs.push(RegionSpec {
                 collection,
-                position: region_pulses(graph, region.uuid, 10),
-                duration: region_pulses(graph, region.uuid, 11),
-                loop_offset: region_pulses(graph, region.uuid, 12),
-                loop_duration: region_pulses(graph, region.uuid, 13)
+                position: region_pulses(graph, region_uuid, 10),
+                duration: region_pulses(graph, region_uuid, 11),
+                loop_offset: region_pulses(graph, region_uuid, 12),
+                loop_duration: region_pulses(graph, region_uuid, 13)
             });
         }
     }
@@ -1585,7 +1601,7 @@ mod tests {
     use alloc::rc::Rc;
     use core::cell::RefCell;
     use crate::{DeviceReg, Engine, EFFECT_INDEX_KEY};
-    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT};
+    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT, UNIT_MIDI_KEY, UNIT_INPUT_KEY, UNIT_AUDIO_KEY, UNIT_TRACKS_KEY};
     use abi::DEVICE_KIND_AUDIO_EFFECT;
     use boxgraph::updates::Update;
     use engine_env::engine_context::NodeId;
@@ -1629,13 +1645,13 @@ mod tests {
     fn unit_graph() -> BoxGraph {
         BoxGraph::from_boxes(vec![
             graph_box(UNIT, "AudioUnitBox", &[
-                (20, FieldValue::Hook), (21, FieldValue::Hook), (22, FieldValue::Hook), (23, FieldValue::Hook)
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
             ]),
             graph_box(INSTR, "TestInstrument", &[
-                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![22]))))
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))
             ]),
             graph_box(FX_A, "TestEffect", &[
-                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![23])))),
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))),
                 (EFFECT_INDEX_KEY, FieldValue::Int32(0))
             ]),
             graph_box(FX_B, "TestEffect", &[
@@ -1672,7 +1688,7 @@ mod tests {
         let connect = Update::Pointer {
             address: Address::of(FX_B, vec![HOST_KEY]),
             old: None,
-            new: Some(Address::of(UNIT, vec![23]))
+            new: Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY]))
         };
         engine.graph.transaction(&[connect], &engine.registry).expect("connect FX_B");
         assert_eq!(unit.audio.sorted(), vec![FX_A, FX_B], "FX_B joined the audio chain in index order");
@@ -1693,7 +1709,7 @@ mod tests {
         let mut unit = engine.build_unit(UNIT);
         // Connect FX_B (index 1) so the chain is [FX_A(0), FX_B(1)].
         engine.graph.transaction(&[Update::Pointer {
-            address: Address::of(FX_B, vec![HOST_KEY]), old: None, new: Some(Address::of(UNIT, vec![23]))
+            address: Address::of(FX_B, vec![HOST_KEY]), old: None, new: Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY]))
         }], &engine.registry).expect("connect FX_B");
         engine.reconcile_one(&mut unit);
         let (_, audio_before) = leaf_nodes(&unit);
@@ -1735,10 +1751,10 @@ mod tests {
     fn composite_graph() -> BoxGraph {
         BoxGraph::from_boxes(vec![
             graph_box(UNIT, "AudioUnitBox", &[
-                (20, FieldValue::Hook), (21, FieldValue::Hook), (22, FieldValue::Hook), (23, FieldValue::Hook)
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
             ]),
             graph_box(COMPOSITE, "TestComposite", &[
-                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![22])))),
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))),
                 (CHILDREN_FIELD, FieldValue::Hook)
             ]),
             graph_box(CHILD_A, "TestInstrument", &[
@@ -1836,5 +1852,47 @@ mod tests {
         // A different path on the same device has no track.
         let (none, _, _) = build_param_track(&mut graph, DEVICE, &[16, 5, 11]);
         assert!(none.is_none(), "an unbound path has no automation track");
+    }
+
+    #[test]
+    fn build_param_track_resolves_only_the_targeting_track_among_unrelated_ones() {
+        // Two automation chains on ONE device at DIFFERENT parameter paths. The targeted (incoming-pointer)
+        // lookup must resolve each parameter to its OWN track and ONLY that track's value regions — never the
+        // other chain's. This is the behaviour the find_all_by_name scans had; it must survive the rewrite.
+        const TRACK_B: Uuid = [18u8; 16];
+        const REGION_B: Uuid = [17u8; 16];
+        const VCOLLECTION_B: Uuid = [16u8; 16];
+        const EVENT_B: Uuid = [15u8; 16];
+        let path_a = [5u16];
+        let path_b = [6u16];
+        let chain = |track: Uuid, region: Uuid, collection: Uuid, event: Uuid, path: &[u16], value: f32| vec![
+            graph_box(track, "TrackBox", &[
+                (2, FieldValue::Pointer(Some(Address::of(DEVICE, path.to_vec())))),
+                (3, FieldValue::Hook)
+            ]),
+            graph_box(region, "ValueRegionBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(track, vec![3])))),
+                (2, FieldValue::Pointer(Some(Address::of(collection, vec![2])))),
+                (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)), (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+            ]),
+            graph_box(collection, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+            graph_box(event, "ValueEventBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(collection, vec![1])))), (10, FieldValue::Int32(0)), (13, FieldValue::Float32(value))
+            ])
+        ];
+        let mut boxes = vec![graph_box(DEVICE, "RevampDeviceBox", &[])];
+        boxes.extend(chain(TRACK, REGION, VCOLLECTION, EVENT, &path_a, 0.7));
+        boxes.extend(chain(TRACK_B, REGION_B, VCOLLECTION_B, EVENT_B, &path_b, 0.3));
+        let mut graph = BoxGraph::from_boxes(boxes);
+
+        let (curve_a, track_a, cols_a) = build_param_track(&mut graph, DEVICE, &path_a);
+        assert_eq!(track_a, Some(TRACK), "param A resolves to its own track");
+        assert_eq!(cols_a.len(), 1, "param A observes ONLY its own track's value region");
+        assert_eq!(curve_a.expect("curve A").value_at(0.0, -1.0), 0.7);
+
+        let (curve_b, track_b, cols_b) = build_param_track(&mut graph, DEVICE, &path_b);
+        assert_eq!(track_b, Some(TRACK_B), "param B resolves to the OTHER track");
+        assert_eq!(cols_b.len(), 1, "param B observes ONLY its own track's value region");
+        assert_eq!(curve_b.expect("curve B").value_at(0.0, -1.0), 0.3);
     }
 }

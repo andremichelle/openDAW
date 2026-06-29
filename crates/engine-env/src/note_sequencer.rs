@@ -55,14 +55,13 @@ impl NoteEventSource for NoteSequencer {
         let read = flags.has(BlockFlags::TRANSPORTING | BlockFlags::PLAYING);
         let discontinuous = flags.discontinuous();
         if !read || discontinuous {
-            for retained in self.retainer.release_all() {
-                sink(Event::NoteComplete {id: retained.id, position: from, pitch: retained.pitch});
-            }
+            self.retainer.drain_all(|retained|
+                sink(Event::NoteComplete {id: retained.id, position: from, pitch: retained.pitch}));
         } else {
-            for retained in self.retainer.release_linear_completed(to) {
+            self.retainer.drain_linear_completed(to, |retained| {
                 let position = clamp(retained.complete(), from, to);
                 sink(Event::NoteComplete {id: retained.id, position, pitch: retained.pitch});
-            }
+            });
         }
         if !read {
             return;

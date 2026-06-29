@@ -39,19 +39,34 @@ impl<E: EventSpan> EventSpanRetainer<E> {
         self.events.insert(index, event);
     }
 
-    /// Remove and return the spans that completed before `position` (the soonest-to-finish first),
-    /// stopping at the first span still sounding.
+    /// Release completed spans (soonest-to-finish first), calling `f` for each, stopping at the first span
+    /// still sounding. ALLOCATION-FREE — the render hot path calls this every block.
+    pub fn drain_linear_completed(&mut self, position: f64, mut f: impl FnMut(E)) {
+        while self.events.last().is_some_and(|event| event.complete() < position) {
+            f(self.events.pop().unwrap());
+        }
+    }
+
+    /// Drain every retained span into `f` (e.g. on a transport stop or loop wrap). Allocation-free, and
+    /// `drain(..)` keeps the backing capacity so the next note does not re-grow it.
+    pub fn drain_all(&mut self, mut f: impl FnMut(E)) {
+        for event in self.events.drain(..) {
+            f(event);
+        }
+    }
+
+    /// Vec-returning convenience over `drain_linear_completed` (tests / non-hot-path callers only).
     pub fn release_linear_completed(&mut self, position: f64) -> Vec<E> {
         let mut released = Vec::new();
-        while self.events.last().is_some_and(|event| event.complete() < position) {
-            released.push(self.events.pop().unwrap());
-        }
+        self.drain_linear_completed(position, |event| released.push(event));
         released
     }
 
-    /// Drain and return every retained span (e.g. on a transport stop or loop wrap).
+    /// Vec-returning convenience over `drain_all`.
     pub fn release_all(&mut self) -> Vec<E> {
-        core::mem::take(&mut self.events)
+        let mut released = Vec::new();
+        self.drain_all(|event| released.push(event));
+        released
     }
 
     /// The spans sounding at `position` (its start is at or before, its completion strictly after).
