@@ -16,12 +16,16 @@ const ODSL = path.resolve(__dirname, "../public/odsl/test.odsl")
 describe("render smoke", () => {
     it("the fully-built project produces audible output", async () => {
         const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
-        const {engine, memory} = await loadFullEngine()
+        const {engine, memory, drainSamples} = await loadFullEngine()
         const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)
         const steps = decodeSteps(commits)
         const sync = connectSyncToEngine(engine, memory, source)
         await sync.settle(); engine.bind()
+        // Turn the metronome OFF and feed the samplers real samples, so this asserts genuine INSTRUMENT audio (the
+        // synths + the Playfield slots) — not the 0.5 metronome click, which would mask a silent instrument graph.
+        engine.set_metronome_enabled(0)
         for (let at = 0; at < steps.length; at++) {stepForward(source, steps[at]); await sync.settle()}
+        expect(drainSamples()).toBeGreaterThan(0) // the project has sample-based slots; they are now audible
 
         engine.play()
         let peak = 0
@@ -41,7 +45,7 @@ describe("render smoke", () => {
         }
         const rms = Math.sqrt(energy / samples)
         console.log(`peak=${peak.toFixed(4)} rms=${rms.toFixed(4)}`)
-        expect(peak).toBeGreaterThan(0.01) // the project is clearly audible, not silent
-        expect(rms).toBeGreaterThan(0.0001) // and sustained, not a single click
+        expect(peak).toBeGreaterThan(0.1) // real instruments are clearly audible (no metronome to lean on)
+        expect(rms).toBeGreaterThan(0.005) // and sustained, not a single click
     }, 30000)
 })
