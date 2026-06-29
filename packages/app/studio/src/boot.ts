@@ -1,5 +1,3 @@
-if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
-
 import "./main.sass"
 import {App} from "@/ui/App.tsx"
 import {isDefined, panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
@@ -38,6 +36,8 @@ import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
+
+if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
 
 const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
