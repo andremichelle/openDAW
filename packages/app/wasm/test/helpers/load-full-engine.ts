@@ -22,12 +22,12 @@ const DEVICES: ReadonlyArray<{file: string, boxType: string}> = [
     {file: "device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"}
 ]
 type CompositeSpec = {boxType: string, childrenField: number, indexKey: number, excludeKey: number,
-    cellInstrumentField: number, cellMidiField: number, cellAudioField: number}
+    cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number}
 const COMPOSITES: ReadonlyArray<CompositeSpec> = [
     {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
-        cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0},
+        cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0, childEnabledKey: 22},
     {boxType: "CompositeDeviceBox", childrenField: 10, indexKey: 5, excludeKey: 0,
-        cellInstrumentField: 11, cellMidiField: 12, cellAudioField: 13}
+        cellInstrumentField: 11, cellMidiField: 12, cellAudioField: 13, childEnabledKey: 0}
 ]
 
 const readVarU32 = (bytes: Uint8Array, pos: number): [number, number] => {
@@ -64,6 +64,11 @@ export type FullEngine = {
     engine: any
     memory: WebAssembly.Memory
     deviceBuilds(): number
+    // Feed a synthetic sample to every load the engine has queued (on seeing an AudioFileBox), so sample-based
+    // devices (a Playfield slot) are AUDIBLE in tests. Returns how many it satisfied. The real loader fetches +
+    // decodes a file; here we write a fixed 0.5 s 220 Hz mono tone, which is enough to assert real signal. Call
+    // it after building the project (and again after any edit that adds a sample).
+    drainSamples(): number
 }
 
 export const loadFullEngine = async (sampleRate = 48000): Promise<FullEngine> => {
@@ -125,7 +130,27 @@ export const loadFullEngine = async (sampleRate = 48000): Promise<FullEngine> =>
         const bytes = new Uint8Array(memory.buffer, pointer, composite.boxType.length)
         for (let i = 0; i < composite.boxType.length; i++) {bytes[i] = composite.boxType.charCodeAt(i) & 0xff}
         engine.composite_register(composite.boxType.length, composite.childrenField, composite.indexKey,
-            composite.excludeKey, composite.cellInstrumentField, composite.cellMidiField, composite.cellAudioField)
+            composite.excludeKey, composite.cellInstrumentField, composite.cellMidiField, composite.cellAudioField,
+            composite.childEnabledKey)
     }
-    return {engine, memory, deviceBuilds: () => engine.device_build_count() >>> 0}
+    const drainSamples = (): number => {
+        let satisfied = 0
+        for (; ;) {
+            const requestPtr = engine.input_reserve(16)
+            const handle = engine.sample_take_request(requestPtr)
+            if (handle < 0) {break}
+            const frameCount = Math.floor(sampleRate * 0.5)
+            const channelCount = 1
+            const byteLength = frameCount * channelCount * Float32Array.BYTES_PER_ELEMENT
+            const pointer = engine.sample_allocate(handle, byteLength)
+            const frames = new Float32Array(memory.buffer, pointer, frameCount)
+            for (let frame = 0; frame < frameCount; frame++) {
+                frames[frame] = 0.5 * Math.sin((2 * Math.PI * 220 * frame) / sampleRate)
+            }
+            engine.sample_set_ready(handle, frameCount, channelCount, sampleRate)
+            satisfied++
+        }
+        return satisfied
+    }
+    return {engine, memory, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples}
 }

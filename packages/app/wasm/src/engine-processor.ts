@@ -63,7 +63,7 @@ type EngineExports = {
     // Register a composite box type (a box hosting a child collection of its own instruments): the composite
     // box-type UTF-8 name is written into the input buffer (nameLen bytes) first, then its child collection's
     // host field key + the child index/routing key are passed. Mirrors device_set_box_type.
-    composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number, cellInstrumentField: number, cellMidiField: number, cellAudioField: number) => void
+    composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number, cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number) => void
     input_ptr: () => number
     input_capacity: () => number
     input_reserve: (len: number) => number // ensure the input scratch holds `len`, grow if needed, return its (current) ptr
@@ -178,12 +178,12 @@ class EngineProcessor extends AudioWorkletProcessor {
         deviceModules.forEach((deviceModule, index) => this.#loadDevice(deviceModule, deviceBoxTypes[index], sampleRate))
         // register each composite box type: write its name into the input buffer, then map its child collection
         // (the child plugin itself is a normal device above). Box-type names are ASCII identifiers.
-        composites.forEach(({boxType, childrenField, indexKey, excludeKey, cellInstrumentField, cellMidiField, cellAudioField}) => {
+        composites.forEach(({boxType, childrenField, indexKey, excludeKey, cellInstrumentField, cellMidiField, cellAudioField, childEnabledKey}) => {
             const length = boxType.length
             const pointer = engine.input_reserve(length)
             const bytes = new Uint8Array(this.#memory.buffer, pointer, length)
             for (let index = 0; index < length; index++) {bytes[index] = boxType.charCodeAt(index) & 0xff}
-            engine.composite_register(length, childrenField, indexKey, excludeKey, cellInstrumentField, cellMidiField, cellAudioField)
+            engine.composite_register(length, childrenField, indexKey, excludeKey, cellInstrumentField, cellMidiField, cellAudioField, childEnabledKey)
         })
         if (metronome === false) {engine.set_metronome_enabled(0)}
         // ONE Messenger over the engine port, split into typed Communicator protocols, one per named channel

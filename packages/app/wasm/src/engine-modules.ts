@@ -10,7 +10,9 @@ export type CompositeSpec = {
     boxType: string, childrenField: number, indexKey: number, excludeKey: number,
     // When the composite hosts CELLS (a generic wrapper holding one instrument + its own chains), the cell box's
     // fixed field keys: the hosted instrument, its midi-fx host, its audio-fx host. All 0 = direct instruments.
-    cellInstrumentField: number, cellMidiField: number, cellAudioField: number
+    cellInstrumentField: number, cellMidiField: number, cellAudioField: number,
+    // A child's `enabled` BooleanField (0 = no per-child enable). Playfield's slot key is 22, not the base device 4.
+    childEnabledKey: number
 }
 
 export type EngineModules = {
@@ -50,12 +52,12 @@ const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
 const COMPOSITES: ReadonlyArray<CompositeSpec> = [
     // Playfield: direct children (self-hosting slots, device-declared chains), routed by note index + choke.
     {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
-        cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0},
+        cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0, childEnabledKey: 22},
     // A generic instrument bundle: children are CELLS (CompositeCellBox) at field 10, each wrapping one
     // instrument (field 2) plus its midi-fx (3) and audio-fx (4) chains, ordered by the cell's own `index`
     // (field 5, UI position + engine sort). No note routing, no choke.
     {boxType: "CompositeDeviceBox", childrenField: 10, indexKey: 5, excludeKey: 0,
-        cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4}
+        cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4, childEnabledKey: 0}
 ]
 
 export const loadEngineModules = async (): Promise<EngineModules> => {

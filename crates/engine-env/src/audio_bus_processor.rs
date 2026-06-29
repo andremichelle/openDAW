@@ -16,12 +16,19 @@ use crate::RENDER_QUANTUM;
 pub struct AudioBusProcessor {
     output: SharedAudioBuffer,
     sources: Vec<SharedAudioBuffer>,
+    enabled: bool,
     events: EventBuffer
 }
 
 impl AudioBusProcessor {
     pub fn new(output: SharedAudioBuffer) -> Self {
-        Self {output, sources: Vec::new(), events: EventBuffer::new()}
+        Self {output, sources: Vec::new(), enabled: true, events: EventBuffer::new()}
+    }
+
+    /// Enable / disable the bus. A disabled bus outputs silence (it stops summing its sources). Used to bypass a
+    /// composite device (e.g. a disabled Playfield): the children keep their state but contribute no signal.
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
     }
 
     /// Add a source whose output is summed into this bus (TS `addAudioSource`).
@@ -65,6 +72,9 @@ impl Processor for AudioBusProcessor {
     fn process(&mut self, _info: &ProcessInfo) {
         let mut output = self.output.borrow_mut();
         output.clear_range(0, RENDER_QUANTUM);
+        if !self.enabled {
+            return; // disabled (bypassed composite): emit silence, sum nothing
+        }
         for source in &self.sources {
             let source = source.borrow();
             output.add_range(&source, 0, RENDER_QUANTUM);

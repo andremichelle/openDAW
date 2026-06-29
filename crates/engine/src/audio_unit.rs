@@ -58,7 +58,7 @@ const UNIT_AUDIO_KEY: u16 = 23;    // audio-effect chain host
 const ROOT_AUDIO_UNITS_KEY: u16 = 20;
 // A unit-level device box's `enabled` BooleanField (WASM CONTRACT: the base device schema; a disabled
 // audio / midi effect is bypassed — skipped in the chain wiring). Composite-child enabled is separate.
-const DEVICE_ENABLED_KEY: u16 = 4;
+pub(crate) const DEVICE_ENABLED_KEY: u16 = 4;
 
 /// The handle a unit's subscriptions use to enqueue THAT unit for reconcile when its scope changes, so a
 /// related edit reconciles one unit instead of sweeping all units (the Rust analog of TS's per-unit
@@ -265,6 +265,55 @@ struct LeafChain {
     edges: Vec<(NodeId, NodeId)>
 }
 
+/// A composite SLOT's persistent cluster (a direct-instrument child, e.g. a Playfield slot): the same per-member
+/// machinery as a leaf unit (instrument + midi/audio members + note source), reconciled EDGE-ONLY so a chain edit
+/// or an effect `enabled` toggle keeps every survivor's DSP state. Defined here (not in `composite`) so it can
+/// reach the module-private `Member`. The owning child appends the slot's sum edge; the slot itself owns its
+/// instrument note source (choke-routed) and internal edges.
+pub(crate) struct SlotCluster {
+    instrument: Member,
+    sequencer: SharedNoteEventSource,
+    midi: Vec<Member>,
+    audio: Vec<Member>,
+    internal_edges: Vec<(NodeId, NodeId)>,
+    pub(crate) output: SharedAudioBuffer,
+    pub(crate) output_node: NodeId
+}
+
+impl SlotCluster {
+    /// Visit every member's bound parameters (instrument + midi + audio), for the unit's automation re-bind.
+    pub(crate) fn for_each_params(&mut self, visit: &mut dyn FnMut(&mut DeviceParams)) {
+        visit(&mut self.instrument.params);
+        for member in &mut self.midi { visit(&mut member.params); }
+        for member in &mut self.audio { visit(&mut member.params); }
+    }
+
+    /// Visit every audio member's sidechain binding, for the unit's sidechain re-resolve.
+    pub(crate) fn for_each_sidechain(&mut self, visit: &mut dyn FnMut(&mut SidechainBinding)) {
+        for member in &mut self.audio {
+            if let Some(binding) = &mut member.sidechain { visit(binding); }
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn instrument_node(&self) -> NodeId {
+        self.instrument.node_id.unwrap()
+    }
+
+    /// How many audio-fx members this slot OWNS (built + persistent, incl. a disabled one — edge-only).
+    #[cfg(test)]
+    pub(crate) fn audio_member_count(&self) -> usize {
+        self.audio.len()
+    }
+
+    /// How many audio-fx are currently WIRED into the signal path (one internal edge per wired fx; a disabled,
+    /// bypassed fx contributes none). Proves the bypass is edge-only: members persist while wiring drops.
+    #[cfg(test)]
+    pub(crate) fn wired_audio_count(&self) -> usize {
+        self.internal_edges.len()
+    }
+}
+
 /// A composite-instrument unit's wiring: the persistent per-child `CompositeBinding` (which owns the children's
 /// processors, params, and sidechains, and reconciles them per child), plus the unit's own tail — the channel
 /// strip and the `sum -> strip -> master` edges. The strip persists across child edits (the sum bus is stable).
@@ -272,7 +321,10 @@ struct CompositeWired {
     binding: CompositeBinding,
     strip_id: NodeId,
     strip_output: SharedAudioBuffer,
-    tail_edges: Vec<(NodeId, NodeId)> // sum -> strip, strip -> master
+    tail_edges: Vec<(NodeId, NodeId)>, // sum -> strip, strip -> master
+    // A TARGETED `This` monitor on the composite DEVICE's `enabled`: a toggle enqueues the unit (plain mark, NOT
+    // `wiring_dirty`), so reconcile lands in the per-child branch and re-applies the sum gate without a rebuild.
+    enabled_sub: SubscriptionId
 }
 
 /// The reusable result of `build_cluster`: an instrument plus its midi-fx pull chain and audio-fx chain,
@@ -455,6 +507,9 @@ impl Engine {
                 Some(device) if device.kind == DEVICE_KIND_AUDIO_EFFECT => device,
                 _ => continue
             };
+            if !self.device_enabled(device_uuid) {
+                continue; // a disabled effect is bypassed: not built, not wired into the chain
+            }
             let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
             let node_state = node.borrow().state_ptr();
             let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
@@ -673,6 +728,7 @@ impl Engine {
                 if let Some(master) = &self.master {
                     master.borrow_mut().remove_audio_source(&composite.strip_output);
                 }
+                self.graph.unsubscribe(composite.enabled_sub);
                 for (source, target) in &composite.tail_edges {
                     self.context.remove_edge(*source, *target);
                 }
@@ -819,7 +875,11 @@ impl Engine {
         tail_edges.push((strip_id, self.master_id));
         // Each child's parameters are pushed as it is built (a joiner), inside `build_one_child`; no blanket
         // re-push here, so a per-child reconcile never touches an existing slot's parameters.
-        unit.wired = Some(Wired::Composite(CompositeWired {binding, strip_id, strip_output, tail_edges}));
+        let enabled_mark = unit.mark.clone();
+        let enabled_sub = self.graph.subscribe_vertex(Propagation::This,
+            Address::of(instrument_uuid, vec![DEVICE_ENABLED_KEY]),
+            Box::new(move |_graph, _update| enabled_mark.mark()));
+        unit.wired = Some(Wired::Composite(CompositeWired {binding, strip_id, strip_output, tail_edges, enabled_sub}));
     }
 
     /// The LEAF-instrument per-member path, mirroring TS `AudioDeviceChain`: keep the existing device
@@ -887,35 +947,8 @@ impl Engine {
             Some((uuid, kept)) if uuid == instrument_uuid => kept,
             _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}))))
         };
-        let mut pull = PullLink::Source(sequencer.clone());
-        for member in &midi_members {
-            if !self.device_enabled(member.uuid) {
-                continue; // a disabled midi-fx is bypassed (left out of the pull chain); its state is untouched
-            }
-            if let ProcHandle::Midi(effect) = &member.proc {
-                pull = PullLink::MidiFx {effect: effect.clone(), upstream: Rc::new(pull)};
-            }
-        }
-        if let ProcHandle::Instrument(processor) = &instrument.proc {
-            processor.borrow_mut().set_pull_chain(pull);
-        }
-        // Edge-only re-wire: instrument -> fx0 -> ... -> strip -> master, in chain order.
-        let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
-        let mut output = instrument.output.clone().unwrap();
-        let mut output_node = instrument.node_id.unwrap();
-        for member in &audio_members {
-            if !self.device_enabled(member.uuid) {
-                continue; // a disabled audio-fx is BYPASSED: not wired into the signal path; processor untouched
-            }
-            if let ProcHandle::Audio(node) = &member.proc {
-                node.borrow_mut().set_audio_source(output.clone());
-            }
-            let node_id = member.node_id.unwrap();
-            self.context.register_edge(output_node, node_id);
-            edges.push((output_node, node_id));
-            output = member.output.clone().unwrap();
-            output_node = node_id;
-        }
+        // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip -> master below.
+        let (output, output_node, mut edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[]);
         // The channel strip terminates the chain; reuse it across reconciles (it carries no DSP state, just the
         // shared volume / panning / mute), re-pointing its source at the new tail.
         let (strip, strip_id, strip_output) = match strip_keep {
@@ -945,7 +978,7 @@ impl Engine {
 
     /// Whether a device box is `enabled` (default true): a disabled audio / midi effect is bypassed — skipped
     /// in the chain wiring, its processor + params + DSP state left fully intact.
-    fn device_enabled(&self, uuid: Uuid) -> bool {
+    pub(crate) fn device_enabled(&self, uuid: Uuid) -> bool {
         self.graph.field_value(&Address::of(uuid, vec![DEVICE_ENABLED_KEY])).and_then(|value| value.as_bool()).unwrap_or(true)
     }
 
@@ -1029,6 +1062,107 @@ impl Engine {
         Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), output: Some(output), params, sidechain, enabled_sub}
     }
 
+    /// Wire a cluster's persistent members edge-only (shared by a leaf unit and a composite slot): fold the
+    /// midi-fx PULL chain onto the note source (choke-routed for a slot), GATE + set the instrument's pull chain,
+    /// then chain the audio fx (instrument -> fx0 -> fx1 -> ...). Every step SKIPS a disabled device (bypassed,
+    /// its processor + state untouched). Returns the chain's output buffer, last node, and internal edges; the
+    /// caller appends its own tail (a unit's strip -> master, a slot's sum).
+    fn wire_cluster(&mut self, instrument: &Member, instrument_uuid: Uuid, sequencer: &SharedNoteEventSource,
+                    midi: &[Member], audio: &[Member], choke: &[i32]) -> (SharedAudioBuffer, NodeId, Vec<(NodeId, NodeId)>) {
+        let mut pull = if choke.is_empty() {
+            PullLink::Source(sequencer.clone())
+        } else {
+            PullLink::SlotRoute {upstream: sequencer.clone(), choke: Rc::from(choke.to_vec())}
+        };
+        for member in midi {
+            if !self.device_enabled(member.uuid) {
+                continue; // a disabled midi-fx is bypassed (left out of the pull chain); its state is untouched
+            }
+            if let ProcHandle::Midi(effect) = &member.proc {
+                pull = PullLink::MidiFx {effect: effect.clone(), upstream: Rc::new(pull)};
+            }
+        }
+        if let ProcHandle::Instrument(processor) = &instrument.proc {
+            processor.borrow_mut().set_enabled(self.device_enabled(instrument_uuid));
+            processor.borrow_mut().set_pull_chain(pull);
+        }
+        let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut output = instrument.output.clone().unwrap();
+        let mut output_node = instrument.node_id.unwrap();
+        for member in audio {
+            if !self.device_enabled(member.uuid) {
+                continue; // a disabled audio-fx is BYPASSED: not wired into the signal path; processor untouched
+            }
+            if let ProcHandle::Audio(node) = &member.proc {
+                node.borrow_mut().set_audio_source(output.clone());
+            }
+            let node_id = member.node_id.unwrap();
+            self.context.register_edge(output_node, node_id);
+            edges.push((output_node, node_id));
+            output = member.output.clone().unwrap();
+            output_node = node_id;
+        }
+        (output, output_node, edges)
+    }
+
+    /// Reconcile a composite SLOT's cluster EDGE-ONLY (build when `prev` is `None`): pool the previous members,
+    /// rebuild from the current midi/audio uuid lists (reusing survivors, building joiners, terminating leavers),
+    /// reuse the note source while the instrument survives, then re-wire (skipping disabled devices). Mirrors
+    /// `reconcile_leaf` minus the channel-strip tail (the caller appends the slot's sum edge). `rewire` is the
+    /// slot's own re-wire signal (a member `enabled` toggle re-runs THIS, not the unit chain).
+    pub(crate) fn reconcile_slot_cluster(&mut self, prev: Option<SlotCluster>, instrument_uuid: Uuid, device: DeviceReg,
+                                         midi_uuids: &[Uuid], audio_uuids: &[Uuid], track_sets: &SharedTrackSets,
+                                         choke: &[i32], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> SlotCluster {
+        let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
+        let mut sequencer_keep: Option<(Uuid, SharedNoteEventSource)> = None;
+        if let Some(prev) = prev {
+            for (source, target) in &prev.internal_edges {
+                self.context.remove_edge(*source, *target);
+            }
+            sequencer_keep = Some((prev.instrument.uuid, prev.sequencer));
+            pool.insert(prev.instrument.uuid, prev.instrument);
+            for member in prev.midi { pool.insert(member.uuid, member); }
+            for member in prev.audio { pool.insert(member.uuid, member); }
+        }
+        let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, device, invalidate, rewire);
+        let mut midi_members: Vec<Member> = Vec::new();
+        for uuid in midi_uuids.iter().copied() {
+            if let Some(device) = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
+                if device.kind == DEVICE_KIND_MIDI_EFFECT {
+                    midi_members.push(self.take_or_build_midi(&mut pool, uuid, device, invalidate, rewire));
+                }
+            }
+        }
+        let mut audio_members: Vec<Member> = Vec::new();
+        for uuid in audio_uuids.iter().copied() {
+            if let Some(device) = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
+                if device.kind == DEVICE_KIND_AUDIO_EFFECT {
+                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, signal, invalidate, rewire));
+                }
+            }
+        }
+        for (_, member) in core::mem::take(&mut pool) {
+            self.terminate_member(member);
+        }
+        let sequencer: SharedNoteEventSource = match sequencer_keep {
+            Some((uuid, kept)) if uuid == instrument_uuid => kept,
+            _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: track_sets.clone()}))))
+        };
+        let (output, output_node, internal_edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, choke);
+        SlotCluster {instrument, sequencer, midi: midi_members, audio: audio_members, internal_edges, output, output_node}
+    }
+
+    /// Tear a slot cluster down: remove its internal edges, terminate every member (its node + params + sidechain
+    /// monitors + `enabled` monitor). The caller has already removed the slot's sum edge + source.
+    pub(crate) fn teardown_slot_cluster(&mut self, cluster: SlotCluster) {
+        for (source, target) in &cluster.internal_edges {
+            self.context.remove_edge(*source, *target);
+        }
+        self.terminate_member(cluster.instrument);
+        for member in cluster.midi { self.terminate_member(member); }
+        for member in cluster.audio { self.terminate_member(member); }
+    }
+
     /// Build one processor cluster: an instrument plus its midi-fx pull chain (folded onto `source` in index
     /// order, so the instrument pulls the highest-index fx down to the source) and its audio-fx chain
     /// (instrument -> fx0 -> fx1 -> ...), wired into the global graph. Returns the chain's final output buffer
@@ -1043,7 +1177,7 @@ impl Engine {
         for device_uuid in midi.iter().copied() {
             let device = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
             match device {
-                Some(device) if device.kind == DEVICE_KIND_MIDI_EFFECT => {
+                Some(device) if device.kind == DEVICE_KIND_MIDI_EFFECT && self.device_enabled(device_uuid) => {
                     let effect = Rc::new(PluginMidiEffect::new(device));
                     device_params.push(self.bind_device(device_uuid, device, effect.state_ptr(), ParamNode::Midi(effect.clone()), invalidate));
                     chain = PullLink::MidiFx {effect, upstream: Rc::new(chain)};
@@ -1069,6 +1203,9 @@ impl Engine {
                 Some(device) if device.kind == DEVICE_KIND_AUDIO_EFFECT => device,
                 _ => continue
             };
+            if !self.device_enabled(device_uuid) {
+                continue; // a disabled effect is bypassed: not built, not wired into the chain
+            }
             let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
             let node_state = node.borrow().state_ptr();
             let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
@@ -1911,6 +2048,7 @@ mod tests {
     const CHILD_A: Uuid = [31u8; 16];
     const CHILD_B: Uuid = [32u8; 16];
     const CHILDREN_FIELD: u16 = 30; // the composite's child-slot host hub
+    const CHILD_ENABLED_KEY: u16 = 22; // a child's `enabled` field (Playfield's slot key; the test mirrors it)
 
     // A unit whose instrument is a composite hosting direct-instrument children (no choke, no routing). CHILD_A
     // is connected; CHILD_B exists but joins later. The children are `TestInstrument` voices.
@@ -1924,10 +2062,12 @@ mod tests {
                 (CHILDREN_FIELD, FieldValue::Hook)
             ]),
             graph_box(CHILD_A, "TestInstrument", &[
-                (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD]))))
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))),
+                (CHILD_ENABLED_KEY, FieldValue::Boolean(true))
             ]),
             graph_box(CHILD_B, "TestInstrument", &[
-                (HOST_KEY, FieldValue::Pointer(None))
+                (HOST_KEY, FieldValue::Pointer(None)),
+                (CHILD_ENABLED_KEY, FieldValue::Boolean(true))
             ])
         ])
     }
@@ -1935,6 +2075,19 @@ mod tests {
     fn child_instrument_node(unit: &AudioUnitBinding, child: Uuid) -> Option<NodeId> {
         match unit.wired.as_ref().expect("wired after reconcile") {
             Wired::Composite(composite) => composite.binding.child_instrument_node(child),
+            _ => panic!("expected a composite chain")
+        }
+    }
+
+    fn child_audio_members(unit: &AudioUnitBinding, child: Uuid) -> Option<usize> {
+        match unit.wired.as_ref().expect("wired after reconcile") {
+            Wired::Composite(composite) => composite.binding.child_audio_member_count(child),
+            _ => panic!("expected a composite chain")
+        }
+    }
+    fn child_wired_audio(unit: &AudioUnitBinding, child: Uuid) -> Option<usize> {
+        match unit.wired.as_ref().expect("wired after reconcile") {
+            Wired::Composite(composite) => composite.binding.child_wired_audio_count(child),
             _ => panic!("expected a composite chain")
         }
     }
@@ -1952,9 +2105,74 @@ mod tests {
         let mut engine = engine_with_devices(); // TestInstrument + TestEffect device table
         engine.composites = vec![CompositeSpec {
             box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
-            cell_instrument_field: 0, cell_midi_field: 0, cell_audio_field: 0 // direct instruments, no choke
+            cell_instrument_field: 0, cell_midi_field: 0, cell_audio_field: 0, // direct instruments, no choke
+            child_enabled_key: CHILD_ENABLED_KEY
         }];
         engine
+    }
+
+    #[test]
+    fn a_cell_composite_builds_its_hosted_instrument_and_keeps_it_across_reconcile() {
+        // A CELL composite (CompositeDeviceBox path): children are generic wrappers that HOST one instrument at a
+        // fixed field. Exercises the `ChildBody::Cell` build + survive + teardown path (otherwise untested).
+        const CELL: Uuid = [40u8; 16];
+        const CELL_INSTRUMENT_FIELD: u16 = 50;
+        let mut engine = engine_with_devices();
+        engine.composites = vec![CompositeSpec {
+            box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
+            cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0, child_enabled_key: 0
+        }];
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+                (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+            ]),
+            graph_box(COMPOSITE, "TestComposite", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (CHILDREN_FIELD, FieldValue::Hook)
+            ]),
+            graph_box(CELL, "TestCell", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))), (CELL_INSTRUMENT_FIELD, FieldValue::Hook)
+            ]),
+            graph_box(CHILD_A, "TestInstrument", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(CELL, vec![CELL_INSTRUMENT_FIELD]))))
+            ])
+        ]);
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        assert_eq!(composite_sum_sources(&unit), 1, "the cell's hosted instrument feeds the sum");
+        let node = child_instrument(&unit, CELL).expect("cell child built");
+        engine.reconcile_one(&mut unit);
+        assert_eq!(child_instrument(&unit, CELL), Some(node), "the cell child survives an idle reconcile (same processor)");
+    }
+
+    #[test]
+    fn a_nested_composite_builds_and_sums_its_subtree() {
+        // A NESTED composite: a child of a composite is ITSELF a composite (recurses). Exercises `ChildBody::Nested`
+        // build + survive + teardown (otherwise untested). OUTER hosts INNER (a composite) which hosts a LEAF voice.
+        const INNER: Uuid = [40u8; 16];
+        const LEAF: Uuid = [41u8; 16];
+        let mut engine = composite_engine(); // TestComposite, direct children, child_enabled_key 22
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+                (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+            ]),
+            graph_box(COMPOSITE, "TestComposite", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (CHILDREN_FIELD, FieldValue::Hook)
+            ]),
+            graph_box(INNER, "TestComposite", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))),
+                (CHILDREN_FIELD, FieldValue::Hook), (CHILD_ENABLED_KEY, FieldValue::Boolean(true))
+            ]),
+            graph_box(LEAF, "TestInstrument", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(INNER, vec![CHILDREN_FIELD])))), (CHILD_ENABLED_KEY, FieldValue::Boolean(true))
+            ])
+        ]);
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        assert_eq!(composite_sum_sources(&unit), 1, "the outer sum sums the nested composite's one output");
+        engine.reconcile_one(&mut unit);
+        assert_eq!(composite_sum_sources(&unit), 1, "the nested subtree is stable across an idle reconcile");
     }
 
     #[test]
@@ -2003,6 +2221,95 @@ mod tests {
         assert_eq!(child_instrument_node(&unit, CHILD_A), None, "the removed child is gone");
         assert_eq!(child_instrument_node(&unit, CHILD_B), Some(child_b_node), "the surviving child keeps its processor");
         assert_eq!(composite_sum_sources(&unit), 1, "the removed child no longer feeds the sum (no stale buffer)");
+    }
+
+    fn child_instrument(unit: &AudioUnitBinding, child: Uuid) -> Option<NodeId> {
+        match unit.wired.as_ref().expect("wired after reconcile") {
+            Wired::Composite(composite) => composite.binding.child_instrument_node(child),
+            _ => panic!("expected a composite chain")
+        }
+    }
+
+    #[test]
+    fn disabling_an_effect_inside_a_composite_child_bypasses_it_edge_only() {
+        // A composite child (e.g. a Playfield slot) hosts its OWN audio-fx chain. Disabling one of those effects
+        // (its `enabled`, key 4) must BYPASS it EDGE-ONLY: the effect's processor + the slot's instrument are kept
+        // (no rebuild, no voice reset), only the wiring drops — exactly like a unit-level effect.
+        const CHILD_FX: Uuid = [33u8; 16];
+        const CHILD_AUDIO_FIELD: u16 = 40; // the child instrument hosts its audio chain here
+        let mut engine = composite_engine();
+        engine.devices[0].audio_effects_field = CHILD_AUDIO_FIELD; // TestInstrument children host an audio chain
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+                (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+            ]),
+            graph_box(COMPOSITE, "TestComposite", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))),
+                (CHILDREN_FIELD, FieldValue::Hook)
+            ]),
+            graph_box(CHILD_A, "TestInstrument", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))),
+                (CHILD_ENABLED_KEY, FieldValue::Boolean(true)), (CHILD_AUDIO_FIELD, FieldValue::Hook)
+            ]),
+            graph_box(CHILD_FX, "TestEffect", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(CHILD_A, vec![CHILD_AUDIO_FIELD])))),
+                (EFFECT_INDEX_KEY, FieldValue::Int32(0)), (DEVICE_ENABLED_KEY, FieldValue::Boolean(true))
+            ])
+        ]);
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        let instrument_node = child_instrument(&unit, CHILD_A).expect("slot instrument built");
+        assert_eq!(child_audio_members(&unit, CHILD_A), Some(1), "the slot owns its one effect");
+        assert_eq!(child_wired_audio(&unit, CHILD_A), Some(1), "and the enabled effect is wired in");
+
+        // Disable the child's effect: it is BYPASSED — still OWNED (member persists) but no longer wired. The
+        // slot's instrument processor is the SAME (no rebuild, voice preserved).
+        let toggle = |engine: &mut Engine, from: bool, to: bool| engine.graph.transaction(&[Update::Primitive {
+            address: Address::of(CHILD_FX, vec![DEVICE_ENABLED_KEY]),
+            old: FieldValue::Boolean(from), new: FieldValue::Boolean(to)
+        }], &engine.registry).expect("toggle child effect enabled");
+        toggle(&mut engine, true, false);
+        engine.reconcile_one(&mut unit);
+        assert_eq!(child_audio_members(&unit, CHILD_A), Some(1), "the disabled effect is still owned (not torn down)");
+        assert_eq!(child_wired_audio(&unit, CHILD_A), Some(0), "but it is bypassed — not wired into the slot");
+        assert_eq!(child_instrument(&unit, CHILD_A), Some(instrument_node), "the slot instrument is untouched (edge-only)");
+
+        // Re-enable: the SAME effect processor is wired back, instrument still untouched.
+        toggle(&mut engine, false, true);
+        engine.reconcile_one(&mut unit);
+        assert_eq!(child_wired_audio(&unit, CHILD_A), Some(1), "the re-enabled effect is wired back in");
+        assert_eq!(child_instrument(&unit, CHILD_A), Some(instrument_node), "still the same slot instrument");
+    }
+
+    #[test]
+    fn disabling_a_composite_child_drops_it_from_the_sum_edge_only() {
+        let mut engine = composite_engine();
+        engine.graph = composite_graph();
+        let mut unit = engine.build_unit(UNIT);
+        // Connect CHILD_B so both children are summed.
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(CHILD_B, vec![HOST_KEY]), old: None, new: Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD]))
+        }], &engine.registry).expect("connect CHILD_B");
+        engine.reconcile_one(&mut unit);
+        let child_b_node = child_instrument_node(&unit, CHILD_B).expect("CHILD_B built");
+        assert_eq!(composite_sum_sources(&unit), 2, "both enabled children feed the sum");
+
+        // Disable CHILD_B (its `enabled` field): it must leave the sum, but keep its processor (edge-only).
+        let toggle = |engine: &mut Engine, from: bool, to: bool| engine.graph.transaction(&[Update::Primitive {
+            address: Address::of(CHILD_B, vec![CHILD_ENABLED_KEY]),
+            old: FieldValue::Boolean(from), new: FieldValue::Boolean(to)
+        }], &engine.registry).expect("toggle CHILD_B enabled");
+        toggle(&mut engine, true, false);
+        engine.reconcile_one(&mut unit);
+        assert_eq!(composite_sum_sources(&unit), 1, "the disabled child no longer feeds the sum");
+        assert_eq!(child_instrument_node(&unit, CHILD_B), Some(child_b_node), "but its processor is kept (not rebuilt)");
+
+        // Re-enable: it rejoins the sum, same processor.
+        toggle(&mut engine, false, true);
+        engine.reconcile_one(&mut unit);
+        assert_eq!(composite_sum_sources(&unit), 2, "the re-enabled child feeds the sum again");
+        assert_eq!(child_instrument_node(&unit, CHILD_B), Some(child_b_node), "still the same processor instance");
     }
 
     #[test]

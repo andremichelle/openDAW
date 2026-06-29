@@ -30,6 +30,10 @@ pub(crate) struct PluginInstrument {
     process_index: u32, // the device's `process` slot in the shared function table
     reset_index: u32,   // the device's `reset` slot (clears voices on STOP); 0 if none
     sample_rate: f32,
+    // A disabled instrument is SILENCED at the source (mirrors TS instrument processors, e.g. Nano:
+    // `if (!enabled) return` in processAudio + `reset()` on disable). Unlike an effect (bypassed = passthrough),
+    // a source has nothing to pass through, so it renders silence and drops its voices.
+    enabled: bool,
     pull_chain: Option<PullLink>, // the top of this unit's event pull chain (sequencer, or a midi-fx over it)
     // This device's bound parameters, swapped into `PULL` for the device call so `host_update_parameters`
     // resolves + diffs them; `clock_armed` is true iff one is automated (so the clock injects update ticks).
@@ -83,6 +87,7 @@ impl PluginInstrument {
             process_index: device.process_index,
             reset_index: device.reset_index,
             sample_rate,
+            enabled: true,
             pull_chain: None,
             params: Vec::new(),
             clock_armed: false,
@@ -98,6 +103,15 @@ impl PluginInstrument {
 
     pub(crate) fn set_pull_chain(&mut self, chain: PullLink) {
         self.pull_chain = Some(chain);
+    }
+
+    /// Enable / disable the instrument. Disabling drops its active voices immediately (TS instrument: the
+    /// `enabled` observer calls `reset()`), so a held note stops rather than freezing; `process` then renders
+    /// silence until re-enabled. Re-enabling resumes from the live note source. A no-op if unchanged.
+    pub(crate) fn set_enabled(&mut self, enabled: bool) {
+        if self.enabled == enabled { return; }
+        self.enabled = enabled;
+        if !enabled { self.reset(); }
     }
 }
 
@@ -133,6 +147,14 @@ impl Processor for PluginInstrument {
     }
 
     fn process(&mut self, info: &ProcessInfo) {
+        if !self.enabled {
+            // Disabled: render silence and don't call the device (no notes pulled, no CPU). Voices were already
+            // dropped on the disable transition (`set_enabled`).
+            let mut output = self.output.borrow_mut();
+            output.left[..RENDER_QUANTUM].fill(0.0);
+            output.right[..RENDER_QUANTUM].fill(0.0);
+            return;
+        }
         // Point the descriptor straight at the engine's per-quantum block array (the shared wire type, in
         // shared memory) — no per-node copy. The blocks Vec may move between quanta, so refresh the pointer.
         self.descriptor[0] = RENDER_QUANTUM as u32;
