@@ -99,9 +99,14 @@ export namespace StringMapping {
 
         y(x: string): ParseResult<number> {
             let value = x.trim()
+            if (this.#unit.length > 0 && this.#unit !== "%" && value.endsWith(this.#unit)) {
+                // remove the unit before parsing, otherwise a unit that begins with a digit
+                // (e.g. "1/32th") gets merged into the numeric value by parseFloat
+                value = value.slice(0, -this.#unit.length).trim()
+            }
             const float = parseFloat(value)
             if (isNaN(float)) {
-                return {type: "unknown", value: value}
+                return {type: "unknown", value: x.trim()}
             } else if (this.#unit === "%") {
                 return {
                     type: "explicit",
@@ -115,12 +120,7 @@ export namespace StringMapping {
                         : clamp(float / 100.0, 0.0, 1.0)
                 }
             } else {
-                if (value.endsWith(this.#unit) && this.#unit.length > 0) {
-                    // remove unit
-                    value = value.slice(0, -this.#unit.length)
-                }
-                const regex = /(\d+)(\D+)/
-                const match: Nullable<RegExpExecArray> = regex.exec(value)
+                const match: Nullable<RegExpExecArray> = /(\d+)(\D+)/.exec(value)
                 const last = match?.at(2)?.at(0)
                 if (isDefined(last)) {
                     const index: int = prefixes.indexOf(last)

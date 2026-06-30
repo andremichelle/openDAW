@@ -62,12 +62,10 @@ describe("ScriptDeclaration", () => {
         it("throws on unknown mapping", () => {
             expect(() => ScriptDeclaration.parseParams("// @param x 0.5 0 1 cubic")).toThrow()
         })
-        it("parses names that are not valid identifiers without throwing (project load must not fail)", () => {
+        it("accepts names starting with a digit or hash", () => {
             expect(ScriptDeclaration.parseParams("// @param 1 5 1 9 int")[0].label).toBe("1")
+            expect(ScriptDeclaration.parseParams("// @param #steps 0.5")[0].label).toBe("#steps")
             expect(ScriptDeclaration.parseParams("// @param foo-bar 0.5")[0].label).toBe("foo-bar")
-        })
-        it("accepts identifiers with leading underscore and digits", () => {
-            expect(ScriptDeclaration.parseParams("// @param _osc1")[0].label).toBe("_osc1")
         })
     })
 
@@ -84,19 +82,8 @@ describe("ScriptDeclaration", () => {
         it("ignores sample line with no name", () => {
             expect(ScriptDeclaration.parseSamples("// @sample ")).toEqual([])
         })
-        it("parses a sample name that is not a valid identifier without throwing", () => {
+        it("accepts a sample name starting with a digit", () => {
             expect(ScriptDeclaration.parseSamples("// @sample 1kick")).toEqual([{label: "1kick"}])
-        })
-    })
-
-    describe("collectInvalidIdentifiers", () => {
-        it("flags param and sample names that are not valid identifiers", () => {
-            const code = "// @param 1 5 1 9 int\n// @param gain 1\n// @sample 1kick"
-            expect(ScriptDeclaration.collectInvalidIdentifiers(code)).toEqual(["1", "1kick"])
-        })
-        it("returns empty when all names are valid identifiers", () => {
-            const code = "// @param gain 1\n// @sample kick"
-            expect(ScriptDeclaration.collectInvalidIdentifiers(code)).toEqual([])
         })
     })
 

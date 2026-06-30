@@ -1,4 +1,4 @@
-import {asInstanceOf, isDefined, isValidIdentifier, Notifier, Nullable, Observable, Option, StringMapping, Terminable, ValueMapping} from "@opendaw/lib-std"
+import {asInstanceOf, isDefined, Notifier, Nullable, Observable, Option, StringMapping, Terminable, ValueMapping} from "@opendaw/lib-std"
 import {Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox} from "@opendaw/studio-boxes"
@@ -156,17 +156,6 @@ export namespace ScriptDeclaration {
             samples.push({label: tokens[0]})
         }
         return samples
-    }
-
-    export const collectInvalidIdentifiers = (code: string): ReadonlyArray<string> => {
-        const invalid: Array<string> = []
-        for (const {label} of parseParams(code)) {
-            if (!isValidIdentifier(label)) {invalid.push(label)}
-        }
-        for (const {label} of parseSamples(code)) {
-            if (!isValidIdentifier(label)) {invalid.push(label)}
-        }
-        return invalid
     }
 
     export const parseDeclarationOrder = (code: string): Map<string, number> => {

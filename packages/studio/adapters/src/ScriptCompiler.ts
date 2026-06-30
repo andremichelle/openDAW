@@ -181,10 +181,6 @@ export namespace ScriptCompiler {
                 const params = ScriptDeclaration.parseParams(userCode)
                 const samples = ScriptDeclaration.parseSamples(userCode)
                 const order = ScriptDeclaration.parseDeclarationOrder(userCode)
-                const invalidIdentifiers = ScriptDeclaration.collectInvalidIdentifiers(userCode)
-                if (invalidIdentifiers.length > 0) {
-                    console.warn(`Script names are not valid JavaScript identifiers and may not be usable in code: ${invalidIdentifiers.join(", ")}`)
-                }
                 const wrappedCode = wrapCode(config, uuid, newUpdate, userCode)
                 validateCode(wrappedCode)
                 const label = ScriptDeclaration.parseLabel(userCode)
