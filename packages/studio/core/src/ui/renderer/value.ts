@@ -45,14 +45,14 @@ export namespace ValueStreamRenderer {
                 path.lineTo(x1, y0) // hold value to the next event
                 path.lineTo(x1, y1) // jump to the next event value
             } else if (type === "linear") {
-                const ratio = (v1 - v0) / (p1 - p0)
+                const slope = (y1 - y0) / (x1 - x0)
                 if (notMoved) {
-                    path.moveTo(xMin, valueToY(p0 < windowMin ? v0 + ratio * (windowMin - p0) : v0)) // move pen to window min
+                    path.moveTo(xMin, p0 < windowMin ? y0 + slope * (xMin - x0) : y0) // move pen to window min
                     if (p0 > windowMin) {path.lineTo(x0, y0)} // line to first event
                     notMoved = false
                 }
                 if (p1 > windowMax) {
-                    path.lineTo(xMax, valueToY(v0 + ratio * (windowMax - p0))) // line to window max
+                    path.lineTo(xMax, y0 + slope * (xMax - x0)) // line to window max
                 } else {
                     path.lineTo(x1, y1) // line to next event
                 }
