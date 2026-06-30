@@ -58,9 +58,6 @@ const parseSingleParam = (line: string): ParamDeclaration => {
         throw new Error(`Malformed @param: '${line}'`)
     }
     const label = tokens[0]
-    if (!isValidIdentifier(label)) {
-        throw new Error(`Malformed @param: '${line}' — '${label}' is not a valid identifier`)
-    }
     if (tokens.length === 1) {
         return {label, defaultValue: 0, min: 0, max: 1, mapping: "unipolar", unit: ""}
     }
@@ -156,12 +153,20 @@ export namespace ScriptDeclaration {
             if (tokens.length > 1) {
                 throw new Error(`Malformed @sample: '${match[0]}' — expected: // @sample <name>`)
             }
-            if (!isValidIdentifier(tokens[0])) {
-                throw new Error(`Malformed @sample: '${match[0]}' — '${tokens[0]}' is not a valid identifier`)
-            }
             samples.push({label: tokens[0]})
         }
         return samples
+    }
+
+    export const collectInvalidIdentifiers = (code: string): ReadonlyArray<string> => {
+        const invalid: Array<string> = []
+        for (const {label} of parseParams(code)) {
+            if (!isValidIdentifier(label)) {invalid.push(label)}
+        }
+        for (const {label} of parseSamples(code)) {
+            if (!isValidIdentifier(label)) {invalid.push(label)}
+        }
+        return invalid
     }
 
     export const parseDeclarationOrder = (code: string): Map<string, number> => {
@@ -200,9 +205,6 @@ export namespace ScriptDeclaration {
                 const tokens = line.replace(/^\/\/ @sample\s+/, "").replace(/\s+\/\/.*$/, "").trim().split(/\s+/)
                 if (tokens.length === 0 || tokens[0].length === 0) {
                     throw new Error(`Malformed @sample: '${line}' — expected: // @sample <name>`)
-                }
-                if (!isValidIdentifier(tokens[0])) {
-                    throw new Error(`Malformed @sample: '${line}' — '${tokens[0]}' is not a valid identifier`)
                 }
                 currentItems.push({type: "sample", declaration: {label: tokens[0]}})
             }
