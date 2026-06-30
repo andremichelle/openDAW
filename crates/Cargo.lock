@@ -141,6 +141,7 @@ dependencies = [
  "boxgraph",
  "dsp",
  "engine-env",
+ "math",
  "processors",
  "studio-boxes",
  "talc",

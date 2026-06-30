@@ -202,6 +202,7 @@ mod plugin_audio_effect;
 mod plugin_midi_effect;
 use plugin_midi_effect::PluginMidiEffect; // named in the PullLink::MidiFx variant defined here
 mod audio_unit;
+mod audio_region_player;
 use audio_unit::{AudioUnitBinding, DeviceParams, Members};
 mod composite;
 mod param_automation;
@@ -1232,6 +1233,13 @@ pub extern "C" fn composite_register(name_len: usize, children_field: u32, index
                 cell_instrument_field as u16, cell_midi_field as u16, cell_audio_field as u16, child_enabled_key as u16);
         }
     }
+}
+
+/// Resolve an `AudioFileBox` uuid to its frames for an ENGINE-SIDE reader (the audio-region player) during
+/// render. Reads the `SAMPLES` cell read-only, exactly like `host_resolve_sample`, so it never aliases the
+/// `&mut Engine` the render path holds.
+pub(crate) fn resolve_sample(uuid: boxgraph::address::Uuid) -> Option<abi::SampleRef> {
+    unsafe { SAMPLES.get() }.resolve_uuid(uuid)
 }
 
 /// Resolve a sample handle (Route F) for a device DURING render: write a `SampleRef` to `out_ptr` and return

@@ -43,6 +43,7 @@ use crate::plugin_audio_effect::PluginAudioEffect;
 use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::composite::CompositeBinding;
+use crate::audio_region_player::AudioRegionPlayer;
 use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, CompositeSpec, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SIDECHAIN_BIND, EFFECT_INDEX_KEY};
 
 // AudioUnitBox field keys (WASM CONTRACT: mirror the TS AudioUnitBox schema). The unit carries its strip
@@ -59,6 +60,9 @@ const ROOT_AUDIO_UNITS_KEY: u16 = 20;
 // A unit-level device box's `enabled` BooleanField (WASM CONTRACT: the base device schema; a disabled
 // audio / midi effect is bypassed — skipped in the chain wiring). Composite-child enabled is separate.
 pub(crate) const DEVICE_ENABLED_KEY: u16 = 4;
+// The instrument box type whose audio source is the engine-side audio-region player (it reads the unit's AUDIO
+// tracks rather than mapping to a wasm device). WASM CONTRACT: mirrors the TS TapeDeviceBox class name.
+const TAPE_BOX_TYPE: &str = "TapeDeviceBox";
 
 /// The handle a unit's subscriptions use to enqueue THAT unit for reconcile when its scope changes, so a
 /// related edit reconciles one unit instead of sweeping all units (the Rust analog of TS's per-unit
@@ -164,6 +168,15 @@ pub(crate) type SharedTrackRegions = Rc<RefCell<RegionCollection<BoundRegion>>>;
 /// sequencer. Tracks are added / removed live; the sequencer iterates whatever is currently present.
 pub(crate) type SharedTrackSets = Rc<RefCell<Vec<SharedTrackRegions>>>;
 
+/// ONE audio track's regions, kept SORTED BY POSITION (like the note path, but each element is a self-contained
+/// `AudioRegion` — its playback data, no shared event collection). Shared between the track binding (the cascade
+/// maintains it) and the unit's audio-region player (which range-queries it each block).
+pub(crate) type SharedAudioRegions = Rc<RefCell<RegionCollection<AudioRegion>>>;
+
+/// The unit's live list of per-audio-track region collections, shared with the audio-region player. Mirrors
+/// `SharedTrackSets` for the audio side.
+pub(crate) type SharedAudioTrackSets = Rc<RefCell<Vec<SharedAudioRegions>>>;
+
 /// The `NoteRegionSource` the unit's sequencer reads. It iterates EACH track's own sorted region collection
 /// (unit -> tracks -> regions), range-querying each — mirroring TS `tracks -> regions.collection.iterateRange`.
 pub(crate) struct BoundNoteRegions {
@@ -213,6 +226,25 @@ struct TrackBinding {
     enabled_sub: SubscriptionId
 }
 
+/// One audio region's cascade entry: its uuid (its key in the track's collection) and a `Parent` edit monitor
+/// that re-reads + re-sorts the region when its own fields change. No collection ref (audio regions hold their
+/// playback data inline; the source file is resolved at render).
+struct AudioRegionBinding {
+    region_uuid: Uuid,
+    edit_sub: SubscriptionId
+}
+
+/// An AUDIO track binding: its sorted `AudioRegion` collection (shared with the player), its `regions`
+/// membership observation, per-region edit monitors, and its `enabled` monitor. The audio analog of `TrackBinding`.
+struct AudioTrackBinding {
+    track_uuid: Uuid,
+    regions_set: SharedAudioRegions,
+    region_bindings: Vec<AudioRegionBinding>,
+    region_changes: Rc<RefCell<Members>>,
+    region_sub: SubscriptionId,
+    enabled_sub: SubscriptionId
+}
+
 /// What the engine wired for one unit. A LEAF-instrument unit owns its device processors PERSISTENTLY (the
 /// analog of TS `AudioDeviceChain`'s `#effects`): a chain edit keeps the survivors and only creates joiners /
 /// terminates leavers, re-wiring EDGES ONLY (the `#disconnector` analog), so no survivor's DSP state is reset.
@@ -221,7 +253,18 @@ struct TrackBinding {
 #[allow(clippy::large_enum_variant)] // the common variant is the live one; boxing it would add a per-build heap allocation
 enum Wired {
     Leaf(LeafChain),
-    Composite(CompositeWired)
+    Composite(CompositeWired),
+    Tape(TapeWired)
+}
+
+/// A TAPE / audio-region unit's wiring: the engine-side audio-region player (reads the unit's AUDIO tracks) ->
+/// channel strip -> master. The player is owned by the context (removed by `player_id` on teardown); it reads
+/// `audio_track_sets` live, so a region edit needs no rebuild.
+struct TapeWired {
+    player_id: NodeId,
+    strip_id: NodeId,
+    strip_output: SharedAudioBuffer,
+    tail_edges: Vec<(NodeId, NodeId)> // player -> strip, strip -> master
 }
 
 /// A held device processor, kept alive across rewires so its DSP state (voices, delay tails, filter history)
@@ -409,6 +452,8 @@ pub(crate) struct AudioUnitBinding {
     track_sets: SharedTrackSets,
     collections: CollectionCache,
     tracks: Vec<TrackBinding>,
+    audio_track_sets: SharedAudioTrackSets, // per-AUDIO-track region collections, read by the audio-region player
+    audio_tracks: Vec<AudioTrackBinding>,
     track_changes: Rc<RefCell<Members>>,
     track_sub: SubscriptionId,
     strip_params: Rc<StripParams>,        // the unit's volume / panning / mute, kept in sync with its box
@@ -642,7 +687,7 @@ impl Engine {
                 Some(Wired::Composite(composite)) => {
                     composite.binding.for_each_sidechain(&mut |binding| self.resolve_one_sidechain(binding));
                 }
-                None => {}
+                Some(Wired::Tape(_)) | None => {} // an audio-region player has no sidechains
             }
         }
         self.audio_units = units;
@@ -691,6 +736,9 @@ impl Engine {
         for track in binding.tracks {
             teardown_track(&mut self.graph, &binding.track_sets, &mut binding.collections, track);
         }
+        for track in binding.audio_tracks {
+            teardown_audio_track(&mut self.graph, &binding.audio_track_sets, track);
+        }
         binding.collections.terminate_all(&mut self.graph); // defensive; the tracks released everything
         binding.input.terminate(&mut self.graph);
         binding.midi.terminate(&mut self.graph);
@@ -737,6 +785,16 @@ impl Engine {
                 }
                 self.context.remove_processor(composite.strip_id);
                 self.teardown_composite(composite.binding);
+            }
+            Wired::Tape(tape) => {
+                if let Some(master) = &self.master {
+                    master.borrow_mut().remove_audio_source(&tape.strip_output);
+                }
+                for (source, target) in &tape.tail_edges {
+                    self.context.remove_edge(*source, *target);
+                }
+                self.context.remove_processor(tape.strip_id);
+                self.context.remove_processor(tape.player_id);
             }
         }
     }
@@ -808,6 +866,7 @@ impl Engine {
         let wiring_dirty = Rc::new(Cell::new(false));
         AudioUnitBinding {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
+            audio_track_sets: Rc::new(RefCell::new(Vec::new())), audio_tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
             input, midi, audio, wired: None, automation_dirty, wiring_dirty, mark
         }
@@ -845,6 +904,8 @@ impl Engine {
         let rewire = Self::rewire_signal(unit); // a device `enabled` toggle re-wires the chain edge-only
         if let Some(spec) = self.composite_for_type(&box_name) {
             self.reconcile_composite(unit, instrument_uuid, spec, &signal, &invalidate);
+        } else if box_name == TAPE_BOX_TYPE {
+            self.reconcile_tape(unit); // an audio unit: the engine-side player reads its AUDIO tracks
         } else {
             match self.device_for_type(&box_name) {
                 Some(device) if device.kind == DEVICE_KIND_INSTRUMENT =>
@@ -852,6 +913,30 @@ impl Engine {
                 _ => self.teardown_unit_wired(unit) // not a buildable instrument: silent
             }
         }
+    }
+
+    /// The TAPE / audio-region path: the unit's instrument is a `TapeDeviceBox`, so its source is the engine-side
+    /// audio-region player reading the unit's AUDIO tracks (`audio_track_sets`) -> channel strip -> master. Built
+    /// wholesale on a chain change; the player reads its track sets live, so a region add / remove / edit needs no
+    /// rebuild (the cascade updates the collections the player range-queries).
+    fn reconcile_tape(&mut self, unit: &mut AudioUnitBinding) {
+        self.teardown_unit_wired(unit);
+        let player = Rc::new(RefCell::new(AudioRegionPlayer::new(unit.audio_track_sets.clone(), self.sample_rate)));
+        let player_output = player.borrow().audio_output();
+        let player_id = self.context.register_processor(player);
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
+        strip.borrow_mut().set_audio_source(player_output);
+        let strip_output = strip.borrow().audio_output();
+        let strip_id = self.context.register_processor(strip);
+        let mut tail_edges = Vec::new();
+        self.context.register_edge(player_id, strip_id);
+        tail_edges.push((player_id, strip_id));
+        self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
+        let master = self.master.as_ref().unwrap();
+        master.borrow_mut().add_audio_source(strip_output.clone());
+        self.context.register_edge(strip_id, self.master_id);
+        tail_edges.push((strip_id, self.master_id));
+        unit.wired = Some(Wired::Tape(TapeWired {player_id, strip_id, strip_output, tail_edges}));
     }
 
     /// The COMPOSITE-instrument path (e.g. Playfield): tear down the old wiring and rebuild the child cascade
@@ -1408,6 +1493,7 @@ impl Engine {
             Wired::Composite(composite) => {
                 composite.binding.for_each_params(&mut |params| self.rebind_one(params, &invalidate, position));
             }
+            Wired::Tape(_) => {} // the audio-region player has no automatable device parameters
         }
         unit.wired = Some(wired);
     }
@@ -1540,21 +1626,25 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding) {
         if let Some(index) = unit.tracks.iter().position(|track| track.track_uuid == track_uuid) {
             let track = unit.tracks.remove(index);
             teardown_track(graph, &unit.track_sets, &mut unit.collections, track);
+        } else if let Some(index) = unit.audio_tracks.iter().position(|track| track.track_uuid == track_uuid) {
+            let track = unit.audio_tracks.remove(index);
+            teardown_audio_track(graph, &unit.audio_track_sets, track);
         }
     }
     for track_uuid in changes.added {
-        if unit.tracks.iter().any(|track| track.track_uuid == track_uuid) {
+        if unit.tracks.iter().any(|track| track.track_uuid == track_uuid)
+            || unit.audio_tracks.iter().any(|track| track.track_uuid == track_uuid) {
             continue;
         }
-        if track_type(graph, track_uuid) == TRACK_TYPE_VALUE {
-            continue; // a Value (automation) track is read per-device by `device_automation`, not the note cascade
+        match track_type(graph, track_uuid) {
+            TRACK_TYPE_VALUE => continue, // a Value (automation) track is read per-device by `device_automation`
+            TRACK_TYPE_AUDIO => unit.audio_tracks.push(build_audio_track(graph, track_uuid, &mark)),
+            _ => unit.tracks.push(build_track(graph, track_uuid, &mark)) // Notes / Undefined -> the note cascade
         }
-        let track = build_track(graph, track_uuid, &mark);
-        unit.tracks.push(track);
     }
-    // Re-derive the active note-track set: a track feeds the sequencer its regions IFF enabled. Rebuilding
-    // here (not only on add) is what makes an `enabled` toggle take effect edge-only — no region rebuild, the
-    // disabled track's collection is simply dropped from `track_sets` (and restored on re-enable).
+    // Re-derive the active track sets (note + audio): a track feeds the player its regions IFF enabled.
+    // Rebuilding here (not only on add) makes an `enabled` toggle take effect edge-only — the disabled track's
+    // collection is simply dropped from the set (and restored on re-enable), no region rebuild.
     {
         let mut sets = unit.track_sets.borrow_mut();
         sets.clear();
@@ -1564,8 +1654,20 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding) {
             }
         }
     }
+    {
+        let mut sets = unit.audio_track_sets.borrow_mut();
+        sets.clear();
+        for track in &unit.audio_tracks {
+            if track_enabled(graph, track.track_uuid) {
+                sets.push(track.regions_set.clone());
+            }
+        }
+    }
     for track in &mut unit.tracks {
         reconcile_regions(graph, &mut unit.collections, track);
+    }
+    for track in &mut unit.audio_tracks {
+        reconcile_audio_regions(graph, track);
     }
 }
 
@@ -1665,6 +1767,143 @@ fn region_pulses(graph: &BoxGraph, uuid: Uuid, key: u16) -> f64 {
     graph.field_value(&Address::of(uuid, vec![key])).and_then(|value| value.as_int32()).unwrap_or(0) as f64
 }
 
+// AudioRegionBox field keys (WASM CONTRACT: mirror the TS AudioRegionBox schema). The loopable span lives at
+// the SAME keys as note/value regions (10 position, 11 duration, 12 loop-offset, 13 loop-duration).
+const AUDIO_REGION_FILE_KEY: u16 = 2;             // -> the AudioFileBox (the source sample)
+const AUDIO_REGION_WAVEFORM_OFFSET_KEY: u16 = 7;  // seconds into the source where playback reads
+const AUDIO_REGION_MUTE_KEY: u16 = 14;
+const AUDIO_REGION_GAIN_KEY: u16 = 17;            // decibels
+const AUDIO_REGION_FADING_KEY: u16 = 18;          // object: 1 in, 2 out (ppqn), 3 in-slope, 4 out-slope (ratio)
+
+/// One audio region of an AUDIO track: its loopable span (mirrors note/value regions, keys 10-13) plus the
+/// playback data the audio-region player needs. `gain_db` is the RAW decibel value (converted to a linear gain
+/// in the player); `waveform_offset` is the source read offset in seconds; the fade in/out lengths + slopes let
+/// the player apply ONE slope-shaped fade per region (never the doubled voice×clip product that the TS app hit).
+/// Kept sorted in the track's `RegionCollection` by position. Fields are `pub(crate)` — the audio-region player
+/// reads them directly at render.
+pub(crate) struct AudioRegion {
+    pub(crate) region_uuid: Uuid,
+    pub(crate) position: f64,        // ppqn
+    pub(crate) duration: f64,        // ppqn
+    pub(crate) loop_offset: f64,     // ppqn
+    pub(crate) loop_duration: f64,   // ppqn
+    pub(crate) file: Uuid,           // the AudioFileBox uuid (resolved to a SampleRef at render)
+    pub(crate) gain_db: f32,
+    pub(crate) mute: bool,
+    pub(crate) waveform_offset: f64, // seconds
+    pub(crate) fade_in: f64,         // ppqn
+    pub(crate) fade_out: f64,        // ppqn
+    pub(crate) fade_in_slope: f32,   // 0..1 ratio
+    pub(crate) fade_out_slope: f32   // 0..1 ratio
+}
+
+impl Span for AudioRegion {
+    fn position(&self) -> f64 { self.position }
+    fn duration(&self) -> f64 { self.duration }
+}
+
+fn region_float(graph: &BoxGraph, uuid: Uuid, path: &[u16]) -> f32 {
+    graph.field_value(&Address::of(uuid, path.to_vec())).and_then(|value| value.as_float32()).unwrap_or(0.0)
+}
+
+/// Read an `AudioRegionBox`'s span + playback fields. `None` when it has no `file` pointer (an unresolved /
+/// half-built region is skipped, never played).
+fn read_audio_region(graph: &BoxGraph, region_uuid: Uuid) -> Option<AudioRegion> {
+    let file = graph.target_of(&Address::of(region_uuid, vec![AUDIO_REGION_FILE_KEY]))?.uuid;
+    Some(AudioRegion {
+        region_uuid,
+        position: region_pulses(graph, region_uuid, 10),
+        duration: region_float(graph, region_uuid, &[11]) as f64,
+        loop_offset: region_float(graph, region_uuid, &[12]) as f64,
+        loop_duration: region_float(graph, region_uuid, &[13]) as f64,
+        file,
+        gain_db: region_float(graph, region_uuid, &[AUDIO_REGION_GAIN_KEY]),
+        mute: graph.field_value(&Address::of(region_uuid, vec![AUDIO_REGION_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false),
+        waveform_offset: region_float(graph, region_uuid, &[AUDIO_REGION_WAVEFORM_OFFSET_KEY]) as f64,
+        fade_in: region_float(graph, region_uuid, &[AUDIO_REGION_FADING_KEY, 1]) as f64,
+        fade_out: region_float(graph, region_uuid, &[AUDIO_REGION_FADING_KEY, 2]) as f64,
+        fade_in_slope: region_float(graph, region_uuid, &[AUDIO_REGION_FADING_KEY, 3]),
+        fade_out_slope: region_float(graph, region_uuid, &[AUDIO_REGION_FADING_KEY, 4])
+    })
+}
+
+/// Build an AUDIO track binding (the audio analog of `build_track`): its sorted `AudioRegion` collection, a
+/// `regions` membership observer, and an `enabled` monitor.
+fn build_audio_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMark) -> AudioTrackBinding {
+    let regions_set: SharedAudioRegions = Rc::new(RefCell::new(RegionCollection::new()));
+    let region_changes = Rc::new(RefCell::new(Members::default()));
+    let recorder = region_changes.clone();
+    let region_mark = mark.clone();
+    let region_sub = graph.subscribe_pointer_hub(Address::of(track_uuid, vec![TRACK_REGIONS_KEY]), Box::new(move |_graph, event| {
+        match event {
+            HubEvent::Added(source) => recorder.borrow_mut().added.push(source.uuid),
+            HubEvent::Removed(source) => recorder.borrow_mut().removed.push(source.uuid)
+        }
+        region_mark.mark();
+    }));
+    let enabled_mark = mark.clone();
+    let enabled_sub = graph.subscribe_vertex(Propagation::This, Address::of(track_uuid, vec![TRACK_ENABLED_KEY]),
+        Box::new(move |_graph, _update| enabled_mark.mark()));
+    AudioTrackBinding {track_uuid, regions_set, region_bindings: Vec::new(), region_changes, region_sub, enabled_sub}
+}
+
+/// Tear down an audio track: unsubscribe its membership + edit + enabled observers and drop its region
+/// collection from the unit's `audio_track_sets`.
+fn teardown_audio_track(graph: &mut BoxGraph, audio_track_sets: &SharedAudioTrackSets, track: AudioTrackBinding) {
+    graph.unsubscribe(track.region_sub);
+    graph.unsubscribe(track.enabled_sub);
+    audio_track_sets.borrow_mut().retain(|set| !Rc::ptr_eq(set, &track.regions_set));
+    for region in track.region_bindings {
+        graph.unsubscribe(region.edit_sub);
+    }
+}
+
+/// Reconcile an audio track's regions against its `regions` membership: drop leavers, build + sorted-insert
+/// joiners. Mirrors `reconcile_regions` without the note-event cache.
+fn reconcile_audio_regions(graph: &mut BoxGraph, track: &mut AudioTrackBinding) {
+    let changes = core::mem::take(&mut *track.region_changes.borrow_mut());
+    for region_uuid in changes.removed {
+        if let Some(index) = track.region_bindings.iter().position(|region| region.region_uuid == region_uuid) {
+            let region = track.region_bindings.remove(index);
+            track.regions_set.borrow_mut().retain(|bound| bound.region_uuid != region_uuid);
+            graph.unsubscribe(region.edit_sub);
+        }
+    }
+    for region_uuid in changes.added {
+        if track.region_bindings.iter().any(|region| region.region_uuid == region_uuid) {
+            continue;
+        }
+        if let Some(binding) = build_audio_region(graph, &track.regions_set, region_uuid) {
+            track.region_bindings.push(binding);
+        }
+    }
+}
+
+/// Read an audio region, sorted-insert it into the track's collection, and subscribe a `Parent` edit monitor
+/// that re-reads + re-sorts it when its own fields change (so a moved / re-gained / re-faded region updates
+/// live). `None` if the region has no file (skipped, never played).
+fn build_audio_region(graph: &mut BoxGraph, regions_set: &SharedAudioRegions, region_uuid: Uuid) -> Option<AudioRegionBinding> {
+    let region = read_audio_region(graph, region_uuid)?;
+    regions_set.borrow_mut().add(region);
+    let edit_regions = regions_set.clone();
+    let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(region_uuid), Box::new(move |graph, _update| {
+        let mut set = edit_regions.borrow_mut();
+        let mut moved = false;
+        for bound in set.iter_mut() {
+            if bound.region_uuid == region_uuid {
+                if let Some(updated) = read_audio_region(graph, region_uuid) {
+                    *bound = updated;
+                    moved = true;
+                }
+            }
+        }
+        if moved {
+            set.resort();
+        }
+    }));
+    Some(AudioRegionBinding {region_uuid, edit_sub})
+}
+
 // ---- Device parameter automation (Route D). A device's automated parameter is a Value `TrackBox` whose
 // `target` points at the parameter field; the engine observes its curve and hands the device a read handle,
 // and the device pulls the value on each global clock event. Discovered per device at rewire (mirroring TS
@@ -1673,6 +1912,7 @@ fn region_pulses(graph: &BoxGraph, uuid: Uuid, key: u16) -> f64 {
 // TrackBox.type (field 11) values mirror studio-adapters `TrackType`; only a Value track carries parameter
 // automation (Note / Audio tracks and the unset default go through the note cascade).
 const TRACK_TYPE_VALUE: i32 = 3;
+const TRACK_TYPE_AUDIO: i32 = 2; // an Audio track's regions are AudioRegionBoxes, played by the audio-region player
 const TRACK_TYPE_KEY: u16 = 11;
 const TRACK_ENABLED_KEY: u16 = 20;      // TrackBox.enabled (WASM CONTRACT): a disabled track contributes nothing
 const TRACK_TARGET_KEY: u16 = 2;        // TrackBox.target -> the automated parameter field (Automation pointer)
@@ -1827,7 +2067,7 @@ mod tests {
     use alloc::rc::Rc;
     use core::cell::RefCell;
     use crate::{DeviceReg, Engine, EFFECT_INDEX_KEY};
-    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT, UNIT_MIDI_KEY, UNIT_INPUT_KEY, UNIT_AUDIO_KEY, UNIT_TRACKS_KEY, DEVICE_ENABLED_KEY, TRACK_ENABLED_KEY, TRACK_TYPE_KEY, TRACK_REGIONS_KEY};
+    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT, UNIT_MIDI_KEY, UNIT_INPUT_KEY, UNIT_AUDIO_KEY, UNIT_TRACKS_KEY, DEVICE_ENABLED_KEY, TRACK_ENABLED_KEY, TRACK_TYPE_KEY, TRACK_TYPE_AUDIO, TRACK_REGIONS_KEY};
     use abi::DEVICE_KIND_AUDIO_EFFECT;
     use boxgraph::updates::Update;
     use engine_env::engine_context::NodeId;
@@ -2044,6 +2284,110 @@ mod tests {
         toggle(&mut engine, false, true);
         engine.reconcile_one(&mut unit);
         assert_eq!(unit.track_sets.borrow().len(), 1, "re-enabling restores the track's regions");
+    }
+
+    #[test]
+    fn read_audio_region_reads_span_file_gain_and_fades() {
+        use super::{read_audio_region, AUDIO_REGION_FADING_KEY};
+        const REGION: Uuid = [50u8; 16];
+        const FILE: Uuid = [51u8; 16];
+        let mut fading = Fields::new();
+        fading.insert(1u16, FieldValue::Float32(120.0)); // fade in (ppqn)
+        fading.insert(2u16, FieldValue::Float32(240.0)); // fade out (ppqn)
+        fading.insert(3u16, FieldValue::Float32(0.75));  // in slope
+        fading.insert(4u16, FieldValue::Float32(0.25));  // out slope
+        let graph = BoxGraph::from_boxes(vec![
+            graph_box(FILE, "AudioFileBox", &[]),
+            graph_box(REGION, "AudioRegionBox", &[
+                (2, FieldValue::Pointer(Some(Address::box_of(FILE)))),  // file -> the AudioFileBox
+                (10, FieldValue::Int32(1920)),      // position (ppqn)
+                (11, FieldValue::Float32(3840.0)),  // duration (ppqn)
+                (12, FieldValue::Float32(0.0)),     // loop offset
+                (13, FieldValue::Float32(3840.0)),  // loop duration
+                (7, FieldValue::Float32(0.5)),      // waveform offset (seconds)
+                (14, FieldValue::Boolean(false)),   // mute
+                (17, FieldValue::Float32(-6.0)),    // gain (dB)
+                (AUDIO_REGION_FADING_KEY, FieldValue::Object(fading))
+            ])
+        ]);
+        let region = read_audio_region(&graph, REGION).expect("a region with a file resolves");
+        assert_eq!(region.position, 1920.0);
+        assert_eq!(region.duration, 3840.0);
+        assert_eq!(region.loop_duration, 3840.0);
+        assert_eq!(region.file, FILE);
+        assert_eq!(region.gain_db, -6.0);
+        assert!(!region.mute);
+        assert_eq!(region.waveform_offset, 0.5);
+        assert_eq!(region.fade_in, 120.0);
+        assert_eq!(region.fade_out, 240.0);
+        assert_eq!(region.fade_in_slope, 0.75);
+        assert_eq!(region.fade_out_slope, 0.25);
+        // A region with no file pointer is skipped (never played), not a panic.
+        let orphan = BoxGraph::from_boxes(vec![graph_box(REGION, "AudioRegionBox", &[(10, FieldValue::Int32(0))])]);
+        assert!(read_audio_region(&orphan, REGION).is_none());
+    }
+
+    #[test]
+    fn an_audio_track_feeds_its_regions_to_the_audio_player_set() {
+        const TRACK: Uuid = [52u8; 16];
+        const REGION: Uuid = [53u8; 16];
+        const FILE: Uuid = [54u8; 16];
+        let mut engine = engine_with_devices();
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+                (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+            ]),
+            graph_box(TRACK, "TrackBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))), // tracks -> unit.tracks
+                (TRACK_TYPE_KEY, FieldValue::Int32(TRACK_TYPE_AUDIO)),                    // an AUDIO track
+                (TRACK_REGIONS_KEY, FieldValue::Hook), (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+            ]),
+            graph_box(FILE, "AudioFileBox", &[]),
+            graph_box(REGION, "AudioRegionBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![TRACK_REGIONS_KEY])))), // regions -> track.regions
+                (2, FieldValue::Pointer(Some(Address::box_of(FILE)))),                       // file
+                (10, FieldValue::Int32(0)), (11, FieldValue::Float32(3840.0)), (13, FieldValue::Float32(3840.0))
+            ])
+        ]);
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        let sets = unit.audio_track_sets.borrow();
+        assert_eq!(sets.len(), 1, "the enabled audio track feeds one region collection to the player");
+        assert_eq!(sets[0].borrow().len(), 1, "with its one audio region");
+        // It must NOT leak into the NOTE set (an audio track is not a note track).
+        assert_eq!(unit.track_sets.borrow().len(), 0, "an audio track is not in the note-track set");
+    }
+
+    #[test]
+    fn a_tape_instrument_unit_builds_the_audio_region_player() {
+        const TAPE: Uuid = [55u8; 16];
+        const TRACK: Uuid = [56u8; 16];
+        const REGION: Uuid = [57u8; 16];
+        const FILE: Uuid = [58u8; 16];
+        let mut engine = engine_with_devices();
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+                (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+            ]),
+            graph_box(TAPE, "TapeDeviceBox", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+            graph_box(TRACK, "TrackBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))),
+                (TRACK_TYPE_KEY, FieldValue::Int32(TRACK_TYPE_AUDIO)), (TRACK_REGIONS_KEY, FieldValue::Hook),
+                (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+            ]),
+            graph_box(FILE, "AudioFileBox", &[]),
+            graph_box(REGION, "AudioRegionBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![TRACK_REGIONS_KEY])))),
+                (2, FieldValue::Pointer(Some(Address::box_of(FILE)))),
+                (10, FieldValue::Int32(0)), (11, FieldValue::Float32(3840.0)), (13, FieldValue::Float32(3840.0))
+            ])
+        ]);
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        assert!(matches!(unit.wired, Some(Wired::Tape(_))), "a TapeDeviceBox instrument builds the audio-region player -> strip -> master");
+        assert_eq!(unit.audio_track_sets.borrow()[0].borrow().len(), 1, "the player reads the unit's audio region");
     }
 
     // ---- Composite per-child lifecycle ----

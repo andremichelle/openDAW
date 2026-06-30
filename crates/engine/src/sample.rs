@@ -94,6 +94,13 @@ impl SampleResource {
         }
     }
 
+    /// Resolve an `AudioFileBox` uuid directly to its frames when ready (for an engine-side reader, e.g. the
+    /// audio-region player, that holds a region's file uuid rather than a device handle). `None` when the file
+    /// is unknown or not yet resident.
+    pub fn resolve_uuid(&self, uuid: Uuid) -> Option<SampleRef> {
+        self.resolve(self.handle_of(uuid)?)
+    }
+
     /// Resolve a handle to its frames, but ONLY when ready (a device skips an unready sample for the block).
     pub fn resolve(&self, handle: u32) -> Option<SampleRef> {
         let slot = self.slots.get(handle as usize)?.as_ref()?;
