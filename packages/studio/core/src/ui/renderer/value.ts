@@ -69,9 +69,11 @@ export namespace ValueStreamRenderer {
                     }
                     notMoved = false
                 }
-                // TODO We can optimise this by walking the Curve.coefficients
-                for (let x = cx0; x <= cx1; x += 4) {
-                    path.lineTo(x, Curve.valueAt(definition, x - x0))
+                const {m, q} = Curve.coefficients(definition)
+                let value = Curve.valueAt(definition, cx0 - x0)
+                for (let x = cx0; x <= cx1; x++) {
+                    path.lineTo(x, value)
+                    value = m * value + q
                 }
                 path.lineTo(cx1, Curve.valueAt(definition, cx1 - x0))
             }
