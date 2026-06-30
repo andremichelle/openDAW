@@ -26,6 +26,7 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell, UnsafeCell};
 use bindings::indexed_collection::IndexedCollection;
 use bindings::value_collection::ValueCollection;
+use crate::tempo_map::{SharedTempoMap, TempoMap};
 use boxgraph::address::{Address, Uuid};
 use boxgraph::boxes::Registry;
 use boxgraph::bytes::ByteReader;
@@ -203,6 +204,8 @@ mod plugin_midi_effect;
 use plugin_midi_effect::PluginMidiEffect; // named in the PullLink::MidiFx variant defined here
 mod audio_unit;
 mod audio_region_player;
+mod time_stretch;
+mod tempo_map;
 use audio_unit::{AudioUnitBinding, DeviceParams, Members};
 mod composite;
 mod param_automation;
@@ -693,6 +696,8 @@ struct Engine {
     transport: Transport,
     metronome: Metronome,
     tempo: Option<ValueCollection>,
+    tempo_map: SharedTempoMap, // ppqn -> real-seconds map (tempo-automation aware), read by the audio-region player
+
     context: EngineContext,
     output_bus: Option<SharedAudioBuffer>,
     master: Option<Rc<RefCell<AudioBusProcessor>>>, // the output bus, retained so units wire into it live
@@ -723,6 +728,7 @@ impl Engine {
             transport: Transport::new(sample_rate, 120.0),
             metronome: Metronome::new(sample_rate),
             tempo: None,
+            tempo_map: Rc::new(RefCell::new(TempoMap::new())),
             context: EngineContext::new(),
             output_bus: None,
             master: None,
@@ -821,7 +827,7 @@ impl Engine {
         }
         // disjoint field borrows so the render closure can hold the metronome / block scratch while
         // `render_quantum` holds the transport.
-        let Engine {transport, metronome, context, output_bus, blocks, tempo, controls, ..} = self;
+        let Engine {transport, metronome, context, output_bus, blocks, tempo, tempo_map, controls, ..} = self;
         // apply the latest timeline values recorded by the subscriptions
         transport.set_bpm(controls.bpm.get());
         transport.set_loop_enabled(controls.loop_enabled.get());
@@ -829,6 +835,14 @@ impl Engine {
         transport.set_loop_to(controls.loop_to.get());
         metronome.set_nominator(controls.nominator.get() as u32);
         metronome.set_denominator(controls.denominator.get() as u32);
+        // refresh the tempo map the audio-region player reads: the live automation curve under the same
+        // condition the transport uses it (enabled + non-empty), else a constant tempo at the configured bpm.
+        let tempo_curve = if controls.tempo_automation_enabled.get() {
+            tempo.as_ref().filter(|collection| !collection.is_empty()).map(|collection| collection.curve())
+        } else {
+            None
+        };
+        tempo_map.borrow_mut().update(controls.bpm.get(), tempo_curve);
         blocks.clear();
         if transport.is_playing() {
             // use the tempo map only when automation is enabled and non-empty, else the fixed bpm
@@ -965,6 +979,15 @@ impl Engine {
         if let Some(collection) = tempo_collection {
             self.tempo = Some(ValueCollection::observe(&mut self.graph, collection));
         }
+        // Populate the tempo map BEFORE reconcile reads region spans: a seconds-based audio region's duration /
+        // loop-duration are converted tempo-aware at the region position, so the map must reflect the loaded
+        // tempo (nominal bpm + automation curve) already at bind, not only from the first render.
+        let tempo_curve = if self.controls.tempo_automation_enabled.get() {
+            self.tempo.as_ref().filter(|collection| !collection.is_empty()).map(|collection| collection.curve())
+        } else {
+            None
+        };
+        self.tempo_map.borrow_mut().update(self.controls.bpm.get(), tempo_curve);
         // Master summing bus: every instrument audio unit's channel strip sums into it. It is the static
         // input bus of THE output audio unit, whose channel strip (built by `output_strip`) is the engine's
         // final master and what `render` reads. Both the bus and the output unit are fixed singletons.

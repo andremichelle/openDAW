@@ -33,6 +33,26 @@ pub fn mod_euclid(n: f64, m: f64) -> f64 {
     n - floor(n / m) * m
 }
 
+/// Round to nearest, half away from zero (libm-backed for no_std + host/wasm parity). Mirrors JS `Math.round`
+/// for the non-negative sample counts the granular voices round (`Math.round(VOICE_FADE_DURATION * sampleRate)`).
+#[inline]
+pub fn round(x: f64) -> f64 {
+    libm::round(x)
+}
+
+/// Cosine (libm-backed for no_std + host/wasm parity). Used by the pingpong granular crossfade (equal-power
+/// bounce), one of the few transcendentals on the render path — only during a ~10 ms bounce window.
+#[inline]
+pub fn cos(x: f32) -> f32 {
+    libm::cosf(x)
+}
+
+/// Sine (libm-backed for no_std + host/wasm parity); the equal-power partner of [`cos`].
+#[inline]
+pub fn sin(x: f32) -> f32 {
+    libm::sinf(x)
+}
+
 /// Clamp `value` into `[min, max]`. Generic over any ordered type (f32, f64, integers): the Rust way
 /// to "overload" is a single generic function, not multiple same-named ones.
 pub fn clamp<T: PartialOrd>(value: T, min: T, max: T) -> T {
