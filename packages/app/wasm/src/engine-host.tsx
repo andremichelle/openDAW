@@ -7,7 +7,7 @@ import {EngineStateSchema, ProjectSkeleton, ScriptCompiler} from "@opendaw/studi
 import {AudioData, PPQN} from "@opendaw/lib-dsp"
 import {SampleInfo, SampleLoader} from "./sample-loader"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
-import {loadSample} from "./sample-fetch"
+import {loadSampleCached} from "./sample-fetch"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {createEngineMemory, loadEngineModules} from "./engine-modules"
 import processorURL from "./engine-processor.ts?worker&url"
@@ -157,7 +157,7 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
                 const id = UUID.toString(uuid)
                 append(`sample ${id}: requesting…`)
                 try {
-                    const data = await loadSample(uuid)
+                    const data = await loadSampleCached(uuid)
                     held.set(id, data)
                     append(`sample ${id}: decoded ${data.numberOfFrames} frames, ${data.numberOfChannels}ch @ ${data.sampleRate} Hz`)
                     return {

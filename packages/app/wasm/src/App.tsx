@@ -11,6 +11,7 @@ import {MultiplePluginsPage} from "./pages/multiple-plugins/MultiplePluginsPage"
 import {CompositePage} from "./pages/composite/CompositePage"
 import {TidalPage} from "./pages/tidal/TidalPage"
 import {LoadFilePage} from "./pages/load-file/LoadFilePage"
+import {BundlePlayerPage} from "./pages/bundle-player/BundlePlayerPage"
 import {SyncLogPage} from "./pages/sync-log/SyncLogPage"
 
 export const App = () => {
@@ -29,6 +30,7 @@ export const App = () => {
                 <LocalLink href="/composite">Composite</LocalLink>
                 <LocalLink href="/tidal">Tidal</LocalLink>
                 <LocalLink href="/load-file">Load File</LocalLink>
+                <LocalLink href="/bundle-player">Bundle Player</LocalLink>
                 <LocalLink href="/sync-log">Sync Log</LocalLink>
             </nav>
             <main>
@@ -46,6 +48,7 @@ export const App = () => {
                         {path: "/composite", factory: CompositePage},
                         {path: "/tidal", factory: TidalPage},
                         {path: "/load-file", factory: LoadFilePage},
+                        {path: "/bundle-player", factory: BundlePlayerPage},
                         {path: "/sync-log", factory: SyncLogPage}
                     ]}
                     fallback={() => <div className="page"><h2>404</h2></div>}/>
