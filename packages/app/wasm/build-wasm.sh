@@ -47,9 +47,12 @@ RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-nano      
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-delay      --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-playfield-slot --release --target "$TARGET" -Zbuild-std=core
 RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-gate       --release --target "$TARGET" -Zbuild-std=core
+RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-werkstatt  --release --target "$TARGET" -Zbuild-std=core
+RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-apparat    --release --target "$TARGET" -Zbuild-std=core
+RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-spielwerk  --release --target "$TARGET" -Zbuild-std=core
 cargo build -p sine --release --target "$TARGET"
 
-MODULES="engine device_lowpass device_transpose device_arp device_zeitgeist device_tidal device_vaporisateur device_nano device_delay device_playfield_slot device_gate sine"
+MODULES="engine device_lowpass device_transpose device_arp device_zeitgeist device_tidal device_vaporisateur device_nano device_delay device_playfield_slot device_gate device_werkstatt device_apparat device_spielwerk sine"
 
 # Size-optimise each module with binaryen's wasm-opt (Homebrew: `brew install binaryen`). GUARDED: if it is
 # not installed the build still works, just larger. The devices are PIC side modules (a `dylink.0` section,
@@ -68,5 +71,5 @@ else
   echo "wasm-opt not found (brew install binaryen) — shipping unoptimised modules"
 fi
 
-cp "$OUT/engine.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/device_arp.wasm" "$OUT/device_zeitgeist.wasm" "$OUT/device_tidal.wasm" "$OUT/device_vaporisateur.wasm" "$OUT/device_nano.wasm" "$OUT/device_delay.wasm" "$OUT/device_playfield_slot.wasm" "$OUT/device_gate.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
-echo "built: engine.wasm + device_lowpass/transpose/arp/zeitgeist/tidal/vaporisateur/nano/delay/playfield_slot/gate + sine"
+cp "$OUT/engine.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/device_arp.wasm" "$OUT/device_zeitgeist.wasm" "$OUT/device_tidal.wasm" "$OUT/device_vaporisateur.wasm" "$OUT/device_nano.wasm" "$OUT/device_delay.wasm" "$OUT/device_playfield_slot.wasm" "$OUT/device_gate.wasm" "$OUT/device_werkstatt.wasm" "$OUT/device_apparat.wasm" "$OUT/device_spielwerk.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
+echo "built: engine.wasm + stock devices + werkstatt/apparat/spielwerk + sine"

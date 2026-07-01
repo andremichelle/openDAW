@@ -14,7 +14,7 @@ fn empty_state() -> SynthState {
 }
 
 fn note_on(id: u32, offset: u32, pitch: u32) -> EventRecord {
-    EventRecord {position: 0.0, offset, kind: EVENT_NOTE_ON, id, pitch, velocity: 1.0, cent: 0.0}
+    EventRecord {position: 0.0, offset, kind: EVENT_NOTE_ON, id, pitch, velocity: 1.0, cent: 0.0, duration: 0.0}
 }
 
 fn energy(output: &[f32]) -> f32 {
@@ -44,7 +44,7 @@ fn a_note_off_eventually_returns_to_silence() {
     let mut state = empty_state();
     let (mut left, mut right) = ([0.0f32; FRAMES], [0.0f32; FRAMES]);
     render(&mut state, &[note_on(0, 0, 69)], &mut left, &mut right, SR);
-    render(&mut state, &[EventRecord {position: 0.0, offset: 0, kind: EVENT_NOTE_OFF, id: 0, pitch: 69, velocity: 0.0, cent: 0.0}], &mut left, &mut right, SR);
+    render(&mut state, &[EventRecord {position: 0.0, offset: 0, kind: EVENT_NOTE_OFF, id: 0, pitch: 69, velocity: 0.0, cent: 0.0, duration: 0.0}], &mut left, &mut right, SR);
     // render past the 200 ms release tail (200 blocks = ~0.53 s at 48k).
     for _ in 0..200 {
         render(&mut state, &[], &mut left, &mut right, SR);

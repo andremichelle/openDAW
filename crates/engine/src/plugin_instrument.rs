@@ -63,7 +63,7 @@ impl PluginInstrument {
             vec![0.0f32; RENDER_QUANTUM].into_boxed_slice(),
             vec![0.0f32; RENDER_QUANTUM].into_boxed_slice()
         ];
-        let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+        let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
         let device_events = vec![blank; DEVICE_MAX_EVENTS].into_boxed_slice();
         let state_size = device.state_size as usize;
         let device_state = vec![0u32; state_size.div_ceil(4)].into_boxed_slice(); // 4-aligned, >= state_size bytes

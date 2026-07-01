@@ -328,11 +328,11 @@ mod tests {
     }
 
     fn note_on(id: u32, pitch: u32) -> EventRecord {
-        EventRecord {position: 0.0, offset: 0, kind: EVENT_NOTE_ON, id, pitch, velocity: 1.0, cent: 0.0}
+        EventRecord {position: 0.0, offset: 0, kind: EVENT_NOTE_ON, id, pitch, velocity: 1.0, cent: 0.0, duration: 0.0}
     }
 
     fn note_off(id: u32) -> EventRecord {
-        EventRecord {position: 0.0, offset: 0, kind: abi::EVENT_NOTE_OFF, id, pitch: 0, velocity: 0.0, cent: 0.0}
+        EventRecord {position: 0.0, offset: 0, kind: abi::EVENT_NOTE_OFF, id, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0}
     }
 
     fn peak(buffer: &[f32]) -> f32 {

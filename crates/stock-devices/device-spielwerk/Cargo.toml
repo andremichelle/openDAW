@@ -1,0 +1,11 @@
+[package]
+name = "device-spielwerk"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+abi = {path = "../../abi"}

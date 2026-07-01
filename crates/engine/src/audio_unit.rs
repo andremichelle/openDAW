@@ -46,7 +46,7 @@ use crate::composite::CompositeBinding;
 use crate::audio_region_player::AudioRegionPlayer;
 use crate::time_stretch::{TimeStretchConfig, TransientPlayMode};
 use crate::tempo_map::{SharedTempoMap, TempoMap};
-use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, CompositeSpec, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SIDECHAIN_BIND, EFFECT_INDEX_KEY};
+use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, CompositeSpec, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
 
 // AudioUnitBox field keys (WASM CONTRACT: mirror the TS AudioUnitBox schema). The unit carries its strip
 // params and hosts its instrument / effect chains / tracks at these hub keys.
@@ -400,7 +400,13 @@ pub(crate) struct DeviceParams {
     field_subs: Vec<SubscriptionId>,
     collections: Vec<ValueCollection>,
     observe_subs: Vec<SubscriptionId>, // the device's PLAIN field observations (`observe_field`), dropped on teardown
-    sidechain_paths: Vec<Vec<u16>> // the audio effect's declared sidechain pointer paths (`bind_sidechain`), in order
+    sidechain_paths: Vec<Vec<u16>>, // the audio effect's declared sidechain pointer paths (`bind_sidechain`), in order
+    // SCRIPTABLE devices: membership subscriptions on the dynamic `parameters` / `samples` collection hubs (fire
+    // the unit's automation invalidate on a child add / remove). Kept SEPARATE from `field_subs`, since they
+    // survive a `rebind_one` (which tears down + rebuilds only the per-parameter subscriptions). `None` for a
+    // device without that collection. The per-child param/sample subscriptions live in `field_subs`/`observe_subs`.
+    param_hub_sub: Option<SubscriptionId>,
+    sample_hub_sub: Option<SubscriptionId>
 }
 
 /// A persistent sidechain binding kept by the owning unit: an audio effect that declared sidechain ports, the
@@ -1332,16 +1338,40 @@ impl Engine {
     /// `host_bind_parameter`), observe each path's field value + automation track, hand the node its
     /// parameter set, and return the bookkeeping for teardown / re-bind.
     fn bind_device(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, sink: ParamNode, invalidate: &Rc<dyn Fn()>) -> DeviceParams {
+        // Make the device's own box uuid available to `host_self_uuid` for the duration of its `init` (a script
+        // device reads it there to key its JS-side bridge); the engine knows it, the device does not.
+        unsafe { *CURRENT_DEVICE_UUID.get() = device_uuid; }
         let paths = bind_paths(reg, state_ptr, self.sample_rate);
         let sample_paths = core::mem::take(unsafe { SAMPLE_OBS.get() }); // recorded by host_observe_sample during init
         let field_paths = core::mem::take(unsafe { FIELD_OBS.get() }); // recorded by host_observe_field during init
         let sidechain_paths = core::mem::take(unsafe { SIDECHAIN_BIND.get() }); // recorded by host_bind_sidechain during init
-        let (handles, field_subs, collections, armed) = self.observe_params(device_uuid, &paths, invalidate);
-        sink.set_params(handles.clone(), armed);
+        let (mut handles, mut field_subs, mut collections, mut armed) = self.observe_params(device_uuid, &paths, invalidate);
         // The device's plain-field and sample observations both unsubscribe the same way, so keep one list.
         let mut observe_subs = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
         observe_subs.extend(self.observe_samples(device_uuid, reg, state_ptr, &sample_paths));
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, sidechain_paths}
+        // SCRIPTABLE devices: also bind the dynamic parameter / sample COLLECTION children, and watch each hub's
+        // membership so a child add / remove re-binds (through the same automation-invalidate path).
+        let mut param_hub_sub = None;
+        if reg.param_collection_field != 0 {
+            let (mut script_handles, mut script_subs, mut script_collections, script_armed) =
+                self.observe_script_params(device_uuid, reg.param_collection_field, invalidate);
+            handles.append(&mut script_handles);
+            field_subs.append(&mut script_subs);
+            collections.append(&mut script_collections);
+            armed |= script_armed;
+            let hub_invalidate = invalidate.clone();
+            param_hub_sub = Some(self.graph.subscribe_pointer_hub(Address::of(device_uuid, vec![reg.param_collection_field]),
+                Box::new(move |_graph, _event| hub_invalidate())));
+        }
+        let mut sample_hub_sub = None;
+        if reg.sample_collection_field != 0 {
+            observe_subs.extend(self.observe_script_samples(device_uuid, reg, state_ptr, reg.sample_collection_field));
+            let hub_invalidate = invalidate.clone();
+            sample_hub_sub = Some(self.graph.subscribe_pointer_hub(Address::of(device_uuid, vec![reg.sample_collection_field]),
+                Box::new(move |_graph, _event| hub_invalidate())));
+        }
+        sink.set_params(handles.clone(), armed);
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, sidechain_paths, param_hub_sub, sample_hub_sub}
     }
 
     /// Wire each PLAIN field a device asked to observe (`observe_field`): `catchup_and_subscribe` the field on
@@ -1401,51 +1431,67 @@ impl Engine {
         let mut collections = Vec::new();
         let mut armed = false;
         for (index, path) in paths.iter().enumerate() {
-            let address = Address::of(device_uuid, path.clone());
-            // A parameter field carries its real primitive type — Float32 (a cutoff), Int32 (semitones), or
-            // Boolean (a toggle), fixed by the schema. Read it once so the wire can tag the un-automated value
-            // with its kind; the device then receives a typed `ParamValue` and never inspects a tag.
-            let kind = self.graph.field_value(&address).map_or(PARAM_KIND_FLOAT, |value| {
-                if value.as_int32().is_some() { PARAM_KIND_INT }
-                else if value.as_bool().is_some() { PARAM_KIND_BOOL }
-                else { PARAM_KIND_FLOAT }
-            });
-            let field = Rc::new(core::cell::Cell::new(0.0f32));
-            let cell = field.clone();
-            // The field VALUE: keep the live cell in sync, and invalidate so reconcile re-pushes the device
-            // (a static parameter's new value must reach it; an automated one re-resolves harmlessly).
-            let field_invalidate = invalidate.clone();
-            subs.push(self.graph.catchup_and_subscribe(address.clone(), move |value| {
-                let real = value.as_float32()
-                    .or_else(|| value.as_int32().map(|value| value as f32))
-                    .or_else(|| value.as_bool().map(|value| if value {1.0} else {0.0}));
-                if let Some(real) = real {
-                    cell.set(real);
-                    field_invalidate();
-                }
-            }));
-            // Automation ATTACH / DETACH: incoming pointers at the parameter field (a Value track's `target`).
-            let attach_invalidate = invalidate.clone();
-            subs.push(self.graph.subscribe_pointer_hub(address, Box::new(move |_graph, _event| attach_invalidate())));
-            let (track, track_uuid, mut track_collections) = build_param_track(&mut self.graph, device_uuid, path);
-            if track.is_some() {
-                armed = true;
-            }
-            // Value-region join / leave on the automation track (so the curve's region set stays current).
-            if let Some(track_uuid) = track_uuid {
-                let region_invalidate = invalidate.clone();
-                subs.push(self.graph.subscribe_pointer_hub(Address::of(track_uuid, vec![TRACK_REGIONS_KEY]),
-                    Box::new(move |_graph, _event| region_invalidate())));
-                // Re-bind when the automation track is enabled / disabled, so the curve is applied or dropped.
-                let enabled_invalidate = invalidate.clone();
-                subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(track_uuid, vec![TRACK_ENABLED_KEY]),
-                    Box::new(move |_graph, _update| enabled_invalidate())));
-            }
-            collections.append(&mut track_collections);
-            handles.push(ParamHandle {id: index as u32, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN))});
+            let (handle, mut param_subs, mut param_collections, param_armed) =
+                self.observe_param(device_uuid, path, index as u32, invalidate);
+            handles.push(handle);
+            subs.append(&mut param_subs);
+            collections.append(&mut param_collections);
+            armed |= param_armed;
         }
         (handles, subs, collections, armed)
     }
+
+    /// Observe ONE parameter field's value (a reactive cell) + its automation track, returning the handle, its
+    /// subscriptions, the curve collections, and whether it is automated. Shared by [`observe_params`] (a device's
+    /// fixed field paths) and [`observe_script_params`] (a scriptable device's dynamic `WerkstattParameterBox`
+    /// children). `id` is what the device receives in `parameter_changed`. The automation track is found by
+    /// `build_param_track(graph, box_uuid, path)`, which scans for a Value track targeting `(box_uuid, path)` —
+    /// so for a script param the same machinery binds the CHILD box's `value` field (key 4) unchanged.
+    pub(crate) fn observe_param(&mut self, box_uuid: Uuid, path: &[u16], id: u32, invalidate: &Rc<dyn Fn()>) -> (ParamHandle, Vec<SubscriptionId>, Vec<ValueCollection>, bool) {
+        let mut subs = Vec::new();
+        let mut collections = Vec::new();
+        let mut armed = false;
+        let address = Address::of(box_uuid, path.to_vec());
+        // A parameter field carries its real primitive type — Float32 (a cutoff), Int32 (semitones), or Boolean
+        // (a toggle), fixed by the schema. Read it once so the wire tags the un-automated value with its kind;
+        // the device then receives a typed `ParamValue`. (A script param's `value` is Float32 -> the static value
+        // arrives as `PARAM_KIND_FLOAT` for the bridge to use directly; an automated one arrives as `_UNIT`.)
+        let kind = self.graph.field_value(&address).map_or(PARAM_KIND_FLOAT, |value| {
+            if value.as_int32().is_some() { PARAM_KIND_INT }
+            else if value.as_bool().is_some() { PARAM_KIND_BOOL }
+            else { PARAM_KIND_FLOAT }
+        });
+        let field = Rc::new(core::cell::Cell::new(0.0f32));
+        let cell = field.clone();
+        let field_invalidate = invalidate.clone();
+        subs.push(self.graph.catchup_and_subscribe(address.clone(), move |value| {
+            let real = value.as_float32()
+                .or_else(|| value.as_int32().map(|value| value as f32))
+                .or_else(|| value.as_bool().map(|value| if value {1.0} else {0.0}));
+            if let Some(real) = real {
+                cell.set(real);
+                field_invalidate();
+            }
+        }));
+        let attach_invalidate = invalidate.clone();
+        subs.push(self.graph.subscribe_pointer_hub(address, Box::new(move |_graph, _event| attach_invalidate())));
+        let (track, track_uuid, mut track_collections) = build_param_track(&mut self.graph, box_uuid, path);
+        if track.is_some() {
+            armed = true;
+        }
+        if let Some(track_uuid) = track_uuid {
+            let region_invalidate = invalidate.clone();
+            subs.push(self.graph.subscribe_pointer_hub(Address::of(track_uuid, vec![TRACK_REGIONS_KEY]),
+                Box::new(move |_graph, _event| region_invalidate())));
+            let enabled_invalidate = invalidate.clone();
+            subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(track_uuid, vec![TRACK_ENABLED_KEY]),
+                Box::new(move |_graph, _update| enabled_invalidate())));
+        }
+        collections.append(&mut track_collections);
+        let handle = ParamHandle {id, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN))};
+        (handle, subs, collections, armed)
+    }
+
 
     /// Push the initial parameter values of freshly built devices (JOINERS) to them. Survivors are NEVER passed
     /// here — a chain edit (reorder / add / remove) must leave every existing plugin's parameters untouched.
@@ -1463,6 +1509,9 @@ impl Engine {
                 self.graph.unsubscribe(sub);
             }
             for sub in params.observe_subs {
+                self.graph.unsubscribe(sub);
+            }
+            for sub in params.param_hub_sub.into_iter().chain(params.sample_hub_sub) {
                 self.graph.unsubscribe(sub);
             }
             for collection in params.collections {
@@ -1516,7 +1565,16 @@ impl Engine {
         for collection in core::mem::take(&mut params.collections) {
             collection.terminate(&mut self.graph);
         }
-        let (handles, field_subs, collections, armed) = self.observe_params(params.device_uuid, &params.paths, invalidate);
+        let (mut handles, mut field_subs, mut collections, mut armed) = self.observe_params(params.device_uuid, &params.paths, invalidate);
+        // Re-enumerate a scriptable device's dynamic params too (an add / remove / automation edit re-binds them).
+        if params.reg.param_collection_field != 0 {
+            let (mut script_handles, mut script_subs, mut script_collections, script_armed) =
+                self.observe_script_params(params.device_uuid, params.reg.param_collection_field, invalidate);
+            handles.append(&mut script_handles);
+            field_subs.append(&mut script_subs);
+            collections.append(&mut script_collections);
+            armed |= script_armed;
+        }
         for (handle, last) in handles.iter().zip(previous_last) {
             handle.last.set(last);
         }
@@ -1559,7 +1617,7 @@ fn refresh_params(handles: &[ParamHandle], reg: DeviceReg, state_ptr: u32, posit
 /// handle when the `file` pointer targets an `AudioFileBox` (the frames are requested through `SAMPLES`), or
 /// "unbound" (`present = 0`) when the pointer has no target (cleared). Touches `SAMPLES` (its own cell) and the
 /// device, never `&mut Engine`, so it is safe from a transaction observer.
-fn resolve_and_deliver_sample(graph: &BoxGraph, device_uuid: Uuid, path: &[u16], sample_changed_index: u32, state_ptr: u32, id: u32) {
+pub(crate) fn resolve_and_deliver_sample(graph: &BoxGraph, device_uuid: Uuid, path: &[u16], sample_changed_index: u32, state_ptr: u32, id: u32) {
     match graph.target_of(&Address::of(device_uuid, path.to_vec())) {
         Some(target) => {
             let handle = unsafe { SAMPLES.get() }.request(target.uuid);
@@ -2203,7 +2261,7 @@ mod tests {
         DeviceReg {
             process_index: 0, state_size: 64, kind, init_index: 0, parameter_changed_index: 0,
             field_changed_index: 0, sample_changed_index: 0, reset_index: 0,
-            midi_effects_field: 0, audio_effects_field: 0
+            midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0
         }
     }
 
@@ -2929,5 +2987,40 @@ mod tests {
         assert_eq!(curve.value_at(150.0, -1.0), 0.2, "in the gap after A: A's HELD outgoing value, not B's");
         assert_eq!(curve.value_at(250.0, -1.0), 0.8, "inside region B");
         assert_eq!(curve.value_at(500.0, -1.0), 0.8, "past the last region: B's HELD outgoing value");
+    }
+
+    #[test]
+    fn build_param_track_resolves_a_scriptable_devices_child_parameter() {
+        // A scriptable device's @param is a WerkstattParameterBox CHILD under the device's `parameters` hub
+        // (key 11); a Value track automating it targets the CHILD's `value` field (key 4) — NOT a field on the
+        // device box. `observe_script_params` binds `(child, [4])`, so `build_param_track` must resolve the
+        // child's automation exactly as it does a fixed device field. This is the param-hub reuse claim.
+        const CHILD: Uuid = [42u8; 16];
+        let mut graph = BoxGraph::from_boxes(vec![
+            graph_box(DEVICE, "WerkstattDeviceBox", &[(11, FieldValue::Hook)]),
+            graph_box(CHILD, "WerkstattParameterBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(DEVICE, vec![11])))), // owner -> device.parameters
+                (3, FieldValue::Int32(0)),                                     // declaration index
+                (4, FieldValue::Float32(0.3))                                  // static value (ignored when automated)
+            ]),
+            graph_box(TRACK, "TrackBox", &[
+                (2, FieldValue::Pointer(Some(Address::of(CHILD, vec![4])))),   // target -> the CHILD's value field
+                (3, FieldValue::Hook)
+            ]),
+            graph_box(REGION, "ValueRegionBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![3])))),
+                (2, FieldValue::Pointer(Some(Address::of(VCOLLECTION, vec![2])))),
+                (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)), (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+            ]),
+            graph_box(VCOLLECTION, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+            graph_box(EVENT, "ValueEventBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(VCOLLECTION, vec![1])))), (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.7))
+            ])
+        ]);
+        let (curve, track_uuid, collections) = build_param_track(&mut graph, CHILD, &[4]);
+        assert_eq!(track_uuid, Some(TRACK), "the track targeting the child's value field is found");
+        assert_eq!(collections.len(), 1, "its one value region's collection is observed");
+        assert_eq!(curve.expect("child param has an automation curve").value_at(0.0, -1.0), 0.7,
+            "the unit automation value reaches the child param (the bridge then maps it via the @param)");
     }
 }

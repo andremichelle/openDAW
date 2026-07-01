@@ -43,7 +43,12 @@ pub struct EventRecord {
     pub id: u32,
     pub pitch: u32,
     pub velocity: f32,
-    pub cent: f32
+    pub cent: f32,
+    // The note's length in pulses, on a NOTE_ON only (0 otherwise). An instrument does not need it (it gets a
+    // matching NOTE_OFF), but a MIDI fx exposes it to its user script as the note's `duration` — the script
+    // schedules the transformed note's own note-off from it, so it must travel WITH the note-on (the matching
+    // note-off can be in a later block). `f64` last so it stays 8-aligned with no padding (size 40).
+    pub duration: f64
 }
 
 pub const EVENT_NOTE_ON: u32 = 0;
@@ -156,6 +161,19 @@ extern "C" {
     fn host_observe_field(path_ptr: u32, path_len: u32) -> u32;
     fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
+    // SCRIPT BRIDGE (Werkstatt / Apparat / Spielwerk only). `host_self_uuid` is an engine export like the rest;
+    // the `host_script_*` family are JS closures the loader binds into `env` (see the `script_*` wrappers below).
+    fn host_self_uuid(out16_ptr: u32);
+    fn host_script_create(uuid_ptr: u32, kind: u32, state_ptr: u32) -> u32;
+    fn host_script_audio(handle: u32, src_l: u32, src_r: u32, out_l: u32, out_r: u32,
+                         s0: u32, s1: u32, index: u32, p0: f64, p1: f64, bpm: f32, flags: u32) -> u32;
+    fn host_script_note_on(handle: u32, pitch: u32, velocity: f32, cent: f32, id: u32);
+    fn host_script_note_off(handle: u32, id: u32);
+    fn host_script_reset(handle: u32);
+    fn host_script_param(handle: u32, index: u32, kind: u32, value: f32);
+    fn host_script_sample(handle: u32, index: u32, sample_handle: u32, present: u32);
+    fn host_script_notes(handle: u32, in_ptr: u32, in_count: u32, out_ptr: u32, out_max: u32,
+                         from: f64, to: f64, bpm: f32, flags: u32, s0: u32, s1: u32) -> u32;
 }
 
 /// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the
@@ -432,6 +450,113 @@ pub fn resolve_input(id: u32) -> Option<AudioInputRef> {
     }
 }
 
+// ---- SCRIPT BRIDGE wrappers -------------------------------------------------------------------------------
+// The Werkstatt / Apparat / Spielwerk devices run user JavaScript in the host's AudioWorklet. Their Rust
+// side-module is a thin BRIDGE: per block it hands the engine's audio / notes / params / samples to a host JS
+// callback that runs the user `Processor` over the shared linear memory. These wrappers are the ONLY device
+// surface that crosses back into JS during render (every other `host_*` is a wasm-to-wasm engine export); the
+// relaxation of the zero-JS-in-render guarantee is contained to these three devices. Native stubs are no-ops so
+// the crates still build + unit-test off-target.
+
+/// THIS device's 16-byte box uuid (an engine export — the engine knows it at bind). Used once from `init` to
+/// key the JS-side script bridge to the matching user `Processor`. Native stub returns zeroes.
+#[inline]
+pub fn self_uuid() -> [u8; 16] {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = [0u8; 16];
+        unsafe { host_self_uuid(out.as_mut_ptr() as u32) };
+        out
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { [0u8; 16] }
+}
+
+/// Create the JS-side script bridge for this device (from `init`): `uuid` + `kind` (`DEVICE_KIND_*`) identify
+/// it; returns a handle the device passes to every later `script_*` call. Native stub returns 0.
+#[inline]
+pub fn script_create(uuid: &[u8; 16], kind: u32, state_ptr: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_create(uuid.as_ptr() as u32, kind, state_ptr) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (uuid, kind, state_ptr); 0 }
+}
+
+/// Run the user `process` for one `block` over the shared audio buffers (Werkstatt / Apparat). `src_l`/`src_r`
+/// are the input channels' byte offsets (0 for an instrument with no input), `out_l`/`out_r` the output
+/// channels'. Returns 0 ok, nonzero when the bridge silenced the device (already reported). Native stub = 0.
+#[inline]
+pub fn script_audio(handle: u32, src_l: u32, src_r: u32, out_l: u32, out_r: u32, block: &Block) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_audio(handle, src_l, src_r, out_l, out_r, block.s0, block.s1, block.index, block.p0, block.p1, block.bpm, block.flags.0) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, src_l, src_r, out_l, out_r, block); 0 }
+}
+
+/// Deliver a note-on to the user `Processor` (Apparat) at the current sub-block boundary. Native stub no-op.
+#[inline]
+pub fn script_note_on(handle: u32, pitch: u32, velocity: f32, cent: f32, id: u32) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_note_on(handle, pitch, velocity, cent, id) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, pitch, velocity, cent, id); }
+}
+
+/// Deliver a note-off to the user `Processor` (Apparat). Native stub no-op.
+#[inline]
+pub fn script_note_off(handle: u32, id: u32) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_note_off(handle, id) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, id); }
+}
+
+/// Tell the user `Processor` to reset (transport stop). Native stub no-op.
+#[inline]
+pub fn script_reset(handle: u32) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_reset(handle) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = handle; }
+}
+
+/// Forward a parameter change to the user `Processor` by declaration `index` + the raw `(kind, value)` (the
+/// bridge maps `UNIT` via the script's `@param` mapping, uses `FLOAT`/`INT`/`BOOL` directly). Native stub no-op.
+#[inline]
+pub fn script_param(handle: u32, index: u32, value: ParamValue) {
+    let (kind, bits) = match value {
+        ParamValue::Unit(unit) => (PARAM_KIND_UNIT, unit),
+        ParamValue::Int(int) => (PARAM_KIND_INT, int as f32),
+        ParamValue::Float(float) => (PARAM_KIND_FLOAT, float),
+        ParamValue::Bool(flag) => (PARAM_KIND_BOOL, if flag { 1.0 } else { 0.0 })
+    };
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_param(handle, index, kind, bits) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, index, kind, bits); }
+}
+
+/// Deliver a sample slot's resolved handle (or unbind) to the user `Processor` by declaration `index` (Apparat).
+/// `present` is 0 to clear. The bridge resolves the handle's frames into `proc.samples[label]`. Native stub no-op.
+#[inline]
+pub fn script_sample(handle: u32, index: u32, sample_handle: u32, present: bool) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_sample(handle, index, sample_handle, present as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, index, sample_handle, present); }
+}
+
+/// Run the user note-transform generator + all stateful tracking (Spielwerk) over the pulled input events,
+/// writing output `EventRecord`s into `out` and returning the count. Native stub returns 0.
+#[inline]
+#[allow(clippy::too_many_arguments)]
+pub fn script_notes(handle: u32, input: &[EventRecord], out: &mut [EventRecord], from: f64, to: f64, bpm: f32, flags: u32, s0: u32, s1: u32) -> usize {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_notes(handle, input.as_ptr() as u32, input.len() as u32, out.as_mut_ptr() as u32, out.len() as u32, from, to, bpm, flags, s0, s1) as usize } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, input, out.len(), from, to, bpm, flags, s0, s1); 0 }
+}
+
 /// Pull THIS device's parameters that CHANGED at pulse `position` into `out` (the host resolves each — its
 /// automation curve, else its field value — and diffs against the last value it handed out), returning the
 /// number written. The device applies each via its `parameter_changed`. Called by the SDK on a clock event.
@@ -475,9 +600,11 @@ const MAX_PARAM_CHANGES: usize = 32;
 
 /// Pull the parameters changed at `position` and apply each through `apply` (the device's `parameter_changed`),
 /// passing whether the value is the uniform automation value (to map) or an already-real value (to use).
-/// The scratch is on the stack, so no device-global buffer.
+/// The scratch is on the stack, so no device-global buffer. Public so the SCRIPTABLE devices (which write
+/// `process` directly instead of via the `render_*` templates) can refresh their automated parameters at each
+/// update position exactly as the templates do.
 #[inline]
-fn apply_param_changes<S>(state: &mut S, position: f64, apply: fn(&mut S, u32, ParamValue)) {
+pub fn apply_param_changes<S>(state: &mut S, position: f64, apply: fn(&mut S, u32, ParamValue)) {
     let mut changes = [ParamChange {id: 0, kind: 0, value: 0.0}; MAX_PARAM_CHANGES];
     let count = update_parameters(position, &mut changes);
     for change in &changes[..count] {
@@ -773,7 +900,7 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
         let mut count = pull_events(block.p0, block.p1, block.flags.0, event_scratch);
         let mut position = first_update_position(block.p0);
         while position < block.p1 && count < event_scratch.len() {
-            event_scratch[count] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+            event_scratch[count] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
             count += 1;
             position = next_update_position(position);
         }
@@ -917,7 +1044,7 @@ const MIDI_PULL_SCRATCH: usize = 256;
 pub fn render_midi_effect<M: MidiEffect>(from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
     let state = unsafe { &mut *(state_ptr as *mut M::State) };
     let out = unsafe { slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
-    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
     let mut count = 0;
     let mut sub_from = from;
     // The seed is INCLUSIVE (a boundary exactly on `from` fires); the loop then advances STRICTLY. When the fx
@@ -979,7 +1106,7 @@ mod tests {
     }
 
     fn note_on(offset: u32, position: f64, pitch: u32) -> EventRecord {
-        EventRecord {position, offset, kind: EVENT_NOTE_ON, id: 1, pitch, velocity: 1.0, cent: 0.0}
+        EventRecord {position, offset, kind: EVENT_NOTE_ON, id: 1, pitch, velocity: 1.0, cent: 0.0, duration: 0.0}
     }
 
     fn block(s0: u32, s1: u32, p0: f64, p1: f64, bpm: f32) -> Block {

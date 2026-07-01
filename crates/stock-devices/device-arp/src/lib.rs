@@ -103,7 +103,7 @@ fn first_grid(from: f64) -> f64 {
 /// consumer resolves sample offsets), so the output is position-sorted (note-off before note-on at an equal
 /// position). Returns the count written.
 pub fn step(state: &mut ArpState, from: f64, to: f64, flags: u32, out: &mut [EventRecord]) -> usize {
-    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
     let mut emitted = [blank; EMIT_MAX];
     let mut count = 0;
     let discontinuous = flags & abi::BlockFlags::DISCONTINUOUS != 0;
@@ -113,7 +113,7 @@ pub fn step(state: &mut ArpState, from: f64, to: f64, flags: u32, out: &mut [Eve
         if discontinuous || active.end_pulse < to {
             let end = if discontinuous || active.end_pulse < from { from } else { active.end_pulse };
             if count < EMIT_MAX {
-                emitted[count] = EventRecord {position: end, offset: 0, kind: EVENT_NOTE_OFF, id: active.id, pitch: active.pitch, velocity: 0.0, cent: 0.0};
+                emitted[count] = EventRecord {position: end, offset: 0, kind: EVENT_NOTE_OFF, id: active.id, pitch: active.pitch, velocity: 0.0, cent: 0.0, duration: 0.0};
                 count += 1;
             }
             state.active[index] = state.active[state.active_count as usize - 1];
@@ -129,7 +129,7 @@ pub fn step(state: &mut ArpState, from: f64, to: f64, flags: u32, out: &mut [Eve
                 let held = state.held[(state.step as usize) % state.held_count as usize];
                 let id = state.next_id;
                 state.next_id = state.next_id.wrapping_add(1);
-                emitted[count] = EventRecord {position: pulse, offset: 0, kind: EVENT_NOTE_ON, id, pitch: held.pitch, velocity: held.velocity, cent: 0.0};
+                emitted[count] = EventRecord {position: pulse, offset: 0, kind: EVENT_NOTE_ON, id, pitch: held.pitch, velocity: held.velocity, cent: 0.0, duration: 0.0};
                 count += 1;
                 state.active[state.active_count as usize] = Active {id, pitch: held.pitch, end_pulse: pulse + SIXTEENTH * GATE};
                 state.active_count += 1;
@@ -161,7 +161,7 @@ pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
 #[no_mangle]
 pub extern "C" fn process_events(from: f64, to: f64, flags: u32, state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
     let state = unsafe { &mut *(state_ptr as *mut ArpState) };
-    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
     let mut scratch = [blank; PULL_SCRATCH];
     let pulled = abi::pull_events(from, to, flags, &mut scratch);
     ingest(state, &scratch[..pulled]);

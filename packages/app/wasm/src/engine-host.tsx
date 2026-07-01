@@ -2,11 +2,11 @@ import {createElement} from "@opendaw/lib-jsx"
 import {asDefined, ByteArrayInput, Lifecycle, MutableObservableOption, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
-import {BoxIO} from "@opendaw/studio-boxes"
-import {EngineStateSchema, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {ApparatDeviceBox, BoxIO, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
+import {EngineStateSchema, ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
 import {AudioData, PPQN} from "@opendaw/lib-dsp"
 import {SampleInfo, SampleLoader} from "./sample-loader"
-import {EngineProtocol, HeapListener, HeapStats, TransportListener} from "./engine-protocol"
+import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
 import {loadSample} from "./sample-fetch"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {createEngineMemory, loadEngineModules} from "./engine-modules"
@@ -14,6 +14,30 @@ import processorURL from "./engine-processor.ts?worker&url"
 
 // The box graph type ProjectSkeleton hands back; every page drives the engine from one of these.
 type EngineBoxGraph = ReturnType<typeof ProjectSkeleton.empty>["boxGraph"]
+
+// Register every scriptable device's user script (Werkstatt / Apparat / Spielwerk) into THIS context's
+// AudioWorkletGlobalScope — the same scope the engine processor runs in — so the engine's `ScriptBridges` find
+// them at `globalThis.openDAW.<registry>[uuid]`. Mirrors the studio's `Project.loadScriptDevices`: without it a
+// loaded scriptable device has no registered `Processor`, so its bridge stays silent (no audio). Each `load`
+// parses the box's `code`, wraps it, and `audioWorklet.addModule`s the blob; must complete before play.
+const loadScriptDevices = async (audioContext: BaseAudioContext, boxGraph: EngineBoxGraph,
+                                 append: (line: string) => void): Promise<void> => {
+    const load = (config: ScriptCompiler.Config, box: ScriptCompiler.ScriptDeviceBox): Promise<void> =>
+        ScriptCompiler.create(config).load(audioContext, box).then(
+            () => append(`script ${UUID.toString(box.address.uuid)}: registered (${config.headerTag})`),
+            (reason: unknown) => append(`script ${UUID.toString(box.address.uuid)}: FAILED ${reason}`))
+    const pending: Array<Promise<void>> = []
+    for (const box of boxGraph.boxes()) {
+        if (box instanceof ApparatDeviceBox) {
+            pending.push(load({headerTag: "apparat", registryName: "apparatProcessors", functionName: "apparat"}, box))
+        } else if (box instanceof WerkstattDeviceBox) {
+            pending.push(load({headerTag: "werkstatt", registryName: "werkstattProcessors", functionName: "werkstatt"}, box))
+        } else if (box instanceof SpielwerkDeviceBox) {
+            pending.push(load({headerTag: "spielwerk", registryName: "spielwerkProcessors", functionName: "spielwerk"}, box))
+        }
+    }
+    await Promise.all(pending)
+}
 
 /// The shared engine host every page mounts: it boots the AudioWorklet engine, loads the device modules,
 /// streams the page's box graph into it through the unchanged `SyncSource`, and decodes the engine-state and
@@ -91,6 +115,9 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         ctx.addEventListener("statechange", () => showAudioState())
         showAudioState()
         await ctx.audioWorklet.addModule(processorURL)
+        // Register the project's scriptable-device user scripts into this same worklet scope BEFORE the engine
+        // starts rendering, so their bridges find a Processor at globalThis.openDAW.<registry>[uuid].
+        await loadScriptDevices(ctx, boxGraph, append)
         const {engineModule, deviceModules, deviceBoxTypes, composites} = await loadEngineModules()
         const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
@@ -117,6 +144,10 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         }))
         lifecycle.own(Communicator.executor<HeapListener>(messenger.channel("heap"), new class implements HeapListener {
             heap(stats: HeapStats): void {showMemory(stats)}
+        }))
+        // A scriptable device reporting a user-script runtime / validation error (it silences itself in the engine).
+        lifecycle.own(Communicator.executor<ScriptListener>(messenger.channel("script"), new class implements ScriptListener {
+            deviceMessage(uuid: string, message: string): void {append(`script ${uuid}: ${message}`)}
         }))
         // Route F: the sample loader. The worklet drives the handshake; this executor fetches + decodes a sample
         // and writes its PLANAR frames into the SAB at the engine-allocated pointer.

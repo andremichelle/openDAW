@@ -197,7 +197,7 @@ mod tests {
     const SR: f32 = 48_000.0;
 
     fn note_on(id: u32, pitch: u32) -> EventRecord {
-        EventRecord {position: 0.0, offset: 0, kind: EVENT_NOTE_ON, id, pitch, velocity: 1.0, cent: 0.0}
+        EventRecord {position: 0.0, offset: 0, kind: EVENT_NOTE_ON, id, pitch, velocity: 1.0, cent: 0.0, duration: 0.0}
     }
 
     #[test]

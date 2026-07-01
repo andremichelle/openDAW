@@ -62,7 +62,12 @@ struct DeviceReg {
     sample_changed_index: u32,     // slot of the device's `sample_changed` export (observed samples); 0 if none
     reset_index: u32,              // slot of the device's `reset` export (clears runtime state on STOP); 0 if none
     midi_effects_field: u16,       // the device's OWN midi-fx host field key when hosted as a composite child; 0 if none
-    audio_effects_field: u16       // the device's OWN audio-fx host field key when hosted as a composite child; 0 if none
+    audio_effects_field: u16,      // the device's OWN audio-fx host field key when hosted as a composite child; 0 if none
+    // SCRIPTABLE devices (Werkstatt / Apparat / Spielwerk): the field keys of the dynamic parameter / sample
+    // COLLECTIONS the engine must observe and drive into the device (the params/samples are `WerkstattParameterBox`
+    // / `WerkstattSampleBox` children, not fixed paths). 0 = the device has no such collection.
+    param_collection_field: u16,
+    sample_collection_field: u16
 }
 
 /// A registered COMPOSITE box type (e.g. Playfield): a device box that hosts a CHILD COLLECTION of its own
@@ -206,6 +211,7 @@ mod audio_unit;
 mod audio_region_player;
 mod time_stretch;
 mod tempo_map;
+mod script_device;
 use audio_unit::{AudioUnitBinding, DeviceParams, Members};
 mod composite;
 mod param_automation;
@@ -310,6 +316,11 @@ static SIDECHAIN_BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
 // `2, 3, ...` the resolved sidechains. Its own cell (NOT `ENGINE`); read-only during render, never aliases the
 // graph, exactly like `host_resolve_sample` reading `SAMPLES`.
 static INPUTS: Shared<Vec<(u32, u32, u32)>> = Shared::new(Vec::new());
+
+// The box uuid of the device whose `init` is currently running, so a SCRIPTABLE device's `init` can read its
+// own uuid via `host_self_uuid` (the engine knows it at bind; the device does not, since it only uses relative
+// field paths). The engine sets it right before `call_device_init`. Its own cell, set + read outside render.
+static CURRENT_DEVICE_UUID: Shared<[u8; 16]> = Shared::new([0; 16]);
 
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
 /// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` wraps a
@@ -480,6 +491,15 @@ pub extern "C" fn host_observe_field(path_ptr: u32, path_len: u32) -> u32 {
     obs.len() as u32 - 1
 }
 
+/// Host import a SCRIPTABLE device calls from `init` to learn its own box uuid (16 bytes written to `out16_ptr`),
+/// which it passes to the JS script bridge so the bridge finds the matching user `Processor`. Reads only the
+/// `CURRENT_DEVICE_UUID` cell the engine set before `init`, never `&mut Engine`.
+#[no_mangle]
+pub extern "C" fn host_self_uuid(out16_ptr: u32) {
+    let uuid = unsafe { *CURRENT_DEVICE_UUID.get() };
+    unsafe { core::ptr::copy_nonoverlapping(uuid.as_ptr(), out16_ptr as *mut u8, 16); }
+}
+
 /// Host import an audio effect calls from `init` to declare a SIDECHAIN input port by its pointer field-key
 /// path. Records the path (the engine resolves it after `init`) and returns the device-facing PORT id: `2` for
 /// the first sidechain, `3` for the next, and so on, after the reserved `MAIN_INPUT` (1). Touches no
@@ -573,14 +593,15 @@ fn pull_from_source(source: &SharedNoteEventSource, from: f64, to: f64, flags: u
             break;
         }
         let record = match *event {
-            Event::NoteStart {id, position, pitch, cent, velocity, ..} => EventRecord {
+            Event::NoteStart {id, position, duration, pitch, cent, velocity} => EventRecord {
                 position,
                 offset: 0,
                 kind: EVENT_NOTE_ON,
                 id: id as u32,
                 pitch: pitch as u32,
                 velocity,
-                cent
+                cent,
+                duration // the note's length in pulses, carried on the note-on so a MIDI-fx script sees it
             },
             Event::NoteComplete {id, position, pitch} => EventRecord {
                 position,
@@ -589,7 +610,8 @@ fn pull_from_source(source: &SharedNoteEventSource, from: f64, to: f64, flags: u
                 id: id as u32,
                 pitch: pitch as u32,
                 velocity: 0.0,
-                cent: 0.0
+                cent: 0.0,
+                duration: 0.0
             },
             Event::Update {..} => continue
         };
@@ -618,16 +640,16 @@ fn pull_from_slot_route(upstream: &SharedNoteEventSource, choke: &[i32], from: f
         match *event {
             Event::NoteStart {id, position, pitch, cent, velocity, ..} => {
                 if choke.contains(&(pitch as i32)) {
-                    out[count] = EventRecord {position, offset: 0, kind: EVENT_CHOKE, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+                    out[count] = EventRecord {position, offset: 0, kind: EVENT_CHOKE, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
                     count += 1;
                     if count >= out.len() {
                         break;
                     }
                 }
-                out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_ON, id: id as u32, pitch: pitch as u32, velocity, cent};
+                out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_ON, id: id as u32, pitch: pitch as u32, velocity, cent, duration: 0.0};
             }
             Event::NoteComplete {id, position, pitch} => {
-                out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_OFF, id: id as u32, pitch: pitch as u32, velocity: 0.0, cent: 0.0};
+                out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_OFF, id: id as u32, pitch: pitch as u32, velocity: 0.0, cent: 0.0, duration: 0.0};
             }
             Event::Update {..} => continue
         }
@@ -762,10 +784,11 @@ impl Engine {
     /// Register a loaded device: the table slot holding its `process` and the bytes its state block needs.
     /// Returns the device id (its index). The host calls this once per device, before `bind`.
     #[allow(clippy::too_many_arguments)] // one slot per device export; positional to match the loader's call
-    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32) -> u32 {
+    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32, param_collection_field: u32, sample_collection_field: u32) -> u32 {
         let id = self.devices.len() as u32;
         self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, reset_index,
-            midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16});
+            midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16,
+            param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16});
         id
     }
 
@@ -1210,10 +1233,10 @@ pub extern "C" fn device_alloc(size: u32) -> u32 {
 /// Returns the device id. Call once per device, before `bind` (which builds the graph and wires devices).
 #[no_mangle]
 #[allow(clippy::too_many_arguments)] // one positional arg per device export, matching the loader's call
-pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32) -> u32 {
+pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32, param_collection_field: u32, sample_collection_field: u32) -> u32 {
     unsafe {
         match ENGINE.get().as_mut() {
-            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, reset_index, midi_effects_field, audio_effects_field),
+            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, reset_index, midi_effects_field, audio_effects_field, param_collection_field, sample_collection_field),
             None => 0
         }
     }

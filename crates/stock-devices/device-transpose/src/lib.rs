@@ -124,11 +124,11 @@ mod tests {
     }
 
     fn note_on(id: u32, offset: u32, pitch: u32) -> EventRecord {
-        EventRecord {position: 0.0, offset, kind: EVENT_NOTE_ON, id, pitch, velocity: 0.8, cent: 0.0}
+        EventRecord {position: 0.0, offset, kind: EVENT_NOTE_ON, id, pitch, velocity: 0.8, cent: 0.0, duration: 0.0}
     }
 
     fn blanks() -> [EventRecord; 8] {
-        [EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0}; 8]
+        [EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0}; 8]
     }
 
     #[test]

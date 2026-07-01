@@ -13,7 +13,8 @@ import {UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {CompositeSpec} from "./engine-modules"
 import {SampleInfo, SampleLoader} from "./sample-loader"
-import {EngineProtocol, HeapListener, HeapStats, TransportListener} from "./engine-protocol"
+import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
+import {ScriptBridges, ScriptEngine} from "./script-bridge"
 
 const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~42)
 const DEVICE_STACK_SIZE = 256 * 1024 // talc-allocated stack handed to each loaded device
@@ -49,6 +50,10 @@ type DeviceExports = {
     // (e.g. a Playfield slot). Absent / 0 means the device hosts no chains of its own.
     midi_effects_field?: () => number
     audio_effects_field?: () => number
+    // Scriptable devices (Werkstatt / Apparat / Spielwerk): the collection field keys whose child boxes the
+    // engine observes as the device's dynamic @param / @sample declarations (11 / 12). Absent / 0 = none.
+    observe_param_collection_field?: () => number
+    observe_sample_collection_field?: () => number
     __wasm_apply_data_relocs?: () => void
     __wasm_call_ctors?: () => void
 }
@@ -56,7 +61,7 @@ type DeviceExports = {
 type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
-    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number, fieldChangedIndex: number, sampleChangedIndex: number, resetIndex: number, midiEffectsField: number, audioEffectsField: number) => number
+    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number, fieldChangedIndex: number, sampleChangedIndex: number, resetIndex: number, midiEffectsField: number, audioEffectsField: number, paramCollectionField: number, sampleCollectionField: number) => number
     // Map a device-box type to the just-registered device: the box-type UTF-8 name is written into the
     // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
     device_set_box_type: (deviceId: number, nameLen: number) => void
@@ -101,6 +106,9 @@ type EngineExports = {
     // -1), `sample_allocate` reserves the decoded byte length and returns the pointer, `sample_set_ready`
     // marks it resolvable once the frames are written.
     host_resolve_sample: (handle: number, outPtr: number) => number
+    // A scriptable device imports this from `env`; the engine writes the current device box's 16 uuid bytes to
+    // `outPtr` (called from the device's `init`), so the script bridge can key its registry lookup by uuid.
+    host_self_uuid: (outPtr: number) => void
     host_observe_sample: (pathPtr: number, pathLen: number) => number
     host_observe_field: (pathPtr: number, pathLen: number) => number
     // Route B/C (audio input ports). A device imports these: `host_bind_sidechain` declares a sidechain port by
@@ -158,6 +166,8 @@ class EngineProcessor extends AudioWorkletProcessor {
     #transport!: TransportListener // transport-state back-channel sender (set in the constructor)
     #heap!: HeapListener // heap-stats back-channel sender (set in the constructor)
     #loader!: SampleLoader // the sample-load RPC sender (set in the constructor)
+    #scripts!: ScriptListener // scriptable-device error back-channel sender (set in the constructor)
+    readonly #scriptBridges: ScriptBridges // runs the scriptable devices' user JS over the shared memory
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
@@ -174,8 +184,14 @@ class EngineProcessor extends AudioWorkletProcessor {
         const engine = new WebAssembly.Instance(engineModule, {env}).exports as unknown as EngineExports
         this.#engine = engine
         engine.init(sampleRate)
+        // The script bridge runs the scriptable devices' user JavaScript over the shared memory; its `host_script_*`
+        // closures are bound into each scriptable device's env at load. A user-script error reports out on the
+        // `script` back-channel (set up below; the closure runs only during render, by which point it is wired).
+        this.#scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
+            (uuid, message) => this.#scripts.deviceMessage(uuid, message))
+        const scriptImports = this.#scriptBridges.imports()
         // load each device PIC side module at a host-assigned base, register it, and map its box type.
-        deviceModules.forEach((deviceModule, index) => this.#loadDevice(deviceModule, deviceBoxTypes[index], sampleRate))
+        deviceModules.forEach((deviceModule, index) => this.#loadDevice(deviceModule, deviceBoxTypes[index], sampleRate, scriptImports))
         // register each composite box type: write its name into the input buffer, then map its child collection
         // (the child plugin itself is a normal device above). Box-type names are ASCII identifiers.
         composites.forEach(({boxType, childrenField, indexKey, excludeKey, cellInstrumentField, cellMidiField, cellAudioField, childEnabledKey}) => {
@@ -209,6 +225,9 @@ class EngineProcessor extends AudioWorkletProcessor {
             decode(uuid: UUID.Bytes): Promise<SampleInfo> {return dispatcher.dispatchAndReturn(this.decode, uuid)}
             write(uuid: UUID.Bytes, pointer: number): Promise<void> {return dispatcher.dispatchAndReturn(this.write, uuid, pointer)}
         })
+        this.#scripts = Communicator.sender<ScriptListener>(messenger.channel("script"), dispatcher => new class implements ScriptListener {
+            deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
+        })
     }
 
     // Pop every sample the engine queued (on seeing an AudioFileBox) and run the load handshake for each:
@@ -234,7 +253,8 @@ class EngineProcessor extends AudioWorkletProcessor {
     // Link one PIC device side module into the engine: assign it memory + table + stack bases from talc,
     // instantiate, apply its data relocations, install its `process` into the shared table, register it, and
     // map its device-box type to the registered device id (the engine's device table).
-    #loadDevice(module: WebAssembly.Module, boxType: string, sampleRate: number): void {
+    #loadDevice(module: WebAssembly.Module, boxType: string, sampleRate: number,
+                scriptImports: Record<string, (...args: Array<number>) => number | void>): void {
         const engine = this.#engine
         const table = this.#table
         const {memorySize, tableSize} = parseDylink(module)
@@ -262,7 +282,10 @@ class EngineProcessor extends AudioWorkletProcessor {
                 host_observe_sample: engine.host_observe_sample,
                 host_observe_field: engine.host_observe_field,
                 host_bind_sidechain: engine.host_bind_sidechain,
-                host_resolve_input: engine.host_resolve_input
+                host_resolve_input: engine.host_resolve_input,
+                // Scriptable devices: the engine's self-uuid export + the JS script bridge closures.
+                host_self_uuid: engine.host_self_uuid,
+                ...scriptImports
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()
@@ -284,7 +307,9 @@ class EngineProcessor extends AudioWorkletProcessor {
         // defaulting to 0 when the device hosts no fx chains of its own.
         const midiEffectsField = device.midi_effects_field?.() ?? 0
         const audioEffectsField = device.audio_effects_field?.() ?? 0
-        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind(), initIndex, parameterChangedIndex, fieldChangedIndex, sampleChangedIndex, resetIndex, midiEffectsField, audioEffectsField)
+        const paramCollectionField = device.observe_param_collection_field?.() ?? 0
+        const sampleCollectionField = device.observe_sample_collection_field?.() ?? 0
+        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind(), initIndex, parameterChangedIndex, fieldChangedIndex, sampleChangedIndex, resetIndex, midiEffectsField, audioEffectsField, paramCollectionField, sampleCollectionField)
         // Register the device table entry: write the box-type name into the input buffer, then map it.
         // Box-type names are ASCII identifiers, so encode byte-per-char (no TextEncoder in the worklet scope).
         const length = boxType.length

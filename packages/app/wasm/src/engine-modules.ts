@@ -43,6 +43,9 @@ const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/device_arp.wasm", boxType: "ArpeggioDeviceBox"},      // midi effect
     {url: "/device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"}, // midi effect
     {url: "/device_transpose.wasm", boxType: "PitchDeviceBox"},   // midi effect
+    {url: "/device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
+    {url: "/device_apparat.wasm", boxType: "ApparatDeviceBox"},   // scriptable instrument
+    {url: "/device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
     {url: "/device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"} // composite child (one Playfield slot)
 ]
 

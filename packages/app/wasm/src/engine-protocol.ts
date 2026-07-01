@@ -27,3 +27,9 @@ export interface HeapStats {
     heapClaimed: number
     memoryTotal: number
 }
+
+// worklet -> main: a scriptable device (Werkstatt / Apparat / Spielwerk) reporting a runtime / validation error
+// from its user script, so the app can surface it on the device (mirrors the TS engine's `deviceMessage`).
+export interface ScriptListener {
+    deviceMessage(uuid: string, message: string): void
+}

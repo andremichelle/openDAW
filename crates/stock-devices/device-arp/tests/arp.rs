@@ -14,11 +14,11 @@ fn zeroed() -> ArpState {
 }
 
 fn note(kind: u32, id: u32, pitch: u32) -> EventRecord {
-    EventRecord {position: 0.0, offset: 0, kind, id, pitch, velocity: 0.8, cent: 0.0}
+    EventRecord {position: 0.0, offset: 0, kind, id, pitch, velocity: 0.8, cent: 0.0, duration: 0.0}
 }
 
 fn blank() -> EventRecord {
-    EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0}
+    EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0}
 }
 
 fn pitches(out: &[EventRecord], kind: u32) -> Vec<u32> {

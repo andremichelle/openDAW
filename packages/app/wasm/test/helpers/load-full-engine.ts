@@ -4,6 +4,7 @@
 
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
+import {ScriptBridges, ScriptEngine} from "../../src/script-bridge"
 
 const PUBLIC = path.resolve(__dirname, "../../public")
 const DEVICE_STACK_SIZE = 256 * 1024
@@ -19,7 +20,10 @@ const DEVICES: ReadonlyArray<{file: string, boxType: string}> = [
     {file: "device_arp.wasm", boxType: "ArpeggioDeviceBox"},
     {file: "device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"},
     {file: "device_transpose.wasm", boxType: "PitchDeviceBox"},
-    {file: "device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"}
+    {file: "device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"},
+    {file: "device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
+    {file: "device_apparat.wasm", boxType: "ApparatDeviceBox"},     // scriptable instrument
+    {file: "device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}  // scriptable midi effect
 ]
 type CompositeSpec = {boxType: string, childrenField: number, indexKey: number, excludeKey: number,
     cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number}
@@ -78,6 +82,12 @@ export const loadFullEngine = async (sampleRate = 48000): Promise<FullEngine> =>
     const engine = new WebAssembly.Instance(engineModule, {env: {memory, __indirect_function_table: table}})
         .exports as any
     engine.init(sampleRate)
+    // User scripts read the `sampleRate` global (an AudioWorkletGlobalScope built-in); provide it in node so the
+    // scriptable devices behave exactly as in the worklet.
+    ;(globalThis as any).sampleRate = sampleRate
+    // The script bridge runs the scriptable devices' user JavaScript over the shared memory (see script-bridge.ts).
+    const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate)
+    const scriptImports = scriptBridges.imports()
 
     const installOptional = (fn: unknown): number => {
         if (fn === undefined) {return 0}
@@ -107,7 +117,9 @@ export const loadFullEngine = async (sampleRate = 48000): Promise<FullEngine> =>
                 host_observe_sample: engine.host_observe_sample,
                 host_observe_field: engine.host_observe_field,
                 host_bind_sidechain: engine.host_bind_sidechain,
-                host_resolve_input: engine.host_resolve_input
+                host_resolve_input: engine.host_resolve_input,
+                host_self_uuid: engine.host_self_uuid,
+                ...scriptImports
             }
         }).exports as any
         device.__wasm_apply_data_relocs?.()
@@ -119,7 +131,8 @@ export const loadFullEngine = async (sampleRate = 48000): Promise<FullEngine> =>
             installOptional(device.init), installOptional(device.parameter_changed),
             installOptional(device.field_changed), installOptional(device.sample_changed),
             installOptional(device.reset),
-            device.midi_effects_field?.() ?? 0, device.audio_effects_field?.() ?? 0)
+            device.midi_effects_field?.() ?? 0, device.audio_effects_field?.() ?? 0,
+            device.observe_param_collection_field?.() ?? 0, device.observe_sample_collection_field?.() ?? 0)
         const pointer = engine.input_reserve(boxType.length)
         const bytes = new Uint8Array(memory.buffer, pointer, boxType.length)
         for (let i = 0; i < boxType.length; i++) {bytes[i] = boxType.charCodeAt(i) & 0xff}

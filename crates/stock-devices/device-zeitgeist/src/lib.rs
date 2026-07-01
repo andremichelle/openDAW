@@ -65,7 +65,7 @@ pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
 
 #[no_mangle]
 pub extern "C" fn process_events(from: f64, to: f64, flags: u32, _state_ptr: u32, out_ptr: u32, max: u32) -> u32 {
-    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0};
+    let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
     let mut scratch = [blank; PULL_SCRATCH];
     // Pull the UN-warped range, so events that the groove pushes into [from, to) are captured.
     let pulled = abi::pull_events(unwarp(from), unwarp(to), flags, &mut scratch);

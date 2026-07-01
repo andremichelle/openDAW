@@ -110,7 +110,22 @@ const reconcileSamples = (deviceBox: ScriptCompiler.ScriptDeviceBox, declared: R
     }
 }
 
-const wrapCode = (config: ScriptCompiler.Config, uuid: string, update: number, userCode: string): string => `
+// Wrap the user script for registration into `globalThis.openDAW.<registry>[uuid]`. Beyond `{update, create}`
+// (consumed by the TS core-processors engine), the entry also carries the PARSED `@param` / `@sample`
+// declarations (with their declaration index, matching the `WerkstattParameterBox.index` the engine keys by):
+// the WASM script bridge needs them to map a param's raw automation value through the right `ValueMapping` and
+// to label each param / sample, since the worklet has no box graph to read those from. The TS engine ignores
+// the extra fields (it resolves mappings + labels from the box adapter), so this stays a pure superset.
+const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number, userCode: string): string => {
+    const order = ScriptDeclaration.parseDeclarationOrder(userCode)
+    const params = ScriptDeclaration.parseParams(userCode).map(declaration => ({
+        label: declaration.label, index: order.get(declaration.label) ?? 0, mapping: declaration.mapping,
+        min: declaration.min, max: declaration.max, unit: declaration.unit
+    }))
+    const samples = ScriptDeclaration.parseSamples(userCode).map(declaration => ({
+        label: declaration.label, index: order.get(declaration.label) ?? 0
+    }))
+    return `
     if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
     if (typeof globalThis.openDAW.${config.registryName} === "undefined") { globalThis.openDAW.${config.registryName} = {} }
     globalThis.openDAW.${config.registryName}["${uuid}"] = {
@@ -118,9 +133,12 @@ const wrapCode = (config: ScriptCompiler.Config, uuid: string, update: number, u
         create: (function ${config.functionName}() {
             ${userCode}
             return Processor
-        })()
+        })(),
+        params: ${JSON.stringify(params)},
+        samples: ${JSON.stringify(samples)}
     }
 `
+}
 
 const validateCode = (wrappedCode: string): void => {new Function(wrappedCode)}
 
@@ -148,6 +166,11 @@ export namespace ScriptCompiler {
         readonly functionName: string
     }
 
+    // The wrapped, registry-populating source for a script (`{update, create, params, samples}`), exposed so the
+    // WASM script bridge + its parity tests + the offline renderer can seed `globalThis.openDAW` identically to
+    // the live app (which goes through `compile` / `load`). The single source of truth for the registry shape.
+    export const wrap = wrapScript
+
     export const create = (config: Config) => {
         const headerPattern = createHeaderPattern(config.headerTag)
         const createHeader = (update: number): string =>
@@ -163,7 +186,7 @@ export namespace ScriptCompiler {
                 for (const declaration of params) {declMap.set(declaration.label, declaration)}
                 cachedParamDeclarations.set(deviceBox, declMap)
                 const uuid = UUID.toString(deviceBox.address.uuid)
-                const wrappedCode = wrapCode(config, uuid, update, userCode)
+                const wrappedCode = wrapScript(config, uuid, update, userCode)
                 validateCode(wrappedCode)
                 return registerWorklet(audioContext, wrappedCode)
             },
@@ -181,7 +204,7 @@ export namespace ScriptCompiler {
                 const params = ScriptDeclaration.parseParams(userCode)
                 const samples = ScriptDeclaration.parseSamples(userCode)
                 const order = ScriptDeclaration.parseDeclarationOrder(userCode)
-                const wrappedCode = wrapCode(config, uuid, newUpdate, userCode)
+                const wrappedCode = wrapScript(config, uuid, newUpdate, userCode)
                 validateCode(wrappedCode)
                 const label = ScriptDeclaration.parseLabel(userCode)
                 const modifier = () => {

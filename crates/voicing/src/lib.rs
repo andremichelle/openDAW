@@ -468,7 +468,7 @@ mod tests {
     }
 
     fn note(id: u32) -> EventRecord {
-        EventRecord {position: 0.0, offset: 0, kind: EVENT_NOTE_ON, id, pitch: 60, velocity: 0.8, cent: 0.0}
+        EventRecord {position: 0.0, offset: 0, kind: EVENT_NOTE_ON, id, pitch: 60, velocity: 0.8, cent: 0.0, duration: 0.0}
     }
 
     fn block() -> Block {
