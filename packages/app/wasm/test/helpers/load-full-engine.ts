@@ -23,7 +23,16 @@ const DEVICES: ReadonlyArray<{file: string, boxType: string}> = [
     {file: "device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"},
     {file: "device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
     {file: "device_apparat.wasm", boxType: "ApparatDeviceBox"},     // scriptable instrument
-    {file: "device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}  // scriptable midi effect
+    {file: "device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
+    {file: "device_waveshaper.wasm", boxType: "WaveshaperDeviceBox"}, // audio effect
+    {file: "device_crusher.wasm", boxType: "CrusherDeviceBox"}, // audio effect
+    {file: "device_fold.wasm", boxType: "FoldDeviceBox"}, // audio effect
+    {file: "device_stereo_tool.wasm", boxType: "StereoToolDeviceBox"}, // audio effect
+    {file: "device_velocity.wasm", boxType: "VelocityDeviceBox"}, // midi effect
+    {file: "device_maximizer.wasm", boxType: "MaximizerDeviceBox"}, // audio effect
+    {file: "device_compressor.wasm", boxType: "CompressorDeviceBox"}, // audio effect (sidechain)
+    {file: "device_reverb.wasm", boxType: "ReverbDeviceBox"}, // audio effect
+    {file: "device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"} // audio effect
 ]
 type CompositeSpec = {boxType: string, childrenField: number, indexKey: number, excludeKey: number,
     cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number}

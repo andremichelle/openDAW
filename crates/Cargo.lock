@@ -43,7 +43,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-compressor"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+]
+
+[[package]]
+name = "device-crusher"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "math",
+]
+
+[[package]]
+name = "device-dattorro-reverb"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "math",
+]
+
+[[package]]
 name = "device-delay"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+]
+
+[[package]]
+name = "device-fold"
 version = "0.0.0"
 dependencies = [
  "abi",
@@ -71,6 +109,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-maximizer"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-nano"
 version = "0.0.0"
 dependencies = [
@@ -89,6 +137,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-reverb"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-sine"
 version = "0.0.0"
 dependencies = [
@@ -101,6 +159,15 @@ name = "device-spielwerk"
 version = "0.0.0"
 dependencies = [
  "abi",
+]
+
+[[package]]
+name = "device-stereo-tool"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "math",
 ]
 
 [[package]]
@@ -129,6 +196,23 @@ dependencies = [
  "libm",
  "math",
  "voicing",
+]
+
+[[package]]
+name = "device-velocity"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "math",
+]
+
+[[package]]
+name = "device-waveshaper"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "math",
 ]
 
 [[package]]

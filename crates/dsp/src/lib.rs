@@ -6,16 +6,36 @@
 
 pub mod adsr;
 pub mod biquad;
+pub mod crusher;
+pub mod dattorro;
+pub mod ctagdrc;
+pub mod freeverb;
 pub mod glide;
 pub mod lfo;
 pub mod osc;
 pub mod panning;
 pub mod ppqn;
+pub mod ramp;
+pub mod resampler;
 pub mod simple_limiter;
 pub mod smooth;
 pub mod tidal;
+pub mod waveshaper;
 
 pub use math::{clamp, fabs, fast_sin, PI};
+
+/// `ln(10) / 20`, the decibel → linear-gain exponent base, mirroring lib-dsp `utils.LogDb`.
+const LOG_DB: f32 = 0.115_129_255; // (ln 10) / 20
+
+/// A decibel value to a linear gain, `exp(db * ln(10)/20)`. Mirrors lib-dsp `dbToGain`.
+pub fn db_to_gain(db: f32) -> f32 {
+    libm::expf(db * LOG_DB)
+}
+
+/// A linear gain to a decibel value, `ln(gain) / (ln(10)/20)`. Mirrors lib-dsp `gainToDb`.
+pub fn gain_to_db(gain: f32) -> f32 {
+    libm::logf(gain) / LOG_DB
+}
 
 /// The host's fixed render quantum in samples (Web Audio's 128-frame block), mirroring lib-dsp `RenderQuantum`.
 /// A device sizes its per-block scratch to this: an inter-event processing chunk never exceeds one quantum.

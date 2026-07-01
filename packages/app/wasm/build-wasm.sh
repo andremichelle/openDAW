@@ -35,24 +35,20 @@ SHARED="-C link-arg=--shared-memory -C link-arg=--max-memory=$MAX_MEMORY -C link
 PIC_RUSTFLAGS="-C relocation-model=pic -C link-arg=--experimental-pic -C link-arg=-shared $SHARED -Zunstable-options -Cpanic=immediate-abort -Zdefault-visibility=hidden"
 DEVICE_TOOLCHAIN="${DEVICE_TOOLCHAIN:-nightly}"
 
+# The PIC side-module device crates. ADD A NEW DEVICE HERE (its crate name) and it is built, size-optimised,
+# and copied to public/ automatically. The wasm artifact basename is the crate name with '-' -> '_'.
+DEVICE_CRATES="device-lowpass device-transpose device-arp device-zeitgeist device-tidal device-vaporisateur device-nano device-delay device-playfield-slot device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb"
+
 cargo rustc -p engine --release --target "$TARGET" -- \
   -C link-arg=--import-memory -C link-arg=--import-table $SHARED
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-lowpass   --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-transpose --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-arp       --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-zeitgeist --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-tidal     --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-vaporisateur --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-nano       --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-delay      --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-playfield-slot --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-gate       --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-werkstatt  --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-apparat    --release --target "$TARGET" -Zbuild-std=core
-RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p device-spielwerk  --release --target "$TARGET" -Zbuild-std=core
+for crate in $DEVICE_CRATES; do
+  RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p "$crate" --release --target "$TARGET" -Zbuild-std=core
+done
 cargo build -p sine --release --target "$TARGET"
 
-MODULES="engine device_lowpass device_transpose device_arp device_zeitgeist device_tidal device_vaporisateur device_nano device_delay device_playfield_slot device_gate device_werkstatt device_apparat device_spielwerk sine"
+# Module basenames (crate '-' -> '_') plus the engine host and the standalone sine.
+DEVICE_MODULES=$(echo "$DEVICE_CRATES" | tr '-' '_')
+MODULES="engine $DEVICE_MODULES sine"
 
 # Size-optimise each module with binaryen's wasm-opt (Homebrew: `brew install binaryen`). GUARDED: if it is
 # not installed the build still works, just larger. The devices are PIC side modules (a `dylink.0` section,
@@ -71,5 +67,7 @@ else
   echo "wasm-opt not found (brew install binaryen) — shipping unoptimised modules"
 fi
 
-cp "$OUT/engine.wasm" "$OUT/device_lowpass.wasm" "$OUT/device_transpose.wasm" "$OUT/device_arp.wasm" "$OUT/device_zeitgeist.wasm" "$OUT/device_tidal.wasm" "$OUT/device_vaporisateur.wasm" "$OUT/device_nano.wasm" "$OUT/device_delay.wasm" "$OUT/device_playfield_slot.wasm" "$OUT/device_gate.wasm" "$OUT/device_werkstatt.wasm" "$OUT/device_apparat.wasm" "$OUT/device_spielwerk.wasm" "$OUT/sine.wasm" "$ROOT/packages/app/wasm/public/"
+CP_LIST=""
+for module in $MODULES; do CP_LIST="$CP_LIST $OUT/$module.wasm"; done
+cp $CP_LIST "$ROOT/packages/app/wasm/public/"
 echo "built: engine.wasm + stock devices + werkstatt/apparat/spielwerk + sine"

@@ -136,3 +136,33 @@
 - A scrubbable Sync Log page, the read side of studio-core's SyncLogReader turned into a stepper: it loads a recorded .odsl (the first commit the project, each later commit one transaction), decodes it into a box graph wired to the engine through the unchanged SyncSource, and walks it transaction by transaction with rewind, scrub, and fast-forward, so the project builds up or down and you can press Play to hear it at any step. The navigation was extracted into its own module and tested. Done.
 - Three bugs the stepper surfaced, each root-caused not patched. A burst of transactions raced the async engine-sync pipeline (it serialised tasks against a graph that had already advanced), fixed by yielding one transaction at a time, the same pause the canonical reader takes. Rewinding broke because the recorded log omits the deferred pointer resolutions the graph generates at endTransaction for a forward-reference within a transaction, so inverting the recorded updates was incomplete, fixed by capturing the COMPLETE applied-update list per step and inverting it in reverse, exactly as the graph's own rollback does. And a full rewind trapped the real engine with an unreachable, because a per-note edit monitor fired on the note box's own deletion and tried to re-read the gone box, a latent binder bug that any runtime note or event deletion would hit, fixed by skipping the re-read when the box is already gone. A test drives the actual engine.wasm forward to the end and back to the start to guard all three. Done.
 - Still ahead: the per-member processor lifecycle (a chain edit still rebuilds its one unit's whole cluster and resets that unit's DSP state, where the TS keeps surviving processors alive and re-wires only edges, planned in engine-updates.md for a dedicated pass with audio-level tests), plus the standing list, the Tape device, the timeline query, and the composite-unification.
+
+## Day N (2026-07-01): stock-device porting sweep
+
+Ported 9 of the remaining stock devices to Rust/WASM, each faithful to the TS (source of truth), f32 internal
+math, no allocations in the hot path, plus native DSP tests and a WASM wiring test per device:
+
+- **Audio effects**: Waveshaper, Crusher, Fold (2x/4x/8x oversampling), StereoTool, Maximizer (look-ahead
+  limiter), Compressor (CTAGDRC feed-forward, sidechain + auto attack/release/makeup), Reverb (Freeverb),
+  DattorroReverb (plate).
+- **MIDI effect**: Velocity (magnet + Mulberry32 seeded jitter + offset, byte-parity PRNG).
+
+New shared DSP in `crates/dsp`: `db_to_gain`/`gain_to_db`, `ramp` (LinearRamp + StereoMatrixRamp), `waveshaper`,
+`crusher`, `resampler` (polyphase halfband, replicating the TS undersized-array truncation), `panning`
+(StereoMatrix update), `ctagdrc`, `freeverb`, `dattorro`; `math::random::Mulberry32` (TS byte-parity).
+
+Two device patterns learned: a STRING/INT/BOOL non-param field is observed via `observe_field` + a `field_changed`
+export (Waveshaper equation, Fold oversampling, StereoTool mixing, Maximizer lookahead); and a LARGE device state
+(Reverb ~700 KB, Dattorro ~500 KB) must be zero-init IN PLACE (`dsp.init(&mut self)`) — building it by value in
+`new()` overflows the 256 KB device stack (silent NaN/zero output).
+
+`build-wasm.sh` now loops over a `DEVICE_CRATES` list; adding a device is one entry there + one in
+`engine-modules.ts` + `load-full-engine.ts`. All box schemas were already in `studio-boxes/registry.rs`.
+
+MIDIOutput: intentionally NON-functional and needs no crate — the engine already renders an unregistered
+instrument box type as a silent unit (`audio_unit.rs` "not a buildable instrument: silent"), and the box registry
+decodes its boxes, so projects with a MIDIOutput load fine.
+
+Deferred (each a large focused effort): **Vocoder** (761-line filter-bank DSP; portable, no engine change),
+**Soundfont** (SF2 sample-data delivery — an engine/data change), **NeuralAmp** (NN-weight delivery — an
+engine/data change). The latter two hit the "significant audio-engine change" stop condition.

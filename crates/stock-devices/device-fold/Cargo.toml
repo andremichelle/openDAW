@@ -1,0 +1,16 @@
+[package]
+name = "device-fold"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+abi = {path = "../../abi"}
+math = {path = "../../math"}
+dsp = {path = "../../dsp"}
+
+[dependencies.libm]
+version = "0.2"

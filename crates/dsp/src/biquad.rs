@@ -217,6 +217,15 @@ pub trait BiquadProcessor {
     /// buffers; for in-place chaining use [`BiquadStack`] or `process_frame`.
     fn process(&mut self, coeff: &BiquadCoeff, source: &[f32], target: &mut [f32], from: usize, to: usize);
     fn process_frame(&mut self, coeff: &BiquadCoeff, x: f64) -> f64;
+    /// Filter `buffer[from..to]` IN PLACE (for chaining a band's output back through the next). Frame-by-frame
+    /// via `process_frame`, so it works for any processor (incl. a `BiquadStack` cascade) and is reachable
+    /// through `&mut dyn BiquadProcessor`. (`BiquadMono` / `BiquadStack` also have an inherent same-named method
+    /// with identical math, used on the concrete types.)
+    fn process_in_place(&mut self, coeff: &BiquadCoeff, buffer: &mut [f32], from: usize, to: usize) {
+        for sample in &mut buffer[from..to] {
+            *sample = self.process_frame(coeff, *sample as f64) as f32;
+        }
+    }
 }
 
 /// One second-order section with its own delay state (`x[n-1..2]`, `y[n-1..2]`). Mirrors TS `BiquadMono`.

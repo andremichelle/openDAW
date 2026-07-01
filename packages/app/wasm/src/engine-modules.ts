@@ -46,6 +46,15 @@ const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
     {url: "/device_apparat.wasm", boxType: "ApparatDeviceBox"},   // scriptable instrument
     {url: "/device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
+    {url: "/device_waveshaper.wasm", boxType: "WaveshaperDeviceBox"}, // audio effect
+    {url: "/device_crusher.wasm", boxType: "CrusherDeviceBox"},   // audio effect
+    {url: "/device_fold.wasm", boxType: "FoldDeviceBox"},         // audio effect (wavefolder)
+    {url: "/device_stereo_tool.wasm", boxType: "StereoToolDeviceBox"}, // audio effect
+    {url: "/device_velocity.wasm", boxType: "VelocityDeviceBox"}, // midi effect
+    {url: "/device_maximizer.wasm", boxType: "MaximizerDeviceBox"}, // audio effect
+    {url: "/device_compressor.wasm", boxType: "CompressorDeviceBox"}, // audio effect (sidechain)
+    {url: "/device_reverb.wasm", boxType: "ReverbDeviceBox"},     // audio effect
+    {url: "/device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
     {url: "/device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"} // composite child (one Playfield slot)
 ]
 
