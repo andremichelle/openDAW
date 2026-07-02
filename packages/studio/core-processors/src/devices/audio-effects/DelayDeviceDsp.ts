@@ -1,4 +1,4 @@
-import {bipolar, int, nextPowOf2, panic, unitValue, ValueMapping} from "@opendaw/lib-std"
+import {bipolar, int, isDefined, nextPowOf2, Nullable, panic, unitValue, ValueMapping} from "@opendaw/lib-std"
 import {BiquadCoeff, BiquadMono, BiquadProcessor, Delay, Smooth, StereoMatrix} from "@opendaw/lib-dsp"
 
 const LIMITER_ATTACK_MS = 50.0
@@ -9,9 +9,9 @@ export class DelayDeviceDsp {
     // Lazy-initialized to avoid crash when sampleRate is 0 (Node.js/test contexts).
     // See issue #279: static initializer with `20.0 / sampleRate` produces Infinity
     // when sampleRate=0, causing Exponential assertion failure at import time.
-    static #filterMapping: ValueMapping<number> | null = null
+    static #filterMapping: Nullable<ValueMapping<number>> = null
     static get FilterMapping(): ValueMapping<number> {
-        if (DelayDeviceDsp.#filterMapping === null) {
+        if (!isDefined(DelayDeviceDsp.#filterMapping)) {
             const sr = sampleRate > 0 ? sampleRate : DEFAULT_SAMPLE_RATE
             DelayDeviceDsp.#filterMapping = ValueMapping.exponential(20.0 / sr, 20000.0 / sr)
         }
