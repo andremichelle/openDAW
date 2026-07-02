@@ -13,6 +13,7 @@ import {UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {CompositeSpec} from "./engine-modules"
 import {SampleInfo, SampleLoader} from "./sample-loader"
+import {SoundfontInfo, SoundfontLoader} from "./soundfont-loader"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
 import {ScriptBridges, ScriptEngine} from "./script-bridge"
 
@@ -45,6 +46,7 @@ type DeviceExports = {
     parameter_changed?: (statePtr: number, id: number, kind: number, value: number) => void
     field_changed?: (statePtr: number, id: number, kind: number, bits: number, len: number) => void
     sample_changed?: (statePtr: number, id: number, handle: number, present: number) => void
+    soundfont_changed?: (statePtr: number, id: number, handle: number, present: number) => void
     reset?: (statePtr: number) => void
     // The box field keys hosting this device's OWN midi / audio fx chains when it runs as a composite child
     // (e.g. a Playfield slot). Absent / 0 means the device hosts no chains of its own.
@@ -61,7 +63,7 @@ type DeviceExports = {
 type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
-    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number, fieldChangedIndex: number, sampleChangedIndex: number, resetIndex: number, midiEffectsField: number, audioEffectsField: number, paramCollectionField: number, sampleCollectionField: number) => number
+    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number, fieldChangedIndex: number, sampleChangedIndex: number, soundfontChangedIndex: number, resetIndex: number, midiEffectsField: number, audioEffectsField: number, paramCollectionField: number, sampleCollectionField: number) => number
     // Map a device-box type to the just-registered device: the box-type UTF-8 name is written into the
     // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
     device_set_box_type: (deviceId: number, nameLen: number) => void
@@ -106,6 +108,11 @@ type EngineExports = {
     // -1), `sample_allocate` reserves the decoded byte length and returns the pointer, `sample_set_ready`
     // marks it resolvable once the frames are written.
     host_resolve_sample: (handle: number, outPtr: number) => number
+    host_resolve_soundfont: (handle: number, outPtr: number) => number
+    host_observe_soundfont: (pathPtr: number, pathLen: number) => number
+    soundfont_take_request: (outPtr: number) => number
+    soundfont_allocate: (handle: number, byteLength: number) => number
+    soundfont_set_ready: (handle: number) => void
     // A scriptable device imports this from `env`; the engine writes the current device box's 16 uuid bytes to
     // `outPtr` (called from the device's `init`), so the script bridge can key its registry lookup by uuid.
     host_self_uuid: (outPtr: number) => void
@@ -166,6 +173,7 @@ class EngineProcessor extends AudioWorkletProcessor {
     #transport!: TransportListener // transport-state back-channel sender (set in the constructor)
     #heap!: HeapListener // heap-stats back-channel sender (set in the constructor)
     #loader!: SampleLoader // the sample-load RPC sender (set in the constructor)
+    #soundfontLoader!: SoundfontLoader // the soundfont-load RPC sender (set in the constructor)
     #scripts!: ScriptListener // scriptable-device error back-channel sender (set in the constructor)
     readonly #scriptBridges: ScriptBridges // runs the scriptable devices' user JS over the shared memory
 
@@ -225,6 +233,10 @@ class EngineProcessor extends AudioWorkletProcessor {
             decode(uuid: UUID.Bytes): Promise<SampleInfo> {return dispatcher.dispatchAndReturn(this.decode, uuid)}
             write(uuid: UUID.Bytes, pointer: number): Promise<void> {return dispatcher.dispatchAndReturn(this.write, uuid, pointer)}
         })
+        this.#soundfontLoader = Communicator.sender<SoundfontLoader>(messenger.channel("soundfonts"), dispatcher => new class implements SoundfontLoader {
+            decode(uuid: UUID.Bytes): Promise<SoundfontInfo> {return dispatcher.dispatchAndReturn(this.decode, uuid)}
+            write(uuid: UUID.Bytes, pointer: number): Promise<void> {return dispatcher.dispatchAndReturn(this.write, uuid, pointer)}
+        })
         this.#scripts = Communicator.sender<ScriptListener>(messenger.channel("script"), dispatcher => new class implements ScriptListener {
             deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
         })
@@ -246,6 +258,25 @@ class EngineProcessor extends AudioWorkletProcessor {
                 const pointer = this.#engine.sample_allocate(handle, info.byteLength)
                 await loader.write(uuid, pointer)
                 this.#engine.sample_set_ready(handle, info.frameCount, info.channelCount, info.sampleRate)
+            })()
+        }
+    }
+
+    // The soundfont analog of `#drainSampleRequests`: the main-thread loader parses the .sf2 + builds the
+    // simplified blob, reports its size, and writes it into the engine allocation. Each request runs as its own
+    // async chain so a slow/failed soundfont never blocks others.
+    #drainSoundfontRequests(): void {
+        const loader = this.#soundfontLoader
+        for (; ;) {
+            const outPtr = this.#engine.input_reserve(16)
+            const handle = this.#engine.soundfont_take_request(outPtr)
+            if (handle < 0) {break}
+            const uuid = new Uint8Array(this.#memory.buffer, outPtr, 16).slice()
+            void (async () => {
+                const info = await loader.decode(uuid)
+                const pointer = this.#engine.soundfont_allocate(handle, info.byteLength)
+                await loader.write(uuid, pointer)
+                this.#engine.soundfont_set_ready(handle)
             })()
         }
     }
@@ -280,6 +311,10 @@ class EngineProcessor extends AudioWorkletProcessor {
                 // sample reference (its box file-pointer path) from `init`.
                 host_resolve_sample: engine.host_resolve_sample,
                 host_observe_sample: engine.host_observe_sample,
+                // Soundfont: the device resolves its simplified blob during render and declares its `file`
+                // pointer from `init`, mirroring the sample surface.
+                host_resolve_soundfont: engine.host_resolve_soundfont,
+                host_observe_soundfont: engine.host_observe_soundfont,
                 host_observe_field: engine.host_observe_field,
                 host_bind_sidechain: engine.host_bind_sidechain,
                 host_resolve_input: engine.host_resolve_input,
@@ -302,6 +337,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         const parameterChangedIndex = this.#installOptional(device.parameter_changed)
         const fieldChangedIndex = this.#installOptional(device.field_changed)
         const sampleChangedIndex = this.#installOptional(device.sample_changed)
+        const soundfontChangedIndex = this.#installOptional(device.soundfont_changed)
         const resetIndex = this.#installOptional(device.reset)
         // These are plain field-key VALUES the device returns (like kind()), not table slots: call directly,
         // defaulting to 0 when the device hosts no fx chains of its own.
@@ -309,7 +345,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         const audioEffectsField = device.audio_effects_field?.() ?? 0
         const paramCollectionField = device.observe_param_collection_field?.() ?? 0
         const sampleCollectionField = device.observe_sample_collection_field?.() ?? 0
-        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind(), initIndex, parameterChangedIndex, fieldChangedIndex, sampleChangedIndex, resetIndex, midiEffectsField, audioEffectsField, paramCollectionField, sampleCollectionField)
+        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind(), initIndex, parameterChangedIndex, fieldChangedIndex, sampleChangedIndex, soundfontChangedIndex, resetIndex, midiEffectsField, audioEffectsField, paramCollectionField, sampleCollectionField)
         // Register the device table entry: write the box-type name into the input buffer, then map it.
         // Box-type names are ASCII identifiers, so encode byte-per-char (no TextEncoder in the worklet scope).
         const length = boxType.length
@@ -340,6 +376,8 @@ class EngineProcessor extends AudioWorkletProcessor {
         if (!this.#bound && this.#engine.bind() === 0) {this.#bound = true}
         // A transaction may have added AudioFileBoxes (the engine queued their loads); dispatch them.
         this.#drainSampleRequests()
+        // Likewise a SoundfontFileBox target queues a soundfont blob build; dispatch those too.
+        this.#drainSoundfontRequests()
         // Emit heap stats off-render so the panel updates while the context is suspended (a scrub never
         // calls `process`); a delete that frees a sample is then visible as Heap-used dropping at once.
         this.#heap.heap({

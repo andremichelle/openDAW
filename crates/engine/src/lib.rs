@@ -61,6 +61,7 @@ struct DeviceReg {
     parameter_changed_index: u32,  // slot of the device's `parameter_changed` export; 0 if it has none
     field_changed_index: u32,      // slot of the device's `field_changed` export (observed plain fields); 0 if none
     sample_changed_index: u32,     // slot of the device's `sample_changed` export (observed samples); 0 if none
+    soundfont_changed_index: u32,  // slot of the device's `soundfont_changed` export (observed soundfont); 0 if none
     reset_index: u32,              // slot of the device's `reset` export (clears runtime state on STOP); 0 if none
     midi_effects_field: u16,       // the device's OWN midi-fx host field key when hosted as a composite child; 0 if none
     audio_effects_field: u16,      // the device's OWN audio-fx host field key when hosted as a composite child; 0 if none
@@ -180,6 +181,21 @@ fn call_device_sample_changed(sample_changed_index: u32, state_ptr: u32, id: u32
 #[cfg(not(target_family = "wasm"))]
 fn call_device_sample_changed(_sample_changed_index: u32, _state_ptr: u32, _id: u32, _handle: u32, _present: u32) {}
 
+// Call a device's `soundfont_changed(state_ptr, id, handle, present)` export to deliver an observed soundfont
+// (the resolved blob handle, or `present == 0` when the pointer is unbound). Called only inside a transaction
+// (the pointer observer), never during `process`. Mirrors `call_device_sample_changed`.
+#[cfg(target_family = "wasm")]
+#[inline]
+fn call_device_soundfont_changed(soundfont_changed_index: u32, state_ptr: u32, id: u32, handle: u32, present: u32) {
+    if soundfont_changed_index == 0 {
+        return; // the device exports no `soundfont_changed`; index 0 is the "none" sentinel
+    }
+    let soundfont_changed: extern "C" fn(u32, u32, u32, u32) = unsafe { core::mem::transmute(soundfont_changed_index as usize) };
+    soundfont_changed(state_ptr, id, handle, present);
+}
+#[cfg(not(target_family = "wasm"))]
+fn call_device_soundfont_changed(_soundfont_changed_index: u32, _state_ptr: u32, _id: u32, _handle: u32, _present: u32) {}
+
 // Call a device's `reset(state_ptr)` export to clear its runtime state on a transport STOP. Called outside
 // render, never during `process`.
 #[cfg(target_family = "wasm")]
@@ -219,6 +235,8 @@ mod param_automation;
 use param_automation::ParamHandle;
 mod sample;
 use sample::SampleResource;
+mod soundfont;
+use soundfont::SoundfontResource;
 
 const INPUT_CAPACITY: usize = 1 << 20; // initial input scratch (1 MiB); grows on demand, keeps the high-water mark
 
@@ -299,6 +317,16 @@ static SAMPLES: Shared<SampleResource> = Shared::new(SampleResource::new());
 // "unbound") to the device via `sample_changed`. Its OWN cell (NOT `ENGINE`) so the re-entrant
 // `host_observe_sample` call from `init` never aliases `&mut Engine`.
 static SAMPLE_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+
+// The soundfont resource: the simplified soundfont blobs resident in shared memory, keyed by SoundfontFileBox
+// uuid. Its OWN cell (NOT `ENGINE`) so a device's re-entrant `host_resolve_soundfont` call during render never
+// aliases the `&mut Engine` the render path holds. Mirrors `SAMPLES`.
+static SOUNDFONTS: Shared<SoundfontResource> = Shared::new(SoundfontResource::new());
+// The soundfont-observe recorder the `host_observe_soundfont` export appends to: each device's soundfont
+// pointer-field path (the Soundfont device's `file` at `[10]`). After `init` the engine reactively tracks the
+// pointer, resolving its target `SoundfontFileBox`, requesting its blob, and delivering the handle (or
+// "unbound") via `soundfont_changed`. Its OWN cell (NOT `ENGINE`). Mirrors `SAMPLE_OBS`.
+static SOUNDFONT_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
 
 // The field-observe recorder the `host_observe_field` export appends to: each device's PLAIN box-field path it
 // wants to track (e.g. a Playfield slot's `index` at `[15]`). After `init`, the engine `catchup_and_subscribe`s
@@ -476,6 +504,19 @@ pub extern "C" fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32 {
 pub extern "C" fn host_observe_sample(path_ptr: u32, path_len: u32) -> u32 {
     let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
     let obs = unsafe { SAMPLE_OBS.get() };
+    obs.push(path.to_vec());
+    obs.len() as u32 - 1
+}
+
+/// Host import a device calls from its `init` to OBSERVE its SOUNDFONT reference by the box pointer-field PATH
+/// (`[10]` for the Soundfont device's `file`). Only RECORDS the path (into `SOUNDFONT_OBS`) and returns its id;
+/// after `init` the engine reactively tracks the pointer, resolving + requesting the soundfont and delivering
+/// the handle via `soundfont_changed`. Touches no `&mut Engine`, so it is safe from `init`. Mirrors
+/// `host_observe_sample`.
+#[no_mangle]
+pub extern "C" fn host_observe_soundfont(path_ptr: u32, path_len: u32) -> u32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let obs = unsafe { SOUNDFONT_OBS.get() };
     obs.push(path.to_vec());
     obs.len() as u32 - 1
 }
@@ -791,9 +832,9 @@ impl Engine {
     /// Register a loaded device: the table slot holding its `process` and the bytes its state block needs.
     /// Returns the device id (its index). The host calls this once per device, before `bind`.
     #[allow(clippy::too_many_arguments)] // one slot per device export; positional to match the loader's call
-    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32, param_collection_field: u32, sample_collection_field: u32) -> u32 {
+    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, soundfont_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32, param_collection_field: u32, sample_collection_field: u32) -> u32 {
         let id = self.devices.len() as u32;
-        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, reset_index,
+        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index,
             midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16,
             param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16});
         id
@@ -1240,10 +1281,10 @@ pub extern "C" fn device_alloc(size: u32) -> u32 {
 /// Returns the device id. Call once per device, before `bind` (which builds the graph and wires devices).
 #[no_mangle]
 #[allow(clippy::too_many_arguments)] // one positional arg per device export, matching the loader's call
-pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32, param_collection_field: u32, sample_collection_field: u32) -> u32 {
+pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, soundfont_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32, param_collection_field: u32, sample_collection_field: u32) -> u32 {
     unsafe {
         match ENGINE.get().as_mut() {
-            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, reset_index, midi_effects_field, audio_effects_field, param_collection_field, sample_collection_field),
+            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, midi_effects_field, audio_effects_field, param_collection_field, sample_collection_field),
             None => 0
         }
     }
@@ -1335,6 +1376,48 @@ pub extern "C" fn sample_allocate(handle: u32, byte_len: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn sample_set_ready(handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
     unsafe { SAMPLES.get() }.set_ready(handle, frame_count, channel_count, sample_rate);
+}
+
+/// Resolve a soundfont handle for a device DURING render: write a `SoundfontRef` (ptr + len) to `out_ptr` and
+/// return 1 if the blob is resident (ready), else 0. Bound into each device's `env`; reads the `SOUNDFONTS`
+/// cell read-only, so it never aliases the `&mut Engine` the render path holds. Mirrors `host_resolve_sample`.
+#[no_mangle]
+pub extern "C" fn host_resolve_soundfont(handle: u32, out_ptr: u32) -> u32 {
+    match unsafe { SOUNDFONTS.get() }.resolve(handle) {
+        Some(soundfont_ref) => {
+            unsafe { *(out_ptr as *mut abi::SoundfontRef) = soundfont_ref; }
+            1
+        }
+        None => 0
+    }
+}
+
+/// Pop the next soundfont awaiting a load (queued on seeing a `SoundfontFileBox` target): write its 16-byte
+/// uuid to `out_ptr` and return its handle, or -1 when none pending. The worklet drains these after applying a
+/// transaction and dispatches each to the main-thread soundfont loader. Off-render.
+#[no_mangle]
+pub extern "C" fn soundfont_take_request(out_ptr: u32) -> i32 {
+    match unsafe { SOUNDFONTS.get() }.take_pending() {
+        Some((handle, uuid)) => {
+            unsafe { core::ptr::copy_nonoverlapping(uuid.as_ptr(), out_ptr as *mut u8, 16); }
+            handle as i32
+        }
+        None => -1
+    }
+}
+
+/// Reserve `byte_len` zeroed bytes for the soundfont blob and return the pointer the loader writes into.
+/// Off-render (the worklet calls it once the loader reports the built blob size).
+#[no_mangle]
+pub extern "C" fn soundfont_allocate(handle: u32, byte_len: u32) -> u32 {
+    unsafe { SOUNDFONTS.get() }.allocate(handle, byte_len as usize)
+}
+
+/// Mark a soundfont ready once the loader has written its blob. After this the soundfont resolves for the
+/// device. Off-render.
+#[no_mangle]
+pub extern "C" fn soundfont_set_ready(handle: u32) {
+    unsafe { SOUNDFONTS.get() }.set_ready(handle);
 }
 
 // Dynamic heap: talc claims linear memory via `memory.grow` on demand (no fixed arena) and reclaims

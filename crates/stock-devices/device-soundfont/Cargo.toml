@@ -1,0 +1,12 @@
+[package]
+name = "device-soundfont"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+abi = {path = "../../abi"}
+libm = "0.2"

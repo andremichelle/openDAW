@@ -155,6 +155,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-soundfont"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "libm",
+]
+
+[[package]]
 name = "device-spielwerk"
 version = "0.0.0"
 dependencies = [

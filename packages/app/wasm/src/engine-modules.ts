@@ -55,6 +55,7 @@ const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/device_compressor.wasm", boxType: "CompressorDeviceBox"}, // audio effect (sidechain)
     {url: "/device_reverb.wasm", boxType: "ReverbDeviceBox"},     // audio effect
     {url: "/device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
+    {url: "/device_soundfont.wasm", boxType: "SoundfontDeviceBox"}, // instrument (preset sampler)
     {url: "/device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"} // composite child (one Playfield slot)
 ]
 

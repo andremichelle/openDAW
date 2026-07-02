@@ -49,7 +49,7 @@ use crate::composite::CompositeBinding;
 use crate::audio_region_player::AudioRegionPlayer;
 use crate::time_stretch::{TimeStretchConfig, TransientPlayMode};
 use crate::tempo_map::{SharedTempoMap, TempoMap};
-use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, CompositeSpec, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
+use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, CompositeSpec, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
 
 // AudioUnitBox field keys (WASM CONTRACT: mirror the TS AudioUnitBox schema). The unit carries its strip
 // params and hosts its instrument / effect chains / tracks at these hub keys.
@@ -1838,12 +1838,14 @@ impl Engine {
         unsafe { *CURRENT_DEVICE_UUID.get() = device_uuid; }
         let paths = bind_paths(reg, state_ptr, self.sample_rate);
         let sample_paths = core::mem::take(unsafe { SAMPLE_OBS.get() }); // recorded by host_observe_sample during init
+        let soundfont_paths = core::mem::take(unsafe { SOUNDFONT_OBS.get() }); // recorded by host_observe_soundfont during init
         let field_paths = core::mem::take(unsafe { FIELD_OBS.get() }); // recorded by host_observe_field during init
         let sidechain_paths = core::mem::take(unsafe { SIDECHAIN_BIND.get() }); // recorded by host_bind_sidechain during init
         let (mut handles, mut field_subs, mut collections, mut armed) = self.observe_params(device_uuid, &paths, invalidate);
-        // The device's plain-field and sample observations both unsubscribe the same way, so keep one list.
+        // The device's plain-field, sample and soundfont observations all unsubscribe the same way, so one list.
         let mut observe_subs = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
         observe_subs.extend(self.observe_samples(device_uuid, reg, state_ptr, &sample_paths));
+        observe_subs.extend(self.observe_soundfonts(device_uuid, reg, state_ptr, &soundfont_paths));
         // SCRIPTABLE devices: also bind the dynamic parameter / sample COLLECTION children, and watch each hub's
         // membership so a child add / remove re-binds (through the same automation-invalidate path).
         let mut param_hub_sub = None;
@@ -1910,6 +1912,26 @@ impl Engine {
             let sub = self.graph.subscribe_vertex(Propagation::This, Address::of(device_uuid, path.clone()),
                 Box::new(move |graph, _update| {
                     resolve_and_deliver_sample(graph, device_uuid, &owned_path, sample_changed_index, state_ptr, id);
+                }));
+            subs.push(sub);
+        }
+        subs
+    }
+
+    /// Wire each soundfont a device asked to observe (`observe_soundfont`): catch up to the `file` pointer's
+    /// current target and subscribe to that pointer field, so a set / repoint / clear (inside a transaction,
+    /// never during render) re-resolves and re-delivers through the device's `soundfont_changed` export.
+    /// Mirrors `observe_samples`.
+    fn observe_soundfonts(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, paths: &[Vec<u16>]) -> Vec<SubscriptionId> {
+        let mut subs = Vec::new();
+        for (index, path) in paths.iter().enumerate() {
+            let id = index as u32;
+            let soundfont_changed_index = reg.soundfont_changed_index;
+            resolve_and_deliver_soundfont(&self.graph, device_uuid, path, soundfont_changed_index, state_ptr, id);
+            let owned_path = path.clone();
+            let sub = self.graph.subscribe_vertex(Propagation::This, Address::of(device_uuid, path.clone()),
+                Box::new(move |graph, _update| {
+                    resolve_and_deliver_soundfont(graph, device_uuid, &owned_path, soundfont_changed_index, state_ptr, id);
                 }));
             subs.push(sub);
         }
@@ -2092,6 +2114,7 @@ impl Engine {
 fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Vec<FieldPath> {
     unsafe { BIND.get() }.clear();
     unsafe { SAMPLE_OBS.get() }.clear();
+    unsafe { SOUNDFONT_OBS.get() }.clear();
     unsafe { FIELD_OBS.get() }.clear();
     unsafe { SIDECHAIN_BIND.get() }.clear();
     call_device_init(reg.init_index, state_ptr, sample_rate);
@@ -2124,6 +2147,20 @@ pub(crate) fn resolve_and_deliver_sample(graph: &BoxGraph, device_uuid: Uuid, pa
             call_device_sample_changed(sample_changed_index, state_ptr, id, handle, 1);
         }
         None => call_device_sample_changed(sample_changed_index, state_ptr, id, 0, 0)
+    }
+}
+
+/// Resolve a device's observed soundfont pointer to a handle and deliver it via `soundfont_changed`: a resident
+/// handle when the `file` pointer targets a `SoundfontFileBox` (the blob is requested through `SOUNDFONTS`), or
+/// "unbound" (`present = 0`) when the pointer has no target. Touches `SOUNDFONTS` (its own cell) and the device,
+/// never `&mut Engine`. Mirrors `resolve_and_deliver_sample`.
+pub(crate) fn resolve_and_deliver_soundfont(graph: &BoxGraph, device_uuid: Uuid, path: &[u16], soundfont_changed_index: u32, state_ptr: u32, id: u32) {
+    match graph.target_of(&Address::of(device_uuid, path.to_vec())) {
+        Some(target) => {
+            let handle = unsafe { SOUNDFONTS.get() }.request(target.uuid);
+            call_device_soundfont_changed(soundfont_changed_index, state_ptr, id, handle, 1);
+        }
+        None => call_device_soundfont_changed(soundfont_changed_index, state_ptr, id, 0, 0)
     }
 }
 
@@ -2760,7 +2797,7 @@ mod tests {
     fn stub_device(kind: u32) -> DeviceReg {
         DeviceReg {
             process_index: 0, state_size: 64, kind, init_index: 0, parameter_changed_index: 0,
-            field_changed_index: 0, sample_changed_index: 0, reset_index: 0,
+            field_changed_index: 0, sample_changed_index: 0, soundfont_changed_index: 0, reset_index: 0,
             midi_effects_field: 0, audio_effects_field: 0, param_collection_field: 0, sample_collection_field: 0
         }
     }

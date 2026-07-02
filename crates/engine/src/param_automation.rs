@@ -73,6 +73,23 @@ impl ValueBoundRegion {
     fn value_at(&self, position: f64, fallback: f32) -> f32 {
         self.curve.value_at(self.local(position), fallback)
     }
+
+    /// The region's OUTGOING value, for a position AT/AFTER its end (mirrors TS `ValueRegionBoxAdapter.
+    /// outgoingValue`). When the region ends exactly on a loop boundary, read the curve at the loop END
+    /// (`loop_duration`, UN-wrapped) so an automated parameter HOLDS its last value; otherwise the wrapped local
+    /// of the end. Without this, `value_at(end)` routes through `local()`, which wraps a boundary-ending region
+    /// back to the loop START — so the parameter jumps to the loop's first value instead of holding (the
+    /// "automation doesn't keep its last value when the region ends" bug). TS: `(complete - offset) %
+    /// loopDuration === 0` with `offset = position - loopOffset`, i.e. `(duration + loopOffset) % loopDuration`.
+    fn outgoing_value(&self, fallback: f32) -> f32 {
+        let ends_on_loop_pass = self.loop_duration > 0.0
+            && ((self.duration + self.loop_offset) % self.loop_duration).abs() < 1.0e-6;
+        if ends_on_loop_pass {
+            self.curve.value_at(self.loop_duration, fallback)
+        } else {
+            self.curve.value_at(self.local(self.position + self.duration), fallback)
+        }
+    }
 }
 
 /// A graph node (the instrument and audio-effect bridges) whose bound parameters the engine sets after
@@ -109,7 +126,7 @@ impl ParamCurve {
         match regions.get(floor as usize) {
             None => fallback,
             Some(region) if position < region.position + region.duration => region.value_at(position, fallback),
-            Some(region) => region.value_at(region.position + region.duration, fallback)
+            Some(region) => region.outgoing_value(fallback)
         }
     }
 }

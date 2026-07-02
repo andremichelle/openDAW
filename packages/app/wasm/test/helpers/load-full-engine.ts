@@ -4,6 +4,7 @@
 
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
+import {UUID} from "@opendaw/lib-std"
 import {ScriptBridges, ScriptEngine} from "../../src/script-bridge"
 
 const PUBLIC = path.resolve(__dirname, "../../public")
@@ -32,7 +33,8 @@ const DEVICES: ReadonlyArray<{file: string, boxType: string}> = [
     {file: "device_maximizer.wasm", boxType: "MaximizerDeviceBox"}, // audio effect
     {file: "device_compressor.wasm", boxType: "CompressorDeviceBox"}, // audio effect (sidechain)
     {file: "device_reverb.wasm", boxType: "ReverbDeviceBox"}, // audio effect
-    {file: "device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"} // audio effect
+    {file: "device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
+    {file: "device_soundfont.wasm", boxType: "SoundfontDeviceBox"} // instrument (preset sampler)
 ]
 type CompositeSpec = {boxType: string, childrenField: number, indexKey: number, excludeKey: number,
     cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number}
@@ -124,6 +126,8 @@ export const loadFullEngine = async (sampleRate = 48000): Promise<FullEngine> =>
                 host_next_update_position: engine.host_next_update_position,
                 host_resolve_sample: engine.host_resolve_sample,
                 host_observe_sample: engine.host_observe_sample,
+                host_resolve_soundfont: engine.host_resolve_soundfont,
+                host_observe_soundfont: engine.host_observe_soundfont,
                 host_observe_field: engine.host_observe_field,
                 host_bind_sidechain: engine.host_bind_sidechain,
                 host_resolve_input: engine.host_resolve_input,
@@ -139,6 +143,7 @@ export const loadFullEngine = async (sampleRate = 48000): Promise<FullEngine> =>
             processIndex, device.state_size(sampleRate), device.kind(),
             installOptional(device.init), installOptional(device.parameter_changed),
             installOptional(device.field_changed), installOptional(device.sample_changed),
+            installOptional(device.soundfont_changed),
             installOptional(device.reset),
             device.midi_effects_field?.() ?? 0, device.audio_effects_field?.() ?? 0,
             device.observe_param_collection_field?.() ?? 0, device.observe_sample_collection_field?.() ?? 0)
@@ -174,5 +179,22 @@ export const loadFullEngine = async (sampleRate = 48000): Promise<FullEngine> =>
         }
         return satisfied
     }
-    return {engine, memory, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples}
+    // Satisfy pending soundfont requests: the test supplies the simplified blob bytes for each requested uuid
+    // (mirrors the main-thread SoundfontLoader that builds the blob from the parsed .sf2).
+    const drainSoundfonts = (build: (uuid: string) => ArrayBuffer): number => {
+        let satisfied = 0
+        for (; ;) {
+            const requestPtr = engine.input_reserve(16)
+            const handle = engine.soundfont_take_request(requestPtr)
+            if (handle < 0) {break}
+            const uuid = UUID.toString(new Uint8Array(memory.buffer.slice(requestPtr, requestPtr + 16)) as UUID.Bytes)
+            const blob = new Uint8Array(build(uuid))
+            const pointer = engine.soundfont_allocate(handle, blob.byteLength)
+            new Uint8Array(memory.buffer, pointer, blob.byteLength).set(blob)
+            engine.soundfont_set_ready(handle)
+            satisfied++
+        }
+        return satisfied
+    }
+    return {engine, memory, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
 }

@@ -37,7 +37,7 @@ DEVICE_TOOLCHAIN="${DEVICE_TOOLCHAIN:-nightly}"
 
 # The PIC side-module device crates. ADD A NEW DEVICE HERE (its crate name) and it is built, size-optimised,
 # and copied to public/ automatically. The wasm artifact basename is the crate name with '-' -> '_'.
-DEVICE_CRATES="device-lowpass device-transpose device-arp device-zeitgeist device-tidal device-vaporisateur device-nano device-delay device-playfield-slot device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb"
+DEVICE_CRATES="device-lowpass device-transpose device-arp device-zeitgeist device-tidal device-vaporisateur device-nano device-delay device-playfield-slot device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb device-soundfont"
 
 cargo rustc -p engine --release --target "$TARGET" -- \
   -C link-arg=--import-memory -C link-arg=--import-table $SHARED

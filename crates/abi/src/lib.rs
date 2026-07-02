@@ -158,6 +158,8 @@ extern "C" {
     fn host_next_update_position(after: f64) -> f64;
     fn host_resolve_sample(handle: u32, out_ptr: u32) -> u32;
     fn host_observe_sample(path_ptr: u32, path_len: u32) -> u32;
+    fn host_resolve_soundfont(handle: u32, out_ptr: u32) -> u32;
+    fn host_observe_soundfont(path_ptr: u32, path_len: u32) -> u32;
     fn host_observe_field(path_ptr: u32, path_len: u32) -> u32;
     fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
@@ -369,6 +371,60 @@ pub fn resolve_sample(handle: u32) -> Option<SampleRef> {
         let _ = handle;
         None
     }
+}
+
+/// A resolved SOUNDFONT: a pointer + byte length of the simplified soundfont BLOB resident in the engine's
+/// shared linear memory (built on the main thread from the parsed SF2 — sample table + region table + preset
+/// table + PLANAR-normalized f32 PCM). `#[repr(C)]` so the engine writes it straight into the device's out
+/// pointer, exactly like [`SampleRef`]. The device reads the blob IN PLACE (offset arithmetic, no allocation).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SoundfontRef {
+    pub ptr: u32,
+    pub len: u32
+}
+
+impl SoundfontRef {
+    /// The blob as a safe byte slice. The one `unsafe` stays here in the shim; the device reads scalars out of
+    /// it by fixed offset. Borrows the resident soundfont memory, valid while the soundfont stays resident.
+    #[inline]
+    pub fn bytes(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.ptr as *const u8, self.len as usize) }
+    }
+}
+
+/// Resolve a soundfont `handle` to its resident BLOB (ptr + len), or `None` when not yet resident (the device
+/// stays silent for the note). Mirrors [`resolve_sample`]: the host writes a [`SoundfontRef`] into an on-stack
+/// scratch and returns 1 when resident. Native stub returns `None`.
+#[inline]
+pub fn resolve_soundfont(handle: u32) -> Option<SoundfontRef> {
+    #[cfg(target_family = "wasm")]
+    {
+        let mut out = SoundfontRef {ptr: 0, len: 0};
+        if unsafe { host_resolve_soundfont(handle, &mut out as *mut SoundfontRef as u32) } != 0 {
+            Some(out)
+        } else {
+            None
+        }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let _ = handle;
+        None
+    }
+}
+
+/// Observe this device's SOUNDFONT reference by its box pointer-field PATH (e.g. `[10]` for the Soundfont
+/// device's `file`), returning an id the device matches in [`Instrument::soundfont_changed`]. The host tracks
+/// that pointer reactively: on catch-up and whenever it is set / repointed / cleared it resolves the target
+/// `SoundfontFileBox`, requests its simplified blob, and delivers the handle through `soundfont_changed` (a
+/// resident handle, or "unbound"). Mirrors [`observe_sample`]. A device calls this from `init`. Native stub 0.
+#[inline]
+pub fn observe_soundfont(path: &[u16]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_observe_soundfont(path.as_ptr() as u32, path.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = path; 0 }
 }
 
 /// Observe this device's sample reference by its box pointer-field PATH (e.g. `[11]` for a Playfield slot's
@@ -825,6 +881,13 @@ pub trait Instrument {
     /// on add / remove / repoint, only inside a transaction. Default: nothing (no samples).
     fn sample_changed(state: &mut Self::State, id: u32, sample: Option<u32>) {
         let _ = (state, id, sample);
+    }
+    /// Apply this device's observed SOUNDFONT reference for `id` (the value [`observe_soundfont`] returned),
+    /// storing the handle in `state`. `soundfont` is `Some(handle)` to later [`resolve_soundfont`] when the
+    /// `file` pointer targets a `SoundfontFileBox`, or `None` when unbound. Delivered on catch-up and on
+    /// add / remove / repoint, only inside a transaction. Default: nothing (no soundfont).
+    fn soundfont_changed(state: &mut Self::State, id: u32, soundfont: Option<u32>) {
+        let _ = (state, id, soundfont);
     }
     /// Once per quantum, after all blocks (e.g. a feedback delay over the whole stereo `output`). Default: nothing.
     fn finish(state: &mut Self::State, output: [&mut [f32]; 2]) {

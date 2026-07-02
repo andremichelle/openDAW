@@ -6,6 +6,8 @@ import {ApparatDeviceBox, BoxIO, SpielwerkDeviceBox, WerkstattDeviceBox} from "@
 import {EngineStateSchema, ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
 import {AudioData, PPQN} from "@opendaw/lib-dsp"
 import {SampleInfo, SampleLoader} from "./sample-loader"
+import {SoundfontInfo, SoundfontLoader} from "./soundfont-loader"
+import {loadSoundfontBlob} from "./soundfont-fetch"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
 import {loadSampleCached} from "./sample-fetch"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
@@ -184,6 +186,32 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
             }
         }
         lifecycle.own(Communicator.executor<SampleLoader>(messenger.channel("samples"), sampleLoader))
+        // The soundfont analog: fetch + parse the .sf2 on the main thread, build the simplified blob, and write
+        // it into the engine allocation. The wasm side only ever sees the blob.
+        const heldSoundfonts = new Map<string, Uint8Array>()
+        const soundfontLoader: SoundfontLoader = new class implements SoundfontLoader {
+            async decode(uuid: UUID.Bytes): Promise<SoundfontInfo> {
+                const id = UUID.toString(uuid)
+                append(`soundfont ${id}: requesting…`)
+                try {
+                    const blob = new Uint8Array(await loadSoundfontBlob(uuid))
+                    heldSoundfonts.set(id, blob)
+                    append(`soundfont ${id}: built ${blob.byteLength} bytes`)
+                    return {byteLength: blob.byteLength}
+                } catch (error) {
+                    append(`soundfont ${id}: FAILED ${error instanceof Error ? error.message : String(error)}`)
+                    throw error
+                }
+            }
+            async write(uuid: UUID.Bytes, pointer: number): Promise<void> {
+                const key = UUID.toString(uuid)
+                const blob = asDefined(heldSoundfonts.get(key), "soundfont not built")
+                new Uint8Array(memory.buffer, pointer, blob.byteLength).set(blob)
+                append(`soundfont ${key}: written @ ptr ${pointer} (${blob.byteLength} bytes)`)
+                heldSoundfonts.delete(key)
+            }
+        }
+        lifecycle.own(Communicator.executor<SoundfontLoader>(messenger.channel("soundfonts"), soundfontLoader))
         // SyncSource (unchanged) -> local BroadcastChannel loopback -> serialize (this graph's schema) -> worklet bytes.
         const sender = new BroadcastChannel(options.channel)
         const receiver = new BroadcastChannel(options.channel)
