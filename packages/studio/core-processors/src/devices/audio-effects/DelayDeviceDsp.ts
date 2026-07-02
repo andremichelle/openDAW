@@ -3,6 +3,7 @@ import {BiquadCoeff, BiquadMono, BiquadProcessor, Delay, Smooth, StereoMatrix} f
 
 const LIMITER_ATTACK_MS = 50.0
 const LIMITER_RELEASE_MS = 250.0
+const DEFAULT_SAMPLE_RATE = 48000
 
 export class DelayDeviceDsp {
     // Lazy-initialized to avoid crash when sampleRate is 0 (Node.js/test contexts).
@@ -11,7 +12,7 @@ export class DelayDeviceDsp {
     static #filterMapping: ValueMapping<number> | null = null
     static get FilterMapping(): ValueMapping<number> {
         if (DelayDeviceDsp.#filterMapping === null) {
-            const sr = sampleRate > 0 ? sampleRate : 48000
+            const sr = sampleRate > 0 ? sampleRate : DEFAULT_SAMPLE_RATE
             DelayDeviceDsp.#filterMapping = ValueMapping.exponential(20.0 / sr, 20000.0 / sr)
         }
         return DelayDeviceDsp.#filterMapping
