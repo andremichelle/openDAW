@@ -3,9 +3,20 @@ import {BiquadCoeff, BiquadMono, BiquadProcessor, Delay, Smooth, StereoMatrix} f
 
 const LIMITER_ATTACK_MS = 50.0
 const LIMITER_RELEASE_MS = 250.0
+const DEFAULT_SAMPLE_RATE = 48000
 
 export class DelayDeviceDsp {
-    static readonly FilterMapping: ValueMapping<number> = ValueMapping.exponential(20.0 / sampleRate, 20000.0 / sampleRate)
+    // Lazy-initialized to avoid crash when sampleRate is 0 (Node.js/test contexts).
+    // See issue #279: static initializer with `20.0 / sampleRate` produces Infinity
+    // when sampleRate=0, causing Exponential assertion failure at import time.
+    static #filterMapping: ValueMapping<number> | null = null
+    static get FilterMapping(): ValueMapping<number> {
+        if (DelayDeviceDsp.#filterMapping === null) {
+            const sr = sampleRate > 0 ? sampleRate : DEFAULT_SAMPLE_RATE
+            DelayDeviceDsp.#filterMapping = ValueMapping.exponential(20.0 / sr, 20000.0 / sr)
+        }
+        return DelayDeviceDsp.#filterMapping
+    }
 
     readonly #delaySize: int
     readonly #delayMask: int
