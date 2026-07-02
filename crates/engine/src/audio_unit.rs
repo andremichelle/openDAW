@@ -29,6 +29,9 @@ use boxgraph::subscription::{HubEvent, Propagation, SubscriptionId};
 use engine_env::audio_buffer::SharedAudioBuffer;
 use engine_env::audio_generator::AudioGenerator;
 use engine_env::audio_input::AudioInput;
+use engine_env::audio_buffer::shared_audio_buffer;
+use engine_env::audio_bus_processor::AudioBusProcessor;
+use engine_env::aux_send::{AuxSendProcessor, SendParams};
 use engine_env::channel_strip::{ChannelStripProcessor, StripParams};
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
@@ -57,6 +60,8 @@ const UNIT_TRACKS_KEY: u16 = 20;   // track-membership hub
 const UNIT_MIDI_KEY: u16 = 21;     // midi-effect chain host
 const UNIT_INPUT_KEY: u16 = 22;    // instrument (input) host
 const UNIT_AUDIO_KEY: u16 = 23;    // audio-effect chain host
+const UNIT_AUX_SENDS_KEY: u16 = 24; // the unit's `auxSends` collection (parallel post-FX / pre-fader sends)
+const UNIT_OUTPUT_KEY: u16 = 25;   // the unit's `output` pointer -> the AudioBusBox `input` it feeds (or the root)
 // RootBox.audio-units hub (unit membership) — a different box, same ordinal.
 const ROOT_AUDIO_UNITS_KEY: u16 = 20;
 // A unit-level device box's `enabled` BooleanField (WASM CONTRACT: the base device schema; a disabled
@@ -65,6 +70,13 @@ pub(crate) const DEVICE_ENABLED_KEY: u16 = 4;
 // The instrument box type whose audio source is the engine-side audio-region player (it reads the unit's AUDIO
 // tracks rather than mapping to a wasm device). WASM CONTRACT: mirrors the TS TapeDeviceBox class name.
 const TAPE_BOX_TYPE: &str = "TapeDeviceBox";
+const DEVICE_HOST_KEY: u16 = 1; // every device box's `host` pointer (field 1) -> its owning unit's host address
+const BUS_BOX_TYPE: &str = "AudioBusBox"; // a unit whose `input` device is one is a RETURN / submix bus channel
+const BUS_ENABLED_KEY: u16 = 4; // AudioBusBox.enabled: a disabled bus sums nothing (emits silence)
+// AuxSendBox fields: targetBus (2, pointer -> the bus's `input`), sendGain (5, dB), sendPan (6, bipolar).
+const SEND_TARGET_KEY: u16 = 2;
+const SEND_GAIN_KEY: u16 = 5;
+const SEND_PAN_KEY: u16 = 6;
 
 /// The handle a unit's subscriptions use to enqueue THAT unit for reconcile when its scope changes, so a
 /// related edit reconciles one unit instead of sweeping all units (the Rust analog of TS's per-unit
@@ -256,7 +268,74 @@ struct AudioTrackBinding {
 enum Wired {
     Leaf(LeafChain),
     Composite(CompositeWired),
-    Tape(TapeWired)
+    Tape(TapeWired),
+    Bus(BusWired)
+}
+
+impl Wired {
+    /// The unit's channel-strip node + output buffer — the source a `resolve_outputs` route feeds into its
+    /// target bus. Uniform across every wiring kind.
+    fn strip(&self) -> (NodeId, SharedAudioBuffer) {
+        match self {
+            Wired::Leaf(chain) => (chain.strip_id, chain.strip_output.clone()),
+            Wired::Composite(composite) => (composite.strip_id, composite.strip_output.clone()),
+            Wired::Tape(tape) => (tape.strip_id, tape.strip_output.clone()),
+            Wired::Bus(bus) => (bus.strip_id, bus.strip_output.clone())
+        }
+    }
+
+    /// The POST-effects / PRE-fader tap: the buffer feeding the channel strip + the node that produces it. An
+    /// `AuxSendProcessor` reads this buffer (pre volume/pan/mute) and depends on this node for ordering.
+    fn pre_strip(&self) -> (NodeId, SharedAudioBuffer) {
+        match self {
+            Wired::Leaf(chain) => (chain.pre_strip_node, chain.pre_strip.clone()),
+            Wired::Composite(composite) => (composite.pre_strip_node, composite.pre_strip.clone()),
+            Wired::Tape(tape) => (tape.pre_strip_node, tape.pre_strip.clone()),
+            Wired::Bus(bus) => (bus.pre_strip_node, bus.pre_strip.clone())
+        }
+    }
+}
+
+/// A RETURN / submix-bus unit's wiring: its `AudioBusBox` input becomes a summing `AudioBusProcessor` (`sum`,
+/// registered in `bus_registry` so sources route into it); the bus's own audio-effect chain runs over the sum
+/// (`sum -> fx0 -> ... -> strip`), and the strip's output is routed to the bus's own `output` target like any
+/// unit. Rebuilt wholesale on a chain edit (like tape / composite), so `nodes` / `edges` / `device_params`
+/// carry everything to tear down.
+struct BusWired {
+    bus_uuid: Uuid, // the AudioBusBox uuid; its sum node + `bus_registry` entry are dropped on teardown
+    pre_strip: SharedAudioBuffer, // the fx-chain output feeding the strip (the send tap)
+    pre_strip_node: NodeId,
+    strip_id: NodeId,
+    strip_output: SharedAudioBuffer,
+    nodes: Vec<NodeId>,           // sum + fx nodes + strip (removed on teardown)
+    edges: Vec<(NodeId, NodeId)>, // sum -> fx0 -> ... -> strip
+    device_params: Vec<DeviceParams>,
+    sidechains: Vec<SidechainBinding>, // a sidechained bus effect (e.g. a ducking compressor) resolved each pass
+    subs: Vec<SubscriptionId>     // the bus `enabled` monitor + each fx device's `enabled` monitor
+}
+
+/// A unit's currently-wired OUTPUT route: which target bus sum its channel strip feeds. `bus` is the target
+/// `AudioBusBox` uuid (`None` = the primary bus, i.e. the fixed `master` fallback); `sum_id` the sum node the
+/// strip edge points at; `strip_id` / `strip_output` the source, kept so the route can be torn down (remove the
+/// summed source + the edge) even after the strip is rebuilt. Diffed each `resolve_outputs` pass so a re-point
+/// or a strip rebuild re-wires exactly once.
+struct Routed {
+    bus: Option<Uuid>,
+    sum_id: NodeId,
+    strip_id: NodeId,
+    strip_output: SharedAudioBuffer
+}
+
+/// One built parallel AUX SEND: the `AuxSendProcessor` tapping this unit's PRE-fader buffer, plus its resolution
+/// state. `source` is the pre-strip node currently wired as its input; `target` the resolved target bus (uuid +
+/// sum node) its output feeds; both diffed in `resolve_sends` so a re-point / strip rebuild re-wires once.
+struct SendBinding {
+    send_uuid: Uuid,
+    proc: Rc<RefCell<AuxSendProcessor>>,
+    node_id: NodeId,
+    source: Option<NodeId>,
+    target: Option<(Option<Uuid>, NodeId)>,
+    subs: Vec<SubscriptionId> // targetBus (2) pointer monitor + sendGain (5) / sendPan (6) field observers
 }
 
 /// A TAPE / audio-region unit's wiring: the engine-side audio-region player (reads the unit's AUDIO tracks) ->
@@ -264,9 +343,14 @@ enum Wired {
 /// `audio_track_sets` live, so a region edit needs no rebuild.
 struct TapeWired {
     player_id: NodeId,
+    instrument_uuid: Uuid,        // the TapeDeviceBox uuid: the player output is registered under it so a SIDECHAIN
+                                  // targeting the tape device taps its RAW output (pre fx / strip), matching TS
+    audio: Vec<Member>,           // the unit's AUDIO-effects chain (player -> fx0 -> ... -> strip), like a leaf
+    pre_strip: SharedAudioBuffer, // the fx-chain output feeding the strip (the send tap; == player output if no fx)
+    pre_strip_node: NodeId,
     strip_id: NodeId,
     strip_output: SharedAudioBuffer,
-    tail_edges: Vec<(NodeId, NodeId)> // player -> strip, strip -> master
+    edges: Vec<(NodeId, NodeId)>  // player -> fx0 -> ... -> strip
 }
 
 /// A held device processor, kept alive across rewires so its DSP state (voices, delay tails, filter history)
@@ -306,6 +390,8 @@ struct LeafChain {
     midi: Vec<Member>,
     audio: Vec<Member>,
     strip: Rc<RefCell<ChannelStripProcessor>>,
+    pre_strip: SharedAudioBuffer, // the fx-chain output feeding the strip (the send tap)
+    pre_strip_node: NodeId,
     strip_id: NodeId,
     strip_output: SharedAudioBuffer,
     edges: Vec<(NodeId, NodeId)>
@@ -365,9 +451,11 @@ impl SlotCluster {
 /// strip and the `sum -> strip -> master` edges. The strip persists across child edits (the sum bus is stable).
 struct CompositeWired {
     binding: CompositeBinding,
+    pre_strip: SharedAudioBuffer, // the composite sum feeding the strip (the send tap)
+    pre_strip_node: NodeId,       // == binding.sum_id
     strip_id: NodeId,
     strip_output: SharedAudioBuffer,
-    tail_edges: Vec<(NodeId, NodeId)>, // sum -> strip, strip -> master
+    tail_edges: Vec<(NodeId, NodeId)>, // sum -> strip
     // A TARGETED `This` monitor on the composite DEVICE's `enabled`: a toggle enqueues the unit (plain mark, NOT
     // `wiring_dirty`), so reconcile lands in the per-child branch and re-applies the sum gate without a rebuild.
     enabled_sub: SubscriptionId
@@ -469,6 +557,14 @@ pub(crate) struct AudioUnitBinding {
     input: IndexedCollection,
     midi: IndexedCollection,
     audio: IndexedCollection,
+    // SEND/RETURN: the unit's `output` (25) pointer monitor (a re-point enqueues the unit so `resolve_outputs`
+    // re-routes it) + the CURRENT output route (which bus sum the strip feeds), and the `auxSends` (24)
+    // collection + its built parallel sends. `routed` persists across rewires so a route can be torn down even
+    // as the strip is rebuilt; `sends` each resolve their target bus in `resolve_sends`.
+    output_sub: SubscriptionId,
+    routed: Option<Routed>,
+    aux_sends: IndexedCollection,
+    sends: Vec<SendBinding>,
     // The wired processor graph: a leaf unit's persistent per-member chain, or a composite unit's bundle.
     // `None` until the first reconcile (or a unit with no resolvable instrument). The instrument's composite
     // cascade, the sidechain bindings, and the bound parameters all live INSIDE this now (per member for a
@@ -636,6 +732,8 @@ impl Engine {
         // An idle transaction skips it entirely. The pass itself is diff-based, so it no-ops per unchanged port.
         if did_work {
             self.resolve_sidechains();
+            self.resolve_outputs(); // route each unit's strip to its OUTPUT bus (or the master fallback)
+            self.resolve_sends();   // wire each parallel aux send: pre-fader tap -> target bus
         }
     }
 
@@ -667,6 +765,11 @@ impl Engine {
                 self.reconcile_composite_children(&mut composite.binding, &track_sets, &signal, &invalidate);
             }
         }
+        // The unit's parallel aux sends: build / destroy the send processors on a collection change (source +
+        // target-bus edges are wired by `resolve_sends` at the end of the reconcile). Dirty on the first build.
+        if unit.aux_sends.take_dirty() {
+            self.reconcile_sends(unit);
+        }
         if automation_changed {
             self.rebind_automation(unit);
         }
@@ -695,7 +798,19 @@ impl Engine {
                 Some(Wired::Composite(composite)) => {
                     composite.binding.for_each_sidechain(&mut |binding| self.resolve_one_sidechain(binding));
                 }
-                Some(Wired::Tape(_)) | None => {} // an audio-region player has no sidechains
+                Some(Wired::Tape(tape)) => {
+                    for member in &mut tape.audio {
+                        if let Some(binding) = &mut member.sidechain {
+                            self.resolve_one_sidechain(binding);
+                        }
+                    }
+                }
+                Some(Wired::Bus(bus)) => {
+                    for binding in &mut bus.sidechains {
+                        self.resolve_one_sidechain(binding);
+                    }
+                }
+                None => {}
             }
         }
         self.audio_units = units;
@@ -709,8 +824,20 @@ impl Engine {
         let mut sources: Vec<(u32, SharedAudioBuffer)> = Vec::new();
         for port in &mut binding.ports {
             let target = self.graph.target_of(&Address::of(binding.device_uuid, port.path.clone())).cloned();
-            let resolution = target.and_then(|target| self.output_registry.resolve(&Address::of(target.uuid, vec![]))
-                .map(|output| (output.processor, output.buffer.clone())));
+            let resolution = target.and_then(|target| {
+                // The sidechain pointer targets a UNIT (its strip output) or a DEVICE. TS taps the DEVICE's own
+                // output (e.g. the tape instrument's RAW output, before the unit's audio effects + strip), so a
+                // device that registers its output under its own uuid (currently the tape instrument) resolves
+                // directly. Otherwise follow the device's `host` pointer (field 1) to the owning unit's strip
+                // output as a fallback; without either, detection falls back to the compressor's own (hot) input.
+                let source_uuid = if self.output_registry.resolve(&Address::of(target.uuid, vec![])).is_some() {
+                    Some(target.uuid)
+                } else {
+                    self.graph.target_of(&Address::of(target.uuid, vec![DEVICE_HOST_KEY])).map(|host| host.uuid)
+                };
+                source_uuid.and_then(|uuid| self.output_registry.resolve(&Address::of(uuid, vec![]))
+                    .map(|output| (output.processor, output.buffer.clone())))
+            });
             let source_node = resolution.as_ref().map(|(node, _)| *node);
             if source_node != port.resolved {
                 if let Some(old) = port.resolved {
@@ -731,9 +858,302 @@ impl Engine {
         }
     }
 
+    // ---- SEND / RETURN routing ------------------------------------------------------------------------------
+    //
+    // A unit's channel strip feeds its OUTPUT bus (a RETURN / submix `AudioBusBox`, or the primary bus = the
+    // fixed `master` fallback). A bus unit's `AudioBusBox` input becomes a summing `AudioBusProcessor`
+    // (`bus_registry`), so any source routing to it sums in, then the bus runs its own fx + strip. Parallel
+    // `AuxSendBox`es tap a unit's PRE-fader buffer into a target bus. Wiring is DEFERRED to `resolve_outputs`
+    // / `resolve_sends` (like sidechains), so it is order-independent: all buses are registered by the time the
+    // resolve passes run at the end of `reconcile_units`. A feedback loop is rejected up front (`would_cycle`).
+
+    /// The RETURN / submix-bus path: the unit's `input` device is an `AudioBusBox`, so build a summing bus
+    /// (`sum`), register it so sources route in, run the bus's own audio-effect chain over it, then a channel
+    /// strip; the strip's output is routed to the bus's own `output` by `resolve_outputs`. Wholesale rebuild on
+    /// a chain edit (like tape / composite).
+    fn reconcile_bus(&mut self, unit: &mut AudioUnitBinding, bus_uuid: Uuid, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) {
+        self.teardown_unit_wired(unit);
+        let sum_buffer = shared_audio_buffer();
+        let sum = Rc::new(RefCell::new(AudioBusProcessor::new(sum_buffer.clone())));
+        let sum_id = self.context.register_processor(sum.clone());
+        self.bus_registry.insert(bus_uuid, (sum.clone(), sum_id));
+        let mut nodes = vec![sum_id];
+        let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut device_params: Vec<DeviceParams> = Vec::new();
+        let mut sidechains: Vec<SidechainBinding> = Vec::new();
+        let mut subs: Vec<SubscriptionId> = Vec::new();
+        // A disabled bus (`enabled` = 4) sums nothing (emits silence).
+        let sum_enable = sum.clone();
+        subs.push(self.graph.catchup_and_subscribe(Address::of(bus_uuid, vec![BUS_ENABLED_KEY]), move |value| {
+            if let Some(enabled) = value.as_bool() { sum_enable.borrow_mut().set_enabled(enabled) }
+        }));
+        // The bus's own audio-effect chain (host 23), ordered by index, enabled only: sum -> fx0 -> ... Each
+        // enabled / disabled effect gets a `This` monitor so a toggle re-wires (wholesale, like a chain edit).
+        let mut source = sum_buffer;
+        let mut source_id = sum_id;
+        for device_uuid in unit.audio.sorted() {
+            let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
+            let device = match resolved {
+                Some(device) if device.kind == DEVICE_KIND_AUDIO_EFFECT => device,
+                _ => continue
+            };
+            let rewire = Self::rewire_signal(unit);
+            subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(device_uuid, vec![DEVICE_ENABLED_KEY]),
+                Box::new(move |_graph, _update| rewire())));
+            if !self.device_enabled(device_uuid) {
+                continue; // bypassed: not built, not wired into the chain
+            }
+            let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
+            let node_state = node.borrow().state_ptr();
+            let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
+            let params = self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink), invalidate);
+            node.borrow_mut().set_audio_source(source);
+            source = node.borrow().audio_output();
+            let node_id = self.context.register_processor(node.clone());
+            // A sidechained bus effect (e.g. a ducking compressor on a submix): build its sidechain binding so the
+            // resolve pass feeds it the source unit's signal. Without this it detects on its own (hot) main input
+            // and over-ducks everything routed through the bus.
+            if !params.sidechain_paths.is_empty() {
+                let mut ports = Vec::new();
+                for (index, path) in params.sidechain_paths.iter().cloned().enumerate() {
+                    let port_signal = signal.clone();
+                    let pointer_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(device_uuid, path.clone()),
+                        Box::new(move |_graph, _update| port_signal()));
+                    ports.push(SidechainPort {port_id: index as u32 + 2, path, resolved: None, pointer_sub});
+                }
+                sidechains.push(SidechainBinding {effect: node.clone(), node_id, device_uuid, ports});
+            }
+            device_params.push(params);
+            self.context.register_edge(source_id, node_id);
+            edges.push((source_id, node_id));
+            nodes.push(node_id);
+            source_id = node_id;
+        }
+        let position = self.transport.position();
+        for params in &device_params {
+            refresh_params(&params.handles, params.reg, params.state_ptr, position);
+        }
+        let pre_strip = source.clone();
+        let pre_strip_node = source_id;
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
+        strip.borrow_mut().set_audio_source(source);
+        let strip_output = strip.borrow().audio_output();
+        let strip_id = self.context.register_processor(strip);
+        self.context.register_edge(source_id, strip_id);
+        edges.push((source_id, strip_id));
+        nodes.push(strip_id);
+        self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
+        unit.wired = Some(Wired::Bus(BusWired {
+            bus_uuid, pre_strip, pre_strip_node, strip_id, strip_output, nodes, edges, device_params, sidechains, subs
+        }));
+    }
+
+    /// Drop a unit's current OUTPUT route (the strip -> target bus summed source + ordering edge). A torn-down
+    /// bus is already absent from `bus_registry` (its sum + incoming edges vanished with it), so its source
+    /// removal is simply skipped.
+    fn unwire_output_route(&mut self, unit: &mut AudioUnitBinding) {
+        let Some(route) = unit.routed.take() else { return };
+        let sum = match route.bus {
+            Some(bus_uuid) => self.bus_registry.get(&bus_uuid).map(|(sum, _)| sum.clone()),
+            None => self.master.clone()
+        };
+        if let Some(sum) = sum {
+            sum.borrow_mut().remove_audio_source(&route.strip_output);
+        }
+        if self.context.has_node(route.sum_id) {
+            self.context.remove_edge(route.strip_id, route.sum_id);
+        }
+    }
+
+    /// Re-resolve EVERY unit's OUTPUT route against the current graph, diff-based (a no-op per unchanged unit).
+    /// Run at the end of a working `reconcile_units`, after all units + buses are (re)built, so a source that
+    /// targets a bus resolves once the bus is registered. Mirrors `resolve_sidechains`.
+    fn resolve_outputs(&mut self) {
+        let mut units = core::mem::take(&mut self.audio_units);
+        for unit in &mut units {
+            self.resolve_one_output(unit);
+        }
+        self.audio_units = units;
+    }
+
+    /// Resolve ONE unit's output route: follow `output` (25) to the target `AudioBusBox`; a registered
+    /// (non-primary) bus resolves to its sum, anything else (the primary bus, unset, or a dangling / not-yet-
+    /// built bus) falls back to the `master`. Re-wire only when the source strip or the target sum changed; a
+    /// feedback loop is left unrouted (silent) rather than silently broken by the topological sort.
+    fn resolve_one_output(&mut self, unit: &mut AudioUnitBinding) {
+        let Some((strip_id, strip_output)) = unit.wired.as_ref().map(|wired| wired.strip()) else {
+            self.unwire_output_route(unit); // no wired chain: drop any stale route
+            return;
+        };
+        let target_bus: Option<Uuid> = self.graph.target_of(&Address::of(unit.unit, vec![UNIT_OUTPUT_KEY]))
+            .map(|target| target.uuid)
+            .filter(|uuid| self.bus_registry.contains_key(uuid));
+        let (sum_rc, sum_id) = match target_bus {
+            Some(bus_uuid) => { let (sum, id) = &self.bus_registry[&bus_uuid]; (sum.clone(), *id) }
+            None => (self.master.clone().unwrap(), self.master_id)
+        };
+        if let Some(route) = &unit.routed {
+            if route.strip_id == strip_id && route.sum_id == sum_id {
+                return; // unchanged
+            }
+        }
+        self.unwire_output_route(unit);
+        if self.context.would_cycle(strip_id, sum_id) {
+            return; // a feedback loop: leave unrouted (silent); a later edit can fix it
+        }
+        sum_rc.borrow_mut().add_audio_source(strip_output.clone());
+        self.context.register_edge(strip_id, sum_id);
+        unit.routed = Some(Routed {bus: target_bus, sum_id, strip_id, strip_output});
+    }
+
+    /// Reconcile a unit's parallel AUX SENDS against its `auxSends` (24) collection: build joiners, terminate
+    /// leavers, in collection order. Only the send PROCESSORS + their param subscriptions are (de)allocated
+    /// here; their source (pre-fader tap) + target-bus edges are wired by `resolve_sends`.
+    fn reconcile_sends(&mut self, unit: &mut AudioUnitBinding) {
+        let desired = unit.aux_sends.sorted();
+        let existing = core::mem::take(&mut unit.sends);
+        let (mut pool, gone): (Vec<SendBinding>, Vec<SendBinding>) =
+            existing.into_iter().partition(|send| desired.contains(&send.send_uuid));
+        for send in gone {
+            self.teardown_send(send);
+        }
+        let mut sends = Vec::new();
+        for send_uuid in desired {
+            if let Some(index) = pool.iter().position(|send| send.send_uuid == send_uuid) {
+                sends.push(pool.remove(index));
+            } else {
+                let mark = unit.mark.clone();
+                sends.push(self.build_send(send_uuid, &mark));
+            }
+        }
+        unit.sends = sends;
+    }
+
+    /// Build one aux send: its `AuxSendProcessor` reading the send's `sendGain` (5, dB) / `sendPan` (6, bipolar)
+    /// via a shared `SendParams` (kept in sync with the box, de-clicked in the node), plus a `targetBus` (2)
+    /// pointer monitor that re-resolves on a re-point.
+    fn build_send(&mut self, send_uuid: Uuid, mark: &DirtyMark) -> SendBinding {
+        let params = Rc::new(SendParams::new());
+        let mut subs = Vec::new();
+        let gain = params.clone();
+        subs.push(self.graph.catchup_and_subscribe(Address::of(send_uuid, vec![SEND_GAIN_KEY]), move |value| {
+            if let Some(value) = value.as_float32() { gain.gain_db.set(value) }
+        }));
+        let pan = params.clone();
+        subs.push(self.graph.catchup_and_subscribe(Address::of(send_uuid, vec![SEND_PAN_KEY]), move |value| {
+            if let Some(value) = value.as_float32() { pan.pan.set(value) }
+        }));
+        let target_mark = mark.clone();
+        subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(send_uuid, vec![SEND_TARGET_KEY]),
+            Box::new(move |_graph, _update| target_mark.mark())));
+        let proc = Rc::new(RefCell::new(AuxSendProcessor::new(params, self.sample_rate)));
+        let node_id = self.context.register_processor(proc.clone());
+        SendBinding {send_uuid, proc, node_id, source: None, target: None, subs}
+    }
+
+    /// Tear down one aux send: detach its source + target edges (and its summed output), then drop the node +
+    /// subscriptions.
+    fn teardown_send(&mut self, send: SendBinding) {
+        if let Some(source) = send.source {
+            if self.context.has_node(send.node_id) {
+                self.context.remove_edge(source, send.node_id);
+            }
+        }
+        if let Some((bus, sum_id)) = send.target {
+            let sum = match bus {
+                Some(bus_uuid) => self.bus_registry.get(&bus_uuid).map(|(sum, _)| sum.clone()),
+                None => self.master.clone()
+            };
+            if let Some(sum) = sum {
+                sum.borrow_mut().remove_audio_source(&send.proc.borrow().audio_output());
+            }
+            if self.context.has_node(sum_id) {
+                self.context.remove_edge(send.node_id, sum_id);
+            }
+        }
+        for sub in send.subs {
+            self.graph.unsubscribe(sub);
+        }
+        self.context.remove_processor(send.node_id);
+    }
+
+    /// Tear down all of a unit's aux sends (a unit removal / a full re-init).
+    fn teardown_sends(&mut self, unit: &mut AudioUnitBinding) {
+        for send in core::mem::take(&mut unit.sends) {
+            self.teardown_send(send);
+        }
+    }
+
+    /// Re-resolve EVERY unit's aux sends against the current graph (source tap + target bus), diff-based. Run
+    /// with `resolve_outputs` at the end of a working `reconcile_units`.
+    fn resolve_sends(&mut self) {
+        let mut units = core::mem::take(&mut self.audio_units);
+        for unit in &mut units {
+            let tap = unit.wired.as_ref().map(|wired| wired.pre_strip());
+            let mut sends = core::mem::take(&mut unit.sends);
+            for send in &mut sends {
+                self.resolve_one_send(send, &tap);
+            }
+            unit.sends = sends;
+        }
+        self.audio_units = units;
+    }
+
+    /// Resolve ONE aux send: wire its PRE-fader tap node as source, and its `targetBus` (registered bus sum, or
+    /// the master fallback) as the destination it sums into. Both diffed so a re-point / strip rebuild re-wires
+    /// once; a feedback loop is left unrouted.
+    fn resolve_one_send(&mut self, send: &mut SendBinding, tap: &Option<(NodeId, SharedAudioBuffer)>) {
+        let source_node = tap.as_ref().map(|(node, _)| *node);
+        if source_node != send.source {
+            if let Some(old) = send.source {
+                if self.context.has_node(send.node_id) {
+                    self.context.remove_edge(old, send.node_id);
+                }
+            }
+            if let Some((node, buffer)) = tap {
+                send.proc.borrow_mut().set_audio_source(buffer.clone());
+                self.context.register_edge(*node, send.node_id);
+            }
+            send.source = source_node;
+        }
+        let target_bus: Option<Uuid> = self.graph.target_of(&Address::of(send.send_uuid, vec![SEND_TARGET_KEY]))
+            .map(|target| target.uuid)
+            .filter(|uuid| self.bus_registry.contains_key(uuid));
+        let (sum_rc, sum_id) = match target_bus {
+            Some(bus_uuid) => { let (sum, id) = &self.bus_registry[&bus_uuid]; (sum.clone(), *id) }
+            None => (self.master.clone().unwrap(), self.master_id)
+        };
+        let new_target = (target_bus, sum_id);
+        if send.target == Some(new_target) {
+            return;
+        }
+        if let Some((old_bus, old_sum)) = send.target {
+            let old_sum_rc = match old_bus {
+                Some(bus_uuid) => self.bus_registry.get(&bus_uuid).map(|(sum, _)| sum.clone()),
+                None => self.master.clone()
+            };
+            if let Some(sum) = old_sum_rc {
+                sum.borrow_mut().remove_audio_source(&send.proc.borrow().audio_output());
+            }
+            if self.context.has_node(old_sum) {
+                self.context.remove_edge(send.node_id, old_sum);
+            }
+        }
+        if self.context.would_cycle(send.node_id, sum_id) {
+            send.target = None; // a feedback loop: leave unrouted
+            return;
+        }
+        sum_rc.borrow_mut().add_audio_source(send.proc.borrow().audio_output());
+        self.context.register_edge(send.node_id, sum_id);
+        send.target = Some(new_target);
+    }
+
     /// Remove a unit entirely: drop its wired cluster (edges, nodes, bus source), unsubscribe its tracks
     /// membership + track cascade, and terminate its three device-chain collections.
     fn teardown_unit(&mut self, mut binding: AudioUnitBinding) {
+        self.unwire_output_route(&mut binding); // drop the strip -> target bus route + summed source
+        self.teardown_sends(&mut binding);      // drop the parallel aux sends (nodes, edges, monitors)
+        self.graph.unsubscribe(binding.output_sub);
         if let Some(wired) = binding.wired.take() {
             self.teardown_wired_value(binding.unit, wired);
         }
@@ -751,6 +1171,7 @@ impl Engine {
         binding.input.terminate(&mut self.graph);
         binding.midi.terminate(&mut self.graph);
         binding.audio.terminate(&mut self.graph);
+        binding.aux_sends.terminate(&mut self.graph);
     }
 
     /// Drop a unit's whole wired graph (full teardown, the analog of TS `#disconnector.terminate` plus
@@ -764,13 +1185,11 @@ impl Engine {
 
     fn teardown_wired_value(&mut self, unit_uuid: Uuid, wired: Wired) {
         // The unit's strip output is registered for sidechain resolution; drop it so a torn-down unit can never
-        // hand a sidechain a stale buffer. A rebuild (kind change) re-registers it immediately after.
+        // hand a sidechain a stale buffer. A rebuild (kind change) re-registers it immediately after. The OUTPUT
+        // route (strip -> target bus) is torn down separately by `unwire_output_route` before this runs.
         self.output_registry.remove(&Address::of(unit_uuid, vec![]));
         match wired {
             Wired::Leaf(chain) => {
-                if let Some(master) = &self.master {
-                    master.borrow_mut().remove_audio_source(&chain.strip_output);
-                }
                 for (source, target) in &chain.edges {
                     self.context.remove_edge(*source, *target);
                 }
@@ -784,9 +1203,6 @@ impl Engine {
                 }
             }
             Wired::Composite(composite) => {
-                if let Some(master) = &self.master {
-                    master.borrow_mut().remove_audio_source(&composite.strip_output);
-                }
                 self.graph.unsubscribe(composite.enabled_sub);
                 for (source, target) in &composite.tail_edges {
                     self.context.remove_edge(*source, *target);
@@ -795,14 +1211,36 @@ impl Engine {
                 self.teardown_composite(composite.binding);
             }
             Wired::Tape(tape) => {
-                if let Some(master) = &self.master {
-                    master.borrow_mut().remove_audio_source(&tape.strip_output);
-                }
-                for (source, target) in &tape.tail_edges {
+                self.output_registry.remove(&Address::of(tape.instrument_uuid, vec![]));
+                for (source, target) in &tape.edges {
                     self.context.remove_edge(*source, *target);
                 }
                 self.context.remove_processor(tape.strip_id);
                 self.context.remove_processor(tape.player_id);
+                for member in tape.audio {
+                    self.terminate_member(member);
+                }
+            }
+            Wired::Bus(bus) => {
+                // Drop this bus from the registry FIRST so any source unit still routed to it re-resolves to the
+                // master fallback (and skips removing its summed source from the now-gone sum). Then remove the
+                // enabled monitors, the fx params, the internal edges, and every node (sum + fx + strip).
+                self.bus_registry.remove(&bus.bus_uuid);
+                for sub in bus.subs {
+                    self.graph.unsubscribe(sub);
+                }
+                for binding in bus.sidechains {
+                    for port in binding.ports {
+                        self.graph.unsubscribe(port.pointer_sub);
+                    }
+                }
+                self.teardown_device_params(bus.device_params);
+                for (source, target) in &bus.edges {
+                    self.context.remove_edge(*source, *target);
+                }
+                for node in bus.nodes {
+                    self.context.remove_processor(node);
+                }
             }
         }
     }
@@ -851,6 +1289,14 @@ impl Engine {
         input.set_on_dirty(mark.signal());
         midi.set_on_dirty(mark.signal());
         audio.set_on_dirty(mark.signal());
+        // SEND/RETURN: the `auxSends` (24) collection (parallel sends, ordered by index but order is not audible)
+        // + a monitor on `output` (25) so a re-point of the unit's destination bus enqueues it. Both wired AFTER
+        // observe so the catch-up members / value do not fire (the new unit enqueues itself once below).
+        let aux_sends = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUX_SENDS_KEY]), EFFECT_INDEX_KEY);
+        aux_sends.set_on_dirty(mark.signal());
+        let output_mark = mark.clone();
+        let output_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, vec![UNIT_OUTPUT_KEY]),
+            Box::new(move |_graph, _update| output_mark.mark()));
         // The channel strip's parameters, kept in sync with the unit's box: volume (12, dB), panning (13),
         // mute (14). Reactive but no rewire needed — the strip reads these Cells each block.
         let strip_params = Rc::new(StripParams::new());
@@ -876,7 +1322,8 @@ impl Engine {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
             audio_track_sets: Rc::new(RefCell::new(Vec::new())), audio_tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
-            input, midi, audio, wired: None, automation_dirty, wiring_dirty, mark
+            input, midi, audio, output_sub, routed: None, aux_sends, sends: Vec::new(),
+            wired: None, automation_dirty, wiring_dirty, mark
         }
     }
 
@@ -897,6 +1344,9 @@ impl Engine {
     /// instrument is left silent (its wiring fully torn down). The only per-device knowledge is the
     /// box-type -> plugin table.
     fn reconcile_chain(&mut self, unit: &mut AudioUnitBinding) {
+        // A rewire tears down (or reuses) the strip; drop the current output route first so no stale summed
+        // source / edge survives. `resolve_outputs` (end of `reconcile_units`) re-routes the rebuilt strip.
+        self.unwire_output_route(unit);
         let instrument_uuid = match unit.input.sorted().first().copied() {
             Some(uuid) => uuid,
             None => return self.teardown_unit_wired(unit) // no instrument: silent until its `input` box appears
@@ -910,10 +1360,12 @@ impl Engine {
         let signal = unit.mark.signal();
         let invalidate = automation_invalidate(unit);
         let rewire = Self::rewire_signal(unit); // a device `enabled` toggle re-wires the chain edge-only
-        if let Some(spec) = self.composite_for_type(&box_name) {
+        if box_name == BUS_BOX_TYPE {
+            self.reconcile_bus(unit, instrument_uuid, &signal, &invalidate); // a RETURN / submix bus unit
+        } else if let Some(spec) = self.composite_for_type(&box_name) {
             self.reconcile_composite(unit, instrument_uuid, spec, &signal, &invalidate);
         } else if box_name == TAPE_BOX_TYPE {
-            self.reconcile_tape(unit); // an audio unit: the engine-side player reads its AUDIO tracks
+            self.reconcile_tape(unit, instrument_uuid, &signal, &invalidate, &rewire); // audio unit: player -> fx -> strip
         } else {
             match self.device_for_type(&box_name) {
                 Some(device) if device.kind == DEVICE_KIND_INSTRUMENT =>
@@ -927,24 +1379,73 @@ impl Engine {
     /// audio-region player reading the unit's AUDIO tracks (`audio_track_sets`) -> channel strip -> master. Built
     /// wholesale on a chain change; the player reads its track sets live, so a region add / remove / edit needs no
     /// rebuild (the cascade updates the collections the player range-queries).
-    fn reconcile_tape(&mut self, unit: &mut AudioUnitBinding) {
-        self.teardown_unit_wired(unit);
+    fn reconcile_tape(&mut self, unit: &mut AudioUnitBinding, instrument_uuid: Uuid, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) {
+        // Pool the previous tape audio-fx members so survivors keep their DSP state (compressor ballistics, delay
+        // tails) across a chain edit; the player + strip are rebuilt fresh (the player reads its track sets live,
+        // the strip carries no DSP state, just the shared volume / panning / mute cells).
+        let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
+        match unit.wired.take() {
+            Some(Wired::Tape(tape)) => {
+                for (source, target) in &tape.edges {
+                    self.context.remove_edge(*source, *target);
+                }
+                self.context.remove_processor(tape.strip_id);
+                self.context.remove_processor(tape.player_id);
+                self.output_registry.remove(&Address::of(unit.unit, vec![]));
+                self.output_registry.remove(&Address::of(tape.instrument_uuid, vec![]));
+                for member in tape.audio {
+                    pool.insert(member.uuid, member);
+                }
+            }
+            Some(other) => self.teardown_wired_value(unit.unit, other),
+            None => {}
+        }
         let player = Rc::new(RefCell::new(AudioRegionPlayer::new(unit.audio_track_sets.clone(), self.sample_rate, self.tempo_map.clone())));
         let player_output = player.borrow().audio_output();
         let player_id = self.context.register_processor(player);
+        // The tape's RAW output (pre fx / strip) registered under the TapeDeviceBox uuid: a sidechain targeting the
+        // tape device resolves THIS (matching TS, which taps the instrument output before the unit's audio effects).
+        self.output_registry.register(Address::of(instrument_uuid, vec![]), player_output.clone(), player_id);
+        // Build the AUDIO-effects chain (reusing survivors, building joiners, terminating leavers) exactly like a
+        // leaf unit. Without this an audio track's effects (EQ / compressor / gain) are silently dropped.
+        let mut audio_members: Vec<Member> = Vec::new();
+        for uuid in unit.audio.sorted() {
+            let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
+            if let Some(device) = device {
+                if device.kind == DEVICE_KIND_AUDIO_EFFECT {
+                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, signal, invalidate, rewire));
+                }
+            }
+        }
+        for (_, member) in core::mem::take(&mut pool) {
+            self.terminate_member(member);
+        }
+        // Wire player -> fx0 -> ... (a disabled effect is SKIPPED, its processor + state untouched).
+        let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut output = player_output;
+        let mut output_node = player_id;
+        for member in &audio_members {
+            if !self.device_enabled(member.uuid) {
+                continue;
+            }
+            if let ProcHandle::Audio(node) = &member.proc {
+                node.borrow_mut().set_audio_source(output.clone());
+            }
+            let node_id = member.node_id.unwrap();
+            self.context.register_edge(output_node, node_id);
+            edges.push((output_node, node_id));
+            output = member.output.clone().unwrap();
+            output_node = node_id;
+        }
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
-        strip.borrow_mut().set_audio_source(player_output);
+        strip.borrow_mut().set_audio_source(output.clone());
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
-        let mut tail_edges = Vec::new();
-        self.context.register_edge(player_id, strip_id);
-        tail_edges.push((player_id, strip_id));
+        self.context.register_edge(output_node, strip_id);
+        edges.push((output_node, strip_id));
+        // The strip's output is routed to the unit's OUTPUT bus by `resolve_outputs` (not wired to master here).
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
-        let master = self.master.as_ref().unwrap();
-        master.borrow_mut().add_audio_source(strip_output.clone());
-        self.context.register_edge(strip_id, self.master_id);
-        tail_edges.push((strip_id, self.master_id));
-        unit.wired = Some(Wired::Tape(TapeWired {player_id, strip_id, strip_output, tail_edges}));
+        unit.wired = Some(Wired::Tape(TapeWired {player_id, instrument_uuid, audio: audio_members, pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges}));
     }
 
     /// The COMPOSITE-instrument path (e.g. Playfield): tear down the old wiring and rebuild the child cascade
@@ -955,8 +1456,10 @@ impl Engine {
         self.teardown_unit_wired(unit);
         let track_sets = unit.track_sets.clone();
         let binding = self.build_composite(&track_sets, instrument_uuid, &spec, signal, invalidate);
-        // The unit's tail: the composite's sum bus -> channel strip -> master. The strip + these edges persist
-        // across later per-child reconciles (the sum bus is stable).
+        // The unit's tail: the composite's sum bus -> channel strip; the strip's output is routed to the unit's
+        // OUTPUT bus by `resolve_outputs` (not master here). The strip + sum edge persist across per-child reconciles.
+        let pre_strip = binding.sum_buffer.clone();
+        let pre_strip_node = binding.sum_id;
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
         strip.borrow_mut().set_audio_source(binding.sum_buffer.clone());
         let strip_output = strip.borrow().audio_output();
@@ -965,17 +1468,13 @@ impl Engine {
         self.context.register_edge(binding.sum_id, strip_id);
         tail_edges.push((binding.sum_id, strip_id));
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
-        let master = self.master.as_ref().unwrap();
-        master.borrow_mut().add_audio_source(strip_output.clone());
-        self.context.register_edge(strip_id, self.master_id);
-        tail_edges.push((strip_id, self.master_id));
         // Each child's parameters are pushed as it is built (a joiner), inside `build_one_child`; no blanket
         // re-push here, so a per-child reconcile never touches an existing slot's parameters.
         let enabled_mark = unit.mark.clone();
         let enabled_sub = self.graph.subscribe_vertex(Propagation::This,
             Address::of(instrument_uuid, vec![DEVICE_ENABLED_KEY]),
             Box::new(move |_graph, _update| enabled_mark.mark()));
-        unit.wired = Some(Wired::Composite(CompositeWired {binding, strip_id, strip_output, tail_edges, enabled_sub}));
+        unit.wired = Some(Wired::Composite(CompositeWired {binding, pre_strip, pre_strip_node, strip_id, strip_output, tail_edges, enabled_sub}));
     }
 
     /// The LEAF-instrument per-member path, mirroring TS `AudioDeviceChain`: keep the existing device
@@ -995,9 +1494,7 @@ impl Engine {
                 for (source, target) in &chain.edges {
                     self.context.remove_edge(*source, *target);
                 }
-                if let Some(master) = &self.master {
-                    master.borrow_mut().remove_audio_source(&chain.strip_output);
-                }
+                // The output route was already dropped in `reconcile_chain`; the strip survives, so it re-routes.
                 sequencer_keep = Some((chain.instrument.uuid, chain.sequencer));
                 pool.insert(chain.instrument.uuid, chain.instrument);
                 for member in chain.midi {
@@ -1043,7 +1540,8 @@ impl Engine {
             Some((uuid, kept)) if uuid == instrument_uuid => kept,
             _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}))))
         };
-        // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip -> master below.
+        // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip; the strip's output is
+        // routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).
         let (output, output_node, mut edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[]);
         // The channel strip terminates the chain; reuse it across reconciles (it carries no DSP state, just the
         // shared volume / panning / mute), re-pointing its source at the new tail.
@@ -1056,19 +1554,16 @@ impl Engine {
                 (strip, strip_id, strip_output)
             }
         };
-        strip.borrow_mut().set_audio_source(output);
+        strip.borrow_mut().set_audio_source(output.clone());
         self.context.register_edge(output_node, strip_id);
         edges.push((output_node, strip_id));
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
-        let master = self.master.as_ref().unwrap();
-        master.borrow_mut().add_audio_source(strip_output.clone());
-        self.context.register_edge(strip_id, self.master_id);
-        edges.push((strip_id, self.master_id));
         // Parameters are pushed ONLY to JOINERS (at build, in `take_or_build_*`). Survivors are NOT touched — a
         // reorder / add / remove must leave every existing plugin's parameters exactly as they are (re-pushing
         // would, e.g., glide a delay's offset). A real automation change re-binds via `rebind_automation`.
         unit.wired = Some(Wired::Leaf(LeafChain {
-            instrument, sequencer, midi: midi_members, audio: audio_members, strip, strip_id, strip_output, edges
+            instrument, sequencer, midi: midi_members, audio: audio_members, strip,
+            pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges
         }));
     }
 
@@ -1544,7 +2039,12 @@ impl Engine {
             Wired::Composite(composite) => {
                 composite.binding.for_each_params(&mut |params| self.rebind_one(params, &invalidate, position));
             }
-            Wired::Tape(_) => {} // the audio-region player has no automatable device parameters
+            Wired::Tape(tape) => {
+                for member in &mut tape.audio {
+                    self.rebind_one(&mut member.params, &invalidate, position);
+                }
+            }
+            Wired::Bus(_) => {} // a bus's fx params are bound at (wholesale) build; live automation re-bind deferred
         }
         unit.wired = Some(wired);
     }

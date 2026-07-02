@@ -19,6 +19,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec;
@@ -733,6 +734,11 @@ struct Engine {
     // pointer resolves to the buffer to read and the node to depend on. Each unit keeps its own persistent
     // sidechain bindings (see `AudioUnitBinding::sidechains`); the resolve pass re-resolves them per reconcile.
     output_registry: AudioOutputBufferRegistry<NodeId>,
+    // The SEND/RETURN bus registry: each non-primary `AudioBusBox`'s summing bus (`AudioBusProcessor`), keyed
+    // by the bus box uuid, built when its bus-type audio unit is wired. A unit's `output` (25) or an
+    // `AuxSendBox`'s `targetBus` resolves through this to the sum node to feed; the PRIMARY bus is ABSENT (it
+    // maps to the fixed `master`, the fallback). See `resolve_outputs` / `resolve_sends` in audio_unit.
+    bus_registry: BTreeMap<Uuid, (Rc<RefCell<AudioBusProcessor>>, NodeId)>,
     sample_rate: f32,
     blocks: Vec<Block>,
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
@@ -761,6 +767,7 @@ impl Engine {
             output_audio: None,
             output_device_params: Vec::new(),
             output_registry: AudioOutputBufferRegistry::new(),
+            bus_registry: BTreeMap::new(),
             sample_rate,
             blocks: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM), // a quantum splits into a few blocks (tempo / loop); never realloc on the render path
             devices: Vec::new(),

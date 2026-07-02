@@ -14,7 +14,7 @@ import {connectSyncToEngine} from "./connect-sync"
 const PROJECTS = path.resolve(__dirname, "../../public/projects")
 
 // Register a scriptable device's user script into the worklet-global registry (as engine-host.loadScriptDevices
-// does in the app), so its bridge finds a Processor. sunset.od has none, but real projects may.
+// does in the app), so its bridge finds a Processor.
 const registerScripts = (boxGraph: BoxGraph): number => {
     const configs: Record<string, {header: string, registry: string, fn: string}> = {
         ApparatDeviceBox: {header: "apparat", registry: "apparatProcessors", fn: "apparat"},

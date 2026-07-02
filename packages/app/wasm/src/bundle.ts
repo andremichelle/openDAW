@@ -11,6 +11,7 @@ export type Bundle = {
     version: string
     uuid: UUID.Bytes | null // the project id, or null if the archive omits it
     boxGraph: BoxGraph
+    project: ArrayBuffer // the raw `project.od` bytes (a decoded ProjectSkeleton), for re-feeding to an engine
     meta: unknown
     samples: ReadonlyArray<{uuid: UUID.Bytes, wav: ArrayBuffer}> // extracted audio, keyed by sample uuid
 }
@@ -27,7 +28,8 @@ export const decodeBundle = async (arrayBuffer: ArrayBuffer): Promise<Bundle> =>
     const uuid = uuidFile === null ? null : UUID.validateBytes(await uuidFile.async("uint8array") as UUID.Bytes)
     const projectFile = zip.file(PROJECT_FILE)
     if (projectFile === null) {return Promise.reject(new Error(`Bundle has no ${PROJECT_FILE}`))}
-    const {boxGraph} = ProjectSkeleton.decode(await projectFile.async("arraybuffer") as ArrayBuffer)
+    const project = await projectFile.async("arraybuffer") as ArrayBuffer
+    const {boxGraph} = ProjectSkeleton.decode(project)
     const metaFile = zip.file(META_FILE)
     const meta = metaFile === null ? {} : JSON.parse(await metaFile.async("text"))
     // Extract each `samples/<uuid>/audio.wav`. JSZip's folder().forEach gives paths relative to the folder.
@@ -42,5 +44,5 @@ export const decodeBundle = async (arrayBuffer: ArrayBuffer): Promise<Bundle> =>
         })
     }
     await Promise.all(pending)
-    return {version, uuid, boxGraph, meta, samples}
+    return {version, uuid, boxGraph, project, meta, samples}
 }

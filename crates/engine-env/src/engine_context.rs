@@ -87,6 +87,32 @@ impl EngineContext {
         self.needs_sort = true;
     }
 
+    /// Whether a node is still a registered vertex — checked before `remove_edge`, which panics on a missing
+    /// TARGET vertex (a torn-down bus's sum node whose incoming edges vanished with it).
+    pub fn has_node(&self, id: NodeId) -> bool {
+        self.graph.vertices().contains(&id)
+    }
+
+    /// Whether adding the edge `source -> target` would close a cycle: true iff `target` is already a
+    /// (transitive) predecessor of `source` (so `source` already depends on `target`, and the new edge would
+    /// make `target` depend on `source`). Used to reject a feedback loop in output / send bus routing up front
+    /// (the topological sort silently drops a back-edge; rejecting here is clearer and keeps the graph acyclic).
+    pub fn would_cycle(&self, source: NodeId, target: NodeId) -> bool {
+        let mut stack = alloc::vec![source];
+        let mut seen = alloc::collections::BTreeSet::new();
+        while let Some(node) = stack.pop() {
+            for &predecessor in self.graph.get_predecessors(node) {
+                if predecessor == target {
+                    return true;
+                }
+                if seen.insert(predecessor) {
+                    stack.push(predecessor);
+                }
+            }
+        }
+        false
+    }
+
     /// Run an observer in each `ProcessPhase` (TS `subscribeProcessPhase`). Unsubscription is deferred.
     pub fn subscribe_process_phase(&mut self, observer: Box<dyn FnMut(ProcessPhase)>) {
         self.phase_observers.push(observer);
