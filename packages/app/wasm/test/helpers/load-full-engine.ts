@@ -86,7 +86,8 @@ export type FullEngine = {
     drainSamples(): number
 }
 
-export const loadFullEngine = async (sampleRate = 48000): Promise<FullEngine> => {
+export const loadFullEngine = async (sampleRate = 48000,
+                                     onScriptMessage: (uuid: string, message: string) => void = () => {}): Promise<FullEngine> => {
     const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engineModule = await WebAssembly.compile(readFileSync(path.join(PUBLIC, "engine.wasm")))
@@ -97,7 +98,7 @@ export const loadFullEngine = async (sampleRate = 48000): Promise<FullEngine> =>
     // scriptable devices behave exactly as in the worklet.
     ;(globalThis as any).sampleRate = sampleRate
     // The script bridge runs the scriptable devices' user JavaScript over the shared memory (see script-bridge.ts).
-    const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate)
+    const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate, onScriptMessage)
     const scriptImports = scriptBridges.imports()
 
     const installOptional = (fn: unknown): number => {

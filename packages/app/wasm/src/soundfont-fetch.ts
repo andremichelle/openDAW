@@ -1,5 +1,22 @@
 import {UUID} from "@opendaw/lib-std"
+import type {SoundFont2} from "soundfont2"
 import {simplifySoundfont} from "./soundfont-simplify"
+
+// Parse raw .sf2 bytes into a `SoundFont2` (the studio engine consumes this directly; the wasm engine gets the
+// simplified blob from it). `soundfont2` is imported dynamically so it is only pulled in when actually used.
+export const parseSoundfont = async (bytes: ArrayBuffer): Promise<SoundFont2> => {
+    // `soundfont2` references `window` at module load; a Web Worker (and node) has no `window`, only `globalThis`.
+    // Shim it before importing so the parser loads off the main thread. Harmless on the main thread (window exists).
+    if (typeof (globalThis as {window?: unknown}).window === "undefined") {
+        (globalThis as {window?: unknown}).window = globalThis
+    }
+    const {SoundFont2} = await import("soundfont2")
+    return new SoundFont2(new Uint8Array(bytes))
+}
+
+// Build the wasm's simplified blob directly from raw .sf2 bytes (the bundle carries them, no network fetch).
+export const simplifySoundfontBytes = async (bytes: ArrayBuffer): Promise<ArrayBuffer> =>
+    simplifySoundfont(await parseSoundfont(bytes))
 
 // The main thread keeps the SF2 FILE: fetch its bytes, parse with the `soundfont2` library, and flatten to the
 // SIMPLIFIED blob the wasm engine plays. Mirrors `sample-fetch` (fetch WAV -> decode planar f32). The wasm side

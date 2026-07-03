@@ -5,7 +5,7 @@
 //! yet. Per-sample gains are de-clicked through `LinearRamp`s (L/R gain + a mute gain), as in TS.
 
 use alloc::rc::Rc;
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 use math::db_to_gain;
 use crate::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use crate::audio_generator::AudioGenerator;
@@ -38,8 +38,35 @@ impl Default for StripParams {
     }
 }
 
+/// The strip's optional volume / panning AUTOMATION overrides: each closure maps a pulse position to the
+/// strip-unit value (volume dB, panning -1..1) of the parameter's Value-track curve. `None` means the
+/// parameter is not automated, so the strip uses the static `StripParams` value. Shared (`Rc`) between the
+/// strip node and the engine binding, which swaps the closures in when a Value track attaches / detaches (like
+/// `StripParams` is swapped for static edits). The engine owns the curve; the strip just calls the closure.
+/// Maps a pulse position to a strip parameter's automated value (volume dB, panning -1..1). Built by the engine
+/// from the parameter's Value-track curve; `None` when the parameter is not automated.
+pub type StripValueSource = Rc<dyn Fn(f64) -> f32>;
+
+pub struct StripAutomation {
+    pub volume: RefCell<Option<StripValueSource>>,
+    pub panning: RefCell<Option<StripValueSource>>
+}
+
+impl StripAutomation {
+    pub fn new() -> Self {
+        Self {volume: RefCell::new(None), panning: RefCell::new(None)}
+    }
+}
+
+impl Default for StripAutomation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct ChannelStripProcessor {
     params: Rc<StripParams>,
+    automation: Rc<StripAutomation>,
     output: SharedAudioBuffer,
     input: Option<SharedAudioBuffer>,
     gain_left: LinearRamp,
@@ -50,8 +77,9 @@ pub struct ChannelStripProcessor {
 }
 
 impl ChannelStripProcessor {
-    pub fn new(params: Rc<StripParams>, sample_rate: f32) -> Self {
+    pub fn new(params: Rc<StripParams>, automation: Rc<StripAutomation>, sample_rate: f32) -> Self {
         Self {
+            automation,
             params,
             output: shared_audio_buffer(),
             input: None,
@@ -87,7 +115,7 @@ impl Processor for ChannelStripProcessor {
         self.output.borrow_mut().clear();
     }
 
-    fn process(&mut self, _info: &ProcessInfo) {
+    fn process(&mut self, info: &ProcessInfo) {
         let mut output = self.output.borrow_mut();
         let input = match &self.input {
             Some(input) => input,
@@ -99,8 +127,18 @@ impl Processor for ChannelStripProcessor {
         // Volume in dB -> linear gain, split into L/R by the pan law (TS ChannelStripProcessor); mute is a
         // separate 0/1 gain. Aim the ramps at the new targets (smooth after the first block) so parameter
         // jumps de-click; `set` is a no-op when a target is unchanged.
-        let gain = db_to_gain(self.params.volume_db.get());
-        let panning = self.params.panning.get();
+        // An AUTOMATED volume / panning overrides the static value: evaluate its curve at this quantum's pulse
+        // position; the L/R ramps then de-click the per-block value like any parameter move.
+        let position = info.blocks.first().map_or(0.0, |block| block.p0);
+        let volume_db = match self.automation.volume.borrow().as_ref() {
+            Some(source) => source(position),
+            None => self.params.volume_db.get()
+        };
+        let panning = match self.automation.panning.borrow().as_ref() {
+            Some(source) => source(position),
+            None => self.params.panning.get()
+        };
+        let gain = db_to_gain(volume_db);
         self.gain_left.set((1.0 - panning.max(0.0)) * gain, self.processing);
         self.gain_right.set((1.0 + panning.min(0.0)) * gain, self.processing);
         self.mute_gain.set(if self.params.mute.get() {0.0} else {1.0}, self.processing);

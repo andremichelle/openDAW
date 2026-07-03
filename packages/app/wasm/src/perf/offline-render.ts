@@ -1,0 +1,326 @@
+// OFFLINE render of a bundle through BOTH engines, as fast as possible (no AudioContext, no realtime): drive
+// the render loop directly and time ONLY that loop (setup / decode / sample-load / bind are excluded). The WASM
+// path links the engine + device side-modules exactly like the AudioWorklet (mirrors test/helpers/load-full-
+// engine) and calls `engine.render()` per quantum. The TS path instantiates the real studio `EngineProcessor`
+// headless (mirrors test/helpers/render-ts) and calls `processor.process(...)` per quantum. Both capture the
+// stereo master into planar Float32Arrays for A/B playback.
+import {Arrays, type Nullable, SyncStream, UUID} from "@opendaw/lib-std"
+import {AudioData, type ppqn, RenderQuantum, WavFile} from "@opendaw/lib-dsp"
+import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {SyncSource, Synchronization, UpdateTask} from "@opendaw/lib-box"
+import {ApparatDeviceBox, BoxIO, SpielwerkDeviceBox, TimelineBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
+import type {BoxGraph} from "@opendaw/lib-box"
+import {EngineCommands, EngineState, EngineStateSchema, EngineToClient, MonitoringMapEntry, NoteSignal, ScriptCompiler} from "@opendaw/studio-adapters"
+import {setupWorkletGlobals, updateFrameTime, type WorkletGlobals} from "../../../../studio/core-workers/src/worklet-env"
+import {serializeUpdateTasks} from "../sync/serialize-update-tasks"
+import {ScriptBridges, ScriptEngine} from "../script-bridge"
+import {loadEngineModules} from "../engine-modules"
+import {loadSoundfontBlob, parseSoundfont, simplifySoundfontBytes} from "../soundfont-fetch"
+import type {Bundle} from "../bundle"
+import type {OfflineResult} from "./result"
+
+const DEVICE_STACK_SIZE = 256 * 1024
+
+// Register the user scripts of every scriptable device (Werkstatt / Apparat / Spielwerk) into `globalThis.openDAW`,
+// mirroring OfflineEngineRenderer.loadScriptDevice. Without this those devices have no processor: the TS engine
+// (and the wasm ScriptBridges, which reads the same globals) can't voice/process them. A project that routes tracks
+// through unregistered scriptable effects/instruments renders silent. Runs the box `code` as the studio does.
+const registerScriptDevice = (code: string, header: RegExp, registry: string, fn: string, uuid: string): void => {
+    const match = code.match(header)
+    if (match === null) {return}
+    const update = parseInt(match[3])
+    const userCode = code.slice(match[0].length)
+    // Use ScriptCompiler.wrap (NOT a hand-rolled entry): it also carries the parsed @param / @sample declarations
+    // the WASM ScriptBridges needs (it does `registry.params.map(...)` / `registry.samples.map(...)`). Omitting them
+    // makes the bridge throw and SILENCE the device — which is why Open Up rendered silent in WASM.
+    new Function(ScriptCompiler.wrap({headerTag: fn, registryName: registry, functionName: fn}, uuid, update, userCode))()
+}
+
+export const registerScriptDevices = (boxGraph: BoxGraph): void => {
+    for (const box of boxGraph.boxes()) {
+        if (box instanceof WerkstattDeviceBox) {
+            registerScriptDevice(box.code.getValue(), /^\/\/ @werkstatt (\w+) (\d+) (\d+)\n/, "werkstattProcessors", "werkstatt", UUID.toString(box.address.uuid))
+        } else if (box instanceof ApparatDeviceBox) {
+            registerScriptDevice(box.code.getValue(), /^\/\/ @apparat (\w+) (\d+) (\d+)\n/, "apparatProcessors", "apparat", UUID.toString(box.address.uuid))
+        } else if (box instanceof SpielwerkDeviceBox) {
+            registerScriptDevice(box.code.getValue(), /^\/\/ @spielwerk (\w+) (\d+) (\d+)\n/, "spielwerkProcessors", "spielwerk", UUID.toString(box.address.uuid))
+        }
+    }
+}
+
+// Disable the timeline loop area so a front-to-end render plays the whole arrangement instead of looping a
+// section forever (the studio's OfflineEngineRenderer does the same before an export).
+export const disableLoopArea = (boxGraph: BoxGraph): void => {
+    let timeline: TimelineBox | undefined
+    for (const box of boxGraph.boxes()) {
+        if (box instanceof TimelineBox) {timeline = box; break}
+    }
+    if (timeline === undefined || !timeline.loopArea.enabled.getValue()) {return}
+    boxGraph.beginTransaction()
+    timeline.loopArea.enabled.setValue(false)
+    boxGraph.endTransaction()
+}
+
+const readVarU32 = (bytes: Uint8Array, pos: number): [number, number] => {
+    let result = 0, shift = 0, cursor = pos
+    for (; ;) {
+        const byte = bytes[cursor++]
+        result |= (byte & 0x7f) << shift
+        if ((byte & 0x80) === 0) {break}
+        shift += 7
+    }
+    return [result >>> 0, cursor]
+}
+
+// The PIC side module's required linear-memory + table sizes (its `dylink.0` custom section).
+const parseDylink = (module: WebAssembly.Module): {memorySize: number, tableSize: number} => {
+    const sections = WebAssembly.Module.customSections(module, "dylink.0")
+    if (sections.length === 0) {return {memorySize: 0, tableSize: 0}}
+    const bytes = new Uint8Array(sections[0])
+    let pos = 0
+    while (pos < bytes.length) {
+        const type = bytes[pos++]
+        const [size, afterSize] = readVarU32(bytes, pos)
+        if (type === 1) {
+            const [memorySize, afterMem] = readVarU32(bytes, afterSize)
+            const [, afterAlign] = readVarU32(bytes, afterMem)
+            const [tableSize] = readVarU32(bytes, afterAlign)
+            return {memorySize, tableSize}
+        }
+        pos = afterSize + size
+    }
+    return {memorySize: 0, tableSize: 0}
+}
+
+// Wire the source box graph into the engine over the unchanged SyncSource (a BroadcastChannel loopback), with a
+// deterministic `settle()` (mirrors test/helpers/connect-sync).
+let channelCounter = 0
+const connectSync = (engine: any, memory: WebAssembly.Memory, source: {checksum(): Int8Array}) => {
+    const channelName = `perf-sync-${channelCounter++}`
+    const engineChecksum = (): Int8Array => new Int8Array(memory.buffer, engine.checksum_ptr(), 32).slice()
+    const target: Synchronization<BoxIO.TypeMap> = {
+        sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
+            const bytes = new Uint8Array(serializeUpdateTasks(tasks, source as never))
+            const pointer = engine.input_reserve(bytes.length)
+            new Uint8Array(memory.buffer, pointer, bytes.length).set(bytes)
+            if (engine.apply_updates(bytes.length) !== 0) {throw new Error("apply_updates rejected a transaction")}
+        },
+        checksum(value: Int8Array): Promise<void> {
+            const actual = engineChecksum()
+            return value.every((byte, index) => byte === actual[index])
+                ? Promise.resolve() : Promise.reject(new Error("engine checksum diverged from the source"))
+        }
+    }
+    const a = new BroadcastChannel(channelName)
+    const b = new BroadcastChannel(channelName)
+    Communicator.executor<Synchronization<BoxIO.TypeMap>>(Messenger.for(b), target)
+    const syncSource = new SyncSource<BoxIO.TypeMap>(source as never, Messenger.for(a), true)
+    return {settle: () => syncSource.checksum(source.checksum()), close: () => {a.close(); b.close()}}
+}
+
+// Feed the bundle's samples + soundfonts into the engine's request queues (excluded from render timing).
+const drainResources = async (engine: any, memory: WebAssembly.Memory, bundle: Bundle): Promise<void> => {
+    for (; ;) {
+        const rp = engine.input_reserve(16)
+        const handle = engine.sample_take_request(rp)
+        if (handle < 0) {break}
+        const uuid = UUID.toString(new Uint8Array(memory.buffer.slice(rp, rp + 16)) as UUID.Bytes)
+        const sample = bundle.samples.find(entry => UUID.toString(entry.uuid) === uuid)
+        if (sample === undefined) {engine.sample_allocate(handle, 4); engine.sample_set_ready(handle, 1, 1, 48000); continue}
+        const data = WavFile.decodeFloats(sample.wav)
+        const pointer = engine.sample_allocate(handle, data.numberOfFrames * data.numberOfChannels * 4)
+        for (let channel = 0; channel < data.numberOfChannels; channel++) {
+            new Float32Array(memory.buffer, pointer + channel * data.numberOfFrames * 4, data.numberOfFrames).set(data.frames[channel])
+        }
+        engine.sample_set_ready(handle, data.numberOfFrames, data.numberOfChannels, data.sampleRate)
+    }
+    for (; ;) {
+        const rp = engine.input_reserve(16)
+        const handle = engine.soundfont_take_request(rp)
+        if (handle < 0) {break}
+        const uuid = new Uint8Array(memory.buffer.slice(rp, rp + 16)) as UUID.Bytes
+        const uuidString = UUID.toString(uuid)
+        const carried = bundle.soundfonts.find(entry => UUID.toString(entry.uuid) === uuidString)
+        try {
+            // Prefer the .sf2 the bundle carries (no network); fall back to the asset server otherwise.
+            const blob = new Uint8Array(carried !== undefined ? await simplifySoundfontBytes(carried.sf2) : await loadSoundfontBlob(uuid))
+            const pointer = engine.soundfont_allocate(handle, blob.byteLength)
+            new Uint8Array(memory.buffer, pointer, blob.byteLength).set(blob)
+            engine.soundfont_set_ready(handle)
+        } catch (_error) { /* offline / missing: the device stays silent, still a valid render */ }
+    }
+}
+
+export const renderWasmOffline = async (bundle: Bundle, quanta: number, sampleRate = 48000): Promise<OfflineResult> => {
+    const {engineModule, deviceModules, deviceBoxTypes, composites} = await loadEngineModules()
+    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
+    const engine = new WebAssembly.Instance(engineModule, {env: {memory, __indirect_function_table: table}}).exports as any
+    engine.init(sampleRate)
+    ;(globalThis as any).sampleRate = sampleRate
+    const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate,
+        (uuid, message) => console.warn(`[perf] scriptable device ${uuid}: ${message}`))
+    const scriptImports = scriptBridges.imports()
+    const installOptional = (fn: unknown): number => {
+        if (fn === undefined) {return 0}
+        const index = table.grow(1)
+        table.set(index, fn as () => void)
+        return index
+    }
+    for (let index = 0; index < deviceModules.length; index++) {
+        const module = deviceModules[index], boxType = deviceBoxTypes[index]
+        const {memorySize, tableSize} = parseDylink(module)
+        const memoryBase = engine.device_alloc(memorySize)
+        const tableBase = tableSize > 0 ? table.grow(tableSize) : table.length
+        const stackBase = engine.device_alloc(DEVICE_STACK_SIZE)
+        const device = new WebAssembly.Instance(module, {
+            env: {
+                memory, __indirect_function_table: table,
+                __memory_base: new WebAssembly.Global({value: "i32", mutable: false}, memoryBase),
+                __table_base: new WebAssembly.Global({value: "i32", mutable: false}, tableBase),
+                __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackBase + DEVICE_STACK_SIZE),
+                host_pull_events: engine.host_pull_events, host_pulse_to_offset: engine.host_pulse_to_offset,
+                host_bind_parameter: engine.host_bind_parameter, host_update_parameters: engine.host_update_parameters,
+                host_first_update_position: engine.host_first_update_position, host_next_update_position: engine.host_next_update_position,
+                host_resolve_sample: engine.host_resolve_sample, host_observe_sample: engine.host_observe_sample,
+                host_resolve_soundfont: engine.host_resolve_soundfont, host_observe_soundfont: engine.host_observe_soundfont,
+                host_observe_field: engine.host_observe_field, host_bind_sidechain: engine.host_bind_sidechain,
+                host_resolve_input: engine.host_resolve_input, host_self_uuid: engine.host_self_uuid,
+                ...scriptImports
+            }
+        }).exports as any
+        device.__wasm_apply_data_relocs?.()
+        device.__wasm_call_ctors?.()
+        const processIndex = table.grow(1)
+        table.set(processIndex, (device.process_events ?? device.process) as () => void)
+        const deviceId = engine.device_register(
+            processIndex, device.state_size(sampleRate), device.kind(),
+            installOptional(device.init), installOptional(device.parameter_changed),
+            installOptional(device.field_changed), installOptional(device.sample_changed),
+            installOptional(device.soundfont_changed), installOptional(device.reset),
+            device.midi_effects_field?.() ?? 0, device.audio_effects_field?.() ?? 0,
+            device.observe_param_collection_field?.() ?? 0, device.observe_sample_collection_field?.() ?? 0)
+        const pointer = engine.input_reserve(boxType.length)
+        const bytes = new Uint8Array(memory.buffer, pointer, boxType.length)
+        for (let i = 0; i < boxType.length; i++) {bytes[i] = boxType.charCodeAt(i) & 0xff}
+        engine.device_set_box_type(deviceId, boxType.length)
+    }
+    for (const composite of composites) {
+        const pointer = engine.input_reserve(composite.boxType.length)
+        const bytes = new Uint8Array(memory.buffer, pointer, composite.boxType.length)
+        for (let i = 0; i < composite.boxType.length; i++) {bytes[i] = composite.boxType.charCodeAt(i) & 0xff}
+        engine.composite_register(composite.boxType.length, composite.childrenField, composite.indexKey,
+            composite.excludeKey, composite.cellInstrumentField, composite.cellMidiField, composite.cellAudioField,
+            composite.childEnabledKey)
+    }
+    const sync = connectSync(engine, memory, bundle.boxGraph)
+    await sync.settle(); engine.bind(); await sync.settle()
+    await drainResources(engine, memory, bundle)
+    await sync.settle()
+    engine.set_metronome_enabled(0)
+    const len = engine.output_len() >>> 0
+    const half = len >>> 1
+    const left = new Float32Array(quanta * half), right = new Float32Array(quanta * half)
+    engine.stop(); engine.play()
+    const t0 = performance.now()
+    for (let q = 0; q < quanta; q++) {
+        engine.render()
+        const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+        left.set(out.subarray(0, half), q * half)
+        right.set(out.subarray(half, len), q * half)
+    }
+    const renderMs = performance.now() - t0
+    sync.close()
+    return {left, right, renderMs, sampleRate}
+}
+
+export const renderTsOffline = async (bundle: Bundle, quanta: number, sampleRate = 48000): Promise<OfflineResult> => {
+    setupWorkletGlobals({sampleRate})
+    const globals = globalThis as unknown as WorkletGlobals
+    const sampleMap = new Map<string, AudioData>()
+    for (const {uuid, wav} of bundle.samples) {sampleMap.set(UUID.toString(uuid), WavFile.decodeFloats(wav))}
+    const channel = new MessageChannel()
+    globals.__workletPort__ = channel.port1 as unknown as MessagePort
+    const reader = SyncStream.reader<EngineState>(EngineStateSchema(), () => {})
+    const messenger = Messenger.for(channel.port2 as unknown as MessagePort)
+    Communicator.executor<EngineToClient>(messenger.channel("engine-to-client"), {
+        log: (): void => {}, error: (): void => {}, ready: (): void => {}, deviceMessage: (): void => {},
+        fetchAudio: (uuid: UUID.Bytes): Promise<AudioData> => {
+            // Resolve a 1-frame silence for a sample the bundle does not carry, so a missing asset never leaves
+            // the engine's loader stuck (which would render the whole project silent) — it just plays nothing.
+            const data = sampleMap.get(UUID.toString(uuid))
+            return Promise.resolve(data ?? AudioData.create(sampleRate, 1, 1))
+        },
+        fetchSoundfont: (uuid: UUID.Bytes) => {
+            const carried = bundle.soundfonts.find(entry => UUID.toString(entry.uuid) === UUID.toString(uuid))
+            return carried !== undefined ? parseSoundfont(carried.sf2) : Promise.reject(new Error("missing soundfont"))
+        },
+        fetchNamWasm: (): Promise<never> => Promise.reject(new Error("no nam")),
+        notifyClipSequenceChanges: (): void => {}, switchMarkerState: (): void => {}
+    })
+    const engineCommands = Communicator.sender<EngineCommands>(messenger.channel("engine-commands"),
+        dispatcher => new class implements EngineCommands {
+            play(): void {dispatcher.dispatchAndForget(this.play)}
+            stop(reset: boolean): void {dispatcher.dispatchAndForget(this.stop, reset)}
+            setPosition(position: ppqn): void {dispatcher.dispatchAndForget(this.setPosition, position)}
+            prepareRecordingState(countIn: boolean): void {dispatcher.dispatchAndForget(this.prepareRecordingState, countIn)}
+            stopRecording(): void {dispatcher.dispatchAndForget(this.stopRecording)}
+            queryLoadingComplete(): Promise<boolean> {return dispatcher.dispatchAndReturn(this.queryLoadingComplete)}
+            panic(): void {dispatcher.dispatchAndForget(this.panic)}
+            noteSignal(signal: NoteSignal): void {dispatcher.dispatchAndForget(this.noteSignal, signal)}
+            ignoreNoteRegion(uuid: UUID.Bytes): void {dispatcher.dispatchAndForget(this.ignoreNoteRegion, uuid)}
+            scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void {dispatcher.dispatchAndForget(this.scheduleClipPlay, clipIds)}
+            scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void {dispatcher.dispatchAndForget(this.scheduleClipStop, trackIds)}
+            setupMIDI(port: MessagePort, buffer: SharedArrayBuffer): void {dispatcher.dispatchAndForget(this.setupMIDI, port, buffer)}
+            updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void {dispatcher.dispatchAndForget(this.updateMonitoringMap, map)}
+            loadClickSound(index: 0 | 1, data: AudioData): void {dispatcher.dispatchAndForget(this.loadClickSound, index, data)}
+            setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {dispatcher.dispatchAndForget(this.setFrozenAudio, uuid, audioData)}
+            terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
+        })
+    channel.port2.start()
+    const {EngineProcessor} = await import("../../../../studio/core-processors/src/EngineProcessor")
+    const processor = new EngineProcessor({
+        processorOptions: {
+            syncStreamBuffer: reader.buffer,
+            controlFlagsBuffer: new SharedArrayBuffer(4),
+            hrClockBuffer: new SharedArrayBuffer(32),
+            project: bundle.project,
+            exportConfiguration: undefined
+        }
+    })
+    for (let attempt = 0; attempt < 400; attempt++) {
+        if (await engineCommands.queryLoadingComplete()) {break}
+        await new Promise(resolve => setTimeout(resolve, 5))
+    }
+    engineCommands.play()
+    await new Promise(resolve => setTimeout(resolve, 10))
+    const half = RenderQuantum
+    const left = new Float32Array(quanta * half), right = new Float32Array(quanta * half)
+    // Pre-allocate the per-quantum output buffers ONCE and clear-reuse them, so the timed loop measures the DSP,
+    // not per-quantum allocation (a fair comparison with the WASM path). The worklet hands fresh zeroed buffers
+    // each block, so clearing reproduces that exactly.
+    const channels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), 2)
+    const outputs: Float32Array[][] = [channels]
+    let totalFrames = 0, lastYield = 0, renderMs = 0
+    let segmentStart = performance.now()
+    for (let q = 0; q < quanta; q++) {
+        channels[0].fill(0.0)
+        channels[1].fill(0.0)
+        updateFrameTime(totalFrames, sampleRate)
+        processor.process([[]], outputs)
+        totalFrames += RenderQuantum
+        left.set(channels[0], q * half)
+        right.set(channels[1], q * half)
+        // Yield to the event loop every ~1 s of rendered audio so the async fetchAudio / fetchSoundfont deliveries
+        // land (the engine requests some assets lazily when a region starts, AFTER queryLoadingComplete). Mirrors
+        // the studio offline-engine worker. Only the compute time is accumulated, so `renderMs` stays accurate.
+        if (totalFrames - lastYield >= sampleRate) {
+            lastYield = totalFrames
+            renderMs += performance.now() - segmentStart
+            await new Promise(resolve => setTimeout(resolve, 0))
+            segmentStart = performance.now()
+        }
+    }
+    renderMs += performance.now() - segmentStart
+    return {left, right, renderMs, sampleRate}
+}

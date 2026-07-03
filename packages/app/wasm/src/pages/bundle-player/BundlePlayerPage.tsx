@@ -37,11 +37,23 @@ export const BundlePlayerPage: PageFactory<Env> = ({lifecycle}) => {
         host.append(engine.element)
         logs.append(engine.log)
         engine.append(`bundle: ${bundle.samples.length} sample(s) cached to OPFS (${SampleStorage.Folder})`)
+        // Every device with a checkbox bound to its `enabled` field. Toggling runs a box-graph transaction, which
+        // streams through the SAME SyncSource as every other edit, so the engine bypasses / re-wires the device
+        // edge-only (no rebuild, no param reset) — handy for isolating what a project's devices contribute.
         const devices = bundle.boxGraph.boxes().filter(DeviceBoxUtils.isDeviceBox)
             .sort((left, right) => deviceLabel(left).localeCompare(deviceLabel(right)))
         if (devices.length > 0) {
-            plugins.append(<div className="plugin-list"><h3>Devices</h3>
-                {devices.map(device => <label className="plugin-row"><span>{deviceLabel(device)}</span></label>)}</div>)
+            const rows = devices.map(device => {
+                const checkbox: HTMLInputElement = <input type="checkbox"/>
+                checkbox.onchange = () => {
+                    bundle.boxGraph.beginTransaction()
+                    device.enabled.setValue(checkbox.checked)
+                    bundle.boxGraph.endTransaction()
+                }
+                terminator.own(device.enabled.catchupAndSubscribe(field => checkbox.checked = field.getValue()))
+                return <label className="plugin-row">{checkbox}<span>{deviceLabel(device)}</span></label>
+            })
+            plugins.append(<div className="plugin-list"><h3>Devices</h3>{rows}</div>)
         }
         status.textContent = `Loaded ${file.name} — ${bundle.samples.length} sample(s), ${devices.length} device(s). Press Play.`
     }

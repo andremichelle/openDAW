@@ -272,3 +272,80 @@ code
     font-size: 0.7rem
     line-height: 1.5
     color: var(--color-gray)
+
+  .perf-results
+    margin-top: 1.25rem
+    display: flex
+    flex-direction: column
+    gap: 0.85rem
+
+    .perf-summary
+      display: flex
+      gap: 1.5rem
+      flex-wrap: wrap
+
+      .perf-metric
+        display: flex
+        flex-direction: column
+        padding: 0.5rem 0.85rem
+        border: 1px solid var(--color-panel-background-bright)
+        border-radius: 6px
+        background: var(--color-panel-background-dark)
+
+        span
+          font-size: 0.7rem
+          color: var(--color-gray)
+
+        strong
+          font-size: 1.1rem
+          color: var(--color-bright)
+
+    .perf-note
+      font-size: 0.75rem
+      color: var(--color-gray)
+      max-width: 44rem
+      line-height: 1.4
+
+    .perf-ab
+      display: flex
+      align-items: center
+      gap: 0.85rem
+
+      .perf-active
+        font-size: 0.8rem
+        color: var(--color-gray)
+
+    .perf-player
+      display: flex
+      flex-direction: column
+      gap: 0.35rem
+
+      h4
+        margin: 0
+        color: var(--color-gray)
+
+      audio
+        width: 100%
+        max-width: 40rem
+
+      .perf-wave-wrap
+        position: relative
+        width: 100%
+        max-width: 40rem
+        cursor: pointer
+        line-height: 0
+
+        .perf-wave
+          width: 100%
+          height: auto
+          background: rgba(0, 0, 0, 0.35)
+          border-radius: 3px
+
+        .perf-cursor
+          position: absolute
+          top: 0
+          bottom: 0
+          left: 0
+          width: 1px
+          background: var(--color-white, #fff)
+          pointer-events: none

@@ -61,12 +61,17 @@ pub(crate) struct AudioRegionPlayer {
 /// — reseat the read from the tempo map). `next_pulse` is NaN until the first render, forcing an initial seat.
 struct NativeCursor {
     read_frame: f64,
-    next_pulse: f64
+    next_pulse: f64,
+    // The `raw_start` of the loop cycle the read is currently in. A continuation stays in the SAME cycle; a loop
+    // WRAP starts a new cycle (`raw_start` jumps by `loop_duration`), which is a source-read discontinuity (jump
+    // back to the loop content) even though the timeline is contiguous — so the read must reseat, not free-run.
+    // NaN until the first render, forcing an initial seat.
+    raw_start: f64
 }
 
 impl NativeCursor {
     fn new() -> Self {
-        Self {read_frame: 0.0, next_pulse: f64::NAN}
+        Self {read_frame: 0.0, next_pulse: f64::NAN, raw_start: f64::NAN}
     }
 }
 
@@ -205,7 +210,12 @@ fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], r
         //  - PitchStretch: warp markers map content ppqn -> source seconds; the read start + advance come from the
         //    warp segment, so the audio follows the warped tempo.
         let (read_start, rate) = if region.warp.is_empty() {
-            let continues = !block.flags.discontinuous() && (cursor.next_pulse - cycle.result_start).abs() < 1e-6;
+            // Continue the free-running read ONLY within the SAME loop cycle (pulse-contiguous AND same
+            // `raw_start`). A loop wrap yields a new cycle whose `raw_start` jumped, so `continues` is false and
+            // the read reseats to the loop content start below (else it would run off the sample end and go silent).
+            let continues = !block.flags.discontinuous()
+                && (cursor.next_pulse - cycle.result_start).abs() < 1e-6
+                && (cursor.raw_start - cycle.raw_start).abs() < 1e-6;
             let read_start = if continues {
                 cursor.read_frame
             } else {
@@ -241,6 +251,7 @@ fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], r
         if region.warp.is_empty() {
             cursor.read_frame = read_start + (end - begin) as f64 * rate;
             cursor.next_pulse = cycle.result_end;
+            cursor.raw_start = cycle.raw_start;
         }
     }
 }

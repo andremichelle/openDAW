@@ -32,7 +32,8 @@ use engine_env::audio_input::AudioInput;
 use engine_env::audio_buffer::shared_audio_buffer;
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::aux_send::{AuxSendProcessor, SendParams};
-use engine_env::channel_strip::{ChannelStripProcessor, StripParams};
+use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripParams};
+use math::value_mapping::{Decibel, Linear, ValueMapping};
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_region::NoteRegion;
@@ -554,6 +555,9 @@ pub(crate) struct AudioUnitBinding {
     track_sub: SubscriptionId,
     strip_params: Rc<StripParams>,        // the unit's volume / panning / mute, kept in sync with its box
     strip_subs: Vec<SubscriptionId>,      // the volume / panning / mute field subscriptions
+    strip_automation: Rc<StripAutomation>, // the unit's volume / panning AUTOMATION overrides (Value-track curves)
+    strip_param_subs: Vec<SubscriptionId>, // the volume / panning parameter observations (field + track hubs)
+    strip_param_collections: Vec<ValueCollection>, // keep the strip curves' region collections alive
     input: IndexedCollection,
     midi: IndexedCollection,
     audio: IndexedCollection,
@@ -675,7 +679,8 @@ impl Engine {
         }
         self.output_audio = Some(audio);
         self.output_device_params = device_params;
-        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(params, self.sample_rate)));
+        // The output/master unit's volume/panning stay static (not automation-bound here); pass an empty override.
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(params, Rc::new(StripAutomation::new()), self.sample_rate)));
         strip.borrow_mut().set_audio_source(source);
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
@@ -773,7 +778,42 @@ impl Engine {
         if automation_changed {
             self.rebind_automation(unit);
         }
+        // Bind the strip's volume / panning automation on the FIRST reconcile (subs still empty) and re-observe
+        // on a real automation change. Its catch-up sets `automation_dirty` again, cleared just below (like a
+        // device joiner's) — the extra enqueue is a no-op (subs are then non-empty, no real change).
+        if unit.strip_param_subs.is_empty() || automation_changed {
+            self.bind_strip_automation(unit);
+        }
         unit.automation_dirty.set(false); // consume the joiner catch-up flags + the handled real change
+    }
+
+    /// Bind the channel strip's volume (12) + panning (13) to their AUTOMATION, so a Value track targeting those
+    /// fields drives the strip over the transport. The plain field subscriptions only track the STATIC value, so
+    /// without this an automated fader was ignored (the unit played at its static volume). Re-observed on a real
+    /// automation change; when a field has no track the override stays `None` and the strip keeps using the static
+    /// `StripParams`. Volume maps the 0..1 curve through the AudioUnit dB mapping; panning is bipolar (TS adapters).
+    fn bind_strip_automation(&mut self, unit: &mut AudioUnitBinding) {
+        const VOLUME: Decibel = Decibel::new(-96.0, -9.0, 6.0); // TS AudioUnitBoxAdapter.VolumeMapper
+        const PANNING: Linear = Linear::bipolar();
+        *unit.strip_automation.volume.borrow_mut() = None;
+        *unit.strip_automation.panning.borrow_mut() = None;
+        for sub in core::mem::take(&mut unit.strip_param_subs) {
+            self.graph.unsubscribe(sub);
+        }
+        unit.strip_param_collections.clear();
+        let invalidate = automation_invalidate(unit);
+        let (volume_handle, volume_subs, volume_collections, _) = self.observe_param(unit.unit, &[UNIT_VOLUME_KEY], 0, &invalidate);
+        let (panning_handle, panning_subs, panning_collections, _) = self.observe_param(unit.unit, &[UNIT_PANNING_KEY], 1, &invalidate);
+        unit.strip_param_subs.extend(volume_subs);
+        unit.strip_param_subs.extend(panning_subs);
+        unit.strip_param_collections.extend(volume_collections);
+        unit.strip_param_collections.extend(panning_collections);
+        if volume_handle.track.is_some() {
+            *unit.strip_automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| VOLUME.y(volume_handle.resolve(position).0)));
+        }
+        if panning_handle.track.is_some() {
+            *unit.strip_automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| PANNING.y(panning_handle.resolve(position).0)));
+        }
     }
 
     /// Re-resolve EVERY unit's sidechain bindings against the current graph, diff-based so it is a no-op when
@@ -935,7 +975,7 @@ impl Engine {
         }
         let pre_strip = source.clone();
         let pre_strip_node = source_id;
-        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
         strip.borrow_mut().set_audio_source(source);
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
@@ -1161,6 +1201,9 @@ impl Engine {
         for sub in &binding.strip_subs {
             self.graph.unsubscribe(*sub);
         }
+        for sub in &binding.strip_param_subs {
+            self.graph.unsubscribe(*sub);
+        }
         for track in binding.tracks {
             teardown_track(&mut self.graph, &binding.track_sets, &mut binding.collections, track);
         }
@@ -1322,6 +1365,7 @@ impl Engine {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
             audio_track_sets: Rc::new(RefCell::new(Vec::new())), audio_tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
+            strip_automation: Rc::new(StripAutomation::new()), strip_param_subs: Vec::new(), strip_param_collections: Vec::new(),
             input, midi, audio, output_sub, routed: None, aux_sends, sends: Vec::new(),
             wired: None, automation_dirty, wiring_dirty, mark
         }
@@ -1437,7 +1481,7 @@ impl Engine {
             output = member.output.clone().unwrap();
             output_node = node_id;
         }
-        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
         strip.borrow_mut().set_audio_source(output.clone());
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
@@ -1460,7 +1504,7 @@ impl Engine {
         // OUTPUT bus by `resolve_outputs` (not master here). The strip + sum edge persist across per-child reconciles.
         let pre_strip = binding.sum_buffer.clone();
         let pre_strip_node = binding.sum_id;
-        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
         strip.borrow_mut().set_audio_source(binding.sum_buffer.clone());
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
@@ -1548,7 +1592,7 @@ impl Engine {
         let (strip, strip_id, strip_output) = match strip_keep {
             Some(existing) => existing,
             None => {
-                let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), self.sample_rate)));
+                let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
                 let strip_output = strip.borrow().audio_output();
                 let strip_id = self.context.register_processor(strip.clone());
                 (strip, strip_id, strip_output)

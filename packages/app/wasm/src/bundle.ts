@@ -14,6 +14,7 @@ export type Bundle = {
     project: ArrayBuffer // the raw `project.od` bytes (a decoded ProjectSkeleton), for re-feeding to an engine
     meta: unknown
     samples: ReadonlyArray<{uuid: UUID.Bytes, wav: ArrayBuffer}> // extracted audio, keyed by sample uuid
+    soundfonts: ReadonlyArray<{uuid: UUID.Bytes, sf2: ArrayBuffer}> // extracted raw .sf2, keyed by soundfont uuid
 }
 
 const PROJECT_FILE = "project.od" // ProjectPaths.ProjectFile
@@ -43,6 +44,17 @@ export const decodeBundle = async (arrayBuffer: ArrayBuffer): Promise<Bundle> =>
             pending.push(file.async("arraybuffer").then(wav => {samples.push({uuid: sampleUuid, wav: wav as ArrayBuffer})}))
         })
     }
+    // Extract each `soundfonts/<uuid>/soundfont.sf2` (the raw SF2 the engines parse: TS keeps the SoundFont2, the
+    // wasm gets a simplified blob).
+    const soundfonts: Array<{uuid: UUID.Bytes, sf2: ArrayBuffer}> = []
+    const soundfontsFolder = zip.folder("soundfonts")
+    if (soundfontsFolder !== null) {
+        soundfontsFolder.forEach((relativePath, file) => {
+            if (file.dir || !relativePath.endsWith("/soundfont.sf2")) {return}
+            const soundfontUuid = UUID.parse(relativePath.slice(0, relativePath.indexOf("/"))) as UUID.Bytes
+            pending.push(file.async("arraybuffer").then(sf2 => {soundfonts.push({uuid: soundfontUuid, sf2: sf2 as ArrayBuffer})}))
+        })
+    }
     await Promise.all(pending)
-    return {version, uuid, boxGraph, project, meta, samples}
+    return {version, uuid, boxGraph, project, meta, samples, soundfonts}
 }

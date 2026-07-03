@@ -16,6 +16,9 @@ import {SimpleLimiter} from "@opendaw/lib-dsp"
 import {runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
 
 const RENDER_QUANTUM = 128
+// ~1 second of render calls (128-frame quanta at 48k) before a scriptless device is reported — long enough to
+// cover a script still compiling / addModule-ing async, short enough to surface a genuine misconfiguration.
+const MISSING_GRACE_CALLS = 375
 
 // Device kinds (mirror abi DEVICE_KIND_*) and their script registries.
 const KIND_INSTRUMENT = 0
@@ -59,6 +62,11 @@ class Bridge {
     readonly sampleHandles = new Map<number, number>() // index -> resolved engine sample handle (-1 = no sample; 0 is valid)
     limiter: SimpleLimiter | null = null
     spielwerk: SpielwerkRuntime | null = null
+    // A scriptable device with no registered Processor renders silence. That is legitimate for a block or two
+    // while the script loads async, but a device that stays scriptless is an anomaly the host must surface (not
+    // swallow). Count the render calls that found no registry entry; warn ONCE past the grace window.
+    missingCalls = 0
+    warnedMissing = false
 
     constructor(readonly uuid: string, readonly kind: number, readonly registryName: string) {}
 }
@@ -133,6 +141,15 @@ export class ScriptBridges {
     // then re-apply the cached params + samples. Returns the live, non-silenced proc, or null.
     #ensureProc(bridge: Bridge): any | null {
         const registry = (globalThis as any).openDAW?.[bridge.registryName]?.[bridge.uuid] as RegistryEntry | undefined
+        if (registry === undefined && bridge.currentUpdate === -1) {
+            // Never loaded and still absent: tolerate the async-load grace window, then report once so a scriptable
+            // device silently muting its chain (the "Open Up renders silent" failure) can never pass unnoticed.
+            if (!bridge.warnedMissing && ++bridge.missingCalls > MISSING_GRACE_CALLS) {
+                bridge.warnedMissing = true
+                this.#onMessage(bridge.uuid, `No Processor registered at globalThis.openDAW.${bridge.registryName}[${bridge.uuid}] — device is rendering silence`)
+            }
+            return null
+        }
         if (registry !== undefined && registry.update !== bridge.currentUpdate) {
             try {
                 const proc = new registry.create()

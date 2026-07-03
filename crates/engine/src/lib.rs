@@ -1069,6 +1069,7 @@ impl Engine {
         self.output_bus = Some(self.output_strip(output_buffer)); // master strip output (or the bus, if no output unit)
         self.observe_audio_units();
         self.observe_audio_files();
+        self.observe_soundfont_files();
         0
     }
 
@@ -1090,6 +1091,19 @@ impl Engine {
                     unsafe { SAMPLES.get() }.free(*uuid);
                 }
                 _ => {}
+            }
+        }));
+    }
+
+    /// Free a soundfont's blob when its `SoundfontFileBox` is removed. Unlike samples, soundfonts are REQUESTED
+    /// reactively (when a device's `file` pointer resolves, in `resolve_and_deliver_soundfont`), not proactively
+    /// per box — so this only needs the free half, to release the blob storage on delete.
+    fn observe_soundfont_files(&mut self) {
+        self.graph.subscribe_box_lifecycle(Box::new(|_graph, update| {
+            if let Update::Delete {uuid, name, ..} = update {
+                if name == "SoundfontFileBox" {
+                    unsafe { SOUNDFONTS.get() }.free(*uuid);
+                }
             }
         }));
     }

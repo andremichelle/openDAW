@@ -19,7 +19,9 @@ export const buildSampleMap = (samples: ReadonlyArray<{uuid: UUID.Bytes, wav: Ar
 
 export type TsRender = {rms: number, peak: number, buffer: Float32Array}
 
-export const renderTs = async (project: ArrayBuffer, sampleMap: Map<string, AudioData>, quanta: number): Promise<TsRender> => {
+// Optional in-memory soundfont provider: raw .sf2 bytes per uuid, parsed on demand for `fetchSoundfont`.
+export const renderTs = async (project: ArrayBuffer, sampleMap: Map<string, AudioData>, quanta: number,
+                               soundfonts?: ReadonlyArray<{uuid: UUID.Bytes, sf2: ArrayBuffer}>): Promise<TsRender> => {
     const sampleRate = 48000
     setupWorkletGlobals({sampleRate})
     const {MessageChannel} = await import("node:worker_threads")
@@ -34,7 +36,12 @@ export const renderTs = async (project: ArrayBuffer, sampleMap: Map<string, Audi
             const data = sampleMap.get(UUID.toString(uuid))
             return data !== undefined ? Promise.resolve(data) : Promise.reject(new Error("missing sample"))
         },
-        fetchSoundfont: (): Promise<never> => Promise.reject(new Error("no soundfont")),
+        fetchSoundfont: async (uuid: UUID.Bytes) => {
+            const carried = soundfonts?.find(entry => UUID.toString(entry.uuid) === UUID.toString(uuid))
+            if (carried === undefined) {return Promise.reject(new Error("no soundfont"))}
+            const {parseSoundfont} = await import("../../src/soundfont-fetch")
+            return parseSoundfont(carried.sf2)
+        },
         fetchNamWasm: (): Promise<never> => Promise.reject(new Error("no nam")),
         notifyClipSequenceChanges: (): void => {}, switchMarkerState: (): void => {}
     })
