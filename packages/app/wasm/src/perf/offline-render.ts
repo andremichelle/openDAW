@@ -14,6 +14,7 @@ import {EngineCommands, EngineState, EngineStateSchema, EngineToClient, Monitori
 import {setupWorkletGlobals, updateFrameTime, type WorkletGlobals} from "../../../../studio/core-workers/src/worklet-env"
 import {serializeUpdateTasks} from "../sync/serialize-update-tasks"
 import {ScriptBridges, ScriptEngine} from "../script-bridge"
+import {NamBridges} from "../nam-bridge"
 import {loadEngineModules} from "../engine-modules"
 import {loadSoundfontBlob, parseSoundfont, simplifySoundfontBytes} from "../soundfont-fetch"
 import type {Bundle} from "../bundle"
@@ -164,6 +165,13 @@ export const renderWasmOffline = async (bundle: Bundle, quanta: number, sampleRa
     const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate,
         (uuid, message) => console.warn(`[perf] scriptable device ${uuid}: ${message}`))
     const scriptImports = scriptBridges.imports()
+    // The NeuralAmp devices' inference bridge: the perf worker fetches the `@opendaw/nam-wasm` binary itself
+    // (lazily, on the first model load) — the same recipe as the engine host, no worklet RPC needed here.
+    const namBridges = new NamBridges(memory, async () => {
+        const url = new URL("@opendaw/nam-wasm/nam.wasm", import.meta.url)
+        return (await fetch(url)).arrayBuffer()
+    }, sampleRate)
+    const namImports = namBridges.imports()
     const installOptional = (fn: unknown): number => {
         if (fn === undefined) {return 0}
         const index = table.grow(1)
@@ -187,9 +195,10 @@ export const renderWasmOffline = async (bundle: Bundle, quanta: number, sampleRa
                 host_first_update_position: engine.host_first_update_position, host_next_update_position: engine.host_next_update_position,
                 host_resolve_sample: engine.host_resolve_sample, host_observe_sample: engine.host_observe_sample,
                 host_resolve_soundfont: engine.host_resolve_soundfont, host_observe_soundfont: engine.host_observe_soundfont,
-                host_observe_field: engine.host_observe_field, host_bind_sidechain: engine.host_bind_sidechain,
+                host_observe_field: engine.host_observe_field, host_observe_target_string: engine.host_observe_target_string,
+                host_bind_sidechain: engine.host_bind_sidechain,
                 host_resolve_input: engine.host_resolve_input, host_self_uuid: engine.host_self_uuid,
-                ...scriptImports
+                ...scriptImports, ...namImports
             }
         }).exports as any
         device.__wasm_apply_data_relocs?.()
@@ -258,7 +267,11 @@ export const renderTsOffline = async (bundle: Bundle, quanta: number, sampleRate
             const carried = bundle.soundfonts.find(entry => UUID.toString(entry.uuid) === UUID.toString(uuid))
             return carried !== undefined ? parseSoundfont(carried.sf2) : Promise.reject(new Error("missing soundfont"))
         },
-        fetchNamWasm: (): Promise<never> => Promise.reject(new Error("no nam")),
+        // Both engines must see the same NAM binary, or the A/B compares a playing amp against a silent one.
+        fetchNamWasm: async (): Promise<ArrayBuffer> => {
+            const url = new URL("@opendaw/nam-wasm/nam.wasm", import.meta.url)
+            return (await fetch(url)).arrayBuffer()
+        },
         notifyClipSequenceChanges: (): void => {}, switchMarkerState: (): void => {}
     })
     const engineCommands = Communicator.sender<EngineCommands>(messenger.channel("engine-commands"),

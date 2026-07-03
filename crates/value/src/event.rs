@@ -17,12 +17,16 @@ pub trait EventSpan: Event {
 }
 
 pub struct EventCollection<E: Event + Ord> {
-    events: Vec<E>
+    events: Vec<E>,
+    // Lazily-cached maximum duration (TS `NoteEventCollectionBoxAdapter.#computedExtremas`): the sequencer
+    // extends its range query by it (the lookback), so a long note starting before the window still ratchets.
+    max_duration: core::cell::Cell<f64>,
+    extremas_dirty: core::cell::Cell<bool>
 }
 
 impl<E: Event + Ord> EventCollection<E> {
     pub fn new() -> Self {
-        Self {events: Vec::new()}
+        Self {events: Vec::new(), max_duration: core::cell::Cell::new(0.0), extremas_dirty: core::cell::Cell::new(false)}
     }
 
     pub fn is_empty(&self) -> bool {
@@ -53,12 +57,14 @@ impl<E: Event + Ord> EventCollection<E> {
     pub fn add(&mut self, event: E) {
         let index = self.events.binary_search(&event).unwrap_or_else(|insertion| insertion);
         self.events.insert(index, event);
+        self.extremas_dirty.set(true);
     }
 
     pub fn remove(&mut self, event: &E) -> bool {
         match self.events.binary_search(event) {
             Ok(index) => {
                 self.events.remove(index);
+                self.extremas_dirty.set(true);
                 true
             }
             Err(_) => false
@@ -101,6 +107,23 @@ impl<E: Event + Ord> EventCollection<E> {
     pub fn iterate_range(&self, from: f64, to: f64) -> impl Iterator<Item = &E> {
         let start = self.ceil_first_index(from);
         self.events.get(start..).unwrap_or(&[]).iter().take_while(move |event| event.position() < to)
+    }
+}
+
+impl<E: Event + Ord + EventSpan> EventCollection<E> {
+    /// The longest event duration, lazily recomputed after an edit (TS `maxDuration` via `#computeExtremas`).
+    pub fn max_duration(&self) -> f64 {
+        if self.extremas_dirty.get() {
+            let mut max = 0.0f64;
+            for event in &self.events {
+                if event.duration() > max {
+                    max = event.duration();
+                }
+            }
+            self.max_duration.set(max);
+            self.extremas_dirty.set(false);
+        }
+        self.max_duration.get()
     }
 }
 

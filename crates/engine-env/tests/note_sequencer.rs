@@ -85,3 +85,89 @@ fn truncate_mode_cuts_notes_at_the_loop_cycle_end() {
     assert!(third.iter().any(|event| matches!(event, Event::NoteComplete {position, ..} if *position == 200.0)),
         "cycle 2 off at the region end: {third:?}");
 }
+
+#[test]
+fn the_chance_roll_stream_matches_the_ts_sequencer_seed() {
+    // The first `nextDouble(0, 100)` values of lib-std `Mulberry32(0xFFF_F123)` (computed in node from the
+    // TS source). The sequencer's rolls MUST consume this exact stream for TS-WASM parity.
+    use math::random::Mulberry32;
+    let expected = [
+        74.664209992624819f64, 48.376012477092445, 95.600672857835889,
+        75.700043095275760, 71.344265271909535, 89.466835046187043
+    ];
+    let mut random = Mulberry32::new(0xFFF_F123);
+    for (index, want) in expected.iter().enumerate() {
+        let got = random.next_double(0.0, 100.0);
+        assert_eq!(got, *want, "roll {index}");
+    }
+}
+
+#[test]
+fn chance_gates_notes_on_the_seeded_stream() {
+    // chance 60 with the 0xFFF_F123 stream: roll 74.66 SKIPS the first pass, roll 48.38 PLAYS the second.
+    // (The exact scenario of the Open Up vocal: TS skipped the first pass, the old WASM always played.)
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0};
+    let mut note = NoteEvent::new(10.0, 20.0, 60, 0.0, 1.0);
+    note.chance = 60.0;
+    let mut sequencer = sequencer(region, &[note]);
+    let first = pull(&mut sequencer, 0.0, 100.0);
+    assert!(!first.iter().any(|event| matches!(event, Event::NoteStart {..})),
+        "first pass: roll 74.66 > 60 skips the note: {first:?}");
+    let second = pull(&mut sequencer, 100.0, 200.0);
+    assert!(second.iter().any(|event| matches!(event, Event::NoteStart {position, ..} if *position == 110.0)),
+        "second pass: roll 48.38 <= 60 plays the loop repeat: {second:?}");
+}
+
+#[test]
+fn chance_100_notes_never_roll_and_always_play() {
+    // A chance-100 note must NOT advance the RNG stream (TS short-circuits `chance < 100.0`).
+    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0};
+    let mut gated = NoteEvent::new(50.0, 10.0, 62, 0.0, 1.0);
+    gated.chance = 70.0;
+    let plain = NoteEvent::new(10.0, 10.0, 60, 0.0, 1.0);
+    let mut sequencer = sequencer(region, &[plain, gated]);
+    let events = pull(&mut sequencer, 0.0, 100.0);
+    assert!(events.iter().any(|event| matches!(event, Event::NoteStart {pitch: 60, ..})), "the plain note always plays");
+    assert!(!events.iter().any(|event| matches!(event, Event::NoteStart {pitch: 62, ..})),
+        "the gated note consumed the FIRST roll (74.66 > 70 skips): the plain note did not shift the stream");
+}
+
+#[test]
+fn play_count_ratchets_the_note_linearly() {
+    // playCount 4, curve 0 (linear): a 40-pulse note at 10 ratchets every 10 pulses. The window start (0)
+    // lands EXACTLY on the pre-note grid point (index -1), which TS's `searchPosition >= searchStart`
+    // includes — so the faithful result is FIVE repeats starting at 0 (the grid-aligned phantom), 10, 20,
+    // 30, 40, each 10 long.
+    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0};
+    let mut note = NoteEvent::new(10.0, 40.0, 60, 0.0, 1.0);
+    note.play_count = 4;
+    let mut sequencer = sequencer(region, &[note]);
+    let events = pull(&mut sequencer, 0.0, 100.0);
+    let starts: Vec<(f64, f64)> = events.iter().filter_map(|event| match event {
+        Event::NoteStart {position, duration, ..} => Some((*position, *duration)),
+        _ => None
+    }).collect();
+    assert_eq!(starts.len(), 5, "five repeats incl the grid-aligned pre-note (TS-faithful): {starts:?}");
+    for (index, (position, duration)) in starts.iter().enumerate() {
+        assert!((position - index as f64 * 10.0).abs() < 1.0e-9, "repeat {index} at {position}");
+        assert!((duration - 10.0).abs() < 1.0e-9, "repeat {index} duration {duration}");
+    }
+}
+
+#[test]
+fn a_ratchet_spanning_blocks_retriggers_via_the_lookback() {
+    // The note STARTS before the second block's window; the max-duration lookback must still find it so
+    // the repeats inside the window fire (TS iterates from `localStart - collection.maxDuration`).
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 200.0};
+    let mut note = NoteEvent::new(0.0, 160.0, 60, 0.0, 1.0);
+    note.play_count = 4; // repeats at 0, 40, 80, 120
+    let mut sequencer = sequencer(region, &[note]);
+    let first = pull(&mut sequencer, 0.0, 50.0);
+    assert_eq!(first.iter().filter(|event| matches!(event, Event::NoteStart {..})).count(), 2, "repeats 0 + 40: {first:?}");
+    let second = pull(&mut sequencer, 50.0, 130.0);
+    let starts: Vec<f64> = second.iter().filter_map(|event| match event {
+        Event::NoteStart {position, ..} => Some(*position),
+        _ => None
+    }).collect();
+    assert_eq!(starts, vec![80.0, 120.0], "the lookback finds the running ratchet: {second:?}");
+}

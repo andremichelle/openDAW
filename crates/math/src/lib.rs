@@ -34,6 +34,12 @@ pub fn mod_euclid(n: f64, m: f64) -> f64 {
     n - floor(n / m) * m
 }
 
+/// `x^y` in f64 (libm-backed for no_std + host/wasm parity). Mirrors JS `**` on doubles.
+#[inline]
+pub fn pow(x: f64, y: f64) -> f64 {
+    libm::pow(x, y)
+}
+
 /// Round to nearest, half away from zero (libm-backed for no_std + host/wasm parity). Mirrors JS `Math.round`
 /// for the non-negative sample counts the granular voices round (`Math.round(VOICE_FADE_DURATION * sampleRate)`).
 #[inline]

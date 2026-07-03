@@ -4,7 +4,6 @@
 //! any modulating synth.
 
 use crate::osc::ClassicWaveform;
-use core::f64::consts::TAU;
 
 /// A naive (non-band-limited) LFO over a control value, mirroring lib-dsp `LFO`.
 #[derive(Clone, Copy, Default)]

@@ -57,6 +57,7 @@ const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
     {url: "/device_soundfont.wasm", boxType: "SoundfontDeviceBox"}, // instrument (preset sampler)
     {url: "/device_vocoder.wasm", boxType: "VocoderDeviceBox"},   // audio effect (channel vocoder + sidechain)
+    {url: "/device_neural_amp.wasm", boxType: "NeuralAmpDeviceBox"}, // audio effect (NAM, via the nam bridge)
     {url: "/device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"} // composite child (one Playfield slot)
 ]
 

@@ -16,7 +16,10 @@ const NOTE_POSITION: u16 = 10; // Int32 pulses
 const NOTE_DURATION: u16 = 11; // Int32 pulses
 const NOTE_PITCH: u16 = 20; // Int32 (0..=127)
 const NOTE_VELOCITY: u16 = 21; // Float32 (0..=1)
+const NOTE_PLAY_COUNT: u16 = 22; // Int32 (>= 1, the ratchet repeat count)
+const NOTE_PLAY_CURVE: u16 = 23; // Float32 (the ratchet time-warp, 0 = linear)
 const NOTE_CENT: u16 = 24; // Float32 cents
+const NOTE_CHANCE: u16 = 25; // Int32 (0..=100, the play probability)
 const DEFAULT_DURATION: i32 = 240;
 const DEFAULT_VELOCITY: f32 = 0.787_401_57; // 100/127, the schema default
 
@@ -27,5 +30,9 @@ pub fn read_note_event(graph: &BoxGraph, note_uuid: Uuid) -> NoteEvent {
     let duration = field(NOTE_DURATION).and_then(FieldValue::as_int32).unwrap_or(DEFAULT_DURATION) as f64;
     let velocity = field(NOTE_VELOCITY).and_then(FieldValue::as_float32).unwrap_or(DEFAULT_VELOCITY);
     let cent = field(NOTE_CENT).and_then(FieldValue::as_float32).unwrap_or(0.0);
-    NoteEvent::new(position, duration, clamp(pitch, 0, 127) as u8, cent, velocity)
+    let mut event = NoteEvent::new(position, duration, clamp(pitch, 0, 127) as u8, cent, velocity);
+    event.chance = field(NOTE_CHANCE).and_then(FieldValue::as_int32).unwrap_or(100) as f32;
+    event.play_count = field(NOTE_PLAY_COUNT).and_then(FieldValue::as_int32).unwrap_or(1);
+    event.play_curve = field(NOTE_PLAY_CURVE).and_then(FieldValue::as_float32).unwrap_or(0.0);
+    event
 }

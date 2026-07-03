@@ -129,6 +129,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-neural-amp"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "math",
+]
+
+[[package]]
 name = "device-playfield-slot"
 version = "0.0.0"
 dependencies = [

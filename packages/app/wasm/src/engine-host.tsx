@@ -7,6 +7,7 @@ import {EngineStateSchema, ProjectSkeleton, ScriptCompiler} from "@opendaw/studi
 import {AudioData, PPQN} from "@opendaw/lib-dsp"
 import {SampleInfo, SampleLoader} from "./sample-loader"
 import {SoundfontInfo, SoundfontLoader} from "./soundfont-loader"
+import {NamLoader} from "./nam-loader"
 import {loadSoundfontBlob} from "./soundfont-fetch"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
 import {loadSampleCached} from "./sample-fetch"
@@ -212,6 +213,15 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
             }
         }
         lifecycle.own(Communicator.executor<SoundfontLoader>(messenger.channel("soundfonts"), soundfontLoader))
+        // The NAM analog: fetch the `@opendaw/nam-wasm` binary (lazily, on the worklet's first NeuralAmp model
+        // load) and hand the bytes over; the worklet instantiates it next to the engine. The TS engine's recipe.
+        lifecycle.own(Communicator.executor<NamLoader>(messenger.channel("nam"), new class implements NamLoader {
+            async fetchWasm(): Promise<ArrayBuffer> {
+                const url = new URL("@opendaw/nam-wasm/nam.wasm", import.meta.url)
+                append(`nam: fetching ${url}`)
+                return (await fetch(url)).arrayBuffer()
+            }
+        }))
         // SyncSource (unchanged) -> local BroadcastChannel loopback -> serialize (this graph's schema) -> worklet bytes.
         const sender = new BroadcastChannel(options.channel)
         const receiver = new BroadcastChannel(options.channel)

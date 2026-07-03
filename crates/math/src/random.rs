@@ -22,11 +22,22 @@ impl Mulberry32 {
     /// The next `[0, 1)` value. Mirrors `Mulberry32.uniform`: `imul` is `wrapping_mul`, `>>>` is `u32 >>`, and
     /// the final divide by 2^32 is done in `f64` then narrowed (the f64 -> f32 policy).
     pub fn uniform(&mut self) -> f32 {
+        self.uniform_f64() as f32
+    }
+
+    /// The next `[0, 1)` value at FULL f64 precision, the exact TS `uniform` (JS numbers are doubles). The
+    /// note sequencer's chance rolls compare this against thresholds, so it must not narrow.
+    pub fn uniform_f64(&mut self) -> f64 {
         self.seed = self.seed.wrapping_add(0x6D2B_79F5);
         let mut t = self.seed;
         t = (t ^ (t >> 15)).wrapping_mul(t | 1);
         t ^= t.wrapping_add((t ^ (t >> 7)).wrapping_mul(t | 61));
-        ((t ^ (t >> 14)) as f64 / 4_294_967_296.0) as f32
+        (t ^ (t >> 14)) as f64 / 4_294_967_296.0
+    }
+
+    /// Mirrors `Mulberry32.nextDouble`: `min + uniform() * (max - min)` in f64.
+    pub fn next_double(&mut self, min: f64, max: f64) -> f64 {
+        min + self.uniform_f64() * (max - min)
     }
 }
 

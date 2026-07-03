@@ -42,7 +42,14 @@ export const renderTs = async (project: ArrayBuffer, sampleMap: Map<string, Audi
             const {parseSoundfont} = await import("../../src/soundfont-fetch")
             return parseSoundfont(carried.sf2)
         },
-        fetchNamWasm: (): Promise<never> => Promise.reject(new Error("no nam")),
+        fetchNamWasm: async (): Promise<ArrayBuffer> => {
+            // Serve the real `@opendaw/nam-wasm` binary from the package (in node the worklet's URL fetch is
+            // unavailable), so a TS-vs-wasm parity patch may carry a NeuralAmp device.
+            const {createRequire} = await import("node:module")
+            const {readFileSync} = await import("node:fs")
+            const bytes = readFileSync(createRequire(__filename).resolve("@opendaw/nam-wasm/nam.wasm"))
+            return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+        },
         notifyClipSequenceChanges: (): void => {}, switchMarkerState: (): void => {}
     })
     const engineCommands = Communicator.sender<EngineCommands>(messenger.channel("engine-commands"),

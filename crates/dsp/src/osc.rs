@@ -2,7 +2,6 @@
 //! triangle (the triangle integrates the band-limited square with a leaky integrator). f64 phase (like the TS
 //! `number`) for precision over long notes; f32 output samples. Generic, shareable by any synth voice.
 
-use core::f64::consts::TAU;
 
 /// The four classic oscillator shapes, mirroring lib-dsp `ClassicWaveform` (sine = 0, triangle = 1, saw = 2,
 /// square = 3 — the order a synth's waveform parameter indexes).

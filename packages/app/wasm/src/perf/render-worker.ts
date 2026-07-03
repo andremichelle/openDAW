@@ -8,7 +8,7 @@ import {disableLoopArea, registerScriptDevices, renderTsOffline, renderWasmOffli
 import type {OfflineResult} from "./result"
 
 export type RenderRequest = {odb: ArrayBuffer, quanta: number, sampleRate: number}
-type ResultMessage = {left: Float32Array, right: Float32Array, renderMs: number, sampleRate: number}
+type ResultMessage = {left: Float32Array<ArrayBuffer>, right: Float32Array<ArrayBuffer>, renderMs: number, sampleRate: number}
 export type RenderResponse =
     | {type: "progress", message: string}
     | {type: "done", wasm: ResultMessage, ts: ResultMessage}

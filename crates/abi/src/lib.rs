@@ -161,8 +161,17 @@ extern "C" {
     fn host_resolve_soundfont(handle: u32, out_ptr: u32) -> u32;
     fn host_observe_soundfont(path_ptr: u32, path_len: u32) -> u32;
     fn host_observe_field(path_ptr: u32, path_len: u32) -> u32;
+    fn host_observe_target_string(path_ptr: u32, path_len: u32, field_key: u32) -> u32;
     fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
+    // NAM BRIDGE (NeuralAmp only). JS closures the loader binds into `env` (script-bridge style): the DSP is
+    // the `@opendaw/nam-wasm` Emscripten module (NeuralAmpModelerCore) instantiated NEXT TO the engine in the
+    // worklet; the bridge copies each chunk between the two memories. See the `nam_*` wrappers below.
+    fn host_nam_create(uuid_ptr: u32) -> u32;
+    fn host_nam_load(handle: u32, json_ptr: u32, json_len: u32);
+    fn host_nam_set_mono(handle: u32, mono: u32);
+    fn host_nam_process(handle: u32, in0_ptr: u32, in1_ptr: u32, out0_ptr: u32, out1_ptr: u32, frames: u32, channels: u32) -> u32;
+    fn host_nam_reset(handle: u32);
     // SCRIPT BRIDGE (Werkstatt / Apparat / Spielwerk only). `host_self_uuid` is an engine export like the rest;
     // the `host_script_*` family are JS closures the loader binds into `env` (see the `script_*` wrappers below).
     fn host_self_uuid(out16_ptr: u32);
@@ -455,6 +464,22 @@ pub fn observe_field(path: &[u16]) -> u32 {
     { let _ = path; 0 }
 }
 
+/// Observe a POINTER field of THIS device by its field-key PATH, delivering the TARGET box's STRING field
+/// `field_key` through [`Instrument::field_changed`] / the effect's `field_changed` as a
+/// [`FieldValue::String`] (an EMPTY string when the pointer is unbound or the target lacks the field).
+/// Returns an id in the SAME id space as [`observe_field`]. The host tracks the pointer reactively: catch-up
+/// and every set / repoint / clear re-resolves the target and re-delivers, only inside a transaction, never
+/// during render. Built for resources that live as a string on a referenced box (the NeuralAmp's model JSON
+/// on its `NeuralAmpModelBox`), but generic: no box name or field key is hardcoded host-side. A device calls
+/// this from `init`. Native stub returns 0.
+#[inline]
+pub fn observe_target_string(path: &[u16], field_key: u16) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_observe_target_string(path.as_ptr() as u32, path.len() as u32, field_key as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (path, field_key); 0 }
+}
+
 /// Register one of THIS device's parameters with the host by its stable FIELD-KEY PATH on the device box
 /// (`path`) — e.g. `[16, 10]` for `lowPass.frequency`, the same keys the box schema uses (no encoding).
 /// Returns an opaque `id` the device keeps and matches in `parameter_changed`. A device calls this from its
@@ -611,6 +636,74 @@ pub fn script_notes(handle: u32, input: &[EventRecord], out: &mut [EventRecord],
     { unsafe { host_script_notes(handle, input.as_ptr() as u32, input.len() as u32, out.as_mut_ptr() as u32, out.len() as u32, from, to, bpm, flags, s0, s1) as usize } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, input, out.len(), from, to, bpm, flags, s0, s1); 0 }
+}
+
+// ---- NAM BRIDGE wrappers ----------------------------------------------------------------------------------
+// The NeuralAmp device's DSP is the `@opendaw/nam-wasm` module (NeuralAmpModelerCore, the exact module the TS
+// engine runs), instantiated as its OWN wasm instance in the worklet — an Emscripten build cannot join the
+// engine's shared memory. These wrappers cross into JS closures the loader binds (like `host_script_*`); the
+// zero-JS-in-render relaxation stays contained to the scriptable devices plus this one. Native stubs are
+// no-ops / "not loaded" so the crate builds + unit-tests off-target (the device then passes through).
+
+/// Create (or on a rebind REUSE, keyed by the device box `uuid`) this device's JS-side NAM bridge, returning
+/// a handle every later `nam_*` call passes. Reuse keeps the loaded model + its prewarmed state across
+/// rebinds. Native stub returns 0 (the bridge treats 0 as "no bridge" and `nam_process` reports not-loaded).
+#[inline]
+pub fn nam_create(uuid: &[u8; 16]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_nam_create(uuid.as_ptr() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = uuid; 0 }
+}
+
+/// Load the `.nam` model JSON into the bridge's instances (the bridge copies the UTF-8 bytes out of the
+/// engine memory synchronously; byte-identical JSON is skipped). An EMPTY string unloads. The nam module
+/// itself loads lazily off-thread on the first call; until it is ready `nam_process` reports not-loaded and
+/// the device passes through, mirroring the TS processor while its wasm fetch is in flight. Native stub no-op.
+#[inline]
+pub fn nam_load(handle: u32, json: &str) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_nam_load(handle, json.as_ptr() as u32, json.len() as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, json); }
+}
+
+/// Mirror the TS `#onMonoChanged`: `true` drops the second instance, `false` creates it and loads the cached
+/// model into it. Native stub no-op.
+#[inline]
+pub fn nam_set_mono(handle: u32, mono: bool) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_nam_set_mono(handle, mono as u32) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, mono); }
+}
+
+/// Run `frames` samples of `channels` (1 = mono, 2 = stereo) scratch buffers through the bridge's instances.
+/// Returns `true` when the model is loaded and the wet signal was written into the out buffers; `false` means
+/// not ready (module still loading / no model) and the device must pass its input through, the TS not-ready
+/// path. Native stub returns `false`.
+#[inline]
+pub fn nam_process(handle: u32, inputs: [&[f32]; 2], outputs: [&mut [f32]; 2], frames: usize, channels: u32) -> bool {
+    #[cfg(target_family = "wasm")]
+    {
+        let [in0, in1] = inputs;
+        let [out0, out1] = outputs;
+        unsafe {
+            host_nam_process(handle, in0.as_ptr() as u32, in1.as_ptr() as u32,
+                             out0.as_mut_ptr() as u32, out1.as_mut_ptr() as u32, frames as u32, channels) != 0
+        }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, inputs, outputs, frames, channels); false }
+}
+
+/// Reset the bridge's instances' internal DSP state (transport stop). Native stub no-op.
+#[inline]
+pub fn nam_reset(handle: u32) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_nam_reset(handle) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = handle; }
 }
 
 /// Pull THIS device's parameters that CHANGED at pulse `position` into `out` (the host resolves each — its

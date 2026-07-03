@@ -4,8 +4,10 @@
 
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
+import {createRequire} from "node:module"
 import {UUID} from "@opendaw/lib-std"
 import {ScriptBridges, ScriptEngine} from "../../src/script-bridge"
+import {NamBridges} from "../../src/nam-bridge"
 
 const PUBLIC = path.resolve(__dirname, "../../public")
 const DEVICE_STACK_SIZE = 256 * 1024
@@ -35,7 +37,8 @@ const DEVICES: ReadonlyArray<{file: string, boxType: string}> = [
     {file: "device_reverb.wasm", boxType: "ReverbDeviceBox"}, // audio effect
     {file: "device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
     {file: "device_soundfont.wasm", boxType: "SoundfontDeviceBox"}, // instrument (preset sampler)
-    {file: "device_vocoder.wasm", boxType: "VocoderDeviceBox"} // audio effect (channel vocoder + sidechain)
+    {file: "device_vocoder.wasm", boxType: "VocoderDeviceBox"}, // audio effect (channel vocoder + sidechain)
+    {file: "device_neural_amp.wasm", boxType: "NeuralAmpDeviceBox"} // audio effect (NAM, via the nam bridge)
 ]
 type CompositeSpec = {boxType: string, childrenField: number, indexKey: number, excludeKey: number,
     cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number}
@@ -79,6 +82,7 @@ const parseDylink = (module: WebAssembly.Module): {memorySize: number, tableSize
 export type FullEngine = {
     engine: any
     memory: WebAssembly.Memory
+    namBridges: NamBridges
     deviceBuilds(): number
     // Feed a synthetic sample to every load the engine has queued (on seeing an AudioFileBox), so sample-based
     // devices (a Playfield slot) are AUDIBLE in tests. Returns how many it satisfied. The real loader fetches +
@@ -102,7 +106,14 @@ export const loadFullEngine = async (sampleRate = 48000,
     ;(globalThis as any).sampleRate = sampleRate
     // The script bridge runs the scriptable devices' user JavaScript over the shared memory (see script-bridge.ts).
     const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate, onScriptMessage)
-    const scriptImports = scriptBridges.imports()
+    // The nam bridge runs the NeuralAmp devices' nam-wasm inference; in node the binary comes from the package.
+    const namBridges = new NamBridges(memory, async () => {
+        const namWasmPath = createRequire(path.join(__dirname, "load-full-engine.ts")).resolve("@opendaw/nam-wasm/nam.wasm")
+        const bytes = readFileSync(namWasmPath)
+        // A node Buffer can sit at an offset inside a pooled ArrayBuffer; hand over exactly the file's bytes.
+        return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+    }, sampleRate)
+    const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports()}
 
     const installOptional = (fn: unknown): number => {
         if (fn === undefined) {return 0}
@@ -133,10 +144,11 @@ export const loadFullEngine = async (sampleRate = 48000,
                 host_resolve_soundfont: engine.host_resolve_soundfont,
                 host_observe_soundfont: engine.host_observe_soundfont,
                 host_observe_field: engine.host_observe_field,
+                host_observe_target_string: engine.host_observe_target_string,
                 host_bind_sidechain: engine.host_bind_sidechain,
                 host_resolve_input: engine.host_resolve_input,
                 host_self_uuid: engine.host_self_uuid,
-                ...scriptImports
+                ...bridgeImports
             }
         }).exports as any
         device.__wasm_apply_data_relocs?.()
@@ -200,5 +212,5 @@ export const loadFullEngine = async (sampleRate = 48000,
         }
         return satisfied
     }
-    return {engine, memory, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
+    return {engine, memory, namBridges, deviceBuilds: () => engine.device_build_count() >>> 0, drainSamples, drainSoundfonts}
 }

@@ -16,6 +16,8 @@ import {SampleInfo, SampleLoader} from "./sample-loader"
 import {SoundfontInfo, SoundfontLoader} from "./soundfont-loader"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
 import {ScriptBridges, ScriptEngine} from "./script-bridge"
+import {NamBridges} from "./nam-bridge"
+import {NamLoader} from "./nam-loader"
 
 const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~42)
 const DEVICE_STACK_SIZE = 256 * 1024 // talc-allocated stack handed to each loaded device
@@ -118,6 +120,9 @@ type EngineExports = {
     host_self_uuid: (outPtr: number) => void
     host_observe_sample: (pathPtr: number, pathLen: number) => number
     host_observe_field: (pathPtr: number, pathLen: number) => number
+    // Observe a device's POINTER field and deliver the TARGET box's string field through `field_changed`
+    // (the NeuralAmp's model JSON on its NeuralAmpModelBox); shares the `host_observe_field` id space.
+    host_observe_target_string: (pathPtr: number, pathLen: number, fieldKey: number) => number
     // Route B/C (audio input ports). A device imports these: `host_bind_sidechain` declares a sidechain port by
     // its pointer field-key path (returns the port id 2+); `host_resolve_input` resolves a port id to its
     // stereo buffer during render (id 1 the through-signal).
@@ -175,7 +180,9 @@ class EngineProcessor extends AudioWorkletProcessor {
     #loader!: SampleLoader // the sample-load RPC sender (set in the constructor)
     #soundfontLoader!: SoundfontLoader // the soundfont-load RPC sender (set in the constructor)
     #scripts!: ScriptListener // scriptable-device error back-channel sender (set in the constructor)
+    #namLoader!: NamLoader // the nam-wasm binary RPC sender (set in the constructor)
     readonly #scriptBridges: ScriptBridges // runs the scriptable devices' user JS over the shared memory
+    readonly #namBridges: NamBridges // runs the NeuralAmp devices' nam-wasm inference next to the engine
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
@@ -201,8 +208,12 @@ class EngineProcessor extends AudioWorkletProcessor {
         this.#scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
             (uuid, message) => this.#scripts.deviceMessage(uuid, message))
         const scriptImports = this.#scriptBridges.imports()
+        // The nam bridge runs the NeuralAmp devices' inference in the `@opendaw/nam-wasm` module, instantiated
+        // lazily next to the engine on the first model load (the binary arrives over the `nam` RPC channel).
+        this.#namBridges = new NamBridges(memory, () => this.#namLoader.fetchWasm(), sampleRate)
+        const bridgeImports = {...scriptImports, ...this.#namBridges.imports()}
         // load each device PIC side module at a host-assigned base, register it, and map its box type.
-        deviceModules.forEach((deviceModule, index) => this.#loadDevice(deviceModule, deviceBoxTypes[index], sampleRate, scriptImports))
+        deviceModules.forEach((deviceModule, index) => this.#loadDevice(deviceModule, deviceBoxTypes[index], sampleRate, bridgeImports))
         // register each composite box type: write its name into the input buffer, then map its child collection
         // (the child plugin itself is a normal device above). Box-type names are ASCII identifiers.
         composites.forEach(({boxType, childrenField, indexKey, excludeKey, cellInstrumentField, cellMidiField, cellAudioField, childEnabledKey}) => {
@@ -242,6 +253,9 @@ class EngineProcessor extends AudioWorkletProcessor {
         })
         this.#scripts = Communicator.sender<ScriptListener>(messenger.channel("script"), dispatcher => new class implements ScriptListener {
             deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
+        })
+        this.#namLoader = Communicator.sender<NamLoader>(messenger.channel("nam"), dispatcher => new class implements NamLoader {
+            fetchWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchWasm)}
         })
     }
 
@@ -288,7 +302,7 @@ class EngineProcessor extends AudioWorkletProcessor {
     // instantiate, apply its data relocations, install its `process` into the shared table, register it, and
     // map its device-box type to the registered device id (the engine's device table).
     #loadDevice(module: WebAssembly.Module, boxType: string, sampleRate: number,
-                scriptImports: Record<string, (...args: Array<number>) => number | void>): void {
+                bridgeImports: Record<string, (...args: Array<number>) => number | void>): void {
         const engine = this.#engine
         const table = this.#table
         const {memorySize, tableSize} = parseDylink(module)
@@ -319,11 +333,12 @@ class EngineProcessor extends AudioWorkletProcessor {
                 host_resolve_soundfont: engine.host_resolve_soundfont,
                 host_observe_soundfont: engine.host_observe_soundfont,
                 host_observe_field: engine.host_observe_field,
+                host_observe_target_string: engine.host_observe_target_string,
                 host_bind_sidechain: engine.host_bind_sidechain,
                 host_resolve_input: engine.host_resolve_input,
-                // Scriptable devices: the engine's self-uuid export + the JS script bridge closures.
+                // Scriptable devices + NeuralAmp: the engine's self-uuid export + the JS bridge closures.
                 host_self_uuid: engine.host_self_uuid,
-                ...scriptImports
+                ...bridgeImports
             }
         }).exports as unknown as DeviceExports
         device.__wasm_apply_data_relocs?.()

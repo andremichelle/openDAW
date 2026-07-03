@@ -214,3 +214,31 @@ scripts, by running each user Processor in the same AudioWorkletGlobalScope the 
 - Strip automation. The AudioUnit volume and panning ignored their automation entirely, the channel strip only tracked the static box field, so a fader automated up from silence played at full level from the first sample. Wired volume (field 12) and panning (field 13) into the same parameter pipeline the device parameters use, evaluated per block at the transport position through the real decibel and bipolar mappings from the TS adapter, with the static field as the fallback before any region. A soloed unit whose volume automates from zero is now silent at the start and audible after the ramp. Done.
 - A TS-versus-WASM parity hunt, because the page makes every fraction of a decibel visible. I added a third DIFFERENCE waveform and a null-test readout (loudness delta, null residual, max sample delta), and rebuilt the A/B switch to be sample-accurate by playing both renders through one Web Audio clock started together, so the two can never drift in PLAYBACK. That mattered, because the drift the ear caught in A/B was the old two-audio-element switch, not the engines. Cross-correlating the renders proved they stay time-locked to zero samples across a full minute. The remaining differences, all measured rather than guessed: the reverb-tail divergence is bounded floating-point drift and inaudible, an Apparat "Grain Synthesizer" calls `Math.random` so it can never null (a red herring), and the residual "the reverb sounds louder" on Open Up is a small SYSTEMATIC level bias, WASM a few tenths of a decibel hotter, spread across devices and biggest at the instrument, not the reverb. An f32-to-f64 pass on the Dattorro reverb improved the null residual but did not move the audible loudness, so it was reverted. The bias hunt is still open, the next step is a leak-free single-instrument null to read the exact gain difference in the sample path. Ongoing.
 - The Vocoder, the last portable stock device (deferred on Day 13). A channel vocoder over a bank of up to 16 bandpass pairs, ported to the letter as `dsp::vocoder` (a `NoiseGenerator` with byte-parity white, pink, and brown, plus the `VocoderDsp` filter bank with its geometric coefficient interpolation, per-band envelope follower, bandwidth-compensated output gain, and click-free band-count fade) with the `device-vocoder` audio-effect crate on top. The CARRIER is the main input, and the MODULATOR is chosen by the `modulatorSource` string field, synthesised noise, the carrier itself as a multi-band gate, or an external sidechain resolved through the same input-port model the Gate uses. `bandCount` is a non-param field, and the spectrum-analyser and peak meters of the TS processor are UI-only and skipped. Native DSP tests plus a WASM wiring test (self-mode gate differs from dry, noise-mode is audible, both finite and bounded). Done. Only NeuralAmp (needs neural-net weight delivery) and the Modular device remain unported.
+
+## Day 17 (2026-07-03): NeuralAmp, via a nam bridge instead of a port
+
+- NeuralAmp (the Tone3000 / NAM amp modeler) plays in the WASM engine. Decision first: NOT a Rust port of
+  NeuralAmpModelerCore. The engine BRIDGES to the exact `@opendaw/nam-wasm` module (v1.2.0 = core 0.5.3, the
+  latest A2-capable release) the TS engine runs, instantiated as its own wasm instance in the worklet — an
+  Emscripten build cannot join the engine's shared memory — with a `host_nam_*` closure family in the script
+  bridge's mold, one JS hop and two 128-sample copies per chunk, negligible next to the inference. Parity with
+  the TS engine is by construction: a level null-test through the same WaveNet model lands within 0.05 dB.
+  See `neural-amp.md`. Done.
+- The model delivery needed no blob handshake at all: Tone3000 already copies the chosen `.nam` JSON into a
+  content-addressed `NeuralAmpModelBox` STRING field, and that box was already in the wasm registry — the JSON
+  arrives in the engine's own box graph with every sync. A new GENERIC observation closes the last gap:
+  `observe_target_string(path, field_key)` tracks a device's POINTER field and delivers the TARGET box's string
+  through the existing `field_changed` wire (empty = unbound), sharing the `FIELD_OBS` id space (entries grew a
+  `target_key`, 0 = plain). The device hands the delivered ptr/len straight to the bridge, which copies the raw
+  UTF-8 into the nam heap — no JS string, no TextDecoder (the worklet has none), byte-identical re-deliveries
+  skipped. The nam module itself loads LAZILY on the first model, its binary fetched over a new `nam` RPC
+  channel (the TS engine's `fetchNamWasm` recipe); until it lands the device passes through, exactly like the
+  TS processor mid-fetch. Bridges are keyed by device uuid so a rebind reuses the loaded (prewarmed) model.
+- `device-neural-amp` mirrors the TS processor's wrapper to the letter: input/output gain `decibel(-72, 0, 12)`
+  through `db_to_gain`, unipolar mix, `mono` as an observed bool field driving instance count (mono averages
+  L+R into one instance, stereo runs two), not-ready = plain passthrough (no gains, no mix), `reset` resets the
+  nam instances. Native tests prove the wrapper (mappings, field dispatch, stub passthrough); WASM wiring tests
+  prove a WaveNet model audibly reshapes the signal, LSTM and stereo run finite, and an unbound model is a
+  bit-exact passthrough. The test-side TS renderer also gained a real `fetchNamWasm`, so parity patches may
+  carry NeuralAmp devices. Known gap, shared with the script bridge: devices have no `terminate` export, so a
+  REMOVED device leaks its two nam instances until reload. Done. Only the Modular device remains unported.

@@ -2,7 +2,8 @@
 // main-thread page can build audio players from a worker's result WITHOUT importing the heavy engine renderers.
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
 
-export type OfflineResult = {left: Float32Array, right: Float32Array, renderMs: number, sampleRate: number}
+// Plain (non-shared) buffers: `copyToChannel` and structured-clone transfer both require `ArrayBuffer` backing.
+export type OfflineResult = {left: Float32Array<ArrayBuffer>, right: Float32Array<ArrayBuffer>, renderMs: number, sampleRate: number}
 
 // The peak sample magnitude across both channels (0 = silence).
 export const resultPeak = (result: OfflineResult): number => {

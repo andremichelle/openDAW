@@ -52,7 +52,7 @@ use crate::composite::CompositeBinding;
 use crate::audio_region_player::AudioRegionPlayer;
 use crate::time_stretch::{TimeStretchConfig, TransientPlayMode};
 use crate::tempo_map::{SharedTempoMap, TempoMap};
-use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, CompositeSpec, DeviceReg, Engine, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
+use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, CompositeSpec, DeviceReg, Engine, FieldObs, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
 
 // AudioUnitBox field keys (WASM CONTRACT: mirror the TS AudioUnitBox schema). The unit carries its strip
 // params and hosts its instrument / effect chains / tracks at these hub keys.
@@ -2000,29 +2000,44 @@ impl Engine {
         DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, sidechain_paths, param_hub_sub, sample_hub_sub}
     }
 
-    /// Wire each PLAIN field a device asked to observe (`observe_field`): `catchup_and_subscribe` the field on
-    /// the device's box and deliver its value through the device's `field_changed` export, by the id (the
-    /// observation's index) the device got back. The callback runs on catch-up and on edits, only inside a
-    /// transaction, never during render, so calling the device is safe. Returns the subscriptions for teardown.
-    fn observe_fields(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, paths: &[Vec<u16>]) -> Vec<SubscriptionId> {
+    /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
+    /// `catchup_and_subscribe` the field on the device's box and deliver its value through the device's
+    /// `field_changed` export, by the id (the observation's index) the device got back. A TARGET-STRING
+    /// observation (`observe_target_string`): catch up to the POINTER's current target and subscribe to the
+    /// pointer field, delivering the target box's string field `target_key` (empty = unbound) — the
+    /// `observe_soundfonts` shape with the payload read straight from the graph. Both run on catch-up and on
+    /// edits, only inside a transaction, never during render, so calling the device is safe. Returns the
+    /// subscriptions for teardown.
+    fn observe_fields(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, paths: &[FieldObs]) -> Vec<SubscriptionId> {
         let mut subs = Vec::new();
-        for (index, path) in paths.iter().enumerate() {
+        for (index, obs) in paths.iter().enumerate() {
             let id = index as u32;
             let field_changed_index = reg.field_changed_index;
-            let sub = self.graph.catchup_and_subscribe(Address::of(device_uuid, path.clone()), move |value| {
-                // Encode the field's typed value onto the wire `(kind, bits, len)`: numeric bits, or a string's
-                // pointer + length into the shared memory (valid for the synchronous call).
-                if let Some(value) = value.as_int32() {
-                    call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_INT, value as u32, 0);
-                } else if let Some(value) = value.as_float32() {
-                    call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_FLOAT, value.to_bits(), 0);
-                } else if let Some(value) = value.as_bool() {
-                    call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_BOOL, value as u32, 0);
-                } else if let Some(value) = value.as_str() {
-                    call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_STRING, value.as_ptr() as u32, value.len() as u32);
-                }
-            });
-            subs.push(sub);
+            if obs.target_key == 0 {
+                let sub = self.graph.catchup_and_subscribe(Address::of(device_uuid, obs.path.clone()), move |value| {
+                    // Encode the field's typed value onto the wire `(kind, bits, len)`: numeric bits, or a string's
+                    // pointer + length into the shared memory (valid for the synchronous call).
+                    if let Some(value) = value.as_int32() {
+                        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_INT, value as u32, 0);
+                    } else if let Some(value) = value.as_float32() {
+                        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_FLOAT, value.to_bits(), 0);
+                    } else if let Some(value) = value.as_bool() {
+                        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_BOOL, value as u32, 0);
+                    } else if let Some(value) = value.as_str() {
+                        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_STRING, value.as_ptr() as u32, value.len() as u32);
+                    }
+                });
+                subs.push(sub);
+            } else {
+                let target_key = obs.target_key;
+                resolve_and_deliver_target_string(&self.graph, device_uuid, &obs.path, target_key, field_changed_index, state_ptr, id);
+                let owned_path = obs.path.clone();
+                let sub = self.graph.subscribe_vertex(Propagation::This, Address::of(device_uuid, obs.path.clone()),
+                    Box::new(move |graph, _update| {
+                        resolve_and_deliver_target_string(graph, device_uuid, &owned_path, target_key, field_changed_index, state_ptr, id);
+                    }));
+                subs.push(sub);
+            }
         }
         subs
     }
@@ -2291,6 +2306,19 @@ pub(crate) fn resolve_and_deliver_soundfont(graph: &BoxGraph, device_uuid: Uuid,
         }
         None => call_device_soundfont_changed(soundfont_changed_index, state_ptr, id, 0, 0)
     }
+}
+
+/// Resolve a device's observed POINTER to its target box and deliver the target's STRING field `target_key`
+/// through the device's `field_changed` (`FIELD_KIND_STRING`), or an EMPTY string when the pointer is unbound
+/// or the target lacks that string field. The delivered ptr/len reference the live box-graph string, valid for
+/// the synchronous call (the device copies or forwards it before returning). Mirrors
+/// `resolve_and_deliver_soundfont`, but needs no resource handshake: the payload already lives in the graph.
+pub(crate) fn resolve_and_deliver_target_string(graph: &BoxGraph, device_uuid: Uuid, path: &[u16], target_key: u16, field_changed_index: u32, state_ptr: u32, id: u32) {
+    let text = graph.target_of(&Address::of(device_uuid, path.to_vec()))
+        .and_then(|target| graph.field_value(&Address::of(target.uuid, vec![target_key])))
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_STRING, text.as_ptr() as u32, text.len() as u32);
 }
 
 /// The automation curve for a device parameter, if a Value track targets `(device_uuid, path)`: build a

@@ -328,11 +328,21 @@ static SOUNDFONTS: Shared<SoundfontResource> = Shared::new(SoundfontResource::ne
 // "unbound") via `soundfont_changed`. Its OWN cell (NOT `ENGINE`). Mirrors `SAMPLE_OBS`.
 static SOUNDFONT_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
 
-// The field-observe recorder the `host_observe_field` export appends to: each device's PLAIN box-field path it
-// wants to track (e.g. a Playfield slot's `index` at `[15]`). After `init`, the engine `catchup_and_subscribe`s
-// each path and delivers values through the device's `field_changed` export. Its own cell (NOT `ENGINE`) so the
+// One recorded field observation: `path` is the device-box field-key path; `target_key` is 0 for a PLAIN
+// field (observed directly via `host_observe_field`) or, for `host_observe_target_string`, the string field
+// key read off the POINTER TARGET the path names (schema keys start at 1, so 0 is free as the "plain" tag).
+// Both kinds share the `field_changed` id space (the index into `FIELD_OBS`).
+pub(crate) struct FieldObs {
+    pub(crate) path: Vec<u16>,
+    pub(crate) target_key: u16
+}
+
+// The field-observe recorder the `host_observe_field` / `host_observe_target_string` exports append to: each
+// device's PLAIN box-field path (e.g. a Playfield slot's `index` at `[15]`), or a pointer path whose TARGET's
+// string field the device tracks (the NeuralAmp's model JSON). After `init`, the engine `catchup_and_subscribe`s
+// each and delivers values through the device's `field_changed` export. Its own cell (NOT `ENGINE`) so the
 // re-entrant `host_observe_field` call from `init` never aliases `&mut Engine`.
-static FIELD_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+static FIELD_OBS: Shared<Vec<FieldObs>> = Shared::new(Vec::new());
 
 // The sidechain-bind recorder the `host_bind_sidechain` export appends to: each audio effect's sidechain
 // pointer FIELD-KEY path (e.g. the Gate's `side-chain` at `[30]`), in declaration order. After `init` the
@@ -537,7 +547,19 @@ pub extern "C" fn host_observe_soundfont(path_ptr: u32, path_len: u32) -> u32 {
 pub extern "C" fn host_observe_field(path_ptr: u32, path_len: u32) -> u32 {
     let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
     let obs = unsafe { FIELD_OBS.get() };
-    obs.push(path.to_vec());
+    obs.push(FieldObs {path: path.to_vec(), target_key: 0});
+    obs.len() as u32 - 1
+}
+
+/// Host import a device calls from its `init` to observe a POINTER field by its field-key PATH, tracking the
+/// TARGET box's STRING field `field_key`: on catch-up and every set / repoint / clear the engine resolves the
+/// target and delivers its string through `field_changed` (`FIELD_KIND_STRING`, empty = unbound). Shares the
+/// `FIELD_OBS` id space with `host_observe_field`. Touches no `&mut Engine`, so it is safe from `init`.
+#[no_mangle]
+pub extern "C" fn host_observe_target_string(path_ptr: u32, path_len: u32, field_key: u32) -> u32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let obs = unsafe { FIELD_OBS.get() };
+    obs.push(FieldObs {path: path.to_vec(), target_key: field_key as u16});
     obs.len() as u32 - 1
 }
 
