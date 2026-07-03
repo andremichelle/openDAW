@@ -62,6 +62,7 @@ impl EngineContext {
         self.next_id += 1;
         self.graph.add_vertex(id);
         self.processors.insert(id, processor);
+        self.sort.reserve(self.graph.vertices().len()); // pre-size here (reconcile) so the lazy in-render sort never allocates
         self.needs_sort = true;
         id
     }

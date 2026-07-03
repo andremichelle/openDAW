@@ -7,7 +7,7 @@ extern crate alloc;
 use engine_env::audio_buffer::shared_audio_buffer;
 use engine_env::audio_generator::AudioGenerator;
 use engine_env::audio_input::AudioInput;
-use engine_env::channel_strip::{ChannelStripProcessor, StripParams};
+use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripParams};
 use engine_env::process_info::ProcessInfo;
 use engine_env::processor::Processor;
 use engine_env::ramp::LinearRamp;
@@ -31,7 +31,7 @@ fn ramp_jumps_on_hard_set_and_interpolates_on_smooth_set() {
 
 fn strip_with_input(level: f32) -> (ChannelStripProcessor, Rc<StripParams>) {
     let params = Rc::new(StripParams::new());
-    let mut strip = ChannelStripProcessor::new(params.clone(), SR);
+    let mut strip = ChannelStripProcessor::new(params.clone(), Rc::new(StripAutomation::new()), SR);
     let input = shared_audio_buffer();
     {
         let mut buffer = input.borrow_mut();
