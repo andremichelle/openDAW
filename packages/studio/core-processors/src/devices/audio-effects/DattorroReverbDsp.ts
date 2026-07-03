@@ -135,7 +135,7 @@ export class DattorroReverbDsp {
             pre = db3[dw[3]] = si * (pre - db3[drd[3]]) + db2[drd[2]]
             const split = si * pre + db3[drd[3]]
             const exc = ed * (1 + Math.cos(excPhase * TAU))
-            const exc2 = ed * (1 + Math.sin(excPhase * 6.2847))
+            const exc2 = ed * (1 + Math.sin(excPhase * TAU))
             const r4exc = exc - ~~exc
             let r4int = ~~exc + drd[4] - 1
             const r4x0 = db4[r4int++ & dm4], r4x1 = db4[r4int++ & dm4]

@@ -173,10 +173,10 @@ impl DattorroReverbDsp {
             let d3r = self.get(3, read(self, 3));
             let split = si * pre + d3r;
             // excursion-modulated cubic reads for lines 4 and 8
-            // WASM CONTRACT: TAU here and 6.2847 on the sin line mirror the TS `DattorroReverbDsp` exactly
-            // (the sin rate is deliberately detuned from TAU so the two excursion LFOs decorrelate).
+            // WASM CONTRACT: TAU mirrors the TS `DattorroReverbDsp` exactly (one LFO period per phase unit;
+            // cos/sin keep the two excursion reads 90 degrees apart).
             let exc = ed * (1.0 + libm::cos(exc_phase * core::f64::consts::TAU)) as f32;
-            let exc2 = ed * (1.0 + libm::sin(exc_phase * 6.2847)) as f32;
+            let exc2 = ed * (1.0 + libm::sin(exc_phase * core::f64::consts::TAU)) as f32;
             let read_c4 = self.cubic_excursion(4, read(self, 4), exc);
             let read_c8 = self.cubic_excursion(8, read(self, 8), exc2);
             // tank, first half (lines 4..7)
