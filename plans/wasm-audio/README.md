@@ -39,6 +39,7 @@ WASM core is free to restructure; it just has to produce the same audio.
    - [Device processing pattern (AudioProcessor / NoteProcessor)](device-processing.md) — **draft, discussing**
    - [Processor infrastructure port map (TS → Rust)](processor-port-map.md) — **draft, discussing**
    - [Scriptable devices (JS DSP backend)](scriptable-devices.md)
+   - [LiveStreamBroadcaster (UI telemetry: meters / knobs / spectra)](live-broadcaster.md) — **planned**
 5. [Memory & module composition](05-memory.md) — **drafted** (needs a spike)
 6. [Build toolchain & integration](06-build.md) — **drafted**
 7. [Testing & parity harness](07-testing.md) — **drafted**
