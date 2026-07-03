@@ -917,6 +917,10 @@ impl Engine {
         let sum = Rc::new(RefCell::new(AudioBusProcessor::new(sum_buffer.clone())));
         let sum_id = self.context.register_processor(sum.clone());
         self.bus_registry.insert(bus_uuid, (sum.clone(), sum_id));
+        // Register the RAW SUM (pre-fx, pre-strip, pre-mute) under the AudioBusBox uuid so a sidechain pointer
+        // that targets this bus (e.g. a vocoder modulated by a MUTED submix) taps its full signal. Mirrors TS
+        // `AudioBusProcessor` registering `adapter.address -> #audioOutput` (the sum), NOT the strip output.
+        self.output_registry.register(Address::of(bus_uuid, vec![]), sum_buffer.clone(), sum_id);
         let mut nodes = vec![sum_id];
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut device_params: Vec<DeviceParams> = Vec::new();
@@ -1269,6 +1273,7 @@ impl Engine {
                 // master fallback (and skips removing its summed source from the now-gone sum). Then remove the
                 // enabled monitors, the fx params, the internal edges, and every node (sum + fx + strip).
                 self.bus_registry.remove(&bus.bus_uuid);
+                self.output_registry.remove(&Address::of(bus.bus_uuid, vec![]));
                 for sub in bus.subs {
                     self.graph.unsubscribe(sub);
                 }
