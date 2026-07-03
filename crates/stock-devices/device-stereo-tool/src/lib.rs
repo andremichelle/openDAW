@@ -141,6 +141,12 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
     unsafe { abi::with_state(state_ptr, |state| <StereoTool as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
 }
 
+/// Transport STOP: clear the runtime state (mirrors the TS processor's `reset`).
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, <StereoTool as AudioEffect>::reset) }
+}
+
 /// Apply the observed `panning-mixing` int field (0 = Linear, 1 = EqualPower).
 #[no_mangle]
 pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, len: u32) {

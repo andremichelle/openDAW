@@ -393,14 +393,17 @@ impl PullContext {
     }
 }
 
-// Order the device's input event stream: by position, and at an EQUAL position by kind priority
-// note-off -> param-update -> note-on. So a note ending at a position releases first, the automated
-// parameter is then updated, and a note starting there sees the new value (the confirmed tie-break).
-// Extends TS `NoteLifecycleEvent.Comparator` (which only ranks note-off before note-on) with the clock
-// update events the pulled stream also carries.
+// Order the device's input event stream: by position, at an EQUAL position by kind priority
+// note-off -> param-update -> note-on (so a note ending there releases first, the automated parameter
+// is then updated, and a note starting there sees the new value), and at an equal kind by note id
+// (emission order, since ids ascend). Extends TS `NoteLifecycleEvent.Comparator` (which only ranks
+// note-off before note-on) with the clock update events the pulled stream also carries. The id tiebreak
+// makes this a TOTAL order, so the callers can use the non-allocating `sort_unstable_by` (the stable
+// sort heap-allocates a scratch buffer past ~25 elements, inside render).
 fn compare_lifecycle(a: &Event, b: &Event) -> core::cmp::Ordering {
     match a.position().partial_cmp(&b.position()) {
-        Some(core::cmp::Ordering::Equal) | None => lifecycle_rank(a).cmp(&lifecycle_rank(b)),
+        Some(core::cmp::Ordering::Equal) | None => lifecycle_rank(a).cmp(&lifecycle_rank(b))
+            .then_with(|| lifecycle_id(a).cmp(&lifecycle_id(b))),
         Some(order) => order
     }
 }
@@ -410,6 +413,13 @@ fn lifecycle_rank(event: &Event) -> u8 {
         Event::NoteComplete {..} => 0, // note-off first
         Event::Update {..} => 1,       // then the param-update (clock tick)
         Event::NoteStart {..} => 2     // then note-on, so it sees the updated parameter
+    }
+}
+
+fn lifecycle_id(event: &Event) -> u64 {
+    match event {
+        Event::NoteStart {id, ..} | Event::NoteComplete {id, ..} => *id,
+        Event::Update {..} => 0
     }
 }
 
@@ -627,7 +637,7 @@ fn pull_from_source(source: &SharedNoteEventSource, from: f64, to: f64, flags: u
     let pull = unsafe { PULL.get() };
     pull.scratch.clear();
     source.borrow_mut().process_notes(from, to, BlockFlags(flags), &mut |event| pull.scratch.push(event));
-    pull.scratch.sort_by(compare_lifecycle);
+    pull.scratch.sort_unstable_by(compare_lifecycle);
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
     let mut count = 0;
     for event in &pull.scratch {
@@ -672,7 +682,7 @@ fn pull_from_slot_route(upstream: &SharedNoteEventSource, choke: &[i32], from: f
     let pull = unsafe { PULL.get() };
     pull.scratch.clear();
     upstream.borrow_mut().process_notes(from, to, BlockFlags(flags), &mut |event| pull.scratch.push(event));
-    pull.scratch.sort_by(compare_lifecycle);
+    pull.scratch.sort_unstable_by(compare_lifecycle);
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut EventRecord, max as usize) };
     let mut count = 0;
     for event in &pull.scratch {
@@ -1512,7 +1522,7 @@ mod tests {
     fn input_events_sort_by_position_then_off_param_on() {
         // Added out of order at the SAME position 0, plus a later note-on at 10.
         let mut events = vec![note_on(0.0), update(0.0), note_off(0.0), note_on(10.0)];
-        events.sort_by(compare_lifecycle);
+        events.sort_unstable_by(compare_lifecycle);
         // at position 0: note-off -> param-update -> note-on; then the position-10 note-on.
         assert_eq!(kinds(&events), vec!["off", "param", "on", "on"]);
     }
@@ -1520,7 +1530,7 @@ mod tests {
     #[test]
     fn earlier_position_always_precedes_regardless_of_kind() {
         let mut events = [note_on(5.0), note_off(20.0), update(1.0)];
-        events.sort_by(compare_lifecycle);
+        events.sort_unstable_by(compare_lifecycle);
         assert_eq!(events.iter().map(Event::position).collect::<Vec<_>>(), vec![1.0, 5.0, 20.0]);
     }
 }

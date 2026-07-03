@@ -800,7 +800,9 @@ impl Engine {
         for sub in core::mem::take(&mut unit.strip_param_subs) {
             self.graph.unsubscribe(sub);
         }
-        unit.strip_param_collections.clear();
+        for collection in core::mem::take(&mut unit.strip_param_collections) {
+            collection.terminate(&mut self.graph); // a plain drop would leak its hub / event / curve observers
+        }
         let invalidate = automation_invalidate(unit);
         let (volume_handle, volume_subs, volume_collections, _) = self.observe_param(unit.unit, &[UNIT_VOLUME_KEY], 0, &invalidate);
         let (panning_handle, panning_subs, panning_collections, _) = self.observe_param(unit.unit, &[UNIT_PANNING_KEY], 1, &invalidate);
@@ -1207,6 +1209,9 @@ impl Engine {
         }
         for sub in &binding.strip_param_subs {
             self.graph.unsubscribe(*sub);
+        }
+        for collection in core::mem::take(&mut binding.strip_param_collections) {
+            collection.terminate(&mut self.graph);
         }
         for track in binding.tracks {
             teardown_track(&mut self.graph, &binding.track_sets, &mut binding.collections, track);
@@ -2801,7 +2806,7 @@ mod tests {
     use alloc::rc::Rc;
     use core::cell::RefCell;
     use crate::{DeviceReg, Engine, EFFECT_INDEX_KEY};
-    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT, UNIT_MIDI_KEY, UNIT_INPUT_KEY, UNIT_AUDIO_KEY, UNIT_TRACKS_KEY, DEVICE_ENABLED_KEY, TRACK_ENABLED_KEY, TRACK_TYPE_KEY, TRACK_TYPE_AUDIO, TRACK_REGIONS_KEY};
+    use super::{AudioUnitBinding, Wired, DEVICE_KIND_INSTRUMENT, UNIT_MIDI_KEY, UNIT_INPUT_KEY, UNIT_AUDIO_KEY, UNIT_TRACKS_KEY, UNIT_VOLUME_KEY, DEVICE_ENABLED_KEY, TRACK_ENABLED_KEY, TRACK_TYPE_KEY, TRACK_TYPE_AUDIO, TRACK_REGIONS_KEY};
     use abi::DEVICE_KIND_AUDIO_EFFECT;
     use boxgraph::updates::Update;
     use engine_env::engine_context::NodeId;
@@ -3608,5 +3613,53 @@ mod tests {
         assert_eq!(collections.len(), 1, "its one value region's collection is observed");
         assert_eq!(curve.expect("child param has an automation curve").value_at(0.0, -1.0), 0.7,
             "the unit automation value reaches the child param (the bridge then maps it via the @param)");
+    }
+
+    #[test]
+    fn rebinding_strip_automation_does_not_leak_subscriptions() {
+        // A Value track automates the UNIT's volume (key 12). `bind_strip_automation` re-runs on every real
+        // automation change; each pass must terminate the previous pass's ValueCollections, else their hub /
+        // event / curve observers accumulate in the graph for the session.
+        const VTRACK: Uuid = [20u8; 16];
+        const VREGION: Uuid = [21u8; 16];
+        const VCOLL: Uuid = [22u8; 16];
+        const VEVENT: Uuid = [23u8; 16];
+        let mut engine = engine_with_devices();
+        let mut boxes = vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+            ]),
+            graph_box(INSTR, "TestInstrument", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))
+            ])
+        ];
+        boxes.extend(vec![
+            graph_box(VTRACK, "TrackBox", &[
+                (2, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_VOLUME_KEY])))),
+                (3, FieldValue::Hook)
+            ]),
+            graph_box(VREGION, "ValueRegionBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![3])))),
+                (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+                (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)), (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+            ]),
+            graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+            graph_box(VEVENT, "ValueEventBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))), (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.5))
+            ])
+        ]);
+        engine.graph = BoxGraph::from_boxes(boxes);
+        let mut unit = engine.build_unit(UNIT);
+        engine.bind_strip_automation(&mut unit);
+        let baseline = engine.graph.subscription_count();
+        for _ in 0..3 {
+            engine.bind_strip_automation(&mut unit);
+        }
+        assert_eq!(engine.graph.subscription_count(), baseline,
+            "repeated strip-automation rebinds must not grow the graph's observer count");
+        let with_unit = baseline;
+        engine.teardown_unit(unit);
+        assert!(engine.graph.subscription_count() < with_unit,
+            "teardown released the strip observers (count must drop below the bound state)");
     }
 }

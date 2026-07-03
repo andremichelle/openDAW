@@ -1,4 +1,4 @@
-import {float, int, nextPowOf2} from "@opendaw/lib-std"
+import {float, int, nextPowOf2, TAU} from "@opendaw/lib-std"
 import {StereoMatrix} from "@opendaw/lib-dsp"
 
 // https://github.com/khoin/DattorroReverbNode
@@ -134,7 +134,7 @@ export class DattorroReverbDsp {
             pre = db2[dw[2]] = fi * pre + db1[drd[1]] - si * db2[drd[2]]
             pre = db3[dw[3]] = si * (pre - db3[drd[3]]) + db2[drd[2]]
             const split = si * pre + db3[drd[3]]
-            const exc = ed * (1 + Math.cos(excPhase * 6.28))
+            const exc = ed * (1 + Math.cos(excPhase * TAU))
             const exc2 = ed * (1 + Math.sin(excPhase * 6.2847))
             const r4exc = exc - ~~exc
             let r4int = ~~exc + drd[4] - 1

@@ -83,6 +83,10 @@ impl AudioEffect for Reverb {
         }
     }
 
+    fn reset(state: &mut ReverbState) {
+        state.reverb.clear(); // TS `ReverbDeviceProcessor.reset` -> `FreeVerb.clear`: the tail dies on STOP
+    }
+
     fn process_audio(state: &mut ReverbState, output: [&mut [f32]; 2], block: &Block) {
         let Some(input) = abi::resolve_input(abi::MAIN_INPUT) else {return};
         let [in_left, in_right] = input.channels();
@@ -115,4 +119,10 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Reverb as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Transport STOP: the reverb tail dies (mirrors the TS processor's `reset`).
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, <Reverb as AudioEffect>::reset) }
 }

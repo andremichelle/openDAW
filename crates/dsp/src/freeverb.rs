@@ -66,6 +66,31 @@ impl FreeVerb {
         self.delay_position = 0;
     }
 
+    /// Clear the sounding state on a transport STOP (TS `FreeVerb.clear`): all rings + feedback histories +
+    /// positions go to zero, the parameters + delay geometry survive.
+    pub fn clear(&mut self) {
+        self.index = 0;
+        self.delay_position = 0;
+        for buffer in self.comb_left.iter_mut().chain(self.comb_right.iter_mut()) {
+            buffer.fill(0.0);
+        }
+        self.lp_left.fill(0.0);
+        self.fb_left.fill(0.0);
+        self.lp_right.fill(0.0);
+        self.fb_right.fill(0.0);
+        self.ap_l0.fill(0.0);
+        self.ap_l1.fill(0.0);
+        self.ap_l2.fill(0.0);
+        self.ap_l3.fill(0.0);
+        self.ap_r0.fill(0.0);
+        self.ap_r1.fill(0.0);
+        self.ap_r2.fill(0.0);
+        self.ap_r3.fill(0.0);
+        self.ap_left.fill(0.0);
+        self.ap_right.fill(0.0);
+        self.delay_buffer.fill(0.0);
+    }
+
     pub fn new(sample_rate: f32) -> Self {
         let delay_size = next_pow_of_2(libm::ceilf(0.5 * sample_rate) as usize).min(MAX_DELAY_SIZE);
         FreeVerb {

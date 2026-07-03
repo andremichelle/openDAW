@@ -44,7 +44,7 @@ impl<V: Ord + Copy> TopologicalSort<V> {
         for &vertex in graph.vertices() {
             self.states.push((vertex, WHITE));
         }
-        self.states.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+        self.states.sort_unstable_by_key(|entry| entry.0);
         for &vertex in graph.vertices() {
             if self.state(vertex) == WHITE {
                 self.dfs(graph, vertex);

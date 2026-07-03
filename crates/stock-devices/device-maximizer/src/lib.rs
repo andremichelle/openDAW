@@ -4,7 +4,7 @@
 //! With look-ahead on, the signal is delayed by the look-ahead window (so reduction lands before the transient)
 //! and the output is hard-clamped; with it off, the gain is applied directly.
 //!
-//! Parameters (`MaximizerDeviceBox`): threshold `[11]` (linear -30..0 dB). The lookahead `[10]` is a BOOL field
+//! Parameters (`MaximizerDeviceBox`): threshold `[11]` (linear -24..0 dB, the TS adapter mapping). The lookahead `[10]` is a BOOL field
 //! (observed, not automatable). The device owns the mappings.
 //!
 //! Exports: `kind()` (audio effect), `state_size()`, `process(desc_ptr)`, `init(...)`, `parameter_changed(...)`,
@@ -28,7 +28,7 @@ fn panic(_: &PanicInfo) -> ! {
 
 const THRESHOLD_FIELD: [u16; 1] = [11];
 const LOOKAHEAD_FIELD: [u16; 1] = [10];
-const THRESHOLD_MAPPING: Linear = Linear {min: -30.0, max: 0.0};
+const THRESHOLD_MAPPING: Linear = Linear {min: -24.0, max: 0.0}; // MaximizerDeviceBoxAdapter ValueMapping.linear(-24, 0)
 
 const RELEASE_IN_SECONDS: f32 = 0.2;
 const LOOK_AHEAD_SECONDS: f32 = 0.005;
@@ -165,6 +165,12 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Maximizer as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Transport STOP: clear the runtime state (mirrors the TS processor's `reset`).
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, <Maximizer as AudioEffect>::reset) }
 }
 
 /// Apply the observed `lookahead` bool field (resets the delay position + envelope on a change, like the TS).

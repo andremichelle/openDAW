@@ -150,6 +150,12 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
     unsafe { abi::with_state(state_ptr, |state| <Fold as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
 }
 
+/// Transport STOP: clear the runtime state (mirrors the TS processor's `reset`).
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, <Fold as AudioEffect>::reset) }
+}
+
 /// Apply the observed `over-sampling` int field (0/1/2 -> factor 2/4/8), rebuilding the oversampler + ramps.
 #[no_mangle]
 pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, len: u32) {

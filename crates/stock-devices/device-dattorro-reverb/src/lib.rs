@@ -107,6 +107,10 @@ impl AudioEffect for Dattorro {
         }
     }
 
+    fn reset(state: &mut DattorroState) {
+        state.dsp.reset(); // TS `DattorroReverbDeviceProcessor.reset` -> `DattorroReverbDsp.reset`: the tail dies on STOP
+    }
+
     fn process_audio(state: &mut DattorroState, output: [&mut [f32]; 2], block: &Block) {
         let Some(input) = abi::resolve_input(abi::MAIN_INPUT) else {return};
         let [in_left, in_right] = input.channels();
@@ -139,4 +143,10 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Dattorro as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Transport STOP: the reverb tail dies (mirrors the TS processor's `reset`).
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, <Dattorro as AudioEffect>::reset) }
 }

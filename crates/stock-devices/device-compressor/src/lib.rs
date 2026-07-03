@@ -257,3 +257,9 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Compressor as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
 }
+
+/// Transport STOP: clear the runtime state (mirrors the TS processor's `reset`).
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, <Compressor as AudioEffect>::reset) }
+}

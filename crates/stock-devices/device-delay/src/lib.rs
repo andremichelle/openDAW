@@ -172,9 +172,8 @@ impl AudioEffect for Delay {
         let (delay_l, rest) = tail.split_at_mut(size);
         let (delay_r, rest) = rest.split_at_mut(size);
         let (pre_l, pre_r) = rest.split_at_mut(size);
-        if block.flags.discontinuous() {
-            state.delay_dsp.reset([delay_l, delay_r], [pre_l, pre_r]);
-        }
+        // No DISCONTINUOUS handling: TS `DelayDeviceProcessor` keeps the delay lines across loop wraps and
+        // seeks (the echo tail survives the boundary); they clear only on transport stop via `reset`.
         let [input_l, input_r] = input.channels();
         let [output_l, output_r] = output;
         // The sub-chunk to process this call (absolute quantum coords); the delay line state persists across

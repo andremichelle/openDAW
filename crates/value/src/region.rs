@@ -32,6 +32,13 @@ pub fn locate_loops(position: f64, complete: f64, loop_offset: f64, loop_duratio
     let offset = position - loop_offset;
     let seek_min = if position > from {position} else {from};
     let seek_max = if complete < to {complete} else {to};
+    // A degenerate loop duration (0, negative, or NaN from an unset field) would drive `raw_start` to
+    // NaN and the `>= seek_max` termination test never fires: an audio-thread hang. Yield nothing.
+    // (The negated comparison is deliberate: it is the NaN-rejecting form.)
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    if !(loop_duration > 0.0) {
+        return LoopCycles {position, complete, loop_duration, seek_min, seek_max, raw_start: seek_max, index: 0};
+    }
     let index = floor((seek_min - offset) / loop_duration);
     LoopCycles {
         position,
@@ -58,7 +65,9 @@ impl Iterator for LoopCycles {
     type Item = LoopCycle;
 
     fn next(&mut self) -> Option<LoopCycle> {
-        if self.raw_start >= self.seek_max {
+        // Inverted comparison so a NaN in either operand terminates instead of iterating forever.
+        #[allow(clippy::neg_cmp_op_on_partial_ord)]
+        if !(self.raw_start < self.seek_max) {
             return None;
         }
         let raw_start = self.raw_start;

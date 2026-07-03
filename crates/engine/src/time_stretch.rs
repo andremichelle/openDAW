@@ -461,6 +461,15 @@ impl TimeStretchSequencer {
         self.accumulated_drift = 0.0;
     }
 
+    /// Hard-clear for POOL reuse (another region takes this sequencer over): drop all voices outright
+    /// (their fade-outs belong to the previous region's source) but keep the Vec capacities.
+    pub(crate) fn recycle(&mut self) {
+        self.voices.clear();
+        self.spawn.clear();
+        self.current_transient_index = -1;
+        self.accumulated_drift = 0.0;
+    }
+
     /// Render one loop cycle of a time-stretch region. `output` is summed into; `source` are the file planes;
     /// `transients` are the file's transient marker positions in SECONDS (sorted); `warp`/`mode`/`playback_rate`
     /// come from the `AudioTimeStretchBox`; `fading_gain` is the region fade envelope for this cycle, indexed by

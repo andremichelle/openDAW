@@ -160,3 +160,12 @@ fn moving_a_region_then_resorting_reorders_it() {
     assert_eq!(ids(&collection, 510.0, 560.0), vec![0]);
     assert!(ids(&collection, 10.0, 60.0).is_empty(), "nothing remains at the old position");
 }
+
+#[test]
+fn a_zero_loop_duration_yields_nothing_instead_of_hanging() {
+    // A 0-duration loop (field unset / degenerate region) drove raw_start to NaN, and `NaN >= seek_max`
+    // never terminated the iterator: an audio-thread hang. It must yield no cycles at all.
+    assert!(cycles(0.0, 4.0 * BAR, 0.0, 0.0, 0.0, 4.0 * BAR).is_empty());
+    assert!(cycles(0.0, 4.0 * BAR, 0.0, -1.0, 0.0, 4.0 * BAR).is_empty());
+    assert!(cycles(0.0, 4.0 * BAR, 0.0, f64::NAN, 0.0, 4.0 * BAR).is_empty());
+}

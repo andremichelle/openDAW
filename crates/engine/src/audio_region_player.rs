@@ -53,7 +53,11 @@ pub(crate) struct AudioRegionPlayer {
     native_cursors: Vec<(Uuid, NativeCursor)>,
     // Region uuids touched this quantum, to prune per-region state for regions that stopped playing (a re-entry
     // starts on a discontinuous block and resets anyway).
-    visited: Vec<Uuid>
+    visited: Vec<Uuid>,
+    // Recycled sequencers: a pruned region's sequencer parks here (voices cleared, capacity kept) and the next
+    // stretch region reuses it, so region entry/exit during playback never allocates or frees on the render path
+    // (a `TimeStretchSequencer::new` per entry was a guaranteed talc alloc mid-render).
+    sequencer_pool: Vec<TimeStretchSequencer>
 }
 
 /// The free-running read state of one no-stretch region: the current source-frame read position, and the pulse
@@ -78,7 +82,8 @@ impl NativeCursor {
 impl AudioRegionPlayer {
     pub(crate) fn new(tracks: SharedAudioTrackSets, sample_rate: f32, tempo_map: SharedTempoMap) -> Self {
         Self {tracks, sample_rate, tempo_map, output: shared_audio_buffer(), events: EventBuffer::new(),
-            sequencers: Vec::with_capacity(4), native_cursors: Vec::with_capacity(4), visited: Vec::with_capacity(8)}
+            sequencers: Vec::with_capacity(8), native_cursors: Vec::with_capacity(16), visited: Vec::with_capacity(32),
+            sequencer_pool: Vec::with_capacity(8)}
     }
 }
 
@@ -127,7 +132,8 @@ impl Processor for AudioRegionPlayer {
                             let index = match self.sequencers.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
                                 Some(index) => index,
                                 None => {
-                                    self.sequencers.push((region.region_uuid, TimeStretchSequencer::new()));
+                                    let sequencer = self.sequencer_pool.pop().unwrap_or_else(TimeStretchSequencer::new);
+                                    self.sequencers.push((region.region_uuid, sequencer));
                                     self.sequencers.len() - 1
                                 }
                             };
@@ -157,8 +163,19 @@ impl Processor for AudioRegionPlayer {
                 }
             }
         }
+        // Prune per-region state for regions that stopped playing: cursors are plain Copy structs (retain frees
+        // nothing), sequencers park in the pool for reuse instead of dropping their voice buffers mid-render.
+        let mut index = 0;
+        while index < self.sequencers.len() {
+            if self.visited.contains(&self.sequencers[index].0) {
+                index += 1;
+            } else {
+                let (_, mut sequencer) = self.sequencers.swap_remove(index);
+                sequencer.recycle();
+                self.sequencer_pool.push(sequencer);
+            }
+        }
         let visited = &self.visited;
-        self.sequencers.retain(|(uuid, _)| visited.contains(uuid));
         self.native_cursors.retain(|(uuid, _)| visited.contains(uuid));
     }
 }

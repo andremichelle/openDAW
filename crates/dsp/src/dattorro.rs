@@ -47,7 +47,10 @@ pub struct DattorroReverbDsp {
     lp1: f32,
     lp2: f32,
     lp3: f32,
-    exc_phase: f32,
+    // f64 like TS: the phase accumulates forever (never wraps), and at the default rate the per-sample
+    // increment (~1e-5) falls below the f32 ulp once the phase passes 256, freezing the tank LFO after
+    // ~8 minutes of playback (the tail turns static / metallic).
+    exc_phase: f64,
     pre_delay: usize,
     bandwidth: f32,
     input_diffusion1: f32,
@@ -93,6 +96,19 @@ impl DattorroReverbDsp {
         self.dry = 0.6;
     }
 
+    /// Clear the sounding state on a transport STOP (TS `DattorroReverbDsp.reset`): pre-delay + delay rings,
+    /// the input lowpass histories, the write position, and the excursion phase go to zero; the delay geometry
+    /// (offsets / masks / read-write pointers) and the parameters survive.
+    pub fn reset(&mut self) {
+        self.pre_delay_buffer.fill(0.0);
+        self.delay.fill(0.0);
+        self.pre_delay_write = 0;
+        self.lp1 = 0.0;
+        self.lp2 = 0.0;
+        self.lp3 = 0.0;
+        self.exc_phase = 0.0;
+    }
+
     pub fn set_pre_delay_ms(&mut self, ms: f32) {self.pre_delay = (libm::floorf(ms / 1000.0 * self.sample_rate) as usize).min(PRE_DELAY_SIZE - 1);}
     pub fn set_bandwidth(&mut self, value: f32) {self.bandwidth = value * 0.9999;}
     pub fn set_input_diffusion1(&mut self, value: f32) {self.input_diffusion1 = value;}
@@ -126,7 +142,7 @@ impl DattorroReverbDsp {
         let ft = self.decay_diffusion1;
         let st = self.decay_diffusion2;
         let dp = 1.0 - self.damping;
-        let ex = self.excursion_rate / self.sample_rate;
+        let ex = (self.excursion_rate / self.sample_rate) as f64;
         let ed = self.excursion_depth * self.sample_rate / 1000.0;
         let we = self.wet * 0.6;
         let dr = self.dry;
@@ -157,8 +173,10 @@ impl DattorroReverbDsp {
             let d3r = self.get(3, read(self, 3));
             let split = si * pre + d3r;
             // excursion-modulated cubic reads for lines 4 and 8
-            let exc = ed * (1.0 + libm::cosf(exc_phase * 6.28));
-            let exc2 = ed * (1.0 + libm::sinf(exc_phase * 6.2847));
+            // WASM CONTRACT: TAU here and 6.2847 on the sin line mirror the TS `DattorroReverbDsp` exactly
+            // (the sin rate is deliberately detuned from TAU so the two excursion LFOs decorrelate).
+            let exc = ed * (1.0 + libm::cos(exc_phase * core::f64::consts::TAU)) as f32;
+            let exc2 = ed * (1.0 + libm::sin(exc_phase * 6.2847)) as f32;
             let read_c4 = self.cubic_excursion(4, read(self, 4), exc);
             let read_c8 = self.cubic_excursion(8, read(self, 8), exc2);
             // tank, first half (lines 4..7)

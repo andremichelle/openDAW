@@ -107,6 +107,12 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
     unsafe { abi::with_state(state_ptr, |state| <CrusherDevice as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
 }
 
+/// Transport STOP: clear the runtime state (mirrors the TS processor's `reset`).
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, <CrusherDevice as AudioEffect>::reset) }
+}
+
 #[cfg(test)]
 mod tests {
     //! The device wrapper delegates to the DSP (covered thoroughly in `dsp::crusher`); here we just confirm the
