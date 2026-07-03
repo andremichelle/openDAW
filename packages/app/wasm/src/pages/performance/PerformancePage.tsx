@@ -97,10 +97,11 @@ export const PerformancePage: PageFactory<Env> = ({lifecycle}) => {
         const stopSources = () => {if (sources !== null) {sources.wasm.stop(); sources.ts.stop(); sources = null}}
         const startAt = (from: number) => {
             stopSources()
+            const begin = Math.min(Math.max(0, from), duration) % duration // clamp into [0, duration) for start()
             const wasmSource = ctx.createBufferSource(); wasmSource.buffer = wasmBuffer; wasmSource.loop = true; wasmSource.connect(wasmGain)
             const tsSource = ctx.createBufferSource(); tsSource.buffer = tsBuffer; tsSource.loop = true; tsSource.connect(tsGain)
-            wasmSource.start(ctx.currentTime, from % duration); tsSource.start(ctx.currentTime, from % duration)
-            sources = {wasm: wasmSource, ts: tsSource}; startTime = ctx.currentTime; offset = from
+            wasmSource.start(ctx.currentTime, begin); tsSource.start(ctx.currentTime, begin)
+            sources = {wasm: wasmSource, ts: tsSource}; startTime = ctx.currentTime; offset = begin
         }
         const label: HTMLSpanElement = <span className="perf-active">Active: WASM</span>
         const playButton: HTMLButtonElement = <button>▶ Play</button>
@@ -117,6 +118,7 @@ export const PerformancePage: PageFactory<Env> = ({lifecycle}) => {
             tsGain.gain.setTargetAtTime(activeIsWasm ? 0 : 1, ctx.currentTime, 0.004)
             label.textContent = `Active: ${activeIsWasm ? "WASM" : "TS"}`
         }
+        const resetButton: HTMLButtonElement = <button onclick={() => {startAt(0); syncPlayLabel()}}>⏮ Reset</button>
         const abButton: HTMLButtonElement = <button onclick={flip}>A/B Switch (WASM ⇄ TS)</button>
         const silent = Math.max(wasmPeak, tsPeak) < 1e-4
         // A waveform per render + a playback cursor. Both cursors track the ACTIVE render's time (A/B keeps the two
@@ -164,7 +166,7 @@ export const PerformancePage: PageFactory<Env> = ({lifecycle}) => {
                 ? <p className="perf-active">Both renders are silent — the project likely starts with silence or uses
                     the clip launcher (which a front-to-end arrangement render does not trigger). Try a longer length,
                     or a bundle whose arrangement has content from the start.</p>
-                : <div className="perf-ab">{playButton} {abButton} {label}</div>,
+                : <div className="perf-ab">{playButton} {resetButton} {abButton} {label}</div>,
             <div className="perf-player"><h4>WASM</h4>{waveform(wasm, "#57c7ff", wasmCursor)}</div>,
             <div className="perf-player"><h4>TS (studio engine)</h4>{waveform(ts, "#ffb057", tsCursor)}</div>,
             <div className="perf-player">

@@ -137,7 +137,32 @@
 - Three bugs the stepper surfaced, each root-caused not patched. A burst of transactions raced the async engine-sync pipeline (it serialised tasks against a graph that had already advanced), fixed by yielding one transaction at a time, the same pause the canonical reader takes. Rewinding broke because the recorded log omits the deferred pointer resolutions the graph generates at endTransaction for a forward-reference within a transaction, so inverting the recorded updates was incomplete, fixed by capturing the COMPLETE applied-update list per step and inverting it in reverse, exactly as the graph's own rollback does. And a full rewind trapped the real engine with an unreachable, because a per-note edit monitor fired on the note box's own deletion and tried to re-read the gone box, a latent binder bug that any runtime note or event deletion would hit, fixed by skipping the re-read when the box is already gone. A test drives the actual engine.wasm forward to the end and back to the start to guard all three. Done.
 - Still ahead: the per-member processor lifecycle (a chain edit still rebuilds its one unit's whole cluster and resets that unit's DSP state, where the TS keeps surviving processors alive and re-wires only edges, planned in engine-updates.md for a dedicated pass with audio-level tests), plus the standing list, the Tape device, the timeline query, and the composite-unification.
 
-## Day N (2026-07-01): stock-device porting sweep
+## Day 10 (2026-06-28): the per-member processor lifecycle
+
+The standing item from Day 9, closed. A chain edit used to rebuild a unit's whole processor cluster and reset that
+unit's DSP, where the TS keeps surviving processors alive and re-wires only the edges. Reworked the leaf and the
+composite paths so a device that survives a chain edit keeps its state and only its connections change, no
+parameter push and no reset, the same edge-only re-wire the TS `invalidateWiring` does per unit. Sample disposal on
+delete freed. Done.
+
+## Day 11 (2026-06-29): enable and disable, everywhere, edge-only
+
+Bypass across the whole graph, each toggle edge-only so it costs only the connection. A device (audio or midi
+effect) enable and disable that skips or includes it in the wire without a rebuild, track enable and disable for
+note and automation tracks, and instrument, composite, and slot enable and disable. A plugin enable and disable
+list in the LoadFilePage to isolate what each of a project's devices contributes. Alongside it a cleanup pass,
+named field-key constants, targeted automation-region discovery, allocation-free note release, and a QA hardening
+round (dead code, dedup, a leak fix, render reserves). New coverage, real-instrument differential and fuzz audio
+tests, a deterministic sync drain that de-flakes the integration harness, and automation curve-boundary tests.
+Done.
+
+## Day 12 (2026-06-30): audio-region playback, tape, and a tempo-correct timeline
+
+The audio groundwork, a track cascade down to audio-bound regions feeding the sequencer, an engine-side tape read
+head, and the TapeDeviceBox unit wired with a differential test. Then a transient-aligned time-stretch play-mode
+over a tempo-correct timeline, so a warped audio region plays back at the project tempo. Done.
+
+## Day 13 (2026-07-01): stock-device porting sweep
 
 Ported 9 of the remaining stock devices to Rust/WASM, each faithful to the TS (source of truth), f32 internal
 math, no allocations in the hot path, plus native DSP tests and a WASM wiring test per device:
@@ -166,3 +191,25 @@ decodes its boxes, so projects with a MIDIOutput load fine.
 Deferred (each a large focused effort): **Vocoder** (761-line filter-bank DSP; portable, no engine change),
 **Soundfont** (SF2 sample-data delivery — an engine/data change), **NeuralAmp** (NN-weight delivery — an
 engine/data change). The latter two hit the "significant audio-engine change" stop condition.
+
+## Day 14 (2026-07-01): scriptable devices, and the bundle player
+
+Three of openDAW's devices are scriptable, their DSP is user JavaScript rather than Rust: Werkstatt (audio
+effect), Apparat (instrument), Spielwerk (midi effect). I brought all three to the WASM engine WITHOUT porting the
+scripts, by running each user Processor in the same AudioWorkletGlobalScope the engine already runs in.
+
+- The linchpin is that the engine worklet and the user script share one global scope, so `globalThis.openDAW.<registry>[uuid]` is directly visible at render time. The WASM device is a thin bridge, three small side-module crates (device-werkstatt/apparat/spielwerk) that, instead of doing DSP, call new `host_script_*` env imports the loader binds to a JS `ScriptBridges` manager. The bridge re-derives its memory views every call (talc may grow the buffer), hot-swaps the Processor by an update counter, and validates the output. `host_self_uuid` is a real engine export so a device knows which registry entry is its own. Done.
+- The reuse that made it small: a `WerkstattParameterBox.value` is automatable, and a Value track that automates it targets `(childBox_uuid, [4])`. The engine's existing automation binding keys by that address, so binding a script parameter against its CHILD box reuses ALL the region, curve, and update machinery with no change to `param_automation.rs`. A new `param_hub.rs` (`ScriptParamHub` / `ScriptSampleHub`) enumerates the parameters and samples hubs and aggregates their handles into the device node. The parsed `@param` / `@sample` declarations ride in the registry entry via `ScriptCompiler.wrap`, so the bridge maps an automation value through the identical `ValueMapping` on both engines and parity is clean by construction. Each device null-tests WASM against a TS-offline render. Done.
+- The bundle player: a page that loads an `.odb` (a project plus its samples) from disk, writes every sample into a persistent OPFS cache (`samples/v2/<uuid>/audio.wav`, the same layout the studio uses) so a re-open needs no network, then boots the engine on the extracted box graph. A `SampleStorage` plus a cache-first loader. Done.
+
+## Day 15 (2026-07-02): send and return, then soundfont playback
+
+- Send and return routing: a unit's output can feed a bus (a submix) and it can also run parallel aux sends. A `bus_registry` plus `resolve_outputs` / `resolve_sends`, a `would_cycle` guard so a routing edit can never build a feedback loop, and an `AuxSendProcessor` that taps a unit pre-fader. This surfaced a real bug, a sidechained compressor ON a bus never resolved its sidechain (it was crushing its own hot synths), fixed by running an audio-track fx chain in the reconcile and by tapping the sidechain from the DEVICE output. A TS-versus-WASM differential harness on real projects (Chaotics, Ambition) proves the per-unit levels match. Done.
+- Soundfont playback: the TS side still keeps and parses the `.sf2`, but the WASM engine receives a SIMPLIFIED binary blob (sample, region, and preset tables plus normalized f32 PCM) over the same request-allocate-resolve handshake the samples use. `device-soundfont` reads that blob in place with no allocation, and it needed an `Adsr` and a `Smooth` port plus a 128-voice pool. The SF2 generators the TS voice honors (key and velocity ranges, pan, loop mode, root key, the volume envelope) are mirrored exactly. Done.
+
+## Day 16 (2026-07-03): a performance A/B page, a real arpeggiator, strip automation, and a parity hunt
+
+- The Performance A/B page renders a bundle front-to-end through BOTH engines offline in a worker, times only the render loop, and presents both as players you can flip between. It immediately earned its keep by exposing two silent-render bugs on "Open Up", each root-caused not patched. The scriptable-device scripts were never registered into the shared registry (the `registerScriptDevices` helper existed but nothing called it), so every chain that ran through a scriptable device went silent. And, WASM only, the hand-rolled registry entry omitted the parsed params and samples, so the bridge threw while loading and silenced the device, fixed by registering through the canonical `ScriptCompiler.wrap`. On the user's principle that the engine must report anything out of the ordinary, the bridge now emits a one-shot message when a scriptable device has no registered Processor rather than swallowing it. Done.
+- A real arpeggiator. `device-arp` had been a dummy that hardcoded a 1/16 grid and read no parameters, so a project's 1/3 arp ran at 1/16. Ported in full to mirror `ArpeggioDeviceProcessor`: the rate from the descending `RateFractions` table through `Fraction.toPPQN`, the Up, Down, and UpDown modes with their octave and velocity math, gate, repeat, and the velocity magnet, with parameters honored mid-block by splitting the range at update boundaries like the SDK's midi-effect template. It is a stateful pull source that writes `process_events` directly rather than the one-to-one transform template. Proven end to end, a 1/3 arp steps at 1280 pulses and a 1/16 at 240 where the dummy gave 240 for both. Done.
+- Strip automation. The AudioUnit volume and panning ignored their automation entirely, the channel strip only tracked the static box field, so a fader automated up from silence played at full level from the first sample. Wired volume (field 12) and panning (field 13) into the same parameter pipeline the device parameters use, evaluated per block at the transport position through the real decibel and bipolar mappings from the TS adapter, with the static field as the fallback before any region. A soloed unit whose volume automates from zero is now silent at the start and audible after the ramp. Done.
+- A TS-versus-WASM parity hunt, because the page makes every fraction of a decibel visible. I added a third DIFFERENCE waveform and a null-test readout (loudness delta, null residual, max sample delta), and rebuilt the A/B switch to be sample-accurate by playing both renders through one Web Audio clock started together, so the two can never drift in PLAYBACK. That mattered, because the drift the ear caught in A/B was the old two-audio-element switch, not the engines. Cross-correlating the renders proved they stay time-locked to zero samples across a full minute. The remaining differences, all measured rather than guessed: the reverb-tail divergence is bounded floating-point drift and inaudible, an Apparat "Grain Synthesizer" calls `Math.random` so it can never null (a red herring), and the residual "the reverb sounds louder" on Open Up is a small SYSTEMATIC level bias, WASM a few tenths of a decibel hotter, spread across devices and biggest at the instrument, not the reverb. An f32-to-f64 pass on the Dattorro reverb improved the null residual but did not move the audible loudness, so it was reverted. The bias hunt is still open, the next step is a leak-free single-instrument null to read the exact gain difference in the sample path. Ongoing.

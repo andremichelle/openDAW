@@ -46,9 +46,47 @@ code
 
   button
     font: inherit
-    padding: 0.5em 1em
+    padding: 0.4em 0.9em
     margin-right: 0.5em
     cursor: pointer
+    color: var(--color-bright)
+    background: var(--color-panel-background)
+    border: 1px solid var(--color-panel-background-bright)
+    border-radius: 4px
+
+    &:hover:not(:disabled)
+      border-color: var(--color-blue)
+      color: var(--color-blue)
+
+    &:disabled
+      cursor: default
+      opacity: 0.35
+
+  input[type="number"], input[type="text"]
+    font: inherit
+    color: var(--color-bright)
+    background: var(--color-panel-background)
+    border: 1px solid var(--color-panel-background-bright)
+    border-radius: 4px
+    padding: 0.25em 0.45em
+
+  input[type="file"]
+    font: inherit
+    color: var(--color-gray)
+
+    &::file-selector-button
+      font: inherit
+      margin-right: 0.6rem
+      padding: 0.4em 0.9em
+      cursor: pointer
+      color: var(--color-bright)
+      background: var(--color-panel-background)
+      border: 1px solid var(--color-panel-background-bright)
+      border-radius: 4px
+
+      &:hover
+        border-color: var(--color-blue)
+        color: var(--color-blue)
 
   pre
     color: var(--color-blue)
