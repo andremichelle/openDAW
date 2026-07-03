@@ -20,6 +20,7 @@ pub mod resampler;
 pub mod simple_limiter;
 pub mod smooth;
 pub mod tidal;
+pub mod vocoder;
 pub mod waveshaper;
 
 pub use math::{clamp, fabs, fast_sin, PI};

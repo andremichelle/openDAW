@@ -216,6 +216,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-vocoder"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "math",
+]
+
+[[package]]
 name = "device-waveshaper"
 version = "0.0.0"
 dependencies = [

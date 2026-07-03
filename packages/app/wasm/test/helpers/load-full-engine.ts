@@ -34,7 +34,8 @@ const DEVICES: ReadonlyArray<{file: string, boxType: string}> = [
     {file: "device_compressor.wasm", boxType: "CompressorDeviceBox"}, // audio effect (sidechain)
     {file: "device_reverb.wasm", boxType: "ReverbDeviceBox"}, // audio effect
     {file: "device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
-    {file: "device_soundfont.wasm", boxType: "SoundfontDeviceBox"} // instrument (preset sampler)
+    {file: "device_soundfont.wasm", boxType: "SoundfontDeviceBox"}, // instrument (preset sampler)
+    {file: "device_vocoder.wasm", boxType: "VocoderDeviceBox"} // audio effect (channel vocoder + sidechain)
 ]
 type CompositeSpec = {boxType: string, childrenField: number, indexKey: number, excludeKey: number,
     cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number}
