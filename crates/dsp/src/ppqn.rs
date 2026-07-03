@@ -9,6 +9,17 @@
 pub const QUARTER: f64 = 960.0;
 pub const BAR: f64 = 3840.0; // QUARTER * 4
 pub const SEMI_QUAVER: f64 = 240.0; // QUARTER / 4
+// WASM CONTRACT: the update-clock grid, mirror of lib-dsp `UpdateClockRate = PPQN.fromSignature(1, 384)` =
+// floor(3840 / 384) = 10 pulses. Everything that fragments on the update clock (devices via the host
+// exports, the channel strip's automated gains) uses this one grid, switching parameters together.
+pub const UPDATE_CLOCK_RATE: f64 = 10.0;
+
+/// The smallest update-grid multiple at or above `at` (INCLUSIVE, so a grid point exactly on a block's
+/// start fires; mirrors TS `Fragmentor`'s `ceil`). No libm: truncate toward zero, then step up if below.
+pub fn first_update_position(at: f64) -> f64 {
+    let floored = ((at / UPDATE_CLOCK_RATE) as i64) as f64 * UPDATE_CLOCK_RATE;
+    if floored < at { floored + UPDATE_CLOCK_RATE } else { floored }
+}
 
 pub fn seconds_to_pulses(seconds: f64, bpm: f32) -> f64 {
     seconds * bpm as f64 / 60.0 * QUARTER

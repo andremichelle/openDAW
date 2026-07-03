@@ -184,6 +184,7 @@ impl Engine {
         let sum_buffer = shared_audio_buffer();
         let sum = Rc::new(RefCell::new(AudioBusProcessor::new(sum_buffer.clone())));
         let sum_id = self.context.register_processor(sum.clone());
+        self.context.set_label(sum_id, alloc::string::String::from("composite-sum"));
         let mut binding = CompositeBinding {spec: spec.clone(), composite_uuid, children, sum, sum_id, sum_buffer, members: Vec::new()};
         self.reconcile_composite_children(&mut binding, track_sets, signal, invalidate);
         binding

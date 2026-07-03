@@ -155,7 +155,10 @@ export const renderWasmOffline = async (bundle: Bundle, quanta: number, sampleRa
     const {engineModule, deviceModules, deviceBoxTypes, composites} = await loadEngineModules()
     const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
-    const engine = new WebAssembly.Instance(engineModule, {env: {memory, __indirect_function_table: table}}).exports as any
+    const engine = new WebAssembly.Instance(engineModule, {env: {
+        memory, __indirect_function_table: table,
+        host_perf_now: () => performance.now() * 1000.0 // micros clock for the render profiler
+    }}).exports as any
     engine.init(sampleRate)
     ;(globalThis as any).sampleRate = sampleRate
     const scriptBridges = new ScriptBridges(memory, engine as ScriptEngine, sampleRate,

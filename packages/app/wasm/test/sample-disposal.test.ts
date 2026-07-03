@@ -29,7 +29,7 @@ const loadEngine = async () => {
     const module = await WebAssembly.compile(readFileSync(WASM))
     const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
-    const engine = new WebAssembly.Instance(module, {env: {memory, __indirect_function_table: table}})
+    const engine = new WebAssembly.Instance(module, {env: {memory, __indirect_function_table: table, host_perf_now: () => performance.now() * 1000.0}})
         .exports as unknown as EngineExports
     engine.init(48000)
     return {engine, memory}

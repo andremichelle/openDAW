@@ -7,7 +7,9 @@
 use alloc::rc::Rc;
 use core::cell::{Cell, RefCell};
 use math::db_to_gain;
-use crate::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
+use crate::audio_buffer::{shared_audio_buffer, AudioBuffer, SharedAudioBuffer};
+use crate::block::Block;
+use crate::ppqn::{first_update_position, pulses_to_samples, UPDATE_CLOCK_RATE};
 use crate::audio_generator::AudioGenerator;
 use crate::audio_input::AudioInput;
 use crate::event_buffer::EventBuffer;
@@ -72,7 +74,8 @@ pub struct ChannelStripProcessor {
     gain_left: LinearRamp,
     gain_right: LinearRamp,
     mute_gain: LinearRamp,
-    processing: bool, // false until the first block, so the first targets jump (no ramp from 0)
+    sample_rate: f32,
+    processing: bool, // false until the first chunk, so the first targets jump (no ramp from 0)
     events: EventBuffer // unused (the strip receives no events) but required by `Processor: EventReceiver`
 }
 
@@ -86,9 +89,67 @@ impl ChannelStripProcessor {
             gain_left: LinearRamp::linear(sample_rate),
             gain_right: LinearRamp::linear(sample_rate),
             mute_gain: LinearRamp::linear(sample_rate),
+            sample_rate,
             processing: false,
             events: EventBuffer::new()
         }
+    }
+
+    // Aim the three ramps at the pan-law gains for `volume_db` / `panning` (+ the mute 0/1). Smooth after the
+    // first processed chunk so parameter moves de-click; `set` no-ops on an unchanged target.
+    fn retarget(&mut self, volume_db: f32, panning: f32) {
+        let gain = db_to_gain(volume_db);
+        self.gain_left.set((1.0 - panning.max(0.0)) * gain, self.processing);
+        self.gain_right.set((1.0 + panning.min(0.0)) * gain, self.processing);
+        self.mute_gain.set(if self.params.mute.get() {0.0} else {1.0}, self.processing);
+    }
+
+    // Evaluate the automated volume / panning curves at `position` (falling back to the static params) and
+    // retarget. Called at each update-clock boundary, mirroring TS `AutomatableParameter` events.
+    fn retarget_at(&mut self, position: f64) {
+        let volume_db = match self.automation.volume.borrow().as_ref() {
+            Some(source) => source(position),
+            None => self.params.volume_db.get()
+        };
+        let panning = match self.automation.panning.borrow().as_ref() {
+            Some(source) => source(position),
+            None => self.params.panning.get()
+        };
+        self.retarget(volume_db, panning);
+    }
+
+    // Apply the gains over `[from, to)`. Settled fast path (TS `isInterpolating` branch): scalar gains keep
+    // the loop auto-vectorizable; the ramped branch keeps the per-sample de-click. Two multiplies in BOTH
+    // branches (float multiplication does not re-associate, the branches must produce identical samples).
+    fn apply(&mut self, source: &AudioBuffer, output: &mut AudioBuffer, from: usize, to: usize) {
+        if self.gain_left.is_interpolating() || self.gain_right.is_interpolating() || self.mute_gain.is_interpolating() {
+            for index in from..to {
+                let mute = self.mute_gain.move_and_get();
+                output.left[index] = source.left[index] * self.gain_left.move_and_get() * mute;
+                output.right[index] = source.right[index] * self.gain_right.move_and_get() * mute;
+            }
+        } else {
+            let gain_left = self.gain_left.get();
+            let gain_right = self.gain_right.get();
+            let mute = self.mute_gain.get();
+            for index in from..to {
+                output.left[index] = source.left[index] * gain_left * mute;
+                output.right[index] = source.right[index] * gain_right * mute;
+            }
+        }
+        self.processing = true; // TS sets it per processed sub-block, so a mid-quantum retarget already ramps
+    }
+
+    // Map an update-grid pulse to its sample offset within `block` (the engine's `sample_offset` formula).
+    fn sample_offset(&self, position: f64, block: &Block) -> usize {
+        let pulses = position - block.p0;
+        let (s0, s1) = (block.s0 as usize, block.s1 as usize);
+        let raw = if pulses.abs() < 1.0e-7 {
+            s0
+        } else {
+            s0 + pulses_to_samples(pulses, block.bpm, self.sample_rate) as usize
+        };
+        raw.clamp(s0, s1)
     }
 }
 
@@ -116,37 +177,43 @@ impl Processor for ChannelStripProcessor {
     }
 
     fn process(&mut self, info: &ProcessInfo) {
-        let mut output = self.output.borrow_mut();
+        let output = self.output.clone();
+        let mut output = output.borrow_mut();
         let input = match &self.input {
-            Some(input) => input,
+            Some(input) => input.clone(),
             None => {
                 output.clear_range(0, RENDER_QUANTUM);
                 return;
             }
         };
-        // Volume in dB -> linear gain, split into L/R by the pan law (TS ChannelStripProcessor); mute is a
-        // separate 0/1 gain. Aim the ramps at the new targets (smooth after the first block) so parameter
-        // jumps de-click; `set` is a no-op when a target is unchanged.
-        // An AUTOMATED volume / panning overrides the static value: evaluate its curve at this quantum's pulse
-        // position; the L/R ramps then de-click the per-block value like any parameter move.
-        let position = info.blocks.first().map_or(0.0, |block| block.p0);
-        let volume_db = match self.automation.volume.borrow().as_ref() {
-            Some(source) => source(position),
-            None => self.params.volume_db.get()
-        };
-        let panning = match self.automation.panning.borrow().as_ref() {
-            Some(source) => source(position),
-            None => self.params.panning.get()
-        };
-        let gain = db_to_gain(volume_db);
-        self.gain_left.set((1.0 - panning.max(0.0)) * gain, self.processing);
-        self.gain_right.set((1.0 + panning.min(0.0)) * gain, self.processing);
-        self.mute_gain.set(if self.params.mute.get() {0.0} else {1.0}, self.processing);
         let source = input.borrow();
-        for index in 0..RENDER_QUANTUM {
-            let mute = self.mute_gain.move_and_get();
-            output.left[index] = source.left[index] * self.gain_left.move_and_get() * mute;
-            output.right[index] = source.right[index] * self.gain_right.move_and_get() * mute;
+        let automated = self.automation.volume.borrow().is_some() || self.automation.panning.borrow().is_some();
+        if !automated {
+            // Static parameters: one retarget for the whole quantum (the ramps de-click any edit).
+            self.retarget(self.params.volume_db.get(), self.params.panning.get());
+            self.apply(&source, &mut output, 0, RENDER_QUANTUM);
+        } else {
+            // An automated volume / panning resolves at the UPDATE CLOCK, like every automated device: split
+            // each block at the 10-pulse grid and retarget at every boundary (TS `AudioProcessor` splitting
+            // the quantum at `UpdateEvent`s). A loop-wrap quantum's post-wrap block re-evaluates at ITS p0.
+            for block in info.blocks {
+                let (s0, s1) = (block.s0 as usize, block.s1 as usize);
+                let mut cursor = s0;
+                self.retarget_at(block.p0);
+                let mut position = first_update_position(block.p0);
+                while position < block.p1 {
+                    let offset = self.sample_offset(position, block).clamp(cursor, s1);
+                    if offset > cursor {
+                        self.apply(&source, &mut output, cursor, offset);
+                        cursor = offset;
+                    }
+                    self.retarget_at(position);
+                    position += UPDATE_CLOCK_RATE;
+                }
+                if cursor < s1 {
+                    self.apply(&source, &mut output, cursor, s1);
+                }
+            }
         }
         self.processing = true;
     }

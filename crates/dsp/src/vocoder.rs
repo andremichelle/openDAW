@@ -360,6 +360,15 @@ impl VocoderDsp {
         self.processed_bands = 0;
     }
 
+    // ---- band processing ---------------------------------------------------------------------------------
+    //
+    // Bands are INDEPENDENT of each other (the serial feedback is per band, over time), so on wasm they run
+    // 4 per `f32x4` lane. Numerics are UNCHANGED: every per-band operation maps to the identical IEEE op in a
+    // lane (mul/add/sub/abs/min-style select are exact per lane), and each sample's output accumulates the
+    // band contributions IN BAND ORDER (sequential lane extraction), so float association matches the scalar
+    // path bit-for-bit. The scalar per-band bodies remain as the non-multiple-of-4 remainder path and the
+    // native (test) implementation of a lane group.
+
     fn inner_stereo_mod(&mut self, car_l: &[f32], car_r: &[f32], mod_l: &[f32], mod_r: &[f32],
                         out_l: &mut [f32], out_r: &mut [f32], from: usize, to: usize) {
         let dry = self.dry_gain;
@@ -367,53 +376,153 @@ impl VocoderDsp {
             out_l[i] = car_l[i] * dry;
             out_r[i] = car_r[i] * dry;
         }
+        let groups = self.processed_bands / 4;
+        for group in 0..groups {
+            self.lanes_stereo_mod(group, car_l, car_r, mod_l, mod_r, out_l, out_r, from, to);
+        }
+        for i in groups * 4..self.processed_bands {
+            self.band_stereo_mod(i, car_l, car_r, mod_l, mod_r, out_l, out_r, from, to);
+        }
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn lanes_stereo_mod(&mut self, group: usize, car_l: &[f32], car_r: &[f32], mod_l: &[f32], mod_r: &[f32],
+                        out_l: &mut [f32], out_r: &mut [f32], from: usize, to: usize) {
+        for i in group * 4..group * 4 + 4 {
+            self.band_stereo_mod(i, car_l, car_r, mod_l, mod_r, out_l, out_r, from, to);
+        }
+    }
+
+    fn band_stereo_mod(&mut self, i: usize, car_l: &[f32], car_r: &[f32], mod_l: &[f32], mod_r: &[f32],
+                       out_l: &mut [f32], out_r: &mut [f32], from: usize, to: usize) {
         let wet = self.wet_gain;
         let band_g = self.band_gain * self.output_gain;
         let a_coeff = self.attack_coeff;
         let r_coeff = self.release_coeff;
         let fade = self.fade_coeff;
-        for i in 0..self.processed_bands {
-            let o = i * 5;
-            let (cb0, cb1, cb2) = (self.carrier_coeffs[o], self.carrier_coeffs[o + 1], self.carrier_coeffs[o + 2]);
-            let (ca1, ca2) = (self.carrier_coeffs[o + 3], self.carrier_coeffs[o + 4]);
-            let (mb0, mb1, mb2) = (self.modulator_coeffs[o], self.modulator_coeffs[o + 1], self.modulator_coeffs[o + 2]);
-            let (ma1, ma2) = (self.modulator_coeffs[o + 3], self.modulator_coeffs[o + 4]);
-            let (mut cx_l1, mut cx_l2, mut cy_l1, mut cy_l2) = (self.car_cx_l1[i], self.car_cx_l2[i], self.car_cy_l1[i], self.car_cy_l2[i]);
-            let (mut cx_r1, mut cx_r2, mut cy_r1, mut cy_r2) = (self.car_cx_r1[i], self.car_cx_r2[i], self.car_cy_r1[i], self.car_cy_r2[i]);
-            let (mut mx_l1, mut mx_l2, mut my_l1, mut my_l2) = (self.mod_mx_l1[i], self.mod_mx_l2[i], self.mod_my_l1[i], self.mod_my_l2[i]);
-            let (mut mx_r1, mut mx_r2, mut my_r1, mut my_r2) = (self.mod_mx_r1[i], self.mod_mx_r2[i], self.mod_my_r1[i], self.mod_my_r2[i]);
-            let mut env = self.envelope[i];
-            let mut gain = self.band_gain_current[i];
-            let tgt = self.target_active[i];
-            for s in from..to {
-                gain = tgt + fade * (gain - tgt);
-                let mx_l = mod_l[s];
-                let my_l = (mb0 * mx_l + mb1 * mx_l1 + mb2 * mx_l2 - ma1 * my_l1 - ma2 * my_l2) + 1e-18 - 1e-18;
-                mx_l2 = mx_l1; mx_l1 = mx_l; my_l2 = my_l1; my_l1 = my_l;
-                let mx_r = mod_r[s];
-                let my_r = (mb0 * mx_r + mb1 * mx_r1 + mb2 * mx_r2 - ma1 * my_r1 - ma2 * my_r2) + 1e-18 - 1e-18;
-                mx_r2 = mx_r1; mx_r1 = mx_r; my_r2 = my_r1; my_r1 = my_r;
-                let a_l = my_l.abs();
-                let a_r = my_r.abs();
-                let peak = if a_l > a_r { a_l } else { a_r };
-                env = if env < peak { peak + a_coeff * (env - peak) } else { peak + r_coeff * (env - peak) };
-                let cx_l = car_l[s];
-                let cy_l = (cb0 * cx_l + cb1 * cx_l1 + cb2 * cx_l2 - ca1 * cy_l1 - ca2 * cy_l2) + 1e-18 - 1e-18;
-                cx_l2 = cx_l1; cx_l1 = cx_l; cy_l2 = cy_l1; cy_l1 = cy_l;
-                let cx_r = car_r[s];
-                let cy_r = (cb0 * cx_r + cb1 * cx_r1 + cb2 * cx_r2 - ca1 * cy_r1 - ca2 * cy_r2) + 1e-18 - 1e-18;
-                cx_r2 = cx_r1; cx_r1 = cx_r; cy_r2 = cy_r1; cy_r1 = cy_r;
-                let k = env * band_g * wet * gain;
-                out_l[s] += cy_l * k;
-                out_r[s] += cy_r * k;
-            }
-            self.car_cx_l1[i] = cx_l1; self.car_cx_l2[i] = cx_l2; self.car_cy_l1[i] = cy_l1; self.car_cy_l2[i] = cy_l2;
-            self.car_cx_r1[i] = cx_r1; self.car_cx_r2[i] = cx_r2; self.car_cy_r1[i] = cy_r1; self.car_cy_r2[i] = cy_r2;
-            self.mod_mx_l1[i] = mx_l1; self.mod_mx_l2[i] = mx_l2; self.mod_my_l1[i] = my_l1; self.mod_my_l2[i] = my_l2;
-            self.mod_mx_r1[i] = mx_r1; self.mod_mx_r2[i] = mx_r2; self.mod_my_r1[i] = my_r1; self.mod_my_r2[i] = my_r2;
-            self.envelope[i] = env;
-            self.band_gain_current[i] = gain;
+        let o = i * 5;
+        let (cb0, cb1, cb2) = (self.carrier_coeffs[o], self.carrier_coeffs[o + 1], self.carrier_coeffs[o + 2]);
+        let (ca1, ca2) = (self.carrier_coeffs[o + 3], self.carrier_coeffs[o + 4]);
+        let (mb0, mb1, mb2) = (self.modulator_coeffs[o], self.modulator_coeffs[o + 1], self.modulator_coeffs[o + 2]);
+        let (ma1, ma2) = (self.modulator_coeffs[o + 3], self.modulator_coeffs[o + 4]);
+        let (mut cx_l1, mut cx_l2, mut cy_l1, mut cy_l2) = (self.car_cx_l1[i], self.car_cx_l2[i], self.car_cy_l1[i], self.car_cy_l2[i]);
+        let (mut cx_r1, mut cx_r2, mut cy_r1, mut cy_r2) = (self.car_cx_r1[i], self.car_cx_r2[i], self.car_cy_r1[i], self.car_cy_r2[i]);
+        let (mut mx_l1, mut mx_l2, mut my_l1, mut my_l2) = (self.mod_mx_l1[i], self.mod_mx_l2[i], self.mod_my_l1[i], self.mod_my_l2[i]);
+        let (mut mx_r1, mut mx_r2, mut my_r1, mut my_r2) = (self.mod_mx_r1[i], self.mod_mx_r2[i], self.mod_my_r1[i], self.mod_my_r2[i]);
+        let mut env = self.envelope[i];
+        let mut gain = self.band_gain_current[i];
+        let tgt = self.target_active[i];
+        for s in from..to {
+            gain = tgt + fade * (gain - tgt);
+            let mx_l = mod_l[s];
+            let my_l = (mb0 * mx_l + mb1 * mx_l1 + mb2 * mx_l2 - ma1 * my_l1 - ma2 * my_l2) + 1e-18 - 1e-18;
+            mx_l2 = mx_l1; mx_l1 = mx_l; my_l2 = my_l1; my_l1 = my_l;
+            let mx_r = mod_r[s];
+            let my_r = (mb0 * mx_r + mb1 * mx_r1 + mb2 * mx_r2 - ma1 * my_r1 - ma2 * my_r2) + 1e-18 - 1e-18;
+            mx_r2 = mx_r1; mx_r1 = mx_r; my_r2 = my_r1; my_r1 = my_r;
+            let a_l = my_l.abs();
+            let a_r = my_r.abs();
+            let peak = if a_l > a_r { a_l } else { a_r };
+            env = if env < peak { peak + a_coeff * (env - peak) } else { peak + r_coeff * (env - peak) };
+            let cx_l = car_l[s];
+            let cy_l = (cb0 * cx_l + cb1 * cx_l1 + cb2 * cx_l2 - ca1 * cy_l1 - ca2 * cy_l2) + 1e-18 - 1e-18;
+            cx_l2 = cx_l1; cx_l1 = cx_l; cy_l2 = cy_l1; cy_l1 = cy_l;
+            let cx_r = car_r[s];
+            let cy_r = (cb0 * cx_r + cb1 * cx_r1 + cb2 * cx_r2 - ca1 * cy_r1 - ca2 * cy_r2) + 1e-18 - 1e-18;
+            cx_r2 = cx_r1; cx_r1 = cx_r; cy_r2 = cy_r1; cy_r1 = cy_r;
+            let k = env * band_g * wet * gain;
+            out_l[s] += cy_l * k;
+            out_r[s] += cy_r * k;
         }
+        self.car_cx_l1[i] = cx_l1; self.car_cx_l2[i] = cx_l2; self.car_cy_l1[i] = cy_l1; self.car_cy_l2[i] = cy_l2;
+        self.car_cx_r1[i] = cx_r1; self.car_cx_r2[i] = cx_r2; self.car_cy_r1[i] = cy_r1; self.car_cy_r2[i] = cy_r2;
+        self.mod_mx_l1[i] = mx_l1; self.mod_mx_l2[i] = mx_l2; self.mod_my_l1[i] = my_l1; self.mod_my_l2[i] = my_l2;
+        self.mod_mx_r1[i] = mx_r1; self.mod_mx_r2[i] = mx_r2; self.mod_my_r1[i] = my_r1; self.mod_my_r2[i] = my_r2;
+        self.envelope[i] = env;
+        self.band_gain_current[i] = gain;
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn lanes_stereo_mod(&mut self, group: usize, car_l: &[f32], car_r: &[f32], mod_l: &[f32], mod_r: &[f32],
+                        out_l: &mut [f32], out_r: &mut [f32], from: usize, to: usize) {
+        use core::arch::wasm32::*;
+        let base = group * 4;
+        let cb0 = Self::coeff_lane(&self.carrier_coeffs, group, 0);
+        let cb1 = Self::coeff_lane(&self.carrier_coeffs, group, 1);
+        let cb2 = Self::coeff_lane(&self.carrier_coeffs, group, 2);
+        let ca1 = Self::coeff_lane(&self.carrier_coeffs, group, 3);
+        let ca2 = Self::coeff_lane(&self.carrier_coeffs, group, 4);
+        let mb0 = Self::coeff_lane(&self.modulator_coeffs, group, 0);
+        let mb1 = Self::coeff_lane(&self.modulator_coeffs, group, 1);
+        let mb2 = Self::coeff_lane(&self.modulator_coeffs, group, 2);
+        let ma1 = Self::coeff_lane(&self.modulator_coeffs, group, 3);
+        let ma2 = Self::coeff_lane(&self.modulator_coeffs, group, 4);
+        let mut cx_l1 = Self::load_lane(&self.car_cx_l1, base);
+        let mut cx_l2 = Self::load_lane(&self.car_cx_l2, base);
+        let mut cy_l1 = Self::load_lane(&self.car_cy_l1, base);
+        let mut cy_l2 = Self::load_lane(&self.car_cy_l2, base);
+        let mut cx_r1 = Self::load_lane(&self.car_cx_r1, base);
+        let mut cx_r2 = Self::load_lane(&self.car_cx_r2, base);
+        let mut cy_r1 = Self::load_lane(&self.car_cy_r1, base);
+        let mut cy_r2 = Self::load_lane(&self.car_cy_r2, base);
+        let mut mx_l1 = Self::load_lane(&self.mod_mx_l1, base);
+        let mut mx_l2 = Self::load_lane(&self.mod_mx_l2, base);
+        let mut my_l1 = Self::load_lane(&self.mod_my_l1, base);
+        let mut my_l2 = Self::load_lane(&self.mod_my_l2, base);
+        let mut mx_r1 = Self::load_lane(&self.mod_mx_r1, base);
+        let mut mx_r2 = Self::load_lane(&self.mod_mx_r2, base);
+        let mut my_r1 = Self::load_lane(&self.mod_my_r1, base);
+        let mut my_r2 = Self::load_lane(&self.mod_my_r2, base);
+        let mut env = Self::load_lane(&self.envelope, base);
+        let mut gain = Self::load_lane(&self.band_gain_current, base);
+        let tgt = Self::load_lane(&self.target_active, base);
+        let fade = f32x4_splat(self.fade_coeff);
+        let attack = f32x4_splat(self.attack_coeff);
+        let release = f32x4_splat(self.release_coeff);
+        let band_g = f32x4_splat(self.band_gain * self.output_gain);
+        let wet = f32x4_splat(self.wet_gain);
+        let flush = f32x4_splat(1.0e-18);
+        for s in from..to {
+            gain = f32x4_add(tgt, f32x4_mul(fade, f32x4_sub(gain, tgt)));
+            let mx_l = f32x4_splat(mod_l[s]);
+            let my_l = Self::biquad_lane(mb0, mb1, mb2, ma1, ma2, mx_l, mx_l1, mx_l2, my_l1, my_l2, flush);
+            mx_l2 = mx_l1; mx_l1 = mx_l; my_l2 = my_l1; my_l1 = my_l;
+            let mx_r = f32x4_splat(mod_r[s]);
+            let my_r = Self::biquad_lane(mb0, mb1, mb2, ma1, ma2, mx_r, mx_r1, mx_r2, my_r1, my_r2, flush);
+            mx_r2 = mx_r1; mx_r1 = mx_r; my_r2 = my_r1; my_r1 = my_r;
+            // `pmax(a_r, a_l)` == the scalar `if a_l > a_r {a_l} else {a_r}` (abs values are never NaN here)
+            let peak = f32x4_pmax(f32x4_abs(my_r), f32x4_abs(my_l));
+            env = Self::envelope_lane(env, peak, attack, release);
+            let cx_l = f32x4_splat(car_l[s]);
+            let cy_l = Self::biquad_lane(cb0, cb1, cb2, ca1, ca2, cx_l, cx_l1, cx_l2, cy_l1, cy_l2, flush);
+            cx_l2 = cx_l1; cx_l1 = cx_l; cy_l2 = cy_l1; cy_l1 = cy_l;
+            let cx_r = f32x4_splat(car_r[s]);
+            let cy_r = Self::biquad_lane(cb0, cb1, cb2, ca1, ca2, cx_r, cx_r1, cx_r2, cy_r1, cy_r2, flush);
+            cx_r2 = cx_r1; cx_r1 = cx_r; cy_r2 = cy_r1; cy_r1 = cy_r;
+            let k = f32x4_mul(f32x4_mul(f32x4_mul(env, band_g), wet), gain);
+            let add_l = f32x4_mul(cy_l, k);
+            let add_r = f32x4_mul(cy_r, k);
+            out_l[s] = Self::accumulate_lanes(out_l[s], add_l);
+            out_r[s] = Self::accumulate_lanes(out_r[s], add_r);
+        }
+        Self::store_lane(&mut self.car_cx_l1, base, cx_l1);
+        Self::store_lane(&mut self.car_cx_l2, base, cx_l2);
+        Self::store_lane(&mut self.car_cy_l1, base, cy_l1);
+        Self::store_lane(&mut self.car_cy_l2, base, cy_l2);
+        Self::store_lane(&mut self.car_cx_r1, base, cx_r1);
+        Self::store_lane(&mut self.car_cx_r2, base, cx_r2);
+        Self::store_lane(&mut self.car_cy_r1, base, cy_r1);
+        Self::store_lane(&mut self.car_cy_r2, base, cy_r2);
+        Self::store_lane(&mut self.mod_mx_l1, base, mx_l1);
+        Self::store_lane(&mut self.mod_mx_l2, base, mx_l2);
+        Self::store_lane(&mut self.mod_my_l1, base, my_l1);
+        Self::store_lane(&mut self.mod_my_l2, base, my_l2);
+        Self::store_lane(&mut self.mod_mx_r1, base, mx_r1);
+        Self::store_lane(&mut self.mod_mx_r2, base, mx_r2);
+        Self::store_lane(&mut self.mod_my_r1, base, my_r1);
+        Self::store_lane(&mut self.mod_my_r2, base, my_r2);
+        Self::store_lane(&mut self.envelope, base, env);
+        Self::store_lane(&mut self.band_gain_current, base, gain);
     }
 
     fn inner_mono_mod(&mut self, car_l: &[f32], car_r: &[f32], modu: &[f32],
@@ -423,12 +532,31 @@ impl VocoderDsp {
             out_l[i] = car_l[i] * dry;
             out_r[i] = car_r[i] * dry;
         }
+        let groups = self.processed_bands / 4;
+        for group in 0..groups {
+            self.lanes_mono_mod(group, car_l, car_r, modu, out_l, out_r, from, to);
+        }
+        for i in groups * 4..self.processed_bands {
+            self.band_mono_mod(i, car_l, car_r, modu, out_l, out_r, from, to);
+        }
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn lanes_mono_mod(&mut self, group: usize, car_l: &[f32], car_r: &[f32], modu: &[f32],
+                      out_l: &mut [f32], out_r: &mut [f32], from: usize, to: usize) {
+        for i in group * 4..group * 4 + 4 {
+            self.band_mono_mod(i, car_l, car_r, modu, out_l, out_r, from, to);
+        }
+    }
+
+    fn band_mono_mod(&mut self, i: usize, car_l: &[f32], car_r: &[f32], modu: &[f32],
+                     out_l: &mut [f32], out_r: &mut [f32], from: usize, to: usize) {
         let wet = self.wet_gain;
         let band_g = self.band_gain * self.output_gain;
         let a_coeff = self.attack_coeff;
         let r_coeff = self.release_coeff;
         let fade = self.fade_coeff;
-        for i in 0..self.processed_bands {
+        {
             let o = i * 5;
             let (cb0, cb1, cb2) = (self.carrier_coeffs[o], self.carrier_coeffs[o + 1], self.carrier_coeffs[o + 2]);
             let (ca1, ca2) = (self.carrier_coeffs[o + 3], self.carrier_coeffs[o + 4]);
@@ -471,12 +599,29 @@ impl VocoderDsp {
             out_l[i] = car_l[i] * dry;
             out_r[i] = car_r[i] * dry;
         }
+        let groups = self.processed_bands / 4;
+        for group in 0..groups {
+            self.lanes_self(group, car_l, car_r, out_l, out_r, from, to);
+        }
+        for i in groups * 4..self.processed_bands {
+            self.band_self(i, car_l, car_r, out_l, out_r, from, to);
+        }
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn lanes_self(&mut self, group: usize, car_l: &[f32], car_r: &[f32], out_l: &mut [f32], out_r: &mut [f32], from: usize, to: usize) {
+        for i in group * 4..group * 4 + 4 {
+            self.band_self(i, car_l, car_r, out_l, out_r, from, to);
+        }
+    }
+
+    fn band_self(&mut self, i: usize, car_l: &[f32], car_r: &[f32], out_l: &mut [f32], out_r: &mut [f32], from: usize, to: usize) {
         let wet = self.wet_gain;
         let band_g = self.band_gain * self.output_gain;
         let a_coeff = self.attack_coeff;
         let r_coeff = self.release_coeff;
         let fade = self.fade_coeff;
-        for i in 0..self.processed_bands {
+        {
             let o = i * 5;
             let (cb0, cb1, cb2) = (self.carrier_coeffs[o], self.carrier_coeffs[o + 1], self.carrier_coeffs[o + 2]);
             let (ca1, ca2) = (self.carrier_coeffs[o + 3], self.carrier_coeffs[o + 4]);
@@ -506,6 +651,193 @@ impl VocoderDsp {
             self.envelope[i] = env;
             self.band_gain_current[i] = gain;
         }
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn lanes_mono_mod(&mut self, group: usize, car_l: &[f32], car_r: &[f32], modu: &[f32],
+                      out_l: &mut [f32], out_r: &mut [f32], from: usize, to: usize) {
+        use core::arch::wasm32::*;
+        let base = group * 4;
+        let cb0 = Self::coeff_lane(&self.carrier_coeffs, group, 0);
+        let cb1 = Self::coeff_lane(&self.carrier_coeffs, group, 1);
+        let cb2 = Self::coeff_lane(&self.carrier_coeffs, group, 2);
+        let ca1 = Self::coeff_lane(&self.carrier_coeffs, group, 3);
+        let ca2 = Self::coeff_lane(&self.carrier_coeffs, group, 4);
+        let mb0 = Self::coeff_lane(&self.modulator_coeffs, group, 0);
+        let mb1 = Self::coeff_lane(&self.modulator_coeffs, group, 1);
+        let mb2 = Self::coeff_lane(&self.modulator_coeffs, group, 2);
+        let ma1 = Self::coeff_lane(&self.modulator_coeffs, group, 3);
+        let ma2 = Self::coeff_lane(&self.modulator_coeffs, group, 4);
+        let mut cx_l1 = Self::load_lane(&self.car_cx_l1, base);
+        let mut cx_l2 = Self::load_lane(&self.car_cx_l2, base);
+        let mut cy_l1 = Self::load_lane(&self.car_cy_l1, base);
+        let mut cy_l2 = Self::load_lane(&self.car_cy_l2, base);
+        let mut cx_r1 = Self::load_lane(&self.car_cx_r1, base);
+        let mut cx_r2 = Self::load_lane(&self.car_cx_r2, base);
+        let mut cy_r1 = Self::load_lane(&self.car_cy_r1, base);
+        let mut cy_r2 = Self::load_lane(&self.car_cy_r2, base);
+        let mut mx_l1 = Self::load_lane(&self.mod_mx_l1, base);
+        let mut mx_l2 = Self::load_lane(&self.mod_mx_l2, base);
+        let mut my_l1 = Self::load_lane(&self.mod_my_l1, base);
+        let mut my_l2 = Self::load_lane(&self.mod_my_l2, base);
+        let mut env = Self::load_lane(&self.envelope, base);
+        let mut gain = Self::load_lane(&self.band_gain_current, base);
+        let tgt = Self::load_lane(&self.target_active, base);
+        let fade = f32x4_splat(self.fade_coeff);
+        let attack = f32x4_splat(self.attack_coeff);
+        let release = f32x4_splat(self.release_coeff);
+        let band_g = f32x4_splat(self.band_gain * self.output_gain);
+        let wet = f32x4_splat(self.wet_gain);
+        let flush = f32x4_splat(1.0e-18);
+        for s in from..to {
+            gain = f32x4_add(tgt, f32x4_mul(fade, f32x4_sub(gain, tgt)));
+            let mx = f32x4_splat(modu[s]);
+            let my = Self::biquad_lane(mb0, mb1, mb2, ma1, ma2, mx, mx_l1, mx_l2, my_l1, my_l2, flush);
+            mx_l2 = mx_l1; mx_l1 = mx; my_l2 = my_l1; my_l1 = my;
+            let peak = f32x4_abs(my);
+            env = Self::envelope_lane(env, peak, attack, release);
+            let cx_l = f32x4_splat(car_l[s]);
+            let cy_l = Self::biquad_lane(cb0, cb1, cb2, ca1, ca2, cx_l, cx_l1, cx_l2, cy_l1, cy_l2, flush);
+            cx_l2 = cx_l1; cx_l1 = cx_l; cy_l2 = cy_l1; cy_l1 = cy_l;
+            let cx_r = f32x4_splat(car_r[s]);
+            let cy_r = Self::biquad_lane(cb0, cb1, cb2, ca1, ca2, cx_r, cx_r1, cx_r2, cy_r1, cy_r2, flush);
+            cx_r2 = cx_r1; cx_r1 = cx_r; cy_r2 = cy_r1; cy_r1 = cy_r;
+            let k = f32x4_mul(f32x4_mul(f32x4_mul(env, band_g), wet), gain);
+            let add_l = f32x4_mul(cy_l, k);
+            let add_r = f32x4_mul(cy_r, k);
+            out_l[s] = Self::accumulate_lanes(out_l[s], add_l);
+            out_r[s] = Self::accumulate_lanes(out_r[s], add_r);
+        }
+        Self::store_lane(&mut self.car_cx_l1, base, cx_l1);
+        Self::store_lane(&mut self.car_cx_l2, base, cx_l2);
+        Self::store_lane(&mut self.car_cy_l1, base, cy_l1);
+        Self::store_lane(&mut self.car_cy_l2, base, cy_l2);
+        Self::store_lane(&mut self.car_cx_r1, base, cx_r1);
+        Self::store_lane(&mut self.car_cx_r2, base, cx_r2);
+        Self::store_lane(&mut self.car_cy_r1, base, cy_r1);
+        Self::store_lane(&mut self.car_cy_r2, base, cy_r2);
+        Self::store_lane(&mut self.mod_mx_l1, base, mx_l1);
+        Self::store_lane(&mut self.mod_mx_l2, base, mx_l2);
+        Self::store_lane(&mut self.mod_my_l1, base, my_l1);
+        Self::store_lane(&mut self.mod_my_l2, base, my_l2);
+        Self::store_lane(&mut self.envelope, base, env);
+        Self::store_lane(&mut self.band_gain_current, base, gain);
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn lanes_self(&mut self, group: usize, car_l: &[f32], car_r: &[f32], out_l: &mut [f32], out_r: &mut [f32], from: usize, to: usize) {
+        use core::arch::wasm32::*;
+        let base = group * 4;
+        let cb0 = Self::coeff_lane(&self.carrier_coeffs, group, 0);
+        let cb1 = Self::coeff_lane(&self.carrier_coeffs, group, 1);
+        let cb2 = Self::coeff_lane(&self.carrier_coeffs, group, 2);
+        let ca1 = Self::coeff_lane(&self.carrier_coeffs, group, 3);
+        let ca2 = Self::coeff_lane(&self.carrier_coeffs, group, 4);
+        let mut cx_l1 = Self::load_lane(&self.car_cx_l1, base);
+        let mut cx_l2 = Self::load_lane(&self.car_cx_l2, base);
+        let mut cy_l1 = Self::load_lane(&self.car_cy_l1, base);
+        let mut cy_l2 = Self::load_lane(&self.car_cy_l2, base);
+        let mut cx_r1 = Self::load_lane(&self.car_cx_r1, base);
+        let mut cx_r2 = Self::load_lane(&self.car_cx_r2, base);
+        let mut cy_r1 = Self::load_lane(&self.car_cy_r1, base);
+        let mut cy_r2 = Self::load_lane(&self.car_cy_r2, base);
+        let mut env = Self::load_lane(&self.envelope, base);
+        let mut gain = Self::load_lane(&self.band_gain_current, base);
+        let tgt = Self::load_lane(&self.target_active, base);
+        let fade = f32x4_splat(self.fade_coeff);
+        let attack = f32x4_splat(self.attack_coeff);
+        let release = f32x4_splat(self.release_coeff);
+        let band_g = f32x4_splat(self.band_gain * self.output_gain);
+        let wet = f32x4_splat(self.wet_gain);
+        let flush = f32x4_splat(1.0e-18);
+        for s in from..to {
+            gain = f32x4_add(tgt, f32x4_mul(fade, f32x4_sub(gain, tgt)));
+            let cx_l = f32x4_splat(car_l[s]);
+            let cy_l = Self::biquad_lane(cb0, cb1, cb2, ca1, ca2, cx_l, cx_l1, cx_l2, cy_l1, cy_l2, flush);
+            cx_l2 = cx_l1; cx_l1 = cx_l; cy_l2 = cy_l1; cy_l1 = cy_l;
+            let cx_r = f32x4_splat(car_r[s]);
+            let cy_r = Self::biquad_lane(cb0, cb1, cb2, ca1, ca2, cx_r, cx_r1, cx_r2, cy_r1, cy_r2, flush);
+            cx_r2 = cx_r1; cx_r1 = cx_r; cy_r2 = cy_r1; cy_r1 = cy_r;
+            // `pmax(a_r, a_l)` == the scalar `if a_l > a_r {a_l} else {a_r}` (abs values are never NaN here)
+            let peak = f32x4_pmax(f32x4_abs(cy_r), f32x4_abs(cy_l));
+            env = Self::envelope_lane(env, peak, attack, release);
+            let k = f32x4_mul(f32x4_mul(f32x4_mul(env, band_g), wet), gain);
+            let add_l = f32x4_mul(cy_l, k);
+            let add_r = f32x4_mul(cy_r, k);
+            out_l[s] = Self::accumulate_lanes(out_l[s], add_l);
+            out_r[s] = Self::accumulate_lanes(out_r[s], add_r);
+        }
+        Self::store_lane(&mut self.car_cx_l1, base, cx_l1);
+        Self::store_lane(&mut self.car_cx_l2, base, cx_l2);
+        Self::store_lane(&mut self.car_cy_l1, base, cy_l1);
+        Self::store_lane(&mut self.car_cy_l2, base, cy_l2);
+        Self::store_lane(&mut self.car_cx_r1, base, cx_r1);
+        Self::store_lane(&mut self.car_cx_r2, base, cx_r2);
+        Self::store_lane(&mut self.car_cy_r1, base, cy_r1);
+        Self::store_lane(&mut self.car_cy_r2, base, cy_r2);
+        Self::store_lane(&mut self.envelope, base, env);
+        Self::store_lane(&mut self.band_gain_current, base, gain);
+    }
+
+    // ---- lane helpers (wasm only, all SAFE: vectors built / extracted via the f32x4 constructor) ----------
+
+    /// One coefficient across a group's 4 bands (the storage is 5-strided per band).
+    #[cfg(target_family = "wasm")]
+    #[inline]
+    fn coeff_lane(coeffs: &[f32; 5 * MAX_BANDS], group: usize, which: usize) -> core::arch::wasm32::v128 {
+        let o = group * 20 + which;
+        core::arch::wasm32::f32x4(coeffs[o], coeffs[o + 5], coeffs[o + 10], coeffs[o + 15])
+    }
+
+    #[cfg(target_family = "wasm")]
+    #[inline]
+    fn load_lane(array: &[f32; MAX_BANDS], base: usize) -> core::arch::wasm32::v128 {
+        core::arch::wasm32::f32x4(array[base], array[base + 1], array[base + 2], array[base + 3])
+    }
+
+    #[cfg(target_family = "wasm")]
+    #[inline]
+    fn store_lane(array: &mut [f32; MAX_BANDS], base: usize, value: core::arch::wasm32::v128) {
+        use core::arch::wasm32::f32x4_extract_lane;
+        array[base] = f32x4_extract_lane::<0>(value);
+        array[base + 1] = f32x4_extract_lane::<1>(value);
+        array[base + 2] = f32x4_extract_lane::<2>(value);
+        array[base + 3] = f32x4_extract_lane::<3>(value);
+    }
+
+    /// The bandpass step, association identical to the scalar body (including the denormal flush).
+    #[cfg(target_family = "wasm")]
+    #[inline]
+    fn biquad_lane(b0: core::arch::wasm32::v128, b1: core::arch::wasm32::v128, b2: core::arch::wasm32::v128,
+                   a1: core::arch::wasm32::v128, a2: core::arch::wasm32::v128,
+                   x: core::arch::wasm32::v128, x1: core::arch::wasm32::v128, x2: core::arch::wasm32::v128,
+                   y1: core::arch::wasm32::v128, y2: core::arch::wasm32::v128,
+                   flush: core::arch::wasm32::v128) -> core::arch::wasm32::v128 {
+        use core::arch::wasm32::*;
+        let acc = f32x4_add(f32x4_add(f32x4_mul(b0, x), f32x4_mul(b1, x1)), f32x4_mul(b2, x2));
+        let acc = f32x4_sub(f32x4_sub(acc, f32x4_mul(a1, y1)), f32x4_mul(a2, y2));
+        f32x4_sub(f32x4_add(acc, flush), flush)
+    }
+
+    /// The attack / release follower: per lane `peak + coeff * (env - peak)` with the coefficient selected
+    /// by `env < peak`, exactly the scalar branch.
+    #[cfg(target_family = "wasm")]
+    #[inline]
+    fn envelope_lane(env: core::arch::wasm32::v128, peak: core::arch::wasm32::v128,
+                     attack: core::arch::wasm32::v128, release: core::arch::wasm32::v128) -> core::arch::wasm32::v128 {
+        use core::arch::wasm32::*;
+        let coeff = v128_bitselect(attack, release, f32x4_lt(env, peak));
+        f32x4_add(peak, f32x4_mul(coeff, f32x4_sub(env, peak)))
+    }
+
+    /// Add a group's 4 band contributions to one output sample IN BAND ORDER (sequential lane extraction),
+    /// so the float association matches the scalar band-by-band accumulation bit-for-bit.
+    #[cfg(target_family = "wasm")]
+    #[inline]
+    fn accumulate_lanes(sample: f32, adds: core::arch::wasm32::v128) -> f32 {
+        use core::arch::wasm32::f32x4_extract_lane;
+        (((sample + f32x4_extract_lane::<0>(adds)) + f32x4_extract_lane::<1>(adds))
+            + f32x4_extract_lane::<2>(adds)) + f32x4_extract_lane::<3>(adds)
     }
 }
 

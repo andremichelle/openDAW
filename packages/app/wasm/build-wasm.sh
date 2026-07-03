@@ -32,14 +32,19 @@ SHARED="-C link-arg=--shared-memory -C link-arg=--max-memory=$MAX_MEMORY -C link
 #    core and --gc-sections cannot prune it -> a ~1158-function module needing 58 GOT entries (a full
 #    dynamic linker to resolve). With them, only process/init/state_size are roots, core is pruned, and the
 #    module is ~2 KB with NO GOT, so the worklet loader needs no GOT resolution.
-PIC_RUSTFLAGS="-C relocation-model=pic -C link-arg=--experimental-pic -C link-arg=-shared $SHARED -Zunstable-options -Cpanic=immediate-abort -Zdefault-visibility=hidden"
+# WASM SIMD128 (fixed-width 128-bit vectors): supported in every current browser + Node. A pure codegen
+# feature: LLVM auto-vectorizes without changing IEEE semantics (no reassociation without fast-math), so
+# the TS-vs-WASM parity holds bit-for-bit. Must reach the DEPS too (dsp/engine-env hold the hot loops),
+# hence RUSTFLAGS on the engine build, not just `cargo rustc --` (which only flags the final crate).
+SIMD="-C target-feature=+simd128"
+PIC_RUSTFLAGS="-C relocation-model=pic $SIMD -C link-arg=--experimental-pic -C link-arg=-shared $SHARED -Zunstable-options -Cpanic=immediate-abort -Zdefault-visibility=hidden"
 DEVICE_TOOLCHAIN="${DEVICE_TOOLCHAIN:-nightly}"
 
 # The PIC side-module device crates. ADD A NEW DEVICE HERE (its crate name) and it is built, size-optimised,
 # and copied to public/ automatically. The wasm artifact basename is the crate name with '-' -> '_'.
 DEVICE_CRATES="device-lowpass device-transpose device-arp device-zeitgeist device-tidal device-vaporisateur device-nano device-delay device-playfield-slot device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb device-soundfont device-vocoder"
 
-cargo rustc -p engine --release --target "$TARGET" -- \
+RUSTFLAGS="$SIMD" cargo rustc -p engine --release --target "$TARGET" -- \
   -C link-arg=--import-memory -C link-arg=--import-table $SHARED
 for crate in $DEVICE_CRATES; do
   RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p "$crate" --release --target "$TARGET" -Zbuild-std=core
@@ -58,7 +63,7 @@ MODULES="engine $DEVICE_MODULES sine"
 # this, verify the devices still load and play in the browser.
 if command -v wasm-opt >/dev/null 2>&1; then
   for module in $MODULES; do
-    wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-mutable-globals \
+    wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-mutable-globals --enable-simd \
       "$OUT/$module.wasm" -o "$OUT/$module.wasm.opt"
     mv "$OUT/$module.wasm.opt" "$OUT/$module.wasm"
   done

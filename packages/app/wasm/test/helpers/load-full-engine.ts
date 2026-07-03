@@ -92,8 +92,10 @@ export const loadFullEngine = async (sampleRate = 48000,
     const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engineModule = await WebAssembly.compile(readFileSync(path.join(PUBLIC, "engine.wasm")))
-    const engine = new WebAssembly.Instance(engineModule, {env: {memory, __indirect_function_table: table}})
-        .exports as any
+    const engine = new WebAssembly.Instance(engineModule, {env: {
+        memory, __indirect_function_table: table,
+        host_perf_now: () => performance.now() * 1000.0 // micros clock for the render profiler
+    }}).exports as any
     engine.init(sampleRate)
     // User scripts read the `sampleRate` global (an AudioWorkletGlobalScope built-in); provide it in node so the
     // scriptable devices behave exactly as in the worklet.

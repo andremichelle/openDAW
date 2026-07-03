@@ -15,7 +15,9 @@
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
+use alloc::format;
 use alloc::rc::Rc;
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
@@ -107,6 +109,12 @@ impl DirtyMark {
 /// The signal a unit's PARAMETER subscriptions fire when automation attaches / detaches / edits: set the
 /// unit's `automation_dirty` flag and enqueue the unit, so `reconcile_one` re-binds its automation (no
 /// rewire). Distinct from `DirtyMark::signal` (chain / sidechain), which only enqueues.
+// A node's PROFILER label: the device's box type + a short uuid (reconcile-time, report-only).
+fn device_label(graph: &BoxGraph, device_uuid: &Uuid) -> String {
+    let name = graph.find_box(device_uuid).map_or("<device>", |device_box| device_box.name.as_str());
+    format!("{} {:02x}{:02x}", name, device_uuid[0], device_uuid[1])
+}
+
 fn automation_invalidate(unit: &AudioUnitBinding) -> Rc<dyn Fn()> {
     let dirty = unit.automation_dirty.clone();
     let mark = unit.mark.clone();
@@ -336,7 +344,10 @@ struct SendBinding {
     node_id: NodeId,
     source: Option<NodeId>,
     target: Option<(Option<Uuid>, NodeId)>,
-    subs: Vec<SubscriptionId> // targetBus (2) pointer monitor + sendGain (5) / sendPan (6) field observers
+    subs: Vec<SubscriptionId>, // targetBus (2) pointer monitor + sendGain (5) / sendPan (6) field observers
+    automation: Rc<StripAutomation>, // sendGain / sendPan automation overrides (volume = gain dB, panning = pan)
+    param_subs: Vec<SubscriptionId>, // the automation observers, re-observed on a real automation change
+    param_collections: Vec<ValueCollection> // keep the send curves' region collections alive (terminated on rebind)
 }
 
 /// A TAPE / audio-region unit's wiring: the engine-side audio-region player (reads the unit's AUDIO tracks) ->
@@ -670,6 +681,7 @@ impl Engine {
             node.borrow_mut().set_audio_source(source);
             source = node.borrow().audio_output();
             let node_id = self.context.register_processor(node);
+            self.context.set_label(node_id, device_label(&self.graph, &device_uuid));
             self.context.register_edge(source_id, node_id);
             source_id = node_id;
         }
@@ -684,6 +696,7 @@ impl Engine {
         strip.borrow_mut().set_audio_source(source);
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
+        self.context.set_label(strip_id, String::from("strip:output"));
         self.context.register_edge(source_id, strip_id); // the (effected) summing bus feeds the master strip
         strip_output
     }
@@ -783,6 +796,16 @@ impl Engine {
         // device joiner's) — the extra enqueue is a no-op (subs are then non-empty, no real change).
         if unit.strip_param_subs.is_empty() || automation_changed {
             self.bind_strip_automation(unit);
+        }
+        // Same for the aux sends' gain / pan automation (built sends bound in `build_send`; a real automation
+        // change re-observes them all — a unit has few sends, so the re-bind is cheap).
+        if automation_changed {
+            let invalidate = automation_invalidate(unit);
+            let mut sends = core::mem::take(&mut unit.sends);
+            for send in &mut sends {
+                self.bind_send_automation(send, &invalidate);
+            }
+            unit.sends = sends;
         }
         unit.automation_dirty.set(false); // consume the joiner catch-up flags + the handled real change
     }
@@ -918,6 +941,7 @@ impl Engine {
         let sum_buffer = shared_audio_buffer();
         let sum = Rc::new(RefCell::new(AudioBusProcessor::new(sum_buffer.clone())));
         let sum_id = self.context.register_processor(sum.clone());
+        self.context.set_label(sum_id, format!("bus-sum {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
         self.bus_registry.insert(bus_uuid, (sum.clone(), sum_id));
         // Register the RAW SUM (pre-fx, pre-strip, pre-mute) under the AudioBusBox uuid so a sidechain pointer
         // that targets this bus (e.g. a vocoder modulated by a MUTED submix) taps its full signal. Mirrors TS
@@ -956,6 +980,7 @@ impl Engine {
             node.borrow_mut().set_audio_source(source);
             source = node.borrow().audio_output();
             let node_id = self.context.register_processor(node.clone());
+            self.context.set_label(node_id, device_label(&self.graph, &device_uuid));
             // A sidechained bus effect (e.g. a ducking compressor on a submix): build its sidechain binding so the
             // resolve pass feeds it the source unit's signal. Without this it detects on its own (hot) main input
             // and over-ducks everything routed through the bus.
@@ -985,6 +1010,7 @@ impl Engine {
         strip.borrow_mut().set_audio_source(source);
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
+        self.context.set_label(strip_id, String::from("strip:bus"));
         self.context.register_edge(source_id, strip_id);
         edges.push((source_id, strip_id));
         nodes.push(strip_id);
@@ -1064,12 +1090,13 @@ impl Engine {
             self.teardown_send(send);
         }
         let mut sends = Vec::new();
+        let invalidate = automation_invalidate(unit);
         for send_uuid in desired {
             if let Some(index) = pool.iter().position(|send| send.send_uuid == send_uuid) {
                 sends.push(pool.remove(index));
             } else {
                 let mark = unit.mark.clone();
-                sends.push(self.build_send(send_uuid, &mark));
+                sends.push(self.build_send(send_uuid, &mark, &invalidate));
             }
         }
         unit.sends = sends;
@@ -1078,7 +1105,7 @@ impl Engine {
     /// Build one aux send: its `AuxSendProcessor` reading the send's `sendGain` (5, dB) / `sendPan` (6, bipolar)
     /// via a shared `SendParams` (kept in sync with the box, de-clicked in the node), plus a `targetBus` (2)
     /// pointer monitor that re-resolves on a re-point.
-    fn build_send(&mut self, send_uuid: Uuid, mark: &DirtyMark) -> SendBinding {
+    fn build_send(&mut self, send_uuid: Uuid, mark: &DirtyMark, invalidate: &Rc<dyn Fn()>) -> SendBinding {
         let params = Rc::new(SendParams::new());
         let mut subs = Vec::new();
         let gain = params.clone();
@@ -1092,9 +1119,43 @@ impl Engine {
         let target_mark = mark.clone();
         subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(send_uuid, vec![SEND_TARGET_KEY]),
             Box::new(move |_graph, _update| target_mark.mark())));
-        let proc = Rc::new(RefCell::new(AuxSendProcessor::new(params, self.sample_rate)));
+        let automation = Rc::new(StripAutomation::new());
+        let proc = Rc::new(RefCell::new(AuxSendProcessor::new(params, automation.clone(), self.sample_rate)));
         let node_id = self.context.register_processor(proc.clone());
-        SendBinding {send_uuid, proc, node_id, source: None, target: None, subs}
+        self.context.set_label(node_id, String::from("aux-send"));
+        let mut send = SendBinding {send_uuid, proc, node_id, source: None, target: None, subs, automation,
+            param_subs: Vec::new(), param_collections: Vec::new()};
+        self.bind_send_automation(&mut send, invalidate);
+        send
+    }
+
+    /// Bind a send's `sendGain` (5) + `sendPan` (6) to their AUTOMATION (mirrors `bind_strip_automation`): a
+    /// Value track targeting those fields drives the send at the update clock. Re-observed on a real automation
+    /// change; without a track the override stays `None` and the send keeps using the static `SendParams`.
+    /// Gain maps the 0..1 curve through the adapter's `ValueMapping.DefaultDecibel`; pan is bipolar.
+    fn bind_send_automation(&mut self, send: &mut SendBinding, invalidate: &Rc<dyn Fn()>) {
+        const SEND_GAIN: Decibel = Decibel::new(-72.0, -12.0, 0.0); // TS AuxSendBoxAdapter ValueMapping.DefaultDecibel
+        const SEND_PAN: Linear = Linear::bipolar();
+        *send.automation.volume.borrow_mut() = None;
+        *send.automation.panning.borrow_mut() = None;
+        for sub in core::mem::take(&mut send.param_subs) {
+            self.graph.unsubscribe(sub);
+        }
+        for collection in core::mem::take(&mut send.param_collections) {
+            collection.terminate(&mut self.graph); // a plain drop would leak its hub / event / curve observers
+        }
+        let (gain_handle, gain_subs, gain_collections, _) = self.observe_param(send.send_uuid, &[SEND_GAIN_KEY], 0, invalidate);
+        let (pan_handle, pan_subs, pan_collections, _) = self.observe_param(send.send_uuid, &[SEND_PAN_KEY], 1, invalidate);
+        send.param_subs.extend(gain_subs);
+        send.param_subs.extend(pan_subs);
+        send.param_collections.extend(gain_collections);
+        send.param_collections.extend(pan_collections);
+        if gain_handle.track.is_some() {
+            *send.automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| SEND_GAIN.y(gain_handle.resolve(position).0)));
+        }
+        if pan_handle.track.is_some() {
+            *send.automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| SEND_PAN.y(pan_handle.resolve(position).0)));
+        }
     }
 
     /// Tear down one aux send: detach its source + target edges (and its summed output), then drop the node +
@@ -1119,6 +1180,12 @@ impl Engine {
         }
         for sub in send.subs {
             self.graph.unsubscribe(sub);
+        }
+        for sub in send.param_subs {
+            self.graph.unsubscribe(sub);
+        }
+        for collection in send.param_collections {
+            collection.terminate(&mut self.graph);
         }
         self.context.remove_processor(send.node_id);
     }
@@ -1457,6 +1524,7 @@ impl Engine {
         let player = Rc::new(RefCell::new(AudioRegionPlayer::new(unit.audio_track_sets.clone(), self.sample_rate, self.tempo_map.clone())));
         let player_output = player.borrow().audio_output();
         let player_id = self.context.register_processor(player);
+        self.context.set_label(player_id, String::from("region-player"));
         // The tape's RAW output (pre fx / strip) registered under the TapeDeviceBox uuid: a sidechain targeting the
         // tape device resolves THIS (matching TS, which taps the instrument output before the unit's audio effects).
         self.output_registry.register(Address::of(instrument_uuid, vec![]), player_output.clone(), player_id);
@@ -1495,6 +1563,7 @@ impl Engine {
         strip.borrow_mut().set_audio_source(output.clone());
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
+        self.context.set_label(strip_id, String::from("strip:tape"));
         self.context.register_edge(output_node, strip_id);
         edges.push((output_node, strip_id));
         // The strip's output is routed to the unit's OUTPUT bus by `resolve_outputs` (not wired to master here).
@@ -1518,6 +1587,7 @@ impl Engine {
         strip.borrow_mut().set_audio_source(binding.sum_buffer.clone());
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
+        self.context.set_label(strip_id, String::from("strip:composite"));
         let mut tail_edges = Vec::new();
         self.context.register_edge(binding.sum_id, strip_id);
         tail_edges.push((binding.sum_id, strip_id));
@@ -1605,6 +1675,7 @@ impl Engine {
                 let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
                 let strip_output = strip.borrow().audio_output();
                 let strip_id = self.context.register_processor(strip.clone());
+                self.context.set_label(strip_id, String::from("strip:leaf"));
                 (strip, strip_id, strip_output)
             }
         };
@@ -1652,6 +1723,7 @@ impl Engine {
         refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
         let output = instrument.borrow().audio_output();
         let node_id = self.context.register_processor(instrument.clone());
+        self.context.set_label(node_id, device_label(&self.graph, &uuid));
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), output: Some(output), params, sidechain: None, enabled_sub}
     }
@@ -1691,6 +1763,7 @@ impl Engine {
         refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
         let output = node.borrow().audio_output();
         let node_id = self.context.register_processor(node.clone());
+        self.context.set_label(node_id, device_label(&self.graph, &uuid));
         let sidechain = if params.sidechain_paths.is_empty() {
             None
         } else {
@@ -1839,6 +1912,7 @@ impl Engine {
         instrument.borrow_mut().set_pull_chain(chain);
         let mut output = instrument.borrow().audio_output();
         let instrument_id = self.context.register_processor(instrument);
+        self.context.set_label(instrument_id, device_label(&self.graph, &instrument_uuid));
         let mut nodes = vec![instrument_id];
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut sidechains: Vec<SidechainBinding> = Vec::new();
@@ -1862,6 +1936,7 @@ impl Engine {
             node.borrow_mut().set_audio_source(output);
             output = node.borrow().audio_output();
             let node_id = self.context.register_processor(node.clone());
+            self.context.set_label(node_id, device_label(&self.graph, &device_uuid));
             // Keep this effect's declared sidechain ports as a persistent binding (resolved by the post-build
             // pass, re-resolved on later edits). Each port gets a TARGETED `This` monitor on its pointer
             // field, so a re-point / detach enqueues the unit. Port ids start at 2 (after MAIN_INPUT).

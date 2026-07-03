@@ -17,6 +17,7 @@
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::rc::Rc;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use crate::audio_output_buffer_registry::AudioOutputBufferRegistry;
@@ -32,6 +33,16 @@ pub type NodeId = u64;
 /// A shared, single-threaded processor handle (mirrors `SharedAudioBuffer`).
 pub type SharedProcessor = Rc<RefCell<dyn Processor>>;
 
+// The render-loop PROFILER (diagnostic, off by default): per-node accumulated wall time via a host-provided
+// clock. `accum` is indexed by NodeId and pre-grown at registration (reconcile), so the per-render timing
+// adds two clock calls per node and NO allocation. Labels are recorded at registration regardless (cheap,
+// reconcile-time), so enabling the profiler later still reports meaningful names.
+struct Profiler {
+    now: fn() -> f64, // micros (host `performance.now() * 1000`)
+    accum: Vec<f64>,
+    quanta: u64
+}
+
 pub struct EngineContext {
     next_id: NodeId,
     graph: Graph<NodeId>,
@@ -39,6 +50,8 @@ pub struct EngineContext {
     processors: BTreeMap<NodeId, SharedProcessor>,
     registry: AudioOutputBufferRegistry<NodeId>,
     phase_observers: Vec<Box<dyn FnMut(ProcessPhase)>>,
+    labels: BTreeMap<NodeId, String>,
+    profiler: Option<Profiler>,
     needs_sort: bool
 }
 
@@ -51,7 +64,39 @@ impl EngineContext {
             processors: BTreeMap::new(),
             registry: AudioOutputBufferRegistry::new(),
             phase_observers: Vec::new(),
+            labels: BTreeMap::new(),
+            profiler: None,
             needs_sort: false
+        }
+    }
+
+    /// Attach a human-readable label to a node (its box type / role), for the profiler report. Reconcile-time.
+    pub fn set_label(&mut self, id: NodeId, label: String) {
+        self.labels.insert(id, label);
+    }
+
+    /// Enable per-node render profiling with the given micros clock, (re)zeroing the accumulators.
+    pub fn profile_enable(&mut self, now: fn() -> f64) {
+        let mut accum = Vec::new();
+        accum.resize(self.next_id as usize, 0.0);
+        self.profiler = Some(Profiler {now, accum, quanta: 0});
+    }
+
+    /// The profile so far: (label, total micros) per node, unsorted, plus the profiled quantum count.
+    pub fn profile_report(&self) -> (Vec<(String, f64)>, u64) {
+        match &self.profiler {
+            Some(profiler) => {
+                let entries = profiler.accum.iter().enumerate()
+                    .filter(|(_, micros)| **micros > 0.0)
+                    .map(|(id, micros)| {
+                        let label = self.labels.get(&(id as NodeId)).cloned()
+                            .unwrap_or_else(|| String::from("<unlabeled>"));
+                        (label, *micros)
+                    })
+                    .collect();
+                (entries, profiler.quanta)
+            }
+            None => (Vec::new(), 0)
         }
     }
 
@@ -63,6 +108,9 @@ impl EngineContext {
         self.graph.add_vertex(id);
         self.processors.insert(id, processor);
         self.sort.reserve(self.graph.vertices().len()); // pre-size here (reconcile) so the lazy in-render sort never allocates
+        if let Some(profiler) = &mut self.profiler {
+            profiler.accum.resize(self.next_id as usize, 0.0); // grow at reconcile, never during render
+        }
         self.needs_sort = true;
         id
     }
@@ -136,10 +184,25 @@ impl EngineContext {
             self.needs_sort = false;
         }
         let count = self.sort.sorted().len();
-        for index in 0..count {
-            let id = self.sort.sorted()[index];
-            if let Some(processor) = self.processors.get(&id) {
-                processor.borrow_mut().process(info);
+        match &mut self.profiler {
+            Some(profiler) => {
+                for index in 0..count {
+                    let id = self.sort.sorted()[index];
+                    if let Some(processor) = self.processors.get(&id) {
+                        let begin = (profiler.now)();
+                        processor.borrow_mut().process(info);
+                        profiler.accum[id as usize] += (profiler.now)() - begin;
+                    }
+                }
+                profiler.quanta += 1;
+            }
+            None => {
+                for index in 0..count {
+                    let id = self.sort.sorted()[index];
+                    if let Some(processor) = self.processors.get(&id) {
+                        processor.borrow_mut().process(info);
+                    }
+                }
             }
         }
         self.emit(ProcessPhase::After);

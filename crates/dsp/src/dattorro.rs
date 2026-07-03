@@ -31,15 +31,36 @@ const PRE_DELAY_MASK: usize = PRE_DELAY_SIZE - 1;
 // The 12 ring sizes at 48 kHz (masks are size - 1). Kept as one flat backing store with per-line offsets.
 const DELAY_SIZES: [usize; 12] = [256, 256, 1024, 512, 2048, 8192, 4096, 8192, 2048, 8192, 8192, 8192];
 const TOTAL_DELAY: usize = 256 + 256 + 1024 + 512 + 2048 + 8192 + 4096 + 8192 + 2048 + 8192 + 8192 + 8192;
+// Offsets + masks as COMPILE-TIME constants (not state fields): `OFFSET[line] + (pos & MASK[line])` is then
+// provably < TOTAL_DELAY at every literal-`line` call site, so LLVM deletes the ~30 per-sample bounds checks
+// the packed-ring accesses otherwise pay (the profiler showed the Dattorro dominating whole projects).
+const DELAY_OFFSETS: [usize; 12] = {
+    let mut offsets = [0usize; 12];
+    let mut acc = 0usize;
+    let mut index = 0;
+    while index < 12 {
+        offsets[index] = acc;
+        acc += DELAY_SIZES[index];
+        index += 1;
+    }
+    offsets
+};
+const DELAY_MASKS: [usize; 12] = {
+    let mut masks = [0usize; 12];
+    let mut index = 0;
+    while index < 12 {
+        masks[index] = DELAY_SIZES[index] - 1;
+        index += 1;
+    }
+    masks
+};
 
 /// The plate-reverb DSP. A device holds it in its (engine-zeroed) state and calls `init` in place — the struct
 /// is ~500 KB, too large for the device stack, so it is never constructed by value on the audio thread.
 pub struct DattorroReverbDsp {
     sample_rate: f32,
     pre_delay_buffer: [f32; PRE_DELAY_SIZE],
-    delay: [f32; TOTAL_DELAY], // 12 rings packed end to end (offsets in DELAY_OFFSET)
-    offsets: [usize; 12],
-    masks: [usize; 12],
+    delay: [f32; TOTAL_DELAY], // 12 rings packed end to end (geometry in DELAY_OFFSETS / DELAY_MASKS, const)
     writes: [usize; 12],
     reads: [usize; 12],
     taps: [i32; 14],
@@ -69,15 +90,11 @@ impl DattorroReverbDsp {
     /// Initialise (delay geometry + default params) on an ALREADY-ZEROED instance; the buffers stay zero.
     pub fn init(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
-        let mut offset = 0usize;
         for index in 0..12 {
             let size = DELAY_SIZES[index];
             let len = (libm::roundf(DELAY_TIMES[index] * sample_rate) as usize).min(size); // clamp to the fixed ring
-            self.offsets[index] = offset;
-            self.masks[index] = size - 1;
             self.writes[index] = len - 1;
             self.reads[index] = 0;
-            offset += size;
         }
         for (index, &time) in TAP_TIMES.iter().enumerate() {
             self.taps[index] = libm::roundf(time * sample_rate) as i32;
@@ -97,8 +114,8 @@ impl DattorroReverbDsp {
     }
 
     /// Clear the sounding state on a transport STOP (TS `DattorroReverbDsp.reset`): pre-delay + delay rings,
-    /// the input lowpass histories, the write position, and the excursion phase go to zero; the delay geometry
-    /// (offsets / masks / read-write pointers) and the parameters survive.
+    /// the input lowpass histories, the write position, and the excursion phase go to zero; the read-write
+    /// pointers and the parameters survive (the ring geometry is const).
     pub fn reset(&mut self) {
         self.pre_delay_buffer.fill(0.0);
         self.delay.fill(0.0);
@@ -122,14 +139,15 @@ impl DattorroReverbDsp {
     pub fn set_wet_gain(&mut self, value: f32) {self.wet = value;}
     pub fn set_dry_gain(&mut self, value: f32) {self.dry = value;}
 
-    // Read/write one packed ring by index (offset + (pos & mask)).
+    // Read/write one packed ring by index (const offset + (pos & const mask), bounds-check-free after
+    // const propagation at the literal-`line` call sites).
     #[inline]
     fn get(&self, line: usize, pos: usize) -> f32 {
-        self.delay[self.offsets[line] + (pos & self.masks[line])]
+        self.delay[DELAY_OFFSETS[line] + (pos & DELAY_MASKS[line])]
     }
     #[inline]
     fn put(&mut self, line: usize, pos: usize, value: f32) {
-        let index = self.offsets[line] + (pos & self.masks[line]);
+        let index = DELAY_OFFSETS[line] + (pos & DELAY_MASKS[line]);
         self.delay[index] = value;
     }
 
@@ -149,6 +167,14 @@ impl DattorroReverbDsp {
         let mut pdw = self.pre_delay_write;
         let (mut lp1, mut lp2, mut lp3) = (self.lp1, self.lp2, self.lp3);
         let mut exc_phase = self.exc_phase;
+        // WASM CONTRACT: the excursion LFO is a per-block-seeded ROTATION (cos/sin evaluated once per call,
+        // then advanced by the exact angle-sum recurrence), mirrored operation-for-operation with the TS
+        // `DattorroReverbDsp`. Two trig calls per block instead of two per sample — the per-sample pair was
+        // ~40% of this reverb's entire cost.
+        let mut exc_cos = libm::cos(exc_phase * core::f64::consts::TAU);
+        let mut exc_sin = libm::sin(exc_phase * core::f64::consts::TAU);
+        let step_cos = libm::cos(ex * core::f64::consts::TAU);
+        let step_sin = libm::sin(ex * core::f64::consts::TAU);
         let read = |slf: &Self, line: usize| slf.reads[line];
         for i in from..to {
             let inp_left = in_left[i];
@@ -172,11 +198,9 @@ impl DattorroReverbDsp {
             self.put(3, self.writes[3], pre);
             let d3r = self.get(3, read(self, 3));
             let split = si * pre + d3r;
-            // excursion-modulated cubic reads for lines 4 and 8
-            // WASM CONTRACT: TAU mirrors the TS `DattorroReverbDsp` exactly (one LFO period per phase unit;
-            // cos/sin keep the two excursion reads 90 degrees apart).
-            let exc = ed * (1.0 + libm::cos(exc_phase * core::f64::consts::TAU)) as f32;
-            let exc2 = ed * (1.0 + libm::sin(exc_phase * core::f64::consts::TAU)) as f32;
+            // excursion-modulated cubic reads for lines 4 and 8 (cos/sin keep the two reads 90 degrees apart)
+            let exc = ed * (1.0 + exc_cos) as f32;
+            let exc2 = ed * (1.0 + exc_sin) as f32;
             let read_c4 = self.cubic_excursion(4, read(self, 4), exc);
             let read_c8 = self.cubic_excursion(8, read(self, 8), exc2);
             // tank, first half (lines 4..7)
@@ -209,11 +233,15 @@ impl DattorroReverbDsp {
                 - self.get(11, (read(self, 11) as i32 + t[13]) as usize);
             out_left[i] += lo * we;
             out_right[i] += ro * we;
+            // Advance the LFO by the exact rotation (same temp-variable order as the TS, bit-identical).
+            let next_cos = exc_cos * step_cos - exc_sin * step_sin;
+            exc_sin = exc_sin * step_cos + exc_cos * step_sin;
+            exc_cos = next_cos;
             exc_phase += ex;
             pdw = (pdw + 1) & PRE_DELAY_MASK;
             for d in 0..12 {
-                self.writes[d] = (self.writes[d] + 1) & self.masks[d];
-                self.reads[d] = (self.reads[d] + 1) & self.masks[d];
+                self.writes[d] = (self.writes[d] + 1) & DELAY_MASKS[d];
+                self.reads[d] = (self.reads[d] + 1) & DELAY_MASKS[d];
             }
         }
         self.pre_delay_write = pdw;

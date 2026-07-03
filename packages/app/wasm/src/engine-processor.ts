@@ -9,7 +9,7 @@
 // The engine holds the wasm BoxGraph mirror; the main thread serializes SyncSource's UpdateTask[] into
 // bytes and posts them here. Each batch -> apply_updates, then bind() once the TimelineBox exists.
 
-import {UUID} from "@opendaw/lib-std"
+import {isDefined, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {CompositeSpec} from "./engine-modules"
 import {SampleInfo, SampleLoader} from "./sample-loader"
@@ -187,7 +187,10 @@ class EngineProcessor extends AudioWorkletProcessor {
         // the one shared function table: the engine (main module) imports it and uses the low slots; each
         // device's functions + its `process` entry are appended above via table.grow.
         this.#table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
-        const env = {memory, __indirect_function_table: this.#table}
+        // micros clock for the render profiler; the AudioWorkletGlobalScope has no `performance`, Date.now
+        // (ms resolution) is the honest fallback there — profile in the offline/test contexts for precision.
+        const now: () => number = isDefined(globalThis.performance) ? () => performance.now() * 1000.0 : () => Date.now() * 1000.0
+        const env = {memory, __indirect_function_table: this.#table, host_perf_now: now}
         // the engine is the dynamic-linker host; instantiate it first, before any device.
         const engine = new WebAssembly.Instance(engineModule, {env}).exports as unknown as EngineExports
         this.#engine = engine

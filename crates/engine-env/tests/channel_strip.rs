@@ -67,6 +67,36 @@ fn mute_ramps_down_to_silence() {
 }
 
 #[test]
+fn automated_volume_retargets_at_the_update_clock_inside_the_quantum() {
+    // TS `ChannelStripProcessor` is an `AudioProcessor`: the quantum splits at the 10-pulse update clock and
+    // the gains retarget at each boundary. Block p0 = 8, 5.12 pulses over 128 samples (120 bpm, 48 kHz), so
+    // the grid point 10 lands at sample 50: unity before it, ramping toward -96 dB after it.
+    use engine_env::block::Block;
+    use engine_env::block_flags::BlockFlags;
+    let params = Rc::new(StripParams::new());
+    let automation = Rc::new(StripAutomation::new());
+    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64| if position < 10.0 {0.0} else {-96.0}));
+    let mut strip = ChannelStripProcessor::new(params, automation.clone(), SR);
+    let input = shared_audio_buffer();
+    {
+        let mut buffer = input.borrow_mut();
+        for index in 0..RENDER_QUANTUM {
+            buffer.left[index] = 1.0;
+            buffer.right[index] = 1.0;
+        }
+    }
+    strip.set_audio_source(input);
+    let block = Block {index: 0, flags: BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING), p0: 8.0, p1: 13.12, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0};
+    strip.process(&ProcessInfo {blocks: &[block]});
+    let output = strip.audio_output();
+    let buffer = output.borrow();
+    assert!((buffer.left[10] - 1.0).abs() < 1.0e-6, "before the grid point: unity");
+    assert!((buffer.left[49] - 1.0).abs() < 1.0e-6, "the last pre-boundary sample is still unity");
+    assert!(buffer.left[60] < 1.0 - 1.0e-3, "after the 10-pulse boundary the gain ramps down");
+    assert!(buffer.left[127] < buffer.left[60], "and keeps falling across the rest of the quantum");
+}
+
+#[test]
 fn full_left_pan_silences_the_right() {
     let (mut strip, params) = strip_with_input(1.0);
     params.panning.set(-1.0); // hard left

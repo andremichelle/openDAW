@@ -42,7 +42,7 @@ use engine_env::block_flags::BlockFlags;
 use engine_env::engine_context::{EngineContext, NodeId};
 use engine_env::event::Event;
 use engine_env::note_event_instrument::SharedNoteEventSource;
-use engine_env::ppqn::pulses_to_samples;
+use engine_env::ppqn::{first_update_position, pulses_to_samples, UPDATE_CLOCK_RATE};
 use engine_env::process_info::ProcessInfo;
 use studio_boxes::registry;
 use transport::transport::{Transport, RENDER_QUANTUM};
@@ -469,9 +469,7 @@ pub extern "C" fn host_first_update_position(at: f64) -> f64 {
     if !pull.clock_armed {
         return f64::INFINITY;
     }
-    // The smallest grid multiple at or above `at` (no libm: truncate toward zero, then step up if below).
-    let floored = ((at / UPDATE_CLOCK_RATE) as i64) as f64 * UPDATE_CLOCK_RATE;
-    if floored < at { floored + UPDATE_CLOCK_RATE } else { floored }
+    first_update_position(at)
 }
 
 /// Host import a render template calls to ADVANCE its fragment loop: the next update position STRICTLY after
@@ -607,10 +605,8 @@ pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) 
     count as u32
 }
 
-// WASM CONTRACT: the update-clock grid, mirror of lib-dsp `UpdateClockRate = PPQN.fromSignature(1, 384)` =
-// floor(3840 / 384) = 10 pulses. The engine owns this rate in `host_next_update_position` (so it can become
-// tempo-aware); every automated device fragments on the same absolute grid, switching its params together.
-const UPDATE_CLOCK_RATE: f64 = 10.0;
+// The update-clock grid (`UPDATE_CLOCK_RATE`) and its `first_update_position` live in `dsp::ppqn` (the
+// WASM-CONTRACT home), shared with the channel strip's automated-gain fragmentation.
 
 /// Host import a (generative) device calls to map a pulse position to its sample offset within the current
 /// quantum, resolved against the block containing `pulse`. An arpeggiator uses it to time the events it
@@ -1075,6 +1071,7 @@ impl Engine {
         let output_buffer = shared_audio_buffer();
         let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
         self.master_id = self.context.register_processor(master.clone());
+        self.context.set_label(self.master_id, alloc::string::String::from("master-sum"));
         self.master = Some(master);
         self.output_bus = Some(self.output_strip(output_buffer)); // master strip output (or the bus, if no output unit)
         self.observe_audio_units();
@@ -1154,6 +1151,57 @@ pub extern "C" fn input_reserve(len: usize) -> *mut u8 {
             input.reserve(len); // len() is always 0 (we read via the ptr, never push), so this targets `len`
         }
         input.as_mut_ptr()
+    }
+}
+
+// ---- render-loop PROFILER (diagnostic) -------------------------------------------------------------------
+// `host_perf_now` is the engine's ONE env import (a micros clock, `performance.now() * 1000`): every engine
+// loader must bind it. It is only CALLED while profiling is enabled, so the render hot path stays untouched
+// by default (the context branches once per quantum).
+
+#[cfg(target_family = "wasm")]
+#[link(wasm_import_module = "env")]
+extern "C" {
+    fn host_perf_now() -> f64;
+}
+
+#[cfg(target_family = "wasm")]
+fn perf_now() -> f64 {
+    unsafe { host_perf_now() }
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn perf_now() -> f64 {
+    0.0
+}
+
+/// Enable (or re-zero) per-node render profiling.
+#[no_mangle]
+pub extern "C" fn profile_enable() {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.context.profile_enable(perf_now);
+        }
+    }
+}
+
+/// Write the profile as a UTF-8 text table into `out_ptr` (client-reserved via `input_reserve`), sorted by
+/// accumulated time descending: `micros<TAB>label` per line, headed by `quanta <n>`. Returns bytes written
+/// (truncated to `max`). Diagnostic path, allocation is fine here.
+#[no_mangle]
+pub extern "C" fn profile_report(out_ptr: u32, max: u32) -> u32 {
+    unsafe {
+        let Some(engine) = ENGINE.get().as_mut() else { return 0 };
+        let (mut entries, quanta) = engine.context.profile_report();
+        entries.sort_unstable_by(|left, right| right.1.partial_cmp(&left.1).unwrap_or(core::cmp::Ordering::Equal));
+        let mut text = alloc::format!("quanta {}\n", quanta);
+        for (label, micros) in entries {
+            text.push_str(&alloc::format!("{micros:.1}\t{label}\n"));
+        }
+        let bytes = text.as_bytes();
+        let count = bytes.len().min(max as usize);
+        core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, count);
+        count as u32
     }
 }
 

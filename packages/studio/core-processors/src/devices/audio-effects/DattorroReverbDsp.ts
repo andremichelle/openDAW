@@ -121,6 +121,13 @@ export class DattorroReverbDsp {
         let pdw = this.#preDelayWrite
         let lp1 = this.#lp1, lp2 = this.#lp2, lp3 = this.#lp3
         let excPhase = this.#excPhase
+        // WASM CONTRACT: the excursion LFO is a per-block-seeded ROTATION (cos/sin evaluated once per call,
+        // then advanced by the exact angle-sum recurrence), mirrored operation-for-operation with the Rust
+        // `dsp::dattorro`. Two trig calls per block instead of two per sample.
+        let excCos = Math.cos(excPhase * TAU)
+        let excSin = Math.sin(excPhase * TAU)
+        const stepCos = Math.cos(ex * TAU)
+        const stepSin = Math.sin(ex * TAU)
         for (let i = fromIndex; i < toIndex; i++) {
             const inpL = inpChL[i]
             const inpR = inpChR[i]
@@ -134,8 +141,8 @@ export class DattorroReverbDsp {
             pre = db2[dw[2]] = fi * pre + db1[drd[1]] - si * db2[drd[2]]
             pre = db3[dw[3]] = si * (pre - db3[drd[3]]) + db2[drd[2]]
             const split = si * pre + db3[drd[3]]
-            const exc = ed * (1 + Math.cos(excPhase * TAU))
-            const exc2 = ed * (1 + Math.sin(excPhase * TAU))
+            const exc = ed * (1 + excCos)
+            const exc2 = ed * (1 + excSin)
             const r4exc = exc - ~~exc
             let r4int = ~~exc + drd[4] - 1
             const r4x0 = db4[r4int++ & dm4], r4x1 = db4[r4int++ & dm4]
@@ -170,6 +177,10 @@ export class DattorroReverbDsp {
                 db11[(drd[11] + taps[13]) & dm11]
             outChL[i] += lo * we
             outChR[i] += ro * we
+            // Advance the LFO by the exact rotation (same temp-variable order as the Rust, bit-identical).
+            const nextCos = excCos * stepCos - excSin * stepSin
+            excSin = excSin * stepCos + excCos * stepSin
+            excCos = nextCos
             excPhase += ex
             pdw = (pdw + 1) & pdMask
             for (let d = 0; d < 12; d++) {
