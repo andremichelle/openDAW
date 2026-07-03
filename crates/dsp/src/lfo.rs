@@ -24,8 +24,9 @@ impl Lfo {
         let phase_inc = frequency as f64 * self.inv_sample_rate;
         match shape {
             ClassicWaveform::Sine => {
+                // WASM CONTRACT: `fast_sin_tau` mirrors lib-dsp `fastSinTau` (identical arithmetic both engines).
                 for sample in &mut buffer[from..to] {
-                    *sample = libm::sin(self.phase * TAU) as f32;
+                    *sample = crate::fast_math::fast_sin_tau(self.phase) as f32;
                     self.phase += phase_inc;
                     if self.phase >= 1.0 {self.phase -= 1.0;}
                 }

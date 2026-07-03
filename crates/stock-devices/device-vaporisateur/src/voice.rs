@@ -137,11 +137,15 @@ impl VaporisateurVoice {
         let lfo_target_tune = shared.lfo_target_tune;
         let lfo_target_cutoff = shared.lfo_target_cutoff;
         let lfo_target_volume = shared.lfo_target_volume;
+        // BIT-EXACT fast path: with no tune modulation, `exp2f(lfo * 0.0)` is exactly 1.0 and `freq * 1.0`
+        // is the identity, so the per-sample call (a large share of the voice cost) can be skipped outright.
+        let tune_modulated = lfo_target_tune != 0.0;
         for index in 0..len {
             let lfo = work.lfo[index];
             work.cutoff[index] = shared.flt_cutoff + self.filter_keyboard_delta + work.vca[index] * shared.flt_env_amount + lfo * lfo_target_cutoff;
             work.vca[index] *= clamp_unit(gain + lfo * lfo_target_volume);
-            let frequency = work.freq[index] * libm::exp2f(lfo * lfo_target_tune);
+            // WASM CONTRACT: `fast_exp2` mirrors lib-dsp `fastExp2`, fed the f64 product like the TS voice.
+            let frequency = if tune_modulated { work.freq[index] * dsp::fast_math::fast_exp2(lfo as f64 * lfo_target_tune as f64) as f32 } else { work.freq[index] };
             work.freq_a[index] = frequency * shared.frequency_a_multiplier;
             work.freq_b[index] = frequency * shared.frequency_b_multiplier;
         }

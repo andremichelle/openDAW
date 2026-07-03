@@ -59,8 +59,9 @@ impl BandLimitedOscillator {
         let mut phase = self.phase;
         match waveform {
             ClassicWaveform::Sine => {
+                // WASM CONTRACT: `fast_sin_tau` mirrors lib-dsp `fastSinTau` (identical arithmetic both engines).
                 for index in from..to {
-                    output[index] = libm::sin(TAU * (phase % 1.0)) as f32;
+                    output[index] = crate::fast_math::fast_sin_tau(phase) as f32;
                     phase += inc_at(index);
                 }
             }

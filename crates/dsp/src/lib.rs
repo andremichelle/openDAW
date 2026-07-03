@@ -8,6 +8,7 @@ pub mod adsr;
 pub mod biquad;
 pub mod crusher;
 pub mod dattorro;
+pub mod fast_math;
 pub mod ctagdrc;
 pub mod freeverb;
 pub mod glide;

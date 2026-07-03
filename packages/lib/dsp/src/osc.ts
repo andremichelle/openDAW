@@ -1,4 +1,5 @@
 import {ClassicWaveform} from "./classic-waveform"
+import {fastSinTau} from "./fast-math"
 
 export class BandLimitedOscillator {
     readonly #invSampleRate: number
@@ -51,7 +52,8 @@ export class BandLimitedOscillator {
     #genSineConst(output: Float32Array, phaseInc: number, fromIndex: number, toIndex: number): void {
         let phase = this.#phase
         for (let i = fromIndex; i < toIndex; i++) {
-            output[i] = Math.sin(2.0 * Math.PI * (phase % 1.0))
+            // WASM CONTRACT: `fastSinTau` mirrors `dsp::fast_math` (identical arithmetic in both engines)
+            output[i] = fastSinTau(phase)
             phase += phaseInc
         }
         this.#phase = phase
@@ -96,7 +98,8 @@ export class BandLimitedOscillator {
         const invSR = this.#invSampleRate
         let phase = this.#phase
         for (let i = fromIndex; i < toIndex; i++) {
-            output[i] = Math.sin(2.0 * Math.PI * (phase % 1.0))
+            // WASM CONTRACT: `fastSinTau` mirrors `dsp::fast_math` (identical arithmetic in both engines)
+            output[i] = fastSinTau(phase)
             phase += freqBuffer[i] * invSR
         }
         this.#phase = phase

@@ -1,4 +1,5 @@
 import {ClassicWaveform} from "./classic-waveform"
+import {fastSinTau} from "./fast-math"
 
 export class LFO {
     #phase = 0.0
@@ -10,7 +11,8 @@ export class LFO {
         switch (shape) {
             case ClassicWaveform.sine: {
                 for (let i = fromIndex; i < toIndex; i++) {
-                    buffer[i] = Math.sin(this.#phase * Math.PI * 2.0)
+                    // WASM CONTRACT: `fastSinTau` mirrors `dsp::fast_math` (identical arithmetic in both engines)
+                    buffer[i] = fastSinTau(this.#phase)
                     this.#phase += phaseInc
                     if (this.#phase >= 1.0) { this.#phase -= 1.0 }
                 }
