@@ -8,7 +8,7 @@ Community-contributed DSP scripts for openDAW's scriptable devices:
 Each script is a self-contained `Processor` class that runs in the AudioWorklet.
 Parameters are declared via `// @param` directives and auto-create UI knobs when compiled.
 
-## Werkstatt (7 scripts)
+## Werkstatt (9 scripts)
 
 | File | Effect | Parameters |
 |------|--------|------------|
@@ -19,6 +19,8 @@ Parameters are declared via `// @param` directives and auto-create UI knobs when
 | `werkstatt_phaser.js` | Allpass cascade phaser | rate (Hz), depth, feedback, stages (2-8), mix |
 | `werkstatt_lookahead.js` | Lookahead compressor | threshold (dB), ratio, attack (s), release (s), knee (dB), makeup (dB), mix |
 | `werkstatt_shimmer.js` | Pitch-shift delay | time (s), feedback, pitch (semitones), shimmer, damping, mix |
+| `werkstatt_paulstretch.js` | Extreme time-stretch (Paul Nasca algorithm) | stretch, window, mix |
+| `werkstatt_envfollower.js` | Envelope follower / sidechain ducking | attack, release, depth, threshold, invert, makeup |
 
 ## Apparat (3 scripts)
 
