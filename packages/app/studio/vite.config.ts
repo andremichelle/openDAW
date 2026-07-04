@@ -1,4 +1,4 @@
-import {readFileSync, writeFileSync} from "fs"
+import {readdirSync, readFileSync, writeFileSync} from "fs"
 import {resolve} from "path"
 import {defineConfig} from "vite"
 import crossOriginIsolation from "vite-plugin-cross-origin-isolation"
@@ -103,6 +103,35 @@ export default defineConfig(({command}) => {
                 }
             },
             {
+                // The WASM engine artifacts (built by packages/app/wasm/build-wasm.sh into its public/) served
+                // under /wasm-engine/: live from the source dir in dev, copied into the bundle at build. When
+                // they are absent (e.g. a CI runner without the Rust toolchain) the studio still builds; the
+                // engine toggle then reports the WASM engine as unavailable.
+                name: "wasm-engine-assets",
+                configureServer(server) {
+                    const sourceDir = resolve(__dirname, "../wasm/public")
+                    server.middlewares.use("/wasm-engine", (req, res, next) => {
+                        const name = (req.url ?? "").split("?")[0].replace(/^\//, "")
+                        const file = resolve(sourceDir, name)
+                        if (!isWasmEngineAsset(name) || !existsSync(file)) {return next()}
+                        res.setHeader("Content-Type", "application/wasm")
+                        res.end(readFileSync(file))
+                    })
+                },
+                generateBundle() {
+                    const sourceDir = resolve(__dirname, "../wasm/public")
+                    if (!existsSync(sourceDir)) {
+                        console.warn("wasm-engine-assets: no artifacts found, skipping")
+                        return
+                    }
+                    readdirSync(sourceDir).filter(isWasmEngineAsset).forEach(name => this.emitFile({
+                        type: "asset",
+                        fileName: `wasm-engine/${name}`,
+                        source: readFileSync(resolve(sourceDir, name))
+                    }))
+                }
+            },
+            {
                 name: "spa",
                 configureServer(server) {
                     server.middlewares.use((req, res, next) => {
@@ -124,6 +153,8 @@ export default defineConfig(({command}) => {
         ]
     }
 })
+
+const isWasmEngineAsset = (name: string): boolean => name === "engine.wasm" || (name.startsWith("device_") && name.endsWith(".wasm"))
 
 const generateUUID = () => {
     const format = crypto.getRandomValues(new Uint8Array(16))

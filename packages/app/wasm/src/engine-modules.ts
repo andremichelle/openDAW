@@ -75,8 +75,8 @@ export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
         cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4, childEnabledKey: 0}
 ]
 
-export const loadEngineModules = async (): Promise<EngineModules> => {
-    const urls = ["/engine.wasm", ...DEVICES.map(device => device.url)]
+export const loadEngineModules = async (base: string = ""): Promise<EngineModules> => {
+    const urls = [`${base}/engine.wasm`, ...DEVICES.map(device => `${base}${device.url}`)]
     const buffers = await Promise.all(urls.map(url => fetch(url).then(response => response.arrayBuffer())))
     const [engineModule, ...deviceModules] = await Promise.all(buffers.map(bytes => WebAssembly.compile(bytes)))
     return {engineModule, deviceModules, deviceBoxTypes: DEVICES.map(device => device.boxType), composites: COMPOSITES}

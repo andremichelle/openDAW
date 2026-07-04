@@ -2,6 +2,7 @@ import {
     Arrays,
     DefaultObservableValue,
     int,
+    isNull,
     MutableObservableValue,
     Notifier,
     Nullable,
@@ -38,6 +39,7 @@ import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {Engine} from "./Engine"
+import {EngineVariant, EngineWorkletVariant} from "./EngineVariant"
 import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
@@ -99,8 +101,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         })
 
         const controlFlagsSAB = new SharedArrayBuffer(4) // 4 bytes minimum
+        const variant: Nullable<EngineWorkletVariant> = EngineVariant.current()
 
-        super(context, "engine-processor", {
+        super(context, isNull(variant) ? "engine-processor" : variant.processorName, {
                 numberOfInputs: 1,
                 numberOfOutputs: 2,
                 outputChannelCount: [numberOfChannels, 8],
@@ -110,7 +113,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     hrClockBuffer: HRClockWorker.get().sab,
                     project: project.toArrayBuffer(),
                     exportConfiguration,
-                    options
+                    options,
+                    variant: isNull(variant) ? undefined : variant.attachment
                 } satisfies EngineProcessorAttachment
             }
         )
@@ -233,7 +237,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             AnimationFrame.add(() => reader.tryRead()),
             project.liveStreamReceiver.connect(messenger.channel("engine-live-data")),
             this.#preferences.syncWith(messenger.channel("engine-preferences")),
-            new SyncSource<BoxIO.TypeMap>(project.boxGraph, messenger.channel("engine-sync"), false)
+            isNull(variant)
+                ? new SyncSource<BoxIO.TypeMap>(project.boxGraph, messenger.channel("engine-sync"), false)
+                : variant.connectSync(messenger, project)
         )
     }
 

@@ -38,6 +38,7 @@ import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
+import {WasmEngine} from "@/wasm-engine/WasmEngine"
 
 const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
@@ -76,6 +77,11 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl}: {
     const audioWorklets = await Promises.tryCatch(AudioWorklets.createFor(context))
     if (audioWorklets.status === "rejected") {
         return panic(audioWorklets.error)
+    }
+    WasmEngine.install()
+    if (WasmEngine.isEnabled() && !await WasmEngine.ensureReady(context)) {
+        console.warn("WASM engine artifacts unavailable — reverting to the TypeScript engine.")
+        WasmEngine.setEnabled(false)
     }
     if (context.state === "suspended") {
         window.addEventListener("click",

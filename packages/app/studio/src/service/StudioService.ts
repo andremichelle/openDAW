@@ -40,7 +40,7 @@ import {RouteLocation} from "@opendaw/lib-jsx"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
+import {ExportConfiguration, InstrumentFactories, NoteSignal} from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {
     AudioContentFactory,
@@ -173,6 +173,51 @@ export class StudioService implements ProjectEnv {
     get projectProfileService(): ProjectProfileService {return this.#projectProfileService}
 
     panicEngine(): void {this.runIfProject(({engine}) => engine.panic())}
+
+    // Tear down the running worklet and boot a fresh one for the current project (e.g. after switching the
+    // engine variant). The screen is re-mounted so views subscribe to the new broadcaster instances, and the
+    // transport state (position, playing) carries over to the new engine.
+    restartEngine(): void {
+        this.runIfProject(project => {
+            const screen = this.layout.screen.getValue()
+            const wasPlaying = this.engine.isPlaying.getValue()
+            const position = this.engine.position.getValue()
+            this.switchScreen(null)
+            this.engine.releaseWorklet()
+            const restart: RestartWorklet = {
+                unload: async (event: unknown) => {
+                    this.switchScreen(null)
+                    this.engine.releaseWorklet()
+                    return Dialogs.info({
+                        headline: "Audio-Engine Error",
+                        message: String(safeRead(event, "error", "message") ?? "Unknown error"),
+                        okText: "Restart Engine",
+                        cancelable: false
+                    })
+                },
+                load: (engine: EngineWorklet) => {
+                    this.engine.setWorklet(engine)
+                    this.switchScreen(screen)
+                }
+            }
+            const {status, value: worklet, error} = tryCatch(() => project.startAudioWorklet(restart, {}))
+            if (status === "failure") {
+                Dialogs.info({
+                    headline: "Audio-Engine Error",
+                    message: `Could not start the audio engine. (${Errors.toString(error)})`,
+                    okText: "OK",
+                    cancelable: false
+                }).finally()
+                return
+            }
+            this.engine.setWorklet(worklet)
+            this.switchScreen(screen)
+            worklet.isReady().then(() => {
+                this.engine.setPosition(position)
+                if (wasPlaying) {this.engine.play()}
+            })
+        })
+    }
 
     async newProject() {
         if (this.hasProfile && !this.project.editing.hasNoChanges()) {
@@ -540,6 +585,20 @@ export class StudioService implements ProjectEnv {
             })).match({none: () => "no project", some: value => value}))
         ConsoleCommands.exportAccessor("box.graph.dependencies",
             () => this.runIfProject(project => project.boxGraph.debugDependencies()))
+        ConsoleCommands.exportMethod("engine.play",
+            () => {
+                this.engine.play()
+                return this.hasProfile
+            })
+        ConsoleCommands.exportMethod("engine.stop",
+            () => {
+                this.engine.stop(true)
+                return this.hasProfile
+            })
+        ConsoleCommands.exportMethod("engine.position", () => this.engine.position.getValue())
+        ConsoleCommands.exportMethod("engine.isPlaying", () => this.engine.isPlaying.getValue())
+        ConsoleCommands.exportMethod("engine.noteTest",
+            () => tryCatch(() => this.engine.noteSignal(NoteSignal.on(UUID.generate(), 60, 1.0))).status)
     }
 
     #populateSpotlightData(): void {

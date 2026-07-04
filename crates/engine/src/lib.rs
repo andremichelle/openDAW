@@ -1035,6 +1035,12 @@ impl Engine {
         }
     }
 
+    /// SEEK: move the playhead (playing or stopped), keeping all plugin / buffer state.
+    /// Mirrors the TS engine's `setPosition`.
+    fn set_position(&mut self, position: f64) {
+        self.transport.seek(position)
+    }
+
     fn set_metronome_enabled(&mut self, enabled: bool) {
         self.metronome.set_enabled(enabled)
     }
@@ -1421,6 +1427,15 @@ pub extern "C" fn stop() {
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.stop()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn set_position(position: f64) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.set_position(position)
         }
     }
 }
