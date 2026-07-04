@@ -92,8 +92,8 @@ class Processor {
         if (pattern.length === 0) return
 
         // generate arpeggio notes within this block
-        const from = block.p0
-        const to = block.p1
+        const from = block.from
+        const to = block.to
         const swingAmt = this.swing * ratePpqn * 0.5
 
         let pos = from

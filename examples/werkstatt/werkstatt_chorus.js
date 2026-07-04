@@ -12,8 +12,8 @@ class Processor {
   phase = 0
 
   constructor() {
-    // 2× max center to accommodate depth modulation (center + depth*center*2)
-    this.maxDelay = Math.floor(this.sr * 0.1)
+    // 3× max center for depth modulation headroom (center + depth*center*2)
+    this.maxDelay = Math.floor(this.sr * 0.15)
     this.bufL = new Float32Array(this.maxDelay)
     this.bufR = new Float32Array(this.maxDelay)
     this.idxL = 0
