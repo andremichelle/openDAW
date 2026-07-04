@@ -1,9 +1,9 @@
 # Scriptable Device Examples
 
 Community-contributed DSP scripts for openDAW's scriptable devices:
-- [Werkstatt](werkstatt/) — audio effect (processes audio)
-- [Apparat](apparat/) — instrument (generates audio from MIDI)
-- [Spielwerk](spielwerk/) — MIDI effect (transforms MIDI events)
+- [Werkstatt](werkstatt/) — 12 audio effect scripts
+- [Apparat](apparat/) — 4 instrument scripts
+- [Spielwerk](spielwerk/) — 2 MIDI effect scripts
 
 Each script is a self-contained `Processor` class that runs in the AudioWorklet.
 Parameters are declared via `// @param` directives and auto-create UI knobs when compiled.
@@ -25,13 +25,14 @@ Parameters are declared via `// @param` directives and auto-create UI knobs when
 | `werkstatt_granular_stretch.js` | Granular time-stretch with pitch shift | stretch, grain, overlap, pitch, mix |
 | `werkstatt_pitch_shift.js` | Real-time pitch shifter (delay-line sweep) | semitones, cents, latency, mix |
 
-## Apparat (3 scripts)
+## Apparat (4 scripts)
 
 | File | Instrument | Parameters |
 |------|-----------|------------|
 | `apparat_darkbass.js` | Mono subtractive bass synth | waveform, cutoff (Hz), resonance, ADSR, subOsc, detune, volume |
 | `apparat_subcrusher.js` | Sub-bass with sub-oscillator | waveform, cutoff (Hz), resonance, ADSR, sub, volume |
 | `apparat_coldlead.js` | Lead synth with glide | waveform, cutoff (Hz), resonance, ADSR, glide, volume |
+| `apparat_ringmod.js` | Ring modulator synth with ADSR | frequency (Hz), waveform, ADSR, adsrAmount, subOsc, volume |
 
 ## Spielwerk (2 scripts)
 
