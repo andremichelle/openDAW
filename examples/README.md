@@ -3,7 +3,7 @@
 Community-contributed DSP scripts for openDAW's scriptable devices:
 - [Werkstatt](werkstatt/) — 14 audio effect scripts
 - [Apparat](apparat/) — 5 instrument scripts
-- [Spielwerk](spielwerk/) — 2 MIDI effect scripts
+- [Spielwerk](spielwerk/) — 6 MIDI effect scripts
 
 Each script is a self-contained `Processor` class that runs in the AudioWorklet.
 Parameters are declared via `// @param` directives and auto-create UI knobs when compiled.
@@ -37,12 +37,16 @@ Parameters are declared via `// @param` directives and auto-create UI knobs when
 | `apparat_ringmod.js` | Ring modulator synth with ADSR | frequency (Hz), waveform, ADSR, adsrAmount, subOsc, volume |
 | `apparat_fm.js` | 2-operator FM synth (#138) | carrier (Hz), ratio, mod_depth, waveform, ADSR, volume |
 
-## Spielwerk (2 scripts)
+## Spielwerk (6 scripts)
 
 | File | MIDI Effect | Parameters |
 |------|------------|------------|
-| `spielwerk_arpeggiator.js` | Arpeggiator | rate, octaves, direction, hold, velocity, swing |
+| `spielwerk_arpeggiator.js` | Arpeggiator with swing | rate, octaves, direction, hold, velocity, swing |
 | `spielwerk_powerchord.js` | Power chord generator | interval, interval2, velScale, detune |
+| `spielwerk_chordmemory.js` | Chord memory (major/minor/7/dim/aug) | chord (0-6), octave, velocity |
+| `spielwerk_strum.js` | Strummer with up/down/random direction | speed, direction, spread, velocity |
+| `spielwerk_velocity.js` | Velocity scaler with curve and clamp | scale, offset, curve, min_vel, max_vel |
+| `spielwerk_mididelay.js` | MIDI delay with feedback + transpose | time, feedback, repeats, transpose, decay |
 
 ## Usage
 
