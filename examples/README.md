@@ -2,7 +2,7 @@
 
 Community-contributed DSP scripts for openDAW's scriptable devices:
 - [Werkstatt](werkstatt/) — 14 audio effect scripts
-- [Apparat](apparat/) — 4 instrument scripts
+- [Apparat](apparat/) — 5 instrument scripts
 - [Spielwerk](spielwerk/) — 2 MIDI effect scripts
 
 Each script is a self-contained `Processor` class that runs in the AudioWorklet.
@@ -27,7 +27,7 @@ Parameters are declared via `// @param` directives and auto-create UI knobs when
 | `werkstatt_dcremover.js` | DC offset remover + stereo width tool (#91) | dc_freq (Hz), width, balance, mix |
 | `werkstatt_allpass.js` | Allpass filter with invert + cascade (#133) | freq (Hz), stages (1-8), invert, feedback, mix |
 
-## Apparat (4 scripts)
+## Apparat (5 scripts)
 
 | File | Instrument | Parameters |
 |------|-----------|------------|
@@ -35,6 +35,7 @@ Parameters are declared via `// @param` directives and auto-create UI knobs when
 | `apparat_subcrusher.js` | Sub-bass with sub-oscillator | waveform, cutoff (Hz), resonance, ADSR, sub, volume |
 | `apparat_coldlead.js` | Lead synth with glide | waveform, cutoff (Hz), resonance, ADSR, glide, volume |
 | `apparat_ringmod.js` | Ring modulator synth with ADSR | frequency (Hz), waveform, ADSR, adsrAmount, subOsc, volume |
+| `apparat_fm.js` | 2-operator FM synth (#138) | carrier (Hz), ratio, mod_depth, waveform, ADSR, volume |
 
 ## Spielwerk (2 scripts)
 
