@@ -11,23 +11,50 @@ class Processor {
   sr = sampleRate
 
   constructor() {
-    // Schroeder reverb: 4 comb filters + 2 allpass
-    const combMs = [29.7, 37.1, 41.1, 43.7]
-    this.combs = combMs.map(ms => {
-      const len = Math.floor(this.sr * ms / 1000)
-      return {buf: new Float32Array(len), idx: 0, len, damp: 0}
-    })
-    const apMs = [5.0, 1.7]
-    this.allpasses = apMs.map(ms => {
-      const len = Math.floor(this.sr * ms / 1000)
-      return {buf: new Float32Array(len), idx: 0, len}
-    })
-    this.pdBuf = new Float32Array(Math.floor(this.sr * 0.2))
+    // Schroeder reverb: 4 comb filters + 2 allpass per channel
+    // Slightly different delay times L vs R for stereo decorrelation
+    const combMsL = [29.7, 37.1, 41.1, 43.7]
+    const combMsR = [30.1, 36.5, 41.7, 43.3]
+    const apMsL = [5.0, 1.7]
+    const apMsR = [4.8, 1.9]
+
+    this.combsL = combMsL.map(ms => this._mkComb(this.sr * ms / 1000))
+    this.combsR = combMsR.map(ms => this._mkComb(this.sr * ms / 1000))
+    this.apsL = apMsL.map(ms => this._mkAp(this.sr * ms / 1000))
+    this.apsR = apMsR.map(ms => this._mkAp(this.sr * ms / 1000))
+
+    this.pdBufL = new Float32Array(Math.floor(this.sr * 0.2))
+    this.pdBufR = new Float32Array(Math.floor(this.sr * 0.2))
     this.pdIdx = 0
+  }
+
+  _mkComb(len) {
+    const n = Math.floor(len)
+    return {buf: new Float32Array(n), idx: 0, len: n, damp: 0}
+  }
+
+  _mkAp(len) {
+    const n = Math.floor(len)
+    return {buf: new Float32Array(n), idx: 0, len: n}
   }
 
   paramChanged(name, value) {
     this.p[name] = value
+  }
+
+  _combProcess(c, input, decay, damping) {
+    const fb = c.buf[c.idx]
+    c.damp = c.damp * damping + fb * (1 - damping)
+    c.buf[c.idx] = input + c.damp * decay
+    c.idx = (c.idx + 1) % c.len
+    return c.damp
+  }
+
+  _apProcess(a, input) {
+    const delayed = a.buf[a.idx]
+    a.buf[a.idx] = input + delayed * 0.7
+    a.idx = (a.idx + 1) % a.len
+    return delayed - input * 0.7
   }
 
   process(io, block) {
@@ -36,41 +63,46 @@ class Processor {
     const damping = this.p.damping
     const width = this.p.width
     const mix = this.p.mix
+    const pdLen = this.pdBufL.length
 
     for (let i = block.s0; i < block.s1; i++) {
       const dryL = io.src[0][i]
       const dryR = io.src[1][i]
-      const dry = (dryL + dryR) * 0.5
 
-      // Predelay
-      const pdRead = (this.pdIdx - pdSamp + this.pdBuf.length) % this.pdBuf.length
-      const pdOut = this.pdBuf[pdRead]
-      this.pdBuf[this.pdIdx] = dry
-      this.pdIdx = (this.pdIdx + 1) % this.pdBuf.length
+      // Predelay (per-channel)
+      const pdReadL = (this.pdIdx - pdSamp + pdLen) % pdLen
+      const pdReadR = (this.pdIdx - pdSamp + pdLen) % pdLen
+      const pdOutL = this.pdBufL[pdReadL]
+      const pdOutR = this.pdBufR[pdReadR]
+      this.pdBufL[this.pdIdx] = dryL
+      this.pdBufR[this.pdIdx] = dryR
+      this.pdIdx = (this.pdIdx + 1) % pdLen
 
-      // Comb filters — each with own damping state and advancing index
-      let wet = pdOut
-      for (let k = 0; k < this.combs.length; k++) {
-        const c = this.combs[k]
-        const fb = c.buf[c.idx]
-        c.damp = c.damp * damping + fb * (1 - damping)
-        c.buf[c.idx] = pdOut + c.damp * decay
-        wet += c.damp
-        c.idx = (c.idx + 1) % c.len
+      // Comb bank L
+      let wetL = pdOutL
+      for (let k = 0; k < this.combsL.length; k++) {
+        wetL += this._combProcess(this.combsL[k], pdOutL, decay, damping)
       }
 
-      // Allpass filters
-      for (let k = 0; k < this.allpasses.length; k++) {
-        const a = this.allpasses[k]
-        const delayed = a.buf[a.idx]
-        a.buf[a.idx] = wet + delayed * 0.7
-        wet = delayed - wet * 0.7
-        a.idx = (a.idx + 1) % a.len
+      // Comb bank R
+      let wetR = pdOutR
+      for (let k = 0; k < this.combsR.length; k++) {
+        wetR += this._combProcess(this.combsR[k], pdOutR, decay, damping)
       }
 
-      // Stereo width — M/S decode: width=0 mono, width=1 full stereo
-      const mid = wet * 0.707
-      const side = (dryL - dryR) * 0.707 * width
+      // Allpass L
+      for (let k = 0; k < this.apsL.length; k++) {
+        wetL = this._apProcess(this.apsL[k], wetL)
+      }
+
+      // Allpass R
+      for (let k = 0; k < this.apsR.length; k++) {
+        wetR = this._apProcess(this.apsR[k], wetR)
+      }
+
+      // M/S width control: width=0 → mono, width=1 → full stereo
+      const mid = (wetL + wetR) * 0.5
+      const side = (wetL - wetR) * 0.5 * width
       const wL = mid + side
       const wR = mid - side
 

@@ -8,28 +8,27 @@
 // @param mix     1.0 0 1 linear %   // dry/wet mix
 
 class Processor {
-    stretch = 0.3   // ~30x stretch by default
-    window = 0.5    // medium window
-    mix = 1.0       // 100% wet
-    sRate = 0       // sampleRate from paramChanged
+    stretch = 0.3
+    window = 0.5
+    mix = 1.0
+    sRate = 0
 
-    // Internal buffers
-    inputBuf = null     // circular input buffer
-    inputPos = 0
+    inputBuf = null
+    inputWritePos = 0
     inputSize = 0
-    overlapBuf = null   // overlap-add buffer
-    overlapPos = 0
+    samplesAccumulated = 0
+
+    overlapBuf = null
+    overlapReadPos = 0
     overlapSize = 0
+
     windowSize = 4096
     hopSize = 2048
     fftSize = 4096
     initialized = false
 
-    // Simple FFT (radix-2 Cooley-Tukey)
-    // In-place, re and im arrays
     fft(re, im, inverse) {
         const n = re.length
-        // Bit reversal
         for (let i = 1, j = 0; i < n; i++) {
             let bit = n >> 1
             for (; j & bit; bit >>= 1) j ^= bit
@@ -39,7 +38,6 @@ class Processor {
                 t = im[i]; im[i] = im[j]; im[j] = t
             }
         }
-        // Butterfly
         for (let len = 2; len <= n; len <<= 1) {
             const ang = (inverse ? 2 : -2) * Math.PI / len
             const wRe = Math.cos(ang)
@@ -69,7 +67,6 @@ class Processor {
         }
     }
 
-    // Hann window
     hann(buf, size) {
         for (let i = 0; i < size; i++) {
             buf[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (size - 1)))
@@ -78,21 +75,17 @@ class Processor {
 
     init(sRate) {
         this.sRate = sRate
-        // Map params to sizes
-        // window 0→1024, 1→16384
         this.windowSize = Math.pow(2, Math.round(10 + this.window * 4))
         this.fftSize = this.windowSize
-        // stretch 0→1x (hop=window), 1→100x (hop=window/100)
         const stretchFactor = 1 + this.stretch * 99
         this.hopSize = Math.max(1, Math.round(this.windowSize / stretchFactor))
-        // Input buffer = 2x window for safety
         this.inputSize = this.windowSize * 2
         this.inputBuf = new Float32Array(this.inputSize)
-        this.inputPos = 0
-        // Overlap buffer = windowSize
+        this.inputWritePos = 0
+        this.samplesAccumulated = 0
         this.overlapSize = this.windowSize
         this.overlapBuf = new Float32Array(this.overlapSize)
-        this.overlapPos = 0
+        this.overlapReadPos = 0
         this.initialized = true
     }
 
@@ -100,7 +93,6 @@ class Processor {
         if (label === "stretch") this.stretch = value
         else if (label === "window") this.window = value
         else if (label === "mix") this.mix = value
-        // Re-init on stretch/window change (will happen on next process)
         if (label === "stretch" || label === "window") this.initialized = false
     }
 
@@ -112,33 +104,29 @@ class Processor {
         const srcR = io.src[1] || io.src[0]
         const outL = io.out[0]
         const outR = io.out[1] || io.out[0]
-        const len = outL.length
+        const len = block.s1 - block.s0
 
         for (let i = 0; i < len; i++) {
-            // Push input to circular buffer
-            this.inputBuf[this.inputPos] = (srcL[i] + srcR[i]) * 0.5
-            this.inputPos = (this.inputPos + 1) % this.inputSize
+            const idx = block.s0 + i
+            // Write input to circular buffer (write cursor only)
+            this.inputBuf[this.inputWritePos] = (srcL[idx] + srcR[idx]) * 0.5
+            this.inputWritePos = (this.inputWritePos + 1) % this.inputSize
+            this.samplesAccumulated++
 
-            // Pull from overlap buffer
-            const wet = this.overlapBuf[this.overlapPos]
-            this.overlapBuf[this.overlapPos] = 0  // consume
-            this.overlapPos = (this.overlapPos + 1) % this.overlapSize
+            // Read from overlap buffer (read cursor — independent of input)
+            const wet = this.overlapBuf[this.overlapReadPos]
+            this.overlapBuf[this.overlapReadPos] = 0
+            this.overlapReadPos = (this.overlapReadPos + 1) % this.overlapSize
 
-            // Dry/wet mix
-            const dry = (srcL[i] + srcR[i]) * 0.5
-            outL[i] = dry * (1 - this.mix) + wet * this.mix
-            outR[i] = outL[i]
+            const dry = (srcL[idx] + srcR[idx]) * 0.5
+            outL[idx] = dry * (1 - this.mix) + wet * this.mix
+            if (outR !== outL) outR[idx] = outL[idx]
 
-            // Check if we have enough input for a new frame
-            // Count available samples since last frame
-        }
-
-        // Process as many frames as possible
-        // We need windowSize samples in the input buffer
-        // Simple approach: process one frame per block if enough data
-        const available = this.inputSize // assume buffer wraps
-        if (available >= this.windowSize) {
-            this.processFrame()
+            // Emit frames when enough samples accumulated (synthesis cursor)
+            while (this.samplesAccumulated >= this.hopSize) {
+                this.processFrame()
+                this.samplesAccumulated -= this.hopSize
+            }
         }
     }
 
@@ -148,22 +136,19 @@ class Processor {
         const im = new Float32Array(n)
         const win = new Float32Array(n)
 
-        // Read windowSize samples from input buffer (starting hopSize before current pos)
-        const startIdx = (this.inputPos - this.windowSize + this.inputSize * 2) % this.inputSize
+        // Read windowSize samples ending at current write position
+        const startIdx = (this.inputWritePos - this.windowSize + this.inputSize * 2) % this.inputSize
         for (let i = 0; i < n; i++) {
             const srcIdx = (startIdx + i) % this.inputSize
             re[i] = this.inputBuf[srcIdx]
             im[i] = 0
         }
 
-        // Apply Hann window
         this.hann(win, n)
         for (let i = 0; i < n; i++) re[i] *= win[i]
 
-        // Forward FFT
         this.fft(re, im, false)
 
-        // Paulstretch: randomize phase, keep magnitude
         for (let i = 0; i < n; i++) {
             const mag = Math.sqrt(re[i] * re[i] + im[i] * im[i])
             const phase = Math.random() * 2 * Math.PI
@@ -171,21 +156,15 @@ class Processor {
             im[i] = mag * Math.sin(phase)
         }
 
-        // Inverse FFT
         this.fft(re, im, true)
 
-        // Apply window again (overlap-add)
         for (let i = 0; i < n; i++) re[i] *= win[i]
 
-        // Overlap-add into output buffer
-        const writeStart = this.overlapPos
+        // Overlap-add into output buffer at current read position
+        const writeStart = this.overlapReadPos
         for (let i = 0; i < n; i++) {
             const idx = (writeStart + i) % this.overlapSize
             this.overlapBuf[idx] += re[i]
         }
-        // Advance overlap position by hopSize
-        this.overlapPos = (this.overlapPos + this.hopSize) % this.overlapSize
-        // Also advance input position by hopSize (to consume input)
-        this.inputPos = (this.inputPos + this.hopSize) % this.inputSize
     }
 }
