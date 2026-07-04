@@ -32,6 +32,7 @@ pub mod event;
 pub mod event_buffer;
 pub mod event_receiver;
 pub mod graph;
+pub mod meter;
 pub mod note_event_instrument;
 pub mod note_event_source;
 pub mod note_region;

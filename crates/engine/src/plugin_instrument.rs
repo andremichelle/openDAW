@@ -41,6 +41,8 @@ pub(crate) struct PluginInstrument {
     clock_armed: bool,
     events: EventBuffer,
     output: SharedAudioBuffer,
+    meter: engine_env::meter::Meter, // peaks/RMS of the device output (a broadcast slot)
+    activity: alloc::rc::Rc<core::cell::RefCell<[f32; 4]>>, // [0] = monotonic pulled-note count (a broadcast slot)
     device_output: [Box<[f32]>; 2], // the device's stereo output buffers ([left, right])
     // `device_events` (the event scratch the device pulls into), `device_state`, and `out_offsets` are
     // referenced only by raw address inside `descriptor`; they must stay alive (dropping them frees the
@@ -93,6 +95,8 @@ impl PluginInstrument {
             clock_armed: false,
             events: EventBuffer::new(),
             output: shared_audio_buffer(),
+            meter: engine_env::meter::Meter::new(sample_rate),
+            activity: alloc::rc::Rc::new(core::cell::RefCell::new([0.0; 4])),
             device_output,
             device_events,
             device_state,
@@ -103,6 +107,16 @@ impl PluginInstrument {
 
     pub(crate) fn set_pull_chain(&mut self, chain: PullLink) {
         self.pull_chain = Some(chain);
+    }
+
+    /// The peak/RMS broadcast slot of this instrument's output.
+    pub(crate) fn meter_slot(&self) -> engine_env::meter::MeterSlot {
+        self.meter.slot()
+    }
+
+    /// The pulled-note activity broadcast slot ([0] = a monotonic count).
+    pub(crate) fn activity_slot(&self) -> alloc::rc::Rc<core::cell::RefCell<[f32; 4]>> {
+        self.activity.clone()
     }
 
     /// Enable / disable the instrument. Disabling drops its active voices immediately (TS instrument: the
@@ -144,6 +158,7 @@ impl Processor for PluginInstrument {
         // buffered events.
         call_device_reset(self.reset_index, self.device_state.as_ptr() as u32);
         self.events.clear();
+        self.meter.clear();
     }
 
     fn process(&mut self, info: &ProcessInfo) {
@@ -170,6 +185,7 @@ impl Processor for PluginInstrument {
             pull.block_count = info.blocks.len();
             pull.sample_rate = self.sample_rate;
             pull.clock_armed = self.clock_armed;
+            pull.activity = Some(self.activity.clone()); // pulled notes credit THIS instrument's indicator
             core::mem::swap(&mut self.params, &mut pull.params); // move our params in (no alloc)
         }
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
@@ -179,12 +195,16 @@ impl Processor for PluginInstrument {
             pull.blocks = core::ptr::null();
             pull.block_count = 0;
             pull.clock_armed = false;
+            pull.activity = None;
             core::mem::swap(&mut self.params, &mut pull.params); // and take them back
         }
-        let mut output = self.output.borrow_mut();
-        for index in 0..RENDER_QUANTUM {
-            output.left[index] = self.device_output[0][index];
-            output.right[index] = self.device_output[1][index];
+        {
+            let mut output = self.output.borrow_mut();
+            for index in 0..RENDER_QUANTUM {
+                output.left[index] = self.device_output[0][index];
+                output.right[index] = self.device_output[1][index];
+            }
         }
+        self.meter.process(&self.device_output[0], &self.device_output[1]);
     }
 }

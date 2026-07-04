@@ -1,5 +1,5 @@
 import {createElement} from "@opendaw/lib-jsx"
-import {asDefined, ByteArrayInput, Lifecycle, MutableObservableOption, UUID} from "@opendaw/lib-std"
+import {asDefined, ByteArrayInput, Lifecycle, MutableObservableOption, Procedure, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {ApparatDeviceBox, BoxIO, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
@@ -59,6 +59,9 @@ export interface EngineHost {
 export interface EngineHostOptions {
     readonly channel: string      // a BroadcastChannel name unique to the page (the SyncSource loopback)
     readonly metronome?: boolean  // the engine's built-in metronome click (default off)
+    // Called with the worklet-port Messenger once it exists, so a page can attach its own channels (e.g. a
+    // `LiveStreamReceiver` on "engine-live-data") next to the host's transport / heap / sample protocols.
+    readonly onMessenger?: Procedure<Messenger>
 }
 
 export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle, options: EngineHostOptions): EngineHost => {
@@ -135,6 +138,7 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         // also emits a `heap` channel, observed only by the metronome page.)
         const messenger = Messenger.for(workletNode.port)
         lifecycle.own(messenger)
+        options.onMessenger?.(messenger)
         const engine = Communicator.sender<EngineProtocol>(messenger.channel("engine"), dispatcher => new class implements EngineProtocol {
             applyUpdates(bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.applyUpdates, Communicator.makeTransferable(bytes))}
             play(): void {dispatcher.dispatchAndForget(this.play)}

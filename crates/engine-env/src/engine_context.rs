@@ -173,6 +173,14 @@ impl EngineContext {
         self.phase_observers.push(observer);
     }
 
+    /// Diagnostic container sizes for leak probes: processors, labels, queue len/capacity, next node id,
+    /// registry entries, live graph vertices. Reconcile-time only.
+    pub fn debug_counts(&self) -> [u32; 7] {
+        [self.processors.len() as u32, self.labels.len() as u32, self.queue.len() as u32,
+            self.queue.capacity() as u32, self.next_id as u32, self.registry.len() as u32,
+            self.graph.vertices().len() as u32]
+    }
+
     pub fn registry(&self) -> &AudioOutputBufferRegistry<NodeId> {
         &self.registry
     }

@@ -31,6 +31,7 @@ pub(crate) struct PluginAudioEffect {
     process_index: u32,
     reset_index: u32,
     sample_rate: f32,
+    meter: engine_env::meter::Meter, // peaks/RMS of the device output (a broadcast slot)
     events: EventBuffer, // unused here (the device PULLS its events) but required by `Processor: EventReceiver`
     // This effect's bound parameters, swapped into `PULL` for the device call so `host_update_parameters`
     // resolves + diffs them; `clock_armed` is true iff one is automated. When armed, the device's per-block
@@ -89,6 +90,7 @@ impl PluginAudioEffect {
             process_index: device.process_index,
             reset_index: device.reset_index,
             sample_rate,
+            meter: engine_env::meter::Meter::new(sample_rate),
             events: EventBuffer::new(),
             params: Vec::new(),
             clock_armed: false,
@@ -102,6 +104,11 @@ impl PluginAudioEffect {
             device_state,
             descriptor
         }
+    }
+
+    /// The peak/RMS broadcast slot of this effect's output.
+    pub(crate) fn meter_slot(&self) -> engine_env::meter::MeterSlot {
+        self.meter.slot()
     }
 }
 
@@ -197,10 +204,13 @@ impl Processor for PluginAudioEffect {
             core::mem::swap(&mut self.params, &mut pull.params);
             core::mem::swap(&mut self.input_ports, unsafe { INPUTS.get() });
         }
-        let mut output = self.output.borrow_mut();
-        for index in 0..RENDER_QUANTUM {
-            output.left[index] = self.device_output[0][index];
-            output.right[index] = self.device_output[1][index];
+        {
+            let mut output = self.output.borrow_mut();
+            for index in 0..RENDER_QUANTUM {
+                output.left[index] = self.device_output[0][index];
+                output.right[index] = self.device_output[1][index];
+            }
         }
+        self.meter.process(&self.device_output[0], &self.device_output[1]);
     }
 }

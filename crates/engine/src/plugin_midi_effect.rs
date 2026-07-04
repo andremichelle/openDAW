@@ -40,7 +40,10 @@ pub(crate) struct PluginMidiEffect {
     process_index: u32, // the device's `process_events` slot in the shared function table
     state: DeviceState,
     params: RefCell<Vec<ParamHandle>>,
-    clock_armed: Cell<bool>
+    clock_armed: Cell<bool>,
+    // Note activity ([0] = a monotonic count of events this fx EMITTED; the UI diffs it to flash an
+    // indicator). A broadcast slot: the table points at it, `Weak`-owned so a teardown sweeps the entry.
+    activity: alloc::rc::Rc<RefCell<[f32; 4]>>
 }
 
 impl PluginMidiEffect {
@@ -49,7 +52,19 @@ impl PluginMidiEffect {
             process_index: device.process_index,
             state: DeviceState::new(device.state_size as usize),
             params: RefCell::new(Vec::new()),
-            clock_armed: Cell::new(false)
+            clock_armed: Cell::new(false),
+            activity: alloc::rc::Rc::new(RefCell::new([0.0; 4]))
+        }
+    }
+
+    /// The note-activity broadcast slot (see the field docs).
+    pub(crate) fn activity_slot(&self) -> alloc::rc::Rc<RefCell<[f32; 4]>> {
+        self.activity.clone()
+    }
+
+    pub(crate) fn bump_activity(&self, count: u32) {
+        if count > 0 {
+            self.activity.borrow_mut()[0] += count as f32;
         }
     }
 

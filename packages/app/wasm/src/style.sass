@@ -297,6 +297,92 @@ code
       &:hover
         color: var(--color-bright)
 
+  .live-board
+    display: flex
+    flex-direction: column
+    gap: 0.5rem
+    margin: 1rem 0
+
+    .live-row
+      display: flex
+      align-items: flex-end
+      gap: 0.75rem
+      padding: 0.5rem
+      background: var(--color-panel-background)
+      border-radius: 4px
+
+      .unit
+        width: 9rem
+        flex-shrink: 0
+        color: var(--color-bright)
+        font-size: 0.85rem
+        overflow: hidden
+        text-overflow: ellipsis
+        white-space: nowrap
+
+      .cells
+        display: flex
+        gap: 0.75rem
+        flex-wrap: wrap
+
+      .live-cell
+        display: flex
+        flex-direction: column
+        align-items: center
+        gap: 0.25rem
+        width: 4.5rem
+
+        .name
+          color: var(--color-gray)
+          font-size: 0.7rem
+          max-width: 100%
+          overflow: hidden
+          text-overflow: ellipsis
+          white-space: nowrap
+
+      .live-meter
+        display: flex
+        gap: 2px
+        height: 3.5rem
+
+        &.clip .fill.peak
+          background: var(--color-red, #e33)
+
+        .channel
+          position: relative
+          width: 8px
+          background: rgba(0, 0, 0, 0.35)
+          border-radius: 2px
+          overflow: hidden
+
+          .fill
+            position: absolute
+            bottom: 0
+            left: 0
+            right: 0
+            height: 0
+
+            &.peak
+              background: var(--color-green)
+              opacity: 0.5
+
+            &.rms
+              background: var(--color-green)
+
+      .live-note
+        display: flex
+        align-items: center
+        justify-content: center
+        height: 3.5rem
+
+        .dot
+          width: 0.9rem
+          height: 0.9rem
+          border-radius: 50%
+          background: var(--color-orange, var(--color-green))
+          box-shadow: 0 0 8px var(--color-orange, var(--color-green))
+          opacity: 0
+
   .engine-log
     margin: 1.5rem 0 0
     padding: 0.6rem 0.85rem

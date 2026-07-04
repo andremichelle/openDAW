@@ -9,7 +9,9 @@
 // The engine holds the wasm BoxGraph mirror; the main thread serializes SyncSource's UpdateTask[] into
 // bytes and posts them here. Each batch -> apply_updates, then bind() once the TimelineBox exists.
 
-import {isDefined, UUID} from "@opendaw/lib-std"
+import {isDefined, Terminable, UUID} from "@opendaw/lib-std"
+import {Address} from "@opendaw/lib-box"
+import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {CompositeSpec} from "./engine-modules"
 import {SampleInfo, SampleLoader} from "./sample-loader"
@@ -55,6 +57,14 @@ type EngineExports = {
     engine_state_ptr: () => number
     engine_state_len: () => number
     set_metronome_enabled: (enabled: number) => void
+    // Live-telemetry BROADCAST TABLE: the engine registers meter / note-activity slots at reconcile;
+    // `broadcast_generation` bumps whenever the table changed, so this worklet re-reads it (via
+    // `broadcast_entry`, one fixed 48-byte record per entry) and re-registers its LiveStreamBroadcaster
+    // packages as views over wasm memory. `broadcast_set_active` round-trips the UI subscription flag.
+    broadcast_generation: () => number
+    broadcast_count: () => number
+    broadcast_entry: (index: number, outPtr: number) => number
+    broadcast_set_active: (index: number, active: number) => void
     // Transport: `play` starts advancing, `pause` freezes (state kept), `stop` rewinds to 0 + resets all plugins.
     play: () => void
     pause: () => void
@@ -120,6 +130,11 @@ class EngineProcessor extends AudioWorkletProcessor {
     #namLoader!: NamLoader // the nam-wasm binary RPC sender (set in the constructor)
     readonly #scriptBridges: ScriptBridges // runs the scriptable devices' user JS over the shared memory
     readonly #namBridges: NamBridges // runs the NeuralAmp devices' nam-wasm inference next to the engine
+    // The live-telemetry bridge: the UNCHANGED lib-fusion protocol, fed by Float32Array views over the
+    // engine's broadcast slots (shared-memory views survive talc growth, so a view registers once).
+    readonly #broadcaster: LiveStreamBroadcaster
+    readonly #broadcastSubs: Array<Terminable> = []
+    #broadcastGeneration: number = -1
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
@@ -187,6 +202,44 @@ class EngineProcessor extends AudioWorkletProcessor {
         this.#namLoader = Communicator.sender<NamLoader>(messenger.channel("nam"), dispatcher => new class implements NamLoader {
             fetchWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchWasm)}
         })
+        this.#broadcaster = LiveStreamBroadcaster.create(messenger, "engine-live-data")
+    }
+
+    // Mirror the engine's broadcast table onto the LiveStreamBroadcaster whenever its generation moved (a
+    // reconcile registered or swept telemetry slots): terminate every stale package, then register each entry
+    // as a package whose Float32Array view points straight into wasm memory — the broadcaster reads the LIVE
+    // values at flush, so the render path never copies. Entry indices are only valid for this generation; a
+    // sweep re-runs this, so a captured `index` in the subscription round-trip can never go stale.
+    #syncBroadcasts(): void {
+        const generation = this.#engine.broadcast_generation()
+        if (generation === this.#broadcastGeneration) {return}
+        this.#broadcastGeneration = generation
+        this.#broadcastSubs.forEach(subscription => subscription.terminate())
+        this.#broadcastSubs.length = 0
+        const count = this.#engine.broadcast_count()
+        for (let index = 0; index < count; index++) {
+            const recordPtr = this.#engine.input_reserve(48)
+            if (this.#engine.broadcast_entry(index, recordPtr) === 0) {continue}
+            // [uuid 16][package_type u32][ptr u32][len u32][keys_count u32][keys u16 x 8], little-endian
+            const record = new DataView(this.#memory.buffer, recordPtr, 48)
+            const uuid = new Uint8Array(this.#memory.buffer, recordPtr, 16).slice()
+            const packageType = record.getUint32(16, true)
+            const ptr = record.getUint32(20, true)
+            const len = record.getUint32(24, true)
+            const keysCount = record.getUint32(28, true)
+            const keys: Array<number> = []
+            for (let position = 0; position < keysCount; position++) {
+                keys.push(record.getUint16(32 + position * 2, true))
+            }
+            const address = Address.compose(uuid, ...keys)
+            const values = new Float32Array(this.#memory.buffer, ptr, len)
+            if (packageType === 0) { // PackageType.Float
+                this.#broadcastSubs.push(this.#broadcaster.broadcastFloat(address, () => values[0]))
+            } else { // PackageType.FloatArray
+                this.#broadcastSubs.push(this.#broadcaster.broadcastFloats(address, values,
+                    hasSubscribers => this.#engine.broadcast_set_active(index, hasSubscribers ? 1 : 0)))
+            }
+        }
     }
 
     // Pop every sample the engine queued (on seeing an AudioFileBox) and run the load handshake for each:
@@ -281,6 +334,8 @@ class EngineProcessor extends AudioWorkletProcessor {
             const bytes = new Uint8Array(buffer, this.#engine.engine_state_ptr(), length).slice().buffer
             this.#transport.state(bytes)
         }
+        this.#syncBroadcasts()
+        this.#broadcaster.flush()
         this.#sinceStats += frames
         if (this.#sinceStats >= this.#sampleRate) { // ~once per second of audio
             this.#sinceStats = 0

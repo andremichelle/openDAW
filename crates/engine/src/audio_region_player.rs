@@ -56,6 +56,7 @@ pub(crate) struct AudioRegionPlayer {
     visited: Vec<Uuid>,
     // TapeDeviceBox `enabled` (TS observes it, resets on disable, and renders silence while off).
     enabled: bool,
+    meter: engine_env::meter::Meter, // peaks/RMS of the tape output (a broadcast slot)
     // Recycled sequencers: a pruned region's sequencer parks here (voices cleared, capacity kept) and the
     // next stretch region reuses it. `prepare` (reconcile) pre-warms the pool for every BOUND stretch region,
     // so the render-path `pop()` never misses; without the pre-warm each new concurrency high-water would
@@ -86,7 +87,8 @@ impl AudioRegionPlayer {
     pub(crate) fn new(tracks: SharedAudioTrackSets, sample_rate: f32, tempo_map: SharedTempoMap) -> Self {
         Self {tracks, sample_rate, tempo_map, output: shared_audio_buffer(), events: EventBuffer::new(),
             sequencers: Vec::with_capacity(8), native_cursors: Vec::with_capacity(16), visited: Vec::with_capacity(32),
-            sequencer_pool: Vec::with_capacity(8), enabled: true}
+            sequencer_pool: Vec::with_capacity(8), enabled: true,
+            meter: engine_env::meter::Meter::new(sample_rate)}
     }
 
     /// Pre-warm at RECONCILE (region bind / edit), so region entry during playback never allocates: park a
@@ -113,7 +115,13 @@ impl AudioRegionPlayer {
                 self.sequencer_pool.push(sequencer);
             }
             self.native_cursors.clear();
+            self.meter.clear();
         }
+    }
+
+    /// The peak/RMS broadcast slot of the tape output.
+    pub(crate) fn meter_slot(&self) -> engine_env::meter::MeterSlot {
+        self.meter.slot()
     }
 
     #[cfg(test)]
@@ -137,6 +145,7 @@ impl AudioGenerator for AudioRegionPlayer {
 impl Processor for AudioRegionPlayer {
     fn reset(&mut self) {
         self.output.borrow_mut().clear();
+        self.meter.clear();
     }
 
     fn process(&mut self, info: &ProcessInfo) {
@@ -201,6 +210,7 @@ impl Processor for AudioRegionPlayer {
                 }
             }
         }
+        self.meter.process(&output.left, &output.right);
         // Prune per-region state for regions that stopped playing: cursors are plain Copy structs (retain frees
         // nothing), sequencers park in the pool for reuse instead of dropping their voice buffers mid-render.
         let mut index = 0;

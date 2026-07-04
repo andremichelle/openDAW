@@ -56,6 +56,9 @@ use crate::{call_device_init, call_device_field_changed, call_device_parameter_c
 
 // AudioUnitBox field keys (WASM CONTRACT: mirror the TS AudioUnitBox schema). The unit carries its strip
 // params and hosts its instrument / effect chains / tracks at these hub keys.
+// WASM CONTRACT: TS `UUID.Lowest` = 00000000-0000-4000-8000-000000000000 (version/variant bits set, NOT all
+// zeros); `EngineAddresses.PEAKS` = Address.compose(UUID.Lowest).append(0) — the master strip's meter address.
+const UUID_LOWEST: Uuid = [0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, 0];
 const UNIT_VOLUME_KEY: u16 = 12;
 const UNIT_PANNING_KEY: u16 = 13;
 const UNIT_MUTE_KEY: u16 = 14;
@@ -733,6 +736,8 @@ impl Engine {
             device_params.push(self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink), &noop));
             node.borrow_mut().set_audio_source(source);
             source = node.borrow().audio_output();
+            let meter_slot = node.borrow().meter_slot();
+            self.broadcasts.register(device_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot, 4);
             let node_id = self.context.register_processor(node);
             self.context.set_label(node_id, device_label(&self.graph, &device_uuid));
             self.context.register_edge(source_id, node_id);
@@ -748,6 +753,9 @@ impl Engine {
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(params, Rc::new(StripAutomation::new()), self.sample_rate)));
         strip.borrow_mut().set_audio_source(source);
         let strip_output = strip.borrow().audio_output();
+        // The MASTER peaks, at the TS `EngineAddresses.PEAKS` address (`UUID.Lowest` + key 0).
+        let strip_meter = strip.borrow().meter_slot();
+        self.broadcasts.register(UUID_LOWEST, &[0], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter, 4);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, String::from("strip:output"));
         self.context.register_edge(source_id, strip_id); // the (effected) summing bus feeds the master strip
@@ -805,6 +813,7 @@ impl Engine {
             self.resolve_sidechains();
             self.resolve_outputs(); // route each unit's strip to its OUTPUT bus (or the master fallback)
             self.resolve_sends();   // wire each parallel aux send: pre-fader tap -> target bus
+            self.broadcasts.sweep(); // drop telemetry entries whose processor was torn down (generation bump)
         }
     }
 
@@ -1063,6 +1072,8 @@ impl Engine {
             source = node.borrow().audio_output();
             let node_id = self.context.register_processor(node.clone());
             self.context.set_label(node_id, device_label(&self.graph, &device_uuid));
+            let meter_slot = node.borrow().meter_slot();
+            self.broadcasts.register(device_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot, 4);
             // A sidechained bus effect (e.g. a ducking compressor on a submix): build its sidechain binding so the
             // resolve pass feeds it the source unit's signal. Without this it detects on its own (hot) main input
             // and over-ducks everything routed through the bus.
@@ -1091,6 +1102,8 @@ impl Engine {
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
         strip.borrow_mut().set_audio_source(source);
         let strip_output = strip.borrow().audio_output();
+        let strip_meter = strip.borrow().meter_slot();
+        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter, 4);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:bus {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
         self.context.register_edge(source_id, strip_id);
@@ -1594,6 +1607,9 @@ impl Engine {
             }
         });
         self.context.set_label(player_id, format!("region-player {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        // Live telemetry: the tape's raw output peaks, registered under the TapeDeviceBox (the device column).
+        let player_meter = player.borrow().meter_slot();
+        self.broadcasts.register(instrument_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &player_meter, 4);
         // The tape's RAW output (pre fx / strip) registered under the TapeDeviceBox uuid: a sidechain targeting the
         // tape device resolves THIS (matching TS, which taps the instrument output before the unit's audio effects).
         self.output_registry.register(Address::of(instrument_uuid, vec![]), player_output.clone(), player_id);
@@ -1631,6 +1647,8 @@ impl Engine {
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
         strip.borrow_mut().set_audio_source(output.clone());
         let strip_output = strip.borrow().audio_output();
+        let strip_meter = strip.borrow().meter_slot();
+        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter, 4);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:tape {:02x}{:02x}", unit.unit[0], unit.unit[1]));
         self.context.register_edge(output_node, strip_id);
@@ -1655,6 +1673,8 @@ impl Engine {
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
         strip.borrow_mut().set_audio_source(binding.sum_buffer.clone());
         let strip_output = strip.borrow().audio_output();
+        let strip_meter = strip.borrow().meter_slot();
+        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter, 4);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:composite {:02x}{:02x}", unit.unit[0], unit.unit[1]));
         let mut tail_edges = Vec::new();
@@ -1743,6 +1763,8 @@ impl Engine {
             None => {
                 let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
                 let strip_output = strip.borrow().audio_output();
+                let strip_meter = strip.borrow().meter_slot();
+                self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter, 4);
                 let strip_id = self.context.register_processor(strip.clone());
                 self.context.set_label(strip_id, format!("strip:leaf {:02x}{:02x}", unit.unit[0], unit.unit[1]));
                 (strip, strip_id, strip_output)
@@ -1793,6 +1815,12 @@ impl Engine {
         let output = instrument.borrow().audio_output();
         let node_id = self.context.register_processor(instrument.clone());
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        // Live telemetry: the instrument's output peaks (TS `PeakBroadcaster(adapter.address)`) plus a monotonic
+        // note-activity counter at `.append(1)` (a WASM-only extra; TS broadcasts a 128-bit `Bits` set instead).
+        let meter_slot = instrument.borrow().meter_slot();
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot, 4);
+        let activity_slot = instrument.borrow().activity_slot();
+        self.broadcasts.register(uuid, &[1], crate::broadcast::PACKAGE_FLOAT, &activity_slot, 1);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), output: Some(output), params, sidechain: None, enabled_sub}
     }
@@ -1810,6 +1838,9 @@ impl Engine {
         let effect = Rc::new(PluginMidiEffect::new(device));
         let params = self.bind_device(uuid, device, effect.state_ptr(), ParamNode::Midi(effect.clone()), invalidate);
         refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
+        // Live telemetry: a monotonic note-activity counter (a WASM-only extra; TS broadcasts a `Bits` set).
+        let activity_slot = effect.activity_slot();
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT, &activity_slot, 1);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Midi(effect), node_id: None, output: None, params, sidechain: None, enabled_sub}
     }
@@ -1833,6 +1864,9 @@ impl Engine {
         let output = node.borrow().audio_output();
         let node_id = self.context.register_processor(node.clone());
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        // Live telemetry: the effect's output peaks (TS `PeakBroadcaster(adapter.address)`).
+        let meter_slot = node.borrow().meter_slot();
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot, 4);
         let sidechain = if params.sidechain_paths.is_empty() {
             None
         } else {

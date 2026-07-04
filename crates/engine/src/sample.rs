@@ -30,17 +30,43 @@ struct Slot {
     state: State
 }
 
-/// The engine's table of samples, one slot per `AudioFileBox`. A handle is an index into `slots`; a freed
-/// slot becomes `None` and its index is never reused, so a stale handle held by a device resolves to `None`.
+// A handle is `generation << 16 | index`: the INDEX addresses the slot and IS REUSED after a free (a
+// tombstoned index per freed sample would grow the table forever under box delete/recreate cycles, e.g. a
+// sync-log rewind), while the GENERATION invalidates stale handles — `free` bumps the slot's generation, so
+// a handle a device kept across the free resolves to `None` instead of the recycled slot's new sample. The
+// generation is masked to 15 bits so an encoded handle stays positive as the i32 that crosses the JS
+// boundary (`sample_take_request` returns -1 for "none").
+pub(crate) const HANDLE_INDEX_BITS: u32 = 16;
+pub(crate) const HANDLE_INDEX_MASK: u32 = (1 << HANDLE_INDEX_BITS) - 1;
+pub(crate) const HANDLE_GENERATION_MASK: u32 = 0x7FFF;
+
+pub(crate) fn encode_handle(index: u32, generation: u32) -> u32 {
+    ((generation & HANDLE_GENERATION_MASK) << HANDLE_INDEX_BITS) | (index & HANDLE_INDEX_MASK)
+}
+
+pub(crate) fn decode_handle(handle: u32) -> (u32, u32) {
+    (handle & HANDLE_INDEX_MASK, handle >> HANDLE_INDEX_BITS)
+}
+
+// One slot table entry: the slot payload plus the generation its CURRENT handles carry (bumped at free).
+struct Entry {
+    generation: u32,
+    slot: Option<Slot>
+}
+
+/// The engine's table of samples, one slot per `AudioFileBox`, addressed by generation-tagged handles (see
+/// the handle layout above): freed slots are recycled through `free_indices`, and a stale handle held by a
+/// device resolves to `None` via its outdated generation.
 #[derive(Default)]
 pub struct SampleResource {
-    slots: Vec<Option<Slot>>,
+    entries: Vec<Entry>,
+    free_indices: Vec<u32>, // freed slot indices awaiting reuse
     pending: Vec<u32> // handles in `Requested` state, awaiting a load request to the host
 }
 
 impl SampleResource {
     pub const fn new() -> Self {
-        Self {slots: Vec::new(), pending: Vec::new()}
+        Self {entries: Vec::new(), free_indices: Vec::new(), pending: Vec::new()}
     }
 
     /// Ensure a slot exists for `uuid`, deduplicating so many regions sharing one file allocate once. A new
@@ -49,21 +75,54 @@ impl SampleResource {
         if let Some(handle) = self.handle_of(uuid) {
             return handle;
         }
-        let handle = self.slots.len() as u32;
-        self.slots.push(Some(Slot {uuid, storage: Vec::new(), frame_count: 0, channel_count: 0, sample_rate: 0.0, state: State::Requested}));
+        let slot = Slot {uuid, storage: Vec::new(), frame_count: 0, channel_count: 0, sample_rate: 0.0, state: State::Requested};
+        let index = match self.free_indices.pop() {
+            Some(index) => {
+                self.entries[index as usize].slot = Some(slot);
+                index
+            }
+            None => {
+                let index = self.entries.len() as u32;
+                debug_assert!(index <= HANDLE_INDEX_MASK, "sample slot index space exhausted");
+                self.entries.push(Entry {generation: 0, slot: Some(slot)});
+                index
+            }
+        };
+        let handle = encode_handle(index, self.entries[index as usize].generation);
         self.pending.push(handle);
         handle
     }
 
     fn handle_of(&self, uuid: Uuid) -> Option<u32> {
-        self.slots.iter().position(|slot| slot.as_ref().is_some_and(|slot| slot.uuid == uuid)).map(|index| index as u32)
+        self.entries.iter().enumerate().find_map(|(index, entry)|
+            entry.slot.as_ref().filter(|slot| slot.uuid == uuid)
+                .map(|_| encode_handle(index as u32, entry.generation)))
+    }
+
+    // Resolve a handle to its live slot: the entry must exist AND carry the handle's generation.
+    fn slot(&self, handle: u32) -> Option<&Slot> {
+        let (index, generation) = decode_handle(handle);
+        let entry = self.entries.get(index as usize)?;
+        if entry.generation & HANDLE_GENERATION_MASK != generation {
+            return None;
+        }
+        entry.slot.as_ref()
+    }
+
+    fn slot_mut(&mut self, handle: u32) -> Option<&mut Slot> {
+        let (index, generation) = decode_handle(handle);
+        let entry = self.entries.get_mut(index as usize)?;
+        if entry.generation & HANDLE_GENERATION_MASK != generation {
+            return None;
+        }
+        entry.slot.as_mut()
     }
 
     /// Pop the next sample awaiting a host load request, returning its `(handle, uuid)`, or `None`. The
     /// worklet drains these after applying a transaction and dispatches each to the loader.
     pub fn take_pending(&mut self) -> Option<(u32, Uuid)> {
         while let Some(handle) = self.pending.pop() {
-            if let Some(Some(slot)) = self.slots.get(handle as usize) {
+            if let Some(slot) = self.slot(handle) {
                 if slot.state == State::Requested {
                     return Some((handle, slot.uuid));
                 }
@@ -75,7 +134,7 @@ impl SampleResource {
     /// Reserve `byte_len` zeroed bytes for the slot's planar f32 frames and return the pointer the host
     /// writes into. The storage lives in the slot, so the pointer is stable until the sample is freed.
     pub fn allocate(&mut self, handle: u32, byte_len: usize) -> u32 {
-        let Some(Some(slot)) = self.slots.get_mut(handle as usize) else {
+        let Some(slot) = self.slot_mut(handle) else {
             return 0;
         };
         slot.storage = vec![0u8; byte_len];
@@ -86,7 +145,7 @@ impl SampleResource {
     /// Mark the slot ready once the host has written its frames: `channel_count` planes of `frame_count`
     /// f32 each, at `sample_rate`.
     pub fn set_ready(&mut self, handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
-        if let Some(Some(slot)) = self.slots.get_mut(handle as usize) {
+        if let Some(slot) = self.slot_mut(handle) {
             slot.frame_count = frame_count;
             slot.channel_count = channel_count;
             slot.sample_rate = sample_rate;
@@ -103,7 +162,7 @@ impl SampleResource {
 
     /// Resolve a handle to its frames, but ONLY when ready (a device skips an unready sample for the block).
     pub fn resolve(&self, handle: u32) -> Option<SampleRef> {
-        let slot = self.slots.get(handle as usize)?.as_ref()?;
+        let slot = self.slot(handle)?;
         if slot.state != State::Ready {
             return None;
         }
@@ -115,12 +174,21 @@ impl SampleResource {
         })
     }
 
-    /// Free the sample for `uuid` (its box was removed): drop the slot's storage and empty the slot. A later
-    /// request for the same uuid gets a fresh handle.
+    /// Diagnostic slot-table sizes for leak probes: (table entries, live slots). The table must not grow
+    /// across box delete/recreate cycles (freed indices are recycled).
+    pub fn debug_counts(&self) -> (u32, u32) {
+        (self.entries.len() as u32, self.entries.iter().filter(|entry| entry.slot.is_some()).count() as u32)
+    }
+
+    /// Free the sample for `uuid` (its box was removed): drop the slot's storage, bump the generation (so
+    /// every handle out there dies), and recycle the index for the next request.
     pub fn free(&mut self, uuid: Uuid) {
-        if let Some(handle) = self.handle_of(uuid) {
-            self.slots[handle as usize] = None;
-        }
+        let Some(handle) = self.handle_of(uuid) else { return };
+        let (index, _) = decode_handle(handle);
+        let entry = &mut self.entries[index as usize];
+        entry.slot = None;
+        entry.generation = (entry.generation + 1) & HANDLE_GENERATION_MASK;
+        self.free_indices.push(index);
     }
 }
 
@@ -171,6 +239,25 @@ mod tests {
         resource.free(uuid(3));
         assert!(resource.resolve(handle).is_none(), "a freed sample no longer resolves");
         let fresh = resource.request(uuid(3));
-        assert_ne!(fresh, handle, "re-requesting a freed uuid gets a new handle, never the old index");
+        assert_ne!(fresh, handle, "re-requesting a freed uuid gets a new handle (bumped generation)");
+    }
+
+    #[test]
+    fn freed_slots_are_recycled_and_stale_handles_never_see_the_new_tenant() {
+        let mut resource = SampleResource::new();
+        let mut stale = resource.request(uuid(1));
+        // Many delete/recreate cycles (the sync-log rewind pattern) must not grow the table.
+        for round in 0..100u8 {
+            resource.free(uuid(1));
+            assert!(resource.resolve(stale).is_none(), "round {round}: the freed handle is dead");
+            let fresh = resource.request(uuid(1));
+            assert_ne!(fresh, stale, "round {round}: the recycled slot carries a new generation");
+            resource.allocate(fresh, 16);
+            resource.set_ready(fresh, 4, 1, 48_000.0);
+            assert!(resource.resolve(stale).is_none(), "round {round}: the stale handle never resolves the new tenant");
+            assert!(resource.resolve(fresh).is_some());
+            stale = fresh;
+        }
+        assert_eq!(resource.debug_counts(), (1, 1), "one uuid occupies ONE recycled slot, forever");
     }
 }

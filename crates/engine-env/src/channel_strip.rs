@@ -72,6 +72,7 @@ pub struct ChannelStripProcessor {
     gain_left: LinearRamp,
     gain_right: LinearRamp,
     mute_gain: LinearRamp,
+    meter: crate::meter::Meter, // peaks/RMS of the strip output (a broadcast slot)
     sample_rate: f32,
     processing: bool, // false until the first chunk, so the first targets jump (no ramp from 0)
     events: EventBuffer // unused (the strip receives no events) but required by `Processor: EventReceiver`
@@ -87,6 +88,7 @@ impl ChannelStripProcessor {
             gain_left: LinearRamp::linear(sample_rate),
             gain_right: LinearRamp::linear(sample_rate),
             mute_gain: LinearRamp::linear(sample_rate),
+            meter: crate::meter::Meter::new(sample_rate),
             sample_rate,
             processing: false,
             events: EventBuffer::new()
@@ -138,6 +140,11 @@ impl ChannelStripProcessor {
         self.processing = true; // TS sets it per processed sub-block, so a mid-quantum retarget already ramps
     }
 
+    /// The peak/RMS broadcast slot of this strip's output.
+    pub fn meter_slot(&self) -> crate::meter::MeterSlot {
+        self.meter.slot()
+    }
+
     // Map an update-grid pulse to its sample offset within `block` (the engine's `sample_offset` formula).
     fn sample_offset(&self, position: f64, block: &Block) -> usize {
         let pulses = position - block.p0;
@@ -172,6 +179,7 @@ impl AudioGenerator for ChannelStripProcessor {
 impl Processor for ChannelStripProcessor {
     fn reset(&mut self) {
         self.output.borrow_mut().clear();
+        self.meter.clear();
     }
 
     fn process(&mut self, info: &ProcessInfo) {
@@ -181,6 +189,7 @@ impl Processor for ChannelStripProcessor {
             Some(input) => input.clone(),
             None => {
                 output.clear_range(0, RENDER_QUANTUM);
+                self.meter.process(&output.left, &output.right); // the held peak still decays while unwired
                 return;
             }
         };
@@ -213,5 +222,6 @@ impl Processor for ChannelStripProcessor {
                 }
             }
         }
+        self.meter.process(&output.left, &output.right);
     }
 }

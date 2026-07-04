@@ -23,6 +23,7 @@
     "@opendaw/lib-dom": "^0.0.83",
     "@opendaw/lib-dsp": "^0.0.84",
     "@opendaw/lib-jsx": "^0.0.83",
+    "@opendaw/lib-fusion": "^0.0.94",
     "@opendaw/studio-enums": "^0.0.77",
     "@opendaw/nam-wasm": "^1.2.0",
     "jszip": "^3.10.1",

@@ -38,6 +38,14 @@ impl<P> AudioOutputBufferRegistry<P> {
     pub fn resolve(&self, address: &Address) -> Option<&AudioOutputBuffer<P>> {
         self.outputs.get(address)
     }
+
+    pub fn len(&self) -> usize {
+        self.outputs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.outputs.is_empty()
+    }
 }
 
 impl<P> Default for AudioOutputBufferRegistry<P> {

@@ -226,6 +226,7 @@ mod plugin_midi_effect;
 use plugin_midi_effect::PluginMidiEffect; // named in the PullLink::MidiFx variant defined here
 mod audio_unit;
 mod audio_region_player;
+pub(crate) mod broadcast;
 mod time_stretch;
 mod tempo_map;
 mod script_device;
@@ -391,14 +392,18 @@ struct PullContext {
     // alloc. `clock_armed` is set when that device has an automated parameter, so `host_next_update_position`
     // returns real grid points (and the render fragments); otherwise it returns INFINITY (no fragmentation).
     params: Vec<ParamHandle>,
-    clock_armed: bool
+    clock_armed: bool,
+    // The CURRENT CONSUMER's note-activity slot ([0] is a monotonic pulled-note counter the UI diffs to
+    // flash an indicator). Set by `PluginInstrument` around its device call; cleared during a MidiFx descent
+    // so nested pulls credit only their own producers.
+    activity: Option<Rc<RefCell<[f32; 4]>>>
 }
 
 impl PullContext {
     const fn new() -> Self {
         Self {
             current: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new(),
-            params: Vec::new(), clock_armed: false
+            params: Vec::new(), clock_armed: false, activity: None
         }
     }
 }
@@ -441,7 +446,9 @@ fn lifecycle_id(event: &Event) -> u64 {
 #[no_mangle]
 pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
     let link = { unsafe { PULL.get() }.current.clone() };
-    match link {
+    // The CONSUMER's activity slot, taken before any descent below swaps it out.
+    let consumer_activity = { unsafe { PULL.get() }.activity.clone() };
+    let count = match link {
         Some(PullLink::Source(ref source)) => pull_from_source(source, from, to, flags, out_ptr, max),
         Some(PullLink::SlotRoute {ref upstream, ref choke}) => pull_from_slot_route(upstream, choke, from, to, flags, out_ptr, max),
         Some(PullLink::MidiFx {effect, upstream}) => {
@@ -455,19 +462,28 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
                 effect.swap_params(&mut pull.params);
                 pull.clock_armed = effect.clock_armed();
                 pull.current = Some((*upstream).clone());
+                pull.activity = None; // nested pulls credit only their own producers (each fx bumps itself)
                 saved
             };
             let count = effect.process_events(from, to, flags, out_ptr, max);
+            effect.bump_activity(count);
             {
                 let pull = unsafe { PULL.get() };
                 effect.swap_params(&mut pull.params);
                 pull.clock_armed = saved_armed;
                 pull.current = Some(PullLink::MidiFx {effect, upstream});
+                pull.activity = consumer_activity.clone();
             }
             count
         }
         None => 0
+    };
+    if count > 0 {
+        if let Some(slot) = consumer_activity {
+            slot.borrow_mut()[0] += count as f32;
+        }
     }
+    count
 }
 
 /// Host import a render template calls to SEED its fragment loop: the first update position at or AFTER `at`
@@ -808,6 +824,8 @@ struct Engine {
     // `AuxSendBox`'s `targetBus` resolves through this to the sum node to feed; the PRIMARY bus is ABSENT (it
     // maps to the fixed `master`, the fallback). See `resolve_outputs` / `resolve_sends` in audio_unit.
     bus_registry: BTreeMap<Uuid, (Rc<RefCell<AudioBusProcessor>>, NodeId)>,
+    // The live-telemetry broadcast table (meters / note activity) the worklet mirrors to the UI.
+    broadcasts: broadcast::Broadcasts,
     sample_rate: f32,
     blocks: Vec<Block>,
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
@@ -837,6 +855,7 @@ impl Engine {
             output_device_params: Vec::new(),
             output_registry: AudioOutputBufferRegistry::new(),
             bus_registry: BTreeMap::new(),
+            broadcasts: broadcast::Broadcasts::default(),
             sample_rate,
             blocks: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM), // a quantum splits into a few blocks (tempo / loop); never realloc on the render path
             devices: Vec::new(),
@@ -1195,6 +1214,75 @@ fn perf_now() -> f64 {
 #[cfg(not(target_family = "wasm"))]
 fn perf_now() -> f64 {
     0.0
+}
+
+// ---- live-telemetry BROADCAST TABLE (plans/wasm-audio/live-broadcaster.md) -------------------------------
+
+/// Bumps whenever the broadcast table changed (a register or a sweep); the worklet re-reads the table then.
+#[no_mangle]
+pub extern "C" fn broadcast_generation() -> u32 {
+    unsafe { ENGINE.get().as_ref().map_or(0, |engine| engine.broadcasts.generation()) }
+}
+
+#[no_mangle]
+pub extern "C" fn broadcast_count() -> u32 {
+    unsafe { ENGINE.get().as_ref().map_or(0, |engine| engine.broadcasts.len() as u32) }
+}
+
+/// Write entry `index` as a fixed 48-byte record to `out_ptr` (client-reserved via `input_reserve`):
+/// `[uuid 16][package_type u32][ptr u32][len u32][keys_count u32][keys u16 x 8]`. Returns 1, or 0 when out
+/// of range.
+#[no_mangle]
+pub extern "C" fn broadcast_entry(index: u32, out_ptr: u32) -> u32 {
+    unsafe {
+        let Some(engine) = ENGINE.get().as_ref() else { return 0 };
+        let Some(entry) = engine.broadcasts.entry(index as usize) else { return 0 };
+        let out = core::slice::from_raw_parts_mut(out_ptr as *mut u8, 48);
+        out[..16].copy_from_slice(&entry.uuid);
+        out[16..20].copy_from_slice(&entry.package_type.to_le_bytes());
+        out[20..24].copy_from_slice(&entry.ptr.to_le_bytes());
+        out[24..28].copy_from_slice(&entry.len.to_le_bytes());
+        let keys_count = entry.keys.len().min(8) as u32;
+        out[28..32].copy_from_slice(&keys_count.to_le_bytes());
+        for (position, key) in entry.keys.iter().take(8).enumerate() {
+            let at = 32 + position * 2;
+            out[at..at + 2].copy_from_slice(&key.to_le_bytes());
+        }
+        1
+    }
+}
+
+/// Diagnostic LEAK PROBE (off the render path, used by `test/heap-cycle-probe.test.ts`): write container
+/// sizes as 14 u32s to `out_ptr` (client-reserved):
+/// [processors, labels, queue_len, queue_cap, next_node_id, output_registry, graph_vertices,
+///  box_count, subscription_count, broadcasts, audio_units, output_registry_engine,
+///  sample_slots_ever, sample_slots_live].
+#[no_mangle]
+pub extern "C" fn debug_probe(out_ptr: u32) {
+    unsafe {
+        let Some(engine) = ENGINE.get().as_ref() else { return };
+        let out = core::slice::from_raw_parts_mut(out_ptr as *mut u32, 14);
+        let context = engine.context.debug_counts();
+        out[..7].copy_from_slice(&context);
+        out[7] = engine.graph.box_count() as u32;
+        out[8] = engine.graph.subscription_count() as u32;
+        out[9] = engine.broadcasts.len() as u32;
+        out[10] = engine.audio_units.len() as u32;
+        out[11] = engine.output_registry.len() as u32;
+        let (slots_ever, slots_live) = SAMPLES.get().debug_counts();
+        out[12] = slots_ever;
+        out[13] = slots_live;
+    }
+}
+
+/// The UI's subscription flag round-trip (a producer MAY skip cold work; meters are always-on today).
+#[no_mangle]
+pub extern "C" fn broadcast_set_active(index: u32, active: u32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.broadcasts.set_active(index as usize, active != 0);
+        }
+    }
 }
 
 /// Enable (or re-zero) per-node render profiling.

@@ -34,6 +34,17 @@ WORKLET WRAPPER registers packages whose views point directly into wasm memory. 
 values into fixed slots. Zero copies, no new lock protocol, no receiver changes. Same containment
 precedent as the script/NAM bridges: the JS stays in the wrapper, the engine stays pure.
 
+## Status
+
+Phases 1+2 are IMPLEMENTED (plus per-device meters and note-activity counters beyond the phase-2 scope):
+`crates/engine/src/broadcast.rs` (Weak-swept table + generation), `crates/engine-env/src/meter.rs`
+(PeakBroadcaster port), meters in PluginInstrument / PluginAudioEffect / ChannelStrip / AudioRegionPlayer,
+registrations + `sweep()` in `audio_unit.rs`, the worklet bridge in `engine-processor.ts`
+(`#syncBroadcasts` + `flush`), and the `/live-meters` demo page (rows = audio units, columns = devices).
+Note activity deviates from TS (a monotonic counter at `.append(1)` / the midi-fx address instead of the
+128-bit `Bits` set). Tests: `broadcast.rs` unit test + `test/live-broadcast.test.ts` end to end.
+Phases 3 (param unit values), 4 (device telemetry ABI), 5 (spectra) remain.
+
 ## Phases
 
 ### Phase 1 — the broadcast table
