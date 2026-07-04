@@ -17,8 +17,6 @@ class Processor {
   }
 
   _fold(x, amount) {
-    // Mirror fold: wrap signal between -1..1
-    const range = 2.0
     let y = x * (1 + amount * 3)
     while (y > 1 || y < -1) {
       if (y > 1) y = 2 - y
