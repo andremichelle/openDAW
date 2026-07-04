@@ -4,9 +4,12 @@
 //! one retainer (one per unit, so ids never collide across the unit's regions) and emit `NoteComplete`
 //! when their span completes, or immediately on a transport stop / discontinuity (e.g. a loop wrap).
 //!
-//! Raw (live MIDI) and audition notes from TS are not ported yet (no MIDI input path).
+//! RAW notes (live MIDI / on-screen keys, TS `pushRawNoteOn/Off`) and AUDITION notes (fixed-duration
+//! previews, TS `auditionNote`) are emitted BEFORE the transport gate, so they sound while stopped too
+//! (the paused render keeps the pulse range advancing).
 
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use math::clamp;
 use math::random::Mulberry32;
 use value::event::EventSpan;
@@ -44,9 +47,28 @@ impl EventSpan for RetainedNote {
     }
 }
 
+// A live (raw) note: gated by the physical key, `running` carries the emitted note-on's id once started
+// (mirrors TS `RawNote`).
+struct RawNote {
+    pitch: u8,
+    velocity: f32,
+    gate: bool,
+    running: Option<u64>
+}
+
+// A queued audition note (TS `ScheduledNote`), started at the next block with its fixed duration.
+struct ScheduledNote {
+    pitch: u8,
+    duration: f64,
+    velocity: f32
+}
+
 pub struct NoteSequencer {
     source: Box<dyn NoteRegionSource>,
     retainer: EventSpanRetainer<RetainedNote>,
+    raw_notes: Vec<RawNote>,
+    audition_queue: Vec<ScheduledNote>,
+    audition_retainer: EventSpanRetainer<RetainedNote>,
     random: Mulberry32,
     next_id: u64,
     truncate_at_region_end: bool
@@ -54,7 +76,16 @@ pub struct NoteSequencer {
 
 impl NoteSequencer {
     pub fn new(source: Box<dyn NoteRegionSource>) -> Self {
-        Self {source, retainer: EventSpanRetainer::new(), random: Mulberry32::new(CHANCE_SEED), next_id: 0, truncate_at_region_end: false}
+        Self {
+            source,
+            retainer: EventSpanRetainer::new(),
+            raw_notes: Vec::new(),
+            audition_queue: Vec::new(),
+            audition_retainer: EventSpanRetainer::new(),
+            random: Mulberry32::new(CHANCE_SEED),
+            next_id: 0,
+            truncate_at_region_end: false
+        }
     }
 
     /// The TS preference `playback.truncateNotesAtRegionEnd` (default FALSE: a note rings past its
@@ -77,11 +108,51 @@ impl NoteEventSource for NoteSequencer {
                 sink(Event::NoteComplete {id: retained.id, position, pitch: retained.pitch});
             });
         }
+        // AUDITION releases (TS: discontinuous -> stop all at `from`, else stop each at its clamped end).
+        if discontinuous {
+            self.audition_retainer.drain_all(|retained|
+                sink(Event::NoteComplete {id: retained.id, position: from, pitch: retained.pitch}));
+        } else {
+            self.audition_retainer.drain_linear_completed(to, |retained| {
+                let position = clamp(retained.complete(), from, to);
+                sink(Event::NoteComplete {id: retained.id, position, pitch: retained.pitch});
+            });
+        }
+        // RAW notes: start every note not yet running (infinite duration, released by its note-off), and
+        // release + drop every gated-off note. Runs BEFORE the read gate, so live keys sound while stopped.
+        let mut index = 0;
+        while index < self.raw_notes.len() {
+            if self.raw_notes[index].running.is_none() {
+                let id = self.next_id;
+                self.next_id += 1;
+                let (pitch, velocity) = (self.raw_notes[index].pitch, self.raw_notes[index].velocity);
+                sink(Event::NoteStart {id, position: from, duration: f64::INFINITY, pitch, cent: 0.0, velocity});
+                self.raw_notes[index].running = Some(id);
+            }
+            if self.raw_notes[index].gate {
+                index += 1;
+            } else {
+                let RawNote {pitch, running, ..} = self.raw_notes.remove(index);
+                sink(Event::NoteComplete {id: running.expect("raw note never started"), position: from, pitch});
+            }
+        }
+        // QUEUED auditions replace the currently retained ones (TS: stop all retained at `from`, then start
+        // each queued with its fixed duration).
+        if !self.audition_queue.is_empty() {
+            self.audition_retainer.drain_all(|retained|
+                sink(Event::NoteComplete {id: retained.id, position: from, pitch: retained.pitch}));
+            for ScheduledNote {pitch, duration, velocity} in self.audition_queue.drain(..) {
+                let id = self.next_id;
+                self.next_id += 1;
+                sink(Event::NoteStart {id, position: from, duration, pitch, cent: 0.0, velocity});
+                self.audition_retainer.add_and_retain(RetainedNote {position: from, duration, id, pitch});
+            }
+        }
         if !read {
             return;
         }
         let truncate = self.truncate_at_region_end;
-        let Self {source, retainer, random, next_id, truncate_at_region_end: _} = self;
+        let Self {source, retainer, random, next_id, ..} = self;
         source.for_each_region(from, to, &mut |region, notes| {
             for cycle in locate_loops(region.position, region.complete(), region.loop_offset, region.loop_duration, from, to) {
                 // TS: `end = truncateNotesAtRegionEnd ? min(rawEnd, region.complete) : Infinity` — by
@@ -158,5 +229,148 @@ impl NoteEventSource for NoteSequencer {
             let position = clamp(retained.complete(), from, to);
             sink(Event::NoteComplete {id: retained.id, position, pitch: retained.pitch});
         });
+    }
+
+    fn push_raw_note_on(&mut self, pitch: u8, velocity: f32) {
+        self.raw_notes.push(RawNote {pitch, velocity, gate: true, running: None});
+    }
+
+    // Mirrors TS `pushRawNoteOff`: drop never-started notes while searching; gate off the FIRST started
+    // note of that pitch (its note-off is emitted by the next `process_notes`).
+    fn push_raw_note_off(&mut self, pitch: u8) {
+        let mut index = 0;
+        while index < self.raw_notes.len() {
+            if self.raw_notes[index].running.is_none() {
+                self.raw_notes.remove(index);
+            } else if self.raw_notes[index].pitch == pitch {
+                self.raw_notes[index].gate = false;
+                return;
+            } else {
+                index += 1;
+            }
+        }
+    }
+
+    fn audition_note(&mut self, pitch: u8, duration: f64, velocity: f32) {
+        self.audition_queue.push(ScheduledNote {pitch, duration, velocity});
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::vec::Vec;
+    use value::event::EventCollection;
+    use value::note::NoteEvent;
+    use crate::note_region::NoteRegion;
+    use super::*;
+
+    struct NoRegions;
+
+    impl NoteRegionSource for NoRegions {
+        fn for_each_region(&self, _from: f64, _to: f64, _visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {}
+    }
+
+    fn sequencer() -> NoteSequencer {
+        NoteSequencer::new(Box::new(NoRegions))
+    }
+
+    fn stopped() -> BlockFlags {
+        BlockFlags::create(false, false, false, false)
+    }
+
+    fn playing() -> BlockFlags {
+        BlockFlags::create(true, false, true, false)
+    }
+
+    fn collect(sequencer: &mut NoteSequencer, from: f64, to: f64, flags: BlockFlags) -> Vec<Event> {
+        let mut events = Vec::new();
+        sequencer.process_notes(from, to, flags, &mut |event| events.push(event));
+        events
+    }
+
+    #[test]
+    fn raw_note_sounds_while_stopped_and_releases_on_off() {
+        let mut sequencer = sequencer();
+        sequencer.push_raw_note_on(60, 0.8);
+        let started = collect(&mut sequencer, 0.0, 5.0, stopped());
+        assert_eq!(started.len(), 1);
+        let id = match started[0] {
+            Event::NoteStart {id, position, duration, pitch, velocity, ..} => {
+                assert_eq!(position, 0.0);
+                assert_eq!(duration, f64::INFINITY);
+                assert_eq!(pitch, 60);
+                assert_eq!(velocity, 0.8);
+                id
+            }
+            _ => panic!("expected a note-start")
+        };
+        assert!(collect(&mut sequencer, 5.0, 10.0, stopped()).is_empty(), "a running raw note re-emits nothing");
+        sequencer.push_raw_note_off(60);
+        let released = collect(&mut sequencer, 10.0, 15.0, stopped());
+        assert_eq!(released.len(), 1);
+        assert!(matches!(released[0], Event::NoteComplete {id: complete, position, pitch: 60}
+            if complete == id && position == 10.0));
+        assert!(collect(&mut sequencer, 15.0, 20.0, stopped()).is_empty());
+    }
+
+    #[test]
+    fn raw_note_off_before_first_block_never_sounds() {
+        let mut sequencer = sequencer();
+        sequencer.push_raw_note_on(60, 0.8);
+        sequencer.push_raw_note_off(60);
+        assert!(collect(&mut sequencer, 0.0, 5.0, stopped()).is_empty());
+    }
+
+    #[test]
+    fn raw_note_works_while_playing_too() {
+        let mut sequencer = sequencer();
+        sequencer.push_raw_note_on(72, 1.0);
+        let events = collect(&mut sequencer, 100.0, 105.0, playing());
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], Event::NoteStart {position, pitch: 72, ..} if position == 100.0));
+    }
+
+    #[test]
+    fn audition_note_plays_for_its_duration() {
+        let mut sequencer = sequencer();
+        sequencer.audition_note(62, 8.0, 0.9);
+        let started = collect(&mut sequencer, 0.0, 5.0, stopped());
+        assert_eq!(started.len(), 1);
+        let id = match started[0] {
+            Event::NoteStart {id, position, duration, pitch, ..} => {
+                assert_eq!(position, 0.0);
+                assert_eq!(duration, 8.0);
+                assert_eq!(pitch, 62);
+                id
+            }
+            _ => panic!("expected a note-start")
+        };
+        let released = collect(&mut sequencer, 5.0, 10.0, stopped());
+        assert_eq!(released.len(), 1);
+        assert!(matches!(released[0], Event::NoteComplete {id: complete, position, pitch: 62}
+            if complete == id && position == 8.0), "the audition stops at its own end position");
+        assert!(collect(&mut sequencer, 10.0, 15.0, stopped()).is_empty());
+    }
+
+    #[test]
+    fn new_audition_replaces_the_running_one() {
+        let mut sequencer = sequencer();
+        sequencer.audition_note(60, 100.0, 1.0);
+        assert_eq!(collect(&mut sequencer, 0.0, 5.0, stopped()).len(), 1);
+        sequencer.audition_note(64, 100.0, 1.0);
+        let events = collect(&mut sequencer, 5.0, 10.0, stopped());
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], Event::NoteComplete {pitch: 60, position, ..} if position == 5.0));
+        assert!(matches!(events[1], Event::NoteStart {pitch: 64, position, ..} if position == 5.0));
+    }
+
+    #[test]
+    fn discontinuity_stops_the_running_audition() {
+        let mut sequencer = sequencer();
+        sequencer.audition_note(60, 100.0, 1.0);
+        assert_eq!(collect(&mut sequencer, 0.0, 5.0, playing()).len(), 1);
+        let events = collect(&mut sequencer, 200.0, 205.0, BlockFlags::create(true, true, true, false));
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], Event::NoteComplete {pitch: 60, position, ..} if position == 200.0));
     }
 }

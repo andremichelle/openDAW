@@ -40,7 +40,7 @@ import {RouteLocation} from "@opendaw/lib-jsx"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {ExportConfiguration, InstrumentFactories, NoteSignal} from "@opendaw/studio-adapters"
+import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {
     AudioContentFactory,
@@ -282,7 +282,7 @@ export class StudioService implements ProjectEnv {
                 const {status, error} = await Promises.tryCatch(Mixdowns.exportMixdown(profile))
                 if (status === "rejected" && !Errors.isAbort(error)) {
                     console.warn(error)
-                RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
+                    RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                 }
                 this.audioContext.resume().then()
             })
@@ -310,7 +310,7 @@ export class StudioService implements ProjectEnv {
                 const {status, error} = await Promises.tryCatch(Mixdowns.exportStems(profile, config))
                 if (status === "rejected" && !Errors.isAbort(error)) {
                     console.warn(error)
-                RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
+                    RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                 }
                 this.audioContext.resume().then(EmptyExec, EmptyExec)
             })
@@ -597,8 +597,6 @@ export class StudioService implements ProjectEnv {
             })
         ConsoleCommands.exportMethod("engine.position", () => this.engine.position.getValue())
         ConsoleCommands.exportMethod("engine.isPlaying", () => this.engine.isPlaying.getValue())
-        ConsoleCommands.exportMethod("engine.noteTest",
-            () => tryCatch(() => this.engine.noteSignal(NoteSignal.on(UUID.generate(), 60, 1.0))).status)
     }
 
     #populateSpotlightData(): void {

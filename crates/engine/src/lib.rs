@@ -1440,6 +1440,44 @@ pub extern "C" fn set_position(position: f64) {
     }
 }
 
+/// The 16-byte target uuid the host wrote into the input buffer (the `device_set_box_type` convention).
+fn input_uuid() -> Uuid {
+    let mut uuid: Uuid = [0; 16];
+    unsafe { uuid.copy_from_slice(core::slice::from_raw_parts(INPUT.get().as_ptr(), 16)); }
+    uuid
+}
+
+/// LIVE note signals (the studio's on-screen keys / pads / MIDI input, TS `EngineCommands.noteSignal`):
+/// the host writes the target `AudioUnitBox` uuid into the input buffer (16 bytes) first, then calls one
+/// of these. A raw note-on sustains until its note-off; an audition stops itself after `duration` pulses.
+/// They sound while the transport is stopped too (the paused render keeps the pulse range advancing).
+#[no_mangle]
+pub extern "C" fn note_signal_on(pitch: u32, velocity: f32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_ref() {
+            engine.note_signal(input_uuid(), audio_unit::NoteSignal::On {pitch: pitch as u8, velocity})
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn note_signal_off(pitch: u32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_ref() {
+            engine.note_signal(input_uuid(), audio_unit::NoteSignal::Off {pitch: pitch as u8})
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn note_signal_audition(pitch: u32, duration: f64, velocity: f32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_ref() {
+            engine.note_signal(input_uuid(), audio_unit::NoteSignal::Audition {pitch: pitch as u8, duration, velocity})
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn set_metronome_enabled(enabled: i32) {
     unsafe {

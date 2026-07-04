@@ -49,6 +49,21 @@ pub(crate) struct CompositeBinding {
     members: Vec<CompositeChild>            // persistent per-child records, in sum order
 }
 
+impl CompositeBinding {
+    /// Collect the live-note injection targets: every SLOT's sequencer (its device filters by pad note),
+    /// recursing into nested composites. A CELL's sequencer lives inside its pull link (unreachable here),
+    /// so cell composites do not receive live notes yet.
+    pub(crate) fn collect_note_sources(&self, out: &mut Vec<SharedNoteEventSource>) {
+        for child in &self.members {
+            match &child.body {
+                ChildBody::Slot {cluster, ..} => out.push(cluster.note_source()),
+                ChildBody::Nested {binding} => binding.collect_note_sources(out),
+                ChildBody::Cell {..} => {}
+            }
+        }
+    }
+}
+
 /// What a composite child IS. A direct-instrument child (e.g. a Playfield slot) is an edge-only `SlotCluster`
 /// reconciled in place (its fx-chain edits + effect `enabled` toggles keep every survivor's DSP state). A cell
 /// child and a nested composite are rebuilt wholesale (rarer; no edge-only path).

@@ -141,7 +141,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 loadClickSound: (_index: 0 | 1, _data: AudioData): void => {}, // the wasm engine ships its own click
                 setFrozenAudio: (_uuid: UUID.Bytes, _audioData: Nullable<AudioData>): void => this.#unsupported("frozen audio"),
                 updateMonitoringMap: (_map: ReadonlyArray<MonitoringMapEntry>): void => {},
-                noteSignal: (_signal: NoteSignal): void => this.#unsupported("note signals"),
+                noteSignal: (signal: NoteSignal): void => this.#noteSignal(signal),
                 ignoreNoteRegion: (_uuid: UUID.Bytes): void => {},
                 scheduleClipPlay: (_clipIds: ReadonlyArray<UUID.Bytes>): void => this.#unsupported("clip launching"),
                 scheduleClipStop: (_trackIds: ReadonlyArray<UUID.Bytes>): void => {},
@@ -190,6 +190,20 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#syncBroadcasts()
         this.#broadcaster.flush()
         this.#stateSender.tryWrite()
+    }
+
+    // Route a live note signal (on-screen keys / pads / MIDI input) to the engine: the target
+    // AudioUnitBox uuid goes into the input scratch, then the matching export fires.
+    #noteSignal(signal: NoteSignal): void {
+        const pointer = this.#engine.input_reserve(16)
+        new Uint8Array(this.#memory.buffer, pointer, 16).set(signal.uuid)
+        if (NoteSignal.isOn(signal)) {
+            this.#engine.note_signal_on(signal.pitch, signal.velocity)
+        } else if (NoteSignal.isOff(signal)) {
+            this.#engine.note_signal_off(signal.pitch)
+        } else if (NoteSignal.isAudition(signal)) {
+            this.#engine.note_signal_audition(signal.pitch, signal.duration, signal.velocity)
+        }
     }
 
     #play(): void {

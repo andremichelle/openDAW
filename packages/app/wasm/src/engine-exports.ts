@@ -39,6 +39,12 @@ export type EngineExports = {
     pause: () => void
     stop: () => void
     set_position: (position: number) => void
+    // LIVE note signals (the studio's on-screen keys / pads / MIDI input): write the target AudioUnitBox
+    // uuid into the input buffer (16 bytes) first. A raw note-on sustains until its note-off; an audition
+    // stops itself after `duration` pulses. They sound while the transport is stopped too.
+    note_signal_on: (pitch: number, velocity: number) => void
+    note_signal_off: (pitch: number) => void
+    note_signal_audition: (pitch: number, duration: number, velocity: number) => void
     // A device imports this from `env`; the loader binds it so the device PULLS its own input events for a
     // pulse range (Route A), writing EventRecords into the descriptor scratch and returning the count.
     host_pull_events: (from: number, to: number, flags: number, outPtr: number, max: number) => number

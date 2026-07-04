@@ -480,6 +480,11 @@ pub(crate) struct SlotCluster {
 }
 
 impl SlotCluster {
+    /// The slot's note source, a live-note injection target (the slot's device filters by its pad note).
+    pub(crate) fn note_source(&self) -> SharedNoteEventSource {
+        self.sequencer.clone()
+    }
+
     /// Visit every member's bound parameters (instrument + midi + audio), for the unit's automation re-bind.
     pub(crate) fn for_each_params(&mut self, visit: &mut dyn FnMut(&mut DeviceParams)) {
         visit(&mut self.instrument.params);
@@ -2943,6 +2948,43 @@ fn track_enabled(graph: &BoxGraph, track_uuid: Uuid) -> bool {
     graph.field_value(&Address::of(track_uuid, vec![TRACK_ENABLED_KEY])).and_then(|value| value.as_bool()).unwrap_or(true)
 }
 
+/// A LIVE note signal the studio injects (TS `NoteSignal`): the on-screen keys / pads / MIDI input.
+#[derive(Clone, Copy)]
+pub(crate) enum NoteSignal {
+    On {pitch: u8, velocity: f32},
+    Off {pitch: u8},
+    Audition {pitch: u8, duration: f64, velocity: f32}
+}
+
+/// Route a live note signal to the unit's note sources: the leaf sequencer, or every composite SLOT's
+/// sequencer (each slot pulls independently; its device filters by pad note). Tape / bus units have none.
+/// Mirrors TS `EngineProcessor.noteSignal` -> `NoteSequencer.pushRawNoteOn/Off/auditionNote`.
+pub(crate) fn note_signal_to_unit(unit: &AudioUnitBinding, signal: NoteSignal) {
+    let mut sources: Vec<SharedNoteEventSource> = Vec::new();
+    match unit.wired.as_ref() {
+        Some(Wired::Leaf(chain)) => sources.push(chain.sequencer.clone()),
+        Some(Wired::Composite(wired)) => wired.binding.collect_note_sources(&mut sources),
+        _ => {}
+    }
+    for source in sources {
+        let mut source = source.borrow_mut();
+        match signal {
+            NoteSignal::On {pitch, velocity} => source.push_raw_note_on(pitch, velocity),
+            NoteSignal::Off {pitch} => source.push_raw_note_off(pitch),
+            NoteSignal::Audition {pitch, duration, velocity} => source.audition_note(pitch, duration, velocity)
+        }
+    }
+}
+
+impl Engine {
+    /// Inject a live note signal into the unit identified by its `AudioUnitBox` uuid. Called OFF-render
+    /// (between quanta); the note starts / releases at the next block, playing or stopped.
+    pub(crate) fn note_signal(&self, unit: Uuid, signal: NoteSignal) {
+        if let Some(binding) = self.audio_units.iter().find(|binding| binding.unit == unit) {
+            note_signal_to_unit(binding, signal);
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -3158,6 +3200,28 @@ mod tests {
         assert_eq!(instr_after, instr_node, "instrument processor identity preserved across chain edit");
         assert_eq!(audio_after[0], fx_a_node, "surviving effect FX_A processor identity preserved");
         assert!(audio_after[1] > fx_a_node, "the joiner FX_B is a freshly created processor");
+    }
+
+    #[test]
+    fn live_note_signal_reaches_the_leaf_sequencer() {
+        let mut engine = engine_with_devices();
+        engine.graph = unit_graph();
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        // A raw note-on routes to the unit's sequencer and emits at the next block, transport STOPPED.
+        super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 60, velocity: 0.9});
+        let sequencer = leaf_sequencer(&unit);
+        let stopped = engine_env::block_flags::BlockFlags::create(false, false, false, false);
+        let mut events: Vec<engine_env::event::Event> = Vec::new();
+        sequencer.borrow_mut().process_notes(0.0, 5.0, stopped, &mut |event| events.push(event));
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], engine_env::event::Event::NoteStart {pitch: 60, ..}));
+        // The note-off releases it in the following block.
+        super::note_signal_to_unit(&unit, super::NoteSignal::Off {pitch: 60});
+        events.clear();
+        sequencer.borrow_mut().process_notes(5.0, 10.0, stopped, &mut |event| events.push(event));
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], engine_env::event::Event::NoteComplete {pitch: 60, ..}));
     }
 
     #[test]
