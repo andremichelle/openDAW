@@ -131,7 +131,8 @@ impl FreeVerb {
             let inp_left = in_left[i];
             let inp_right = in_right[i];
             // stereo pre-delay
-            let delay_read = (self.delay_position + self.delay_size - predelay) % self.delay_size;
+            // `delay_size` is a power of two: mask instead of a per-sample integer division.
+            let delay_read = (self.delay_position + self.delay_size - predelay) & (self.delay_size - 1);
             let read_left = self.delay_buffer[delay_read << 1] * MAGIC_GAIN;
             let read_right = self.delay_buffer[(delay_read << 1) + 1] * MAGIC_GAIN;
             self.delay_buffer[self.delay_position << 1] = inp_left;

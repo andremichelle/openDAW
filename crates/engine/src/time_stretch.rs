@@ -589,7 +589,7 @@ impl TimeStretchSequencer {
             }
             let samples_to_end = (seg_end - read_pos) / effective_playback_rate;
             if samples_to_end < buffer_count as f64 {
-                let fade_out_offset = math::clamp(libm_floor(samples_to_end), 0.0, f64::MAX) as usize;
+                let fade_out_offset = math::clamp(math::floor(samples_to_end), 0.0, f64::MAX) as usize;
                 self.voices[index].start_fade_out(fade_out_offset);
             }
             index += 1;
@@ -758,10 +758,6 @@ fn seconds_to_ppqn(warp: &[(f64, f64)], seconds: f64) -> f64 {
     }
 }
 
-#[inline]
-fn libm_floor(x: f64) -> f64 {
-    math::floor(x)
-}
 
 #[cfg(test)]
 mod tests {

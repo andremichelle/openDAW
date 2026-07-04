@@ -8,19 +8,21 @@ use crate::osc::ClassicWaveform;
 /// A naive (non-band-limited) LFO over a control value, mirroring lib-dsp `LFO`.
 #[derive(Clone, Copy, Default)]
 pub struct Lfo {
-    inv_sample_rate: f64,
+    sample_rate: f64,
     phase: f64
 }
 
 impl Lfo {
     pub fn new(sample_rate: f32) -> Self {
-        Self {inv_sample_rate: 1.0 / sample_rate as f64, phase: 0.0}
+        Self {sample_rate: sample_rate as f64, phase: 0.0}
     }
 
     /// Fill `buffer[from..to]` with `shape` at `frequency` Hz, advancing the phase. Mirrors `LFO.fill`: the
     /// shape is branched once and each gets its own loop, the phase wrapping by subtracting 1 when it reaches it.
     pub fn fill(&mut self, buffer: &mut [f32], shape: ClassicWaveform, frequency: f32, from: usize, to: usize) {
-        let phase_inc = frequency as f64 * self.inv_sample_rate;
+        // A DIVISION like the TS (`frequency / this.sampleRate`), not a reciprocal multiply: the two can
+        // differ by an ulp and the phase drift accumulates over a held note. Zero rate stays inert.
+        let phase_inc = if self.sample_rate > 0.0 { frequency as f64 / self.sample_rate } else { 0.0 };
         match shape {
             ClassicWaveform::Sine => {
                 // WASM CONTRACT: `fast_sin_tau` mirrors lib-dsp `fastSinTau` (identical arithmetic both engines).

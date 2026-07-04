@@ -131,7 +131,8 @@ impl AudioEffect for Maximizer {
                 out_right[i] = clamp(state.buffer_right[state.position] * gain, -1.0, 1.0);
                 state.buffer_left[state.position] = inp0;
                 state.buffer_right[state.position] = inp1;
-                state.position = (state.position + 1) % frames;
+                state.position += 1;
+                if state.position == frames {state.position = 0;} // wrap without a per-sample division
             } else {
                 out_left[i] = inp0 * gain;
                 out_right[i] = inp1 * gain;
@@ -235,7 +236,8 @@ mod tests {
                 out_r[i] = math::clamp(state.buffer_right[state.position] * gain, -1.0, 1.0);
                 state.buffer_left[state.position] = inp0;
                 state.buffer_right[state.position] = inp1;
-                state.position = (state.position + 1) % frames;
+                state.position += 1;
+                if state.position == frames {state.position = 0;} // wrap without a per-sample division
             } else {
                 out_l[i] = inp0 * gain;
                 out_r[i] = inp1 * gain;

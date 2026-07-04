@@ -30,3 +30,38 @@ fn iterate_range_finds_notes_starting_in_the_window() {
     let pitches: Vec<u8> = collection.iterate_range(480.0, 961.0).map(|note| note.pitch).collect();
     assert_eq!(pitches, vec![62, 64]);
 }
+
+#[test]
+fn remove_takes_the_exact_duplicate_not_an_arbitrary_equal_one() {
+    // Two notes share (position, pitch) — the Ord key — but differ in payload. Removing one must remove
+    // THAT one (TS removes by identity); an arbitrary equal-run removal desyncs the box mirror.
+    use value::event::EventCollection;
+    use value::note::NoteEvent;
+    let short = NoteEvent::new(0.0, 100.0, 60, 0.0, 0.5);
+    let long = NoteEvent::new(0.0, 400.0, 60, 0.0, 1.0);
+    let mut collection = EventCollection::new();
+    collection.add(short);
+    collection.add(long);
+    assert!(collection.remove(&short), "the exact payload is found");
+    assert_eq!(collection.len(), 1);
+    let kept = collection.as_slice()[0];
+    assert_eq!(kept.duration, 400.0, "the OTHER duplicate survives untouched");
+    assert_eq!(kept.velocity, 1.0);
+}
+
+#[test]
+fn duplicates_keep_insertion_order() {
+    // TS appends + stable-sorts, so equal (position, pitch) notes iterate in insertion order — the chance
+    // RNG roll order depends on it.
+    use value::event::EventCollection;
+    use value::note::NoteEvent;
+    let first = NoteEvent::new(0.0, 100.0, 60, 0.0, 0.1);
+    let second = NoteEvent::new(0.0, 200.0, 60, 0.0, 0.2);
+    let third = NoteEvent::new(0.0, 300.0, 60, 0.0, 0.3);
+    let mut collection = EventCollection::new();
+    collection.add(first);
+    collection.add(second);
+    collection.add(third);
+    let velocities: Vec<f32> = collection.as_slice().iter().map(|note| note.velocity).collect();
+    assert_eq!(velocities, vec![0.1, 0.2, 0.3], "insertion order within the equal run");
+}

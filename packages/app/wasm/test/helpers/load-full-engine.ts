@@ -8,76 +8,16 @@ import {createRequire} from "node:module"
 import {UUID} from "@opendaw/lib-std"
 import {ScriptBridges, ScriptEngine} from "../../src/script-bridge"
 import {NamBridges} from "../../src/nam-bridge"
+import {linkDevice, registerComposite} from "../../src/device-linker"
+import {COMPOSITES, DEVICES as DEVICE_URLS} from "../../src/engine-modules"
 
 const PUBLIC = path.resolve(__dirname, "../../public")
-const DEVICE_STACK_SIZE = 256 * 1024
 
-// Parallel to engine-modules.ts DEVICES / COMPOSITES.
-const DEVICES: ReadonlyArray<{file: string, boxType: string}> = [
-    {file: "device_vaporisateur.wasm", boxType: "VaporisateurDeviceBox"},
-    {file: "device_nano.wasm", boxType: "NanoDeviceBox"},
-    {file: "device_lowpass.wasm", boxType: "RevampDeviceBox"},
-    {file: "device_tidal.wasm", boxType: "TidalDeviceBox"},
-    {file: "device_delay.wasm", boxType: "DelayDeviceBox"},
-    {file: "device_gate.wasm", boxType: "GateDeviceBox"},
-    {file: "device_arp.wasm", boxType: "ArpeggioDeviceBox"},
-    {file: "device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"},
-    {file: "device_transpose.wasm", boxType: "PitchDeviceBox"},
-    {file: "device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"},
-    {file: "device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
-    {file: "device_apparat.wasm", boxType: "ApparatDeviceBox"},     // scriptable instrument
-    {file: "device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
-    {file: "device_waveshaper.wasm", boxType: "WaveshaperDeviceBox"}, // audio effect
-    {file: "device_crusher.wasm", boxType: "CrusherDeviceBox"}, // audio effect
-    {file: "device_fold.wasm", boxType: "FoldDeviceBox"}, // audio effect
-    {file: "device_stereo_tool.wasm", boxType: "StereoToolDeviceBox"}, // audio effect
-    {file: "device_velocity.wasm", boxType: "VelocityDeviceBox"}, // midi effect
-    {file: "device_maximizer.wasm", boxType: "MaximizerDeviceBox"}, // audio effect
-    {file: "device_compressor.wasm", boxType: "CompressorDeviceBox"}, // audio effect (sidechain)
-    {file: "device_reverb.wasm", boxType: "ReverbDeviceBox"}, // audio effect
-    {file: "device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
-    {file: "device_soundfont.wasm", boxType: "SoundfontDeviceBox"}, // instrument (preset sampler)
-    {file: "device_vocoder.wasm", boxType: "VocoderDeviceBox"}, // audio effect (channel vocoder + sidechain)
-    {file: "device_neural_amp.wasm", boxType: "NeuralAmpDeviceBox"} // audio effect (NAM, via the nam bridge)
-]
-type CompositeSpec = {boxType: string, childrenField: number, indexKey: number, excludeKey: number,
-    cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number}
-const COMPOSITES: ReadonlyArray<CompositeSpec> = [
-    {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
-        cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0, childEnabledKey: 22},
-    {boxType: "CompositeDeviceBox", childrenField: 10, indexKey: 5, excludeKey: 0,
-        cellInstrumentField: 11, cellMidiField: 12, cellAudioField: 13, childEnabledKey: 0}
-]
-
-const readVarU32 = (bytes: Uint8Array, pos: number): [number, number] => {
-    let result = 0, shift = 0, cursor = pos
-    for (; ;) {
-        const byte = bytes[cursor++]
-        result |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) {break}
-        shift += 7
-    }
-    return [result >>> 0, cursor]
-}
-
-const parseDylink = (module: WebAssembly.Module): {memorySize: number, tableSize: number} => {
-    const sections = WebAssembly.Module.customSections(module, "dylink.0")
-    if (sections.length === 0) {return {memorySize: 0, tableSize: 0}}
-    const bytes = new Uint8Array(sections[0])
-    let pos = 0
-    while (pos < bytes.length) {
-        const type = bytes[pos++]
-        const [size, afterSize] = readVarU32(bytes, pos)
-        if (type === 1) {
-            const [memorySize, afterMem] = readVarU32(bytes, afterSize)
-            const [, afterAlign] = readVarU32(bytes, afterMem)
-            const [tableSize] = readVarU32(bytes, afterAlign)
-            return {memorySize, tableSize}
-        }
-        pos = afterSize + size
-    }
-    return {memorySize: 0, tableSize: 0}
-}
+// ONE device/composite list for every context: the production tables from engine-modules, with the vite
+// URL mapped to the public/ file name. The former local copies had already drifted (wrong composite cell
+// field keys), which is exactly why they are gone.
+const DEVICES: ReadonlyArray<{file: string, boxType: string}> =
+    DEVICE_URLS.map(({url, boxType}) => ({file: url.slice(1), boxType}))
 
 export type FullEngine = {
     engine: any
@@ -115,66 +55,12 @@ export const loadFullEngine = async (sampleRate = 48000,
     }, sampleRate)
     const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports()}
 
-    const installOptional = (fn: unknown): number => {
-        if (fn === undefined) {return 0}
-        const index = table.grow(1)
-        table.set(index, fn as () => void)
-        return index
-    }
     for (const {file, boxType} of DEVICES) {
         const module = await WebAssembly.compile(readFileSync(path.join(PUBLIC, file)))
-        const {memorySize, tableSize} = parseDylink(module)
-        const memoryBase = engine.device_alloc(memorySize)
-        const tableBase = tableSize > 0 ? table.grow(tableSize) : table.length
-        const stackBase = engine.device_alloc(DEVICE_STACK_SIZE)
-        const device = new WebAssembly.Instance(module, {
-            env: {
-                memory, __indirect_function_table: table,
-                __memory_base: new WebAssembly.Global({value: "i32", mutable: false}, memoryBase),
-                __table_base: new WebAssembly.Global({value: "i32", mutable: false}, tableBase),
-                __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackBase + DEVICE_STACK_SIZE),
-                host_pull_events: engine.host_pull_events,
-                host_pulse_to_offset: engine.host_pulse_to_offset,
-                host_bind_parameter: engine.host_bind_parameter,
-                host_update_parameters: engine.host_update_parameters,
-                host_first_update_position: engine.host_first_update_position,
-                host_next_update_position: engine.host_next_update_position,
-                host_resolve_sample: engine.host_resolve_sample,
-                host_observe_sample: engine.host_observe_sample,
-                host_resolve_soundfont: engine.host_resolve_soundfont,
-                host_observe_soundfont: engine.host_observe_soundfont,
-                host_observe_field: engine.host_observe_field,
-                host_observe_target_string: engine.host_observe_target_string,
-                host_bind_sidechain: engine.host_bind_sidechain,
-                host_resolve_input: engine.host_resolve_input,
-                host_self_uuid: engine.host_self_uuid,
-                ...bridgeImports
-            }
-        }).exports as any
-        device.__wasm_apply_data_relocs?.()
-        device.__wasm_call_ctors?.()
-        const processIndex = table.grow(1)
-        table.set(processIndex, (device.process_events ?? device.process) as () => void)
-        const deviceId = engine.device_register(
-            processIndex, device.state_size(sampleRate), device.kind(),
-            installOptional(device.init), installOptional(device.parameter_changed),
-            installOptional(device.field_changed), installOptional(device.sample_changed),
-            installOptional(device.soundfont_changed),
-            installOptional(device.reset),
-            device.midi_effects_field?.() ?? 0, device.audio_effects_field?.() ?? 0,
-            device.observe_param_collection_field?.() ?? 0, device.observe_sample_collection_field?.() ?? 0)
-        const pointer = engine.input_reserve(boxType.length)
-        const bytes = new Uint8Array(memory.buffer, pointer, boxType.length)
-        for (let i = 0; i < boxType.length; i++) {bytes[i] = boxType.charCodeAt(i) & 0xff}
-        engine.device_set_box_type(deviceId, boxType.length)
+        linkDevice(engine, memory, table, module, boxType, sampleRate, bridgeImports)
     }
     for (const composite of COMPOSITES) {
-        const pointer = engine.input_reserve(composite.boxType.length)
-        const bytes = new Uint8Array(memory.buffer, pointer, composite.boxType.length)
-        for (let i = 0; i < composite.boxType.length; i++) {bytes[i] = composite.boxType.charCodeAt(i) & 0xff}
-        engine.composite_register(composite.boxType.length, composite.childrenField, composite.indexKey,
-            composite.excludeKey, composite.cellInstrumentField, composite.cellMidiField, composite.cellAudioField,
-            composite.childEnabledKey)
+        registerComposite(engine, memory, composite)
     }
     const drainSamples = (): number => {
         let satisfied = 0

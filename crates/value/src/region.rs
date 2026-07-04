@@ -136,6 +136,10 @@ impl<R: Span> RegionCollection<R> {
         self.regions.iter_mut()
     }
 
+    pub fn iter(&self) -> core::slice::Iter<'_, R> {
+        self.regions.iter()
+    }
+
     /// Re-sort by `position` after positions changed (stable, so equal positions keep order). The lazy
     /// re-index a `RegionCollection` does on `onIndexingChanged`; we re-sort eagerly when a region moves.
     pub fn resort(&mut self) {

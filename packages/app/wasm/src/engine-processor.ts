@@ -17,10 +17,10 @@ import {SoundfontInfo, SoundfontLoader} from "./soundfont-loader"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
 import {ScriptBridges, ScriptEngine} from "./script-bridge"
 import {NamBridges} from "./nam-bridge"
+import {linkDevice, registerComposite} from "./device-linker"
 import {NamLoader} from "./nam-loader"
 
 const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~42)
-const DEVICE_STACK_SIZE = 256 * 1024 // talc-allocated stack handed to each loaded device
 
 type BootOptions = {
     engineModule: WebAssembly.Module
@@ -30,36 +30,6 @@ type BootOptions = {
     memory: WebAssembly.Memory // SHARED, created on the main thread so it can see the WASM heap
     sampleRate: number
     metronome?: boolean // default true; the note's page sets false to hear only the instrument
-}
-
-// The device exports the loader touches. `state_size` takes the sample rate (devices size their state
-// from it, e.g. a delay buffer), so the device holds no global rate. Relocation helpers are optional.
-type DeviceExports = {
-    process?: (descPtr: number) => void // audio devices (instrument / effect): called once per quantum
-    // MIDI-fx devices: a pull responder invoked when something downstream pulls them for [from, to)
-    process_events?: (from: number, to: number, flags: number, statePtr: number, outPtr: number, max: number) => number
-    state_size: (sampleRate: number) => number
-    kind: () => number // DEVICE_KIND_INSTRUMENT (0) / EFFECT (1) / MIDI_EFFECT (2); tells the host how to wire it
-    // Route D parameter hooks (optional): `init` binds the device's parameters with the host; the engine
-    // calls `parameter_changed` to push a resolved value (initial / edit / automation). `kind` tags how the
-    // f32 `value` is read (uniform 0..1 to map, or a real int / float / bool field value). Engine calls these
-    // wasm-to-wasm through the shared table; JS only installs the function pointers, never invokes them.
-    init?: (statePtr: number, sampleRate: number) => void
-    parameter_changed?: (statePtr: number, id: number, kind: number, value: number) => void
-    field_changed?: (statePtr: number, id: number, kind: number, bits: number, len: number) => void
-    sample_changed?: (statePtr: number, id: number, handle: number, present: number) => void
-    soundfont_changed?: (statePtr: number, id: number, handle: number, present: number) => void
-    reset?: (statePtr: number) => void
-    // The box field keys hosting this device's OWN midi / audio fx chains when it runs as a composite child
-    // (e.g. a Playfield slot). Absent / 0 means the device hosts no chains of its own.
-    midi_effects_field?: () => number
-    audio_effects_field?: () => number
-    // Scriptable devices (Werkstatt / Apparat / Spielwerk): the collection field keys whose child boxes the
-    // engine observes as the device's dynamic @param / @sample declarations (11 / 12). Absent / 0 = none.
-    observe_param_collection_field?: () => number
-    observe_sample_collection_field?: () => number
-    __wasm_apply_data_relocs?: () => void
-    __wasm_call_ctors?: () => void
 }
 
 type EngineExports = {
@@ -134,39 +104,6 @@ type EngineExports = {
 }
 
 // Read a varuint32 (LEB128) at `pos`; returns [value, nextPos].
-const readVarU32 = (bytes: Uint8Array, pos: number): [number, number] => {
-    let result = 0
-    let shift = 0
-    let cursor = pos
-    for (; ;) {
-        const byte = bytes[cursor++]
-        result |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) {break}
-        shift += 7
-    }
-    return [result >>> 0, cursor]
-}
-
-// Parse a device's `dylink.0` section for the WASM_DYLINK_MEM_INFO sizes the loader needs.
-const parseDylink = (module: WebAssembly.Module): { memorySize: number, tableSize: number } => {
-    const sections = WebAssembly.Module.customSections(module, "dylink.0")
-    if (sections.length === 0) {return {memorySize: 0, tableSize: 0}}
-    const bytes = new Uint8Array(sections[0])
-    let pos = 0
-    while (pos < bytes.length) {
-        const type = bytes[pos++]
-        const [size, afterSize] = readVarU32(bytes, pos)
-        if (type === 1) { // WASM_DYLINK_MEM_INFO: memorysize, memoryalignment, tablesize, tablealignment
-            const [memorySize, afterMem] = readVarU32(bytes, afterSize)
-            const [, afterAlign] = readVarU32(bytes, afterMem)
-            const [tableSize] = readVarU32(bytes, afterAlign)
-            return {memorySize, tableSize}
-        }
-        pos = afterSize + size
-    }
-    return {memorySize: 0, tableSize: 0}
-}
-
 class EngineProcessor extends AudioWorkletProcessor {
     readonly #memory: WebAssembly.Memory
     readonly #engine: EngineExports
@@ -213,16 +150,9 @@ class EngineProcessor extends AudioWorkletProcessor {
         this.#namBridges = new NamBridges(memory, () => this.#namLoader.fetchWasm(), sampleRate)
         const bridgeImports = {...scriptImports, ...this.#namBridges.imports()}
         // load each device PIC side module at a host-assigned base, register it, and map its box type.
-        deviceModules.forEach((deviceModule, index) => this.#loadDevice(deviceModule, deviceBoxTypes[index], sampleRate, bridgeImports))
-        // register each composite box type: write its name into the input buffer, then map its child collection
-        // (the child plugin itself is a normal device above). Box-type names are ASCII identifiers.
-        composites.forEach(({boxType, childrenField, indexKey, excludeKey, cellInstrumentField, cellMidiField, cellAudioField, childEnabledKey}) => {
-            const length = boxType.length
-            const pointer = engine.input_reserve(length)
-            const bytes = new Uint8Array(this.#memory.buffer, pointer, length)
-            for (let index = 0; index < length; index++) {bytes[index] = boxType.charCodeAt(index) & 0xff}
-            engine.composite_register(length, childrenField, indexKey, excludeKey, cellInstrumentField, cellMidiField, cellAudioField, childEnabledKey)
-        })
+        deviceModules.forEach((deviceModule, index) =>
+            linkDevice(engine, memory, this.#table, deviceModule, deviceBoxTypes[index], sampleRate, bridgeImports))
+        composites.forEach(composite => registerComposite(engine, memory, composite))
         if (metronome === false) {engine.set_metronome_enabled(0)}
         // ONE Messenger over the engine port, split into typed Communicator protocols, one per named channel
         // (each channel is a single sender -> executor direction): `engine` receives the SyncSource transaction
@@ -275,7 +205,13 @@ class EngineProcessor extends AudioWorkletProcessor {
                 const pointer = this.#engine.sample_allocate(handle, info.byteLength)
                 await loader.write(uuid, pointer)
                 this.#engine.sample_set_ready(handle, info.frameCount, info.channelCount, info.sampleRate)
-            })()
+            })().catch((reason: unknown) => {
+                // A failed fetch/decode must not become an unhandled rejection: mark the handle ready as a
+                // 1-frame silence (the missing-asset convention) so the load never sticks, and report it.
+                this.#engine.sample_allocate(handle, 4)
+                this.#engine.sample_set_ready(handle, 1, 1, sampleRate)
+                this.#scripts.deviceMessage("engine", `sample load failed: ${reason}`)
+            })
         }
     }
 
@@ -294,93 +230,10 @@ class EngineProcessor extends AudioWorkletProcessor {
                 const pointer = this.#engine.soundfont_allocate(handle, info.byteLength)
                 await loader.write(uuid, pointer)
                 this.#engine.soundfont_set_ready(handle)
-            })()
+            })().catch((reason: unknown) => {
+                this.#scripts.deviceMessage("engine", `soundfont load failed: ${reason}`)
+            })
         }
-    }
-
-    // Link one PIC device side module into the engine: assign it memory + table + stack bases from talc,
-    // instantiate, apply its data relocations, install its `process` into the shared table, register it, and
-    // map its device-box type to the registered device id (the engine's device table).
-    #loadDevice(module: WebAssembly.Module, boxType: string, sampleRate: number,
-                bridgeImports: Record<string, (...args: Array<number>) => number | void>): void {
-        const engine = this.#engine
-        const table = this.#table
-        const {memorySize, tableSize} = parseDylink(module)
-        const memoryBase = engine.device_alloc(memorySize)
-        const tableBase = tableSize > 0 ? table.grow(tableSize) : table.length
-        const stackBase = engine.device_alloc(DEVICE_STACK_SIZE)
-        const device = new WebAssembly.Instance(module, {
-            env: {
-                memory: this.#memory,
-                __indirect_function_table: table,
-                __memory_base: new WebAssembly.Global({value: "i32", mutable: false}, memoryBase),
-                __table_base: new WebAssembly.Global({value: "i32", mutable: false}, tableBase),
-                __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackBase + DEVICE_STACK_SIZE),
-                // wasm-to-wasm: the device calls the engine's event-pull / timing / parameter exports
-                // directly (Route A pull + Route D parameters).
-                host_pull_events: engine.host_pull_events,
-                host_pulse_to_offset: engine.host_pulse_to_offset,
-                host_bind_parameter: engine.host_bind_parameter,
-                host_update_parameters: engine.host_update_parameters,
-                host_first_update_position: engine.host_first_update_position,
-                host_next_update_position: engine.host_next_update_position,
-                // Route F: the device resolves a sample handle to its frames during render, and declares its
-                // sample reference (its box file-pointer path) from `init`.
-                host_resolve_sample: engine.host_resolve_sample,
-                host_observe_sample: engine.host_observe_sample,
-                // Soundfont: the device resolves its simplified blob during render and declares its `file`
-                // pointer from `init`, mirroring the sample surface.
-                host_resolve_soundfont: engine.host_resolve_soundfont,
-                host_observe_soundfont: engine.host_observe_soundfont,
-                host_observe_field: engine.host_observe_field,
-                host_observe_target_string: engine.host_observe_target_string,
-                host_bind_sidechain: engine.host_bind_sidechain,
-                host_resolve_input: engine.host_resolve_input,
-                // Scriptable devices + NeuralAmp: the engine's self-uuid export + the JS bridge closures.
-                host_self_uuid: engine.host_self_uuid,
-                ...bridgeImports
-            }
-        }).exports as unknown as DeviceExports
-        device.__wasm_apply_data_relocs?.()
-        device.__wasm_call_ctors?.()
-        // The sample rate is known at load (the earliest point), so the device sizes its state from it
-        // here (e.g. a delay buffer) and reads it per render from the descriptor — no device-global rate.
-        const processIndex = table.grow(1) // a fresh slot for the engine -> device call_indirect
-        // An audio device installs `process`; a MIDI-fx device installs `process_events` (its pull responder).
-        const entry = device.process_events ?? device.process
-        table.set(processIndex, entry as unknown as () => void)
-        // Route D: install the parameter hooks into the table if the device has them (index 0 = none — device
-        // slots are grown above the engine's own functions, so a real hook is never at 0).
-        const initIndex = this.#installOptional(device.init)
-        const parameterChangedIndex = this.#installOptional(device.parameter_changed)
-        const fieldChangedIndex = this.#installOptional(device.field_changed)
-        const sampleChangedIndex = this.#installOptional(device.sample_changed)
-        const soundfontChangedIndex = this.#installOptional(device.soundfont_changed)
-        const resetIndex = this.#installOptional(device.reset)
-        // These are plain field-key VALUES the device returns (like kind()), not table slots: call directly,
-        // defaulting to 0 when the device hosts no fx chains of its own.
-        const midiEffectsField = device.midi_effects_field?.() ?? 0
-        const audioEffectsField = device.audio_effects_field?.() ?? 0
-        const paramCollectionField = device.observe_param_collection_field?.() ?? 0
-        const sampleCollectionField = device.observe_sample_collection_field?.() ?? 0
-        const deviceId = engine.device_register(processIndex, device.state_size(sampleRate), device.kind(), initIndex, parameterChangedIndex, fieldChangedIndex, sampleChangedIndex, soundfontChangedIndex, resetIndex, midiEffectsField, audioEffectsField, paramCollectionField, sampleCollectionField)
-        // Register the device table entry: write the box-type name into the input buffer, then map it.
-        // Box-type names are ASCII identifiers, so encode byte-per-char (no TextEncoder in the worklet scope).
-        const length = boxType.length
-        const pointer = engine.input_reserve(length)
-        const bytes = new Uint8Array(this.#memory.buffer, pointer, length)
-        for (let index = 0; index < length; index++) {bytes[index] = boxType.charCodeAt(index) & 0xff}
-        engine.device_set_box_type(deviceId, length)
-    }
-
-    // Install an optional device export into a fresh table slot and return its index, or 0 ("none") when the
-    // device does not export it. Device slots are grown above the engine's own table functions, so 0 is never
-    // a real device hook.
-    #installOptional(fn: ((...args: Array<number>) => unknown) | undefined): number {
-        if (fn === undefined) {return 0}
-        const index = this.#table.grow(1)
-        this.#table.set(index, fn as unknown as () => void)
-        return index
     }
 
     #applyUpdates(bytes: ArrayBuffer): void {
@@ -390,7 +243,12 @@ class EngineProcessor extends AudioWorkletProcessor {
         // transaction is never silently dropped (which would desync the engine's box graph).
         const pointer = this.#engine.input_reserve(array.length)
         new Uint8Array(this.#memory.buffer, pointer, array.length).set(array)
-        this.#engine.apply_updates(array.length)
+        const rejected = this.#engine.apply_updates(array.length)
+        if (rejected !== 0) {
+            // A rejected transaction permanently desyncs the engine's box-graph mirror: SAY SO loudly (the
+            // back-channel reaches the client console) instead of silently playing a stale graph.
+            this.#scripts.deviceMessage("engine", `apply_updates rejected a transaction (code ${rejected}); the engine graph is desynced`)
+        }
         if (!this.#bound && this.#engine.bind() === 0) {this.#bound = true}
         // A transaction may have added AudioFileBoxes (the engine queued their loads); dispatch them.
         this.#drainSampleRequests()

@@ -1,11 +1,11 @@
 // Inspection of "/tmp/ambition.odb": the send/return topology — AuxSendBoxes (source unit -> targetBus, gain/pan),
 // AudioBusBoxes (return channels), and which units output where.
 import {describe, it} from "vitest"
-import {readFileSync} from "node:fs"
+import {existsSync, readFileSync} from "node:fs"
 import {UUID} from "@opendaw/lib-std"
 import {decodeBundle} from "../src/bundle"
 
-describe("ambition inspect", () => {
+describe.skipIf(!existsSync("/tmp/ambition.odb"))("ambition inspect", () => {
     it("dumps send/return topology", async () => {
         const buffer = readFileSync("/tmp/ambition.odb")
         const {boxGraph} = await decodeBundle(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength))

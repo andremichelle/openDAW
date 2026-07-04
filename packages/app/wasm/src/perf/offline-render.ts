@@ -15,12 +15,12 @@ import {setupWorkletGlobals, updateFrameTime, type WorkletGlobals} from "../../.
 import {serializeUpdateTasks} from "../sync/serialize-update-tasks"
 import {ScriptBridges, ScriptEngine} from "../script-bridge"
 import {NamBridges} from "../nam-bridge"
+import {linkDevice, registerComposite} from "../device-linker"
 import {loadEngineModules} from "../engine-modules"
 import {loadSoundfontBlob, parseSoundfont, simplifySoundfontBytes} from "../soundfont-fetch"
 import type {Bundle} from "../bundle"
 import type {OfflineResult} from "./result"
 
-const DEVICE_STACK_SIZE = 256 * 1024
 
 // Register the user scripts of every scriptable device (Werkstatt / Apparat / Spielwerk) into `globalThis.openDAW`,
 // mirroring OfflineEngineRenderer.loadScriptDevice. Without this those devices have no processor: the TS engine
@@ -60,37 +60,6 @@ export const disableLoopArea = (boxGraph: BoxGraph): void => {
     boxGraph.beginTransaction()
     timeline.loopArea.enabled.setValue(false)
     boxGraph.endTransaction()
-}
-
-const readVarU32 = (bytes: Uint8Array, pos: number): [number, number] => {
-    let result = 0, shift = 0, cursor = pos
-    for (; ;) {
-        const byte = bytes[cursor++]
-        result |= (byte & 0x7f) << shift
-        if ((byte & 0x80) === 0) {break}
-        shift += 7
-    }
-    return [result >>> 0, cursor]
-}
-
-// The PIC side module's required linear-memory + table sizes (its `dylink.0` custom section).
-const parseDylink = (module: WebAssembly.Module): {memorySize: number, tableSize: number} => {
-    const sections = WebAssembly.Module.customSections(module, "dylink.0")
-    if (sections.length === 0) {return {memorySize: 0, tableSize: 0}}
-    const bytes = new Uint8Array(sections[0])
-    let pos = 0
-    while (pos < bytes.length) {
-        const type = bytes[pos++]
-        const [size, afterSize] = readVarU32(bytes, pos)
-        if (type === 1) {
-            const [memorySize, afterMem] = readVarU32(bytes, afterSize)
-            const [, afterAlign] = readVarU32(bytes, afterMem)
-            const [tableSize] = readVarU32(bytes, afterAlign)
-            return {memorySize, tableSize}
-        }
-        pos = afterSize + size
-    }
-    return {memorySize: 0, tableSize: 0}
 }
 
 // Wire the source box graph into the engine over the unchanged SyncSource (a BroadcastChannel loopback), with a
@@ -172,58 +141,11 @@ export const renderWasmOffline = async (bundle: Bundle, quanta: number, sampleRa
         return (await fetch(url)).arrayBuffer()
     }, sampleRate)
     const namImports = namBridges.imports()
-    const installOptional = (fn: unknown): number => {
-        if (fn === undefined) {return 0}
-        const index = table.grow(1)
-        table.set(index, fn as () => void)
-        return index
-    }
     for (let index = 0; index < deviceModules.length; index++) {
-        const module = deviceModules[index], boxType = deviceBoxTypes[index]
-        const {memorySize, tableSize} = parseDylink(module)
-        const memoryBase = engine.device_alloc(memorySize)
-        const tableBase = tableSize > 0 ? table.grow(tableSize) : table.length
-        const stackBase = engine.device_alloc(DEVICE_STACK_SIZE)
-        const device = new WebAssembly.Instance(module, {
-            env: {
-                memory, __indirect_function_table: table,
-                __memory_base: new WebAssembly.Global({value: "i32", mutable: false}, memoryBase),
-                __table_base: new WebAssembly.Global({value: "i32", mutable: false}, tableBase),
-                __stack_pointer: new WebAssembly.Global({value: "i32", mutable: true}, stackBase + DEVICE_STACK_SIZE),
-                host_pull_events: engine.host_pull_events, host_pulse_to_offset: engine.host_pulse_to_offset,
-                host_bind_parameter: engine.host_bind_parameter, host_update_parameters: engine.host_update_parameters,
-                host_first_update_position: engine.host_first_update_position, host_next_update_position: engine.host_next_update_position,
-                host_resolve_sample: engine.host_resolve_sample, host_observe_sample: engine.host_observe_sample,
-                host_resolve_soundfont: engine.host_resolve_soundfont, host_observe_soundfont: engine.host_observe_soundfont,
-                host_observe_field: engine.host_observe_field, host_observe_target_string: engine.host_observe_target_string,
-                host_bind_sidechain: engine.host_bind_sidechain,
-                host_resolve_input: engine.host_resolve_input, host_self_uuid: engine.host_self_uuid,
-                ...scriptImports, ...namImports
-            }
-        }).exports as any
-        device.__wasm_apply_data_relocs?.()
-        device.__wasm_call_ctors?.()
-        const processIndex = table.grow(1)
-        table.set(processIndex, (device.process_events ?? device.process) as () => void)
-        const deviceId = engine.device_register(
-            processIndex, device.state_size(sampleRate), device.kind(),
-            installOptional(device.init), installOptional(device.parameter_changed),
-            installOptional(device.field_changed), installOptional(device.sample_changed),
-            installOptional(device.soundfont_changed), installOptional(device.reset),
-            device.midi_effects_field?.() ?? 0, device.audio_effects_field?.() ?? 0,
-            device.observe_param_collection_field?.() ?? 0, device.observe_sample_collection_field?.() ?? 0)
-        const pointer = engine.input_reserve(boxType.length)
-        const bytes = new Uint8Array(memory.buffer, pointer, boxType.length)
-        for (let i = 0; i < boxType.length; i++) {bytes[i] = boxType.charCodeAt(i) & 0xff}
-        engine.device_set_box_type(deviceId, boxType.length)
+        linkDevice(engine, memory, table, deviceModules[index], deviceBoxTypes[index], sampleRate, {...scriptImports, ...namImports})
     }
     for (const composite of composites) {
-        const pointer = engine.input_reserve(composite.boxType.length)
-        const bytes = new Uint8Array(memory.buffer, pointer, composite.boxType.length)
-        for (let i = 0; i < composite.boxType.length; i++) {bytes[i] = composite.boxType.charCodeAt(i) & 0xff}
-        engine.composite_register(composite.boxType.length, composite.childrenField, composite.indexKey,
-            composite.excludeKey, composite.cellInstrumentField, composite.cellMidiField, composite.cellAudioField,
-            composite.childEnabledKey)
+        registerComposite(engine, memory, composite)
     }
     const sync = connectSync(engine, memory, bundle.boxGraph)
     await sync.settle(); engine.bind(); await sync.settle()

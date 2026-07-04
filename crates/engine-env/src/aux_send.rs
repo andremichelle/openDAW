@@ -129,6 +129,14 @@ impl EventReceiver for AuxSendProcessor {
     }
 }
 
+impl AuxSendProcessor {
+    /// Detach the input (the source chain tore down): the send outputs silence instead of endlessly summing
+    /// the last frozen buffer into its target bus.
+    pub fn clear_audio_source(&mut self) {
+        self.input = None;
+    }
+}
+
 impl AudioInput for AuxSendProcessor {
     fn set_audio_source(&mut self, source: SharedAudioBuffer) {
         self.input = Some(source);
@@ -184,6 +192,5 @@ impl Processor for AuxSendProcessor {
                 }
             }
         }
-        self.processing = true;
     }
 }

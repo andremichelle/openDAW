@@ -33,7 +33,7 @@ export const createEngineMemory = (): WebAssembly.Memory =>
 // table the engine uses to instantiate a device box: when the box graph presents e.g. an ArpeggioDeviceBox,
 // the engine looks up its type here to find device_arp.wasm. Load order is irrelevant now (the engine reads
 // each unit's chains from the box, ordered by the device `index`); only the type mapping matters.
-const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
+export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/device_vaporisateur.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
     {url: "/device_nano.wasm", boxType: "NanoDeviceBox"},         // instrument (sampler)
     {url: "/device_lowpass.wasm", boxType: "RevampDeviceBox"},    // audio effect
@@ -64,7 +64,7 @@ const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
 // The composite box types. Playfield hosts its slots in the `samples` field (key 10); each slot's note is its
 // `index` field (key 15) and its choke-group flag is `exclude` (key 42). The slot plugin itself is the
 // PlayfieldSampleBox entry in DEVICES above.
-const COMPOSITES: ReadonlyArray<CompositeSpec> = [
+export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
     // Playfield: direct children (self-hosting slots, device-declared chains), routed by note index + choke.
     {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
         cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0, childEnabledKey: 22},

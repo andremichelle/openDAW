@@ -16,6 +16,11 @@ pub trait EventSpan: Event {
     }
 }
 
+/// FULL-payload equality (every field), distinct from `Ord`/`Eq` which mirror the TS COMPARATOR keys.
+pub trait ExactEq {
+    fn exact_eq(&self, other: &Self) -> bool;
+}
+
 pub struct EventCollection<E: Event + Ord> {
     events: Vec<E>,
     // Lazily-cached maximum duration (TS `NoteEventCollectionBoxAdapter.#computedExtremas`): the sequencer
@@ -53,22 +58,34 @@ impl<E: Event + Ord> EventCollection<E> {
         self.events.last()
     }
 
-    /// Insert keeping the array sorted by `Ord` (position then any tiebreak the event defines).
+    /// Insert keeping the array sorted by `Ord`, AFTER any equal-key run (TS appends then stable-sorts, so
+    /// duplicates iterate in insertion order — the sequencer's chance-roll order depends on it).
     pub fn add(&mut self, event: E) {
-        let index = self.events.binary_search(&event).unwrap_or_else(|insertion| insertion);
+        let index = self.events.partition_point(|existing| *existing <= event);
         self.events.insert(index, event);
         self.extremas_dirty.set(true);
     }
 
-    pub fn remove(&mut self, event: &E) -> bool {
-        match self.events.binary_search(event) {
-            Ok(index) => {
+    /// Remove the EXACT payload (every field), not an arbitrary member of its equal-key run: `Ord`/`Eq`
+    /// mirror the TS comparator keys only (e.g. position + pitch), and TS removes by object identity — the
+    /// by-value mirror's analog is full-field equality. Removing a same-key sibling would desync the mirror.
+    pub fn remove(&mut self, event: &E) -> bool
+    where E: ExactEq {
+        let Ok(found) = self.events.binary_search(event) else { return false };
+        let mut start = found;
+        while start > 0 && self.events[start - 1] == *event {
+            start -= 1;
+        }
+        let mut index = start;
+        while index < self.events.len() && self.events[index] == *event {
+            if self.events[index].exact_eq(event) {
                 self.events.remove(index);
                 self.extremas_dirty.set(true);
-                true
+                return true;
             }
-            Err(_) => false
+            index += 1;
         }
+        false
     }
 
     /// Rightmost index whose position is `<= position`, or -1 if none (mirrors `floorLastIndex`).

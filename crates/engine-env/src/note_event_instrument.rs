@@ -22,7 +22,7 @@ pub struct NoteEventInstrument {
 
 impl NoteEventInstrument {
     pub fn new() -> Self {
-        Self {source: None, scratch: Vec::new()}
+        Self {source: None, scratch: Vec::with_capacity(64)} // pre-reserve: the first eventful block must not allocate mid-render
     }
 
     pub fn set_note_event_source(&mut self, source: SharedNoteEventSource) {

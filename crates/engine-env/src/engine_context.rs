@@ -52,6 +52,9 @@ pub struct EngineContext {
     phase_observers: Vec<Box<dyn FnMut(ProcessPhase)>>,
     labels: BTreeMap<NodeId, String>,
     profiler: Option<Profiler>,
+    // The topsorted processors CACHED as handles (rebuilt with the sort), so the steady-state render loop is
+    // a linear walk with zero per-node BTreeMap lookups. Rc clones only; capacity reserved at registration.
+    queue: Vec<(NodeId, SharedProcessor)>,
     needs_sort: bool
 }
 
@@ -66,6 +69,7 @@ impl EngineContext {
             phase_observers: Vec::new(),
             labels: BTreeMap::new(),
             profiler: None,
+            queue: Vec::new(),
             needs_sort: false
         }
     }
@@ -108,6 +112,7 @@ impl EngineContext {
         self.graph.add_vertex(id);
         self.processors.insert(id, processor);
         self.sort.reserve(self.graph.vertices().len()); // pre-size here (reconcile) so the lazy in-render sort never allocates
+        self.queue.reserve(self.graph.vertices().len().saturating_sub(self.queue.len()));
         if let Some(profiler) = &mut self.profiler {
             profiler.accum.resize(self.next_id as usize, 0.0); // grow at reconcile, never during render
         }
@@ -127,6 +132,7 @@ impl EngineContext {
     pub fn remove_processor(&mut self, id: NodeId) {
         self.graph.remove_vertex(id);
         self.processors.remove(&id);
+        self.labels.remove(&id); // ids are never reused; keeping dead labels would grow forever
         self.needs_sort = true;
     }
 
@@ -181,27 +187,26 @@ impl EngineContext {
         self.emit(ProcessPhase::Before);
         if self.needs_sort {
             self.sort.update(&self.graph);
+            self.queue.clear();
+            for &id in self.sort.sorted() {
+                if let Some(processor) = self.processors.get(&id) {
+                    self.queue.push((id, processor.clone()));
+                }
+            }
             self.needs_sort = false;
         }
-        let count = self.sort.sorted().len();
         match &mut self.profiler {
             Some(profiler) => {
-                for index in 0..count {
-                    let id = self.sort.sorted()[index];
-                    if let Some(processor) = self.processors.get(&id) {
-                        let begin = (profiler.now)();
-                        processor.borrow_mut().process(info);
-                        profiler.accum[id as usize] += (profiler.now)() - begin;
-                    }
+                for (id, processor) in &self.queue {
+                    let begin = (profiler.now)();
+                    processor.borrow_mut().process(info);
+                    profiler.accum[*id as usize] += (profiler.now)() - begin;
                 }
                 profiler.quanta += 1;
             }
             None => {
-                for index in 0..count {
-                    let id = self.sort.sorted()[index];
-                    if let Some(processor) = self.processors.get(&id) {
-                        processor.borrow_mut().process(info);
-                    }
+                for (_, processor) in &self.queue {
+                    processor.borrow_mut().process(info);
                 }
             }
         }

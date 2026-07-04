@@ -15,14 +15,15 @@ const NOISE_SEED: u32 = 0x0F123F42;
 /// pink filter, and an integrating brown). Bipolar output in roughly `[-1, 1]`.
 pub struct NoiseGenerator {
     seed: u32,
-    b0: f32,
-    b1: f32,
-    b2: f32,
-    b3: f32,
-    b4: f32,
-    b5: f32,
-    b6: f32,
-    brown: f32
+    // f64 filter states like the TS (plain `number` fields): the pink/brown streams then match byte-for-byte.
+    b0: f64,
+    b1: f64,
+    b2: f64,
+    b3: f64,
+    b4: f64,
+    b5: f64,
+    b6: f64,
+    brown: f64
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -39,13 +40,15 @@ impl Default for NoiseGenerator {
 }
 
 impl NoiseGenerator {
+    // f64 end to end like the TS (JS numbers are doubles), narrowed ONCE at the buffer store: an early
+    // `as f32` double-rounds (drops the u32's low bits before the scale) and breaks byte-parity.
     #[inline]
-    fn white_sample(seed: &mut u32) -> f32 {
+    fn white_sample(seed: &mut u32) -> f64 {
         *seed = seed.wrapping_add(0x6D2B79F5);
         let mut t = *seed;
         t = (t ^ (t >> 15)).wrapping_mul(t | 1);
         t ^= t.wrapping_add((t ^ (t >> 7)).wrapping_mul(t | 61));
-        (((t ^ (t >> 14)) as f32) / 4294967296.0) * 2.0 - 1.0
+        ((t ^ (t >> 14)) as f64 / 4294967296.0) * 2.0 - 1.0
     }
 
     pub fn fill(&mut self, color: NoiseColor, target: &mut [f32], from: usize, to: usize) {
@@ -53,7 +56,7 @@ impl NoiseGenerator {
         match color {
             NoiseColor::White => {
                 for sample in &mut target[from..to] {
-                    *sample = Self::white_sample(&mut seed);
+                    *sample = Self::white_sample(&mut seed) as f32;
                 }
             }
             NoiseColor::Pink => {
@@ -67,7 +70,7 @@ impl NoiseGenerator {
                     b3 = 0.86650 * b3 + white * 0.3104856;
                     b4 = 0.55000 * b4 + white * 0.5329522;
                     b5 = -0.7616 * b5 - white * 0.0168980;
-                    *sample = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+                    *sample = ((b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11) as f32;
                     b6 = white * 0.115926;
                 }
                 self.b0 = b0; self.b1 = b1; self.b2 = b2; self.b3 = b3;
@@ -78,7 +81,7 @@ impl NoiseGenerator {
                 for sample in &mut target[from..to] {
                     let white = Self::white_sample(&mut seed);
                     brown = (brown + 0.02 * white) / 1.02;
-                    *sample = brown * 3.5;
+                    *sample = (brown * 3.5) as f32;
                 }
                 self.brown = brown;
             }

@@ -54,9 +54,12 @@ pub(crate) struct AudioRegionPlayer {
     // Region uuids touched this quantum, to prune per-region state for regions that stopped playing (a re-entry
     // starts on a discontinuous block and resets anyway).
     visited: Vec<Uuid>,
-    // Recycled sequencers: a pruned region's sequencer parks here (voices cleared, capacity kept) and the next
-    // stretch region reuses it, so region entry/exit during playback never allocates or frees on the render path
-    // (a `TimeStretchSequencer::new` per entry was a guaranteed talc alloc mid-render).
+    // TapeDeviceBox `enabled` (TS observes it, resets on disable, and renders silence while off).
+    enabled: bool,
+    // Recycled sequencers: a pruned region's sequencer parks here (voices cleared, capacity kept) and the
+    // next stretch region reuses it. `prepare` (reconcile) pre-warms the pool for every BOUND stretch region,
+    // so the render-path `pop()` never misses; without the pre-warm each new concurrency high-water would
+    // still call `TimeStretchSequencer::new` mid-render.
     sequencer_pool: Vec<TimeStretchSequencer>
 }
 
@@ -83,7 +86,39 @@ impl AudioRegionPlayer {
     pub(crate) fn new(tracks: SharedAudioTrackSets, sample_rate: f32, tempo_map: SharedTempoMap) -> Self {
         Self {tracks, sample_rate, tempo_map, output: shared_audio_buffer(), events: EventBuffer::new(),
             sequencers: Vec::with_capacity(8), native_cursors: Vec::with_capacity(16), visited: Vec::with_capacity(32),
-            sequencer_pool: Vec::with_capacity(8)}
+            sequencer_pool: Vec::with_capacity(8), enabled: true}
+    }
+
+    /// Pre-warm at RECONCILE (region bind / edit), so region entry during playback never allocates: park a
+    /// pooled sequencer for every bound time-stretch region and reserve the per-region bookkeeping for the
+    /// total region count. Growth beyond these bounds (e.g. `visited` on many-block quanta) is the accepted
+    /// one-time high-water category.
+    pub(crate) fn prepare(&mut self, stretch_regions: usize, total_regions: usize) {
+        while self.sequencer_pool.len() + self.sequencers.len() < stretch_regions {
+            self.sequencer_pool.push(TimeStretchSequencer::new());
+        }
+        self.sequencers.reserve(stretch_regions.saturating_sub(self.sequencers.len()));
+        self.native_cursors.reserve(total_regions.saturating_sub(self.native_cursors.len()));
+        self.visited.reserve((total_regions * 2).saturating_sub(self.visited.len()));
+    }
+
+    /// The TapeDeviceBox `enabled` gate (TS `TapeDeviceProcessor`): disabling RESETS the playback state
+    /// (voices dropped, cursors reseat on re-enable) and the player renders silence while off.
+    pub(crate) fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+        if !enabled {
+            self.output.borrow_mut().clear();
+            while let Some((_, mut sequencer)) = self.sequencers.pop() {
+                sequencer.recycle();
+                self.sequencer_pool.push(sequencer);
+            }
+            self.native_cursors.clear();
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pooled_sequencers(&self) -> usize {
+        self.sequencer_pool.len()
     }
 }
 
@@ -107,6 +142,9 @@ impl Processor for AudioRegionPlayer {
     fn process(&mut self, info: &ProcessInfo) {
         let mut output = self.output.borrow_mut();
         output.clear(); // the player is a source: it fills its own output each quantum (silence when not playing)
+        if !self.enabled {
+            return; // TapeDeviceBox disabled: silence (TS returns before reading any region)
+        }
         let sample_rate = self.sample_rate;
         let tracks = self.tracks.clone();
         let tempo_map = self.tempo_map.borrow();

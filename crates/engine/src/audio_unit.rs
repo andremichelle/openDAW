@@ -106,15 +106,65 @@ impl DirtyMark {
     }
 }
 
-/// The signal a unit's PARAMETER subscriptions fire when automation attaches / detaches / edits: set the
-/// unit's `automation_dirty` flag and enqueue the unit, so `reconcile_one` re-binds its automation (no
-/// rewire). Distinct from `DirtyMark::signal` (chain / sidechain), which only enqueues.
 // A node's PROFILER label: the device's box type + a short uuid (reconcile-time, report-only).
 fn device_label(graph: &BoxGraph, device_uuid: &Uuid) -> String {
     let name = graph.find_box(device_uuid).map_or("<device>", |device_box| device_box.name.as_str());
     format!("{} {:02x}{:02x}", name, device_uuid[0], device_uuid[1])
 }
 
+// Count a tape unit's bound audio regions (total + how many run the time-stretch strategy), for the
+// player's reconcile-time pre-warm.
+fn tape_region_counts(track_sets: &SharedAudioTrackSets) -> (usize, usize) {
+    let mut stretch = 0;
+    let mut total = 0;
+    for track in track_sets.borrow().iter() {
+        for region in track.borrow().iter() {
+            total += 1;
+            if region.time_stretch.is_some() && region.transients.len() >= 2 {
+                stretch += 1;
+            }
+        }
+    }
+    (stretch, total)
+}
+
+// The LIGHT per-unit signal a plain FIELD edit raises while `reconcile_one` runs (set around the unit's
+// work, the `CURRENT_DEVICE_UUID` pattern): a knob drag then only marks `params_dirty` (one value push at
+// the next reconcile) instead of `automation_dirty` (a full unsubscribe + re-observe of every parameter,
+// per drag tick, on the audio thread). Automation ATTACH / DETACH / region moves keep the heavy signal.
+#[cfg(not(test))]
+static PARAMS_SIGNAL: crate::Shared<Option<Rc<dyn Fn()>>> = crate::Shared::new(None);
+#[cfg(test)]
+std::thread_local! {
+    // Tests run on parallel threads; the production engine is single-threaded, so the Shared cell is only
+    // sound there. Per-thread isolation keeps the tests deterministic.
+    static PARAMS_SIGNAL: core::cell::RefCell<Option<Rc<dyn Fn()>>> = const { core::cell::RefCell::new(None) };
+}
+
+fn set_params_signal(signal: Option<Rc<dyn Fn()>>) {
+    #[cfg(not(test))]
+    unsafe { *PARAMS_SIGNAL.get() = signal; }
+    #[cfg(test)]
+    PARAMS_SIGNAL.with(|cell| *cell.borrow_mut() = signal);
+}
+
+fn current_params_signal() -> Option<Rc<dyn Fn()>> {
+    #[cfg(not(test))]
+    { unsafe { PARAMS_SIGNAL.get() }.clone() }
+    #[cfg(test)]
+    { PARAMS_SIGNAL.with(|cell| cell.borrow().clone()) }
+}
+
+fn params_invalidate(unit: &AudioUnitBinding) -> Rc<dyn Fn()> {
+    let dirty = unit.params_dirty.clone();
+    let mark = unit.mark.clone();
+    Rc::new(move || {dirty.set(true); mark.mark();})
+}
+
+/// The signal a unit's PARAMETER subscriptions fire when automation attaches / detaches / a region moves:
+/// set the unit's `automation_dirty` flag and enqueue the unit, so `reconcile_one` re-binds its automation
+/// (no rewire). Distinct from `params_invalidate` (a plain field edit: push only) and from
+/// `DirtyMark::signal` (chain / sidechain), which only enqueues.
 fn automation_invalidate(unit: &AudioUnitBinding) -> Rc<dyn Fn()> {
     let dirty = unit.automation_dirty.clone();
     let mark = unit.mark.clone();
@@ -354,6 +404,8 @@ struct SendBinding {
 /// channel strip -> master. The player is owned by the context (removed by `player_id` on teardown); it reads
 /// `audio_track_sets` live, so a region edit needs no rebuild.
 struct TapeWired {
+    player: Rc<RefCell<AudioRegionPlayer>>, // kept so a region edit can pre-warm the pool (see `prepare`)
+    enabled_sub: SubscriptionId, // TapeDeviceBox `enabled` (4): gates the player, resets on disable (TS mirror)
     player_id: NodeId,
     instrument_uuid: Uuid,        // the TapeDeviceBox uuid: the player output is registered under it so a SIDECHAIN
                                   // targeting the tape device taps its RAW output (pre fx / strip), matching TS
@@ -589,6 +641,7 @@ pub(crate) struct AudioUnitBinding {
     // when a Value track attaches / detaches or its data changes; `reconcile_one` then re-binds the unit's
     // curves (no rewire) and clears it.
     automation_dirty: Rc<Cell<bool>>,
+    params_dirty: Rc<Cell<bool>>, // a plain field edit: push the value, no automation re-bind
     // Set by a device's `enabled` monitor: the chain membership did not change, but the unit must RE-WIRE
     // (skip / include the toggled effect). `reconcile_one` treats it like a chain-dirty so reconcile_leaf runs
     // its edge-only re-wire (survivors reused — no param push, no reset).
@@ -761,12 +814,22 @@ impl Engine {
     /// so it also clears that flag.
     fn reconcile_one(&mut self, unit: &mut AudioUnitBinding) {
         reconcile_tracks(&mut self.graph, unit, &self.tempo_map);
+        // A region add / edit ran the cascade above: pre-warm the tape player NOW (reconcile), so a region
+        // entering playback later never allocates its sequencer on the render path.
+        if let Some(Wired::Tape(tape)) = &unit.wired {
+            let (stretch_regions, total_regions) = tape_region_counts(&unit.audio_track_sets);
+            tape.player.borrow_mut().prepare(stretch_regions, total_regions);
+        }
         // A REAL automation change (a Value track attach / detach / curve edit on an EXISTING parameter) sets
         // this flag BEFORE this reconcile runs. A joiner's initial parameter catch-up ALSO sets it during the
         // chain reconcile below — but that is spurious (the joiner is bound + refreshed at build), so it must
         // NOT trigger a broad re-bind that would re-push every SURVIVING plugin's parameters (which would, e.g.,
         // glide a delay's offset). So capture it first and only re-bind for a genuine pre-existing change.
         let automation_changed = unit.automation_dirty.get();
+        let params_changed = unit.params_dirty.get();
+        // While this unit reconciles, a field-value subscription firing (a catch-up or a live edit applied
+        // mid-bind) raises the LIGHT flag through this cell instead of the heavy automation invalidate.
+        set_params_signal(Some(params_invalidate(unit)));
         // `wiring_dirty` (a device `enabled` toggle) re-wires the chain edge-only without a membership change.
         let unit_dirty = unit.input.take_dirty() | unit.midi.take_dirty() | unit.audio.take_dirty() | unit.wiring_dirty.replace(false);
         if unit_dirty {
@@ -807,6 +870,14 @@ impl Engine {
             }
             unit.sends = sends;
         }
+        // A plain FIELD edit (knob drag): the value cells are already updated by their subscriptions, so a
+        // single refresh pushes exactly the changed values — no unsubscribe / re-observe churn. Skipped when a
+        // heavier path already ran (a rebuild / re-bind pushes on its own).
+        if params_changed && !unit_dirty && !automation_changed {
+            self.refresh_unit_params(unit);
+        }
+        set_params_signal(None);
+        unit.params_dirty.set(false);
         unit.automation_dirty.set(false); // consume the joiner catch-up flags + the handled real change
     }
 
@@ -817,27 +888,38 @@ impl Engine {
     /// `StripParams`. Volume maps the 0..1 curve through the AudioUnit dB mapping; panning is bipolar (TS adapters).
     fn bind_strip_automation(&mut self, unit: &mut AudioUnitBinding) {
         const VOLUME: Decibel = Decibel::new(-96.0, -9.0, 6.0); // TS AudioUnitBoxAdapter.VolumeMapper
-        const PANNING: Linear = Linear::bipolar();
-        *unit.strip_automation.volume.borrow_mut() = None;
-        *unit.strip_automation.panning.borrow_mut() = None;
-        for sub in core::mem::take(&mut unit.strip_param_subs) {
+        let invalidate = automation_invalidate(unit);
+        self.bind_gain_pan_automation(unit.unit, UNIT_VOLUME_KEY, UNIT_PANNING_KEY, VOLUME,
+            &unit.strip_automation, &mut unit.strip_param_subs, &mut unit.strip_param_collections, &invalidate);
+    }
+
+    /// The shared gain (dB) + pan automation binder behind the strip AND the aux sends: drop the previous
+    /// observers + curve collections (a plain drop would LEAK their hub / event / curve observers), re-observe
+    /// both fields, and install the mapped closures. Without a track an override stays `None` (static cells rule).
+    #[allow(clippy::too_many_arguments)]
+    fn bind_gain_pan_automation(&mut self, box_uuid: Uuid, gain_key: u16, pan_key: u16, gain_mapping: Decibel,
+                                automation: &StripAutomation, subs: &mut Vec<SubscriptionId>,
+                                collections: &mut Vec<ValueCollection>, invalidate: &Rc<dyn Fn()>) {
+        const PAN: Linear = Linear::bipolar();
+        *automation.volume.borrow_mut() = None;
+        *automation.panning.borrow_mut() = None;
+        for sub in core::mem::take(subs) {
             self.graph.unsubscribe(sub);
         }
-        for collection in core::mem::take(&mut unit.strip_param_collections) {
-            collection.terminate(&mut self.graph); // a plain drop would leak its hub / event / curve observers
+        for collection in core::mem::take(collections) {
+            collection.terminate(&mut self.graph);
         }
-        let invalidate = automation_invalidate(unit);
-        let (volume_handle, volume_subs, volume_collections, _) = self.observe_param(unit.unit, &[UNIT_VOLUME_KEY], 0, &invalidate);
-        let (panning_handle, panning_subs, panning_collections, _) = self.observe_param(unit.unit, &[UNIT_PANNING_KEY], 1, &invalidate);
-        unit.strip_param_subs.extend(volume_subs);
-        unit.strip_param_subs.extend(panning_subs);
-        unit.strip_param_collections.extend(volume_collections);
-        unit.strip_param_collections.extend(panning_collections);
-        if volume_handle.track.is_some() {
-            *unit.strip_automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| VOLUME.y(volume_handle.resolve(position).0)));
+        let (gain_handle, gain_subs, gain_collections, _) = self.observe_param(box_uuid, &[gain_key], 0, invalidate);
+        let (pan_handle, pan_subs, pan_collections, _) = self.observe_param(box_uuid, &[pan_key], 1, invalidate);
+        subs.extend(gain_subs);
+        subs.extend(pan_subs);
+        collections.extend(gain_collections);
+        collections.extend(pan_collections);
+        if gain_handle.track.is_some() {
+            *automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| gain_mapping.y(gain_handle.resolve(position).0)));
         }
-        if panning_handle.track.is_some() {
-            *unit.strip_automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| PANNING.y(panning_handle.resolve(position).0)));
+        if pan_handle.track.is_some() {
+            *automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| PAN.y(pan_handle.resolve(position).0)));
         }
     }
 
@@ -1010,7 +1092,7 @@ impl Engine {
         strip.borrow_mut().set_audio_source(source);
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
-        self.context.set_label(strip_id, String::from("strip:bus"));
+        self.context.set_label(strip_id, format!("strip:bus {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
         self.context.register_edge(source_id, strip_id);
         edges.push((source_id, strip_id));
         nodes.push(strip_id);
@@ -1020,16 +1102,21 @@ impl Engine {
         }));
     }
 
+    /// The summing bus of a route: a REGISTERED (non-primary) bus's sum, or the master fallback (`None` =
+    /// the primary bus). `None` result = the bus vanished (teardown races resolve to a no-op).
+    fn sum_of(&self, bus: Option<Uuid>) -> Option<(Rc<RefCell<AudioBusProcessor>>, NodeId)> {
+        match bus {
+            Some(bus_uuid) => self.bus_registry.get(&bus_uuid).map(|(sum, id)| (sum.clone(), *id)),
+            None => self.master.clone().map(|master| (master, self.master_id))
+        }
+    }
+
     /// Drop a unit's current OUTPUT route (the strip -> target bus summed source + ordering edge). A torn-down
     /// bus is already absent from `bus_registry` (its sum + incoming edges vanished with it), so its source
     /// removal is simply skipped.
     fn unwire_output_route(&mut self, unit: &mut AudioUnitBinding) {
         let Some(route) = unit.routed.take() else { return };
-        let sum = match route.bus {
-            Some(bus_uuid) => self.bus_registry.get(&bus_uuid).map(|(sum, _)| sum.clone()),
-            None => self.master.clone()
-        };
-        if let Some(sum) = sum {
+        if let Some((sum, _)) = self.sum_of(route.bus) {
             sum.borrow_mut().remove_audio_source(&route.strip_output);
         }
         if self.context.has_node(route.sum_id) {
@@ -1060,10 +1147,7 @@ impl Engine {
         let target_bus: Option<Uuid> = self.graph.target_of(&Address::of(unit.unit, vec![UNIT_OUTPUT_KEY]))
             .map(|target| target.uuid)
             .filter(|uuid| self.bus_registry.contains_key(uuid));
-        let (sum_rc, sum_id) = match target_bus {
-            Some(bus_uuid) => { let (sum, id) = &self.bus_registry[&bus_uuid]; (sum.clone(), *id) }
-            None => (self.master.clone().unwrap(), self.master_id)
-        };
+        let Some((sum_rc, sum_id)) = self.sum_of(target_bus) else { return };
         if let Some(route) = &unit.routed {
             if route.strip_id == strip_id && route.sum_id == sum_id {
                 return; // unchanged
@@ -1122,7 +1206,7 @@ impl Engine {
         let automation = Rc::new(StripAutomation::new());
         let proc = Rc::new(RefCell::new(AuxSendProcessor::new(params, automation.clone(), self.sample_rate)));
         let node_id = self.context.register_processor(proc.clone());
-        self.context.set_label(node_id, String::from("aux-send"));
+        self.context.set_label(node_id, format!("aux-send {:02x}{:02x}", send_uuid[0], send_uuid[1]));
         let mut send = SendBinding {send_uuid, proc, node_id, source: None, target: None, subs, automation,
             param_subs: Vec::new(), param_collections: Vec::new()};
         self.bind_send_automation(&mut send, invalidate);
@@ -1135,27 +1219,9 @@ impl Engine {
     /// Gain maps the 0..1 curve through the adapter's `ValueMapping.DefaultDecibel`; pan is bipolar.
     fn bind_send_automation(&mut self, send: &mut SendBinding, invalidate: &Rc<dyn Fn()>) {
         const SEND_GAIN: Decibel = Decibel::new(-72.0, -12.0, 0.0); // TS AuxSendBoxAdapter ValueMapping.DefaultDecibel
-        const SEND_PAN: Linear = Linear::bipolar();
-        *send.automation.volume.borrow_mut() = None;
-        *send.automation.panning.borrow_mut() = None;
-        for sub in core::mem::take(&mut send.param_subs) {
-            self.graph.unsubscribe(sub);
-        }
-        for collection in core::mem::take(&mut send.param_collections) {
-            collection.terminate(&mut self.graph); // a plain drop would leak its hub / event / curve observers
-        }
-        let (gain_handle, gain_subs, gain_collections, _) = self.observe_param(send.send_uuid, &[SEND_GAIN_KEY], 0, invalidate);
-        let (pan_handle, pan_subs, pan_collections, _) = self.observe_param(send.send_uuid, &[SEND_PAN_KEY], 1, invalidate);
-        send.param_subs.extend(gain_subs);
-        send.param_subs.extend(pan_subs);
-        send.param_collections.extend(gain_collections);
-        send.param_collections.extend(pan_collections);
-        if gain_handle.track.is_some() {
-            *send.automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| SEND_GAIN.y(gain_handle.resolve(position).0)));
-        }
-        if pan_handle.track.is_some() {
-            *send.automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| SEND_PAN.y(pan_handle.resolve(position).0)));
-        }
+        let automation = send.automation.clone();
+        self.bind_gain_pan_automation(send.send_uuid, SEND_GAIN_KEY, SEND_PAN_KEY, SEND_GAIN,
+            &automation, &mut send.param_subs, &mut send.param_collections, invalidate);
     }
 
     /// Tear down one aux send: detach its source + target edges (and its summed output), then drop the node +
@@ -1167,11 +1233,7 @@ impl Engine {
             }
         }
         if let Some((bus, sum_id)) = send.target {
-            let sum = match bus {
-                Some(bus_uuid) => self.bus_registry.get(&bus_uuid).map(|(sum, _)| sum.clone()),
-                None => self.master.clone()
-            };
-            if let Some(sum) = sum {
+            if let Some((sum, _)) = self.sum_of(bus) {
                 sum.borrow_mut().remove_audio_source(&send.proc.borrow().audio_output());
             }
             if self.context.has_node(sum_id) {
@@ -1226,26 +1288,22 @@ impl Engine {
             if let Some((node, buffer)) = tap {
                 send.proc.borrow_mut().set_audio_source(buffer.clone());
                 self.context.register_edge(*node, send.node_id);
+            } else {
+                // The source chain is gone: DETACH, or the send keeps summing the last frozen buffer forever.
+                send.proc.borrow_mut().clear_audio_source();
             }
             send.source = source_node;
         }
         let target_bus: Option<Uuid> = self.graph.target_of(&Address::of(send.send_uuid, vec![SEND_TARGET_KEY]))
             .map(|target| target.uuid)
             .filter(|uuid| self.bus_registry.contains_key(uuid));
-        let (sum_rc, sum_id) = match target_bus {
-            Some(bus_uuid) => { let (sum, id) = &self.bus_registry[&bus_uuid]; (sum.clone(), *id) }
-            None => (self.master.clone().unwrap(), self.master_id)
-        };
+        let Some((sum_rc, sum_id)) = self.sum_of(target_bus) else { return };
         let new_target = (target_bus, sum_id);
         if send.target == Some(new_target) {
             return;
         }
         if let Some((old_bus, old_sum)) = send.target {
-            let old_sum_rc = match old_bus {
-                Some(bus_uuid) => self.bus_registry.get(&bus_uuid).map(|(sum, _)| sum.clone()),
-                None => self.master.clone()
-            };
-            if let Some(sum) = old_sum_rc {
+            if let Some((sum, _)) = self.sum_of(old_bus) {
                 sum.borrow_mut().remove_audio_source(&send.proc.borrow().audio_output());
             }
             if self.context.has_node(old_sum) {
@@ -1330,6 +1388,7 @@ impl Engine {
                 self.teardown_composite(composite.binding);
             }
             Wired::Tape(tape) => {
+                self.graph.unsubscribe(tape.enabled_sub);
                 self.output_registry.remove(&Address::of(tape.instrument_uuid, vec![]));
                 for (source, target) in &tape.edges {
                     self.context.remove_edge(*source, *target);
@@ -1437,6 +1496,7 @@ impl Engine {
         // sets this flag + enqueues the unit, so `reconcile_one` re-binds the unit's curves (no rewire). No
         // per-unit all-updates observer.
         let automation_dirty = Rc::new(Cell::new(false));
+        let params_dirty = Rc::new(Cell::new(false));
         let wiring_dirty = Rc::new(Cell::new(false));
         AudioUnitBinding {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
@@ -1444,7 +1504,7 @@ impl Engine {
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
             strip_automation: Rc::new(StripAutomation::new()), strip_param_subs: Vec::new(), strip_param_collections: Vec::new(),
             input, midi, audio, output_sub, routed: None, aux_sends, sends: Vec::new(),
-            wired: None, automation_dirty, wiring_dirty, mark
+            wired: None, automation_dirty, params_dirty, wiring_dirty, mark
         }
     }
 
@@ -1523,8 +1583,17 @@ impl Engine {
         }
         let player = Rc::new(RefCell::new(AudioRegionPlayer::new(unit.audio_track_sets.clone(), self.sample_rate, self.tempo_map.clone())));
         let player_output = player.borrow().audio_output();
-        let player_id = self.context.register_processor(player);
-        self.context.set_label(player_id, String::from("region-player"));
+        let player_id = self.context.register_processor(player.clone());
+        let (stretch_regions, total_regions) = tape_region_counts(&unit.audio_track_sets);
+        player.borrow_mut().prepare(stretch_regions, total_regions);
+        // TS `TapeDeviceProcessor` observes the box `enabled`: silence + a state reset while disabled.
+        let enabled_player = player.clone();
+        let enabled_sub = self.graph.catchup_and_subscribe(Address::of(instrument_uuid, vec![DEVICE_ENABLED_KEY]), move |value| {
+            if let Some(enabled) = value.as_bool() {
+                enabled_player.borrow_mut().set_enabled(enabled);
+            }
+        });
+        self.context.set_label(player_id, format!("region-player {:02x}{:02x}", unit.unit[0], unit.unit[1]));
         // The tape's RAW output (pre fx / strip) registered under the TapeDeviceBox uuid: a sidechain targeting the
         // tape device resolves THIS (matching TS, which taps the instrument output before the unit's audio effects).
         self.output_registry.register(Address::of(instrument_uuid, vec![]), player_output.clone(), player_id);
@@ -1563,12 +1632,12 @@ impl Engine {
         strip.borrow_mut().set_audio_source(output.clone());
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
-        self.context.set_label(strip_id, String::from("strip:tape"));
+        self.context.set_label(strip_id, format!("strip:tape {:02x}{:02x}", unit.unit[0], unit.unit[1]));
         self.context.register_edge(output_node, strip_id);
         edges.push((output_node, strip_id));
         // The strip's output is routed to the unit's OUTPUT bus by `resolve_outputs` (not wired to master here).
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
-        unit.wired = Some(Wired::Tape(TapeWired {player_id, instrument_uuid, audio: audio_members, pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges}));
+        unit.wired = Some(Wired::Tape(TapeWired {player, enabled_sub, player_id, instrument_uuid, audio: audio_members, pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges}));
     }
 
     /// The COMPOSITE-instrument path (e.g. Playfield): tear down the old wiring and rebuild the child cascade
@@ -1587,7 +1656,7 @@ impl Engine {
         strip.borrow_mut().set_audio_source(binding.sum_buffer.clone());
         let strip_output = strip.borrow().audio_output();
         let strip_id = self.context.register_processor(strip);
-        self.context.set_label(strip_id, String::from("strip:composite"));
+        self.context.set_label(strip_id, format!("strip:composite {:02x}{:02x}", unit.unit[0], unit.unit[1]));
         let mut tail_edges = Vec::new();
         self.context.register_edge(binding.sum_id, strip_id);
         tail_edges.push((binding.sum_id, strip_id));
@@ -1675,7 +1744,7 @@ impl Engine {
                 let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
                 let strip_output = strip.borrow().audio_output();
                 let strip_id = self.context.register_processor(strip.clone());
-                self.context.set_label(strip_id, String::from("strip:leaf"));
+                self.context.set_label(strip_id, format!("strip:leaf {:02x}{:02x}", unit.unit[0], unit.unit[1]));
                 (strip, strip_id, strip_output)
             }
         };
@@ -2124,7 +2193,8 @@ impl Engine {
         });
         let field = Rc::new(core::cell::Cell::new(0.0f32));
         let cell = field.clone();
-        let field_invalidate = invalidate.clone();
+        // A VALUE change is a light edit (push only); everything structural below keeps the heavy signal.
+        let field_invalidate = current_params_signal().unwrap_or_else(|| invalidate.clone());
         subs.push(self.graph.catchup_and_subscribe(address.clone(), move |value| {
             let real = value.as_float32()
                 .or_else(|| value.as_int32().map(|value| value as f32))
@@ -2185,6 +2255,41 @@ impl Engine {
     /// audio graph: for each device re-observe its parameters (the field-paths it declared are kept), re-set
     /// them on the node (re-arming or disarming the clock), and push the resolved values. Mirrors TS
     /// `bindParameter` reacting to a parameter's automation pointer hub.
+    /// Push the units' devices their CURRENT resolved parameter values (only the changed ones — `last` is
+    /// compared per handle). The whole handling of a plain field edit: no subscriptions move.
+    fn refresh_unit_params(&mut self, unit: &mut AudioUnitBinding) {
+        let position = self.transport.position();
+        let mut wired = match unit.wired.take() {
+            Some(wired) => wired,
+            None => return
+        };
+        match &mut wired {
+            Wired::Leaf(chain) => {
+                refresh_params(&chain.instrument.params.handles, chain.instrument.params.reg, chain.instrument.params.state_ptr, position);
+                for member in &chain.midi {
+                    refresh_params(&member.params.handles, member.params.reg, member.params.state_ptr, position);
+                }
+                for member in &chain.audio {
+                    refresh_params(&member.params.handles, member.params.reg, member.params.state_ptr, position);
+                }
+            }
+            Wired::Composite(composite) => {
+                composite.binding.for_each_params(&mut |params| refresh_params(&params.handles, params.reg, params.state_ptr, position));
+            }
+            Wired::Tape(tape) => {
+                for member in &tape.audio {
+                    refresh_params(&member.params.handles, member.params.reg, member.params.state_ptr, position);
+                }
+            }
+            Wired::Bus(bus) => {
+                for params in &bus.device_params {
+                    refresh_params(&params.handles, params.reg, params.state_ptr, position);
+                }
+            }
+        }
+        unit.wired = Some(wired);
+    }
+
     fn rebind_automation(&mut self, unit: &mut AudioUnitBinding) {
         let invalidate = automation_invalidate(unit);
         let position = self.transport.position();
@@ -3716,6 +3821,89 @@ mod tests {
         assert_eq!(collections.len(), 1, "its one value region's collection is observed");
         assert_eq!(curve.expect("child param has an automation curve").value_at(0.0, -1.0), 0.7,
             "the unit automation value reaches the child param (the bridge then maps it via the @param)");
+    }
+
+    #[test]
+    fn a_field_edit_raises_the_light_signal_and_an_attach_the_heavy_one() {
+        // A knob drag (a Primitive field update) must NOT trigger the automation re-bind machinery: it raises
+        // the LIGHT params signal (one value push at reconcile). Attaching a Value TRACK is structural and
+        // keeps the heavy automation signal.
+        const DEV: Uuid = [40u8; 16];
+        const ATRACK: Uuid = [41u8; 16];
+        let mut engine = engine_with_devices();
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(DEV, "TestEffect", &[(10, FieldValue::Float32(0.5))]),
+            graph_box(ATRACK, "TrackBox", &[(2, FieldValue::Pointer(None)), (3, FieldValue::Hook)])
+        ]);
+        use core::cell::Cell;
+        let params_flag = Rc::new(Cell::new(false));
+        let automation_flag = Rc::new(Cell::new(false));
+        let light = params_flag.clone();
+        super::set_params_signal(Some(Rc::new(move || light.set(true))));
+        let heavy = automation_flag.clone();
+        let invalidate: Rc<dyn Fn()> = Rc::new(move || heavy.set(true));
+        let (_handle, subs, collections, _) = engine.observe_param(DEV, &[10], 0, &invalidate);
+        super::set_params_signal(None);
+        params_flag.set(false); // the catch-up fired the light signal; only the EDITS below matter
+        automation_flag.set(false);
+        engine.graph.transaction(&[Update::Primitive {
+            address: Address::of(DEV, vec![10]),
+            old: FieldValue::Float32(0.5), new: FieldValue::Float32(0.75)
+        }], &engine.registry).expect("field edit");
+        assert!(params_flag.get(), "a plain value edit raises the LIGHT signal");
+        assert!(!automation_flag.get(), "and must NOT trigger the automation re-bind");
+        params_flag.set(false);
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(ATRACK, vec![2]),
+            old: None, new: Some(Address::of(DEV, vec![10]))
+        }], &engine.registry).expect("track attach");
+        assert!(automation_flag.get(), "an automation ATTACH raises the heavy signal");
+        for sub in subs {
+            engine.graph.unsubscribe(sub);
+        }
+        for collection in collections {
+            collection.terminate(&mut engine.graph);
+        }
+    }
+
+    #[test]
+    fn an_unwired_send_goes_silent_instead_of_looping_the_stale_buffer() {
+        // The send's source chain tears down (tap = None): the send must CLEAR its input, not keep summing
+        // the last frozen buffer into the target bus forever (an audible stuck loop).
+        use engine_env::audio_buffer::shared_audio_buffer;
+        use engine_env::process_info::ProcessInfo;
+        use engine_env::processor::Processor;
+        const SEND: Uuid = [30u8; 16];
+        let mut engine = engine_with_devices();
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(SEND, "AuxSendBox", &[
+                (super::SEND_TARGET_KEY, FieldValue::Pointer(None)),
+                (super::SEND_GAIN_KEY, FieldValue::Float32(0.0)),
+                (super::SEND_PAN_KEY, FieldValue::Float32(0.0))
+            ])
+        ]);
+        use engine_env::audio_generator::AudioGenerator;
+        let mark = super::DirtyMark {units: Rc::new(RefCell::new(Vec::new())), unit: SEND};
+        let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+        let mut send = engine.build_send(SEND, &mark, &invalidate);
+        let tap_buffer = shared_audio_buffer();
+        {
+            let mut buffer = tap_buffer.borrow_mut();
+            for index in 0..engine_env::RENDER_QUANTUM {
+                buffer.left[index] = 1.0;
+                buffer.right[index] = 1.0;
+            }
+        }
+        engine.resolve_one_send(&mut send, &Some((engine.master_id, tap_buffer)));
+        send.proc.borrow_mut().process(&ProcessInfo {blocks: &[]});
+        let wired = send.proc.borrow().audio_output().borrow().left[0];
+        assert!(wired.abs() > 0.5, "the wired send passes the tap (got {wired})");
+        // The chain is torn down: the tap vanishes. The send must output SILENCE now.
+        engine.resolve_one_send(&mut send, &None);
+        send.proc.borrow_mut().process(&ProcessInfo {blocks: &[]});
+        let after = send.proc.borrow().audio_output().borrow().left[0];
+        assert_eq!(after, 0.0, "an unwired send is silent, not a stale-buffer loop");
+        engine.teardown_send(send);
     }
 
     #[test]

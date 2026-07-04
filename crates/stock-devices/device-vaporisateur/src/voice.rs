@@ -125,7 +125,8 @@ impl VaporisateurVoice {
     fn process_window(&mut self, out_left: &mut [f32], out_right: &mut [f32], block: &Block, shared: &VaporisateurParams, work: &mut Workspace) -> bool {
         let len = out_left.len();
         let gain = velocity_to_gain(self.velocity) * self.gain;
-        let detune = libm::exp2f(self.spread * (shared.unison_detune / 1200.0));
+        // WASM CONTRACT: `fast_exp2` mirrors lib-dsp `fastExp2` (the TS voice computes the same f64 product).
+        let detune = dsp::fast_math::fast_exp2(self.spread as f64 * (shared.unison_detune as f64 / 1200.0)) as f32;
         let panning = self.spread * shared.unison_stereo;
         let [gain_l, gain_r] = panning_to_gains(panning, Mixing::Linear);
         for sample in &mut work.freq[..len] {

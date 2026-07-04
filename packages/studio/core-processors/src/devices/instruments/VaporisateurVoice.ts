@@ -105,7 +105,8 @@ export class VaporisateurVoice implements Voice {
             parameterUnisonStereo
         } = this.device
         const gain = velocityToGain(this.#event.velocity) * this.#gain
-        const detune = 2.0 ** (this.#spread * (parameterUnisonDetune.getValue() / 1200.0))
+        // WASM CONTRACT: `fastExp2` mirrors `dsp::fast_math` (identical arithmetic in both engines)
+        const detune = fastExp2(this.#spread * (parameterUnisonDetune.getValue() / 1200.0))
         const panning = this.#spread * parameterUnisonStereo.getValue()
         const [gainL, gainR] = StereoMatrix.panningToGains(panning, Mixing.Linear)
         const [outL, outR] = output.channels()

@@ -48,6 +48,14 @@ impl Event for NoteEvent {
     }
 }
 
+impl crate::event::ExactEq for NoteEvent {
+    fn exact_eq(&self, other: &Self) -> bool {
+        self.position == other.position && self.duration == other.duration && self.pitch == other.pitch
+            && self.cent == other.cent && self.velocity == other.velocity && self.chance == other.chance
+            && self.play_count == other.play_count && self.play_curve == other.play_curve
+    }
+}
+
 impl EventSpan for NoteEvent {
     fn duration(&self) -> f64 {
         self.duration

@@ -44,6 +44,13 @@ impl Event for ValueEvent {
     }
 }
 
+impl crate::event::ExactEq for ValueEvent {
+    fn exact_eq(&self, other: &Self) -> bool {
+        self.position == other.position && self.index == other.index && self.value == other.value
+            && self.interpolation == other.interpolation
+    }
+}
+
 // Ordering mirrors `ValueEvent.Comparator`: by position, then by index.
 impl PartialEq for ValueEvent {
     fn eq(&self, other: &Self) -> bool {

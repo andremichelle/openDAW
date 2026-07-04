@@ -45,8 +45,6 @@ impl Default for StripParams {
 /// parameter is not automated, so the strip uses the static `StripParams` value. Shared (`Rc`) between the
 /// strip node and the engine binding, which swaps the closures in when a Value track attaches / detaches (like
 /// `StripParams` is swapped for static edits). The engine owns the curve; the strip just calls the closure.
-/// Maps a pulse position to a strip parameter's automated value (volume dB, panning -1..1). Built by the engine
-/// from the parameter's Value-track curve; `None` when the parameter is not automated.
 pub type StripValueSource = Rc<dyn Fn(f64) -> f32>;
 
 pub struct StripAutomation {
@@ -215,6 +213,5 @@ impl Processor for ChannelStripProcessor {
                 }
             }
         }
-        self.processing = true;
     }
 }
