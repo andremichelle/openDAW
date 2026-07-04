@@ -37,12 +37,13 @@ class Processor {
       const inR = io.src[1][i]
       const mono = (inL + inR) * 0.5
 
-      // Lookahead: store current, read delayed
+      // Lookahead: store current, read delayed — envelope tracks current,
+      // gain reduction applies to delayed signal so transient is caught
       const delayed = this.lookBuf[this.lookIdx]
       this.lookBuf[this.lookIdx] = mono
       this.lookIdx = (this.lookIdx + 1) % this.lookBuf.length
 
-      // Envelope follower (peak)
+      // Envelope follower (peak) on current input
       const absIn = Math.abs(mono)
       const coef = absIn > this.env ? attackCoef : releaseCoef
       this.env = absIn + (this.env - absIn) * coef
@@ -63,8 +64,9 @@ class Processor {
       const gainLin = Math.pow(10, -gr / 20) * makeupLin
       const outGain = gainLin * mix + (1 - mix)
 
-      io.out[0][i] = inL * outGain
-      io.out[1][i] = inR * outGain
+      // Apply gain to delayed signal (true lookahead)
+      io.out[0][i] = delayed * outGain
+      io.out[1][i] = delayed * outGain
     }
   }
 }

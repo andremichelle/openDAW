@@ -25,22 +25,24 @@ class Processor {
   }
 
   process(io, block) {
-    const outL = Math.pow(10, this.p.output / 20)
+    const outGain = Math.pow(10, this.p.output / 20)
     const driveAmt = 1 + this.p.drive * 4
     const toneMix = this.p.tone
     const wetMix = this.p.mix
     const bias = this.p.bias
 
     for (let i = block.s0; i < block.s1; i++) {
-      // DC blocker (one-pole highpass ~20Hz)
       const inL = io.src[0][i]
       const inR = io.src[1][i]
-      this.dcL = inL - (inL - this.dcL) * 0.999
-      this.dcR = inR - (inR - this.dcR) * 0.999
+      // DC blocker: lowpass estimate → subtract from input
+      this.dcL = this.dcL * 0.999 + inL * 0.001
+      this.dcR = this.dcR * 0.999 + inR * 0.001
+      const dcBlockL = inL - this.dcL
+      const dcBlockR = inR - this.dcR
 
-      // Bias + drive + tanh saturation
-      const satL = this._tanh((this.dcL + bias) * driveAmt)
-      const satR = this._tanh((this.dcR + bias) * driveAmt)
+      // Bias + drive + tanh saturation on DC-blocked signal
+      const satL = this._tanh((dcBlockL + bias) * driveAmt)
+      const satR = this._tanh((dcBlockR + bias) * driveAmt)
 
       // Tone: shelving (lowpass/highpass blend)
       this.lpL = this.lpL * 0.7 + satL * 0.3
@@ -51,8 +53,8 @@ class Processor {
       const tonedR = this.lpR * (1 - toneMix) + this.hpR * toneMix
 
       // Dry/wet + output gain
-      io.out[0][i] = (inL * (1 - wetMix) + tonedL * wetMix) * outL
-      io.out[1][i] = (inR * (1 - wetMix) + tonedR * wetMix) * outR
+      io.out[0][i] = (inL * (1 - wetMix) + tonedL * wetMix) * outGain
+      io.out[1][i] = (inR * (1 - wetMix) + tonedR * wetMix) * outGain
     }
   }
 }

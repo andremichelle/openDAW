@@ -16,7 +16,7 @@ class Processor {
     // Allpass states for 8 stages, stereo
     this.ap = []
     for (let c = 0; c < 2; c++) {
-      this.ap.push(new Array(8).fill(0).map(() => ({z1: 0, z2: 0})))
+      this.ap.push(new Array(8).fill(0).map(() => ({z1: 0})))
     }
   }
 
@@ -24,15 +24,12 @@ class Processor {
     this.p[name] = value
   }
 
-  // 2nd-order allpass
-  _ap2(x, state, freq) {
-    const w = 2 * Math.PI * freq / this.sr
-    const tanw = Math.tan(w / 2)
-    const b0 = (1 - tanw) / (1 + tanw)
-    const a1 = -2 * Math.cos(w) * (1 - tanw) / (1 + tanw)
-    const y = b0 * x + state.z1 - state.z2 * b0
-    state.z2 = state.z1
-    state.z1 = x - a1 * y
+  // 1st-order allpass (stable) — used in cascade
+  _ap1(x, state, freq) {
+    const tanw = Math.tan(Math.PI * freq / this.sr)
+    const a = (1 - tanw) / (1 + tanw)
+    const y = -a * x + state.z1
+    state.z1 = x + a * y
     return y
   }
 
@@ -55,9 +52,9 @@ class Processor {
         const dry = io.src[c][i]
         let s = dry + this.fb[c] * feedback
 
-        // Cascade allpass stages
+        // Cascade 1st-order allpass stages
         for (let st = 0; st < stages; st++) {
-          s = this._ap2(s, this.ap[c][st], sweepFreq)
+          s = this._ap1(s, this.ap[c][st], sweepFreq)
         }
 
         this.fb[c] = s

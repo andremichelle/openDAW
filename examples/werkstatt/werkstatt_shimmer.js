@@ -17,9 +17,10 @@ class Processor {
     const maxLen = this.sr
     this.buf = new Float32Array(maxLen * 2)
     this.idx = 0
-    // Granular pitch shifter buffer
-    this.pitchBuf = new Float32Array(4096)
-    this.pitchPhase = 0
+    // Per-channel granular pitch shifter state
+    this.pitchBuf = [new Float32Array(4096), new Float32Array(4096)]
+    this.pWriteIdx = [0, 0]
+    this.pitchPhase = [0, 0]
     this.dampState = [0, 0]
   }
 
@@ -27,20 +28,19 @@ class Processor {
     this.p[name] = value
   }
 
-  // Simple granular pitch shift
-  _pitchShift(sample, semitones) {
+  // Simple granular pitch shift — per-channel state
+  _pitchShift(sample, semitones, ch) {
     if (semitones === 0) return sample
     const ratio = Math.pow(2, semitones / 12)
-    this.pitchBuf[this.pWriteIdx] = sample
-    this.pWriteIdx = (this.pWriteIdx + 1) % this.pitchBuf.length
-
-    this.pitchPhase += ratio
-    if (this.pitchPhase >= this.pitchBuf.length) this.pitchPhase -= this.pitchBuf.length
-
-    const ri = Math.floor(this.pitchPhase)
-    const ni = (ri + 1) % this.pitchBuf.length
-    const f = this.pitchPhase - ri
-    return this.pitchBuf[ri] * (1 - f) + this.pitchBuf[ni] * f
+    const buf = this.pitchBuf[ch]
+    buf[this.pWriteIdx[ch]] = sample
+    this.pWriteIdx[ch] = (this.pWriteIdx[ch] + 1) % buf.length
+    this.pitchPhase[ch] += ratio
+    if (this.pitchPhase[ch] >= buf.length) this.pitchPhase[ch] -= buf.length
+    const ri = Math.floor(this.pitchPhase[ch])
+    const ni = (ri + 1) % buf.length
+    const f = this.pitchPhase[ch] - ri
+    return buf[ri] * (1 - f) + buf[ni] * f
   }
 
   process(io, block) {
@@ -56,23 +56,12 @@ class Processor {
       for (let c = 0; c < 2; c++) {
         const bufBase = c * maxLen
         const dry = io.src[c][i]
-
-        // Read delayed
         const readIdx = (this.idx - delaySamp + maxLen) % maxLen
         const delayed = this.buf[bufBase + readIdx]
-
-        // Pitch shift the delayed signal
-        const pitched = this._pitchShift(delayed, semitones)
-
-        // Mix dry delay + pitched shimmer
+        const pitched = this._pitchShift(delayed, semitones, c)
         const wet = delayed * (1 - shimmerAmt) + pitched * shimmerAmt
-
-        // Damping (one-pole lowpass in feedback path)
         this.dampState[c] = this.dampState[c] * damping + wet * (1 - damping)
-
-        // Write with feedback
         this.buf[bufBase + this.idx] = dry + this.dampState[c] * feedback
-
         io.out[c][i] = dry * (1 - mix) + wet * mix
       }
       this.idx = (this.idx + 1) % maxLen

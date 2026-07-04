@@ -31,7 +31,7 @@ class Processor {
     const driveAmt = this.p.drive
     const foldAmt = this.p.fold
     const crushAmt = this.p.crush
-    const slewAmt = this.p.slew / 100
+    const slewAmt = this.p.slew
     const wetMix = this.p.mix
 
     for (let i = block.s0; i < block.s1; i++) {
@@ -62,11 +62,11 @@ class Processor {
         dR = this.crushHoldR
       }
 
-      // Slew (lowpass on output)
-      this.slewL += (dL - this.slewL) * (1 - slewAmt)
-      this.slewR += (dR - this.slewR) * (1 - slewAmt)
-      dL = slewAmt > 0 ? this.slewL : dL
-      dR = slewAmt > 0 ? this.slewR : dR
+      // Slew (lowpass on output) — 0=dry, 1=max smoothing
+      const slewCoef = 1 - slewAmt
+      this.slewL += (dL - this.slewL) * slewCoef
+      this.slewR += (dR - this.slewR) * slewCoef
+      if (slewAmt > 0) { dL = this.slewL; dR = this.slewR }
 
       io.out[0][i] = inL * (1 - wetMix) + dL * wetMix
       io.out[1][i] = inR * (1 - wetMix) + dR * wetMix

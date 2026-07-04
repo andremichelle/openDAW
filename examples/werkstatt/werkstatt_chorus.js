@@ -12,7 +12,8 @@ class Processor {
   phase = 0
 
   constructor() {
-    this.maxDelay = Math.floor(this.sr * 0.05)
+    // 2× max center to accommodate depth modulation (center + depth*center*2)
+    this.maxDelay = Math.floor(this.sr * 0.1)
     this.bufL = new Float32Array(this.maxDelay)
     this.bufR = new Float32Array(this.maxDelay)
     this.idxL = 0
@@ -41,9 +42,9 @@ class Processor {
       const delayL = center + depth * center * lfoL
       const delayR = center + depth * center * lfoR
 
-      // Fractional delay read (linear interp)
-      const readL = this.idxL - delayL + this.maxDelay
-      const readR = this.idxR - delayR + this.maxDelay
+      // Fractional delay read (linear interp) — safe modulo for negative indices
+      const readL = ((this.idxL - delayL) % this.maxDelay + this.maxDelay) % this.maxDelay
+      const readR = ((this.idxR - delayR) % this.maxDelay + this.maxDelay) % this.maxDelay
       const iL0 = Math.floor(readL) % this.maxDelay
       const iL1 = (iL0 + 1) % this.maxDelay
       const fL = readL - Math.floor(readL)

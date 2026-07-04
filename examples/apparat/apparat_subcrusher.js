@@ -134,15 +134,16 @@ class Processor {
 
         for (let i = block.s0; i < block.s1; i++) {
             // glide
+            // glide — exponential interpolation, works both up and down
             if (this.glideRate > 0 && this.freq !== this.targetFreq) {
-                const ratio = this.freq / this.targetFreq
-                const logRatio = Math.log(ratio)
-                const newLog = logRatio - this.glideRate
-                if (Math.abs(newLog) < 0.001) {
+                const logF = Math.log(this.freq)
+                const logT = Math.log(this.targetFreq)
+                const diff = logT - logF
+                if (Math.abs(diff) < this.glideRate) {
                     this.freq = this.targetFreq
                     this.glideRate = 0
                 } else {
-                    this.freq = this.targetFreq * Math.exp(newLog)
+                    this.freq = Math.exp(logF + Math.sign(diff) * this.glideRate)
                 }
             }
 

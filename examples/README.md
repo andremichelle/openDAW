@@ -98,11 +98,11 @@ class Processor {
 
 ## @param Format
 
-```
+```text
 // @param <name> <default> <min> <max> <type> [unit]
 ```
 
-Types: `linear`, `exp`, `int`, `bool`, or omit for `unipolar` (0–1).
+Types: `linear`, `exp`, `int`, `bool`.
 
 See `plans/werkstatt.md`, `plans/apparat.md`, `plans/spielwerk.md`, and `plans/custom-mapping.md` for full specifications.
 

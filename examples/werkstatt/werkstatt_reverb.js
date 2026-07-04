@@ -15,7 +15,7 @@ class Processor {
     const combMs = [29.7, 37.1, 41.1, 43.7]
     this.combs = combMs.map(ms => {
       const len = Math.floor(this.sr * ms / 1000)
-      return {buf: new Float32Array(len), idx: 0, len}
+      return {buf: new Float32Array(len), idx: 0, len, damp: 0}
     })
     const apMs = [5.0, 1.7]
     this.allpasses = apMs.map(ms => {
@@ -24,7 +24,6 @@ class Processor {
     })
     this.pdBuf = new Float32Array(Math.floor(this.sr * 0.2))
     this.pdIdx = 0
-    this.dampL = 0; this.dampR = 0
   }
 
   paramChanged(name, value) {
@@ -49,14 +48,15 @@ class Processor {
       this.pdBuf[this.pdIdx] = dry
       this.pdIdx = (this.pdIdx + 1) % this.pdBuf.length
 
-      // Comb filters
+      // Comb filters — each with own damping state and advancing index
       let wet = pdOut
       for (let k = 0; k < this.combs.length; k++) {
         const c = this.combs[k]
         const fb = c.buf[c.idx]
-        this.dampL = this.dampL * damping + fb * (1 - damping)
-        c.buf[c.idx] = pdOut + this.dampL * decay
-        wet += this.dampL
+        c.damp = c.damp * damping + fb * (1 - damping)
+        c.buf[c.idx] = pdOut + c.damp * decay
+        wet += c.damp
+        c.idx = (c.idx + 1) % c.len
       }
 
       // Allpass filters
@@ -68,9 +68,11 @@ class Processor {
         a.idx = (a.idx + 1) % a.len
       }
 
-      // Stereo width
-      const wL = wet * (0.5 + width * 0.5)
-      const wR = wet * (0.5 + (1 - width) * 0.5)
+      // Stereo width — M/S decode: width=0 mono, width=1 full stereo
+      const mid = wet * 0.707
+      const side = (dryL - dryR) * 0.707 * width
+      const wL = mid + side
+      const wR = mid - side
 
       io.out[0][i] = dryL * (1 - mix) + wL * mix
       io.out[1][i] = dryR * (1 - mix) + wR * mix

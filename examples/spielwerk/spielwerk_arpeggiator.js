@@ -107,10 +107,10 @@ class Processor {
             const noteIdx = localStep % pattern.length
             const pitch = pattern[noteIdx]
 
-            // swing: odd steps delayed
+            // swing: odd steps delayed — if pushed past block end,
+            // yield it anyway so the engine schedules it next block
             let notePos = pos
             if (localStep % 2 === 1) notePos += swingAmt
-            if (notePos >= to) break
 
             const dur = Math.round(ratePpqn * this.hold)
             const id = this.nextId++
