@@ -8,7 +8,7 @@ Community-contributed DSP scripts for openDAW's scriptable devices:
 Each script is a self-contained `Processor` class that runs in the AudioWorklet.
 Parameters are declared via `// @param` directives and auto-create UI knobs when compiled.
 
-## Werkstatt (11 scripts)
+## Werkstatt (12 scripts)
 
 | File | Effect | Parameters |
 |------|--------|------------|
@@ -23,6 +23,7 @@ Parameters are declared via `// @param` directives and auto-create UI knobs when
 | `werkstatt_envfollower.js` | Envelope follower / sidechain ducking | attack, release, depth, threshold, invert, makeup |
 | `werkstatt_adsr_trim.js` | ADSR envelope trim (gates sustained samples) | attack, decay, sustain, release, threshold, mix |
 | `werkstatt_granular_stretch.js` | Granular time-stretch with pitch shift | stretch, grain, overlap, pitch, mix |
+| `werkstatt_pitch_shift.js` | Real-time pitch shifter (delay-line sweep) | semitones, cents, latency, mix |
 
 ## Apparat (3 scripts)
 
