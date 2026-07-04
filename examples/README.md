@@ -1,14 +1,14 @@
 # Scriptable Device Examples
 
 Community-contributed DSP scripts for openDAW's scriptable devices:
-- [Werkstatt](werkstatt/) — 12 audio effect scripts
+- [Werkstatt](werkstatt/) — 14 audio effect scripts
 - [Apparat](apparat/) — 4 instrument scripts
 - [Spielwerk](spielwerk/) — 2 MIDI effect scripts
 
 Each script is a self-contained `Processor` class that runs in the AudioWorklet.
 Parameters are declared via `// @param` directives and auto-create UI knobs when compiled.
 
-## Werkstatt (12 scripts)
+## Werkstatt (14 scripts)
 
 | File | Effect | Parameters |
 |------|--------|------------|
@@ -24,6 +24,8 @@ Parameters are declared via `// @param` directives and auto-create UI knobs when
 | `werkstatt_adsr_trim.js` | ADSR envelope trim (gates sustained samples) | attack, decay, sustain, release, threshold, mix |
 | `werkstatt_granular_stretch.js` | Granular time-stretch with pitch shift | stretch, grain, overlap, pitch, mix |
 | `werkstatt_pitch_shift.js` | Real-time pitch shifter (delay-line sweep) | semitones, cents, latency, mix |
+| `werkstatt_dcremover.js` | DC offset remover + stereo width tool (#91) | dc_freq (Hz), width, balance, mix |
+| `werkstatt_allpass.js` | Allpass filter with invert + cascade (#133) | freq (Hz), stages (1-8), invert, feedback, mix |
 
 ## Apparat (4 scripts)
 
