@@ -39,7 +39,8 @@ use math::value_mapping::{Decibel, Linear, ValueMapping};
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_region::NoteRegion;
-use engine_env::note_region_source::NoteRegionSource;
+use engine_env::clip_sequencer::ClipSequencer;
+use engine_env::note_region_source::{NoteRegionSource, NoteTrackAccess};
 use engine_env::note_sequencer::NoteSequencer;
 use value::event::EventCollection;
 use value::note::NoteEvent;
@@ -238,7 +239,39 @@ impl CollectionCache {
 /// `iterate_range` assumes non-overlapping regions, which holds within a track but not across a unit's
 /// tracks. Shared between the track binding (the cascade inserts / removes / re-sorts) and the unit's
 /// sequencer (which range-queries it each block).
-pub(crate) type SharedTrackRegions = Rc<RefCell<RegionCollection<BoundRegion>>>;
+pub(crate) struct NoteTrackContent {
+    pub(crate) uuid: Uuid,
+    pub(crate) regions: RegionCollection<BoundRegion>,
+    pub(crate) clips: Vec<BoundNoteClip>
+}
+
+/// One launchable clip's playable content (TS `NoteClipBoxAdapter`): its live duration / loop flag and
+/// its note-event collection (a cache ref, released when the clip leaves).
+pub(crate) struct BoundNoteClip {
+    pub(crate) clip_uuid: Uuid,
+    pub(crate) duration: f64,
+    pub(crate) looped: bool,
+    pub(crate) collection: NoteCollection
+}
+
+impl NoteTrackAccess for NoteTrackContent {
+    fn for_each_region(&self, from: f64, to: f64, visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {
+        // Binary-search the regions overlapping [from, to) within this track (sorted by position).
+        for bound in self.regions.iterate_range(from, to) {
+            visit(&bound.region, &bound.collection.events());
+        }
+    }
+    fn clip_info(&self, clip: &[u8; 16]) -> Option<(f64, bool)> {
+        self.clips.iter().find(|bound| &bound.clip_uuid == clip).map(|bound| (bound.duration, bound.looped))
+    }
+    fn clip_events(&self, clip: &[u8; 16], visit: &mut dyn FnMut(&EventCollection<NoteEvent>)) {
+        if let Some(bound) = self.clips.iter().find(|bound| &bound.clip_uuid == clip) {
+            visit(&bound.collection.events());
+        }
+    }
+}
+
+pub(crate) type SharedTrackRegions = Rc<RefCell<NoteTrackContent>>;
 
 /// The unit's live list of per-track region collections (one entry per `TrackBox`), shared with the
 /// sequencer. Tracks are added / removed live; the sequencer iterates whatever is currently present.
@@ -260,12 +293,11 @@ pub(crate) struct BoundNoteRegions {
 }
 
 impl NoteRegionSource for BoundNoteRegions {
-    fn for_each_region(&self, from: f64, to: f64, visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {
+    fn for_each_track(&self, visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess)) {
         for track in self.tracks.borrow().iter() {
-            // Binary-search the regions overlapping [from, to) within this track (sorted by position).
-            for bound in track.borrow().iterate_range(from, to) {
-                visit(&bound.region, &bound.collection.events());
-            }
+            let content = track.borrow();
+            let uuid = content.uuid;
+            visit(&uuid, &*content);
         }
     }
 }
@@ -288,6 +320,14 @@ struct RegionBinding {
     edit_sub: SubscriptionId
 }
 
+/// One bound launchable clip: its entry in the track's content, the note collection it references, and a
+/// TARGETED `Parent` subscription re-reading its duration / loop flag on edit (mirrors `RegionBinding`).
+struct ClipBinding {
+    clip_uuid: Uuid,
+    collection_uuid: Uuid,
+    edit_sub: SubscriptionId
+}
+
 /// A track BINDING: owns this track's sorted region collection (`regions_set`, shared with the sequencer)
 /// and observes its `regions` membership (add / remove). A member region's span edit is observed per-region
 /// (see `RegionBinding`), so no track-wide listener is needed.
@@ -297,6 +337,9 @@ struct TrackBinding {
     region_bindings: Vec<RegionBinding>,
     region_changes: Rc<RefCell<Members>>,
     region_sub: SubscriptionId,
+    clip_bindings: Vec<ClipBinding>,
+    clip_changes: Rc<RefCell<Members>>,
+    clip_sub: SubscriptionId,
     // A TARGETED `This` monitor on the track's `enabled` field: toggling it re-derives the unit's active
     // note-track set (a disabled track's regions are excluded), exactly like a device `enabled` toggle.
     enabled_sub: SubscriptionId
@@ -827,7 +870,7 @@ impl Engine {
     /// else re-bind its automation curves if those attached / detached. A full rewire re-gathers automation,
     /// so it also clears that flag.
     fn reconcile_one(&mut self, unit: &mut AudioUnitBinding) {
-        reconcile_tracks(&mut self.graph, unit, &self.tempo_map);
+        reconcile_tracks(&mut self.graph, unit, &self.tempo_map, &self.clip_sequencer);
         // A region add / edit ran the cascade above: pre-warm the tape player NOW (reconcile), so a region
         // entering playback later never allocates its sequencer on the render path.
         if let Some(Wired::Tape(tape)) = &unit.wired {
@@ -1357,7 +1400,7 @@ impl Engine {
             collection.terminate(&mut self.graph);
         }
         for track in binding.tracks {
-            teardown_track(&mut self.graph, &binding.track_sets, &mut binding.collections, track);
+            teardown_track(&mut self.graph, &binding.track_sets, &mut binding.collections, &self.clip_sequencer, track);
         }
         for track in binding.audio_tracks {
             teardown_audio_track(&mut self.graph, &binding.audio_track_sets, track);
@@ -1756,7 +1799,7 @@ impl Engine {
         // their state; only the pull wrappers are rebuilt).
         let sequencer: SharedNoteEventSource = match sequencer_keep {
             Some((uuid, kept)) if uuid == instrument_uuid => kept,
-            _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}))))
+            _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}), self.clip_sequencer.clone())))
         };
         // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip; the strip's output is
         // routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).
@@ -1973,7 +2016,7 @@ impl Engine {
         }
         let sequencer: SharedNoteEventSource = match sequencer_keep {
             Some((uuid, kept)) if uuid == instrument_uuid => kept,
-            _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: track_sets.clone()}))))
+            _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: track_sets.clone()}), self.clip_sequencer.clone())))
         };
         let (output, output_node, internal_edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, choke);
         SlotCluster {instrument, sequencer, midi: midi_members, audio: audio_members, internal_edges, output, output_node}
@@ -2517,13 +2560,14 @@ fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16]) -> (
 /// Reconcile one unit's tracks against its `tracks` membership, then each track's regions. A new track's
 /// region collection is registered into the unit's shared `track_sets` (so the sequencer sees it); a
 /// removed track's collection is unregistered.
-fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding, tempo_map: &SharedTempoMap) {
+fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding, tempo_map: &SharedTempoMap,
+                    clip_sequencer: &Rc<RefCell<ClipSequencer>>) {
     let mark = unit.mark.clone();
     let changes = core::mem::take(&mut *unit.track_changes.borrow_mut());
     for track_uuid in changes.removed {
         if let Some(index) = unit.tracks.iter().position(|track| track.track_uuid == track_uuid) {
             let track = unit.tracks.remove(index);
-            teardown_track(graph, &unit.track_sets, &mut unit.collections, track);
+            teardown_track(graph, &unit.track_sets, &mut unit.collections, clip_sequencer, track);
         } else if let Some(index) = unit.audio_tracks.iter().position(|track| track.track_uuid == track_uuid) {
             let track = unit.audio_tracks.remove(index);
             teardown_audio_track(graph, &unit.audio_track_sets, track);
@@ -2563,6 +2607,7 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding, tempo_map
     }
     for track in &mut unit.tracks {
         reconcile_regions(graph, &mut unit.collections, track);
+        reconcile_clips(graph, &mut unit.collections, clip_sequencer, track);
     }
     for track in &mut unit.audio_tracks {
         reconcile_audio_regions(graph, track, tempo_map);
@@ -2573,7 +2618,9 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding, tempo_map
 /// `regions` membership (key 3), and an edit subscription that re-sorts the collection when a member
 /// region's span (position / duration / loop fields) changes — so a moved region lands at the right place.
 fn build_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMark) -> TrackBinding {
-    let regions_set: SharedTrackRegions = Rc::new(RefCell::new(RegionCollection::new()));
+    let regions_set: SharedTrackRegions = Rc::new(RefCell::new(NoteTrackContent {
+        uuid: track_uuid, regions: RegionCollection::new(), clips: Vec::new()
+    }));
     let region_changes = Rc::new(RefCell::new(Members::default()));
     let recorder = region_changes.clone();
     let region_mark = mark.clone();
@@ -2584,18 +2631,36 @@ fn build_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMark) -> Trac
         }
         region_mark.mark();
     }));
+    let clip_changes = Rc::new(RefCell::new(Members::default()));
+    let clip_recorder = clip_changes.clone();
+    let clip_mark = mark.clone();
+    let clip_sub = graph.subscribe_pointer_hub(Address::of(track_uuid, vec![TRACK_CLIPS_KEY]), Box::new(move |_graph, event| {
+        match event {
+            HubEvent::Added(source) => clip_recorder.borrow_mut().added.push(source.uuid),
+            HubEvent::Removed(source) => clip_recorder.borrow_mut().removed.push(source.uuid)
+        }
+        clip_mark.mark();
+    }));
     let enabled_mark = mark.clone();
     let enabled_sub = graph.subscribe_vertex(Propagation::This, Address::of(track_uuid, vec![TRACK_ENABLED_KEY]),
         Box::new(move |_graph, _update| enabled_mark.mark()));
-    TrackBinding {track_uuid, regions_set, region_bindings: Vec::new(), region_changes, region_sub, enabled_sub}
+    TrackBinding {track_uuid, regions_set, region_bindings: Vec::new(), region_changes, region_sub,
+        clip_bindings: Vec::new(), clip_changes, clip_sub, enabled_sub}
 }
 
 /// Tear down a track: unsubscribe its membership + edit observers, unregister its region collection from the
 /// unit's `track_sets`, and release each region's note-event cache reference.
-fn teardown_track(graph: &mut BoxGraph, track_sets: &SharedTrackSets, collections: &mut CollectionCache, track: TrackBinding) {
+fn teardown_track(graph: &mut BoxGraph, track_sets: &SharedTrackSets, collections: &mut CollectionCache,
+                  clip_sequencer: &Rc<RefCell<ClipSequencer>>, track: TrackBinding) {
     graph.unsubscribe(track.region_sub);
+    graph.unsubscribe(track.clip_sub);
     graph.unsubscribe(track.enabled_sub);
+    clip_sequencer.borrow_mut().forget(&track.track_uuid);
     track_sets.borrow_mut().retain(|set| !Rc::ptr_eq(set, &track.regions_set));
+    for clip in track.clip_bindings {
+        graph.unsubscribe(clip.edit_sub);
+        collections.release(graph, clip.collection_uuid);
+    }
     for region in track.region_bindings {
         graph.unsubscribe(region.edit_sub);
         collections.release(graph, region.collection_uuid);
@@ -2609,7 +2674,7 @@ fn reconcile_regions(graph: &mut BoxGraph, collections: &mut CollectionCache, tr
     for region_uuid in changes.removed {
         if let Some(index) = track.region_bindings.iter().position(|region| region.region_uuid == region_uuid) {
             let region = track.region_bindings.remove(index);
-            track.regions_set.borrow_mut().retain(|bound| bound.region_uuid != region_uuid);
+            track.regions_set.borrow_mut().regions.retain(|bound| bound.region_uuid != region_uuid);
             graph.unsubscribe(region.edit_sub);
             collections.release(graph, region.collection_uuid);
         }
@@ -2624,6 +2689,57 @@ fn reconcile_regions(graph: &mut BoxGraph, collections: &mut CollectionCache, tr
     }
 }
 
+/// Sync a track's launched-clip bindings to its `clips` membership (key 4): a leaver releases its
+/// collection ref and leaves the clip sequencer; a joiner reads its content (mirrors `reconcile_regions`).
+fn reconcile_clips(graph: &mut BoxGraph, collections: &mut CollectionCache,
+                   clip_sequencer: &Rc<RefCell<ClipSequencer>>, track: &mut TrackBinding) {
+    let changes = core::mem::take(&mut *track.clip_changes.borrow_mut());
+    for clip_uuid in changes.removed {
+        if let Some(index) = track.clip_bindings.iter().position(|clip| clip.clip_uuid == clip_uuid) {
+            let clip = track.clip_bindings.remove(index);
+            track.regions_set.borrow_mut().clips.retain(|bound| bound.clip_uuid != clip_uuid);
+            graph.unsubscribe(clip.edit_sub);
+            collections.release(graph, clip.collection_uuid);
+            clip_sequencer.borrow_mut().forget(&clip_uuid);
+        }
+    }
+    for clip_uuid in changes.added {
+        if track.clip_bindings.iter().any(|clip| clip.clip_uuid == clip_uuid) {
+            continue;
+        }
+        if let Some(binding) = build_clip(graph, &track.regions_set, collections, clip_uuid) {
+            track.clip_bindings.push(binding);
+        }
+    }
+}
+
+/// Read a clip's duration (key 10) + `triggerMode.loop` (path [4, 1], default TRUE), ACQUIRE its note-event
+/// collection (`events` pointer key 2), and register it in the track content. A targeted `Parent` sub keeps
+/// duration / loop fresh on edit. `None` if the clip has no collection.
+fn build_clip(graph: &mut BoxGraph, regions_set: &SharedTrackRegions, collections: &mut CollectionCache, clip_uuid: Uuid) -> Option<ClipBinding> {
+    let collection_uuid = graph.target_of(&Address::of(clip_uuid, vec![2]))?.uuid;
+    let collection = collections.acquire(graph, collection_uuid);
+    let (duration, looped) = read_clip_playback(graph, clip_uuid);
+    regions_set.borrow_mut().clips.push(BoundNoteClip {clip_uuid, duration, looped, collection});
+    let edit_content = regions_set.clone();
+    let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(clip_uuid), Box::new(move |graph, _update| {
+        let (duration, looped) = read_clip_playback(graph, clip_uuid);
+        for bound in edit_content.borrow_mut().clips.iter_mut() {
+            if bound.clip_uuid == clip_uuid {
+                bound.duration = duration;
+                bound.looped = looped;
+            }
+        }
+    }));
+    Some(ClipBinding {clip_uuid, collection_uuid, edit_sub})
+}
+
+fn read_clip_playback(graph: &BoxGraph, clip_uuid: Uuid) -> (f64, bool) {
+    let duration = region_pulses(graph, clip_uuid, 10);
+    let looped = graph.field_value(&Address::of(clip_uuid, vec![4, 1])).and_then(|value| value.as_bool()).unwrap_or(true);
+    (duration, looped)
+}
+
 /// Read a region's loopable span, ACQUIRE its note-event collection (`events` pointer key 2) from the cache
 /// (observed once, shared by mirrored regions), and sorted-insert it into the track's region collection.
 /// `None` if the region has no collection.
@@ -2631,12 +2747,13 @@ fn build_region(graph: &mut BoxGraph, regions_set: &SharedTrackRegions, collecti
     let region = read_note_region(graph, region_uuid);
     let collection_uuid = graph.target_of(&Address::of(region_uuid, vec![2]))?.uuid;
     let collection = collections.acquire(graph, collection_uuid);
-    regions_set.borrow_mut().add(BoundRegion {region_uuid, region, collection});
+    regions_set.borrow_mut().regions.add(BoundRegion {region_uuid, region, collection});
     // Targeted: a `Parent` sub on the region box re-reads THIS region's span and re-sorts the track's set
     // when (and only when) one of this region's own fields is edited (TS `onIndexingChanged`, per-region).
     let edit_regions = regions_set.clone();
     let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(region_uuid), Box::new(move |graph, _update| {
-        let mut set = edit_regions.borrow_mut();
+        let mut content = edit_regions.borrow_mut();
+        let set = &mut content.regions;
         let mut moved = false;
         for bound in set.iter_mut() {
             if bound.region_uuid == region_uuid {
@@ -2898,6 +3015,7 @@ fn build_audio_region(graph: &mut BoxGraph, regions_set: &SharedAudioRegions, re
 // automation (Note / Audio tracks and the unset default go through the note cascade).
 const TRACK_TYPE_VALUE: i32 = 3;
 const TRACK_TYPE_AUDIO: i32 = 2; // an Audio track's regions are AudioRegionBoxes, played by the audio-region player
+const TRACK_CLIPS_KEY: u16 = 4; // WASM CONTRACT: TrackBox `clips` collection (launchable clips)
 const TRACK_TYPE_KEY: u16 = 11;
 const TRACK_ENABLED_KEY: u16 = 20;      // TrackBox.enabled (WASM CONTRACT): a disabled track contributes nothing
 const TRACK_TARGET_KEY: u16 = 2;        // TrackBox.target -> the automated parameter field (Automation pointer)
@@ -3200,6 +3318,91 @@ mod tests {
         assert_eq!(instr_after, instr_node, "instrument processor identity preserved across chain edit");
         assert_eq!(audio_after[0], fx_a_node, "surviving effect FX_A processor identity preserved");
         assert!(audio_after[1] > fx_a_node, "the joiner FX_B is a freshly created processor");
+    }
+
+    #[test]
+    fn launching_a_clip_plays_its_notes_instead_of_the_timeline() {
+        const CLIP: Uuid = [30u8; 16];
+        const CLIP_COLLECTION: Uuid = [31u8; 16];
+        const CLIP_NOTE: Uuid = [32u8; 16];
+        const TL_REGION: Uuid = [33u8; 16];
+        const TL_COLLECTION: Uuid = [34u8; 16];
+        const TL_NOTE: Uuid = [35u8; 16];
+        let mut engine = engine_with_devices();
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+                (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+            ]),
+            graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+            graph_box(TRACK, "TrackBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))),
+                (TRACK_TYPE_KEY, FieldValue::Int32(1)), // Notes
+                (TRACK_REGIONS_KEY, FieldValue::Hook),
+                (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+                (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+            ]),
+            // The timeline: one region spanning two bars with a note (pitch 60) inside the SECOND bar.
+            graph_box(TL_REGION, "NoteRegionBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![TRACK_REGIONS_KEY])))),
+                (2, FieldValue::Pointer(Some(Address::of(TL_COLLECTION, vec![2])))),
+                (10, FieldValue::Int32(0)), (11, FieldValue::Int32(7680)),
+                (12, FieldValue::Int32(0)), (13, FieldValue::Int32(7680))
+            ]),
+            graph_box(TL_COLLECTION, "NoteEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+            graph_box(TL_NOTE, "NoteEventBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(TL_COLLECTION, vec![1])))),
+                (10, FieldValue::Int32(3850)), (11, FieldValue::Int32(240)),
+                (20, FieldValue::Int32(60)), (21, FieldValue::Float32(0.8)), (24, FieldValue::Float32(0.0))
+            ]),
+            // The clip: one bar long (960 pulses would be a beat; use 960 to prove clip-duration cycling), a
+            // note (pitch 72) at its start, attached to the track's `clips` collection.
+            graph_box(CLIP, "NoteClipBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![super::TRACK_CLIPS_KEY])))),
+                (2, FieldValue::Pointer(Some(Address::of(CLIP_COLLECTION, vec![2])))),
+                (10, FieldValue::Int32(960))
+            ]),
+            graph_box(CLIP_COLLECTION, "NoteEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+            graph_box(CLIP_NOTE, "NoteEventBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(CLIP_COLLECTION, vec![1])))),
+                (10, FieldValue::Int32(0)), (11, FieldValue::Int32(240)),
+                (20, FieldValue::Int32(72)), (21, FieldValue::Float32(0.9)), (24, FieldValue::Float32(0.0))
+            ])
+        ]);
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        let sequencer = leaf_sequencer(&unit);
+        let flags = engine_env::block_flags::BlockFlags::create(true, false, true, false);
+        let mut events: Vec<engine_env::event::Event> = Vec::new();
+        // Before the launch, the timeline note plays.
+        sequencer.borrow_mut().process_notes(3800.0, 3900.0, flags, &mut |event| events.push(event));
+        assert!(events.iter().any(|event| matches!(event, engine_env::event::Event::NoteStart {pitch: 60, ..})),
+            "the timeline note plays before any clip: {events:?}");
+        // Launch the clip (resolves its track through the `clips` pointer). Handover on the NEXT bar,
+        // and the TRANSPORT STARTS (TS: scheduleClipPlay sets transporting), so a stopped studio plays.
+        assert!(!engine.transport.is_playing(), "transport starts stopped");
+        engine.schedule_clip_play(CLIP);
+        assert!(engine.transport.is_playing(), "launching a clip starts the transport (TS parity)");
+        events.clear();
+        sequencer.borrow_mut().process_notes(7660.0, 7700.0, flags, &mut |event| events.push(event));
+        assert!(events.iter().any(|event| matches!(event, engine_env::event::Event::NoteStart {pitch: 72, position, ..} if *position == 7680.0)),
+            "the clip note starts at the bar boundary: {events:?}");
+        // While the clip plays, its collection cycles at the CLIP duration (960): next start at 8640, and
+        // the timeline stays suppressed.
+        events.clear();
+        sequencer.borrow_mut().process_notes(8620.0, 8660.0, flags, &mut |event| events.push(event));
+        assert!(events.iter().any(|event| matches!(event, engine_env::event::Event::NoteStart {pitch: 72, position, ..} if *position == 8640.0)),
+            "the clip cycles at its own duration: {events:?}");
+        assert!(!events.iter().any(|event| matches!(event, engine_env::event::Event::NoteStart {pitch: 60, ..})),
+            "the timeline is suppressed while the clip plays: {events:?}");
+        // The launch queued a STARTED transition for the back-channel.
+        let mut started = 0;
+        engine.clip_sequencer.borrow_mut().take_changes(&mut |uuid, change| {
+            if uuid == &CLIP && change == engine_env::clip_sequencer::Change::Started {
+                started += 1;
+            }
+        });
+        assert_eq!(started, 1, "exactly one started notification");
     }
 
     #[test]

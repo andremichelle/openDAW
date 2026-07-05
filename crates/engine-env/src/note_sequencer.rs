@@ -9,17 +9,21 @@
 //! (the paused render keeps the pulse range advancing).
 
 use alloc::boxed::Box;
+use alloc::rc::Rc;
 use alloc::vec::Vec;
+use core::cell::RefCell;
 use math::clamp;
 use math::random::Mulberry32;
-use value::event::EventSpan;
+use value::event::{EventCollection, EventSpan};
+use value::note::NoteEvent;
 use value::note::{curve_func, inverse_curve_func};
 use value::region::locate_loops;
 use value::retainer::EventSpanRetainer;
 use crate::block_flags::BlockFlags;
 use crate::event::Event;
+use crate::clip_sequencer::{ClipInfo, ClipKey, ClipSequencer};
 use crate::note_event_source::NoteEventSource;
-use crate::note_region_source::NoteRegionSource;
+use crate::note_region_source::{NoteRegionSource, NoteTrackAccess};
 
 // The chance-roll seed, mirroring TS `NoteSequencer`'s `Random.create(0xFFFF123)` (one stream per
 // sequencer instance, seeded at construction, never re-seeded — not even on a transport stop).
@@ -65,6 +69,7 @@ struct ScheduledNote {
 
 pub struct NoteSequencer {
     source: Box<dyn NoteRegionSource>,
+    clips: Rc<RefCell<ClipSequencer>>,
     retainer: EventSpanRetainer<RetainedNote>,
     raw_notes: Vec<RawNote>,
     audition_queue: Vec<ScheduledNote>,
@@ -75,9 +80,10 @@ pub struct NoteSequencer {
 }
 
 impl NoteSequencer {
-    pub fn new(source: Box<dyn NoteRegionSource>) -> Self {
+    pub fn new(source: Box<dyn NoteRegionSource>, clips: Rc<RefCell<ClipSequencer>>) -> Self {
         Self {
             source,
+            clips,
             retainer: EventSpanRetainer::new(),
             raw_notes: Vec::new(),
             audition_queue: Vec::new(),
@@ -152,78 +158,42 @@ impl NoteEventSource for NoteSequencer {
             return;
         }
         let truncate = self.truncate_at_region_end;
-        let Self {source, retainer, random, next_id, ..} = self;
-        source.for_each_region(from, to, &mut |region, notes| {
-            for cycle in locate_loops(region.position, region.complete(), region.loop_offset, region.loop_duration, from, to) {
-                // TS: `end = truncateNotesAtRegionEnd ? min(rawEnd, region.complete) : Infinity` — by
-                // default a note keeps its FULL duration and rings past the region / cycle end.
-                let end = if truncate { cycle.raw_end.min(region.complete()) } else { f64::INFINITY };
-                let local_from = cycle.result_start - cycle.raw_start;
-                let local_to = cycle.result_end - cycle.raw_start;
-                // TS `#processCollection`: the query extends BACK by the collection's longest duration (a
-                // ratchet note that started before the window still repeats inside it), and the CHANCE roll
-                // advances the seeded stream for EVERY iterated note — even one whose start check then
-                // fails — so the roll ORDER is part of the parity contract.
-                for note in notes.iterate_range(local_from - notes.max_duration(), local_to) {
-                    if note.chance < 100.0 && random.next_double(0.0, 100.0) > note.chance as f64 {
-                        continue;
-                    }
-                    if note.play_count > 1 {
-                        let duration = note.duration;
-                        let count = note.play_count as f64;
-                        let curve = note.play_curve as f64;
-                        let search_start = inverse_curve_func((local_from - note.position) / duration, curve);
-                        let search_limit = inverse_curve_func((local_to - note.position) / duration, curve);
-                        let mut search_index = math::floor(search_start * count);
-                        let mut search_position = search_index / count;
-                        while search_position < search_limit {
-                            if search_position >= search_start {
-                                let a = curve_func(search_position, curve) * duration;
-                                if a >= duration {
-                                    break;
-                                }
-                                let b = curve_func(search_position + 1.0 / count, curve) * duration;
-                                let position = cycle.raw_start + note.position + a;
-                                let ratchet = b - a;
-                                let id = {
-                                    let value = *next_id;
-                                    *next_id += 1;
-                                    value
-                                };
-                                sink(Event::NoteStart {
-                                    id,
-                                    position,
-                                    duration: ratchet,
-                                    pitch: note.pitch,
-                                    cent: note.cent,
-                                    velocity: note.velocity
-                                });
-                                retainer.add_and_retain(RetainedNote {position, duration: ratchet, id, pitch: note.pitch});
-                            }
-                            search_index += 1.0;
-                            search_position = search_index / count;
+        let Self {source, retainer, random, next_id, clips, ..} = self;
+        let mut clips = clips.borrow_mut();
+        source.for_each_track(&mut |track, access| {
+            let info = LiveClipInfo {access};
+            clips.iterate(track, from, to, &info, &mut |section| {
+                match section.clip {
+                    // Timeline: the track's regions within the section (TS `#processRegions`).
+                    None => access.for_each_region(section.from, section.to, &mut |region, notes| {
+                        for cycle in locate_loops(region.position, region.complete(), region.loop_offset, region.loop_duration, section.from, section.to) {
+                            // TS: `end = truncateNotesAtRegionEnd ? min(rawEnd, region.complete) : Infinity` — by
+                            // default a note keeps its FULL duration and rings past the region / cycle end.
+                            let end = if truncate { cycle.raw_end.min(region.complete()) - cycle.raw_start } else { f64::INFINITY };
+                            let local_from = cycle.result_start - cycle.raw_start;
+                            let local_to = cycle.result_end - cycle.raw_start;
+                            process_collection(notes, local_from, local_to, cycle.raw_start, end, retainer, random, next_id, sink);
                         }
-                    } else if local_from <= note.position && note.position < local_to {
-                        let global = cycle.raw_start + note.position;
-                        let duration = note.duration.min(end - global);
-                        let id = {
-                            let value = *next_id;
-                            *next_id += 1;
-                            value
-                        };
-                        sink(Event::NoteStart {
-                            id,
-                            position: global,
-                            duration,
-                            pitch: note.pitch,
-                            cent: note.cent,
-                            velocity: note.velocity
+                    }),
+                    // A launched clip: its collection cycles at the CLIP duration (TS `#processClip`).
+                    Some(clip) => {
+                        let Some((clip_duration, _)) = access.clip_info(&clip) else { return };
+                        access.clip_events(&clip, &mut |notes| {
+                            let clip_start = quantize_floor(section.from, clip_duration);
+                            let clip_end = clip_start + clip_duration;
+                            let truncate_end = if truncate { clip_duration } else { f64::INFINITY };
+                            if section.to > clip_end {
+                                process_collection(notes, section.from - clip_start, clip_duration, clip_start, truncate_end, retainer, random, next_id, sink);
+                                process_collection(notes, 0.0, section.to - clip_end, clip_end, truncate_end, retainer, random, next_id, sink);
+                            } else {
+                                process_collection(notes, section.from - clip_start, section.to - clip_start, clip_start, truncate_end, retainer, random, next_id, sink);
+                            }
                         });
-                        retainer.add_and_retain(RetainedNote {position: global, duration, id, pitch: note.pitch});
                     }
                 }
-            }
+            });
         });
+        drop(clips);
         // TS re-drains after region processing, "in case they complete in the same block".
         retainer.drain_linear_completed(to, |retained| {
             let position = clamp(retained.complete(), from, to);
@@ -256,22 +226,103 @@ impl NoteEventSource for NoteSequencer {
     }
 }
 
+// Bridge the sequencer's live-clip lookups to the track access (duration / loop stay fresh on edits).
+struct LiveClipInfo<'a> {
+    access: &'a dyn NoteTrackAccess
+}
+
+impl ClipInfo for LiveClipInfo<'_> {
+    fn resolve(&self, clip: &ClipKey) -> Option<(f64, bool)> {
+        self.access.clip_info(clip)
+    }
+}
+
+fn quantize_floor(value: f64, interval: f64) -> f64 {
+    math::floor(value / interval) * interval
+}
+
+/// TS `#processCollection`: emit note-ons for `[local_from, local_to)` of a collection placed at
+/// `delta`, truncating at the collection-LOCAL `end` (INFINITY = never). The query extends BACK by the
+/// collection's longest duration (a ratchet note that started before the window still repeats inside
+/// it), and the CHANCE roll advances the seeded stream for EVERY iterated note — even one whose start
+/// check then fails — so the roll ORDER is part of the parity contract.
+#[allow(clippy::too_many_arguments)]
+fn process_collection(notes: &EventCollection<NoteEvent>, local_from: f64, local_to: f64, delta: f64, end: f64,
+                      retainer: &mut EventSpanRetainer<RetainedNote>, random: &mut Mulberry32, next_id: &mut u64,
+                      sink: &mut dyn FnMut(Event)) {
+    for note in notes.iterate_range(local_from - notes.max_duration(), local_to) {
+        if note.chance < 100.0 && random.next_double(0.0, 100.0) > note.chance as f64 {
+            continue;
+        }
+        if note.play_count > 1 {
+            let duration = note.duration;
+            let count = note.play_count as f64;
+            let curve = note.play_curve as f64;
+            let search_start = inverse_curve_func((local_from - note.position) / duration, curve);
+            let search_limit = inverse_curve_func((local_to - note.position) / duration, curve);
+            let mut search_index = math::floor(search_start * count);
+            let mut search_position = search_index / count;
+            while search_position < search_limit {
+                if search_position >= search_start {
+                    let a = curve_func(search_position, curve) * duration;
+                    if a >= duration {
+                        break;
+                    }
+                    let b = curve_func(search_position + 1.0 / count, curve) * duration;
+                    let position = delta + note.position + a;
+                    let ratchet = b - a;
+                    let id = {
+                        let value = *next_id;
+                        *next_id += 1;
+                        value
+                    };
+                    sink(Event::NoteStart {
+                        id,
+                        position,
+                        duration: ratchet,
+                        pitch: note.pitch,
+                        cent: note.cent,
+                        velocity: note.velocity
+                    });
+                    retainer.add_and_retain(RetainedNote {position, duration: ratchet, id, pitch: note.pitch});
+                }
+                search_index += 1.0;
+                search_position = search_index / count;
+            }
+        } else if local_from <= note.position && note.position < local_to {
+            let global = delta + note.position;
+            let duration = note.duration.min(end - note.position);
+            let id = {
+                let value = *next_id;
+                *next_id += 1;
+                value
+            };
+            sink(Event::NoteStart {
+                id,
+                position: global,
+                duration,
+                pitch: note.pitch,
+                cent: note.cent,
+                velocity: note.velocity
+            });
+            retainer.add_and_retain(RetainedNote {position: global, duration, id, pitch: note.pitch});
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::vec::Vec;
-    use value::event::EventCollection;
-    use value::note::NoteEvent;
-    use crate::note_region::NoteRegion;
     use super::*;
 
     struct NoRegions;
 
     impl NoteRegionSource for NoRegions {
-        fn for_each_region(&self, _from: f64, _to: f64, _visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {}
+        fn for_each_track(&self, _visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess)) {}
     }
 
     fn sequencer() -> NoteSequencer {
-        NoteSequencer::new(Box::new(NoRegions))
+        NoteSequencer::new(Box::new(NoRegions), Rc::new(RefCell::new(ClipSequencer::new())))
     }
 
     fn stopped() -> BlockFlags {

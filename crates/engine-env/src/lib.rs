@@ -14,6 +14,7 @@ pub mod audio_buffer;
 pub mod audio_bus_processor;
 pub mod aux_send;
 pub mod channel_strip;
+pub mod clip_sequencer;
 pub mod ramp;
 pub mod audio_generator;
 pub mod audio_input;

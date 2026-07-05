@@ -3,25 +3,40 @@
 //! same block"), and durations follow the `truncateNotesAtRegionEnd` preference (TS default FALSE: a
 //! note rings past its region end; TRUE: truncated at the loop-cycle / region end).
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use engine_env::block_flags::BlockFlags;
+use engine_env::clip_sequencer::ClipSequencer;
 use engine_env::event::Event;
 use engine_env::note_event_source::NoteEventSource;
 use engine_env::note_region::NoteRegion;
-use engine_env::note_region_source::NoteRegionSource;
+use engine_env::note_region_source::{NoteRegionSource, NoteTrackAccess};
 use engine_env::note_sequencer::NoteSequencer;
 use value::event::EventCollection;
 use value::note::NoteEvent;
+
+const TRACK: [u8; 16] = [1; 16];
 
 struct OneRegion {
     region: NoteRegion,
     notes: EventCollection<NoteEvent>
 }
 
-impl NoteRegionSource for OneRegion {
+impl NoteTrackAccess for OneRegion {
     fn for_each_region(&self, from: f64, to: f64, visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {
         if self.region.position < to && self.region.complete() > from {
             visit(&self.region, &self.notes)
         }
+    }
+    fn clip_info(&self, _clip: &[u8; 16]) -> Option<(f64, bool)> {
+        None
+    }
+    fn clip_events(&self, _clip: &[u8; 16], _visit: &mut dyn FnMut(&EventCollection<NoteEvent>)) {}
+}
+
+impl NoteRegionSource for OneRegion {
+    fn for_each_track(&self, visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess)) {
+        visit(&TRACK, self)
     }
 }
 
@@ -30,7 +45,7 @@ fn sequencer(region: NoteRegion, notes: &[NoteEvent]) -> NoteSequencer {
     for note in notes {
         collection.add(*note);
     }
-    NoteSequencer::new(Box::new(OneRegion {region, notes: collection}))
+    NoteSequencer::new(Box::new(OneRegion {region, notes: collection}), Rc::new(RefCell::new(ClipSequencer::new())))
 }
 
 fn pull(sequencer: &mut NoteSequencer, from: f64, to: f64) -> Vec<Event> {
@@ -170,4 +185,61 @@ fn a_ratchet_spanning_blocks_retriggers_via_the_lookback() {
         _ => None
     }).collect();
     assert_eq!(starts, vec![80.0, 120.0], "the lookback finds the running ratchet: {second:?}");
+}
+
+struct TrackWithClip {
+    region: NoteRegion,
+    region_notes: EventCollection<NoteEvent>,
+    clip_notes: EventCollection<NoteEvent>,
+    clip: [u8; 16]
+}
+
+impl NoteTrackAccess for TrackWithClip {
+    fn for_each_region(&self, from: f64, to: f64, visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {
+        if self.region.position < to && self.region.complete() > from {
+            visit(&self.region, &self.region_notes)
+        }
+    }
+    fn clip_info(&self, clip: &[u8; 16]) -> Option<(f64, bool)> {
+        (clip == &self.clip).then_some((960.0, true))
+    }
+    fn clip_events(&self, clip: &[u8; 16], visit: &mut dyn FnMut(&EventCollection<NoteEvent>)) {
+        if clip == &self.clip {
+            visit(&self.clip_notes)
+        }
+    }
+}
+
+impl NoteRegionSource for TrackWithClip {
+    fn for_each_track(&self, visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess)) {
+        visit(&TRACK, self)
+    }
+}
+
+#[test]
+fn a_launched_clip_replaces_the_timeline_at_the_handover() {
+    const CLIP: [u8; 16] = [9; 16];
+    let clips = Rc::new(RefCell::new(ClipSequencer::new()));
+    let mut region_notes = EventCollection::new();
+    region_notes.add(NoteEvent::new(3850.0, 10.0, 60, 0.0, 1.0));
+    let mut clip_notes = EventCollection::new();
+    clip_notes.add(NoteEvent::new(0.0, 10.0, 72, 0.0, 1.0));
+    let source = TrackWithClip {
+        region: NoteRegion {position: 0.0, duration: 7680.0, loop_offset: 0.0, loop_duration: 7680.0},
+        region_notes,
+        clip_notes,
+        clip: CLIP
+    };
+    let mut sequencer = NoteSequencer::new(Box::new(source), clips.clone());
+    clips.borrow_mut().schedule_play(TRACK, CLIP);
+    // The handover lands on the bar (3840): the clip note plays there, the timeline note at 3850 does not.
+    let events = pull(&mut sequencer, 3800.0, 3900.0);
+    assert!(events.iter().any(|event| matches!(event, Event::NoteStart {pitch: 72, position, ..} if *position == 3840.0)),
+        "the clip note starts at the bar: {events:?}");
+    assert!(!events.iter().any(|event| matches!(event, Event::NoteStart {pitch: 60, ..})),
+        "the timeline is suppressed while the clip plays: {events:?}");
+    // The clip cycles at ITS duration (960): the next repetition starts at 4800.
+    let events = pull(&mut sequencer, 4790.0, 4810.0);
+    assert!(events.iter().any(|event| matches!(event, Event::NoteStart {pitch: 72, position, ..} if *position == 4800.0)),
+        "the clip loops at its own duration: {events:?}");
 }

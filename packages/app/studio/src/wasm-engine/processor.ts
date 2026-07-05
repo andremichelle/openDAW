@@ -144,8 +144,16 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 updateMonitoringMap: (_map: ReadonlyArray<MonitoringMapEntry>): void => {},
                 noteSignal: (signal: NoteSignal): void => this.#noteSignal(signal),
                 ignoreNoteRegion: (_uuid: UUID.Bytes): void => {},
-                scheduleClipPlay: (_clipIds: ReadonlyArray<UUID.Bytes>): void => this.#unsupported("clip launching"),
-                scheduleClipStop: (_trackIds: ReadonlyArray<UUID.Bytes>): void => {},
+                scheduleClipPlay: (clipIds: ReadonlyArray<UUID.Bytes>): void => clipIds.forEach(uuid => {
+                    const pointer = engine.input_reserve(16)
+                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    engine.schedule_clip_play()
+                }),
+                scheduleClipStop: (trackIds: ReadonlyArray<UUID.Bytes>): void => trackIds.forEach(uuid => {
+                    const pointer = engine.input_reserve(16)
+                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    engine.schedule_clip_stop()
+                }),
                 setupMIDI: (_port: MessagePort, _buffer: SharedArrayBuffer): void => {},
                 terminate: (): void => {
                     this.#valid = false
@@ -191,6 +199,27 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#syncBroadcasts()
         this.#broadcaster.flush()
         this.#stateSender.tryWrite()
+        this.#drainClipChanges()
+    }
+
+    // Forward the engine's queued clip transitions to the client (TS `clipSequencing.changes()` +
+    // `notifyClipSequenceChanges`): 20-byte records [uuid 16][kind u32 LE].
+    #drainClipChanges(): void {
+        const engine = this.#engine
+        const count = engine.clip_changes_count()
+        if (count === 0) {return}
+        const pointer = engine.input_reserve(count * 20)
+        const taken = engine.clip_changes_take(pointer)
+        const view = new DataView(this.#memory.buffer, pointer, taken * 20)
+        const started: Array<UUID.Bytes> = []
+        const stopped: Array<UUID.Bytes> = []
+        const obsolete: Array<UUID.Bytes> = []
+        for (let index = 0; index < taken; index++) {
+            const uuid = new Uint8Array(this.#memory.buffer, pointer + index * 20, 16).slice() as UUID.Bytes
+            const kind = view.getUint32(index * 20 + 16, true)
+            if (kind === 0) {started.push(uuid)} else if (kind === 1) {stopped.push(uuid)} else {obsolete.push(uuid)}
+        }
+        this.#engineToClient.notifyClipSequenceChanges({started, stopped, obsolete})
     }
 
     // Route a live note signal (on-screen keys / pads / MIDI input) to the engine: the target
@@ -216,7 +245,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     }
 
     #stop(reset: boolean): void {
-        const wasTransporting = this.#transporting
+        // The engine can start transporting on its own (a clip launch), so consult ITS state too — the
+        // local flag alone would misread a clip-launched playback as "not transporting" and hard-reset.
+        const view = new DataView(this.#memory.buffer, this.#engine.engine_state_ptr(), this.#engine.engine_state_len())
+        const wasTransporting = this.#transporting || view.getUint8(16) === 1
         this.#transporting = false
         this.#engine.pause()
         if (reset || !wasTransporting) {

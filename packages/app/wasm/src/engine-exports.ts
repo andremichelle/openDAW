@@ -45,6 +45,14 @@ export type EngineExports = {
     note_signal_on: (pitch: number, velocity: number) => void
     note_signal_off: (pitch: number) => void
     note_signal_audition: (pitch: number, duration: number, velocity: number) => void
+    // CLIP LAUNCHING: write the 16-byte uuid into the input buffer first — a CLIP uuid for play (the
+    // engine resolves its track), a TRACK uuid for stop. Transitions queue as 20-byte records
+    // [uuid 16][kind u32 LE: 0 started, 1 stopped, 2 obsolete] drained via `clip_changes_take` (reserve
+    // `clip_changes_count() * 20` input bytes first) for notifyClipSequenceChanges.
+    schedule_clip_play: () => void
+    schedule_clip_stop: () => void
+    clip_changes_count: () => number
+    clip_changes_take: (outPtr: number) => number
     // A device imports this from `env`; the loader binds it so the device PULLS its own input events for a
     // pulse range (Route A), writing EventRecords into the descriptor scratch and returning the count.
     host_pull_events: (from: number, to: number, flags: number, outPtr: number, max: number) => number

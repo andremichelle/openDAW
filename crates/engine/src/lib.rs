@@ -811,6 +811,9 @@ struct Engine {
     master: Option<Rc<RefCell<AudioBusProcessor>>>, // the output bus, retained so units wire into it live
     master_id: NodeId,
     audio_units: Vec<AudioUnitBinding>, // one per connected AudioUnitBox, maintained reactively
+    // The clip-launch state machine (TS ClipSequencingAudioContext), shared with every unit's note
+    // sequencer(s); its change queue feeds the notifyClipSequenceChanges back-channel.
+    clip_sequencer: Rc<RefCell<engine_env::clip_sequencer::ClipSequencer>>,
     unit_changes: Rc<RefCell<Members>>, // recorded by the audio-units membership observer, drained by reconcile
     dirty_units: Rc<RefCell<Vec<Uuid>>>, // unit uuids a related edit touched; reconcile rewires ONLY these, not all
     output_audio: Option<IndexedCollection>, // THE output unit's audio-fx chain (built once at bind, see output_strip)
@@ -849,6 +852,7 @@ impl Engine {
             master: None,
             master_id: 0,
             audio_units: Vec::new(),
+            clip_sequencer: Rc::new(RefCell::new(engine_env::clip_sequencer::ClipSequencer::new())),
             unit_changes: Rc::new(RefCell::new(Members::default())),
             dirty_units: Rc::new(RefCell::new(Vec::new())),
             output_audio: None,
@@ -1027,6 +1031,7 @@ impl Engine {
     /// no residual leaks into the final mix while stopped.
     fn stop(&mut self) {
         self.transport.stop(true);
+        self.clip_sequencer.borrow_mut().reset();
         self.context.reset_all();
         if let Some(buffer) = self.output_bus.as_ref() {
             let mut buffer = buffer.borrow_mut();
@@ -1039,6 +1044,17 @@ impl Engine {
     /// Mirrors the TS engine's `setPosition`.
     fn set_position(&mut self, position: f64) {
         self.transport.seek(position)
+    }
+
+    /// Launch `clip` on its own track (resolved through the clip's `clips` pointer, key 1). Mirrors TS
+    /// `EngineCommands.scheduleClipPlay`: the handover happens at the next quantized boundary, and the
+    /// TRANSPORT STARTS if it was not running (TS sets `timeInfo.transporting = true`), so launching a
+    /// clip from a stopped studio plays immediately.
+    pub(crate) fn schedule_clip_play(&mut self, clip: Uuid) {
+        if let Some(track) = self.graph.target_of(&Address::of(clip, vec![1])).map(|address| address.uuid) {
+            self.clip_sequencer.borrow_mut().schedule_play(track, clip);
+            self.play();
+        }
     }
 
     fn set_metronome_enabled(&mut self, enabled: bool) {
@@ -1451,6 +1467,60 @@ fn input_uuid() -> Uuid {
 /// the host writes the target `AudioUnitBox` uuid into the input buffer (16 bytes) first, then calls one
 /// of these. A raw note-on sustains until its note-off; an audition stops itself after `duration` pulses.
 /// They sound while the transport is stopped too (the paused render keeps the pulse range advancing).
+/// CLIP LAUNCHING (TS `EngineCommands.scheduleClipPlay` / `scheduleClipStop`): the host writes the
+/// 16-byte uuid into the input buffer first. `schedule_clip_play` takes a CLIP uuid (its track resolves
+/// through the clip's `clips` pointer, key 1); `schedule_clip_stop` takes a TRACK uuid. Transitions queue
+/// for `clip_changes_take`: records of [uuid 16][kind u32 LE] (0 started, 1 stopped, 2 obsolete), feeding
+/// the notifyClipSequenceChanges back-channel.
+#[no_mangle]
+pub extern "C" fn schedule_clip_play() {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.schedule_clip_play(input_uuid());
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn schedule_clip_stop() {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.clip_sequencer.borrow_mut().schedule_stop(input_uuid());
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn clip_changes_count() -> u32 {
+    unsafe {
+        match ENGINE.get().as_ref() {
+            Some(engine) => engine.clip_sequencer.borrow().changes_len() as u32,
+            None => 0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn clip_changes_take(out_ptr: u32) -> u32 {
+    unsafe {
+        let Some(engine) = ENGINE.get().as_mut() else { return 0 };
+        let mut count: u32 = 0;
+        let base = out_ptr as usize;
+        engine.clip_sequencer.borrow_mut().take_changes(&mut |uuid, change| {
+            let record = core::slice::from_raw_parts_mut((base + count as usize * 20) as *mut u8, 20);
+            record[..16].copy_from_slice(uuid);
+            let kind: u32 = match change {
+                engine_env::clip_sequencer::Change::Started => 0,
+                engine_env::clip_sequencer::Change::Stopped => 1,
+                engine_env::clip_sequencer::Change::Obsolete => 2
+            };
+            record[16..20].copy_from_slice(&kind.to_le_bytes());
+            count += 1;
+        });
+        count
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn note_signal_on(pitch: u32, velocity: f32) {
     unsafe {

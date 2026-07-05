@@ -498,7 +498,7 @@ impl Engine {
             None => { instrument_obs.terminate(&mut self.graph); return None; }
         };
         let sequencer: SharedNoteEventSource =
-            Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: track_sets.clone()}))));
+            Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: track_sets.clone()}), self.clip_sequencer.clone())));
         let mut chains = vec![instrument_obs];
         let midi = self.observe_child_chain(cell_uuid, spec.cell_midi_field, &mut chains, signal);
         let audio = self.observe_child_chain(cell_uuid, spec.cell_audio_field, &mut chains, signal);
