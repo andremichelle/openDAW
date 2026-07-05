@@ -35,7 +35,7 @@ export const loadFullEngine = async (sampleRate = 48000,
                                      onScriptMessage: (uuid: string, message: string) => void = () => {}): Promise<FullEngine> => {
     const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
-    const engineModule = await WebAssembly.compile(readFileSync(path.join(PUBLIC, "engine.wasm")))
+    const engineModule = await WebAssembly.compile(readFileSync(path.join(PUBLIC, "wasm", "engine.wasm")))
     const engine = new WebAssembly.Instance(engineModule, {env: {
         memory, __indirect_function_table: table,
         host_perf_now: () => performance.now() * 1000.0 // micros clock for the render profiler

@@ -1,5 +1,5 @@
 [package]
-name = "device-playfield-slot"
+name = "device-playfield-sample"
 version = "0.0.0"
 edition = "2021"
 publish = false

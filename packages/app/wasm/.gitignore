@@ -1,2 +1,2 @@
-public/*.wasm
+public/wasm/
 dist

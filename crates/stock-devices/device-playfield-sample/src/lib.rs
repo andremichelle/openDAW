@@ -1,4 +1,4 @@
-//! `device-playfield-slot`, one sample-player slot of the Playfield composite, as a runtime-loadable device:
+//! `device-playfield-sample`, one sample-player slot of the Playfield composite, as a runtime-loadable device:
 //! a faithful port of the TS `Playfield/SampleProcessor` + `SampleVoice` voice model. It plays ONE loaded
 //! sample (its `file` pointer) with a fixed voice pool: a windowed `start`..`end` read head (reversed when
 //! `end < start`), gate modes (Off / On / Loop), and a squared attack / release envelope (see `voice.rs`).

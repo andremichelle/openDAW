@@ -42,7 +42,7 @@ DEVICE_TOOLCHAIN="${DEVICE_TOOLCHAIN:-nightly}"
 
 # The PIC side-module device crates. ADD A NEW DEVICE HERE (its crate name) and it is built, size-optimised,
 # and copied to public/ automatically. The wasm artifact basename is the crate name with '-' -> '_'.
-DEVICE_CRATES="device-revamp device-transpose device-arp device-zeitgeist device-tidal device-vaporisateur device-nano device-delay device-playfield-slot device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb device-soundfont device-vocoder device-neural-amp"
+DEVICE_CRATES="device-revamp device-pitch device-arpeggio device-zeitgeist device-tidal device-vaporisateur device-nano device-delay device-playfield-sample device-gate device-werkstatt device-apparat device-spielwerk device-waveshaper device-crusher device-fold device-stereo-tool device-velocity device-maximizer device-compressor device-reverb device-dattorro-reverb device-soundfont device-vocoder device-neural-amp"
 
 RUSTFLAGS="$SIMD" cargo rustc -p engine --release --target "$TARGET" -- \
   -C link-arg=--import-memory -C link-arg=--import-table $SHARED
@@ -72,7 +72,11 @@ else
   echo "wasm-opt not found (brew install binaryen) — shipping unoptimised modules"
 fi
 
-CP_LIST=""
-for module in $MODULES; do CP_LIST="$CP_LIST $OUT/$module.wasm"; done
-cp $CP_LIST "$ROOT/packages/app/wasm/public/"
+# Layout: the engine (and the standalone sine demo) under public/wasm/, the device PLUGINS under
+# public/wasm/plugins/. Old flat artifacts in public/ are removed so nothing stale gets served.
+PUBLIC="$ROOT/packages/app/wasm/public"
+mkdir -p "$PUBLIC/wasm/plugins"
+rm -f "$PUBLIC"/*.wasm
+cp "$OUT/engine.wasm" "$OUT/sine.wasm" "$PUBLIC/wasm/"
+for module in $DEVICE_MODULES; do cp "$OUT/$module.wasm" "$PUBLIC/wasm/plugins/"; done
 echo "built: engine.wasm + stock devices + werkstatt/apparat/spielwerk + sine"

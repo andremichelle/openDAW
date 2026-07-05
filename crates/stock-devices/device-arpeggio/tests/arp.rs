@@ -5,7 +5,7 @@
 //! (step length == rate), so each step's note-off comes due exactly one step later.
 
 use abi::{BlockFlags, EventRecord, EVENT_NOTE_OFF, EVENT_NOTE_ON};
-use device_arp::{process, seed, ArpState};
+use device_arpeggio::{process, seed, ArpState};
 
 const PLAYING: u32 = BlockFlags::TRANSPORTING;
 

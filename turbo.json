@@ -29,7 +29,7 @@
       ],
       "outputs": [
         "dist/**",
-        "public/*.wasm"
+        "public/wasm/**"
       ]
     },
     "@opendaw/app-studio#build": {

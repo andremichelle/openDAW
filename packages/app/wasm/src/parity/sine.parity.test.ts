@@ -4,7 +4,7 @@ import {nullTest, referenceSine, renderSineOffline} from "./harness"
 
 // First parity test: the sine wasm vs the TS reference. Establishes the offline-render + null-test
 // machinery; later tests feed real box-graph fixtures to both the Rust engine and the TS engine.
-const WASM = path.resolve(__dirname, "../../public/sine.wasm")
+const WASM = path.resolve(__dirname, "../../public/wasm/sine.wasm")
 
 describe("parity: sine (wasm vs TS reference)", () => {
     it("null-tests below tolerance over 64 blocks", async () => {

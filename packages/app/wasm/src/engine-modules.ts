@@ -34,34 +34,34 @@ export const createEngineMemory = (): WebAssembly.Memory =>
 
 // The device PIC side modules to load: each wasm plus the device-BOX TYPE it realizes. This is the device
 // table the engine uses to instantiate a device box: when the box graph presents e.g. an ArpeggioDeviceBox,
-// the engine looks up its type here to find device_arp.wasm. Load order is irrelevant now (the engine reads
+// the engine looks up its type here to find its plugin under /wasm/plugins/. Load order is irrelevant now (the engine reads
 // each unit's chains from the box, ordered by the device `index`); only the type mapping matters.
 export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
-    {url: "/device_vaporisateur.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
-    {url: "/device_nano.wasm", boxType: "NanoDeviceBox"},         // instrument (sampler)
-    {url: "/device_revamp.wasm", boxType: "RevampDeviceBox"},     // audio effect
-    {url: "/device_tidal.wasm", boxType: "TidalDeviceBox"},       // audio effect
-    {url: "/device_delay.wasm", boxType: "DelayDeviceBox"},       // audio effect
-    {url: "/device_gate.wasm", boxType: "GateDeviceBox"},         // audio effect (sidechain)
-    {url: "/device_arp.wasm", boxType: "ArpeggioDeviceBox"},      // midi effect
-    {url: "/device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"}, // midi effect
-    {url: "/device_transpose.wasm", boxType: "PitchDeviceBox"},   // midi effect
-    {url: "/device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
-    {url: "/device_apparat.wasm", boxType: "ApparatDeviceBox"},   // scriptable instrument
-    {url: "/device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
-    {url: "/device_waveshaper.wasm", boxType: "WaveshaperDeviceBox"}, // audio effect
-    {url: "/device_crusher.wasm", boxType: "CrusherDeviceBox"},   // audio effect
-    {url: "/device_fold.wasm", boxType: "FoldDeviceBox"},         // audio effect (wavefolder)
-    {url: "/device_stereo_tool.wasm", boxType: "StereoToolDeviceBox"}, // audio effect
-    {url: "/device_velocity.wasm", boxType: "VelocityDeviceBox"}, // midi effect
-    {url: "/device_maximizer.wasm", boxType: "MaximizerDeviceBox"}, // audio effect
-    {url: "/device_compressor.wasm", boxType: "CompressorDeviceBox"}, // audio effect (sidechain)
-    {url: "/device_reverb.wasm", boxType: "ReverbDeviceBox"},     // audio effect
-    {url: "/device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
-    {url: "/device_soundfont.wasm", boxType: "SoundfontDeviceBox"}, // instrument (preset sampler)
-    {url: "/device_vocoder.wasm", boxType: "VocoderDeviceBox"},   // audio effect (channel vocoder + sidechain)
-    {url: "/device_neural_amp.wasm", boxType: "NeuralAmpDeviceBox"}, // audio effect (NAM, via the nam bridge)
-    {url: "/device_playfield_slot.wasm", boxType: "PlayfieldSampleBox"} // composite child (one Playfield slot)
+    {url: "/wasm/plugins/device_vaporisateur.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
+    {url: "/wasm/plugins/device_nano.wasm", boxType: "NanoDeviceBox"},         // instrument (sampler)
+    {url: "/wasm/plugins/device_revamp.wasm", boxType: "RevampDeviceBox"},     // audio effect
+    {url: "/wasm/plugins/device_tidal.wasm", boxType: "TidalDeviceBox"},       // audio effect
+    {url: "/wasm/plugins/device_delay.wasm", boxType: "DelayDeviceBox"},       // audio effect
+    {url: "/wasm/plugins/device_gate.wasm", boxType: "GateDeviceBox"},         // audio effect (sidechain)
+    {url: "/wasm/plugins/device_arpeggio.wasm", boxType: "ArpeggioDeviceBox"}, // midi effect
+    {url: "/wasm/plugins/device_zeitgeist.wasm", boxType: "ZeitgeistDeviceBox"}, // midi effect
+    {url: "/wasm/plugins/device_pitch.wasm", boxType: "PitchDeviceBox"},     // midi effect
+    {url: "/wasm/plugins/device_werkstatt.wasm", boxType: "WerkstattDeviceBox"}, // scriptable audio effect
+    {url: "/wasm/plugins/device_apparat.wasm", boxType: "ApparatDeviceBox"},   // scriptable instrument
+    {url: "/wasm/plugins/device_spielwerk.wasm", boxType: "SpielwerkDeviceBox"}, // scriptable midi effect
+    {url: "/wasm/plugins/device_waveshaper.wasm", boxType: "WaveshaperDeviceBox"}, // audio effect
+    {url: "/wasm/plugins/device_crusher.wasm", boxType: "CrusherDeviceBox"},   // audio effect
+    {url: "/wasm/plugins/device_fold.wasm", boxType: "FoldDeviceBox"},         // audio effect (wavefolder)
+    {url: "/wasm/plugins/device_stereo_tool.wasm", boxType: "StereoToolDeviceBox"}, // audio effect
+    {url: "/wasm/plugins/device_velocity.wasm", boxType: "VelocityDeviceBox"}, // midi effect
+    {url: "/wasm/plugins/device_maximizer.wasm", boxType: "MaximizerDeviceBox"}, // audio effect
+    {url: "/wasm/plugins/device_compressor.wasm", boxType: "CompressorDeviceBox"}, // audio effect (sidechain)
+    {url: "/wasm/plugins/device_reverb.wasm", boxType: "ReverbDeviceBox"},     // audio effect
+    {url: "/wasm/plugins/device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
+    {url: "/wasm/plugins/device_soundfont.wasm", boxType: "SoundfontDeviceBox"}, // instrument (preset sampler)
+    {url: "/wasm/plugins/device_vocoder.wasm", boxType: "VocoderDeviceBox"},   // audio effect (channel vocoder + sidechain)
+    {url: "/wasm/plugins/device_neural_amp.wasm", boxType: "NeuralAmpDeviceBox"}, // audio effect (NAM, via the nam bridge)
+    {url: "/wasm/plugins/device_playfield_sample.wasm", boxType: "PlayfieldSampleBox"} // composite child (one Playfield slot)
 ]
 
 // The composite box types. Playfield hosts its slots in the `samples` field (key 10); each slot's note is its
@@ -81,7 +81,7 @@ export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
 ]
 
 export const loadEngineModules = async (base: string = ""): Promise<EngineModules> => {
-    const urls = [`${base}/engine.wasm`, ...DEVICES.map(device => `${base}${device.url}`)]
+    const urls = [`${base}/wasm/engine.wasm`, ...DEVICES.map(device => `${base}${device.url}`)]
     const buffers = await Promise.all(urls.map(url => fetch(url).then(response => response.arrayBuffer())))
     const [engineModule, ...deviceModules] = await Promise.all(buffers.map(bytes => WebAssembly.compile(bytes)))
     return {engineModule, deviceModules, deviceBoxTypes: DEVICES.map(device => device.boxType), composites: COMPOSITES}

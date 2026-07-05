@@ -41,7 +41,7 @@ export const SinePage: PageFactory<Env> = ({lifecycle}) => {
         ctx.addEventListener("statechange", () => showAudioState())
         showAudioState()
         await ctx.audioWorklet.addModule(workletURL) // vite bundles ./engine-worklet.ts and hands back its URL
-        const wasm = await fetch("/sine.wasm").then(response => response.arrayBuffer())
+        const wasm = await fetch("/wasm/sine.wasm").then(response => response.arrayBuffer())
         const module = await WebAssembly.compile(wasm)
         const workletNode = new AudioWorkletNode(ctx, "engine", {
             processorOptions: {module, sampleRate: ctx.sampleRate, frequency: FREQUENCY}
