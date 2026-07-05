@@ -4,6 +4,16 @@
 
 const SLOPE_MULT: f64 = 10.0;
 
+/// `pow` for the shaper's hot loop: `exp2(exponent * log2(base))` — mathematically what `pow` computes,
+/// minus libm's correctly-rounded dual-double slow path, which dominated Tidal's render cost (measured
+/// ~110ms of a 145ms/60s marginal). Accuracy stays ~1e-13 relative (log2's ~1 ulp error amplified by the
+/// exponent, at most 1024 here), far below the f32 output resolution. `base` is 0..1 by construction; the
+/// 0 edge flows through exactly (log2(0) = -inf, exp2(-inf) = 0).
+#[inline]
+fn fast_pow(base: f64, exponent: f64) -> f64 {
+    libm::exp2(exponent * libm::log2(base))
+}
+
 /// The shaped Tidal envelope. `set` reshapes it; `compute` evaluates it at a phase. Mirrors lib-dsp `TidalComputer`.
 #[derive(Clone, Copy, Default)]
 pub struct TidalComputer {
@@ -36,9 +46,9 @@ impl TidalComputer {
             (p, self.symmetry, self.inv_s0, self.inv_s1)
         };
         if x <= sym {
-            1.0 - libm::pow(1.0 - x * inv_s0, self.p_ex) * self.depth
+            1.0 - fast_pow(1.0 - x * inv_s0, self.p_ex) * self.depth
         } else {
-            libm::pow((1.0 - x) * inv_s1, self.p_ex) * self.depth - self.depth + 1.0
+            fast_pow((1.0 - x) * inv_s1, self.p_ex) * self.depth - self.depth + 1.0
         }
     }
 }

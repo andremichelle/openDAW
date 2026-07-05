@@ -6,11 +6,12 @@ import {MutableObservableOption, Nullable, Terminable} from "@opendaw/lib-std"
 import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {EngineVariant, EngineWorkletVariant, Project} from "@opendaw/studio-core"
+import {EngineVariant, EngineWorkletVariant, OfflineEngineRenderer, Project} from "@opendaw/studio-core"
 import {createEngineMemory, EngineModules, loadEngineModules} from "../../../wasm/src/engine-modules"
 import {serializeUpdateTasks} from "../../../wasm/src/sync/serialize-update-tasks"
 import {WASM_ENGINE_PROCESSOR_NAME, WASM_SYNC_CHANNEL, WasmEngineAttachment, WasmSyncProtocol} from "./protocol"
 import processorUrl from "./processor.ts?worker&url"
+import offlineWorkerUrl from "./offline-worker.ts?worker&url"
 
 export namespace WasmEngine {
     const FLAG_KEY = "opendaw-wasm-engine"
@@ -37,6 +38,9 @@ export namespace WasmEngine {
     }
 
     export const install = (): void => {
+        // The OFFLINE render path (device benchmarks, offline parity renders): the worker self-loads the
+        // wasm artifacts, so no preloading is needed here.
+        OfflineEngineRenderer.installVariant(offlineWorkerUrl, {wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`})
         EngineVariant.install((): Nullable<EngineWorkletVariant> => {
             if (!isEnabled() || modules.isEmpty()) {return null}
             const {engineModule, deviceModules, deviceBoxTypes, composites} = modules.unwrap()

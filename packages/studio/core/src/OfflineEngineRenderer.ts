@@ -34,6 +34,7 @@ import {MIDIReceiver} from "./midi"
 import type {SoundFont2} from "soundfont2"
 
 let workerUrl: Option<string> = Option.None
+let variantWorker: Option<{url: string, attachment: Record<string, unknown>}> = Option.None
 
 export class OfflineEngineRenderer {
     static install(url: string): void {
@@ -41,18 +42,31 @@ export class OfflineEngineRenderer {
         workerUrl = Option.wrap(url)
     }
 
+    // An alternative engine worker (e.g. the WASM engine) speaking the same OfflineEngineProtocol;
+    // `attachment` travels to it as `config.variant` (e.g. the artifacts base url).
+    static installVariant(url: string, attachment: Record<string, unknown>): void {
+        console.debug(`OfflineEngineVariantUrl: '${url}'`)
+        variantWorker = Option.wrap({url, attachment})
+    }
+
     static getWorkerUrl(): string {
         return workerUrl.unwrap("OfflineEngineWorkerUrl is missing (call 'install' first)")
     }
 
+    static hasVariant(): boolean {return variantWorker.nonEmpty()}
+
     static async create(source: Project,
                         optExportConfiguration: Option<ExportConfiguration>,
-                        sampleRate: int = 48_000
+                        sampleRate: int = 48_000,
+                        variant: boolean = false
     ): Promise<OfflineEngineRenderer> {
         const numStems = ExportConfiguration.countStems(optExportConfiguration)
         if (numStems === 0) {return panic("Nothing to export")}
         const numberOfChannels = numStems * 2
-        const worker = new Worker(this.getWorkerUrl(), {type: "module"})
+        const optVariant = variant
+            ? Option.wrap(variantWorker.unwrap("No variant engine installed (call 'installVariant' first)"))
+            : Option.None
+        const worker = new Worker(optVariant.mapOr(entry => entry.url, this.getWorkerUrl()), {type: "module"})
         const messenger = Messenger.for(worker)
         const protocol = Communicator.sender<OfflineEngineProtocol>(
             messenger.channel("offline-engine"),
@@ -193,7 +207,8 @@ export class OfflineEngineRenderer {
             syncStreamBuffer: reader.buffer,
             controlFlagsBuffer,
             project: source.toArrayBuffer(),
-            exportConfiguration: optExportConfiguration.unwrapOrUndefined()
+            exportConfiguration: optExportConfiguration.unwrapOrUndefined(),
+            variant: optVariant.mapOr(entry => entry.attachment, undefined)
         })
         engineCommands.setupMIDI(port, sab)
         return new OfflineEngineRenderer(

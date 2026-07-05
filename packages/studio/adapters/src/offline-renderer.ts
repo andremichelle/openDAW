@@ -8,6 +8,7 @@ export interface OfflineEngineInitializeConfig {
     controlFlagsBuffer: SharedArrayBuffer
     project: ArrayBufferLike
     exportConfiguration?: ExportConfiguration
+    variant?: Record<string, unknown> // extras for an alternative engine worker (e.g. the WASM artifacts url)
 }
 
 export interface OfflineEngineRenderConfig {

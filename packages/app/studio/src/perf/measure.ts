@@ -11,6 +11,12 @@ export type BenchmarkResult = {
     readonly durationSeconds: number
     readonly audio?: Float32Array[]
     readonly error?: string
+    // The WASM engine's numbers for the same render (side-by-side comparison; absent for memory rows).
+    readonly wasmRenderMs?: number
+    readonly wasmMarginalMs?: number
+    readonly wasmPerQuantumUs?: number
+    readonly wasmAudio?: Float32Array[]
+    readonly wasmError?: string
     readonly memory?: {
         readonly backing: MemoryBacking
         readonly pattern: MemoryPattern

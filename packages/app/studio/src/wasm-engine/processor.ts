@@ -7,7 +7,7 @@
 // engine's shared memory here. Recording, note signals, clip launching, monitoring and frozen audio are
 // honest no-ops for now — the transport state simply never reports them active.
 import "../../../wasm/src/worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
-import {int, isDefined, Nullable, panic, Provider, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
+import {int, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
 import {AudioAnalyser, AudioData, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Address} from "@opendaw/lib-box"
@@ -28,13 +28,8 @@ import {
 import type {SoundFont2} from "soundfont2"
 import {PeakBroadcaster} from "../../../../studio/core-processors/src/PeakBroadcaster"
 import {EngineExports} from "../../../wasm/src/engine-exports"
-import {ScriptBridges, ScriptEngine} from "../../../wasm/src/script-bridge"
-import {NamBridges} from "../../../wasm/src/nam-bridge"
-import {linkDevice, registerComposite} from "../../../wasm/src/device-linker"
-import {simplifySoundfont} from "../../../wasm/src/soundfont-simplify"
+import {drainResourceRequests, instantiateWasmEngine} from "./boot"
 import {WASM_ENGINE_PROCESSOR_NAME, WASM_SYNC_CHANNEL, WasmEngineAttachment, WasmSyncProtocol} from "./protocol"
-
-const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~42)
 
 class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #terminator: Terminator = new Terminator()
@@ -63,13 +58,6 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         const {syncStreamBuffer, controlFlagsBuffer, variant} = processorOptions
         const {engineModule, deviceModules, deviceBoxTypes, composites, memory} = variant as WasmEngineAttachment
         this.#memory = memory
-        const table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
-        const now: Provider<number> = isDefined(globalThis.performance)
-            ? () => performance.now() * 1000.0 : () => Date.now() * 1000.0
-        const engine = new WebAssembly.Instance(engineModule,
-            {env: {memory, __indirect_function_table: table, host_perf_now: now}}).exports as unknown as EngineExports
-        this.#engine = engine
-        engine.init(sampleRate)
         const messenger = Messenger.for(this.port)
         this.#engineToClient = Communicator.sender<EngineToClient>(
             messenger.channel("engine-to-client"),
@@ -88,13 +76,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
-        const scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
-            (uuid, message) => this.#engineToClient.deviceMessage(uuid, message))
-        const namBridges = new NamBridges(memory, () => this.#engineToClient.fetchNamWasm(), sampleRate)
-        const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports()}
-        deviceModules.forEach((deviceModule, index) =>
-            linkDevice(engine, memory, table, deviceModule, deviceBoxTypes[index], sampleRate, bridgeImports))
-        composites.forEach(composite => registerComposite(engine, memory, composite))
+        const engine = instantiateWasmEngine({engineModule, deviceModules, deviceBoxTypes, composites},
+            memory, sampleRate, this.#engineToClient)
+        this.#engine = engine
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)
         this.#stateSender = SyncStream.writer(EngineStateSchema(), syncStreamBuffer, state => {
             const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
@@ -271,57 +255,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         }
         if (!this.#bound && this.#engine.bind() === 0) {this.#bound = true}
         // A transaction may have added AudioFileBoxes / SoundfontFileBox targets; dispatch their loads.
-        this.#drainSampleRequests()
-        this.#drainSoundfontRequests()
-    }
-
-    // Pop every sample the engine queued and run the load handshake for each: fetch + decode over the
-    // unchanged EngineToClient RPC (the studio's sampleManager answers), write the planar frames into the
-    // engine allocation, mark ready. The 16-byte uuid is copied out of the (reused) scratch BEFORE any await.
-    #drainSampleRequests(): void {
-        for (; ;) {
-            const outPtr = this.#engine.input_reserve(16)
-            const handle = this.#engine.sample_take_request(outPtr)
-            if (handle < 0) {break}
-            const uuid = new Uint8Array(this.#memory.buffer, outPtr, 16).slice() as UUID.Bytes
-            this.#await(this.#engineToClient.fetchAudio(uuid).then(data => {
-                const {numberOfFrames, numberOfChannels, sampleRate: dataRate, frames} = data
-                const bytesPerChannel = numberOfFrames * Float32Array.BYTES_PER_ELEMENT
-                const pointer = this.#engine.sample_allocate(handle, numberOfChannels * bytesPerChannel)
-                for (let channel = 0; channel < numberOfChannels; channel++) {
-                    new Float32Array(this.#memory.buffer, pointer + channel * bytesPerChannel, numberOfFrames)
-                        .set(frames[channel])
-                }
-                this.#engine.sample_set_ready(handle, numberOfFrames, numberOfChannels, dataRate)
-            }, (reason: unknown) => {
-                // A failed fetch must never stick the load: mark the handle ready as a 1-frame silence.
-                this.#engine.sample_allocate(handle, 4)
-                this.#engine.sample_set_ready(handle, 1, 1, sampleRate)
-                this.#engineToClient.log(`sample load failed: ${reason}`)
-            }))
-        }
-    }
-
-    // The soundfont analog: the parsed SoundFont2 arrives over the RPC (a structured clone, plain data),
-    // the SIMPLIFIED blob is built here and written into the engine allocation.
-    #drainSoundfontRequests(): void {
-        for (; ;) {
-            const outPtr = this.#engine.input_reserve(16)
-            const handle = this.#engine.soundfont_take_request(outPtr)
-            if (handle < 0) {break}
-            const uuid = new Uint8Array(this.#memory.buffer, outPtr, 16).slice() as UUID.Bytes
-            this.#await(this.#engineToClient.fetchSoundfont(uuid).then(soundfont => {
-                const blob = new Uint8Array(simplifySoundfont(soundfont))
-                const pointer = this.#engine.soundfont_allocate(handle, blob.byteLength)
-                new Uint8Array(this.#memory.buffer, pointer, blob.byteLength).set(blob)
-                this.#engine.soundfont_set_ready(handle)
-            }, (reason: unknown) => this.#engineToClient.log(`soundfont load failed: ${reason}`)))
-        }
-    }
-
-    #await(promise: Promise<unknown>): void {
-        this.#pendingResources.add(promise)
-        promise.finally(() => this.#pendingResources.delete(promise))
+        drainResourceRequests(this.#engine, this.#memory, this.#engineToClient, this.#pendingResources, sampleRate)
     }
 
     // Mirror the engine's broadcast table onto the LiveStreamBroadcaster whenever its generation moved (a

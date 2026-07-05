@@ -12,8 +12,11 @@
 //! - scaled by the region gain and a fade envelope (`lib-dsp` `FadingEnvelope`), plus a short boundary declick at
 //!   un-faded region edges so adjacent regions do not click; the two never multiply into a doubled fade.
 //!
-//! Time-stretch (the granular play-mode) lives in `time_stretch`; pitch/warp is handled inline here; clip
-//! sequencing is not ported.
+//! Time-stretch (the granular play-mode) lives in `time_stretch`; pitch/warp is handled inline here. CLIP
+//! LAUNCHING: per block, each track's pulse range is split into sections by the shared `ClipSequencer` (TS
+//! `clipSequencing.iterate` in the Tape) — a clip section plays the clip's VIRTUAL region (position 0,
+//! infinite completion, looping at the clip duration) through the same passes; the timeline regions play
+//! only in the clip-free sections.
 
 use dsp::ppqn::seconds_to_pulses;
 use engine_env::audio_buffer::{shared_audio_buffer, AudioBuffer, SharedAudioBuffer};
@@ -28,7 +31,10 @@ use math::db_to_gain;
 use alloc::vec::Vec;
 use value::region::locate_loops;
 use boxgraph::address::Uuid;
-use crate::audio_unit::{AudioRegion, SharedAudioTrackSets};
+use alloc::rc::Rc;
+use core::cell::RefCell;
+use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
+use crate::audio_unit::{AudioRegion, BoundAudioClip, SharedAudioTrackSets};
 use crate::time_stretch::{Source, TimeStretchSequencer};
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 
@@ -61,7 +67,21 @@ pub(crate) struct AudioRegionPlayer {
     // next stretch region reuses it. `prepare` (reconcile) pre-warms the pool for every BOUND stretch region,
     // so the render-path `pop()` never misses; without the pre-warm each new concurrency high-water would
     // still call `TimeStretchSequencer::new` mid-render.
-    sequencer_pool: Vec<TimeStretchSequencer>
+    sequencer_pool: Vec<TimeStretchSequencer>,
+    // The engine's clip-launch state machine, shared with the note sequencers (sections per track).
+    clips: Rc<RefCell<ClipSequencer>>
+}
+
+/// The clip sequencer's live `(duration, looped)` lookup over one track's bound audio clips.
+struct BoundClipInfo<'a> {
+    clips: &'a [BoundAudioClip]
+}
+
+impl ClipInfo for BoundClipInfo<'_> {
+    fn resolve(&self, clip: &[u8; 16]) -> Option<(f64, bool)> {
+        self.clips.iter().find(|bound| &bound.clip_uuid == clip)
+            .map(|bound| (bound.region.loop_duration, bound.looped))
+    }
 }
 
 /// The free-running read state of one no-stretch region: the current source-frame read position, and the pulse
@@ -84,11 +104,12 @@ impl NativeCursor {
 }
 
 impl AudioRegionPlayer {
-    pub(crate) fn new(tracks: SharedAudioTrackSets, sample_rate: f32, tempo_map: SharedTempoMap) -> Self {
+    pub(crate) fn new(tracks: SharedAudioTrackSets, sample_rate: f32, tempo_map: SharedTempoMap,
+                      clips: Rc<RefCell<ClipSequencer>>) -> Self {
         Self {tracks, sample_rate, tempo_map, output: shared_audio_buffer(), events: EventBuffer::new(),
             sequencers: Vec::with_capacity(8), native_cursors: Vec::with_capacity(16), visited: Vec::with_capacity(32),
             sequencer_pool: Vec::with_capacity(8), enabled: true,
-            meter: engine_env::meter::Meter::new(sample_rate)}
+            meter: engine_env::meter::Meter::new(sample_rate), clips}
     }
 
     /// Pre-warm at RECONCILE (region bind / edit), so region entry during playback never allocates: park a
@@ -149,86 +170,112 @@ impl Processor for AudioRegionPlayer {
     }
 
     fn process(&mut self, info: &ProcessInfo) {
-        let mut output = self.output.borrow_mut();
+        let AudioRegionPlayer {
+            tracks, sample_rate, tempo_map, output, sequencers, native_cursors, visited,
+            sequencer_pool, clips, enabled, meter, ..
+        } = self;
+        let mut output = output.borrow_mut();
         output.clear(); // the player is a source: it fills its own output each quantum (silence when not playing)
-        if !self.enabled {
+        if !*enabled {
             return; // TapeDeviceBox disabled: silence (TS returns before reading any region)
         }
-        let sample_rate = self.sample_rate;
-        let tracks = self.tracks.clone();
-        let tempo_map = self.tempo_map.borrow();
+        let sample_rate = *sample_rate;
+        let tempo_map = tempo_map.borrow();
         let mut fading_gain = [1.0f32; engine_env::RENDER_QUANTUM]; // per-cycle region fade, reused on the stack
-        self.visited.clear();
+        visited.clear();
         for block in info.blocks {
             if !block.flags.transporting() || !block.flags.playing() {
                 continue;
             }
             for track in tracks.borrow().iter() {
-                for region in track.borrow().iterate_range(block.p0, block.p1) {
-                    if region.mute {
-                        continue;
-                    }
-                    let Some(sample) = crate::resolve_sample(region.file) else { continue };
-                    let left = sample.plane(0);
-                    let right = if sample.channel_count >= 2 { sample.plane(1) } else { left };
-                    // The play STRATEGY routes the read: a time-stretch region (with >= 2 transients to bracket a
-                    // segment) goes through its persistent granular sequencer; everything else (native / pitch) is
-                    // the stateless read head in `render_region`.
-                    match &region.time_stretch {
-                        Some(config) if region.transients.len() >= 2 => {
-                            let index = match self.sequencers.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
-                                Some(index) => index,
-                                None => {
-                                    let sequencer = self.sequencer_pool.pop().unwrap_or_else(TimeStretchSequencer::new);
-                                    self.sequencers.push((region.region_uuid, sequencer));
-                                    self.sequencers.len() - 1
-                                }
-                            };
-                            self.visited.push(region.region_uuid);
-                            let source = Source {left, right, num_frames: sample.frame_count as usize};
-                            let complete = region.position + region.duration;
-                            for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, block.p0, block.p1) {
-                                fill_fading_gain(&mut fading_gain, region, cycle.result_start, cycle.result_end, block);
-                                self.sequencers[index].1.process(
-                                    &mut output, &source, sample.sample_rate, &region.transients, config,
-                                    region.waveform_offset, block, cycle.raw_start, cycle.result_start, cycle.result_end,
-                                    &fading_gain, sample_rate);
+                let content = track.borrow();
+                let clip_info = BoundClipInfo {clips: &content.clips};
+                clips.borrow_mut().iterate(&content.uuid, block.p0, block.p1, &clip_info, &mut |section| {
+                    match section.clip {
+                        // Timeline regions play only in the clip-free sections (TS Tape `optClip: none`).
+                        None => for region in content.regions.iterate_range(section.from, section.to) {
+                            play_region(region, section.from, section.to, block, &mut output, &mut fading_gain,
+                                sequencers, sequencer_pool, native_cursors, visited, &tempo_map, sample_rate);
+                        },
+                        Some(clip) => {
+                            if let Some(bound) = content.clips.iter().find(|bound| bound.clip_uuid == clip) {
+                                play_region(&bound.region, section.from, section.to, block, &mut output, &mut fading_gain,
+                                    sequencers, sequencer_pool, native_cursors, visited, &tempo_map, sample_rate);
                             }
                         }
-                        _ => {
-                            let index = match self.native_cursors.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
-                                Some(index) => index,
-                                None => {
-                                    self.native_cursors.push((region.region_uuid, NativeCursor::new()));
-                                    self.native_cursors.len() - 1
-                                }
-                            };
-                            self.visited.push(region.region_uuid);
-                            render_region(&mut output, region, left, right, sample.sample_rate, block, sample_rate, &tempo_map, &mut self.native_cursors[index].1);
-                        }
                     }
-                }
+                });
             }
         }
-        self.meter.process(&output.left, &output.right);
+        meter.process(&output.left, &output.right);
         // Prune per-region state for regions that stopped playing: cursors are plain Copy structs (retain frees
         // nothing), sequencers park in the pool for reuse instead of dropping their voice buffers mid-render.
         let mut index = 0;
-        while index < self.sequencers.len() {
-            if self.visited.contains(&self.sequencers[index].0) {
+        while index < sequencers.len() {
+            if visited.contains(&sequencers[index].0) {
                 index += 1;
             } else {
-                let (_, mut sequencer) = self.sequencers.swap_remove(index);
+                let (_, mut sequencer) = sequencers.swap_remove(index);
                 sequencer.recycle();
-                self.sequencer_pool.push(sequencer);
+                sequencer_pool.push(sequencer);
             }
         }
-        let visited = &self.visited;
-        self.native_cursors.retain(|(uuid, _)| visited.contains(uuid));
+        native_cursors.retain(|(uuid, _)| visited.contains(uuid));
     }
 }
 
-/// Fill `buffer[0..count)` with the region's fade envelope across one loop cycle (TS `FadingEnvelope.fillGainBuffer`):
+/// Play one region (a timeline region, or a launched clip's VIRTUAL region) for the pulse range
+/// `[from, to)` of `block`, routing by play strategy: a time-stretch region (with >= 2 transients to
+/// bracket a segment) goes through its persistent granular sequencer; everything else (native / pitch)
+/// is the stateless read head in `render_region`.
+#[allow(clippy::too_many_arguments)] // the player's split fields; a struct adds no clarity
+fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
+               output: &mut AudioBuffer, fading_gain: &mut [f32; engine_env::RENDER_QUANTUM],
+               sequencers: &mut Vec<(Uuid, TimeStretchSequencer)>, sequencer_pool: &mut Vec<TimeStretchSequencer>,
+               native_cursors: &mut Vec<(Uuid, NativeCursor)>, visited: &mut Vec<Uuid>,
+               tempo_map: &TempoMap, sample_rate: f32) {
+    if region.mute {
+        return;
+    }
+    let Some(sample) = crate::resolve_sample(region.file) else { return };
+    let left = sample.plane(0);
+    let right = if sample.channel_count >= 2 { sample.plane(1) } else { left };
+    match &region.time_stretch {
+        Some(config) if region.transients.len() >= 2 => {
+            let index = match sequencers.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
+                Some(index) => index,
+                None => {
+                    let sequencer = sequencer_pool.pop().unwrap_or_else(TimeStretchSequencer::new);
+                    sequencers.push((region.region_uuid, sequencer));
+                    sequencers.len() - 1
+                }
+            };
+            visited.push(region.region_uuid);
+            let source = Source {left, right, num_frames: sample.frame_count as usize};
+            let complete = region.position + region.duration;
+            for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
+                fill_fading_gain(fading_gain, region, cycle.result_start, cycle.result_end, block);
+                sequencers[index].1.process(
+                    output, &source, sample.sample_rate, &region.transients, config,
+                    region.waveform_offset, block, cycle.raw_start, cycle.result_start, cycle.result_end,
+                    fading_gain, sample_rate);
+            }
+        }
+        _ => {
+            let index = match native_cursors.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
+                Some(index) => index,
+                None => {
+                    native_cursors.push((region.region_uuid, NativeCursor::new()));
+                    native_cursors.len() - 1
+                }
+            };
+            visited.push(region.region_uuid);
+            render_region(output, region, left, right, sample.sample_rate, from, to, block, sample_rate, tempo_map, &mut native_cursors[index].1);
+        }
+    }
+}
+
+/// Fill `buffer[0..count)` with the region's fade envelope/// Fill `buffer[0..count)` with the region's fade envelope across one loop cycle (TS `FadingEnvelope.fillGainBuffer`):
 /// the fade gain is linear in ppqn from `result_start` to `result_end`. Returns the sample count filled.
 fn fill_fading_gain(buffer: &mut [f32], region: &AudioRegion, result_start: f64, result_end: f64, block: &Block) -> usize {
     let pulses = block.p1 - block.p0;
@@ -249,7 +296,7 @@ fn fill_fading_gain(buffer: &mut [f32], region: &AudioRegion, result_start: f64,
 /// Render one region's contribution for one block, summing into `output` (the testable core — takes the source
 /// planes as slices, so a test feeds synthetic frames without the shared-memory `SampleRef`).
 #[allow(clippy::too_many_arguments)] // positional source planes / rates / block / tempo map / cursor; a struct adds no clarity
-fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], right: &[f32], source_rate: f32, block: &Block, engine_rate: f32, tempo_map: &TempoMap, cursor: &mut NativeCursor) {
+fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], right: &[f32], source_rate: f32, from: f64, to: f64, block: &Block, engine_rate: f32, tempo_map: &TempoMap, cursor: &mut NativeCursor) {
     let pulses = block.p1 - block.p0;
     if pulses <= 0.0 {
         return;
@@ -264,7 +311,7 @@ fn render_region(output: &mut AudioBuffer, region: &AudioRegion, left: &[f32], r
     // read cuts into the file (waveform offset > 0); a frame-0 onset (song start / loop start) is left alone.
     let declick_pulses = seconds_to_pulses(VOICE_FADE_DURATION, block.bpm) as f64;
     let declick_in = region.waveform_offset > 0.0;
-    for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, block.p0, block.p1) {
+    for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
         let begin = sample_of(block, cycle.result_start, pulses, samples);
         let end = sample_of(block, cycle.result_end, pulses, samples);
         // The play STRATEGY decides the source read start (frames) + the per-sample advance:
@@ -417,7 +464,7 @@ mod tests {
     fn reads_the_source_at_native_rate_with_unity_gain() {
         let source: Vec<f32> = (0..128).map(|i| i as f32).collect(); // a ramp, so the read offset is checkable
         let mut output = AudioBuffer::new();
-        render_region(&mut output, &region(0.0, 0.0, 0.0), &source, &source, 48_000.0, &block(), 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        render_region(&mut output, &region(0.0, 0.0, 0.0), &source, &source, 48_000.0, block().p0, block().p1, &block(), 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         for i in 0..64 {
             assert!((output.left[i] - i as f32).abs() < 1e-3, "sample {i}: {} != {}", output.left[i], i);
         }
@@ -427,7 +474,7 @@ mod tests {
     fn applies_region_gain_in_decibels() {
         let source = vec![1.0f32; 128];
         let mut output = AudioBuffer::new();
-        render_region(&mut output, &region(-6.0, 0.0, 0.0), &source, &source, 48_000.0, &block(), 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        render_region(&mut output, &region(-6.0, 0.0, 0.0), &source, &source, 48_000.0, block().p0, block().p1, &block(), 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         let expected = db_to_gain(-6.0);
         for i in 0..64 {
             assert!((output.left[i] - expected).abs() < 1e-4, "sample {i}");
@@ -439,7 +486,7 @@ mod tests {
         let source = vec![1.0f32; 128];
         let mut output = AudioBuffer::new();
         // fade-in over 240 ppqn (the whole block), linear slope: gain ramps 0 -> ~1 across the block.
-        render_region(&mut output, &region(0.0, 240.0, 0.0), &source, &source, 48_000.0, &block(), 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        render_region(&mut output, &region(0.0, 240.0, 0.0), &source, &source, 48_000.0, block().p0, block().p1, &block(), 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         assert!(output.left[0].abs() < 1e-3, "starts silent: {}", output.left[0]);
         assert!(output.left[63] > 0.9, "ramps to ~unity: {}", output.left[63]);
         assert!(output.left[32] > output.left[0] && output.left[32] < output.left[63], "monotonic ramp");
@@ -454,7 +501,7 @@ mod tests {
         let mut warped = region(0.0, 0.0, 0.0);
         warped.warp = vec![(0.0, 0.0), (24_000.0, 1.0)];
         let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 32.0, s0: 0, s1: 32, bpm: 120.0};
-        render_region(&mut output, &warped, &source, &source, 48_000.0, &block, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        render_region(&mut output, &warped, &source, &source, 48_000.0, block.p0, block.p1, &block, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         for i in 0..32 {
             assert!((output.left[i] - (2 * i) as f32).abs() < 1e-3, "sample {i}: {} != {}", output.left[i], 2 * i);
         }
@@ -468,7 +515,7 @@ mod tests {
         let mut warped = region(0.0, 0.0, 0.0);
         warped.warp = vec![(0.0, 0.0), (10.0, 1.0)]; // warp range is only [0, 10) ppqn
         let block = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 100.0, p1: 132.0, s0: 0, s1: 32, bpm: 120.0};
-        render_region(&mut output, &warped, &source, &source, 48_000.0, &block, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        render_region(&mut output, &warped, &source, &source, 48_000.0, block.p0, block.p1, &block, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         assert_eq!(output.left[0], 0.0, "content past the warp range is silent");
     }
 
@@ -482,7 +529,7 @@ mod tests {
         let mut short = region(0.0, 0.0, 0.0);
         short.duration = 240.0; // ends exactly at the block end (pulse 240)
         short.loop_duration = 240.0;
-        render_region(&mut output, &short, &source, &source, 48_000.0, &block(), 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        render_region(&mut output, &short, &source, &source, 48_000.0, block().p0, block().p1, &block(), 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         assert!((output.left[20] - 1.0).abs() < 1e-3, "full gain well inside the region: {}", output.left[20]);
         assert!(output.left[63] < 0.2, "the region end ramps down (declick), not a hard cut: {}", output.left[63]);
         assert!(output.left[63] < output.left[40], "monotonic fall into the boundary");
@@ -495,7 +542,7 @@ mod tests {
         let source: Vec<f32> = (0..12_000).map(|i| (i % 100) as f32 * 0.01).collect();
         let mut output = AudioBuffer::new();
         let started = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 240.0, p1: 480.0, s0: 0, s1: 64, bpm: 120.0};
-        render_region(&mut output, &region(0.0, 0.0, 0.0), &source, &source, 48_000.0, &started, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        render_region(&mut output, &region(0.0, 0.0, 0.0), &source, &source, 48_000.0, started.p0, started.p1, &started, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         assert!((output.left[0] - source[6000]).abs() < 1e-3, "first sample is the correct mid-file frame: {} vs {}", output.left[0], source[6000]);
     }
 }

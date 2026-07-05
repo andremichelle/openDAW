@@ -50,6 +50,7 @@ impl TransientPlayMode {
 
 /// The `AudioTimeStretchBox` config: warp markers (content ppqn -> source seconds, sorted), the transient
 /// fill mode, and the user playback-rate multiplier.
+#[derive(Clone)]
 pub(crate) struct TimeStretchConfig {
     pub(crate) warp: Vec<(f64, f64)>,
     pub(crate) transient_play_mode: TransientPlayMode,

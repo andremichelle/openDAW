@@ -111,7 +111,7 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
             return (
                 <tr className="error">
                     <td className="name">{result.name}</td>
-                    <td className="number" colSpan={5}>{result.error}</td>
+                    <td className="number" colSpan={8}>{result.error}</td>
                 </tr>
             )
         }
@@ -123,28 +123,35 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
                     <td className="name">{result.name}</td>
                     <td className="number">{memory.bestMs.toFixed(2)}</td>
                     <td className="number">{memory.mbPerSec.toFixed(0)} MB/s</td>
-                    <td className="number">{memory.nsPerOp.toFixed(2)} ns/op</td>
+                    <td className="number" colSpan={3}>{memory.nsPerOp.toFixed(2)} ns/op</td>
                     <td className="bar-cell">
                         <div className="bar" style={{width: `${barWidth.toFixed(1)}%`}}/>
                     </td>
-                    <td className="audio-cell"/>
+                    <td className="audio-cell" colSpan={2}/>
                 </tr>
             )
         }
         const barWidth = result.marginalMs > 0 && maxMarginal > 0
             ? (result.marginalMs / maxMarginal) * 100 : 0
         const isBaseline = result.category === "Baseline"
+        const hasWasm = isDefined(result.wasmRenderMs) && !isDefined(result.wasmError)
+        const ratio = hasWasm && (result.wasmRenderMs ?? 0) > 0 ? result.renderMs / (result.wasmRenderMs ?? 1) : undefined
         return (
             <tr>
                 <td className="name">{result.name}</td>
                 <td className="number">{result.renderMs.toFixed(0)}</td>
+                <td className="number">{hasWasm ? (result.wasmRenderMs ?? 0).toFixed(0) : (result.wasmError ?? "-")}</td>
+                <td className="number">{isDefined(ratio) ? `${ratio.toFixed(2)}×` : "-"}</td>
                 <td className="number">{isBaseline ? "-" : result.marginalMs.toFixed(0)}</td>
-                <td className="number">{isBaseline ? "-" : result.perQuantumUs.toFixed(2)}</td>
+                <td className="number">{isBaseline || !hasWasm ? "-" : (result.wasmMarginalMs ?? 0).toFixed(0)}</td>
                 <td className="bar-cell">
                     <div className="bar" style={{width: `${barWidth.toFixed(1)}%`}}/>
                 </td>
                 <td className="audio-cell">
                     {isDefined(result.audio) ? createAudioElement(result.audio) : null}
+                </td>
+                <td className="audio-cell">
+                    {isDefined(result.wasmAudio) ? createAudioElement(result.wasmAudio) : null}
                 </td>
             </tr>
         )
@@ -160,7 +167,7 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
             if (categoryResults.length === 0) {continue}
             tbody.appendChild(
                 <tr className="category">
-                    <td colSpan={6}>{category}</td>
+                    <td colSpan={9}>{category}</td>
                 </tr>
             )
             const sorted = category === "Memory"
@@ -180,7 +187,11 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
                 name: result.name,
                 renderMs: Number(result.renderMs.toFixed(2)),
                 marginalMs: Number(result.marginalMs.toFixed(2)),
-                perQuantumUs: Number(result.perQuantumUs.toFixed(3))
+                perQuantumUs: Number(result.perQuantumUs.toFixed(3)),
+                wasmRenderMs: isDefined(result.wasmRenderMs) ? Number(result.wasmRenderMs.toFixed(2)) : null,
+                wasmMarginalMs: isDefined(result.wasmMarginalMs) ? Number(result.wasmMarginalMs.toFixed(2)) : null,
+                wasmPerQuantumUs: isDefined(result.wasmPerQuantumUs) ? Number(result.wasmPerQuantumUs.toFixed(3)) : null,
+                wasmError: result.wasmError ?? null
             }))
         const memory = results
             .filter(result => isDefined(result.memory))
@@ -302,10 +313,10 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
         <div className={className}>
             <h1>DSP Performance Benchmarks</h1>
             <div className="description">
-                <span>Each device runs in its own project that renders {RENDER_SECONDS}s of audio at {SAMPLE_RATE / 1000}kHz offline (faster than real-time, no playback).</span>
-                <span><b>render</b> — wall-clock time to render the full {RENDER_SECONDS}s. Includes engine overhead, channel strip, and the device itself.</span>
-                <span><b>marginal</b> — render time minus the baseline (a project with only a Tape instrument, no effects). This isolates the cost added by the device.</span>
-                <span><b>per quantum</b> — marginal cost divided by the number of 128-sample blocks rendered ({(RENDER_SECONDS * SAMPLE_RATE / 128).toLocaleString()} blocks). Shows how much time the device adds to each audio callback.</span>
+                <span>Each device runs in its own project that renders {RENDER_SECONDS}s of audio at {SAMPLE_RATE / 1000}kHz offline (faster than real-time, no playback) — once through the <b>TypeScript</b> engine and once through the <b>WASM</b> engine, side by side.</span>
+                <span><b>ts / wasm</b> — wall-clock time to render the full {RENDER_SECONDS}s per engine. Includes engine overhead, channel strip, and the device itself.</span>
+                <span><b>speedup</b> — ts render time divided by wasm render time (2.00× = the WASM engine renders twice as fast).</span>
+                <span><b>marginal</b> — render time minus that engine's own baseline (a project with only a Tape instrument, no effects). This isolates the cost added by the device.</span>
                 <span><b>Memory</b> rows compare ArrayBuffer (AB) vs SharedArrayBuffer (SAB) reads at different sizes and access patterns, on the main thread and inside a Web Worker. The render column shows best-of-7 ms per run, the second column shows throughput (MB/s), the third shows nanoseconds per element. Each test runs 5 untimed warmup passes before timing.</span>
                 <span>Negative marginal values indicate measurement noise, the device cost is too small to measure reliably.</span>
             </div>
@@ -326,11 +337,14 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
                 <thead>
                 <tr>
                     <th>Device</th>
-                    <th>render (ms)</th>
-                    <th>marginal (ms)</th>
-                    <th>per quantum (us)</th>
+                    <th>ts (ms)</th>
+                    <th>wasm (ms)</th>
+                    <th>speedup</th>
+                    <th>ts marginal</th>
+                    <th>wasm marginal</th>
                     <th>relative</th>
-                    <th></th>
+                    <th>ts</th>
+                    <th>wasm</th>
                 </tr>
                 </thead>
                 {tbody}
