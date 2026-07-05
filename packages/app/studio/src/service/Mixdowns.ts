@@ -12,6 +12,7 @@ import {Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {ExportConfiguration} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs"
+import {WasmEngine} from "@/wasm-engine/WasmEngine"
 
 export namespace Mixdowns {
     export const exportMixdown = async ({project: source, meta}: ProjectProfile): Promise<void> => {
@@ -24,7 +25,7 @@ export namespace Mixdowns {
             cancel: () => abortController.abort()
         })
         const result = await Promises.tryCatch(OfflineEngineRenderer
-            .start(project, Option.None, progress, abortController.signal))
+            .start(project, Option.None, progress, abortController.signal, 48_000, WasmEngine.useForExports()))
         dialog.terminate()
         if (result.status === "rejected") {
             if (!Errors.isAbort(result.error)) {
@@ -74,6 +75,8 @@ export namespace Mixdowns {
             progress,
             cancel: () => abortController.abort()
         })
+        // Stems always render through the TS engine: the per-stem unit options (includeAudioEffects,
+        // skipChannelStrip, ...) are not ported to the wasm offline worker yet.
         const {status, value, error: renderError} = await Promises.tryCatch(OfflineEngineRenderer
             .start(project, Option.wrap(config), progress, abortController.signal))
         dialog.terminate()

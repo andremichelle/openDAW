@@ -62,6 +62,7 @@ export class OfflineEngineRenderer {
     ): Promise<OfflineEngineRenderer> {
         const numStems = ExportConfiguration.countStems(optExportConfiguration)
         if (numStems === 0) {return panic("Nothing to export")}
+        if (variant && numStems > 1) {return panic("Stem export is not supported by the variant engine yet")}
         const numberOfChannels = numStems * 2
         const optVariant = variant
             ? Option.wrap(variantWorker.unwrap("No variant engine installed (call 'installVariant' first)"))
@@ -227,7 +228,8 @@ export class OfflineEngineRenderer {
                        optExportConfiguration: Option<ExportConfiguration>,
                        progress: DefaultObservableValue<number>,
                        abortSignal?: AbortSignal,
-                       sampleRate: int = 48_000
+                       sampleRate: int = 48_000,
+                       variant: boolean = false
     ): Promise<AudioData> {
         const {timelineBox: {loopArea: {enabled}}, boxGraph} = source
         const wasEnabled = enabled.getValue()
@@ -242,7 +244,7 @@ export class OfflineEngineRenderer {
                 : {startPosition: r.start, endPosition: r.end}
         })
         const maxDurationSeconds = source.tempoMap.intervalToSeconds(startPosition, endPosition) + 30
-        const renderer = await this.create(source, optExportConfiguration, sampleRate)
+        const renderer = await this.create(source, optExportConfiguration, sampleRate, variant)
         const result = await renderer.render(
             {maxDurationSeconds}, startPosition, endPosition, progress, abortSignal)
         boxGraph.beginTransaction()

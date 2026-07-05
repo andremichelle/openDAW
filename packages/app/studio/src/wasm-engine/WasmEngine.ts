@@ -21,6 +21,11 @@ export namespace WasmEngine {
 
     export const setEnabled = (enabled: boolean): void => localStorage.setItem(FLAG_KEY, String(enabled))
 
+    // Whether a MASTER-only offline render (mixdown, publish, video audio) should run through the wasm
+    // variant: the engine toggle is on and the offline worker is installed. STEM exports always use the TS
+    // renderer for now (per-stem unit options — includeAudioEffects/skipChannelStrip — are not ported yet).
+    export const useForExports = (): boolean => isEnabled() && OfflineEngineRenderer.hasVariant()
+
     // Compile the wasm modules + register the processor module (both once). Returns false when the engine
     // artifacts are unavailable (e.g. a deploy without them), so callers can revert to the TS engine.
     export const ensureReady = async (context: BaseAudioContext): Promise<boolean> => {

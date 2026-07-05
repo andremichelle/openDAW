@@ -9,6 +9,7 @@ import {
 } from "@opendaw/lib-std"
 import {dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {OfflineEngineRenderer, Project} from "@opendaw/studio-core"
+import {WasmEngine} from "@/wasm-engine/WasmEngine"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
 import {ShadertoyBox} from "@opendaw/studio-boxes"
@@ -86,7 +87,7 @@ export namespace VideoRenderer {
                 toParts: (position: ppqn) => project.timelineBoxAdapter.signatureTrack.toParts(position)
             })
 
-            const renderer = await OfflineEngineRenderer.create(project, Option.None, sampleRate)
+            const renderer = await OfflineEngineRenderer.create(project, Option.None, sampleRate, WasmEngine.useForExports())
             renderer.play()
 
             const tempoMap = project.tempoMap
