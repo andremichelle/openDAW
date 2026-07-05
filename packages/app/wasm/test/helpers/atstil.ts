@@ -51,7 +51,7 @@ export const fetchAtstilSamples = async (boxGraph: BoxGraph): Promise<Array<{uui
                 // burst — BOTH engines get the identical PCM, so the parity comparison stays valid.
                 console.log(`sample ${id} not in the cloud library — substituting a synthetic burst`)
                 const frames = 24000
-                const data = new Float32Array(frames)
+                const data = new Float32Array(new SharedArrayBuffer(frames * Float32Array.BYTES_PER_ELEMENT))
                 let seed = 0x12345678
                 for (let i = 0; i < frames; i++) {
                     seed = (seed * 1664525 + 1013904223) >>> 0

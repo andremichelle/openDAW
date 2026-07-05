@@ -13,7 +13,7 @@ import {buildSampleMap, renderTs} from "./helpers/render-ts"
 
 const tone = (): ArrayBuffer => {
     const frames = 48000
-    const data = new Float32Array(frames)
+    const data = new Float32Array(new SharedArrayBuffer(frames * Float32Array.BYTES_PER_ELEMENT))
     for (let i = 0; i < frames; i++) {data[i] = Math.sin(i * 220 / 48000 * Math.PI * 2) * 0.5}
     return WavFile.encodeFloats({frames: [data], numberOfFrames: frames, numberOfChannels: 1, sampleRate: 48000})
 }
