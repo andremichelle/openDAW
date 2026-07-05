@@ -258,8 +258,13 @@ pub(crate) struct BoundNoteClip {
 
 impl NoteTrackAccess for NoteTrackContent {
     fn for_each_region(&self, from: f64, to: f64, visit: &mut dyn FnMut(&NoteRegion, &EventCollection<NoteEvent>)) {
-        // Binary-search the regions overlapping [from, to) within this track (sorted by position).
+        // Binary-search the regions overlapping [from, to) within this track (sorted by position). A region
+        // being RECORDED INTO is skipped (TS `context.ignoresRegion` in `NoteSequencer.#processRegions`).
+        let ignored = unsafe { crate::IGNORED_REGIONS.get() };
         for bound in self.regions.iterate_range(from, to) {
+            if ignored.contains(&bound.region_uuid) {
+                continue;
+            }
             visit(&bound.region, &bound.collection.events());
         }
     }

@@ -122,7 +122,9 @@ impl Metronome {
                 let mut position = beat_index as f64 * step;
                 while position < block.p1 {
                     let offset = floor_nonneg(pulses_to_samples(position - block.p0, block.bpm, self.sample_rate)) as usize;
-                    let click_index = if (beat_index as u32).is_multiple_of(self.nominator) {0} else {1};
+                    // `rem_euclid` so NEGATIVE beats (a recording count-in runs before position 0) still
+                    // accent the true downbeats — a u32 cast would wrap and misplace them for e.g. 3/4.
+                    let click_index = if beat_index.rem_euclid(self.nominator as i64) == 0 {0} else {1};
                     if offset < left.len() {
                         self.clicks.push(Click {sound_index: click_index, position: 0, start_index: offset})
                     }

@@ -85,10 +85,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             state.position = view.getFloat32(0)
             state.bpm = view.getFloat32(4)
             state.playbackTimestamp = this.#playbackTimestamp
-            state.countInBeatsRemaining = 0
+            state.countInBeatsRemaining = view.getFloat32(12)
             state.isPlaying = view.getUint8(16) === 1
-            state.isCountingIn = false
-            state.isRecording = false
+            state.isCountingIn = view.getUint8(17) === 1
+            state.isRecording = view.getUint8(18) === 1
         })
         this.#broadcaster = this.#terminator.own(LiveStreamBroadcaster.create(messenger, "engine-live-data"))
         this.#peaks = this.#terminator.own(new PeakBroadcaster(this.#broadcaster, EngineAddresses.PEAKS))
@@ -118,8 +118,15 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     this.#playbackTimestamp = position
                     engine.set_position(position)
                 },
-                prepareRecordingState: (_countIn: boolean): void => this.#unsupported("recording"),
-                stopRecording: (): void => {},
+                prepareRecordingState: (countIn: boolean): void => {
+                    this.#transporting = true
+                    engine.prepare_recording_state(countIn ? 1 : 0,
+                        this.#preferences.settings.recording.countInBars)
+                },
+                stopRecording: (): void => {
+                    this.#transporting = false
+                    engine.stop_recording()
+                },
                 queryLoadingComplete: (): Promise<boolean> =>
                     Promise.all(this.#pendingResources).then(() => true),
                 panic: (): void => {this.#panic = true},
@@ -127,7 +134,11 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 setFrozenAudio: (_uuid: UUID.Bytes, _audioData: Nullable<AudioData>): void => this.#unsupported("frozen audio"),
                 updateMonitoringMap: (_map: ReadonlyArray<MonitoringMapEntry>): void => {},
                 noteSignal: (signal: NoteSignal): void => this.#noteSignal(signal),
-                ignoreNoteRegion: (_uuid: UUID.Bytes): void => {},
+                ignoreNoteRegion: (uuid: UUID.Bytes): void => {
+                    const pointer = engine.input_reserve(16)
+                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    engine.ignore_note_region()
+                },
                 scheduleClipPlay: (clipIds: ReadonlyArray<UUID.Bytes>): void => clipIds.forEach(uuid => {
                     const pointer = engine.input_reserve(16)
                     new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
@@ -233,8 +244,13 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         // local flag alone would misread a clip-launched playback as "not transporting" and hard-reset.
         const view = new DataView(this.#memory.buffer, this.#engine.engine_state_ptr(), this.#engine.engine_state_len())
         const wasTransporting = this.#transporting || view.getUint8(16) === 1
+        const wasRecording = view.getUint8(17) === 1 || view.getUint8(18) === 1
         this.#transporting = false
         this.#engine.pause()
+        if (wasRecording) {
+            // TS `#stop`: leaving a recording returns the playhead to where playback started (or 0).
+            this.#engine.set_position(this.#preferences.settings.playback.timestampEnabled ? this.#playbackTimestamp : 0.0)
+        }
         if (reset || !wasTransporting) {
             this.#engine.stop() // rewinds to 0 + resets every plugin (voices, tails, detectors)
             this.#playbackTimestamp = 0.0

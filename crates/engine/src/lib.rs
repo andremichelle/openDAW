@@ -376,6 +376,11 @@ static INPUTS: Shared<Vec<(u32, u32, u32)>> = Shared::new(Vec::new());
 // own uuid via `host_self_uuid` (the engine knows it at bind; the device does not, since it only uses relative
 // field paths). The engine sets it right before `call_device_init`. Its own cell, set + read outside render.
 static CURRENT_DEVICE_UUID: Shared<[u8; 16]> = Shared::new([0; 16]);
+// Regions the note sequencers must SKIP (TS `EngineCommands.ignoreNoteRegion` + `#ignoredRegions`): the
+// region currently being RECORDED INTO must not play back (it would re-trigger the notes being captured).
+// Cleared on stop / stopRecording. Read from the region iteration (its own cell, never `ENGINE`).
+pub(crate) static IGNORED_REGIONS: Shared<Vec<[u8; 16]>> = Shared::new(Vec::new());
+
 // The note-bits slot of the unit CURRENTLY reconciling (its instruments capture it at construction —
 // composite slots share their unit's slot). Set around `reconcile_one`'s chain work, cleared after.
 static CURRENT_UNIT_NOTE_BITS: Shared<Option<engine_env::telemetry::BroadcastSlot>> = Shared::new(None);
@@ -872,6 +877,13 @@ struct Engine {
     registry: Registry,
     transport: Transport,
     metronome: Metronome,
+    // RECORDING state (TS `TimeInfo.isRecording/isCountingIn` + `EngineProcessor.#prepareRecordingState`):
+    // during a count-in the transport runs from `recording_start - offset` with the metronome FORCED on;
+    // reaching `recording_start` flips to recording and restores the metronome preference.
+    is_recording: bool,
+    is_counting_in: bool,
+    recording_start: f64,
+    metronome_pref: bool,
     tempo: Option<ValueCollection>,
     tempo_map: SharedTempoMap, // ppqn -> real-seconds map (tempo-automation aware), read by the audio-region player
 
@@ -917,6 +929,10 @@ impl Engine {
             registry: registry(),
             transport: Transport::new(sample_rate, 120.0),
             metronome: Metronome::new(sample_rate),
+            is_recording: false,
+            is_counting_in: false,
+            recording_start: 0.0,
+            metronome_pref: false,
             tempo: None,
             tempo_map: Rc::new(RefCell::new(TempoMap::new())),
             context: EngineContext::new(),
@@ -1021,24 +1037,32 @@ impl Engine {
         for sample in output.iter_mut() {
             *sample = 0.0
         }
-        // disjoint field borrows so the render closure can hold the metronome / block scratch while
-        // `render_quantum` holds the transport.
-        let Engine {transport, metronome, context, output_bus, blocks, tempo, tempo_map, controls, ..} = self;
         // apply the latest timeline values recorded by the subscriptions
-        transport.set_bpm(controls.bpm.get());
-        transport.set_loop_enabled(controls.loop_enabled.get());
-        transport.set_loop_from(controls.loop_from.get());
-        transport.set_loop_to(controls.loop_to.get());
-        metronome.set_nominator(controls.nominator.get() as u32);
-        metronome.set_denominator(controls.denominator.get() as u32);
+        self.transport.set_bpm(self.controls.bpm.get());
+        self.transport.set_loop_enabled(self.controls.loop_enabled.get());
+        self.transport.set_loop_from(self.controls.loop_from.get());
+        self.transport.set_loop_to(self.controls.loop_to.get());
+        self.metronome.set_nominator(self.controls.nominator.get() as u32);
+        self.metronome.set_denominator(self.controls.denominator.get() as u32);
         // refresh the tempo map the audio-region player reads: the live automation curve under the same
         // condition the transport uses it (enabled + non-empty), else a constant tempo at the configured bpm.
-        let tempo_curve = if controls.tempo_automation_enabled.get() {
-            tempo.as_ref().filter(|collection| !collection.is_empty()).map(|collection| collection.curve())
+        let tempo_curve = if self.controls.tempo_automation_enabled.get() {
+            self.tempo.as_ref().filter(|collection| !collection.is_empty()).map(|collection| collection.curve())
         } else {
             None
         };
-        tempo_map.borrow_mut().update(controls.bpm.get(), tempo_curve);
+        self.tempo_map.borrow_mut().update(self.controls.bpm.get(), tempo_curve);
+        // The count-in flip (TS `renderer.setCallback(recordingStartTime, ...)`): once the playhead reaches
+        // the recording start, counting-in becomes recording and the metronome returns to its preference.
+        // Quantum-granular (TS splits the block at the exact position; one quantum ≈ 2.7 ms).
+        if self.is_counting_in && self.transport.position() >= self.recording_start {
+            self.is_counting_in = false;
+            self.is_recording = true;
+            self.metronome.set_enabled(self.metronome_pref);
+        }
+        let (is_recording, is_counting_in, recording_start) = (self.is_recording, self.is_counting_in, self.recording_start);
+        let denominator = self.controls.denominator.get() as i32;
+        let Engine {transport, metronome, context, output_bus, blocks, tempo, tempo_map: _, controls, ..} = self;
         blocks.clear();
         if transport.is_playing() {
             // use the tempo map only when automation is enabled and non-empty, else the fixed bpm
@@ -1088,15 +1112,55 @@ impl Engine {
                 output[RENDER_QUANTUM + index] += buffer.right[index];
             }
         }
-        write_engine_state(transport, state);
+        write_engine_state(transport, state, is_recording, is_counting_in, recording_start, denominator);
     }
 
     fn play(&mut self) {
         self.transport.play()
     }
 
+    /// Arm recording (TS `EngineProcessor.#prepareRecordingState`): stopped + count-in wanted -> run the
+    /// transport from `recording_start - countInBars` with the metronome forced on (the flip to recording
+    /// happens in `render` when the playhead reaches the start); else record immediately from here.
+    fn prepare_recording_state(&mut self, count_in: bool, count_in_bars: f64) {
+        if self.is_recording || self.is_counting_in {
+            return;
+        }
+        if !self.transport.is_playing() && count_in {
+            let nominator = self.controls.nominator.get() as f64;
+            let denominator = self.controls.denominator.get() as i32;
+            let offset = dsp::ppqn::from_signature((count_in_bars * nominator) as i32, denominator);
+            self.recording_start = self.transport.position();
+            self.is_counting_in = true;
+            self.apply_metronome();
+            self.transport.seek(self.recording_start - offset);
+            self.transport.play();
+        } else {
+            self.is_recording = true;
+            self.transport.play();
+        }
+    }
+
+    /// End recording (TS `EngineProcessor.#stopRecording`): drop the flags, restore the metronome, and
+    /// PAUSE the transport (no reset — the recorded takes stay audible where the playhead stopped).
+    fn stop_recording(&mut self) {
+        if !self.is_recording && !self.is_counting_in {
+            return;
+        }
+        self.is_recording = false;
+        self.is_counting_in = false;
+        self.apply_metronome();
+        self.transport.stop(false);
+        unsafe { IGNORED_REGIONS.get() }.clear();
+    }
+
     /// PAUSE: freeze the transport where it is, keeping all plugin / buffer state, so PLAY resumes seamlessly.
+    /// Ends any recording / count-in (TS `TimeInfo.pause` clears both flags).
     fn pause(&mut self) {
+        self.is_recording = false;
+        self.is_counting_in = false;
+        self.apply_metronome();
+        unsafe { IGNORED_REGIONS.get() }.clear();
         self.transport.stop(false)
     }
 
@@ -1104,6 +1168,10 @@ impl Engine {
     /// filter + detector state) and the bus / strip buffers, so PLAY starts clean. The output bus is zeroed so
     /// no residual leaks into the final mix while stopped.
     fn stop(&mut self) {
+        self.is_recording = false;
+        self.is_counting_in = false;
+        self.apply_metronome();
+        unsafe { IGNORED_REGIONS.get() }.clear();
         self.transport.stop(true);
         self.clip_sequencer.borrow_mut().reset();
         self.context.reset_all();
@@ -1120,6 +1188,9 @@ impl Engine {
     /// SEEK: move the playhead (playing or stopped), keeping all plugin / buffer state.
     /// Mirrors the TS engine's `setPosition`.
     fn set_position(&mut self, position: f64) {
+        if self.is_recording {
+            return; // TS `#setPosition` ignores seeks while recording
+        }
         self.transport.seek(position)
     }
 
@@ -1135,7 +1206,14 @@ impl Engine {
     }
 
     fn set_metronome_enabled(&mut self, enabled: bool) {
-        self.metronome.set_enabled(enabled)
+        self.metronome_pref = enabled;
+        self.apply_metronome();
+    }
+
+    /// The effective metronome: the preference, FORCED on during a count-in (TS sets
+    /// `timeInfo.metronomeEnabled = true` for the count-in and restores the preference at the flip).
+    fn apply_metronome(&mut self) {
+        self.metronome.set_enabled(self.metronome_pref || self.is_counting_in);
     }
 
     /// Subscribe the timeline controls + the tempo / note collections to the synced `TimelineBox`.
@@ -1256,15 +1334,22 @@ impl Engine {
     }
 }
 
-/// Serialize the transport state into `state` (big-endian, per the EngineState contract).
-fn write_engine_state(transport: &Transport, state: &mut [u8]) {
+/// Serialize the transport state into `state` (big-endian, per the EngineState contract). The count-in
+/// remainder mirrors TS: `(recordingStartTime - position) / PPQN.fromSignature(1, denominator)` beats.
+fn write_engine_state(transport: &Transport, state: &mut [u8], is_recording: bool, is_counting_in: bool,
+                      recording_start: f64, denominator: i32) {
     state[STATE_POSITION..STATE_POSITION + 4].copy_from_slice(&(transport.position() as f32).to_be_bytes());
     state[STATE_BPM..STATE_BPM + 4].copy_from_slice(&transport.bpm().to_be_bytes());
     state[STATE_PLAYBACK_TIMESTAMP..STATE_PLAYBACK_TIMESTAMP + 4].copy_from_slice(&0f32.to_be_bytes());
-    state[STATE_COUNT_IN_REMAINING..STATE_COUNT_IN_REMAINING + 4].copy_from_slice(&0f32.to_be_bytes());
+    let count_in_remaining = if is_counting_in {
+        ((recording_start - transport.position()) / dsp::ppqn::from_signature(1, denominator.max(1))) as f32
+    } else {
+        0.0
+    };
+    state[STATE_COUNT_IN_REMAINING..STATE_COUNT_IN_REMAINING + 4].copy_from_slice(&count_in_remaining.to_be_bytes());
     state[STATE_IS_PLAYING] = transport.is_playing() as u8;
-    state[STATE_IS_COUNTING_IN] = 0;
-    state[STATE_IS_RECORDING] = 0;
+    state[STATE_IS_COUNTING_IN] = is_counting_in as u8;
+    state[STATE_IS_RECORDING] = is_recording as u8;
     state[STATE_PERF_INDEX..STATE_PERF_INDEX + 4].copy_from_slice(&0i32.to_be_bytes());
 }
 
@@ -1531,6 +1616,40 @@ pub extern "C" fn stop() {
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.stop()
         }
+    }
+}
+
+/// Arm recording (TS `EngineCommands.prepareRecordingState`): `count_in_bars` comes from the caller's
+/// preferences (the engine owns the signature). See `Engine::prepare_recording_state`.
+#[no_mangle]
+pub extern "C" fn prepare_recording_state(count_in: i32, count_in_bars: f64) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.prepare_recording_state(count_in != 0, count_in_bars);
+        }
+    }
+}
+
+/// End recording (TS `EngineCommands.stopRecording`): drops the flags and pauses the transport.
+#[no_mangle]
+pub extern "C" fn stop_recording() {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.stop_recording();
+        }
+    }
+}
+
+/// Exclude a note region from playback (TS `EngineCommands.ignoreNoteRegion`): the region currently being
+/// RECORDED INTO must not re-trigger the notes being captured. The 16-byte region uuid is written into the
+/// input scratch first. Cleared on stop / stopRecording.
+#[no_mangle]
+pub extern "C" fn ignore_note_region() {
+    let mut uuid = [0u8; 16];
+    uuid.copy_from_slice(unsafe { core::slice::from_raw_parts(INPUT.get().as_ptr(), 16) });
+    let ignored = unsafe { IGNORED_REGIONS.get() };
+    if !ignored.contains(&uuid) {
+        ignored.push(uuid);
     }
 }
 

@@ -39,6 +39,11 @@ export type EngineExports = {
     pause: () => void
     stop: () => void
     set_position: (position: number) => void
+    // RECORDING (TS EngineCommands.prepareRecordingState/stopRecording/ignoreNoteRegion): count_in_bars
+    // comes from the caller's preferences; the ignored region uuid is written into the input scratch first.
+    prepare_recording_state: (countIn: number, countInBars: number) => void
+    stop_recording: () => void
+    ignore_note_region: () => void
     // LIVE note signals (the studio's on-screen keys / pads / MIDI input): write the target AudioUnitBox
     // uuid into the input buffer (16 bytes) first. A raw note-on sustains until its note-off; an audition
     // stops itself after `duration` pulses. They sound while the transport is stopped too.
