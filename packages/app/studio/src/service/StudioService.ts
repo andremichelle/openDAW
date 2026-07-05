@@ -609,6 +609,23 @@ export class StudioService implements ProjectEnv {
                 }
                 return meterProbe.count
             }).unwrapOrNull())
+        // An offline-export probe: renders the current project's mixdown exactly like `Mixdowns.exportMixdown`
+        // (through the wasm variant when the engine toggle is on) and reports level + length, so a headless
+        // run can compare a TS export against a WASM export without touching the file dialogs.
+        ConsoleCommands.exportMethod("engine.exportTest",
+            async () => this.runIfProject(async project => {
+                const {OfflineEngineRenderer} = await import("@opendaw/studio-core")
+                const {WasmEngine} = await import("@/wasm-engine/WasmEngine")
+                const progress = new DefaultObservableValue(0.0)
+                const audio = await OfflineEngineRenderer.start(
+                    project.copy(), Option.None, progress, undefined, 48_000, WasmEngine.useForExports())
+                let sum = 0.0
+                for (const channel of audio.frames) {
+                    for (const value of channel) {sum += value * value}
+                }
+                const rms = Math.sqrt(sum / (audio.numberOfFrames * audio.numberOfChannels))
+                return {variant: WasmEngine.useForExports() ? "wasm" : "ts", frames: audio.numberOfFrames, rms}
+            }).unwrapOrNull())
     }
 
     #populateSpotlightData(): void {

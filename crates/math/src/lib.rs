@@ -29,9 +29,15 @@ pub fn floor(x: f64) -> f64 {
     libm::floor(x)
 }
 
-/// Floored (Euclidean) modulo: the result lies in `[0, m)` for `m > 0`. Mirrors lib-std `mod`.
+/// Floored (Euclidean) modulo: the result lies in `[0, m)` for `m > 0`. BIT-EXACT mirror of lib-std
+/// `mod = fract(value / range) * range` — the subtraction happens in the DIVIDED domain, then scales back,
+/// which rounds differently than `n - floor(n / m) * m` (e.g. TS mod(7200, 6240) = 959.9999999999993, not
+/// 960). Value-region loop wraps read automation curves at these positions, so an update-clock tick that
+/// lands exactly on a curve event must resolve to the same side of the event in both engines (the atstil
+/// stutter `enable` flip was one tick early in wasm).
 pub fn mod_euclid(n: f64, m: f64) -> f64 {
-    n - floor(n / m) * m
+    let quotient = n / m;
+    (quotient - floor(quotient)) * m
 }
 
 /// `x^y` in f64 (libm-backed for no_std + host/wasm parity). Mirrors JS `**` on doubles.

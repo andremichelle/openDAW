@@ -245,6 +245,10 @@ impl Engine {
         let sum = Rc::new(RefCell::new(AudioBusProcessor::new(sum_buffer.clone())));
         let sum_id = self.context.register_processor(sum.clone());
         self.context.set_label(sum_id, alloc::string::String::from("composite-sum"));
+        // The composite's raw child SUM under its device uuid, so a sidechain targeting the composite device
+        // (e.g. a Playfield clap track) taps its mix — pre the owning unit's fx + strip + mute. Mirrors TS
+        // `MixProcessor` registering `device.adapter.address -> output`.
+        self.output_registry.register(Address::of(composite_uuid, vec![]), sum_buffer.clone(), sum_id);
         let mut binding = CompositeBinding {spec: spec.clone(), composite_uuid, children, sum, sum_id, sum_buffer, members: Vec::new()};
         self.reconcile_composite_children(&mut binding, track_sets, signal, invalidate);
         binding
@@ -522,6 +526,7 @@ impl Engine {
     /// Terminate a whole composite (the unit's instrument changed, or the unit is removed): every child (after
     /// detaching its sum edge), the sum node, and the child-collection observation.
     pub(crate) fn teardown_composite(&mut self, binding: CompositeBinding) {
+        self.output_registry.remove(&Address::of(binding.composite_uuid, vec![]));
         for child in binding.members {
             self.context.remove_edge(child.output_node, binding.sum_id); // the sum edge (the sum node goes next)
             self.teardown_child(child);
