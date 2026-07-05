@@ -396,7 +396,7 @@ struct PullContext {
     // The CURRENT CONSUMER's note-activity slot ([0] is a monotonic pulled-note counter the UI diffs to
     // flash an indicator). Set by `PluginInstrument` around its device call; cleared during a MidiFx descent
     // so nested pulls credit only their own producers.
-    activity: Option<Rc<RefCell<[f32; 4]>>>
+    activity: Option<engine_env::telemetry::BroadcastSlot>
 }
 
 impl PullContext {

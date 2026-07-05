@@ -43,7 +43,7 @@ pub(crate) struct PluginMidiEffect {
     clock_armed: Cell<bool>,
     // Note activity ([0] = a monotonic count of events this fx EMITTED; the UI diffs it to flash an
     // indicator). A broadcast slot: the table points at it, `Weak`-owned so a teardown sweeps the entry.
-    activity: alloc::rc::Rc<RefCell<[f32; 4]>>
+    activity: engine_env::telemetry::BroadcastSlot // one float: the monotonic pulled-note count
 }
 
 impl PluginMidiEffect {
@@ -53,12 +53,12 @@ impl PluginMidiEffect {
             state: DeviceState::new(device.state_size as usize),
             params: RefCell::new(Vec::new()),
             clock_armed: Cell::new(false),
-            activity: alloc::rc::Rc::new(RefCell::new([0.0; 4]))
+            activity: engine_env::telemetry::broadcast_slot(1)
         }
     }
 
     /// The note-activity broadcast slot (see the field docs).
-    pub(crate) fn activity_slot(&self) -> alloc::rc::Rc<RefCell<[f32; 4]>> {
+    pub(crate) fn activity_slot(&self) -> engine_env::telemetry::BroadcastSlot {
         self.activity.clone()
     }
 

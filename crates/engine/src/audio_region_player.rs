@@ -141,7 +141,7 @@ impl AudioRegionPlayer {
     }
 
     /// The peak/RMS broadcast slot of the tape output.
-    pub(crate) fn meter_slot(&self) -> engine_env::meter::MeterSlot {
+    pub(crate) fn meter_slot(&self) -> engine_env::telemetry::BroadcastSlot {
         self.meter.slot()
     }
 

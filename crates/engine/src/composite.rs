@@ -30,7 +30,7 @@ use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_sequencer::NoteSequencer;
-use crate::audio_unit::{BoundNoteRegions, BuiltCluster, DeviceParams, SharedTrackSets, SidechainBinding, SlotCluster};
+use crate::audio_unit::{BoundNoteTracks, BuiltCluster, DeviceParams, SharedTrackSets, SidechainBinding, SlotCluster};
 use crate::{CompositeSpec, DeviceReg, Engine, PullLink, EFFECT_INDEX_KEY};
 
 /// A composite's PERSISTENT per-child cascade, owned by the unit whose instrument is the composite. Each child
@@ -498,7 +498,7 @@ impl Engine {
             None => { instrument_obs.terminate(&mut self.graph); return None; }
         };
         let sequencer: SharedNoteEventSource =
-            Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: track_sets.clone()}), self.clip_sequencer.clone())));
+            Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: track_sets.clone()}), self.clip_sequencer.clone())));
         let mut chains = vec![instrument_obs];
         let midi = self.observe_child_chain(cell_uuid, spec.cell_midi_field, &mut chains, signal);
         let audio = self.observe_child_chain(cell_uuid, spec.cell_audio_field, &mut chains, signal);

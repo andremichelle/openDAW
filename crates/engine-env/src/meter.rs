@@ -4,10 +4,8 @@
 //! The slot lives behind an `Rc` (a stable talc heap address for the processor's life); the ring buffers
 //! are allocated at construction (reconcile), never on the render path.
 
-use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 
 const PEAK_DECAY_SECONDS: f32 = 0.250; // TS PeakBroadcaster.PEAK_DECAY
 const RMS_WINDOW_SECONDS: f32 = 0.100; // TS PeakBroadcaster.RMS_WINDOW
@@ -47,11 +45,10 @@ impl Rms {
     }
 }
 
-/// The shared slot a meter writes and the broadcast table points at.
-pub type MeterSlot = Rc<RefCell<[f32; 4]>>;
+use crate::telemetry::{broadcast_slot, BroadcastSlot};
 
 pub struct Meter {
-    slot: MeterSlot,
+    slot: BroadcastSlot, // four floats: peak L/R + RMS L/R
     decay_base: f64, // PEAK_DECAY = exp(-1 / (sr * 0.25)); applied as decay_base^samples per block
     peak_left: f32,
     peak_right: f32,
@@ -63,7 +60,7 @@ impl Meter {
     pub fn new(sample_rate: f32) -> Self {
         let window = (sample_rate * RMS_WINDOW_SECONDS) as usize;
         Self {
-            slot: Rc::new(RefCell::new([0.0; 4])),
+            slot: broadcast_slot(4),
             decay_base: math::exp(-1.0 / (sample_rate as f64 * PEAK_DECAY_SECONDS as f64)),
             peak_left: 0.0,
             peak_right: 0.0,
@@ -74,12 +71,12 @@ impl Meter {
 
     /// The slot handle (keep an `Rc` clone wherever the values must outlive this meter's owner) and the raw
     /// pointer the broadcast table hands to JS. Stable for the owning processor's life (talc never moves).
-    pub fn slot(&self) -> MeterSlot {
+    pub fn slot(&self) -> BroadcastSlot {
         self.slot.clone()
     }
 
     pub fn values_ptr(&self) -> u32 {
-        self.slot.as_ptr() as u32
+        self.slot.borrow().as_ptr() as u32
     }
 
     /// Meter one rendered quantum: block peak vs the decayed held peak, plus the sliding RMS.
@@ -114,7 +111,7 @@ impl Meter {
         self.peak_right = 0.0;
         self.rms_left.clear();
         self.rms_right.clear();
-        *self.slot.borrow_mut() = [0.0; 4];
+        self.slot.borrow_mut().fill(0.0);
     }
 }
 
@@ -141,6 +138,6 @@ mod tests {
             assert!(values[0] < 0.5 && values[0] > 0.45, "the held peak decays slowly (250 ms)");
         }
         meter.clear();
-        assert_eq!(*meter.slot().borrow(), [0.0; 4]);
+        assert_eq!(meter.slot().borrow().as_ref(), &[0.0f32; 4]);
     }
 }

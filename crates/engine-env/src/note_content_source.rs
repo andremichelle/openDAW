@@ -18,7 +18,7 @@ pub trait NoteTrackAccess {
     fn clip_events(&self, clip: &[u8; 16], visit: &mut dyn FnMut(&EventCollection<NoteEvent>));
 }
 
-pub trait NoteRegionSource {
+pub trait NoteContentSource {
     /// Visit each NOTE track: its `TrackBox` uuid plus the accessor for its content.
     fn for_each_track(&self, visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess));
 }

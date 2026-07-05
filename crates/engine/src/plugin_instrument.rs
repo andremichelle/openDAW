@@ -42,7 +42,7 @@ pub(crate) struct PluginInstrument {
     events: EventBuffer,
     output: SharedAudioBuffer,
     meter: engine_env::meter::Meter, // peaks/RMS of the device output (a broadcast slot)
-    activity: alloc::rc::Rc<core::cell::RefCell<[f32; 4]>>, // [0] = monotonic pulled-note count (a broadcast slot)
+    activity: engine_env::telemetry::BroadcastSlot, // one float: the monotonic pulled-note count
     device_output: [Box<[f32]>; 2], // the device's stereo output buffers ([left, right])
     // `device_events` (the event scratch the device pulls into), `device_state`, and `out_offsets` are
     // referenced only by raw address inside `descriptor`; they must stay alive (dropping them frees the
@@ -96,7 +96,7 @@ impl PluginInstrument {
             events: EventBuffer::new(),
             output: shared_audio_buffer(),
             meter: engine_env::meter::Meter::new(sample_rate),
-            activity: alloc::rc::Rc::new(core::cell::RefCell::new([0.0; 4])),
+            activity: engine_env::telemetry::broadcast_slot(1),
             device_output,
             device_events,
             device_state,
@@ -110,12 +110,12 @@ impl PluginInstrument {
     }
 
     /// The peak/RMS broadcast slot of this instrument's output.
-    pub(crate) fn meter_slot(&self) -> engine_env::meter::MeterSlot {
+    pub(crate) fn meter_slot(&self) -> engine_env::telemetry::BroadcastSlot {
         self.meter.slot()
     }
 
     /// The pulled-note activity broadcast slot ([0] = a monotonic count).
-    pub(crate) fn activity_slot(&self) -> alloc::rc::Rc<core::cell::RefCell<[f32; 4]>> {
+    pub(crate) fn activity_slot(&self) -> engine_env::telemetry::BroadcastSlot {
         self.activity.clone()
     }
 

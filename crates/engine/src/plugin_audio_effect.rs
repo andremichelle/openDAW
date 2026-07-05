@@ -107,7 +107,7 @@ impl PluginAudioEffect {
     }
 
     /// The peak/RMS broadcast slot of this effect's output.
-    pub(crate) fn meter_slot(&self) -> engine_env::meter::MeterSlot {
+    pub(crate) fn meter_slot(&self) -> engine_env::telemetry::BroadcastSlot {
         self.meter.slot()
     }
 }

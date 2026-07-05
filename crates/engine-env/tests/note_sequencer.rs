@@ -10,7 +10,7 @@ use engine_env::clip_sequencer::ClipSequencer;
 use engine_env::event::Event;
 use engine_env::note_event_source::NoteEventSource;
 use engine_env::note_region::NoteRegion;
-use engine_env::note_region_source::{NoteRegionSource, NoteTrackAccess};
+use engine_env::note_content_source::{NoteContentSource, NoteTrackAccess};
 use engine_env::note_sequencer::NoteSequencer;
 use value::event::EventCollection;
 use value::note::NoteEvent;
@@ -34,7 +34,7 @@ impl NoteTrackAccess for OneRegion {
     fn clip_events(&self, _clip: &[u8; 16], _visit: &mut dyn FnMut(&EventCollection<NoteEvent>)) {}
 }
 
-impl NoteRegionSource for OneRegion {
+impl NoteContentSource for OneRegion {
     fn for_each_track(&self, visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess)) {
         visit(&TRACK, self)
     }
@@ -210,7 +210,7 @@ impl NoteTrackAccess for TrackWithClip {
     }
 }
 
-impl NoteRegionSource for TrackWithClip {
+impl NoteContentSource for TrackWithClip {
     fn for_each_track(&self, visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess)) {
         visit(&TRACK, self)
     }

@@ -33,7 +33,11 @@ pub(crate) struct ParamHandle {
     pub(crate) field: Rc<Cell<f32>>, // the box field's current real value (Hz, semitones, bool 0/1) as an f32
     pub(crate) kind: u32,            // the field's primitive type, used when the parameter is NOT automated
     pub(crate) track: Option<ParamCurve>,
-    pub(crate) last: Rc<Cell<f32>>
+    pub(crate) last: Rc<Cell<f32>>,
+    // The UI broadcast slot at the parameter's FIELD ADDRESS (TS `AutomatableParameter.onStartAutomation`:
+    // `broadcastFloat(adapter.address, () => getUnitValue())`) — `Some` only while a track is attached;
+    // `resolve` keeps `[0]` at the current unit value, the worklet mirrors it, the knob animates.
+    pub(crate) broadcast: Option<engine_env::telemetry::BroadcastSlot>
 }
 
 impl ParamHandle {
@@ -43,7 +47,13 @@ impl ParamHandle {
     /// stays mapping-agnostic — the device owns the mapping. Mirrors TS `track ? track.valueAt(...) : getValue()`.
     pub(crate) fn resolve(&self, position: f64) -> (f32, u32) {
         match &self.track {
-            Some(curve) => (curve.value_at(position, 0.0), PARAM_KIND_UNIT),
+            Some(curve) => {
+                let value = curve.value_at(position, 0.0);
+                if let Some(slot) = &self.broadcast {
+                    slot.borrow_mut()[0] = value;
+                }
+                (value, PARAM_KIND_UNIT)
+            }
             None => (self.field.get(), self.kind)
         }
     }

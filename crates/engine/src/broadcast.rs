@@ -5,11 +5,12 @@
 //! the end of every working reconcile) drops entries whose owner died, bumping the GENERATION so the worklet
 //! re-reads the table and re-registers its packages. Nothing here runs during render.
 
+use alloc::boxed::Box;
 use alloc::rc::Weak;
 use alloc::vec::Vec;
 use boxgraph::address::Uuid;
 use core::cell::RefCell;
-use engine_env::meter::MeterSlot;
+use engine_env::telemetry::BroadcastSlot;
 
 // WASM CONTRACT: the lib-fusion `PackageType` enum order (Float, FloatArray, Integer, IntegerArray, ByteArray).
 pub const PACKAGE_FLOAT: u32 = 0;
@@ -22,7 +23,7 @@ pub struct BroadcastEntry {
     pub ptr: u32,
     pub len: u32, // floats at `ptr` (1 for a Float package, 4 for a meter FloatArray)
     pub active: bool, // the UI's subscription flag (round-tripped; producers MAY skip cold work)
-    owner: Weak<RefCell<[f32; 4]>>
+    owner: Weak<RefCell<Box<[f32]>>>
 }
 
 #[derive(Default)]
@@ -32,13 +33,18 @@ pub struct Broadcasts {
 }
 
 impl Broadcasts {
-    /// Register one telemetry slot under a box address. Reconcile-time (allocates the entry).
-    pub fn register(&mut self, uuid: Uuid, keys: &[u16], package_type: u32, slot: &MeterSlot, len: u32) {
+    /// Register one telemetry slot under a box address; its pointer and length come from the slot itself
+    /// (a slot is exactly as long as its content). Reconcile-time (allocates the entry).
+    pub fn register(&mut self, uuid: Uuid, keys: &[u16], package_type: u32, slot: &BroadcastSlot) {
+        let (ptr, len) = {
+            let values = slot.borrow();
+            (values.as_ptr() as u32, values.len() as u32)
+        };
         self.entries.push(BroadcastEntry {
             uuid,
             keys: keys.to_vec(),
             package_type,
-            ptr: slot.as_ptr() as u32,
+            ptr,
             len,
             active: false,
             owner: alloc::rc::Rc::downgrade(slot)
@@ -88,17 +94,17 @@ mod tests {
     fn register_sweep_and_generation() {
         let mut broadcasts = Broadcasts::default();
         assert_eq!(broadcasts.generation(), 0);
-        let alive: MeterSlot = Rc::new(RefCell::new([0.0; 4]));
-        let doomed: MeterSlot = Rc::new(RefCell::new([0.0; 4]));
-        broadcasts.register([1u8; 16], &[], PACKAGE_FLOAT_ARRAY, &alive, 4);
-        broadcasts.register([2u8; 16], &[1], PACKAGE_FLOAT, &doomed, 1);
+        let alive: BroadcastSlot = engine_env::telemetry::broadcast_slot(4);
+        let doomed: BroadcastSlot = engine_env::telemetry::broadcast_slot(1);
+        broadcasts.register([1u8; 16], &[], PACKAGE_FLOAT_ARRAY, &alive);
+        broadcasts.register([2u8; 16], &[1], PACKAGE_FLOAT, &doomed);
         assert_eq!(broadcasts.len(), 2);
         assert_eq!(broadcasts.generation(), 2);
         let entry = broadcasts.entry(1).unwrap();
         assert_eq!(entry.uuid, [2u8; 16]);
         assert_eq!(entry.keys, alloc::vec![1u16]);
         assert_eq!(entry.package_type, PACKAGE_FLOAT);
-        assert_eq!(entry.ptr, doomed.as_ptr() as u32);
+        assert_eq!(entry.ptr, doomed.borrow().as_ptr() as u32);
         assert_eq!(entry.len, 1);
         broadcasts.sweep();
         assert_eq!((broadcasts.len(), broadcasts.generation()), (2, 2), "nothing died: no generation bump");

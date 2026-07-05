@@ -1,5 +1,5 @@
 //! The per-audio-unit note sequencer (TS `NoteSequencer`): a `NoteEventSource` that, per block, reads
-//! its note regions from a `NoteRegionSource`, resolves region looping with `locate_loops`, and emits
+//! its note regions from a `NoteContentSource`, resolves region looping with `locate_loops`, and emits
 //! note-on events with globally-positioned `Event::NoteStart`. Notes that outlast the block are held in
 //! one retainer (one per unit, so ids never collide across the unit's regions) and emit `NoteComplete`
 //! when their span completes, or immediately on a transport stop / discontinuity (e.g. a loop wrap).
@@ -23,7 +23,7 @@ use crate::block_flags::BlockFlags;
 use crate::event::Event;
 use crate::clip_sequencer::{ClipInfo, ClipKey, ClipSequencer};
 use crate::note_event_source::NoteEventSource;
-use crate::note_region_source::{NoteRegionSource, NoteTrackAccess};
+use crate::note_content_source::{NoteContentSource, NoteTrackAccess};
 
 // The chance-roll seed, mirroring TS `NoteSequencer`'s `Random.create(0xFFFF123)` (one stream per
 // sequencer instance, seeded at construction, never re-seeded — not even on a transport stop).
@@ -68,7 +68,7 @@ struct ScheduledNote {
 }
 
 pub struct NoteSequencer {
-    source: Box<dyn NoteRegionSource>,
+    source: Box<dyn NoteContentSource>,
     clips: Rc<RefCell<ClipSequencer>>,
     retainer: EventSpanRetainer<RetainedNote>,
     raw_notes: Vec<RawNote>,
@@ -80,7 +80,7 @@ pub struct NoteSequencer {
 }
 
 impl NoteSequencer {
-    pub fn new(source: Box<dyn NoteRegionSource>, clips: Rc<RefCell<ClipSequencer>>) -> Self {
+    pub fn new(source: Box<dyn NoteContentSource>, clips: Rc<RefCell<ClipSequencer>>) -> Self {
         Self {
             source,
             clips,
@@ -317,7 +317,7 @@ mod tests {
 
     struct NoRegions;
 
-    impl NoteRegionSource for NoRegions {
+    impl NoteContentSource for NoRegions {
         fn for_each_track(&self, _visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess)) {}
     }
 

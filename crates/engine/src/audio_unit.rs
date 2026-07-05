@@ -40,7 +40,7 @@ use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_region::NoteRegion;
 use engine_env::clip_sequencer::ClipSequencer;
-use engine_env::note_region_source::{NoteRegionSource, NoteTrackAccess};
+use engine_env::note_content_source::{NoteContentSource, NoteTrackAccess};
 use engine_env::note_sequencer::NoteSequencer;
 use value::event::EventCollection;
 use value::note::NoteEvent;
@@ -271,11 +271,11 @@ impl NoteTrackAccess for NoteTrackContent {
     }
 }
 
-pub(crate) type SharedTrackRegions = Rc<RefCell<NoteTrackContent>>;
+pub(crate) type SharedNoteTrack = Rc<RefCell<NoteTrackContent>>;
 
 /// The unit's live list of per-track region collections (one entry per `TrackBox`), shared with the
 /// sequencer. Tracks are added / removed live; the sequencer iterates whatever is currently present.
-pub(crate) type SharedTrackSets = Rc<RefCell<Vec<SharedTrackRegions>>>;
+pub(crate) type SharedTrackSets = Rc<RefCell<Vec<SharedNoteTrack>>>;
 
 /// ONE audio track's player-visible content: the track uuid, its regions kept SORTED BY POSITION (each a
 /// self-contained `AudioRegion` — its playback data, no shared event collection), and its launchable audio
@@ -295,19 +295,19 @@ pub(crate) struct BoundAudioClip {
     pub(crate) region: AudioRegion
 }
 
-pub(crate) type SharedAudioRegions = Rc<RefCell<AudioTrackContent>>;
+pub(crate) type SharedAudioTrack = Rc<RefCell<AudioTrackContent>>;
 
 /// The unit's live list of per-audio-track region collections, shared with the audio-region player. Mirrors
 /// `SharedTrackSets` for the audio side.
-pub(crate) type SharedAudioTrackSets = Rc<RefCell<Vec<SharedAudioRegions>>>;
+pub(crate) type SharedAudioTrackSets = Rc<RefCell<Vec<SharedAudioTrack>>>;
 
-/// The `NoteRegionSource` the unit's sequencer reads. It iterates EACH track's own sorted region collection
+/// The `NoteContentSource` the unit's sequencer reads. It iterates EACH track's own sorted region collection
 /// (unit -> tracks -> regions), range-querying each — mirroring TS `tracks -> regions.collection.iterateRange`.
-pub(crate) struct BoundNoteRegions {
+pub(crate) struct BoundNoteTracks {
     pub(crate) tracks: SharedTrackSets
 }
 
-impl NoteRegionSource for BoundNoteRegions {
+impl NoteContentSource for BoundNoteTracks {
     fn for_each_track(&self, visit: &mut dyn FnMut(&[u8; 16], &dyn NoteTrackAccess)) {
         for track in self.tracks.borrow().iter() {
             let content = track.borrow();
@@ -343,12 +343,12 @@ struct ClipBinding {
     edit_sub: SubscriptionId
 }
 
-/// A track BINDING: owns this track's sorted region collection (`regions_set`, shared with the sequencer)
+/// A track BINDING: owns this track's sorted region collection (`content`, shared with the sequencer)
 /// and observes its `regions` membership (add / remove). A member region's span edit is observed per-region
 /// (see `RegionBinding`), so no track-wide listener is needed.
 struct TrackBinding {
     track_uuid: Uuid,
-    regions_set: SharedTrackRegions,
+    content: SharedNoteTrack,
     region_bindings: Vec<RegionBinding>,
     region_changes: Rc<RefCell<Members>>,
     region_sub: SubscriptionId,
@@ -372,7 +372,7 @@ struct AudioRegionBinding {
 /// membership observation, per-region edit monitors, and its `enabled` monitor. The audio analog of `TrackBinding`.
 struct AudioTrackBinding {
     track_uuid: Uuid,
-    regions_set: SharedAudioRegions,
+    content: SharedAudioTrack,
     region_bindings: Vec<AudioRegionBinding>,
     region_changes: Rc<RefCell<Members>>,
     region_sub: SubscriptionId,
@@ -810,7 +810,7 @@ impl Engine {
             node.borrow_mut().set_audio_source(source);
             source = node.borrow().audio_output();
             let meter_slot = node.borrow().meter_slot();
-            self.broadcasts.register(device_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot, 4);
+            self.broadcasts.register(device_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
             let node_id = self.context.register_processor(node);
             self.context.set_label(node_id, device_label(&self.graph, &device_uuid));
             self.context.register_edge(source_id, node_id);
@@ -828,7 +828,7 @@ impl Engine {
         let strip_output = strip.borrow().audio_output();
         // The MASTER peaks, at the TS `EngineAddresses.PEAKS` address (`UUID.Lowest` + key 0).
         let strip_meter = strip.borrow().meter_slot();
-        self.broadcasts.register(UUID_LOWEST, &[0], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter, 4);
+        self.broadcasts.register(UUID_LOWEST, &[0], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, String::from("strip:output"));
         self.context.register_edge(source_id, strip_id); // the (effected) summing bus feeds the master strip
@@ -1146,7 +1146,7 @@ impl Engine {
             let node_id = self.context.register_processor(node.clone());
             self.context.set_label(node_id, device_label(&self.graph, &device_uuid));
             let meter_slot = node.borrow().meter_slot();
-            self.broadcasts.register(device_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot, 4);
+            self.broadcasts.register(device_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
             // A sidechained bus effect (e.g. a ducking compressor on a submix): build its sidechain binding so the
             // resolve pass feeds it the source unit's signal. Without this it detects on its own (hot) main input
             // and over-ducks everything routed through the bus.
@@ -1176,7 +1176,7 @@ impl Engine {
         strip.borrow_mut().set_audio_source(source);
         let strip_output = strip.borrow().audio_output();
         let strip_meter = strip.borrow().meter_slot();
-        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter, 4);
+        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:bus {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
         self.context.register_edge(source_id, strip_id);
@@ -1682,7 +1682,7 @@ impl Engine {
         self.context.set_label(player_id, format!("region-player {:02x}{:02x}", unit.unit[0], unit.unit[1]));
         // Live telemetry: the tape's raw output peaks, registered under the TapeDeviceBox (the device column).
         let player_meter = player.borrow().meter_slot();
-        self.broadcasts.register(instrument_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &player_meter, 4);
+        self.broadcasts.register(instrument_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &player_meter);
         // The tape's RAW output (pre fx / strip) registered under the TapeDeviceBox uuid: a sidechain targeting the
         // tape device resolves THIS (matching TS, which taps the instrument output before the unit's audio effects).
         self.output_registry.register(Address::of(instrument_uuid, vec![]), player_output.clone(), player_id);
@@ -1721,7 +1721,7 @@ impl Engine {
         strip.borrow_mut().set_audio_source(output.clone());
         let strip_output = strip.borrow().audio_output();
         let strip_meter = strip.borrow().meter_slot();
-        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter, 4);
+        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:tape {:02x}{:02x}", unit.unit[0], unit.unit[1]));
         self.context.register_edge(output_node, strip_id);
@@ -1747,7 +1747,7 @@ impl Engine {
         strip.borrow_mut().set_audio_source(binding.sum_buffer.clone());
         let strip_output = strip.borrow().audio_output();
         let strip_meter = strip.borrow().meter_slot();
-        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter, 4);
+        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:composite {:02x}{:02x}", unit.unit[0], unit.unit[1]));
         let mut tail_edges = Vec::new();
@@ -1824,7 +1824,7 @@ impl Engine {
         // their state; only the pull wrappers are rebuilt).
         let sequencer: SharedNoteEventSource = match sequencer_keep {
             Some((uuid, kept)) if uuid == instrument_uuid => kept,
-            _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: unit.track_sets.clone()}), self.clip_sequencer.clone())))
+            _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: unit.track_sets.clone()}), self.clip_sequencer.clone())))
         };
         // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip; the strip's output is
         // routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).
@@ -1837,7 +1837,7 @@ impl Engine {
                 let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
                 let strip_output = strip.borrow().audio_output();
                 let strip_meter = strip.borrow().meter_slot();
-                self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter, 4);
+                self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
                 let strip_id = self.context.register_processor(strip.clone());
                 self.context.set_label(strip_id, format!("strip:leaf {:02x}{:02x}", unit.unit[0], unit.unit[1]));
                 (strip, strip_id, strip_output)
@@ -1891,9 +1891,9 @@ impl Engine {
         // Live telemetry: the instrument's output peaks (TS `PeakBroadcaster(adapter.address)`) plus a monotonic
         // note-activity counter at `.append(1)` (a WASM-only extra; TS broadcasts a 128-bit `Bits` set instead).
         let meter_slot = instrument.borrow().meter_slot();
-        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot, 4);
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
         let activity_slot = instrument.borrow().activity_slot();
-        self.broadcasts.register(uuid, &[1], crate::broadcast::PACKAGE_FLOAT, &activity_slot, 1);
+        self.broadcasts.register(uuid, &[1], crate::broadcast::PACKAGE_FLOAT, &activity_slot);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), output: Some(output), params, sidechain: None, enabled_sub}
     }
@@ -1913,7 +1913,7 @@ impl Engine {
         refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
         // Live telemetry: a monotonic note-activity counter (a WASM-only extra; TS broadcasts a `Bits` set).
         let activity_slot = effect.activity_slot();
-        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT, &activity_slot, 1);
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT, &activity_slot);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Midi(effect), node_id: None, output: None, params, sidechain: None, enabled_sub}
     }
@@ -1939,7 +1939,7 @@ impl Engine {
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
         // Live telemetry: the effect's output peaks (TS `PeakBroadcaster(adapter.address)`).
         let meter_slot = node.borrow().meter_slot();
-        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot, 4);
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
         let sidechain = if params.sidechain_paths.is_empty() {
             None
         } else {
@@ -2041,7 +2041,7 @@ impl Engine {
         }
         let sequencer: SharedNoteEventSource = match sequencer_keep {
             Some((uuid, kept)) if uuid == instrument_uuid => kept,
-            _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteRegions {tracks: track_sets.clone()}), self.clip_sequencer.clone())))
+            _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: track_sets.clone()}), self.clip_sequencer.clone())))
         };
         let (output, output_node, internal_edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, choke);
         SlotCluster {instrument, sequencer, midi: midi_members, audio: audio_members, internal_edges, output, output_node}
@@ -2336,7 +2336,16 @@ impl Engine {
             }
         }
         collections.append(&mut track_collections);
-        let handle = ParamHandle {id, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN))};
+        // An automated parameter broadcasts its UNIT value at its FIELD ADDRESS while the track is attached
+        // (TS `onStartAutomation`) — the knob animates in the UI. Registered under the box uuid + field-path
+        // keys; the slot Rc lives in the handle, so a rebind/teardown drops it and the sweep unregisters.
+        let broadcast = track.as_ref().map(|curve| {
+            let slot = engine_env::telemetry::broadcast_slot(1);
+            slot.borrow_mut()[0] = curve.value_at(self.transport.position(), 0.0);
+            self.broadcasts.register(box_uuid, path, crate::broadcast::PACKAGE_FLOAT, &slot);
+            slot
+        });
+        let handle = ParamHandle {id, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN)), broadcast};
         (handle, subs, collections, armed)
     }
 
@@ -2668,7 +2677,7 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding, tempo_map
         sets.clear();
         for track in &unit.tracks {
             if track_enabled(graph, track.track_uuid) {
-                sets.push(track.regions_set.clone());
+                sets.push(track.content.clone());
             }
         }
     }
@@ -2677,7 +2686,7 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding, tempo_map
         sets.clear();
         for track in &unit.audio_tracks {
             if track_enabled(graph, track.track_uuid) {
-                sets.push(track.regions_set.clone());
+                sets.push(track.content.clone());
             }
         }
     }
@@ -2691,11 +2700,11 @@ fn reconcile_tracks(graph: &mut BoxGraph, unit: &mut AudioUnitBinding, tempo_map
     }
 }
 
-/// Build a track binding: its own sorted region collection (`regions_set`), a subscription to the track's
+/// Build a track binding: its own sorted region collection (`content`), a subscription to the track's
 /// `regions` membership (key 3), and an edit subscription that re-sorts the collection when a member
 /// region's span (position / duration / loop fields) changes — so a moved region lands at the right place.
 fn build_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMark) -> TrackBinding {
-    let regions_set: SharedTrackRegions = Rc::new(RefCell::new(NoteTrackContent {
+    let content: SharedNoteTrack = Rc::new(RefCell::new(NoteTrackContent {
         uuid: track_uuid, regions: RegionCollection::new(), clips: Vec::new()
     }));
     let region_changes = Rc::new(RefCell::new(Members::default()));
@@ -2721,7 +2730,7 @@ fn build_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMark) -> Trac
     let enabled_mark = mark.clone();
     let enabled_sub = graph.subscribe_vertex(Propagation::This, Address::of(track_uuid, vec![TRACK_ENABLED_KEY]),
         Box::new(move |_graph, _update| enabled_mark.mark()));
-    TrackBinding {track_uuid, regions_set, region_bindings: Vec::new(), region_changes, region_sub,
+    TrackBinding {track_uuid, content, region_bindings: Vec::new(), region_changes, region_sub,
         clip_bindings: Vec::new(), clip_changes, clip_sub, enabled_sub}
 }
 
@@ -2733,7 +2742,7 @@ fn teardown_track(graph: &mut BoxGraph, track_sets: &SharedTrackSets, collection
     graph.unsubscribe(track.clip_sub);
     graph.unsubscribe(track.enabled_sub);
     clip_sequencer.borrow_mut().forget(&track.track_uuid);
-    track_sets.borrow_mut().retain(|set| !Rc::ptr_eq(set, &track.regions_set));
+    track_sets.borrow_mut().retain(|set| !Rc::ptr_eq(set, &track.content));
     for clip in track.clip_bindings {
         graph.unsubscribe(clip.edit_sub);
         collections.release(graph, clip.collection_uuid);
@@ -2751,7 +2760,7 @@ fn reconcile_regions(graph: &mut BoxGraph, collections: &mut CollectionCache, tr
     for region_uuid in changes.removed {
         if let Some(index) = track.region_bindings.iter().position(|region| region.region_uuid == region_uuid) {
             let region = track.region_bindings.remove(index);
-            track.regions_set.borrow_mut().regions.retain(|bound| bound.region_uuid != region_uuid);
+            track.content.borrow_mut().regions.retain(|bound| bound.region_uuid != region_uuid);
             graph.unsubscribe(region.edit_sub);
             collections.release(graph, region.collection_uuid);
         }
@@ -2760,7 +2769,7 @@ fn reconcile_regions(graph: &mut BoxGraph, collections: &mut CollectionCache, tr
         if track.region_bindings.iter().any(|region| region.region_uuid == region_uuid) {
             continue;
         }
-        if let Some(binding) = build_region(graph, &track.regions_set, collections, region_uuid) {
+        if let Some(binding) = build_region(graph, &track.content, collections, region_uuid) {
             track.region_bindings.push(binding);
         }
     }
@@ -2774,7 +2783,7 @@ fn reconcile_clips(graph: &mut BoxGraph, collections: &mut CollectionCache,
     for clip_uuid in changes.removed {
         if let Some(index) = track.clip_bindings.iter().position(|clip| clip.clip_uuid == clip_uuid) {
             let clip = track.clip_bindings.remove(index);
-            track.regions_set.borrow_mut().clips.retain(|bound| bound.clip_uuid != clip_uuid);
+            track.content.borrow_mut().clips.retain(|bound| bound.clip_uuid != clip_uuid);
             graph.unsubscribe(clip.edit_sub);
             collections.release(graph, clip.collection_uuid);
             clip_sequencer.borrow_mut().forget(&clip_uuid);
@@ -2784,7 +2793,7 @@ fn reconcile_clips(graph: &mut BoxGraph, collections: &mut CollectionCache,
         if track.clip_bindings.iter().any(|clip| clip.clip_uuid == clip_uuid) {
             continue;
         }
-        if let Some(binding) = build_clip(graph, &track.regions_set, collections, clip_uuid) {
+        if let Some(binding) = build_clip(graph, &track.content, collections, clip_uuid) {
             track.clip_bindings.push(binding);
         }
     }
@@ -2793,12 +2802,12 @@ fn reconcile_clips(graph: &mut BoxGraph, collections: &mut CollectionCache,
 /// Read a clip's duration (key 10) + `triggerMode.loop` (path [4, 1], default TRUE), ACQUIRE its note-event
 /// collection (`events` pointer key 2), and register it in the track content. A targeted `Parent` sub keeps
 /// duration / loop fresh on edit. `None` if the clip has no collection.
-fn build_clip(graph: &mut BoxGraph, regions_set: &SharedTrackRegions, collections: &mut CollectionCache, clip_uuid: Uuid) -> Option<ClipBinding> {
+fn build_clip(graph: &mut BoxGraph, content: &SharedNoteTrack, collections: &mut CollectionCache, clip_uuid: Uuid) -> Option<ClipBinding> {
     let collection_uuid = graph.target_of(&Address::of(clip_uuid, vec![2]))?.uuid;
     let collection = collections.acquire(graph, collection_uuid);
     let (duration, looped) = read_clip_playback(graph, clip_uuid);
-    regions_set.borrow_mut().clips.push(BoundNoteClip {clip_uuid, duration, looped, collection});
-    let edit_content = regions_set.clone();
+    content.borrow_mut().clips.push(BoundNoteClip {clip_uuid, duration, looped, collection});
+    let edit_content = content.clone();
     let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(clip_uuid), Box::new(move |graph, _update| {
         let (duration, looped) = read_clip_playback(graph, clip_uuid);
         for bound in edit_content.borrow_mut().clips.iter_mut() {
@@ -2820,14 +2829,14 @@ fn read_clip_playback(graph: &BoxGraph, clip_uuid: Uuid) -> (f64, bool) {
 /// Read a region's loopable span, ACQUIRE its note-event collection (`events` pointer key 2) from the cache
 /// (observed once, shared by mirrored regions), and sorted-insert it into the track's region collection.
 /// `None` if the region has no collection.
-fn build_region(graph: &mut BoxGraph, regions_set: &SharedTrackRegions, collections: &mut CollectionCache, region_uuid: Uuid) -> Option<RegionBinding> {
+fn build_region(graph: &mut BoxGraph, content: &SharedNoteTrack, collections: &mut CollectionCache, region_uuid: Uuid) -> Option<RegionBinding> {
     let region = read_note_region(graph, region_uuid);
     let collection_uuid = graph.target_of(&Address::of(region_uuid, vec![2]))?.uuid;
     let collection = collections.acquire(graph, collection_uuid);
-    regions_set.borrow_mut().regions.add(BoundRegion {region_uuid, region, collection});
+    content.borrow_mut().regions.add(BoundRegion {region_uuid, region, collection});
     // Targeted: a `Parent` sub on the region box re-reads THIS region's span and re-sorts the track's set
     // when (and only when) one of this region's own fields is edited (TS `onIndexingChanged`, per-region).
-    let edit_regions = regions_set.clone();
+    let edit_regions = content.clone();
     let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(region_uuid), Box::new(move |graph, _update| {
         let mut content = edit_regions.borrow_mut();
         let set = &mut content.regions;
@@ -3009,7 +3018,7 @@ fn read_transients(graph: &BoxGraph, file: Uuid) -> Vec<f64> {
 /// Build an AUDIO track binding (the audio analog of `build_track`): its sorted `AudioRegion` collection, a
 /// `regions` membership observer, and an `enabled` monitor.
 fn build_audio_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMark) -> AudioTrackBinding {
-    let regions_set: SharedAudioRegions = Rc::new(RefCell::new(AudioTrackContent {
+    let content: SharedAudioTrack = Rc::new(RefCell::new(AudioTrackContent {
         uuid: track_uuid, regions: RegionCollection::new(), clips: Vec::new()
     }));
     let region_changes = Rc::new(RefCell::new(Members::default()));
@@ -3035,7 +3044,7 @@ fn build_audio_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMark) -
     let enabled_mark = mark.clone();
     let enabled_sub = graph.subscribe_vertex(Propagation::This, Address::of(track_uuid, vec![TRACK_ENABLED_KEY]),
         Box::new(move |_graph, _update| enabled_mark.mark()));
-    AudioTrackBinding {track_uuid, regions_set, region_bindings: Vec::new(), region_changes, region_sub,
+    AudioTrackBinding {track_uuid, content, region_bindings: Vec::new(), region_changes, region_sub,
         clip_bindings: Vec::new(), clip_changes, clip_sub, enabled_sub}
 }
 
@@ -3047,7 +3056,7 @@ fn teardown_audio_track(graph: &mut BoxGraph, audio_track_sets: &SharedAudioTrac
     graph.unsubscribe(track.clip_sub);
     graph.unsubscribe(track.enabled_sub);
     clip_sequencer.borrow_mut().forget(&track.track_uuid);
-    audio_track_sets.borrow_mut().retain(|set| !Rc::ptr_eq(set, &track.regions_set));
+    audio_track_sets.borrow_mut().retain(|set| !Rc::ptr_eq(set, &track.content));
     for region in track.region_bindings {
         graph.unsubscribe(region.edit_sub);
     }
@@ -3064,7 +3073,7 @@ fn reconcile_audio_clips(graph: &mut BoxGraph, clip_sequencer: &Rc<RefCell<ClipS
     for clip_uuid in changes.removed {
         if let Some(index) = track.clip_bindings.iter().position(|clip| clip.clip_uuid == clip_uuid) {
             let clip = track.clip_bindings.remove(index);
-            track.regions_set.borrow_mut().clips.retain(|bound| bound.clip_uuid != clip_uuid);
+            track.content.borrow_mut().clips.retain(|bound| bound.clip_uuid != clip_uuid);
             graph.unsubscribe(clip.edit_sub);
             clip_sequencer.borrow_mut().forget(&clip_uuid);
         }
@@ -3073,7 +3082,7 @@ fn reconcile_audio_clips(graph: &mut BoxGraph, clip_sequencer: &Rc<RefCell<ClipS
         if track.clip_bindings.iter().any(|clip| clip.clip_uuid == clip_uuid) {
             continue;
         }
-        if let Some(binding) = build_audio_clip(graph, &track.regions_set, clip_uuid, tempo_map) {
+        if let Some(binding) = build_audio_clip(graph, &track.content, clip_uuid, tempo_map) {
             track.clip_bindings.push(binding);
         }
     }
@@ -3081,10 +3090,10 @@ fn reconcile_audio_clips(graph: &mut BoxGraph, clip_sequencer: &Rc<RefCell<ClipS
 
 /// Read an audio clip's playable content and register it; a targeted `Parent` sub keeps it fresh on edit.
 /// `None` when the clip has no file (skipped, never played).
-fn build_audio_clip(graph: &mut BoxGraph, regions_set: &SharedAudioRegions, clip_uuid: Uuid, tempo_map: &SharedTempoMap) -> Option<AudioClipBinding> {
+fn build_audio_clip(graph: &mut BoxGraph, content: &SharedAudioTrack, clip_uuid: Uuid, tempo_map: &SharedTempoMap) -> Option<AudioClipBinding> {
     let (region, looped) = read_audio_clip(graph, clip_uuid, &tempo_map.borrow())?;
-    regions_set.borrow_mut().clips.push(BoundAudioClip {clip_uuid, looped, region});
-    let edit_content = regions_set.clone();
+    content.borrow_mut().clips.push(BoundAudioClip {clip_uuid, looped, region});
+    let edit_content = content.clone();
     let edit_tempo = tempo_map.clone();
     let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(clip_uuid), Box::new(move |graph, _update| {
         if let Some((region, looped)) = read_audio_clip(graph, clip_uuid, &edit_tempo.borrow()) {
@@ -3143,7 +3152,7 @@ fn reconcile_audio_regions(graph: &mut BoxGraph, track: &mut AudioTrackBinding, 
     for region_uuid in changes.removed {
         if let Some(index) = track.region_bindings.iter().position(|region| region.region_uuid == region_uuid) {
             let region = track.region_bindings.remove(index);
-            track.regions_set.borrow_mut().regions.retain(|bound| bound.region_uuid != region_uuid);
+            track.content.borrow_mut().regions.retain(|bound| bound.region_uuid != region_uuid);
             graph.unsubscribe(region.edit_sub);
         }
     }
@@ -3151,7 +3160,7 @@ fn reconcile_audio_regions(graph: &mut BoxGraph, track: &mut AudioTrackBinding, 
         if track.region_bindings.iter().any(|region| region.region_uuid == region_uuid) {
             continue;
         }
-        if let Some(binding) = build_audio_region(graph, &track.regions_set, region_uuid, tempo_map) {
+        if let Some(binding) = build_audio_region(graph, &track.content, region_uuid, tempo_map) {
             track.region_bindings.push(binding);
         }
     }
@@ -3160,10 +3169,10 @@ fn reconcile_audio_regions(graph: &mut BoxGraph, track: &mut AudioTrackBinding, 
 /// Read an audio region, sorted-insert it into the track's collection, and subscribe a `Parent` edit monitor
 /// that re-reads + re-sorts it when its own fields change (so a moved / re-gained / re-faded region updates
 /// live). `None` if the region has no file (skipped, never played).
-fn build_audio_region(graph: &mut BoxGraph, regions_set: &SharedAudioRegions, region_uuid: Uuid, tempo_map: &SharedTempoMap) -> Option<AudioRegionBinding> {
+fn build_audio_region(graph: &mut BoxGraph, content: &SharedAudioTrack, region_uuid: Uuid, tempo_map: &SharedTempoMap) -> Option<AudioRegionBinding> {
     let region = read_audio_region(graph, region_uuid, &tempo_map.borrow())?;
-    regions_set.borrow_mut().regions.add(region);
-    let edit_regions = regions_set.clone();
+    content.borrow_mut().regions.add(region);
+    let edit_regions = content.clone();
     let edit_tempo = tempo_map.clone();
     let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(region_uuid), Box::new(move |graph, _update| {
         let mut content = edit_regions.borrow_mut();
@@ -4172,6 +4181,59 @@ mod tests {
         engine.reconcile_one(&mut unit);
         assert_eq!(composite_sum_sources(&unit), 2, "the re-enabled child feeds the sum again");
         assert_eq!(child_instrument_node(&unit, CHILD_B), Some(child_b_node), "still the same processor instance");
+    }
+
+    #[test]
+    fn an_automated_parameter_broadcasts_its_unit_value_at_its_field_address() {
+        const VTRACK: Uuid = [45u8; 16];
+        const VREGION: Uuid = [46u8; 16];
+        const VCOL: Uuid = [47u8; 16];
+        const VEVENT: Uuid = [48u8; 16];
+        let mut engine = engine_with_devices();
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+                (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook),
+                (UNIT_VOLUME_KEY, FieldValue::Float32(0.0))
+            ]),
+            graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+            // A VALUE track automating the unit's strip volume.
+            graph_box(VTRACK, "TrackBox", &[
+                (2, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_VOLUME_KEY])))),
+                (3, FieldValue::Hook)
+            ]),
+            graph_box(VREGION, "ValueRegionBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![3])))),
+                (2, FieldValue::Pointer(Some(Address::of(VCOL, vec![2])))),
+                (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+                (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+            ]),
+            graph_box(VCOL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+            graph_box(VEVENT, "ValueEventBox", &[
+                (1, FieldValue::Pointer(Some(Address::of(VCOL, vec![1])))),
+                (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.75))
+            ])
+        ]);
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        // The armed strip-volume parameter registered a FLOAT broadcast at (UNIT, [volume]) carrying the
+        // current unit value (TS `onStartAutomation` -> `broadcastFloat(adapter.address, getUnitValue)`).
+        let volume_entry = (0..engine.broadcasts.len()).find(|index| {
+            let entry = engine.broadcasts.entry(*index).expect("entry");
+            entry.uuid == UNIT && entry.keys == vec![UNIT_VOLUME_KEY] && entry.package_type == crate::broadcast::PACKAGE_FLOAT
+        });
+        assert!(volume_entry.is_some(), "the automated volume broadcasts at its field address");
+        // Detach the automation track: the rebind drops the slot; the sweep unregisters the entry.
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(VTRACK, vec![2]), old: Some(Address::of(UNIT, vec![UNIT_VOLUME_KEY])), new: None
+        }], &engine.registry).expect("detach automation");
+        engine.reconcile_one(&mut unit);
+        engine.broadcasts.sweep();
+        let still_there = (0..engine.broadcasts.len()).any(|index| {
+            let entry = engine.broadcasts.entry(index).expect("entry");
+            entry.uuid == UNIT && entry.keys == vec![UNIT_VOLUME_KEY]
+        });
+        assert!(!still_there, "detaching the track unregisters the parameter broadcast");
     }
 
     #[test]

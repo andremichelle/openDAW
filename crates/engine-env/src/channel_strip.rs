@@ -141,7 +141,7 @@ impl ChannelStripProcessor {
     }
 
     /// The peak/RMS broadcast slot of this strip's output.
-    pub fn meter_slot(&self) -> crate::meter::MeterSlot {
+    pub fn meter_slot(&self) -> crate::telemetry::BroadcastSlot {
         self.meter.slot()
     }
 
