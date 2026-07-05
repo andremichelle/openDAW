@@ -47,6 +47,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #warned: Set<string> = new Set()
 
     #broadcastGeneration: int = -1
+    #monitoringMap: ReadonlyArray<MonitoringMapEntry> = []
     #bound: boolean = false
     #valid: boolean = true
     #panic: boolean = false
@@ -132,7 +133,18 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 panic: (): void => {this.#panic = true},
                 loadClickSound: (_index: 0 | 1, _data: AudioData): void => {}, // the wasm engine ships its own click
                 setFrozenAudio: (_uuid: UUID.Bytes, _audioData: Nullable<AudioData>): void => this.#unsupported("frozen audio"),
-                updateMonitoringMap: (_map: ReadonlyArray<MonitoringMapEntry>): void => {},
+                updateMonitoringMap: (map: ReadonlyArray<MonitoringMapEntry>): void => {
+                    // [uuid 16][left i32 LE][right i32 LE] per entry; -1 right = mono source.
+                    this.#monitoringMap = map
+                    const pointer = engine.input_reserve(map.length * 24)
+                    const view = new DataView(this.#memory.buffer, pointer, map.length * 24)
+                    map.forEach(({uuid, channels}, index) => {
+                        new Uint8Array(this.#memory.buffer, pointer + index * 24, 16).set(uuid)
+                        view.setInt32(index * 24 + 16, channels[0], true)
+                        view.setInt32(index * 24 + 20, channels.length > 1 ? channels[1] : -1, true)
+                    })
+                    engine.set_monitoring_map(map.length)
+                },
                 noteSignal: (signal: NoteSignal): void => this.#noteSignal(signal),
                 ignoreNoteRegion: (uuid: UUID.Bytes): void => {
                     const pointer = engine.input_reserve(16)
@@ -161,13 +173,13 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#engineToClient.ready()
     }
 
-    process(_inputs: Array<Array<Float32Array>>, outputs: Array<Array<Float32Array>>): boolean {
+    process(inputs: Array<Array<Float32Array>>, outputs: Array<Array<Float32Array>>): boolean {
         if (!this.#valid) {return false} // will not revive
         if (Atomics.load(this.#controlFlags, 0) === 1) {
             this.#stateSender.tryWrite() // keep the UI in sync (stopped transport) while asleep, no DSP
             return true
         }
-        const {status, error} = tryCatch(() => this.#render(outputs))
+        const {status, error} = tryCatch(() => this.#render(inputs, outputs))
         if (status === "failure") {
             console.debug(error)
             this.#valid = false
@@ -178,10 +190,33 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         return true
     }
 
-    #render([mainOutput]: Array<Array<Float32Array>>): void {
+    #render(inputs: Array<Array<Float32Array>>, [mainOutput, monitorOutput]: Array<Array<Float32Array>>): void {
         if (this.#panic) {return panic("Manual Panic")}
         const engine = this.#engine
+        // EFFECTS monitoring: stage the live input channels for the in-chain injectors, render, then hand
+        // each mapped unit's strip output back on the 2nd worklet output (the MonitoringRouter return).
+        const monitoring = this.#monitoringMap
+        if (monitoring.length > 0) {
+            const input = inputs[0] ?? []
+            const staging = new Float32Array(this.#memory.buffer, engine.monitor_input_ptr(), 8 * RenderQuantum)
+            staging.fill(0.0)
+            for (const {channels} of monitoring) {
+                for (const channel of channels) {
+                    const source = input[channel]
+                    if (source !== undefined && channel < 8) {staging.set(source, channel * RenderQuantum)}
+                }
+            }
+        }
         engine.render()
+        if (monitoring.length > 0 && monitorOutput !== undefined) {
+            const staged = new Float32Array(this.#memory.buffer, engine.monitor_output_ptr(), 8 * RenderQuantum)
+            for (const {channels} of monitoring) {
+                for (const channel of channels) {
+                    const target = monitorOutput[channel]
+                    if (target !== undefined && channel < 8) {target.set(staged.subarray(channel * RenderQuantum, (channel + 1) * RenderQuantum))}
+                }
+            }
+        }
         const frames = mainOutput[0].length // the render quantum (128)
         const buffer = this.#memory.buffer // re-read each block: talc may have grown the buffer
         const pointer = engine.output_ptr()

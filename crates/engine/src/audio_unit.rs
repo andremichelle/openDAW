@@ -495,7 +495,8 @@ struct TapeWired {
     pre_strip_node: NodeId,
     strip_id: NodeId,
     strip_output: SharedAudioBuffer,
-    edges: Vec<(NodeId, NodeId)>  // player -> fx0 -> ... -> strip
+    edges: Vec<(NodeId, NodeId)>, // player -> fx0 -> ... -> strip
+    monitor_node: Option<NodeId>  // the EFFECTS-monitoring injector, rebuilt per re-wire
 }
 
 /// A held device processor, kept alive across rewires so its DSP state (voices, delay tails, filter history)
@@ -539,7 +540,8 @@ struct LeafChain {
     pre_strip_node: NodeId,
     strip_id: NodeId,
     strip_output: SharedAudioBuffer,
-    edges: Vec<(NodeId, NodeId)>
+    edges: Vec<(NodeId, NodeId)>,
+    monitor_node: Option<NodeId> // the EFFECTS-monitoring injector, rebuilt per re-wire
 }
 
 /// A composite SLOT's persistent cluster (a direct-instrument child, e.g. a Playfield slot): the same per-member
@@ -609,7 +611,8 @@ struct CompositeWired {
     tail_edges: Vec<(NodeId, NodeId)>, // sum -> fx0 -> ... -> strip
     // A TARGETED `This` monitor on the composite DEVICE's `enabled`: a toggle enqueues the unit (plain mark, NOT
     // `wiring_dirty`), so reconcile lands in the per-child branch and re-applies the sum gate without a rebuild.
-    enabled_sub: SubscriptionId
+    enabled_sub: SubscriptionId,
+    monitor_node: Option<NodeId> // the EFFECTS-monitoring injector, rebuilt per re-wire
 }
 
 /// The result of `build_cluster` (the wholesale CELL composite-child path; a leaf unit and a direct slot use the
@@ -873,6 +876,17 @@ impl Engine {
     /// `dirty_units` via `DirtyMark`, mirroring TS's per-unit `invalidateWiring`). Called on bind (catch-up)
     /// and after every transaction; a transaction that touched no unit drains nothing, so it is a true no-op
     /// instead of a sweep over every unit and track.
+    /// Mark `uuids` for a chain re-wire (e.g. the monitoring map changed) and enqueue them; the next
+    /// `reconcile_units` rebuilds only those.
+    pub(crate) fn mark_units_rewire(&mut self, uuids: &[[u8; 16]]) {
+        for unit in &self.audio_units {
+            if uuids.contains(&unit.unit) {
+                unit.wiring_dirty.set(true);
+                unit.mark.mark();
+            }
+        }
+    }
+
     pub(crate) fn reconcile_units(&mut self) {
         if self.master.is_none() {
             return;
@@ -1591,6 +1605,9 @@ impl Engine {
                 for (source, target) in &chain.edges {
                     self.context.remove_edge(*source, *target);
                 }
+                if let Some(node) = chain.monitor_node {
+                    self.context.remove_processor(node);
+                }
                 self.context.remove_processor(chain.strip_id);
                 self.terminate_member(chain.instrument);
                 for member in chain.midi {
@@ -1606,6 +1623,9 @@ impl Engine {
                     self.context.remove_edge(*source, *target);
                 }
                 self.context.remove_processor(composite.strip_id);
+                if let Some(node) = composite.monitor_node {
+                    self.context.remove_processor(node);
+                }
                 for member in composite.audio {
                     self.terminate_member(member);
                 }
@@ -1619,6 +1639,9 @@ impl Engine {
                 }
                 self.context.remove_processor(tape.strip_id);
                 self.context.remove_processor(tape.player_id);
+                if let Some(node) = tape.monitor_node {
+                    self.context.remove_processor(node);
+                }
                 for member in tape.audio {
                     self.terminate_member(member);
                 }
@@ -1814,6 +1837,9 @@ impl Engine {
                 }
                 self.context.remove_processor(tape.strip_id);
                 self.context.remove_processor(tape.player_id);
+                if let Some(node) = tape.monitor_node {
+                    self.context.remove_processor(node);
+                }
                 self.output_registry.remove(&Address::of(unit.unit, vec![]));
                 self.output_registry.remove(&Address::of(tape.instrument_uuid, vec![]));
                 for member in tape.audio {
@@ -1860,6 +1886,16 @@ impl Engine {
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut output = player_output;
         let mut output_node = player_id;
+        // EFFECTS monitoring (an armed audio track): inject the staged live input after the player, PRE-FX.
+        let monitor_node = self.monitor_channels_of(&unit.unit).map(|(left, right)| {
+            let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
+            let mixer_id = self.context.register_processor(mixer);
+            self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
+            self.context.register_edge(output_node, mixer_id);
+            edges.push((output_node, mixer_id));
+            output_node = mixer_id;
+            mixer_id
+        });
         for member in &audio_members {
             if !self.device_enabled(member.uuid) {
                 continue;
@@ -1884,7 +1920,7 @@ impl Engine {
         edges.push((output_node, strip_id));
         // The strip's output is routed to the unit's OUTPUT bus by `resolve_outputs` (not wired to master here).
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
-        unit.wired = Some(Wired::Tape(TapeWired {player, enabled_sub, player_id, instrument_uuid, audio: audio_members, pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges}));
+        unit.wired = Some(Wired::Tape(TapeWired {player, enabled_sub, player_id, instrument_uuid, audio: audio_members, pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges, monitor_node}));
     }
 
     /// The COMPOSITE-instrument path (e.g. Playfield): tear down the old wiring and rebuild the child cascade
@@ -1905,6 +1941,9 @@ impl Engine {
                     self.context.remove_edge(*source, *target);
                 }
                 self.context.remove_processor(composite.strip_id);
+                if let Some(node) = composite.monitor_node {
+                    self.context.remove_processor(node);
+                }
                 self.output_registry.remove(&Address::of(unit.unit, vec![]));
                 for member in composite.audio {
                     pool.insert(member.uuid, member);
@@ -1935,6 +1974,16 @@ impl Engine {
         let mut tail_edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut output = binding.sum_buffer.clone();
         let mut output_node = binding.sum_id;
+        // EFFECTS monitoring: inject the staged live input after the composite sum, PRE-FX.
+        let monitor_node = self.monitor_channels_of(&unit.unit).map(|(left, right)| {
+            let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
+            let mixer_id = self.context.register_processor(mixer);
+            self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
+            self.context.register_edge(output_node, mixer_id);
+            tail_edges.push((output_node, mixer_id));
+            output_node = mixer_id;
+            mixer_id
+        });
         for member in &audio_members {
             if !self.device_enabled(member.uuid) {
                 continue;
@@ -1966,7 +2015,7 @@ impl Engine {
         let enabled_sub = self.graph.subscribe_vertex(Propagation::This,
             Address::of(instrument_uuid, vec![DEVICE_ENABLED_KEY]),
             Box::new(move |_graph, _update| enabled_mark.mark()));
-        unit.wired = Some(Wired::Composite(CompositeWired {binding, audio: audio_members, pre_strip, pre_strip_node, strip_id, strip_output, tail_edges, enabled_sub}));
+        unit.wired = Some(Wired::Composite(CompositeWired {binding, audio: audio_members, pre_strip, pre_strip_node, strip_id, strip_output, tail_edges, enabled_sub, monitor_node}));
     }
 
     /// The LEAF-instrument per-member path, mirroring TS `AudioDeviceChain`: keep the existing device
@@ -1985,6 +2034,9 @@ impl Engine {
             Some(Wired::Leaf(chain)) => {
                 for (source, target) in &chain.edges {
                     self.context.remove_edge(*source, *target);
+                }
+                if let Some(node) = chain.monitor_node {
+                    self.context.remove_processor(node); // the injector is rebuilt fresh by `wire_cluster`
                 }
                 // The output route was already dropped in `reconcile_chain`; the strip survives, so it re-routes.
                 sequencer_keep = Some((chain.instrument.uuid, chain.sequencer));
@@ -2034,7 +2086,8 @@ impl Engine {
         };
         // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip; the strip's output is
         // routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).
-        let (output, output_node, mut edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[], None);
+        let monitor = self.monitor_channels_of(&unit.unit);
+        let (output, output_node, mut edges, monitor_node) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[], None, monitor);
         // The channel strip terminates the chain; reuse it across reconciles (it carries no DSP state, just the
         // shared volume / panning / mute), re-pointing its source at the new tail.
         let (strip, strip_id, strip_output) = match strip_keep {
@@ -2058,7 +2111,7 @@ impl Engine {
         // would, e.g., glide a delay's offset). A real automation change re-binds via `rebind_automation`.
         unit.wired = Some(Wired::Leaf(LeafChain {
             instrument, sequencer, midi: midi_members, audio: audio_members, strip,
-            pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges
+            pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges, monitor_node
         }));
     }
 
@@ -2174,7 +2227,8 @@ impl Engine {
     /// its processor + state untouched). Returns the chain's output buffer, last node, and internal edges; the
     /// caller appends its own tail (a unit's strip -> master, a slot's sum).
     fn wire_cluster(&mut self, instrument: &Member, instrument_uuid: Uuid, sequencer: &SharedNoteEventSource,
-                    midi: &[Member], audio: &[Member], choke: &[i32], gate: Option<&Rc<Cell<bool>>>) -> (SharedAudioBuffer, NodeId, Vec<(NodeId, NodeId)>) {
+                    midi: &[Member], audio: &[Member], choke: &[i32], gate: Option<&Rc<Cell<bool>>>,
+                    monitor: Option<(i32, i32)>) -> (SharedAudioBuffer, NodeId, Vec<(NodeId, NodeId)>, Option<NodeId>) {
         let mut pull = match gate {
             // A composite SLOT: routed through `SlotRoute` so its choke records inject and its silent gate
             // (pad mute / solo) drops note starts live, no rebuild.
@@ -2196,6 +2250,17 @@ impl Engine {
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut output = instrument.output.clone().unwrap();
         let mut output_node = instrument.node_id.unwrap();
+        // EFFECTS monitoring: the injector ADDS the staged live input into the instrument's output IN PLACE
+        // (TS `MonitoringMixProcessor` sits post-instrument, PRE-FX), ordered before every chain consumer.
+        let monitor_node = monitor.map(|(left, right)| {
+            let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
+            let mixer_id = self.context.register_processor(mixer);
+            self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
+            self.context.register_edge(output_node, mixer_id);
+            edges.push((output_node, mixer_id));
+            output_node = mixer_id;
+            mixer_id
+        });
         for member in audio {
             if !self.device_enabled(member.uuid) {
                 continue; // a disabled audio-fx is BYPASSED: not wired into the signal path; processor untouched
@@ -2209,7 +2274,7 @@ impl Engine {
             output = member.output.clone().unwrap();
             output_node = node_id;
         }
-        (output, output_node, edges)
+        (output, output_node, edges, monitor_node)
     }
 
     /// Reconcile a composite SLOT's cluster EDGE-ONLY (build when `prev` is `None`): pool the previous members,
@@ -2256,7 +2321,7 @@ impl Engine {
             Some((uuid, kept)) if uuid == instrument_uuid => kept,
             _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: track_sets.clone()}), self.clip_sequencer.clone())))
         };
-        let (output, output_node, internal_edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, choke, Some(gate));
+        let (output, output_node, internal_edges, _) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, choke, Some(gate), None);
         SlotCluster {instrument, sequencer, midi: midi_members, audio: audio_members, internal_edges, output, output_node}
     }
 

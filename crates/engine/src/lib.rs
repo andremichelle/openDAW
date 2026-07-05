@@ -224,6 +224,7 @@ const MAX_BLOCKS_PER_QUANTUM: usize = 16; // a 128-frame quantum rarely splits p
 const EFFECT_INDEX_KEY: u16 = 2;
 
 mod metronome;
+mod monitor;
 use metronome::Metronome;
 mod plugin_instrument;
 mod plugin_audio_effect;
@@ -380,6 +381,13 @@ static CURRENT_DEVICE_UUID: Shared<[u8; 16]> = Shared::new([0; 16]);
 // region currently being RECORDED INTO must not play back (it would re-trigger the notes being captured).
 // Cleared on stop / stopRecording. Read from the region iteration (its own cell, never `ENGINE`).
 pub(crate) static IGNORED_REGIONS: Shared<Vec<[u8; 16]>> = Shared::new(Vec::new());
+// EFFECTS-monitoring staging (its own cells, read re-entrantly by MonitorMix nodes during render): the
+// worklet writes the live input channels into MONITOR_INPUT before each render and reads each mapped
+// unit's strip output back from MONITOR_OUTPUT after it (forwarded on the worklet's second output).
+pub(crate) static MONITOR_INPUT: Shared<[f32; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]> =
+    Shared::new([0.0; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]);
+pub(crate) static MONITOR_OUTPUT: Shared<[f32; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]> =
+    Shared::new([0.0; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]);
 
 // The note-bits slot of the unit CURRENTLY reconciling (its instruments capture it at construction —
 // composite slots share their unit's slot). Set around `reconcile_one`'s chain work, cleared after.
@@ -884,6 +892,9 @@ struct Engine {
     is_counting_in: bool,
     recording_start: f64,
     metronome_pref: bool,
+    // The EFFECTS-monitoring map (TS `#monitoringMap`): units whose chains inject the staged live input
+    // and whose strip outputs are copied back for the worklet's monitor return.
+    monitoring_map: Vec<monitor::MonitorEntry>,
     tempo: Option<ValueCollection>,
     tempo_map: SharedTempoMap, // ppqn -> real-seconds map (tempo-automation aware), read by the audio-region player
 
@@ -933,6 +944,7 @@ impl Engine {
             is_counting_in: false,
             recording_start: 0.0,
             metronome_pref: false,
+            monitoring_map: Vec::new(),
             tempo: None,
             tempo_map: Rc::new(RefCell::new(TempoMap::new())),
             context: EngineContext::new(),
@@ -1202,6 +1214,49 @@ impl Engine {
         if let Some(track) = self.graph.target_of(&Address::of(clip, vec![1])).map(|address| address.uuid) {
             self.clip_sequencer.borrow_mut().schedule_play(track, clip);
             self.play();
+        }
+    }
+
+    /// Replace the monitoring map and re-wire every unit that joined or left it (its chain gains / drops
+    /// the `MonitorMix` injector). Runs off-render (a worklet command), so the reconcile is immediate.
+    fn set_monitoring_map(&mut self, map: Vec<monitor::MonitorEntry>) {
+        let mut affected: Vec<[u8; 16]> = Vec::new();
+        for entry in self.monitoring_map.iter().chain(map.iter()) {
+            if !affected.contains(&entry.uuid) {
+                affected.push(entry.uuid);
+            }
+        }
+        self.monitoring_map = map;
+        unsafe { MONITOR_OUTPUT.get() }.fill(0.0);
+        self.mark_units_rewire(&affected);
+        self.reconcile_units();
+    }
+
+    /// The staged input channels mapped to `unit` (TS `AudioDeviceChain.setMonitoringChannels`), consulted
+    /// by the chain wiring.
+    pub(crate) fn monitor_channels_of(&self, unit: &[u8; 16]) -> Option<(i32, i32)> {
+        self.monitoring_map.iter().find(|entry| &entry.uuid == unit).map(|entry| (entry.left, entry.right))
+    }
+
+    /// Copy each mapped unit's STRIP output (TS `unit.audioOutput()`) into the monitor OUTPUT staging, for
+    /// the worklet's second output (the MonitoringRouter return). Runs right after `render`.
+    fn copy_monitor_outputs(&mut self) {
+        if self.monitoring_map.is_empty() {
+            return;
+        }
+        let staging = unsafe { MONITOR_OUTPUT.get() };
+        for entry in &self.monitoring_map {
+            let Some(output) = self.output_registry.resolve(&Address::of(entry.uuid, alloc::vec![])) else { continue };
+            let buffer = output.buffer.borrow();
+            let left = entry.left as usize;
+            if entry.left < 0 || left >= monitor::MONITOR_CHANNELS {
+                continue;
+            }
+            staging[left * RENDER_QUANTUM..(left + 1) * RENDER_QUANTUM].copy_from_slice(&buffer.left);
+            if (0..monitor::MONITOR_CHANNELS as i32).contains(&entry.right) {
+                let right = entry.right as usize;
+                staging[right * RENDER_QUANTUM..(right + 1) * RENDER_QUANTUM].copy_from_slice(&buffer.right);
+            }
         }
     }
 
@@ -1587,7 +1642,44 @@ pub extern "C" fn init(sample_rate: f32) {
 pub extern "C" fn render() {
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
-            engine.render(OUTPUT.get(), ENGINE_STATE.get())
+            engine.render(OUTPUT.get(), ENGINE_STATE.get());
+            engine.copy_monitor_outputs();
+        }
+    }
+}
+
+/// The EFFECTS-monitoring INPUT staging (`MONITOR_CHANNELS * 128` f32, channel-planar): the worklet writes
+/// the live input channels here BEFORE each `render`.
+#[no_mangle]
+pub extern "C" fn monitor_input_ptr() -> *mut f32 {
+    unsafe { MONITOR_INPUT.get().as_mut_ptr() }
+}
+
+/// The EFFECTS-monitoring OUTPUT staging (same layout): each mapped unit's strip output lands here after
+/// `render`; the worklet forwards it on its second output (the MonitoringRouter return).
+#[no_mangle]
+pub extern "C" fn monitor_output_ptr() -> *const f32 {
+    unsafe { MONITOR_OUTPUT.get().as_ptr() }
+}
+
+/// Replace the EFFECTS-monitoring map (TS `EngineCommands.updateMonitoringMap`): `count` records of
+/// `[unit uuid 16][left channel i32 LE][right channel i32 LE]` (right -1 = mono) in the input scratch.
+/// Every unit leaving or joining the map re-wires (the `MonitorMix` injector joins / leaves its chain).
+#[no_mangle]
+pub extern "C" fn set_monitoring_map(count: u32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), count as usize * 24);
+            let mut map = Vec::with_capacity(count as usize);
+            for index in 0..count as usize {
+                let record = &bytes[index * 24..index * 24 + 24];
+                let mut uuid = [0u8; 16];
+                uuid.copy_from_slice(&record[..16]);
+                let left = i32::from_le_bytes([record[16], record[17], record[18], record[19]]);
+                let right = i32::from_le_bytes([record[20], record[21], record[22], record[23]]);
+                map.push(monitor::MonitorEntry {uuid, left, right});
+            }
+            engine.set_monitoring_map(map);
         }
     }
 }
