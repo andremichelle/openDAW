@@ -27,7 +27,7 @@ import {
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig
-} from "@opendaw/studio-adapters"
+, ScriptCompiler} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {AudioWorklets} from "./AudioWorklets"
 import {MIDIReceiver} from "./midi"
@@ -162,8 +162,11 @@ export class OfflineEngineRenderer {
         const {port, sab} = terminator.own(MIDIReceiver.create(() => 0,
             (deviceId, data, relativeTimeInMs) => source.receivedMIDIFromEngine(deviceId, data, relativeTimeInMs)))
 
+        // The SAME wrapper as the live worklet path (`ScriptCompiler.wrap`): the registry entry must carry
+        // `params`/`samples` too — the WASM script bridge reads them (the TS worker ignores the extras).
         const loadScriptDevice = async (code: string,
                                         headerPattern: RegExp,
+                                        headerTag: string,
                                         registryName: string,
                                         functionName: string,
                                         uuid: string): Promise<void> => {
@@ -171,33 +174,23 @@ export class OfflineEngineRenderer {
             if (match === null) {return}
             const userCode = code.slice(match[0].length)
             const update = parseInt(match[3])
-            await protocol.addModule(`
-                if (typeof globalThis.openDAW === "undefined") { globalThis.openDAW = {} }
-                if (typeof globalThis.openDAW.${registryName} === "undefined") { globalThis.openDAW.${registryName} = {} }
-                globalThis.openDAW.${registryName}["${uuid}"] = {
-                    update: ${update},
-                    create: (function ${functionName}() {
-                        ${userCode}
-                        return Processor
-                    })()
-                }
-            `)
+            await protocol.addModule(ScriptCompiler.wrap({headerTag, registryName, functionName}, uuid, update, userCode))
         }
         for (const box of source.boxGraph.boxes()) {
             if (box instanceof WerkstattDeviceBox) {
                 await loadScriptDevice(box.code.getValue(),
                     /^\/\/ @werkstatt (\w+) (\d+) (\d+)\n/,
-                    "werkstattProcessors", "werkstatt",
+                    "werkstatt", "werkstattProcessors", "werkstatt",
                     UUID.toString(box.address.uuid))
             } else if (box instanceof SpielwerkDeviceBox) {
                 await loadScriptDevice(box.code.getValue(),
                     /^\/\/ @spielwerk (\w+) (\d+) (\d+)\n/,
-                    "spielwerkProcessors", "spielwerk",
+                    "spielwerk", "spielwerkProcessors", "spielwerk",
                     UUID.toString(box.address.uuid))
             } else if (box instanceof ApparatDeviceBox) {
                 await loadScriptDevice(box.code.getValue(),
                     /^\/\/ @apparat (\w+) (\d+) (\d+)\n/,
-                    "apparatProcessors", "apparat",
+                    "apparat", "apparatProcessors", "apparat",
                     UUID.toString(box.address.uuid))
             }
         }

@@ -64,6 +64,9 @@ const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: F
 Communicator.executor<OfflineEngineProtocol>(
     Messenger.for(self as unknown as Parameters<typeof Messenger.for>[0]).channel("offline-engine"), {
         async initialize(enginePort: MessagePort, config: OfflineEngineInitializeConfig) {
+            // User scripts read the `sampleRate` global (an AudioWorkletGlobalScope built-in); provide it
+            // in this worker so the scriptable devices behave exactly as in the worklet.
+            ;(globalThis as unknown as {sampleRate: number}).sampleRate = config.sampleRate
             const variant = config.variant as {wasmUrl: string}
             const modules = await loadEngineModules(variant.wasmUrl)
             const memory = createEngineMemory()
