@@ -77,6 +77,17 @@ struct DeviceReg {
 /// so it stays mapping-agnostic — no composite box name or field key is hardcoded. `children_field` is the
 /// host field whose pointer hub holds the children; `index_key` is the child box field their order / routing
 /// reads. Each child is realized generically by its OWN box type (a leaf device, or a nested composite).
+/// One stem-export entry (TS `ExportStemConfiguration` minus the fileName): the unit to export and its
+/// wiring options. `Default` (all-true chain, no alternates) is what every NON-stem unit uses.
+#[derive(Clone, Copy)]
+pub(crate) struct StemEntry {
+    pub(crate) uuid: [u8; 16],
+    pub(crate) include_audio_effects: bool,
+    pub(crate) include_sends: bool,
+    pub(crate) use_instrument_output: bool,
+    pub(crate) skip_channel_strip: bool
+}
+
 #[derive(Clone)]
 pub(crate) struct CompositeSpec {
     box_type: String,
@@ -895,6 +906,11 @@ struct Engine {
     // The EFFECTS-monitoring map (TS `#monitoringMap`): units whose chains inject the staged live input
     // and whose strip outputs are copied back for the worklet's monitor return.
     monitoring_map: Vec<monitor::MonitorEntry>,
+    // STEM-EXPORT configuration (TS `exportConfiguration.stems` -> per-unit `AudioUnitOptions`): set ONCE
+    // before `bind` by the offline worker; each entry's unit renders with its options and its TAP is copied
+    // into `stem_staging` after every render (stem i -> planar channels 2i / 2i+1).
+    stem_exports: Vec<StemEntry>,
+    stem_staging: Vec<f32>,
     tempo: Option<ValueCollection>,
     tempo_map: SharedTempoMap, // ppqn -> real-seconds map (tempo-automation aware), read by the audio-region player
 
@@ -945,6 +961,8 @@ impl Engine {
             recording_start: 0.0,
             metronome_pref: false,
             monitoring_map: Vec::new(),
+            stem_exports: Vec::new(),
+            stem_staging: Vec::new(),
             tempo: None,
             tempo_map: Rc::new(RefCell::new(TempoMap::new())),
             context: EngineContext::new(),
@@ -1230,6 +1248,15 @@ impl Engine {
         unsafe { MONITOR_OUTPUT.get() }.fill(0.0);
         self.mark_units_rewire(&affected);
         self.reconcile_units();
+    }
+
+    /// The stem-export options of `unit` (TS `AudioUnitOptions.Default` when it is not a stem), consulted
+    /// by the chain wiring and the send/output resolution.
+    pub(crate) fn unit_options(&self, unit: &[u8; 16]) -> StemEntry {
+        self.stem_exports.iter().find(|entry| &entry.uuid == unit).copied().unwrap_or(StemEntry {
+            uuid: *unit, include_audio_effects: true, include_sends: true,
+            use_instrument_output: false, skip_channel_strip: false
+        })
     }
 
     /// The staged input channels mapped to `unit` (TS `AudioDeviceChain.setMonitoringChannels`), consulted
@@ -1644,6 +1671,47 @@ pub extern "C" fn render() {
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.render(OUTPUT.get(), ENGINE_STATE.get());
             engine.copy_monitor_outputs();
+            engine.copy_stem_outputs();
+        }
+    }
+}
+
+/// Configure a STEM EXPORT (TS `exportConfiguration.stems`): `count` records of `[unit uuid 16][flags u32
+/// LE]` (bit0 includeAudioEffects, bit1 includeSends, bit2 useInstrumentOutput, bit3 skipChannelStrip) in
+/// the input scratch, in EXPORT ORDER. Call BEFORE `bind` (an offline render configures once); allocates
+/// the staging each render fills (stem i -> planar channels 2i / 2i+1 at `stem_output_ptr`).
+#[no_mangle]
+pub extern "C" fn set_stem_export(count: u32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), count as usize * 20);
+            let mut stems = Vec::with_capacity(count as usize);
+            for index in 0..count as usize {
+                let record = &bytes[index * 20..index * 20 + 20];
+                let mut uuid = [0u8; 16];
+                uuid.copy_from_slice(&record[..16]);
+                let flags = u32::from_le_bytes([record[16], record[17], record[18], record[19]]);
+                stems.push(StemEntry {
+                    uuid,
+                    include_audio_effects: flags & 1 != 0,
+                    include_sends: flags & 2 != 0,
+                    use_instrument_output: flags & 4 != 0,
+                    skip_channel_strip: flags & 8 != 0
+                });
+            }
+            engine.stem_staging = alloc::vec![0.0; stems.len() * 2 * RENDER_QUANTUM];
+            engine.stem_exports = stems;
+        }
+    }
+}
+
+/// The stem staging base pointer (`stems * 2 * 128` f32, planar per stem).
+#[no_mangle]
+pub extern "C" fn stem_output_ptr() -> *const f32 {
+    unsafe {
+        match ENGINE.get().as_ref() {
+            Some(engine) => engine.stem_staging.as_ptr(),
+            None => core::ptr::null()
         }
     }
 }

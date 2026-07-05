@@ -443,6 +443,7 @@ impl Wired {
 /// carry everything to tear down.
 struct BusWired {
     bus_uuid: Uuid, // the AudioBusBox uuid; its sum node + `bus_registry` entry are dropped on teardown
+    sum_buffer: SharedAudioBuffer, // the RAW sum (pre-fx), the `useInstrumentOutput` stem tap
     pre_strip: SharedAudioBuffer, // the fx-chain output feeding the strip (the send tap)
     pre_strip_node: NodeId,
     strip_id: NodeId,
@@ -760,6 +761,26 @@ impl AudioUnitBinding {
     pub(crate) fn clear_note_bits(&self) {
         engine_env::telemetry::clear_note_bits(&self.note_bits);
     }
+
+    /// The unit's STEM-EXPORT tap per its options (TS `AudioUnit.audioOutput()`): the raw chain start for
+    /// `useInstrumentOutput` (the instrument / tape player / composite sum / bus sum output — pre-fx by
+    /// construction, since the fx write their OWN buffers), the pre-strip (post-fx) buffer for
+    /// `skipChannelStrip`, else the channel-strip output.
+    pub(crate) fn stem_tap(&self, entry: &crate::StemEntry) -> Option<SharedAudioBuffer> {
+        let wired = self.wired.as_ref()?;
+        if entry.use_instrument_output {
+            return Some(match wired {
+                Wired::Leaf(chain) => chain.instrument.output.clone()?,
+                Wired::Tape(tape) => tape.player.borrow().audio_output(),
+                Wired::Composite(composite) => composite.binding.sum_buffer.clone(),
+                Wired::Bus(bus) => bus.sum_buffer.clone()
+            });
+        }
+        if entry.skip_channel_strip {
+            return Some(wired.pre_strip().1);
+        }
+        Some(wired.strip().1)
+    }
 }
 
 
@@ -876,6 +897,24 @@ impl Engine {
     /// `dirty_units` via `DirtyMark`, mirroring TS's per-unit `invalidateWiring`). Called on bind (catch-up)
     /// and after every transaction; a transaction that touched no unit drains nothing, so it is a true no-op
     /// instead of a sweep over every unit and track.
+    /// Copy each stem's TAP (per its options: chain start / pre-strip / strip, TS `unit.audioOutput()`)
+    /// into the stem staging (planar, stem i -> channels 2i / 2i+1). Runs right after `render`.
+    pub(crate) fn copy_stem_outputs(&mut self) {
+        if self.stem_exports.is_empty() {
+            return;
+        }
+        let stems = core::mem::take(&mut self.stem_exports);
+        for (index, entry) in stems.iter().enumerate() {
+            let Some(unit) = self.audio_units.iter().find(|unit| unit.unit == entry.uuid) else { continue };
+            let Some(tap) = unit.stem_tap(entry) else { continue };
+            let buffer = tap.borrow();
+            let base = index * 2 * engine_env::RENDER_QUANTUM;
+            self.stem_staging[base..base + engine_env::RENDER_QUANTUM].copy_from_slice(&buffer.left);
+            self.stem_staging[base + engine_env::RENDER_QUANTUM..base + 2 * engine_env::RENDER_QUANTUM].copy_from_slice(&buffer.right);
+        }
+        self.stem_exports = stems;
+    }
+
     /// Mark `uuids` for a chain re-wire (e.g. the monitoring map changed) and enqueue them; the next
     /// `reconcile_units` rebuilds only those.
     pub(crate) fn mark_units_rewire(&mut self, uuids: &[[u8; 16]]) {
@@ -1269,7 +1308,7 @@ impl Engine {
         }));
         // The bus's own audio-effect chain (host 23), ordered by index, enabled only: sum -> fx0 -> ... Each
         // enabled / disabled effect gets a `This` monitor so a toggle re-wires (wholesale, like a chain edit).
-        let mut source = sum_buffer;
+        let mut source = sum_buffer.clone();
         let mut source_id = sum_id;
         for device_uuid in unit.audio.sorted() {
             let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
@@ -1333,7 +1372,7 @@ impl Engine {
         nodes.push(strip_id);
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
         unit.wired = Some(Wired::Bus(BusWired {
-            bus_uuid, pre_strip, pre_strip_node, strip_id, strip_output, nodes, edges, device_params, sidechains, subs
+            bus_uuid, sum_buffer, pre_strip, pre_strip_node, strip_id, strip_output, nodes, edges, device_params, sidechains, subs
         }));
     }
 
@@ -1499,7 +1538,12 @@ impl Engine {
     fn resolve_sends(&mut self) {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
-            let tap = unit.wired.as_ref().map(|wired| wired.pre_strip());
+            // A STEM export with includeSends=false leaves this unit's aux sends unwired (TS skips them).
+            let tap = if self.unit_options(&unit.unit).include_sends {
+                unit.wired.as_ref().map(|wired| wired.pre_strip())
+            } else {
+                None
+            };
             let mut sends = core::mem::take(&mut unit.sends);
             for send in &mut sends {
                 self.resolve_one_send(send, &tap);
@@ -1896,7 +1940,11 @@ impl Engine {
             output_node = mixer_id;
             mixer_id
         });
+        let include_fx = self.unit_options(&unit.unit).include_audio_effects;
         for member in &audio_members {
+            if !include_fx {
+                break; // a STEM export with includeAudioEffects=false: the fx chain is left unwired
+            }
             if !self.device_enabled(member.uuid) {
                 continue;
             }
@@ -1984,7 +2032,11 @@ impl Engine {
             output_node = mixer_id;
             mixer_id
         });
+        let include_fx = self.unit_options(&unit.unit).include_audio_effects;
         for member in &audio_members {
+            if !include_fx {
+                break; // a STEM export with includeAudioEffects=false: the fx chain is left unwired
+            }
             if !self.device_enabled(member.uuid) {
                 continue;
             }
@@ -2087,7 +2139,8 @@ impl Engine {
         // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip; the strip's output is
         // routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).
         let monitor = self.monitor_channels_of(&unit.unit);
-        let (output, output_node, mut edges, monitor_node) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[], None, monitor);
+        let include_fx = self.unit_options(&unit.unit).include_audio_effects;
+        let (output, output_node, mut edges, monitor_node) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[], None, monitor, include_fx);
         // The channel strip terminates the chain; reuse it across reconciles (it carries no DSP state, just the
         // shared volume / panning / mute), re-pointing its source at the new tail.
         let (strip, strip_id, strip_output) = match strip_keep {
@@ -2228,7 +2281,7 @@ impl Engine {
     /// caller appends its own tail (a unit's strip -> master, a slot's sum).
     fn wire_cluster(&mut self, instrument: &Member, instrument_uuid: Uuid, sequencer: &SharedNoteEventSource,
                     midi: &[Member], audio: &[Member], choke: &[i32], gate: Option<&Rc<Cell<bool>>>,
-                    monitor: Option<(i32, i32)>) -> (SharedAudioBuffer, NodeId, Vec<(NodeId, NodeId)>, Option<NodeId>) {
+                    monitor: Option<(i32, i32)>, include_fx: bool) -> (SharedAudioBuffer, NodeId, Vec<(NodeId, NodeId)>, Option<NodeId>) {
         let mut pull = match gate {
             // A composite SLOT: routed through `SlotRoute` so its choke records inject and its silent gate
             // (pad mute / solo) drops note starts live, no rebuild.
@@ -2262,6 +2315,9 @@ impl Engine {
             mixer_id
         });
         for member in audio {
+            if !include_fx {
+                break; // a STEM export with includeAudioEffects=false: the whole unit fx chain is left unwired
+            }
             if !self.device_enabled(member.uuid) {
                 continue; // a disabled audio-fx is BYPASSED: not wired into the signal path; processor untouched
             }
@@ -2321,7 +2377,7 @@ impl Engine {
             Some((uuid, kept)) if uuid == instrument_uuid => kept,
             _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: track_sets.clone()}), self.clip_sequencer.clone())))
         };
-        let (output, output_node, internal_edges, _) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, choke, Some(gate), None);
+        let (output, output_node, internal_edges, _) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, choke, Some(gate), None, true);
         SlotCluster {instrument, sequencer, midi: midi_members, audio: audio_members, internal_edges, output, output_node}
     }
 

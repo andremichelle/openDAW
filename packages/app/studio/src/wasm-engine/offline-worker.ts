@@ -33,15 +33,25 @@ type EngineState = {
     readonly stateSender: SyncStream.Writer
     readonly sampleRate: int
     readonly pending: Set<Promise<unknown>>
+    readonly numberOfChannels: int // 2 for a mixdown; stems * 2 for a stem export
+    readonly stems: int // 0 = mixdown (the master output); > 0 = read the stem staging
     totalFrames: int
     running: boolean
 }
 
 let state: Option<EngineState> = Option.None
 
-const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: Float32Array[]): void => {
+const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: Float32Array[], stems: number): void => {
     engine.render()
     const buffer = memory.buffer // re-read each block: talc may have grown the buffer
+    if (stems > 0) {
+        // STEM export: each stem's tap lands planar in the stem staging (stem i -> channels 2i / 2i+1).
+        const staging = new Float32Array(buffer, engine.stem_output_ptr(), stems * 2 * RenderQuantum)
+        for (let channel = 0; channel < out.length && channel < stems * 2; channel++) {
+            out[channel].set(staging.subarray(channel * RenderQuantum, (channel + 1) * RenderQuantum))
+        }
+        return
+    }
     const pointer = engine.output_ptr()
     out[0].set(new Float32Array(buffer, pointer, RenderQuantum))
     if (out.length > 1) {
@@ -54,9 +64,6 @@ const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: F
 Communicator.executor<OfflineEngineProtocol>(
     Messenger.for(self as unknown as Parameters<typeof Messenger.for>[0]).channel("offline-engine"), {
         async initialize(enginePort: MessagePort, config: OfflineEngineInitializeConfig) {
-            if (config.numberOfChannels !== 2) {
-                throw new Error("The WASM offline engine renders the stereo master only (no stem export yet)")
-            }
             const variant = config.variant as {wasmUrl: string}
             const modules = await loadEngineModules(variant.wasmUrl)
             const memory = createEngineMemory()
@@ -91,6 +98,23 @@ Communicator.executor<OfflineEngineProtocol>(
             new Uint8Array(memory.buffer, pointer, bytes.length).set(bytes)
             if (engine.apply_updates(bytes.length) !== 0) {
                 throw new Error("apply_updates rejected the project snapshot")
+            }
+            // STEM export: hand the per-unit options to the engine BEFORE bind, in export order
+            // ([uuid 16][flags u32 LE]: 1 includeAudioEffects, 2 includeSends, 4 useInstrumentOutput,
+            // 8 skipChannelStrip) — the chain wiring consults them (TS builds units with AudioUnitOptions).
+            const stems = config.exportConfiguration?.stems
+            const stemKeys = isDefined(stems) ? Object.keys(stems) : []
+            if (stemKeys.length > 0) {
+                const recordsPtr = engine.input_reserve(stemKeys.length * 20)
+                const view = new DataView(memory.buffer, recordsPtr, stemKeys.length * 20)
+                stemKeys.forEach((key, index) => {
+                    const stem = stems![key]
+                    new Uint8Array(memory.buffer, recordsPtr + index * 20, 16).set(UUID.parse(key))
+                    view.setUint32(index * 20 + 16,
+                        (stem.includeAudioEffects ? 1 : 0) | (stem.includeSends ? 2 : 0)
+                        | (stem.useInstrumentOutput ? 4 : 0) | ((stem.skipChannelStrip ?? false) ? 8 : 0), true)
+                })
+                engine.set_stem_export(stemKeys.length)
             }
             if (engine.bind() !== 0) {
                 throw new Error("the project snapshot carries no TimelineBox")
@@ -132,6 +156,8 @@ Communicator.executor<OfflineEngineProtocol>(
             state = Option.wrap({
                 engine, memory, stateSender, pending,
                 sampleRate: config.sampleRate,
+                numberOfChannels: stemKeys.length > 0 ? stemKeys.length * 2 : 2,
+                stems: stemKeys.length,
                 totalFrames: 0,
                 running: false
             })
@@ -148,13 +174,14 @@ Communicator.executor<OfflineEngineProtocol>(
             // The loop stays fully SYNCHRONOUS (like the TS offline worker's step): every resource resolved
             // above, and a per-second `setTimeout(0)` yield would cost more than the render itself (~4ms
             // clamped, ×60 — measured as 260ms of a 297ms empty render).
-            const result: Float32Array[] = Arrays.create(() => new Float32Array(numSamples), 2)
-            const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), 2)
+            const {numberOfChannels, stems} = state.unwrap("state.step")
+            const result: Float32Array[] = Arrays.create(() => new Float32Array(numSamples), numberOfChannels)
+            const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
             let offset = 0 | 0
             while (offset < numSamples) {
-                renderQuantum(engine, memory, outputChannels)
+                renderQuantum(engine, memory, outputChannels, stems)
                 const toCopy = Math.min(numSamples - offset, RenderQuantum)
-                for (let channel = 0; channel < 2; channel++) {
+                for (let channel = 0; channel < numberOfChannels; channel++) {
                     result[channel].set(outputChannels[channel].subarray(0, toCopy), offset)
                 }
                 offset += toCopy
@@ -168,15 +195,16 @@ Communicator.executor<OfflineEngineProtocol>(
             const threshold = dbToGain(silenceThresholdDb ?? -72.0)
             const silenceFramesNeeded = Math.ceil((silenceDurationSeconds ?? 10) * engine.sampleRate)
             const maxFrames = isDefined(maxDurationSeconds) ? Math.ceil(maxDurationSeconds * engine.sampleRate) : Infinity
-            const chunks: Float32Array[][] = Arrays.create(() => [], 2)
+            const {numberOfChannels, stems} = state.unwrap("state.render")
+            const chunks: Float32Array[][] = Arrays.create(() => [], numberOfChannels)
             let consecutiveSilentFrames = 0
             let hasHadAudio = false
             let lastYield = 0
             engine.running = true
             await Wait.timeSpan(TimeSpan.seconds(0))
             while (engine.running && engine.totalFrames < maxFrames) {
-                const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), 2)
-                renderQuantum(engine.engine, engine.memory, outputChannels)
+                const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
+                renderQuantum(engine.engine, engine.memory, outputChannels, stems)
                 let maxSample = 0
                 for (const channel of outputChannels) {
                     for (const sample of channel) {
@@ -192,7 +220,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 } else {
                     consecutiveSilentFrames = 0
                 }
-                for (let channel = 0; channel < 2; channel++) {
+                for (let channel = 0; channel < numberOfChannels; channel++) {
                     chunks[channel].push(outputChannels[channel].slice())
                 }
                 engine.totalFrames += RenderQuantum
@@ -213,7 +241,7 @@ Communicator.executor<OfflineEngineProtocol>(
                     offset += toCopy
                 }
                 return total
-            }, 2)
+            }, numberOfChannels)
         },
         stop() { state.unwrap("state.stop").running = false }
     }

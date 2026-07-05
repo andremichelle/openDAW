@@ -51,6 +51,12 @@ export type EngineExports = {
     set_monitoring_map: (count: number) => void
     monitor_input_ptr: () => number
     monitor_output_ptr: () => number
+    // STEM export (TS exportConfiguration.stems): `set_stem_export` reads `count` records of
+    // [unit uuid 16][flags u32 LE: 1 includeAudioEffects, 2 includeSends, 4 useInstrumentOutput,
+    // 8 skipChannelStrip] from the input scratch BEFORE bind; each render fills the staging at
+    // `stem_output_ptr` (stem i -> planar channels 2i / 2i+1).
+    set_stem_export: (count: number) => void
+    stem_output_ptr: () => number
     // LIVE note signals (the studio's on-screen keys / pads / MIDI input): write the target AudioUnitBox
     // uuid into the input buffer (16 bytes) first. A raw note-on sustains until its note-off; an audition
     // stops itself after `duration` pulses. They sound while the transport is stopped too.

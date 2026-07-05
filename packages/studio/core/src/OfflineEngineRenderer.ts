@@ -62,7 +62,7 @@ export class OfflineEngineRenderer {
     ): Promise<OfflineEngineRenderer> {
         const numStems = ExportConfiguration.countStems(optExportConfiguration)
         if (numStems === 0) {return panic("Nothing to export")}
-        if (variant && numStems > 1) {return panic("Stem export is not supported by the variant engine yet")}
+
         const numberOfChannels = numStems * 2
         const optVariant = variant
             ? Option.wrap(variantWorker.unwrap("No variant engine installed (call 'installVariant' first)"))

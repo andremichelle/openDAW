@@ -626,6 +626,33 @@ export class StudioService implements ProjectEnv {
                 const rms = Math.sqrt(sum / (audio.numberOfFrames * audio.numberOfChannels))
                 return {variant: WasmEngine.useForExports() ? "wasm" : "ts", frames: audio.numberOfFrames, rms}
             }).unwrapOrNull())
+        // The STEM-export probe: exports every instrument unit as a stem (default options) exactly like
+        // `Mixdowns.exportStems` and reports per-stem levels, for headless TS-vs-WASM comparisons.
+        ConsoleCommands.exportMethod("engine.exportStemsTest",
+            async () => this.runIfProject(async project => {
+                const {OfflineEngineRenderer} = await import("@opendaw/studio-core")
+                const {WasmEngine} = await import("@/wasm-engine/WasmEngine")
+                const {UUID} = await import("@opendaw/lib-std")
+                const stems: Record<string, {includeAudioEffects: boolean, includeSends: boolean, useInstrumentOutput: boolean, fileName: string}> = {}
+                for (const box of project.boxGraph.boxes()) {
+                    if (box.name !== "AudioUnitBox") {continue}
+                    const type = (box as unknown as {type: {getValue(): string}}).type.getValue()
+                    if (type !== "instrument") {continue}
+                    stems[UUID.toString(box.address.uuid)] =
+                        {includeAudioEffects: true, includeSends: true, useInstrumentOutput: false, fileName: UUID.toString(box.address.uuid).slice(0, 8)}
+                }
+                const progress = new DefaultObservableValue(0.0)
+                const audio = await OfflineEngineRenderer.start(
+                    project.copy(), Option.wrap({stems}), progress, undefined, 48_000, WasmEngine.useForExports())
+                const perStem: Array<number> = []
+                for (let stem = 0; stem < audio.numberOfChannels / 2; stem++) {
+                    let sum = 0.0
+                    for (const value of audio.frames[stem * 2]) {sum += value * value}
+                    for (const value of audio.frames[stem * 2 + 1]) {sum += value * value}
+                    perStem.push(Math.sqrt(sum / (audio.numberOfFrames * 2)))
+                }
+                return {variant: WasmEngine.useForExports() ? "wasm" : "ts", frames: audio.numberOfFrames, perStem}
+            }).unwrapOrNull())
     }
 
     #populateSpotlightData(): void {

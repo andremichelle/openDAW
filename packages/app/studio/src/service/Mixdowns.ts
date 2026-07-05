@@ -75,10 +75,8 @@ export namespace Mixdowns {
             progress,
             cancel: () => abortController.abort()
         })
-        // Stems always render through the TS engine: the per-stem unit options (includeAudioEffects,
-        // skipChannelStrip, ...) are not ported to the wasm offline worker yet.
         const {status, value, error: renderError} = await Promises.tryCatch(OfflineEngineRenderer
-            .start(project, Option.wrap(config), progress, abortController.signal))
+            .start(project, Option.wrap(config), progress, abortController.signal, 48_000, WasmEngine.useForExports()))
         dialog.terminate()
         if (status === "rejected") {
             if (Errors.isAbort(renderError)) {return}
