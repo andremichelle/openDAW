@@ -50,16 +50,14 @@ const createMeter = (): {element: HTMLElement, update: Procedure<Float32Array>} 
     return {element, update}
 }
 
-// One note-activity cell: the engine broadcasts a MONOTONIC event counter per device; any movement lights the
-// dot, which then decays a little every received frame. (The TS engine broadcasts a 128-bit note set instead;
-// the wasm engine's counter is a deliberate, simpler deviation — this page only needs "something played".)
-const createNoteIndicator = (): {element: HTMLElement, update: Procedure<number>} => {
+// One note cell: the engine broadcasts a 128-bit held-note set per unit / midi-fx (the TS `NoteBroadcaster`
+// mirror, an Integers package); any held note lights the dot, which decays once all notes released.
+const createNoteIndicator = (): {element: HTMLElement, update: Procedure<Int32Array>} => {
     const dot: HTMLDivElement = <div className="dot"/>
     const element: HTMLDivElement = <div className="live-note">{dot}</div>
-    const state = {last: Number.NaN, energy: 0.0}
-    const update = (count: number): void => {
-        if (count !== state.last) {
-            state.last = count
+    const state = {energy: 0.0}
+    const update = (bits: Int32Array): void => {
+        if ((bits[0] | bits[1] | bits[2] | bits[3]) !== 0) {
             state.energy = 1.0
         } else {
             state.energy *= 0.90
@@ -133,12 +131,12 @@ export const LiveMetersPage: PageFactory<Env> = ({lifecycle}) => {
             }
             const noteCell = (label: string, address: Address): void => {
                 const note = createNoteIndicator()
-                terminator.own(receiver.subscribeFloat(address, note.update))
+                terminator.own(receiver.subscribeIntegers(address, note.update))
                 cells.push(<div className="live-cell"><span className="name">{label}</span>{note.element}</div>)
             }
             midi.forEach(device => noteCell(deviceLabel(device), device.address))
             instruments.forEach(device => {
-                noteCell("notes", Address.compose(device.address.uuid, 1))
+                noteCell("notes", unit.address) // the UNIT's 128-bit note set (TS NoteEventInstrument address)
                 meterCell(deviceLabel(device), device.address)
             })
             audio.forEach(device => meterCell(deviceLabel(device), device.address))

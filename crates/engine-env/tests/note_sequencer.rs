@@ -57,7 +57,7 @@ fn pull(sequencer: &mut NoteSequencer, from: f64, to: f64) -> Vec<Event> {
 
 #[test]
 fn a_note_completing_inside_the_block_emits_its_off_in_the_same_block() {
-    let region = NoteRegion {position: 0.0, duration: 960.0, loop_offset: 0.0, loop_duration: 960.0};
+    let region = NoteRegion {position: 0.0, duration: 960.0, loop_offset: 0.0, loop_duration: 960.0, mute: false};
     let mut sequencer = sequencer(region, &[NoteEvent::new(0.0, 10.0, 60, 0.0, 1.0)]);
     let events = pull(&mut sequencer, 0.0, 480.0);
     assert!(matches!(events.first(), Some(Event::NoteStart {position, ..}) if *position == 0.0), "note-on first: {events:?}");
@@ -68,7 +68,7 @@ fn a_note_completing_inside_the_block_emits_its_off_in_the_same_block() {
 #[test]
 fn by_default_a_note_rings_past_the_region_end() {
     // TS `truncateNotesAtRegionEnd` defaults to FALSE: the note keeps its full duration.
-    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0};
+    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false};
     let mut sequencer = sequencer(region, &[NoteEvent::new(50.0, 200.0, 60, 0.0, 1.0)]);
     let first = pull(&mut sequencer, 0.0, 100.0);
     assert!(matches!(first.first(), Some(Event::NoteStart {duration, ..}) if *duration == 200.0),
@@ -83,7 +83,7 @@ fn by_default_a_note_rings_past_the_region_end() {
 #[test]
 fn truncate_mode_cuts_notes_at_the_loop_cycle_end() {
     // TS truncate mode: `end = min(rawEnd, region.complete)`, so a note near the cycle end is cut there.
-    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0};
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0, mute: false};
     let mut sequencer = sequencer(region, &[NoteEvent::new(90.0, 50.0, 60, 0.0, 1.0)]);
     sequencer.set_truncate_at_region_end(true);
     let first = pull(&mut sequencer, 0.0, 100.0);
@@ -121,7 +121,7 @@ fn the_chance_roll_stream_matches_the_ts_sequencer_seed() {
 fn chance_gates_notes_on_the_seeded_stream() {
     // chance 60 with the 0xFFF_F123 stream: roll 74.66 SKIPS the first pass, roll 48.38 PLAYS the second.
     // (The exact scenario of the Open Up vocal: TS skipped the first pass, the old WASM always played.)
-    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0};
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 100.0, mute: false};
     let mut note = NoteEvent::new(10.0, 20.0, 60, 0.0, 1.0);
     note.chance = 60.0;
     let mut sequencer = sequencer(region, &[note]);
@@ -136,7 +136,7 @@ fn chance_gates_notes_on_the_seeded_stream() {
 #[test]
 fn chance_100_notes_never_roll_and_always_play() {
     // A chance-100 note must NOT advance the RNG stream (TS short-circuits `chance < 100.0`).
-    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0};
+    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false};
     let mut gated = NoteEvent::new(50.0, 10.0, 62, 0.0, 1.0);
     gated.chance = 70.0;
     let plain = NoteEvent::new(10.0, 10.0, 60, 0.0, 1.0);
@@ -153,7 +153,7 @@ fn play_count_ratchets_the_note_linearly() {
     // lands EXACTLY on the pre-note grid point (index -1), which TS's `searchPosition >= searchStart`
     // includes — so the faithful result is FIVE repeats starting at 0 (the grid-aligned phantom), 10, 20,
     // 30, 40, each 10 long.
-    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0};
+    let region = NoteRegion {position: 0.0, duration: 100.0, loop_offset: 0.0, loop_duration: 100.0, mute: false};
     let mut note = NoteEvent::new(10.0, 40.0, 60, 0.0, 1.0);
     note.play_count = 4;
     let mut sequencer = sequencer(region, &[note]);
@@ -173,7 +173,7 @@ fn play_count_ratchets_the_note_linearly() {
 fn a_ratchet_spanning_blocks_retriggers_via_the_lookback() {
     // The note STARTS before the second block's window; the max-duration lookback must still find it so
     // the repeats inside the window fire (TS iterates from `localStart - collection.maxDuration`).
-    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 200.0};
+    let region = NoteRegion {position: 0.0, duration: 200.0, loop_offset: 0.0, loop_duration: 200.0, mute: false};
     let mut note = NoteEvent::new(0.0, 160.0, 60, 0.0, 1.0);
     note.play_count = 4; // repeats at 0, 40, 80, 120
     let mut sequencer = sequencer(region, &[note]);
@@ -225,7 +225,7 @@ fn a_launched_clip_replaces_the_timeline_at_the_handover() {
     let mut clip_notes = EventCollection::new();
     clip_notes.add(NoteEvent::new(0.0, 10.0, 72, 0.0, 1.0));
     let source = TrackWithClip {
-        region: NoteRegion {position: 0.0, duration: 7680.0, loop_offset: 0.0, loop_duration: 7680.0},
+        region: NoteRegion {position: 0.0, duration: 7680.0, loop_offset: 0.0, loop_duration: 7680.0, mute: false},
         region_notes,
         clip_notes,
         clip: CLIP

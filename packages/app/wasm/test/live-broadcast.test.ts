@@ -80,8 +80,9 @@ const readEntries = (engine: any, memory: WebAssembly.Memory): Array<Entry> => {
     return entries
 }
 
-const findEntry = (entries: Array<Entry>, uuid: Uint8Array, keys: Array<number>): Entry => {
+const findEntry = (entries: Array<Entry>, uuid: Uint8Array, keys: Array<number>, packageType?: number): Entry => {
     const entry = entries.find(candidate => UUID.equals(candidate.uuid as UUID.Bytes, uuid as UUID.Bytes)
+        && (packageType === undefined || candidate.packageType === packageType)
         && candidate.keys.length === keys.length && candidate.keys.every((key, at) => key === keys[at]))
     return asDefined(entry, `entry ${UUID.toString(uuid as UUID.Bytes)}/${keys.join(",")} registered`)
 }
@@ -108,15 +109,16 @@ describe("live broadcast table", () => {
         const master = findEntry(entries, UUID.Lowest, [0]) // TS EngineAddresses.PEAKS (NOT all-zero bytes)
         expect(master.packageType).toBe(PACKAGE_FLOAT_ARRAY)
         expect(master.len).toBe(4)
-        const strip = findEntry(entries, unitUuid, [])
+        const strip = findEntry(entries, unitUuid, [], PACKAGE_FLOAT_ARRAY)
         expect(strip.packageType).toBe(PACKAGE_FLOAT_ARRAY)
         expect(strip.len).toBe(4)
         const instrument = findEntry(entries, nanoUuid, [])
         expect(instrument.packageType).toBe(PACKAGE_FLOAT_ARRAY)
         expect(instrument.len).toBe(4)
-        const activity = findEntry(entries, nanoUuid, [1])
-        expect(activity.packageType).toBe(PACKAGE_FLOAT)
-        expect(activity.len).toBe(1)
+        // The UNIT's 128-bit note set (TS `NoteEventInstrument`'s `NoteBroadcaster` at the unit address):
+        // an Integers package next to the strip's Floats at the SAME address.
+        const noteBits = findEntry(entries, unitUuid, [], 3)
+        expect(noteBits.len).toBe(4)
         const slot = (entry: Entry): Float32Array => new Float32Array(memory.buffer, entry.ptr, entry.len)
         expect(Array.from(slot(master))).toEqual([0, 0, 0, 0])
         engine.stop(); engine.play()
@@ -126,7 +128,11 @@ describe("live broadcast table", () => {
         expect(slot(strip)[0], "strip peak L").toBeGreaterThan(0.0)
         expect(slot(master)[0], "master peak L").toBeGreaterThan(0.0)
         expect(slot(master)[1], "master peak R").toBeGreaterThan(0.0)
-        expect(slot(activity)[0], "note activity counter").toBeGreaterThan(0.0)
+        const bits = new Int32Array(memory.buffer, noteBits.ptr, noteBits.len)
+        const anyBit = bits[0] | bits[1] | bits[2] | bits[3]
+        expect(anyBit, "a held note sets its unit bit").not.toBe(0)
+        engine.stop()
+        expect(bits[0] | bits[1] | bits[2] | bits[3], "stop clears the note bits").toBe(0)
         expect(engine.broadcast_generation() >>> 0, "rendering does not touch the table").toBe(generation)
     }, 60000)
 })

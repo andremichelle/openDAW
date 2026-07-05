@@ -41,9 +41,9 @@ pub(crate) struct PluginMidiEffect {
     state: DeviceState,
     params: RefCell<Vec<ParamHandle>>,
     clock_armed: Cell<bool>,
-    // Note activity ([0] = a monotonic count of events this fx EMITTED; the UI diffs it to flash an
-    // indicator). A broadcast slot: the table points at it, `Weak`-owned so a teardown sweeps the entry.
-    activity: engine_env::telemetry::BroadcastSlot // one float: the monotonic pulled-note count
+    // The fx's note-bits slot (TS midi effects own a `NoteBroadcaster` at the DEVICE address): the note
+    // starts/completes this fx EMITS set/clear pitch bits, so its editor's note indicator mirrors TS.
+    note_bits: engine_env::telemetry::BroadcastSlot,
 }
 
 impl PluginMidiEffect {
@@ -53,18 +53,23 @@ impl PluginMidiEffect {
             state: DeviceState::new(device.state_size as usize),
             params: RefCell::new(Vec::new()),
             clock_armed: Cell::new(false),
-            activity: engine_env::telemetry::broadcast_slot(1)
+            note_bits: engine_env::telemetry::broadcast_slot(4)
         }
     }
 
-    /// The note-activity broadcast slot (see the field docs).
-    pub(crate) fn activity_slot(&self) -> engine_env::telemetry::BroadcastSlot {
-        self.activity.clone()
+    /// The note-bits broadcast slot (see the field docs).
+    pub(crate) fn note_bits_slot(&self) -> engine_env::telemetry::BroadcastSlot {
+        self.note_bits.clone()
     }
 
-    pub(crate) fn bump_activity(&self, count: u32) {
-        if count > 0 {
-            self.activity.borrow_mut()[0] += count as f32;
+    /// Mark the note lifecycles this fx emitted into its bits (TS `NoteBroadcaster.noteOn/noteOff`).
+    pub(crate) fn mark_notes(&self, records: &[abi::EventRecord]) {
+        for record in records {
+            if record.kind == abi::EVENT_NOTE_ON {
+                engine_env::telemetry::set_note_bit(&self.note_bits, record.pitch as i32, true);
+            } else if record.kind == abi::EVENT_NOTE_OFF {
+                engine_env::telemetry::set_note_bit(&self.note_bits, record.pitch as i32, false);
+            }
         }
     }
 

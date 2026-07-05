@@ -13,3 +13,22 @@ pub type BroadcastSlot = Rc<RefCell<Box<[f32]>>>;
 pub fn broadcast_slot(len: usize) -> BroadcastSlot {
     Rc::new(RefCell::new(alloc::vec![0.0f32; len].into_boxed_slice()))
 }
+
+/// Set / clear one bit of a NOTE-BITS slot (TS `NoteBroadcaster`'s 128-bit set): the slot's f32 storage
+/// carries raw i32 bit patterns (the worklet views it as an Int32Array), so the update round-trips through
+/// `to_bits`/`from_bits`. Out-of-range pitches are ignored (TS guards 0..128).
+pub fn set_note_bit(slot: &BroadcastSlot, pitch: i32, on: bool) {
+    if !(0..128).contains(&pitch) {
+        return;
+    }
+    let index = (pitch >> 5) as usize;
+    let mask = 1u32 << (pitch & 31);
+    let mut values = slot.borrow_mut();
+    let bits = values[index].to_bits();
+    values[index] = f32::from_bits(if on {bits | mask} else {bits & !mask});
+}
+
+/// Clear a NOTE-BITS slot (TS `NoteBroadcaster.clear`, e.g. on transport stop).
+pub fn clear_note_bits(slot: &BroadcastSlot) {
+    slot.borrow_mut().fill(0.0);
+}

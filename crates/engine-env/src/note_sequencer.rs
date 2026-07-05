@@ -166,6 +166,9 @@ impl NoteEventSource for NoteSequencer {
                 match section.clip {
                     // Timeline: the track's regions within the section (TS `#processRegions`).
                     None => access.for_each_region(section.from, section.to, &mut |region, notes| {
+                        if region.mute {
+                            return; // TS `#processRegions`: `region.mute -> continue` — a muted region emits no notes
+                        }
                         for cycle in locate_loops(region.position, region.complete(), region.loop_offset, region.loop_duration, section.from, section.to) {
                             // TS: `end = truncateNotesAtRegionEnd ? min(rawEnd, region.complete) : Infinity` — by
                             // default a note keeps its FULL duration and rings past the region / cycle end.

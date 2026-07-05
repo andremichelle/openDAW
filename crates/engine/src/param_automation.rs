@@ -41,14 +41,15 @@ pub(crate) struct ParamHandle {
 }
 
 impl ParamHandle {
-    /// Resolve the parameter at `position`, returning `(value, kind)` for the wire: when a track is connected,
-    /// the uniform `0..1` curve value tagged `PARAM_KIND_UNIT` (the device maps it); else the box field's
-    /// already-real value tagged with the field's primitive `kind` (the device uses it directly). The host
-    /// stays mapping-agnostic — the device owns the mapping. Mirrors TS `track ? track.valueAt(...) : getValue()`.
+    /// Resolve the parameter at `position`, returning `(value, kind)` for the wire: when a track is connected
+    /// AND its curve covers the position, the uniform `0..1` curve value tagged `PARAM_KIND_UNIT` (the device
+    /// maps it); else the box field's STORED value tagged with the field's primitive `kind` (the device uses
+    /// it directly). The host stays mapping-agnostic — the device owns the mapping. Mirrors TS
+    /// `valueMapping.y(track.valueAt(position, getUnitValue()))`: the TS fallback is the mapped FIELD value,
+    /// so a muted value clip / an empty curve resolves to the field's storage value, never a made-up 0.
     pub(crate) fn resolve(&self, position: f64) -> (f32, u32) {
-        match &self.track {
-            Some(curve) => {
-                let value = curve.value_at(position, 0.0);
+        match self.track.as_ref().and_then(|curve| curve.value_at(position)) {
+            Some(value) => {
                 if let Some(slot) = &self.broadcast {
                     slot.borrow_mut()[0] = value;
                 }
@@ -61,11 +62,14 @@ impl ParamHandle {
 
 /// One value region on a parameter's track: its loopable span plus a read handle onto its curve. Sorted by
 /// `position` within the parameter's `RegionCollection`, so `floor_last_index` finds the covering region.
+/// A MUTED region is skipped by the lookup (TS `lowerEqual(position, region => !region.mute)`), so the
+/// previous unmuted region's value (or the first region's incoming value) applies instead.
 pub(crate) struct ValueBoundRegion {
     pub(crate) position: f64,
     pub(crate) duration: f64,
     pub(crate) loop_offset: f64,
     pub(crate) loop_duration: f64,
+    pub(crate) mute: bool,
     pub(crate) curve: ValueCurve
 }
 
@@ -85,19 +89,17 @@ impl ValueBoundRegion {
         }
     }
 
-    fn value_at(&self, position: f64, fallback: f32) -> f32 {
-        self.curve.value_at(self.local(position), fallback)
+    /// `None` when the curve is empty (the caller falls back to the field's STORED value, like TS).
+    fn value_at(&self, position: f64) -> Option<f32> {
+        self.curve.value_at_opt(self.local(position))
     }
 
     /// The region's INCOMING value, for a position BEFORE the track's first region (mirrors TS
     /// `ValueRegionBoxAdapter.incomingValue`): the FIRST curve event when one sits at local 0. On STACKED
     /// events at 0, `value_at(0)` floors to the LAST of the stack — a different value (the atstil
     /// pad-StereoTool bug: TS resolved the stack's first, wasm its last). Falls back to the region start.
-    fn incoming_value(&self, fallback: f32) -> f32 {
-        match self.curve.incoming_zero_value() {
-            Some(value) => value,
-            None => self.value_at(self.position, fallback)
-        }
+    fn incoming_value(&self) -> Option<f32> {
+        self.curve.incoming_zero_value().or_else(|| self.value_at(self.position))
     }
 
     /// The region's OUTGOING value, for a position AT/AFTER its end (mirrors TS `ValueRegionBoxAdapter.
@@ -107,13 +109,13 @@ impl ValueBoundRegion {
     /// back to the loop START — so the parameter jumps to the loop's first value instead of holding (the
     /// "automation doesn't keep its last value when the region ends" bug). TS: `(complete - offset) %
     /// loopDuration === 0` with `offset = position - loopOffset`, i.e. `(duration + loopOffset) % loopDuration`.
-    fn outgoing_value(&self, fallback: f32) -> f32 {
+    fn outgoing_value(&self) -> Option<f32> {
         let ends_on_loop_pass = self.loop_duration > 0.0
             && ((self.duration + self.loop_offset) % self.loop_duration).abs() < 1.0e-6;
         if ends_on_loop_pass {
-            self.curve.value_at(self.loop_duration, fallback)
+            self.curve.value_at_opt(self.loop_duration)
         } else {
-            self.curve.value_at(self.local(self.position + self.duration), fallback)
+            self.curve.value_at_opt(self.local(self.position + self.duration))
         }
     }
 }
@@ -130,11 +132,13 @@ pub(crate) trait ParamSink {
 }
 
 /// One launchable VALUE clip's automation content (TS `ValueClipBoxAdapter`): its live event curve, read
-/// modulo the clip duration while the clip plays.
+/// modulo the clip duration while the clip plays. A MUTED clip reads as the fallback (the UI also gates
+/// launching a muted clip).
 pub(crate) struct BoundValueClip {
     pub(crate) clip_uuid: Uuid,
     pub(crate) duration: f64,
     pub(crate) looped: bool,
+    pub(crate) mute: bool,
     pub(crate) curve: ValueCurve
 }
 
@@ -172,23 +176,26 @@ impl ParamCurve {
     /// clip sections: a LAUNCHED value clip replaces the timeline (its curve read modulo the clip duration);
     /// the clip-free sections resolve the region at/before the position (loop-local while inside, its
     /// outgoing value after, the first region's incoming value before). The last section's value wins (TS).
-    pub(crate) fn value_at(&self, position: f64, fallback: f32) -> f32 {
+    /// `None` = no automation applies (a MUTED clip, an empty curve, no regions): the caller resolves the
+    /// field's STORED value, exactly like TS's `getUnitValue()` fallback.
+    pub(crate) fn value_at(&self, position: f64) -> Option<f32> {
         let state = self.0.borrow();
-        let mut value = fallback;
+        let mut value = None;
         let info = ValueClipInfo {clips: &state.clips};
         let regions = &state.regions;
         let clips = &state.clips;
         state.sequencer.borrow_mut().iterate(&state.track, position, position + UPDATE_CLOCK_RATE, &info, &mut |section| {
             value = match section.clip {
-                None => Self::region_value_at(regions, position, fallback),
+                None => Self::region_value_at(regions, position),
                 Some(clip) => {
-                    // TS: only the section STARTING at the queried position reads the clip.
+                    // TS: only the section STARTING at the queried position reads the clip; a MUTED clip
+                    // reads as the fallback = the field's storage value.
                     if section.from == position {
                         clips.iter().find(|bound| bound.clip_uuid == clip)
-                            .filter(|bound| bound.duration > 0.0)
-                            .map_or(fallback, |bound| bound.curve.value_at(position % bound.duration, fallback))
+                            .filter(|bound| bound.duration > 0.0 && !bound.mute)
+                            .and_then(|bound| bound.curve.value_at_opt(position % bound.duration))
                     } else {
-                        fallback
+                        None
                     }
                 }
             };
@@ -196,16 +203,22 @@ impl ParamCurve {
         value
     }
 
-    fn region_value_at(regions: &RegionCollection<ValueBoundRegion>, position: f64, fallback: f32) -> f32 {
-        let floor = regions.floor_last_index(position);
+    fn region_value_at(regions: &RegionCollection<ValueBoundRegion>, position: f64) -> Option<f32> {
+        // Walk down from the floor past MUTED regions (TS `lowerEqual(position, region => !region.mute)`),
+        // so a muted region applies nothing and the previous unmuted one rules instead.
+        let mut floor = regions.floor_last_index(position);
+        while floor >= 0 && regions.get(floor as usize).is_some_and(|region| region.mute) {
+            floor -= 1;
+        }
         if floor < 0 {
-            // Before the track's first region: its INCOMING value (TS `firstRegion.incomingValue(fallback)`).
-            return regions.get(0).map_or(fallback, |region| region.incoming_value(fallback));
+            // Before the track's first (unmuted) region: the FIRST region's INCOMING value — TS reads
+            // `optAt(0)` here WITHOUT the mute filter, quirk mirrored.
+            return regions.get(0).and_then(|region| region.incoming_value());
         }
         match regions.get(floor as usize) {
-            None => fallback,
-            Some(region) if position < region.position + region.duration => region.value_at(position, fallback),
-            Some(region) => region.outgoing_value(fallback)
+            None => None,
+            Some(region) if position < region.position + region.duration => region.value_at(position),
+            Some(region) => region.outgoing_value()
         }
     }
 }

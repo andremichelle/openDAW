@@ -207,6 +207,13 @@ impl ValueCurve {
         value_at(&self.0.borrow().events, position, fallback)
     }
 
+    /// Like [`Self::value_at`] but `None` when the curve is EMPTY, so the caller can fall back to the
+    /// parameter's STORED field value (TS's fallback is `getUnitValue()`, the mapped field).
+    pub fn value_at_opt(&self, position: f64) -> Option<f32> {
+        let state = self.0.borrow();
+        if state.events.is_empty() { None } else { Some(value_at(&state.events, position, 0.0)) }
+    }
+
     /// The FIRST event's value when it sits exactly at local position 0 (TS `ValueRegionBoxAdapter.
     /// incomingValue`'s `greaterEqual(0)` probe). With STACKED events at 0 this is the one first BY INDEX —
     /// `value_at(0)` floors to the LAST of the stack, a different value.

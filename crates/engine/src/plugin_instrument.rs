@@ -42,7 +42,10 @@ pub(crate) struct PluginInstrument {
     events: EventBuffer,
     output: SharedAudioBuffer,
     meter: engine_env::meter::Meter, // peaks/RMS of the device output (a broadcast slot)
-    activity: engine_env::telemetry::BroadcastSlot, // one float: the monotonic pulled-note count
+    // The owning UNIT's note-bits slot (TS `NoteEventInstrument`'s `NoteBroadcaster` at the unit address):
+    // pulled note starts SET, completes CLEAR the pitch bit. Captured from the engine's wiring context at
+    // construction; composite slots share their unit's slot (idempotent bit writes).
+    note_bits: Option<engine_env::telemetry::BroadcastSlot>,
     device_output: [Box<[f32]>; 2], // the device's stereo output buffers ([left, right])
     // `device_events` (the event scratch the device pulls into), `device_state`, and `out_offsets` are
     // referenced only by raw address inside `descriptor`; they must stay alive (dropping them frees the
@@ -96,7 +99,7 @@ impl PluginInstrument {
             events: EventBuffer::new(),
             output: shared_audio_buffer(),
             meter: engine_env::meter::Meter::new(sample_rate),
-            activity: engine_env::telemetry::broadcast_slot(1),
+            note_bits: crate::current_unit_note_bits(),
             device_output,
             device_events,
             device_state,
@@ -114,10 +117,7 @@ impl PluginInstrument {
         self.meter.slot()
     }
 
-    /// The pulled-note activity broadcast slot ([0] = a monotonic count).
-    pub(crate) fn activity_slot(&self) -> engine_env::telemetry::BroadcastSlot {
-        self.activity.clone()
-    }
+
 
     /// Enable / disable the instrument. Disabling drops its active voices immediately (TS instrument: the
     /// `enabled` observer calls `reset()`), so a held note stops rather than freezing; `process` then renders
@@ -185,7 +185,7 @@ impl Processor for PluginInstrument {
             pull.block_count = info.blocks.len();
             pull.sample_rate = self.sample_rate;
             pull.clock_armed = self.clock_armed;
-            pull.activity = Some(self.activity.clone()); // pulled notes credit THIS instrument's indicator
+            pull.note_bits = self.note_bits.clone(); // pulled notes mark THIS unit's note indicator
             core::mem::swap(&mut self.params, &mut pull.params); // move our params in (no alloc)
         }
         call_device_process(self.process_index, self.descriptor.as_ptr() as u32);
@@ -195,7 +195,7 @@ impl Processor for PluginInstrument {
             pull.blocks = core::ptr::null();
             pull.block_count = 0;
             pull.clock_armed = false;
-            pull.activity = None;
+            pull.note_bits = None;
             core::mem::swap(&mut self.params, &mut pull.params); // and take them back
         }
         {

@@ -166,6 +166,9 @@ class EngineProcessor extends AudioWorkletProcessor {
                     ring[Math.min(ints[0], ring.length - 1)] = 0
                     ints[0] = 0
                 }))
+            } else if (packageType === 3) { // INT ARRAY: a plain i32 mirror (e.g. the unit's note bits)
+                const ints = new Int32Array(this.#memory.buffer, ptr, length)
+                this.#broadcastSubs.push(this.#broadcaster.broadcastIntegers(address, ints, () => {}))
             } else { // PackageType.FloatArray
                 const values = new Float32Array(this.#memory.buffer, ptr, len)
                 this.#broadcastSubs.push(this.#broadcaster.broadcastFloats(address, values,

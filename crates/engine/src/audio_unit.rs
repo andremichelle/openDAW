@@ -252,6 +252,7 @@ pub(crate) struct BoundNoteClip {
     pub(crate) clip_uuid: Uuid,
     pub(crate) duration: f64,
     pub(crate) looped: bool,
+    pub(crate) mute: bool,
     pub(crate) collection: NoteCollection
 }
 
@@ -267,6 +268,9 @@ impl NoteTrackAccess for NoteTrackContent {
     }
     fn clip_events(&self, clip: &[u8; 16], visit: &mut dyn FnMut(&EventCollection<NoteEvent>)) {
         if let Some(bound) = self.clips.iter().find(|bound| &bound.clip_uuid == clip) {
+            if bound.mute {
+                return; // a muted launched clip emits no notes (the UI also gates launching a muted clip)
+            }
             visit(&bound.collection.events());
         }
     }
@@ -709,6 +713,10 @@ pub(crate) struct AudioUnitBinding {
     strip_automation: Rc<StripAutomation>, // the unit's volume / panning AUTOMATION overrides (Value-track curves)
     strip_param_subs: Vec<SubscriptionId>, // the volume / panning parameter observations (field + track hubs)
     strip_param_collections: Vec<ValueCollection>, // keep the strip curves' region collections alive
+    // The unit's NOTE-BITS broadcast (TS `NoteEventInstrument`'s `NoteBroadcaster` at the unit address,
+    // an Integers package of 128 held-note bits): every instrument built for this unit (leaf or composite
+    // slot) marks resolved note starts/completes here; the octave grids / note indicators subscribe to it.
+    note_bits: engine_env::telemetry::BroadcastSlot,
     input: IndexedCollection,
     midi: IndexedCollection,
     audio: IndexedCollection,
@@ -738,6 +746,14 @@ pub(crate) struct AudioUnitBinding {
     // regions, automation, composite, sidechain pointers) fire — so a related edit rewires one unit.
     mark: DirtyMark
 }
+
+impl AudioUnitBinding {
+    /// Clear the unit's held-note indicator bits (transport stop; TS `NoteBroadcaster.clear`).
+    pub(crate) fn clear_note_bits(&self) {
+        engine_env::telemetry::clear_note_bits(&self.note_bits);
+    }
+}
+
 
 impl Engine {
     /// Start observing the RootBox `audio-units` membership: each connected `AudioUnitBox` becomes a unit
@@ -988,6 +1004,8 @@ impl Engine {
     /// else re-bind its automation curves if those attached / detached. A full rewire re-gathers automation,
     /// so it also clears that flag.
     fn reconcile_one(&mut self, unit: &mut AudioUnitBinding) {
+        // Instruments built below (leaf or composite slots) capture THIS unit's note-bits slot.
+        crate::set_current_unit_note_bits(Some(unit.note_bits.clone()));
         reconcile_tracks(&mut self.graph, unit, &self.tempo_map, &self.clip_sequencer);
         // A region add / edit ran the cascade above: pre-warm the tape player NOW (reconcile), so a region
         // entering playback later never allocates its sequencer on the render path.
@@ -1052,6 +1070,7 @@ impl Engine {
             self.refresh_unit_params(unit);
         }
         set_params_signal(None);
+        crate::set_current_unit_note_bits(None);
         unit.params_dirty.set(false);
         unit.automation_dirty.set(false); // consume the joiner catch-up flags + the handled real change
     }
@@ -1090,11 +1109,19 @@ impl Engine {
         subs.extend(pan_subs);
         collections.extend(gain_collections);
         collections.extend(pan_collections);
+        // `resolve` hands back a UNIT value while the curve covers the position, else the FIELD's stored
+        // value with its own kind (already real dB / bipolar pan) — map only the unit case.
         if gain_handle.track.is_some() {
-            *automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| gain_mapping.y(gain_handle.resolve(position).0)));
+            *automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| {
+                let (value, kind) = gain_handle.resolve(position);
+                if kind == abi::PARAM_KIND_UNIT { gain_mapping.y(value) } else { value }
+            }));
         }
         if pan_handle.track.is_some() {
-            *automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| PAN.y(pan_handle.resolve(position).0)));
+            *automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| {
+                let (value, kind) = pan_handle.resolve(position);
+                if kind == abi::PARAM_KIND_UNIT { PAN.y(value) } else { value }
+            }));
         }
     }
 
@@ -1643,6 +1670,8 @@ impl Engine {
     /// from catch-up). No per-device-type logic: the device table (`device_for_type`) maps each box to its plugin.
     fn build_unit(&mut self, uuid: Uuid) -> AudioUnitBinding {
         let mark = DirtyMark {units: self.dirty_units.clone(), unit: uuid};
+        let note_bits = engine_env::telemetry::broadcast_slot(4);
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_INT_ARRAY, &note_bits);
         let track_sets: SharedTrackSets = Rc::new(RefCell::new(Vec::new()));
         let track_changes = Rc::new(RefCell::new(Members::default()));
         let recorder = track_changes.clone();
@@ -1711,7 +1740,7 @@ impl Engine {
             audio_track_sets: Rc::new(RefCell::new(Vec::new())), audio_tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub, solo_sub],
             strip_automation: Rc::new(StripAutomation::new()), strip_param_subs: Vec::new(), strip_param_collections: Vec::new(),
-            input, midi, audio, output_sub, routed: None, aux_sends, sends: Vec::new(),
+            note_bits, input, midi, audio, output_sub, routed: None, aux_sends, sends: Vec::new(),
             wired: None, automation_dirty, params_dirty, wiring_dirty, mark
         }
     }
@@ -2064,12 +2093,11 @@ impl Engine {
         // directly (TS: every device processor registers `adapter.address -> output`). A composite SLOT child
         // overwrites this with its post-fx cluster output right after (its child uuid IS the instrument uuid).
         self.output_registry.register(Address::of(uuid, vec![]), output.clone(), node_id);
-        // Live telemetry: the instrument's output peaks (TS `PeakBroadcaster(adapter.address)`) plus a monotonic
-        // note-activity counter at `.append(1)` (a WASM-only extra; TS broadcasts a 128-bit `Bits` set instead).
+        // Live telemetry: the instrument's output peaks (TS `PeakBroadcaster(adapter.address)`). The unit's
+        // 128-bit note set broadcasts separately (the binding's `note_bits`, marked from the pull path).
         let meter_slot = instrument.borrow().meter_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
-        let activity_slot = instrument.borrow().activity_slot();
-        self.broadcasts.register(uuid, &[1], crate::broadcast::PACKAGE_FLOAT, &activity_slot);
+
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), output: Some(output), params, sidechain: None, enabled_sub}
     }
@@ -2087,9 +2115,9 @@ impl Engine {
         let effect = Rc::new(PluginMidiEffect::new(device));
         let params = self.bind_device(uuid, device, effect.state_ptr(), ParamNode::Midi(effect.clone()), invalidate);
         refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
-        // Live telemetry: a monotonic note-activity counter (a WASM-only extra; TS broadcasts a `Bits` set).
-        let activity_slot = effect.activity_slot();
-        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT, &activity_slot);
+        // Live telemetry: the fx's 128-bit note set (TS midi effects own a `NoteBroadcaster` at the device address).
+        let note_bits = effect.note_bits_slot();
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_INT_ARRAY, &note_bits);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Midi(effect), node_id: None, output: None, params, sidechain: None, enabled_sub}
     }
@@ -2518,7 +2546,7 @@ impl Engine {
         }));
         let attach_invalidate = invalidate.clone();
         subs.push(self.graph.subscribe_pointer_hub(address, Box::new(move |_graph, _event| attach_invalidate())));
-        let (track, track_uuid, mut track_collections, clip_uuids) =
+        let (track, track_uuid, mut track_collections, rebind_uuids) =
             build_param_track(&mut self.graph, box_uuid, path, &self.clip_sequencer);
         if track.is_some() {
             armed = true;
@@ -2533,11 +2561,12 @@ impl Engine {
             let enabled_invalidate = invalidate.clone();
             subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(track_uuid, vec![TRACK_ENABLED_KEY]),
                 Box::new(move |_graph, _update| enabled_invalidate())));
-            // A clip's duration / loop-flag edit re-binds (the event CURVES stay live via ValueCollection).
-            for clip_uuid in clip_uuids {
-                let clip_invalidate = invalidate.clone();
-                subs.push(self.graph.subscribe_vertex(Propagation::Parent, Address::box_of(clip_uuid),
-                    Box::new(move |_graph, _update| clip_invalidate())));
+            // A bound region's / clip's own field edit — a move, a duration change, a MUTE toggle — re-binds
+            // the snapshot (the event CURVES stay live via ValueCollection).
+            for rebind_uuid in rebind_uuids {
+                let rebind_invalidate = invalidate.clone();
+                subs.push(self.graph.subscribe_vertex(Propagation::Parent, Address::box_of(rebind_uuid),
+                    Box::new(move |_graph, _update| rebind_invalidate())));
             }
         }
         collections.append(&mut track_collections);
@@ -2546,7 +2575,7 @@ impl Engine {
         // keys; the slot Rc lives in the handle, so a rebind/teardown drops it and the sweep unregisters.
         let broadcast = track.as_ref().map(|curve| {
             let slot = engine_env::telemetry::broadcast_slot(1);
-            slot.borrow_mut()[0] = curve.value_at(self.transport.position(), 0.0);
+            slot.borrow_mut()[0] = curve.value_at(self.transport.position()).unwrap_or(0.0);
             self.broadcasts.register(box_uuid, path, crate::broadcast::PACKAGE_FLOAT, &slot);
             slot
         });
@@ -2773,7 +2802,9 @@ pub(crate) fn resolve_and_deliver_target_string(graph: &BoxGraph, device_uuid: U
 
 /// The automation curve for a device parameter, if a Value track targets `(device_uuid, path)`: build a
 /// `ParamCurve` over that track's value regions and return it with the collections to terminate. `None` (and
-/// no collections) when the parameter has no automation track.
+/// no collections) when the parameter has no automation track. The last element is the REBIND set: every
+/// bound region + clip box uuid, each of which gets a targeted `Parent` monitor in `observe_param` so a
+/// field edit (a move, a mute toggle, a duration change) re-binds the snapshot.
 fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16],
                      clip_sequencer: &Rc<RefCell<ClipSequencer>>) -> (Option<ParamCurve>, Option<Uuid>, Vec<ValueCollection>, Vec<Uuid>) {
     // Find the Value track whose `target` points at this parameter. NOTE: this scans every TrackBox — it can
@@ -2804,37 +2835,40 @@ fn build_param_track(graph: &mut BoxGraph, device_uuid: Uuid, path: &[u16],
     }
     let mut regions = RegionCollection::new();
     let mut collections = Vec::new();
+    let mut rebind_uuids = Vec::new();
     for spec in value_regions_of_track(graph, track_uuid) {
         let collection = ValueCollection::observe(graph, spec.collection);
         regions.add(ValueBoundRegion {
             position: spec.position, duration: spec.duration,
             loop_offset: spec.loop_offset, loop_duration: spec.loop_duration,
+            mute: spec.mute,
             curve: collection.curve()
         });
         collections.push(collection);
+        rebind_uuids.push(spec.region);
     }
     // The track's launchable VALUE clips (TS `TrackBoxAdapter.valueAt`'s clip sections): each clip's live
     // event curve, read modulo the clip duration while launched. Rebound with the rest on automation_dirty.
     let mut clips = Vec::new();
-    let mut clip_uuids = Vec::new();
     for spec in value_clips_of_track(graph, track_uuid) {
         let collection = ValueCollection::observe(graph, spec.collection);
-        clips.push(BoundValueClip {clip_uuid: spec.clip, duration: spec.duration, looped: spec.looped, curve: collection.curve()});
+        clips.push(BoundValueClip {clip_uuid: spec.clip, duration: spec.duration, looped: spec.looped, mute: spec.mute, curve: collection.curve()});
         collections.push(collection);
-        clip_uuids.push(spec.clip);
+        rebind_uuids.push(spec.clip);
     }
-    (Some(ParamCurve::new(track_uuid, regions, clips, clip_sequencer.clone())), Some(track_uuid), collections, clip_uuids)
+    (Some(ParamCurve::new(track_uuid, regions, clips, clip_sequencer.clone())), Some(track_uuid), collections, rebind_uuids)
 }
 
 struct ValueClipSpec {
     clip: Uuid,
     collection: Uuid,
     duration: f64,
-    looped: bool
+    looped: bool,
+    mute: bool
 }
 
 /// The VALUE clips attached to a track's `clips` hub (key 4), each with its event collection, duration
-/// (key 10, pulses) and `triggerMode.loop` (path [4, 1], default TRUE).
+/// (key 10, pulses), `triggerMode.loop` (path [4, 1], default TRUE) and `mute` (key 11).
 fn value_clips_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<ValueClipSpec> {
     let mut specs = Vec::new();
     let clips_hub = Address::of(track_uuid, vec![TRACK_CLIPS_KEY]);
@@ -2849,7 +2883,8 @@ fn value_clips_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<ValueClipSpec
                 clip: clip_uuid,
                 collection,
                 duration: region_pulses(graph, clip_uuid, 10),
-                looped: graph.field_value(&Address::of(clip_uuid, vec![4, 1])).and_then(|value| value.as_bool()).unwrap_or(true)
+                looped: graph.field_value(&Address::of(clip_uuid, vec![4, 1])).and_then(|value| value.as_bool()).unwrap_or(true),
+                mute: graph.field_value(&Address::of(clip_uuid, vec![CLIP_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false)
             });
         }
     }
@@ -3018,31 +3053,36 @@ fn reconcile_clips(graph: &mut BoxGraph, collections: &mut CollectionCache,
     }
 }
 
-/// Read a clip's duration (key 10) + `triggerMode.loop` (path [4, 1], default TRUE), ACQUIRE its note-event
-/// collection (`events` pointer key 2), and register it in the track content. A targeted `Parent` sub keeps
-/// duration / loop fresh on edit. `None` if the clip has no collection.
+/// Read a clip's duration (key 10), `triggerMode.loop` (path [4, 1], default TRUE) and `mute` (key 11),
+/// ACQUIRE its note-event collection (`events` pointer key 2), and register it in the track content. A
+/// targeted `Parent` sub keeps duration / loop / mute fresh on edit. `None` if the clip has no collection.
 fn build_clip(graph: &mut BoxGraph, content: &SharedNoteTrack, collections: &mut CollectionCache, clip_uuid: Uuid) -> Option<ClipBinding> {
     let collection_uuid = graph.target_of(&Address::of(clip_uuid, vec![2]))?.uuid;
     let collection = collections.acquire(graph, collection_uuid);
-    let (duration, looped) = read_clip_playback(graph, clip_uuid);
-    content.borrow_mut().clips.push(BoundNoteClip {clip_uuid, duration, looped, collection});
+    let (duration, looped, mute) = read_clip_playback(graph, clip_uuid);
+    content.borrow_mut().clips.push(BoundNoteClip {clip_uuid, duration, looped, mute, collection});
     let edit_content = content.clone();
     let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(clip_uuid), Box::new(move |graph, _update| {
-        let (duration, looped) = read_clip_playback(graph, clip_uuid);
+        let (duration, looped, mute) = read_clip_playback(graph, clip_uuid);
         for bound in edit_content.borrow_mut().clips.iter_mut() {
             if bound.clip_uuid == clip_uuid {
                 bound.duration = duration;
                 bound.looped = looped;
+                bound.mute = mute;
             }
         }
     }));
     Some(ClipBinding {clip_uuid, collection_uuid, edit_sub})
 }
 
-fn read_clip_playback(graph: &BoxGraph, clip_uuid: Uuid) -> (f64, bool) {
+// NoteClipBox / ValueClipBox / AudioClipBox all carry `mute` at key 11 (WASM CONTRACT: mirror the TS schemas).
+const CLIP_MUTE_KEY: u16 = 11;
+
+fn read_clip_playback(graph: &BoxGraph, clip_uuid: Uuid) -> (f64, bool, bool) {
     let duration = region_pulses(graph, clip_uuid, 10);
     let looped = graph.field_value(&Address::of(clip_uuid, vec![4, 1])).and_then(|value| value.as_bool()).unwrap_or(true);
-    (duration, looped)
+    let mute = graph.field_value(&Address::of(clip_uuid, vec![CLIP_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false);
+    (duration, looped, mute)
 }
 
 /// Read a region's loopable span, ACQUIRE its note-event collection (`events` pointer key 2) from the cache
@@ -3073,13 +3113,19 @@ fn build_region(graph: &mut BoxGraph, content: &SharedNoteTrack, collections: &m
     Some(RegionBinding {region_uuid, collection_uuid, edit_sub})
 }
 
-/// Read a region's loopable span from the box graph (position 10, duration 11, loopOffset 12, loopDuration 13).
+// NoteRegionBox `mute` (WASM CONTRACT: mirror the TS NoteRegionBox schema — note regions carry mute at 15,
+// audio and value regions at 14).
+const NOTE_REGION_MUTE_KEY: u16 = 15;
+
+/// Read a region's loopable span from the box graph (position 10, duration 11, loopOffset 12, loopDuration 13)
+/// plus its `mute` (15) — the sequencer skips a muted region (TS `NoteSequencer.#processRegions`).
 fn read_note_region(graph: &BoxGraph, region_uuid: Uuid) -> NoteRegion {
     NoteRegion {
         position: region_pulses(graph, region_uuid, 10),
         duration: region_pulses(graph, region_uuid, 11),
         loop_offset: region_pulses(graph, region_uuid, 12),
-        loop_duration: region_pulses(graph, region_uuid, 13)
+        loop_duration: region_pulses(graph, region_uuid, 13),
+        mute: graph.field_value(&Address::of(region_uuid, vec![NOTE_REGION_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false)
     }
 }
 
@@ -3430,12 +3476,17 @@ const VALUE_REGION_EVENTS_KEY: u16 = 2; // ValueRegionBox.events -> the ValueEve
 
 /// One value region of an automation track: its `events` collection and loopable span.
 struct RegionSpec {
+    region: Uuid,
     collection: Uuid,
     position: f64,
     duration: f64,
     loop_offset: f64,
-    loop_duration: f64
+    loop_duration: f64,
+    mute: bool
 }
+
+// ValueRegionBox `mute` (WASM CONTRACT: mirror the TS ValueRegionBox schema — key 14, like audio regions).
+const VALUE_REGION_MUTE_KEY: u16 = 14;
 
 /// Every value region of an automation track: the `ValueRegionBox`es whose `regions` points at `track_uuid`,
 /// with their `events` collection and span (position 10, duration 11, loopOffset 12, loopDuration 13). Read
@@ -3452,11 +3503,13 @@ fn value_regions_of_track(graph: &BoxGraph, track_uuid: Uuid) -> Vec<RegionSpec>
         }
         if let Some(collection) = graph.target_of(&Address::of(region_uuid, vec![VALUE_REGION_EVENTS_KEY])).map(|address| address.uuid) {
             specs.push(RegionSpec {
+                region: region_uuid,
                 collection,
                 position: region_pulses(graph, region_uuid, 10),
                 duration: region_pulses(graph, region_uuid, 11),
                 loop_offset: region_pulses(graph, region_uuid, 12),
-                loop_duration: region_pulses(graph, region_uuid, 13)
+                loop_duration: region_pulses(graph, region_uuid, 13),
+                mute: graph.field_value(&Address::of(region_uuid, vec![VALUE_REGION_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false)
             });
         }
     }
@@ -4554,19 +4607,19 @@ mod tests {
             ])
         ]);
         let sequencer = clip_rc();
-        let (curve, _, collections, clip_uuids) = build_param_track(&mut graph, DEVICE, &path, &sequencer);
+        let (curve, _, collections, rebind_uuids) = build_param_track(&mut graph, DEVICE, &path, &sequencer);
         let curve = curve.expect("a targeting track with a region -> a curve");
-        assert_eq!(clip_uuids, vec![VCLIP], "the value clip is bound");
+        assert_eq!(rebind_uuids, vec![REGION, VCLIP], "the region and the value clip are bound for re-binds");
         // Timeline automation resolves while nothing is launched.
-        assert_eq!(curve.value_at(0.0, 0.5), 0.7);
+        assert_eq!(curve.value_at(0.0), Some(0.7));
         // Launching the clip replaces the timeline value (the section starts at the queried position).
         sequencer.borrow_mut().schedule_play(TRACK, VCLIP);
-        assert_eq!(curve.value_at(0.0, 0.5), 0.9);
+        assert_eq!(curve.value_at(0.0), Some(0.9));
         // The clip's curve reads modulo ITS duration while it keeps playing.
-        assert_eq!(curve.value_at(1920.0, 0.5), 0.9);
+        assert_eq!(curve.value_at(1920.0), Some(0.9));
         // A scheduled stop hands back to the timeline at the boundary.
         sequencer.borrow_mut().schedule_stop(TRACK);
-        assert_eq!(curve.value_at(3840.0, 0.5), 0.7);
+        assert_eq!(curve.value_at(3840.0), Some(0.7));
         assert!(!collections.is_empty());
     }
 
@@ -4579,7 +4632,7 @@ mod tests {
         let curve = curve.expect("the parameter at the deep path has an automation track");
         assert_eq!(track_uuid, Some(TRACK), "the targeting track is found (its region hub is then watched)");
         assert_eq!(collections.len(), 1, "its one value region's collection is observed");
-        assert_eq!(curve.value_at(0.0, -1.0), 0.7, "and the curve reads its event through that path");
+        assert_eq!(curve.value_at(0.0), Some(0.7), "and the curve reads its event through that path");
         // A different path on the same device has no track.
         let (none, _, _, _) = build_param_track(&mut graph, DEVICE, &[16, 5, 11], &clip_rc());
         assert!(none.is_none(), "an unbound path has no automation track");
@@ -4619,12 +4672,12 @@ mod tests {
         let (curve_a, track_a, cols_a, _) = build_param_track(&mut graph, DEVICE, &path_a, &clip_rc());
         assert_eq!(track_a, Some(TRACK), "param A resolves to its own track");
         assert_eq!(cols_a.len(), 1, "param A observes ONLY its own track's value region");
-        assert_eq!(curve_a.expect("curve A").value_at(0.0, -1.0), 0.7);
+        assert_eq!(curve_a.expect("curve A").value_at(0.0), Some(0.7));
 
         let (curve_b, track_b, cols_b, _) = build_param_track(&mut graph, DEVICE, &path_b, &clip_rc());
         assert_eq!(track_b, Some(TRACK_B), "param B resolves to the OTHER track");
         assert_eq!(cols_b.len(), 1, "param B observes ONLY its own track's value region");
-        assert_eq!(curve_b.expect("curve B").value_at(0.0, -1.0), 0.3);
+        assert_eq!(curve_b.expect("curve B").value_at(0.0), Some(0.3));
     }
 
     #[test]
@@ -4661,11 +4714,11 @@ mod tests {
         let mut graph = BoxGraph::from_boxes(boxes);
         let curve = build_param_track(&mut graph, DEVICE, &path, &clip_rc()).0.expect("two regions -> a curve");
 
-        assert_eq!(curve.value_at(-10.0, -1.0), 0.2, "before the first region: its incoming value");
-        assert_eq!(curve.value_at(50.0, -1.0), 0.2, "inside region A");
-        assert_eq!(curve.value_at(150.0, -1.0), 0.2, "in the gap after A: A's HELD outgoing value, not B's");
-        assert_eq!(curve.value_at(250.0, -1.0), 0.8, "inside region B");
-        assert_eq!(curve.value_at(500.0, -1.0), 0.8, "past the last region: B's HELD outgoing value");
+        assert_eq!(curve.value_at(-10.0), Some(0.2), "before the first region: its incoming value");
+        assert_eq!(curve.value_at(50.0), Some(0.2), "inside region A");
+        assert_eq!(curve.value_at(150.0), Some(0.2), "in the gap after A: A's HELD outgoing value, not B's");
+        assert_eq!(curve.value_at(250.0), Some(0.8), "inside region B");
+        assert_eq!(curve.value_at(500.0), Some(0.8), "past the last region: B's HELD outgoing value");
     }
 
     #[test]
@@ -4699,7 +4752,7 @@ mod tests {
         let (curve, track_uuid, collections, _) = build_param_track(&mut graph, CHILD, &[4], &clip_rc());
         assert_eq!(track_uuid, Some(TRACK), "the track targeting the child's value field is found");
         assert_eq!(collections.len(), 1, "its one value region's collection is observed");
-        assert_eq!(curve.expect("child param has an automation curve").value_at(0.0, -1.0), 0.7,
+        assert_eq!(curve.expect("child param has an automation curve").value_at(0.0), Some(0.7),
             "the unit automation value reaches the child param (the bridge then maps it via the @param)");
     }
 

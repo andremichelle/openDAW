@@ -207,7 +207,7 @@ export class TrackBoxAdapter implements BoxAdapter {
                 },
                 some: clip => {
                     if (sectionFrom === position) {
-                        if (isInstanceOf(clip, ValueClipBoxAdapter)) {
+                        if (isInstanceOf(clip, ValueClipBoxAdapter) && !clip.mute) {
                             return clip.valueAt(position, fallback)
                         }
                     }

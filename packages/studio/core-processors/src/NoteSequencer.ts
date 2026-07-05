@@ -190,7 +190,7 @@ export class NoteSequencer implements NoteEventSource, Terminable {
     toString(): string {return `{${this.constructor.name}}`}
 
     * #processClip(clip: NoteClipBoxAdapter, p0: ppqn, p1: ppqn): IterableIterator<Id<NoteEvent>> {
-        if (clip.optCollection.isEmpty()) {return}
+        if (clip.mute || clip.optCollection.isEmpty()) {return}
         const truncateNotesAtRegionEnd = this.#context.preferences.settings.playback.truncateNotesAtRegionEnd
         const collection = clip.optCollection.unwrap()
         const clipDuration = clip.duration

@@ -85,6 +85,16 @@ describe("audio-clip playback", () => {
         // The clip LOOPS at its duration: still audible after more than a bar.
         expect(peakOf(64)).toBeGreaterThan(0.01)
 
+        // MUTED WHILE PLAYING: a muted audio clip is IGNORED (silent over a full clip cycle), and resumes
+        // when unmuted — it stays launched throughout.
+        source.beginTransaction(); clipBox.mute.setValue(true); source.endTransaction()
+        await sync.settle()
+        peakOf(32) // flush the render quantum straddling the edit
+        expect(peakOf(750)).toBe(0)
+        source.beginTransaction(); clipBox.mute.setValue(false); source.endTransaction()
+        await sync.settle()
+        expect(peakOf(750)).toBeGreaterThan(0.01)
+
         // A scheduled stop ends it at the next bar boundary: after rendering past it, silence returns.
         scheduleUuid(track.address.uuid, () => engine.schedule_clip_stop())
         peakOf(720) // render past the boundary (a bar is 2s at 120bpm = 750 quanta; changes land within)

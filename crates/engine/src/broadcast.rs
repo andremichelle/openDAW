@@ -19,6 +19,9 @@ pub const PACKAGE_FLOAT_ARRAY: u32 = 1;
 // consumer (the worklet) mirrors `[1..]` as an Integers package and, per UI tick, writes the 0 sentinel at
 // the index and resets it — the TS `broadcastIntegers` consume-on-read (e.g. the Velocity device's ring).
 pub const PACKAGE_INT_RING: u32 = 2;
+// A PLAIN i32 array mirrored as an Integers package (no consume semantics) — e.g. the per-unit NOTE BITS
+// (TS `NoteBroadcaster`: a 128-bit set of held notes the octave grids / note indicators subscribe to).
+pub const PACKAGE_INT_ARRAY: u32 = 3;
 
 pub struct BroadcastEntry {
     pub uuid: Uuid,
@@ -44,7 +47,10 @@ impl Broadcasts {
         // already claims (uuid, keys), keep it and skip — a DEVICE-bound slot at the same address (e.g. the
         // Playfield slot's voice positions at the bare pad address) takes precedence over the engine's
         // generic meter, which registers after `bind_device`. Dead entries do not block (swept later).
-        if self.entries.iter().any(|entry| entry.uuid == uuid && entry.keys == keys && entry.owner.upgrade().is_some()) {
+        // Same-TYPE only: TS runs different package kinds at ONE address (the unit's peaks FLOATS + its
+        // note-bits INTEGERS), which the receiver disambiguates by subscription kind.
+        if self.entries.iter().any(|entry| entry.uuid == uuid && entry.keys == keys
+            && entry.package_type == package_type && entry.owner.upgrade().is_some()) {
             return;
         }
         let (ptr, len) = {
@@ -81,6 +87,7 @@ impl Broadcasts {
         self.entries.len()
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -103,6 +110,7 @@ mod tests {
     #[test]
     fn register_sweep_and_generation() {
         let mut broadcasts = Broadcasts::default();
+        assert!(broadcasts.is_empty());
         assert_eq!(broadcasts.generation(), 0);
         let alive: BroadcastSlot = engine_env::telemetry::broadcast_slot(4);
         let doomed: BroadcastSlot = engine_env::telemetry::broadcast_slot(1);

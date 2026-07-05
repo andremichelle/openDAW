@@ -376,6 +376,17 @@ static INPUTS: Shared<Vec<(u32, u32, u32)>> = Shared::new(Vec::new());
 // own uuid via `host_self_uuid` (the engine knows it at bind; the device does not, since it only uses relative
 // field paths). The engine sets it right before `call_device_init`. Its own cell, set + read outside render.
 static CURRENT_DEVICE_UUID: Shared<[u8; 16]> = Shared::new([0; 16]);
+// The note-bits slot of the unit CURRENTLY reconciling (its instruments capture it at construction —
+// composite slots share their unit's slot). Set around `reconcile_one`'s chain work, cleared after.
+static CURRENT_UNIT_NOTE_BITS: Shared<Option<engine_env::telemetry::BroadcastSlot>> = Shared::new(None);
+
+pub(crate) fn current_unit_note_bits() -> Option<engine_env::telemetry::BroadcastSlot> {
+    unsafe { CURRENT_UNIT_NOTE_BITS.get() }.clone()
+}
+
+pub(crate) fn set_current_unit_note_bits(slot: Option<engine_env::telemetry::BroadcastSlot>) {
+    *unsafe { CURRENT_UNIT_NOTE_BITS.get() } = slot;
+}
 
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
 /// instrument that consumes it). A leaf `Source` is the note sequencer; a `MidiFx` wraps a
@@ -410,17 +421,17 @@ struct PullContext {
     // returns real grid points (and the render fragments); otherwise it returns INFINITY (no fragmentation).
     params: Vec<ParamHandle>,
     clock_armed: bool,
-    // The CURRENT CONSUMER's note-activity slot ([0] is a monotonic pulled-note counter the UI diffs to
-    // flash an indicator). Set by `PluginInstrument` around its device call; cleared during a MidiFx descent
-    // so nested pulls credit only their own producers.
-    activity: Option<engine_env::telemetry::BroadcastSlot>
+    // The CURRENT CONSUMER's unit note-bits slot (TS `NoteEventInstrument`'s 128-bit `NoteBroadcaster`):
+    // resolved note starts/completes set/clear pitch bits. Set by `PluginInstrument` around its device call;
+    // cleared during a MidiFx descent so nested pulls mark only their own producers.
+    note_bits: Option<engine_env::telemetry::BroadcastSlot>
 }
 
 impl PullContext {
     const fn new() -> Self {
         Self {
             current: None, blocks: core::ptr::null(), block_count: 0, sample_rate: 0.0, scratch: Vec::new(),
-            params: Vec::new(), clock_armed: false, activity: None
+            params: Vec::new(), clock_armed: false, note_bits: None
         }
     }
 }
@@ -463,8 +474,8 @@ fn lifecycle_id(event: &Event) -> u64 {
 #[no_mangle]
 pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
     let link = { unsafe { PULL.get() }.current.clone() };
-    // The CONSUMER's activity slot, taken before any descent below swaps it out.
-    let consumer_activity = { unsafe { PULL.get() }.activity.clone() };
+    // The CONSUMER's note-bits slot, taken before any descent below swaps it out.
+    let consumer_bits = { unsafe { PULL.get() }.note_bits.clone() };
     let count = match link {
         Some(PullLink::Source(ref source)) => pull_from_source(source, from, to, flags, out_ptr, max),
         Some(PullLink::SlotRoute {ref upstream, ref choke, ref gate}) => pull_from_slot_route(upstream, choke, gate, from, to, flags, out_ptr, max),
@@ -479,25 +490,32 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
                 effect.swap_params(&mut pull.params);
                 pull.clock_armed = effect.clock_armed();
                 pull.current = Some((*upstream).clone());
-                pull.activity = None; // nested pulls credit only their own producers (each fx bumps itself)
+                pull.note_bits = None; // nested pulls mark only their own producers (each fx marks itself)
                 saved
             };
             let count = effect.process_events(from, to, flags, out_ptr, max);
-            effect.bump_activity(count);
+            effect.mark_notes(unsafe { core::slice::from_raw_parts(out_ptr as *const EventRecord, count as usize) });
             {
                 let pull = unsafe { PULL.get() };
                 effect.swap_params(&mut pull.params);
                 pull.clock_armed = saved_armed;
                 pull.current = Some(PullLink::MidiFx {effect, upstream});
-                pull.activity = consumer_activity.clone();
+                pull.note_bits = consumer_bits.clone();
             }
             count
         }
         None => 0
     };
     if count > 0 {
-        if let Some(slot) = consumer_activity {
-            slot.borrow_mut()[0] += count as f32;
+        if let Some(slot) = consumer_bits {
+            // Mark the UNIT's held notes (TS `NoteEventInstrument.#showEvent` per resolved lifecycle event).
+            for record in unsafe { core::slice::from_raw_parts(out_ptr as *const EventRecord, count as usize) } {
+                if record.kind == EVENT_NOTE_ON {
+                    engine_env::telemetry::set_note_bit(&slot, record.pitch as i32, true);
+                } else if record.kind == EVENT_NOTE_OFF {
+                    engine_env::telemetry::set_note_bit(&slot, record.pitch as i32, false);
+                }
+            }
         }
     }
     count
@@ -1089,6 +1107,9 @@ impl Engine {
         self.transport.stop(true);
         self.clip_sequencer.borrow_mut().reset();
         self.context.reset_all();
+        for unit in &self.audio_units {
+            unit.clear_note_bits(); // TS `NoteEventInstrument.clear` on reset: no stuck note indicators
+        }
         if let Some(buffer) = self.output_bus.as_ref() {
             let mut buffer = buffer.borrow_mut();
             buffer.left.fill(0.0);
