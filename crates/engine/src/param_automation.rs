@@ -89,6 +89,17 @@ impl ValueBoundRegion {
         self.curve.value_at(self.local(position), fallback)
     }
 
+    /// The region's INCOMING value, for a position BEFORE the track's first region (mirrors TS
+    /// `ValueRegionBoxAdapter.incomingValue`): the FIRST curve event when one sits at local 0. On STACKED
+    /// events at 0, `value_at(0)` floors to the LAST of the stack — a different value (the atstil
+    /// pad-StereoTool bug: TS resolved the stack's first, wasm its last). Falls back to the region start.
+    fn incoming_value(&self, fallback: f32) -> f32 {
+        match self.curve.incoming_zero_value() {
+            Some(value) => value,
+            None => self.value_at(self.position, fallback)
+        }
+    }
+
     /// The region's OUTGOING value, for a position AT/AFTER its end (mirrors TS `ValueRegionBoxAdapter.
     /// outgoingValue`). When the region ends exactly on a loop boundary, read the curve at the loop END
     /// (`loop_duration`, UN-wrapped) so an automated parameter HOLDS its last value; otherwise the wrapped local
@@ -188,7 +199,8 @@ impl ParamCurve {
     fn region_value_at(regions: &RegionCollection<ValueBoundRegion>, position: f64, fallback: f32) -> f32 {
         let floor = regions.floor_last_index(position);
         if floor < 0 {
-            return regions.get(0).map_or(fallback, |region| region.value_at(region.position, fallback));
+            // Before the track's first region: its INCOMING value (TS `firstRegion.incomingValue(fallback)`).
+            return regions.get(0).map_or(fallback, |region| region.incoming_value(fallback));
         }
         match regions.get(floor as usize) {
             None => fallback,

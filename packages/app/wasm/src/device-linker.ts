@@ -51,13 +51,14 @@ export type LinkerEngine = {
     device_set_box_type: (deviceId: number, nameLen: number) => void
     composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number,
                          cellInstrumentField: number, cellMidiField: number, cellAudioField: number,
-                         childEnabledKey: number) => void
+                         childEnabledKey: number, childMuteKey: number, childSoloKey: number) => void
     input_reserve: (len: number) => number
 }
 
 export type CompositeRegistration = {
     boxType: string, childrenField: number, indexKey: number, excludeKey: number,
-    cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number
+    cellInstrumentField: number, cellMidiField: number, cellAudioField: number,
+    childEnabledKey: number, childMuteKey: number, childSoloKey: number
 }
 
 const readVarU32 = (bytes: Uint8Array, pos: number): [number, number] => {
@@ -151,5 +152,6 @@ export const linkDevice = (engine: LinkerEngine, memory: WebAssembly.Memory, tab
 // name, then map its child collection fields. The child plugin itself is a normal `linkDevice` entry.
 export const registerComposite = (engine: LinkerEngine, memory: WebAssembly.Memory, spec: CompositeRegistration): void => {
     engine.composite_register(writeName(engine, memory, spec.boxType), spec.childrenField, spec.indexKey,
-        spec.excludeKey, spec.cellInstrumentField, spec.cellMidiField, spec.cellAudioField, spec.childEnabledKey)
+        spec.excludeKey, spec.cellInstrumentField, spec.cellMidiField, spec.cellAudioField, spec.childEnabledKey,
+        spec.childMuteKey, spec.childSoloKey)
 }

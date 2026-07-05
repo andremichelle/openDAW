@@ -206,4 +206,12 @@ impl ValueCurve {
     pub fn value_at(&self, position: f64, fallback: f32) -> f32 {
         value_at(&self.0.borrow().events, position, fallback)
     }
+
+    /// The FIRST event's value when it sits exactly at local position 0 (TS `ValueRegionBoxAdapter.
+    /// incomingValue`'s `greaterEqual(0)` probe). With STACKED events at 0 this is the one first BY INDEX —
+    /// `value_at(0)` floors to the LAST of the stack, a different value.
+    pub fn incoming_zero_value(&self) -> Option<f32> {
+        self.0.borrow().events.greater_equal(0.0)
+            .filter(|event| event.position == 0.0).map(|event| event.value)
+    }
 }

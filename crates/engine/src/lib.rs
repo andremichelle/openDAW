@@ -92,7 +92,12 @@ pub(crate) struct CompositeSpec {
     // A child's `enabled` BooleanField (0 = the composite does not support per-child enable). A disabled child
     // is dropped from the sum (silenced) edge-only, its processors kept. Playfield's slot key is 22, not the
     // base device key 4, so it is declared per composite.
-    pub(crate) child_enabled_key: u16
+    pub(crate) child_enabled_key: u16,
+    // A child's `mute` / `solo` BooleanFields (0 = unsupported). Mirrors TS `SampleProcessor.handleEvent`:
+    // a child is SILENT (its note STARTS dropped, releases still pass) when muted, or when any sibling is
+    // soloed and it is not. Playfield's slot keys are 40 / 41.
+    pub(crate) child_mute_key: u16,
+    pub(crate) child_solo_key: u16
 }
 
 // Call a device's `process` through the shared function table: a wasm function pointer IS a table index,
@@ -373,7 +378,9 @@ enum PullLink {
     // A composite child's choke injector over a shared note source: pass every note through (the child device
     // filters to its own note), and ADD a `CHOKE` record when a note in `choke` (its sibling choke group) fires.
     // A leaf link like `Source`. `choke` is an `Rc` so cloning the link (each pull) does not allocate.
-    SlotRoute { upstream: SharedNoteEventSource, choke: Rc<[i32]> },
+    // `gate` is the child's SILENT flag (mute / not-soloed, TS `SampleProcessor.handleEvent`): while set, the
+    // child's note STARTS are dropped (releases + chokes still pass, so held voices stop like TS).
+    SlotRoute { upstream: SharedNoteEventSource, choke: Rc<[i32]>, gate: Rc<Cell<bool>> },
     MidiFx { effect: Rc<PluginMidiEffect>, upstream: Rc<PullLink> }
 }
 
@@ -450,7 +457,7 @@ pub extern "C" fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32,
     let consumer_activity = { unsafe { PULL.get() }.activity.clone() };
     let count = match link {
         Some(PullLink::Source(ref source)) => pull_from_source(source, from, to, flags, out_ptr, max),
-        Some(PullLink::SlotRoute {ref upstream, ref choke}) => pull_from_slot_route(upstream, choke, from, to, flags, out_ptr, max),
+        Some(PullLink::SlotRoute {ref upstream, ref choke, ref gate}) => pull_from_slot_route(upstream, choke, gate, from, to, flags, out_ptr, max),
         Some(PullLink::MidiFx {effect, upstream}) => {
             // Descend into the fx: swap in ITS params + clock-armed state + the upstream link, so the fx's own
             // `host_update_parameters` / `next_update_position` see the fx's automation and its upstream pull
@@ -712,7 +719,7 @@ fn pull_from_source(source: &SharedNoteEventSource, from: f64, to: f64, flags: u
 /// in this child's choke group (`choke`) fires. The choke is emitted just before that note (and the device
 /// re-sorts CHOKE before note-on anyway), so the child's voices release before any simultaneous own note. Same
 /// layering as `pull_from_source`. Used only for a child that is in a choke group; others use `Source`.
-fn pull_from_slot_route(upstream: &SharedNoteEventSource, choke: &[i32], from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
+fn pull_from_slot_route(upstream: &SharedNoteEventSource, choke: &[i32], gate: &Cell<bool>, from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32 {
     let pull = unsafe { PULL.get() };
     pull.scratch.clear();
     upstream.borrow_mut().process_notes(from, to, BlockFlags(flags), &mut |event| pull.scratch.push(event));
@@ -731,6 +738,9 @@ fn pull_from_slot_route(upstream: &SharedNoteEventSource, choke: &[i32], from: f
                     if count >= out.len() {
                         break;
                     }
+                }
+                if gate.get() {
+                    continue; // silent (muted / not soloed): the start never reaches the device (TS mirror)
                 }
                 out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_ON, id: id as u32, pitch: pitch as u32, velocity, cent, duration: 0.0};
             }
@@ -914,9 +924,10 @@ impl Engine {
     /// whole composite glue — the host registers it once and the engine learns nothing else about it.
     #[allow(clippy::too_many_arguments)] // one positional field key per composite facet, matching the loader
     fn register_composite(&mut self, box_type: String, children_field: u16, index_key: u16, exclude_key: u16,
-                          cell_instrument_field: u16, cell_midi_field: u16, cell_audio_field: u16, child_enabled_key: u16) {
+                          cell_instrument_field: u16, cell_midi_field: u16, cell_audio_field: u16, child_enabled_key: u16,
+                          child_mute_key: u16, child_solo_key: u16) {
         self.composites.push(CompositeSpec {box_type, children_field, index_key, exclude_key,
-            cell_instrument_field, cell_midi_field, cell_audio_field, child_enabled_key});
+            cell_instrument_field, cell_midi_field, cell_audio_field, child_enabled_key, child_mute_key, child_solo_key});
     }
 
     /// The composite spec for a box TYPE, if it is a registered composite host (else `None`, a leaf device).
@@ -1624,7 +1635,8 @@ pub extern "C" fn device_set_box_type(device_id: u32, name_len: usize) {
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn composite_register(name_len: usize, children_field: u32, index_key: u32, exclude_key: u32,
-                                     cell_instrument_field: u32, cell_midi_field: u32, cell_audio_field: u32, child_enabled_key: u32) {
+                                     cell_instrument_field: u32, cell_midi_field: u32, cell_audio_field: u32, child_enabled_key: u32,
+                                     child_mute_key: u32, child_solo_key: u32) {
     unsafe {
         let engine = match ENGINE.get().as_mut() {
             Some(engine) => engine,
@@ -1633,7 +1645,8 @@ pub extern "C" fn composite_register(name_len: usize, children_field: u32, index
         let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), name_len);
         if let Ok(name) = core::str::from_utf8(bytes) {
             engine.register_composite(String::from(name), children_field as u16, index_key as u16, exclude_key as u16,
-                cell_instrument_field as u16, cell_midi_field as u16, cell_audio_field as u16, child_enabled_key as u16);
+                cell_instrument_field as u16, cell_midi_field as u16, cell_audio_field as u16, child_enabled_key as u16,
+                child_mute_key as u16, child_solo_key as u16);
         }
     }
 }

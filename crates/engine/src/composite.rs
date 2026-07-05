@@ -85,7 +85,9 @@ struct CompositeChild {
     output_node: NodeId,                    // the node feeding the sum (sum edge: output_node -> sum_id)
     summed: bool,                           // whether `output` is currently a source of the sum (false = disabled)
     enabled_sub: Option<SubscriptionId>,    // monitor on the child's OWN `enabled` field (None if unsupported)
-    effects_dirty: Rc<Cell<bool>>           // set by a slot member's `enabled` toggle -> reconcile this slot
+    effects_dirty: Rc<Cell<bool>>,          // set by a slot member's `enabled` toggle -> reconcile this slot
+    gate: Rc<Cell<bool>>,                   // the child's SILENT flag (mute / not-soloed), read by its pull route
+    gate_subs: Vec<SubscriptionId>          // monitors on the child's `mute` / `solo` fields (empty if unsupported)
 }
 
 /// Sync a child's sum membership to its `enabled`: add its output as a source when it should be summed but is
@@ -167,14 +169,57 @@ impl CompositeBinding {
     }
 }
 
+/// One child's reconcile-time facts, read from the graph each pass: its routing note, its choke-group flag,
+/// whether it is SILENT (muted, or not soloed while a sibling is — TS `SampleProcessor.handleEvent`), and
+/// whether it OWNS its routing note (TS routes a note to exactly ONE pad per index — see `route_owners`).
+#[derive(Clone, Copy)]
+pub(crate) struct ChildInfo {
+    uuid: Uuid,
+    index: Option<i32>,
+    exclude: bool,
+    silent: bool,
+    route_owner: bool
+}
+
+/// Mark, per child, whether it receives its index's notes: TS `PlayfieldDeviceProcessor.optSampleProcessor`
+/// resolves a note via `getAdapterByIndex` — a MIDPOINT binary search over the pads sorted by (index, then
+/// uuid: a stable sort over the uuid-ordered set) — so of several children sharing an index exactly ONE (the
+/// search's pick) plays; the others get no events at all. Mirror the exact search so the pick matches TS.
+fn route_owners(infos: &mut [ChildInfo]) {
+    let mut sorted: Vec<(i32, Uuid)> = infos.iter()
+        .filter_map(|info| info.index.map(|index| (index, info.uuid))).collect();
+    sorted.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+    let owner_of = |key: i32| -> Option<Uuid> {
+        let mut low: isize = 0;
+        let mut high: isize = sorted.len() as isize - 1;
+        while low <= high {
+            let mid = ((low + high) >> 1) as usize;
+            match sorted[mid].0.cmp(&key) {
+                core::cmp::Ordering::Equal => return Some(sorted[mid].1),
+                core::cmp::Ordering::Less => low = mid as isize + 1,
+                core::cmp::Ordering::Greater => high = mid as isize - 1
+            }
+        }
+        None
+    };
+    for info in infos.iter_mut() {
+        info.route_owner = match info.index {
+            Some(index) => owner_of(index) == Some(info.uuid),
+            None => true // no routing: every child sees the full stream
+        };
+    }
+}
+
 /// The choke group a child receives: every OTHER exclude child's note. A non-exclude child gets none (it sees
-/// the full stream and filters its own note). Recomputed each reconcile so a membership change re-chokes
-/// siblings.
-fn choke_for(infos: &[(Uuid, Option<i32>, bool)], index: Option<i32>, exclude: bool) -> Vec<i32> {
+/// the full stream and filters its own note). A SILENT or non-route-owner sibling does not choke (TS returns
+/// before `stopExcludeOthers` when the pad is muted / not soloed, and a non-owner pad never starts a voice).
+/// Recomputed each reconcile so a membership, mute, or solo change re-chokes siblings.
+fn choke_for(infos: &[ChildInfo], index: Option<i32>, exclude: bool) -> Vec<i32> {
     if !exclude {
         return Vec::new();
     }
-    infos.iter().filter(|(_, _, other)| *other).filter_map(|(_, note, _)| *note)
+    infos.iter().filter(|other| other.exclude && !other.silent && other.route_owner)
+        .filter_map(|other| other.index)
         .filter(|note| Some(*note) != index).collect()
 }
 
@@ -218,13 +263,16 @@ impl Engine {
         let infos = self.child_infos(&desired, &spec);
         let mut pool: BTreeMap<Uuid, CompositeChild> = binding.members.drain(..).map(|child| (child.uuid, child)).collect();
         let mut members: Vec<CompositeChild> = Vec::new();
-        for (uuid, index, exclude) in &infos {
-            let choke = choke_for(&infos, *index, *exclude);
-            let reconciled = match pool.remove(uuid) {
+        for info in &infos {
+            let choke = choke_for(&infos, info.index, info.exclude);
+            let reconciled = match pool.remove(&info.uuid) {
                 Some(child) => self.reconcile_one_child(binding, child, choke, &spec, track_sets, signal, invalidate),
-                None => self.build_one_child(binding.sum.clone(), binding.sum_id, track_sets, *uuid, choke, &spec, signal, invalidate)
+                None => self.build_one_child(binding.sum.clone(), binding.sum_id, track_sets, info.uuid, choke, &spec, signal, invalidate)
             };
             if let Some(child) = reconciled {
+                // Resolved across all siblings (solo + index ownership are cross-child facts), so it lands
+                // AFTER every read: silent (mute / not-soloed) or not this index's route owner = no starts.
+                child.gate.set(info.silent || !info.route_owner);
                 members.push(child);
             }
         }
@@ -247,7 +295,7 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // threads the reconcile cascade context
     fn reconcile_one_child(&mut self, binding: &mut CompositeBinding, child: CompositeChild, choke: Vec<i32>,
                            spec: &CompositeSpec, track_sets: &SharedTrackSets, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> Option<CompositeChild> {
-        let CompositeChild {uuid, choke: old_choke, body, output, output_node, summed, enabled_sub, effects_dirty} = child;
+        let CompositeChild {uuid, choke: old_choke, body, output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs} = child;
         let choke_changed = old_choke != choke;
         match body {
             ChildBody::Slot {cluster, device, midi_obs, audio_obs} => {
@@ -259,7 +307,7 @@ impl Engine {
                     let midi_uuids = midi_obs.as_ref().map(|obs| obs.sorted()).unwrap_or_default();
                     let audio_uuids = audio_obs.as_ref().map(|obs| obs.sorted()).unwrap_or_default();
                     let rewire = slot_rewire(&effects_dirty, signal);
-                    let cluster = self.reconcile_slot_cluster(Some(cluster), uuid, device, &midi_uuids, &audio_uuids, track_sets, &choke, signal, invalidate, &rewire);
+                    let cluster = self.reconcile_slot_cluster(Some(cluster), uuid, device, &midi_uuids, &audio_uuids, track_sets, &choke, &gate, signal, invalidate, &rewire);
                     self.context.register_edge(cluster.output_node, binding.sum_id);
                     self.output_registry.register(Address::of(uuid, vec![]), cluster.output.clone(), cluster.output_node);
                     let (output, output_node) = (cluster.output.clone(), cluster.output_node);
@@ -269,20 +317,20 @@ impl Engine {
                 };
                 let summed = sync_sum(&binding.sum, &output, summed, self.child_enabled(uuid, spec.child_enabled_key));
                 Some(CompositeChild {uuid, choke, body: ChildBody::Slot {cluster, device, midi_obs, audio_obs},
-                    output, output_node, summed, enabled_sub, effects_dirty})
+                    output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs})
             }
             ChildBody::Cell {chains, nodes, edges, device_params, sidechains} => {
                 let dirty = chains.iter().fold(false, |acc, chain| acc | chain.take_dirty()) | choke_changed;
                 let child = CompositeChild {uuid, choke: if dirty {choke.clone()} else {choke},
                     body: ChildBody::Cell {chains, nodes, edges, device_params, sidechains},
-                    output, output_node, summed, enabled_sub, effects_dirty};
+                    output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs};
                 self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, signal, invalidate)
             }
             ChildBody::Nested {binding: nested} => {
                 let dirty = self.composite_dirty(&nested) | choke_changed;
                 let child = CompositeChild {uuid, choke: if dirty {choke.clone()} else {choke},
                     body: ChildBody::Nested {binding: nested},
-                    output, output_node, summed, enabled_sub, effects_dirty};
+                    output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs};
                 self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, signal, invalidate)
             }
         }
@@ -312,17 +360,25 @@ impl Engine {
         self.context.remove_edge(child.output_node, binding.sum_id);
     }
 
-    /// Read each child's routing note (`index_key`) and choke-group flag (`exclude_key`) once. `index_key` 0
-    /// means no routing (every child full); `exclude_key` 0 means no choke groups.
-    fn child_infos(&self, child_uuids: &[Uuid], spec: &CompositeSpec) -> Vec<(Uuid, Option<i32>, bool)> {
-        child_uuids.iter().map(|&uuid| {
+    /// Read each child's routing note (`index_key`), choke-group flag (`exclude_key`), and SILENT state
+    /// (mute / solo keys) once. A key of 0 means the composite does not declare that facet. Silent mirrors TS:
+    /// `mute || (anySolo && !solo)`, resolved across the whole sibling set.
+    fn child_infos(&self, child_uuids: &[Uuid], spec: &CompositeSpec) -> Vec<ChildInfo> {
+        let child_flag = |uuid: &Uuid, key: u16| key != 0
+            && self.graph.field_value(&Address::of(*uuid, vec![key])).and_then(|value| value.as_bool()).unwrap_or(false);
+        let has_solo = spec.child_solo_key != 0
+            && child_uuids.iter().any(|uuid| child_flag(uuid, spec.child_solo_key));
+        let mut infos: Vec<ChildInfo> = child_uuids.iter().map(|&uuid| {
             let index = if spec.index_key == 0 { None } else {
                 self.graph.field_value(&Address::of(uuid, vec![spec.index_key])).and_then(|value| value.as_int32())
             };
-            let exclude = spec.exclude_key != 0
-                && self.graph.field_value(&Address::of(uuid, vec![spec.exclude_key])).and_then(|value| value.as_bool()).unwrap_or(false);
-            (uuid, index, exclude)
-        }).collect()
+            let exclude = child_flag(&uuid, spec.exclude_key);
+            let silent = child_flag(&uuid, spec.child_mute_key)
+                || (has_solo && !child_flag(&uuid, spec.child_solo_key));
+            ChildInfo {uuid, index, exclude, silent, route_owner: true}
+        }).collect();
+        route_owners(&mut infos);
+        infos
     }
 
     /// Whether a child contributes to the sum: its `enabled` field at `key` (true when the composite declares no
@@ -371,6 +427,7 @@ impl Engine {
                        child_uuid: Uuid, choke: Vec<i32>, spec: &CompositeSpec, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
         -> Option<CompositeChild> {
         let effects_dirty = Rc::new(Cell::new(false));
+        let gate = Rc::new(Cell::new(false)); // set from the resolved silent state by the caller each reconcile
         let cell_based = spec.cell_instrument_field != 0;
         let (body, output, output_node) = if cell_based {
             let (cluster, chains, _nested) = self.build_cell(track_sets, child_uuid, spec, signal, invalidate)?;
@@ -393,7 +450,7 @@ impl Engine {
                 let midi_uuids = midi_obs.as_ref().map(|obs| obs.sorted()).unwrap_or_default();
                 let audio_uuids = audio_obs.as_ref().map(|obs| obs.sorted()).unwrap_or_default();
                 let rewire = slot_rewire(&effects_dirty, signal);
-                let cluster = self.reconcile_slot_cluster(None, child_uuid, device, &midi_uuids, &audio_uuids, track_sets, &choke, signal, invalidate, &rewire);
+                let cluster = self.reconcile_slot_cluster(None, child_uuid, device, &midi_uuids, &audio_uuids, track_sets, &choke, &gate, signal, invalidate, &rewire);
                 let (output, output_node) = (cluster.output.clone(), cluster.output_node);
                 (ChildBody::Slot {cluster, device, midi_obs, audio_obs}, output, output_node)
             }
@@ -402,7 +459,11 @@ impl Engine {
         let summed = sync_sum(&sum, &output, false, self.child_enabled(child_uuid, spec.child_enabled_key));
         self.context.register_edge(output_node, sum_id);
         let enabled_sub = self.subscribe_child_enabled(child_uuid, spec.child_enabled_key, signal);
-        Some(CompositeChild {uuid: child_uuid, choke, body, output, output_node, summed, enabled_sub, effects_dirty})
+        // A mute / solo toggle enqueues the owning unit (like `enabled`); the per-child reconcile re-resolves
+        // every sibling's silent state (solo is a cross-child fact) and re-chokes.
+        let gate_subs: Vec<SubscriptionId> = [spec.child_mute_key, spec.child_solo_key].iter()
+            .filter_map(|&key| self.subscribe_child_enabled(child_uuid, key, signal)).collect();
+        Some(CompositeChild {uuid: child_uuid, choke, body, output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs})
     }
 
     /// Observe one fx-host collection of a child (`field` = the device-declared host key; 0 = none), sorted by
@@ -422,6 +483,9 @@ impl Engine {
     /// drops its params; a NESTED recurses. The caller has already removed the child's sum wiring (`detach_child_sum`).
     fn teardown_child(&mut self, child: CompositeChild) {
         if let Some(sub) = child.enabled_sub {
+            self.graph.unsubscribe(sub);
+        }
+        for sub in child.gate_subs {
             self.graph.unsubscribe(sub);
         }
         self.output_registry.remove(&Address::of(child.uuid, vec![]));

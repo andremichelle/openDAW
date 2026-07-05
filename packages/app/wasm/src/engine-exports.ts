@@ -10,7 +10,7 @@ export type EngineExports = {
     // Register a composite box type (a box hosting a child collection of its own instruments): the composite
     // box-type UTF-8 name is written into the input buffer (nameLen bytes) first, then its child collection's
     // host field key + the child index/routing key are passed. Mirrors device_set_box_type.
-    composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number, cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number) => void
+    composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number, cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number, childMuteKey: number, childSoloKey: number) => void
     input_ptr: () => number
     input_capacity: () => number
     input_reserve: (len: number) => number // ensure the input scratch holds `len`, grow if needed, return its (current) ptr

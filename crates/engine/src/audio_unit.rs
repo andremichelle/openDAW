@@ -592,11 +592,12 @@ impl SlotCluster {
 /// strip and the `sum -> strip -> master` edges. The strip persists across child edits (the sum bus is stable).
 struct CompositeWired {
     binding: CompositeBinding,
-    pre_strip: SharedAudioBuffer, // the composite sum feeding the strip (the send tap)
-    pre_strip_node: NodeId,       // == binding.sum_id
+    audio: Vec<Member>,           // the unit's AUDIO-effects chain (sum -> fx0 -> ... -> strip), like a leaf
+    pre_strip: SharedAudioBuffer, // the fx-chain output feeding the strip (the send tap; == the sum if no fx)
+    pre_strip_node: NodeId,
     strip_id: NodeId,
     strip_output: SharedAudioBuffer,
-    tail_edges: Vec<(NodeId, NodeId)>, // sum -> strip
+    tail_edges: Vec<(NodeId, NodeId)>, // sum -> fx0 -> ... -> strip
     // A TARGETED `This` monitor on the composite DEVICE's `enabled`: a toggle enqueues the unit (plain mark, NOT
     // `wiring_dirty`), so reconcile lands in the per-child branch and re-applies the sum gate without a rebuild.
     enabled_sub: SubscriptionId
@@ -1108,6 +1109,11 @@ impl Engine {
                 }
                 Some(Wired::Composite(composite)) => {
                     composite.binding.for_each_sidechain(&mut |binding| self.resolve_one_sidechain(binding));
+                    for member in &mut composite.audio {
+                        if let Some(binding) = &mut member.sidechain {
+                            self.resolve_one_sidechain(binding);
+                        }
+                    }
                 }
                 Some(Wired::Tape(tape)) => {
                     for member in &mut tape.audio {
@@ -1553,6 +1559,9 @@ impl Engine {
                     self.context.remove_edge(*source, *target);
                 }
                 self.context.remove_processor(composite.strip_id);
+                for member in composite.audio {
+                    self.terminate_member(member);
+                }
                 self.teardown_composite(composite.binding);
             }
             Wired::Tape(tape) => {
@@ -1723,7 +1732,7 @@ impl Engine {
         if box_name == BUS_BOX_TYPE {
             self.reconcile_bus(unit, instrument_uuid, &signal, &invalidate); // a RETURN / submix bus unit
         } else if let Some(spec) = self.composite_for_type(&box_name) {
-            self.reconcile_composite(unit, instrument_uuid, spec, &signal, &invalidate);
+            self.reconcile_composite(unit, instrument_uuid, spec, &signal, &invalidate, &rewire);
         } else if box_name == TAPE_BOX_TYPE {
             self.reconcile_tape(unit, instrument_uuid, &signal, &invalidate, &rewire); // audio unit: player -> fx -> strip
         } else {
@@ -1825,27 +1834,77 @@ impl Engine {
     }
 
     /// The COMPOSITE-instrument path (e.g. Playfield): tear down the old wiring and rebuild the child cascade
-    /// wholesale (per-child lifecycle is internal to the `composite` module). The composite's own midi / audio
-    /// unit chains are not wrapped around it yet. Mapping-agnostic — `spec` names the slot collection.
+    /// wholesale (per-child lifecycle is internal to the `composite` module), then wrap the unit's own AUDIO
+    /// effects around the sum (`sum -> fx0 -> ... -> strip`, like a leaf / tape unit — without this a Playfield
+    /// unit's effect chain was silently dropped). Pooled like tape: survivors keep their DSP state across the
+    /// wholesale rebuild. The unit's MIDI-fx chain is still not wrapped (each slot pulls its own note source).
+    /// Mapping-agnostic — `spec` names the slot collection.
     fn reconcile_composite(&mut self, unit: &mut AudioUnitBinding, instrument_uuid: Uuid, spec: CompositeSpec,
-                           signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) {
-        self.teardown_unit_wired(unit);
+                           signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) {
+        // Pool the previous unit-fx members so survivors keep their DSP state (compressor ballistics, delay
+        // tails); the composite cascade + strip are rebuilt wholesale.
+        let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
+        match unit.wired.take() {
+            Some(Wired::Composite(composite)) => {
+                self.graph.unsubscribe(composite.enabled_sub);
+                for (source, target) in &composite.tail_edges {
+                    self.context.remove_edge(*source, *target);
+                }
+                self.context.remove_processor(composite.strip_id);
+                self.output_registry.remove(&Address::of(unit.unit, vec![]));
+                for member in composite.audio {
+                    pool.insert(member.uuid, member);
+                }
+                self.teardown_composite(composite.binding);
+            }
+            Some(other) => self.teardown_wired_value(unit.unit, other),
+            None => {}
+        }
         let track_sets = unit.track_sets.clone();
         let binding = self.build_composite(&track_sets, instrument_uuid, &spec, signal, invalidate);
-        // The unit's tail: the composite's sum bus -> channel strip; the strip's output is routed to the unit's
-        // OUTPUT bus by `resolve_outputs` (not master here). The strip + sum edge persist across per-child reconciles.
-        let pre_strip = binding.sum_buffer.clone();
-        let pre_strip_node = binding.sum_id;
+        // The unit's AUDIO-effects chain over the sum (reusing survivors, building joiners, terminating leavers)
+        // exactly like a leaf / tape unit.
+        let mut audio_members: Vec<Member> = Vec::new();
+        for uuid in unit.audio.sorted() {
+            let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
+            if let Some(device) = device {
+                if device.kind == DEVICE_KIND_AUDIO_EFFECT {
+                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, signal, invalidate, rewire));
+                }
+            }
+        }
+        for (_, member) in core::mem::take(&mut pool) {
+            self.terminate_member(member);
+        }
+        // Wire sum -> fx0 -> ... (a disabled effect is SKIPPED, its processor + state untouched) -> strip; the
+        // strip's output is routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).
+        let mut tail_edges: Vec<(NodeId, NodeId)> = Vec::new();
+        let mut output = binding.sum_buffer.clone();
+        let mut output_node = binding.sum_id;
+        for member in &audio_members {
+            if !self.device_enabled(member.uuid) {
+                continue;
+            }
+            if let ProcHandle::Audio(node) = &member.proc {
+                node.borrow_mut().set_audio_source(output.clone());
+            }
+            let node_id = member.node_id.unwrap();
+            self.context.register_edge(output_node, node_id);
+            tail_edges.push((output_node, node_id));
+            output = member.output.clone().unwrap();
+            output_node = node_id;
+        }
+        let pre_strip = output.clone();
+        let pre_strip_node = output_node;
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
-        strip.borrow_mut().set_audio_source(binding.sum_buffer.clone());
+        strip.borrow_mut().set_audio_source(output);
         let strip_output = strip.borrow().audio_output();
         let strip_meter = strip.borrow().meter_slot();
         self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, format!("strip:composite {:02x}{:02x}", unit.unit[0], unit.unit[1]));
-        let mut tail_edges = Vec::new();
-        self.context.register_edge(binding.sum_id, strip_id);
-        tail_edges.push((binding.sum_id, strip_id));
+        self.context.register_edge(pre_strip_node, strip_id);
+        tail_edges.push((pre_strip_node, strip_id));
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
         // Each child's parameters are pushed as it is built (a joiner), inside `build_one_child`; no blanket
         // re-push here, so a per-child reconcile never touches an existing slot's parameters.
@@ -1853,7 +1912,7 @@ impl Engine {
         let enabled_sub = self.graph.subscribe_vertex(Propagation::This,
             Address::of(instrument_uuid, vec![DEVICE_ENABLED_KEY]),
             Box::new(move |_graph, _update| enabled_mark.mark()));
-        unit.wired = Some(Wired::Composite(CompositeWired {binding, pre_strip, pre_strip_node, strip_id, strip_output, tail_edges, enabled_sub}));
+        unit.wired = Some(Wired::Composite(CompositeWired {binding, audio: audio_members, pre_strip, pre_strip_node, strip_id, strip_output, tail_edges, enabled_sub}));
     }
 
     /// The LEAF-instrument per-member path, mirroring TS `AudioDeviceChain`: keep the existing device
@@ -1921,7 +1980,7 @@ impl Engine {
         };
         // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip; the strip's output is
         // routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).
-        let (output, output_node, mut edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[]);
+        let (output, output_node, mut edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[], None);
         // The channel strip terminates the chain; reuse it across reconciles (it carries no DSP state, just the
         // shared volume / panning / mute), re-pointing its source at the new tail.
         let (strip, strip_id, strip_output) = match strip_keep {
@@ -2055,11 +2114,12 @@ impl Engine {
     /// its processor + state untouched). Returns the chain's output buffer, last node, and internal edges; the
     /// caller appends its own tail (a unit's strip -> master, a slot's sum).
     fn wire_cluster(&mut self, instrument: &Member, instrument_uuid: Uuid, sequencer: &SharedNoteEventSource,
-                    midi: &[Member], audio: &[Member], choke: &[i32]) -> (SharedAudioBuffer, NodeId, Vec<(NodeId, NodeId)>) {
-        let mut pull = if choke.is_empty() {
-            PullLink::Source(sequencer.clone())
-        } else {
-            PullLink::SlotRoute {upstream: sequencer.clone(), choke: Rc::from(choke.to_vec())}
+                    midi: &[Member], audio: &[Member], choke: &[i32], gate: Option<&Rc<Cell<bool>>>) -> (SharedAudioBuffer, NodeId, Vec<(NodeId, NodeId)>) {
+        let mut pull = match gate {
+            // A composite SLOT: routed through `SlotRoute` so its choke records inject and its silent gate
+            // (pad mute / solo) drops note starts live, no rebuild.
+            Some(gate) => PullLink::SlotRoute {upstream: sequencer.clone(), choke: Rc::from(choke.to_vec()), gate: gate.clone()},
+            None => PullLink::Source(sequencer.clone())
         };
         for member in midi {
             if !self.device_enabled(member.uuid) {
@@ -2100,7 +2160,7 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // the reconcile cascade threads its signal/invalidate/rewire context
     pub(crate) fn reconcile_slot_cluster(&mut self, prev: Option<SlotCluster>, instrument_uuid: Uuid, device: DeviceReg,
                                          midi_uuids: &[Uuid], audio_uuids: &[Uuid], track_sets: &SharedTrackSets,
-                                         choke: &[i32], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> SlotCluster {
+                                         choke: &[i32], gate: &Rc<Cell<bool>>, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> SlotCluster {
         let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
         let mut sequencer_keep: Option<(Uuid, SharedNoteEventSource)> = None;
         if let Some(prev) = prev {
@@ -2136,7 +2196,7 @@ impl Engine {
             Some((uuid, kept)) if uuid == instrument_uuid => kept,
             _ => Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: track_sets.clone()}), self.clip_sequencer.clone())))
         };
-        let (output, output_node, internal_edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, choke);
+        let (output, output_node, internal_edges) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, choke, Some(gate));
         SlotCluster {instrument, sequencer, midi: midi_members, audio: audio_members, internal_edges, output, output_node}
     }
 
@@ -2494,6 +2554,9 @@ impl Engine {
             }
             Wired::Composite(composite) => {
                 composite.binding.for_each_params(&mut |params| refresh_params(&params.handles, params.reg, params.state_ptr, position));
+                for member in &composite.audio {
+                    refresh_params(&member.params.handles, member.params.reg, member.params.state_ptr, position);
+                }
             }
             Wired::Tape(tape) => {
                 for member in &tape.audio {
@@ -2528,6 +2591,9 @@ impl Engine {
             }
             Wired::Composite(composite) => {
                 composite.binding.for_each_params(&mut |params| self.rebind_one(params, &invalidate, position));
+                for member in &mut composite.audio {
+                    self.rebind_one(&mut member.params, &invalidate, position);
+                }
             }
             Wired::Tape(tape) => {
                 for member in &mut tape.audio {
@@ -4070,7 +4136,7 @@ mod tests {
         engine.composites = vec![CompositeSpec {
             box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
             cell_instrument_field: 0, cell_midi_field: 0, cell_audio_field: 0, // direct instruments, no choke
-            child_enabled_key: CHILD_ENABLED_KEY
+            child_enabled_key: CHILD_ENABLED_KEY, child_mute_key: 0, child_solo_key: 0
         }];
         engine
     }
@@ -4084,7 +4150,8 @@ mod tests {
         let mut engine = engine_with_devices();
         engine.composites = vec![CompositeSpec {
             box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
-            cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0, child_enabled_key: 0
+            cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
+            child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0
         }];
         engine.graph = BoxGraph::from_boxes(vec![
             graph_box(UNIT, "AudioUnitBox", &[
