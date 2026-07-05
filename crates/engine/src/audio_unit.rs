@@ -63,6 +63,7 @@ const UUID_LOWEST: Uuid = [0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, 0]
 const UNIT_VOLUME_KEY: u16 = 12;
 const UNIT_PANNING_KEY: u16 = 13;
 const UNIT_MUTE_KEY: u16 = 14;
+const UNIT_SOLO_KEY: u16 = 15;
 const UNIT_TRACKS_KEY: u16 = 20;   // track-membership hub
 const UNIT_MIDI_KEY: u16 = 21;     // midi-effect chain host
 const UNIT_INPUT_KEY: u16 = 22;    // instrument (input) host
@@ -887,6 +888,87 @@ impl Engine {
             self.resolve_outputs(); // route each unit's strip to its OUTPUT bus (or the master fallback)
             self.resolve_sends();   // wire each parallel aux send: pre-fader tap -> target bus
             self.broadcasts.sweep(); // drop telemetry entries whose processor was torn down (generation bump)
+            self.solo_dirty.set(true); // routing may have changed: the solo walk must re-resolve
+        }
+        if self.solo_dirty.replace(false) {
+            self.update_solo();
+        }
+    }
+
+    /// Resolve SOLO into per-strip `forced_silent` flags, mirroring TS `Mixer.updateSolo` + the strip's
+    /// silence rule: while ANY unit is soloed, a strip is silent unless it is soloed itself or kept audible
+    /// by the routing walk — a soloed unit keeps its OUTPUT-bus chain audible (recursively), and a soloed
+    /// BUS keeps its FEEDERS (routed units + aux senders) audible (recursively). THE output unit is exempt
+    /// by construction (it never joins `audio_units`). Off-render; O(units + routing edges).
+    pub(crate) fn update_solo(&mut self) {
+        struct Entry {
+            solo: bool,
+            params: Rc<StripParams>,
+            routed: Option<Uuid>,   // the bus this unit's strip feeds (None = the master)
+            sends: Vec<Uuid>,       // aux-send target buses
+            bus: Option<Uuid>       // when this unit IS a bus: its AudioBusBox uuid
+        }
+        let mut entries: Vec<(Uuid, Entry)> = Vec::with_capacity(self.audio_units.len());
+        for unit in &self.audio_units {
+            let bus = match unit.wired.as_ref() {
+                Some(Wired::Bus(wired)) => Some(wired.bus_uuid),
+                _ => None
+            };
+            let routed = unit.routed.as_ref().and_then(|routed| routed.bus);
+            let sends = unit.sends.iter()
+                .filter_map(|send| send.target.as_ref().and_then(|(uuid, _)| *uuid))
+                .collect();
+            entries.push((unit.unit, Entry {
+                solo: unit.strip_params.solo.get(),
+                params: unit.strip_params.clone(),
+                routed, sends, bus
+            }));
+        }
+        let unit_of_bus = |bus: &Uuid, entries: &Vec<(Uuid, Entry)>| entries.iter()
+            .position(|(_, entry)| entry.bus.as_ref() == Some(bus));
+        let has_solo = entries.iter().any(|(_, entry)| entry.solo);
+        let mut virtual_solo = alloc::vec![false; entries.len()];
+        // visit OUTPUTS of every soloed unit: its target-bus owner stays audible; recurse while not soloed (TS).
+        let mut touched_outputs = alloc::vec![false; entries.len()];
+        let mut stack: Vec<usize> = entries.iter().enumerate()
+            .filter(|(_, (_, entry))| entry.solo).map(|(index, _)| index).collect();
+        while let Some(index) = stack.pop() {
+            if touched_outputs[index] {
+                continue;
+            }
+            touched_outputs[index] = true;
+            if let Some(bus) = entries[index].1.routed.as_ref() {
+                if let Some(owner) = unit_of_bus(bus, &entries) {
+                    if !entries[owner].1.solo {
+                        virtual_solo[owner] = true;
+                        stack.push(owner);
+                    }
+                }
+            }
+        }
+        // visit INPUTS of every soloed unit: a soloed BUS keeps its feeders (routed + aux sends) audible;
+        // feeders' inputs recurse unconditionally (TS `visitInputs`).
+        let mut touched_inputs = alloc::vec![false; entries.len()];
+        let mut stack: Vec<usize> = entries.iter().enumerate()
+            .filter(|(_, (_, entry))| entry.solo).map(|(index, _)| index).collect();
+        while let Some(index) = stack.pop() {
+            if touched_inputs[index] {
+                continue;
+            }
+            touched_inputs[index] = true;
+            let Some(bus) = entries[index].1.bus else { continue };
+            let feeders: Vec<usize> = entries.iter().enumerate()
+                .filter(|(_, (_, entry))| entry.routed == Some(bus) || entry.sends.contains(&bus))
+                .map(|(feeder, _)| feeder).collect();
+            for feeder in feeders {
+                if !entries[feeder].1.solo {
+                    virtual_solo[feeder] = true;
+                }
+                stack.push(feeder);
+            }
+        }
+        for (index, (_, entry)) in entries.iter().enumerate() {
+            entry.params.forced_silent.set(has_solo && !(entry.solo || virtual_solo[index]));
         }
     }
 
@@ -1577,6 +1659,17 @@ impl Engine {
         let mute_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![UNIT_MUTE_KEY]), move |value| {
             if let Some(value) = value.as_bool() { mute.mute.set(value) }
         });
+        // SOLO (15): the field lands in the params AND arms the engine-level resolution (TS
+        // `Mixer.onChannelStripSoloChanged` -> `updateSolo`), which forces every non-soloed,
+        // non-virtual-solo strip silent.
+        let solo = strip_params.clone();
+        let solo_dirty = self.solo_dirty.clone();
+        let solo_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![UNIT_SOLO_KEY]), move |value| {
+            if let Some(value) = value.as_bool() {
+                solo.solo.set(value);
+                solo_dirty.set(true);
+            }
+        });
         // Automation reactivity is per-parameter and TARGETED (see `observe_params`): each parameter's field
         // value, its automation pointer-hub, and its track's region hub fire `automation_invalidate`, which
         // sets this flag + enqueues the unit, so `reconcile_one` re-binds the unit's curves (no rewire). No
@@ -1587,7 +1680,7 @@ impl Engine {
         AudioUnitBinding {
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
             audio_track_sets: Rc::new(RefCell::new(Vec::new())), audio_tracks: Vec::new(),
-            track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub],
+            track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub, solo_sub],
             strip_automation: Rc::new(StripAutomation::new()), strip_param_subs: Vec::new(), strip_param_collections: Vec::new(),
             input, midi, audio, output_sub, routed: None, aux_sends, sends: Vec::new(),
             wired: None, automation_dirty, params_dirty, wiring_dirty, mark
@@ -4181,6 +4274,67 @@ mod tests {
         engine.reconcile_one(&mut unit);
         assert_eq!(composite_sum_sources(&unit), 2, "the re-enabled child feeds the sum again");
         assert_eq!(child_instrument_node(&unit, CHILD_B), Some(child_b_node), "still the same processor instance");
+    }
+
+    #[test]
+    fn solo_forces_other_strips_silent_keeping_the_output_bus_audible() {
+        use super::{UNIT_SOLO_KEY, UNIT_OUTPUT_KEY, BUS_ENABLED_KEY};
+        const UNIT_A: Uuid = [60u8; 16];
+        const INSTR_A: Uuid = [61u8; 16];
+        const UNIT_C: Uuid = [62u8; 16];
+        const INSTR_C: Uuid = [63u8; 16];
+        const BUS_UNIT: Uuid = [64u8; 16];
+        const BUS_BOX: Uuid = [65u8; 16];
+        let unit_fields = |solo: bool| alloc::vec![
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook),
+            (UNIT_SOLO_KEY, FieldValue::Boolean(solo))
+        ];
+        let mut engine = engine_with_devices();
+        let mut a_fields = unit_fields(false);
+        a_fields.push((UNIT_OUTPUT_KEY, FieldValue::Pointer(Some(Address::of(BUS_BOX, vec![6]))))); // A -> the bus input
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT_A, "AudioUnitBox", &a_fields),
+            graph_box(INSTR_A, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT_A, vec![UNIT_INPUT_KEY]))))]),
+            graph_box(UNIT_C, "AudioUnitBox", &unit_fields(false)),
+            graph_box(INSTR_C, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT_C, vec![UNIT_INPUT_KEY]))))]),
+            graph_box(BUS_UNIT, "AudioUnitBox", &unit_fields(false)),
+            graph_box(BUS_BOX, "AudioBusBox", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(BUS_UNIT, vec![UNIT_INPUT_KEY])))),
+                (6, FieldValue::Hook),
+                (BUS_ENABLED_KEY, FieldValue::Boolean(true))
+            ])
+        ]);
+        for uuid in [BUS_UNIT, UNIT_A, UNIT_C] {
+            let mut unit = engine.build_unit(uuid);
+            engine.reconcile_one(&mut unit);
+            engine.audio_units.push(unit);
+        }
+        engine.resolve_outputs();
+        let params_of = |engine: &Engine, uuid: Uuid| engine.audio_units.iter()
+            .find(|unit| unit.unit == uuid).expect("unit").strip_params.clone();
+        let set_solo = |engine: &mut Engine, uuid: Uuid, from: bool, to: bool| engine.graph.transaction(&[Update::Primitive {
+            address: Address::of(uuid, vec![UNIT_SOLO_KEY]),
+            old: FieldValue::Boolean(from), new: FieldValue::Boolean(to)
+        }], &engine.registry).expect("toggle solo");
+        // Soloing A silences C, keeps A and its OUTPUT BUS audible (virtual solo along the routing).
+        set_solo(&mut engine, UNIT_A, false, true);
+        engine.update_solo();
+        assert!(!params_of(&engine, UNIT_A).forced_silent.get(), "the soloed unit stays audible");
+        assert!(params_of(&engine, UNIT_C).forced_silent.get(), "a non-soloed unit is forced silent");
+        assert!(!params_of(&engine, BUS_UNIT).forced_silent.get(), "the soloed unit's output bus stays audible");
+        // Unsolo: everything audible again.
+        set_solo(&mut engine, UNIT_A, true, false);
+        engine.update_solo();
+        assert!(!params_of(&engine, UNIT_A).forced_silent.get());
+        assert!(!params_of(&engine, UNIT_C).forced_silent.get());
+        assert!(!params_of(&engine, BUS_UNIT).forced_silent.get());
+        // Soloing the BUS keeps its FEEDER (A) audible, silences the unrelated C.
+        set_solo(&mut engine, BUS_UNIT, false, true);
+        engine.update_solo();
+        assert!(!params_of(&engine, BUS_UNIT).forced_silent.get(), "the soloed bus stays audible");
+        assert!(!params_of(&engine, UNIT_A).forced_silent.get(), "the bus feeder stays audible (virtual solo)");
+        assert!(params_of(&engine, UNIT_C).forced_silent.get(), "an unrelated unit is forced silent");
     }
 
     #[test]

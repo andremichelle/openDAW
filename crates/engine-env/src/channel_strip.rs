@@ -25,12 +25,17 @@ use crate::RENDER_QUANTUM;
 pub struct StripParams {
     pub volume_db: Cell<f32>,
     pub panning: Cell<f32>, // -1 (left) .. +1 (right)
-    pub mute: Cell<bool>
+    pub mute: Cell<bool>,
+    pub solo: Cell<bool>,
+    // Set by the engine's SOLO resolution (TS `Mixer.updateSolo`): true while another unit is soloed and
+    // this one is neither soloed nor kept audible by the routing walk. Silences like mute (de-clicked).
+    pub forced_silent: Cell<bool>
 }
 
 impl StripParams {
     pub fn new() -> Self {
-        Self {volume_db: Cell::new(0.0), panning: Cell::new(0.0), mute: Cell::new(false)}
+        Self {volume_db: Cell::new(0.0), panning: Cell::new(0.0), mute: Cell::new(false),
+            solo: Cell::new(false), forced_silent: Cell::new(false)}
     }
 }
 
@@ -101,7 +106,8 @@ impl ChannelStripProcessor {
         let gain = db_to_gain(volume_db);
         self.gain_left.set((1.0 - panning.max(0.0)) * gain, self.processing);
         self.gain_right.set((1.0 + panning.min(0.0)) * gain, self.processing);
-        self.mute_gain.set(if self.params.mute.get() {0.0} else {1.0}, self.processing);
+        let silent = self.params.mute.get() || self.params.forced_silent.get();
+        self.mute_gain.set(if silent {0.0} else {1.0}, self.processing);
     }
 
     // Evaluate the automated volume / panning curves at `position` (falling back to the static params) and

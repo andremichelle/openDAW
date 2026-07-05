@@ -88,7 +88,6 @@ impl Broadcasts {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::rc::Rc;
 
     #[test]
     fn register_sweep_and_generation() {

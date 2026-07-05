@@ -814,6 +814,9 @@ struct Engine {
     // The clip-launch state machine (TS ClipSequencingAudioContext), shared with every unit's note
     // sequencer(s); its change queue feeds the notifyClipSequenceChanges back-channel.
     clip_sequencer: Rc<RefCell<engine_env::clip_sequencer::ClipSequencer>>,
+    // Armed by a unit's SOLO field edit (and by any reconcile that changed routing): the next
+    // reconcile pass re-resolves solo into per-strip forced_silent flags (TS Mixer.updateSolo).
+    solo_dirty: Rc<Cell<bool>>,
     unit_changes: Rc<RefCell<Members>>, // recorded by the audio-units membership observer, drained by reconcile
     dirty_units: Rc<RefCell<Vec<Uuid>>>, // unit uuids a related edit touched; reconcile rewires ONLY these, not all
     output_audio: Option<IndexedCollection>, // THE output unit's audio-fx chain (built once at bind, see output_strip)
@@ -853,6 +856,7 @@ impl Engine {
             master_id: 0,
             audio_units: Vec::new(),
             clip_sequencer: Rc::new(RefCell::new(engine_env::clip_sequencer::ClipSequencer::new())),
+            solo_dirty: Rc::new(Cell::new(false)),
             unit_changes: Rc::new(RefCell::new(Members::default())),
             dirty_units: Rc::new(RefCell::new(Vec::new())),
             output_audio: None,
