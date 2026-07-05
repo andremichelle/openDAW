@@ -312,6 +312,16 @@ static PULL: Shared<PullContext> = Shared::new(PullContext::new());
 // clears it, calls a device's `init` (which binds its params), then drains it and observes each. Held in its
 // OWN cell (NOT `ENGINE`), so the re-entrant `host_bind_parameter` call never aliases the `&mut Engine`.
 static BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+// The broadcast-bind recorder (`host_bind_broadcast`): (global slot id, field-key path, float count) per
+// record. The engine clears it, calls a device's `init`, then drains it in `bind_device` (creating +
+// registering the slots). Its OWN cell (NOT `ENGINE`), safe to append re-entrantly from `init`.
+static BROADCAST_BINDS: Shared<Vec<(u32, Vec<u16>, u32)>> = Shared::new(Vec::new());
+// The device LIVE-DATA broadcast registry: global slot id -> (write ptr, UI-subscribed). Read re-entrantly
+// by `host_broadcast_ptr` / `host_broadcast_active` from a device's `process` (never touches `ENGINE`);
+// `bind_device` fills the ptr, teardown zeroes it and returns the id to the free list (no unbounded growth
+// across chain edits).
+pub(crate) static DEVICE_BROADCASTS: Shared<Vec<(u32, bool)>> = Shared::new(Vec::new());
+pub(crate) static DEVICE_BROADCAST_FREE: Shared<Vec<u32>> = Shared::new(Vec::new());
 // The sample resource (Route F): decoded frames resident in shared memory, keyed by AudioFileBox uuid. Held
 // in its OWN cell (NOT `ENGINE`) so a device's re-entrant `host_resolve_sample` call during render never
 // aliases the `&mut Engine` the render path holds. Mutated only off-render (the load handshake + box
@@ -541,6 +551,37 @@ pub extern "C" fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32 {
 /// (e.g. `[15]` for Nano's `file`). It only RECORDS the path (into `SAMPLE_OBS`) and returns its id; after
 /// `init` the engine reactively tracks the pointer, resolving + requesting the sample and delivering the handle
 /// via `sample_changed`. Touches no graph and no `&mut Engine`, so it is safe from `init`.
+/// Host import a device calls from its `init` to register a LIVE-DATA broadcast slot (`len` floats at the
+/// device address + PATH — the TS `broadcaster.broadcastFloats(adapter.address.append(...))` mirror). It only
+/// RECORDS the request (into `BROADCAST_BINDS`) and returns the GLOBAL slot id; `bind_device` creates and
+/// registers the slot after `init` returns. The device fetches the write ptr via `host_broadcast_ptr`.
+/// Touches only its own cells, so it is safe to call re-entrantly from `init`.
+#[no_mangle]
+pub extern "C" fn host_bind_broadcast(path_ptr: u32, path_len: u32, len: u32) -> u32 {
+    let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
+    let registry = unsafe { DEVICE_BROADCASTS.get() };
+    let id = match unsafe { DEVICE_BROADCAST_FREE.get() }.pop() {
+        Some(id) => { registry[id as usize] = (0, false); id }
+        None => { registry.push((0, false)); (registry.len() - 1) as u32 }
+    };
+    unsafe { BROADCAST_BINDS.get() }.push((id, path.to_vec(), len.max(1)));
+    id
+}
+
+/// The write pointer of a device broadcast slot (0 while unbound). Reads only the registry cell, so a device
+/// may call it lazily from `process`.
+#[no_mangle]
+pub extern "C" fn host_broadcast_ptr(id: u32) -> u32 {
+    unsafe { DEVICE_BROADCASTS.get() }.get(id as usize).map_or(0, |entry| entry.0)
+}
+
+/// Whether the UI currently subscribes to a device broadcast slot (round-tripped by the worklet through
+/// `broadcast_set_active`). Producers may skip cold work (the spectrum FFT) while inactive.
+#[no_mangle]
+pub extern "C" fn host_broadcast_active(id: u32) -> u32 {
+    unsafe { DEVICE_BROADCASTS.get() }.get(id as usize).map_or(0, |entry| entry.1 as u32)
+}
+
 #[no_mangle]
 pub extern "C" fn host_observe_sample(path_ptr: u32, path_len: u32) -> u32 {
     let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
@@ -1318,6 +1359,16 @@ pub extern "C" fn broadcast_set_active(index: u32, active: u32) {
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
             engine.broadcasts.set_active(index as usize, active != 0);
+            // Mirror into the DEVICE broadcast registry (matched by slot ptr) so a plugin's
+            // `host_broadcast_active` sees the subscription without touching `ENGINE`.
+            if let Some(entry) = engine.broadcasts.entry(index as usize) {
+                let ptr = entry.ptr;
+                for slot in DEVICE_BROADCASTS.get().iter_mut() {
+                    if slot.0 == ptr {
+                        slot.1 = active != 0;
+                    }
+                }
+            }
         }
     }
 }

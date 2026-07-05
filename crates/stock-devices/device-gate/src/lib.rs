@@ -17,7 +17,7 @@
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
 use abi::{bool_value, float_value, AudioEffect, Block, ParamValue, Ports, MAIN_INPUT};
-use math::db_to_gain;
+use math::{db_to_gain, gain_to_db};
 use math::value_mapping::{Decibel, Linear};
 
 #[cfg(target_family = "wasm")]
@@ -36,6 +36,7 @@ const RELEASE_FIELD: [u16; 1] = [14];
 const FLOOR_FIELD: [u16; 1] = [15];
 const INVERSE_FIELD: [u16; 1] = [16];
 const SIDE_CHAIN_FIELD: [u16; 1] = [30];
+const EDITOR_FIELD: [u16; 1] = [0]; // live editor values at address.append(0): [input dB, output dB, envelope dB]
 
 // The AUTOMATION value mappings, mirrored from the TS GateDeviceBoxAdapter (the source of truth, NOT the box
 // schema constraints): threshold / return / attack / hold / release are linear, floor is a 3-point decibel
@@ -77,6 +78,9 @@ pub struct GateState {
     gate_open: bool, // the gate state-machine output (before smoothing)
     hold_counter: f32,
     envelope: f32,   // the smoothed 0..1 open amount
+    out_max: f32,    // the output peak follower for the editor display (TS `#outMax`)
+    editor_id: u32,  // live editor broadcast at `[0]`: [input dB, output dB, envelope dB]
+    editor_ptr: u32,
     sample_rate: f32,
     threshold_id: u32,
     return_id: u32,
@@ -118,6 +122,9 @@ impl AudioEffect for Gate {
         state.floor_id = abi::bind_parameter(&FLOOR_FIELD);
         state.inverse_id = abi::bind_parameter(&INVERSE_FIELD);
         state.sidechain_id = abi::bind_sidechain(&SIDE_CHAIN_FIELD);
+        state.editor_id = abi::bind_broadcast(&EDITOR_FIELD, 3);
+        state.editor_ptr = 0;
+        state.out_max = 0.0;
     }
 
     fn process_audio(state: &mut GateState, output: [&mut [f32]; 2], block: &Block) {
@@ -199,8 +206,25 @@ impl Gate {
                 state.envelope = state.release_coeff * state.envelope + (1.0 - state.release_coeff) * target;
             }
             let gain = state.floor_gain + (1.0 - state.floor_gain) * state.envelope;
-            out_left[index] = in_left[index] * gain;
-            out_right[index] = in_right[index] * gain;
+            let left = in_left[index] * gain;
+            let right = in_right[index] * gain;
+            out_left[index] = left;
+            out_right[index] = right;
+            let out_peak = left.abs().max(right.abs());
+            if state.out_max <= out_peak {
+                state.out_max = out_peak;
+            } else {
+                state.out_max *= state.peak_decay;
+            }
+        }
+        if state.editor_ptr == 0 {
+            state.editor_ptr = abi::broadcast_ptr(state.editor_id);
+        }
+        if state.editor_ptr != 0 {
+            let editor = unsafe { core::slice::from_raw_parts_mut(state.editor_ptr as *mut f32, 3) };
+            editor[0] = gain_to_db(state.inp_max);
+            editor[1] = gain_to_db(state.out_max);
+            editor[2] = gain_to_db(state.envelope);
         }
     }
 }

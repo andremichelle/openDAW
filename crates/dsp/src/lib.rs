@@ -5,6 +5,7 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod adsr;
+pub mod analyser;
 pub mod biquad;
 pub mod crusher;
 pub mod dattorro;
@@ -13,6 +14,7 @@ pub mod ctagdrc;
 pub mod freeverb;
 pub mod glide;
 pub mod lfo;
+pub mod meter;
 pub mod osc;
 pub mod panning;
 pub mod ppqn;

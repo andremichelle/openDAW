@@ -53,7 +53,7 @@ use crate::composite::CompositeBinding;
 use crate::audio_region_player::AudioRegionPlayer;
 use crate::time_stretch::{TimeStretchConfig, TransientPlayMode};
 use crate::tempo_map::{SharedTempoMap, TempoMap};
-use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, CompositeSpec, DeviceReg, Engine, FieldObs, PullLink, BIND, FIELD_OBS, SAMPLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
+use crate::{call_device_init, call_device_field_changed, call_device_parameter_changed, call_device_sample_changed, call_device_soundfont_changed, CompositeSpec, DeviceReg, Engine, FieldObs, PullLink, BIND, BROADCAST_BINDS, DEVICE_BROADCASTS, DEVICE_BROADCAST_FREE, FIELD_OBS, SAMPLE_OBS, SAMPLES, SOUNDFONT_OBS, SOUNDFONTS, SIDECHAIN_BIND, CURRENT_DEVICE_UUID, EFFECT_INDEX_KEY};
 
 // AudioUnitBox field keys (WASM CONTRACT: mirror the TS AudioUnitBox schema). The unit carries its strip
 // params and hosts its instrument / effect chains / tracks at these hub keys.
@@ -636,7 +636,17 @@ pub(crate) struct DeviceParams {
     // survive a `rebind_one` (which tears down + rebuilds only the per-parameter subscriptions). `None` for a
     // device without that collection. The per-child param/sample subscriptions live in `field_subs`/`observe_subs`.
     param_hub_sub: Option<SubscriptionId>,
-    sample_hub_sub: Option<SubscriptionId>
+    sample_hub_sub: Option<SubscriptionId>,
+    // The device's LIVE-DATA broadcast slots (`host_bind_broadcast`): (global registry id, slot). The Rc keeps
+    // the table entry alive (Weak-swept on drop); teardown zeroes the registry ptr + frees the id.
+    broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)>
+}
+
+impl DeviceParams {
+    /// The owning device box uuid, for the output-registry cleanup on a wholesale (non-member) teardown.
+    pub(crate) fn device_uuid(&self) -> Uuid {
+        self.device_uuid
+    }
 }
 
 /// A persistent sidechain binding kept by the owning unit: an audio effect that declared sidechain ports, the
@@ -1142,11 +1152,13 @@ impl Engine {
         for port in &mut binding.ports {
             let target = self.graph.target_of(&Address::of(binding.device_uuid, port.path.clone())).cloned();
             let resolution = target.and_then(|target| {
-                // The sidechain pointer targets a UNIT (its strip output) or a DEVICE. TS taps the DEVICE's own
-                // output (e.g. the tape instrument's RAW output, before the unit's audio effects + strip), so a
-                // device that registers its output under its own uuid (currently the tape instrument) resolves
-                // directly. Otherwise follow the device's `host` pointer (field 1) to the owning unit's strip
-                // output as a fallback; without either, detection falls back to the compressor's own (hot) input.
+                // The sidechain pointer targets a UNIT (its strip output), a BUS (its raw sum), or a DEVICE.
+                // Every BUILT device registers its own output under its box uuid (mirroring TS, where every
+                // device processor registers `adapter.address -> output`), so a device target taps that device's
+                // raw signal — before later fx and before the strip. Only a target that was never built (a
+                // disabled bus / cell effect, an unknown device type) falls back through the device's `host`
+                // pointer (field 1) to the owning unit's strip output; without either, detection falls back to
+                // the effect's own (hot) main input.
                 let source_uuid = if self.output_registry.resolve(&Address::of(target.uuid, vec![])).is_some() {
                     Some(target.uuid)
                 } else {
@@ -1233,6 +1245,9 @@ impl Engine {
             source = node.borrow().audio_output();
             let node_id = self.context.register_processor(node.clone());
             self.context.set_label(node_id, device_label(&self.graph, &device_uuid));
+            // The effect's own output under its box uuid, for direct sidechain targeting (see
+            // `take_or_build_audio`); torn down via `device_params` in `teardown_wired_value`.
+            self.output_registry.register(Address::of(device_uuid, vec![]), source.clone(), node_id);
             let meter_slot = node.borrow().meter_slot();
             self.broadcasts.register(device_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
             // A sidechained bus effect (e.g. a ducking compressor on a submix): build its sidechain binding so the
@@ -1590,6 +1605,9 @@ impl Engine {
                         self.graph.unsubscribe(port.pointer_sub);
                     }
                 }
+                for params in &bus.device_params {
+                    self.output_registry.remove(&Address::of(params.device_uuid(), vec![]));
+                }
                 self.teardown_device_params(bus.device_params);
                 for (source, target) in &bus.edges {
                     self.context.remove_edge(*source, *target);
@@ -1601,9 +1619,11 @@ impl Engine {
         }
     }
 
-    /// Terminate ONE leaf chain member (a leaver, or a full teardown): remove its processor node (a midi-fx
-    /// has none), drop its sidechain ports' pointer monitors, and unsubscribe its parameter observations.
+    /// Terminate ONE leaf chain member (a leaver, or a full teardown): drop its output registration (a midi-fx
+    /// never registered one; the remove is a no-op), remove its processor node (a midi-fx has none), drop its
+    /// sidechain ports' pointer monitors, and unsubscribe its parameter observations.
     fn terminate_member(&mut self, member: Member) {
+        self.output_registry.remove(&Address::of(member.uuid, vec![]));
         if let Some(node_id) = member.node_id {
             self.context.remove_processor(node_id);
         }
@@ -2040,6 +2060,10 @@ impl Engine {
         let output = instrument.borrow().audio_output();
         let node_id = self.context.register_processor(instrument.clone());
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        // The instrument's RAW output under its box uuid, so a sidechain pointer targeting THIS device taps it
+        // directly (TS: every device processor registers `adapter.address -> output`). A composite SLOT child
+        // overwrites this with its post-fx cluster output right after (its child uuid IS the instrument uuid).
+        self.output_registry.register(Address::of(uuid, vec![]), output.clone(), node_id);
         // Live telemetry: the instrument's output peaks (TS `PeakBroadcaster(adapter.address)`) plus a monotonic
         // note-activity counter at `.append(1)` (a WASM-only extra; TS broadcasts a 128-bit `Bits` set instead).
         let meter_slot = instrument.borrow().meter_slot();
@@ -2089,6 +2113,9 @@ impl Engine {
         let output = node.borrow().audio_output();
         let node_id = self.context.register_processor(node.clone());
         self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        // The effect's own output under its box uuid, so a sidechain pointer targeting THIS device taps it
+        // directly (TS: every device processor registers `adapter.address -> output`).
+        self.output_registry.register(Address::of(uuid, vec![]), output.clone(), node_id);
         // Live telemetry: the effect's output peaks (TS `PeakBroadcaster(adapter.address)`).
         let meter_slot = node.borrow().meter_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
@@ -2242,6 +2269,9 @@ impl Engine {
         let mut output = instrument.borrow().audio_output();
         let instrument_id = self.context.register_processor(instrument);
         self.context.set_label(instrument_id, device_label(&self.graph, &instrument_uuid));
+        // The instrument's RAW output under its box uuid, for direct sidechain targeting (see `take_or_build_
+        // instrument`); torn down via the cell's `device_params` in `teardown_child`.
+        self.output_registry.register(Address::of(instrument_uuid, vec![]), output.clone(), instrument_id);
         let mut nodes = vec![instrument_id];
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut sidechains: Vec<SidechainBinding> = Vec::new();
@@ -2266,6 +2296,9 @@ impl Engine {
             output = node.borrow().audio_output();
             let node_id = self.context.register_processor(node.clone());
             self.context.set_label(node_id, device_label(&self.graph, &device_uuid));
+            // The effect's own output under its box uuid, for direct sidechain targeting (see
+            // `take_or_build_audio`); torn down via the cell's `device_params` in `teardown_child`.
+            self.output_registry.register(Address::of(device_uuid, vec![]), output.clone(), node_id);
             // Keep this effect's declared sidechain ports as a persistent binding (resolved by the post-build
             // pass, re-resolved on later edits). Each port gets a TARGETED `This` monitor on its pointer
             // field, so a re-point / detach enqueues the unit. Port ids start at 2 (after MAIN_INPUT).
@@ -2299,6 +2332,21 @@ impl Engine {
         let soundfont_paths = core::mem::take(unsafe { SOUNDFONT_OBS.get() }); // recorded by host_observe_soundfont during init
         let field_paths = core::mem::take(unsafe { FIELD_OBS.get() }); // recorded by host_observe_field during init
         let sidechain_paths = core::mem::take(unsafe { SIDECHAIN_BIND.get() }); // recorded by host_bind_sidechain during init
+        // The device's LIVE-DATA broadcast binds (`host_bind_broadcast` during init): create each slot, register
+        // it at the device address + declared path (TS `broadcaster.broadcastFloats(adapter.address.append(...))`),
+        // and publish the write ptr through the registry so the device's `host_broadcast_ptr` resolves it.
+        let broadcast_binds = core::mem::take(unsafe { BROADCAST_BINDS.get() });
+        let mut broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)> = Vec::with_capacity(broadcast_binds.len());
+        for (id, path, len) in broadcast_binds {
+            let slot = engine_env::telemetry::broadcast_slot(len as usize);
+            let package_type = if len == 1 { crate::broadcast::PACKAGE_FLOAT } else { crate::broadcast::PACKAGE_FLOAT_ARRAY };
+            self.broadcasts.register(device_uuid, &path, package_type, &slot);
+            let ptr = slot.borrow().as_ptr() as u32;
+            if let Some(entry) = unsafe { DEVICE_BROADCASTS.get() }.get_mut(id as usize) {
+                *entry = (ptr, false);
+            }
+            broadcast_slots.push((id, slot));
+        }
         let (mut handles, mut field_subs, mut collections, mut armed) = self.observe_params(device_uuid, &paths, invalidate);
         // The device's plain-field, sample and soundfont observations all unsubscribe the same way, so one list.
         let mut observe_subs = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
@@ -2326,7 +2374,7 @@ impl Engine {
                 Box::new(move |_graph, _event| hub_invalidate())));
         }
         sink.set_params(handles.clone(), armed);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, sidechain_paths, param_hub_sub, sample_hub_sub}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, sidechain_paths, param_hub_sub, sample_hub_sub, broadcast_slots}
     }
 
     /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
@@ -2527,6 +2575,13 @@ impl Engine {
             for collection in params.collections {
                 collection.terminate(&mut self.graph);
             }
+            for (id, slot) in params.broadcast_slots {
+                if let Some(entry) = unsafe { DEVICE_BROADCASTS.get() }.get_mut(id as usize) {
+                    *entry = (0, false);
+                }
+                unsafe { DEVICE_BROADCAST_FREE.get() }.push(id);
+                drop(slot); // the table entry Weak-sweeps on the next reconcile
+            }
         }
     }
 
@@ -2647,6 +2702,7 @@ impl Engine {
 /// graph, so it is a free fn.
 fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Vec<FieldPath> {
     unsafe { BIND.get() }.clear();
+    unsafe { BROADCAST_BINDS.get() }.clear();
     unsafe { SAMPLE_OBS.get() }.clear();
     unsafe { SOUNDFONT_OBS.get() }.clear();
     unsafe { FIELD_OBS.get() }.clear();

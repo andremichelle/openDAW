@@ -108,6 +108,11 @@ pub fn db_to_gain(db: f32) -> f32 {
     libm::powf(10.0, db / 20.0)
 }
 
+/// A linear gain to decibels (`20 * log10(gain)`), mirroring lib-dsp `gainToDb` (`-inf` for 0).
+pub fn gain_to_db(gain: f32) -> f32 {
+    20.0 * libm::log10f(gain)
+}
+
 /// Parabolic sine approximation for `x` in `[-PI, PI]` (good enough for a test tone / click).
 #[inline]
 pub fn fast_sin(x: f32) -> f32 {

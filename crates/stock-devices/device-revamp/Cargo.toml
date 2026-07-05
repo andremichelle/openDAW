@@ -1,5 +1,5 @@
 [package]
-name = "device-lowpass"
+name = "device-revamp"
 version = "0.0.0"
 edition = "2021"
 publish = false

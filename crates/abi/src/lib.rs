@@ -153,6 +153,9 @@ extern "C" {
     fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32;
     fn host_pulse_to_offset(pulse: f64) -> u32;
     fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32;
+    fn host_bind_broadcast(path_ptr: u32, path_len: u32, len: u32) -> u32;
+    fn host_broadcast_ptr(id: u32) -> u32;
+    fn host_broadcast_active(id: u32) -> u32;
     fn host_update_parameters(position: f64, out_ptr: u32, max: u32) -> u32;
     fn host_first_update_position(at: f64) -> f64;
     fn host_next_update_position(after: f64) -> f64;
@@ -491,6 +494,36 @@ pub fn bind_parameter(path: &[u16]) -> u32 {
     { unsafe { host_bind_parameter(path.as_ptr() as u32, path.len() as u32) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = path; 0 }
+}
+
+/// Register a LIVE-DATA broadcast slot for THIS device (call from `init`): `len` floats published to the UI
+/// at the device address + `path` (the TS `context.broadcaster.broadcastFloats(adapter.address.append(...))`
+/// mirror — e.g. the Compressor's editor values at `[0]`, Revamp's spectrum at `[0xFFF]`). Returns the slot
+/// id. The slot memory is engine-owned; fetch its pointer with [`broadcast_ptr`] (0 until the engine drains
+/// the bind after `init`) and write the current values each `process`.
+pub fn bind_broadcast(path: &[u16], len: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_bind_broadcast(path.as_ptr() as u32, path.len() as u32, len) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (path, len); 0 }
+}
+
+/// The write pointer of a [`bind_broadcast`] slot (`len` f32s), or 0 while unbound. Stable for the device's
+/// life once non-zero; cache it in state.
+pub fn broadcast_ptr(id: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_broadcast_ptr(id) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = id; 0 }
+}
+
+/// Whether the UI currently SUBSCRIBES to a [`bind_broadcast`] slot (the LiveStream round-trip). Producers
+/// may skip cold work (e.g. the spectrum FFT) while inactive; cheap values are simply written every block.
+pub fn broadcast_active(id: u32) -> bool {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_broadcast_active(id) != 0 } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = id; false }
 }
 
 /// Declare one of THIS effect's SIDECHAIN input PORTS by its pointer FIELD-KEY PATH on the device box (e.g.

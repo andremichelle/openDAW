@@ -101,15 +101,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "device-lowpass"
-version = "0.0.0"
-dependencies = [
- "abi",
- "dsp",
- "math",
-]
-
-[[package]]
 name = "device-maximizer"
 version = "0.0.0"
 dependencies = [
@@ -143,6 +134,15 @@ version = "0.0.0"
 dependencies = [
  "abi",
  "libm",
+ "math",
+]
+
+[[package]]
+name = "device-revamp"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
  "math",
 ]
 

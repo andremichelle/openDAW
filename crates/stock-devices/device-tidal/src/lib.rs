@@ -34,6 +34,7 @@ const RATE_FIELD: [u16; 1] = [20];
 const DEPTH_FIELD: [u16; 1] = [21];
 const OFFSET_FIELD: [u16; 1] = [22];
 const CHANNEL_OFFSET_FIELD: [u16; 1] = [23];
+const PHASE_FIELD: [u16; 1] = [0]; // the live LFO phase at address.append(0) (TS `#phase`, editor animation)
 
 // This device's value mappings (uniform 0..1 -> the parameter's real value), mirroring the TS adapter.
 const SLOPE_MAPPING: Linear = Linear::bipolar();
@@ -74,7 +75,9 @@ pub struct TidalState {
     rate_index_id: u32,
     depth_id: u32,
     offset_degrees_id: u32,
-    channel_offset_degrees_id: u32
+    channel_offset_degrees_id: u32,
+    phase_id: u32,
+    phase_ptr: u32
 }
 
 /// The DSP, plugged into the SDK's `AudioEffect` template ([`abi::render_effect`]).
@@ -91,6 +94,8 @@ impl AudioEffect for Tidal {
         state.depth_id = abi::bind_parameter(&DEPTH_FIELD);
         state.offset_degrees_id = abi::bind_parameter(&OFFSET_FIELD);
         state.channel_offset_degrees_id = abi::bind_parameter(&CHANNEL_OFFSET_FIELD);
+        state.phase_id = abi::bind_broadcast(&PHASE_FIELD, 1);
+        state.phase_ptr = 0;
         state.needs_update = true; // recompute the LFO shape on the first block
     }
 
@@ -124,6 +129,21 @@ impl AudioEffect for Tidal {
         let [in_left, in_right] = input.channels();
         let [out_left, out_right] = output;
         Tidal::dsp(state, in_left, in_right, out_left, out_right, block.s0 as usize, block.s1 as usize, block.p0, block.bpm);
+        // The editor's LFO phase (TS `#phase`): advanced only while the transport plays.
+        let playing = abi::BlockFlags::TRANSPORTING | abi::BlockFlags::PLAYING;
+        if block.flags.0 & playing == playing {
+            if state.phase_ptr == 0 {
+                state.phase_ptr = abi::broadcast_ptr(state.phase_id);
+            }
+            if state.phase_ptr != 0 {
+                let delta = ppqn::samples_to_pulses(1.0, block.bpm, state.sample_rate);
+                let index = state.rate_index.clamp(0, RATE_FRACTIONS.len() as i32 - 1) as usize;
+                let (numerator, denominator) = RATE_FRACTIONS[index];
+                let rate_inverse = 1.0 / ppqn::from_signature(numerator, denominator);
+                let phase = (block.p0 + (block.s1 - block.s0) as f64 * delta) * rate_inverse;
+                unsafe { *(state.phase_ptr as *mut f32) = phase as f32; }
+            }
+        }
     }
 }
 

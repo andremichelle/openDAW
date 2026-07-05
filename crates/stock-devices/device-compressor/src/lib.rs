@@ -16,7 +16,7 @@
 use core::panic::PanicInfo;
 use abi::{bool_value, float_value, AudioEffect, Block, ParamValue, Ports, MAIN_INPUT};
 use dsp::ctagdrc::{decibels_to_gain, DelayLine, GainComputer, LevelDetector, LookAhead, SmoothingFilter};
-use dsp::db_to_gain;
+use dsp::{db_to_gain, gain_to_db};
 use dsp::ramp::LinearRamp;
 use dsp::RENDER_QUANTUM;
 use math::value_mapping::{Exponential, Linear};
@@ -40,6 +40,7 @@ const RELEASE_FIELD: [u16; 1] = [19];
 const MAKEUP_FIELD: [u16; 1] = [20];
 const MIX_FIELD: [u16; 1] = [21];
 const SIDE_CHAIN_FIELD: [u16; 1] = [30];
+const EDITOR_FIELD: [u16; 1] = [0]; // live editor values at address.append(0): [input dB, reduction dB, output dB]
 
 const INPUTGAIN_MAPPING: Linear = Linear {min: -30.0, max: 30.0};
 const THRESHOLD_MAPPING: Linear = Linear {min: -60.0, max: 0.0};
@@ -86,7 +87,14 @@ pub struct CompressorState {
     release_id: u32,
     makeup_id: u32,
     mix_id: u32,
-    sidechain_id: u32
+    sidechain_id: u32,
+    // Live editor telemetry (TS `#editorValues` at address `[0]`): detection peak, last reduction, output
+    // peak — the peaks hold with a 500 ms decay (TS `PEAK_DECAY_PER_SAMPLE`), written per block.
+    editor_id: u32,
+    editor_ptr: u32,
+    editor_peak_decay: f32,
+    inp_max: f32,
+    out_max: f32
 }
 
 /// The DSP, plugged into the SDK's `AudioEffect` template ([`abi::render_effect`]).
@@ -121,6 +129,11 @@ impl AudioEffect for Compressor {
         state.makeup_id = abi::bind_parameter(&MAKEUP_FIELD);
         state.mix_id = abi::bind_parameter(&MIX_FIELD);
         state.sidechain_id = abi::bind_sidechain(&SIDE_CHAIN_FIELD);
+        state.editor_id = abi::bind_broadcast(&EDITOR_FIELD, 3);
+        state.editor_ptr = 0;
+        state.editor_peak_decay = libm::expf(-1.0 / (sample_rate * 0.500));
+        state.inp_max = 0.0;
+        state.out_max = 0.0;
     }
 
     fn parameter_changed(state: &mut CompressorState, id: u32, value: ParamValue) {
@@ -195,10 +208,19 @@ impl AudioEffect for Compressor {
                 }
             }
         }
+        // Track the detection-signal peak for the editor display (TS `#inpMax`, 500 ms decay).
+        for &peak in &state.sidechain_signal[s0..s1] {
+            if state.inp_max <= peak {
+                state.inp_max = peak;
+            } else {
+                state.inp_max *= state.editor_peak_decay;
+            }
+        }
         // 3) crest-factor auto-ballistics, static compression curve, then smoothing ballistics
         state.ballistics.process_crest_factor(&state.sidechain_signal, s0, s1);
         state.gain_computer.apply_compression_to_buffer(&mut state.sidechain_signal, s0, s1);
         state.ballistics.apply_ballistics(&mut state.sidechain_signal, s0, s1);
+        let red_min = state.sidechain_signal[s1 - 1]; // TS `#redMin`: the block's last smoothed reduction (dB)
         // 4) auto makeup (mean attenuation, sign-flipped, smoothed)
         let mut sum = 0.0f32;
         for &sample in &state.sidechain_signal[s0..s1] {
@@ -225,8 +247,25 @@ impl AudioEffect for Compressor {
         }
         let mix = state.mix;
         for i in s0..s1 {
-            out_left[i] = out_left[i] * mix + state.original_left[i] * (1.0 - mix);
-            out_right[i] = out_right[i] * mix + state.original_right[i] * (1.0 - mix);
+            let left = out_left[i] * mix + state.original_left[i] * (1.0 - mix);
+            let right = out_right[i] * mix + state.original_right[i] * (1.0 - mix);
+            let peak = libm::fabsf(left).max(libm::fabsf(right));
+            if state.out_max <= peak {
+                state.out_max = peak;
+            } else {
+                state.out_max *= state.editor_peak_decay;
+            }
+            out_left[i] = left;
+            out_right[i] = right;
+        }
+        if state.editor_ptr == 0 {
+            state.editor_ptr = abi::broadcast_ptr(state.editor_id);
+        }
+        if state.editor_ptr != 0 {
+            let editor = unsafe { core::slice::from_raw_parts_mut(state.editor_ptr as *mut f32, 3) };
+            editor[0] = gain_to_db(state.inp_max);
+            editor[1] = red_min;
+            editor[2] = gain_to_db(state.out_max);
         }
         state.processing = true;
     }

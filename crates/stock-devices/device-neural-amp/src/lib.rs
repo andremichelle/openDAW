@@ -17,6 +17,7 @@
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
 use abi::{float_value, AudioEffect, Block, FieldValue, ParamValue, Ports};
+use dsp::analyser::{AudioAnalyser, NUM_BINS};
 use dsp::db_to_gain;
 use math::value_mapping::{Decibel, Linear};
 
@@ -33,6 +34,7 @@ const INPUT_GAIN_FIELD: [u16; 1] = [11];
 const OUTPUT_GAIN_FIELD: [u16; 1] = [12];
 const MONO_FIELD: [u16; 1] = [13];
 const MIX_FIELD: [u16; 1] = [14];
+const SPECTRUM_FIELD: [u16; 1] = [0xFFF]; // TS NeuralAmpDeviceBoxAdapter.spectrum
 const MODEL_POINTER: [u16; 1] = [20];
 // The `NeuralAmpModelBox` string field holding the `.nam` JSON (`model`, key 2), read off the pointer target.
 const MODEL_JSON_KEY: u16 = 2;
@@ -55,7 +57,12 @@ pub struct NeuralAmpState {
     mono_field_id: u32,
     model_field_id: u32,
     scratch_in: [[f32; RENDER_QUANTUM]; 2],
-    scratch_out: [[f32; RENDER_QUANTUM]; 2]
+    scratch_out: [[f32; RENDER_QUANTUM]; 2],
+    // The editor's output spectrum (TS `adapter.spectrum` at `[0xFFF]`, decay 0.96): the analyser runs only
+    // while the UI subscribes (`broadcast_active`), mirroring TS `#needsSpectrum`.
+    analyser: AudioAnalyser,
+    spectrum_id: u32,
+    spectrum_ptr: u32
 }
 
 pub struct NeuralAmpDevice;
@@ -75,6 +82,9 @@ impl AudioEffect for NeuralAmpDevice {
         state.mix_id = abi::bind_parameter(&MIX_FIELD);
         state.mono_field_id = abi::observe_field(&MONO_FIELD);
         state.model_field_id = abi::observe_target_string(&MODEL_POINTER, MODEL_JSON_KEY);
+        state.analyser.init(0.96); // TS: new AudioAnalyser({decay: 0.96})
+        state.spectrum_id = abi::bind_broadcast(&SPECTRUM_FIELD, NUM_BINS as u32);
+        state.spectrum_ptr = 0;
     }
 
     fn parameter_changed(state: &mut NeuralAmpState, id: u32, value: ParamValue) {
@@ -95,7 +105,19 @@ impl AudioEffect for NeuralAmpDevice {
         let Some(input) = abi::resolve_input(abi::MAIN_INPUT) else {return};
         let [in_left, in_right] = input.channels();
         let [out_left, out_right] = output;
-        process_chunk(state, in_left, in_right, out_left, out_right, block.s0 as usize, block.s1 as usize);
+        let (s0, s1) = (block.s0 as usize, block.s1 as usize);
+        process_chunk(state, in_left, in_right, out_left, out_right, s0, s1);
+        if abi::broadcast_active(state.spectrum_id) {
+            state.analyser.process(&out_left[s0..s1], &out_right[s0..s1]);
+            if state.spectrum_ptr == 0 {
+                state.spectrum_ptr = abi::broadcast_ptr(state.spectrum_id);
+            }
+            if state.spectrum_ptr != 0 {
+                let spectrum = unsafe { core::slice::from_raw_parts_mut(state.spectrum_ptr as *mut f32, NUM_BINS) };
+                spectrum.copy_from_slice(state.analyser.bins());
+                state.analyser.decay = true;
+            }
+        }
     }
 }
 

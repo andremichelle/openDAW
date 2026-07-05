@@ -13,6 +13,7 @@
 use core::panic::PanicInfo;
 use abi::{float_value, AudioEffect, Block, FieldValue, ParamValue, Ports, MAIN_INPUT};
 use dsp::vocoder::{NoiseColor, NoiseGenerator, VocoderDsp};
+use dsp::analyser::{AudioAnalyser, NUM_BINS};
 use math::value_mapping::{Exponential, Linear};
 
 #[cfg(target_family = "wasm")]
@@ -37,6 +38,8 @@ const GAIN_FIELD: [u16; 1] = [21];
 // Non-param fields + the sidechain port.
 const BAND_COUNT_FIELD: [u16; 1] = [18];
 const MODULATOR_SOURCE_FIELD: [u16; 1] = [19];
+const MODULATOR_SPECTRUM_FIELD: [u16; 1] = [0xFFE]; // TS VocoderDeviceBoxAdapter.modulatorSpectrum
+const CARRIER_SPECTRUM_FIELD: [u16; 1] = [0xFFF]; // TS VocoderDeviceBoxAdapter.carrierSpectrum
 const SIDE_CHAIN_FIELD: [u16; 1] = [30];
 
 // Parameter value-mappings (from VocoderDeviceBoxAdapter).
@@ -89,7 +92,15 @@ pub struct VocoderState {
     gain_id: u32,
     band_count_field_id: u32,
     modulator_source_field_id: u32,
-    sidechain_id: u32
+    sidechain_id: u32,
+    // The editor's spectra (one shared analyser, TS `#spectrumMode`): the MODULATOR tap at `[0xFFE]` (the
+    // active modulator signal) or the CARRIER tap at `[0xFFF]` (the main input) — analysed only while the
+    // UI subscribes; the modulator wins when both are watched.
+    analyser: AudioAnalyser,
+    mod_spectrum_id: u32,
+    mod_spectrum_ptr: u32,
+    car_spectrum_id: u32,
+    car_spectrum_ptr: u32
 }
 
 pub struct Vocoder;
@@ -114,6 +125,11 @@ impl AudioEffect for Vocoder {
         state.band_count_field_id = abi::observe_field(&BAND_COUNT_FIELD);
         state.modulator_source_field_id = abi::observe_field(&MODULATOR_SOURCE_FIELD);
         state.sidechain_id = abi::bind_sidechain(&SIDE_CHAIN_FIELD);
+        state.analyser.init(0.0);
+        state.mod_spectrum_id = abi::bind_broadcast(&MODULATOR_SPECTRUM_FIELD, NUM_BINS as u32);
+        state.mod_spectrum_ptr = 0;
+        state.car_spectrum_id = abi::bind_broadcast(&CARRIER_SPECTRUM_FIELD, NUM_BINS as u32);
+        state.car_spectrum_ptr = 0;
     }
 
     fn process_audio(state: &mut VocoderState, output: [&mut [f32]; 2], block: &Block) {
@@ -142,6 +158,42 @@ impl AudioEffect for Vocoder {
                     for sample in &mut state.mod_r[s0..s1] {*sample = 0.0;}
                     state.dsp.process_stereo_mod(car_l, car_r, &state.mod_l, &state.mod_r, out_left, out_right, s0, s1);
                 }
+            }
+        }
+        let mod_active = abi::broadcast_active(state.mod_spectrum_id);
+        let car_active = abi::broadcast_active(state.car_spectrum_id);
+        if mod_active {
+            match state.mode {
+                Mode::NoiseWhite | Mode::NoisePink | Mode::NoiseBrown =>
+                    state.analyser.process(&state.mod_l[s0..s1], &state.mod_l[s0..s1]),
+                Mode::SelfMod => state.analyser.process(&car_l[s0..s1], &car_r[s0..s1]),
+                Mode::External => {
+                    if let Some(sidechain) = abi::resolve_input(state.sidechain_id) {
+                        state.analyser.process(&sidechain.left()[s0..s1], &sidechain.right()[s0..s1]);
+                    }
+                }
+            }
+        } else if car_active {
+            state.analyser.process(&car_l[s0..s1], &car_r[s0..s1]);
+        }
+        if mod_active {
+            if state.mod_spectrum_ptr == 0 {
+                state.mod_spectrum_ptr = abi::broadcast_ptr(state.mod_spectrum_id);
+            }
+            if state.mod_spectrum_ptr != 0 {
+                let spectrum = unsafe { core::slice::from_raw_parts_mut(state.mod_spectrum_ptr as *mut f32, NUM_BINS) };
+                spectrum.copy_from_slice(state.analyser.bins());
+                state.analyser.decay = true;
+            }
+        }
+        if car_active {
+            if state.car_spectrum_ptr == 0 {
+                state.car_spectrum_ptr = abi::broadcast_ptr(state.car_spectrum_id);
+            }
+            if state.car_spectrum_ptr != 0 {
+                let spectrum = unsafe { core::slice::from_raw_parts_mut(state.car_spectrum_ptr as *mut f32, NUM_BINS) };
+                spectrum.copy_from_slice(state.analyser.bins());
+                state.analyser.decay = true;
             }
         }
     }

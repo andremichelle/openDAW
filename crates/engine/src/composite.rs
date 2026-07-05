@@ -510,6 +510,9 @@ impl Engine {
                         self.graph.unsubscribe(port.pointer_sub);
                     }
                 }
+                for params in &device_params {
+                    self.output_registry.remove(&Address::of(params.device_uuid(), vec![]));
+                }
                 self.teardown_device_params(device_params);
             }
             ChildBody::Nested {binding} => self.teardown_composite(binding)

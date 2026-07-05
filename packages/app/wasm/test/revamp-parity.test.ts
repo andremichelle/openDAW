@@ -1,4 +1,4 @@
-// TS-vs-WASM parity for the Revamp 7-band EQ (device-lowpass). The bug: the Rust device used to be a single
+// TS-vs-WASM parity for the Revamp 7-band EQ (device-revamp). The bug: the Rust device used to be a single
 // low-pass biquad, ignoring the other six bands AND the per-band enabled flags, so a project like sunset.od (whose
 // Revamps use bells + shelves with the low-pass OFF) sounded very different. This renders a scriptable Apparat sine
 // through the Rust Revamp configured exactly like sunset's REVAMP 1f89 (low-bell +6 dB @78, high-bell +4.5 @1363,

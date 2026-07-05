@@ -1,5 +1,5 @@
 //! The Revamp 7-band parametric EQ AUDIO-EFFECT device, a faithful port of the TS `RevampDeviceProcessor`.
-//! (Historical crate name `device-lowpass`; it realizes `RevampDeviceBox`.) The bands, in signal order, are:
+//! Realizes `RevampDeviceBox`. The bands, in signal order, are:
 //! high-pass, low-shelf, low-bell, mid-bell, high-bell, high-shelf, low-pass. Each enabled band filters the
 //! previous band's output (a chain); if no band is enabled the input passes through. The high-pass and low-pass
 //! are cascaded `BiquadStack`s (1..4 sections, from the `order` field); the five middle bands are single
@@ -18,6 +18,7 @@
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
 use abi::{bool_value, float_value, int_value, AudioEffect, Block, ParamValue, Ports};
+use dsp::analyser::{AudioAnalyser, NUM_BINS};
 use dsp::biquad::{BiquadCoeff, BiquadMono, BiquadProcessor, BiquadStack};
 use math::value_mapping::{Exponential, Linear, LinearInteger};
 
@@ -51,6 +52,7 @@ const Q_HIGH_BELL: [u16; 2] = [14, 12];
 const Q_LP: [u16; 2] = [16, 12];
 const ORDER_HP: [u16; 2] = [10, 11];
 const ORDER_LP: [u16; 2] = [16, 11];
+const SPECTRUM_FIELD: [u16; 1] = [0xFFF]; // TS RevampDeviceBoxAdapter.spectrum
 
 // Value mappings (uniform 0..1 -> real), mirroring the schema constraints. Static field values arrive as the
 // already-real value (used directly); these map an AUTOMATED unit value.
@@ -83,7 +85,12 @@ pub struct RevampState {
     gain_id: [u32; 7],
     q_id: [u32; 7],
     order_hp_id: u32,
-    order_lp_id: u32
+    order_lp_id: u32,
+    // The editor's output spectrum (TS `adapter.spectrum` at `[0xFFF]`): the analyser runs (and the bins are
+    // copied) only while the UI subscribes (`broadcast_active`), mirroring TS `#needsSpectrum`.
+    analyser: AudioAnalyser,
+    spectrum_id: u32,
+    spectrum_ptr: u32
 }
 
 /// The DSP, plugged into the SDK's `AudioEffect` template ([`abi::render_effect`]).
@@ -153,6 +160,9 @@ impl AudioEffect for Revamp {
         state.q_id[LP] = abi::bind_parameter(&Q_LP);
         state.order_hp_id = abi::bind_parameter(&ORDER_HP);
         state.order_lp_id = abi::bind_parameter(&ORDER_LP);
+        state.analyser.init(0.0);
+        state.spectrum_id = abi::bind_broadcast(&SPECTRUM_FIELD, NUM_BINS as u32);
+        state.spectrum_ptr = 0;
     }
 
     fn parameter_changed(state: &mut RevampState, id: u32, value: ParamValue) {
@@ -226,6 +236,17 @@ impl AudioEffect for Revamp {
                 &mut state.hp[1], &mut state.low_shelf[1], &mut state.low_bell[1], &mut state.mid_bell[1],
                 &mut state.high_bell[1], &mut state.high_shelf[1], &mut state.lp[1]];
             Revamp::process_channel(&coeff, &enabled, bands, in_right, out_right, s0, s1);
+        }
+        if abi::broadcast_active(state.spectrum_id) {
+            state.analyser.process(&out_left[s0..s1], &out_right[s0..s1]);
+            if state.spectrum_ptr == 0 {
+                state.spectrum_ptr = abi::broadcast_ptr(state.spectrum_id);
+            }
+            if state.spectrum_ptr != 0 {
+                let spectrum = unsafe { core::slice::from_raw_parts_mut(state.spectrum_ptr as *mut f32, NUM_BINS) };
+                spectrum.copy_from_slice(state.analyser.bins());
+                state.analyser.decay = true;
+            }
         }
     }
 }

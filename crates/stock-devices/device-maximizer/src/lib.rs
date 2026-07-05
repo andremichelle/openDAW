@@ -15,6 +15,7 @@
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
 use abi::{float_value, AudioEffect, Block, FieldValue, ParamValue, Ports};
+use dsp::meter::StereoMeter;
 use dsp::ramp::LinearRamp;
 use dsp::{db_to_gain, gain_to_db};
 use math::clamp;
@@ -28,6 +29,8 @@ fn panic(_: &PanicInfo) -> ! {
 
 const THRESHOLD_FIELD: [u16; 1] = [11];
 const LOOKAHEAD_FIELD: [u16; 1] = [10];
+const REDUCTION_FIELD: [u16; 1] = [0]; // live reduction (dB, min-held) at address.append(0)
+const INPUT_PEAKS_FIELD: [u16; 1] = [1]; // input peak/rms meter at address.append(1) (TS `#inputPeaks`)
 const THRESHOLD_MAPPING: Linear = Linear {min: -24.0, max: 0.0}; // MaximizerDeviceBoxAdapter ValueMapping.linear(-24, 0)
 
 const RELEASE_IN_SECONDS: f32 = 0.2;
@@ -55,7 +58,15 @@ pub struct MaximizerState {
     processed: bool,
     headroom_gain: f32,
     threshold_id: u32,
-    lookahead_field_id: u32
+    lookahead_field_id: u32,
+    // Live telemetry: the min-held reduction at `[0]` (TS resets it per UI tick; here per block — the UI
+    // samples the last block's min) and the INPUT peak/rms meter at `[1]` (TS `#inputPeaks`).
+    reduction_id: u32,
+    reduction_ptr: u32,
+    reduction_min: f32,
+    input_meter: StereoMeter,
+    input_peaks_id: u32,
+    input_peaks_ptr: u32
 }
 
 /// The DSP, plugged into the SDK's `AudioEffect` template ([`abi::render_effect`]).
@@ -77,6 +88,12 @@ impl AudioEffect for Maximizer {
         state.headroom_gain = 1.0;
         state.threshold_id = abi::bind_parameter(&THRESHOLD_FIELD);
         state.lookahead_field_id = abi::observe_field(&LOOKAHEAD_FIELD);
+        state.reduction_id = abi::bind_broadcast(&REDUCTION_FIELD, 1);
+        state.reduction_ptr = 0;
+        state.reduction_min = 0.0;
+        state.input_meter.init(sample_rate);
+        state.input_peaks_id = abi::bind_broadcast(&INPUT_PEAKS_FIELD, 4);
+        state.input_peaks_ptr = 0;
     }
 
     fn parameter_changed(state: &mut MaximizerState, id: u32, value: ParamValue) {
@@ -124,6 +141,9 @@ impl AudioEffect for Maximizer {
             }
             let threshold = state.threshold.move_and_get();
             let reduction_db = 0.0f32.min(threshold - gain_to_db(state.envelope));
+            if reduction_db < state.reduction_min {
+                state.reduction_min = reduction_db;
+            }
             let headroom_gain = if threshold_ramping {db_to_gain(MAGIC_HEADROOM - threshold)} else {steady_headroom};
             let gain = db_to_gain(reduction_db) * headroom_gain;
             if state.lookahead {
@@ -137,6 +157,20 @@ impl AudioEffect for Maximizer {
                 out_left[i] = inp0 * gain;
                 out_right[i] = inp1 * gain;
             }
+        }
+        if state.reduction_ptr == 0 {
+            state.reduction_ptr = abi::broadcast_ptr(state.reduction_id);
+        }
+        if state.reduction_ptr != 0 {
+            unsafe { *(state.reduction_ptr as *mut f32) = state.reduction_min; }
+            state.reduction_min = 0.0;
+        }
+        if state.input_peaks_ptr == 0 {
+            state.input_peaks_ptr = abi::broadcast_ptr(state.input_peaks_id);
+        }
+        if state.input_peaks_ptr != 0 {
+            let values = unsafe { core::slice::from_raw_parts_mut(state.input_peaks_ptr as *mut f32, 4) };
+            state.input_meter.process(&in_left[s0..s1], &in_right[s0..s1], values);
         }
         state.processed = true;
     }
