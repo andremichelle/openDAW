@@ -46,5 +46,6 @@ WASM core is free to restructure; it just has to produce the same audio.
    - [Integration — separate WASM test app](integration.md) — `packages/app/wasm/`, studio untouched
 8. [Port order](08-port-order.md) — **drafted**
 9. [Rollout / fallback / retirement](09-rollout.md) — **drafted**
+   - [SDK packaging & configurable plugin path](sdk-packaging.md) — publish the engine as `@opendaw/studio-core-wasm`, manifest-driven plugin URLs — **planned**
 
 Status: **planning — all docs drafted.**
