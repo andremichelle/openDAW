@@ -170,6 +170,13 @@ impl VaporisateurVoice {
     }
 }
 
+impl VaporisateurVoice {
+    /// The amp envelope's UI phase (TS `first.env.phase`), for the editor's envelope playhead broadcast.
+    pub fn env_phase(&self) -> f32 {
+        self.env.phase() as f32
+    }
+}
+
 impl Voice for VaporisateurVoice {
     type Shared = VaporisateurParams;
 

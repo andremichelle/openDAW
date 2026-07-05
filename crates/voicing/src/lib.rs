@@ -168,6 +168,14 @@ impl<V: Voice + Default, const U: usize> Default for VoiceUnison<V, U> {
     }
 }
 
+impl<V: Voice + Default, const U: usize> VoiceUnison<V, U> {
+    /// The FIRST sub-voice of the group (TS `unisono.processing().at(0)`) — the group's telemetry
+    /// representative (e.g. the Vaporisateur's envelope playhead). `None` while the group is inactive.
+    pub fn first(&self) -> Option<&V> {
+        if self.active > 0 { Some(&self.voices[0]) } else { None }
+    }
+}
+
 impl<V: Voice + Default, const U: usize> Voice for VoiceUnison<V, U> {
     type Shared = V::Shared;
 
@@ -413,6 +421,25 @@ impl<V: Voice + Default, const VOICES: usize, const STACK: usize> Voicing<V, VOI
     pub fn reset(&mut self) {
         self.polyphonic.reset();
         self.monophonic.reset();
+    }
+
+    /// Visit the ACTIVE strategy's sounding voices (TS `strategy.processing()`), for telemetry (e.g. the
+    /// Vaporisateur's per-voice envelope playheads).
+    pub fn for_each_active(&self, visit: &mut dyn FnMut(&V)) {
+        match self.mode {
+            VoicingMode::Polyphonic => {
+                for slot in &self.polyphonic.slots {
+                    if slot.active {
+                        visit(&slot.voice);
+                    }
+                }
+            }
+            VoicingMode::Monophonic => {
+                if self.monophonic.active {
+                    visit(&self.monophonic.voice);
+                }
+            }
+        }
     }
 }
 

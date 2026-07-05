@@ -70,6 +70,11 @@ impl SlotVoice {
         self.start_seq
     }
 
+    /// The current read position in source frames (TS `SampleVoice.position`, the editor's pad playhead).
+    pub fn position(&self) -> f64 {
+        self.position
+    }
+
     /// Begin a note. Snapshots every parameter except pitch (read live each block): the velocity gain, the
     /// gate mode, the attack / release in samples, and the `start`..`end` window in source frames. Mirrors the
     /// TS `SampleVoice` constructor.

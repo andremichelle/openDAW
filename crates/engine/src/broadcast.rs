@@ -15,6 +15,10 @@ use engine_env::telemetry::BroadcastSlot;
 // WASM CONTRACT: the lib-fusion `PackageType` enum order (Float, FloatArray, Integer, IntegerArray, ByteArray).
 pub const PACKAGE_FLOAT: u32 = 0;
 pub const PACKAGE_FLOAT_ARRAY: u32 = 1;
+// An INT RING slot: `[0]` = the producer's write index (i32), `[1..]` = the ring of i32 payloads. The
+// consumer (the worklet) mirrors `[1..]` as an Integers package and, per UI tick, writes the 0 sentinel at
+// the index and resets it — the TS `broadcastIntegers` consume-on-read (e.g. the Velocity device's ring).
+pub const PACKAGE_INT_RING: u32 = 2;
 
 pub struct BroadcastEntry {
     pub uuid: Uuid,
@@ -36,6 +40,13 @@ impl Broadcasts {
     /// Register one telemetry slot under a box address; its pointer and length come from the slot itself
     /// (a slot is exactly as long as its content). Reconcile-time (allocates the entry).
     pub fn register(&mut self, uuid: Uuid, keys: &[u16], package_type: u32, slot: &BroadcastSlot) {
+        // One package per address (the JS LiveStreamBroadcaster asserts uniqueness): when an ALIVE entry
+        // already claims (uuid, keys), keep it and skip — a DEVICE-bound slot at the same address (e.g. the
+        // Playfield slot's voice positions at the bare pad address) takes precedence over the engine's
+        // generic meter, which registers after `bind_device`. Dead entries do not block (swept later).
+        if self.entries.iter().any(|entry| entry.uuid == uuid && entry.keys == keys && entry.owner.upgrade().is_some()) {
+            return;
+        }
         let (ptr, len) = {
             let values = slot.borrow();
             (values.as_ptr() as u32, values.len() as u32)

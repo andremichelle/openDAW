@@ -31,6 +31,10 @@ const RANDOM_SEED_FIELD: [u16; 1] = [12];
 const RANDOM_AMOUNT_FIELD: [u16; 1] = [13];
 const OFFSET_FIELD: [u16; 1] = [14];
 const MIX_FIELD: [u16; 1] = [15];
+// The editor's note ring at address.append(0): TS packs `inVel*127 | outVel*127 << 8 | 1 << 16` per
+// note-on into an Int32Array(1024) the UI consumes per tick (the 1 << 16 bit marks a live entry).
+const RING_FIELD: [u16; 1] = [0];
+const RING_LEN: u32 = 1024;
 
 const UNIPOLAR: Linear = Linear::unipolar();
 const BIPOLAR: Linear = Linear::bipolar();
@@ -52,7 +56,9 @@ pub struct VelocityState {
     random_seed_id: u32,
     random_amount_id: u32,
     offset_id: u32,
-    mix_id: u32
+    mix_id: u32,
+    ring_id: u32,
+    ring_ptr: u32
 }
 
 /// The transform, plugged into the SDK's `MidiEffect` template ([`abi::render_midi_effect`]).
@@ -82,6 +88,8 @@ impl MidiEffect for Velocity {
         state.random_amount_id = abi::bind_parameter(&RANDOM_AMOUNT_FIELD);
         state.offset_id = abi::bind_parameter(&OFFSET_FIELD);
         state.mix_id = abi::bind_parameter(&MIX_FIELD);
+        state.ring_id = abi::bind_broadcast_ints(&RING_FIELD, RING_LEN);
+        state.ring_ptr = 0;
     }
 
     fn parameter_changed(state: &mut VelocityState, id: u32, value: ParamValue) {
@@ -109,6 +117,20 @@ impl MidiEffect for Velocity {
             let mut event = *record;
             if record.kind == EVENT_NOTE_ON {
                 event.velocity = Velocity::compute_velocity(state, record.position, record.velocity);
+                if state.ring_ptr == 0 {
+                    state.ring_ptr = abi::broadcast_ptr(state.ring_id);
+                }
+                if state.ring_ptr != 0 {
+                    // TS: `round(in*127) | round(out*127) << 8 | 1 << 16` appended at the write index; the
+                    // consumer (the worklet) writes the 0 sentinel and resets the index per UI tick.
+                    let ints = unsafe { core::slice::from_raw_parts_mut(state.ring_ptr as *mut i32, (RING_LEN + 1) as usize) };
+                    let index = (ints[0].max(0) as usize).min(RING_LEN as usize - 1);
+                    let packed = ((record.velocity * 127.0 + 0.5) as i32)
+                        | (((event.velocity * 127.0 + 0.5) as i32) << 8)
+                        | (1 << 16);
+                    ints[1 + index] = packed;
+                    ints[0] = index as i32 + 1;
+                }
             }
             output[count] = event;
             count += 1;

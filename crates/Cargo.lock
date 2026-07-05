@@ -133,6 +133,7 @@ name = "device-playfield-slot"
 version = "0.0.0"
 dependencies = [
  "abi",
+ "dsp",
  "libm",
  "math",
 ]

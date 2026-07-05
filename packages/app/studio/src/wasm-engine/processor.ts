@@ -284,10 +284,19 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 keys.push(record.getUint16(32 + position * 2, true))
             }
             const address = Address.compose(uuid, ...keys)
-            const values = new Float32Array(this.#memory.buffer, pointer, length)
             if (packageType === 0) { // PackageType.Float
+                const values = new Float32Array(this.#memory.buffer, pointer, length)
                 this.#broadcastSubs.push(this.#broadcaster.broadcastFloat(address, () => values[0]))
+            } else if (packageType === 2) { // INT RING: [0] = the device's write index, [1..] = i32 payloads
+                const ints = new Int32Array(this.#memory.buffer, pointer, length)
+                const ring = new Int32Array(this.#memory.buffer, pointer + 4, length - 1)
+                this.#broadcastSubs.push(this.#broadcaster.broadcastIntegers(address, ring, () => {
+                    // Consume-on-read (TS Velocity: sentinel at the write index, then reset).
+                    ring[Math.min(ints[0], ring.length - 1)] = 0
+                    ints[0] = 0
+                }))
             } else { // PackageType.FloatArray
+                const values = new Float32Array(this.#memory.buffer, pointer, length)
                 this.#broadcastSubs.push(this.#broadcaster.broadcastFloats(address, values,
                     hasSubscribers => this.#engine.broadcast_set_active(index, hasSubscribers ? 1 : 0)))
             }

@@ -153,7 +153,7 @@ extern "C" {
     fn host_pull_events(from: f64, to: f64, flags: u32, out_ptr: u32, max: u32) -> u32;
     fn host_pulse_to_offset(pulse: f64) -> u32;
     fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32;
-    fn host_bind_broadcast(path_ptr: u32, path_len: u32, len: u32) -> u32;
+    fn host_bind_broadcast(path_ptr: u32, path_len: u32, len: u32, package_type: u32) -> u32;
     fn host_broadcast_ptr(id: u32) -> u32;
     fn host_broadcast_active(id: u32) -> u32;
     fn host_update_parameters(position: f64, out_ptr: u32, max: u32) -> u32;
@@ -503,9 +503,20 @@ pub fn bind_parameter(path: &[u16]) -> u32 {
 /// the bind after `init`) and write the current values each `process`.
 pub fn bind_broadcast(path: &[u16], len: u32) -> u32 {
     #[cfg(target_family = "wasm")]
-    { unsafe { host_bind_broadcast(path.as_ptr() as u32, path.len() as u32, len) } }
+    { unsafe { host_bind_broadcast(path.as_ptr() as u32, path.len() as u32, len, 0) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (path, len); 0 }
+}
+
+/// Register an INT-RING broadcast slot (TS `broadcastIntegers` consume-on-read, e.g. the Velocity device's
+/// note ring): the slot is `1 + ring_len` i32s — `[0]` the device's write index, `[1..]` the ring. The
+/// consumer resets the index per UI tick after writing a 0 sentinel at it; the device appends at
+/// `ring[index]` and bumps `[0]` (both via [`broadcast_ptr`], cast to `*mut i32`).
+pub fn bind_broadcast_ints(path: &[u16], ring_len: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_bind_broadcast(path.as_ptr() as u32, path.len() as u32, ring_len + 1, 2) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (path, ring_len); 0 }
 }
 
 /// The write pointer of a [`bind_broadcast`] slot (`len` f32s), or 0 while unbound. Stable for the device's

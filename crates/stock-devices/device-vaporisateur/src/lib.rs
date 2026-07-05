@@ -41,6 +41,10 @@ fn panic(_: &PanicInfo) -> ! {
 const POLY_VOICES: usize = 16; // polyphonic voice slots
 const MONO_STACK: usize = 16; // monophonic held-note stack depth
 const UNISON_MAX: usize = 5; // the widest unison (the unison-count values are [1, 3, 5])
+// The editor's envelope playheads at address.append(0) (TS `envValues`): one `env.phase` per sounding
+// voice group (32 max, -1 closes the stream), written only while the UI subscribes.
+const ENV_FIELD: [u16; 1] = [0];
+const ENV_VALUES: usize = 32;
 
 // This device's value mappings (uniform 0..1 -> the parameter's real value), mirroring the TS adapter.
 const VOLUME_MAPPING: Decibel = Decibel::default_volume(); // osc volume (decibel(-72, -12, 0))
@@ -114,7 +118,9 @@ pub struct VaporisateurState {
     sample_rate: f32,
     glide_time: f64,
     unison_count: i32,
-    ids: [u32; param::COUNT]
+    ids: [u32; param::COUNT],
+    env_id: u32,
+    env_ptr: u32
 }
 
 /// The DSP, plugged into the SDK's `Instrument` template ([`abi::render_instrument`]).
@@ -154,6 +160,8 @@ impl Instrument for Vaporisateur {
         state.ids[param::LFO_TARGET_TUNE] = abi::bind_parameter(&[30, 10]);
         state.ids[param::LFO_TARGET_CUTOFF] = abi::bind_parameter(&[30, 11]);
         state.ids[param::LFO_TARGET_VOLUME] = abi::bind_parameter(&[30, 12]);
+        state.env_id = abi::bind_broadcast(&ENV_FIELD, ENV_VALUES as u32);
+        state.env_ptr = 0;
     }
 
     fn handle_event(state: &mut VaporisateurState, event: &EventRecord) {
@@ -171,6 +179,25 @@ impl Instrument for Vaporisateur {
         let [out_left, out_right] = output;
         state.voicing.process([&mut *out_left, &mut *out_right], block, &state.params);
         state.limiter.replace(out_left, out_right, 0, out_left.len());
+        if abi::broadcast_active(state.env_id) {
+            if state.env_ptr == 0 {
+                state.env_ptr = abi::broadcast_ptr(state.env_id);
+            }
+            if state.env_ptr != 0 {
+                let values = unsafe { core::slice::from_raw_parts_mut(state.env_ptr as *mut f32, ENV_VALUES) };
+                let mut index = 0;
+                state.voicing.for_each_active(&mut |group| {
+                    if index >= ENV_VALUES - 1 {
+                        return;
+                    }
+                    if let Some(first) = group.first() {
+                        values[index] = first.env_phase();
+                        index += 1;
+                    }
+                });
+                values[index] = -1.0; // close stream (TS `envValues[index] = -1`)
+            }
+        }
     }
 
     fn parameter_changed(state: &mut VaporisateurState, id: u32, value: ParamValue) {

@@ -21,6 +21,7 @@
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
 use abi::{bool_value, float_value, int_value, Block, EventRecord, FieldValue, Instrument, ParamValue, Ports, EVENT_CHOKE, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use dsp::meter::StereoMeter;
 use math::value_mapping::{Exponential, Linear, LinearInteger};
 
 mod voice;
@@ -35,6 +36,11 @@ fn panic(_: &PanicInfo) -> ! {
 /// The slot's fixed per-pad polyphony cap (see `plans/wasm-audio/playfield-composite.md`). TS polyphony is
 /// unbounded; a fixed pool is the real-time requirement, with oldest-voice stealing when full.
 const MAX_VOICES: usize = 16;
+// The editor's live telemetry (TS `SampleProcessor`): the voice PLAYHEAD positions at the pad's BARE address
+// (16 floats, -1 after the last — the engine's generic meter yields to this, see `Broadcasts::register`) and
+// the pad's output peaks at `[1001]` (TS `PlayfieldSampleBoxAdapter.peakAddress`).
+const POSITIONS_FIELD: [u16; 0] = [];
+const PEAKS_FIELD: [u16; 1] = [1001];
 
 // The PlayfieldSampleBox field-key paths (the stable schema keys, frozen). `file` (the sample pointer),
 // `index` (the MIDI note this slot plays, observed as a plain field, NOT a parameter), and the voice
@@ -66,6 +72,11 @@ const RELEASE_MAPPING: Exponential = Exponential {min: 0.001, max: 5.0}; // seco
 /// counter for oldest-voice stealing, and the binding ids the engine pushes against.
 pub struct PlayfieldSlotState {
     voices: [SlotVoice; MAX_VOICES],
+    positions_id: u32,
+    positions_ptr: u32,
+    meter: StereoMeter,
+    peaks_id: u32,
+    peaks_ptr: u32,
     sample_rate: f32,
     sample: Option<u32>, // the resolved sample handle while the `file` pointer is bound; `None` when unbound
     note_index: i32, // the MIDI note this slot plays; a note-on with a different pitch is ignored. Observed,
@@ -113,6 +124,11 @@ impl Instrument for PlayfieldSlot {
         state.attack_seconds_id = abi::bind_parameter(&ATTACK_FIELD);
         state.release_seconds_id = abi::bind_parameter(&RELEASE_FIELD);
         state.polyphone_id = abi::bind_parameter(&POLYPHONE_FIELD);
+        state.positions_id = abi::bind_broadcast(&POSITIONS_FIELD, MAX_VOICES as u32);
+        state.positions_ptr = 0;
+        state.meter.init(sample_rate);
+        state.peaks_id = abi::bind_broadcast(&PEAKS_FIELD, 4);
+        state.peaks_ptr = 0;
         state.sample = None; // no sample until the engine catches up the `file` pointer right after init
         state.sample_id = abi::observe_sample(&SAMPLE_POINTER);
     }
@@ -177,6 +193,29 @@ impl Instrument for PlayfieldSlot {
             if voice.is_used() && voice.process(out_left, out_right, left, right, num_frames, src_rate, engine_rate, pitch) {
                 voice.free();
             }
+        }
+        if state.positions_ptr == 0 {
+            state.positions_ptr = abi::broadcast_ptr(state.positions_id);
+        }
+        if state.positions_ptr != 0 {
+            let positions = unsafe { core::slice::from_raw_parts_mut(state.positions_ptr as *mut f32, MAX_VOICES) };
+            let mut count = 0;
+            for voice in state.voices.iter() {
+                if voice.is_used() {
+                    positions[count] = voice.position() as f32;
+                    count += 1;
+                }
+            }
+            if count < MAX_VOICES {
+                positions[count] = -1.0; // close stream (TS `positions[slices.length] = -1`)
+            }
+        }
+        if state.peaks_ptr == 0 {
+            state.peaks_ptr = abi::broadcast_ptr(state.peaks_id);
+        }
+        if state.peaks_ptr != 0 {
+            let values = unsafe { core::slice::from_raw_parts_mut(state.peaks_ptr as *mut f32, 4) };
+            state.meter.process(out_left, out_right, values);
         }
     }
 

@@ -315,7 +315,7 @@ static BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
 // The broadcast-bind recorder (`host_bind_broadcast`): (global slot id, field-key path, float count) per
 // record. The engine clears it, calls a device's `init`, then drains it in `bind_device` (creating +
 // registering the slots). Its OWN cell (NOT `ENGINE`), safe to append re-entrantly from `init`.
-static BROADCAST_BINDS: Shared<Vec<(u32, Vec<u16>, u32)>> = Shared::new(Vec::new());
+static BROADCAST_BINDS: Shared<Vec<(u32, Vec<u16>, u32, u32)>> = Shared::new(Vec::new());
 // The device LIVE-DATA broadcast registry: global slot id -> (write ptr, UI-subscribed). Read re-entrantly
 // by `host_broadcast_ptr` / `host_broadcast_active` from a device's `process` (never touches `ENGINE`);
 // `bind_device` fills the ptr, teardown zeroes it and returns the id to the free list (no unbounded growth
@@ -557,14 +557,14 @@ pub extern "C" fn host_bind_parameter(path_ptr: u32, path_len: u32) -> u32 {
 /// registers the slot after `init` returns. The device fetches the write ptr via `host_broadcast_ptr`.
 /// Touches only its own cells, so it is safe to call re-entrantly from `init`.
 #[no_mangle]
-pub extern "C" fn host_bind_broadcast(path_ptr: u32, path_len: u32, len: u32) -> u32 {
+pub extern "C" fn host_bind_broadcast(path_ptr: u32, path_len: u32, len: u32, package_type: u32) -> u32 {
     let path = unsafe { core::slice::from_raw_parts(path_ptr as *const u16, path_len as usize) };
     let registry = unsafe { DEVICE_BROADCASTS.get() };
     let id = match unsafe { DEVICE_BROADCAST_FREE.get() }.pop() {
         Some(id) => { registry[id as usize] = (0, false); id }
         None => { registry.push((0, false)); (registry.len() - 1) as u32 }
     };
-    unsafe { BROADCAST_BINDS.get() }.push((id, path.to_vec(), len.max(1)));
+    unsafe { BROADCAST_BINDS.get() }.push((id, path.to_vec(), len.max(1), package_type));
     id
 }
 

@@ -2337,9 +2337,13 @@ impl Engine {
         // and publish the write ptr through the registry so the device's `host_broadcast_ptr` resolves it.
         let broadcast_binds = core::mem::take(unsafe { BROADCAST_BINDS.get() });
         let mut broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)> = Vec::with_capacity(broadcast_binds.len());
-        for (id, path, len) in broadcast_binds {
+        for (id, path, len, package_type) in broadcast_binds {
             let slot = engine_env::telemetry::broadcast_slot(len as usize);
-            let package_type = if len == 1 { crate::broadcast::PACKAGE_FLOAT } else { crate::broadcast::PACKAGE_FLOAT_ARRAY };
+            let package_type = match package_type {
+                crate::broadcast::PACKAGE_INT_RING => crate::broadcast::PACKAGE_INT_RING,
+                _ if len == 1 => crate::broadcast::PACKAGE_FLOAT,
+                _ => crate::broadcast::PACKAGE_FLOAT_ARRAY
+            };
             self.broadcasts.register(device_uuid, &path, package_type, &slot);
             let ptr = slot.borrow().as_ptr() as u32;
             if let Some(entry) = unsafe { DEVICE_BROADCASTS.get() }.get_mut(id as usize) {

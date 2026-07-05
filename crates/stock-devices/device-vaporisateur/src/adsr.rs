@@ -33,6 +33,12 @@ impl Adsr {
         Self {inv_sample_rate: 1.0 / sample_rate as f64, ..Self::default()}
     }
 
+    /// The envelope's UI phase (TS `env.phase`, 0..4 across Attack/Decay/Sustain/Release — the editor's
+    /// envelope playhead).
+    pub fn phase(&self) -> f64 {
+        self.phase
+    }
+
     pub fn gate(&self) -> bool {
         self.state != State::Idle && self.state != State::Release
     }
