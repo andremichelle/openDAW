@@ -183,6 +183,10 @@ export class LiveStreamReceiver implements Terminable {
         this.#memory = Option.wrap(new ByteArrayInput(data, this.#numPackages))
     }
 
+    // Drop the CONNECTION state only (SAB, lock, structure — all owned by the broadcaster side). The
+    // SUBSCRIBERS survive: they belong to the UI components, not to the connection, so reconnecting a new
+    // broadcaster (an engine swap) resumes every existing subscription — `#writeSubscriptionFlags` re-flags
+    // them against the new structure on the first dispatch. Full teardown (project close) is `terminate`.
     #disconnect(): void {
         this.#memory = Option.None
         this.#optLock = Option.None
@@ -194,11 +198,6 @@ export class LiveStreamReceiver implements Terminable {
         this.#connected = false
         Arrays.clear(this.#procedures)
         Arrays.clear(this.#structure)
-        this.#float.terminate()
-        this.#floats.terminate()
-        this.#integer.terminate()
-        this.#integers.terminate()
-        this.#bytes.terminate()
     }
 
     subscribeFloat(address: Address, procedure: Procedure<float>): Subscription {
@@ -221,7 +220,14 @@ export class LiveStreamReceiver implements Terminable {
         return this.#bytes.subscribe(address, procedure)
     }
 
-    terminate(): void {this.#disconnect()}
+    terminate(): void {
+        this.#disconnect()
+        this.#float.terminate()
+        this.#floats.terminate()
+        this.#integer.terminate()
+        this.#integers.terminate()
+        this.#bytes.terminate()
+    }
 
     #dispatch(): void {
         if (this.#optLock.isEmpty() || this.#memory.isEmpty()) {return}

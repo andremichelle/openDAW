@@ -40,7 +40,7 @@ import {RouteLocation} from "@opendaw/lib-jsx"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
+import {EngineAddresses, ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {
     AudioContentFactory,
@@ -597,6 +597,18 @@ export class StudioService implements ProjectEnv {
             })
         ConsoleCommands.exportMethod("engine.position", () => this.engine.position.getValue())
         ConsoleCommands.exportMethod("engine.isPlaying", () => this.engine.isPlaying.getValue())
+        // A LiveStream liveness probe: subscribes the master PEAKS once (like the header meter, a
+        // profile-lifetime subscription) and returns the dispatch count — if it stops growing while
+        // playing, telemetry died (e.g. across an engine swap).
+        const meterProbe = {count: 0, subscribed: false}
+        ConsoleCommands.exportMethod("engine.meterTest",
+            () => this.runIfProject(project => {
+                if (!meterProbe.subscribed) {
+                    meterProbe.subscribed = true
+                    project.liveStreamReceiver.subscribeFloats(EngineAddresses.PEAKS, () => meterProbe.count++)
+                }
+                return meterProbe.count
+            }).unwrapOrNull())
     }
 
     #populateSpotlightData(): void {
