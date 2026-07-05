@@ -6,6 +6,7 @@
 // Samples/soundfonts/NAM binaries are fetched through the UNCHANGED EngineToClient RPC and written into the
 // engine's shared memory here. Recording, note signals, clip launching, monitoring and frozen audio are
 // honest no-ops for now — the transport state simply never reports them active.
+import "../../../wasm/src/worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
 import {int, isDefined, Nullable, panic, Provider, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
 import {AudioAnalyser, AudioData, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"

@@ -9,6 +9,7 @@
 // The engine holds the wasm BoxGraph mirror; the main thread serializes SyncSource's UpdateTask[] into
 // bytes and posts them here. Each batch -> apply_updates, then bind() once the TimelineBox exists.
 
+import "./worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
 import {isDefined, Terminable, UUID} from "@opendaw/lib-std"
 import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
