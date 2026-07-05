@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "device-arp"
+name = "device-arpeggio"
 version = "0.0.0"
 dependencies = [
  "abi",
@@ -129,7 +129,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "device-playfield-slot"
+name = "device-pitch"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "math",
+]
+
+[[package]]
+name = "device-playfield-sample"
 version = "0.0.0"
 dependencies = [
  "abi",
@@ -195,14 +203,6 @@ version = "0.0.0"
 dependencies = [
  "abi",
  "dsp",
- "math",
-]
-
-[[package]]
-name = "device-transpose"
-version = "0.0.0"
-dependencies = [
- "abi",
  "math",
 ]
 

@@ -18,7 +18,7 @@ import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {serializeUpdateTasks} from "../src/sync/serialize-update-tasks"
 
 const ODSL = path.resolve(__dirname, "../../../../test-files/actions.odsl")
-const WASM = path.resolve(__dirname, "../public/engine.wasm")
+const WASM = path.resolve(__dirname, "../public/wasm/engine.wasm")
 
 const COMMIT_INIT = 0
 const COMMIT_UPDATES = 2

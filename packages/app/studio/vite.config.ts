@@ -120,11 +120,14 @@ export default defineConfig(({command}) => {
                 },
                 generateBundle() {
                     const sourceDir = resolve(__dirname, "../wasm/public")
-                    if (!existsSync(sourceDir)) {
+                    if (!existsSync(resolve(sourceDir, "wasm"))) {
                         console.warn("wasm-engine-assets: no artifacts found, skipping")
                         return
                     }
-                    readdirSync(sourceDir).filter(isWasmEngineAsset).forEach(name => this.emitFile({
+                    const walk = (relative: string): ReadonlyArray<string> =>
+                        readdirSync(resolve(sourceDir, relative), {withFileTypes: true}).flatMap(entry =>
+                            entry.isDirectory() ? walk(`${relative}/${entry.name}`) : [`${relative}/${entry.name}`])
+                    walk("wasm").filter(isWasmEngineAsset).forEach(name => this.emitFile({
                         type: "asset",
                         fileName: `wasm-engine/${name}`,
                         source: readFileSync(resolve(sourceDir, name))
@@ -154,7 +157,9 @@ export default defineConfig(({command}) => {
     }
 })
 
-const isWasmEngineAsset = (name: string): boolean => name === "engine.wasm" || (name.startsWith("device_") && name.endsWith(".wasm"))
+// The artifacts live under public/wasm/ (engine.wasm + sine.wasm) and public/wasm/plugins/ (device_*.wasm).
+const isWasmEngineAsset = (name: string): boolean =>
+    name.startsWith("wasm/") && name.endsWith(".wasm") && !name.includes("..")
 
 const generateUUID = () => {
     const format = crypto.getRandomValues(new Uint8Array(16))

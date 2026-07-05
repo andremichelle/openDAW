@@ -13,7 +13,7 @@ import {serializeUpdateTasks} from "../src/sync/serialize-update-tasks"
 import {decodeSteps, readCommits, stepBackward, stepForward} from "../src/pages/sync-log/sync-log"
 
 const ODSL = path.resolve(__dirname, "../public/odsl/test.odsl")
-const WASM = path.resolve(__dirname, "../public/engine.wasm")
+const WASM = path.resolve(__dirname, "../public/wasm/engine.wasm")
 
 type EngineExports = {
     input_ptr(): number
