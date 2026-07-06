@@ -244,20 +244,37 @@ struct HeldNote {
     frequency: f32
 }
 
-/// Monophonic voicing (a port of TS `MonophonicStrategy`): ONE sounding voice plus a `STACK`-deep stack of
-/// held notes, with legato glide. A new note while a key is held glides the voice to it (no retrigger);
-/// releasing the top note glides back to the next held note; releasing the last note releases the voice; a
-/// note arriving while the voice is in its release re-triggers it, gliding from the dying pitch.
+/// The monophonic voice pool depth. TS holds an unbounded `#processing` array; here retrigger tails only
+/// live for the voice's short force-stop fade (the vapo's ~3 ms VCA smoother), so a few slots suffice.
+/// Exhausting the pool steals the oldest dying tail (the accepted "too many at once" click).
+const MONO_VOICES: usize = 4;
+
+/// Monophonic voicing (a port of TS `MonophonicStrategy`): one TRIGGERED voice (gate on) plus a `STACK`-deep
+/// stack of held notes, with legato glide. A new note while a key is held glides the voice to it (no
+/// retrigger); releasing the top note glides back to the next held note; releasing the last note releases
+/// the voice. A note arriving while the voice is in its release re-triggers on a FRESH pool slot, gliding
+/// from the dying pitch — the force-stopped predecessor keeps rendering until its fade completes (TS spawns
+/// a new voice per retrigger and lets the old one decay in `#processing`; a single reused voice would reset
+/// the envelope/smoothers mid-waveform and CLICK).
 pub struct MonophonicStrategy<V, const STACK: usize> {
-    voice: V,
+    voices: [V; MONO_VOICES],
+    processing: [bool; MONO_VOICES],
+    triggered: Option<usize>, // the voice with the gate on (TS `#triggered`)
+    sounding: Option<usize>, // the voice currently producing sound (TS `#sounding`)
     held: [HeldNote; STACK],
-    depth: usize,
-    active: bool
+    depth: usize
 }
 
 impl<V: Voice + Default, const STACK: usize> Default for MonophonicStrategy<V, STACK> {
     fn default() -> Self {
-        Self {voice: V::default(), held: [HeldNote::default(); STACK], depth: 0, active: false}
+        Self {
+            voices: core::array::from_fn(|_| V::default()),
+            processing: [false; MONO_VOICES],
+            triggered: None,
+            sounding: None,
+            held: [HeldNote::default(); STACK],
+            depth: 0
+        }
     }
 }
 
@@ -266,14 +283,34 @@ impl<V: Voice + Default, const STACK: usize> MonophonicStrategy<V, STACK> {
         Self::default()
     }
 
-    /// Whether a voice is currently sounding.
+    /// Whether any voice (triggered or a decaying retrigger tail) is still sounding.
     pub fn is_active(&self) -> bool {
-        self.active
+        self.processing.iter().any(|used| *used)
     }
 
-    /// The voice's current (possibly gliding) frequency.
+    /// The sounding voice's current (possibly gliding) frequency.
     pub fn current_frequency(&self) -> f32 {
-        self.voice.current_frequency()
+        self.sounding.map_or(0.0, |index| self.voices[index].current_frequency())
+    }
+
+    /// Visit every sounding voice (TS `strategy.processing()`), newest first not guaranteed.
+    pub fn for_each_processing(&self, visit: &mut dyn FnMut(&V)) {
+        for index in 0..MONO_VOICES {
+            if self.processing[index] {
+                visit(&self.voices[index]);
+            }
+        }
+    }
+
+    fn allocate(&mut self) -> usize {
+        if let Some(index) = self.processing.iter().position(|used| !used) {
+            return index;
+        }
+        let victim = (0..MONO_VOICES)
+            .find(|&index| Some(index) != self.triggered && Some(index) != self.sounding)
+            .unwrap_or(0);
+        self.voices[victim].force_stop();
+        victim
     }
 }
 
@@ -285,18 +322,27 @@ impl<V: Voice + Default, const STACK: usize> VoicingStrategy for MonophonicStrat
             self.held[self.depth] = HeldNote {id: event.id as i32, frequency};
             self.depth += 1;
         }
-        if self.active && self.voice.gate() {
-            self.voice.start_glide(frequency, glide_duration); // legato: glide, no retrigger
-            return;
+        if let Some(triggered) = self.triggered {
+            if self.voices[triggered].gate() {
+                self.voices[triggered].start_glide(frequency, glide_duration); // legato: glide, no retrigger
+                return;
+            }
         }
-        // (re)start: glide from the dying voice's pitch when there was one, else start straight on the note.
-        let from = if self.active {Some(self.voice.current_frequency())} else {None};
-        self.voice.force_stop();
-        self.voice.start(event, from.unwrap_or(frequency), gain, 0.0, unison, shared);
+        // Retrigger: force-stop the sounding voice (it FADES OUT on its own slot) and start a fresh one,
+        // gliding from the dying pitch when there was one, else straight on the note (TS `start`).
+        let from = self.sounding.map(|sounding| {
+            let current = self.voices[sounding].current_frequency();
+            self.voices[sounding].force_stop();
+            current
+        });
+        let slot = self.allocate();
+        self.voices[slot].start(event, from.unwrap_or(frequency), gain, 0.0, unison, shared);
         if from.is_some() {
-            self.voice.start_glide(frequency, glide_duration);
+            self.voices[slot].start_glide(frequency, glide_duration);
         }
-        self.active = true;
+        self.processing[slot] = true;
+        self.triggered = Some(slot);
+        self.sounding = Some(slot);
     }
 
     fn stop(&mut self, note_id: i32, glide_duration: f64) {
@@ -308,30 +354,54 @@ impl<V: Voice + Default, const STACK: usize> VoicingStrategy for MonophonicStrat
             self.held[index] = self.held[index + 1];
         }
         self.depth -= 1;
+        let Some(triggered) = self.triggered else {
+            return;
+        };
+        if was_top && self.depth > 0 {
+            // Released the topmost key: glide back to the next held note (TS `stop`).
+            self.voices[triggered].start_glide(self.held[self.depth - 1].frequency, glide_duration);
+            return;
+        }
         if self.depth == 0 {
-            if self.active {
-                self.voice.stop();
-            }
-        } else if was_top {
-            self.voice.start_glide(self.held[self.depth - 1].frequency, glide_duration);
+            self.voices[triggered].stop();
+            self.triggered = None;
         }
     }
 
     fn force_stop(&mut self) {
-        self.voice.force_stop();
+        for index in 0..MONO_VOICES {
+            if self.processing[index] {
+                self.voices[index].force_stop();
+            }
+        }
         self.depth = 0;
     }
 
     fn process(&mut self, output: [&mut [f32]; 2], block: &Block, shared: &V::Shared) -> bool {
-        if self.active && self.voice.process(output, block, shared) {
-            self.active = false;
+        let [out_left, out_right] = output;
+        for index in 0..MONO_VOICES {
+            if self.processing[index] && self.voices[index].process([&mut *out_left, &mut *out_right], block, shared) {
+                self.processing[index] = false;
+                if self.triggered == Some(index) {
+                    self.triggered = None;
+                }
+                if self.sounding == Some(index) {
+                    self.sounding = None;
+                }
+            }
         }
-        !self.active
+        !self.is_active()
     }
 
     fn reset(&mut self) {
-        self.voice.force_stop();
-        self.active = false;
+        for index in 0..MONO_VOICES {
+            if self.processing[index] {
+                self.voices[index].force_stop();
+                self.processing[index] = false;
+            }
+        }
+        self.triggered = None;
+        self.sounding = None;
         self.depth = 0;
     }
 }
@@ -435,9 +505,7 @@ impl<V: Voice + Default, const VOICES: usize, const STACK: usize> Voicing<V, VOI
                 }
             }
             VoicingMode::Monophonic => {
-                if self.monophonic.active {
-                    visit(&self.monophonic.voice);
-                }
+                self.monophonic.for_each_processing(visit);
             }
         }
     }

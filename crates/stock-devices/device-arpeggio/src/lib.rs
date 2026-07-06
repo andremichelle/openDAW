@@ -190,8 +190,13 @@ fn ingest(state: &mut ArpState, input: &[EventRecord]) {
     }
 }
 
+// TS `ArpeggioDeviceProcessor.processNotes` yields the step note-ONs (the Fragmentor loop) BEFORE the
+// note-OFFs completing at the same pulse (`releaseLinearCompleted` runs after), and the stable TS event
+// pipeline preserves that order. ON-before-OFF at an equal position is what keeps a MONO synth legato
+// across abutting steps: the held stack still contains the previous note when the new one starts, so the
+// voice glides instead of retriggering. OFF-first emptied the stack first and forced a retrigger per step.
 fn lifecycle_rank(record: &EventRecord) -> u8 {
-    if record.kind == EVENT_NOTE_OFF { 0 } else { 1 }
+    if record.kind == EVENT_NOTE_OFF { 1 } else { 0 }
 }
 
 /// Smallest grid index `i` with `i * rate >= from` (the first `Fragmentor` step in the range). `from >= 0`.
@@ -230,7 +235,8 @@ fn release_completed(state: &mut ArpState, to: f64, events: &mut [EventRecord], 
 /// Produce one block's events for `[from, to)`. Sequence mirrors `ArpeggioDeviceProcessor.processNotes`: release
 /// due note-offs (all of them on a DISCONTINUOUS jump), ingest the upstream, walk the rate grid emitting a
 /// note-on per step through the active-note stack, then release the note-offs that come due within the block.
-/// Returns the count of position-sorted events written (note-off before note-on at an equal position).
+/// Returns the count of position-sorted events written (note-ON before note-off at an equal position,
+/// mirroring the TS yield order — see `lifecycle_rank`).
 pub fn process(state: &mut ArpState, from: f64, to: f64, flags: u32, input: &[EventRecord], out: &mut [EventRecord]) -> usize {
     let blank = EventRecord {position: 0.0, offset: 0, kind: 0, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
     let mut events = [blank; EMIT_MAX];
