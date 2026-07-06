@@ -1092,7 +1092,7 @@ impl Engine {
     /// Terminate ONE leaf chain member (a leaver, or a full teardown): drop its output registration (a midi-fx
     /// never registered one; the remove is a no-op), remove its processor node (a midi-fx has none), drop its
     /// sidechain ports' pointer monitors, and unsubscribe its parameter observations.
-    fn terminate_member(&mut self, member: Member) {
+    pub(crate) fn terminate_member(&mut self, member: Member) {
         self.output_registry.remove(&Address::of(member.uuid, vec![]));
         if let Some(node_id) = member.node_id {
             self.context.remove_processor(node_id);

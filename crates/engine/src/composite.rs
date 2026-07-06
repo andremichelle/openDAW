@@ -30,7 +30,8 @@ use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_sequencer::NoteSequencer;
-use crate::audio_unit::{BoundNoteTracks, BuiltCluster, DeviceParams, SharedTrackSets, SidechainBinding, SlotCluster};
+use crate::audio_unit::{BoundNoteTracks, BuiltCluster, DeviceParams, Member, SharedTrackSets, SidechainBinding, SlotCluster};
+use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::{CompositeSpec, DeviceReg, Engine, PullLink, EFFECT_INDEX_KEY};
 
 /// A composite's PERSISTENT per-child cascade, owned by the unit whose instrument is the composite. Each child
@@ -46,7 +47,14 @@ pub(crate) struct CompositeBinding {
     pub(crate) sum: Rc<RefCell<AudioBusProcessor>>,
     pub(crate) sum_id: NodeId,
     pub(crate) sum_buffer: SharedAudioBuffer,
-    members: Vec<CompositeChild>            // persistent per-child records, in sum order
+    members: Vec<CompositeChild>,           // persistent per-child records, in sum order
+    // The OWNING UNIT's MIDI-effect chain (host field 21), built once and folded into EVERY child's note-pull
+    // chain so a unit-level midi effect (e.g. Zeitgeist) warps the notes feeding the composite instrument —
+    // exactly like a leaf unit. `unit_midi_members` is OWNED here (its params + teardown), empty for a NESTED
+    // binding; `unit_midi` is the enabled effect handles wrapped at each child's pull base, INHERITED by a
+    // nested binding from its parent (a nested composite hosts no unit-level chain of its own).
+    unit_midi_members: Vec<Member>,
+    unit_midi: Vec<Rc<PluginMidiEffect>>
 }
 
 impl CompositeBinding {
@@ -149,6 +157,7 @@ impl CompositeBinding {
     /// Visit every device's bound parameters in this composite (recursing into nested composites), so the unit
     /// can re-bind automation across the whole cascade.
     pub(crate) fn for_each_params(&mut self, visit: &mut dyn FnMut(&mut DeviceParams)) {
+        for member in &mut self.unit_midi_members { visit(&mut member.params); }
         for child in &mut self.members {
             match &mut child.body {
                 ChildBody::Slot {cluster, ..} => cluster.for_each_params(visit),
@@ -238,7 +247,9 @@ impl Engine {
     /// create the summing bus, and build one persistent child per member. Returns the `CompositeBinding` the
     /// unit stores (its `sum_buffer` / `sum_id` are the cluster output the unit's strip reads). Generic over
     /// any composite — the only composite-specific input is `spec`.
-    pub(crate) fn build_composite(&mut self, track_sets: &SharedTrackSets, composite_uuid: Uuid, spec: &CompositeSpec, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
+    #[allow(clippy::too_many_arguments)] // threads the unit's midi-fx (owned members + fold handles) into the cascade
+    pub(crate) fn build_composite(&mut self, track_sets: &SharedTrackSets, composite_uuid: Uuid, spec: &CompositeSpec, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>,
+                                  unit_midi_members: Vec<Member>, unit_midi: Vec<Rc<PluginMidiEffect>>)
         -> CompositeBinding {
         let children = IndexedCollection::observe(&mut self.graph,
             Address::of(composite_uuid, vec![spec.children_field]), spec.index_key);
@@ -251,7 +262,7 @@ impl Engine {
         // (e.g. a Playfield clap track) taps its mix — pre the owning unit's fx + strip + mute. Mirrors TS
         // `MixProcessor` registering `device.adapter.address -> output`.
         self.output_registry.register(Address::of(composite_uuid, vec![]), sum_buffer.clone(), sum_id);
-        let mut binding = CompositeBinding {spec: spec.clone(), composite_uuid, children, sum, sum_id, sum_buffer, members: Vec::new()};
+        let mut binding = CompositeBinding {spec: spec.clone(), composite_uuid, children, sum, sum_id, sum_buffer, members: Vec::new(), unit_midi_members, unit_midi};
         self.reconcile_composite_children(&mut binding, track_sets, signal, invalidate);
         binding
     }
@@ -265,6 +276,7 @@ impl Engine {
                                                signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) {
         binding.children.take_dirty(); // consume the membership flag
         let spec = binding.spec.clone();
+        let unit_midi = binding.unit_midi.clone(); // the owning unit's midi-fx, folded into every child's pull base
         let desired = binding.children.sorted();
         let infos = self.child_infos(&desired, &spec);
         let mut pool: BTreeMap<Uuid, CompositeChild> = binding.members.drain(..).map(|child| (child.uuid, child)).collect();
@@ -272,8 +284,8 @@ impl Engine {
         for info in &infos {
             let choke = choke_for(&infos, info.index, info.exclude);
             let reconciled = match pool.remove(&info.uuid) {
-                Some(child) => self.reconcile_one_child(binding, child, choke, &spec, track_sets, signal, invalidate),
-                None => self.build_one_child(binding.sum.clone(), binding.sum_id, track_sets, info.uuid, choke, &spec, signal, invalidate)
+                Some(child) => self.reconcile_one_child(binding, child, choke, &spec, track_sets, &unit_midi, signal, invalidate),
+                None => self.build_one_child(binding.sum.clone(), binding.sum_id, track_sets, info.uuid, choke, &spec, &unit_midi, signal, invalidate)
             };
             if let Some(child) = reconciled {
                 // Resolved across all siblings (solo + index ownership are cross-child facts), so it lands
@@ -300,7 +312,7 @@ impl Engine {
     /// the child no longer buildable).
     #[allow(clippy::too_many_arguments)] // threads the reconcile cascade context
     fn reconcile_one_child(&mut self, binding: &mut CompositeBinding, child: CompositeChild, choke: Vec<i32>,
-                           spec: &CompositeSpec, track_sets: &SharedTrackSets, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> Option<CompositeChild> {
+                           spec: &CompositeSpec, track_sets: &SharedTrackSets, unit_midi: &[Rc<PluginMidiEffect>], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> Option<CompositeChild> {
         let CompositeChild {uuid, choke: old_choke, body, output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs} = child;
         let choke_changed = old_choke != choke;
         match body {
@@ -313,7 +325,7 @@ impl Engine {
                     let midi_uuids = midi_obs.as_ref().map(|obs| obs.sorted()).unwrap_or_default();
                     let audio_uuids = audio_obs.as_ref().map(|obs| obs.sorted()).unwrap_or_default();
                     let rewire = slot_rewire(&effects_dirty, signal);
-                    let cluster = self.reconcile_slot_cluster(Some(cluster), uuid, device, &midi_uuids, &audio_uuids, track_sets, &choke, &gate, signal, invalidate, &rewire);
+                    let cluster = self.reconcile_slot_cluster(Some(cluster), uuid, device, &midi_uuids, &audio_uuids, track_sets, unit_midi, &choke, &gate, signal, invalidate, &rewire);
                     self.context.register_edge(cluster.output_node, binding.sum_id);
                     self.output_registry.register(Address::of(uuid, vec![]), cluster.output.clone(), cluster.output_node);
                     let (output, output_node) = (cluster.output.clone(), cluster.output_node);
@@ -330,14 +342,14 @@ impl Engine {
                 let child = CompositeChild {uuid, choke: if dirty {choke.clone()} else {choke},
                     body: ChildBody::Cell {chains, nodes, edges, device_params, sidechains, note_source},
                     output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs};
-                self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, signal, invalidate)
+                self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, unit_midi, signal, invalidate)
             }
             ChildBody::Nested {binding: nested} => {
                 let dirty = self.composite_dirty(&nested) | choke_changed;
                 let child = CompositeChild {uuid, choke: if dirty {choke.clone()} else {choke},
                     body: ChildBody::Nested {binding: nested},
                     output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs};
-                self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, signal, invalidate)
+                self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, unit_midi, signal, invalidate)
             }
         }
     }
@@ -346,13 +358,13 @@ impl Engine {
     /// touched), else just sync its sum membership to its own `enabled`.
     #[allow(clippy::too_many_arguments)] // threads the reconcile cascade context
     fn reconcile_wholesale_child(&mut self, binding: &mut CompositeBinding, mut child: CompositeChild, dirty: bool,
-                                 spec: &CompositeSpec, track_sets: &SharedTrackSets, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> Option<CompositeChild> {
+                                 spec: &CompositeSpec, track_sets: &SharedTrackSets, unit_midi: &[Rc<PluginMidiEffect>], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> Option<CompositeChild> {
         if dirty {
             let uuid = child.uuid;
             let choke = child.choke.clone();
             self.detach_child_sum(binding, &child);
             self.teardown_child(child);
-            return self.build_one_child(binding.sum.clone(), binding.sum_id, track_sets, uuid, choke, spec, signal, invalidate);
+            return self.build_one_child(binding.sum.clone(), binding.sum_id, track_sets, uuid, choke, spec, unit_midi, signal, invalidate);
         }
         child.summed = sync_sum(&binding.sum, &child.output, child.summed, self.child_enabled(child.uuid, spec.child_enabled_key));
         Some(child)
@@ -430,21 +442,23 @@ impl Engine {
     /// `None` if the child has no plugin / composite (silently skipped).
     #[allow(clippy::too_many_arguments)] // threads the reconcile cascade context
     fn build_one_child(&mut self, sum: Rc<RefCell<AudioBusProcessor>>, sum_id: NodeId, track_sets: &SharedTrackSets,
-                       child_uuid: Uuid, choke: Vec<i32>, spec: &CompositeSpec, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
+                       child_uuid: Uuid, choke: Vec<i32>, spec: &CompositeSpec, unit_midi: &[Rc<PluginMidiEffect>], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
         -> Option<CompositeChild> {
         let effects_dirty = Rc::new(Cell::new(false));
         let gate = Rc::new(Cell::new(false)); // set from the resolved silent state by the caller each reconcile
         let cell_based = spec.cell_instrument_field != 0;
         let (body, output, output_node) = if cell_based {
-            let (cluster, chains, note_source) = self.build_cell(track_sets, child_uuid, spec, signal, invalidate)?;
+            let (cluster, chains, note_source) = self.build_cell(track_sets, child_uuid, spec, unit_midi, signal, invalidate)?;
             self.refresh_joiner_params(&cluster.device_params); // push the cell's joiner parameter values
             let (output, output_node) = (cluster.output.clone(), cluster.output_node);
             (ChildBody::Cell {chains, nodes: cluster.nodes, edges: cluster.edges, device_params: cluster.device_params, sidechains: cluster.sidechains, note_source}, output, output_node)
         } else {
             let name = self.graph.find_box(&child_uuid)?.name.clone();
             if let Some(nested_spec) = self.composite_for_type(&name) {
-                // A nested composite routes its own children internally; the parent only sums its output.
-                let binding = self.build_composite(track_sets, child_uuid, &nested_spec, signal, invalidate);
+                // A nested composite routes its own children internally; the parent only sums its output. It hosts
+                // no unit-level midi chain of its own, so it INHERITS the parent's `unit_midi` fold (its leaves
+                // warp with the same unit effect); the owned members stay empty (this parent terminates them).
+                let binding = self.build_composite(track_sets, child_uuid, &nested_spec, signal, invalidate, Vec::new(), unit_midi.to_vec());
                 let (output, output_node) = (binding.sum_buffer.clone(), binding.sum_id);
                 (ChildBody::Nested {binding}, output, output_node)
             } else {
@@ -456,7 +470,7 @@ impl Engine {
                 let midi_uuids = midi_obs.as_ref().map(|obs| obs.sorted()).unwrap_or_default();
                 let audio_uuids = audio_obs.as_ref().map(|obs| obs.sorted()).unwrap_or_default();
                 let rewire = slot_rewire(&effects_dirty, signal);
-                let cluster = self.reconcile_slot_cluster(None, child_uuid, device, &midi_uuids, &audio_uuids, track_sets, &choke, &gate, signal, invalidate, &rewire);
+                let cluster = self.reconcile_slot_cluster(None, child_uuid, device, &midi_uuids, &audio_uuids, track_sets, unit_midi, &choke, &gate, signal, invalidate, &rewire);
                 let (output, output_node) = (cluster.output.clone(), cluster.output_node);
                 (ChildBody::Slot {cluster, device, midi_obs, audio_obs}, output, output_node)
             }
@@ -533,6 +547,9 @@ impl Engine {
             self.context.remove_edge(child.output_node, binding.sum_id); // the sum edge (the sum node goes next)
             self.teardown_child(child);
         }
+        for member in binding.unit_midi_members { // the owning unit's midi-fx (empty for a nested binding)
+            self.terminate_member(member);
+        }
         self.context.remove_processor(binding.sum_id);
         binding.children.terminate(&mut self.graph);
     }
@@ -555,7 +572,8 @@ impl Engine {
     /// generic composite has no per-cell note routing). Also returns a shared handle to the cell's sequencer
     /// (the pull link keeps the same `Rc`), so live note signals reach the cell. Returns `None` for an empty
     /// cell or an unresolved / non-instrument device, unsubscribing whatever it observed.
-    fn build_cell(&mut self, track_sets: &SharedTrackSets, cell_uuid: Uuid, spec: &CompositeSpec, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
+    #[allow(clippy::too_many_arguments)] // threads the unit's midi-fx fold into the cell's note-pull base
+    fn build_cell(&mut self, track_sets: &SharedTrackSets, cell_uuid: Uuid, spec: &CompositeSpec, unit_midi: &[Rc<PluginMidiEffect>], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
         -> Option<(BuiltCluster, Vec<IndexedCollection>, SharedNoteEventSource)> {
         let instrument_obs = IndexedCollection::observe(&mut self.graph, Address::of(cell_uuid, vec![spec.cell_instrument_field]), 0);
         instrument_obs.take_dirty();
@@ -582,7 +600,7 @@ impl Engine {
         let midi = self.observe_child_chain(cell_uuid, spec.cell_midi_field, &mut chains, signal);
         let audio = self.observe_child_chain(cell_uuid, spec.cell_audio_field, &mut chains, signal);
         let note_source = sequencer.clone();
-        let cluster = self.build_cluster(PullLink::Source(sequencer), instrument_uuid, device, &midi, &audio, signal, invalidate);
+        let cluster = self.build_cluster(PullLink::Source(sequencer), instrument_uuid, device, &midi, &audio, unit_midi, signal, invalidate);
         Some((cluster, chains, note_source))
     }
 }

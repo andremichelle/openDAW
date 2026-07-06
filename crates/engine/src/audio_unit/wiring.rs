@@ -566,7 +566,27 @@ impl Engine {
             None => {}
         }
         let track_sets = unit.track_sets.clone();
-        let binding = self.build_composite(&track_sets, instrument_uuid, &spec, signal, invalidate);
+        // The unit's own MIDI-effect chain (host 21), built fresh (the composite is rebuilt wholesale) and folded
+        // into EVERY child's note-pull chain below, so a unit-level midi effect (e.g. Zeitgeist) warps the notes
+        // feeding the composite instrument — exactly like a leaf unit, whose `wire_cluster` folds them onto its
+        // note source. Without this the whole chain was silently dropped for a composite instrument (Playfield).
+        let mut unit_midi_pool: BTreeMap<Uuid, Member> = BTreeMap::new();
+        let mut unit_midi_members: Vec<Member> = Vec::new();
+        for uuid in unit.midi.sorted() {
+            if let Some(device) = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
+                if device.kind == DEVICE_KIND_MIDI_EFFECT {
+                    unit_midi_members.push(self.take_or_build_midi(&mut unit_midi_pool, uuid, device, invalidate, rewire));
+                }
+            }
+        }
+        let unit_midi: Vec<Rc<PluginMidiEffect>> = unit_midi_members.iter()
+            .filter(|member| self.device_enabled(member.uuid))
+            .filter_map(|member| match &member.proc {
+                ProcHandle::Midi(effect) => Some(effect.clone()),
+                _ => None
+            })
+            .collect();
+        let binding = self.build_composite(&track_sets, instrument_uuid, &spec, signal, invalidate, unit_midi_members, unit_midi);
         // The unit's AUDIO-effects chain over the sum (reusing survivors, building joiners, terminating leavers)
         // exactly like a leaf / tape unit.
         let mut audio_members: Vec<Member> = Vec::new();
@@ -708,7 +728,7 @@ impl Engine {
         // routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).
         let monitor = self.monitor_channels_of(&unit.unit);
         let include_fx = self.unit_options(&unit.unit).include_audio_effects;
-        let (output, output_node, mut edges, monitor_node) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[], None, monitor, include_fx);
+        let (output, output_node, mut edges, monitor_node) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &[], &[], None, monitor, include_fx);
         // The channel strip terminates the chain; reuse it across reconciles (it carries no DSP state, just the
         // shared volume / panning / mute), re-pointing its source at the new tail.
         let (strip, strip_id, strip_output) = match strip_keep {
@@ -847,8 +867,9 @@ impl Engine {
     /// then chain the audio fx (instrument -> fx0 -> fx1 -> ...). Every step SKIPS a disabled device (bypassed,
     /// its processor + state untouched). Returns the chain's output buffer, last node, and internal edges; the
     /// caller appends its own tail (a unit's strip -> master, a slot's sum).
+    #[allow(clippy::too_many_arguments)] // a cluster wirer takes one input per facet (instrument + midi + audio + routing)
     pub(crate) fn wire_cluster(&mut self, instrument: &Member, instrument_uuid: Uuid, sequencer: &SharedNoteEventSource,
-                    midi: &[Member], audio: &[Member], choke: &[i32], gate: Option<&Rc<Cell<bool>>>,
+                    midi: &[Member], audio: &[Member], unit_midi: &[Rc<PluginMidiEffect>], choke: &[i32], gate: Option<&Rc<Cell<bool>>>,
                     monitor: Option<(i32, i32)>, include_fx: bool) -> (SharedAudioBuffer, NodeId, Vec<(NodeId, NodeId)>, Option<NodeId>) {
         let mut pull = match gate {
             // A composite SLOT: routed through `SlotRoute` so its choke records inject and its silent gate
@@ -856,6 +877,12 @@ impl Engine {
             Some(gate) => PullLink::SlotRoute {upstream: sequencer.clone(), choke: Rc::from(choke.to_vec()), gate: gate.clone()},
             None => PullLink::Source(sequencer.clone())
         };
+        // The OWNING UNIT's midi-fx (a composite slot only): folded at the pull base, below the slot's own midi,
+        // so a unit-level effect (e.g. Zeitgeist) warps the notes feeding this pad — the composite mirror of a
+        // leaf unit folding its midi chain onto the note source. Empty for a leaf (its `midi` IS the unit chain).
+        for effect in unit_midi {
+            pull = PullLink::MidiFx {effect: effect.clone(), upstream: Rc::new(pull)};
+        }
         for member in midi {
             if !self.device_enabled(member.uuid) {
                 continue; // a disabled midi-fx is bypassed (left out of the pull chain); its state is untouched
@@ -908,7 +935,7 @@ impl Engine {
     /// slot's own re-wire signal (a member `enabled` toggle re-runs THIS, not the unit chain).
     #[allow(clippy::too_many_arguments)] // the reconcile cascade threads its signal/invalidate/rewire context
     pub(crate) fn reconcile_slot_cluster(&mut self, prev: Option<SlotCluster>, instrument_uuid: Uuid, device: DeviceReg,
-                                         midi_uuids: &[Uuid], audio_uuids: &[Uuid], track_sets: &SharedTrackSets,
+                                         midi_uuids: &[Uuid], audio_uuids: &[Uuid], track_sets: &SharedTrackSets, unit_midi: &[Rc<PluginMidiEffect>],
                                          choke: &[i32], gate: &Rc<Cell<bool>>, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> SlotCluster {
         let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
         let mut sequencer_keep: Option<(Uuid, SharedNoteEventSource)> = None;
@@ -949,7 +976,7 @@ impl Engine {
                 sequencer
             }
         };
-        let (output, output_node, internal_edges, _) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, choke, Some(gate), None, true);
+        let (output, output_node, internal_edges, _) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, unit_midi, choke, Some(gate), None, true);
         SlotCluster {instrument, sequencer, midi: midi_members, audio: audio_members, internal_edges, output, output_node}
     }
 
@@ -972,10 +999,15 @@ impl Engine {
     /// per-device knowledge is the box-type -> plugin table, so any cluster host reuses this verbatim.
     #[allow(clippy::too_many_arguments)] // a cluster builder takes one input per facet (instrument + midi + audio + signals)
     pub(crate) fn build_cluster(&mut self, source: PullLink, instrument_uuid: Uuid, instrument_device: DeviceReg,
-                     midi: &[Uuid], audio: &[Uuid], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> BuiltCluster {
+                     midi: &[Uuid], audio: &[Uuid], unit_midi: &[Rc<PluginMidiEffect>], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> BuiltCluster {
         let mut device_params: Vec<DeviceParams> = Vec::new();
         // Each midi-fx binds its parameters too, so a midi-fx parameter is automatable like an audio device's.
         let mut chain = source;
+        // The OWNING UNIT's midi-fx folded at the base (below the cell's own midi), so a unit-level effect (e.g.
+        // Zeitgeist) warps the notes feeding this cell — the composite mirror of a leaf unit's note-source fold.
+        for effect in unit_midi {
+            chain = PullLink::MidiFx {effect: effect.clone(), upstream: Rc::new(chain)};
+        }
         for device_uuid in midi.iter().copied() {
             let device = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
             match device {
