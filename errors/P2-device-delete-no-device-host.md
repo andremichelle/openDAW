@@ -1,55 +1,38 @@
 # Effect-device delete — "no device-host" unwrap
 
-- **status:** OPEN (root mechanism identified; trigger unconfirmed) · **priority:** P2
-- **occurrences:** 1 · **ids:** [1015]
-- **assessment:** `Devices.deleteEffectDevices` calls `adapter.deviceHost()` on each device to delete. `deviceHost()` unwraps `box.host.targetVertex` with `"no device-host"`. The device being deleted has an **empty `host` pointer** (orphaned / already detached), so the unwrap panics.
-- **action (proposed):** Make `deleteEffectDevices` resilient to a device whose `host` pointer is absent (skip / filter such devices rather than unwrap-panicking). Confirm the upstream cause (how a still-listed effect loses its host pointer). Do NOT mark fixed until shipped + tested.
+- **status:** FIXED (two root causes closed; code + tests; deploy pending — #1015's exact trigger unconfirmed, monitor) · **priority:** P2
+- **occurrences:** 2 · **ids:** [1015, 1020]
+- **assessment:** `Devices.deleteEffectDevices` ran on a device whose `host` pointer no longer resolves. Two independent root causes were found and fixed at their source; `deleteEffectDevices` itself was deliberately left untouched (adding orphan-tolerance there would mask whatever produces orphans).
 
 [< back to index](error-triage.md)
 
 ## Reports
 
 ### Error: Error: no device-host
-- **occurrences:** 1 · **ids:** [1015] · **span:** 2026-06-17 · **builds:** 1 (6abdd11c) · **browsers:** Chrome/ChromeOS
-- **stack (source-mapped):**
-  - `at h (lib/std/lang.js:49 (panic))`
-  - `at Option.unwrap (lib/std/option.js:39 (panic))` → `"no device-host"`
-  - `at <DeviceBoxAdapter>.deviceHost (main…js)` → `this.#box.host.targetVertex.unwrap("no device-host")`
-  - `at deleteEffectDevices (main…js)`
-  - `at editing.modify (...) → trigger → onpointerup` (delete via UI gesture)
+- **occurrences:** 2 · **ids:** [1015, 1020] · **span:** 2026-06-17 → 2026-07-02 · **builds:** 2 (6abdd11c, 169f7f25) · **browsers:** Chrome/ChromeOS, Chrome/Android (Fire tablet KFTUWI)
+- **stack:** `unwrap("no device-host") → <EffectAdapter>.deviceHost → deleteEffectDevices → editing.modify → MenuItem trigger → onpointerup`
 
-## Investigation (root mechanism)
+## Root cause A — ghost re-trigger of menu items on touch (proven, #1020)
 
-`Devices.deleteEffectDevices` (`packages/studio/adapters/src/DeviceAdapter.ts:106-121`):
-```ts
-export const deleteEffectDevices = (devices: ReadonlyArray<EffectDeviceBoxAdapter>): void => {
-    if (devices.length === 0) {return}
-    assert(Arrays.satisfy(devices, (a, b) => a.deviceHost().address.equals(b.deviceHost().address)),
-        "Devices are not connected to the same host")          // ← calls deviceHost() per device
-    const device = devices[0]
-    const targets = device.accepts === "audio"
-        ? device.deviceHost().audioEffects.field()...           // ← deviceHost() again
-        : ...
-    ...
-}
+#1020's log is unambiguous — the SAME menu item fired twice:
+
+```
+1783017702688 simulate pointerup onpointerdown   ← every tap in this session logs this
+1783017702690 MenuItem.trigger "Delete 'Crusher'"
+1783017704114 simulate pointerup onpointerdown
+1783017704114 MenuItem.trigger "Delete 'Crusher'"  ← device already deleted → panic
 ```
 
-`deviceHost()` on each effect adapter resolves `this.#box.host.targetVertex.unwrap("no device-host")` (e.g. `DelayDeviceBoxAdapter.ts:58`, and the same line in every effect adapter under `packages/studio/adapters/src/devices/**`). When a device's `host` pointer field has **no target vertex**, the unwrap panics with `no device-host`.
+`Surface.tsx#listen` works around missing outside-pointerup events by tracking the last `pointerdown` target and dispatching a **fabricated `pointerup` to the previous target** when a new `pointerdown` arrives while one is still tracked. It listened for `pointerup` but **not `pointercancel`** — yet per the Pointer Events spec a pointerdown concludes with either. On this tablet every tap ended in `pointercancel` (browser-owned touch gestures), so the tracking was stale on EVERY tap and each new tap re-activated the previously tapped element. Menu items trigger on pointerup → "Delete 'Crusher'" ran once per tap, the second time against an already-deleted device.
 
-**So one of the devices passed to `deleteEffectDevices` is not (or is no longer) connected to a host.** Reported once, via a pointer-up gesture (the device delete button / context-menu "Delete"), on a single build.
+**Fix:** `Surface.tsx` now also clears the tracking on `pointercancel`.
 
-**Candidate triggers (unconfirmed — need repro / the project):**
-- The effect was already detached from its host (stale UI element still firing delete), so its `host` pointer is empty.
-- A migrated/partially-loaded project left an effect box in a chain view while its `host` edge was never resolved.
-- A double-delete or delete racing with a host removal, leaving the effect orphaned at the moment delete runs.
+**Open observation (separate issue, not fixed):** on devices where taps end in `pointercancel`, controls that activate on `pointerup` may not respond at all — the stale-dispatch bug was accidentally making them work "one tap late". If reports of unresponsive touch UI appear, this is where to look.
 
-Callers: `packages/app/studio/src/ui/devices/menu-items.ts:80` (per-device "Delete") and `packages/app/studio/src/ui/browse/PresetService.ts:217`.
+## Root cause B — aborted transactions restored boxes with unresolved pointers (proven by test)
 
-## Recommended fix (no band-aid)
+`BoxGraph.abortTransaction` **discarded** the deferred pointer updates of boxes recreated during rollback (`DeleteUpdate.inverse` → `createBox` → pointer reads deferred) without ever calling `resolvedTo`. Result: a live, staged box whose `host` pointer has `targetAddress` set but `targetVertex = None` — visible in the UI, unresolvable on access. Fixed in `packages/lib/box/src/graph.ts` (abort now resolves recreation-deferred updates); regression test "restores deleted boxes with resolved pointers when a transaction aborts". See [[P2-undo-rollback-pointerfield-missing]] for the full abort-integrity fix set.
 
-- In `deleteEffectDevices`, resolve each device's host via a **non-panicking** accessor and **drop devices whose host is absent** before the same-host `assert` and the index-reordering — an orphaned effect has no chain to renumber and can be deleted directly (`device.box.delete()`). This keeps the delete operation total instead of panicking the whole app over an already-detached device.
-- Separately, investigate why a still-clickable effect can have an empty `host` pointer (UI not torn down on detach, or a load/migration gap) and fix at source if reproducible.
+## #1015 specifics (trigger unconfirmed)
 
-## Regression test
-
-Adapter-level test: build a device chain, detach one effect's `host` pointer (or delete its host), then call `deleteEffectDevices([orphan])` and assert it neither throws nor corrupts the surviving chain's indices.
+ChromeOS session: stock preset "Noise Gate" applied → `RangeError: Offset is outside the bounds of the DataView` warned during preset decode (aborted transaction) → 4s later "Delete 'Gate'" → panic. The abort + restore sequence matches root cause B's preconditions, and ChromeOS is a touch device (root cause A also plausible), but the log doesn't pin which path produced the orphan. The corrupt-preset RangeError itself (thrown from `PresetDecoder.insertEffectChain`'s unguarded header read, `PresetDecoder.ts:249`, when bytes are truncated) is worth its own hardening pass if it recurs.

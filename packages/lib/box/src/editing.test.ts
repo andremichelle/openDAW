@@ -252,6 +252,80 @@ describe("editing", () => {
     })
 })
 
+describe("transaction abort integrity", () => {
+    interface TestScene {
+        graph: BoxGraph
+        editing: BoxEditing
+    }
+
+    beforeEach<TestScene>((scene: TestScene) => {
+        const graph = new BoxGraph<any>(Option.wrap((name: keyof any, graph: BoxGraph, uuid: UUID.Bytes, constructor: Procedure<Box>) => {
+            switch (name) {
+                case "BarBox":
+                    return BarBox.create(graph, uuid, constructor)
+                default:
+                    return panic()
+            }
+        }))
+        scene.graph = graph
+        scene.editing = new BoxEditing(graph)
+    })
+
+    it("rollback survives a box with deferred pointer created and deleted in the aborted transaction", (scene: TestScene) => {
+        // #1014: the deferred pointer update lands at the end of the transaction updates, so the
+        // reverse rollback replay used to hit it first — after the box was already unstaged —
+        // and panicked with "Could not find PointerField".
+        const targetBox = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        expect(() => scene.editing.modify(() => {
+            const tempBox = BarBox.create(scene.graph, UUID.generate(),
+                box => box.pointer.targetAddress = Option.wrap(targetBox.pointer.address))
+            tempBox.delete()
+            panic("forced failure")
+        })).toThrow("forced failure")
+        expect(scene.graph.boxes().length).toBe(1)
+        expect(scene.graph.findBox(targetBox.address.uuid).nonEmpty()).true
+        expect(scene.editing.modify(() => targetBox.bool.setValue(true)).isEmpty()).true
+        expect(targetBox.bool.getValue()).true
+    })
+
+    it("recovers when a box constructor throws mid-transaction", (scene: TestScene) => {
+        // The never-staged box must not leak deferred pointer updates, edges or the constructing flag.
+        const targetBox = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        expect(() => scene.editing.modify(() => {
+            BarBox.create(scene.graph, UUID.generate(), box => {
+                box.pointer.targetAddress = Option.wrap(targetBox.pointer.address)
+                panic("constructor failure")
+            })
+        })).toThrow("constructor failure")
+        expect(scene.graph.boxes().length).toBe(1)
+        const laterBox = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        expect(scene.graph.findBox(laterBox.address.uuid).nonEmpty()).true
+    })
+
+    it("restores deleted boxes with resolved pointers when a transaction aborts", () => {
+        // #1015/#1020: boxes recreated during the rollback deferred their pointer updates, which were
+        // then discarded without resolving — leaving a live box whose pointer had no target vertex.
+        const graph = createGraphWithFactory()
+        const editing = new BoxEditing(graph)
+        const {mandatory, ref} = editing.modify(() => {
+            const mandatory = MandatoryBox.create(graph, UUID.generate())
+            const ref = RefBox.create(graph, UUID.generate(), box => box.target.refer(mandatory))
+            return {mandatory, ref}
+        }).unwrap()
+        const refUuid = ref.address.uuid
+        expect(() => editing.modify(() => {
+            mandatory.delete()
+            panic("forced failure")
+        })).toThrow("forced failure")
+        const restored = graph.findBox(refUuid)
+        expect(restored.nonEmpty()).true
+        const restoredPointer = (restored.unwrap() as RefBox).target
+        expect(restoredPointer.targetAddress.nonEmpty()).true
+        expect(restoredPointer.targetVertex.nonEmpty()).true
+        expect(restoredPointer.targetVertex.unwrap().address.equals(mandatory.address)).true
+    })
+})
+
 describe("transaction validation & rollback", () => {
     describe("validation catches invalid state", () => {
         it("valid transaction succeeds", () => {
