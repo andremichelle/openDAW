@@ -4,7 +4,7 @@ import {EngineFacade} from "./EngineFacade"
 import {StudioPreferences} from "./StudioPreferences"
 
 export class BufferUnderrunDetector implements Terminable {
-    static readonly CONSECUTIVE_THRESHOLD: int = 3
+    static readonly CONSECUTIVE_THRESHOLD: int = 5
 
     readonly #terminator = new Terminator()
     readonly #pollLifecycle: Terminator
