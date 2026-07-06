@@ -4,7 +4,7 @@
 // It decodes the produced blob (the same layout blob.rs reads) and asserts the flattened region + sample.
 import {describe, expect, it} from "vitest"
 import type {SoundFont2} from "soundfont2"
-import {simplifySoundfont} from "../src/soundfont-simplify"
+import {simplifySoundfont} from "../../../studio/core-wasm/src/soundfont-simplify"
 
 const gen = (value: number) => ({value})
 const range = (lo: number, hi: number) => ({range: {lo, hi}})

@@ -12,7 +12,7 @@ import {Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {ExportConfiguration} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs"
-import {WasmEngine} from "@/wasm-engine/WasmEngine"
+import {WasmEngine} from "@opendaw/studio-core-wasm"
 
 export namespace Mixdowns {
     export const exportMixdown = async ({project: source, meta}: ProjectProfile): Promise<void> => {

@@ -17,9 +17,24 @@
         "dist/**"
       ]
     },
-    "@opendaw/app-wasm#build": {
+    "@opendaw/studio-core-wasm#build": {
       "dependsOn": [
         "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "$TURBO_ROOT$/crates/**",
+        "!$TURBO_ROOT$/crates/target/**"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "@opendaw/app-wasm#build": {
+      "dependsOn": [
+        "^build",
+        "@opendaw/studio-core-wasm#build"
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -34,8 +49,7 @@
     },
     "@opendaw/app-studio#build": {
       "dependsOn": [
-        "^build",
-        "@opendaw/app-wasm#build"
+        "^build"
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -123,6 +137,12 @@
     "@opendaw/app-wasm#test": {
       "dependsOn": [
         "^build"
+      ],
+      "cache": false
+    },
+    "@opendaw/studio-core-wasm#test": {
+      "dependsOn": [
+        "build"
       ],
       "cache": false
     }

@@ -11,8 +11,8 @@ import {UUID} from "@opendaw/lib-std"
 import {Communicator} from "@opendaw/lib-runtime"
 import {BoxGraph, SyncSource, Synchronization, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
-import {serializeUpdateTasks} from "../src/sync/serialize-update-tasks"
-import {createSyncLoopback} from "../src/sync/loopback"
+import {serializeUpdateTasks} from "../../../studio/core-wasm/src/sync/serialize-update-tasks"
+import {createSyncLoopback} from "../../../studio/core-wasm/src/sync/loopback"
 
 const WASM = path.resolve(__dirname, "../public/wasm/engine.wasm")
 

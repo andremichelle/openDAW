@@ -4,6 +4,21 @@ Make the WASM engine consumable by any SDK app the way the TS engine is today: `
 self-hosted URLs, no studio-app code, no relative source imports. Complements [09-rollout](09-rollout.md)
 (flag/exposure) — this is about **where the engine lives and how a host configures it**.
 
+## STATUS: implemented (2026-07-06)
+
+`packages/studio/core-wasm` = `@opendaw/studio-core-wasm`. dist ships `index.js` (main-thread API),
+`wasm-processor.js` + `wasm-offline-worker.js` (prebuilt esbuild bundles, worklet-scope shim first) and
+`wasm/engine.wasm` + `wasm/plugins/*.wasm` (built by the package's own `build-wasm.sh`, wasm-opt'ed).
+`WasmEngine.install({processorUrl, offlineWorkerUrl, wasmUrl})` as planned. The studio consumes the
+published surface (`?url` asset imports + the vite plugin copies `dist/wasm` under `/wasm-engine/`);
+`app/wasm` stays the dev harness and deep-imports the package **src** (fast Rust loop, no dist staleness).
+The SDK meta-package re-lists it; `studio/sdk/README.md` documents the boot. `test/dist-smoke.test.ts`
+is the consumer smoke test (dist-only resolution, device-table-vs-built-plugins drift, scope-shim order,
+engine compile). Deviations from the proposal: **no `plugins.json`** — the DEVICES/COMPOSITES table stays
+compiled-in TS data (the smoke test guards drift against the built plugins); manifest-driven subsetting
+can layer on later without breaking the API. Sine stays an app-wasm-only artifact (its slim
+`build-wasm.sh` wraps the package's and adds sine).
+
 ## Current state (what blocks SDK use)
 
 Shipped in the studio (dev channel): the header toggle, the `EngineVariant` seam in `studio-core`

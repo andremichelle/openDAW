@@ -10,7 +10,7 @@ import type {BoxGraph} from "@opendaw/lib-box"
 import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
-import {encodeSoundfont} from "../src/soundfont-simplify"
+import {encodeSoundfont} from "../../../studio/core-wasm/src/soundfont-simplify"
 
 const DC = 0.5
 const FRAMES = 48000

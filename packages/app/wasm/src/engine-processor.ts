@@ -9,20 +9,20 @@
 // The engine holds the wasm BoxGraph mirror; the main thread serializes SyncSource's UpdateTask[] into
 // bytes and posts them here. Each batch -> apply_updates, then bind() once the TimelineBox exists.
 
-import "./worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
+import "../../../studio/core-wasm/src/worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
 import {isDefined, Terminable, UUID} from "@opendaw/lib-std"
 import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import {CompositeSpec} from "./engine-modules"
+import {CompositeSpec} from "../../../studio/core-wasm/src/engine-modules"
 import {SampleInfo, SampleLoader} from "./sample-loader"
 import {SoundfontInfo, SoundfontLoader} from "./soundfont-loader"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
-import {ScriptBridges, ScriptEngine} from "./script-bridge"
-import {NamBridges} from "./nam-bridge"
-import {linkDevice, registerComposite} from "./device-linker"
-import {NamLoader} from "./nam-loader"
-import {EngineExports} from "./engine-exports"
+import {ScriptBridges, ScriptEngine} from "../../../studio/core-wasm/src/script-bridge"
+import {NamBridges} from "../../../studio/core-wasm/src/nam-bridge"
+import {linkDevice, registerComposite} from "../../../studio/core-wasm/src/device-linker"
+import {NamLoader} from "../../../studio/core-wasm/src/nam-loader"
+import {EngineExports} from "../../../studio/core-wasm/src/engine-exports"
 
 const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~42)
 

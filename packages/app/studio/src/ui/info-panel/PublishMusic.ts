@@ -2,7 +2,7 @@ import {OfflineEngineRenderer, ProjectBundle, ProjectProfile} from "@opendaw/stu
 import {WavFile} from "@opendaw/lib-dsp"
 import {DefaultObservableValue, isDefined, Option, panic, Procedure, Progress} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {WasmEngine} from "@/wasm-engine/WasmEngine"
+import {WasmEngine} from "@opendaw/studio-core-wasm"
 
 export namespace PublishMusic {
     export const publishMusic = async (profile: ProjectProfile, progress: Progress.Handler, log: Procedure<string>): Promise<string> => {

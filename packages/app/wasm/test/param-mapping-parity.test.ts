@@ -25,7 +25,7 @@ import {
     TidalDeviceBoxAdapter, VaporisateurDeviceBoxAdapter, VelocityDeviceBoxAdapter, VocoderDeviceBoxAdapter,
     WaveshaperDeviceBoxAdapter
 } from "@opendaw/studio-adapters"
-import {DEVICE_STACK_SIZE, DeviceExports, parseDylink} from "../src/device-linker"
+import {DEVICE_STACK_SIZE, DeviceExports, parseDylink} from "../../../studio/core-wasm/src/device-linker"
 
 const PLUGINS = path.resolve(__dirname, "../public/wasm/plugins")
 const SAMPLE_RATE = 48000

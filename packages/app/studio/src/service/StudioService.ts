@@ -615,7 +615,7 @@ export class StudioService implements ProjectEnv {
         ConsoleCommands.exportMethod("engine.exportTest",
             async () => this.runIfProject(async project => {
                 const {OfflineEngineRenderer} = await import("@opendaw/studio-core")
-                const {WasmEngine} = await import("@/wasm-engine/WasmEngine")
+                const {WasmEngine} = await import("@opendaw/studio-core-wasm")
                 const progress = new DefaultObservableValue(0.0)
                 const audio = await OfflineEngineRenderer.start(
                     project.copy(), Option.None, progress, undefined, 48_000, WasmEngine.useForExports())
@@ -631,7 +631,7 @@ export class StudioService implements ProjectEnv {
         ConsoleCommands.exportMethod("engine.exportStemsTest",
             async () => this.runIfProject(async project => {
                 const {OfflineEngineRenderer} = await import("@opendaw/studio-core")
-                const {WasmEngine} = await import("@/wasm-engine/WasmEngine")
+                const {WasmEngine} = await import("@opendaw/studio-core-wasm")
                 const {UUID} = await import("@opendaw/lib-std")
                 const stems: Record<string, {includeAudioEffects: boolean, includeSends: boolean, useInstrumentOutput: boolean, fileName: string}> = {}
                 for (const box of project.boxGraph.boxes()) {

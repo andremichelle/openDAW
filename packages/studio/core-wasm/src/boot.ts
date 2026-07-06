@@ -3,12 +3,12 @@
 // runs the sample/soundfont load handshakes over the UNCHANGED EngineToClient RPC.
 import {isDefined, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
 import {EngineToClient} from "@opendaw/studio-adapters"
-import {EngineExports, readPanicMessage} from "../../../wasm/src/engine-exports"
-import {CompositeSpec} from "../../../wasm/src/engine-modules"
-import {linkDevice, registerComposite} from "../../../wasm/src/device-linker"
-import {ScriptBridges, ScriptEngine} from "../../../wasm/src/script-bridge"
-import {NamBridges} from "../../../wasm/src/nam-bridge"
-import {simplifySoundfont} from "../../../wasm/src/soundfont-simplify"
+import {EngineExports, readPanicMessage} from "./engine-exports"
+import {CompositeSpec} from "./engine-modules"
+import {linkDevice, registerComposite} from "./device-linker"
+import {ScriptBridges, ScriptEngine} from "./script-bridge"
+import {NamBridges} from "./nam-bridge"
+import {simplifySoundfont} from "./soundfont-simplify"
 
 const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~42)
 

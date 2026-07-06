@@ -2,7 +2,7 @@ import {Color, DefaultObservableValue, Lifecycle, RuntimeNotifier} from "@openda
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {Checkbox} from "@/ui/components/Checkbox"
-import {WasmEngine} from "@/wasm-engine/WasmEngine"
+import {WasmEngine} from "@opendaw/studio-core-wasm"
 import {Colors} from "@opendaw/studio-enums"
 
 const WasmPurple = new Color(248, 84, 63) // the WebAssembly logo color (#654ff0)
@@ -15,10 +15,10 @@ type Construct = {
 // Switches the running project between the TypeScript and the experimental WASM engine. The choice persists
 // in localStorage, and every engine boot honors it; flipping reboots the worklet in place (no reload).
 export const WasmEngineToggle = ({lifecycle, service}: Construct) => {
-    const model = new DefaultObservableValue<boolean>(WasmEngine.isEnabled())
+    const model = new DefaultObservableValue<boolean>(WasmEngine.isEnabled() && WasmEngine.isReady())
     lifecycle.own(model.subscribe(async owner => {
         const enabled = owner.getValue()
-        if (enabled === WasmEngine.isEnabled()) {return}
+        if (enabled === (WasmEngine.isEnabled() && WasmEngine.isReady())) {return}
         if (enabled && !await WasmEngine.ensureReady(service.audioContext)) {
             model.setValue(false)
             RuntimeNotifier.notify({message: "WASM engine unavailable"})
@@ -34,7 +34,7 @@ export const WasmEngineToggle = ({lifecycle, service}: Construct) => {
                   appearance={{
                       color: Colors.black,
                       activeColor: WasmPurple,
-                      tooltip: "Experimental WASM engine (reboots the audio engine)",
+                      tooltip: "WASM engine (reboots the audio engine)",
                       cursor: "pointer"
                   }}>
             <svg viewBox="0 0 128 128" style={{width: "1.125em", height: "1.125em"}}>

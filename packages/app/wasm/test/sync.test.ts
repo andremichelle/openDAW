@@ -15,7 +15,7 @@ import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {BoxGraph, SyncSource, Synchronization, Updates, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
-import {serializeUpdateTasks} from "../src/sync/serialize-update-tasks"
+import {serializeUpdateTasks} from "../../../studio/core-wasm/src/sync/serialize-update-tasks"
 
 const ODSL = path.resolve(__dirname, "../../../../test-files/actions.odsl")
 const WASM = path.resolve(__dirname, "../public/wasm/engine.wasm")

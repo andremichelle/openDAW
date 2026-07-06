@@ -4,9 +4,9 @@
 // buffers are preallocated and reused, device-id strings are fetched once per device number and cached.
 // Shared by the realtime worklet processor and the offline render worker.
 import {int, isDefined, Nullable} from "@opendaw/lib-std"
-import {MIDISender} from "../../../../studio/core-processors/src/MIDISender"
-import {EngineExports} from "../../../wasm/src/engine-exports"
-import {decodeUtf8} from "../../../wasm/src/utf8"
+import {MIDISender} from "../../core-processors/src/MIDISender"
+import {EngineExports} from "./engine-exports"
+import {decodeUtf8} from "./utf8"
 
 const RECORD_BYTES = 16 // WASM CONTRACT: [device u32 LE][status u8][data1 u8][data2 u8][length u8][timeMs f64 LE]
 

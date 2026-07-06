@@ -1,16 +1,18 @@
-// Main-thread side of the WASM engine toggle: loads + caches the engine/device wasm modules, registers the
-// worklet processor module once, and installs the EngineVariant provider the studio-core EngineWorklet
-// consults at construction. The selection persists in localStorage; every engine (re)boot re-reads it, so
-// the existing restart machinery swaps engines without a page reload.
+// Main-thread API of the WASM engine: `install` takes the host-served URLs (the prebuilt worklet module,
+// the prebuilt offline render worker, and the base serving the wasm binaries — all shipped in this
+// package's dist), registers the EngineVariant provider the studio-core EngineWorklet consults at
+// construction, and wires the offline render variant. `ensureReady` compiles the modules + registers the
+// processor module once. The WASM engine is the DEFAULT; localStorage only records an explicit opt-out.
+// Every engine (re)boot re-reads it, so the existing restart machinery swaps engines without a page reload.
 import {isNull, MutableObservableOption, Nullable, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter, OfflineEngineRenderer, Project} from "@opendaw/studio-core"
-import {createEngineMemory, EngineModules, loadEngineModules} from "../../../wasm/src/engine-modules"
-import {serializeUpdateTasks} from "../../../wasm/src/sync/serialize-update-tasks"
-import {createSyncLoopback} from "../../../wasm/src/sync/loopback"
+import {createEngineMemory, EngineModules, loadEngineModules} from "./engine-modules"
+import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
+import {createSyncLoopback} from "./sync/loopback"
 import {
     WASM_ENGINE_PROCESSOR_NAME,
     WASM_FROZEN_CHANNEL,
@@ -19,29 +21,39 @@ import {
     WasmFrozenProtocol,
     WasmSyncProtocol
 } from "./protocol"
-import processorUrl from "./processor.ts?worker&url"
-import offlineWorkerUrl from "./offline-worker.ts?worker&url"
+export type WasmEngineUrls = {
+    // The prebuilt realtime worklet module (this package's dist/wasm-processor.js), served by the host.
+    processorUrl: string
+    // The prebuilt offline render worker (dist/wasm-offline-worker.js), served by the host.
+    offlineWorkerUrl: string
+    // Base URL serving the binaries (dist/wasm/*): `${wasmUrl}/wasm/engine.wasm` + `${wasmUrl}/wasm/plugins/*.wasm`.
+    wasmUrl: string
+}
 
 export namespace WasmEngine {
     const FLAG_KEY = "opendaw-wasm-engine"
     const modules = new MutableObservableOption<EngineModules>()
+    const config = new MutableObservableOption<WasmEngineUrls>()
 
-    export const isEnabled = (): boolean => localStorage.getItem(FLAG_KEY) === "true"
+    export const isEnabled = (): boolean => localStorage.getItem(FLAG_KEY) !== "false"
 
     export const setEnabled = (enabled: boolean): void => localStorage.setItem(FLAG_KEY, String(enabled))
 
-    // Whether a MASTER-only offline render (mixdown, publish, video audio) should run through the wasm
-    // variant: the engine toggle is on and the offline worker is installed. STEM exports always use the TS
-    // renderer for now (per-stem unit options — includeAudioEffects/skipChannelStrip — are not ported yet).
-    export const useForExports = (): boolean => isEnabled() && OfflineEngineRenderer.hasVariant()
+    // Whether the wasm modules are compiled and the processor is registered (i.e. `ensureReady` succeeded).
+    export const isReady = (): boolean => modules.nonEmpty()
+
+    // Whether an offline render (mixdown, stems, publish, video audio) should run through the wasm variant:
+    // the engine is enabled, its artifacts actually loaded, and the offline worker is installed.
+    export const useForExports = (): boolean => isEnabled() && isReady() && OfflineEngineRenderer.hasVariant()
 
     // Compile the wasm modules + register the processor module (both once). Returns false when the engine
     // artifacts are unavailable (e.g. a deploy without them), so callers can revert to the TS engine.
     export const ensureReady = async (context: BaseAudioContext): Promise<boolean> => {
         if (modules.nonEmpty()) {return true}
+        const {processorUrl, wasmUrl} = config.unwrap("WasmEngine.install must run before ensureReady")
         const {status, value, error} = await Promises.tryCatch((async () => {
             await context.audioWorklet.addModule(processorUrl)
-            return loadEngineModules(`${import.meta.env.BASE_URL}wasm-engine`)
+            return loadEngineModules(wasmUrl)
         })())
         if (status === "rejected") {
             console.warn("WASM engine unavailable:", error)
@@ -51,10 +63,11 @@ export namespace WasmEngine {
         return true
     }
 
-    export const install = (): void => {
-        // The OFFLINE render path (device benchmarks, offline parity renders): the worker self-loads the
-        // wasm artifacts, so no preloading is needed here.
-        OfflineEngineRenderer.installVariant(offlineWorkerUrl, {wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`})
+    export const install = (urls: WasmEngineUrls): void => {
+        config.wrap(urls)
+        // The OFFLINE render path (mixdown/stems/freeze/benchmarks): the worker self-loads the wasm
+        // artifacts from `wasmUrl`, so no preloading is needed here.
+        OfflineEngineRenderer.installVariant(urls.offlineWorkerUrl, {wasmUrl: urls.wasmUrl})
         OfflineEngineRenderer.installVariantPolicy(() => useForExports()) // freeze/consolidation follow the toggle
         EngineVariant.install((): Nullable<EngineWorkletVariant> => {
             if (!isEnabled() || modules.isEmpty()) {return null}

@@ -9,7 +9,7 @@ import {ApparatDeviceBox, AudioUnitBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
-import {ScriptBridges, ScriptEngine} from "../src/script-bridge"
+import {ScriptBridges, ScriptEngine} from "../../../studio/core-wasm/src/script-bridge"
 
 const CODE = `class Processor {
     phase = 0

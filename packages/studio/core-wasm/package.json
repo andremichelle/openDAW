@@ -1,0 +1,52 @@
+{
+  "name": "@opendaw/studio-core-wasm",
+  "version": "0.0.1",
+  "license": "LGPL-3.0-or-later",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./wasm-processor.js": "./dist/wasm-processor.js",
+    "./wasm-offline-worker.js": "./dist/wasm-offline-worker.js",
+    "./wasm/*": "./dist/wasm/*"
+  },
+  "files": [
+    "dist/**"
+  ],
+  "scripts": {
+    "build": "npm run build:wasm && npm run build:bundles && npm run build:api",
+    "build:wasm": "sh ./build-wasm.sh",
+    "build:bundles": "esbuild src/processor.ts --bundle --format=esm --platform=browser --minify --sourcemap --outfile=dist/wasm-processor.js && esbuild src/offline-worker.ts --bundle --format=esm --platform=browser --minify --sourcemap --outfile=dist/wasm-offline-worker.js",
+    "build:api": "tsc --project tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"**/*.ts\"",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@opendaw/lib-box": "^0.0.86",
+    "@opendaw/lib-dsp": "^0.0.84",
+    "@opendaw/lib-fusion": "^0.0.94",
+    "@opendaw/lib-runtime": "^0.0.79",
+    "@opendaw/lib-std": "^0.0.78",
+    "@opendaw/nam-wasm": "^1.2.0",
+    "@opendaw/studio-adapters": "^0.0.116",
+    "@opendaw/studio-boxes": "^0.0.94",
+    "@opendaw/studio-core": "^0.0.152",
+    "soundfont2": "^0.5.0"
+  },
+  "devDependencies": {
+    "@opendaw/eslint-config": "^0.0.28",
+    "@opendaw/studio-core-processors": "^0.0.122",
+    "@opendaw/typescript-config": "^0.0.32",
+    "@types/audioworklet": "^0.0.77",
+    "esbuild": "^0.25.0",
+    "vitest": "^3.1.3"
+  }
+}

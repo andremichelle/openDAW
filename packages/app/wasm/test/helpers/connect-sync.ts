@@ -11,7 +11,7 @@
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {SyncSource, Synchronization, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {serializeUpdateTasks} from "../../src/sync/serialize-update-tasks"
+import {serializeUpdateTasks} from "../../../../studio/core-wasm/src/sync/serialize-update-tasks"
 
 export type EngineSync = {
     // Drain every shipped transaction into the engine and assert the engine checksum equals the source's.

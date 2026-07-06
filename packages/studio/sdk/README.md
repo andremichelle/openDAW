@@ -16,6 +16,33 @@
 * `@opendaw/studio-boxes`
 * `@opendaw/studio-adapters`
 * `@opendaw/studio-core`
+* `@opendaw/studio-core-wasm`
+
+## WASM engine
+
+`@opendaw/studio-core-wasm` ships the Rust audio engine as prebuilt artifacts: the realtime worklet module
+(`dist/wasm-processor.js`), the offline render worker (`dist/wasm-offline-worker.js`) and the binaries
+(`dist/wasm/engine.wasm`, `dist/wasm/plugins/*.wasm`). Serve the package's `dist/` from your host (the page
+must be cross-origin isolated — COOP/COEP — for the SharedArrayBuffer the engine memory needs) and install
+it before booting:
+
+```ts
+import {WasmEngine} from "@opendaw/studio-core-wasm"
+
+WasmEngine.install({
+    processorUrl: "/opendaw-wasm/wasm-processor.js",
+    offlineWorkerUrl: "/opendaw-wasm/wasm-offline-worker.js",
+    wasmUrl: "/opendaw-wasm"
+})
+if (WasmEngine.isEnabled() && !await WasmEngine.ensureReady(audioContext)) {
+    console.warn("WASM engine unavailable — TypeScript engine active")
+}
+```
+
+With a bundler that resolves package assets (e.g. vite), the two module URLs can come straight from the
+package: `import wasmProcessorUrl from "@opendaw/studio-core-wasm/wasm-processor.js?url"`. The engine is
+enabled by default; `WasmEngine.setEnabled(false)` persists an opt-out to the TypeScript engine. Offline
+renders (mixdown, stems, freeze) follow automatically via `OfflineEngineRenderer`.
 
 ## Dual-Licensing Model
 

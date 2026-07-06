@@ -19,7 +19,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: 🦀 Install Rust + wasm target
+      - name: 🦀 Install Rust + wasm target + binaryen
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
           . "$HOME/.cargo/env"
@@ -27,6 +27,7 @@ jobs:
           rustup toolchain install nightly --profile minimal --component rust-src
           rustup target add wasm32-unknown-unknown --toolchain nightly
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          sudo apt-get update && sudo apt-get install -y binaryen
 
       - name: 📦 Install dependencies
         run: npm ci

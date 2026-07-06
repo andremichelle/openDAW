@@ -11,7 +11,7 @@ import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {SyncSource, Synchronization, Update, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
-import {serializeUpdateTasks} from "../src/sync/serialize-update-tasks"
+import {serializeUpdateTasks} from "../../../studio/core-wasm/src/sync/serialize-update-tasks"
 import {decodeSteps, readCommits, stepBackward, stepForward} from "../src/pages/sync-log/sync-log"
 import {loadFullEngine} from "./helpers/load-full-engine"
 

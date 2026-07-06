@@ -55,6 +55,7 @@
     "@opendaw/studio-adapters": "^0.0.116",
     "@opendaw/studio-boxes": "^0.0.94",
     "@opendaw/studio-core": "^0.0.152",
+    "@opendaw/studio-core-wasm": "^0.0.1",
     "@opendaw/studio-enums": "^0.0.77"
   },
   "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"

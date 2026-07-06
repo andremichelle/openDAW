@@ -22,9 +22,9 @@ import {
     ProjectSkeleton
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
-import {EngineExports} from "../../../wasm/src/engine-exports"
-import {createEngineMemory, loadEngineModules} from "../../../wasm/src/engine-modules"
-import {serializeUpdateTasks} from "../../../wasm/src/sync/serialize-update-tasks"
+import {EngineExports} from "./engine-exports"
+import {createEngineMemory, loadEngineModules} from "./engine-modules"
+import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
 import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 

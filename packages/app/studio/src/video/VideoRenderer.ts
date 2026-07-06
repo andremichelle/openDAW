@@ -9,7 +9,7 @@ import {
 } from "@opendaw/lib-std"
 import {dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {OfflineEngineRenderer, Project} from "@opendaw/studio-core"
-import {WasmEngine} from "@/wasm-engine/WasmEngine"
+import {WasmEngine} from "@opendaw/studio-core-wasm"
 import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
 import {ShadertoyBox} from "@opendaw/studio-boxes"

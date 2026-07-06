@@ -16,7 +16,7 @@
     "pretest:sync": "npm run wasm",
     "test:sync": "vitest run --config vitest.config.ts test/sync.test.ts",
     "test": "npm run test:rust && npm run test:parity",
-    "clean": "rm -rf dist public/*.wasm"
+    "clean": "rm -rf dist public/wasm"
   },
   "dependencies": {
     "@opendaw/lib-std": "^0.0.78",

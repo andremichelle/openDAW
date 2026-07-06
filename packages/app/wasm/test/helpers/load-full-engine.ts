@@ -6,10 +6,10 @@ import * as path from "node:path"
 import {readFileSync} from "node:fs"
 import {createRequire} from "node:module"
 import {UUID} from "@opendaw/lib-std"
-import {ScriptBridges, ScriptEngine} from "../../src/script-bridge"
-import {NamBridges} from "../../src/nam-bridge"
-import {linkDevice, registerComposite} from "../../src/device-linker"
-import {COMPOSITES, DEVICES as DEVICE_URLS} from "../../src/engine-modules"
+import {ScriptBridges, ScriptEngine} from "../../../../studio/core-wasm/src/script-bridge"
+import {NamBridges} from "../../../../studio/core-wasm/src/nam-bridge"
+import {linkDevice, registerComposite} from "../../../../studio/core-wasm/src/device-linker"
+import {COMPOSITES, DEVICES as DEVICE_URLS} from "../../../../studio/core-wasm/src/engine-modules"
 
 const PUBLIC = path.resolve(__dirname, "../../public")
 

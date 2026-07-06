@@ -1,6 +1,6 @@
 import {UUID} from "@opendaw/lib-std"
 import type {SoundFont2} from "soundfont2"
-import {simplifySoundfont} from "./soundfont-simplify"
+import {simplifySoundfont} from "../../../studio/core-wasm/src/soundfont-simplify"
 
 // Parse raw .sf2 bytes into a `SoundFont2` (the studio engine consumes this directly; the wasm engine gets the
 // simplified blob from it). `soundfont2` is imported dynamically so it is only pulled in when actually used.

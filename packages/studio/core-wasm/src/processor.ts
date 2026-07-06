@@ -6,7 +6,7 @@
 // Samples/soundfonts/NAM binaries are fetched through the UNCHANGED EngineToClient RPC and written into the
 // engine's shared memory here. Recording, note signals, clip launching, monitoring and frozen audio are
 // honest no-ops for now — the transport state simply never reports them active.
-import "../../../wasm/src/worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
+import "./worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
 import {Exec, int, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
 import {AudioAnalyser, AudioData, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
@@ -27,9 +27,9 @@ import {
     PreferencesClient
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
-import {HRClock} from "../../../../studio/core-processors/src/HRClock"
-import {PeakBroadcaster} from "../../../../studio/core-processors/src/PeakBroadcaster"
-import {EngineExports} from "../../../wasm/src/engine-exports"
+import {HRClock} from "../../core-processors/src/HRClock"
+import {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
+import {EngineExports} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
 import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 import {

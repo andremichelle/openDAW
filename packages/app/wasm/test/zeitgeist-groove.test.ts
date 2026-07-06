@@ -24,7 +24,7 @@ import {
     AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, GrooveShuffleBoxAdapter,
     ParameterFieldAdapters, ProjectSkeleton, ScriptCompiler, TrackType
 } from "@opendaw/studio-adapters"
-import {DEVICE_STACK_SIZE, DeviceExports, parseDylink} from "../src/device-linker"
+import {DEVICE_STACK_SIZE, DeviceExports, parseDylink} from "../../../studio/core-wasm/src/device-linker"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
 

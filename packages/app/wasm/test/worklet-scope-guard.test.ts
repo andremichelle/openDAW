@@ -8,7 +8,7 @@ import {readdirSync, readFileSync} from "node:fs"
 
 const TREES = [
     path.resolve(__dirname, "../src"),
-    path.resolve(__dirname, "../../studio/src/wasm-engine")
+    path.resolve(__dirname, "../../../studio/core-wasm/src")
 ]
 
 const collect = (dir: string, out: Array<string>): Array<string> => {

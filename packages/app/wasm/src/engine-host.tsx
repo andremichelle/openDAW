@@ -7,12 +7,12 @@ import {EngineStateSchema, ProjectSkeleton, ScriptCompiler} from "@opendaw/studi
 import {AudioData, PPQN} from "@opendaw/lib-dsp"
 import {SampleInfo, SampleLoader} from "./sample-loader"
 import {SoundfontInfo, SoundfontLoader} from "./soundfont-loader"
-import {NamLoader} from "./nam-loader"
+import {NamLoader} from "../../../studio/core-wasm/src/nam-loader"
 import {loadSoundfontBlob} from "./soundfont-fetch"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
 import {loadSampleCached} from "./sample-fetch"
-import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
-import {createEngineMemory, loadEngineModules} from "./engine-modules"
+import {serializeUpdateTasks} from "../../../studio/core-wasm/src/sync/serialize-update-tasks"
+import {createEngineMemory, loadEngineModules} from "../../../studio/core-wasm/src/engine-modules"
 import processorURL from "./engine-processor.ts?worker&url"
 
 // The box graph type ProjectSkeleton hands back; every page drives the engine from one of these.
