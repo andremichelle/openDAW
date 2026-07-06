@@ -33,6 +33,14 @@ pub struct BroadcastEntry {
     owner: Weak<RefCell<Box<[f32]>>>
 }
 
+impl BroadcastEntry {
+    /// Whether the owning slot still exists. A DEAD entry's `ptr` points into FREED heap (talc reuses it),
+    /// so it must never be served to the worklet — the view would read allocator garbage as meter floats.
+    pub fn alive(&self) -> bool {
+        self.owner.upgrade().is_some()
+    }
+}
+
 #[derive(Default)]
 pub struct Broadcasts {
     entries: Vec<BroadcastEntry>,

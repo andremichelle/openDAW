@@ -22,8 +22,8 @@ use voice::SoundfontVoice;
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 const MAX_VOICES: usize = 128;

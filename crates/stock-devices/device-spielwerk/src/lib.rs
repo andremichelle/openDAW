@@ -17,8 +17,8 @@ use abi::{EventRecord, ParamValue, DEVICE_KIND_MIDI_EFFECT};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 /// The on-stack scratch the device pulls its upstream into before bridging (the device gets a 256 KiB stack).

@@ -18,8 +18,8 @@ use math::value_mapping::{Decibel, Linear};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 const PRE_DELAY_FIELD: [u16; 1] = [10];
@@ -143,6 +143,18 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Dattorro as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.
+#[no_mangle]
+pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
+    let value = ParamValue::Unit(unit);
+    match id {
+        0 => float_value(value, &PRE_DELAY_MAPPING),
+        1..=9 => float_value(value, &UNIPOLAR),
+        10 | 11 => float_value(value, &GAIN_MAPPING),
+        _ => f32::NAN
+    }
 }
 
 /// Transport STOP: the reverb tail dies (mirrors the TS processor's `reset`).

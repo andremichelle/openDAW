@@ -282,6 +282,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         worklet.addEventListener("processorerror", handler)
         worklet.connect(worklet.context.destination, 0)
         this.engine.setWorklet(worklet)
+        worklet.isReady().then(() => this.audioUnitFreeze.replay(worklet))
         return worklet
     }
 

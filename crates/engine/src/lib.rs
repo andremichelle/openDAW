@@ -179,8 +179,21 @@ fn call_device_field_changed(field_changed_index: u32, state_ptr: u32, id: u32, 
     let field_changed: extern "C" fn(u32, u32, u32, u32, u32) = unsafe { core::mem::transmute(field_changed_index as usize) };
     field_changed(state_ptr, id, kind, bits, len);
 }
+// Native: record the delivery (id, kind, bits, len) for tests when the device declares a `field_changed`
+// export (mirroring the wasm "index 0 = none" sentinel), so field-observation tests can assert what reached
+// the device without a wasm build.
 #[cfg(not(target_family = "wasm"))]
-fn call_device_field_changed(_field_changed_index: u32, _state_ptr: u32, _id: u32, _kind: u32, _bits: u32, _len: u32) {}
+fn call_device_field_changed(field_changed_index: u32, _state_ptr: u32, id: u32, kind: u32, bits: u32, len: u32) {
+    #[cfg(test)]
+    if field_changed_index != 0 {
+        unsafe { FIELD_DELIVERIES.get() }.push((id, kind, bits, len));
+    }
+    #[cfg(not(test))]
+    let _ = (field_changed_index, id, kind, bits, len);
+}
+
+#[cfg(all(not(target_family = "wasm"), test))]
+pub(crate) static FIELD_DELIVERIES: Shared<Vec<(u32, u32, u32, u32)>> = Shared::new(Vec::new());
 
 // Call a device's `sample_changed(state_ptr, id, handle, present)` export to deliver an observed sample (the
 // resolved handle, or `present == 0` when the pointer is unbound). Called only inside a transaction (the
@@ -236,6 +249,7 @@ const EFFECT_INDEX_KEY: u16 = 2;
 
 mod metronome;
 mod monitor;
+mod frozen;
 use metronome::Metronome;
 mod plugin_instrument;
 mod plugin_audio_effect;
@@ -911,6 +925,11 @@ struct Engine {
     // into `stem_staging` after every render (stem i -> planar channels 2i / 2i+1).
     stem_exports: Vec<StemEntry>,
     stem_staging: Vec<f32>,
+    // FROZEN units (TS `setFrozenAudio`): pre-rendered PCM per unit — the chain wiring swaps the
+    // instrument + fx for a `FrozenPlayback` while an entry exists. `frozen_pending` holds the buffer the
+    // worklet fills between `frozen_allocate` and `set_frozen_audio`.
+    frozen_audio: Vec<([u8; 16], Rc<frozen::FrozenData>)>,
+    frozen_pending: Vec<f32>,
     tempo: Option<ValueCollection>,
     tempo_map: SharedTempoMap, // ppqn -> real-seconds map (tempo-automation aware), read by the audio-region player
 
@@ -963,6 +982,8 @@ impl Engine {
             monitoring_map: Vec::new(),
             stem_exports: Vec::new(),
             stem_staging: Vec::new(),
+            frozen_audio: Vec::new(),
+            frozen_pending: Vec::new(),
             tempo: None,
             tempo_map: Rc::new(RefCell::new(TempoMap::new())),
             context: EngineContext::new(),
@@ -1250,6 +1271,29 @@ impl Engine {
         self.reconcile_units();
     }
 
+    /// The frozen PCM of `unit`, if any (TS `AudioUnit.frozen`), consulted by the chain wiring.
+    pub(crate) fn frozen_of(&self, unit: &[u8; 16]) -> Option<Rc<frozen::FrozenData>> {
+        self.frozen_audio.iter().find(|(uuid, _)| uuid == unit).map(|(_, data)| data.clone())
+    }
+
+    /// Attach / replace the frozen PCM of a unit and re-wire it (TS `setFrozenAudio(Option.wrap(data))`).
+    fn set_frozen_audio(&mut self, unit: [u8; 16], data: Rc<frozen::FrozenData>) {
+        self.frozen_audio.retain(|(uuid, _)| uuid != &unit);
+        self.frozen_audio.push((unit, data));
+        self.mark_units_rewire(&[unit]);
+        self.reconcile_units();
+    }
+
+    /// Drop a unit's frozen PCM and re-wire its live chain (TS `setFrozenAudio(Option.None)`).
+    fn clear_frozen_audio(&mut self, unit: [u8; 16]) {
+        let before = self.frozen_audio.len();
+        self.frozen_audio.retain(|(uuid, _)| uuid != &unit);
+        if self.frozen_audio.len() != before {
+            self.mark_units_rewire(&[unit]);
+            self.reconcile_units();
+        }
+    }
+
     /// The stem-export options of `unit` (TS `AudioUnitOptions.Default` when it is not a stem), consulted
     /// by the chain wiring and the send/output resolution.
     pub(crate) fn unit_options(&self, unit: &[u8; 16]) -> StemEntry {
@@ -1497,12 +1541,14 @@ pub extern "C" fn broadcast_count() -> u32 {
 
 /// Write entry `index` as a fixed 48-byte record to `out_ptr` (client-reserved via `input_reserve`):
 /// `[uuid 16][package_type u32][ptr u32][len u32][keys_count u32][keys u16 x 8]`. Returns 1, or 0 when out
-/// of range.
+/// of range OR when the entry's owning slot died (its `ptr` points into freed heap — serving it would hand
+/// the worklet a view over allocator garbage; the next sweep drops it).
 #[no_mangle]
 pub extern "C" fn broadcast_entry(index: u32, out_ptr: u32) -> u32 {
     unsafe {
         let Some(engine) = ENGINE.get().as_ref() else { return 0 };
         let Some(entry) = engine.broadcasts.entry(index as usize) else { return 0 };
+        if !entry.alive() { return 0 }
         let out = core::slice::from_raw_parts_mut(out_ptr as *mut u8, 48);
         out[..16].copy_from_slice(&entry.uuid);
         out[16..20].copy_from_slice(&entry.package_type.to_le_bytes());
@@ -1701,6 +1747,55 @@ pub extern "C" fn set_stem_export(count: u32) {
             }
             engine.stem_staging = alloc::vec![0.0; stems.len() * 2 * RENDER_QUANTUM];
             engine.stem_exports = stems;
+        }
+    }
+}
+
+/// FREEZE step 1 (TS `EngineCommands.setFrozenAudio`): allocate the pending PCM buffer (ALWAYS
+/// `frame_count * 2` f32, the final planar stereo layout) and return its write pointer; the writer fills
+/// plane 0 (and plane 1 when stereo), then calls `set_frozen_audio` with the unit uuid in the input scratch.
+#[no_mangle]
+pub extern "C" fn frozen_allocate(frame_count: u32, _channels: u32) -> *mut f32 {
+    unsafe {
+        match ENGINE.get().as_mut() {
+            Some(engine) => {
+                engine.frozen_pending = alloc::vec![0.0; frame_count as usize * 2];
+                engine.frozen_pending.as_mut_ptr()
+            }
+            None => core::ptr::null_mut()
+        }
+    }
+}
+
+/// FREEZE step 2: attach the pending PCM (written planar into the `frozen_allocate` buffer) to the unit
+/// whose 16-byte uuid sits in the input scratch, and re-wire it to frozen playback. Takes the pending
+/// buffer AS-IS (no allocation, no copy — it already has the stereo layout); a mono freeze duplicates
+/// plane 0 into plane 1 in place.
+#[no_mangle]
+pub extern "C" fn set_frozen_audio(frame_count: u32, channels: u32, sample_rate: f32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            let mut uuid = [0u8; 16];
+            uuid.copy_from_slice(core::slice::from_raw_parts(INPUT.get().as_ptr(), 16));
+            let frame_count = frame_count as usize;
+            let mut frames = core::mem::take(&mut engine.frozen_pending);
+            if channels < 2 {
+                frames.copy_within(..frame_count, frame_count);
+            }
+            engine.set_frozen_audio(uuid, Rc::new(frozen::FrozenData {frames, frame_count, sample_rate}));
+        }
+    }
+}
+
+/// UNFREEZE (TS `setFrozenAudio(uuid, null)`): drop the unit's frozen PCM (uuid in the input scratch) and
+/// re-wire its live chain.
+#[no_mangle]
+pub extern "C" fn clear_frozen_audio() {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            let mut uuid = [0u8; 16];
+            uuid.copy_from_slice(core::slice::from_raw_parts(INPUT.get().as_ptr(), 16));
+            engine.clear_frozen_audio(uuid);
         }
     }
 }
@@ -2137,9 +2232,57 @@ mod heap {
     }
 }
 
+// The panic MESSAGE buffer: the handler formats the panic (message + location) here BEFORE trapping, and
+// the worklet reads it back via `panic_message_ptr/len` after catching the RuntimeError — so a production
+// panic is never anonymous (panic=abort + strip discard the message and the function names otherwise).
+// A fixed static, no alloc: the allocator may be the very thing that panicked.
+const PANIC_MESSAGE_CAPACITY: usize = 512;
+static PANIC_MESSAGE: Shared<([u8; PANIC_MESSAGE_CAPACITY], usize)> =
+    Shared::new(([0; PANIC_MESSAGE_CAPACITY], 0));
+
+struct PanicWriter {
+    buffer: &'static mut [u8],
+    written: usize
+}
+
+impl core::fmt::Write for PanicWriter {
+    fn write_str(&mut self, text: &str) -> core::fmt::Result {
+        let bytes = text.as_bytes();
+        let count = bytes.len().min(self.buffer.len() - self.written);
+        self.buffer[self.written..self.written + count].copy_from_slice(&bytes[..count]);
+        self.written += count;
+        Ok(()) // truncate silently; a clipped message still names the panic
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn panic_message_ptr() -> *const u8 {
+    unsafe { PANIC_MESSAGE.get() }.0.as_ptr()
+}
+
+#[no_mangle]
+pub extern "C" fn panic_message_len() -> usize {
+    unsafe { PANIC_MESSAGE.get() }.1
+}
+
+/// Host import a DEVICE's panic handler calls to deposit ITS panic message before trapping (the abi crate's
+/// shared handler): copied into the same buffer the worklet reads. Writes nothing else, safe at any time.
+#[no_mangle]
+pub extern "C" fn host_panic(msg_ptr: u32, msg_len: u32) {
+    let (buffer, written) = unsafe { PANIC_MESSAGE.get() };
+    let count = (msg_len as usize).min(PANIC_MESSAGE_CAPACITY);
+    unsafe { core::ptr::copy_nonoverlapping(msg_ptr as *const u8, buffer.as_mut_ptr(), count); }
+    *written = count;
+}
+
 #[cfg(not(test))]
 #[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    use core::fmt::Write;
+    let (buffer, written) = unsafe { PANIC_MESSAGE.get() };
+    let mut writer = PanicWriter {buffer, written: 0};
+    let _ = write!(writer, "{}", info); // Display = "panicked at <file>:<line>: <message>"
+    *written = writer.written;
     // Trap (observable RuntimeError) rather than `loop {}` (a silent hang), so a panic surfaces.
     core::arch::wasm32::unreachable()
 }

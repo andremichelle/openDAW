@@ -26,8 +26,8 @@ use math::value_mapping::{Linear, LinearInteger};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 // WASM CONTRACT: mirrors `PPQN` (Quarter = 960, Bar = 3840) and `Fraction.toPPQN` = floor(Bar / d) * n.
@@ -370,6 +370,21 @@ fn apply_parameter(state: &mut ArpState, id: u32, value: ParamValue) {
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     let state = unsafe { &mut *(state_ptr as *mut ArpState) };
     apply_parameter(state, id, ParamValue::from_wire(kind, value));
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.
+#[no_mangle]
+pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
+    let value = ParamValue::Unit(unit);
+    match id {
+        0 => abi::int_value(value, &MODE_MAPPING) as f32,
+        1 => abi::int_value(value, &OCTAVES_MAPPING) as f32,
+        2 => abi::int_value(value, &RATE_MAPPING) as f32,
+        3 => abi::float_value(value, &GATE_MAPPING),
+        4 => abi::int_value(value, &REPEAT_MAPPING) as f32,
+        5 => abi::float_value(value, &VELOCITY_MAPPING),
+        _ => f32::NAN
+    }
 }
 
 #[no_mangle]

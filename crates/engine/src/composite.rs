@@ -50,15 +50,15 @@ pub(crate) struct CompositeBinding {
 }
 
 impl CompositeBinding {
-    /// Collect the live-note injection targets: every SLOT's sequencer (its device filters by pad note),
-    /// recursing into nested composites. A CELL's sequencer lives inside its pull link (unreachable here),
-    /// so cell composites do not receive live notes yet.
+    /// Collect the live-note injection targets: every SLOT's sequencer (its device filters by pad note) and
+    /// every CELL's sequencer (the retained handle to the pull link's source), recursing into nested
+    /// composites.
     pub(crate) fn collect_note_sources(&self, out: &mut Vec<SharedNoteEventSource>) {
         for child in &self.members {
             match &child.body {
                 ChildBody::Slot {cluster, ..} => out.push(cluster.note_source()),
                 ChildBody::Nested {binding} => binding.collect_note_sources(out),
-                ChildBody::Cell {..} => {}
+                ChildBody::Cell {note_source, ..} => out.push(note_source.clone())
             }
         }
     }
@@ -70,7 +70,9 @@ impl CompositeBinding {
 #[allow(clippy::large_enum_variant)] // Slot is the common variant; boxing it would add a per-slot heap allocation
 enum ChildBody {
     Slot {cluster: SlotCluster, device: DeviceReg, midi_obs: Option<IndexedCollection>, audio_obs: Option<IndexedCollection>},
-    Cell {chains: Vec<IndexedCollection>, nodes: Vec<NodeId>, edges: Vec<(NodeId, NodeId)>, device_params: Vec<DeviceParams>, sidechains: Vec<SidechainBinding>},
+    // `note_source` is a shared handle to the SAME sequencer the cell's pull link owns (an `Rc`), kept so
+    // live note signals (`collect_note_sources`) reach the cell's instrument.
+    Cell {chains: Vec<IndexedCollection>, nodes: Vec<NodeId>, edges: Vec<(NodeId, NodeId)>, device_params: Vec<DeviceParams>, sidechains: Vec<SidechainBinding>, note_source: SharedNoteEventSource},
     Nested {binding: CompositeBinding}
 }
 
@@ -323,10 +325,10 @@ impl Engine {
                 Some(CompositeChild {uuid, choke, body: ChildBody::Slot {cluster, device, midi_obs, audio_obs},
                     output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs})
             }
-            ChildBody::Cell {chains, nodes, edges, device_params, sidechains} => {
+            ChildBody::Cell {chains, nodes, edges, device_params, sidechains, note_source} => {
                 let dirty = chains.iter().fold(false, |acc, chain| acc | chain.take_dirty()) | choke_changed;
                 let child = CompositeChild {uuid, choke: if dirty {choke.clone()} else {choke},
-                    body: ChildBody::Cell {chains, nodes, edges, device_params, sidechains},
+                    body: ChildBody::Cell {chains, nodes, edges, device_params, sidechains, note_source},
                     output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs};
                 self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, signal, invalidate)
             }
@@ -434,10 +436,10 @@ impl Engine {
         let gate = Rc::new(Cell::new(false)); // set from the resolved silent state by the caller each reconcile
         let cell_based = spec.cell_instrument_field != 0;
         let (body, output, output_node) = if cell_based {
-            let (cluster, chains, _nested) = self.build_cell(track_sets, child_uuid, spec, signal, invalidate)?;
+            let (cluster, chains, note_source) = self.build_cell(track_sets, child_uuid, spec, signal, invalidate)?;
             self.refresh_joiner_params(&cluster.device_params); // push the cell's joiner parameter values
             let (output, output_node) = (cluster.output.clone(), cluster.output_node);
-            (ChildBody::Cell {chains, nodes: cluster.nodes, edges: cluster.edges, device_params: cluster.device_params, sidechains: cluster.sidechains}, output, output_node)
+            (ChildBody::Cell {chains, nodes: cluster.nodes, edges: cluster.edges, device_params: cluster.device_params, sidechains: cluster.sidechains, note_source}, output, output_node)
         } else {
             let name = self.graph.find_box(&child_uuid)?.name.clone();
             if let Some(nested_spec) = self.composite_for_type(&name) {
@@ -499,7 +501,7 @@ impl Engine {
                 if let Some(observation) = audio_obs { observation.terminate(&mut self.graph); }
                 self.teardown_slot_cluster(cluster);
             }
-            ChildBody::Cell {chains, nodes, edges, device_params, sidechains} => {
+            ChildBody::Cell {chains, nodes, edges, device_params, sidechains, note_source: _} => {
                 for (source, target) in &edges {
                     self.context.remove_edge(*source, *target);
                 }
@@ -550,10 +552,11 @@ impl Engine {
     /// effects are unchanged plugins that attach to the cell by their normal `host` pointers, so a leaf device
     /// needs no per-composite knowledge. Reads the cell's hosted instrument (first member of its instrument host)
     /// and folds the cell's chains around it with the shared `build_cluster`, on the full broadcast stream (a
-    /// generic composite has no per-cell note routing). Returns `None` for an empty cell or an unresolved /
-    /// non-instrument device, unsubscribing whatever it observed.
+    /// generic composite has no per-cell note routing). Also returns a shared handle to the cell's sequencer
+    /// (the pull link keeps the same `Rc`), so live note signals reach the cell. Returns `None` for an empty
+    /// cell or an unresolved / non-instrument device, unsubscribing whatever it observed.
     fn build_cell(&mut self, track_sets: &SharedTrackSets, cell_uuid: Uuid, spec: &CompositeSpec, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>)
-        -> Option<(BuiltCluster, Vec<IndexedCollection>, Option<CompositeBinding>)> {
+        -> Option<(BuiltCluster, Vec<IndexedCollection>, SharedNoteEventSource)> {
         let instrument_obs = IndexedCollection::observe(&mut self.graph, Address::of(cell_uuid, vec![spec.cell_instrument_field]), 0);
         instrument_obs.take_dirty();
         instrument_obs.set_on_dirty(signal.clone()); // swapping the cell's hosted instrument enqueues the owning unit
@@ -574,7 +577,8 @@ impl Engine {
         let mut chains = vec![instrument_obs];
         let midi = self.observe_child_chain(cell_uuid, spec.cell_midi_field, &mut chains, signal);
         let audio = self.observe_child_chain(cell_uuid, spec.cell_audio_field, &mut chains, signal);
+        let note_source = sequencer.clone();
         let cluster = self.build_cluster(PullLink::Source(sequencer), instrument_uuid, device, &midi, &audio, signal, invalidate);
-        Some((cluster, chains, None))
+        Some((cluster, chains, note_source))
     }
 }

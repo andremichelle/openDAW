@@ -82,7 +82,9 @@ export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
 
 export const loadEngineModules = async (base: string = ""): Promise<EngineModules> => {
     const urls = [`${base}/wasm/engine.wasm`, ...DEVICES.map(device => `${base}${device.url}`)]
-    const buffers = await Promise.all(urls.map(url => fetch(url).then(response => response.arrayBuffer())))
+    const buffers = await Promise.all(urls.map(url => fetch(url).then(response => response.ok
+        ? response.arrayBuffer()
+        : Promise.reject(new Error(`Could not load wasm module '${url}' (${response.status} ${response.statusText})`)))))
     const [engineModule, ...deviceModules] = await Promise.all(buffers.map(bytes => WebAssembly.compile(bytes)))
     return {engineModule, deviceModules, deviceBoxTypes: DEVICES.map(device => device.boxType), composites: COMPOSITES}
 }

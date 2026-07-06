@@ -7,7 +7,7 @@
 // engine's shared memory here. Recording, note signals, clip launching, monitoring and frozen audio are
 // honest no-ops for now — the transport state simply never reports them active.
 import "../../../wasm/src/worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
-import {int, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
+import {Exec, int, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
 import {AudioAnalyser, AudioData, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Address} from "@opendaw/lib-box"
@@ -28,8 +28,15 @@ import {
 import type {SoundFont2} from "soundfont2"
 import {PeakBroadcaster} from "../../../../studio/core-processors/src/PeakBroadcaster"
 import {EngineExports} from "../../../wasm/src/engine-exports"
-import {drainResourceRequests, instantiateWasmEngine} from "./boot"
-import {WASM_ENGINE_PROCESSOR_NAME, WASM_SYNC_CHANNEL, WasmEngineAttachment, WasmSyncProtocol} from "./protocol"
+import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
+import {
+    WASM_ENGINE_PROCESSOR_NAME,
+    WASM_FROZEN_CHANNEL,
+    WASM_SYNC_CHANNEL,
+    WasmEngineAttachment,
+    WasmFrozenProtocol,
+    WasmSyncProtocol
+} from "./protocol"
 
 class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #terminator: Terminator = new Terminator()
@@ -44,7 +51,6 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #peaks: PeakBroadcaster
     readonly #analyser: AudioAnalyser
     readonly #pendingResources: Set<Promise<unknown>> = new Set()
-    readonly #warned: Set<string> = new Set()
 
     #broadcastGeneration: int = -1
     #monitoringMap: ReadonlyArray<MonitoringMapEntry> = []
@@ -110,30 +116,71 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             this.#preferences.catchupAndSubscribe(enabled =>
                 engine.set_metronome_enabled(enabled ? 1 : 0), "metronome", "enabled"),
             Communicator.executor<WasmSyncProtocol>(messenger.channel(WASM_SYNC_CHANNEL), {
-                applyUpdates: (bytes: ArrayBuffer): void => this.#applyUpdates(bytes)
+                applyUpdates: (bytes: ArrayBuffer): void => this.#guarded(() => this.#applyUpdates(bytes)),
+                checksum: (bytes: Int8Array): Promise<void> => this.#verifyChecksum(bytes)
+            }),
+            // Freeze PCM delivery (WasmEngine.connectFrozenAudio): the MAIN thread writes the frames into
+            // the shared memory between allocate and attach — nothing here copies sample data.
+            Communicator.executor<WasmFrozenProtocol>(messenger.channel(WASM_FROZEN_CHANNEL), {
+                frozenAllocate: (frameCount: number, channels: number): Promise<number> => {
+                    const {status, value, error} = tryCatch(() => engine.frozen_allocate(frameCount, channels))
+                    if (status === "failure") {
+                        this.#fail(error)
+                        return Promise.reject(error)
+                    }
+                    return Promise.resolve(value)
+                },
+                frozenAttach: (uuid: UUID.Bytes, frameCount: number, channels: number, sampleRate: number): void =>
+                    this.#guarded(() => {
+                        const pointer = engine.input_reserve(16)
+                        new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                        engine.set_frozen_audio(frameCount, channels, sampleRate)
+                    }),
+                frozenClear: (uuid: UUID.Bytes): void => this.#guarded(() => {
+                    const pointer = engine.input_reserve(16)
+                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    engine.clear_frozen_audio()
+                })
             }),
             Communicator.executor<EngineCommands>(messenger.channel("engine-commands"), {
-                play: (): void => this.#play(),
-                stop: (reset: boolean): void => this.#stop(reset),
-                setPosition: (position: number): void => {
+                play: (): void => this.#guarded(() => this.#play()),
+                stop: (reset: boolean): void => this.#guarded(() => this.#stop(reset)),
+                setPosition: (position: number): void => this.#guarded(() => {
                     this.#playbackTimestamp = position
                     engine.set_position(position)
-                },
-                prepareRecordingState: (countIn: boolean): void => {
+                }),
+                prepareRecordingState: (countIn: boolean): void => this.#guarded(() => {
                     this.#transporting = true
                     engine.prepare_recording_state(countIn ? 1 : 0,
                         this.#preferences.settings.recording.countInBars)
-                },
-                stopRecording: (): void => {
+                }),
+                stopRecording: (): void => this.#guarded(() => {
                     this.#transporting = false
                     engine.stop_recording()
-                },
+                }),
                 queryLoadingComplete: (): Promise<boolean> =>
                     Promise.all(this.#pendingResources).then(() => true),
                 panic: (): void => {this.#panic = true},
                 loadClickSound: (_index: 0 | 1, _data: AudioData): void => {}, // the wasm engine ships its own click
-                setFrozenAudio: (_uuid: UUID.Bytes, _audioData: Nullable<AudioData>): void => this.#unsupported("frozen audio"),
-                updateMonitoringMap: (map: ReadonlyArray<MonitoringMapEntry>): void => {
+                setFrozenAudio: (uuid: UUID.Bytes, audioData: Nullable<AudioData>): void => this.#guarded(() => {
+                    if (audioData === null) {
+                        const pointer = engine.input_reserve(16)
+                        new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                        engine.clear_frozen_audio()
+                        return
+                    }
+                    const {frames, numberOfFrames, numberOfChannels, sampleRate} = audioData
+                    const channels = Math.min(numberOfChannels, 2)
+                    const pcm = engine.frozen_allocate(numberOfFrames, channels)
+                    for (let channel = 0; channel < channels; channel++) {
+                        new Float32Array(this.#memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
+                            .set(frames[channel])
+                    }
+                    const pointer = engine.input_reserve(16)
+                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    engine.set_frozen_audio(numberOfFrames, channels, sampleRate)
+                }),
+                updateMonitoringMap: (map: ReadonlyArray<MonitoringMapEntry>): void => this.#guarded(() => {
                     // [uuid 16][left i32 LE][right i32 LE] per entry; -1 right = mono source.
                     this.#monitoringMap = map
                     const pointer = engine.input_reserve(map.length * 24)
@@ -144,23 +191,23 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                         view.setInt32(index * 24 + 20, channels.length > 1 ? channels[1] : -1, true)
                     })
                     engine.set_monitoring_map(map.length)
-                },
-                noteSignal: (signal: NoteSignal): void => this.#noteSignal(signal),
-                ignoreNoteRegion: (uuid: UUID.Bytes): void => {
+                }),
+                noteSignal: (signal: NoteSignal): void => this.#guarded(() => this.#noteSignal(signal)),
+                ignoreNoteRegion: (uuid: UUID.Bytes): void => this.#guarded(() => {
                     const pointer = engine.input_reserve(16)
                     new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
                     engine.ignore_note_region()
-                },
-                scheduleClipPlay: (clipIds: ReadonlyArray<UUID.Bytes>): void => clipIds.forEach(uuid => {
+                }),
+                scheduleClipPlay: (clipIds: ReadonlyArray<UUID.Bytes>): void => this.#guarded(() => clipIds.forEach(uuid => {
                     const pointer = engine.input_reserve(16)
                     new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
                     engine.schedule_clip_play()
-                }),
-                scheduleClipStop: (trackIds: ReadonlyArray<UUID.Bytes>): void => trackIds.forEach(uuid => {
+                })),
+                scheduleClipStop: (trackIds: ReadonlyArray<UUID.Bytes>): void => this.#guarded(() => trackIds.forEach(uuid => {
                     const pointer = engine.input_reserve(16)
                     new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
                     engine.schedule_clip_stop()
-                }),
+                })),
                 setupMIDI: (_port: MessagePort, _buffer: SharedArrayBuffer): void => {},
                 terminate: (): void => {
                     this.#valid = false
@@ -181,13 +228,39 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         }
         const {status, error} = tryCatch(() => this.#render(inputs, outputs))
         if (status === "failure") {
-            console.debug(error)
-            this.#valid = false
-            this.#engineToClient.error(error)
-            this.#terminator.terminate()
+            this.#fail(error)
             return false
         }
         return true
+    }
+
+    // A failure in a command handler (usually an engine trap) leaves the wasm instance unusable AND would
+    // otherwise escape uncaught in the AudioWorkletGlobalScope: invalidate the processor and escalate through
+    // engineToClient.error (with the wasm panic message attached) so the studio's restart flow reboots.
+    #fail(error: unknown): void {
+        console.debug(error)
+        this.#valid = false
+        this.#engineToClient.error(describeEngineTrap(this.#engine, this.#memory, error))
+        this.#terminator.terminate()
+    }
+
+    #guarded(exec: Exec): void {
+        const {status, error} = tryCatch(exec)
+        if (status === "failure") {this.#fail(error)}
+    }
+
+    // The engine refreshes a rolling 32-byte checksum after every applied transaction; the main thread sends
+    // the source graph's checksum through the same ordered channel, so equality proves the mirror still
+    // tracks the source. A divergence permanently desyncs playback: escalate so the studio's restart flow
+    // reboots from a fresh full dump.
+    #verifyChecksum(bytes: Int8Array): Promise<void> {
+        const local = new Int8Array(this.#memory.buffer, this.#engine.checksum_ptr(), 32)
+        if (bytes.length === local.length && bytes.every((byte, index) => byte === local[index])) {
+            return Promise.resolve()
+        }
+        const error = new Error("box-graph checksum mismatch: the engine mirror diverged from the source graph")
+        this.#engineToClient.error(error)
+        return Promise.reject(error)
     }
 
     #render(inputs: Array<Array<Float32Array>>, [mainOutput, monitorOutput]: Array<Array<Float32Array>>): void {
@@ -306,7 +379,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         }
         if (!this.#bound && this.#engine.bind() === 0) {this.#bound = true}
         // A transaction may have added AudioFileBoxes / SoundfontFileBox targets; dispatch their loads.
-        drainResourceRequests(this.#engine, this.#memory, this.#engineToClient, this.#pendingResources, sampleRate)
+        drainResourceRequests(this.#engine, this.#memory, this.#engineToClient, this.#pendingResources,
+            sampleRate, error => this.#fail(error))
     }
 
     // Mirror the engine's broadcast table onto the LiveStreamBroadcaster whenever its generation moved (a
@@ -357,11 +431,6 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         }
     }
 
-    #unsupported(feature: string): void {
-        if (this.#warned.has(feature)) {return}
-        this.#warned.add(feature)
-        this.#engineToClient.log(`WASM engine: ${feature} not supported yet`)
-    }
 }
 
 registerProcessor(WASM_ENGINE_PROCESSOR_NAME, WasmEngineProcessor)

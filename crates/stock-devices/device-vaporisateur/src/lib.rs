@@ -34,8 +34,8 @@ use voice::{VaporisateurParams, VaporisateurVoice};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 const POLY_VOICES: usize = 16; // polyphonic voice slots
@@ -303,6 +303,31 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Vaporisateur as Instrument>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order (the `param` slots).
+#[no_mangle]
+pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
+    let value = ParamValue::Unit(unit);
+    match id as usize {
+        param::OSC_A_WAVEFORM | param::OSC_B_WAVEFORM => int_value(value, &OSC_WAVEFORM_MAPPING) as f32,
+        param::OSC_A_VOLUME | param::OSC_B_VOLUME => float_value(value, &VOLUME_MAPPING),
+        param::OSC_A_OCTAVE | param::OSC_B_OCTAVE => int_value(value, &OCTAVE_MAPPING) as f32,
+        param::OSC_A_TUNE | param::OSC_B_TUNE => float_value(value, &TUNE_MAPPING),
+        param::ATTACK | param::DECAY | param::RELEASE => float_value(value, &TIME_MAPPING),
+        param::SUSTAIN | param::GLIDE_TIME | param::UNISON_STEREO => float_value(value, &UNIPOLAR),
+        param::CUTOFF => float_value(value, &CUTOFF_MAPPING),
+        param::RESONANCE => float_value(value, &RESONANCE_MAPPING),
+        param::FILTER_ENVELOPE | param::FILTER_KEYBOARD => float_value(value, &BIPOLAR),
+        param::FILTER_ORDER => int_value(value, &Values::new(&FILTER_ORDER_VALUES)) as f32,
+        param::VOICING_MODE => int_value(value, &Values::new(&VOICING_MODE_VALUES)) as f32,
+        param::UNISON_COUNT => int_value(value, &Values::new(&UNISON_COUNT_VALUES)) as f32,
+        param::UNISON_DETUNE => float_value(value, &DETUNE_MAPPING),
+        param::LFO_WAVEFORM => int_value(value, &Values::new(&LFO_WAVEFORM_VALUES)) as f32,
+        param::LFO_RATE => float_value(value, &LFO_RATE_MAPPING),
+        param::LFO_TARGET_TUNE | param::LFO_TARGET_CUTOFF | param::LFO_TARGET_VOLUME => float_value(value, &BIPOLAR),
+        _ => f32::NAN
+    }
 }
 
 /// Transport STOP: drop every voice (force-stop the voicing) so playback starts silent.

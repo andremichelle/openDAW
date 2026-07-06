@@ -23,8 +23,8 @@ use math::value_mapping::{Decibel, Linear};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 const RENDER_QUANTUM: usize = 128;
@@ -208,6 +208,17 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <NeuralAmpDevice as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.
+#[no_mangle]
+pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
+    let value = ParamValue::Unit(unit);
+    match id {
+        0 | 1 => float_value(value, &GAIN_MAPPING),
+        2 => float_value(value, &MIX_MAPPING),
+        _ => f32::NAN
+    }
 }
 
 /// Apply the observed `mono` bool field (`[13]`) or the model JSON read off the `model` pointer target

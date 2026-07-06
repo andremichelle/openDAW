@@ -2,6 +2,7 @@ import {
     Arrays,
     DefaultObservableValue,
     int,
+    isDefined,
     isNull,
     MutableObservableValue,
     Notifier,
@@ -39,7 +40,7 @@ import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {Engine} from "./Engine"
-import {EngineVariant, EngineWorkletVariant} from "./EngineVariant"
+import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter} from "./EngineVariant"
 import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
@@ -71,6 +72,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #playingClips: Array<UUID.Bytes>
     readonly #deviceMessageListeners: SetMultimap<string, Procedure<string>> = new SetMultimap()
     readonly #commands: EngineCommands
+    readonly #frozenAudioWriter: Nullable<FrozenAudioWriter>
     readonly #isReady: Promise<void>
 
     #perfBuffer: Float32Array = new Float32Array(0)
@@ -167,6 +169,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     }
                     terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
                 }))
+        this.#frozenAudioWriter = isNull(variant) || !isDefined(variant.connectFrozenAudio)
+            ? null : variant.connectFrozenAudio(messenger)
         this.#monitoringRouter = this.#terminator.own(new MonitoringRouter(this, this.#commands))
 
         const {port, sab} =
@@ -259,7 +263,13 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     }
     wake(): void {Atomics.store(this.#controlFlags, 0, 0)}
     loadClickSound(index: 0 | 1, data: AudioData): void {this.#commands.loadClickSound(index, data)}
-    setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {this.#commands.setFrozenAudio(uuid, audioData)}
+    setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
+        if (isNull(this.#frozenAudioWriter)) {
+            this.#commands.setFrozenAudio(uuid, audioData)
+        } else {
+            this.#frozenAudioWriter(uuid, audioData)
+        }
+    }
 
     get isPlaying(): ObservableValue<boolean> {return this.#isPlaying}
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}

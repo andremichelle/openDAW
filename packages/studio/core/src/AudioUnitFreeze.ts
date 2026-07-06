@@ -2,6 +2,7 @@ import {DefaultObservableValue, Errors, Notifier, Observer, Option, RuntimeNotif
 import {AudioData} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBoxAdapter, ExportConfiguration} from "@opendaw/studio-adapters"
+import {Engine} from "./Engine"
 import {OfflineEngineRenderer} from "./OfflineEngineRenderer"
 import {Address} from "@opendaw/lib-box"
 
@@ -34,6 +35,14 @@ export class AudioUnitFreeze implements Terminable {
     }
 
     subscribe(observer: Observer<UUID.Bytes>): Subscription {return this.#notifier.subscribe(observer)}
+
+    // A rebooted worklet (engine error restart, TS/WASM toggle) starts with no frozen entries: replay every
+    // frozen unit's PCM so it keeps playing frozen instead of silently rewiring its live chain.
+    replay(engine: Engine): void {
+        for (const [key, entry] of this.#frozenAudioUnits) {
+            engine.setFrozenAudio(UUID.parse(key), entry.audioData)
+        }
+    }
 
     hasSidechainDependents(audioUnitBoxAdapter: AudioUnitBoxAdapter): boolean {
         const targetAddresses: Array<Address> = []

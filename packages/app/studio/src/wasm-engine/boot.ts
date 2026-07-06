@@ -1,9 +1,9 @@
 // Shared WASM-engine boot + resource plumbing for BOTH studio hosts: the realtime worklet processor and
 // the offline render worker. Links the engine + device side-modules (with the script/NAM bridges) and
 // runs the sample/soundfont load handshakes over the UNCHANGED EngineToClient RPC.
-import {isDefined, Provider, UUID} from "@opendaw/lib-std"
+import {isDefined, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
 import {EngineToClient} from "@opendaw/studio-adapters"
-import {EngineExports} from "../../../wasm/src/engine-exports"
+import {EngineExports, readPanicMessage} from "../../../wasm/src/engine-exports"
 import {CompositeSpec} from "../../../wasm/src/engine-modules"
 import {linkDevice, registerComposite} from "../../../wasm/src/device-linker"
 import {ScriptBridges, ScriptEngine} from "../../../wasm/src/script-bridge"
@@ -17,6 +17,15 @@ export type WasmEngineModules = {
     deviceModules: ReadonlyArray<WebAssembly.Module>
     deviceBoxTypes: ReadonlyArray<string>
     composites: ReadonlyArray<CompositeSpec>
+}
+
+// A wasm trap surfaces as an anonymous "RuntimeError: unreachable" (panic=abort strips the message);
+// the engine's panic handler deposits the real message + location into a static buffer first, so attach
+// it before the error leaves the host.
+export const describeEngineTrap = (engine: EngineExports, memory: WebAssembly.Memory, error: unknown): unknown => {
+    const message = tryCatch(() => readPanicMessage(engine, memory))
+    if (message.status === "failure" || message.value.length === 0) {return error}
+    return new Error(`wasm panic: ${message.value}`, {cause: error})
 }
 
 export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAssembly.Memory,
@@ -40,12 +49,15 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
 // Pop every sample/soundfont the engine queued and run the load handshake for each: fetch + decode over
 // the EngineToClient RPC, write into the engine allocation, mark ready. Each runs as its own async chain
 // tracked in `pending` (queryLoadingComplete awaits them); a failed sample resolves as 1-frame silence.
+// A throw INSIDE a continuation (an engine trap while writing the allocation) would otherwise vanish as
+// an unhandled rejection in the host's global scope, so it routes into `onError`.
 export const drainResourceRequests = (engine: EngineExports, memory: WebAssembly.Memory,
                                       engineToClient: EngineToClient, pending: Set<Promise<unknown>>,
-                                      fallbackSampleRate: number): void => {
+                                      fallbackSampleRate: number, onError: Procedure<unknown>): void => {
     const track = (promise: Promise<unknown>): void => {
-        pending.add(promise)
-        promise.finally(() => pending.delete(promise))
+        const guarded = promise.catch(onError)
+        pending.add(guarded)
+        guarded.finally(() => pending.delete(guarded))
     }
     for (; ;) {
         const outPtr = engine.input_reserve(16)

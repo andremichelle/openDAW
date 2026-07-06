@@ -54,4 +54,19 @@ fn clear_empties_the_buffer() {
     buffer.clear();
     assert!(buffer.is_empty());
     assert!(buffer.get(0).is_empty());
+    let mut visited = 0;
+    buffer.for_each(|_, _| visited += 1);
+    assert_eq!(visited, 0, "for_each skips emptied buckets");
+}
+
+#[test]
+fn clear_keeps_the_bucket_storage_for_reuse() {
+    // The render path clears once per quantum; the bucket Vec must be REUSED (same storage), never
+    // freed and re-allocated. The slice pointer proves it: it only changes on a re-allocation.
+    let mut buffer = EventBuffer::new();
+    buffer.add(0, note_start(1, 0.0, 60));
+    let before = buffer.get(0).as_ptr();
+    buffer.clear();
+    buffer.add(0, note_start(2, 0.0, 64));
+    assert_eq!(buffer.get(0).as_ptr(), before, "the emptied bucket's storage is reused");
 }

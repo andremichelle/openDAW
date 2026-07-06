@@ -21,8 +21,8 @@ use math::value_mapping::{Linear, LinearInteger};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 const MAGNET_POSITION_FIELD: [u16; 1] = [10];
@@ -162,6 +162,18 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Velocity as MidiEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.
+#[no_mangle]
+pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
+    let value = ParamValue::Unit(unit);
+    match id {
+        0 | 1 | 3 | 5 => abi::float_value(value, &UNIPOLAR),
+        2 => abi::int_value(value, &SEED_MAPPING) as f32,
+        4 => abi::float_value(value, &BIPOLAR),
+        _ => f32::NAN
+    }
 }
 
 #[cfg(test)]

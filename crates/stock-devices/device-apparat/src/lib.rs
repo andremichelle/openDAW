@@ -18,8 +18,8 @@ use abi::{Block, EventRecord, Ports, ParamValue, DEVICE_KIND_INSTRUMENT, EVENT_N
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 /// The bridge state (engine-allocated, zeroed): the device's box uuid and the JS-side bridge handle. No DSP /

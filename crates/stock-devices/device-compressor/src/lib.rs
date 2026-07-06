@@ -23,8 +23,8 @@ use math::value_mapping::{Exponential, Linear};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 const LOOKAHEAD_FIELD: [u16; 1] = [10];
@@ -295,6 +295,24 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Compressor as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.
+#[no_mangle]
+pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
+    let value = ParamValue::Unit(unit);
+    match id {
+        0..=3 => if bool_value(value) {1.0} else {0.0},
+        4 => float_value(value, &INPUTGAIN_MAPPING),
+        5 => float_value(value, &THRESHOLD_MAPPING),
+        6 => float_value(value, &RATIO_MAPPING),
+        7 => float_value(value, &KNEE_MAPPING),
+        8 => float_value(value, &ATTACK_MAPPING),
+        9 => float_value(value, &RELEASE_MAPPING),
+        10 => float_value(value, &MAKEUP_MAPPING),
+        11 => float_value(value, &MIX_MAPPING),
+        _ => f32::NAN
+    }
 }
 
 /// Transport STOP: clear the runtime state (mirrors the TS processor's `reset`).

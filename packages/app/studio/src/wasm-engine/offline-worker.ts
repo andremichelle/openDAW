@@ -4,7 +4,7 @@
 // replacement leans on (device benchmarks, offline parity renders, later exports). The project snapshot
 // is decoded here and streamed into the engine as one full-dump transaction; samples/soundfonts/NAM
 // arrive over the EngineToClient RPC exactly like the realtime worklet host.
-import {Arrays, int, isDefined, Nullable, Option, SyncStream, TimeSpan, UUID} from "@opendaw/lib-std"
+import {Arrays, int, isDefined, Nullable, Option, SyncStream, TimeSpan, tryCatch, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
 import {AudioData, dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {UpdateTask} from "@opendaw/lib-box"
@@ -25,7 +25,7 @@ import type {SoundFont2} from "soundfont2"
 import {EngineExports} from "../../../wasm/src/engine-exports"
 import {createEngineMemory, loadEngineModules} from "../../../wasm/src/engine-modules"
 import {serializeUpdateTasks} from "../../../wasm/src/sync/serialize-update-tasks"
-import {drainResourceRequests, instantiateWasmEngine} from "./boot"
+import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 
 type EngineState = {
     readonly engine: EngineExports
@@ -42,7 +42,11 @@ type EngineState = {
 let state: Option<EngineState> = Option.None
 
 const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: Float32Array[], stems: number): void => {
-    engine.render()
+    const rendered = tryCatch(() => engine.render())
+    if (rendered.status === "failure") {
+        // A wasm trap is an anonymous RuntimeError; the panic handler left the real message in its buffer.
+        throw describeEngineTrap(engine, memory, rendered.error)
+    }
     const buffer = memory.buffer // re-read each block: talc may have grown the buffer
     if (stems > 0) {
         // STEM export: each stem's tap lands planar in the stem staging (stem i -> channels 2i / 2i+1).
@@ -123,7 +127,8 @@ Communicator.executor<OfflineEngineProtocol>(
                 throw new Error("the project snapshot carries no TimelineBox")
             }
             const pending: Set<Promise<unknown>> = new Set()
-            drainResourceRequests(engine, memory, engineToClient, pending, config.sampleRate)
+            drainResourceRequests(engine, memory, engineToClient, pending, config.sampleRate,
+                reason => engineToClient.error(describeEngineTrap(engine, memory, reason)))
             const stateSender = SyncStream.writer(EngineStateSchema(), config.syncStreamBuffer, engineState => {
                 const view = new DataView(memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
                 engineState.position = view.getFloat32(0)

@@ -29,8 +29,8 @@ use voice::SlotVoice;
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 /// The slot's fixed per-pad polyphony cap (see `plans/wasm-audio/playfield-composite.md`). TS polyphony is
@@ -333,6 +333,21 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <PlayfieldSlot as Instrument>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.
+#[no_mangle]
+pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
+    let value = ParamValue::Unit(unit);
+    match id {
+        0 => int_value(value, &GATE_MAPPING) as f32,
+        1 => float_value(value, &PITCH_MAPPING),
+        2 | 3 => float_value(value, &UNIPOLAR),
+        4 => float_value(value, &ATTACK_MAPPING),
+        5 => float_value(value, &RELEASE_MAPPING),
+        6 => if bool_value(value) {1.0} else {0.0},
+        _ => f32::NAN
+    }
 }
 
 /// Apply an observed plain field's value (its `index`), by the id `observe_field` returned. Driven by the

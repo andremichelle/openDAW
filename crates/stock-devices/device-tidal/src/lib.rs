@@ -23,8 +23,8 @@ use math::value_mapping::{Linear, LinearInteger, ValueMapping};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 // The parameter field-key PATHs on the `TidalDeviceBox` (the stable schema keys, passed to the host as-is).
@@ -206,6 +206,21 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Tidal as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.
+#[no_mangle]
+pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
+    let value = ParamValue::Unit(unit);
+    match id {
+        0 => float_value(value, &SLOPE_MAPPING),
+        1 => float_value(value, &SYMMETRY_MAPPING),
+        2 => RATE_MAPPING.y(unit) as f32,
+        3 => float_value(value, &DEPTH_MAPPING),
+        4 => float_value(value, &OFFSET_MAPPING),
+        5 => float_value(value, &CHANNEL_OFFSET_MAPPING),
+        _ => f32::NAN
+    }
 }
 
 #[cfg(test)]

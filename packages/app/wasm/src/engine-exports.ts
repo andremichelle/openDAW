@@ -57,6 +57,13 @@ export type EngineExports = {
     // `stem_output_ptr` (stem i -> planar channels 2i / 2i+1).
     set_stem_export: (count: number) => void
     stem_output_ptr: () => number
+    // FROZEN units (TS EngineCommands.setFrozenAudio): `frozen_allocate` reserves the FINAL planar stereo
+    // buffer (always frameCount * 2 f32); the writer fills plane 0 (and plane 1 when stereo), then attaches
+    // it to the unit whose uuid sits in the input scratch — `set_frozen_audio` takes the buffer as-is
+    // (a mono freeze duplicates plane 0 in place, no copy); clear re-wires the live chain.
+    frozen_allocate: (frameCount: number, channels: number) => number
+    set_frozen_audio: (frameCount: number, channels: number, sampleRate: number) => void
+    clear_frozen_audio: () => void
     // LIVE note signals (the studio's on-screen keys / pads / MIDI input): write the target AudioUnitBox
     // uuid into the input buffer (16 bytes) first. A raw note-on sustains until its note-off; an audition
     // stops itself after `duration` pulses. They sound while the transport is stopped too.
@@ -113,4 +120,16 @@ export type EngineExports = {
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number
     sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
+    // PANIC readout: the engine's panic handler (and a device's, via the shared host_panic deposit) formats
+    // the panic message + location into a static buffer BEFORE trapping. After catching the RuntimeError the
+    // host reads it back here, so a production panic is never anonymous (panic=abort strips it otherwise).
+    panic_message_ptr: () => number
+    panic_message_len: () => number
+}
+
+// Read the panic message the trapped engine left behind (empty when the failure was not a wasm panic).
+export const readPanicMessage = (exports: EngineExports, memory: WebAssembly.Memory): string => {
+    const length = exports.panic_message_len()
+    if (length === 0) {return ""}
+    return new TextDecoder().decode(new Uint8Array(memory.buffer, exports.panic_message_ptr(), length).slice())
 }

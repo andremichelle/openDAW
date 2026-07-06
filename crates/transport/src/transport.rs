@@ -51,6 +51,7 @@ pub struct Transport {
     nominal_bpm: f32,  // the configured bpm (TimelineBox.bpm); the live bpm when no tempo automation drives it
     sample_rate: f32,
     playing: bool,
+    leap: bool, // a position JUMP happened (seek / stop-rewind); the next quantum's first block flags discontinuous (TS `TimeInfo.#leap`)
     loop_enabled: bool,
     loop_from: f64, // pulses
     loop_to: f64,   // pulses
@@ -58,7 +59,7 @@ pub struct Transport {
 
 impl Transport {
     pub fn new(sample_rate: f32, bpm: f32) -> Self {
-        Self {position: 0.0, free_running: 0.0, bpm, nominal_bpm: bpm, sample_rate, playing: false, loop_enabled: false, loop_from: 0.0, loop_to: 0.0}
+        Self {position: 0.0, free_running: 0.0, bpm, nominal_bpm: bpm, sample_rate, playing: false, leap: false, loop_enabled: false, loop_from: 0.0, loop_to: 0.0}
     }
 
     pub fn position(&self) -> f64 {self.position}
@@ -78,11 +79,16 @@ impl Transport {
         self.playing = false;
         if reset {
             self.position = 0.0;
-            self.free_running = 0.0
+            self.free_running = 0.0;
+            self.leap = true;
         }
     }
 
-    pub fn seek(&mut self, position: f64) {self.position = position; self.free_running = position}
+    pub fn seek(&mut self, position: f64) {
+        self.position = position;
+        self.free_running = position;
+        self.leap = true; // the next quantum's first block flags discontinuous (TS sets `#leap` on any position set)
+    }
 
     /// Build the free-running block for a PAUSED quantum: `position` stays frozen, but the pulse range
     /// keeps advancing (a real quantum length) so the graph renders one more block — active voices flush
@@ -116,7 +122,7 @@ impl Transport {
         }
         let mut p0 = self.position;
         let mut s0: usize = 0;
-        let mut discontinuous = false;
+        let mut discontinuous = core::mem::replace(&mut self.leap, false);
         self.eval_tempo(tempo, p0);
         while s0 < RENDER_QUANTUM {
             let sn = RENDER_QUANTUM - s0;

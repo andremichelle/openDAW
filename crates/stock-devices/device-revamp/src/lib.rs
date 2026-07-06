@@ -24,8 +24,8 @@ use math::value_mapping::{Exponential, Linear, LinearInteger};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 // Band signal-order indices.
@@ -280,6 +280,24 @@ pub extern "C" fn reset(state_ptr: u32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Revamp as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order: per-band
+/// enabled/freq pairs (0..13), then the five gains (14..18), the five Qs (19..23), the two orders (24, 25).
+#[no_mangle]
+pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
+    let value = ParamValue::Unit(unit);
+    match id {
+        0..=13 => if id % 2 == 0 {
+            if bool_value(value) {1.0} else {0.0}
+        } else {
+            float_value(value, &FREQ_MAPPING)
+        },
+        14..=18 => float_value(value, &GAIN_MAPPING),
+        19..=23 => float_value(value, &Q_MAPPING),
+        24 | 25 => int_value(value, &ORDER_MAPPING) as f32,
+        _ => f32::NAN
+    }
 }
 
 #[cfg(test)]

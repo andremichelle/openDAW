@@ -26,12 +26,20 @@ impl EventBuffer {
 
     pub fn for_each(&self, mut procedure: impl FnMut(u32, &[Event])) {
         for (index, events) in &self.buckets {
-            procedure(*index, events);
+            if !events.is_empty() {
+                procedure(*index, events);
+            }
         }
     }
 
+    /// Empties every bucket KEEPING its storage (and the map nodes): `clear` runs once per quantum on the
+    /// render path, where dropping the buckets would free + re-allocate through talc on every eventful
+    /// quantum. Bucket count is bounded by the block indices ever seen (a high-water, like every render
+    /// scratch), so retained nodes never grow past one quantum's block count.
     pub fn clear(&mut self) {
-        self.buckets.clear();
+        for events in self.buckets.values_mut() {
+            events.clear();
+        }
     }
 
     pub fn is_empty(&self) -> bool {

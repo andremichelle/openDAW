@@ -90,6 +90,38 @@ fn value_at_multi_event() {
 }
 
 #[test]
+fn value_at_stacked_events_at_the_same_position_stay_finite() {
+    // STACKED events (same position, distinct index) are a real occurrence in projects (the atstil
+    // pad-StereoTool stack at 0). TS `valueAt` never interpolates ACROSS a stack: `position < next.position`
+    // gates the interpolation, so the a==b division (0/0 -> NaN) is unreachable. Mirror-proof it: the
+    // rightmost stacked event rules AT the stack, and interpolation toward the NEXT real event divides by
+    // the positive span only — never NaN, never Inf.
+    let stack_first = ValueEvent::new(100.0, 0, 0.2, Interpolation::Linear);
+    let stack_last = ValueEvent::new(100.0, 1, 0.8, Interpolation::Linear);
+    let next = ValueEvent::new(200.0, 0, 1.0, Interpolation::Linear);
+    let events = collection(&[stack_first, stack_last, next]);
+    let at_stack = value_at(&events, 100.0, -1.0);
+    assert_eq!(at_stack, 0.8, "on the stack: the RIGHTMOST stacked event rules (TS floorLastIndex)");
+    let between = value_at(&events, 150.0, -1.0);
+    assert!(between.is_finite(), "between stack and next must be finite, got {between}");
+    assert!((between - 0.9).abs() < EPS, "interpolates from the stack's last (0.8) toward 1.0");
+    let before = value_at(&events, 50.0, -1.0);
+    assert!(before.is_finite());
+    assert_eq!(before, 0.2, "before the stack: the first event's value holds");
+    // A stack with CURVE interpolation on its last member: the curve steps span is the positive distance
+    // to the next event, never zero.
+    let curve_last = ValueEvent::new(100.0, 1, 0.8, Interpolation::Curve(0.25));
+    let curved_events = collection(&[stack_first, curve_last, next]);
+    let curved = value_at(&curved_events, 150.0, -1.0);
+    assert!(curved.is_finite(), "curve across a stack boundary must be finite, got {curved}");
+    // A trailing stack (no event after it): holds, no interpolation attempted.
+    let trailing = collection(&[stack_first, stack_last]);
+    let held = value_at(&trailing, 100.0, -1.0);
+    assert_eq!(held, 0.8);
+    assert!(value_at(&trailing, 500.0, -1.0).is_finite());
+}
+
+#[test]
 fn next_event_walks_then_ends() {
     let a = event(0.0, 0.0, Interpolation::Linear);
     let b = event(100.0, 1.0, Interpolation::Linear);

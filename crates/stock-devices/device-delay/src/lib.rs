@@ -26,8 +26,8 @@ use delay_dsp::DelayDsp;
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info) // deposit the message in the engine's panic buffer, then trap (never a silent hang)
 }
 
 const TEMPO_MIN: f32 = 30.0; // TempoRange.min, the slowest tempo, which sets the worst-case delay length
@@ -252,4 +252,20 @@ pub extern "C" fn reset(state_ptr: u32) {
 #[no_mangle]
 pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
     unsafe { abi::with_state(state_ptr, |state| <Delay as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order (the `param` slots).
+#[no_mangle]
+pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
+    let value = ParamValue::Unit(unit);
+    match id as usize {
+        param::PRE_SYNC_L | param::PRE_SYNC_R | param::DELAY_SYNC => sync_index(value) as f32,
+        param::PRE_MILLIS_L | param::PRE_MILLIS_R | param::DELAY_MILLIS => millis_value(value),
+        param::FEEDBACK | param::CROSS => float_value(value, &UNIPOLAR),
+        param::LFO_SPEED => float_value(value, &LFO_SPEED_MAPPING),
+        param::LFO_DEPTH => float_value(value, &LFO_DEPTH_MAPPING),
+        param::FILTER => float_value(value, &BIPOLAR),
+        param::WET | param::DRY => float_value(value, &VOLUME_MAPPING),
+        _ => f32::NAN
+    }
 }

@@ -26,8 +26,10 @@ use bindings::indexed_collection::IndexedCollection;
 use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
 use boxgraph::address::{Address, Uuid};
+use boxgraph::field::FieldValue;
 use boxgraph::graph::BoxGraph;
-use boxgraph::subscription::{HubEvent, Propagation, SubscriptionId};
+use boxgraph::subscription::{HubEvent, Propagation, SubscriptionId, UpdateObserver};
+use boxgraph::updates::Update;
 use engine_env::audio_buffer::SharedAudioBuffer;
 use engine_env::audio_generator::AudioGenerator;
 use engine_env::audio_input::AudioInput;
@@ -409,7 +411,19 @@ enum Wired {
     Leaf(LeafChain),
     Composite(CompositeWired),
     Tape(TapeWired),
-    Bus(BusWired)
+    Bus(BusWired),
+    Frozen(FrozenWired)
+}
+
+/// A FROZEN unit's wiring (TS `AudioDeviceChain.#wire`'s frozen branch): the pre-rendered PCM player
+/// replaces the instrument + fx; the LIVE channel strip still applies (fader / mute / panning), and the
+/// aux sends read the player output (`pre_strip`). Rebuilt wholesale on freeze / unfreeze.
+struct FrozenWired {
+    player_id: NodeId,
+    pre_strip: SharedAudioBuffer, // the player output (the send tap)
+    strip_id: NodeId,
+    strip_output: SharedAudioBuffer,
+    edges: Vec<(NodeId, NodeId)>
 }
 
 impl Wired {
@@ -420,7 +434,8 @@ impl Wired {
             Wired::Leaf(chain) => (chain.strip_id, chain.strip_output.clone()),
             Wired::Composite(composite) => (composite.strip_id, composite.strip_output.clone()),
             Wired::Tape(tape) => (tape.strip_id, tape.strip_output.clone()),
-            Wired::Bus(bus) => (bus.strip_id, bus.strip_output.clone())
+            Wired::Bus(bus) => (bus.strip_id, bus.strip_output.clone()),
+            Wired::Frozen(frozen) => (frozen.strip_id, frozen.strip_output.clone())
         }
     }
 
@@ -431,7 +446,8 @@ impl Wired {
             Wired::Leaf(chain) => (chain.pre_strip_node, chain.pre_strip.clone()),
             Wired::Composite(composite) => (composite.pre_strip_node, composite.pre_strip.clone()),
             Wired::Tape(tape) => (tape.pre_strip_node, tape.pre_strip.clone()),
-            Wired::Bus(bus) => (bus.pre_strip_node, bus.pre_strip.clone())
+            Wired::Bus(bus) => (bus.pre_strip_node, bus.pre_strip.clone()),
+            Wired::Frozen(frozen) => (frozen.player_id, frozen.pre_strip.clone())
         }
     }
 }
@@ -643,6 +659,10 @@ pub(crate) struct DeviceParams {
     field_subs: Vec<SubscriptionId>,
     collections: Vec<ValueCollection>,
     observe_subs: Vec<SubscriptionId>, // the device's PLAIN field observations (`observe_field`), dropped on teardown
+    // POINTER-CROSSING field observations (`observe_field` with a pointer at the path head, e.g. Zeitgeist's
+    // `groove`): each cell holds the CURRENT target-field subscription, swapped by the pointer watcher (which
+    // itself lives in `observe_subs`) on a repoint / clear. Unsubscribed by cell on teardown.
+    pointer_field_subs: Vec<Rc<Cell<Option<SubscriptionId>>>>,
     sidechain_paths: Vec<Vec<u16>>, // the audio effect's declared sidechain pointer paths (`bind_sidechain`), in order
     // SCRIPTABLE devices: membership subscriptions on the dynamic `parameters` / `samples` collection hubs (fire
     // the unit's automation invalidate on a child add / remove). Kept SEPARATE from `field_subs`, since they
@@ -773,7 +793,8 @@ impl AudioUnitBinding {
                 Wired::Leaf(chain) => chain.instrument.output.clone()?,
                 Wired::Tape(tape) => tape.player.borrow().audio_output(),
                 Wired::Composite(composite) => composite.binding.sum_buffer.clone(),
-                Wired::Bus(bus) => bus.sum_buffer.clone()
+                Wired::Bus(bus) => bus.sum_buffer.clone(),
+                Wired::Frozen(frozen) => frozen.pre_strip.clone()
             });
         }
         if entry.skip_channel_strip {
@@ -1222,6 +1243,7 @@ impl Engine {
                         self.resolve_one_sidechain(binding);
                     }
                 }
+                Some(Wired::Frozen(_)) => {} // pre-rendered: no live devices, no sidechains
                 None => {}
             }
         }
@@ -1285,6 +1307,28 @@ impl Engine {
     /// (`sum`), register it so sources route in, run the bus's own audio-effect chain over it, then a channel
     /// strip; the strip's output is routed to the bus's own `output` by `resolve_outputs`. Wholesale rebuild on
     /// a chain edit (like tape / composite).
+    /// Wire a FROZEN unit: the `FrozenPlayback` node (transport-aligned PCM) feeds the LIVE channel strip;
+    /// `resolve_outputs` routes the strip and `resolve_sends` taps the player output like any pre-strip.
+    fn reconcile_frozen(&mut self, unit: &mut AudioUnitBinding, data: Rc<crate::frozen::FrozenData>) {
+        self.teardown_unit_wired(unit);
+        let player = Rc::new(RefCell::new(crate::frozen::FrozenPlayback::new(data, self.tempo_map.clone())));
+        let player_output = player.borrow().audio_output();
+        let player_id = self.context.register_processor(player);
+        self.context.set_label(player_id, format!("frozen {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
+        strip.borrow_mut().set_audio_source(player_output.clone());
+        let strip_output = strip.borrow().audio_output();
+        let strip_meter = strip.borrow().meter_slot();
+        self.broadcasts.register(unit.unit, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
+        let strip_id = self.context.register_processor(strip);
+        self.context.set_label(strip_id, format!("strip:frozen {:02x}{:02x}", unit.unit[0], unit.unit[1]));
+        self.context.register_edge(player_id, strip_id);
+        self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
+        unit.wired = Some(Wired::Frozen(FrozenWired {
+            player_id, pre_strip: player_output, strip_id, strip_output, edges: vec![(player_id, strip_id)]
+        }));
+    }
+
     fn reconcile_bus(&mut self, unit: &mut AudioUnitBinding, bus_uuid: Uuid, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) {
         self.teardown_unit_wired(unit);
         let sum_buffer = shared_audio_buffer();
@@ -1715,6 +1759,13 @@ impl Engine {
                     self.context.remove_processor(node);
                 }
             }
+            Wired::Frozen(frozen) => {
+                for (source, target) in &frozen.edges {
+                    self.context.remove_edge(*source, *target);
+                }
+                self.context.remove_processor(frozen.strip_id);
+                self.context.remove_processor(frozen.player_id);
+            }
         }
     }
 
@@ -1837,6 +1888,11 @@ impl Engine {
         // A rewire tears down (or reuses) the strip; drop the current output route first so no stale summed
         // source / edge survives. `resolve_outputs` (end of `reconcile_units`) re-routes the rebuilt strip.
         self.unwire_output_route(unit);
+        // A FROZEN unit plays its pre-rendered PCM instead of its chain (TS `AudioDeviceChain.#wire`'s
+        // frozen branch): player -> LIVE strip; sends read the player output. Unfreezing re-wires the chain.
+        if let Some(data) = self.frozen_of(&unit.unit) {
+            return self.reconcile_frozen(unit, data);
+        }
         let instrument_uuid = match unit.input.sorted().first().copied() {
             Some(uuid) => uuid,
             None => return self.teardown_unit_wired(unit) // no instrument: silent until its `input` box appears
@@ -1951,10 +2007,10 @@ impl Engine {
             if let ProcHandle::Audio(node) = &member.proc {
                 node.borrow_mut().set_audio_source(output.clone());
             }
-            let node_id = member.node_id.unwrap();
+            let node_id = member.node_id.expect("member.node_id");
             self.context.register_edge(output_node, node_id);
             edges.push((output_node, node_id));
-            output = member.output.clone().unwrap();
+            output = member.output.clone().expect("member.output");
             output_node = node_id;
         }
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(unit.strip_params.clone(), unit.strip_automation.clone(), self.sample_rate)));
@@ -2043,10 +2099,10 @@ impl Engine {
             if let ProcHandle::Audio(node) = &member.proc {
                 node.borrow_mut().set_audio_source(output.clone());
             }
-            let node_id = member.node_id.unwrap();
+            let node_id = member.node_id.expect("member.node_id");
             self.context.register_edge(output_node, node_id);
             tail_edges.push((output_node, node_id));
-            output = member.output.clone().unwrap();
+            output = member.output.clone().expect("member.output");
             output_node = node_id;
         }
         let pre_strip = output.clone();
@@ -2301,8 +2357,8 @@ impl Engine {
             processor.borrow_mut().set_pull_chain(pull);
         }
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
-        let mut output = instrument.output.clone().unwrap();
-        let mut output_node = instrument.node_id.unwrap();
+        let mut output = instrument.output.clone().expect("instrument.output");
+        let mut output_node = instrument.node_id.expect("instrument.node_id");
         // EFFECTS monitoring: the injector ADDS the staged live input into the instrument's output IN PLACE
         // (TS `MonitoringMixProcessor` sits post-instrument, PRE-FX), ordered before every chain consumer.
         let monitor_node = monitor.map(|(left, right)| {
@@ -2324,10 +2380,10 @@ impl Engine {
             if let ProcHandle::Audio(node) = &member.proc {
                 node.borrow_mut().set_audio_source(output.clone());
             }
-            let node_id = member.node_id.unwrap();
+            let node_id = member.node_id.expect("member.node_id");
             self.context.register_edge(output_node, node_id);
             edges.push((output_node, node_id));
-            output = member.output.clone().unwrap();
+            output = member.output.clone().expect("member.output");
             output_node = node_id;
         }
         (output, output_node, edges, monitor_node)
@@ -2507,7 +2563,7 @@ impl Engine {
         }
         let (mut handles, mut field_subs, mut collections, mut armed) = self.observe_params(device_uuid, &paths, invalidate);
         // The device's plain-field, sample and soundfont observations all unsubscribe the same way, so one list.
-        let mut observe_subs = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
+        let (mut observe_subs, pointer_field_subs) = self.observe_fields(device_uuid, reg, state_ptr, &field_paths);
         observe_subs.extend(self.observe_samples(device_uuid, reg, state_ptr, &sample_paths));
         observe_subs.extend(self.observe_soundfonts(device_uuid, reg, state_ptr, &soundfont_paths));
         // SCRIPTABLE devices: also bind the dynamic parameter / sample COLLECTION children, and watch each hub's
@@ -2532,38 +2588,28 @@ impl Engine {
                 Box::new(move |_graph, _event| hub_invalidate())));
         }
         sink.set_params(handles.clone(), armed);
-        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, sidechain_paths, param_hub_sub, sample_hub_sub, broadcast_slots}
+        DeviceParams {device_uuid, reg, state_ptr, sink, paths, handles, field_subs, collections, observe_subs, pointer_field_subs, sidechain_paths, param_hub_sub, sample_hub_sub, broadcast_slots}
     }
 
     /// Wire each field a device asked to observe. A PLAIN observation (`observe_field`, `target_key == 0`):
     /// `catchup_and_subscribe` the field on the device's box and deliver its value through the device's
-    /// `field_changed` export, by the id (the observation's index) the device got back. A TARGET-STRING
-    /// observation (`observe_target_string`): catch up to the POINTER's current target and subscribe to the
-    /// pointer field, delivering the target box's string field `target_key` (empty = unbound) — the
-    /// `observe_soundfonts` shape with the payload read straight from the graph. Both run on catch-up and on
-    /// edits, only inside a transaction, never during render, so calling the device is safe. Returns the
-    /// subscriptions for teardown.
-    fn observe_fields(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, paths: &[FieldObs]) -> Vec<SubscriptionId> {
+    /// `field_changed` export, by the id (the observation's index) the device got back. A plain path whose
+    /// HEAD is a POINTER field (e.g. Zeitgeist's `groove` at `[10, 10]`) crosses the pointer: the REMAINING
+    /// path is observed on the pointer's TARGET box, and the pointer itself is watched so a repoint / clear
+    /// re-resolves (delivering the new target's value; unbound = no delivery, the device keeps its previous /
+    /// seeded value). A TARGET-STRING observation (`observe_target_string`): catch up to the POINTER's current
+    /// target and subscribe to the pointer field, delivering the target box's string field `target_key`
+    /// (empty = unbound) — the `observe_soundfonts` shape with the payload read straight from the graph. All
+    /// run on catch-up and on edits, only inside a transaction, never during render, so calling the device is
+    /// safe. Returns the fixed subscriptions plus the pointer-crossing observations' swappable target-field
+    /// subscription cells, both for teardown.
+    fn observe_fields(&mut self, device_uuid: Uuid, reg: DeviceReg, state_ptr: u32, paths: &[FieldObs]) -> (Vec<SubscriptionId>, Vec<Rc<Cell<Option<SubscriptionId>>>>) {
         let mut subs = Vec::new();
+        let mut pointer_subs = Vec::new();
         for (index, obs) in paths.iter().enumerate() {
             let id = index as u32;
             let field_changed_index = reg.field_changed_index;
-            if obs.target_key == 0 {
-                let sub = self.graph.catchup_and_subscribe(Address::of(device_uuid, obs.path.clone()), move |value| {
-                    // Encode the field's typed value onto the wire `(kind, bits, len)`: numeric bits, or a string's
-                    // pointer + length into the shared memory (valid for the synchronous call).
-                    if let Some(value) = value.as_int32() {
-                        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_INT, value as u32, 0);
-                    } else if let Some(value) = value.as_float32() {
-                        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_FLOAT, value.to_bits(), 0);
-                    } else if let Some(value) = value.as_bool() {
-                        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_BOOL, value as u32, 0);
-                    } else if let Some(value) = value.as_str() {
-                        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_STRING, value.as_ptr() as u32, value.len() as u32);
-                    }
-                });
-                subs.push(sub);
-            } else {
+            if obs.target_key != 0 {
                 let target_key = obs.target_key;
                 resolve_and_deliver_target_string(&self.graph, device_uuid, &obs.path, target_key, field_changed_index, state_ptr, id);
                 let owned_path = obs.path.clone();
@@ -2572,9 +2618,49 @@ impl Engine {
                         resolve_and_deliver_target_string(graph, device_uuid, &owned_path, target_key, field_changed_index, state_ptr, id);
                     }));
                 subs.push(sub);
+            } else if obs.path.len() > 1
+                && matches!(self.graph.field_value(&Address::of(device_uuid, vec![obs.path[0]])), Some(FieldValue::Pointer(_))) {
+                // The pointer-crossing shape: `resubscribe` resolves the pointer, delivers the target field's
+                // current value (catch-up) and hangs the target-field subscription into the shared cell.
+                // Run once now, and again from the pointer watcher on every repoint / clear — the watcher only
+                // holds `&BoxGraph`, so the swap goes through the graph's DEFERRED subscription queue.
+                let pointer = Address::of(device_uuid, vec![obs.path[0]]);
+                let rest: Rc<Vec<u16>> = Rc::new(obs.path[1..].to_vec());
+                let target_sub: Rc<Cell<Option<SubscriptionId>>> = Rc::new(Cell::new(None));
+                let resubscribe: Rc<dyn Fn(&BoxGraph)> = {
+                    let deferred = self.graph.deferred();
+                    let pointer = pointer.clone();
+                    let holder = target_sub.clone();
+                    Rc::new(move |graph| {
+                        if let Some(previous) = holder.take() {
+                            deferred.unsubscribe(previous);
+                        }
+                        if let Some(target) = graph.target_of(&pointer).map(|address| address.uuid) {
+                            let field = Address::of(target, rest.as_ref().clone());
+                            if let Some(value) = graph.field_value(&field) {
+                                deliver_field_value(value, field_changed_index, state_ptr, id);
+                            }
+                            holder.set(Some(deferred.subscribe_vertex(Propagation::This, field,
+                                pointer_target_field_observer(pointer.clone(), target, field_changed_index, state_ptr, id))));
+                        }
+                    })
+                };
+                resubscribe(&self.graph);
+                let on_repoint = resubscribe.clone();
+                subs.push(self.graph.subscribe_vertex(Propagation::This, pointer,
+                    Box::new(move |graph, _update| on_repoint(graph))));
+                pointer_subs.push(target_sub);
+            } else {
+                let sub = self.graph.catchup_and_subscribe(Address::of(device_uuid, obs.path.clone()), move |value| {
+                    deliver_field_value(value, field_changed_index, state_ptr, id);
+                });
+                subs.push(sub);
             }
         }
-        subs
+        // Register the pointer-crossing catch-ups' queued target-field subscriptions (we hold `&mut`, so the
+        // deferred queue would otherwise sit until the next transaction).
+        self.graph.apply_deferred();
+        (subs, pointer_subs)
     }
 
     /// Wire each sample a device asked to observe (`observe_sample`): catch up to the `file` pointer's current
@@ -2728,6 +2814,11 @@ impl Engine {
             for sub in params.observe_subs {
                 self.graph.unsubscribe(sub);
             }
+            for cell in params.pointer_field_subs {
+                if let Some(sub) = cell.take() {
+                    self.graph.unsubscribe(sub);
+                }
+            }
             for sub in params.param_hub_sub.into_iter().chain(params.sample_hub_sub) {
                 self.graph.unsubscribe(sub);
             }
@@ -2782,6 +2873,7 @@ impl Engine {
                     refresh_params(&params.handles, params.reg, params.state_ptr, position);
                 }
             }
+            Wired::Frozen(_) => {} // pre-rendered: no live parameters
         }
         unit.wired = Some(wired);
     }
@@ -2815,6 +2907,7 @@ impl Engine {
                 }
             }
             Wired::Bus(_) => {} // a bus's fx params are bound at (wholesale) build; live automation re-bind deferred
+            Wired::Frozen(_) => {} // pre-rendered: no live parameters
         }
         unit.wired = Some(wired);
     }
@@ -2911,6 +3004,35 @@ pub(crate) fn resolve_and_deliver_soundfont(graph: &BoxGraph, device_uuid: Uuid,
         }
         None => call_device_soundfont_changed(soundfont_changed_index, state_ptr, id, 0, 0)
     }
+}
+
+/// Encode a field's typed value onto the `field_changed` wire `(kind, bits, len)`: numeric bits, or a
+/// string's pointer + length into the shared memory (valid for the synchronous call).
+fn deliver_field_value(value: &FieldValue, field_changed_index: u32, state_ptr: u32, id: u32) {
+    if let Some(value) = value.as_int32() {
+        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_INT, value as u32, 0);
+    } else if let Some(value) = value.as_float32() {
+        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_FLOAT, value.to_bits(), 0);
+    } else if let Some(value) = value.as_bool() {
+        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_BOOL, value as u32, 0);
+    } else if let Some(value) = value.as_str() {
+        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_STRING, value.as_ptr() as u32, value.len() as u32);
+    }
+}
+
+/// The target-field observer of a POINTER-CROSSING observation (`observe_fields`): deliver each primitive
+/// edit of the target box's field, but only WHILE the pointer still aims at that target. The guard covers a
+/// same-transaction "repoint, then the OLD target's field edited": the swap-out of this subscription is
+/// deferred (applied after dispatch), so it can still fire within the repointing transaction and must not
+/// overwrite the new target's delivered value.
+fn pointer_target_field_observer(pointer: Address, target_uuid: Uuid, field_changed_index: u32, state_ptr: u32, id: u32) -> UpdateObserver {
+    Box::new(move |graph, update| {
+        if let Update::Primitive {new, ..} = update {
+            if graph.target_of(&pointer).map(|target| target.uuid) == Some(target_uuid) {
+                deliver_field_value(new, field_changed_index, state_ptr, id);
+            }
+        }
+    })
 }
 
 /// Resolve a device's observed POINTER to its target box and deliver the target's STRING field `target_key`
@@ -3911,6 +4033,50 @@ mod tests {
     }
 
     #[test]
+    fn a_chain_teardown_never_leaves_a_dead_or_skipped_meter_entry() {
+        // The studio PeakMeter NaN crash: a wholesale chain teardown (freeze, composite/tape rebuild, an
+        // instrument unwire) removes its processors, but the context's CACHED render queue still holds Rc
+        // clones — so the torn-down meter slots look ALIVE through the reconcile's sweep AND block a
+        // same-address re-registration (the register dedup). The next render rebuilds the queue, the old
+        // slots die, and the broadcast table serves a FREED pointer to the worklet: talc metadata read as
+        // negative floats -> `gainToDb(negative)` = NaN in the UI meter. TS never exhibits this — a device's
+        // terminate removes its LiveStreamBroadcaster package synchronously with the teardown.
+        use engine_env::process_info::ProcessInfo;
+        let mut engine = engine_with_devices();
+        engine.graph = unit_graph();
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        engine.broadcasts.sweep();
+        let render = |engine: &mut Engine| engine.context.process(&ProcessInfo {blocks: &[]});
+        render(&mut engine); // cache the render queue (the studio always renders between reconciles)
+        let alive_meter = |engine: &Engine, uuid: Uuid| (0..engine.broadcasts.len()).any(|index| {
+            let entry = engine.broadcasts.entry(index).expect("entry");
+            entry.uuid == uuid && entry.keys.is_empty()
+                && entry.package_type == crate::broadcast::PACKAGE_FLOAT_ARRAY && entry.alive()
+        });
+        let dead_entries = |engine: &Engine| (0..engine.broadcasts.len())
+            .filter(|index| !engine.broadcasts.entry(*index).expect("entry").alive()).count();
+        assert!(alive_meter(&engine, FX_A), "FX_A meter registered after the first reconcile");
+        // Unwire the instrument: `reconcile_leaf` tears the WHOLE chain down (no instrument -> silent).
+        let point = |engine: &mut Engine, old: Option<Address>, new: Option<Address>|
+            engine.graph.transaction(&[Update::Pointer {
+                address: Address::of(INSTR, vec![HOST_KEY]), old, new
+            }], &engine.registry).expect("point instrument host");
+        point(&mut engine, Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])), None);
+        engine.reconcile_one(&mut unit);
+        engine.broadcasts.sweep();
+        // Re-wire it in the SAME apply pass (no render between): the chain rebuilds and re-registers its
+        // meters at the SAME addresses while the queue still keeps the old slots alive.
+        point(&mut engine, None, Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])));
+        engine.reconcile_one(&mut unit);
+        engine.broadcasts.sweep();
+        assert!(alive_meter(&engine, FX_A), "the rebuilt FX_A meter is registered (not dedup-skipped)");
+        render(&mut engine); // the queue rebuild drops the torn-down processors for good
+        assert_eq!(dead_entries(&engine), 0, "no dead entry (freed slot ptr) is served after the render");
+        assert!(alive_meter(&engine, FX_A), "FX_A still meters after the rebuild's first render");
+    }
+
+    #[test]
     fn launching_a_clip_plays_its_notes_instead_of_the_timeline() {
         const CLIP: Uuid = [30u8; 16];
         const CLIP_COLLECTION: Uuid = [31u8; 16];
@@ -4413,6 +4579,57 @@ mod tests {
         let node = child_instrument(&unit, CELL).expect("cell child built");
         engine.reconcile_one(&mut unit);
         assert_eq!(child_instrument(&unit, CELL), Some(node), "the cell child survives an idle reconcile (same processor)");
+    }
+
+    #[test]
+    fn live_note_signal_reaches_a_cell_composites_sequencer() {
+        // A CELL-based composite dropped live notes: `build_cell` moved its sequencer into the pull link with
+        // no retained handle, so `collect_note_sources` skipped cells (on-screen keys / MIDI stayed silent
+        // while sequenced playback worked). The retained `note_source` clone shares the pull link's `Rc`.
+        const CELL: Uuid = [40u8; 16];
+        const CELL_INSTRUMENT_FIELD: u16 = 50;
+        let mut engine = engine_with_devices();
+        engine.composites = vec![CompositeSpec {
+            box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
+            cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
+            child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0
+        }];
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(UNIT, "AudioUnitBox", &[
+                (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+                (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+            ]),
+            graph_box(COMPOSITE, "TestComposite", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (CHILDREN_FIELD, FieldValue::Hook)
+            ]),
+            graph_box(CELL, "TestCell", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))), (CELL_INSTRUMENT_FIELD, FieldValue::Hook)
+            ]),
+            graph_box(CHILD_A, "TestInstrument", &[
+                (HOST_KEY, FieldValue::Pointer(Some(Address::of(CELL, vec![CELL_INSTRUMENT_FIELD]))))
+            ])
+        ]);
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        // A raw note-on routes to the cell's sequencer and emits at the next block, transport STOPPED.
+        super::note_signal_to_unit(&unit, super::NoteSignal::On {pitch: 60, velocity: 0.9});
+        let mut sources: Vec<engine_env::note_event_instrument::SharedNoteEventSource> = Vec::new();
+        match unit.wired.as_ref().expect("wired after reconcile") {
+            Wired::Composite(composite) => composite.binding.collect_note_sources(&mut sources),
+            _ => panic!("expected a composite chain")
+        }
+        assert_eq!(sources.len(), 1, "the cell's sequencer is a live-note injection target");
+        let stopped = engine_env::block_flags::BlockFlags::create(false, false, false, false);
+        let mut events: Vec<engine_env::event::Event> = Vec::new();
+        sources[0].borrow_mut().process_notes(0.0, 5.0, stopped, &mut |event| events.push(event));
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], engine_env::event::Event::NoteStart {pitch: 60, ..}));
+        // The note-off releases it in the following block.
+        super::note_signal_to_unit(&unit, super::NoteSignal::Off {pitch: 60});
+        events.clear();
+        sources[0].borrow_mut().process_notes(5.0, 10.0, stopped, &mut |event| events.push(event));
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], engine_env::event::Event::NoteComplete {pitch: 60, ..}));
     }
 
     #[test]
@@ -4923,6 +5140,66 @@ mod tests {
         for collection in collections {
             collection.terminate(&mut engine.graph);
         }
+    }
+
+    #[test]
+    fn a_pointer_head_field_observation_tracks_the_target_box_and_the_repoint() {
+        // The Zeitgeist shape: the device observes `[10, 10]` / `[10, 11]`, where key 10 on its own box is
+        // the `groove` POINTER to a GrooveShuffleBox carrying `amount` (10) and `duration` (11). The engine
+        // must deliver the TARGET box's values (catch-up + edits) and re-resolve on a repoint / clear.
+        const ZDEV: Uuid = [40u8; 16];
+        const GROOVE_A: Uuid = [41u8; 16];
+        const GROOVE_B: Uuid = [42u8; 16];
+        let mut engine = Engine::new(48_000.0);
+        engine.graph = BoxGraph::from_boxes(vec![
+            graph_box(ZDEV, "ZeitgeistDeviceBox", &[(10, FieldValue::Pointer(Some(Address::box_of(GROOVE_A))))]),
+            graph_box(GROOVE_A, "GrooveShuffleBox", &[(10, FieldValue::Float32(0.6)), (11, FieldValue::Int32(480))]),
+            graph_box(GROOVE_B, "GrooveShuffleBox", &[(10, FieldValue::Float32(0.25)), (11, FieldValue::Int32(960))])
+        ]);
+        let reg = crate::DeviceReg {field_changed_index: 7, ..stub_device(abi::DEVICE_KIND_MIDI_EFFECT)};
+        let paths = vec![
+            crate::FieldObs {path: vec![10, 10], target_key: 0},
+            crate::FieldObs {path: vec![10, 11], target_key: 0}
+        ];
+        let deliveries = || core::mem::take(unsafe { crate::FIELD_DELIVERIES.get() });
+        deliveries();
+        let base = engine.graph.subscription_count();
+        let (subs, pointer_subs) = engine.observe_fields(ZDEV, reg, 0, &paths);
+        assert_eq!(deliveries(), vec![
+            (0, abi::FIELD_KIND_FLOAT, 0.6f32.to_bits(), 0),
+            (1, abi::FIELD_KIND_INT, 480, 0)
+        ], "catch-up delivers the CONNECTED groove box's values across the pointer");
+        let edit = |engine: &mut Engine, uuid: Uuid, key: u16, old: FieldValue, new: FieldValue|
+            engine.graph.transaction(&[Update::Primitive {address: Address::of(uuid, vec![key]), old, new}],
+                &engine.registry).expect("edit");
+        edit(&mut engine, GROOVE_A, 10, FieldValue::Float32(0.6), FieldValue::Float32(0.9));
+        assert_eq!(deliveries(), vec![(0, abi::FIELD_KIND_FLOAT, 0.9f32.to_bits(), 0)],
+            "a target field edit is delivered live");
+        let repoint = |engine: &mut Engine, old: Option<Address>, new: Option<Address>|
+            engine.graph.transaction(&[Update::Pointer {address: Address::of(ZDEV, vec![10]), old, new}],
+                &engine.registry).expect("repoint");
+        repoint(&mut engine, Some(Address::box_of(GROOVE_A)), Some(Address::box_of(GROOVE_B)));
+        assert_eq!(deliveries(), vec![
+            (0, abi::FIELD_KIND_FLOAT, 0.25f32.to_bits(), 0),
+            (1, abi::FIELD_KIND_INT, 960, 0)
+        ], "a repoint delivers the NEW target's values");
+        edit(&mut engine, GROOVE_A, 10, FieldValue::Float32(0.9), FieldValue::Float32(0.1));
+        assert_eq!(deliveries(), vec![], "the old target is no longer observed");
+        edit(&mut engine, GROOVE_B, 11, FieldValue::Int32(960), FieldValue::Int32(1920));
+        assert_eq!(deliveries(), vec![(1, abi::FIELD_KIND_INT, 1920, 0)], "the new target's edits are delivered");
+        repoint(&mut engine, Some(Address::box_of(GROOVE_B)), None);
+        assert_eq!(deliveries(), vec![], "an unbound pointer delivers nothing (the device keeps its last values)");
+        edit(&mut engine, GROOVE_B, 11, FieldValue::Int32(1920), FieldValue::Int32(480));
+        assert_eq!(deliveries(), vec![], "no target, no delivery");
+        for sub in subs {
+            engine.graph.unsubscribe(sub);
+        }
+        for cell in pointer_subs {
+            if let Some(sub) = cell.take() {
+                engine.graph.unsubscribe(sub);
+            }
+        }
+        assert_eq!(engine.graph.subscription_count(), base, "teardown releases every observation (no leak)");
     }
 
     #[test]

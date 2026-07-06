@@ -1,10 +1,14 @@
 //! Read a `NoteEventBox` into a `NoteEvent` (the per-box read `NoteCollection` drives incrementally),
 //! mirroring `value_events`. A note box carries position (key 10), duration (11), pitch (20),
 //! velocity (21) and cent (24). `position` and `pitch` are mandatory schema fields, so a member
-//! missing them is a corrupt mirror and panics; duration / velocity / cent fall back to schema defaults.
+//! missing them is a corrupt mirror and panics (naming box type, field and uuid for the panic buffer);
+//! duration / velocity / cent fall back to schema defaults. Rejecting the transaction instead is not
+//! reachable: this read fires from subscription dispatch (and the `observe` catch-up during rebind),
+//! which runs AFTER `BoxGraph::transaction` has applied every update — the graph is committed and
+//! observers return no `Result`, so there is no error path back to `Engine::apply_updates` from here.
 
 use alloc::vec;
-use boxgraph::address::{Address, Uuid};
+use boxgraph::address::{uuid_to_string, Address, Uuid};
 use boxgraph::field::FieldValue;
 use boxgraph::graph::BoxGraph;
 use math::clamp;
@@ -25,8 +29,10 @@ const DEFAULT_VELOCITY: f32 = 0.787_401_57; // 100/127, the schema default
 
 pub fn read_note_event(graph: &BoxGraph, note_uuid: Uuid) -> NoteEvent {
     let field = |key: u16| graph.field_value(&Address::of(note_uuid, vec![key]));
-    let position = field(NOTE_POSITION).and_then(FieldValue::as_int32).expect("NoteEventBox.position (Int32)") as f64;
-    let pitch = field(NOTE_PITCH).and_then(FieldValue::as_int32).expect("NoteEventBox.pitch (Int32)");
+    let position = field(NOTE_POSITION).and_then(FieldValue::as_int32)
+        .unwrap_or_else(|| panic!("NoteEventBox.position (Int32) missing @{}", uuid_to_string(&note_uuid))) as f64;
+    let pitch = field(NOTE_PITCH).and_then(FieldValue::as_int32)
+        .unwrap_or_else(|| panic!("NoteEventBox.pitch (Int32) missing @{}", uuid_to_string(&note_uuid)));
     let duration = field(NOTE_DURATION).and_then(FieldValue::as_int32).unwrap_or(DEFAULT_DURATION) as f64;
     let velocity = field(NOTE_VELOCITY).and_then(FieldValue::as_float32).unwrap_or(DEFAULT_VELOCITY);
     let cent = field(NOTE_CENT).and_then(FieldValue::as_float32).unwrap_or(0.0);

@@ -255,6 +255,7 @@ name = "device-zeitgeist"
 version = "0.0.0"
 dependencies = [
  "abi",
+ "math",
 ]
 
 [[package]]

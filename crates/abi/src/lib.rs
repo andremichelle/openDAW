@@ -188,6 +188,34 @@ extern "C" {
     fn host_script_sample(handle: u32, index: u32, sample_handle: u32, present: u32);
     fn host_script_notes(handle: u32, in_ptr: u32, in_count: u32, out_ptr: u32, out_max: u32,
                          from: f64, to: f64, bpm: f32, flags: u32, s0: u32, s1: u32) -> u32;
+    // PANIC deposit: copies a device panic's message into the ENGINE's readable panic buffer (the engine
+    // export `host_panic`), so the worklet can name the trap after catching the RuntimeError.
+    fn host_panic(msg_ptr: u32, msg_len: u32);
+}
+
+/// The shared device panic-handler body: format the panic (message + location) into a stack buffer, deposit
+/// it in the engine's panic buffer via `host_panic`, then TRAP — an observable RuntimeError the worklet can
+/// report, never `loop {}` (a silent audio-thread hang). Each device's `#[panic_handler]` delegates here.
+#[cfg(target_family = "wasm")]
+pub fn panic_to_host(info: &core::panic::PanicInfo) -> ! {
+    struct StackWriter {
+        buffer: [u8; 256],
+        written: usize
+    }
+    impl core::fmt::Write for StackWriter {
+        fn write_str(&mut self, text: &str) -> core::fmt::Result {
+            let bytes = text.as_bytes();
+            let count = bytes.len().min(self.buffer.len() - self.written);
+            self.buffer[self.written..self.written + count].copy_from_slice(&bytes[..count]);
+            self.written += count;
+            Ok(()) // truncate silently; a clipped message still names the panic
+        }
+    }
+    use core::fmt::Write;
+    let mut writer = StackWriter {buffer: [0; 256], written: 0};
+    let _ = write!(writer, "{}", info); // Display = "panicked at <file>:<line>: <message>"
+    unsafe { host_panic(writer.buffer.as_ptr() as u32, writer.written as u32); }
+    core::arch::wasm32::unreachable()
 }
 
 /// Pull this device's resolved input events for the pulse range `[from, to)` into `out`, returning the

@@ -6,7 +6,7 @@
 
 use alloc::vec;
 use alloc::vec::Vec;
-use boxgraph::address::{Address, Uuid};
+use boxgraph::address::{uuid_to_string, Address, Uuid};
 use boxgraph::field::FieldValue;
 use boxgraph::graph::BoxGraph;
 use value::value::{Interpolation, ValueEvent};
@@ -25,12 +25,18 @@ const CURVE_BOX: &str = "ValueEventCurveBox";
 
 /// Read one member `ValueEventBox` into a `ValueEvent`. `position` and `value` are mandatory schema
 /// fields, so a member missing them is a corrupt mirror and panics (rather than silently dropping the
-/// event). `index` defaults to 0 (a harmless tiebreak) and `interpolation` to Linear. This is the
-/// per-box read the incremental observer calls on each Added / property edit.
+/// event), naming box type, field and uuid for the panic buffer. Rejecting the transaction instead is
+/// not reachable: this read fires from subscription dispatch (and the `observe` catch-up during rebind),
+/// which runs AFTER `BoxGraph::transaction` has applied every update — the graph is committed and
+/// observers return no `Result`, so there is no error path back to `Engine::apply_updates` from here.
+/// `index` defaults to 0 (a harmless tiebreak) and `interpolation` to Linear. This is the per-box read
+/// the incremental observer calls on each Added / property edit.
 pub fn read_value_event(graph: &BoxGraph, event_uuid: Uuid) -> ValueEvent {
     let field = |key: u16| graph.field_value(&Address::of(event_uuid, vec![key]));
-    let position = field(EVENT_POSITION).and_then(FieldValue::as_int32).expect("ValueEventBox.position (Int32)") as f64;
-    let value = field(EVENT_VALUE).and_then(FieldValue::as_float32).expect("ValueEventBox.value (Float32)");
+    let position = field(EVENT_POSITION).and_then(FieldValue::as_int32)
+        .unwrap_or_else(|| panic!("ValueEventBox.position (Int32) missing @{}", uuid_to_string(&event_uuid))) as f64;
+    let value = field(EVENT_VALUE).and_then(FieldValue::as_float32)
+        .unwrap_or_else(|| panic!("ValueEventBox.value (Float32) missing @{}", uuid_to_string(&event_uuid)));
     let index = field(EVENT_INDEX).and_then(FieldValue::as_int32).unwrap_or(0);
     ValueEvent::new(position, index, value, read_interpolation(graph, event_uuid))
 }

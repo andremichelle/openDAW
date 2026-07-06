@@ -133,6 +133,12 @@ impl EngineContext {
         self.graph.remove_vertex(id);
         self.processors.remove(&id);
         self.labels.remove(&id); // ids are never reused; keeping dead labels would grow forever
+        // Drop the cached render queue NOW (it rebuilds on the next `process` anyway): its Rc clones would
+        // keep the removed processor alive past this reconcile — its telemetry slots then read as ALIVE,
+        // blocking a same-address re-registration and surviving the sweep, only to die mid-render and leave
+        // the broadcast table serving a freed pointer (the PeakMeter NaN). TS drops a removed processor
+        // synchronously; mirror that. `clear` keeps the capacity, so the in-render rebuild never allocates.
+        self.queue.clear();
         self.needs_sort = true;
     }
 
