@@ -9,7 +9,12 @@
 //! - the read-head `position` is f64 (sub-sample precision over long samples), the ordinary math is f32;
 //! - `sign` matches JS `Math.sign` (0 at 0), not `f32::signum` (which is +1 at 0);
 //! - the envelope is a plain AR with sustain at 1, gated by a `released` flag, no `Infinity` sentinel;
-//! - the final sample IS written, then the voice ends (TS drops it);
+//! - a FINISHED voice returns BEFORE writing its sample, exactly like every TS `return true` (gate end,
+//!   elapsed release). This is load-bearing: a mono retrigger on a voice whose natural (gate-Off) release
+//!   already ran shortens `release` to the 5 ms fast tail while `decay_position` sits far in the past, so
+//!   the release term goes hugely NEGATIVE — squared into a massive gain. TS drops that sample via the
+//!   elapsed check (`SampleVoice` line 114); writing it produced a one-sample spike per retrigger (the
+//!   indahouse "sounds very different after the first kick" bug: ~7x spikes pumping the master maximizer);
 //! - a zero-length window (`sign == 0`) ends the voice rather than leaving a stuck read head.
 
 const GATE_OFF: i32 = 0;
@@ -161,22 +166,21 @@ impl SlotVoice {
                 attack_term.min(1.0)
             };
             self.position += rate_ratio;
-            let mut finished = false;
             if self.sign > 0.0 {
                 match self.gate {
                     GATE_OFF => {
                         if self.position >= num_frames as f64 {
-                            finished = true;
+                            return true;
                         } else if !self.released && self.position >= self.end {
                             self.release_envelope();
                         }
                     }
                     GATE_ON => {
                         if self.position >= self.end - self.fast_release as f64 {
-                            env *= ((self.end - self.position) as f32 / self.fast_release).max(0.0);
                             if self.position >= self.end {
-                                finished = true;
+                                return true;
                             }
+                            env *= (self.end - self.position) as f32 / self.fast_release;
                         }
                     }
                     GATE_LOOP => {
@@ -190,17 +194,17 @@ impl SlotVoice {
                 match self.gate {
                     GATE_OFF => {
                         if self.position <= 0.0 {
-                            finished = true;
+                            return true;
                         } else if !self.released && self.position <= self.end {
                             self.release_envelope();
                         }
                     }
                     GATE_ON => {
                         if self.position <= self.end + self.fast_release as f64 {
-                            env *= ((self.end - self.position) as f32 / self.fast_release).max(0.0);
                             if self.position <= self.end {
-                                finished = true;
+                                return true;
                             }
+                            env *= (self.end - self.position) as f32 / self.fast_release;
                         }
                     }
                     GATE_LOOP => {
@@ -212,18 +216,15 @@ impl SlotVoice {
                 }
             } else {
                 // Zero-length window: the read head cannot advance. End the voice (the guard).
-                finished = true;
+                return true;
             }
             self.env_position += 1.0;
             if self.released && self.env_position - self.decay_position > self.attack + self.release {
-                finished = true;
+                return true;
             }
             let shaped = self.gain * env * env;
             out_left[index] += sample_left * shaped;
             out_right[index] += sample_right * shaped;
-            if finished {
-                return true;
-            }
         }
         false
     }
@@ -310,6 +311,27 @@ mod tests {
         let finished = voice.process(&mut tail_left, &mut tail_right, &frames, &frames, 48_000, SR, SR, 0.0);
         assert!(finished, "the release elapses within the chunk");
         assert!(peak(&tail_left[2_048..]) < 1.0e-6, "silent once released");
+    }
+
+    #[test]
+    fn force_release_after_natural_release_never_spikes() {
+        // The indahouse kick pad: gate Off, a short window (sampleEnd < 1) with a LONG release. The head
+        // passes `end`, the natural release begins; the next kick's mono retrigger force-releases, which
+        // shortens `release` to the 5 ms fast tail while `decay_position` sits thousands of samples back —
+        // the release term goes hugely negative and squares into a massive gain. TS returns BEFORE writing
+        // (the elapsed check, `SampleVoice` line 114), so no sample may be written: without the
+        // return-before-write ordering this spikes one sample per retrigger (~7x full scale in indahouse).
+        let mut voice = SlotVoice::default();
+        voice.start(1, 1.0, 0, 0.001, 3.1, 0.0, 0.44, 24_000, SR, 0);
+        let frames = vec![0.5f32; 24_000];
+        let (mut left, mut right) = (vec![0.0f32; 12_000], vec![0.0f32; 12_000]);
+        assert!(!voice.process(&mut left, &mut right, &frames, &frames, 24_000, SR, SR, 0.0), "still ringing its long natural release");
+        voice.force_release();
+        let (mut tail_left, mut tail_right) = (vec![0.0f32; 256], vec![0.0f32; 256]);
+        let finished = voice.process(&mut tail_left, &mut tail_right, &frames, &frames, 24_000, SR, SR, 0.0);
+        assert!(finished, "the elapsed fast release ends the voice at once");
+        let spike = peak(&tail_left);
+        assert!(spike <= 0.5, "a force-release after the natural release must not spike, peak {spike}");
     }
 
     #[test]

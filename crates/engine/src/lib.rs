@@ -580,13 +580,28 @@ pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventR
     count
 }
 
+/// True when the CURRENT quantum's blocks are TRANSPORTING. The update clock only ticks while the transport
+/// runs (TS `UpdateClock.process` skips a block without `BlockFlag.transporting`), so a PAUSED quantum (the
+/// free-running block, whose pulse range keeps advancing at a position that is NOT the song position) yields
+/// no update positions: automated parameters HOLD their last resolved value and the UI broadcasts stay still.
+/// A quantum is uniformly playing or paused, so the per-block TS gate collapses to this per-quantum check.
+fn quantum_transporting() -> bool {
+    let pull = unsafe { PULL.get() };
+    if pull.blocks.is_null() {
+        return false;
+    }
+    let blocks = unsafe { core::slice::from_raw_parts(pull.blocks, pull.block_count) };
+    blocks.iter().all(|block| block.flags.transporting())
+}
+
 /// Host import a render template calls to SEED its fragment loop: the first update position at or AFTER `at`
 /// (INCLUSIVE), so a grid point exactly on a block's start fires (mirrors TS `Fragmentor`'s `ceil`). Returns
-/// `f64::INFINITY` when the CURRENT device has no automated parameter. Reads only `PULL`.
+/// `f64::INFINITY` when the CURRENT device has no automated parameter, or while the transport is NOT running
+/// (TS `UpdateClock` emits no update events on a non-transporting block). Reads only `PULL`.
 #[no_mangle]
 pub extern "C" fn host_first_update_position(at: f64) -> f64 {
     let pull = unsafe { PULL.get() };
-    if !pull.clock_armed {
+    if !pull.clock_armed || !quantum_transporting() {
         return f64::INFINITY;
     }
     first_update_position(at)
@@ -595,12 +610,13 @@ pub extern "C" fn host_first_update_position(at: f64) -> f64 {
 /// Host import a render template calls to ADVANCE its fragment loop: the next update position STRICTLY after
 /// `after` — the engine's update-clock policy (a fixed grid today; the one place to make it tempo-aware).
 /// Strict so the loop always moves forward. Returns `f64::INFINITY` when the CURRENT device has no automated
-/// parameter, so its render simply does not fragment. Reads only `PULL` (the current device's clock-armed
-/// state, set by its node / the fx descent).
+/// parameter (so its render simply does not fragment) or while the transport is NOT running (the TS
+/// `UpdateClock` gate). Reads only `PULL` (the current device's clock-armed state, set by its node / the fx
+/// descent).
 #[no_mangle]
 pub extern "C" fn host_next_update_position(after: f64) -> f64 {
     let pull = unsafe { PULL.get() };
-    if !pull.clock_armed {
+    if !pull.clock_armed || !quantum_transporting() {
         return f64::INFINITY;
     }
     // The smallest grid multiple strictly greater than `after` (no libm: truncate toward zero, then step).

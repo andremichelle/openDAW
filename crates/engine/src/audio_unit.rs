@@ -5775,4 +5775,37 @@ mod tests {
         assert!(engine.graph.subscription_count() < with_unit,
             "teardown released the strip observers (count must drop below the bound state)");
     }
+
+    #[test]
+    fn update_positions_gate_on_transporting_blocks() {
+        // TS `UpdateClock.process` skips a block without `BlockFlag.transporting`: a PAUSED quantum (the
+        // free-running block whose pulse range keeps advancing at a non-song position) must yield NO update
+        // positions, so automated parameters HOLD their last value and the UI broadcast stays still (BUG:
+        // paused automation kept executing and animating the knobs).
+        let _guard = pull_lock();
+        let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
+            p0: 500.0, p1: 505.12, s0: 0, s1: 128, bpm: 120.0}];
+        let playing = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(true, false, true, false),
+            p0: 500.0, p1: 505.12, s0: 0, s1: 128, bpm: 120.0}];
+        {
+            let pull = unsafe { crate::PULL.get() };
+            pull.clock_armed = true;
+            pull.blocks = paused.as_ptr();
+            pull.block_count = 1;
+        }
+        assert!(crate::host_first_update_position(500.0).is_infinite(), "a paused quantum yields no update positions");
+        assert!(crate::host_next_update_position(500.0).is_infinite(), "a paused quantum never advances the update loop");
+        {
+            let pull = unsafe { crate::PULL.get() };
+            pull.blocks = playing.as_ptr();
+        }
+        assert_eq!(crate::host_first_update_position(500.0), 500.0, "a transporting quantum keeps the inclusive grid seed");
+        assert_eq!(crate::host_next_update_position(500.0), 510.0, "a transporting quantum advances strictly on the grid");
+        {
+            let pull = unsafe { crate::PULL.get() };
+            pull.clock_armed = false;
+            pull.blocks = core::ptr::null();
+            pull.block_count = 0;
+        }
+    }
 }

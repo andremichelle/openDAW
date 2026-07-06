@@ -52,6 +52,10 @@ pub struct AuxSendProcessor {
     gain_right: LinearRamp,
     sample_rate: f32,
     processing: bool, // false until the first chunk, so the first targets jump (no ramp from 0)
+    // The last AUTOMATED values resolved at an update boundary, HELD while the transport is paused (the TS
+    // `AutomatableParameter#value`, which only moves on update events — none arrive while not transporting).
+    held_gain_db: Option<f32>,
+    held_pan: Option<f32>,
     events: EventBuffer // unused, but required by `Processor: EventReceiver`
 }
 
@@ -66,6 +70,8 @@ impl AuxSendProcessor {
             gain_right: LinearRamp::linear(sample_rate),
             sample_rate,
             processing: false,
+            held_gain_db: None,
+            held_pan: None,
             events: EventBuffer::new()
         }
     }
@@ -79,14 +85,37 @@ impl AuxSendProcessor {
     }
 
     // Evaluate the automated sendGain / sendPan curves at `position` (falling back to the static params) and
-    // retarget. Called at each update-clock boundary, mirroring TS `AutomatableParameter` events.
+    // retarget, remembering the resolved automated values for the paused hold. Called at each update-clock
+    // boundary, mirroring TS `AutomatableParameter` events.
     fn retarget_at(&mut self, position: f64) {
         let gain_db = match self.automation.volume.borrow().as_ref() {
-            Some(source) => source(position),
+            Some(source) => {
+                let value = source(position);
+                self.held_gain_db = Some(value);
+                value
+            }
             None => self.params.gain_db.get()
         };
         let panning = match self.automation.panning.borrow().as_ref() {
-            Some(source) => source(position),
+            Some(source) => {
+                let value = source(position);
+                self.held_pan = Some(value);
+                value
+            }
+            None => self.params.pan.get()
+        };
+        self.retarget(gain_db, panning);
+    }
+
+    // PAUSED (a non-transporting block): no update events (the TS `UpdateClock` gate), so an automated
+    // sendGain / sendPan HOLDS its last resolved value; the static side still applies.
+    fn retarget_held(&mut self) {
+        let gain_db = match self.automation.volume.borrow().as_ref() {
+            Some(_) => self.held_gain_db.unwrap_or_else(|| self.params.gain_db.get()),
+            None => self.params.gain_db.get()
+        };
+        let panning = match self.automation.panning.borrow().as_ref() {
+            Some(_) => self.held_pan.unwrap_or_else(|| self.params.pan.get()),
             None => self.params.pan.get()
         };
         self.retarget(gain_db, panning);
@@ -172,9 +201,15 @@ impl Processor for AuxSendProcessor {
             self.apply(&source, &mut output, 0, RENDER_QUANTUM);
         } else {
             // An automated sendGain / sendPan resolves at the UPDATE CLOCK, like the channel strip: split each
-            // block at the 10-pulse grid and retarget at every boundary (TS `AudioProcessor`).
+            // block at the 10-pulse grid and retarget at every boundary (TS `AudioProcessor`). A PAUSED
+            // (non-transporting) block gets no update events (the TS `UpdateClock` gate): hold.
             for block in info.blocks {
                 let (s0, s1) = (block.s0 as usize, block.s1 as usize);
+                if !block.flags.transporting() {
+                    self.retarget_held();
+                    self.apply(&source, &mut output, s0, s1);
+                    continue;
+                }
                 let mut cursor = s0;
                 self.retarget_at(block.p0);
                 let mut position = first_update_position(block.p0);
