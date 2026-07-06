@@ -1,7 +1,9 @@
 // The engine-side LIVE BROADCAST TABLE end-to-end: a minimal leaf project (Nano over a constant sample) must
-// register telemetry entries at reconcile — the master PEAKS slot, the unit's strip meter, the instrument's
-// output meter and its note-activity counter — and rendering with playback must move the live values the
-// worklet's LiveStreamBroadcaster reads straight out of wasm memory.
+// register telemetry entries at reconcile — the unit's strip meter, the instrument's output meter and its
+// note-activity counter — and rendering with playback must move the live values the worklet's
+// LiveStreamBroadcaster reads straight out of wasm memory. The MASTER PEAKS slot is NOT engine-registered:
+// the worklet's own PeakBroadcaster owns EngineAddresses.PEAKS (fed engine.output_ptr()), mirroring the TS
+// engine, so registering it here too would collide on that single address.
 import {describe, expect, it} from "vitest"
 import {asDefined, UUID} from "@opendaw/lib-std"
 import {AudioFileBox, AudioUnitBox, CaptureMidiBox, NanoDeviceBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
@@ -106,9 +108,6 @@ describe("live broadcast table", () => {
         const generation = engine.broadcast_generation() >>> 0
         expect(generation).toBeGreaterThan(0)
         const entries = readEntries(engine, memory)
-        const master = findEntry(entries, UUID.Lowest, [0]) // TS EngineAddresses.PEAKS (NOT all-zero bytes)
-        expect(master.packageType).toBe(PACKAGE_FLOAT_ARRAY)
-        expect(master.len).toBe(4)
         const strip = findEntry(entries, unitUuid, [], PACKAGE_FLOAT_ARRAY)
         expect(strip.packageType).toBe(PACKAGE_FLOAT_ARRAY)
         expect(strip.len).toBe(4)
@@ -120,14 +119,11 @@ describe("live broadcast table", () => {
         const noteBits = findEntry(entries, unitUuid, [], 3)
         expect(noteBits.len).toBe(4)
         const slot = (entry: Entry): Float32Array => new Float32Array(memory.buffer, entry.ptr, entry.len)
-        expect(Array.from(slot(master))).toEqual([0, 0, 0, 0])
         engine.stop(); engine.play()
         for (let quantum = 0; quantum < 100; quantum++) {engine.render()}
         expect(slot(instrument)[0], "instrument peak L").toBeGreaterThan(0.0)
         expect(slot(instrument)[2], "instrument rms L").toBeGreaterThan(0.0)
         expect(slot(strip)[0], "strip peak L").toBeGreaterThan(0.0)
-        expect(slot(master)[0], "master peak L").toBeGreaterThan(0.0)
-        expect(slot(master)[1], "master peak R").toBeGreaterThan(0.0)
         const bits = new Int32Array(memory.buffer, noteBits.ptr, noteBits.len)
         const anyBit = bits[0] | bits[1] | bits[2] | bits[3]
         expect(anyBit, "a held note sets its unit bit").not.toBe(0)

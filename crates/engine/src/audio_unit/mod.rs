@@ -82,9 +82,6 @@ pub(crate) use params::note_signal_to_unit;
 
 // AudioUnitBox field keys (WASM CONTRACT: mirror the TS AudioUnitBox schema). The unit carries its strip
 // params and hosts its instrument / effect chains / tracks at these hub keys.
-// WASM CONTRACT: TS `UUID.Lowest` = 00000000-0000-4000-8000-000000000000 (version/variant bits set, NOT all
-// zeros); `EngineAddresses.PEAKS` = Address.compose(UUID.Lowest).append(0) — the master strip's meter address.
-const UUID_LOWEST: Uuid = [0, 0, 0, 0, 0, 0, 0x40, 0, 0x80, 0, 0, 0, 0, 0, 0, 0];
 const UNIT_VOLUME_KEY: u16 = 12;
 const UNIT_PANNING_KEY: u16 = 13;
 const UNIT_MUTE_KEY: u16 = 14;
@@ -687,9 +684,11 @@ impl Engine {
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(params, Rc::new(StripAutomation::new()), self.sample_rate)));
         strip.borrow_mut().set_audio_source(source);
         let strip_output = strip.borrow().audio_output();
-        // The MASTER peaks, at the TS `EngineAddresses.PEAKS` address (`UUID.Lowest` + key 0).
+        // The output unit's strip meter feeds the mixer's OUTPUT channel strip, which subscribes to the unit's
+        // box address (like every other unit's strip meter at `unit.unit`). The master header/VU meter is a
+        // separate path: the worklet's own `PeakBroadcaster` at `EngineAddresses.PEAKS`, fed `output_ptr()`.
         let strip_meter = strip.borrow().meter_slot();
-        self.broadcasts.register(UUID_LOWEST, &[0], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &strip_meter);
         let strip_id = self.context.register_processor(strip);
         self.context.set_label(strip_id, String::from("strip:output"));
         self.context.register_edge(source_id, strip_id); // the (effected) summing bus feeds the master strip
