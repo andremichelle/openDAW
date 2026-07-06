@@ -281,3 +281,79 @@ scripts, by running each user Processor in the same AudioWorkletGlobalScope the 
   recycles the index, and a stale device handle resolves to `None` by generation mismatch instead of by
   tombstone. Soundfonts got the identical treatment. The probe now reads 7648.8 KB flat across 20 cycles and
   stays in the suite as a regression test. Done.
+
+## Day 17 (2026-07-05): a production-readiness audit, the last feature ports, and a per-block automation hunt
+
+- A full production-readiness pass over the engine, its findings fixed in one batch. Panic messages were
+  INVISIBLE in production (panic=abort strips them, a trap surfaces as an anonymous "unreachable"): the handler
+  now deposits the real message + location into a static `PANIC_MESSAGE` buffer, exported through
+  `panic_message_ptr/len`, and every device shares `abi::panic_to_host`; the worklet reads it back and attaches
+  it to the error. The worklet lacks TextDecoder, so a hand-rolled `utf8.ts` decodes the buffer, and a grep
+  guard test greps every worklet-reachable tree for `new TextDecoder` (node vitest can't catch this class of
+  gap). The EventBuffer's `clear()` was the one systematic render-path allocation — it now empties buckets
+  KEEPING their storage. A CI guard renders 162 automatable parameters across 20 devices and asserts the wasm
+  value-mappings match each TS `*BoxAdapter` (zero mismatches, but the guard stays). The worklet message
+  handlers got failure guards (a thrown handler no longer wedges the audio thread silently), the sync path
+  serializes at emission time with a real checksum round-trip, and freeze survived a reboot (replay + off-audio
+  -thread PCM staging). A PeakMeter NaN was a use-after-free: after a chain teardown the broadcast queue served
+  freed meter-slot pointers, fixed with `queue.clear()` + a `BroadcastEntry::alive()` gate. Done.
+- The remaining feature gaps, ported to close the list. Markers, the signature track, and metronome preferences
+  (enabled / gain / beat-subdivision / monophonic, plus custom click samples) all landed engine-side. Base
+  frequency is now PULLED from the host (`host_base_frequency`) rather than hardcoded. MIDIOutput is an
+  engine-side recorder like the tape, not a plugin — it writes `[device][status][data1][data2][length][timeMs]`
+  records drained over a lock-free SAB ring with a null-payload postMessage wakeup (the studio's existing fast
+  path), and the same hunt fixed a TS bug where the MIDIOutput device never owned a NoteBroadcaster, so its
+  note indicators were dead in BOTH engines. Zeitgeist's swing was hardcoded 0.65 and now reads the groove.
+  Composite CELL sequencers got live note signals. Devices gained a `terminate` export so a removed
+  NeuralAmp/script device releases its JS-side bridge instead of leaking to reload. Loop gating while recording,
+  `truncateNotesAtRegionEnd`, and DSP-load stats (an HRClock over a Worker+SAB, since the worklet has no
+  `performance.now`) all mirror their TS preferences. Done, the feature-gap list is empty.
+- A per-block automation hunt on indahouse.od (user: "very different after the first kick"). Two symptoms, two
+  causes. Automation executed on the engine even while PAUSED — the update clock now gates on
+  `BlockFlag.transporting` exactly like TS `UpdateClock`. And every OTHER kick jumped to +14 dB: the Playfield
+  `SlotVoice` wrote its FINAL sample before returning, so a mono retrigger on a voice whose release had already
+  run squared a hugely negative release term into a ~7x one-sample spike, which the master Maximizer clamped,
+  ducking the whole mix. TS returns BEFORE that write; the voice now mirrors it. A committed
+  `indahouse-ts-vs-wasm.test.ts` pins it to a hard per-second tolerance. Done.
+- `audio_unit.rs` had grown past 5800 lines. Split into six modules (types+lifecycle, wiring, routing, tracks,
+  params, tests) as pure code motion, re-exported so no call site changed. Done.
+
+## Day 18 (2026-07-06): the WASM engine becomes the default, an SDK package, and a mono-voicing click
+
+- The WASM engine is now the DEFAULT everywhere. `isEnabled()` reads localStorage `!== "false"`, so only an
+  explicit opt-out selects TS; a boot with missing artifacts falls back for the SESSION only (persisting the
+  opt-out would strand the user on TS after the artifacts return). The header toggle reflects the EFFECTIVE
+  state (enabled AND ready) and stays gated to localhost + dev, so production users have no path back to TS,
+  which matches trashing it later. wasm-opt now actually runs: `brew`/`apt` binaryen in both deploy workflows,
+  and testing it locally exposed that it had been ABORTING all along on `i32.trunc_sat` — `build-wasm.sh` was
+  missing four feature flags Rust >= 1.82 emits by default (nontrapping-float-to-int, sign-ext, multivalue,
+  reference-types). With those added the engine shrank 548 to 483 KB, plugins 348 to 304 KB, suite green on the
+  optimised modules. Done.
+- SDK packaging: `@opendaw/studio-core-wasm`, a published sibling to `studio-core`. Its dist ships the
+  main-thread API (`index.js`), two prebuilt esbuild bundles (`wasm-processor.js` + `wasm-offline-worker.js`,
+  the worklet-scope shim guaranteed first), and the binaries (`wasm/engine.wasm` + `wasm/plugins/*.wasm`, built
+  by the package's own `build-wasm.sh`). `WasmEngine.install({processorUrl, offlineWorkerUrl, wasmUrl})` takes
+  host-served URLs — no relative source imports, no studio-app code. The shared plumbing (engine-modules,
+  device-linker, the script/NAM bridges, sync, utf8, scope shim) moved OUT of `app/wasm/src` and the studio's
+  `src/wasm-engine`; the studio consumes the published surface (`?url` asset imports + a vite plugin copying
+  dist), while `app/wasm` stays the dev harness and deep-imports the package SRC so the Rust loop never sees a
+  stale dist. One deviation from the plan: no `plugins.json` manifest — the device table stays compiled-in TS,
+  with a `dist-smoke.test.ts` that fails the build if the table and the built plugins drift (plus dist-only
+  resolution, shim-before-registerProcessor, engine compile). A turbo `dependsOn` was needed or the two builds
+  race cargo and the shared dist. Done. Only capability-gated auto-fallback stays deliberately unbuilt (the TS
+  engine is being retired, not kept as a runtime safety net).
+- A mono-voicing click (user: env-bug.od clicks on overlapping notes, mono vapo, gone in poly or at 30 bpm; and
+  a SECOND project clicks with no arp at all). The dual-engine null render showed wasm cutting to exactly 0.0
+  mid-waveform where TS stayed continuous — two independent causes, both needed. The arpeggio sorted note-OFF
+  before note-ON at an equal pulse; TS yields the step's ONs first, which is what keeps a mono synth legato
+  across abutting steps (the held stack still contains the previous note, so the voice glides instead of
+  retriggering). `lifecycle_rank` now ranks ON first. The GENERAL cause, the one that clicks with no arp:
+  `MonophonicStrategy` owned ONE voice, so a retrigger while the voice was still releasing ran `force_stop()`
+  then `start()` on the SAME object — force_stop snaps the ADSR to 0.0 and start resets the envelope, the VCA
+  smoother and the oscillator phase, a hard cut mid-waveform (measured -0.105 to 0.0 in one sample, an ~18-frame
+  notch the Maximizer made audible). TS spawns a fresh voice per retrigger and fades the old one out in
+  `#processing`; the strategy now holds a small pool mirroring `#triggered`/`#sounding`/`#processing`, so the
+  outgoing voice fades on its own slot over the ~3 ms smoother and the new note starts clean. The invariant, per
+  the user: a synth voice must NEVER be reset while still audible; the only hard cut left is genuine pool
+  exhaustion. `env-bug-ts-vs-wasm.test.ts` pins both, its single-sample cap (0.01) is the real click detector
+  since an 18-frame notch barely moves RMS. Done.
