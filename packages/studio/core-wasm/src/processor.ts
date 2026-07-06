@@ -209,6 +209,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     const {frames, numberOfFrames, numberOfChannels, sampleRate} = audioData
                     const channels = Math.min(numberOfChannels, 2)
                     const pcm = engine.frozen_allocate(numberOfFrames, channels)
+                    if (pcm === 0) {return} // no engine instance: writing at 0 would corrupt memory (see boot.ts)
                     for (let channel = 0; channel < channels; channel++) {
                         new Float32Array(this.#memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
                             .set(frames[channel])
