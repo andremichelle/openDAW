@@ -8,7 +8,7 @@ use value::value::{Interpolation, ValueEvent};
 
 fn render(transport: &mut Transport, tempo: Option<&EventCollection<ValueEvent>>) -> Vec<Block> {
     let mut blocks = Vec::new();
-    transport.render_quantum(tempo, |block| blocks.push(*block));
+    transport.render_quantum(tempo, &[], false, |block| blocks.push(*block));
     blocks
 }
 
@@ -58,7 +58,7 @@ fn the_block_resuming_after_a_loop_wrap_is_flagged_discontinuous() {
     transport.set_loop_to(3.0);
     transport.play();
     let mut flags = Vec::new();
-    transport.render_quantum(None, |block| flags.push(block.discontinuous));
+    transport.render_quantum(None, &[], false, |block| flags.push(block.discontinuous));
     assert_eq!(flags, vec![false, true], "pre-wrap block continuous, the block resuming at the loop start discontinuous");
 }
 
@@ -96,7 +96,7 @@ fn loop_wraps_when_its_end_coincides_with_a_tempo_grid() {
     transport.set_loop_to(80.0); // 80 = exactly one tempo grid
     transport.play();
     for _ in 0..30 {
-        transport.render_quantum(Some(&tempo), |_| {});
+        transport.render_quantum(Some(&tempo), &[], false, |_| {});
         assert!(transport.position() < 80.0, "stayed inside the loop; position={}", transport.position());
     }
 }

@@ -7,7 +7,7 @@ use value::value::{Interpolation, ValueEvent};
 
 fn collect(transport: &mut Transport, tempo: Option<&EventCollection<ValueEvent>>) -> Vec<Block> {
     let mut blocks = Vec::new();
-    transport.render_quantum(tempo, |block| blocks.push(*block));
+    transport.render_quantum(tempo, &[], false, |block| blocks.push(*block));
     blocks
 }
 

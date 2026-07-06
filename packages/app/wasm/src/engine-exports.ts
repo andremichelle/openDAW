@@ -1,5 +1,7 @@
 // The engine wasm module's export surface, shared by every host that instantiates it (the wasm app's own
 // worklet, the offline perf renderer, and the studio's wasm engine processor).
+import {decodeUtf8} from "./utf8"
+
 export type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
@@ -24,6 +26,17 @@ export type EngineExports = {
     engine_state_ptr: () => number
     engine_state_len: () => number
     set_metronome_enabled: (enabled: number) => void
+    // Metronome preferences (TS preferences.settings.metronome), forwarded from the engine-preferences
+    // channel: click gain in dB (<= 0), beat sub-division (1|2|4|8), monophonic (a new click fades the
+    // previous over 5ms).
+    set_metronome_gain: (gainDb: number) => void
+    set_metronome_beat_sub_division: (division: number) => void
+    set_metronome_monophonic: (enabled: number) => void
+    // Custom CLICK SOUNDS (TS EngineCommands.loadClickSound, the frozen-audio pattern): `click_allocate`
+    // reserves `frameCount * channels` f32 (planar); the writer fills the planes, then `set_click_sound`
+    // attaches them as click `index` (0 downbeat, 1 beat) keeping the PCM's own sample rate.
+    click_allocate: (frameCount: number, channels: number) => number
+    set_click_sound: (index: number, frameCount: number, channels: number, sampleRate: number) => void
     checksum_ptr: () => number
     // Live-telemetry BROADCAST TABLE: the engine registers meter / note-activity slots at reconcile;
     // `broadcast_generation` bumps whenever the table changed, so a worklet re-reads it (via
@@ -78,6 +91,21 @@ export type EngineExports = {
     schedule_clip_stop: () => void
     clip_changes_count: () => number
     clip_changes_take: (outPtr: number) => number
+    // MARKER-STATE notifications (TS EngineToClient.switchMarkerState): the active marker or its play
+    // count moved (a section repeat, a fall-through, a seek into another section). Changes queue as
+    // 24-byte records [uuid 16][count u32 LE][flag u32 LE: 1 active marker, 0 none] drained via
+    // `marker_changes_take` (reserve `marker_changes_count() * 24` input bytes first).
+    marker_changes_count: () => number
+    marker_changes_take: (outPtr: number) => number
+    // MIDI-OUT drain (TS MIDISender feed): every MIDI-output unit's queued messages + the transport
+    // clock, drained once per quantum into the studio's unchanged MIDISender SAB ring. 16-byte records
+    // [device u32 LE][status u8][data1 u8][data2 u8][length u8][timeMs f64 LE] (reserve
+    // `midi_out_count() * 16` input bytes first). `device` is a stable first-seen index resolved to the
+    // MIDIOutputBox.id string via `midi_out_device_id` (UTF-8 written to outPtr, byte length returned,
+    // 0 = unknown), so the host caches the mapping.
+    midi_out_count: () => number
+    midi_out_take: (outPtr: number) => number
+    midi_out_device_id: (num: number, outPtr: number, max: number) => number
     // A device imports this from `env`; the loader binds it so the device PULLS its own input events for a
     // pulse range (Route A), writing EventRecords into the descriptor scratch and returning the count.
     host_pull_events: (from: number, to: number, flags: number, outPtr: number, max: number) => number
@@ -117,6 +145,9 @@ export type EngineExports = {
     // stereo buffer during render (id 1 the through-signal).
     host_bind_sidechain: (pathPtr: number, pathLen: number) => number
     host_resolve_input: (id: number, outPtr: number) => number
+    // The project's tuning reference in Hz (TS EngineContext.baseFrequency, RootBox.baseFrequency): a device
+    // whose TS counterpart tunes against it (the Vaporisateur) pulls it per note-on.
+    host_base_frequency: () => number
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number
     sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
@@ -128,8 +159,10 @@ export type EngineExports = {
 }
 
 // Read the panic message the trapped engine left behind (empty when the failure was not a wasm panic).
+// Decoded WITHOUT TextDecoder — the AudioWorkletGlobalScope has none, and this runs exactly when a
+// worklet must report a panic.
 export const readPanicMessage = (exports: EngineExports, memory: WebAssembly.Memory): string => {
     const length = exports.panic_message_len()
     if (length === 0) {return ""}
-    return new TextDecoder().decode(new Uint8Array(memory.buffer, exports.panic_message_ptr(), length).slice())
+    return decodeUtf8(new Uint8Array(memory.buffer, exports.panic_message_ptr(), length))
 }

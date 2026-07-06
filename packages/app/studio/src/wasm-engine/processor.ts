@@ -28,6 +28,7 @@ import {
 import type {SoundFont2} from "soundfont2"
 import {PeakBroadcaster} from "../../../../studio/core-processors/src/PeakBroadcaster"
 import {EngineExports} from "../../../wasm/src/engine-exports"
+import {WasmMidiDrain} from "./midi-drain"
 import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 import {
     WASM_ENGINE_PROCESSOR_NAME,
@@ -50,6 +51,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #broadcastSubs: Array<Terminable> = []
     readonly #peaks: PeakBroadcaster
     readonly #analyser: AudioAnalyser
+    readonly #midi: WasmMidiDrain = new WasmMidiDrain()
     readonly #pendingResources: Set<Promise<unknown>> = new Set()
 
     #broadcastGeneration: int = -1
@@ -115,6 +117,12 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             }),
             this.#preferences.catchupAndSubscribe(enabled =>
                 engine.set_metronome_enabled(enabled ? 1 : 0), "metronome", "enabled"),
+            this.#preferences.catchupAndSubscribe(gain =>
+                engine.set_metronome_gain(gain), "metronome", "gain"),
+            this.#preferences.catchupAndSubscribe(division =>
+                engine.set_metronome_beat_sub_division(division), "metronome", "beatSubDivision"),
+            this.#preferences.catchupAndSubscribe(monophonic =>
+                engine.set_metronome_monophonic(monophonic ? 1 : 0), "metronome", "monophonic"),
             Communicator.executor<WasmSyncProtocol>(messenger.channel(WASM_SYNC_CHANNEL), {
                 applyUpdates: (bytes: ArrayBuffer): void => this.#guarded(() => this.#applyUpdates(bytes)),
                 checksum: (bytes: Int8Array): Promise<void> => this.#verifyChecksum(bytes)
@@ -161,7 +169,17 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 queryLoadingComplete: (): Promise<boolean> =>
                     Promise.all(this.#pendingResources).then(() => true),
                 panic: (): void => {this.#panic = true},
-                loadClickSound: (_index: 0 | 1, _data: AudioData): void => {}, // the wasm engine ships its own click
+                loadClickSound: (index: 0 | 1, data: AudioData): void => this.#guarded(() => {
+                    // Tiny PCM (<1s), so the worklet copies it directly (no main-thread staging like frozen).
+                    const {frames, numberOfFrames, numberOfChannels, sampleRate} = data
+                    const channels = Math.min(numberOfChannels, 2)
+                    const pcm = engine.click_allocate(numberOfFrames, channels)
+                    for (let channel = 0; channel < channels; channel++) {
+                        new Float32Array(this.#memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
+                            .set(frames[channel])
+                    }
+                    engine.set_click_sound(index, numberOfFrames, channels, sampleRate)
+                }),
                 setFrozenAudio: (uuid: UUID.Bytes, audioData: Nullable<AudioData>): void => this.#guarded(() => {
                     if (audioData === null) {
                         const pointer = engine.input_reserve(16)
@@ -208,7 +226,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
                     engine.schedule_clip_stop()
                 })),
-                setupMIDI: (_port: MessagePort, _buffer: SharedArrayBuffer): void => {},
+                // The TS EngineProcessor contract: the main thread's MIDIReceiver hands over its port +
+                // SAB ring; the engine's drained MIDI records feed the same MIDISender transport.
+                setupMIDI: (port: MessagePort, buffer: SharedArrayBuffer): void => this.#midi.connect(port, buffer),
                 terminate: (): void => {
                     this.#valid = false
                     this.#broadcastSubs.forEach(subscription => subscription.terminate())
@@ -303,6 +323,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#broadcaster.flush()
         this.#stateSender.tryWrite()
         this.#drainClipChanges()
+        this.#drainMarkerChanges()
+        this.#midi.drain(engine, this.#memory)
     }
 
     // Forward the engine's queued clip transitions to the client (TS `clipSequencing.changes()` +
@@ -323,6 +345,26 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             if (kind === 0) {started.push(uuid)} else if (kind === 1) {stopped.push(uuid)} else {obsolete.push(uuid)}
         }
         this.#engineToClient.notifyClipSequenceChanges({started, stopped, obsolete})
+    }
+
+    // Forward the engine's queued marker-state changes to the client (TS BlockRenderer's
+    // `switchMarkerState([uuid, count] | null)`): 24-byte records [uuid 16][count u32 LE][flag u32 LE].
+    #drainMarkerChanges(): void {
+        const engine = this.#engine
+        const count = engine.marker_changes_count()
+        if (count === 0) {return}
+        const pointer = engine.input_reserve(count * 24)
+        const taken = engine.marker_changes_take(pointer)
+        const view = new DataView(this.#memory.buffer, pointer, taken * 24)
+        for (let index = 0; index < taken; index++) {
+            const active = view.getUint32(index * 24 + 20, true) === 1
+            if (active) {
+                const uuid = new Uint8Array(this.#memory.buffer, pointer + index * 24, 16).slice() as UUID.Bytes
+                this.#engineToClient.switchMarkerState([uuid, view.getUint32(index * 24 + 16, true)])
+            } else {
+                this.#engineToClient.switchMarkerState(null)
+            }
+        }
     }
 
     // Route a live note signal (on-screen keys / pads / MIDI input) to the engine: the target

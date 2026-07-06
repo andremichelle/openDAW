@@ -23,7 +23,7 @@
 use core::panic::PanicInfo;
 use abi::{float_value, int_value, Block, EventRecord, Instrument, ParamValue, Ports, EVENT_NOTE_ON};
 use dsp::osc::ClassicWaveform;
-use dsp::{midi_to_hz, ppqn};
+use dsp::{midi_to_hz_base, ppqn};
 use math::value_mapping::{Decibel, Exponential, Linear, LinearInteger, Values, ValueMapping};
 use math::db_to_gain;
 use voicing::{VoiceUnison, Voicing, VoicingMode};
@@ -166,7 +166,9 @@ impl Instrument for Vaporisateur {
 
     fn handle_event(state: &mut VaporisateurState, event: &EventRecord) {
         if event.kind == EVENT_NOTE_ON {
-            let frequency = midi_to_hz(event.pitch as f32 + event.cent / 100.0);
+            // TS `computeFrequency`: `midiToHz(pitch + cent/100, context.baseFrequency)`, the tuning
+            // reference pulled from the host per note-on (a running voice never retunes).
+            let frequency = midi_to_hz_base(event.pitch as f32 + event.cent / 100.0, abi::base_frequency());
             let glide_time = state.glide_time;
             let unison = state.unison_count.max(1) as usize;
             state.voicing.start(event, frequency, 1.0, glide_time, unison, &state.params);
@@ -394,6 +396,31 @@ mod tests {
     fn rms(buffer: &[f32]) -> f32 {
         let sum: f32 = buffer.iter().map(|sample| sample * sample).sum();
         libm::sqrtf(sum / buffer.len() as f32)
+    }
+
+    /// Fundamental estimate: rising zero crossings per second over a steady sustain.
+    fn estimate_frequency(buffer: &[f32], sample_rate: f32) -> f32 {
+        let crossings = buffer.windows(2).filter(|pair| pair[0] < 0.0 && pair[1] >= 0.0).count();
+        crossings as f32 * sample_rate / buffer.len() as f32
+    }
+
+    #[test]
+    fn the_host_tuning_reference_shifts_the_voice_pitch() {
+        let render_a4 = || {
+            let mut state = configured(VoicingMode::Polyphonic);
+            state.params.osc_a_waveform = ClassicWaveform::Sine; // clean crossings for the estimate
+            let (mut left, mut right) = (vec![0.0f32; 48_000], vec![0.0f32; 48_000]);
+            render(&mut state, &[note_on(1, 69)], &mut left, &mut right, SR);
+            estimate_frequency(&left[4_800..], SR) // skip the attack
+        };
+        let reference = render_a4();
+        abi::set_native_base_frequency(432.0);
+        let detuned = render_a4();
+        abi::set_native_base_frequency(440.0); // restore the default for the other tests
+        assert!((reference - 440.0).abs() < 2.0, "A4 at the default tuning, got {reference}");
+        assert!((detuned - 432.0).abs() < 2.0, "A4 at a 432 reference, got {detuned}");
+        assert!((detuned / reference - 432.0 / 440.0).abs() < 0.005,
+                "the pitch shifts by the base ratio, got {detuned} / {reference}");
     }
 
     #[test]

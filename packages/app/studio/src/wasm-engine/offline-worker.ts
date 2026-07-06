@@ -25,6 +25,7 @@ import type {SoundFont2} from "soundfont2"
 import {EngineExports} from "../../../wasm/src/engine-exports"
 import {createEngineMemory, loadEngineModules} from "../../../wasm/src/engine-modules"
 import {serializeUpdateTasks} from "../../../wasm/src/sync/serialize-update-tasks"
+import {WasmMidiDrain} from "./midi-drain"
 import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 
 type EngineState = {
@@ -35,18 +36,20 @@ type EngineState = {
     readonly pending: Set<Promise<unknown>>
     readonly numberOfChannels: int // 2 for a mixdown; stems * 2 for a stem export
     readonly stems: int // 0 = mixdown (the master output); > 0 = read the stem staging
+    readonly midi: WasmMidiDrain // TS offline renders emit MIDI too (the offline worker hosts the full EngineProcessor)
     totalFrames: int
     running: boolean
 }
 
 let state: Option<EngineState> = Option.None
 
-const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: Float32Array[], stems: number): void => {
+const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: Float32Array[], stems: number, midi: WasmMidiDrain): void => {
     const rendered = tryCatch(() => engine.render())
     if (rendered.status === "failure") {
         // A wasm trap is an anonymous RuntimeError; the panic handler left the real message in its buffer.
         throw describeEngineTrap(engine, memory, rendered.error)
     }
+    midi.drain(engine, memory)
     const buffer = memory.buffer // re-read each block: talc may have grown the buffer
     if (stems > 0) {
         // STEM export: each stem's tap lands planar in the stem staging (stem i -> channels 2i / 2i+1).
@@ -126,6 +129,7 @@ Communicator.executor<OfflineEngineProtocol>(
             if (engine.bind() !== 0) {
                 throw new Error("the project snapshot carries no TimelineBox")
             }
+            const midi = new WasmMidiDrain()
             const pending: Set<Promise<unknown>> = new Set()
             drainResourceRequests(engine, memory, engineToClient, pending, config.sampleRate,
                 reason => engineToClient.error(describeEngineTrap(engine, memory, reason)))
@@ -157,12 +161,12 @@ Communicator.executor<OfflineEngineProtocol>(
                 ignoreNoteRegion: (_uuid: UUID.Bytes): void => {},
                 scheduleClipPlay: (_clipIds: ReadonlyArray<UUID.Bytes>): void => {},
                 scheduleClipStop: (_trackIds: ReadonlyArray<UUID.Bytes>): void => {},
-                setupMIDI: (_port: MessagePort, _buffer: SharedArrayBuffer): void => {},
+                setupMIDI: (port: MessagePort, buffer: SharedArrayBuffer): void => midi.connect(port, buffer),
                 terminate: (): void => {}
             })
             enginePort.start()
             state = Option.wrap({
-                engine, memory, stateSender, pending,
+                engine, memory, stateSender, pending, midi,
                 sampleRate: config.sampleRate,
                 numberOfChannels: stemKeys.length > 0 ? stemKeys.length * 2 : 2,
                 stems: stemKeys.length,
@@ -182,12 +186,12 @@ Communicator.executor<OfflineEngineProtocol>(
             // The loop stays fully SYNCHRONOUS (like the TS offline worker's step): every resource resolved
             // above, and a per-second `setTimeout(0)` yield would cost more than the render itself (~4ms
             // clamped, ×60 — measured as 260ms of a 297ms empty render).
-            const {numberOfChannels, stems} = state.unwrap("state.step")
+            const {numberOfChannels, stems, midi} = state.unwrap("state.step")
             const result: Float32Array[] = Arrays.create(() => new Float32Array(numSamples), numberOfChannels)
             const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
             let offset = 0 | 0
             while (offset < numSamples) {
-                renderQuantum(engine, memory, outputChannels, stems)
+                renderQuantum(engine, memory, outputChannels, stems, midi)
                 const toCopy = Math.min(numSamples - offset, RenderQuantum)
                 for (let channel = 0; channel < numberOfChannels; channel++) {
                     result[channel].set(outputChannels[channel].subarray(0, toCopy), offset)
@@ -212,7 +216,7 @@ Communicator.executor<OfflineEngineProtocol>(
             await Wait.timeSpan(TimeSpan.seconds(0))
             while (engine.running && engine.totalFrames < maxFrames) {
                 const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
-                renderQuantum(engine.engine, engine.memory, outputChannels, stems)
+                renderQuantum(engine.engine, engine.memory, outputChannels, stems, engine.midi)
                 let maxSample = 0
                 for (const channel of outputChannels) {
                     for (const sample of channel) {

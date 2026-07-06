@@ -167,6 +167,7 @@ extern "C" {
     fn host_observe_target_string(path_ptr: u32, path_len: u32, field_key: u32) -> u32;
     fn host_bind_sidechain(path_ptr: u32, path_len: u32) -> u32;
     fn host_resolve_input(id: u32, out_ptr: u32) -> u32;
+    fn host_base_frequency() -> f32;
     // NAM BRIDGE (NeuralAmp only). JS closures the loader binds into `env` (script-bridge style): the DSP is
     // the `@opendaw/nam-wasm` Emscripten module (NeuralAmpModelerCore) instantiated NEXT TO the engine in the
     // worklet; the bridge copies each chunk between the two memories. See the `nam_*` wrappers below.
@@ -238,6 +239,30 @@ pub fn pulse_to_offset(pulse: f64) -> u32 {
     { unsafe { host_pulse_to_offset(pulse) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = pulse; 0 }
+}
+
+// The native tuning reference behind `base_frequency` (f32 bits), settable so a device test can assert
+// that a changed base shifts the voice pitch; wasm builds ask the engine instead.
+#[cfg(not(target_family = "wasm"))]
+static NATIVE_BASE_FREQUENCY: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0x43DC_0000); // 440.0f32
+
+/// The project's TUNING REFERENCE in Hz (TS `EngineContext.baseFrequency`, `RootBox.baseFrequency`), pulled
+/// from the host. A device reads it exactly where its TS counterpart reads `context.baseFrequency` — the
+/// Vaporisateur per note-on (`computeFrequency`), never mid-voice. Native builds serve the test-settable
+/// default (440).
+#[inline]
+pub fn base_frequency() -> f32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_base_frequency() } }
+    #[cfg(not(target_family = "wasm"))]
+    { f32::from_bits(NATIVE_BASE_FREQUENCY.load(core::sync::atomic::Ordering::Relaxed)) }
+}
+
+/// Native TEST SEAM: set what [`base_frequency`] returns (a device test detunes, then restores 440).
+#[cfg(not(target_family = "wasm"))]
+pub fn set_native_base_frequency(hz: f32) {
+    NATIVE_BASE_FREQUENCY.store(hz.to_bits(), core::sync::atomic::Ordering::Relaxed);
 }
 
 /// The kind tag carried beside a [`ParamChange`]'s `value`, telling the SDK how to read that one f32: `UNIT`
