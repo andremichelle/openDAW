@@ -35,6 +35,9 @@ export type DeviceExports = {
     sample_changed?: (statePtr: number, id: number, handle: number, present: number) => void
     soundfont_changed?: (statePtr: number, id: number, handle: number, present: number) => void
     reset?: (statePtr: number) => void
+    // Fires ONCE, only when the device's INSTANCE dies (a genuine removal — never a chain-edit survivor):
+    // releases resources it holds outside its state block (e.g. a bridge's JS-side instance).
+    terminate?: (statePtr: number) => void
     midi_effects_field?: () => number
     audio_effects_field?: () => number
     observe_param_collection_field?: () => number
@@ -48,7 +51,7 @@ export type LinkerEngine = {
     device_alloc: (size: number) => number
     device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number,
                       parameterChangedIndex: number, fieldChangedIndex: number, sampleChangedIndex: number,
-                      soundfontChangedIndex: number, resetIndex: number, midiEffectsField: number,
+                      soundfontChangedIndex: number, resetIndex: number, terminateIndex: number, midiEffectsField: number,
                       audioEffectsField: number, paramCollectionField: number, sampleCollectionField: number) => number
     device_set_box_type: (deviceId: number, nameLen: number) => void
     composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number,
@@ -144,7 +147,7 @@ export const linkDevice = (engine: LinkerEngine, memory: WebAssembly.Memory, tab
         processIndex, device.state_size(sampleRate), device.kind(),
         installOptional(device.init), installOptional(device.parameter_changed),
         installOptional(device.field_changed), installOptional(device.sample_changed),
-        installOptional(device.soundfont_changed), installOptional(device.reset),
+        installOptional(device.soundfont_changed), installOptional(device.reset), installOptional(device.terminate),
         device.midi_effects_field?.() ?? 0, device.audio_effects_field?.() ?? 0,
         device.observe_param_collection_field?.() ?? 0, device.observe_sample_collection_field?.() ?? 0)
     engine.device_set_box_type(deviceId, writeName(engine, memory, boxType))

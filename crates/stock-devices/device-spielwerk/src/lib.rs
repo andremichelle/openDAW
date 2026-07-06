@@ -74,6 +74,14 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
     }
 }
 
+/// This device's INSTANCE is dying (a genuine removal, never a chain-edit survivor): release the JS-side
+/// script bridge (its Processor + note-tracking runtime), so removing/rebinding a Spielwerk device no longer
+/// orphans one.
+#[no_mangle]
+pub extern "C" fn terminate(state_ptr: u32) {
+    unsafe { abi::with_state::<SpielwerkState>(state_ptr, |state| abi::script_release(state.handle)) }
+}
+
 /// Pull-responder: pull the upstream notes for `[from, to)` ONCE into the stack scratch, then run the user
 /// generator + tracking in the JS bridge, which writes the transformed notes into the host output buffer.
 #[no_mangle]

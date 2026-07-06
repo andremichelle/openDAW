@@ -11,7 +11,7 @@
 // call passes that handle. Buffers are byte offsets into the ONE shared memory; we re-derive `memory.buffer`
 // views EVERY call, since the SharedArrayBuffer can grow / detach (talc), never caching a typed-array view.
 
-import {UUID, ValueMapping} from "@opendaw/lib-std"
+import {isDefined, UUID, ValueMapping} from "@opendaw/lib-std"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
 import {runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
 
@@ -104,6 +104,7 @@ export class ScriptBridges {
     readonly #sampleRate: number
     readonly #onMessage: (uuid: string, message: string) => void
     readonly #bridges = new Map<number, Bridge>()
+    readonly #byUuid = new Map<string, number>()
     #nextHandle = 1
 
     constructor(memory: WebAssembly.Memory, engine: ScriptEngine, sampleRate: number,
@@ -126,14 +127,21 @@ export class ScriptBridges {
             host_script_param: (handle, index, kind, value) => this.#param(handle, index, kind, value),
             host_script_sample: (handle, index, sampleHandle, present) => this.#sample(handle, index, sampleHandle, present),
             host_script_notes: (handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1) =>
-                this.#notes(handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1)
+                this.#notes(handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1),
+            host_script_release: (handle) => this.#release(handle)
         }
     }
 
+    // A `create` for a uuid that already has a live bridge REPLACES it: release the old one first (its
+    // Processor + limiter + runtime), so a rebind the engine's `terminate` hasn't (yet, or ever) reached for
+    // never orphans the previous bridge — the dedup a bare `#nextHandle++` per call was missing entirely.
     #create(uuidPtr: number, kind: number, _statePtr: number): number {
         const uuid = UUID.toString(new Uint8Array(this.#memory.buffer, uuidPtr, 16).slice() as UUID.Bytes)
+        const existingHandle = this.#byUuid.get(uuid)
+        if (isDefined(existingHandle)) {this.#release(existingHandle)}
         const handle = this.#nextHandle++
         this.#bridges.set(handle, new Bridge(uuid, kind, REGISTRY_BY_KIND[kind] ?? "werkstattProcessors"))
+        this.#byUuid.set(uuid, handle)
         return handle
     }
 
@@ -301,5 +309,21 @@ export class ScriptBridges {
     #silence(bridge: Bridge, message: string): void {
         bridge.silenced = true
         this.#onMessage(bridge.uuid, message)
+    }
+
+    // THIS device's instance is dying (a genuine removal, never a chain-edit survivor, called from the
+    // engine's `terminate` export — or a `#create` dedup replacing a stale bridge for the same uuid): drop
+    // the bridge (its Processor + limiter + runtime are then just garbage-collected JS objects).
+    #release(handle: number): void {
+        const bridge = this.#bridges.get(handle)
+        if (!isDefined(bridge)) {return}
+        this.#bridges.delete(handle)
+        if (this.#byUuid.get(bridge.uuid) === handle) {this.#byUuid.delete(bridge.uuid)}
+    }
+
+    /// Test-only introspection: how many bridges are currently live, proving a rebind's `#create` dedup
+    /// released the previous one instead of orphaning it.
+    liveBridgeCount(): number {
+        return this.#bridges.size
     }
 }

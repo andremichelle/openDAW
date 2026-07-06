@@ -91,6 +91,14 @@ pub extern "C" fn reset(state_ptr: u32) {
     unsafe { abi::with_state::<ApparatState>(state_ptr, |state| abi::script_reset(state.handle)) }
 }
 
+/// This device's INSTANCE is dying (a genuine removal, never a chain-edit survivor): release the JS-side
+/// script bridge (its Processor + limiter + runtime), so removing/rebinding an Apparat device no longer
+/// orphans one.
+#[no_mangle]
+pub extern "C" fn terminate(state_ptr: u32) {
+    unsafe { abi::with_state::<ApparatState>(state_ptr, |state| abi::script_release(state.handle)) }
+}
+
 /// Sort key at an equal offset: releases (note-off / choke) before a parameter refresh before note-ons, so a
 /// note starting at an update position sees the refreshed parameter and a choke precedes a re-trigger there
 /// (mirrors `render_instrument`'s `record_rank`).

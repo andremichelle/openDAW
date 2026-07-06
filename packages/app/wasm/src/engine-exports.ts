@@ -5,7 +5,10 @@ import {decodeUtf8} from "./utf8"
 export type EngineExports = {
     init: (sampleRate: number) => void
     device_alloc: (size: number) => number
-    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number, fieldChangedIndex: number, sampleChangedIndex: number, soundfontChangedIndex: number, resetIndex: number, midiEffectsField: number, audioEffectsField: number, paramCollectionField: number, sampleCollectionField: number) => number
+    // `terminateIndex` fires once, ONLY when the device's INSTANCE dies (a genuine removal — never a
+    // chain-edit survivor): releases resources it holds outside its state block (e.g. a bridge's JS-side
+    // instance). 0 when the device exports none.
+    device_register: (processIndex: number, stateSize: number, kind: number, initIndex: number, parameterChangedIndex: number, fieldChangedIndex: number, sampleChangedIndex: number, soundfontChangedIndex: number, resetIndex: number, terminateIndex: number, midiEffectsField: number, audioEffectsField: number, paramCollectionField: number, sampleCollectionField: number) => number
     // Map a device-box type to the just-registered device: the box-type UTF-8 name is written into the
     // input buffer (nameLen bytes) first. This is the device table the engine instantiates boxes through.
     device_set_box_type: (deviceId: number, nameLen: number) => void
@@ -151,6 +154,12 @@ export type EngineExports = {
     sample_take_request: (outPtr: number) => number
     sample_allocate: (handle: number, byteLength: number) => number
     sample_set_ready: (handle: number, frameCount: number, channelCount: number, sampleRate: number) => void
+    // Recording/loop/note preferences (TS settings.recording.allowTakes, settings.playback.pauseOnLoopDisabled,
+    // settings.playback.truncateNotesAtRegionEnd): the loop-wrap gate, pause-at-loop-end, and live note
+    // truncation the sequencers read per block.
+    set_allow_takes: (enabled: number) => void
+    set_pause_on_loop_disabled: (enabled: number) => void
+    set_truncate_notes_at_region_end: (enabled: number) => void
     // PANIC readout: the engine's panic handler (and a device's, via the shared host_panic deposit) formats
     // the panic message + location into a static buffer BEFORE trapping. After catching the RuntimeError the
     // host reads it back here, so a production panic is never anonymous (panic=abort strips it otherwise).

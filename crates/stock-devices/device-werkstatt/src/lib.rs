@@ -72,6 +72,13 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
     }
 }
 
+/// This device's INSTANCE is dying (a genuine removal, never a chain-edit survivor): release the JS-side
+/// script bridge (its Processor + runtime), so removing/rebinding a Werkstatt device no longer orphans one.
+#[no_mangle]
+pub extern "C" fn terminate(state_ptr: u32) {
+    unsafe { abi::with_state::<WerkstattState>(state_ptr, |state| abi::script_release(state.handle)) }
+}
+
 /// Render one quantum: resolve the through-input, then per block run the user `process` over the shared buffers,
 /// SPLITTING the block at the device's parameter-update positions so an automated `@param` is refreshed between
 /// sub-ranges (mirrors `render_effect`'s split loop — the script processes each sub-range whole). A device with

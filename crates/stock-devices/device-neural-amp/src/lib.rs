@@ -238,6 +238,13 @@ pub extern "C" fn reset(state_ptr: u32) {
     unsafe { abi::with_state(state_ptr, <NeuralAmpDevice as AudioEffect>::reset) }
 }
 
+/// This device's INSTANCE is dying (a genuine removal, never a chain-edit survivor): release the bridge's
+/// nam instance(s), so removing/rebinding a NeuralAmp device no longer leaks its native nam instance(s).
+#[no_mangle]
+pub extern "C" fn terminate(state_ptr: u32) {
+    unsafe { abi::with_state(state_ptr, |state: &mut NeuralAmpState| abi::nam_release(state.bridge)) }
+}
+
 #[cfg(test)]
 mod tests {
     //! The inference runs in the JS-bridged nam module (covered by the wasm wiring/parity tests); natively the

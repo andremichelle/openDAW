@@ -176,6 +176,10 @@ extern "C" {
     fn host_nam_set_mono(handle: u32, mono: u32);
     fn host_nam_process(handle: u32, in0_ptr: u32, in1_ptr: u32, out0_ptr: u32, out1_ptr: u32, frames: u32, channels: u32) -> u32;
     fn host_nam_reset(handle: u32);
+    // Release the bridge's JS-side nam instance(s) when THIS device's instance dies (a genuine removal, never
+    // a chain-edit survivor). Without this the bridge kept the instance(s) alive forever (freed only by the
+    // mono/stereo toggle's own instance drop).
+    fn host_nam_release(handle: u32);
     // SCRIPT BRIDGE (Werkstatt / Apparat / Spielwerk only). `host_self_uuid` is an engine export like the rest;
     // the `host_script_*` family are JS closures the loader binds into `env` (see the `script_*` wrappers below).
     fn host_self_uuid(out16_ptr: u32);
@@ -189,6 +193,10 @@ extern "C" {
     fn host_script_sample(handle: u32, index: u32, sample_handle: u32, present: u32);
     fn host_script_notes(handle: u32, in_ptr: u32, in_count: u32, out_ptr: u32, out_max: u32,
                          from: f64, to: f64, bpm: f32, flags: u32, s0: u32, s1: u32) -> u32;
+    // Release the bridge (its Processor instance + limiter + runtime) when THIS device's instance dies (a
+    // genuine removal, never a chain-edit survivor). Without this every rebind orphaned a bridge (no uuid
+    // dedup on create either — see the JS side).
+    fn host_script_release(handle: u32);
     // PANIC deposit: copies a device panic's message into the ENGINE's readable panic buffer (the engine
     // export `host_panic`), so the worklet can name the trap after catching the RuntimeError.
     fn host_panic(msg_ptr: u32, msg_len: u32);
@@ -698,6 +706,16 @@ pub fn script_reset(handle: u32) {
     { let _ = handle; }
 }
 
+/// Release the bridge (this device's INSTANCE is dying — a genuine removal, never a chain-edit survivor):
+/// drops the user `Processor` + its limiter/runtime JS-side. Native stub no-op.
+#[inline]
+pub fn script_release(handle: u32) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_script_release(handle) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = handle; }
+}
+
 /// Forward a parameter change to the user `Processor` by declaration `index` + the raw `(kind, value)` (the
 /// bridge maps `UNIT` via the script's `@param` mapping, uses `FLOAT`/`INT`/`BOOL` directly). Native stub no-op.
 #[inline]
@@ -799,6 +817,17 @@ pub fn nam_process(handle: u32, inputs: [&[f32]; 2], outputs: [&mut [f32]; 2], f
 pub fn nam_reset(handle: u32) {
     #[cfg(target_family = "wasm")]
     { unsafe { host_nam_reset(handle) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = handle; }
+}
+
+/// Release the bridge's nam instance(s) (this device's INSTANCE is dying — a genuine removal, never a
+/// chain-edit survivor). Without this every rebind/removal kept the native nam instance(s) resident forever
+/// (only the mono/stereo toggle ever freed one). Native stub no-op.
+#[inline]
+pub fn nam_release(handle: u32) {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_nam_release(handle) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = handle; }
 }

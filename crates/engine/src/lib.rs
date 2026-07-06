@@ -64,6 +64,9 @@ struct DeviceReg {
     sample_changed_index: u32,     // slot of the device's `sample_changed` export (observed samples); 0 if none
     soundfont_changed_index: u32,  // slot of the device's `soundfont_changed` export (observed soundfont); 0 if none
     reset_index: u32,              // slot of the device's `reset` export (clears runtime state on STOP); 0 if none
+    terminate_index: u32,          // slot of the device's `terminate` export (its INSTANCE is dying — a genuine
+                                    // removal, never a chain-edit survivor); releases external resources (e.g.
+                                    // a bridge's JS-side instance); 0 if none
     midi_effects_field: u16,       // the device's OWN midi-fx host field key when hosted as a composite child; 0 if none
     audio_effects_field: u16,      // the device's OWN audio-fx host field key when hosted as a composite child; 0 if none
     // SCRIPTABLE devices (Werkstatt / Apparat / Spielwerk): the field keys of the dynamic parameter / sample
@@ -240,6 +243,30 @@ fn call_device_reset(reset_index: u32, state_ptr: u32) {
 #[cfg(not(target_family = "wasm"))]
 fn call_device_reset(_reset_index: u32, _state_ptr: u32) {}
 
+// Call a device's `terminate(state_ptr)` export when its INSTANCE dies (a genuine removal — the box left the
+// graph, or the unit/bus/cluster it belonged to was torn down wholesale). NEVER called for a chain-edit
+// SURVIVOR (a reorder / rewire keeps its state_ptr and skips this). Releases resources the device holds
+// OUTSIDE its state block (e.g. the NAM / script bridge's JS-side instance). Same table-index-is-fn-pointer
+// trick as `call_device_reset`.
+#[cfg(target_family = "wasm")]
+#[inline]
+fn call_device_terminate(terminate_index: u32, state_ptr: u32) {
+    if terminate_index == 0 {
+        return; // the device exports no `terminate`; index 0 is the "none" sentinel
+    }
+    unsafe { *TERMINATES.get() = TERMINATES.get().wrapping_add(1); }
+    let terminate: extern "C" fn(u32) = unsafe { core::mem::transmute(terminate_index as usize) };
+    terminate(state_ptr);
+}
+// Native: count the call (for a device that declares `terminate`) so a removal-vs-reorder test can assert it
+// without a wasm build, mirroring `call_device_field_changed`'s native counter.
+#[cfg(not(target_family = "wasm"))]
+fn call_device_terminate(terminate_index: u32, _state_ptr: u32) {
+    if terminate_index != 0 {
+        unsafe { *TERMINATES.get() = TERMINATES.get().wrapping_add(1); }
+    }
+}
+
 const DEVICE_MAX_EVENTS: usize = 256; // per-quantum event scratch the device pulls into
 const MAX_BLOCKS_PER_QUANTUM: usize = 16; // a 128-frame quantum rarely splits past a few blocks; pre-reserved so render never reallocs
 // The `index` field of an EFFECT device box (DeviceFactory's midi-effect / audio-effect attributes), giving
@@ -321,6 +348,16 @@ static PARAM_PUSHES: Shared<u32> = Shared::new(0);
 #[no_mangle]
 pub extern "C" fn param_push_count() -> u32 {
     unsafe { *PARAM_PUSHES.get() }
+}
+
+// A debug counter of device `terminate` calls (genuine instance death only — a chain-edit SURVIVOR is never
+// counted). Exported so a test can assert a removal terminates its device exactly once, and a reorder /
+// rewire of survivors terminates none.
+static TERMINATES: Shared<u32> = Shared::new(0);
+
+#[no_mangle]
+pub extern "C" fn device_terminate_count() -> u32 {
+    unsafe { *TERMINATES.get() }
 }
 
 // The single engine instance + the four fixed I/O buffers JS reaches by pointer. The buffers are kept
@@ -962,6 +999,9 @@ struct Engine {
     recording_start: f64,
     recording_denominator: i32, // the signature denominator at the recording start (the count-in remaining unit)
     metronome_pref: bool,
+    // Recording/loop preferences (TS settings.recording.allowTakes / settings.playback.pauseOnLoopDisabled).
+    allow_takes: bool,
+    pause_on_loop_disabled: bool,
     click_pending: Vec<f32>, // the buffer the worklet fills between `click_allocate` and `set_click_sound`
     // The EFFECTS-monitoring map (TS `#monitoringMap`): units whose chains inject the staged live input
     // and whose strip outputs are copied back for the worklet's monitor return.
@@ -996,6 +1036,9 @@ struct Engine {
     // The clip-launch state machine (TS ClipSequencingAudioContext), shared with every unit's note
     // sequencer(s); its change queue feeds the notifyClipSequenceChanges back-channel.
     clip_sequencer: Rc<RefCell<engine_env::clip_sequencer::ClipSequencer>>,
+    // The `playback.truncateNotesAtRegionEnd` preference (TS reads it live per block), shared with
+    // every note sequencer via `bind_truncate_preference`.
+    pub(crate) truncate_pref: Rc<Cell<bool>>,
     // Armed by a unit's SOLO field edit (and by any reconcile that changed routing): the next
     // reconcile pass re-resolves solo into per-strip forced_silent flags (TS Mixer.updateSolo).
     solo_dirty: Rc<Cell<bool>>,
@@ -1039,6 +1082,8 @@ impl Engine {
             recording_start: 0.0,
             recording_denominator: 4,
             metronome_pref: false,
+            allow_takes: true,
+            pause_on_loop_disabled: false,
             click_pending: Vec::new(),
             monitoring_map: Vec::new(),
             stem_exports: Vec::new(),
@@ -1056,6 +1101,7 @@ impl Engine {
             master_id: 0,
             audio_units: Vec::new(),
             clip_sequencer: Rc::new(RefCell::new(engine_env::clip_sequencer::ClipSequencer::new())),
+            truncate_pref: Rc::new(Cell::new(false)),
             solo_dirty: Rc::new(Cell::new(false)),
             unit_changes: Rc::new(RefCell::new(Members::default())),
             dirty_units: Rc::new(RefCell::new(Vec::new())),
@@ -1088,9 +1134,9 @@ impl Engine {
     /// Register a loaded device: the table slot holding its `process` and the bytes its state block needs.
     /// Returns the device id (its index). The host calls this once per device, before `bind`.
     #[allow(clippy::too_many_arguments)] // one slot per device export; positional to match the loader's call
-    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, soundfont_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32, param_collection_field: u32, sample_collection_field: u32) -> u32 {
+    fn device_register(&mut self, process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, soundfont_changed_index: u32, reset_index: u32, terminate_index: u32, midi_effects_field: u32, audio_effects_field: u32, param_collection_field: u32, sample_collection_field: u32) -> u32 {
         let id = self.devices.len() as u32;
-        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index,
+        self.devices.push(DeviceReg {process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, terminate_index,
             midi_effects_field: midi_effects_field as u16, audio_effects_field: audio_effects_field as u16,
             param_collection_field: param_collection_field as u16, sample_collection_field: sample_collection_field as u16});
         id
@@ -1155,7 +1201,12 @@ impl Engine {
         }
         // apply the latest timeline values recorded by the subscriptions
         self.transport.set_bpm(self.controls.bpm.get());
-        self.transport.set_loop_enabled(self.controls.loop_enabled.get());
+        // TS BlockRenderer:143 loop gate: no wrap during a count-in, none while recording without takes;
+        // `pauseOnLoopDisabled` keeps the loop ACTION armed (it pauses at the loop end instead of wrapping).
+        let loop_gate = (self.controls.loop_enabled.get() && !self.is_counting_in
+            && (!self.is_recording || self.allow_takes)) || self.pause_on_loop_disabled;
+        self.transport.set_loop_enabled(loop_gate);
+        self.transport.set_loop_pause(self.pause_on_loop_disabled);
         self.transport.set_loop_from(self.controls.loop_from.get());
         self.transport.set_loop_to(self.controls.loop_to.get());
         // refresh the tempo map the audio-region player reads: the live automation curve under the same
@@ -1174,10 +1225,11 @@ impl Engine {
             self.is_recording = true;
             self.metronome.set_enabled(self.metronome_pref);
         }
-        let (is_recording, is_counting_in, recording_start) = (self.is_recording, self.is_counting_in, self.recording_start);
+        let recording_start = self.recording_start;
         let denominator = self.recording_denominator;
         let sample_rate = self.sample_rate;
-        let Engine {transport, metronome, context, output_bus, blocks, tempo, tempo_map: _, controls, signature, marker_track, marker_changes, midi_out, ..} = self;
+        let Engine {transport, metronome, context, output_bus, blocks, tempo, tempo_map: _, controls, signature,
+            marker_track, marker_changes, midi_out, is_recording, is_counting_in, metronome_pref, ..} = self;
         // The signature events the metronome walks: the live signature track once bound, else a single
         // storage-signature entry from the controls (the pre-bind fallback).
         let signature_events = signature.as_ref().map(|track| track.events());
@@ -1214,6 +1266,28 @@ impl Engine {
                     bpm: block.bpm
                 });
             });
+            // `pauseOnLoopDisabled` stopped the transport AT the loop end mid-quantum (TS
+            // `timeInfo.pause()` + `releaseBlock`): drop the recording flags like `pause()` does and
+            // render the quantum's remainder as one free-running NON-playing block, so held notes
+            // release and tails ring out instead of hard-cutting.
+            if !transport.is_playing() {
+                *is_recording = false;
+                *is_counting_in = false;
+                metronome.set_enabled(*metronome_pref); // apply_metronome with the count-in force gone
+                let covered = blocks.last().map_or(0, |block| block.s1 as usize);
+                if covered < RENDER_QUANTUM {
+                    let paused = transport.render_paused_tail(RENDER_QUANTUM - covered);
+                    blocks.push(Block {
+                        index: blocks.len() as u32,
+                        flags: BlockFlags::create(false, false, false, false),
+                        p0: paused.p0,
+                        p1: paused.p1,
+                        s0: covered as u32,
+                        s1: RENDER_QUANTUM as u32,
+                        bpm: paused.bpm
+                    });
+                }
+            }
         } else {
             // PAUSED: still process the graph for one free-running quantum (the song `position` is frozen, but
             // the pulse range keeps ADVANCING) so the sequencer flushes its held notes into note-offs (its
@@ -1252,7 +1326,7 @@ impl Engine {
                 output[RENDER_QUANTUM + index] += buffer.right[index];
             }
         }
-        write_engine_state(transport, state, is_recording, is_counting_in, recording_start, denominator);
+        write_engine_state(transport, state, *is_recording, *is_counting_in, recording_start, denominator);
     }
 
     fn play(&mut self) {
@@ -2289,6 +2363,36 @@ pub extern "C" fn note_signal_audition(pitch: u32, duration: f64, velocity: f32)
     }
 }
 
+/// TS `settings.recording.allowTakes`: while recording WITHOUT takes the loop wrap is suppressed.
+#[no_mangle]
+pub extern "C" fn set_allow_takes(enabled: i32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.allow_takes = enabled != 0
+        }
+    }
+}
+
+/// TS `settings.playback.pauseOnLoopDisabled`: reaching the loop end PAUSES instead of wrapping.
+#[no_mangle]
+pub extern "C" fn set_pause_on_loop_disabled(enabled: i32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_mut() {
+            engine.pause_on_loop_disabled = enabled != 0
+        }
+    }
+}
+
+/// The `playback.truncateNotesAtRegionEnd` preference (TS `NoteSequencer` reads it live per block).
+#[no_mangle]
+pub extern "C" fn set_truncate_notes_at_region_end(enabled: i32) {
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_ref() {
+            engine.truncate_pref.set(enabled != 0)
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn set_metronome_enabled(enabled: i32) {
     unsafe {
@@ -2383,14 +2487,16 @@ pub extern "C" fn device_alloc(size: u32) -> u32 {
 
 /// Register a loaded device: `process_index` is its `process` slot in the shared function table,
 /// `state_size` the bytes per instance state block, `kind` its `kind` export (instrument / effect), and
-/// `init_index` / `parameter_changed_index` its parameter-hook slots (0 when the device exports none).
-/// Returns the device id. Call once per device, before `bind` (which builds the graph and wires devices).
+/// `init_index` / `parameter_changed_index` / `reset_index` / `terminate_index` its lifecycle-hook slots (0
+/// when the device exports none). `terminate_index` fires once, only when the device's INSTANCE dies (a
+/// genuine removal), never on a chain-edit survivor. Returns the device id. Call once per device, before
+/// `bind` (which builds the graph and wires devices).
 #[no_mangle]
 #[allow(clippy::too_many_arguments)] // one positional arg per device export, matching the loader's call
-pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, soundfont_changed_index: u32, reset_index: u32, midi_effects_field: u32, audio_effects_field: u32, param_collection_field: u32, sample_collection_field: u32) -> u32 {
+pub extern "C" fn device_register(process_index: u32, state_size: u32, kind: u32, init_index: u32, parameter_changed_index: u32, field_changed_index: u32, sample_changed_index: u32, soundfont_changed_index: u32, reset_index: u32, terminate_index: u32, midi_effects_field: u32, audio_effects_field: u32, param_collection_field: u32, sample_collection_field: u32) -> u32 {
     unsafe {
         match ENGINE.get().as_mut() {
-            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, midi_effects_field, audio_effects_field, param_collection_field, sample_collection_field),
+            Some(engine) => engine.device_register(process_index, state_size, kind, init_index, parameter_changed_index, field_changed_index, sample_changed_index, soundfont_changed_index, reset_index, terminate_index, midi_effects_field, audio_effects_field, param_collection_field, sample_collection_field),
             None => 0
         }
     }

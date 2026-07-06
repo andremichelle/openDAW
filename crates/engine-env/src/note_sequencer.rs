@@ -11,7 +11,7 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use math::clamp;
 use math::random::Mulberry32;
 use value::event::{EventCollection, EventSpan};
@@ -76,7 +76,7 @@ pub struct NoteSequencer {
     audition_retainer: EventSpanRetainer<RetainedNote>,
     random: Mulberry32,
     next_id: u64,
-    truncate_at_region_end: bool
+    truncate_at_region_end: Rc<Cell<bool>>
 }
 
 impl NoteSequencer {
@@ -90,14 +90,20 @@ impl NoteSequencer {
             audition_retainer: EventSpanRetainer::new(),
             random: Mulberry32::new(CHANCE_SEED),
             next_id: 0,
-            truncate_at_region_end: false
+            truncate_at_region_end: Rc::new(Cell::new(false))
         }
     }
 
     /// The TS preference `playback.truncateNotesAtRegionEnd` (default FALSE: a note rings past its
     /// region / loop-cycle end with its full duration).
     pub fn set_truncate_at_region_end(&mut self, value: bool) {
-        self.truncate_at_region_end = value;
+        self.truncate_at_region_end.set(value);
+    }
+
+    /// Share the engine's `playback.truncateNotesAtRegionEnd` preference cell, so a live preference
+    /// edit reaches every sequencer per block (TS reads `preferences.settings` inside `process`).
+    pub fn bind_truncate_preference(&mut self, cell: Rc<Cell<bool>>) {
+        self.truncate_at_region_end = cell;
     }
 }
 
@@ -157,7 +163,7 @@ impl NoteEventSource for NoteSequencer {
         if !read {
             return;
         }
-        let truncate = self.truncate_at_region_end;
+        let truncate = self.truncate_at_region_end.get();
         let Self {source, retainer, random, next_id, clips, ..} = self;
         let mut clips = clips.borrow_mut();
         source.for_each_track(&mut |track, access| {

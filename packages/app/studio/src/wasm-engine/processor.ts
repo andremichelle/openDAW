@@ -20,12 +20,14 @@ import {
     EngineSettings,
     EngineSettingsSchema,
     EngineStateSchema,
+    PERF_BUFFER_SIZE,
     EngineToClient,
     MonitoringMapEntry,
     NoteSignal,
     PreferencesClient
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
+import {HRClock} from "../../../../studio/core-processors/src/HRClock"
 import {PeakBroadcaster} from "../../../../studio/core-processors/src/PeakBroadcaster"
 import {EngineExports} from "../../../wasm/src/engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
@@ -43,6 +45,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #terminator: Terminator = new Terminator()
     readonly #memory: WebAssembly.Memory
     readonly #engine: EngineExports
+    readonly #hrClock: HRClock
+    readonly #perfBuffer: Float32Array = new Float32Array(PERF_BUFFER_SIZE)
     readonly #engineToClient: EngineToClient
     readonly #preferences: PreferencesClient<EngineSettings>
     readonly #stateSender: SyncStream.Writer
@@ -60,11 +64,13 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #valid: boolean = true
     #panic: boolean = false
     #transporting: boolean = false
+    #measureLoad: boolean = false // debug.dspLoadMeasurement (TS EngineProcessor.render's measureLoad)
+    #perfWriteIndex: int = 0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
 
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
         super()
-        const {syncStreamBuffer, controlFlagsBuffer, variant} = processorOptions
+        const {syncStreamBuffer, controlFlagsBuffer, hrClockBuffer, variant} = processorOptions
         const {engineModule, deviceModules, deviceBoxTypes, composites, memory} = variant as WasmEngineAttachment
         this.#memory = memory
         const messenger = Messenger.for(this.port)
@@ -89,6 +95,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             memory, sampleRate, this.#engineToClient)
         this.#engine = engine
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)
+        this.#hrClock = new HRClock(hrClockBuffer)
         this.#stateSender = SyncStream.writer(EngineStateSchema(), syncStreamBuffer, state => {
             const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
             state.position = view.getFloat32(0)
@@ -98,6 +105,10 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             state.isPlaying = view.getUint8(16) === 1
             state.isCountingIn = view.getUint8(17) === 1
             state.isRecording = view.getUint8(18) === 1
+            if (this.#measureLoad) {
+                state.perfBuffer.set(this.#perfBuffer)
+                state.perfIndex = this.#perfWriteIndex
+            }
         })
         this.#broadcaster = this.#terminator.own(LiveStreamBroadcaster.create(messenger, "engine-live-data"))
         this.#peaks = this.#terminator.own(new PeakBroadcaster(this.#broadcaster, EngineAddresses.PEAKS))
@@ -123,6 +134,14 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 engine.set_metronome_beat_sub_division(division), "metronome", "beatSubDivision"),
             this.#preferences.catchupAndSubscribe(monophonic =>
                 engine.set_metronome_monophonic(monophonic ? 1 : 0), "metronome", "monophonic"),
+            this.#preferences.catchupAndSubscribe(allowTakes =>
+                engine.set_allow_takes(allowTakes ? 1 : 0), "recording", "allowTakes"),
+            this.#preferences.catchupAndSubscribe(pauseOnLoopDisabled =>
+                engine.set_pause_on_loop_disabled(pauseOnLoopDisabled ? 1 : 0), "playback", "pauseOnLoopDisabled"),
+            this.#preferences.catchupAndSubscribe(truncate =>
+                engine.set_truncate_notes_at_region_end(truncate ? 1 : 0), "playback", "truncateNotesAtRegionEnd"),
+            this.#preferences.catchupAndSubscribe(measure =>
+                this.#measureLoad = measure, "debug", "dspLoadMeasurement"),
             Communicator.executor<WasmSyncProtocol>(messenger.channel(WASM_SYNC_CHANNEL), {
                 applyUpdates: (bytes: ArrayBuffer): void => this.#guarded(() => this.#applyUpdates(bytes)),
                 checksum: (bytes: Int8Array): Promise<void> => this.#verifyChecksum(bytes)
@@ -285,6 +304,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
 
     #render(inputs: Array<Array<Float32Array>>, [mainOutput, monitorOutput]: Array<Array<Float32Array>>): void {
         if (this.#panic) {return panic("Manual Panic")}
+        // DSP-load measurement (TS EngineProcessor.render): start() returns the PREVIOUS quantum's
+        // validated elapsed time; end() signals the HRClock worker for this one.
+        const elapsed = this.#measureLoad ? this.#hrClock.start() : 0
         const engine = this.#engine
         // EFFECTS monitoring: stage the live input channels for the in-chain injectors, render, then hand
         // each mapped unit's strip output back on the 2nd worklet output (the MonitoringRouter return).
@@ -320,6 +342,11 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#peaks.process(mainOutput[0], mainOutput[1] ?? mainOutput[0])
         this.#analyser.process(mainOutput[0], mainOutput[1] ?? mainOutput[0], 0, RenderQuantum)
         this.#syncBroadcasts()
+        if (this.#measureLoad) {
+            this.#hrClock.end()
+            this.#perfBuffer[this.#perfWriteIndex] = elapsed
+            this.#perfWriteIndex = (this.#perfWriteIndex + 1) % PERF_BUFFER_SIZE
+        }
         this.#broadcaster.flush()
         this.#stateSender.tryWrite()
         this.#drainClipChanges()

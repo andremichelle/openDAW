@@ -72,6 +72,7 @@ pub struct Transport {
     nominal_bpm: f32,  // the configured bpm (TimelineBox.bpm); the live bpm when no tempo automation drives it
     sample_rate: f32,
     playing: bool,
+    loop_pause: bool, // pause at the loop end instead of wrapping (TS `pauseOnLoopDisabled`)
     leap: bool, // a position JUMP happened (seek / stop-rewind); the next quantum's first block flags discontinuous (TS `TimeInfo.#leap`)
     loop_enabled: bool,
     loop_from: f64, // pulses
@@ -83,7 +84,7 @@ pub struct Transport {
 
 impl Transport {
     pub fn new(sample_rate: f32, bpm: f32) -> Self {
-        Self {position: 0.0, free_running: 0.0, bpm, nominal_bpm: bpm, sample_rate, playing: false, leap: false, loop_enabled: false, loop_from: 0.0, loop_to: 0.0,
+        Self {position: 0.0, free_running: 0.0, bpm, nominal_bpm: bpm, sample_rate, playing: false, loop_pause: false, leap: false, loop_enabled: false, loop_from: 0.0, loop_to: 0.0,
             current_marker: None, markers_dirty: false, marker_changed: false}
     }
 
@@ -96,6 +97,9 @@ impl Transport {
     /// the tempo map is evaluated against; while automating, the map overrides the live bpm per block.
     pub fn set_bpm(&mut self, bpm: f32) {self.bpm = bpm; self.nominal_bpm = bpm}
     pub fn set_loop_enabled(&mut self, enabled: bool) {self.loop_enabled = enabled}
+    /// TS `pauseOnLoopDisabled`: reaching the loop end PAUSES the transport at `loop_to` instead of
+    /// wrapping (BlockRenderer's loop action `if (pauseOnLoopDisabled) timeInfo.pause()`).
+    pub fn set_loop_pause(&mut self, pause: bool) {self.loop_pause = pause}
     pub fn set_loop_from(&mut self, from: f64) {self.loop_from = from}
     pub fn set_loop_to(&mut self, to: f64) {self.loop_to = to}
     pub fn play(&mut self) {self.playing = true}
@@ -158,6 +162,15 @@ impl Transport {
         let p1 = p0 + samples_to_pulses(RENDER_QUANTUM as f64, self.bpm, self.sample_rate);
         self.free_running = p1;
         Block {p0, p1, s0: 0, s1: RENDER_QUANTUM, bpm: self.bpm, discontinuous: false}
+    }
+
+    /// The free-running pulse range for a PARTIAL paused tail of `samples` (a `pauseOnLoopDisabled`
+    /// stop mid-quantum): like [`render_paused`], but covering only the quantum's remainder.
+    pub fn render_paused_tail(&mut self, samples: usize) -> Block {
+        let p0 = self.free_running;
+        let p1 = p0 + samples_to_pulses(samples as f64, self.bpm, self.sample_rate);
+        self.free_running = p1;
+        Block {p0, p1, s0: 0, s1: samples, bpm: self.bpm, discontinuous: false}
     }
 
     /// Advance one 128-sample quantum and return its block. Fixed bpm with no events → exactly one
@@ -301,6 +314,15 @@ impl Transport {
                     // the partial block up to the loop end carries the current flag; the next block,
                     // resuming at the loop start, is the discontinuity.
                     s0 = self.emit_until(action_position, p0, s0, discontinuous, &mut emit);
+                    if self.loop_pause {
+                        // TS `pauseOnLoopDisabled`: PAUSE at the loop end (position kept). The caller sees
+                        // the transport stopped mid-quantum and renders the remainder as its own
+                        // free-running non-playing block (the TS `releaseBlock`), flushing voices.
+                        self.playing = false;
+                        self.position = action_position;
+                        self.free_running = action_position;
+                        return;
+                    }
                     p0 = self.loop_from;
                     self.eval_tempo(tempo, p0);
                     discontinuous = true;

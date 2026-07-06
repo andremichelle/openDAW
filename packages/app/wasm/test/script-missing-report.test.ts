@@ -9,6 +9,7 @@ import {ApparatDeviceBox, AudioUnitBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
+import {ScriptBridges, ScriptEngine} from "../src/script-bridge"
 
 const CODE = `class Processor {
     phase = 0
@@ -54,4 +55,24 @@ describe("scriptless device reporting", () => {
         expect(report).toBeDefined()
         expect(report!.message).toContain("No Processor registered")
     }, 30000)
+})
+
+describe("script bridge rebind dedup", () => {
+    it("a create for the same uuid releases the previous bridge instead of orphaning it", () => {
+        // Regression: `#create` used to hand out a fresh handle on EVERY call regardless of uuid, so a device
+        // instance dying WITHOUT the engine's `terminate` reaching it yet (or an engine that never reached this
+        // fix) orphaned a Bridge (its Processor + limiter + runtime) on every rebind. A `create` for a uuid that
+        // already has a live bridge must release the old one first.
+        const memory = new WebAssembly.Memory({initial: 1})
+        const engine: ScriptEngine = {host_resolve_sample: () => 0, input_reserve: () => 0}
+        const bridges = new ScriptBridges(memory, engine, 48000)
+        const uuidPtr = 0
+        new Uint8Array(memory.buffer, uuidPtr, 16).set(UUID.generate())
+        const imports = bridges.imports()
+        const first = imports.host_script_create(uuidPtr, 1, 0) as number
+        expect(bridges.liveBridgeCount()).toBe(1)
+        const second = imports.host_script_create(uuidPtr, 1, 0) as number
+        expect(second).not.toBe(first)
+        expect(bridges.liveBridgeCount()).toBe(1)
+    })
 })

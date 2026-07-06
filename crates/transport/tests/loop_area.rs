@@ -100,3 +100,28 @@ fn loop_wraps_when_its_end_coincides_with_a_tempo_grid() {
         assert!(transport.position() < 80.0, "stayed inside the loop; position={}", transport.position());
     }
 }
+
+#[test]
+fn loop_pause_stops_at_the_loop_end_instead_of_wrapping() {
+    // TS `pauseOnLoopDisabled` (BlockRenderer's loop action `if (pauseOnLoopDisabled) timeInfo.pause()`):
+    // reaching the loop end PAUSES the transport exactly at `loop_to`, keeping the position.
+    let mut transport = Transport::new(8_000.0, 120.0);
+    transport.set_loop_enabled(true);
+    transport.set_loop_pause(true);
+    transport.set_loop_from(0.0);
+    transport.set_loop_to(40.0);
+    transport.play();
+    let mut last_s1 = 0;
+    for _ in 0..30 {
+        if !transport.is_playing() {
+            break;
+        }
+        transport.render_quantum(None, &[], false, |block| last_s1 = block.s1);
+    }
+    assert!(!transport.is_playing(), "the transport paused at the loop end");
+    assert_eq!(transport.position(), 40.0, "the position is kept AT loop_to (pause, not stop)");
+    assert!(last_s1 < 128, "the final quantum's playing blocks end mid-quantum at the loop end: {last_s1}");
+    let tail = transport.render_paused_tail(128 - last_s1);
+    assert_eq!(tail.s1, 128 - last_s1, "the caller renders the remainder as a free-running tail");
+    assert!(tail.p1 > tail.p0, "the tail's pulse range advances (voices flush)");
+}

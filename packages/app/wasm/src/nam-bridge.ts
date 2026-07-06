@@ -69,7 +69,8 @@ export class NamBridges {
             host_nam_set_mono: (handle, mono) => this.#setMono(handle, mono !== 0),
             host_nam_process: (handle, in0, in1, out0, out1, frames, channels) =>
                 this.#process(handle, in0, in1, out0, out1, frames, channels),
-            host_nam_reset: (handle) => this.#reset(handle)
+            host_nam_reset: (handle) => this.#reset(handle),
+            host_nam_release: (handle) => this.#release(handle)
         }
     }
 
@@ -150,6 +151,22 @@ export class NamBridges {
         for (const instance of bridge.instances) {
             if (instance >= 0) {module.reset(instance)}
         }
+    }
+
+    // THIS device's instance is dying (a genuine removal, never a chain-edit survivor, called from the
+    // engine's `terminate` export): destroy its native nam instance(s) and drop the bridge, so a removed or
+    // rebound NeuralAmp device no longer keeps its instance(s) resident forever.
+    #release(handle: number): void {
+        const bridge = this.#bridges.get(handle)
+        if (!isDefined(bridge)) {return}
+        const module = this.#module
+        if (isDefined(module)) {
+            for (const instance of bridge.instances) {
+                if (instance >= 0) {module.unloadModel(instance); module.destroyInstance(instance)}
+            }
+        }
+        this.#bridges.delete(handle)
+        if (this.#byUuid.get(bridge.uuid) === handle) {this.#byUuid.delete(bridge.uuid)}
     }
 
     // Fetch + instantiate the nam module ONCE (lazily, off the render path), then apply every bridge's pending
