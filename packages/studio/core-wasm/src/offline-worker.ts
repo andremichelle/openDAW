@@ -4,13 +4,15 @@
 // replacement leans on (device benchmarks, offline parity renders, later exports). The project snapshot
 // is decoded here and streamed into the engine as one full-dump transaction; samples/soundfonts/NAM
 // arrive over the EngineToClient RPC exactly like the realtime worklet host.
-import {Arrays, int, isDefined, Nullable, Option, SyncStream, TimeSpan, tryCatch, UUID} from "@opendaw/lib-std"
+import {Arrays, int, isDefined, Nullable, Option, SyncStream, Terminable, TimeSpan, tryCatch, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
-import {AudioData, dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioData, dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
+import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {
     ClipSequencingUpdates,
+    EngineAddresses,
     EngineCommands,
     EngineStateSchema,
     EngineToClient,
@@ -37,13 +39,19 @@ type EngineState = {
     readonly numberOfChannels: int // 2 for a mixdown; stems * 2 for a stem export
     readonly stems: int // 0 = mixdown (the master output); > 0 = read the stem staging
     readonly midi: WasmMidiDrain // TS offline renders emit MIDI too (the offline worker hosts the full EngineProcessor)
+    // Master telemetry over "engine-live-data" (mirrors the realtime processor + the TS EngineProcessor), so a
+    // live-stream consumer of an offline render — the video export's shadertoy reads SPECTRUM/WAVEFORM — gets data.
+    readonly broadcaster: LiveStreamBroadcaster
+    readonly analyser: AudioAnalyser
+    readonly broadcasts: ReadonlyArray<Terminable>
     totalFrames: int
     running: boolean
 }
 
 let state: Option<EngineState> = Option.None
 
-const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: Float32Array[], stems: number, midi: WasmMidiDrain): void => {
+const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: Float32Array[], stems: number,
+                       midi: WasmMidiDrain, analyser: AudioAnalyser, broadcaster: LiveStreamBroadcaster): void => {
     const rendered = tryCatch(() => engine.render())
     if (rendered.status === "failure") {
         // A wasm trap is an anonymous RuntimeError; the panic handler left the real message in its buffer.
@@ -64,6 +72,10 @@ const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: F
     if (out.length > 1) {
         out[1].set(new Float32Array(buffer, pointer + RenderQuantum * Float32Array.BYTES_PER_ELEMENT, RenderQuantum))
     }
+    // Feed the master analyser and flush the live stream every quantum, exactly like the realtime processor,
+    // so an offline live-stream consumer (the video export's shadertoy) receives SPECTRUM/WAVEFORM.
+    analyser.process(out[0], out[1] ?? out[0], 0, RenderQuantum)
+    broadcaster.flush()
 }
 
 // In this worker `self` is a DedicatedWorkerGlobalScope; the studio tsconfig types it as Window,
@@ -130,6 +142,24 @@ Communicator.executor<OfflineEngineProtocol>(
                 throw new Error("the project snapshot carries no TimelineBox")
             }
             const midi = new WasmMidiDrain()
+            // Master telemetry over the SAME "engine-live-data" channel the realtime processor + TS
+            // EngineProcessor use, so a live-stream consumer of an offline render (the video export's
+            // shadertoy subscribes to SPECTRUM/WAVEFORM) receives data.
+            const broadcaster = LiveStreamBroadcaster.create(messenger, "engine-live-data")
+            const analyser = new AudioAnalyser()
+            const spectrum = new Float32Array(analyser.numBins())
+            const waveform = new Float32Array(analyser.numBins())
+            const broadcasts: ReadonlyArray<Terminable> = [
+                broadcaster.broadcastFloats(EngineAddresses.SPECTRUM, spectrum, (hasSubscribers) => {
+                    if (!hasSubscribers) {return}
+                    spectrum.set(analyser.bins())
+                    analyser.decay = true
+                }),
+                broadcaster.broadcastFloats(EngineAddresses.WAVEFORM, waveform, (hasSubscribers) => {
+                    if (!hasSubscribers) {return}
+                    waveform.set(analyser.waveform())
+                })
+            ]
             const pending: Set<Promise<unknown>> = new Set()
             drainResourceRequests(engine, memory, engineToClient, pending, config.sampleRate,
                 reason => engineToClient.error(describeEngineTrap(engine, memory, reason)))
@@ -166,7 +196,7 @@ Communicator.executor<OfflineEngineProtocol>(
             })
             enginePort.start()
             state = Option.wrap({
-                engine, memory, stateSender, pending, midi,
+                engine, memory, stateSender, pending, midi, broadcaster, analyser, broadcasts,
                 sampleRate: config.sampleRate,
                 numberOfChannels: stemKeys.length > 0 ? stemKeys.length * 2 : 2,
                 stems: stemKeys.length,
@@ -186,12 +216,12 @@ Communicator.executor<OfflineEngineProtocol>(
             // The loop stays fully SYNCHRONOUS (like the TS offline worker's step): every resource resolved
             // above, and a per-second `setTimeout(0)` yield would cost more than the render itself (~4ms
             // clamped, ×60 — measured as 260ms of a 297ms empty render).
-            const {numberOfChannels, stems, midi} = state.unwrap("state.step")
+            const {numberOfChannels, stems, midi, analyser, broadcaster} = state.unwrap("state.step")
             const result: Float32Array[] = Arrays.create(() => new Float32Array(numSamples), numberOfChannels)
             const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
             let offset = 0 | 0
             while (offset < numSamples) {
-                renderQuantum(engine, memory, outputChannels, stems, midi)
+                renderQuantum(engine, memory, outputChannels, stems, midi, analyser, broadcaster)
                 const toCopy = Math.min(numSamples - offset, RenderQuantum)
                 for (let channel = 0; channel < numberOfChannels; channel++) {
                     result[channel].set(outputChannels[channel].subarray(0, toCopy), offset)
@@ -216,7 +246,7 @@ Communicator.executor<OfflineEngineProtocol>(
             await Wait.timeSpan(TimeSpan.seconds(0))
             while (engine.running && engine.totalFrames < maxFrames) {
                 const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
-                renderQuantum(engine.engine, engine.memory, outputChannels, stems, engine.midi)
+                renderQuantum(engine.engine, engine.memory, outputChannels, stems, engine.midi, engine.analyser, engine.broadcaster)
                 let maxSample = 0
                 for (const channel of outputChannels) {
                     for (const sample of channel) {

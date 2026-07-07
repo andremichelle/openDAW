@@ -24,6 +24,11 @@ import {
 import {Promises} from "@opendaw/lib-runtime"
 
 const MAX_DURATION_SECONDS = TimeSpan.hours(1).absSeconds()
+// A project whose audio never decays (e.g. a generative Spielwerk emitting notes forever) would otherwise
+// render toward MAX_DURATION_SECONDS waiting for a silence that never comes. Bound the tail past the last
+// region instead, and fade the audio out over the final stretch so the forced stop is not an abrupt cut.
+const RENDER_TAIL_SECONDS = 12   // max audio rendered past the last region when no explicit duration is set
+const FADE_OUT_SECONDS = 4       // fade the audio to zero over the final stretch approaching the tail cap
 const SILENCE_THRESHOLD_DB = -72.0
 const SILENCE_DURATION_SECONDS = 10
 
@@ -96,7 +101,8 @@ export namespace VideoRenderer {
                 : tempoMap.ppqnToSeconds(project.lastRegionAction())
             const maxDuration = duration > 0
                 ? duration
-                : MAX_DURATION_SECONDS
+                : Math.min(estimatedDurationInSeconds + RENDER_TAIL_SECONDS, MAX_DURATION_SECONDS)
+            const fadeStartSeconds = maxDuration - FADE_OUT_SECONDS
             const maxFrames = Math.ceil(maxDuration * frameRate)
             const estimatedNumberOfFrames = Math.ceil(estimatedDurationInSeconds * frameRate)
 
@@ -111,7 +117,10 @@ export namespace VideoRenderer {
 
             while (frameIndex < maxFrames && active) {
                 if (frameIndex >= estimatedNumberOfFrames) {
-                    dialog.message = `Waiting for silence...`
+                    dialog.message = `Rendering tail...`
+                    progressValue.setValue(maxFrames > estimatedNumberOfFrames
+                        ? (frameIndex - estimatedNumberOfFrames) / (maxFrames - estimatedNumberOfFrames)
+                        : 1)
                 } else {
                     const progress = frameIndex / estimatedNumberOfFrames
                     dialog.message = `Frame ${frameIndex + 1} / ${estimatedNumberOfFrames} (${estimator(progress)})`
@@ -123,6 +132,7 @@ export namespace VideoRenderer {
                 const quantumsNeeded = Math.ceil(samplesToRender / RenderQuantum)
                 const actualSamplesToRender = quantumsNeeded * RenderQuantum
                 const channels = await renderer.step(actualSamplesToRender)
+                const chunkStartSample = samplesRendered
                 samplesRendered += actualSamplesToRender
                 project.liveStreamReceiver.dispatch()
                 if (duration === 0) {
@@ -158,6 +168,18 @@ export namespace VideoRenderer {
                     compositionCtx.globalCompositeOperation = "source-over"
                 }
 
+                if (duration === 0) {
+                    // Fade the audio out over the final FADE_OUT_SECONDS approaching the tail cap (applied
+                    // AFTER the silence check above, which must read the raw signal). A project that never
+                    // goes silent then ends on a smooth fade instead of a hard cut at the cap.
+                    const chunkSamples = channels[0]?.length ?? 0
+                    for (let index = 0; index < chunkSamples; index++) {
+                        const timeSeconds = (chunkStartSample + index) / sampleRate
+                        if (timeSeconds <= fadeStartSeconds) {continue}
+                        const gain = Math.max(0, (maxDuration - timeSeconds) / FADE_OUT_SECONDS)
+                        for (const channel of channels) {channel[index] *= gain}
+                    }
+                }
                 const timestampSeconds = frameIndex / frameRate
                 await exporter.addFrame(compositionCanvas, channels, timestampSeconds)
                 frameIndex++
