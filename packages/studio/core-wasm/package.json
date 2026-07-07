@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-core-wasm",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "LGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
@@ -30,20 +30,20 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.87",
-    "@opendaw/lib-dsp": "^0.0.85",
-    "@opendaw/lib-fusion": "^0.0.95",
-    "@opendaw/lib-runtime": "^0.0.80",
-    "@opendaw/lib-std": "^0.0.79",
+    "@opendaw/lib-box": "^0.0.88",
+    "@opendaw/lib-dsp": "^0.0.86",
+    "@opendaw/lib-fusion": "^0.0.96",
+    "@opendaw/lib-runtime": "^0.0.81",
+    "@opendaw/lib-std": "^0.0.80",
     "@opendaw/nam-wasm": "^1.2.0",
-    "@opendaw/studio-adapters": "^0.0.118",
-    "@opendaw/studio-boxes": "^0.0.95",
-    "@opendaw/studio-core": "^0.0.154",
+    "@opendaw/studio-adapters": "^0.0.119",
+    "@opendaw/studio-boxes": "^0.0.96",
+    "@opendaw/studio-core": "^0.0.155",
     "soundfont2": "^0.5.0"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",
-    "@opendaw/studio-core-processors": "^0.0.124",
+    "@opendaw/studio-core-processors": "^0.0.125",
     "@opendaw/typescript-config": "^0.0.32",
     "@types/audioworklet": "^0.0.77",
     "esbuild": "^0.25.0",

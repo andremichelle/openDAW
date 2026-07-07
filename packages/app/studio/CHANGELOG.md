@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.155](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.154...@opendaw/app-studio@0.0.155) (2026-07-07)
+
+### Bug Fixes
+
+- **box,std,studio:** transaction-abort integrity, Range NaN poisoning, touch ghost re-trigger ([#1014](https://github.com/andremichelle/openDAW/issues/1014), [#1019](https://github.com/andremichelle/openDAW/issues/1019), [#1020](https://github.com/andremichelle/openDAW/issues/1020), [#1023](https://github.com/andremichelle/openDAW/issues/1023)) ([83efbc6](https://github.com/andremichelle/openDAW/commit/83efbc62d11fb0677389273a6eba3f1534231d03))
+
 ## [0.0.154](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.153...@opendaw/app-studio@0.0.154) (2026-06-29)
 
 ### Bug Fixes

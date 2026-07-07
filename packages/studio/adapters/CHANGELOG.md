@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.119](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.0.118...@opendaw/studio-adapters@0.0.119) (2026-07-07)
+
+### Bug Fixes
+
+- **adapters:** don't block project load on invalid script identifiers ([#264](https://github.com/andremichelle/openDAW/issues/264) follow-up) ([d79d236](https://github.com/andremichelle/openDAW/commit/d79d236715ddc9865af9364eff81378d460ac965))
+- **std:** strip unit before parsing so a digit-leading unit isn't merged into the value ([#264](https://github.com/andremichelle/openDAW/issues/264)) ([8cbfcd2](https://github.com/andremichelle/openDAW/commit/8cbfcd27dd5b79515514f67c8c9040341f8a37c6))
+
 ## [0.0.118](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.0.117...@opendaw/studio-adapters@0.0.118) (2026-06-29)
 
 ### Bug Fixes

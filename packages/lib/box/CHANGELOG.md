@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.88](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box@0.0.87...@opendaw/lib-box@0.0.88) (2026-07-07)
+
+### Bug Fixes
+
+- **box,std,studio:** transaction-abort integrity, Range NaN poisoning, touch ghost re-trigger ([#1014](https://github.com/andremichelle/openDAW/issues/1014), [#1019](https://github.com/andremichelle/openDAW/issues/1019), [#1020](https://github.com/andremichelle/openDAW/issues/1020), [#1023](https://github.com/andremichelle/openDAW/issues/1023)) ([83efbc6](https://github.com/andremichelle/openDAW/commit/83efbc62d11fb0677389273a6eba3f1534231d03))
+
 ## [0.0.87](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-box@0.0.86...@opendaw/lib-box@0.0.87) (2026-06-23)
 
 **Note:** Version bump only for package @opendaw/lib-box

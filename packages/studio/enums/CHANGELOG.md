@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.79](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-enums@0.0.78...@opendaw/studio-enums@0.0.79) (2026-07-07)
+
+**Note:** Version bump only for package @opendaw/studio-enums
+
 ## [0.0.78](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-enums@0.0.77...@opendaw/studio-enums@0.0.78) (2026-06-23)
 
 **Note:** Version bump only for package @opendaw/studio-enums

@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.80](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-std@0.0.79...@opendaw/lib-std@0.0.80) (2026-07-07)
+
+### Bug Fixes
+
+- **box,std,studio:** transaction-abort integrity, Range NaN poisoning, touch ghost re-trigger ([#1014](https://github.com/andremichelle/openDAW/issues/1014), [#1019](https://github.com/andremichelle/openDAW/issues/1019), [#1020](https://github.com/andremichelle/openDAW/issues/1020), [#1023](https://github.com/andremichelle/openDAW/issues/1023)) ([83efbc6](https://github.com/andremichelle/openDAW/commit/83efbc62d11fb0677389273a6eba3f1534231d03))
+- **std:** strip unit before parsing so a digit-leading unit isn't merged into the value ([#264](https://github.com/andremichelle/openDAW/issues/264)) ([8cbfcd2](https://github.com/andremichelle/openDAW/commit/8cbfcd27dd5b79515514f67c8c9040341f8a37c6))
+
 ## [0.0.79](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-std@0.0.78...@opendaw/lib-std@0.0.79) (2026-06-23)
 
 **Note:** Version bump only for package @opendaw/lib-std
