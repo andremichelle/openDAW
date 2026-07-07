@@ -270,22 +270,10 @@ const instruments: ReadonlyArray<InstrumentSpec> = [
             addNoteRegion(boxGraph, trackBox, [36, 38, 42, 46, 36, 38, 42, 46, 36, 38, 42, 46])
         }
     },
-    {
-        name: "Soundfont",
-        needsSample: false,
-        create: (skeleton) => {
-            const {boxGraph} = skeleton
-            const audioUnitBox = AudioUnitFactory.create(skeleton,
-                AudioUnitType.Instrument, Option.wrap(CaptureMidiBox.create(boxGraph, UUID.generate())))
-            InstrumentFactories.Soundfont.create(boxGraph, audioUnitBox.input, "Soundfont", IconSymbol.SoundFont)
-            const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
-                box.target.refer(audioUnitBox)
-                box.type.setValue(TrackType.Notes)
-                box.tracks.refer(audioUnitBox.tracks)
-            })
-            addNoteRegion(boxGraph, trackBox)
-        }
-    },
+    // Soundfont is intentionally omitted: the A/B page renders both engines from real .sf2 bytes, and there is
+    // no soundfont to self-provision from a synthetic skeleton (no bundle carries one here). It renders silent,
+    // which understates its true cost since the voice/interpolation path never runs. Measure it via the
+    // BundlePlayer page, which carries an actual .sf2.
 ]
 
 const createInstrumentSkeleton = (instrument: InstrumentSpec): ProjectSkeleton => {
