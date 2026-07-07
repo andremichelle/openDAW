@@ -6,3 +6,13 @@ component
     padding: 0 0.5em !important
     text-align: center
     font-size: 0.75em
+
+    > .text
+      flex: 1 1 auto
+      min-width: 0
+      overflow: hidden
+      text-overflow: ellipsis
+      white-space: nowrap
+
+    > :not(.text)
+      flex: 0 0 auto

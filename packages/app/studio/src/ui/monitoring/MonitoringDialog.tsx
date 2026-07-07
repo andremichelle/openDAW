@@ -29,11 +29,14 @@ import {Html} from "@opendaw/lib-dom"
 import {AudioDevices} from "@/audio/AudioDevices"
 import {StudioService} from "@/service/StudioService"
 import {SnapCenter} from "@/ui/configs"
+import {DropDown} from "@/ui/composite/DropDown"
 
 const className = Html.adoptStyleSheet(css, "MonitoringDialog")
 
 type OutputDevice = { id: string, label: string }
 const DefaultDevice: OutputDevice = {id: "", label: "Default"}
+const MonitoringModes: ReadonlyArray<MonitoringMode> = ["off", "direct", "effects"]
+const MonitoringModeLabels: Record<MonitoringMode, string> = {off: "Off", direct: "Direct", effects: "With Effects"}
 
 type ParamKnobConstruct = {
     lifecycle: Lifecycle,
@@ -111,28 +114,18 @@ export namespace MonitoringDialog {
             }
         }
         reconnectMeter()
-        const modeSelect: HTMLSelectElement = (
-            <select className="select" onchange={() => {
-                capture.monitoringMode = modeSelect.value as MonitoringMode
-                reconnectMeter()
-            }}>
-                <option value="off" selected={capture.monitoringMode === "off"}>Off</option>
-                <option value="direct" selected={capture.monitoringMode === "direct"}>Direct</option>
-                <option value="effects" selected={capture.monitoringMode === "effects"}>With Effects</option>
-            </select>
-        )
-        const currentDeviceId = capture.monitorOutputDeviceId.unwrapOrElse("")
-        const deviceSelect: HTMLSelectElement = (
-            <select className="select" onchange={() => {
-                const deviceId = deviceSelect.value === "" ? Option.None : Option.wrap(deviceSelect.value)
-                capture.setMonitorOutputDevice(deviceId)
-            }}>
-                {outputDevices.map(device => (
-                    <option value={device.id}
-                            selected={device.id === currentDeviceId}>{device.label}</option>
-                ))}
-            </select>
-        )
+        const modeModel = lifecycle.own(new DefaultObservableValue<MonitoringMode>(capture.monitoringMode))
+        lifecycle.own(modeModel.subscribe(owner => {
+            capture.monitoringMode = owner.getValue()
+            reconnectMeter()
+        }))
+        const currentDevice = outputDevices.find(device =>
+            device.id === capture.monitorOutputDeviceId.unwrapOrElse("")) ?? DefaultDevice
+        const deviceModel = lifecycle.own(new DefaultObservableValue<OutputDevice>(currentDevice))
+        lifecycle.own(deviceModel.subscribe(owner => {
+            const id = owner.getValue().id
+            capture.setMonitorOutputDevice(id === "" ? Option.None : Option.wrap(id))
+        }))
         const dialog: HTMLDialogElement = (
             <Dialog headline="Monitoring"
                     icon={IconSymbol.SpeakerHeadphone}
@@ -162,12 +155,16 @@ export namespace MonitoringDialog {
                     <div className="select-row">
                         <div className="field">
                             <label>Mode</label>
-                            {modeSelect}
+                            <DropDown lifecycle={lifecycle} owner={modeModel}
+                                      provider={() => MonitoringModes}
+                                      mapping={mode => MonitoringModeLabels[mode]}/>
                         </div>
                         {switchable && (
                             <div className="field">
                                 <label>Output</label>
-                                {deviceSelect}
+                                <DropDown lifecycle={lifecycle} owner={deviceModel}
+                                          provider={() => outputDevices}
+                                          mapping={device => device.label}/>
                             </div>
                         )}
                     </div>

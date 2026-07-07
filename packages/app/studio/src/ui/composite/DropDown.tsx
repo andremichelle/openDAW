@@ -32,7 +32,10 @@ export const DropDown = <T, >({lifecycle, owner, provider, mapping, appearance, 
                     }).setTriggerProcedure(() => owner.setValue(value)))
                 }
             })} appearance={appearance ?? {framed: true, color: Colors.dark, activeColor: Colors.gray}}>
-                <label style={{minWidth: width ?? "unset"}}>{injectLabel}<Icon symbol={IconSymbol.Dropdown}/></label>
+                <label style={{minWidth: width ?? "unset", maxWidth: "100%"}}>
+                    <span className="text">{injectLabel}</span>
+                    <Icon symbol={IconSymbol.Dropdown}/>
+                </label>
             </MenuButton>
         </div>
     )
