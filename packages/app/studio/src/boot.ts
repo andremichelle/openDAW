@@ -1,5 +1,3 @@
-if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
-
 import "./main.sass"
 import {App} from "@/ui/App.tsx"
 import {isDefined, panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
@@ -15,13 +13,13 @@ import {
     BufferUnderrunDetector,
     CloudAuthManager,
     ContextMenu,
+    FactoryCatalog,
     GlobalSampleLoaderManager,
     GlobalSoundfontLoaderManager,
     OfflineEngineRenderer,
-    OpenSampleAPI,
-    OpenSoundfontAPI,
     Workers
 } from "@opendaw/studio-core"
+import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI} from "@/opendaw-api"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
@@ -39,6 +37,8 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
+
+if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
 
 const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
@@ -95,6 +95,11 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProce
                 console.debug(`AudioContext resumed (${context.state})`)), {capture: true, once: true})
     }
     const audioDevices = await AudioOutputDevice.create(context)
+    FactoryCatalog.install({
+        samples: () => OpenSampleAPI.get().all(),
+        soundfonts: () => OpenSoundfontAPI.get().all(),
+        presets: () => OpenPresetAPI.get().list()
+    })
     const chainedSampleProvider = new ChainedSampleProvider({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(uuid, progress)

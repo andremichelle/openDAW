@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.154](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.153...@opendaw/studio-core@0.0.154) (2026-06-29)
+
+### Bug Fixes
+
+- **studio:** guard copy-device against the Output unit ([#1016](https://github.com/andremichelle/openDAW/issues/1016)-1018) ([ed83bf6](https://github.com/andremichelle/openDAW/commit/ed83bf64c1de4b79f76f839a00659a62410a9afa)), closes [#1016-1018](https://github.com/andremichelle/openDAW/issues/1016-1018) [#1016-1018](https://github.com/andremichelle/openDAW/issues/1016-1018)
+
+## [0.0.153](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.152...@opendaw/studio-core@0.0.153) (2026-06-23)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
 ## [0.0.152](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.151...@opendaw/studio-core@0.0.152) (2026-06-05)
 
 **Note:** Version bump only for package @opendaw/studio-core

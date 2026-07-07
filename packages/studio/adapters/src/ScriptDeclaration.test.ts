@@ -62,6 +62,11 @@ describe("ScriptDeclaration", () => {
         it("throws on unknown mapping", () => {
             expect(() => ScriptDeclaration.parseParams("// @param x 0.5 0 1 cubic")).toThrow()
         })
+        it("accepts names starting with a digit or hash", () => {
+            expect(ScriptDeclaration.parseParams("// @param 1 5 1 9 int")[0].label).toBe("1")
+            expect(ScriptDeclaration.parseParams("// @param #steps 0.5")[0].label).toBe("#steps")
+            expect(ScriptDeclaration.parseParams("// @param foo-bar 0.5")[0].label).toBe("foo-bar")
+        })
     })
 
     describe("parseSamples", () => {
@@ -76,6 +81,9 @@ describe("ScriptDeclaration", () => {
         })
         it("ignores sample line with no name", () => {
             expect(ScriptDeclaration.parseSamples("// @sample ")).toEqual([])
+        })
+        it("accepts a sample name starting with a digit", () => {
+            expect(ScriptDeclaration.parseSamples("// @sample 1kick")).toEqual([{label: "1kick"}])
         })
     })
 

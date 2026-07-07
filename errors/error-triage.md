@@ -1,6 +1,6 @@
 # openDAW Error Triage — index
 
-Snapshot of https://logs.opendaw.studio. **57 unresolved** reports across **33 signatures**, grouped into **23 error-groups** (one file each). Scanned 914 rows, ids 1..1001.
+Snapshot of https://logs.opendaw.studio (2026-07-05). **Unfixed ids: 1014, 1015, 1019–1027.** The 1016–1018 group was fixed earlier; the current open work is the 2026-07 batch below.
 
 Each error-group has its own file in this folder. Priority: **P1** highest-value real bugs · **P2** real bugs · **P3** lower/needs-context · **ENV** environmental/transient. (Nothing is marked RESOLVED — see note below; a silenced/reworded panic is not a fix.)
 
@@ -9,10 +9,24 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 > **Cross-cutting fix (ErrorHandler):** `processError` no longer treats an unhandled **promise rejection** as fatal — previously ANY non-ignored rejection ran `AnimationFrame.terminate()` + the recovery dialog, killing the whole app over a single async failure (even a reason-less one). Rejections are now reported once and the session stays alive; only synchronous `error` events remain fatal. This is the root cause behind much of the rejection-based "crash" class below; the per-error `#tryIgnore` handlers (storage, monaco, file-picker, …) remain as defence-in-depth and for friendly messages.
 
 
+## Open — 2026-07 batch (ids 1014–1015, 1019–1027)
+
+- [Undo/abort rollback PointerField missing](P2-undo-rollback-pointerfield-missing.md) — FIXED (code + tests; deploy pending) · **P2** · 1× · ids [1014]
+- [Device-delete no-device-host](P2-device-delete-no-device-host.md) — FIXED (two root causes: Surface pointercancel + abort integrity; #1015 trigger unconfirmed, monitor) · **P2** · 2× · ids [1015, 1020]
+- [TimelineRangeSlider non-finite SVGLength](P2-timeline-range-nonfinite.md) — FIXED (code + tests; deploy pending) · **P2** · 2× · ids [1019, 1023]
+- [Timeline duration family](P1-timeline-duration-family.md) — REOPENED (recurrence on current build; clip postProcess path bypasses boundaryTolerance) · **P1** · +3× · ids [1025, 1026, 1027]
+- [Audio adapter file unwrap](P3-audio-adapter-file-unwrap.md) — OPEN (needs logs/repro) · **P3** · 1× · ids [1021]
+- [Media no-supported-source](ENV-media-no-supported-source.md) — OPEN (ENV, no stack) · 1× · ids [1022]
+- [Worker OPFS storage-not-available](ENV-storage-not-available.md) — OPEN (ENV; worker lacks graceful path) · 1× · ids [1024]
+
+## Fixed earlier (ids 1016–1018)
+
+- [Copy-device Output-unit undefined](P1-copy-device-output-unit-undefined.md) — FIXED (code + test; deployed, marked fixed=1) · **P1** · 3× · ids [1016, 1017, 1018]
+
 ## P1
 
 - [Mixer Unknown-key channel-strip](P1-mixer-unknown-key-channel-strip.md) — OPEN · 5× · ids [924, 925, 926, 984, 985]
-- [Timeline duration family](P1-timeline-duration-family.md) — #1003 FIXED · recording guarded · 4× · ids [933, 982, 998, 1003]
+- [Timeline duration family](P1-timeline-duration-family.md) — REOPENED (2026-07 recurrence) · 7× · ids [933, 982, 998, 1003, 1025, 1026, 1027]
 
 ## P2
 

@@ -2,7 +2,8 @@ import {Arrays, Errors, panic, Procedure, Progress, RuntimeNotifier, UUID} from 
 import {network, Promises} from "@opendaw/lib-runtime"
 import {Soundfont} from "@opendaw/studio-adapters"
 import {CloudHandler} from "./CloudHandler"
-import {OpenSoundfontAPI, SoundfontStorage} from "../soundfont"
+import {SoundfontStorage} from "../soundfont"
+import {FactoryCatalog} from "../FactoryCatalog"
 
 type SoundfontDomains = Record<"stock" | "local" | "cloud", ReadonlyArray<Soundfont>>
 
@@ -18,7 +19,7 @@ export class CloudBackupSoundfonts {
                        log: Procedure<string>) {
         log("Collecting all soundfont domains...")
         const [stock, local, cloud] = await Promise.all([
-            OpenSoundfontAPI.get().all(),
+            FactoryCatalog.get().soundfonts(),
             SoundfontStorage.get().list(),
             cloudHandler.download(CloudBackupSoundfonts.RemoteCatalogPath)
                 .then(json => JSON.parse(new TextDecoder().decode(json)))

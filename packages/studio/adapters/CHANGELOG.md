@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.118](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.0.117...@opendaw/studio-adapters@0.0.118) (2026-06-29)
+
+### Bug Fixes
+
+- **adapters:** reject non-JS-conformant names in script devices ([#264](https://github.com/andremichelle/openDAW/issues/264)) ([d45b678](https://github.com/andremichelle/openDAW/commit/d45b6786b311e63fc34cb9bc7f116da683477906))
+- **presets:** keep Playfield sample-slot effects in instrument presets ([#265](https://github.com/andremichelle/openDAW/issues/265)) ([445b7f5](https://github.com/andremichelle/openDAW/commit/445b7f5124fa73345d34049e2f51435275b27f02))
+
+## [0.0.117](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.0.116...@opendaw/studio-adapters@0.0.117) (2026-06-23)
+
+### Bug Fixes
+
+- **timeline:** allow AudioUnit reorder via right-click menu (closes [#55](https://github.com/andremichelle/openDAW/issues/55)) ([d9db5e9](https://github.com/andremichelle/openDAW/commit/d9db5e907c788e37acdcfeabb96fa83188bac8e2))
+
 ## [0.0.116](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.0.115...@opendaw/studio-adapters@0.0.116) (2026-06-05)
 
 **Note:** Version bump only for package @opendaw/studio-adapters

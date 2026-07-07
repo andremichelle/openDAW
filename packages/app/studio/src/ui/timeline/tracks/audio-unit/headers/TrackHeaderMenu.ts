@@ -1,7 +1,7 @@
 import {CaptureAudio, MenuItem, Project} from "@opendaw/studio-core"
 import {MonitoringDialog} from "@/ui/monitoring/MonitoringDialog"
 import {Browser} from "@opendaw/lib-dom"
-import {isInstanceOf, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {isInstanceOf, Option, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {
     AudioUnitBoxAdapter,
     DeviceAccepts,
@@ -80,7 +80,7 @@ export const installTrackHeaderMenu = (service: StudioService,
                 .transfer([trackBoxAdapter.audioUnit], project.skeleton, {
                     insertIndex: trackBoxAdapter.audioUnit.index.getValue() + 1
                 }), false).unwrap("copyUnit")
-            userEditingManager.audioUnit.edit(copies[0].editing)
+            Option.wrap(copies.at(0)).ifSome(copy => userEditingManager.audioUnit.edit(copy.editing))
         }),
         MenuItem.default({
             label: "Freeze AudioUnit",

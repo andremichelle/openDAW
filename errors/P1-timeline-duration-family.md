@@ -1,7 +1,7 @@
 # Timeline duration family
 
-- **status:** #1003 FIXED (confirmed) · recording origin guarded · detectors kept · **priority:** P1
-- **occurrences:** 4 · **ids:** [933, 982, 998, 1003]
+- **status:** REOPENED (2026-07 recurrence on current build 169f7f25 — see update below) · **priority:** P1
+- **occurrences:** 7 · **ids:** [933, 982, 998, 1003, 1025, 1026, 1027]
 - **assessment:** TWO distinct origins, both now closed (see 2026-06 update). (1) **Clip-resolver float boundary (#1003, confirmed):** seconds-based audio regions carry double-precision ppqn drift; a duration-drag whose end lands on a neighbour's drifted boundary made `createTasksFromMasks` emit a `start`/`complete` task with a sub-ulp remainder that float32-truncates to 0 → `validateTrack` panic. (2) **Recording (#998 suspect):** `RecordAudio.finalizeTake` could persist a non-positive recomputed take length. The detector panics (validateTrack / createTasksFromMasks / RegionEditing.clip) are kept as safety nets (softening them is a band-aid).
 - **note:** the stale memory claiming "validateTrack non-fatal" is wrong — it still panics (softening was reverted).
 
@@ -60,3 +60,12 @@ Why not rounding: ppqn is integer only for *musical* regions; seconds-audio ppqn
 **Fix shipped (recording, defensive):** `RecordAudio.finalizeTake` now drops (deletes) a take whose recomputed `durationInSeconds <= 0` (loop-wrap path that bypasses the live-update pre-check) instead of persisting a 0-duration region. This is the suspected #982/#998 origin — defensive, not reproduced.
 
 **Status:** #1003 fixed+tested. #933/#982/#998 are detector panics whose two known creation paths (clip-FP, recording-finalize) are now closed; residual unknown creators would still surface them (kept as safety nets). #667 addressed via the resolver path; `RegionEditing.clip` retains its own exact `<=0` check for any direct caller.
+
+## Update (2026-07-05) — recurrence on build 169f7f25 (ids 1025, 1026, 1027)
+
+Three new reports on the CURRENT production build, all from the same Chrome/Linux + Edge/Win sessions, all via a modifier `approve` (`RegionsArea` capture → `approve → apply`):
+
+- **#1025, #1026 — `duration(0) must be positive`** at `validateTrack ← validateTracks ← apply ← approve`. Same detector as #982/#998, but on a build that already contains the clip-resolver tolerance and the recording guard → **a third creation path exists** (or one of the shipped guards doesn't cover its branch). Logs needed; no repro yet.
+- **#1027 — `second part duration will be zero or negative(-0.000007867813110351562)`** at `RegionEditing.clip ← (forEach) ← #postProcess ← … ← apply ← approve`. The float-drift magnitude (~8e-6) is well WITHIN the shipped `boundaryTolerance` (≈2.3e-2 at that position) — but this call reaches `RegionEditing.clip` through the resolver's **postProcess** pass, which evidently does not route through the tolerance-guarded `createTasksFromMasks` boundary classification. The drifted values in a related session (#1019 log: `d:194851.43896484375`) match the seconds-audio ppqn drift already documented for #1003.
+
+**Next step:** inspect `RegionClipResolver`'s postProcess pass — clip positions computed there must use the same `boundaryTolerance` classification (delete/skip instead of emitting a ≤tolerance second part). Repro-first; no detector softening.

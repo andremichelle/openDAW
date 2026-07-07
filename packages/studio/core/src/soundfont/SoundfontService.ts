@@ -5,7 +5,7 @@ import {SoundfontFileBox} from "@opendaw/studio-boxes"
 import {Soundfont, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {SoundfontStorage} from "./SoundfontStorage"
 import {FilePickerAcceptTypes} from "../FilePickerAcceptTypes"
-import {OpenSoundfontAPI} from "./OpenSoundfontAPI"
+import {FactoryCatalog} from "../FactoryCatalog"
 import {AssetService} from "../AssetService"
 import {ExternalLib} from "../ExternalLib"
 
@@ -22,7 +22,7 @@ export class SoundfontService extends AssetService<Soundfont, void> {
         super()
         Promise.all([
             SoundfontStorage.get().list(),
-            OpenSoundfontAPI.get().all()
+            FactoryCatalog.get().soundfonts()
         ]).then(([local, remote]) => {
             this.#local = Option.wrap(Arrays.subtract(local, remote, (a, b) => a.uuid === b.uuid))
             this.#remote = Option.wrap(remote)
@@ -82,7 +82,7 @@ export class SoundfontService extends AssetService<Soundfont, void> {
     }
 
     protected async collectAllFiles(): Promise<ReadonlyArray<Soundfont>> {
-        const stock = await OpenSoundfontAPI.get().all()
+        const stock = await FactoryCatalog.get().soundfonts()
         const local = await SoundfontStorage.get().list()
         return Arrays.merge(stock, local, (a, b) => a.uuid === b.uuid)
     }

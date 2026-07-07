@@ -292,6 +292,12 @@ export class Surface implements TerminableOwner {
             Events.subscribe(this.#owner, "pointerup", (_event: PointerEvent) => {
                 pointerDown = Option.None
             }, {capture: true}),
+            // A pointerdown concludes with either pointerup or pointercancel (e.g. touch gestures
+            // taken over by the browser). Without this, the tracking goes stale and the workaround
+            // above dispatches a fabricated pointerup to the previous target, re-triggering it.
+            Events.subscribe(this.#owner, "pointercancel", (_event: PointerEvent) => {
+                pointerDown = Option.None
+            }, {capture: true}),
             Events.subscribe(this.#owner, "dragover", (event: DragEvent) => {
                 this.#pointer.x = event.clientX
                 this.#pointer.y = event.clientY

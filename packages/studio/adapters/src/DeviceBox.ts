@@ -24,6 +24,8 @@ export namespace DeviceBoxUtils {
         isDeviceBox(box) && box.tags.deviceType === "instrument"
     export const isEffectDeviceBox = (box: Box): box is EffectDeviceBox =>
         isDeviceBox(box) && (box.tags.deviceType === "audio-effect" || box.tags.deviceType === "midi-effect")
+    export const isChainEffectOf = (box: Box, host: Box): box is EffectDeviceBox =>
+        isEffectDeviceBox(box) && box.host.targetVertex.mapOr(vertex => vertex.box === host, false)
     export const lookupHostField = (box: Maybe<Box>): PointerField =>
         isDefined(box) && "host" in box && isInstanceOf(box.host, PointerField)
             ? box.host : panic(`Could not find 'host' field in '${box?.name}'`)

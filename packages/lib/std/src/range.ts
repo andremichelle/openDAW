@@ -130,7 +130,9 @@ export class Range implements Observable<Range> {
         this.#changeNotifier.notify(this)
     }
     get width() {return this.#width}
-    get innerWidth() {return this.#width - this.#padding}
+    // Collapsed layouts can report widths <= padding. Clamping keeps every x <-> value mapping
+    // finite — a division by zero here would poison #min/#max with NaN for good.
+    get innerWidth() {return Math.max(1.0, this.#width - this.#padding)}
 
     set(min: unitValue, max: unitValue): void {
         const clampMin = Math.max(0.0, min)

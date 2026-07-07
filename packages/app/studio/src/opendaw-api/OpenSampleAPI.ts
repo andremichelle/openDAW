@@ -12,12 +12,11 @@ import {
 import {network, Promises} from "@opendaw/lib-runtime"
 import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {SampleAPI} from "@opendaw/studio-core"
-import {base64Credentials, OpenDAWHeaders} from "../OpenDAWHeaders"
+import {base64Credentials, OpenDAWHeaders} from "./OpenDAWHeaders"
 import {z} from "zod"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
 
 // Standard openDAW samples (considered to be non-removable)
-/** @internal */
 export class OpenSampleAPI implements SampleAPI {
     static readonly ApiRoot = "https://api.opendaw.studio/samples"
     static readonly FileRoot = "https://assets.opendaw.studio/samples"

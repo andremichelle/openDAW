@@ -23,3 +23,11 @@ describe("Extract Prefix", () => {
         expect(StringMapping.numeric({bipolar: true, unit: "%"}).x(0.5)).toEqual({value: "0", unit: "%"})
     })
 })
+
+describe("Unit starting with a digit (#264)", () => {
+    it("strips the unit before parsing so its leading digit is not merged into the value", () => {
+        const mapping = StringMapping.numeric({unit: "1/32th"})
+        expect(mapping.y("31/32th")).toEqual({type: "explicit", value: 3})
+        expect(mapping.y("3")).toEqual({type: "explicit", value: 3})
+    })
+})

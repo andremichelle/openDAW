@@ -2,7 +2,7 @@ import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioUnitBox, RootBox} from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
-import {ProjectSkeleton, TransferAudioUnits} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, ProjectSkeleton, TransferAudioUnits} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "./ProjectEnv"
 
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
@@ -42,6 +42,21 @@ describe("Duplicate audio unit (copy-device)", () => {
         expect(roots(project), "RootBox count after attempting to duplicate output").toBe(1)
         expect(outputs, "Output unit count").toBe(1)
         expect(copies.length, "transfer must not copy the Output unit").toBe(0)
+        project.terminate()
+    })
+
+    it("copy-device on the Output unit performs no edit and does not throw — #1016-1018", async () => {
+        const project = await build()
+        const outputBox = project.boxGraph.boxes().find((box): box is AudioUnitBox =>
+            box instanceof AudioUnitBox && box.type.getValue() === AudioUnitType.Output)!
+        const adapter = project.boxAdapters.adapterFor(outputBox, AudioUnitBoxAdapter)
+        expect(adapter.isOutput, "Output adapter must report isOutput (copy-device guard predicate)").true
+        let copies: ReadonlyArray<AudioUnitBox> = []
+        project.editing.modify(() => {copies = TransferAudioUnits.transfer([adapter.box], project.skeleton)})
+        expect(() => copies[0].editing, "the original unguarded copies[0] access throws on empty result").toThrow()
+        const copy = Option.wrap(copies.at(0))
+        expect(copy.isEmpty(), "no copy is produced for the Output unit").true
+        expect(() => copy.ifSome(({editing}) => editing), "safe access must not throw on empty result").not.toThrow()
         project.terminate()
     })
 })

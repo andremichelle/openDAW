@@ -10,7 +10,8 @@ import {
     unitValue,
     UUID
 } from "@opendaw/lib-std"
-import {OpenSampleAPI, SampleStorage} from "@opendaw/studio-core"
+import {SampleStorage} from "@opendaw/studio-core"
+import {OpenSampleAPI} from "@/opendaw-api"
 import {dbToGain, WavFile} from "@opendaw/lib-dsp"
 
 export type PlaybackEvent = {

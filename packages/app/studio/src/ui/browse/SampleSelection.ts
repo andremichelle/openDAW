@@ -3,12 +3,12 @@ import {AudioFileBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, Sample} from "@opendaw/studio-adapters"
 import {
     AudioContentFactory,
-    OpenSampleAPI,
     PresetStorage,
     ProjectStorage,
     SampleStorage,
     TemplateStorage
 } from "@opendaw/studio-core"
+import {OpenSampleAPI} from "@/opendaw-api"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"

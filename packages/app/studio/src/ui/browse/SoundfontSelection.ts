@@ -1,6 +1,7 @@
 import {asDefined, isAbsent, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories, Soundfont} from "@opendaw/studio-adapters"
-import {OpenSoundfontAPI, PresetStorage, ProjectStorage, SoundfontStorage, TemplateStorage} from "@opendaw/studio-core"
+import {PresetStorage, ProjectStorage, SoundfontStorage, TemplateStorage} from "@opendaw/studio-core"
+import {OpenSoundfontAPI} from "@/opendaw-api"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"

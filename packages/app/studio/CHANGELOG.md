@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.154](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.153...@opendaw/app-studio@0.0.154) (2026-06-29)
+
+### Bug Fixes
+
+- **presets:** keep Playfield sample-slot effects in instrument presets ([#265](https://github.com/andremichelle/openDAW/issues/265)) ([445b7f5](https://github.com/andremichelle/openDAW/commit/445b7f5124fa73345d34049e2f51435275b27f02))
+- **studio:** guard copy-device against the Output unit ([#1016](https://github.com/andremichelle/openDAW/issues/1016)-1018) ([ed83bf6](https://github.com/andremichelle/openDAW/commit/ed83bf64c1de4b79f76f839a00659a62410a9afa)), closes [#1016-1018](https://github.com/andremichelle/openDAW/issues/1016-1018) [#1016-1018](https://github.com/andremichelle/openDAW/issues/1016-1018)
+
+## [0.0.153](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.152...@opendaw/app-studio@0.0.153) (2026-06-23)
+
+### Bug Fixes
+
+- **timeline:** allow AudioUnit reorder via right-click menu (closes [#55](https://github.com/andremichelle/openDAW/issues/55)) ([d9db5e9](https://github.com/andremichelle/openDAW/commit/d9db5e907c788e37acdcfeabb96fa83188bac8e2))
+
 ## [0.0.152](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.151...@opendaw/app-studio@0.0.152) (2026-06-05)
 
 **Note:** Version bump only for package @opendaw/app-studio

@@ -2,7 +2,7 @@ import {dbToGain} from "@opendaw/lib-dsp"
 import {Peaks} from "@opendaw/lib-fusion"
 import {AudioRenderer} from "./audio"
 
-export const RiffleStrategy: AudioRenderer.Strategy = {
+export const RiffleStrategy = (barWidth: number = 3, bGap: number = 1): AudioRenderer.Strategy => ({
     render(context, segments, peaks, {top, bottom}, gain): void {
         if (segments.length === 0) {return}
         const dpr = devicePixelRatio
@@ -12,9 +12,8 @@ export const RiffleStrategy: AudioRenderer.Strategy = {
         const numberOfChannels = peaks.numChannels
         const peaksHeight = Math.floor(height / numberOfChannels)
         const gainScale = dbToGain(-gain)
-        const blockWidth = 3 * dpr
-        // noinspection PointlessArithmeticExpressionJS
-        const gap = dpr * 1
+        const blockWidth = barWidth * dpr
+        const gap = dpr * bGap
         const pixelsPerBlock = blockWidth + gap
         let globalX0 = Infinity
         let globalX1 = -Infinity
@@ -89,4 +88,4 @@ export const RiffleStrategy: AudioRenderer.Strategy = {
         }
         context.globalAlpha = 1.0
     }
-}
+})

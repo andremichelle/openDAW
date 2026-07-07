@@ -150,9 +150,11 @@ export namespace StudioShortcutManager {
                 ({editing, boxAdapters, userEditingManager, skeleton}) => userEditingManager.audioUnit.get()
                     .ifSome(({box}) => {
                         const deviceHost: DeviceHost = boxAdapters.adapterFor(box, Devices.isHost)
+                        const audioUnitBoxAdapter = deviceHost.audioUnitBoxAdapter()
+                        if (audioUnitBoxAdapter.isOutput) {return}
                         const copies = editing.modify(() => TransferAudioUnits
-                            .transfer([deviceHost.audioUnitBoxAdapter().box], skeleton), false).unwrap("copyUnit")
-                        userEditingManager.audioUnit.edit(copies[0].editing)
+                            .transfer([audioUnitBoxAdapter.box], skeleton), false).unwrap("copyUnit")
+                        Option.wrap(copies.at(0)).ifSome(copy => userEditingManager.audioUnit.edit(copy.editing))
                     }))),
             gc.register(gs["workspace-next-screen"].shortcut, () => {
                     if (!service.hasProfile) {return}
