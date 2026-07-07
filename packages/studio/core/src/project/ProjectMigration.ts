@@ -26,6 +26,7 @@ import {
     migrateAudioClipBox,
     migrateAudioFileBox,
     migrateAudioRegionBox,
+    migrateAudioRegionOverlaps,
     migrateAudioUnitBox,
     migrateDelayDeviceBox,
     migrateMIDIOutputDeviceBox,
@@ -105,5 +106,8 @@ export class ProjectMigration {
             visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box),
             visitSelectionBox: (box: SelectionBox) => migrateSelectionBox(boxGraph, box)
         }))
+        // 3rd pass. Heal sub-ppqn overlaps that the Int32 position truncation (or the AudioFit->Seconds
+        // pass above) left between seconds-based audio regions. Runs after per-region migration.
+        migrateAudioRegionOverlaps(boxGraph, bpmValue)
     }
 }
