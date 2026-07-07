@@ -1,7 +1,5 @@
 import {Arrays, assert, int, panic, Procedure} from "@opendaw/lib-std"
 
-declare let document: any
-
 export namespace RingBuffer {
     export interface Config {
         sab: SharedArrayBuffer
@@ -14,48 +12,56 @@ export namespace RingBuffer {
 
     export interface Reader {stop(): void}
 
-    export const reader = ({
-                               sab,
-                               numChunks,
-                               numberOfChannels,
-                               bufferSize
-                           }: Config, append: Procedure<Array<Float32Array>>): Reader => {
-        let running = true
-        const pointers = new Int32Array(sab, 0, 2)
-        const audio = new Float32Array(sab, 8)
-        const planarChunk = new Float32Array(numberOfChannels * bufferSize)
-        const canBlock = typeof document === "undefined" // for usage in workers
-        const step = () => {
-            if (!running) {return}
-            let readPtr = Atomics.load(pointers, 1)
-            let writePtr = Atomics.load(pointers, 0)
-            if (readPtr === writePtr) {
-                if (canBlock) {
-                    Atomics.wait(pointers, 0, writePtr)
-                } else {
-                    setTimeout(step, 1)   // non‑blocking poll fallback
-                    return
+    // The reader drains the ring on a dedicated worker that blocks on `Atomics.wait` (woken by the writer's
+    // `Atomics.notify`). This avoids the main-thread `setTimeout` polling that Chrome throttles to ~1s in hidden
+    // tabs, which used to overrun the ring (~0.37s) and silently drop recorded audio. Drained chunks are posted
+    // back (transferred) so the caller's `append` still runs on the main thread. See issue #290.
+    export const reader = (config: Config, append: Procedure<Array<Float32Array>>): Reader => {
+        const code = `
+            onmessage = (event) => {
+                const {sab, numChunks, numberOfChannels, bufferSize} = event.data
+                const pointers = new Int32Array(sab, 0, 2)
+                const audio = new Float32Array(sab, 8)
+                const chunkFloats = numberOfChannels * bufferSize
+                while (true) {
+                    let readPtr = Atomics.load(pointers, 1)
+                    let writePtr = Atomics.load(pointers, 0)
+                    if (readPtr === writePtr) {
+                        Atomics.wait(pointers, 0, writePtr)
+                        writePtr = Atomics.load(pointers, 0)
+                    }
+                    const batch = []
+                    const transfer = []
+                    while (readPtr !== writePtr) {
+                        const offset = readPtr * chunkFloats
+                        const channels = []
+                        for (let channel = 0; channel < numberOfChannels; channel++) {
+                            const start = offset + channel * bufferSize
+                            const frames = audio.slice(start, start + bufferSize)
+                            channels.push(frames)
+                            transfer.push(frames.buffer)
+                        }
+                        readPtr = (readPtr + 1) % numChunks
+                        Atomics.store(pointers, 1, readPtr)
+                        batch.push(channels)
+                    }
+                    postMessage(batch, transfer)
                 }
-                writePtr = Atomics.load(pointers, 0)
             }
-            while (readPtr !== writePtr) {
-                const offset = readPtr * numberOfChannels * bufferSize
-                planarChunk.set(audio.subarray(offset, offset + numberOfChannels * bufferSize))
-                const channels: Array<Float32Array> = []
-                for (let channel = 0; channel < numberOfChannels; channel++) {
-                    const start = channel * bufferSize
-                    const end = start + bufferSize
-                    channels.push(planarChunk.slice(start, end))
-                }
-                readPtr = (readPtr + 1) % numChunks
-                Atomics.store(pointers, 1, readPtr)
-                if (!running) {return}
-                append(channels)
-            }
-            step()
+        `
+        const url = URL.createObjectURL(new Blob([code], {type: "application/javascript"}))
+        const worker = new Worker(url)
+        worker.onmessage = (event: MessageEvent) => {
+            const batch = event.data as Array<Array<Float32Array>>
+            for (const channels of batch) {append(channels)}
         }
-        step()
-        return {stop: () => running = false}
+        worker.postMessage(config)
+        return {
+            stop: () => {
+                worker.terminate()
+                URL.revokeObjectURL(url)
+            }
+        }
     }
 
     export const writer = ({sab, numChunks, numberOfChannels, bufferSize}: Config): Writer => {

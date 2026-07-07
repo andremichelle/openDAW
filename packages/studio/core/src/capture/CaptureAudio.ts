@@ -16,9 +16,12 @@ import {CaptureDevices} from "./CaptureDevices"
 import {InputLatency} from "./InputLatency"
 import {RecordAudio} from "./RecordAudio"
 import {AudioDevices} from "../AudioDevices"
-import {RenderQuantum} from "../RenderQuantum"
 import {RecordingWorklet} from "../RecordingWorklet"
 import {MonitoringMode} from "./MonitoringMode"
+
+// Ring capacity in render-quantum chunks (~3s at 48kHz). The reader worker keeps the ring drained in real time;
+// the headroom only needs to cover the worker's async boot and transient stalls. See issue #290.
+const RecordingRingChunks = 1024
 
 export class CaptureAudio extends Capture<CaptureAudioBox> {
     readonly #stream: MutableObservableOption<MediaStream>
@@ -190,7 +193,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             return Promise.reject("No audio chain available for recording.")
         }
         const {recordGainNode, channelCount} = audioChain
-        const recordingWorklet = audioWorklets.createRecording(channelCount, RenderQuantum)
+        const recordingWorklet = audioWorklets.createRecording(channelCount, RecordingRingChunks)
         recordingWorklet.bpm = project.timelineBox.bpm.getValue()
         recordingWorklet.sampleService = sampleService
         sampleManager.record(recordingWorklet)
