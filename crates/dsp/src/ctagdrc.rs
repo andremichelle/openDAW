@@ -5,15 +5,22 @@
 //! delayed signal. `f32`, fixed buffers (no allocation): the look-ahead window is at most 5 ms.
 
 use crate::RENDER_QUANTUM;
+use crate::fast_math::{fast_exp2, fast_log2};
+
+// WASM CONTRACT: log10(2) and log2(10), identical literals in TS `ctagdrc/conversation.ts`, so the fast
+// dB conversions below run bit-for-bit mirrored across the engines (`log10 = log2 * LOG10_2`, `10^x =
+// 2^(x * LOG2_10)`). Called PER SAMPLE in the compressor's gain path, hence the fast approximations.
+const LOG10_2: f64 = 0.301029995663981195;
+const LOG2_10: f64 = 3.321928094887362348;
 
 /// gain -> dB (`gainToDecibels`): 0 or below maps to a -100 dB floor.
 pub fn gain_to_decibels(gain: f32) -> f32 {
-    if gain > 0.0 {20.0 * libm::log10f(gain)} else {-100.0}
+    if gain > 0.0 {(20.0 * fast_log2(gain as f64) * LOG10_2) as f32} else {-100.0}
 }
 
 /// dB -> gain (`decibelsToGain`).
 pub fn decibels_to_gain(db: f32) -> f32 {
-    libm::powf(10.0, db * 0.05)
+    fast_exp2(db as f64 * 0.05 * LOG2_10) as f32
 }
 
 /// The soft-knee static compression curve (`GainComputer`): returns the (negative) dB attenuation for an input
@@ -377,6 +384,26 @@ mod tests {
         assert!((gain_to_decibels(1.0)).abs() < 1e-4);
         assert!((decibels_to_gain(-6.0) - 0.5011872).abs() < 1e-4);
         assert_eq!(gain_to_decibels(0.0), -100.0, "the silence floor");
+    }
+
+    // The fast dB conversions must be INAUDIBLY close to the exact `20*log10` / `10^(db/20)` they replaced,
+    // independent of the (now also-fast) TS side. Bounds the compression error directly in dB / linear gain.
+    #[test]
+    fn fast_db_conversions_match_the_exact_math() {
+        let mut max_db_error = 0.0f32;
+        for step in 1..200_000i32 {
+            let level = step as f32 / 12_500.0; // 8e-5 .. 16.0, spanning the compressor's input levels
+            let exact_db = 20.0 * libm::log10f(level);
+            max_db_error = max_db_error.max((gain_to_decibels(level) - exact_db).abs());
+        }
+        assert!(max_db_error < 1.0e-3, "max compression dB error {max_db_error}");
+        let mut max_gain_rel = 0.0f32;
+        for step in -1200..400i32 {
+            let db = step as f32 / 10.0; // -120 dB .. +40 dB makeup/reduction range
+            let exact_gain = libm::powf(10.0, db * 0.05);
+            max_gain_rel = max_gain_rel.max(((decibels_to_gain(db) - exact_gain) / exact_gain).abs());
+        }
+        assert!(max_gain_rel < 1.0e-5, "max makeup-gain relative error {max_gain_rel}");
     }
 
     #[test]
