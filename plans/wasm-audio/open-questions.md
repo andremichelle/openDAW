@@ -1,6 +1,7 @@
 # Open questions
 
-Consolidated from the plan docs, grouped by what resolves them. Source doc in brackets.
+Consolidated from the plan docs, grouped by what resolves them. Source doc in brackets. Status reflects
+the shipping engine as of 2026-07-07; ✅ = verified done in code, not just planned.
 
 ## 🟢 Settled by the composition spike (step 2 ✅)
 
@@ -12,69 +13,72 @@ shared memory, no collision) and measured **~250 ns/block (Node) / ~500 ns/block
 - **Memory model → A confirmed.** One shared memory + engine-assigned arena, device stateless, no JS
   in the loop. B (multi-memory) and C (host copies) are unnecessary as the primary path. [05]
 
-Still open within memory/composition (deferred, not blocking):
+Since resolved in the shipping engine:
 
-- **`SharedArrayBuffer`-backed memory** — spike used a non-shared `Memory`. Revisit when threads /
-  asset (`AudioData`) delivery need it (adds `shared`+`maximum` and atomics build flags). [05, 06]
-- **Dynamic dispatch** — spike used a fixed function import (one device). Runtime-loadable / multiple
-  devices need `Table` + `call_indirect` (or per-load re-instantiation). Validate when device count
-  is dynamic. [05, device-plugins]
-- **Device allocator strategy** — fine for stateless/arena devices (proven). Stateful devices
-  (own statics) also proven: relocate each module with `--global-base` into a disjoint slab
-  (engine 1 MiB, devices 4/8 MiB) — verified two stateful devices keep byte-identical state with no
-  collision. Devices needing a dynamic heap still need a custom allocator within their slab. [05]
+- **✅ `SharedArrayBuffer`-backed memory** — `createEngineMemory()` is
+  `new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})`; the main thread writes
+  `AudioData` straight into the engine's shared memory (no foreign-SAB copy). [05, 06]
+- **✅ Dynamic dispatch** — `boot.ts` instantiates the engine against a shared `Table`
+  (`__indirect_function_table`) and `linkDevice`s each device module into it, so runtime-loadable
+  multiple devices dispatch by `call_indirect`. [05, device-plugins]
+- **✅ Device allocator** — engine and all devices share one talc heap in the shared memory; stateful
+  devices keep state across reconciles. No per-device `--global-base` slab or custom allocator was
+  needed in the end. [05]
 
 ## 🟡 Device ABI & plugins
 
-- **ABI mechanism:** custom C-ABI now (kept WIT-shaped) vs WASM Component Model. [device-plugins]
-- **Isolation model** for untrusted / third-party devices (Phase B). [device-plugins]
-- **Device-package format** (wasm + UI bundle + manifest) and how the studio discovers/loads it.
-  [device-plugins, 06]
-- **Scriptable devices:** shared-memory layout for note events + params handed to scripts; telemetry
-  write-back path. [scriptable-devices]
+- **✅ Scriptable devices** — the `abi::script_*` bridge (`script_create` / `script_param` /
+  `script_sample` / `script_reset`, plus `host_script_note_on` / `note_off` / `host_script_audio`)
+  hands offset-sorted note events + params to the user `Processor` and streams telemetry back;
+  Werkstatt / Apparat / Spielwerk ship on it. [scriptable-devices]
+- **Decided — custom C-ABI (shipping).** The engine uses the custom offset-ABI, kept WIT-shaped; a
+  WASM Component Model migration stays a possible later swap, not blocking. [device-plugins]
+- **Open (Phase B, deferred by design):** isolation model for untrusted / third-party devices, the
+  device-package format (wasm + UI bundle + manifest), and studio discovery/loading of external
+  plugins. Stock devices are compiled-in today; nothing third-party loads yet. [device-plugins, 06]
 
 ## 🟡 Composite devices (Playfield)
 
 The generic composite mechanism ships (broadcast + child-side note filter, choke/exclude, per-child
-fx chains with device-declared host keys). Open from the requirements audit:
+fx chains with device-declared host keys).
 
-- **Mute / solo:** not implemented. The child boxes carry `mute` (40) / `solo` (41), but the composite
-  sum applies no per-child gain. Plan calls for a per-child ramped gain at the sum (a mini channel
-  strip), `silent = mute || (anySolo && !thisSolo)`, evaluated continuously, mirroring Bitwig. Queued.
-  [playfield-composite]
-- **Exclude / choke ownership — reopen.** Today the choke `index_key` / `exclude_key` come from the
-  JS-registered `CompositeSpec`, while the per-child fx host keys are exported by the child DEVICE
-  itself. The plan wants ALL control-field roles (mute / solo / exclude / filter-index) declared by the
-  plugin (one source of truth), so the composite reads them off the child, not the spec. Rework the
-  exclude path onto device-declared roles like the fx keys. [playfield-composite]
-- **Sidechain through a composite — to be tested.** Flattening registers each child and per-child fx
-  node in the one global graph by box UUID, so a child output feeding an external sidechain, or a
-  Playfield used as a sidechain source, should work for free. Not yet exercised. [playfield-composite,
-  device-processing]
+- **✅ Mute / solo** — each child carries a SILENT gate (`mute`, or not-soloed while a sibling is),
+  monitored on the child's `mute` (40) / `solo` (41) fields and applied at its pull route; the choke
+  set recomputes on any mute / solo / membership change. [playfield-composite]
+- **✅ Sidechain through a composite** — flattening registers each child + per-child fx node in the one
+  global graph by box UUID; exercised by `sidechain-device-tap`. [playfield-composite, device-processing]
+- **Open — exclude / choke ownership.** The choke `index_key` / `exclude_key` still come from the
+  JS-registered `CompositeSpec`, while the per-child fx host keys are declared by the child DEVICE.
+  Move the exclude / filter-index roles onto device-declared keys too (one source of truth). A cleanup,
+  not a gap. [playfield-composite]
 
-## 🟡 Boundary & sync
+## 🟢 Boundary & sync
 
-- **Box sync granularity:** full project reload vs incremental deltas to the Rust-side graph. [04]
+- **✅ Box sync granularity — incremental.** `SyncSource` opens with a full graph dump (project load),
+  then streams incremental transaction batches over a synchronous ordered channel, with a throttled
+  checksum round-trip that escalates any divergence. No per-edit full reload. [04]
 
-## 🟡 Binary size
+## 🟡 Binary size (optional)
 
-- **`engine.wasm` is 208 KB raw with no plugins** (59 KB brotli) vs the 193 KB TS bundle that holds all
-  devices. Investigated in `06`: not apples-to-apples (wasm ships its own allocator/collections/libm
-  that JS gets from V8; compare gzip/brotli), but real levers exist. Decide how far to push:
-  (1) install binaryen so the already-wired `wasm-opt -Oz` actually runs (~10–20 %); (2) replace the
-  23 KB generated `studio_boxes::registry()` imperative builder with a static data blob and/or register
-  only engine-read box types so device-box schemas are not baked into the engine; (3) cut the
-  BTreeMap/BTreeSet/sort monomorphisation explosion (~41 KB). What is the acceptable engine floor? [06]
+- **✅ `wasm-opt` runs** — binaryen is installed in both deploy workflows (with the Rust ≥1.82 feature
+  flags), so `wasm-opt -Oz` actually optimises the engine + plugins. [06, diary 18]
+- **Open (optional levers, no forced floor):** replace the generated `studio_boxes::registry()`
+  imperative builder with a static data blob and/or register only engine-read box types, and cut the
+  BTreeMap/BTreeSet/sort monomorphisation. Pursue only if size becomes a real constraint. [06]
 
-## 🟡 Testing
+## 🟢 Testing (settled by practice)
 
-- **Tolerance thresholds** per category — decide empirically as primitives land. [07]
-- **Pin shared transcendental implementations** for tighter exactness? [07]
-- **Fixture authoring:** hand-written vs captured from real projects. [07]
-- **wasm test runner:** wasm-bindgen-test vs custom node harness. [06]
+- **✅ Pin transcendentals** — `dsp::fast_math` is a WASM-CONTRACT bit-exact mirror of `lib-dsp`
+  `fast-math.ts`, with per-function accuracy + perf benchmarks. [07]
+- **✅ Tolerance thresholds / fixtures / runner** — per-category tolerances chosen empirically as
+  primitives landed; fixtures are both hand-written and captured from real `.od` projects; the suite
+  runs on the node/vitest harness, not wasm-bindgen-test. [06, 07]
 
-## ⚪ Rollout (later)
+## ⚪ Rollout
 
-- **Capability-gating granularity** — per-device vs per-mechanic. [09]
-- **Build shadow mode** (live WASM-vs-TS compare)? [09]
-- **Flip-default criteria** — parity coverage %, crash rate, perf headroom. [09]
+- **✅ Flip-default — done.** The WASM engine is the default; TS is opt-out only (localhost + dev
+  toggle), with no runtime fallback (TS is being retired). [09, diary 18]
+- **✅ Capability-gating** — `testFeatures` hard-gates on SIMD (plus the existing checks) at boot; with
+  no TS fallback, per-device gating is moot. [09]
+- **Open (optional):** a live WASM-vs-TS shadow-compare mode; the `/performance` A/B page already
+  covers offline comparison. [09]
