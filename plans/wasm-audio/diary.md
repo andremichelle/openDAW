@@ -205,7 +205,7 @@ scripts, by running each user Processor in the same AudioWorkletGlobalScope the 
 - Send and return routing: a unit's output can feed a bus (a submix) and it can also run parallel aux sends. A `bus_registry` plus `resolve_outputs` / `resolve_sends`, a `would_cycle` guard so a routing edit can never build a feedback loop, and an `AuxSendProcessor` that taps a unit pre-fader. This surfaced a real bug, a sidechained compressor ON a bus never resolved its sidechain (it was crushing its own hot synths), fixed by running an audio-track fx chain in the reconcile and by tapping the sidechain from the DEVICE output. A TS-versus-WASM differential harness on real projects (Chaotics, Ambition) proves the per-unit levels match. Done.
 - Soundfont playback: the TS side still keeps and parses the `.sf2`, but the WASM engine receives a SIMPLIFIED binary blob (sample, region, and preset tables plus normalized f32 PCM) over the same request-allocate-resolve handshake the samples use. `device-soundfont` reads that blob in place with no allocation, and it needed an `Adsr` and a `Smooth` port plus a 128-voice pool. The SF2 generators the TS voice honors (key and velocity ranges, pan, loop mode, root key, the volume envelope) are mirrored exactly. Done.
 
-## Day 15 (2026-07-03): the A/B page, a parity hunt, engine review fixes, SIMD and a profiler, NeuralAmp
+## Day 15 (2026-07-03): the A/B page, parity fixes, engine review fixes, SIMD and a profiler, NeuralAmp
 
 - The Performance A/B page renders a bundle front-to-end through BOTH engines offline in a worker, times only the render loop, and presents both as players you can flip between. It immediately earned its keep by exposing two silent-render bugs on "Open Up", each root-caused not patched. The scriptable-device scripts were never registered into the shared registry (the `registerScriptDevices` helper existed but nothing called it), so every chain that ran through a scriptable device went silent. And, WASM only, the hand-rolled registry entry omitted the parsed params and samples, so the bridge threw while loading and silenced the device, fixed by registering through the canonical `ScriptCompiler.wrap`. On the user's principle that the engine must report anything out of the ordinary, the bridge now emits a one-shot message when a scriptable device has no registered Processor rather than swallowing it. Done.
 - A real arpeggiator. `device-arp` had been a dummy that hardcoded a 1/16 grid and read no parameters, so a project's 1/3 arp ran at 1/16. Ported in full to mirror `ArpeggioDeviceProcessor`: the rate from the descending `RateFractions` table through `Fraction.toPPQN`, the Up, Down, and UpDown modes with their octave and velocity math, gate, repeat, and the velocity magnet, with parameters honored mid-block by splitting the range at update boundaries like the SDK's midi-effect template. It is a stateful pull source that writes `process_events` directly rather than the one-to-one transform template. Proven end to end, a 1/3 arp steps at 1280 pulses and a 1/16 at 240 where the dummy gave 240 for both. Done.
@@ -243,7 +243,7 @@ scripts, by running each user Processor in the same AudioWorkletGlobalScope the 
   carry NeuralAmp devices. Known gap, shared with the script bridge: devices have no `terminate` export, so a
   REMOVED device leaks its two nam instances until reload. Done. Only the Modular device remains unported.
 
-## Day 16 (2026-07-04): a cleanup batch, live meters over the real LiveStream, and a heap detective story
+## Day 16 (2026-07-04): a cleanup batch, live meters over the real LiveStream, and a sample-handle heap leak fix
 
 - A second engine-wide review (clean code and performance this time), its findings fixed in order under one
   hard invariant, the Vocoder.odb render fingerprint stayed byte-stable through the whole batch. An aux send
@@ -282,7 +282,7 @@ scripts, by running each user Processor in the same AudioWorkletGlobalScope the 
   tombstone. Soundfonts got the identical treatment. The probe now reads 7648.8 KB flat across 20 cycles and
   stays in the suite as a regression test. Done.
 
-## Day 17 (2026-07-05): a production-readiness audit, the last feature ports, and a per-block automation hunt
+## Day 17 (2026-07-05): a production-readiness audit, the last feature ports, and a per-block automation fix
 
 - A full production-readiness pass over the engine, its findings fixed in one batch. Panic messages were
   INVISIBLE in production (panic=abort strips them, a trap surfaces as an anonymous "unreachable"): the handler
@@ -357,3 +357,44 @@ scripts, by running each user Processor in the same AudioWorkletGlobalScope the 
   the user: a synth voice must NEVER be reset while still audible; the only hard cut left is genuine pool
   exhaustion. `env-bug-ts-vs-wasm.test.ts` pins both, its single-sample cap (0.01) is the real click detector
   since an 18-frame notch barely moves RMS. Done.
+
+## Day 19 (2026-07-07): recording crash fix, video export bounds, SIMD gate, compressor and fast-math perf
+
+- A recording-pause crash, memory access out of bounds (user hint: "creating a sample breaks the memory"). A
+  RecordAudio box churn bumps the sample handle's generation, so `sample_allocate` returns 0 for the now-dead
+  handle, and `boot.ts` was writing the decoded PCM at address 0, straight through the wasm heap base. The
+  sample and soundfont delivery paths now return on a 0 pointer instead of writing, and the freeze path in
+  `processor.ts` guards the same way. A committed `boot-dead-handle-guard.test.ts` pins it. Done.
+- A video export that rendered forever showing "Waiting for silence" (test-files/video.od). It is a Spielwerk
+  generating notes without end, so the render never falls silent and only stopped at the one-hour safety cap.
+  `VideoRenderer` now bounds the tail after the last region (RENDER_TAIL_SECONDS 12) and fades the audio out
+  over FADE_OUT_SECONDS 4, so an endless generator terminates cleanly. The same file had a blank shadertoy
+  spectrum because the offline render path never broadcast it, the offline worker now runs a `LiveStreamBroadcaster`
+  plus an `AudioAnalyser` feeding the same SPECTRUM/WAVEFORM `EngineAddresses` the live worklet uses, so the
+  shader gets its FFT per quantum in an export too. Done.
+- `testFeatures` now gates on SIMD. The WASM engine is the default with no TS fallback, so an unsupported
+  browser must fail loudly at boot, `features.ts` validates a minimal `v128` module through `WebAssembly.validate`
+  and throws "WebAssembly SIMD is required" rather than booting into a silent-render dead end. Done.
+- The compressor's per-sample dB conversions moved off libm `pow`/`log` onto the shared fast math.
+  `dsp::ctagdrc` `gain_to_decibels` / `decibels_to_gain` use `fast_log2` / `fast_exp2` with the LOG10_2 / LOG2_10
+  literals, mirrored in `lib-dsp` `conversation.ts`, so both engines stay bit-identical. A lesson from the user
+  worth keeping: I first mirrored BOTH engines to the fast pair and "verified" by comparing them, which is
+  comparing two new functions, not the new way against the old. The real proof is an ABSOLUTE accuracy test
+  against the exact math, `fast_log2` versus libm `log2` is 1.46e-9, and the compressor's dB path versus the
+  exact `Math` result is 8.8e-9 dB, below -160 dBFS and under the f32 floor. On `/performance` the Compressor
+  dropped 3.612 to 2.401 us/quantum, about a third off. Done.
+- A fast-math performance pass, measured end to end. First Tidal: I put its per-sample `pow` on the same fast
+  pair, and `/performance` said it REGRESSED, wasm 3.974 against 3.355 on libm, so I reverted it. The root cause
+  is instructive, `fast_exp2` built its power-of-two scale with a repeated-multiply LOOP up to 64 steps, and
+  Tidal feeds it large exponents (`p_ex * log2(base)`, very negative near the trough), so the loop dominated.
+  To see this straight I added the perf-comparison benchmarks the diary had been missing, a `fast_math::perf`
+  module timing each fast function against its libm twin (ignored by default, release-only). `sin_tau` 1.95x and
+  `log2` 1.68x are genuine wins, but `exp2` was 0.17 to 0.26x, a 4-6x LOSS, entirely that loop. So I rewrote the
+  scale as a constant-time IEEE-754 exponent bit-set, `f64::from_bits(((steps + 1023) as u64) << 52)` in Rust
+  and the mirrored `Uint32`/`Float64` view in TS, the exact same `2^steps` the loop produced (0 mismatches over
+  the full range, every accuracy and edge test unchanged) but flat across magnitude, native 4.45 ns and twice
+  the loop's speed. On wasm it showed no measurable device win, `exp2` is not a bottleneck in any current device
+  and the change sits under the run-to-run noise, but it is kept as a zero-risk removal of the loop cliff that
+  sank Tidal, so no future device feeding it large `|x|` can hit that pathology. Tidal stays on libm, and I did
+  not re-attempt the fast pair there since the expected gain is now below the measurement noise and it would
+  trade libm's ~1e-13 accuracy for the fast pair's ~1e-7 for nothing provable. Done.

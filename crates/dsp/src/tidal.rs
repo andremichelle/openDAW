@@ -5,10 +5,10 @@
 const SLOPE_MULT: f64 = 10.0;
 
 /// `pow` for the shaper's hot loop: `exp2(exponent * log2(base))` — mathematically what `pow` computes,
-/// minus libm's correctly-rounded dual-double slow path, which dominated Tidal's render cost (measured
-/// ~110ms of a 145ms/60s marginal). Accuracy stays ~1e-13 relative (log2's ~1 ulp error amplified by the
-/// exponent, at most 1024 here), far below the f32 output resolution. `base` is 0..1 by construction; the
-/// 0 edge flows through exactly (log2(0) = -inf, exp2(-inf) = 0).
+/// minus libm's correctly-rounded dual-double slow path, which dominated Tidal's render cost. NOTE: the
+/// polynomial `fast_exp2` is NOT a win here — its power-of-two scaling is an iterative loop, and Tidal's
+/// exponent (`p_ex * log2(base)`, very negative near the trough) drives that loop to its 64-step clamp,
+/// measurably slower than libm's constant-time `exp2`. libm `exp2`/`log2` stay. Accuracy ~1e-13 relative.
 #[inline]
 fn fast_pow(base: f64, exponent: f64) -> f64 {
     libm::exp2(exponent * libm::log2(base))
