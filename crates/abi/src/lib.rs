@@ -563,10 +563,24 @@ pub fn bind_parameter(path: &[u16]) -> u32 {
 /// id. The slot memory is engine-owned; fetch its pointer with [`broadcast_ptr`] (0 until the engine drains
 /// the bind after `init`) and write the current values each `process`.
 pub fn bind_broadcast(path: &[u16], len: u32) -> u32 {
+    // Package type 1 = FLOAT_ARRAY (the `broadcastFloats` mirror): the UI reads it with `subscribeFloats`,
+    // so even a `len` of 1 stays a one-element ARRAY (the Maximizer's reduction). A SCALAR broadcast the UI
+    // reads with `subscribeFloat` uses `bind_broadcast_float` instead.
     #[cfg(target_family = "wasm")]
-    { unsafe { host_bind_broadcast(path.as_ptr() as u32, path.len() as u32, len, 0) } }
+    { unsafe { host_bind_broadcast(path.as_ptr() as u32, path.len() as u32, len, 1) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (path, len); 0 }
+}
+
+/// Register a SCALAR live-data broadcast slot (one f32, the TS `broadcaster.broadcastFloat(...)` mirror): the
+/// UI reads it with `subscribeFloat`, NOT `subscribeFloats` (e.g. the Tidal editor's live LFO phase). Use
+/// [`bind_broadcast`] for anything the UI reads as a Float32Array, including a one-element array.
+pub fn bind_broadcast_float(path: &[u16]) -> u32 {
+    // Package type 0 = FLOAT (scalar).
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_bind_broadcast(path.as_ptr() as u32, path.len() as u32, 1, 0) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = path; 0 }
 }
 
 /// Register an INT-RING broadcast slot (TS `broadcastIntegers` consume-on-read, e.g. the Velocity device's

@@ -1521,6 +1521,50 @@ fn a_field_edit_raises_the_light_signal_and_an_attach_the_heavy_one() {
 }
 
 #[test]
+fn an_output_fx_param_edit_delivers_through_reconcile() {
+    // The master/output unit's fx chain is built statically (not a reconciled unit), so a knob edit on a
+    // master effect can't ride a unit reconcile. `output_strip` binds each with an invalidate that flags
+    // `output_params_dirty`, and `reconcile_units` re-pushes the changed values. This pins that path end to
+    // end: an edit on an output-fx param must reach the device (its handle's `last` advancing proves the
+    // `refresh_params` delivery ran). A regression here is the "master Maximizer threshold does nothing" bug.
+    const FX: Uuid = [50u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(FX, "TestEffect", &[(11, FieldValue::Float32(0.0))])
+    ]);
+    // Observe the param exactly as `output_strip` does: with the `output_params_dirty` invalidate, and NO
+    // params signal set (so a later field edit falls back to that invalidate — the output-unit case).
+    let invalidate: Rc<dyn Fn()> = {
+        let dirty = engine.output_params_dirty.clone();
+        Rc::new(move || dirty.set(true))
+    };
+    let (handle, subs, collections, _) = engine.observe_param(FX, &[11], 0, &invalidate);
+    let last_probe = handle.last.clone();
+    struct StubSink;
+    impl crate::param_automation::ParamSink for StubSink {
+        fn set_params(&mut self, _: alloc::vec::Vec<crate::param_automation::ParamHandle>, _: bool) {}
+        fn state_ptr(&self) -> u32 {0}
+    }
+    engine.output_device_params.push(DeviceParams {
+        device_uuid: FX, reg: stub_device(DEVICE_KIND_AUDIO_EFFECT), state_ptr: 0,
+        sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
+        paths: alloc::vec![alloc::vec![11]], handles: alloc::vec![handle], field_subs: subs, collections,
+        observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
+        param_hub_sub: None, sample_hub_sub: None, broadcast_slots: Vec::new()
+    });
+    // The observe catch-up already fired the flag + set the cell to the current value; clear so only the EDIT counts.
+    engine.output_params_dirty.set(false);
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(FX, vec![11]),
+        old: FieldValue::Float32(0.0), new: FieldValue::Float32(-12.0)
+    }], &engine.registry).expect("threshold edit");
+    assert!(engine.output_params_dirty.get(), "an output-fx param edit flags output_params_dirty");
+    engine.reconcile_units();
+    assert_eq!(last_probe.get(), -12.0, "reconcile re-pushes the edited value to the output-fx device");
+    assert!(!engine.output_params_dirty.get(), "the dirty flag is consumed");
+}
+
+#[test]
 fn a_pointer_head_field_observation_tracks_the_target_box_and_the_repoint() {
     // The Zeitgeist shape: the device observes `[10, 10]` / `[10, 11]`, where key 10 on its own box is
     // the `groove` POINTER to a GrooveShuffleBox carrying `amount` (10) and `duration` (11). The engine

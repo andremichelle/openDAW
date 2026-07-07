@@ -94,7 +94,7 @@ impl AudioEffect for Tidal {
         state.depth_id = abi::bind_parameter(&DEPTH_FIELD);
         state.offset_degrees_id = abi::bind_parameter(&OFFSET_FIELD);
         state.channel_offset_degrees_id = abi::bind_parameter(&CHANNEL_OFFSET_FIELD);
-        state.phase_id = abi::bind_broadcast(&PHASE_FIELD, 1);
+        state.phase_id = abi::bind_broadcast_float(&PHASE_FIELD); // scalar: the editor reads it with subscribeFloat
         state.phase_ptr = 0;
         state.needs_update = true; // recompute the LFO shape on the first block
     }

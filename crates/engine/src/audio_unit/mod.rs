@@ -643,15 +643,18 @@ impl Engine {
         });
         // THE output unit's own audio-effect chain (e.g. a master Tidal), wired between the summing bus and
         // the master strip: bus -> fx0 -> ... -> strip, ordered by device index. Each device binds its
-        // parameters like an instrument unit's, and the initial values are pushed below. Built once at bind
-        // (the output unit is a fixed singleton), so the chain is not reactive yet.
+        // parameters like an instrument unit's, and the initial values are pushed below. The chain's STRUCTURE
+        // is built once at bind (the output unit is a fixed singleton, not reconciled), but its parameter EDITS
+        // must still reach the devices: a knob turn on a master effect marks `output_params_dirty`, and
+        // `reconcile_units` re-pushes the values through `refresh_params`, exactly like any other channel.
         let mut source = master_output;
         let mut source_id = self.master_id;
         let audio = IndexedCollection::observe(&mut self.graph, Address::of(uuid, vec![UNIT_AUDIO_KEY]), EFFECT_INDEX_KEY);
         let mut device_params: Vec<DeviceParams> = Vec::new();
-        // THE output unit is a fixed singleton built once at bind, not reconciled, so its parameters need no
-        // runtime re-bind: a no-op invalidate (its static values are pushed by `refresh_params` below).
-        let noop: Rc<dyn Fn()> = Rc::new(|| {});
+        let invalidate: Rc<dyn Fn()> = {
+            let dirty = self.output_params_dirty.clone();
+            Rc::new(move || dirty.set(true))
+        };
         for device_uuid in audio.sorted() {
             let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
             let device = match resolved {
@@ -664,7 +667,7 @@ impl Engine {
             let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
             let node_state = node.borrow().state_ptr();
             let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
-            device_params.push(self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink), &noop));
+            device_params.push(self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink), &invalidate));
             node.borrow_mut().set_audio_source(source);
             source = node.borrow().audio_output();
             let meter_slot = node.borrow().meter_slot();
@@ -780,6 +783,15 @@ impl Engine {
         }
         if self.solo_dirty.replace(false) {
             self.update_solo();
+        }
+        // THE output unit is not in `audio_units` (built statically in `output_strip`), so a param/field edit on
+        // one of its effects cannot ride a unit reconcile — its invalidate just flags this, and we re-push the
+        // output-fx values here so a master effect's knob reaches the device like every other channel's.
+        if self.output_params_dirty.replace(false) {
+            let position = self.transport.position();
+            for device in &self.output_device_params {
+                refresh_params(&device.handles, device.reg, device.state_ptr, position);
+            }
         }
     }
 

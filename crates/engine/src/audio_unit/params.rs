@@ -302,9 +302,12 @@ impl Engine {
         let mut broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)> = Vec::with_capacity(broadcast_binds.len());
         for (id, path, len, package_type) in broadcast_binds {
             let slot = engine_env::telemetry::broadcast_slot(len as usize);
+            // Honor the type the device DECLARED (via `bind_broadcast` / `bind_broadcast_float` /
+            // `bind_broadcast_ints`), not a length heuristic: a one-element FLOAT_ARRAY (the Maximizer's
+            // reduction, read with `subscribeFloats`) must NOT collapse to a scalar FLOAT.
             let package_type = match package_type {
                 crate::broadcast::PACKAGE_INT_RING => crate::broadcast::PACKAGE_INT_RING,
-                _ if len == 1 => crate::broadcast::PACKAGE_FLOAT,
+                crate::broadcast::PACKAGE_FLOAT => crate::broadcast::PACKAGE_FLOAT,
                 _ => crate::broadcast::PACKAGE_FLOAT_ARRAY
             };
             self.broadcasts.register(device_uuid, &path, package_type, &slot);

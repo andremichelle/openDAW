@@ -1046,6 +1046,7 @@ struct Engine {
     dirty_units: Rc<RefCell<Vec<Uuid>>>, // unit uuids a related edit touched; reconcile rewires ONLY these, not all
     output_audio: Option<IndexedCollection>, // THE output unit's audio-fx chain (built once at bind, see output_strip)
     output_device_params: Vec<DeviceParams>, // the output-fx devices' bound params, retained so they stay observed
+    output_params_dirty: Rc<Cell<bool>>, // a param/field edit on an output-fx device: re-push its values in reconcile
     // The audio-output registry (Route C): each unit's strip output keyed by its box address, so a sidechain
     // pointer resolves to the buffer to read and the node to depend on. Each unit keeps its own persistent
     // sidechain bindings (see `AudioUnitBinding::sidechains`); the resolve pass re-resolves them per reconcile.
@@ -1107,6 +1108,7 @@ impl Engine {
             dirty_units: Rc::new(RefCell::new(Vec::new())),
             output_audio: None,
             output_device_params: Vec::new(),
+            output_params_dirty: Rc::new(Cell::new(false)),
             output_registry: AudioOutputBufferRegistry::new(),
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
