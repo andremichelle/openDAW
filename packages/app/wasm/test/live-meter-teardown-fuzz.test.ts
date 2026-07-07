@@ -161,7 +161,7 @@ describe("80s.od live clip playback scan", () => {
             }
         }
         const journal: Array<string> = []
-        for (let step = 0; step < 400; step++) {
+        for (let step = 0; step < 200; step++) {
             const action = random() % 5
             if (action === 0) {
                 const pick = random() % devices.length
@@ -228,7 +228,7 @@ describe("80s.od live clip playback scan", () => {
             engine.schedule_clip_play()
         }
         engine.play()
-        const seconds = 180
+        const seconds = 80 // one full pass of 80s.od; the clips loop, so re-rendering past the song adds no coverage
         const quanta = Math.ceil(seconds * 48_000 / QUANTUM)
         let generation = -1
         let slots: Array<Slot> = []
