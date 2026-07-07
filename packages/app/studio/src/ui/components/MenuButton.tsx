@@ -66,7 +66,7 @@ export const MenuButton =
                     const rect = button.getBoundingClientRect()
                     const menu = Menu.create(root, groupId)
                     menu.moveTo(rect[horizontal ?? "left"], rect.bottom + Menu.Padding)
-                    menu.attach(Surface.get(button).flyout)
+                    menu.attach(button.closest("dialog") ?? Surface.get(button).flyout)
                     menu.own({terminate: toggle})
                     return Option.wrap(menu)
                 },

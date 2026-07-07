@@ -4,21 +4,6 @@ component
   gap: 1em
   padding: 1em 0
 
-  .select
-    background: rgba(255, 255, 255, 0.06)
-    color: inherit
-    border: 1px solid rgba(255, 255, 255, 0.12)
-    border-radius: 4px
-    padding: 0.35em 0.5em
-    font: inherit
-    font-size: 0.875em
-    cursor: pointer
-    width: 8em
-    outline: none
-
-    &:hover
-      background-color: rgba(255, 255, 255, 0.1)
-
   > .controls-row
     display: flex
     flex-direction: row
@@ -45,15 +30,18 @@ component
         opacity: 0.7
 
   > .select-row
-    display: flex
-    flex-direction: row
+    display: grid
+    grid-auto-flow: column
+    grid-auto-columns: minmax(0, 1fr)
     gap: 1em
+    width: 0
+    min-width: 100%
 
     > .field
       display: flex
       flex-direction: column
       gap: 0.25em
-      flex: 1
+      min-width: 0
 
       > label
         font-size: 0.75em

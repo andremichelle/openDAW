@@ -1,6 +1,7 @@
 export {migrateAudioClipBox} from "./MigrateAudioClipBox"
 export {migrateAudioFileBox} from "./MigrateAudioFileBox"
 export {migrateAudioRegionBox} from "./MigrateAudioRegionBox"
+export {migrateAudioRegionOverlaps} from "./MigrateAudioRegionOverlaps"
 export {migrateAudioUnitBox} from "./MigrateAudioUnitBox"
 export {migrateDelayDeviceBox} from "./MigrateDelayDeviceBox"
 export {migrateMIDIOutputDeviceBox} from "./MigrateMIDIOutputDeviceBox"

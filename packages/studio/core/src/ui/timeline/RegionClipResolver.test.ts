@@ -158,6 +158,18 @@ describe("RegionClipResolver.sortAndJoinMasks", () => {
         expect(result[0]).toEqual(createMask(0, 20))
     })
 
+    it("merges masks separated only by a sub-float32 drift gap (#287)", () => {
+        // Dragging adjacent seconds-based audio clips yields masks that should abut but sit a
+        // ppqn-drift gap apart. Exact merge left them separate, carving the ground region into a
+        // zero-width sliver. They must merge within the boundary tolerance.
+        const masks = [createMask(10, 50), createMask(50 + 1e-9, 90)]
+        const result = RegionClipResolver.sortAndJoinMasks(masks)
+
+        expect(result).toHaveLength(1)
+        expect(result[0].position).toBe(10)
+        expect(result[0].complete).toBe(90)
+    })
+
     it("should handle identical masks", () => {
         const masks = [
             createMask(0, 10),
@@ -757,6 +769,18 @@ describe("RegionClipResolver.createTasksFromMasks", () => {
             expect(tasks).toHaveLength(1)
             expect(tasks[0].type).toBe("start")
             if (tasks[0].type === "start") {expect(tasks[0].position).toBe(15520)}
+        })
+
+        it("drops near-adjacent masks over a ground region to a single delete, no zero-width sliver (#287)", () => {
+            // Full flow: two dragged clips carve a covered region. Their masks abut within float32
+            // drift ([10,50] and [50+1e-9,90]). sortAndJoinMasks must merge them so the region
+            // is deleted outright rather than separated into a zero-width remainder between them.
+            const region = createRegion(10, 80) // [10, 90]
+            const joined = RegionClipResolver.sortAndJoinMasks([createMask(10, 50), createMask(50 + 1e-9, 90)])
+            const tasks = runCreateTasks([region], joined.map(mask => createMask(mask.position, mask.complete)))
+
+            expect(tasks).toHaveLength(1)
+            expect(tasks[0].type).toBe("delete")
         })
     })
 })

@@ -99,6 +99,8 @@ export class Menu implements Terminable, Lifecycle {
 
     #x: int = 0
     #y: int = 0
+    #originX: int = 0
+    #originY: int = 0
 
     private constructor(parent: Option<Menu>, item: MenuItem, groupId: string) {
         this.#terminator = new Terminator()
@@ -136,10 +138,19 @@ export class Menu implements Terminable, Lifecycle {
     moveTo(x: int, y: int): void {
         this.#x = x | 0
         this.#y = y | 0
-        this.#element.style.transform = `translate(${this.#x}px, ${this.#y}px)`
+        this.#element.style.transform = `translate(${this.#x - this.#originX}px, ${this.#y - this.#originY}px)`
     }
 
     attach(parentElement: Element): void {
+        if (this.#parent.isEmpty() && parentElement.localName === "dialog") {
+            const rect = parentElement.getBoundingClientRect()
+            const style = getComputedStyle(parentElement)
+            this.#originX = (rect.left + parseFloat(style.borderLeftWidth)) | 0
+            this.#originY = (rect.top + parseFloat(style.borderTopWidth)) | 0
+            this.#element.style.position = "absolute"
+            this.#element.style.inset = "0 auto auto 0"
+            this.moveTo(this.#x, this.#y)
+        }
         parentElement.appendChild(this.#element)
         const {right, bottom, width, height} = this.#element.getBoundingClientRect()
         const owner = Surface.get(parentElement).owner
