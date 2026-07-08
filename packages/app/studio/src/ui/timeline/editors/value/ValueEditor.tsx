@@ -146,7 +146,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                                         valueAxis,
                                         eventMapping,
                                         reference: adapter,
-                                        collection: reader.content
+                                        collection: reader.content,
+                                        chainPending: true
                                     }))
                                 }
                             })

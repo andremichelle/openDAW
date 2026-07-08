@@ -964,3 +964,52 @@ describe("P2P concurrent editing simulation", () => {
         expect(() => scene.graph.edges().validateRequirements()).not.toThrow()
     })
 })
+
+describe("#208 create-then-settle-move is a single undo step", () => {
+    // ValueEditor double-click creates a node with editing.modify(fn, false) — the create lands
+    // unmarked in #pending — then immediately runs a ValueMoveModifier for the same gesture. If the
+    // settle-move commits with the default mark=true, the create is flushed as one history entry and
+    // the move as a second, so the user must press undo twice. Committing the settle-move with
+    // mark=false too keeps both in #pending, so the next mark() flushes them as ONE new entry without
+    // folding into any prior action.
+    interface TestScene {
+        graph: BoxGraph
+        editing: BoxEditing
+    }
+
+    beforeEach<TestScene>((scene: TestScene) => {
+        scene.graph = createGraphWithFactory()
+        scene.editing = new BoxEditing(scene.graph)
+    })
+
+    it("reproduces the bug: unmarked create + marked settle-move needs two undos", (scene: TestScene) => {
+        const box = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate()), false).unwrap()
+        const uuid = box.address.uuid
+        scene.editing.modify(() => box.bool.setValue(true))
+        expect(scene.graph.findBox(uuid).nonEmpty()).true
+        scene.editing.undo()
+        expect(scene.graph.findBox(uuid).nonEmpty()).true
+        scene.editing.undo()
+        expect(scene.graph.findBox(uuid).nonEmpty()).false
+    })
+
+    it("fix: unmarked create + unmarked settle-move needs a single undo", (scene: TestScene) => {
+        const box = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate()), false).unwrap()
+        const uuid = box.address.uuid
+        scene.editing.modify(() => box.bool.setValue(true), false)
+        expect(scene.graph.findBox(uuid).nonEmpty()).true
+        scene.editing.undo()
+        expect(scene.graph.findBox(uuid).nonEmpty()).false
+    })
+
+    it("fix preserves prior history: the gesture is its own undo step, not merged into the previous action", (scene: TestScene) => {
+        const prior = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate())).unwrap()
+        const priorUuid = prior.address.uuid
+        const box = scene.editing.modify(() => BarBox.create(scene.graph, UUID.generate()), false).unwrap()
+        const uuid = box.address.uuid
+        scene.editing.modify(() => box.bool.setValue(true), false)
+        scene.editing.undo()
+        expect(scene.graph.findBox(uuid).nonEmpty()).false
+        expect(scene.graph.findBox(priorUuid).nonEmpty()).true
+    })
+})

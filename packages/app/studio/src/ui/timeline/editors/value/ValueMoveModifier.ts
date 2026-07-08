@@ -39,6 +39,7 @@ type Construct = Readonly<{
     pointerValue: unitValue
     reference: ValueEventBoxAdapter
     collection: ValueEventCollectionBoxAdapter
+    chainPending?: boolean
 }>
 
 type SnapGuide = {
@@ -63,6 +64,7 @@ export class ValueMoveModifier implements ValueModifier {
     readonly #pointerValue: unitValue
     readonly #reference: ValueEventBoxAdapter
     readonly #collection: ValueEventCollectionBoxAdapter
+    readonly #chainPending: boolean
 
     readonly #notifier: Notifier<void>
     readonly #masks: ReadonlyArray<[ppqn, ppqn]>
@@ -76,7 +78,7 @@ export class ValueMoveModifier implements ValueModifier {
 
     private constructor({
                             editing, element, context, selection, valueAxis, eventMapping, snapping,
-                            pointerPulse, pointerValue, reference, collection
+                            pointerPulse, pointerValue, reference, collection, chainPending
                         }: Construct) {
         this.#editing = editing
         this.#element = element
@@ -89,6 +91,7 @@ export class ValueMoveModifier implements ValueModifier {
         this.#pointerValue = pointerValue
         this.#reference = reference
         this.#collection = collection
+        this.#chainPending = chainPending ?? false
 
         this.#notifier = new Notifier<void>()
         this.#masks = this.#buildMasks()
@@ -248,7 +251,7 @@ export class ValueMoveModifier implements ValueModifier {
             // Add back only the reused adapters (new ones are already added via onAdded)
             reusedAdapters.forEach(adapter => collection.add(adapter))
             obsoleteEvents.forEach(event => event.box.delete())
-        })
+        }, !this.#chainPending)
         this.#dispatchChange()
     }
 
