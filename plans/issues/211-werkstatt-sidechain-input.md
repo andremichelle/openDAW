@@ -1,0 +1,31 @@
+# Sidechain input for Werkstatt (#211)
+
+**Doability:** ⭐⭐⭐☆☆ (3/5) — the sidechain routing mechanism (pointer field + `bind_sidechain`/`resolve_input`) is standard and proven on Compressor/Vocoder; the new work is widening the script bridge ABI to carry a second audio buffer through to user scripts, in lockstep across TS and WASM.
+**Type:** feature
+**Scope:** medium
+
+## What is asked
+Give the Werkstatt scriptable device a sidechain/external audio input so user scripts (e.g. a hand-written vocoder) can read a second signal, not just the device's main input.
+
+## Current behaviour / relevant code
+- Werkstatt schema: `packages/studio/forge-boxes/src/schema/devices/audio-effects/WerkstattDeviceBox.ts:5-9` — fields `code` (string), `parameters` (pointer-hub, `Pointers.Parameter`), `samples` (pointer-hub, `Pointers.Sample`). **No sidechain field**, unlike Compressor.
+- Werkstatt adapter: `packages/studio/adapters/src/devices/audio-effects/WerkstattDeviceBoxAdapter.ts:13-57` — no `sideChain` getter (contrast `CompressorDeviceBoxAdapter.ts:38`).
+- Werkstatt TS processor: `packages/studio/core-processors/src/devices/audio-effects/WerkstattDeviceProcessor.ts` — `processAudio` (line 175) builds `#io = {src: [L,R], out: [L,R]}` from the single upstream source (line 167-170) and calls `proc.process(this.#io, block)` (line 190). `UserIO` interface (lines 34-37) only has `src`/`out` — no sidechain slot.
+- Script bridge (JS↔WASM boundary): `packages/studio/core-wasm/src/script-bridge.ts` — `imports()` (lines 119-133) exposes `host_script_audio(handle, srcL, srcR, outL, outR, s0, s1, index, p0, p1, bpm, flags)`, a fixed 4-audio-pointer signature; `#audio()` (lines 188-229) builds `io.src`/`io.out` from exactly those two buffers before calling `proc.process(io, block)`.
+- Rust Werkstatt mirror: `crates/stock-devices/device-werkstatt/src/lib.rs` — `process()` (lines 87-122) resolves only `MAIN_INPUT` via `abi::resolve_input(MAIN_INPUT)` (line 93); no `bind_sidechain` call anywhere in this crate. Calls `abi::script_audio(handle, src_l, src_r, out_l, out_r, &Block{...})` (lines 110-111, 119-120) — one buffer pair only.
+- **Sidechain wiring to mirror** (Compressor): schema field `CompressorDeviceBox.ts:45-47` (`30: {type:"pointer", name:"side-chain", pointerType: Pointers.SideChain, mandatory:false}`); adapter `CompressorDeviceBoxAdapter.ts:38` (`get sideChain()`); UI `packages/app/studio/src/ui/devices/SidechainButton.tsx:19-56` (menu of `rootBoxAdapter.labeledAudioOutputs()`, sets `sideChain.targetAddress`); TS processor `CompressorDeviceProcessor.ts:136-152` (resolves `adapter.sideChain.targetVertex` → `context.audioOutputBufferRegistry.resolve(address)`, registers a graph edge via `context.registerEdge(...)`, falls back to the main signal if unresolved); Rust `device-compressor/src/lib.rs:42,131,187` (`SIDE_CHAIN_FIELD=[30]`, `abi::bind_sidechain` in `init`, `abi::resolve_input` in `process_audio`); engine plumbing `crates/abi/src/lib.rs:616-646`, `crates/engine/src/audio_unit/wiring.rs:116-125`, `crates/engine/src/audio_unit/routing.rs:62,262`.
+- **Vocoder** (`VocoderDeviceBox.ts:47-49`, field `19 modulator-source` + field `30 side-chain`) confirms the pattern generalizes: the sidechain pointer field is the sole audio-path mechanism, and a separate string/mode field just decides how the resolved sidechain buffer is interpreted downstream.
+
+## Plan
+1. Schema: add a `30: {type:"pointer", name:"side-chain", pointerType: Pointers.SideChain, mandatory:false}` field to `WerkstattDeviceBox.ts`, identical to Compressor/Vocoder.
+2. Adapter: add `get sideChain(): PointerField<Pointers.SideChain> {return this.#box.sideChain}` to `WerkstattDeviceBoxAdapter.ts`.
+3. TS processor: in `WerkstattDeviceProcessor.ts`, add the same `ProcessPhase.Before` resolution hook Compressor uses (subscribe to `adapter.sideChain`, resolve via `context.audioOutputBufferRegistry`, `context.registerEdge(...)` for graph ordering, store the resolved `AudioBuffer` or a silent fallback). Extend `UserIO` (lines 34-37) with a new member, e.g. `sideChain: ReadonlyArray<Float32Array>`, populated each block in `processAudio` alongside `src`/`out`.
+4. Script bridge: widen `host_script_audio`'s signature in `script-bridge.ts` (`imports()` lines 119-133, `#audio()` lines 188-229) to accept a second pair of buffer pointers (sidechain L/R), building `io.sideChain` from them before calling `proc.process(io, block)`.
+5. Rust: add `SIDE_CHAIN_FIELD` + `abi::bind_sidechain`/`abi::resolve_input` to `device-werkstatt/src/lib.rs::init`/`process()` (mirroring `device-compressor`), and widen `abi::script_audio(...)`'s call signature and the corresponding WASM import to pass the resolved sidechain buffer pointers through to the JS `#audio()` bridge.
+6. UI: add `SidechainButton` to `WerkstattDeviceEditor.tsx` exactly as `CompressorDeviceEditor.tsx`/Vocoder's editor do.
+7. Documentation for script authors: update `werkstatt-examples.ts`, `werkstatt-default.js`, `werkstatt-starter-prompt.txt` (all in the Werkstatt editor folder) to document the new `io.sideChain` member and add an example script (a simple vocoder) demonstrating its use — this is the actual point of the feature per the issue.
+
+## Risks / open questions
+- The script bridge ABI change (widening `host_script_audio`) touches a frozen cross-engine contract — must be updated in lockstep per the project's "WASM frozen contracts" rule, and needs a version bump/compat check if any serialized user scripts assume the old signature (they shouldn't, since scripts call `process(io, block)`, not the host import directly, but verify no script currently destructures `io` in a way that would break with an added field).
+- Same feature is worth checking against Apparat/Spielwerk (other scriptable devices sharing `crates/engine/src/script_device.rs`) — if they're expected to get sidechain too eventually, consider adding the `sideChain` plumbing at the shared `script_device.rs` level rather than duplicating per-device, to avoid drift.
+- Decide whether the sidechain is mono or stereo into the script, and what the fallback buffer is when unresolved (silence, matches Compressor's behavior) — document this clearly since script authors will branch on it.
