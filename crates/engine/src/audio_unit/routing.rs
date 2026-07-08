@@ -138,6 +138,9 @@ impl Engine {
     /// built bus) falls back to the `master`. Re-wire only when the source strip or the target sum changed; a
     /// feedback loop is left unrouted (silent) rather than silently broken by the topological sort.
     pub(crate) fn resolve_one_output(&mut self, unit: &mut AudioUnitBinding) {
+        if self.is_output_unit(unit.unit) {
+            return; // terminal master: its strip output IS the render buffer (published by `reconcile_bus`), not routed onward
+        }
         let Some((strip_id, strip_output)) = unit.wired.as_ref().map(|wired| wired.strip()) else {
             self.unwire_output_route(unit); // no wired chain: drop any stale route
             return;

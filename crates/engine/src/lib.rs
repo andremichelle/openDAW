@@ -25,7 +25,6 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell, UnsafeCell};
-use bindings::indexed_collection::IndexedCollection;
 use bindings::value_collection::ValueCollection;
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 use boxgraph::address::{Address, Uuid};
@@ -294,7 +293,7 @@ pub(crate) mod broadcast;
 mod time_stretch;
 mod tempo_map;
 mod script_device;
-use audio_unit::{AudioUnitBinding, DeviceParams, Members};
+use audio_unit::{AudioUnitBinding, Members};
 mod composite;
 mod param_automation;
 use param_automation::ParamHandle;
@@ -1044,9 +1043,6 @@ struct Engine {
     solo_dirty: Rc<Cell<bool>>,
     unit_changes: Rc<RefCell<Members>>, // recorded by the audio-units membership observer, drained by reconcile
     dirty_units: Rc<RefCell<Vec<Uuid>>>, // unit uuids a related edit touched; reconcile rewires ONLY these, not all
-    output_audio: Option<IndexedCollection>, // THE output unit's audio-fx chain (built once at bind, see output_strip)
-    output_device_params: Vec<DeviceParams>, // the output-fx devices' bound params, retained so they stay observed
-    output_params_dirty: Rc<Cell<bool>>, // a param/field edit on an output-fx device: re-push its values in reconcile
     // The audio-output registry (Route C): each unit's strip output keyed by its box address, so a sidechain
     // pointer resolves to the buffer to read and the node to depend on. Each unit keeps its own persistent
     // sidechain bindings (see `AudioUnitBinding::sidechains`); the resolve pass re-resolves them per reconcile.
@@ -1106,9 +1102,6 @@ impl Engine {
             solo_dirty: Rc::new(Cell::new(false)),
             unit_changes: Rc::new(RefCell::new(Members::default())),
             dirty_units: Rc::new(RefCell::new(Vec::new())),
-            output_audio: None,
-            output_device_params: Vec::new(),
-            output_params_dirty: Rc::new(Cell::new(false)),
             output_registry: AudioOutputBufferRegistry::new(),
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
@@ -1616,15 +1609,17 @@ impl Engine {
             None
         };
         self.tempo_map.borrow_mut().update(self.controls.bpm.get(), tempo_curve);
-        // Master summing bus: every instrument audio unit's channel strip sums into it. It is the static
-        // input bus of THE output audio unit, whose channel strip (built by `output_strip`) is the engine's
-        // final master and what `render` reads. Both the bus and the output unit are fixed singletons.
+        // Master summing bus: every audio unit's channel strip sums into it (`sum_of(None)`). It is the SUM of
+        // THE output audio unit, which reconciles like any bus (`reconcile_bus`): master-sum -> its fx chain ->
+        // its strip, whose output it republishes to `output_bus` (what `render` reads) on every rebuild.
         let output_buffer = shared_audio_buffer();
         let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
         self.master_id = self.context.register_processor(master.clone());
         self.context.set_label(self.master_id, alloc::string::String::from("master-sum"));
         self.master = Some(master);
-        self.output_bus = Some(self.output_strip(output_buffer)); // master strip output (or the bus, if no output unit)
+        // Fallback until the output unit reconciles (in `observe_audio_units` below): render the raw master sum.
+        // The output unit reconciles like any bus (`reconcile_bus`) and republishes `output_bus` to its strip.
+        self.output_bus = Some(output_buffer);
         // The MIDI-out targets must register BEFORE the units reconcile (inside `observe_audio_units`): a
         // MIDI-output unit's initial CC push resolves its device through the registry (TS resolves it off
         // the complete graph at construction).

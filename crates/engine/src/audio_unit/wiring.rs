@@ -62,25 +62,39 @@ impl Engine {
 
     pub(crate) fn reconcile_bus(&mut self, unit: &mut AudioUnitBinding, bus_uuid: Uuid, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) {
         self.teardown_unit_wired(unit);
-        let sum_buffer = shared_audio_buffer();
-        let sum = Rc::new(RefCell::new(AudioBusProcessor::new(sum_buffer.clone())));
-        let sum_id = self.context.register_processor(sum.clone());
-        self.context.set_label(sum_id, format!("bus-sum {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
+        // THE output (terminal master) unit is a bus whose SUM is the engine's shared master-sum node (every unit
+        // routes into it via `sum_of(None)`), and whose STRIP output is what `render` reads. So it reuses `master`
+        // instead of creating a fresh sum, and keeps `master_id` OUT of `nodes` so a chain-edit teardown never
+        // removes the shared master. Every other bus builds its own sum.
+        let is_output = self.is_output_unit(unit.unit);
+        let (sum, sum_id, sum_buffer) = if is_output {
+            let master = self.master.clone().expect("master-sum exists before the output unit reconciles");
+            let buffer = master.borrow().audio_output();
+            (master, self.master_id, buffer)
+        } else {
+            let buffer = shared_audio_buffer();
+            let sum = Rc::new(RefCell::new(AudioBusProcessor::new(buffer.clone())));
+            let id = self.context.register_processor(sum.clone());
+            self.context.set_label(id, format!("bus-sum {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
+            (sum, id, buffer)
+        };
         self.bus_registry.insert(bus_uuid, (sum.clone(), sum_id));
         // Register the RAW SUM (pre-fx, pre-strip, pre-mute) under the AudioBusBox uuid so a sidechain pointer
         // that targets this bus (e.g. a vocoder modulated by a MUTED submix) taps its full signal. Mirrors TS
         // `AudioBusProcessor` registering `adapter.address -> #audioOutput` (the sum), NOT the strip output.
         self.output_registry.register(Address::of(bus_uuid, vec![]), sum_buffer.clone(), sum_id);
-        let mut nodes = vec![sum_id];
+        let mut nodes = if is_output { Vec::new() } else { vec![sum_id] };
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut device_params: Vec<DeviceParams> = Vec::new();
         let mut sidechains: Vec<SidechainBinding> = Vec::new();
         let mut subs: Vec<SubscriptionId> = Vec::new();
-        // A disabled bus (`enabled` = 4) sums nothing (emits silence).
-        let sum_enable = sum.clone();
-        subs.push(self.graph.catchup_and_subscribe(Address::of(bus_uuid, vec![BUS_ENABLED_KEY]), move |value| {
-            if let Some(enabled) = value.as_bool() { sum_enable.borrow_mut().set_enabled(enabled) }
-        }));
+        // A disabled bus (`enabled` = 4) sums nothing (emits silence). The master never disables (it is the output).
+        if !is_output {
+            let sum_enable = sum.clone();
+            subs.push(self.graph.catchup_and_subscribe(Address::of(bus_uuid, vec![BUS_ENABLED_KEY]), move |value| {
+                if let Some(enabled) = value.as_bool() { sum_enable.borrow_mut().set_enabled(enabled) }
+            }));
+        }
         // The bus's own audio-effect chain (host 23), ordered by index, enabled only: sum -> fx0 -> ... Each
         // enabled / disabled effect gets a `This` monitor so a toggle re-wires (wholesale, like a chain edit).
         let mut source = sum_buffer.clone();
@@ -146,6 +160,11 @@ impl Engine {
         edges.push((source_id, strip_id));
         nodes.push(strip_id);
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
+        // The terminal master unit's strip output IS the engine's final render buffer: republish it on every
+        // rebuild so `render` reads the current chain (an added / removed master effect takes effect live).
+        if is_output {
+            self.output_bus = Some(strip_output.clone());
+        }
         unit.wired = Some(Wired::Bus(BusWired {
             bus_uuid, sum_buffer, pre_strip, pre_strip_node, strip_id, strip_output, nodes, edges, device_params, sidechains, subs
         }));

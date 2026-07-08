@@ -1521,47 +1521,49 @@ fn a_field_edit_raises_the_light_signal_and_an_attach_the_heavy_one() {
 }
 
 #[test]
-fn an_output_fx_param_edit_delivers_through_reconcile() {
-    // The master/output unit's fx chain is built statically (not a reconciled unit), so a knob edit on a
-    // master effect can't ride a unit reconcile. `output_strip` binds each with an invalidate that flags
-    // `output_params_dirty`, and `reconcile_units` re-pushes the changed values. This pins that path end to
-    // end: an edit on an output-fx param must reach the device (its handle's `last` advancing proves the
-    // `refresh_params` delivery ran). A regression here is the "master Maximizer threshold does nothing" bug.
-    const FX: Uuid = [50u8; 16];
+fn adding_an_effect_to_the_output_unit_wires_it_live() {
+    // The output unit is structurally a terminal bus (sum -> fx -> strip): it must reconcile like any bus so a
+    // LIVE effect add is wired into the running master chain, not silently dropped until the next save + reload.
+    // Regression for "a compressor/gate added to the master output does nothing until reload".
+    use super::{UNIT_OUTPUT_KEY, BUS_ENABLED_KEY};
+    let _ = UNIT_OUTPUT_KEY;
+    const OUT_UNIT: Uuid = [70u8; 16];
+    const OUT_BUS: Uuid = [71u8; 16];
+    const FX: Uuid = [72u8; 16];
+    const TYPE_KEY: u16 = 1; // AudioUnitBox `type`; "output" marks THE terminal master unit
     let mut engine = engine_with_devices();
     engine.graph = BoxGraph::from_boxes(vec![
-        graph_box(FX, "TestEffect", &[(11, FieldValue::Float32(0.0))])
+        graph_box(OUT_UNIT, "AudioUnitBox", &[
+            (TYPE_KEY, FieldValue::String("output".into())),
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(OUT_BUS, "AudioBusBox", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(OUT_UNIT, vec![UNIT_INPUT_KEY])))),
+            (6, FieldValue::Hook),
+            (BUS_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(FX, "TestEffect", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(OUT_UNIT, vec![UNIT_AUDIO_KEY])))),
+            (EFFECT_INDEX_KEY, FieldValue::Int32(0))
+        ])
     ]);
-    // Observe the param exactly as `output_strip` does: with the `output_params_dirty` invalidate, and NO
-    // params signal set (so a later field edit falls back to that invalidate — the output-unit case).
-    let invalidate: Rc<dyn Fn()> = {
-        let dirty = engine.output_params_dirty.clone();
-        Rc::new(move || dirty.set(true))
-    };
-    let (handle, subs, collections, _) = engine.observe_param(FX, &[11], 0, &invalidate);
-    let last_probe = handle.last.clone();
-    struct StubSink;
-    impl crate::param_automation::ParamSink for StubSink {
-        fn set_params(&mut self, _: alloc::vec::Vec<crate::param_automation::ParamHandle>, _: bool) {}
-        fn state_ptr(&self) -> u32 {0}
-    }
-    engine.output_device_params.push(DeviceParams {
-        device_uuid: FX, reg: stub_device(DEVICE_KIND_AUDIO_EFFECT), state_ptr: 0,
-        sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
-        paths: alloc::vec![alloc::vec![11]], handles: alloc::vec![handle], field_subs: subs, collections,
-        observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
-        param_hub_sub: None, sample_hub_sub: None, broadcast_slots: Vec::new()
-    });
-    // The observe catch-up already fired the flag + set the cell to the current value; clear so only the EDIT counts.
-    engine.output_params_dirty.set(false);
-    engine.graph.transaction(&[Update::Primitive {
-        address: Address::of(FX, vec![11]),
-        old: FieldValue::Float32(0.0), new: FieldValue::Float32(-12.0)
-    }], &engine.registry).expect("threshold edit");
-    assert!(engine.output_params_dirty.get(), "an output-fx param edit flags output_params_dirty");
+    // Drive the production reconcile loop: the output unit enters via the audio-units membership add.
+    engine.unit_changes.borrow_mut().added.push(OUT_UNIT);
     engine.reconcile_units();
-    assert_eq!(last_probe.get(), -12.0, "reconcile re-pushes the edited value to the output-fx device");
-    assert!(!engine.output_params_dirty.get(), "the dirty flag is consumed");
+    let unit = engine.audio_units.iter().find(|unit| unit.unit == OUT_UNIT)
+        .expect("the output unit reconciles like a normal bus unit (not a static singleton)");
+    match unit.wired.as_ref().expect("wired after reconcile") {
+        Wired::Bus(bus) => {
+            // The master sum is shared (kept out of `nodes` so a teardown never removes it), so the output unit's
+            // nodes are the built effect + strip, and its device_params carry the live-added effect.
+            assert_eq!(bus.device_params.len(), 1, "the live-added output effect is built into the chain");
+            assert!(bus.nodes.len() >= 2, "the effect + strip are wired ({} nodes)", bus.nodes.len());
+        }
+        _ => panic!("expected the output unit to reconcile as a Bus")
+    }
+    // And the terminal wiring: `render` reads the output unit's strip output, not the raw master sum.
+    assert!(engine.output_bus.is_some(), "the output unit republished its strip as the render buffer");
 }
 
 #[test]
