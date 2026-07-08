@@ -154,7 +154,7 @@ export namespace WasmEngine {
         }
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates: (tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void => {
-                sender.applyUpdates(serializeUpdateTasks(tasks, project.boxGraph))
+                sender.applyUpdates(serializeUpdateTasks(tasks))
                 verifyChecksum()
             },
             checksum: (value: Int8Array): Promise<void> => sender.checksum(value)

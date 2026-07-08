@@ -1,8 +1,11 @@
-// Regression: SyncSource batches must be serialized AT EMISSION TIME. The studio's previous wiring pushed
-// the update tasks over a MessageChannel loopback, so serialization ran a macrotask later against the LIVE
-// graph: a transaction updating a field followed by a transaction deleting that box IN THE SAME TASK made
-// the deferred `findVertex(address)` unwrap fail, dropping the whole batch and silently desyncing the
-// engine mirror. The synchronous loopback serializes each batch within the endTransaction call stack.
+// Regression (#287): a single transaction may update a primitive field AND then delete that box — the
+// exact shape an UNDO produces when it inverse-trims a region (setValue on duration/loopOffset/loopDuration)
+// and then unstages it. SyncSource collects both as one forward-only batch: [update-primitive .../11, ...,
+// delete uuid]. serializeUpdateTasks used to re-resolve each field's codec from the LIVE graph via
+// findVertex, which is empty for the just-deleted box -> "no field at <uuid>/11", throwing out of
+// endTransaction (surfaced as "History changed by another participant") and poisoning the next batch.
+// The task now carries its primitiveType from emission, so the stream is self-contained and the engine
+// applies update-then-delete in order, ending up mirroring the source exactly.
 
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
@@ -33,8 +36,8 @@ const loadEngine = async (): Promise<{engine: EngineExports, memory: WebAssembly
     return {engine, memory}
 }
 
-describe("sync: serialization happens at task emission time", () => {
-    it("keeps a field-update batch intact when the next transaction deletes the box in the same task", async () => {
+describe("sync: update-primitive followed by delete in the SAME transaction (#287)", () => {
+    it("serializes the batch and keeps the engine mirroring the source", async () => {
         const {engine, memory} = await loadEngine()
         const source = new BoxGraph<BoxIO.TypeMap>()
         source.beginTransaction()
@@ -56,19 +59,15 @@ describe("sync: serialization happens at task emission time", () => {
         const loopback = createSyncLoopback()
         const executor = Communicator.executor<Synchronization<BoxIO.TypeMap>>(loopback.target, target)
         const syncSource = new SyncSource<BoxIO.TypeMap>(source, loopback.source, true)
-        expect(batches.length).toBe(1) // the initial full dump arrived synchronously
-        // The race this test pins down: update a primitive field, then delete the box in the NEXT
-        // transaction WITHOUT yielding to the event loop in between. Deferred serialization would resolve
-        // the update-primitive codec against the already-deleted box and drop the first batch.
+        expect(batches.length).toBe(1) // initial full dump
+        // The #287 shape: mutate the field AND delete the box within ONE transaction. Without the fix,
+        // serializeUpdateTasks throws "no field at <uuid>/..." here (the box is gone at flush time).
         source.beginTransaction()
         event.value.setValue(0.75)
-        source.endTransaction()
-        source.beginTransaction()
         event.delete()
         source.endTransaction()
-        expect(batches.length).toBe(3)
+        expect(batches.length).toBe(2)
         batches.forEach(batch => expect(batch.byteLength).toBeGreaterThan(4))
-        // The engine must accept every batch in order and end up mirroring the source graph exactly.
         batches.forEach(batch => {
             const bytes = new Uint8Array(batch)
             const pointer = engine.input_reserve(bytes.length)

@@ -115,7 +115,7 @@ Communicator.executor<OfflineEngineProtocol>(
             const {boxGraph} = ProjectSkeleton.decode(config.project)
             const tasks: Array<UpdateTask<BoxIO.TypeMap>> = boxGraph.boxes().map(box =>
                 ({type: "new", name: box.name as keyof BoxIO.TypeMap, uuid: box.address.uuid, buffer: box.toArrayBuffer()}))
-            const bytes = new Uint8Array(serializeUpdateTasks(tasks, boxGraph))
+            const bytes = new Uint8Array(serializeUpdateTasks(tasks))
             const pointer = engine.input_reserve(bytes.length)
             new Uint8Array(memory.buffer, pointer, bytes.length).set(bytes)
             if (engine.apply_updates(bytes.length) !== 0) {

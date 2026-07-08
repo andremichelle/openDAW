@@ -140,6 +140,7 @@ export class PrimitiveUpdate<V extends PrimitiveValues = PrimitiveValues> implem
     }
 
     get address(): Address {return this.#address}
+    get serialization(): ValueSerialization<V> {return this.#serialization}
     get oldValue(): V {return this.#oldValue}
     get newValue(): V {return this.#newValue}
 

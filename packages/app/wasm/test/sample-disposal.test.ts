@@ -45,7 +45,7 @@ describe("sample disposal", () => {
         const steps = decodeSteps(commits)
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
-                const bytes = new Uint8Array(serializeUpdateTasks(tasks, source))
+                const bytes = new Uint8Array(serializeUpdateTasks(tasks))
                 new Uint8Array(memory.buffer, engine.input_ptr(), bytes.length).set(bytes)
                 expect(engine.apply_updates(bytes.length)).toBe(0)
             },
