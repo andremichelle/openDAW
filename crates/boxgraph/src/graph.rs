@@ -6,7 +6,7 @@
 //! edges (a pointer may target a box loaded earlier or later).
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use crate::address::{Address, Uuid};
 use alloc::string::ToString;
@@ -33,6 +33,7 @@ pub struct BoxGraph {
     outgoing: BTreeMap<Address, Address>,       // pointer source → its (non-empty) target
     incoming: BTreeMap<Address, Vec<Address>>,  // target vertex → sources aiming at it, RESOLVED (target exists), sorted
     unresolved: BTreeMap<Address, Vec<Address>>,// target vertex → sources aiming at it while the target does NOT exist (dangling)
+    affected: BTreeSet<Address>,                // targets whose incoming set changed THIS transaction (drives hub dispatch)
     next_index: i32,                            // creation index for boxes created via updates
     subscriptions: Subscriptions,               // change listeners notified during a transaction
 }
@@ -45,8 +46,8 @@ impl BoxGraph {
         }
         let next_index = map.values().map(|graph_box| graph_box.creation_index).max().map_or(0, |max| max + 1);
         let mut graph = Self {
-            boxes: map, outgoing: BTreeMap::new(), incoming: BTreeMap::new(), unresolved: BTreeMap::new(), next_index,
-            subscriptions: Subscriptions::new()
+            boxes: map, outgoing: BTreeMap::new(), incoming: BTreeMap::new(), unresolved: BTreeMap::new(),
+            affected: BTreeSet::new(), next_index, subscriptions: Subscriptions::new()
         };
         graph.rebuild_edges();
         graph
@@ -164,6 +165,7 @@ impl BoxGraph {
     /// maintained per-update (see `update_edges`) rather than rebuilt whole-graph, so the cost is O(changed),
     /// not O(all boxes) — the difference between a silent selection and an audible dropout.
     pub fn transaction(&mut self, updates: &[Update], registry: &Registry) -> Result<(), Error> {
+        self.affected.clear();
         for update in updates {
             self.apply(update, registry)?;
             self.update_edges(update);
@@ -183,13 +185,24 @@ impl BoxGraph {
         for update in updates {
             subscriptions.dispatch(self, update);
         }
-        let targets = subscriptions.hub_targets();
-        if !targets.is_empty() {
-            let currents: Vec<Vec<Address>> = targets
-                .iter()
-                .map(|target| self.incoming(target).into_iter().cloned().collect())
-                .collect();
-            subscriptions.dispatch_hubs(self, &currents);
+        // A hub's incoming set can only have changed if an edge to its target was (dis)connected this
+        // transaction — every such target is in `affected`. So a pure primitive/automation transaction
+        // (empty `affected`) skips the hub pass entirely, and a structural one recomputes ONLY the affected
+        // hubs (the rest keep their unchanged `previous`). This is TS's affected-set model — the difference
+        // between O(all hubs) and O(hubs actually touched) per transaction.
+        if !self.affected.is_empty() {
+            let targets = subscriptions.hub_targets();
+            if !targets.is_empty() {
+                let currents: Vec<Option<Vec<Address>>> = targets
+                    .iter()
+                    .map(|target| if self.affected.contains(target) {
+                        Some(self.incoming(target).into_iter().cloned().collect())
+                    } else {
+                        None
+                    })
+                    .collect();
+                subscriptions.dispatch_hubs(self, &currents);
+            }
         }
         self.subscriptions = subscriptions;
         // Apply any (un)subscriptions observers queued reactively during dispatch (mirrors lib-box deferred
@@ -376,6 +389,7 @@ impl BoxGraph {
     /// Record a pointer edge, filing it under `incoming` if its target already exists, else `unresolved`.
     fn edge_connect(&mut self, source: Address, target: Address) {
         let exists = self.vertex_exists(&target);
+        self.affected.insert(target.clone());
         self.outgoing.insert(source.clone(), target.clone());
         let bucket = if exists {&mut self.incoming} else {&mut self.unresolved};
         insert_source(bucket.entry(target).or_default(), source);
@@ -384,6 +398,7 @@ impl BoxGraph {
     /// Drop the pointer edge at `source` from `outgoing` and from whichever bucket held it.
     fn edge_disconnect(&mut self, source: &Address) {
         if let Some(target) = self.outgoing.remove(source) {
+            self.affected.insert(target.clone());
             remove_source_from(&mut self.incoming, &target, source);
             remove_source_from(&mut self.unresolved, &target, source);
         }
@@ -411,6 +426,7 @@ impl BoxGraph {
         for target in waiting {
             if self.vertex_exists(&target) {
                 if let Some(sources) = self.unresolved.remove(&target) {
+                    self.affected.insert(target.clone());
                     let bucket = self.incoming.entry(target).or_default();
                     for source in sources {
                         insert_source(bucket, source);
@@ -438,6 +454,7 @@ impl BoxGraph {
             .collect();
         for target in targets {
             if let Some(sources) = self.incoming.remove(&target) {
+                self.affected.insert(target.clone());
                 let bucket = self.unresolved.entry(target).or_default();
                 for source in sources {
                     insert_source(bucket, source);

@@ -1170,7 +1170,7 @@ impl Engine {
 
     /// Apply one forward-only transaction, returning the resulting checksum (or `Err` on a
     /// decode/apply failure). The value/note caches update themselves inside `transaction`.
-    fn apply_updates(&mut self, input: &[u8]) -> Result<[u8; 32], ()> {
+    fn apply_updates(&mut self, input: &[u8]) -> Result<(), ()> {
         let mut reader = ByteReader::new(input);
         let mut updates = decode_forward(&mut reader).map_err(|_| ())?;
         // The wire delete task carries only the uuid (frozen contract), so `decode_forward` leaves the name
@@ -1186,7 +1186,14 @@ impl Engine {
             }
         }
         self.graph.transaction(&updates, &self.registry).map_err(|_| ())?;
-        Ok(self.graph.checksum())
+        Ok(())
+    }
+
+    /// The rolling graph checksum, computed on demand (a full-graph field walk, O(all boxes)). Only the
+    /// throttled verification path (~1/s) needs it, so it must NOT run per transaction — a marquee selection
+    /// fires dozens of transactions per second, and hashing the whole graph each time dropped audio.
+    fn checksum(&self) -> [u8; 32] {
+        self.graph.checksum()
     }
 
     /// Render one quantum into `output` (planar L|R) and write the transport state into `state`.
@@ -1907,9 +1914,17 @@ pub extern "C" fn profile_report(out_ptr: u32, max: u32) -> u32 {
     }
 }
 
+/// Refresh the 32-byte checksum buffer from the current graph and return its pointer. Computing the
+/// checksum is a full-graph walk (O(all boxes)), so it runs ONLY here — on the throttled verification
+/// round-trip (~1/s), never per transaction. Called from the worklet's checksum-verify path.
 #[no_mangle]
 pub extern "C" fn checksum_ptr() -> *const u8 {
-    unsafe { CHECKSUM.get().as_ptr() }
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_ref() {
+            CHECKSUM.get().copy_from_slice(&engine.checksum());
+        }
+        CHECKSUM.get().as_ptr()
+    }
 }
 
 #[no_mangle]
@@ -1959,8 +1974,7 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
         // (we never push), so index by the raw ptr; `len` is bounded by the host to the buffer capacity.
         let input = core::slice::from_raw_parts(INPUT.get().as_ptr(), len);
         match engine.apply_updates(input) {
-            Ok(checksum) => {
-                CHECKSUM.get().copy_from_slice(&checksum);
+            Ok(()) => {
                 engine.reconcile_units(); // apply any audio-unit membership change this transaction recorded
                 engine.sync_midi_targets(); // realize any MIDIOutputBox joins / leaves this transaction recorded
                 0
