@@ -37,18 +37,18 @@ const className = Html.adoptStyleSheet(css, "SoftwareMIDIPanel")
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
+    octave: DefaultObservableValue<byte>
+    channel: DefaultObservableValue<byte>
+    velocity: DefaultObservableValue<byte>
 }
 
-export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
+export const SoftwareMIDIPanel = ({lifecycle, service, octave, channel, velocity}: Construct) => {
     const numKeys = 18
     const pianoLayout = new PianoRollLayout(0, numKeys - 1, {
         whiteKeys: {width: 23, height: 48},
         blackKeys: {width: 19, height: 24}
     })
     const {softwareMIDIInput} = MidiDevices
-    const octave = new DefaultObservableValue(5, {guard: (value: number): number => clamp(value, 0, 10)})
-    const channel = new DefaultObservableValue(0, {guard: (value: number): number => clamp(value, 0, 15)})
-    const velocity = new DefaultObservableValue(100, {guard: (value: number): number => clamp(value, 0, 100)})
     const svg: SVGElement = (<PianoRoll lifecycle={lifecycle} pianoLayout={pianoLayout}/>)
     const midiIndicator: DomElement = <Icon symbol={IconSymbol.Connected}/>
     const element: HTMLElement = <div className={className}>
