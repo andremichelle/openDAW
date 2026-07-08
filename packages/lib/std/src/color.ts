@@ -107,6 +107,21 @@ export class Color {
         return new Color(this.#h, this.#s * multiplier, this.#l, this.#a)
     }
 
+    lerp(other: Color, t: unitValue): Color {
+        const rad = Math.PI / 180.0
+        const ax = this.#s * Math.cos(this.#h * rad)
+        const ay = this.#s * Math.sin(this.#h * rad)
+        const bx = other.#s * Math.cos(other.#h * rad)
+        const by = other.#s * Math.sin(other.#h * rad)
+        const x = ax + (bx - ax) * t
+        const y = ay + (by - ay) * t
+        const h = (Math.atan2(y, x) / rad + 360.0) % 360.0
+        const s = Math.sqrt(x * x + y * y)
+        const l = this.#l + (other.#l - this.#l) * t
+        const a = this.#a + (other.#a - this.#a) * t
+        return new Color(h, s, l, a)
+    }
+
     fade(shift: number): Color {
         const newS = this.#s * (1.0 - Math.sqrt(shift))
         const newL = this.#l + (100.0 - this.#l) * (shift ** 3.0)
