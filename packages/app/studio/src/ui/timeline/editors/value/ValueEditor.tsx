@@ -222,7 +222,14 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             yAxis={valueAxis}/>
     )
     const element: HTMLElement = (
-        <div className={className} tabIndex={-1} onConnect={(self: HTMLElement) => self.focus()}>
+        <div className={className} tabIndex={-1} onConnect={(self: HTMLElement) => {
+            // Only grab focus when nothing else holds it. A content swap triggered by
+            // selecting a region in the timeline re-mounts this editor; stealing focus there
+            // would pull it out of the RegionsArea and break region shortcuts (e.g. delete)
+            // until the region is clicked again (issue #292). Mirrors NoteEditor.
+            const active = document.activeElement
+            if (!isDefined(active) || active === document.body) {self.focus()}
+        }}>
             {canvas}
             {selectionRectangle}
         </div>
