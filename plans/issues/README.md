@@ -46,7 +46,7 @@ architecture work or maintainer decisions).
 | [23](023-native-version.md) | native version | feature | 3 | needs PWA vs Tauri decision |
 | [255](255-dough-samples-default.md) | dough-samples default set | content | 3 | no code change, licensing is the blocker |
 | [277](277-werkstatt-midi-input.md) | Werkstatt midi input | feature | 3 | clear template, needs routing decision |
-| [291](291-automation-curve-render-bug.md) | automation curve render bug | bug | 2 | plausible cause, needs live repro first |
+| ~~[291](291-automation-curve-render-bug.md)~~ | ~~automation curve render bug~~ | bug | 2 | ✅ done (clamp curve slope in renderer) |
 | [292](292-automation-clip-deletion-bug.md) | automation clip deletion bug | bug | 2 | code looks correct, needs live repro |
 | [270](270-automate-effect-enable.md) | automate effect enable/disable | feature | 2 | needs chain-wiring rework |
 | [38](038-automation-region-unit-resolution.md) | automation region unit/resolution | feature | 2 | large design surface, new schema |
