@@ -23,6 +23,9 @@ import {
 export class CompressorDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
     static readonly PEAK_DECAY_PER_SAMPLE = Math.exp(-1.0 / (sampleRate * 0.500))
 
+    // Crossfade window for toggling lookahead. Enabling/disabling lookahead changes the output latency by the
+    // lookahead delay, so we crossfade between the immediate and delayed paths over this window instead of jumping.
+    static readonly LOOKAHEAD_CROSSFADE_SECONDS = 0.015 as const
 
     static ID: int = 0 | 0
 
@@ -52,7 +55,9 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
     readonly #smoothedAutoMakeup: SmoothingFilter
 
     readonly #sidechainSignal: Float32Array
-    readonly #originalSignal: readonly [Float32Array, Float32Array]
+    readonly #delayedOutput: AudioBuffer
+    readonly #lookaheadSidechain: Float32Array
+    readonly #lookaheadMix: Ramp<number>
     readonly #lookaheadDelay: number = 0.005
     readonly #editorValues: Float32Array
     readonly #smoothInputGain: Ramp<number>
@@ -119,10 +124,9 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         this.#smoothedAutoMakeup.setAlpha(0.03)
 
         this.#sidechainSignal = new Float32Array(RenderQuantum)
-        this.#originalSignal = [
-            new Float32Array(RenderQuantum),
-            new Float32Array(RenderQuantum)
-        ]
+        this.#delayedOutput = new AudioBuffer()
+        this.#lookaheadSidechain = new Float32Array(RenderQuantum)
+        this.#lookaheadMix = Ramp.linear(sampleRate, CompressorDeviceProcessor.LOOKAHEAD_CROSSFADE_SECONDS)
 
         this.ownAll(
             context.registerProcessor(this),
@@ -163,8 +167,9 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         this.#peaks.clear()
         this.eventInput.clear()
         this.#sidechainSignal.fill(0.0)
-        this.#originalSignal[0].fill(0.0)
-        this.#originalSignal[1].fill(0.0)
+        this.#delayedOutput.clear()
+        this.#lookaheadSidechain.fill(0.0)
+        this.#lookaheadMix.set(this.#lookahead ? 1.0 : 0.0, false)
         this.#autoMakeup = 0.0
         this.#inpMax = 0.0
         this.#outMax = 0.0
@@ -241,38 +246,34 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
         // Calculate auto makeup
         this.#autoMakeup = this.#calculateAutoMakeup(this.#sidechainSignal, s0, s1)
 
-        // Do lookahead if enabled
-        if (this.#lookahead) {
-            // Delay input buffer
-            this.#delay.process(this.#output, s0, s1)
-
-            // Process sidechain (delay + gain reduction fade in)
-            this.#lookaheadProcessor.process(this.#sidechainSignal, s0, s1)
-        }
-
-        // Add makeup gain and convert sidechain to a linear domain
+        // Keep both taps fresh every block regardless of the toggle, so the crossfade never reads stale content:
+        // the delayed output (on-mode audio) and the lookahead-shaped reduction (on-mode sidechain). #sidechainSignal
+        // stays the direct (off-mode) reduction.
+        const delL = this.#delayedOutput.getChannel(0)
+        const delR = this.#delayedOutput.getChannel(1)
         for (let i = s0; i < s1; i++) {
-            this.#sidechainSignal[i] = decibelsToGain(
-                this.#sidechainSignal[i] + this.#makeup + this.#autoMakeup
-            )
+            delL[i] = outL[i]
+            delR[i] = outR[i]
+            this.#lookaheadSidechain[i] = this.#sidechainSignal[i]
         }
+        this.#delay.process(this.#delayedOutput, s0, s1)
+        this.#lookaheadProcessor.process(this.#lookaheadSidechain, s0, s1)
 
-        // Copy buffer to the original signal for dry/wet mixing
+        // Crossfade off-mode (immediate signal + direct reduction) and on-mode (delayed signal + lookahead
+        // reduction). Toggling lookahead ramps #lookaheadMix, so the 5ms latency change fades in/out instead of
+        // jumping (which used to click, #79).
+        const makeup = this.#makeup + this.#autoMakeup
+        const mix = this.#mix
         for (let i = s0; i < s1; i++) {
-            this.#originalSignal[0][i] = outL[i]
-            this.#originalSignal[1][i] = outR[i]
-        }
-
-        // Multiply attenuation with buffer - apply compression
-        for (let i = s0; i < s1; i++) {
-            outL[i] *= this.#sidechainSignal[i]
-            outR[i] *= this.#sidechainSignal[i]
-        }
-
-        // Mix dry and wet signal
-        for (let i = s0; i < s1; i++) {
-            const l = outL[i] * this.#mix + this.#originalSignal[0][i] * (1.0 - this.#mix)
-            const r = outR[i] * this.#mix + this.#originalSignal[1][i] * (1.0 - this.#mix)
+            const blend = this.#lookaheadMix.moveAndGet()
+            const offL = outL[i], offR = outR[i]
+            const gainOff = decibelsToGain(this.#sidechainSignal[i] + makeup)
+            const onL = delL[i], onR = delR[i]
+            const gainOn = decibelsToGain(this.#lookaheadSidechain[i] + makeup)
+            const l = (offL * gainOff * mix + offL * (1.0 - mix)) * (1.0 - blend)
+                + (onL * gainOn * mix + onL * (1.0 - mix)) * blend
+            const r = (offR * gainOff * mix + offR * (1.0 - mix)) * (1.0 - blend)
+                + (onR * gainOn * mix + onR * (1.0 - mix)) * blend
             const peak = Math.max(Math.abs(l), Math.abs(r))
             if (this.#outMax <= peak) {
                 this.#outMax = peak
@@ -299,6 +300,7 @@ export class CompressorDeviceProcessor extends AudioProcessor implements AudioEf
     parameterChanged(parameter: AutomatableParameter): void {
         if (parameter === this.parameterLookahead) {
             this.#lookahead = this.parameterLookahead.getValue()
+            this.#lookaheadMix.set(this.#lookahead ? 1.0 : 0.0, this.#processing)
         } else if (parameter === this.parameterAutomakeup) {
             this.#automakeup = this.parameterAutomakeup.getValue()
         } else if (parameter === this.parameterAutoattack) {

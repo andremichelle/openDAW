@@ -52,6 +52,9 @@ const MAKEUP_MAPPING: Linear = Linear {min: -40.0, max: 40.0};
 const MIX_MAPPING: Linear = Linear::unipolar();
 
 const LOOKAHEAD_SECONDS: f32 = 0.005;
+// Crossfade window for toggling lookahead. Enabling/disabling changes the output latency by the lookahead delay,
+// so we crossfade between the immediate and delayed paths over this window instead of jumping (#79).
+const LOOKAHEAD_CROSSFADE_SECONDS: f32 = 0.015;
 const AUTO_MAKEUP_ALPHA: f32 = 0.03;
 
 /// The compressor's per-instance state (engine-allocated, zeroed). The CTAGDRC blocks + scratch buffers are
@@ -64,8 +67,10 @@ pub struct CompressorState {
     lookahead_processor: LookAhead,
     smoothed_auto_makeup: SmoothingFilter,
     sidechain_signal: [f32; RENDER_QUANTUM],
-    original_left: [f32; RENDER_QUANTUM],
-    original_right: [f32; RENDER_QUANTUM],
+    delayed_left: [f32; RENDER_QUANTUM],
+    delayed_right: [f32; RENDER_QUANTUM],
+    lookahead_sidechain: [f32; RENDER_QUANTUM],
+    lookahead_mix: LinearRamp,
     lookahead: bool,
     automakeup: bool,
     autoattack: bool,
@@ -109,6 +114,7 @@ impl AudioEffect for Compressor {
         state.gain_computer = GainComputer::default();
         state.delay = DelayLine::new(sample_rate, LOOKAHEAD_SECONDS);
         state.lookahead_processor = LookAhead::new(sample_rate, LOOKAHEAD_SECONDS);
+        state.lookahead_mix = LinearRamp::linear(sample_rate, LOOKAHEAD_CROSSFADE_SECONDS);
         state.smoothed_auto_makeup = SmoothingFilter::new(sample_rate);
         state.smoothed_auto_makeup.set_alpha(AUTO_MAKEUP_ALPHA);
         state.attack_ms = 2.0;
@@ -139,6 +145,7 @@ impl AudioEffect for Compressor {
     fn parameter_changed(state: &mut CompressorState, id: u32, value: ParamValue) {
         if id == state.lookahead_id {
             state.lookahead = bool_value(value);
+            state.lookahead_mix.set(if state.lookahead {1.0} else {0.0}, state.processing);
         } else if id == state.automakeup_id {
             state.automakeup = bool_value(value);
         } else if id == state.autoattack_id {
@@ -180,6 +187,10 @@ impl AudioEffect for Compressor {
 
     fn reset(state: &mut CompressorState) {
         state.processing = false;
+        state.delayed_left = [0.0; RENDER_QUANTUM];
+        state.delayed_right = [0.0; RENDER_QUANTUM];
+        state.lookahead_sidechain = [0.0; RENDER_QUANTUM];
+        state.lookahead_mix.set(if state.lookahead {1.0} else {0.0}, false);
     }
 
     fn process_audio(state: &mut CompressorState, output: [&mut [f32]; 2], block: &Block) {
@@ -228,27 +239,32 @@ impl AudioEffect for Compressor {
         }
         state.smoothed_auto_makeup.process(-sum / (s1 - s0) as f32);
         let auto_makeup = if state.automakeup {state.smoothed_auto_makeup.get_state()} else {0.0};
-        // 5) look-ahead: delay the signal and fade in the reduction so it lands before the transient
-        if state.lookahead {
-            state.delay.process([out_left, out_right], s0, s1);
-            state.lookahead_processor.process(&mut state.sidechain_signal, s0, s1);
-        }
-        // 6) makeup + convert to a linear gain
-        let makeup = state.makeup;
+        // 5) keep both taps fresh every block so the crossfade never reads stale content: the delayed output
+        //    (on-mode audio) and the lookahead-shaped reduction (on-mode sidechain). sidechain_signal stays the
+        //    direct (off-mode) reduction.
         for i in s0..s1 {
-            state.sidechain_signal[i] = decibels_to_gain(state.sidechain_signal[i] + makeup + auto_makeup);
+            state.delayed_left[i] = out_left[i];
+            state.delayed_right[i] = out_right[i];
+            state.lookahead_sidechain[i] = state.sidechain_signal[i];
         }
-        // 7) keep the (delayed) dry signal, apply the reduction, then dry/wet mix
-        for i in s0..s1 {
-            state.original_left[i] = out_left[i];
-            state.original_right[i] = out_right[i];
-            out_left[i] *= state.sidechain_signal[i];
-            out_right[i] *= state.sidechain_signal[i];
-        }
+        state.delay.process([&mut state.delayed_left, &mut state.delayed_right], s0, s1);
+        state.lookahead_processor.process(&mut state.lookahead_sidechain, s0, s1);
+        // 6) crossfade off-mode (immediate signal + direct reduction) against on-mode (delayed signal + lookahead
+        //    reduction); toggling lookahead ramps lookahead_mix so the 5ms latency change fades instead of jumping.
+        let makeup = state.makeup + auto_makeup;
         let mix = state.mix;
         for i in s0..s1 {
-            let left = out_left[i] * mix + state.original_left[i] * (1.0 - mix);
-            let right = out_right[i] * mix + state.original_right[i] * (1.0 - mix);
+            let blend = state.lookahead_mix.move_and_get();
+            let off_left = out_left[i];
+            let off_right = out_right[i];
+            let gain_off = decibels_to_gain(state.sidechain_signal[i] + makeup);
+            let on_left = state.delayed_left[i];
+            let on_right = state.delayed_right[i];
+            let gain_on = decibels_to_gain(state.lookahead_sidechain[i] + makeup);
+            let left = (off_left * gain_off * mix + off_left * (1.0 - mix)) * (1.0 - blend)
+                + (on_left * gain_on * mix + on_left * (1.0 - mix)) * blend;
+            let right = (off_right * gain_off * mix + off_right * (1.0 - mix)) * (1.0 - blend)
+                + (on_right * gain_on * mix + on_right * (1.0 - mix)) * blend;
             let peak = libm::fabsf(left).max(libm::fabsf(right));
             if state.out_max <= peak {
                 state.out_max = peak;

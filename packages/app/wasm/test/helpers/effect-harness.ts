@@ -2,7 +2,8 @@
 // unit's audio-fx chain, where the test attaches ONE effect box (via `addEffect`) and configures it. Returns a
 // render() that plays and captures the interleaved stereo output. (Tape units bypass the audio-fx chain, so a
 // leaf instrument is used; the Apparat sine is finite and known — unlike a default Vaporisateur, which NaNs.)
-import {UUID} from "@opendaw/lib-std"
+import {Procedure, UUID} from "@opendaw/lib-std"
+import {RenderQuantum} from "@opendaw/lib-dsp"
 import {ApparatDeviceBox, AudioUnitBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import type {Box, BoxGraph} from "@opendaw/lib-box"
 import {ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
@@ -92,3 +93,46 @@ export const renderEffect = async (source: BoxGraph, quanta = 32): Promise<Float
 
 export const peakOf = (buffer: Float32Array): number => buffer.reduce((max, sample) => Math.max(max, Math.abs(sample)), 0)
 export const allFinite = (buffer: Float32Array): boolean => buffer.every(sample => Number.isFinite(sample))
+
+// Like renderEffect, but applies `mutate` (wrapped in a source transaction + synced to the engine) between the
+// render of quantum `toggleAt - 1` and `toggleAt`, to exercise a parameter flip mid-playback.
+export const renderEffectToggling = async (source: BoxGraph, mutate: Procedure<void>,
+                                           {quanta = 48, toggleAt = 24}: { quanta?: number, toggleAt?: number } = {}):
+    Promise<Float32Array> => {
+    const {engine, memory} = await loadFullEngine()
+    const sync = connectSyncToEngine(engine, memory, source)
+    await sync.settle(); engine.bind(); await sync.settle()
+    engine.set_metronome_enabled(0)
+    const len = engine.output_len() >>> 0
+    engine.stop(); engine.play()
+    const out = new Float32Array(quanta * len)
+    for (let q = 0; q < quanta; q++) {
+        if (q === toggleAt) {
+            source.beginTransaction(); mutate(); source.endTransaction()
+            await sync.settle()
+        }
+        engine.render()
+        out.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+    }
+    return out
+}
+
+// Output is planar per quantum (L[RenderQuantum] then R[RenderQuantum]); stitch the left channel into one signal.
+export const leftChannel = (interleaved: Float32Array): Float32Array => {
+    const stride = RenderQuantum * 2, quanta = (interleaved.length / stride) | 0
+    const left = new Float32Array(quanta * RenderQuantum)
+    for (let q = 0; q < quanta; q++) {
+        left.set(interleaved.subarray(q * stride, q * stride + RenderQuantum), q * RenderQuantum)
+    }
+    return left
+}
+
+// Largest absolute sample-to-sample step within [from, to) — a discontinuity (click) shows up as a spike.
+export const maxStep = (signal: Float32Array, from = 1, to = signal.length): number => {
+    let max = 0.0
+    for (let i = Math.max(1, from); i < to; i++) {
+        const step = Math.abs(signal[i] - signal[i - 1])
+        if (step > max) {max = step}
+    }
+    return max
+}
