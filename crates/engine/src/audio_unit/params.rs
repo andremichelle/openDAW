@@ -542,10 +542,23 @@ impl Engine {
         // (TS `onStartAutomation`) — the knob animates in the UI. Registered under the box uuid + field-path
         // keys; the slot Rc lives in the handle, so a rebind/teardown drops it and the sweep unregisters.
         let broadcast = track.as_ref().map(|curve| {
-            let slot = engine_env::telemetry::broadcast_slot(1);
-            slot.borrow_mut()[0] = curve.value_at(self.transport.position()).unwrap_or(0.0);
-            self.broadcasts.register(box_uuid, path, crate::broadcast::PACKAGE_FLOAT, &slot);
-            slot
+            let value = curve.value_at(self.transport.position()).unwrap_or(0.0);
+            // REUSE the parameter's existing UI slot across a re-observe (an automation edit re-runs this); only a
+            // fresh attach registers a new one. Creating a new slot each rebind would be dedup-skipped by
+            // `register` (the outgoing slot is still alive), stranding the knob on a slot the sweep then drops.
+            // Mirrors TS's persistent `onStartAutomation` broadcast.
+            match self.broadcasts.live_slot(box_uuid, path, crate::broadcast::PACKAGE_FLOAT) {
+                Some(slot) => {
+                    slot.borrow_mut()[0] = value;
+                    slot
+                }
+                None => {
+                    let slot = engine_env::telemetry::broadcast_slot(1);
+                    slot.borrow_mut()[0] = value;
+                    self.broadcasts.register(box_uuid, path, crate::broadcast::PACKAGE_FLOAT, &slot);
+                    slot
+                }
+            }
         });
         let handle = ParamHandle {id, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN)), broadcast};
         (handle, subs, collections, armed)

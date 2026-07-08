@@ -1292,6 +1292,68 @@ fn an_automated_parameter_broadcasts_its_unit_value_at_its_field_address() {
 }
 
 #[test]
+fn a_device_param_automation_rebind_keeps_its_ui_broadcast_alive() {
+    // A device param's automated value drives a UI broadcast at its field address (the knob animates). Every
+    // automation edit re-observes the device's params (rebind_one). rebind_one held the OLD handles + the device
+    // pull alive while re-registering, so the register dedup treated the outgoing slot as the winner and SKIPPED
+    // the new one; the sweep then dropped the stale slot, leaving NO live broadcast — the knob froze while audio
+    // kept updating (audio reads the handle directly). A fresh load registered once cleanly, which is why
+    // save+load "fixed" it. The rebind must leave a LIVE broadcast matching the current handle's slot.
+    use super::{DeviceParams, ParamNode};
+    const DEV: Uuid = [80u8; 16];
+    const TRACK: Uuid = [81u8; 16];
+    const REGION: Uuid = [82u8; 16];
+    const COL: Uuid = [83u8; 16];
+    const EVENT: Uuid = [84u8; 16];
+    const PATH: u16 = 11;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(DEV, "TestEffect", &[(PATH, FieldValue::Float32(0.0))]),
+        graph_box(TRACK, "TrackBox", &[
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Hook)
+        ]),
+        graph_box(REGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![3])))),
+            (2, FieldValue::Pointer(Some(Address::of(COL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(COL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(EVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(COL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.75))
+        ])
+    ]);
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, field_subs, collections, _armed) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    struct StubSink;
+    impl crate::param_automation::ParamSink for StubSink {
+        fn set_params(&mut self, _: alloc::vec::Vec<crate::param_automation::ParamHandle>, _: bool) {}
+        fn state_ptr(&self) -> u32 { 0 }
+    }
+    let mut params = DeviceParams {
+        device_uuid: DEV, reg: stub_device(DEVICE_KIND_AUDIO_EFFECT), state_ptr: 0,
+        sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
+        paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
+        observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
+        param_hub_sub: None, sample_hub_sub: None, broadcast_slots: Vec::new()
+    };
+    let entry_ptr = |engine: &Engine| (0..engine.broadcasts.len()).find_map(|index| {
+        let entry = engine.broadcasts.entry(index).expect("entry");
+        (entry.uuid == DEV && entry.keys == vec![PATH] && entry.package_type == crate::broadcast::PACKAGE_FLOAT && entry.alive())
+            .then_some(entry.ptr)
+    });
+    assert!(entry_ptr(&engine).is_some(), "initial bind registers a live broadcast at the param address");
+    // An automation edit re-observes the params. The UI broadcast must stay live AND point at the CURRENT slot.
+    engine.rebind_one(&mut params, &invalidate, 0.0);
+    engine.broadcasts.sweep();
+    let live = entry_ptr(&engine).expect("the rebind leaves a LIVE broadcast at the param address");
+    let handle_ptr = params.handles[0].broadcast.as_ref().expect("automated handle has a slot").borrow().as_ptr() as u32;
+    assert_eq!(live, handle_ptr, "the live broadcast matches the current handle's slot, not a stale dead one");
+}
+
+#[test]
 fn a_launched_value_clip_replaces_the_region_automation() {
     const VCLIP: Uuid = [40u8; 16];
     const VCLIP_COLLECTION: Uuid = [41u8; 16];

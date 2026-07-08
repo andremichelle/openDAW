@@ -77,6 +77,16 @@ impl Broadcasts {
         self.generation = self.generation.wrapping_add(1);
     }
 
+    /// The live slot already registered at `(uuid, keys, package_type)`, if any — so a re-observe (an automation
+    /// edit re-runs `observe_param`) REUSES the parameter's existing UI slot instead of registering a fresh one
+    /// that `register`'s dedup would then skip. Mirrors TS, where `onStartAutomation`'s broadcast is created once
+    /// and persists across region edits; keeps the registration + write pointer stable so the knob never freezes.
+    pub fn live_slot(&self, uuid: Uuid, keys: &[u16], package_type: u32) -> Option<BroadcastSlot> {
+        self.entries.iter()
+            .find(|entry| entry.uuid == uuid && entry.keys == keys && entry.package_type == package_type)
+            .and_then(|entry| entry.owner.upgrade())
+    }
+
     /// Drop every entry whose owning slot died (its processor was torn down). Self-healing: no per-teardown
     /// bookkeeping anywhere else. Bumps the generation when anything changed.
     pub fn sweep(&mut self) {
