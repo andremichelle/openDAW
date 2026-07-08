@@ -26,11 +26,15 @@ pub struct Edge {
 
 pub struct BoxGraph {
     boxes: BTreeMap<Uuid, GraphBox>,
-    edges: Vec<Edge>,
-    forward: BTreeMap<Address, usize>,        // pointer source → edge
-    incoming: BTreeMap<Address, Vec<usize>>,  // target vertex → edges aimed at it (resolved only)
-    next_index: i32,                          // creation index for boxes created via updates
-    subscriptions: Subscriptions,             // change listeners notified during a transaction
+    // Edges are maintained INCREMENTALLY (mirror lib-box `GraphEdges`): a transaction touches only the
+    // edges of the boxes/pointers it changes, never a whole-graph rebuild (which on the audio thread made
+    // selection churn — ephemeral SelectionBox new/delete — drop audio in busy projects). Both maps key by
+    // Address (uuid, then field path), so all vertices of one box form a contiguous range.
+    outgoing: BTreeMap<Address, Address>,       // pointer source → its (non-empty) target
+    incoming: BTreeMap<Address, Vec<Address>>,  // target vertex → sources aiming at it, RESOLVED (target exists), sorted
+    unresolved: BTreeMap<Address, Vec<Address>>,// target vertex → sources aiming at it while the target does NOT exist (dangling)
+    next_index: i32,                            // creation index for boxes created via updates
+    subscriptions: Subscriptions,               // change listeners notified during a transaction
 }
 
 impl BoxGraph {
@@ -41,7 +45,7 @@ impl BoxGraph {
         }
         let next_index = map.values().map(|graph_box| graph_box.creation_index).max().map_or(0, |max| max + 1);
         let mut graph = Self {
-            boxes: map, edges: Vec::new(), forward: BTreeMap::new(), incoming: BTreeMap::new(), next_index,
+            boxes: map, outgoing: BTreeMap::new(), incoming: BTreeMap::new(), unresolved: BTreeMap::new(), next_index,
             subscriptions: Subscriptions::new()
         };
         graph.rebuild_edges();
@@ -97,8 +101,10 @@ impl BoxGraph {
         self.boxes.values().filter(|graph_box| graph_box.name == name).collect()
     }
 
-    pub fn edges(&self) -> &[Edge] {
-        &self.edges
+    /// Every non-empty pointer edge (resolved or dangling). Rebuilt on demand from `outgoing`; used by
+    /// tests / diagnostics only, so O(edges) is fine (the hot path reads the maps directly).
+    pub fn edges(&self) -> Vec<Edge> {
+        self.outgoing.iter().map(|(source, target)| Edge {source: source.clone(), target: Some(target.clone())}).collect()
     }
 
     /// 32-byte rolling XOR checksum over every box's fields (uuid order), matching `BoxGraph.checksum`.
@@ -112,22 +118,20 @@ impl BoxGraph {
 
     /// The target a pointer field points at (if it has one).
     pub fn target_of(&self, source: &Address) -> Option<&Address> {
-        self.forward.get(source).and_then(|&index| self.edges[index].target.as_ref())
+        self.outgoing.get(source)
     }
 
-    /// Sources of the pointer fields aiming at `target` (resolved edges only).
+    /// Sources of the pointer fields aiming at `target` (resolved edges only), in Address order.
     pub fn incoming(&self, target: &Address) -> Vec<&Address> {
-        self.incoming
-            .get(target)
-            .map(|indices| indices.iter().map(|&index| &self.edges[index].source).collect())
-            .unwrap_or_default()
+        self.incoming.get(target).map(|sources| sources.iter().collect()).unwrap_or_default()
     }
 
     /// Edges whose non-empty target does not resolve to an existing vertex (dangling pointers).
-    pub fn dangling(&self) -> Vec<&Edge> {
-        self.edges
+    pub fn dangling(&self) -> Vec<Edge> {
+        self.unresolved
             .iter()
-            .filter(|edge| edge.target.as_ref().is_some_and(|target| !self.vertex_exists(target)))
+            .flat_map(|(target, sources)| sources.iter().map(move |source|
+                Edge {source: source.clone(), target: Some(target.clone())}))
             .collect()
     }
 
@@ -155,13 +159,15 @@ impl BoxGraph {
 
     // ---- Mutation (the live-mirror update stream; see the `updates` module) ----
 
-    /// Apply a transaction: every update forward, edges rebuilt once, then subscribers notified on the
-    /// final, consistent graph (per-update observers, then pointer-hub membership diffs).
+    /// Apply a transaction: every update forward with its incremental edge delta, then subscribers notified
+    /// on the final, consistent graph (per-update observers, then pointer-hub membership diffs). Edges are
+    /// maintained per-update (see `update_edges`) rather than rebuilt whole-graph, so the cost is O(changed),
+    /// not O(all boxes) — the difference between a silent selection and an audible dropout.
     pub fn transaction(&mut self, updates: &[Update], registry: &Registry) -> Result<(), Error> {
         for update in updates {
             self.apply(update, registry)?;
+            self.update_edges(update);
         }
-        self.rebuild_edges();
         self.dispatch(updates);
         Ok(())
     }
@@ -321,6 +327,9 @@ impl BoxGraph {
         Ok(())
     }
 
+    /// Full rebuild of the edge maps from the boxes. Used on initial load (`from_boxes`) and after `abort`
+    /// (a rollback replays inverse updates, so a one-shot rebuild is simplest there); the live forward path
+    /// keeps them incrementally via `update_edges`.
     fn rebuild_edges(&mut self) {
         let mut edges = Vec::new();
         for graph_box in self.boxes.values() {
@@ -328,19 +337,133 @@ impl BoxGraph {
                 collect_pointers(graph_box.uuid, value, &[*key], &mut edges);
             }
         }
-        let mut forward = BTreeMap::new();
-        let mut incoming: BTreeMap<Address, Vec<usize>> = BTreeMap::new();
-        for (index, edge) in edges.iter().enumerate() {
-            forward.insert(edge.source.clone(), index);
-            if let Some(target) = &edge.target {
-                if self.vertex_exists(target) {
-                    incoming.entry(target.clone()).or_default().push(index);
+        self.outgoing.clear();
+        self.incoming.clear();
+        self.unresolved.clear();
+        for edge in edges {
+            if let Some(target) = edge.target {
+                self.edge_connect(edge.source, target);
+            }
+        }
+    }
+
+    /// Apply one update's edge delta to `outgoing` / `incoming` / `unresolved`. A `Primitive` update never
+    /// touches an edge; `Pointer` re-points one edge; `New` / `Delete` add / drop a box's edges and
+    /// re-resolve any danglers whose target just appeared / vanished.
+    fn update_edges(&mut self, update: &Update) {
+        match update {
+            Update::New {uuid, ..} => self.on_box_created(*uuid),
+            Update::Delete {uuid, ..} => self.on_box_deleted(*uuid),
+            Update::Pointer {address, new, ..} => {
+                self.edge_disconnect(address);
+                if let Some(target) = new {
+                    self.edge_connect(address.clone(), target.clone());
+                }
+            }
+            // A primitive update is almost always a number/bool/string edit (no edge) — the hot automation
+            // path — so it costs nothing here. But a pointer field re-point can also arrive as a `Primitive`
+            // carrying a `Pointer` value (that's how the field mutation is expressed), so mirror the pointer arm.
+            Update::Primitive {address, new: FieldValue::Pointer(new), ..} => {
+                self.edge_disconnect(address);
+                if let Some(target) = new {
+                    self.edge_connect(address.clone(), target.clone());
+                }
+            }
+            Update::Primitive {..} => {}
+        }
+    }
+
+    /// Record a pointer edge, filing it under `incoming` if its target already exists, else `unresolved`.
+    fn edge_connect(&mut self, source: Address, target: Address) {
+        let exists = self.vertex_exists(&target);
+        self.outgoing.insert(source.clone(), target.clone());
+        let bucket = if exists {&mut self.incoming} else {&mut self.unresolved};
+        insert_source(bucket.entry(target).or_default(), source);
+    }
+
+    /// Drop the pointer edge at `source` from `outgoing` and from whichever bucket held it.
+    fn edge_disconnect(&mut self, source: &Address) {
+        if let Some(target) = self.outgoing.remove(source) {
+            remove_source_from(&mut self.incoming, &target, source);
+            remove_source_from(&mut self.unresolved, &target, source);
+        }
+    }
+
+    /// A box appeared: wire its own outgoing pointers, then re-resolve any dangling edges that were waiting
+    /// for a vertex inside this box (its subtree is the contiguous `uuid` range in `unresolved`).
+    fn on_box_created(&mut self, uuid: Uuid) {
+        let mut edges = Vec::new();
+        if let Some(graph_box) = self.boxes.get(&uuid) {
+            for (key, value) in &graph_box.fields {
+                collect_pointers(uuid, value, &[*key], &mut edges);
+            }
+        }
+        for edge in edges {
+            if let Some(target) = edge.target {
+                self.edge_connect(edge.source, target);
+            }
+        }
+        let waiting: Vec<Address> = self.unresolved
+            .range(Address::box_of(uuid)..)
+            .take_while(|(target, _)| target.uuid == uuid)
+            .map(|(target, _)| target.clone())
+            .collect();
+        for target in waiting {
+            if self.vertex_exists(&target) {
+                if let Some(sources) = self.unresolved.remove(&target) {
+                    let bucket = self.incoming.entry(target).or_default();
+                    for source in sources {
+                        insert_source(bucket, source);
+                    }
                 }
             }
         }
-        self.edges = edges;
-        self.forward = forward;
-        self.incoming = incoming;
+    }
+
+    /// A box vanished: disconnect its own outgoing pointers, then demote every edge that targeted a vertex
+    /// inside it (its `uuid` range in `incoming`) to `unresolved` — those sources are now dangling.
+    fn on_box_deleted(&mut self, uuid: Uuid) {
+        let sources: Vec<Address> = self.outgoing
+            .range(Address::box_of(uuid)..)
+            .take_while(|(source, _)| source.uuid == uuid)
+            .map(|(source, _)| source.clone())
+            .collect();
+        for source in sources {
+            self.edge_disconnect(&source);
+        }
+        let targets: Vec<Address> = self.incoming
+            .range(Address::box_of(uuid)..)
+            .take_while(|(target, _)| target.uuid == uuid)
+            .map(|(target, _)| target.clone())
+            .collect();
+        for target in targets {
+            if let Some(sources) = self.incoming.remove(&target) {
+                let bucket = self.unresolved.entry(target).or_default();
+                for source in sources {
+                    insert_source(bucket, source);
+                }
+            }
+        }
+    }
+}
+
+/// Insert `source` into a bucket kept sorted by Address (so `incoming` order matches a full rebuild's
+/// box-then-field iteration order). A duplicate is ignored.
+fn insert_source(bucket: &mut Vec<Address>, source: Address) {
+    if let Err(position) = bucket.binary_search(&source) {
+        bucket.insert(position, source);
+    }
+}
+
+/// Remove `source` from `map[target]` (a sorted bucket), dropping the entry when it empties.
+fn remove_source_from(map: &mut BTreeMap<Address, Vec<Address>>, target: &Address, source: &Address) {
+    if let Some(bucket) = map.get_mut(target) {
+        if let Ok(position) = bucket.binary_search(source) {
+            bucket.remove(position);
+        }
+        if bucket.is_empty() {
+            map.remove(target);
+        }
     }
 }
 
