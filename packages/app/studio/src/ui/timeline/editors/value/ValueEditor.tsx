@@ -119,7 +119,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 if (dblclck && !event.shiftKey) {
                     if (target === null || target.type === "loop-duration") {
                         const rect = canvas.getBoundingClientRect()
-                        const position = Math.round(range.xToUnit(event.clientX - rect.left) - reader.offset)
+                        const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
                         const clickValue = valueAxis.axisToValue(event.clientY - rect.top)
                         const formatValue = context.currentValue
                         const value: number = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))

@@ -14,7 +14,7 @@ architecture work or maintainer decisions).
 | [234](234-evaluate-webclap.md) | Evaluate WebCLAP | research | 5 | pure evaluation, verdict already clear |
 | [263](263-windows-build-instructions.md) | Windows build instructions | docs | 5 | docs only, root cause is bash-only npm scripts |
 | ~~[208](208-automation-node-undo-bug.md)~~ | ~~automation node undo bug~~ | bug | 4 | ✅ done (settle-move stays in #pending + tests) |
-| [274](274-automation-node-snapping-bug.md) | automation node snapping bug | bug | 4 | node creation never consults the grid |
+| ~~[274](274-automation-node-snapping-bug.md)~~ | ~~automation node snapping bug~~ | bug | 4 | ✅ done (create now snaps via Snapping) |
 | [271](271-automation-clip-default-node.md) | automation clip default node | feature | 4 | self-contained factory fix |
 | [212](212-automation-track-naming.md) | automation track naming | feature | 4 | accessors exist, two ProjectApi factories |
 | [185](185-clip-view-issues.md) | clip view issues | ux | 4 | both root causes pinned |
