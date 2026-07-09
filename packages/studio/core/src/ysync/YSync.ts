@@ -26,6 +26,7 @@ import {
     Update
 } from "@opendaw/lib-box"
 import {YMapper} from "./YMapper"
+import {deterministicReconcile} from "./Reconcile"
 import * as Y from "yjs"
 
 type EventHandler = (events: Array<Y.YEvent<any>>, transaction: Y.Transaction) => void
@@ -70,6 +71,10 @@ export class YSync<T> implements Terminable {
             const fields = boxMap.get("fields") as Y.Map<unknown>
             boxGraph.createBox(name, uuid, box => YMapper.applyFromBoxMap(box, fields))
         })
+        // A room document can encode a state that violates a box-graph invariant (the live reconcile heals
+        // each peer's graph but leaves the doc as-is). Repair deterministically before validating, so a fresh
+        // joiner lands on the same graph every peer already holds instead of rejecting the whole snapshot.
+        deterministicReconcile(boxGraph)
         boxGraph.endTransaction()
         return sync
     }
@@ -113,28 +118,10 @@ export class YSync<T> implements Terminable {
             const isHistoryReplay = typeof origin === "string" && origin.startsWith("[history]")
             console.debug(`got ${events.length} ${local ? "local" : "external"} updates from '${originLabel}', isHistoryReplay: ${isHistoryReplay}, isOwnOrigin: ${isOwnOrigin}`)
             if (isOwnOrigin || (local && !isHistoryReplay)) {return}
+            // First attempt: apply the remote batch verbatim.
             this.#boxGraph.beginTransaction()
             const result = tryCatch(() => {
-                for (const event of events) {
-                    const path = this.#normalizePath(event.path)
-                    const keys = event.changes.keys
-                    for (const [key, change] of keys.entries()) {
-                        if (YSync.debugging) {
-                            console.debug(`${change.action} on ${path}:${key}`)
-                        }
-                        if (change.action === "add") {
-                            assert(path.length === 0, "'Add' cannot have a path")
-                            this.#createBox(key)
-                        } else if (change.action === "update") {
-                            if (path.length === 0) {continue}
-                            assert(path.length >= 2, "Invalid path: must have at least 2 elements (uuid, 'fields').")
-                            this.#updateValue(path, key)
-                        } else if (change.action === "delete") {
-                            assert(path.length === 0, "'Delete' cannot have a path")
-                            this.#deleteBox(key)
-                        }
-                    }
-                }
+                this.#applyEvents(events)
                 this.#ignoreUpdates = true
                 this.#boxGraph.endTransaction()
                 this.#ignoreUpdates = false
@@ -144,13 +131,31 @@ export class YSync<T> implements Terminable {
                 if (this.#boxGraph.inTransaction()) {
                     this.#boxGraph.abortTransaction()
                 }
-                // Local revert only; do not publish inverse ops back into Yjs.
-                // Writing inverse ops would race with the same remote update
-                // still in flight and pump Yjs into a retry/corruption loop.
-                // Local state stays as it was before this batch; the doc on
-                // Yjs's side keeps the remote update and converges via the
-                // next legitimate operation (e.g. our delete propagating).
-                console.warn(`[YSync] Transaction rejected, reverted locally:`, result.error)
+                // The merged document is legal for Yjs but violates a box-graph invariant (e.g. two clients
+                // concurrently attached pointers to an exclusive target). Rather than revert locally — which
+                // forks the room, because each client reverts to its own different state — RE-APPLY the batch
+                // and repair the violation with a function that is deterministic in the converged document
+                // (see deterministicReconcile). Every client computes the same repair, so the graphs converge.
+                const reconciled = tryCatch(() => {
+                    this.#boxGraph.beginTransaction()
+                    this.#applyEvents(events)
+                    deterministicReconcile(this.#boxGraph)
+                    this.#ignoreUpdates = true
+                    this.#boxGraph.endTransaction()
+                    this.#ignoreUpdates = false
+                })
+                if (reconciled.status === "failure") {
+                    this.#ignoreUpdates = false
+                    if (this.#boxGraph.inTransaction()) {
+                        this.#boxGraph.abortTransaction()
+                    }
+                    // Still illegal after reconciliation: revert locally (last resort). No inverse ops are
+                    // written back to Yjs (that would race the in-flight remote update into a retry loop).
+                    console.warn(`[YSync] Transaction rejected even after reconcile, reverted locally:`,
+                        result.error, reconciled.error)
+                    return
+                }
+                console.debug(`[YSync] Transaction reconciled deterministically after:`, result.error)
                 return
             }
             const highLevelConflict = this.#conflict.mapOr(check => check(), false)
@@ -160,6 +165,32 @@ export class YSync<T> implements Terminable {
         }
         this.#boxes.observeDeep(eventHandler)
         return {terminate: () => {this.#boxes.unobserveDeep(eventHandler)}}
+    }
+
+    // Replay one remote Yjs event batch into the (already open) box-graph transaction. Idempotent enough to
+    // run twice: the first attempt applies verbatim; on a constraint failure the reconcile path aborts and
+    // replays through here before repairing.
+    #applyEvents(events: Array<Y.YEvent<any>>): void {
+        for (const event of events) {
+            const path = this.#normalizePath(event.path)
+            const keys = event.changes.keys
+            for (const [key, change] of keys.entries()) {
+                if (YSync.debugging) {
+                    console.debug(`${change.action} on ${path}:${key}`)
+                }
+                if (change.action === "add") {
+                    assert(path.length === 0, "'Add' cannot have a path")
+                    this.#createBox(key)
+                } else if (change.action === "update") {
+                    if (path.length === 0) {continue}
+                    assert(path.length >= 2, "Invalid path: must have at least 2 elements (uuid, 'fields').")
+                    this.#updateValue(path, key)
+                } else if (change.action === "delete") {
+                    assert(path.length === 0, "'Delete' cannot have a path")
+                    this.#deleteBox(key)
+                }
+            }
+        }
     }
 
     #createBox(key: string): void {

@@ -86,13 +86,39 @@ class ExclusiveBox extends Box<Pointer.Target, LeafBoxFields> {
     get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
 }
 
+// A RefBox whose pointer is MANDATORY: it may never dangle, so when the reconcile has to drop its edge it
+// must drop the whole owner box instead of clearing the pointer.
+class MandatoryRefBox extends Box<UnreferenceableType, RefBoxFields> {
+    static create(graph: BoxGraph, uuid: UUID.Bytes, constructor?: Procedure<MandatoryRefBox>): MandatoryRefBox {
+        return graph.stageBox(new MandatoryRefBox({uuid, graph, name: "MandatoryRefBox", pointerRules: NoPointers}), constructor)
+    }
+    private constructor(construct: BoxConstruct<UnreferenceableType>) {super(construct)}
+    protected initializeFields(): RefBoxFields {
+        return {
+            1: PointerField.create({parent: this, fieldKey: 1, fieldName: "target", deprecated: false, pointerRules: NoPointers}, Pointer.Target, true)
+        }
+    }
+    accept<R>(visitor: TestVisitor<R>): Maybe<R> {return safeExecute((visitor as any).visitMandatoryRefBox, this)}
+    get tags(): Readonly<Record<string, string | number | boolean>> {return {}}
+    get target(): PointerField<Pointer.Target> {return this.getField(1)}
+}
+
 const factory = (name: string, graph: BoxGraph, uuid: UUID.Bytes, constructor: Procedure<Box>): Box => {
     switch (name) {
         case "LeafBox": return LeafBox.create(graph, uuid, constructor as Procedure<LeafBox>)
         case "RefBox": return RefBox.create(graph, uuid, constructor as Procedure<RefBox>)
         case "ExclusiveBox": return ExclusiveBox.create(graph, uuid, constructor as Procedure<ExclusiveBox>)
+        case "MandatoryRefBox": return MandatoryRefBox.create(graph, uuid, constructor as Procedure<MandatoryRefBox>)
         default: return panic(`Unknown box: ${name}`)
     }
+}
+
+// A seeded PRNG (mulberry32) so fuzz failures reproduce from the logged seed.
+const mulberry32 = (seed: number): (() => number) => () => {
+    seed = (seed + 0x6D2B79F5) | 0
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
 }
 
 // --- Peer + network harness ----------------------------------------------
@@ -265,16 +291,22 @@ describe("YSync live collaboration", () => {
         } finally {
             warn.mockRestore()
         }
-        // INVARIANTS THAT HOLD: no peer crashes, the Yjs doc converges, and each peer keeps the exclusive
-        // rule locally (exactly one incoming pointer).
+        // With deterministic reconciliation, the joint constraint violation NO LONGER forks the room:
+        // each peer keeps exactly one incoming pointer (the exclusive rule holds) AND both peers land on the
+        // SAME survivor (the lowest-addressed source), so the graphs converge.
         expect(A.graph.findBox(target).unwrap().incomingEdges()).toHaveLength(1)
         expect(B.graph.findBox(target).unwrap().incomingEdges()).toHaveLength(1)
-        // KNOWN LIMITATION (documented, not asserted-as-desired): the two GRAPHS DIVERGE. Each peer rejects
-        // the other's constraint-violating batch and reverts locally while the doc keeps both edits, so A
-        // ends with ref1->target and B with ref2->target — a permanent silent fork with no "next legitimate
-        // operation" to auto-heal it (unlike the last-writer-wins primitive/pointer cases above). If YSync
-        // ever learns to reconcile this, the two checksums will start matching and this expectation flips.
-        expect(checksumHex(A.graph)).not.toBe(checksumHex(B.graph))
+        expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+
+        // A LATE joiner reads the (still over-specified) document and must land on the same graph, not reject
+        // the whole snapshot — joinRoom reconciles deterministically too.
+        const joinGraph = new BoxGraph<any>(Option.wrap(factory as any))
+        const joinDoc = new Y.Doc()
+        Y.applyUpdate(joinDoc, Y.encodeStateAsUpdate(A.doc))
+        return YSync.joinRoom<any>({boxGraph: joinGraph, boxes: joinDoc.getMap("boxes")}).then(() => {
+            expect(joinGraph.findBox(target).unwrap().incomingEdges()).toHaveLength(1)
+            expect(checksumHex(joinGraph)).toBe(checksumHex(A.graph))
+        })
     })
 
     it("three peers with concurrent edits all converge", async () => {
@@ -295,5 +327,233 @@ describe("YSync live collaboration", () => {
         expect(A.graph.boxes().length).toBe(3)
         expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
         expect(checksumHex(B.graph)).toBe(checksumHex(C.graph))
+    })
+
+    // The reconcile keeps the lowest-addressed incoming pointer. `survivorUuid` reports whose it is.
+    const survivorUuid = (peer: Peer, target: UUID.Bytes): string =>
+        UUID.toString(peer.graph.findBox(target).unwrap().incomingEdges()[0].box.address.uuid)
+    const lowestUuid = (...ids: ReadonlyArray<UUID.Bytes>): string =>
+        ids.map(UUID.toString).sort((a, b) => a.localeCompare(b))[0]
+
+    it("the exclusive survivor is the lowest-addressed source, independent of who attached it", () => {
+        const target = UUID.generate()
+        const ref1 = UUID.generate()
+        const ref2 = UUID.generate()
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        try {
+            shared(graph => {ExclusiveBox.create(graph, target); RefBox.create(graph, ref1); RefBox.create(graph, ref2)})
+            // A attaches the HIGHER-addressed ref, B the LOWER: the winner must still be the lower one.
+            const [low, high] = [ref1, ref2].sort((a, b) => UUID.toString(a).localeCompare(UUID.toString(b)))
+            edit(A, graph => graph.findBox<RefBox>(high).unwrap().target.refer(graph.findBox(target).unwrap()))
+            edit(B, graph => graph.findBox<RefBox>(low).unwrap().target.refer(graph.findBox(target).unwrap()))
+            converge(A, B)
+            expect(survivorUuid(A, target)).toBe(lowestUuid(ref1, ref2))
+            expect(survivorUuid(B, target)).toBe(lowestUuid(ref1, ref2))
+            expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+        } finally {warn.mockRestore()}
+    })
+
+    it("many refs racing onto one exclusive target converge to the single lowest-addressed winner", async () => {
+        const target = UUID.generate()
+        const refs = Array.from({length: 4}, () => UUID.generate())
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        try {
+            // One peer per ref, so no single client ever holds a local exclusive violation; the conflict
+            // exists only in the merge.
+            const peers: Array<Peer> = [A, B]
+            for (let index = 0; index < 2; index++) {
+                const doc = new Y.Doc()
+                const boxes = doc.getMap("boxes")
+                const graph = new BoxGraph<any>(Option.wrap(factory as any))
+                peers.push({name: `X${index}`, doc, boxes, graph, sync: await YSync.populateRoom<any>({boxGraph: graph, boxes})})
+            }
+            const gossip = (): void => {
+                for (let round = 0; round < 40; round++) {
+                    for (const from of peers) {for (const to of peers) {if (from !== to) {deliver(from, to)}}}
+                    const first = checksumHex(peers[0].graph)
+                    if (peers.every(peer => checksumHex(peer.graph) === first)) {return}
+                }
+                panic("no convergence")
+            }
+            edit(A, graph => {ExclusiveBox.create(graph, target); refs.forEach(id => RefBox.create(graph, id))})
+            gossip()
+            peers.forEach((peer, index) => edit(peer,
+                graph => graph.findBox<RefBox>(refs[index]).unwrap().target.refer(graph.findBox(target).unwrap())))
+            gossip()
+            for (const peer of peers) {
+                expect(peer.graph.findBox(target).unwrap().incomingEdges()).toHaveLength(1)
+                expect(survivorUuid(peer, target)).toBe(lowestUuid(...refs))
+            }
+            const reference = checksumHex(peers[0].graph)
+            for (const peer of peers) {expect(checksumHex(peer.graph)).toBe(reference)}
+        } finally {warn.mockRestore()}
+    })
+
+    it("mandatory pointers: reconcile drops the losing OWNER box, not just the edge", () => {
+        const target = UUID.generate()
+        const ownerA = UUID.generate()
+        const ownerB = UUID.generate()
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        try {
+            shared(graph => {ExclusiveBox.create(graph, target)})
+            edit(A, graph => MandatoryRefBox.create(graph, ownerA).target.refer(graph.findBox(target).unwrap()))
+            edit(B, graph => MandatoryRefBox.create(graph, ownerB).target.refer(graph.findBox(target).unwrap()))
+            converge(A, B)
+            const loser = lowestUuid(ownerA, ownerB) === UUID.toString(ownerA) ? ownerB : ownerA
+            // The losing owner is deleted on BOTH peers (a mandatory pointer may not dangle).
+            expect(A.graph.findBox(loser).isEmpty()).toBe(true)
+            expect(B.graph.findBox(loser).isEmpty()).toBe(true)
+            expect(A.graph.findBox(target).unwrap().incomingEdges()).toHaveLength(1)
+            expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+        } finally {warn.mockRestore()}
+    })
+
+    it("a batch mixing a valid edit with a violating pointer keeps the valid edit", () => {
+        const target = UUID.generate()
+        const ref1 = UUID.generate()
+        const ref2 = UUID.generate()
+        const leaf = UUID.generate()
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        try {
+            shared(graph => {
+                ExclusiveBox.create(graph, target)
+                RefBox.create(graph, ref1)
+                RefBox.create(graph, ref2)
+                LeafBox.create(graph, leaf)
+            })
+            edit(A, graph => graph.findBox<RefBox>(ref1).unwrap().target.refer(graph.findBox(target).unwrap()))
+            // ONE transaction on B: a perfectly valid label edit AND the pointer that will lose reconciliation.
+            edit(B, graph => {
+                graph.findBox<LeafBox>(leaf).unwrap().label.setValue("must-survive")
+                graph.findBox<RefBox>(ref2).unwrap().target.refer(graph.findBox(target).unwrap())
+            })
+            converge(A, B)
+            // The offending edge was dropped, but the unrelated valid edit in the same batch was preserved.
+            expect(A.graph.findBox<LeafBox>(leaf).unwrap().label.getValue()).toBe("must-survive")
+            expect(B.graph.findBox<LeafBox>(leaf).unwrap().label.getValue()).toBe("must-survive")
+            expect(A.graph.findBox(target).unwrap().incomingEdges()).toHaveLength(1)
+            expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+        } finally {warn.mockRestore()}
+    })
+
+    it("does not reconcile when concurrent edits break no constraint", () => {
+        const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
+        try {
+            const leafA = UUID.generate()
+            const leafB = UUID.generate()
+            shared(graph => {LeafBox.create(graph, leafA); LeafBox.create(graph, leafB)})
+            edit(A, graph => graph.findBox<LeafBox>(leafA).unwrap().count.setValue(1))
+            edit(B, graph => graph.findBox<LeafBox>(leafB).unwrap().label.setValue("b"))
+            converge(A, B)
+            const reconciled = debug.mock.calls.some(args =>
+                typeof args[0] === "string" && args[0].includes("reconciled deterministically"))
+            expect(reconciled).toBe(false)
+            expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+        } finally {debug.mockRestore()}
+    })
+
+    it("re-delivering after convergence changes nothing (stable, no oscillation)", () => {
+        const target = UUID.generate()
+        const ref1 = UUID.generate()
+        const ref2 = UUID.generate()
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        try {
+            shared(graph => {ExclusiveBox.create(graph, target); RefBox.create(graph, ref1); RefBox.create(graph, ref2)})
+            edit(A, graph => graph.findBox<RefBox>(ref1).unwrap().target.refer(graph.findBox(target).unwrap()))
+            edit(B, graph => graph.findBox<RefBox>(ref2).unwrap().target.refer(graph.findBox(target).unwrap()))
+            converge(A, B)
+            const before = checksumHex(A.graph)
+            for (let i = 0; i < 3; i++) {deliver(A, B); deliver(B, A)}
+            expect(checksumHex(A.graph)).toBe(before)
+            expect(checksumHex(B.graph)).toBe(before)
+            expect(A.graph.findBox(target).unwrap().incomingEdges()).toHaveLength(1)
+        } finally {warn.mockRestore()}
+    })
+
+    // Randomised multi-peer schedules. Exclusive attachments are kept APPEND-ONLY (a ref is never detached or
+    // retargeted away from an exclusive target) because the prototype suppresses its repair from the doc, so
+    // removing an exclusive survivor would diverge live peers from a fresh joiner. Within that regime the
+    // reconcile is a pure function of the converged doc, so every peer AND a late joiner must agree.
+    it("fuzz: randomised concurrent schedules converge across peers and a late joiner", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
+        try {
+            for (const seed of [1, 2, 5, 9, 13, 17, 23, 42, 99, 123, 777, 2024]) {
+                const rnd = mulberry32(seed)
+                const pick = <T>(items: ReadonlyArray<T>): T => items[Math.floor(rnd() * items.length)]
+                const peers: Array<Peer> = []
+                for (let index = 0; index < 4; index++) {
+                    const doc = new Y.Doc()
+                    const boxes = doc.getMap("boxes")
+                    const graph = new BoxGraph<any>(Option.wrap(factory as any))
+                    peers.push({name: `P${index}`, doc, boxes, graph, sync: await YSync.populateRoom<any>({boxGraph: graph, boxes})})
+                }
+                const gossip = (): void => {
+                    for (let round = 0; round < 40; round++) {
+                        for (const from of peers) {for (const to of peers) {if (from !== to) {deliver(from, to)}}}
+                        const first = checksumHex(peers[0].graph)
+                        if (peers.every(peer => checksumHex(peer.graph) === first)) {return}
+                    }
+                    panic(`seed ${seed}: no global convergence`)
+                }
+                const excl = [UUID.generate(), UUID.generate(), UUID.generate()]
+                const leaves = [UUID.generate(), UUID.generate()]
+                const refs = Array.from({length: 6}, () => UUID.generate())
+                edit(peers[0], graph => {
+                    excl.forEach(id => ExclusiveBox.create(graph, id))
+                    leaves.forEach(id => LeafBox.create(graph, id))
+                    refs.forEach(id => RefBox.create(graph, id))
+                })
+                gossip()
+                const targets = [...excl, ...leaves]
+                for (let round = 0; round < 30; round++) {
+                    for (const peer of peers) {
+                        if (rnd() < 0.5) {continue}
+                        const edits = 1 + Math.floor(rnd() * 2)
+                        for (let e = 0; e < edits; e++) {
+                            const roll = rnd()
+                            const refBox = peer.graph.findBox<RefBox>(pick(refs)).unwrap()
+                            const targetExclusive = refBox.target.targetVertex.mapOr(
+                                vertex => vertex.box.pointerRules.exclusive, false)
+                            if (roll < 0.55) {
+                                const tBox = peer.graph.findBox(pick(targets)).unwrap()
+                                const occupied = tBox.pointerRules.exclusive
+                                    && tBox.incomingEdges().some(pointer => pointer.box !== refBox)
+                                if (occupied) {continue} // keep each peer LOCALLY valid; conflicts arise on merge
+                                if (targetExclusive) {continue} // append-only for exclusive survivors
+                                edit(peer, () => refBox.target.refer(tBox))
+                            } else if (roll < 0.75) {
+                                if (refBox.target.isEmpty() || targetExclusive) {continue} // never detach an exclusive
+                                edit(peer, () => refBox.target.defer())
+                            } else {
+                                const leafBox = peer.graph.findBox<LeafBox>(pick(leaves)).unwrap()
+                                edit(peer, () => leafBox.count.setValue(Math.floor(rnd() * 1000)))
+                            }
+                        }
+                    }
+                    const from = pick(peers)
+                    const to = pick(peers)
+                    if (from !== to) {converge(from, to)}
+                }
+                gossip()
+                const reference = checksumHex(peers[0].graph)
+                for (const peer of peers) {
+                    expect(checksumHex(peer.graph), `seed ${seed} peer ${peer.name}`).toBe(reference)
+                    for (const id of excl) {
+                        expect(peer.graph.findBox(id).unwrap().incomingEdges().length,
+                            `seed ${seed} exclusive overflow`).toBeLessThanOrEqual(1)
+                    }
+                }
+                // A late joiner reconstructs from the document alone and must match the live room.
+                const joinGraph = new BoxGraph<any>(Option.wrap(factory as any))
+                const joinDoc = new Y.Doc()
+                Y.applyUpdate(joinDoc, Y.encodeStateAsUpdate(peers[0].doc))
+                await YSync.joinRoom<any>({boxGraph: joinGraph, boxes: joinDoc.getMap("boxes")})
+                expect(checksumHex(joinGraph), `seed ${seed} joiner`).toBe(reference)
+            }
+        } finally {
+            warn.mockRestore()
+            debug.mockRestore()
+        }
     })
 })
