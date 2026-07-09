@@ -1,6 +1,6 @@
 import {PointerField, PointerTypes} from "./pointer"
 import {Vertex} from "./vertex"
-import {int, Iterables, Listeners, Option, panic, SortedSet, Subscription} from "@opendaw/lib-std"
+import {int, isNotNull, Iterables, Listeners, Option, panic, SortedSet, Subscription} from "@opendaw/lib-std"
 import {Address} from "./address"
 
 export interface PointerListener {
@@ -48,8 +48,14 @@ export class PointerHub {
                 }
             },
             onRemoved: (pointer: PointerField) => {
-                added.removeByKey(pointer.address)
-                listener.onRemoved(pointer)
+                // Symmetric to the onAdded guard above. A subscription created mid-transaction takes its
+                // catch-up snapshot AFTER a pointer was already removed (but before endTransaction dispatches
+                // the deferred onRemoved), so `added` never recorded it. Forwarding that onRemoved would
+                // unbalance the listener (and panic a downstream SortedSet.removeByKey keyed on it, e.g. a
+                // deleted SelectionBox during a live-room re-follow). Only forward removals we announced as adds.
+                if (isNotNull(added.removeByKeyIfExist(pointer.address))) {
+                    listener.onRemoved(pointer)
+                }
             }
         }, ...filter)
     }
