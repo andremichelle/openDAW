@@ -13,13 +13,13 @@ export namespace MenuItems {
         const {editing, api} = project
         const audioUnit = deviceHost.audioUnitBoxAdapter()
         const {canProcessMidi, manualUrl, name} = deviceHost.inputAdapter.mapOr(input => ({
-            canProcessMidi: input.type === "instrument",
+            canProcessMidi: input.accepts === "midi",
             manualUrl: input.manualUrl,
             name: input.labelField.getValue()
         }), {canProcessMidi: false, manualUrl: "manuals", name: "Unknown"})
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(manualUrl, name),
-            MenuItem.default({label: "Add Midi-Effect", separatorBefore: true, selectable: canProcessMidi})
+            MenuItem.default({label: "Add Midi-Effect", separatorBefore: true, hidden: !canProcessMidi})
                 .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.MidiList
                     .map(entry => MenuItem.default({
                         label: entry.defaultName,
