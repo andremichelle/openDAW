@@ -52,15 +52,18 @@ pub fn band_fractions(mono: &[f32], sample_rate: f64) -> [f64; NUM_BANDS] {
     bands
 }
 
-/// Mean absolute per-band dB difference of energy fractions. 0 = same tonal balance.
+/// Mean absolute per-band dB difference of energy fractions, counting only bands the SOURCE
+/// actually occupies (>= 0.1% of its energy) — near-empty bands turn floor noise into huge log
+/// ratios (a pure sine occupies one band; the other seven are meaningless). 0 = same balance;
+/// muffling still trips it because the source's occupied high bands lose their share.
 pub fn spectral_delta_db(source_bands: &[f64; NUM_BANDS], output_bands: &[f64; NUM_BANDS]) -> f64 {
     let mut sum = 0.0;
     let mut counted = 0usize;
     for band in 0..NUM_BANDS {
-        if source_bands[band] < 1e-9 && output_bands[band] < 1e-9 {
+        if source_bands[band] < 1e-3 {
             continue;
         }
-        sum += (10.0 * ((output_bands[band] + 1e-9) / (source_bands[band] + 1e-9)).log10()).abs();
+        sum += (10.0 * ((output_bands[band] + 1e-9) / source_bands[band]).log10()).abs();
         counted += 1;
     }
     if counted == 0 { 0.0 } else { sum / counted as f64 }

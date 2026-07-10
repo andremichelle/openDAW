@@ -10,12 +10,16 @@
 extern crate alloc;
 
 pub mod fft;
+pub mod stft;
+pub mod onset;
+pub mod analyzer;
 pub mod tuning;
 pub mod descriptor;
 pub mod warp;
 pub mod voice;
 pub mod sequencer;
 
+pub use analyzer::{AnalyzedSample, Analyzer, AnalyzerConfig};
 pub use descriptor::TransientDescriptor;
 pub use sequencer::{BlockInfo, Source, Stretcher, StretchConfig, TransientPlayMode};
 pub use tuning::Tuning;

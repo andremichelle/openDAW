@@ -90,7 +90,8 @@ pub fn lookup(map: &ScoreMap, entry: &str, ratio: f64, mode: &str, metric: &str)
 /// The direction registry for values read back from snapshots (TSV carries no direction).
 pub fn direction_of(name: &str) -> Direction {
     match name {
-        "attack_rise_ratio" | "attack_crest_ratio" => Direction::TargetOne,
+        "attack_rise_ratio" => Direction::TargetOne,
+        "attack_crest_ratio" => Direction::AtLeastOne,
         _ => Direction::LowerBetter
     }
 }

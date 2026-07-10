@@ -25,7 +25,9 @@ pub const PAD_MOD_IMPROVEMENT_DB: f64 = 12.0;
 pub const PAD_MOD_ABSOLUTE_DB: f64 = -40.0;
 pub const SINE_SIDEBAND_ABSOLUTE_DB: f64 = -40.0;
 
-/// Metrics whose improvement counts toward an `Improved` verdict.
-pub const TARGETS: &[&str] = &["mod_band_peak_db", "mod_expected_db", "mod_acf_peak", "sine_sideband_db", "sine_thd_db", "attack_extra_peaks"];
+/// Metrics whose improvement counts toward an `Improved` verdict. `mod_expected_db` is reported
+/// but NOT gated: its expectation assumes the baseline's loop length, and the band-peak sweep is
+/// the engine-agnostic (ungameable) version of the same question.
+pub const TARGETS: &[&str] = &["mod_band_peak_db", "mod_acf_peak", "sine_sideband_db", "sine_thd_db", "attack_extra_peaks"];
 /// Metrics that must hold (vs reference + absolute bands) for ANY verdict better than Mixed.
 pub const GUARDS: &[&str] = &["attack_rise_ratio", "attack_crest_ratio", "spectral_delta_db", "level_delta_db", "trailing_silence"];

@@ -35,6 +35,54 @@ fn detrend_gain(frequency: f64) -> f64 {
     (1.0 - sinc).abs().max(0.25)
 }
 
+/// EXCESS modulation over a reference render (the parametric ideal, or the source): material like a
+/// detuned chord BEATS on its own (pitch-derived rates that survive stretching), and the stretcher
+/// must not be charged for modulation the perfect output would also have. Values are dB of excess;
+/// 0 = no more modulation than the reference, positive = added grain.
+pub fn modulation_excess(output_env: &[f32], reference_env: &[f32], expected_loop_hz: f64) -> Option<ModulationScores> {
+    let output = modulation_lines(output_env)?;
+    let reference = modulation_lines(reference_env)?;
+    let mut band_excess = f64::NEG_INFINITY;
+    let mut expected_excess = f64::NEG_INFINITY;
+    for (index, (frequency, output_db)) in output.lines.iter().enumerate() {
+        let reference_db = reference.lines[index].1;
+        let excess = output_db - reference_db.max(-70.0);
+        if excess > band_excess {
+            band_excess = excess;
+        }
+        if expected_loop_hz > 0.2 && (frequency - expected_loop_hz).abs() < 0.26 {
+            expected_excess = excess;
+        }
+    }
+    Some(ModulationScores {
+        expected_db: expected_excess,
+        band_peak_db: band_excess,
+        acf_peak: (output.acf - reference.acf).max(0.0)
+    })
+}
+
+struct ModulationLines {
+    lines: Vec<(f64, f64)>,
+    acf: f64
+}
+
+fn modulation_lines(smooth_env: &[f32]) -> Option<ModulationLines> {
+    let region = analysis_region(smooth_env)?;
+    let level = mean(region);
+    if level < 1e-5 {
+        return None;
+    }
+    let residual = detrend(region, DETREND_WINDOW_MS);
+    let mut lines = Vec::new();
+    let mut frequency = 1.0;
+    while frequency <= 60.0 {
+        let magnitude = goertzel::magnitude(&residual, ENVELOPE_RATE, frequency) / detrend_gain(frequency);
+        lines.push((frequency, goertzel::db(magnitude / level)));
+        frequency += 0.25;
+    }
+    Some(ModulationLines {lines, acf: acf_peak(&residual)})
+}
+
 pub fn modulation_scores(smooth_env: &[f32], expected_loop_hz: f64) -> Option<ModulationScores> {
     let region = analysis_region(smooth_env)?;
     let level = mean(region);

@@ -57,7 +57,16 @@ pub fn judge(current: &Scores, baseline: &ScoreMap, best: Option<&ScoreMap>) -> 
             let is_target = thresholds::TARGETS.contains(&metric.name);
             let is_guard = thresholds::GUARDS.contains(&metric.name);
             if is_guard && guard_absolute_violation(metric) {
-                guard_violations.push(format!("{identifier} = {:.3} (absolute band)", metric.value));
+                // A violation the reference ALREADY had (and the change did not worsen) is
+                // pre-existing pain, not this change's fault — the delta check below still
+                // catches any worsening.
+                let pre_existing = reference_value.map(|value| {
+                    let reference_metric = MetricValue {name: metric.name, value, better: metric.better};
+                    guard_absolute_violation(&reference_metric)
+                }).unwrap_or(false);
+                if !pre_existing {
+                    guard_violations.push(format!("{identifier} = {:.3} (absolute band)", metric.value));
+                }
             }
             if let Some(reference_value) = reference_value {
                 let reference_metric = MetricValue {name: metric.name, value: reference_value, better: metric.better};

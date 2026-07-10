@@ -15,11 +15,16 @@ pub(crate) enum VoiceState {
     Done
 }
 
-/// Everything a voice needs that the sequencer resolves at spawn time.
+/// Everything a voice needs that the sequencer resolves at spawn time. `equal_power` shapes the
+/// voice in/out fades (crossfading DIFFERENT segments — uncorrelated, equal-power is right);
+/// `splice_equal_power` shapes the loop splice, where the law follows alignment: a correlation-
+/// aligned splice is phase-coherent and must crossfade LINEARLY (coherent sum is constant — cos/sin
+/// would bump +3 dB), while an arbitrary fallback splice is uncorrelated and wants equal-power.
 #[derive(Clone, Copy)]
 pub(crate) struct VoiceParams {
     pub fade_seconds: f64,
     pub equal_power: bool,
+    pub splice_equal_power: bool,
     pub loop_start: f64,
     pub loop_end: f64,
     pub loop_fade_samples: f64
@@ -246,7 +251,7 @@ pub(crate) struct RepeatVoice {
     loop_end: f64,
     loop_fade_length: f64,
     loop_fade_inverse: f64,
-    equal_power: bool,
+    splice_equal_power: bool,
     pub(crate) segment_end: f64,
     pub(crate) read_position: f64,
     loop_crossfade_progress: f64,
@@ -265,7 +270,7 @@ impl RepeatVoice {
         }
         Self {
             fade, playback_rate, loop_start, loop_end, loop_fade_length, loop_fade_inverse: 1.0 / loop_fade_length,
-            equal_power: params.equal_power, segment_end, read_position: initial_read_position.unwrap_or(segment_start),
+            splice_equal_power: params.splice_equal_power, segment_end, read_position: initial_read_position.unwrap_or(segment_start),
             loop_crossfade_progress: 0.0, loop_crossfade_position: 0.0, block_offset
         }
     }
@@ -289,7 +294,7 @@ impl RepeatVoice {
             if self.loop_crossfade_progress > 0.0 {
                 if let (Some(loop_l), Some(loop_r)) = (read_interp(source.left, source.num_frames, self.loop_crossfade_position), read_interp(source.right, source.num_frames, self.loop_crossfade_position)) {
                     let crossfade = (self.loop_crossfade_progress * self.loop_fade_inverse) as f32;
-                    if self.equal_power {
+                    if self.splice_equal_power {
                         let fade_out = math::cos(crossfade * core::f32::consts::PI * 0.5);
                         let fade_in = math::sin(crossfade * core::f32::consts::PI * 0.5);
                         sample_l = sample_l * fade_out + loop_l * fade_in;

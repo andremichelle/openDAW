@@ -311,8 +311,26 @@ impl Stretcher {
         // playback inside a silent gap makes `floor_last_index` pick the PRECEDING phrase's transient;
         // without this clamp the voice would replay that phrase (the "breathless pop").
         let playhead_file_samples = file_seconds_start * file_rate as f64;
-        let voice_start_samples = pre_roll_start.max(playhead_file_samples);
+        let mut voice_start_samples = pre_roll_start.max(playhead_file_samples);
         let marker = &markers[transient_index as usize];
+        // PSOLA-style spawn alignment (adaptive, periodic material only): same-frequency crossfades
+        // are phase-coherent, and an opposite-phase overlap dips regardless of fade law. Shifting
+        // the new voice's read start by the mod-period residual (<= half a period — inaudible
+        // micro-timing) phase-matches it to the loudest outgoing voice, so the boundary crossfade
+        // sums cleanly.
+        if self.tuning.adaptive && marker.period > 0.0 {
+            if let Some(old_read) = self.voices.iter().find(|voice| !voice.done()).map(|voice| voice.read_position()) {
+                let period = marker.period as f64;
+                let mut residual = (old_read - voice_start_samples) % period;
+                if residual < 0.0 {
+                    residual += period;
+                }
+                if residual > period * 0.5 {
+                    residual -= period;
+                }
+                voice_start_samples = (voice_start_samples + residual).max(playhead_file_samples);
+            }
+        }
         if let Some(voice) = create_voice(voice_start_samples, info.end_samples, playback_rate, engine_rate, mode, needs_looping, None, marker, &self.tuning) {
             self.voices.push(voice);
         }
@@ -347,6 +365,7 @@ fn voice_params(segment_start: f64, segment_end: f64, playback_rate: f64, sample
         return VoiceParams {
             fade_seconds: tuning.voice_fade_seconds,
             equal_power: tuning.equal_power_fades,
+            splice_equal_power: tuning.equal_power_fades,
             loop_start: legacy_loop_start,
             loop_end: legacy_loop_end,
             loop_fade_samples: round(tuning.loop_fade_seconds * sample_rate as f64)
@@ -371,7 +390,14 @@ fn voice_params(segment_start: f64, segment_end: f64, playback_rate: f64, sample
     }
     let loop_length_output = (loop_end - loop_start) / playback_rate;
     loop_fade_samples = loop_fade_samples.min(0.25 * loop_length_output).max(1.0);
-    VoiceParams {fade_seconds, equal_power: tuning.equal_power_fades, loop_start, loop_end, loop_fade_samples}
+    // Fade law follows coherence: periodic material gets phase-aligned spawns, so its boundary
+    // crossfades are coherent and must be LINEAR (equal-power would bump +3 dB); everything else
+    // is uncorrelated and wants equal-power. Same rule for the loop splice via alignment.
+    let coherent = marker.period > 0.0;
+    VoiceParams {
+        fade_seconds, equal_power: tuning.equal_power_fades && !coherent,
+        splice_equal_power: !marker.has_loop(), loop_start, loop_end, loop_fade_samples
+    }
 }
 
 /// Pick the voice type for the transient play-mode + whether the segment must loop to fill.

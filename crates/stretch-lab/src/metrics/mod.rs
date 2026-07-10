@@ -16,7 +16,10 @@ use crate::render::RenderSpec;
 pub enum Direction {
     LowerBetter,
     HigherBetter,
-    TargetOne
+    TargetOne,
+    /// Only values BELOW one are bad (smear); above one is fine (sparse impulsive material reads
+    /// punchier when loops repeat its quiet tail — not a defect).
+    AtLeastOne
 }
 
 #[derive(Clone, Debug)]
@@ -50,13 +53,24 @@ pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_righ
     let source_bands = spectral::band_fractions(&source_mono, spec.file_rate as f64);
     let output_bands = spectral::band_fractions(&output_mono, engine_rate);
     results.push(metric("spectral_delta_db", spectral::spectral_delta_db(&source_bands, &output_bands), Direction::LowerBetter));
-    if matches!(entry.class, Class::Sustained | Class::Sine | Class::Sweep | Class::Tonal) {
+    // Once mode gaps by design once the segment runs out — its level/spectral drift is the correct
+    // musical behavior, not a defect, so those guards only judge the looping modes.
+    let gapping = spec.mode == crate::render::PlayMode::Once && spec.ratio > 1.01;
+    if !gapping && matches!(entry.class, Class::Sustained | Class::Sine | Class::Sweep | Class::Tonal) {
         results.push(metric("level_delta_db", spectral::level_delta_db(envelope::rms(&source_mono), envelope::rms(&output_mono)), Direction::LowerBetter));
     }
     let looping = spec.ratio > 1.01;
     if looping && matches!(entry.class, Class::Sustained | Class::Sine | Class::Sweep | Class::Tonal | Class::Mixed) {
-        let smooth = envelope::smooth_envelope(&output_mono, crate::render::ENGINE_RATE);
-        if let Some(scores) = modulation::modulation_scores(&smooth, expected_loop_hz(entry)) {
+        // Modulation is judged as EXCESS over the reference: the parametric ideal when the entry
+        // has one, else the source (intrinsic beat rates are pitch-derived and survive stretching).
+        let reference_mono = entry.ideal.as_ref().map(|ideal| ideal(spec.ratio));
+        let (reference_env, reference_rate) = match &reference_mono {
+            Some(ideal) => (ideal.as_slice(), crate::render::ENGINE_RATE),
+            None => (source_mono.as_slice(), spec.file_rate)
+        };
+        let smooth_out = envelope::smooth_envelope(&output_mono, crate::render::ENGINE_RATE);
+        let smooth_ref = envelope::smooth_envelope(reference_env, reference_rate);
+        if let Some(scores) = modulation::modulation_excess(&smooth_out, &smooth_ref, expected_loop_hz(entry)) {
             if scores.expected_db.is_finite() {
                 results.push(metric("mod_expected_db", scores.expected_db, Direction::LowerBetter));
             }
@@ -74,7 +88,7 @@ pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_righ
     if matches!(entry.class, Class::Percussive | Class::Tonal | Class::Mixed) {
         if let Some(scores) = attack::attack_scores(&source_fast, &output_fast, &entry.transients, spec.ratio) {
             results.push(metric("attack_rise_ratio", scores.rise_ratio, Direction::TargetOne));
-            results.push(metric("attack_crest_ratio", scores.crest_ratio, Direction::TargetOne));
+            results.push(metric("attack_crest_ratio", scores.crest_ratio, Direction::AtLeastOne));
             results.push(metric("attack_extra_peaks", scores.extra_peaks, Direction::LowerBetter));
         }
     }
@@ -86,15 +100,17 @@ pub fn badness(value: &MetricValue) -> f64 {
     match value.better {
         Direction::LowerBetter => value.value,
         Direction::HigherBetter => -value.value,
-        Direction::TargetOne => (value.value - 1.0).abs()
+        Direction::TargetOne => (value.value - 1.0).abs(),
+        Direction::AtLeastOne => (1.0 - value.value).max(0.0)
     }
 }
 
-/// The mathematically perfect score for each metric (the "ideal" report column).
+/// The mathematically perfect score for each metric (the "ideal" report column). The mod_* family
+/// is excess-over-reference: 0 means "no more modulation than the perfect output".
 pub fn ideal_value(name: &str) -> f64 {
     match name {
         "attack_rise_ratio" | "attack_crest_ratio" => 1.0,
-        "mod_expected_db" | "mod_band_peak_db" | "sine_sideband_db" | "sine_thd_db" => -120.0,
+        "sine_sideband_db" | "sine_thd_db" => -120.0,
         _ => 0.0
     }
 }

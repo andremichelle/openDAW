@@ -10,7 +10,7 @@
 //! One iteration = edit `crates/stretch` -> `judge` -> read deltas -> `accept` or revert.
 
 use std::path::{Path, PathBuf};
-use stretch::{TransientDescriptor, Tuning};
+use stretch::{Analyzer, Tuning};
 use stretch_lab::corpus::{self, Entry};
 use stretch_lab::metrics::{self, MetricValue};
 use stretch_lab::render::{self, PlayMode, RenderSpec};
@@ -87,7 +87,7 @@ fn render_case(case: &Case, engine: &Engine) -> (Vec<f32>, Vec<f32>, Vec<MetricV
     let (out_left, out_right) = match engine {
         Engine::Baseline => render::render_baseline(&spec),
         Engine::Stretch(tuning) => {
-            let markers = TransientDescriptor::bare_all(&entry.transients);
+            let markers = Analyzer::default().describe(&entry.left, &entry.right, entry.file_rate, &entry.transients);
             render::render_stretch(&spec, &markers, *tuning)
         }
     };
@@ -175,8 +175,8 @@ fn cmd_run() {
     let entries = load_corpus();
     let baseline = read_tsv(&snapshots_dir().join("baseline.tsv")).unwrap_or_else(|| panic!("no snapshots/baseline.tsv — run `judge baseline` first"));
     let best = read_tsv(&snapshots_dir().join("best.tsv"));
-    println!("rendering stretch matrix ({} entries)...", entries.len());
-    let scores = run_matrix(&entries, &Engine::Stretch(Tuning::default()), true);
+    println!("rendering stretch matrix ({} entries, adaptive tuning)...", entries.len());
+    let scores = run_matrix(&entries, &Engine::Stretch(Tuning::adaptive()), true);
     write(&out_dir().join("scores.json"), &scores.to_json());
     write(&out_dir().join("current.tsv"), &scores.to_tsv());
     let judgement = report::judge(&scores, &baseline, best.as_ref());
