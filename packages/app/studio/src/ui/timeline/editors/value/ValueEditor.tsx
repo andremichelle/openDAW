@@ -120,6 +120,10 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                     if (target === null || target.type === "loop-duration") {
                         const rect = canvas.getBoundingClientRect()
                         const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
+                        // #275: when the snapped time already holds a node, the cursor's side of it picks which member
+                        // of the same-time pair the click sets — left of the node = incoming (index 0), right = outgoing.
+                        const side = range.xToUnit(event.clientX - rect.left) - reader.offset < position
+                            ? "incoming" : "outgoing"
                         const clickValue = valueAxis.axisToValue(event.clientY - rect.top)
                         const formatValue = context.currentValue
                         const value: number = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))
@@ -128,7 +132,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             : context.quantize(clickValue)
                         return editing.modify(() =>
                             ValueEventEditing.createOrMoveEvent(reader.content, position, value,
-                                context.floating ? Interpolation.Linear : Interpolation.None), false)
+                                context.floating ? Interpolation.Linear : Interpolation.None, side), false)
                             .match({
                                 none: () => Option.None,
                                 some: adapter => {
