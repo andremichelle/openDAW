@@ -13,6 +13,7 @@ export * from "./ysync"
 
 export * from "./AudioConsolidation"
 export * from "./AudioDevices"
+export * from "./AudioWarpRender"
 export * from "./AudioOfflineRenderer"
 export * from "./OfflineEngineRenderer"
 export * from "./AudioUtils"

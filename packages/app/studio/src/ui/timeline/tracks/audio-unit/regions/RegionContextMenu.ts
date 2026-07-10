@@ -2,6 +2,7 @@ import {EmptyExec, isInstanceOf, RuntimeNotifier, Selection, Terminable} from "@
 import {
     AudioConsolidation,
     AudioContentModifier,
+    AudioWarpRender,
     ContextMenu,
     ElementCapturing,
     MenuItem,
@@ -110,6 +111,18 @@ export const installRegionContextMenu =
                                 region.flatten(selection.selected()).ifSome(box => project.selection.select(box)))
                         }
                     }),
+                MenuItem.default({
+                    label: "Render HQ Stretch",
+                    hidden: region.type !== "audio-region",
+                    selectable: isInstanceOf(region, AudioRegionBoxAdapter) &&
+                        (region.asPlayModeTimeStretch.nonEmpty() || region.asPlayModePitchStretch.nonEmpty())
+                }).setTriggerProcedure(() => {
+                    const audioRegions = selection.selected()
+                        .filter((adapter): adapter is AudioRegionBoxAdapter =>
+                            isInstanceOf(adapter, AudioRegionBoxAdapter))
+                    AudioWarpRender.renderComplex(project, service.sampleService, audioRegions)
+                        .then(EmptyExec, console.warn)
+                }),
                 MenuItem.default({label: "Convert to Clip"})
                     .setTriggerProcedure(() => region.trackBoxAdapter.ifSome(() => editing.modify(() => {
                         service.timeline.clips.visible.setValue(true)
