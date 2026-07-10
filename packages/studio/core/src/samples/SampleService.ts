@@ -75,7 +75,19 @@ export class SampleService extends AssetService<Sample, AudioData> {
     protected async collectAllFiles(): Promise<ReadonlyArray<Sample>> {
         const stock = await FactoryCatalog.get().samples()
         const local = await SampleStorage.get().list()
-        return Arrays.merge(stock, local, (sample, {uuid}) => sample.uuid === uuid)
+        // Cleanup migration: a historical bug let zero-length audio become a duration-0 sample, which then
+        // created duration-0 regions that crash validateTrack. The import guard stops new ones; purge any
+        // already saved (and any with a NaN/negative duration) so they can never be dropped again. Self-heals
+        // on every list, so no run-once flag is needed. `!(duration > 0)` also catches NaN.
+        const valid = local.filter(sample => sample.duration > 0)
+        if (valid.length < local.length) {
+            const invalid = local.filter(sample => !(sample.duration > 0))
+            console.warn(`Purging ${invalid.length} zero-duration sample(s):`, invalid.map(sample => sample.uuid))
+            const storage = SampleStorage.get()
+            await Promise.all(invalid.map(sample =>
+                Promises.tryCatch(storage.deleteItem(UUID.parse(sample.uuid)))))
+        }
+        return Arrays.merge(stock, valid, (sample, {uuid}) => sample.uuid === uuid)
     }
 
     async #decodeAudio(arrayBuffer: ArrayBuffer): Promise<AudioData> {
