@@ -1,6 +1,6 @@
 name: Feature request
 description: Suggest an idea or improvement for openDAW
-labels: ["enhancement"]
+labels: ["feature request"]
 body:
   - type: markdown
     attributes:
