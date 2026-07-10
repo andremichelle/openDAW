@@ -1,0 +1,14 @@
+[package]
+name = "stretch-lab"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+stretch = {path = "../stretch"}
+engine-env = {path = "../engine-env"}
+dsp = {path = "../dsp"}
+math = {path = "../math"}

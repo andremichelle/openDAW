@@ -341,6 +341,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "stretch"
+version = "0.0.0"
+dependencies = [
+ "dsp",
+ "libm",
+ "math",
+]
+
+[[package]]
+name = "stretch-lab"
+version = "0.0.0"
+dependencies = [
+ "dsp",
+ "engine-env",
+ "math",
+ "stretch",
+]
+
+[[package]]
 name = "studio-boxes"
 version = "0.0.0"
 dependencies = [

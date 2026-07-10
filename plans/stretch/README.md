@@ -155,7 +155,29 @@ Every threshold above is an initial value, revisable when the numbers teach us o
 - **Detector replacement rollout** — new positions will differ from the TS detector on existing
   projects; needs a position-parity check before becoming the default writer.
 
-## 6. Risks
+## 6. Amendments from external research review (2026-07-10)
+
+A reviewed survey of the warping-engine landscape confirmed the plan's premise (no single TSM
+algorithm suits all material; adaptive, mode-plural processing is the commercial norm; import-time
+cached analysis matches our bind-time descriptor decision) and contributed:
+
+- **Complex-domain spectral flux** (Bello et al. 2005) as a Phase 2 detector variant next to
+  magnitude flux — strongest on soft tonal onsets (our pad case). The harness arbitrates the two.
+- **Recall-weighted detector gate**: for TSM a missed onset (smeared transient) costs more than a
+  spurious marker — the Phase 2 gate weighs recall over precision.
+- **Spectral-tier candidates widened**: HPS-hybrid (Driedger-Müller-Ewert 2014; implicit transient
+  preservation, but heaviest CPU per region and openDAW needs explicit transients regardless) and
+  RTPGHI (Průša-Holighaus) join the Signalsmith-style PV + transient-reset candidate. Judge matrix
+  decides, same as everything else.
+- **Rubber Band CLI as an optional reference column** — GPL binds shipped code only; rendering the
+  corpus through its CLI is license-clean and gives the R3 quality bar, measured.
+- **Ellis DP beat tracking** (~200 lines, ISC reference in librosa) — pointer for a future
+  auto-warp feature; out of scope here.
+
+Reading order for the spectral tier: Driedger-Müller TSM review → Laroche-Dolson → Bello onset
+tutorial → Ellis beat tracking → JOS TSM notes.
+
+## 7. Risks
 
 - Metrics gamed → paired gating + independent analyzer + mandatory listening.
 - YIN octave errors pick bad loops → aperiodic fallback, correlation alignment.
