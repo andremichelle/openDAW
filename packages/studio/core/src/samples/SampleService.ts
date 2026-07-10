@@ -1,4 +1,4 @@
-import {Arrays, Class, isDefined, Progress, tryCatch, UUID} from "@opendaw/lib-std"
+import {Arrays, Class, isDefined, panic, Progress, tryCatch, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {AudioData, estimateBpm} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
@@ -21,6 +21,12 @@ export class SampleService extends AssetService<Sample, AudioData> {
     constructor(readonly audioContext: AudioContext) {super()}
 
     async importRecording(audioData: AudioData, bpm: number, name: string = "Recording"): Promise<Sample> {
+        // A sample MUST have a positive length. A zero-frame take would become a duration-0 sample and, once
+        // dropped, a duration-0 region that later trips validateTrack ("duration must be positive"). Reject it
+        // at the door so the invariant "every sample has duration > 0" holds for every downstream consumer.
+        if (audioData.numberOfFrames === 0) {
+            return panic(`Cannot import recording '${name}': the take is empty (0 frames).`)
+        }
         const arrayBuffer = WavFile.encodeFloats({
             frames: audioData.frames.slice(),
             numberOfFrames: audioData.numberOfFrames,
@@ -36,6 +42,12 @@ export class SampleService extends AssetService<Sample, AudioData> {
         console.debug(`importSample '${name}' (${arrayBuffer.byteLength >> 10}kb)`)
         uuid ??= await UUID.sha256(arrayBuffer)
         const audioData = await this.#decodeAudio(arrayBuffer)
+        // Empty/undecodable audio yields 0 frames -> duration 0. Such a sample creates duration-0 regions that
+        // later panic in validateTrack. Enforce "a sample has duration > 0" here, the single source of every
+        // audio region, instead of guarding every consumer downstream.
+        if (audioData.numberOfFrames === 0) {
+            return panic(`Cannot import '${name}': the audio is empty (0 frames).`)
+        }
         const duration = audioData.numberOfFrames / audioData.sampleRate
         const shifts = SamplePeaks.findBestFit(audioData.numberOfFrames)
         const peaks = await Workers.Peak.generateAsync(

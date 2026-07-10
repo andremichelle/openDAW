@@ -17,7 +17,7 @@ export const AudioRegionBox: BoxSchema<Pointers> = {
             7: {type: "float32", name: "waveform-offset", constraints: "any", unit: "seconds"},
             8: {type: "pointer", name: "play-mode", pointerType: Pointers.AudioPlayMode, mandatory: false},
             10: {type: "int32", name: "position", ...PPQNPositionConstraints},
-            11: {type: "float32", name: "duration", constraints: "any", unit: "mixed"},
+            11: {type: "float32", name: "duration", constraints: "positive", unit: "mixed"},
             12: {type: "float32", name: "loop-offset", constraints: "any", unit: "mixed"},
             13: {type: "float32", name: "loop-duration", constraints: "any", unit: "mixed"},
             14: {type: "boolean", name: "mute"},
