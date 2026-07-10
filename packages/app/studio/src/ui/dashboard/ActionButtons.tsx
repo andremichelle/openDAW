@@ -30,7 +30,7 @@ export const ActionButtons = ({service}: Construct) => (
                 <div className="desc">Jam with others in real time, share a link.</div>
             </div>
         </button>
-        <button className="action muted" onclick={() => service.importBundle()}>
+        <button className="action import" onclick={() => service.importBundle()}>
             <Icon symbol={IconSymbol.Folder}/>
             <div className="text">
                 <div className="title">Open Bundle</div>

@@ -4,6 +4,7 @@ component
   row-gap: 0.4em
 
   > .action
+    --action-color: var(--color-blue)
     display: flex
     align-items: center
     column-gap: 0.6em
@@ -16,18 +17,16 @@ component
     cursor: pointer
     font: inherit
 
+    // only the frame reacts to hover; it takes the icon's color
     &:hover
-      border-color: var(--color-green)
+      border-color: var(--action-color)
       background: rgba(white, 0.04)
-
-      > svg
-        color: var(--color-green)
 
     > svg
       width: 24px
       height: 24px
       flex: 0 0 auto
-      color: var(--color-blue)
+      color: var(--action-color)
 
     > .text > .title
       color: white
@@ -38,20 +37,6 @@ component
       font-size: var(--fs-m)
       color: var(--color-shadow)
 
-  // secondary action: recedes into the background, stays gray (lower priority than New Project / New Live Room)
-  > .action.muted
-    border-color: rgba(white, 0.04)
-    background: none
-
-    > svg
-      color: var(--color-shadow)
-
-    > .text > .title
-      color: var(--color-dark)
-
-    &:hover
-      border-color: rgba(white, 0.1)
-      background: rgba(white, 0.02)
-
-      > svg
-        color: var(--color-shadow)
+  // Open Bundle: same frame as the others, but orange (icon + hover frame)
+  > .action.import
+    --action-color: var(--color-orange)
