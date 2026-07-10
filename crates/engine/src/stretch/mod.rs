@@ -16,11 +16,15 @@
 //!    randomises per-bin time offsets to avoid metallic resonance);
 //!  - no custom frequency-map callback (openDAW only needs multiplier + tonality limit).
 
-// consumed by the COMPLEX play-mode integration; the API surface lands before its engine wiring
+// The COMPLEX sequencer drives the streaming `process`/`seek` path; the faithful port also keeps the
+// one-shot `exact`/`output_seek`/`flush` API (tested, but not used by the real-time engine).
 #![allow(dead_code)]
 
 mod fft;
 mod stft;
+mod sequencer;
+
+pub(crate) use sequencer::ComplexStretchSequencer;
 
 use alloc::vec::Vec;
 use math::random::Mulberry32;

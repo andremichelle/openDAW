@@ -10,6 +10,7 @@ import {
     TimelineRange
 } from "@opendaw/studio-core"
 import {AnyRegionBoxAdapter, AudioRegionBoxAdapter} from "@opendaw/studio-adapters"
+import {StretchAlgorithm} from "@opendaw/studio-enums"
 import {RegionCaptureTarget} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {TimelineBox} from "@opendaw/studio-boxes"
 import {Surface} from "@/ui/surface/Surface.tsx"
@@ -191,7 +192,21 @@ export const installRegionContextMenu =
                                 console.warn(error)
                             }
                         }
-                    )
+                    ),
+                    MenuItem.default({
+                        label: "Complex Engine",
+                        separatorBefore: true,
+                        selectable: region.type === "audio-region" && region.asPlayModeTimeStretch.nonEmpty(),
+                        checked: region.type === "audio-region" &&
+                            region.asPlayModeTimeStretch.mapOr(stretch =>
+                                stretch.algorithm === StretchAlgorithm.Complex, false)
+                    }).setTriggerProcedure(() => editing.modify(() => selection.selected()
+                        .filter((adapter): adapter is AudioRegionBoxAdapter => adapter.type === "audio-region")
+                        .forEach(adapter => adapter.asPlayModeTimeStretch.ifSome(stretch => {
+                            stretch.algorithm = stretch.algorithm === StretchAlgorithm.Complex
+                                ? StretchAlgorithm.Granular
+                                : StretchAlgorithm.Complex
+                        }))))
                 )),
                 MenuItem.default({
                     label: "Calc Bpm",

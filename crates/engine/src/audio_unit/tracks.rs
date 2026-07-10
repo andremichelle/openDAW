@@ -504,6 +504,7 @@ pub(crate) const WARP_SECONDS_KEY: u16 = 3;                  // WarpMarkerBox.se
 pub(crate) const TIME_STRETCH_WARP_HUB_KEY: u16 = 1;         // AudioTimeStretchBox.warp-markers hub
 pub(crate) const TIME_STRETCH_PLAY_MODE_KEY: u16 = 2;        // transient-play-mode (int32 enum: 0 once, 1 repeat, 2 pingpong)
 pub(crate) const TIME_STRETCH_RATE_KEY: u16 = 3;             // playback-rate (f32 ratio)
+pub(crate) const TIME_STRETCH_ALGORITHM_KEY: u16 = 4;        // algorithm (int32 enum: 0 granular, 1 complex)
 // AudioFileBox / TransientMarkerBox keys (the source's transient onsets, in seconds).
 pub(crate) const AUDIO_FILE_TRANSIENTS_HUB_KEY: u16 = 10;    // AudioFileBox.transient-markers hub
 pub(crate) const TRANSIENT_POSITION_KEY: u16 = 2;            // TransientMarkerBox.position (seconds, f32)
@@ -621,7 +622,9 @@ pub(crate) fn read_time_stretch(graph: &BoxGraph, region_uuid: Uuid) -> Option<T
     let transient_play_mode = TransientPlayMode::from_i32(
         graph.field_value(&Address::of(play_mode, vec![TIME_STRETCH_PLAY_MODE_KEY])).and_then(|value| value.as_int32()).unwrap_or(0));
     let playback_rate = region_float(graph, play_mode, &[TIME_STRETCH_RATE_KEY]);
-    Some(TimeStretchConfig {warp, transient_play_mode, playback_rate})
+    let algorithm = StretchAlgorithm::from_i32(
+        graph.field_value(&Address::of(play_mode, vec![TIME_STRETCH_ALGORITHM_KEY])).and_then(|value| value.as_int32()).unwrap_or(0));
+    Some(TimeStretchConfig {warp, transient_play_mode, playback_rate, algorithm})
 }
 
 /// Read a source file's transient onset positions (seconds, sorted) from its `AudioFileBox.transient-markers`

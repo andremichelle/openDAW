@@ -58,6 +58,13 @@ pub fn exp(x: f64) -> f64 {
     libm::exp(x)
 }
 
+/// `log2(x)` in f64 (libm-backed for no_std + host/wasm parity). Used to turn a playback-rate multiplier into
+/// a semitone transpose for the COMPLEX stretch.
+#[inline]
+pub fn log2(x: f64) -> f64 {
+    libm::log2(x)
+}
+
 /// Round to nearest, half away from zero (libm-backed for no_std + host/wasm parity). Mirrors JS `Math.round`
 /// for the non-negative sample counts the granular voices round (`Math.round(VOICE_FADE_DURATION * sampleRate)`).
 #[inline]

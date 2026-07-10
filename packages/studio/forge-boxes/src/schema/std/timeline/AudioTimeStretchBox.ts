@@ -1,5 +1,5 @@
 import {BoxSchema} from "@opendaw/lib-box-forge"
-import {Pointers, TransientPlayMode} from "@opendaw/studio-enums"
+import {Pointers, StretchAlgorithm, TransientPlayMode} from "@opendaw/studio-enums"
 
 export const AudioTimeStretchBox: BoxSchema<Pointers> = {
     type: "box",
@@ -17,6 +17,10 @@ export const AudioTimeStretchBox: BoxSchema<Pointers> = {
             3: {
                 type: "float32", name: "playback-rate",
                 constraints: "positive", unit: "ratio", value: 1.0
+            },
+            4: {
+                type: "int32", name: "algorithm",
+                constraints: "positive", unit: "enum", value: StretchAlgorithm.Granular
             }
         }
     }, pointerRules: {accepts: [Pointers.AudioPlayMode], mandatory: true}

@@ -6,7 +6,7 @@ import {EventCollection} from "@opendaw/lib-dsp"
 import {WarpMarkerBoxAdapter} from "./WarpMarkerBoxAdapter"
 import {AudioTimeStretchBox, WarpMarkerBox} from "@opendaw/studio-boxes"
 import {MarkerComparator} from "./MarkerComparator"
-import {TransientPlayMode} from "@opendaw/studio-enums"
+import {StretchAlgorithm, TransientPlayMode} from "@opendaw/studio-enums"
 
 export class AudioTimeStretchBoxAdapter implements BoxAdapter {
     readonly #terminator = new Terminator()
@@ -52,11 +52,16 @@ export class AudioTimeStretchBoxAdapter implements BoxAdapter {
     get transientPlayMode(): TransientPlayMode {
         return asEnumValue(this.#box.transientPlayMode.getValue(), TransientPlayMode)
     }
+    get algorithm(): StretchAlgorithm {
+        return asEnumValue(this.#box.algorithm.getValue(), StretchAlgorithm)
+    }
+    set algorithm(value: StretchAlgorithm) {this.#box.algorithm.setValue(value)}
 
     clone(): AudioTimeStretchBox {
         const stretchBox = AudioTimeStretchBox.create(this.#box.graph, UUID.generate(), box => {
             box.transientPlayMode.setValue(this.transientPlayMode)
             box.playbackRate.setValue(this.playbackRate)
+            box.algorithm.setValue(this.algorithm)
             box.warpMarkers
         })
         this.warpMarkers.asArray().forEach(marker => WarpMarkerBox.create(stretchBox.graph, UUID.generate(), box => {
