@@ -18,21 +18,20 @@ const tiles: ReadonlyArray<Tile> = [
     {
         icon: IconSymbol.Timeline,
         title: "Your Studio",
-        text: "A full DAW that runs in your browser: instruments, effects, a mixer, MIDI and audio recording. "
-            + "Arrange, produce and mix complete tracks, nothing to install."
+        text: "Instruments, effects, a mixer, MIDI and audio recording, all in one place. Arrange, produce and "
+            + "mix complete tracks."
     },
     {
         icon: IconSymbol.Connected,
         title: "Live Room",
         text: "Open a room, share the link, and make music together in real time. Everyone edits the same "
-            + "session at once, like a jam that runs in the browser."
+            + "session at once."
     },
     {
         icon: IconSymbol.Book,
         title: "Education",
         text: "Made for learning music production, from your first beat to a finished track. Classroom-friendly "
-            + "and free to use.",
-        href: "https://opendaw.org/education"
+            + "and free to use."
     },
     {
         icon: IconSymbol.Lock,

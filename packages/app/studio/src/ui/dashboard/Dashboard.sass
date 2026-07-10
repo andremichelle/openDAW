@@ -1,6 +1,11 @@
 @use "@/colors"
 
 component
+  // The dashboard chrome uses exactly THREE font sizes (the list column keeps its own sizes). Everything below
+  // maps to one of these; do not introduce a fourth.
+  --fs-l: 18px
+  --fs-m: 13px
+  --fs-s: 11px
   flex: 1
   min-height: 0
   display: flex
@@ -20,27 +25,29 @@ component
 
     > h1
       color: white
-      font-size: 1.75em
+      font-size: var(--fs-l)
       margin: 0
 
     > span
       color: var(--color-blue)
-      font-size: 1.15em
+      font-size: var(--fs-l)
 
   // one-pager: the three columns take the rest; only the middle list column scrolls
   > .main
     flex: 1
     min-height: 0
-    // symmetric side rails so the CAPPED list column sits centered; the rails share the remaining width equally
+    // symmetric side rails so the list column sits centered; the rails share the remaining width equally.
+    // the list column has a MIN-WIDTH (480px) so the tab labels never shrink enough to overlap, with a bounded
+    // max so it stays a flexible range rather than a fixed width.
     display: grid
-    grid-template-columns: minmax(250px, 1fr) minmax(0, 460px) minmax(250px, 1fr)
+    grid-template-columns: minmax(250px, 1fr) minmax(390px, 540px) minmax(250px, 1fr)
     column-gap: 3em
 
     > .rail
       display: flex
       flex-direction: column
       row-gap: 1.5em
-      overflow: hidden
+      min-width: 0
 
     > .lists
       min-height: 0

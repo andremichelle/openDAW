@@ -17,8 +17,11 @@ component
     font: inherit
 
     &:hover
-      border-color: rgba(white, 0.16)
+      border-color: var(--color-green)
       background: rgba(white, 0.04)
+
+      > svg
+        color: var(--color-green)
 
     > svg
       width: 24px
@@ -28,22 +31,27 @@ component
 
     > .text > .title
       color: white
-      font-size: 16px
+      font-size: var(--fs-l)
       font-weight: 500
 
     > .text > .desc
-      font-size: 13px
+      font-size: var(--fs-m)
       color: var(--color-shadow)
 
-  > .action.primary
-    border-color: rgba(white, 0.2)
-    background: rgba(white, 0.045)
+  // secondary action: recedes into the background, stays gray (lower priority than New Project / New Live Room)
+  > .action.muted
+    border-color: rgba(white, 0.04)
+    background: none
 
-  > .action.tiny
-    padding: 0.4em 0.75em
     > svg
-      width: 16px
-      height: 16px
       color: var(--color-shadow)
-    > span
-      font-size: 13px
+
+    > .text > .title
+      color: var(--color-dark)
+
+    &:hover
+      border-color: rgba(white, 0.1)
+      background: rgba(white, 0.02)
+
+      > svg
+        color: var(--color-shadow)

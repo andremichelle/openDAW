@@ -16,7 +16,7 @@ type Construct = {
 
 export const ActionButtons = ({service}: Construct) => (
     <div className={className}>
-        <button className="action primary" onclick={() => service.newProject()}>
+        <button className="action" onclick={() => service.newProject()}>
             <Icon symbol={IconSymbol.New}/>
             <div className="text">
                 <div className="title">New Project</div>
@@ -30,9 +30,12 @@ export const ActionButtons = ({service}: Construct) => (
                 <div className="desc">Jam with others in real time, share a link.</div>
             </div>
         </button>
-        <button className="action tiny" onclick={() => service.importBundle()}>
+        <button className="action muted" onclick={() => service.importBundle()}>
             <Icon symbol={IconSymbol.Folder}/>
-            <span>Open project bundle (.odb)</span>
+            <div className="text">
+                <div className="title">Open Bundle</div>
+                <div className="desc">Load a project bundle (.odb) from disk.</div>
+            </div>
         </button>
     </div>
 )

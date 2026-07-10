@@ -4,7 +4,7 @@ component
   row-gap: 0.3em
 
   > .head
-    font-size: 11px
+    font-size: var(--fs-s)
     text-transform: uppercase
     letter-spacing: 0.06em
     color: var(--color-shadow)
@@ -36,11 +36,12 @@ component
     background: rgba(white, 0.02)
     color: var(--color-dark)
     font: inherit
-    font-size: 13px
+    font-size: var(--fs-m)
     cursor: pointer
 
     &:hover
-      border-color: rgba(white, 0.16)
+      color: var(--color-orange)
+      border-color: var(--color-orange)
 
     > svg
       width: 16px
@@ -49,10 +50,10 @@ component
   .link
     display: flex
     align-items: center
-    column-gap: 0.45em
+    column-gap: 0.5em
     color: var(--color-dark)
     font: inherit
-    font-size: 12px
+    font-size: var(--fs-m)
     text-decoration: none
     cursor: pointer
     background: none
@@ -64,13 +65,13 @@ component
       color: var(--color-blue)
 
     > svg
-      width: 18px
-      height: 18px
+      width: 16px
+      height: 16px
 
   .sponsors
     width: 100%
     display: grid
-    grid-template-columns: repeat(auto-fill, 28px)
+    grid-template-columns: repeat(auto-fill, 32px)
     gap: 4px
 
     > a > img
