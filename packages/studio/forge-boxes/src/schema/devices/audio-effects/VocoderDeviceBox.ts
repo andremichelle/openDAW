@@ -44,7 +44,7 @@ export const VocoderDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEf
         type: "float32", name: "gain", pointerRules: ParameterPointerRules,
         value: 0.0, constraints: {min: -20.0, max: 20.0, scaling: "linear"}, unit: "dB"
     },
-    18: {type: "int32", name: "band-count", value: 16, constraints: {min: 8, max: 16}, unit: ""},
+    18: {type: "int32", name: "band-count", value: 16, constraints: {values: [8, 12, 16]}, unit: ""},
     19: {type: "string", name: "modulator-source", value: "noise-pink"},
     30: {type: "pointer", name: "side-chain", pointerType: Pointers.SideChain, mandatory: false}
 })
