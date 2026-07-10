@@ -23,7 +23,6 @@ import {MetronomeControl} from "@/ui/header/MetronomeControl"
 import {PerformanceStats} from "@/ui/header/PerformanceStats"
 import {BaseFrequencyControl} from "@/ui/header/BaseFrequencyControl"
 import {CaptureMidiButton} from "@/ui/header/CaptureMidiButton"
-import {WasmEngineToggle} from "@/ui/header/WasmEngineToggle"
 
 const className = Html.adoptStyleSheet(css, "Header")
 
@@ -121,8 +120,6 @@ export const Header = ({lifecycle, service}: Construct) => {
                 location.origin.includes("dev.opendaw.studio")
                 && (<h5 style={{color: Colors.cream.toString()}}>DEV VERSION (UNSTABLE)</h5>)}
             <div style={{flex: "2 0 0"}}/>
-            <WasmEngineToggle lifecycle={lifecycle} service={service}/>
-            <hr/>
             <HorizontalPeakMeter lifecycle={lifecycle} peaksInDb={peaksInDb} width="4em"/>
             <hr/>
             <div className="panel-selector">

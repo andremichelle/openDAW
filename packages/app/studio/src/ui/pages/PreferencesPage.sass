@@ -34,6 +34,34 @@ component
         flex: 1
         overflow: hidden auto
 
+      > div.engine-variant
+        font-size: 0.75em
+        padding-right: 8px
+
+        [data-class="checkbox"]
+          width: 100%
+
+          > label
+            flex: 1
+            min-width: 0
+            height: auto
+            padding: 0
+            place-content: center start
+
+            > span
+              white-space: nowrap
+              overflow: hidden
+              text-overflow: ellipsis
+
+            > hr
+              flex: 1
+              background: rgba(white, 0.04)
+              border: none
+              height: 1px
+
+            > svg
+              font-size: 18px
+
       > div.shortcuts
         display: flex
         flex-direction: row
