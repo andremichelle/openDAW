@@ -145,7 +145,12 @@ export class BoxEditing implements Editing {
             this.#notifier.notify()
             return Option.wrap(modifier())
         }
-        if (mark && this.#pending.length > 0) {this.mark()}
+        // No pre-flush: a marked modify FOLDS any leftover unmarked pending into its own history entry (sealed by
+        // the `if (mark) {this.mark()}` below) instead of sealing that pending as a separate step first. The only
+        // thing ever left unmarked in `#pending` is UI-state (selection, edit pointers) or a gesture still building
+        // its step; both belong WITH the edit they precede, not as their own phantom undo entry. Gestures that must
+        // stay a distinct step already self-seal with an explicit `mark()` at their boundaries (knob/slider drags,
+        // recording), so they never depend on this. A prior marked action is already sealed by its own `mark()`.
         this.#modifying = true
         const updates: Array<Update> = []
         const subscription = this.#graph.subscribeToAllUpdates({

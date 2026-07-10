@@ -193,7 +193,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             valueAxis,
                             eventMapping,
                             reference: optCutEvent,
-                            collection: reader.content
+                            collection: reader.content,
+                            chainPending: true // cut(unmarked) + settle-move sealed as ONE undo step (#208 / #306)
                         }))
                     }
                 }
