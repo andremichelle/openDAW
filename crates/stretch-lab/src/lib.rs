@@ -14,3 +14,5 @@ pub mod metrics;
 pub mod scores;
 pub mod thresholds;
 pub mod report;
+#[cfg(feature = "analyzer")]
+pub mod second_opinion;

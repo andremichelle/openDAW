@@ -92,6 +92,8 @@ pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_righ
             results.push(metric("attack_extra_peaks", scores.extra_peaks, Direction::LowerBetter));
         }
     }
+    #[cfg(feature = "analyzer")]
+    results.extend(crate::second_opinion::second_opinion(&source_mono, spec.file_rate, &output_mono, crate::render::ENGINE_RATE));
     results
 }
 
