@@ -56,9 +56,10 @@ change value, it just becomes the outgoing side.
 
 All in the studio app, next to the value editor:
 
-- **Decision (pure) + execution:** `ValueEventEditing` in
-  `packages/app/studio/src/ui/timeline/editors/value/ValueEventEditing.ts` — `resolvePlacement(...)` is the decision
-  table, `createOrMoveEvent(...)` runs it against the event collection.
-- **Cursor side:** computed in the double-click handler in
-  `packages/app/studio/src/ui/timeline/editors/value/ValueEditor.tsx` by comparing the raw cursor position to the
-  snapped position (`raw < snapped` → left/incoming, else right/outgoing).
+- **Decision (pure):** `ValueEventPlacement.resolve(hasIncoming, hasOutgoing, side)` in
+  `packages/app/studio/src/ui/timeline/editors/value/ValueEventPlacement.ts` — dependency-free, so it is unit-tested
+  in `ValueEventPlacement.test.ts` (run by `npm run test -w @opendaw/app-studio`).
+- **Execution:** `ValueEventEditing.createOrMoveEvent(...)` in the same folder runs the decision against the event
+  collection.
+- **Cursor side:** computed in the double-click handler in `ValueEditor.tsx` by comparing the raw cursor position to
+  the snapped position (`raw < snapped` → left/incoming, else right/outgoing).

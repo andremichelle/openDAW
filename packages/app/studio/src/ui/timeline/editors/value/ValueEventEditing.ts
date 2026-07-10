@@ -1,24 +1,9 @@
 import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
 import {asDefined, assert, panic, unitValue} from "@opendaw/lib-std"
+import {ValueEventPlacement} from "./ValueEventPlacement"
 
 export namespace ValueEventEditing {
-    // Which member of a same-time pair a placement targets. Two value events may share one time position: index 0 is
-    // the INCOMING value (left of the resulting vertical step), index 1 is the OUTGOING value (right). See issue #275.
-    export type Side = "incoming" | "outgoing"
-
-    // What a double-click placement does at a (snapped) time that may already hold event(s), given the cursor side.
-    type Placement = "create" | "add-incoming" | "add-outgoing" | "overwrite-incoming" | "overwrite-outgoing"
-
-    // Pure placement rule for #275. `hasIncoming` / `hasOutgoing` report whether an index-0 / index-1 event already
-    // sits at the target time; `side` is the half of the node the cursor is on (left = incoming, right = outgoing).
-    const resolvePlacement = (hasIncoming: boolean, hasOutgoing: boolean, side: Side): Placement => {
-        if (hasIncoming && hasOutgoing) {return side === "incoming" ? "overwrite-incoming" : "overwrite-outgoing"}
-        if (hasIncoming) {return side === "incoming" ? "add-incoming" : "add-outgoing"}
-        if (hasOutgoing) {return "overwrite-outgoing"} // defensive: a lone outgoing (index 1) — just move it
-        return "create"
-    }
-
     export const deleteEvent = (collection: ValueEventCollectionBoxAdapter, event: ValueEventBoxAdapter) => {
         if (event.index > 1) {return panic(`Invalid index > 1 (${event.index})`)}
         // Find successor BEFORE deleting, but promote AFTER to avoid temporary duplicate index
@@ -45,13 +30,13 @@ export namespace ValueEventEditing {
                                       position: ppqn,
                                       value: unitValue,
                                       interpolation: Interpolation = Interpolation.Linear,
-                                      side: Side = "outgoing"): ValueEventBoxAdapter => {
+                                      side: ValueEventPlacement.Side = "outgoing"): ValueEventBoxAdapter => {
         const events = collection.events
         const first = events.greaterEqual(position)
         const last = events.lowerEqual(position)
         const incoming = first !== null && first.position === position && first.index === 0 ? first : null
         const outgoing = last !== null && last.position === position && last.index === 1 ? last : null
-        switch (resolvePlacement(incoming !== null, outgoing !== null, side)) {
+        switch (ValueEventPlacement.resolve(incoming !== null, outgoing !== null, side)) {
             case "create":
                 return collection.createEvent({position, index: 0, value, interpolation})
             case "add-outgoing":
