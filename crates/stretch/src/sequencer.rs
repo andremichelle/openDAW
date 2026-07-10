@@ -253,6 +253,27 @@ impl Stretcher {
             Some(info) => info,
             None => return
         };
+        // WEAK-BOUNDARY CONTINUATION (adaptive): a low-strength onset means nothing new happened in
+        // the material — extend the playing voices across the boundary instead of crossfading into
+        // a fresh spawn. Every avoided crossfade is an avoided audible grain start (the probe's
+        // variant matrix showed the boundary crossfades, not the loop splices, dominate the sine
+        // and pad modulation).
+        if self.tuning.adaptive {
+            let marker = &markers[transient_index as usize];
+            if marker.strength < self.tuning.weak_boundary_threshold {
+                let mut continued = false;
+                for voice in &mut self.voices {
+                    if !voice.done() && !voice.is_fading_out() {
+                        voice.set_segment_end(info.end_samples);
+                        continued = true;
+                    }
+                }
+                if continued {
+                    self.accumulated_drift = 0.0;
+                    return;
+                }
+            }
+        }
         let segment_length = info.end_samples - info.start_samples;
         let output_samples_until_next = if info.has_next {
             let transient_warp_seconds = transient_seconds - waveform_offset;

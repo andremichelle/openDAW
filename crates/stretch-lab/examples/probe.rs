@@ -47,10 +47,28 @@ fn main() {
     }
     let spec = RenderSpec {left: &entry.left, right: &entry.right, file_rate: entry.file_rate, transients: &entry.transients, ratio, mode: PlayMode::Repeat};
     let (base_left, _) = render_baseline(&spec);
-    let (new_left, _) = render_stretch(&spec, &markers, Tuning::adaptive());
-    println!("case {entry_id} x{ratio} repeat — top envelope-modulation lines:");
-    top_lines(&base_left, "  baseline");
-    top_lines(&new_left, "  adaptive");
+    println!("case {entry_id} x{ratio} repeat — top envelope-modulation lines per variant:");
+    top_lines(&base_left, "  baseline (frozen)");
+    let mut no_loops = markers.clone();
+    for marker in &mut no_loops {
+        marker.loop_start = 0.0;
+        marker.loop_end = -1.0;
+    }
+    let mut no_period = markers.clone();
+    for marker in &mut no_period {
+        marker.period = 0.0;
+    }
+    let bare: Vec<stretch::TransientDescriptor> = entry.transients.iter().map(|&position| stretch::TransientDescriptor::bare(position)).collect();
+    let (variant, _) = render_stretch(&spec, &bare, Tuning::legacy());
+    top_lines(&variant, "  legacy tuning, bare markers  (parity ref)");
+    let (variant, _) = render_stretch(&spec, &bare, Tuning::adaptive());
+    top_lines(&variant, "  adaptive, bare markers       (fades only: strength=1 -> short fades)");
+    let (variant, _) = render_stretch(&spec, &no_loops, Tuning::adaptive());
+    top_lines(&variant, "  adaptive, loops stripped     (real strength/period, margin loops)");
+    let (variant, _) = render_stretch(&spec, &no_period, Tuning::adaptive());
+    top_lines(&variant, "  adaptive, period stripped    (loops yes, no PSOLA/coherent-linear)");
+    let (variant, _) = render_stretch(&spec, &markers, Tuning::adaptive());
+    top_lines(&variant, "  adaptive, full descriptors");
     let boundary = 0.5 * ratio;
     println!("  (boundaries every {boundary:.3}s -> {:.2} Hz)", 1.0 / boundary);
 }

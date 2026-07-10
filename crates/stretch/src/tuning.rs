@@ -33,7 +33,11 @@ pub struct Tuning {
     /// Voice read-position projection when testing continuation (legacy: coupled).
     pub boundary_lookahead_seconds: f64,
     /// Pre-roll read-back before a segment start on a fresh boundary spawn (legacy: coupled).
-    pub preroll_seconds: f64
+    pub preroll_seconds: f64,
+    /// Boundaries whose onset strength is below this CONTINUE the playing voices (segment end
+    /// extended) instead of crossfading into a fresh spawn — a weak transient means nothing new
+    /// happened, and every avoided crossfade is an avoided audible grain start. 0.0 = never.
+    pub weak_boundary_threshold: f32
 }
 
 impl Tuning {
@@ -54,7 +58,8 @@ impl Tuning {
             transient_shift_seconds: 0.020,
             drift_threshold_seconds: 0.020,
             boundary_lookahead_seconds: 0.020,
-            preroll_seconds: 0.020
+            preroll_seconds: 0.020,
+            weak_boundary_threshold: 0.0
         }
     }
 
