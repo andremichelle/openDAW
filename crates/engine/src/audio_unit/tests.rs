@@ -1239,6 +1239,100 @@ fn solo_forces_other_strips_silent_keeping_the_output_bus_audible() {
 }
 
 #[test]
+fn an_automated_solo_curve_forces_other_strips_silent() {
+    // #305 (solo half): a Value track automating UNIT A's solo (key 15) must silence the non-soloed unit C while
+    // playing, exactly like a manual solo. Solo is engine-level, so `resolve_automated_solo` writes the curve's
+    // on/off into A's static solo cell and re-runs `update_solo`. Before the fix the curve was never bound.
+    use super::{UNIT_SOLO_KEY, UNIT_OUTPUT_KEY, BUS_ENABLED_KEY};
+    const UNIT_A: Uuid = [70u8; 16];
+    const INSTR_A: Uuid = [71u8; 16];
+    const UNIT_C: Uuid = [72u8; 16];
+    const INSTR_C: Uuid = [73u8; 16];
+    const BUS_UNIT: Uuid = [74u8; 16];
+    const BUS_BOX: Uuid = [75u8; 16];
+    const VTRACK: Uuid = [76u8; 16];
+    const VREGION: Uuid = [77u8; 16];
+    const VCOLL: Uuid = [78u8; 16];
+    const VEVENT: Uuid = [79u8; 16];
+    let unit_fields = || alloc::vec![
+        (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+        (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook),
+        (UNIT_SOLO_KEY, FieldValue::Boolean(false))
+    ];
+    let mut engine = engine_with_devices();
+    let mut a_fields = unit_fields();
+    a_fields.push((UNIT_OUTPUT_KEY, FieldValue::Pointer(Some(Address::of(BUS_BOX, vec![6]))))); // A -> the bus input
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT_A, "AudioUnitBox", &a_fields),
+        graph_box(INSTR_A, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT_A, vec![UNIT_INPUT_KEY]))))]),
+        graph_box(UNIT_C, "AudioUnitBox", &unit_fields()),
+        graph_box(INSTR_C, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT_C, vec![UNIT_INPUT_KEY]))))]),
+        graph_box(BUS_UNIT, "AudioUnitBox", &unit_fields()),
+        graph_box(BUS_BOX, "AudioBusBox", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(BUS_UNIT, vec![UNIT_INPUT_KEY])))),
+            (6, FieldValue::Hook),
+            (BUS_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        // A Value track automating UNIT A's solo, one event at 1.0 (soloed) covering the region.
+        graph_box(VTRACK, "TrackBox", &[
+            (2, FieldValue::Pointer(Some(Address::of(UNIT_A, vec![UNIT_SOLO_KEY])))),
+            (3, FieldValue::Hook)
+        ]),
+        graph_box(VREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![3])))),
+            (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)), (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(VEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))), (10, FieldValue::Int32(0)), (13, FieldValue::Float32(1.0))
+        ])
+    ]);
+    for uuid in [BUS_UNIT, UNIT_A, UNIT_C] {
+        let mut unit = engine.build_unit(uuid);
+        engine.reconcile_one(&mut unit); // binds A's solo automation curve (first reconcile)
+        engine.audio_units.push(unit);
+    }
+    engine.resolve_outputs();
+    let params_of = |engine: &Engine, uuid: Uuid| engine.audio_units.iter()
+        .find(|unit| unit.unit == uuid).expect("unit").strip_params.clone();
+    // Nothing is statically soloed yet, so every strip is audible.
+    engine.update_solo();
+    assert!(!params_of(&engine, UNIT_C).forced_silent.get(), "no solo yet: C is audible");
+    // Resolve the automation at a position the curve covers: A becomes soloed, silencing C, A + its bus stay audible.
+    engine.resolve_automated_solo(0.0);
+    assert!(params_of(&engine, UNIT_A).solo.get(), "the solo curve (event 1.0) wrote the unit's solo cell");
+    assert!(!params_of(&engine, UNIT_A).forced_silent.get(), "the automation-soloed unit stays audible");
+    assert!(params_of(&engine, UNIT_C).forced_silent.get(), "a non-soloed unit is forced silent by the automated solo");
+    assert!(!params_of(&engine, BUS_UNIT).forced_silent.get(), "the soloed unit's output bus stays audible");
+}
+
+#[test]
+fn detaching_solo_automation_restores_the_static_solo_cell_from_the_field() {
+    // `resolve_automated_solo` writes the solo curve's value into the static solo cell. Detaching the automation
+    // (a rebind that finds no track) must restore that cell from the FIELD — the field subscription only fires on a
+    // field edit, not on a track detach — else the unit would stay soloed forever after its automation is removed.
+    use super::UNIT_SOLO_KEY;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook),
+            (UNIT_AUDIO_KEY, FieldValue::Hook), (UNIT_SOLO_KEY, FieldValue::Boolean(false))
+        ]),
+        graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))])
+    ]);
+    let mut unit = engine.build_unit(UNIT);
+    engine.bind_strip_automation(&mut unit); // no solo track attached
+    // Simulate a prior `resolve_automated_solo` having left the cell hot (soloed), diverging from the field (false).
+    unit.strip_params.solo.set(true);
+    engine.solo_dirty.set(false);
+    engine.bind_strip_automation(&mut unit); // rebind with no track -> restore from the field
+    assert!(!unit.strip_params.solo.get(), "detach restored the static solo cell from the field (false)");
+    assert!(engine.solo_dirty.get(), "detach re-armed the solo resolution so forced_silent reverts");
+    engine.teardown_unit(unit);
+}
+
+#[test]
 fn an_automated_parameter_broadcasts_its_unit_value_at_its_field_address() {
     const VTRACK: Uuid = [45u8; 16];
     const VREGION: Uuid = [46u8; 16];
@@ -1774,6 +1868,51 @@ fn rebinding_strip_automation_does_not_leak_subscriptions() {
     engine.teardown_unit(unit);
     assert!(engine.graph.subscription_count() < with_unit,
         "teardown released the strip observers (count must drop below the bound state)");
+}
+
+#[test]
+fn a_value_track_on_the_mute_field_installs_the_strip_mute_automation() {
+    // #305: a Value track targeting the UNIT's mute (key 14) must install the strip's mute automation source, so an
+    // automated mute is applied (and broadcast to the UI). Before the fix `bind_strip_automation` only observed
+    // volume/panning, so the mute curve was never bound and the automation did nothing.
+    const VTRACK: Uuid = [30u8; 16];
+    const VREGION: Uuid = [31u8; 16];
+    const VCOLL: Uuid = [32u8; 16];
+    const VEVENT: Uuid = [33u8; 16];
+    let mut engine = engine_with_devices();
+    let mut boxes = vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook), (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))
+        ])
+    ];
+    boxes.extend(vec![
+        graph_box(VTRACK, "TrackBox", &[
+            (2, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_MUTE_KEY])))),
+            (3, FieldValue::Hook)
+        ]),
+        graph_box(VREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![3])))),
+            (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)), (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(VEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))), (10, FieldValue::Int32(0)), (13, FieldValue::Float32(1.0))
+        ])
+    ]);
+    engine.graph = BoxGraph::from_boxes(boxes);
+    let mut unit = engine.build_unit(UNIT);
+    engine.bind_strip_automation(&mut unit);
+    let muted_at_zero = {
+        let mute_source = unit.strip_automation.mute.borrow();
+        let mute_source = mute_source.as_ref().expect("a mute value track installs the strip mute automation source");
+        mute_source(0.0) >= 0.5
+    };
+    assert!(muted_at_zero, "the mute curve (event 1.0) resolves to muted at position 0");
+    engine.teardown_unit(unit);
 }
 
 #[test]

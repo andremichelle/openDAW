@@ -774,6 +774,28 @@ impl Engine {
         }
     }
 
+    /// Evaluate each unit's SOLO AUTOMATION curve at `position`, write the resolved on/off into the unit's static
+    /// `solo` cell, and re-resolve the cross-strip `forced_silent` if any unit changed. Called once per PLAYING
+    /// quantum from `render` (solo is a mixer fact, so it cannot resolve inside a single strip like volume / mute):
+    /// this is the automation counterpart of the field subscription that arms `solo_dirty` for a manual toggle.
+    /// Mirrors TS, where `AutomatableParameter` solo events drive `Mixer.onChannelStripSoloChanged` -> `updateSolo`.
+    pub(crate) fn resolve_automated_solo(&mut self, position: f64) {
+        let mut changed = false;
+        for unit in &self.audio_units {
+            let soloed = match unit.strip_automation.solo.borrow().as_ref() {
+                Some(source) => source(position) >= 0.5, // TS `ValueMapping.bool.y`
+                None => continue
+            };
+            if unit.strip_params.solo.get() != soloed {
+                unit.strip_params.solo.set(soloed);
+                changed = true;
+            }
+        }
+        if changed {
+            self.update_solo();
+        }
+    }
+
     /// Reconcile ONE unit (it was enqueued because a related edit touched its scope): cascade its tracks ->
     /// regions, then re-wire if a device chain or its composite changed (`|` so all dirty flags are consumed),
     /// else re-bind its automation curves if those attached / detached. A full rewire re-gathers automation,

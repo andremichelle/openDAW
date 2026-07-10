@@ -1230,6 +1230,13 @@ impl Engine {
         let recording_start = self.recording_start;
         let denominator = self.recording_denominator;
         let sample_rate = self.sample_rate;
+        // Automated SOLO resolves at the ENGINE level (it silences other strips), so it cannot ride a single strip's
+        // per-block automation like volume / mute. Resolve it once at this quantum's start position and re-run the
+        // solo walk before the graph processes; only while transporting, so a paused block HOLDS the last solo
+        // (TS `UpdateClock` gates updates on `transporting`).
+        if self.transport.is_playing() {
+            self.resolve_automated_solo(self.transport.position());
+        }
         let Engine {transport, metronome, context, output_bus, blocks, tempo, tempo_map: _, controls, signature,
             marker_track, marker_changes, midi_out, is_recording, is_counting_in, metronome_pref, ..} = self;
         // The signature events the metronome walks: the live signature track once bound, else a single

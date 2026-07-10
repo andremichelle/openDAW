@@ -221,7 +221,7 @@ impl Engine {
     pub(crate) fn bind_send_automation(&mut self, send: &mut SendBinding, invalidate: &Rc<dyn Fn()>) {
         const SEND_GAIN: Decibel = Decibel::new(-72.0, -12.0, 0.0); // TS AuxSendBoxAdapter ValueMapping.DefaultDecibel
         let automation = send.automation.clone();
-        self.bind_gain_pan_automation(send.send_uuid, SEND_GAIN_KEY, SEND_PAN_KEY, SEND_GAIN,
+        self.bind_gain_pan_automation(send.send_uuid, SEND_GAIN_KEY, SEND_PAN_KEY, SEND_GAIN, None,
             &automation, &mut send.param_subs, &mut send.param_collections, invalidate);
     }
 

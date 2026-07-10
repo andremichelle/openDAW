@@ -45,21 +45,28 @@ impl Default for StripParams {
     }
 }
 
-/// The strip's optional volume / panning AUTOMATION overrides: each closure maps a pulse position to the
-/// strip-unit value (volume dB, panning -1..1) of the parameter's Value-track curve. `None` means the
-/// parameter is not automated, so the strip uses the static `StripParams` value. Shared (`Rc`) between the
-/// strip node and the engine binding, which swaps the closures in when a Value track attaches / detaches (like
-/// `StripParams` is swapped for static edits). The engine owns the curve; the strip just calls the closure.
+/// The strip's optional volume / panning / mute AUTOMATION overrides: each closure maps a pulse position to the
+/// strip-unit value (volume dB, panning -1..1, mute as a 0..1 unit value the strip thresholds at >= 0.5, the TS
+/// `ValueMapping.bool`) of the parameter's Value-track curve. `None` means the parameter is not automated, so the
+/// strip uses the static `StripParams` value. Shared (`Rc`) between the strip node and the engine binding, which
+/// swaps the closures in when a Value track attaches / detaches (like `StripParams` is swapped for static edits).
+/// The engine owns the curve; the strip just calls the closure.
 pub type StripValueSource = Rc<dyn Fn(f64) -> f32>;
 
 pub struct StripAutomation {
     pub volume: RefCell<Option<StripValueSource>>,
-    pub panning: RefCell<Option<StripValueSource>>
+    pub panning: RefCell<Option<StripValueSource>>,
+    pub mute: RefCell<Option<StripValueSource>>,
+    // SOLO is a cross-strip MIXER fact (it silences OTHER strips), not a gain the strip applies to itself, so the
+    // strip node never reads this. The ENGINE reads it each playing quantum to drive the unit's static `solo` cell
+    // and re-resolve `forced_silent` (TS `Mixer.updateSolo`); a 0..1 unit value thresholded at >= 0.5. Kept here
+    // so it shares the strip's automation sub/collection lifecycle.
+    pub solo: RefCell<Option<StripValueSource>>
 }
 
 impl StripAutomation {
     pub fn new() -> Self {
-        Self {volume: RefCell::new(None), panning: RefCell::new(None)}
+        Self {volume: RefCell::new(None), panning: RefCell::new(None), mute: RefCell::new(None), solo: RefCell::new(None)}
     }
 }
 
@@ -84,6 +91,7 @@ pub struct ChannelStripProcessor {
     // `AutomatableParameter#value`, which only moves on update events — none arrive while not transporting).
     held_volume_db: Option<f32>,
     held_panning: Option<f32>,
+    held_mute: Option<bool>,
     events: EventBuffer // unused (the strip receives no events) but required by `Processor: EventReceiver`
 }
 
@@ -102,21 +110,24 @@ impl ChannelStripProcessor {
             processing: false,
             held_volume_db: None,
             held_panning: None,
+            held_mute: None,
             events: EventBuffer::new()
         }
     }
 
     // Aim the three ramps at the pan-law gains for `volume_db` / `panning` (+ the mute 0/1). Smooth after the
-    // first processed chunk so parameter moves de-click; `set` no-ops on an unchanged target.
-    fn retarget(&mut self, volume_db: f32, panning: f32) {
+    // first processed chunk so parameter moves de-click; `set` no-ops on an unchanged target. `muted` already
+    // folds in whichever mute source applies (automation curve or the static field); `forced_silent` (the
+    // mixer's solo gating) is OR-ed on top here so it always wins.
+    fn retarget(&mut self, volume_db: f32, panning: f32, muted: bool) {
         let gain = db_to_gain(volume_db);
         self.gain_left.set((1.0 - panning.max(0.0)) * gain, self.processing);
         self.gain_right.set((1.0 + panning.min(0.0)) * gain, self.processing);
-        let silent = self.params.mute.get() || self.params.forced_silent.get();
+        let silent = muted || self.params.forced_silent.get();
         self.mute_gain.set(if silent {0.0} else {1.0}, self.processing);
     }
 
-    // Evaluate the automated volume / panning curves at `position` (falling back to the static params) and
+    // Evaluate the automated volume / panning / mute curves at `position` (falling back to the static params) and
     // retarget, remembering the resolved automated values for the paused hold. Called at each update-clock
     // boundary, mirroring TS `AutomatableParameter` events.
     fn retarget_at(&mut self, position: f64) {
@@ -136,7 +147,15 @@ impl ChannelStripProcessor {
             }
             None => self.params.panning.get()
         };
-        self.retarget(volume_db, panning);
+        let muted = match self.automation.mute.borrow().as_ref() {
+            Some(source) => {
+                let value = source(position) >= 0.5; // TS `ValueMapping.bool.y`
+                self.held_mute = Some(value);
+                value
+            }
+            None => self.params.mute.get()
+        };
+        self.retarget(volume_db, panning, muted);
     }
 
     // PAUSED (a non-transporting block): the update clock is silent (TS `UpdateClock` gates on
@@ -153,7 +172,11 @@ impl ChannelStripProcessor {
             Some(_) => self.held_panning.unwrap_or_else(|| self.params.panning.get()),
             None => self.params.panning.get()
         };
-        self.retarget(volume_db, panning);
+        let muted = match self.automation.mute.borrow().as_ref() {
+            Some(_) => self.held_mute.unwrap_or_else(|| self.params.mute.get()),
+            None => self.params.mute.get()
+        };
+        self.retarget(volume_db, panning, muted);
     }
 
     // Apply the gains over `[from, to)`. Settled fast path (TS `isInterpolating` branch): scalar gains keep
@@ -232,10 +255,11 @@ impl Processor for ChannelStripProcessor {
             }
         };
         let source = input.borrow();
-        let automated = self.automation.volume.borrow().is_some() || self.automation.panning.borrow().is_some();
+        let automated = self.automation.volume.borrow().is_some() || self.automation.panning.borrow().is_some()
+            || self.automation.mute.borrow().is_some();
         if !automated {
             // Static parameters: one retarget for the whole quantum (the ramps de-click any edit).
-            self.retarget(self.params.volume_db.get(), self.params.panning.get());
+            self.retarget(self.params.volume_db.get(), self.params.panning.get(), self.params.mute.get());
             self.apply(&source, &mut output, 0, RENDER_QUANTUM);
         } else {
             // An automated volume / panning resolves at the UPDATE CLOCK, like every automated device: split
@@ -326,5 +350,53 @@ mod tests {
             assert!((output.left[index] - expected).abs() < 1.0e-4,
                 "paused sample {index} must keep the held -20 dB gain, got {}", output.left[index]);
         }
+    }
+
+    #[test]
+    fn an_automated_mute_curve_silences_the_strip_with_an_unmuted_static_field() {
+        // #305: automating mute must actually mute. The static field is UNMUTED (StripParams::mute = false); only
+        // the automation curve engages the mute (unit 1.0 >= 0.5, the TS `ValueMapping.bool` threshold). Before the
+        // fix the strip had no mute automation source and stayed audible.
+        let params = Rc::new(StripParams::new());
+        assert!(!params.mute.get(), "the static field starts unmuted");
+        let automation = Rc::new(StripAutomation::new());
+        *automation.mute.borrow_mut() = Some(Rc::new(|_position: f64| 1.0));
+        let mut strip = ChannelStripProcessor::new(params, automation, SR);
+        let input = shared_audio_buffer();
+        {
+            let mut buffer = input.borrow_mut();
+            buffer.left.fill(1.0);
+            buffer.right.fill(1.0);
+        }
+        strip.set_audio_source(input);
+        strip.process(&ProcessInfo {blocks: &[block(true, 0.0)]});
+        let output = strip.audio_output();
+        let output = output.borrow();
+        for index in 0..RENDER_QUANTUM {
+            assert!(output.left[index].abs() < 1.0e-6,
+                "automated-mute sample {index} must be silent, got {}", output.left[index]);
+        }
+    }
+
+    #[test]
+    fn an_automated_mute_curve_below_the_threshold_keeps_the_strip_audible() {
+        // The complement: a mute curve below 0.5 leaves the strip audible even though a source is installed — the
+        // strip thresholds the unit value exactly like `ValueMapping.bool.y`, it does not treat "automated" as muted.
+        let params = Rc::new(StripParams::new());
+        let automation = Rc::new(StripAutomation::new());
+        *automation.mute.borrow_mut() = Some(Rc::new(|_position: f64| 0.0));
+        let mut strip = ChannelStripProcessor::new(params, automation, SR);
+        let input = shared_audio_buffer();
+        {
+            let mut buffer = input.borrow_mut();
+            buffer.left.fill(1.0);
+            buffer.right.fill(1.0);
+        }
+        strip.set_audio_source(input);
+        strip.process(&ProcessInfo {blocks: &[block(true, 0.0)]});
+        let output = strip.audio_output();
+        let output = output.borrow();
+        assert!(output.left[RENDER_QUANTUM - 1].abs() > 0.5,
+            "a below-threshold mute curve keeps the strip audible, got {}", output.left[RENDER_QUANTUM - 1]);
     }
 }
