@@ -1,6 +1,8 @@
 # Time-Stretch v2 — adaptive playback with a self-judging harness
 
-Status: **planning**. Supersedes the sketch in [`plans/wasm-audio/time-stretch-v2.md`](../wasm-audio/time-stretch-v2.md).
+Status: **Phases 0–3 gates passed; Phase 4 iterating** (see `crates/stretch`, `crates/stretch-lab`;
+run `cargo run -p stretch-lab --release --bin judge`). Supersedes the sketch in
+[`plans/wasm-audio/time-stretch-v2.md`](../wasm-audio/time-stretch-v2.md).
 
 The goal: replace the audio-region time-stretch with a system that sounds great on *different input
 styles* — drums stay punchy, pads stop graining — and prove every step with numbers, not opinions.
