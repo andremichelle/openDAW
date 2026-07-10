@@ -263,8 +263,7 @@ impl Analyzer {
         }
         let reference = &mono[end_index..end_index + window];
         let reference_energy: f64 = reference.iter().map(|value| (*value as f64) * (*value as f64)).sum();
-        let mut best_start = candidate_start.max(earliest_start);
-        let mut best_score = f64::MIN;
+        let mut scores: Vec<(f64, f64)> = Vec::with_capacity((2 * search + 1) as usize);
         for offset in -search..=search {
             let start = candidate_start + offset as f64;
             let start_index = start as usize;
@@ -278,17 +277,26 @@ impl Analyzer {
                 dot += reference[index] as f64 * candidate[index] as f64;
                 energy += (candidate[index] as f64) * (candidate[index] as f64);
             }
-            let score = dot / (libm::sqrt(reference_energy) * libm::sqrt(energy) + 1e-12);
-            if score > best_score {
-                best_score = score;
-                best_start = start;
+            scores.push((start, dot / (libm::sqrt(reference_energy) * libm::sqrt(energy) + 1e-12)));
+        }
+        let Some(best_index) = scores.iter().enumerate().max_by(|a, b| a.1 .1.partial_cmp(&b.1 .1).unwrap()).map(|(index, _)| index) else {
+            return (candidate_start.max(earliest_start), 0.0);
+        };
+        let (mut best_start, best_score) = scores[best_index];
+        // Sub-sample refinement: the voices read at fractional positions, but an integer-sample
+        // splice leaves up to half a sample of phase error per wrap — an audible ~-30 dB tick on a
+        // pure tone at every loop restart. Parabolic interpolation of the correlation peak places
+        // the splice on the fractional maximum.
+        if best_index > 0 && best_index + 1 < scores.len() {
+            let previous = scores[best_index - 1].1;
+            let next = scores[best_index + 1].1;
+            let denominator = previous + next - 2.0 * best_score;
+            if denominator.abs() > 1e-12 {
+                let adjust = (0.5 * (previous - next) / denominator).clamp(-0.5, 0.5);
+                best_start += adjust;
             }
         }
-        if best_score == f64::MIN {
-            (candidate_start.max(earliest_start), 0.0)
-        } else {
-            (best_start, best_score)
-        }
+        (best_start.clamp(earliest_start, latest_start), best_score)
     }
 }
 
