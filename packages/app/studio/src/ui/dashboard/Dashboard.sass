@@ -2,46 +2,47 @@
 
 component
   flex: 1
+  min-height: 0
   display: flex
   flex-direction: column
-  align-items: center
-  justify-content: center
-  font-size: 1.125em
+  row-gap: 2.5em
+  padding: 1.75em 2em 4em 2em
+  color: var(--color-dark)
   @include colors.panel-background
 
-  .highlight
-    color: rgba(black, 0.8)
-    background-color: var(--color-red)
-    border-radius: 2px
-    padding: 0 2px
+  a
+    color: var(--color-blue)
 
-  > article
+  > .hero
     display: flex
-    flex-direction: column
-    width: 720px
-    color: var(--color-dark)
-
-    > h1, h2
-      color: white
-      font-size: 2.25em
+    align-items: baseline
+    column-gap: 0.7em
 
     > h1
-      margin-left: -3px
-      margin-bottom: 2px
+      color: white
+      font-size: 1.75em
+      margin: 0
 
-    > h2
-      font-size: 1.125em
+    > span
       color: var(--color-blue)
+      font-size: 1.15em
 
-    p, ul
-      margin: 0.3em 0
-      font-size: 13px
+  // one-pager: the three columns take the rest; only the middle list column scrolls
+  > .main
+    flex: 1
+    min-height: 0
+    // symmetric side rails so the CAPPED list column sits centered; the rails share the remaining width equally
+    display: grid
+    grid-template-columns: minmax(250px, 1fr) minmax(0, 460px) minmax(250px, 1fr)
+    column-gap: 3em
 
-    a
-      color: var(--color-blue)
+    > .rail
+      display: flex
+      flex-direction: column
+      row-gap: 1.5em
+      overflow: hidden
 
-    > div.columns
-      margin: 1em 0 0 0
-      display: grid
-      column-gap: 0.5em
-      grid-template-columns: 1fr 1fr
+    > .lists
+      min-height: 0
+      display: flex
+      flex-direction: column

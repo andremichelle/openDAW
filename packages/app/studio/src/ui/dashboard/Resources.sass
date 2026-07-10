@@ -1,4 +1,36 @@
-@use "column" as *
-
 component
-  @include column
+  flex: 1
+  min-height: 0
+  display: flex
+  flex-direction: column
+  row-gap: 0.5em
+  font-size: 11px
+
+  h3
+    padding-left: 0.25em
+    font-size: 14px
+    border-radius: 0.25em
+    width: fit-content
+    white-space: nowrap
+
+  label
+    padding: 0
+    cursor: pointer
+
+  > .content
+    flex: 1
+    min-height: 0
+    display: flex
+    flex-direction: column
+
+    // the active browser fills the column and scrolls internally (one-pager: only this scrolls)
+    > *
+      flex: 1
+      min-height: 0
+
+  .empty-cta
+    flex: 0 0 auto
+    margin-top: 0.4em
+    font-size: 12px
+    color: var(--color-orange)
+    cursor: pointer

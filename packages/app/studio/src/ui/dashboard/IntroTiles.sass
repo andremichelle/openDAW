@@ -1,0 +1,36 @@
+component
+  display: grid
+  grid-template-columns: repeat(5, 1fr)
+  gap: 2em
+
+  .tile
+    display: flex
+    flex-direction: column
+    row-gap: 0.5em
+    padding: 0.1em 1em 0.1em 0
+    color: var(--color-dark)
+    text-decoration: none
+
+    > .tile-head
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+
+      > svg
+        width: 26px
+        height: 26px
+        color: var(--color-blue)
+
+      > .tile-title
+        color: white
+        font-size: 16px
+        font-weight: 500
+
+    > .tile-text
+      font-size: 13px
+      line-height: 1.45
+      color: var(--color-shadow)
+
+  a.tile:hover .tile-title
+    color: var(--color-blue)
+    cursor: pointer
