@@ -115,8 +115,8 @@ export class VocoderDsp {
     #targetCarrierMaxFreq: number = 12000.0
     #targetModulatorMinFreq: number = 80.0
     #targetModulatorMaxFreq: number = 12000.0
-    #targetQMin: number = 2.0
-    #targetQMax: number = 20.0
+    #targetQEnd: number = 2.0
+    #targetQStart: number = 20.0
     #coeffsDirty: boolean = true
 
     // ── Current (lerped) per-band frequencies & Q ─────────────────────────
@@ -256,12 +256,12 @@ export class VocoderDsp {
         this.#targetModulatorMaxFreq = hz
         this.#coeffsDirty = true
     }
-    set qMin(q: number) {
-        this.#targetQMin = q
+    set qEnd(q: number) {
+        this.#targetQEnd = q
         this.#coeffsDirty = true
     }
-    set qMax(q: number) {
-        this.#targetQMax = q
+    set qStart(q: number) {
+        this.#targetQStart = q
         this.#coeffsDirty = true
     }
 
@@ -283,12 +283,12 @@ export class VocoderDsp {
 
     #recomputeBandGain(): void {
         const N = this.#targetBandCount
-        const qMax = this.#targetQMax
-        const qLog = Math.log(this.#targetQMax / this.#targetQMin)
+        const qStart = this.#targetQStart
+        const qLog = Math.log(this.#targetQStart / this.#targetQEnd)
         let sum = 0
         for (let i = 0; i < N; i++) {
             const x = N === 1 ? 0 : i / (N - 1)
-            const q = qMax * Math.exp(-x * qLog)
+            const q = qStart * Math.exp(-x * qLog)
             sum += 1.0 / q
         }
         this.#bandGain = VocoderDsp.GAIN_K / sum
@@ -377,14 +377,14 @@ export class VocoderDsp {
         const mfMin = this.#targetModulatorMinFreq
         const cfLog = Math.log(this.#targetCarrierMaxFreq / cfMin)
         const mfLog = Math.log(this.#targetModulatorMaxFreq / mfMin)
-        const qMin = this.#targetQMin
-        const qLog = Math.log(this.#targetQMax / qMin)
+        const qStart = this.#targetQStart
+        const qLog = Math.log(qStart / this.#targetQEnd)
         const denom = N === 1 ? 1 : N - 1
         for (let i = 0; i < N; i++) {
             const x = N === 1 ? 0 : i / denom
             this.#tmpTargetCarrierFreq[i] = cfMin * Math.exp(x * cfLog)
             this.#tmpTargetModulatorFreq[i] = mfMin * Math.exp(x * mfLog)
-            this.#tmpTargetQ[i] = this.#targetQMax * Math.exp(-x * qLog)
+            this.#tmpTargetQ[i] = qStart * Math.exp(-x * qLog)
         }
         // Slots [N..MAX_BANDS) retain stale targets but are skipped by the
         // interpolation / process loops via the targetActive check.

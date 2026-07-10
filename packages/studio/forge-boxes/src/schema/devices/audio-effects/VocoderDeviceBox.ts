@@ -21,11 +21,11 @@ export const VocoderDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEf
         value: 12000.0, constraints: {min: 20.0, max: 20000.0, scaling: "exponential"}, unit: "Hz"
     },
     14: {
-        type: "float32", name: "q-min", pointerRules: ParameterPointerRules,
+        type: "float32", name: "q-end", pointerRules: ParameterPointerRules,
         value: 2.0, constraints: {min: 1.0, max: 60.0, scaling: "exponential"}, unit: ""
     },
     15: {
-        type: "float32", name: "q-max", pointerRules: ParameterPointerRules,
+        type: "float32", name: "q-start", pointerRules: ParameterPointerRules,
         value: 20.0, constraints: {min: 1.0, max: 60.0, scaling: "exponential"}, unit: ""
     },
     16: {

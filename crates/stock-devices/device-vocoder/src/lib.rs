@@ -29,8 +29,8 @@ const CARRIER_MIN_FIELD: [u16; 1] = [10];
 const CARRIER_MAX_FIELD: [u16; 1] = [11];
 const MODULATOR_MIN_FIELD: [u16; 1] = [12];
 const MODULATOR_MAX_FIELD: [u16; 1] = [13];
-const Q_MIN_FIELD: [u16; 1] = [14];
-const Q_MAX_FIELD: [u16; 1] = [15];
+const Q_END_FIELD: [u16; 1] = [14];
+const Q_START_FIELD: [u16; 1] = [15];
 const ENV_RELEASE_FIELD: [u16; 1] = [16];
 const MIX_FIELD: [u16; 1] = [17];
 const ENV_ATTACK_FIELD: [u16; 1] = [20];
@@ -84,8 +84,8 @@ pub struct VocoderState {
     carrier_max_id: u32,
     modulator_min_id: u32,
     modulator_max_id: u32,
-    q_min_id: u32,
-    q_max_id: u32,
+    q_end_id: u32,
+    q_start_id: u32,
     env_release_id: u32,
     mix_id: u32,
     env_attack_id: u32,
@@ -116,8 +116,8 @@ impl AudioEffect for Vocoder {
         state.carrier_max_id = abi::bind_parameter(&CARRIER_MAX_FIELD);
         state.modulator_min_id = abi::bind_parameter(&MODULATOR_MIN_FIELD);
         state.modulator_max_id = abi::bind_parameter(&MODULATOR_MAX_FIELD);
-        state.q_min_id = abi::bind_parameter(&Q_MIN_FIELD);
-        state.q_max_id = abi::bind_parameter(&Q_MAX_FIELD);
+        state.q_end_id = abi::bind_parameter(&Q_END_FIELD);
+        state.q_start_id = abi::bind_parameter(&Q_START_FIELD);
         state.env_release_id = abi::bind_parameter(&ENV_RELEASE_FIELD);
         state.mix_id = abi::bind_parameter(&MIX_FIELD);
         state.env_attack_id = abi::bind_parameter(&ENV_ATTACK_FIELD);
@@ -207,10 +207,10 @@ impl AudioEffect for Vocoder {
             state.dsp.set_modulator_min_freq(float_value(value, &FREQ_MAPPING));
         } else if id == state.modulator_max_id {
             state.dsp.set_modulator_max_freq(float_value(value, &FREQ_MAPPING));
-        } else if id == state.q_min_id {
-            state.dsp.set_q_min(float_value(value, &Q_MAPPING));
-        } else if id == state.q_max_id {
-            state.dsp.set_q_max(float_value(value, &Q_MAPPING));
+        } else if id == state.q_end_id {
+            state.dsp.set_q_end(float_value(value, &Q_MAPPING));
+        } else if id == state.q_start_id {
+            state.dsp.set_q_start(float_value(value, &Q_MAPPING));
         } else if id == state.env_release_id {
             state.dsp.set_release_seconds(float_value(value, &RELEASE_MAPPING) * 0.001);
         } else if id == state.mix_id {

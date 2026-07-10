@@ -29,7 +29,7 @@ export const VocoderDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
     const {editing, midiLearning, rootBoxAdapter} = project
     const {
         carrierMinFreq, carrierMaxFreq, modulatorMinFreq, modulatorMaxFreq,
-        qMin, qMax, envAttack, envRelease, gain, mix
+        qStart, qEnd, envAttack, envRelease, gain, mix
     } = adapter.namedParameter
     const displayMode = lifecycle.own(new DefaultObservableValue(DisplayMode.Transform))
     const spectrum = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
@@ -93,8 +93,8 @@ export const VocoderDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                               {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: carrierMaxFreq, style: {gridArea: "3 / 2"}})}
                               {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: modulatorMinFreq, style: {gridArea: "3 / 3"}})}
                               {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: modulatorMaxFreq, style: {gridArea: "3 / 4"}})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: qMin, style: {gridArea: "3 / 5"}})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: qMax, style: {gridArea: "3 / 6"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: qStart, style: {gridArea: "3 / 5"}})}
+                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: qEnd, style: {gridArea: "3 / 6"}})}
                               {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: envAttack, style: {gridArea: "2 / 8"}})}
                               {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: envRelease, style: {gridArea: "2 / 9"}})}
                               {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: gain, style: {gridArea: "3 / 8"}})}

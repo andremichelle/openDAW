@@ -73,10 +73,10 @@ export class VocoderDeviceBoxAdapter implements AudioEffectDeviceAdapter {
                 box.modulatorMinFreq, freqMap, freqStr, "Mod Min"),
             modulatorMaxFreq: this.#parametric.createParameter(
                 box.modulatorMaxFreq, freqMap, freqStr, "Mod Max"),
-            qMin: this.#parametric.createParameter(
-                box.qMin, qMap, qStr, "Q Min"),
-            qMax: this.#parametric.createParameter(
-                box.qMax, qMap, qStr, "Q Max"),
+            qStart: this.#parametric.createParameter(
+                box.qStart, qMap, qStr, "Q Start"),
+            qEnd: this.#parametric.createParameter(
+                box.qEnd, qMap, qStr, "Q End"),
             envAttack: this.#parametric.createParameter(
                 box.envAttack,
                 ValueMapping.exponential(0.1, 100.0),

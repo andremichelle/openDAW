@@ -21,15 +21,21 @@ Low and high frequency bounds of the carrier filter bank.
 Low and high frequency bounds of the modulator filter bank. Swap or reverse
 these relative to the carrier bounds to remap the spectral correspondence.
 
-### Q Min / Q Max
-Bandwidth range for the filters. Bands are spread exponentially between these
-two Q values. Narrow Q (high number) gives sharper formants, wide Q (low number)
-gives a smoother sound.
+### Q Start / Q End
+Bandwidth of the filters at the first and last band, spread exponentially in
+between. Narrow Q (high number) gives sharper formants, wide Q (low number)
+gives a smoother sound. The defaults run from 20 at the first band down to 2 at
+the last, so the bands closest to Carrier Min stay tight while the upper bands
+open out. Set Q Start below Q End to reverse that gradient.
+
+### Attack
+Attack time of the envelope follower that tracks each modulator band, from
+0.1 ms to 100 ms. Short values keep consonants crisp, longer values soften the
+onset of each band.
 
 ### Release
 Release time of the envelope follower that tracks each modulator band. Short
 values give a snappier, more intelligible result; long values smear and smooth.
-Attack is fixed at 5 ms.
 
 ### Gain
 Output gain applied after the vocoder processing.
