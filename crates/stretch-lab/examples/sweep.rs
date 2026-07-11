@@ -9,9 +9,10 @@ use stretch_lab::metrics::modulation::modulation_excess;
 use stretch_lab::metrics::spectral::level_delta_db;
 use stretch_lab::render::{render_stretch, PlayMode, RenderSpec, ENGINE_RATE};
 
-fn score(entry: &corpus::Entry, ratio: f64, tuning: Tuning, gate: f32) -> f64 {
+fn score(entry: &corpus::Entry, ratio: f64, tuning: Tuning, alpha: f32, delta: f32) -> f64 {
     let mut config = AnalyzerConfig::default();
-    config.chatter_strength_max = gate;
+    config.onset.median_alpha = alpha;
+    config.onset.delta = delta;
     // End-to-end: the detector's own markers drive playback for real fixtures.
     let markers = if entry.ideal.is_some() {
         Analyzer::new(config).describe(&entry.left, &entry.right, entry.file_rate, &entry.transients)
@@ -52,24 +53,24 @@ fn main() {
     println!("{:<28} {:>9} {:>9} {:>11} {:>11} {:>9} {:>10}", "tuning", "chord1.1", "chord1.25", "derelict1.1", "derelict1.25", "drone1.1", "guitar1.25");
     let guitar = entries.iter().find(|entry| entry.id == "guitar-chords");
     for &(fade_min, fade_max) in &[(0.010, 0.080)] {
-      for &read_through in &[0.0f64, 1.12, 1.2, 1.35] {
-        let gate = 0.3f32;
+      for &(alpha, delta) in &[(1.3f32, 0.01f32), (1.6, 0.02), (2.0, 0.03), (2.5, 0.05)] {
+        let read_through = 1.12f64;
         let voice_max = 0.020f64;
         let mut tuning = Tuning::adaptive();
         tuning.loop_fade_min_seconds = fade_min;
         tuning.loop_fade_max_seconds = fade_max;
         tuning.voice_fade_max_seconds = voice_max;
         tuning.read_through_max_fill = read_through;
-        let label = format!("readthrough<{:.2}", read_through);
+        let label = format!("alpha {:.1} delta {:.2}", alpha, delta);
         println!(
             "{:<28} {:>9.2} {:>9.2} {:>9.2} {:>11.2} {:>11.2} {:>10.2}",
             label,
-            score(padchord, 1.1, tuning, gate),
-            score(padchord, 1.25, tuning, gate),
-            derelict.map(|entry| score(entry, 1.1, tuning, gate)).unwrap_or(f64::NAN),
-            derelict.map(|entry| score(entry, 1.25, tuning, gate)).unwrap_or(f64::NAN),
-            drone.map(|entry| score(entry, 1.1, tuning, gate)).unwrap_or(f64::NAN),
-            guitar.map(|entry| score(entry, 1.25, tuning, gate)).unwrap_or(f64::NAN)
+            score(padchord, 1.1, tuning, alpha, delta),
+            score(padchord, 1.25, tuning, alpha, delta),
+            derelict.map(|entry| score(entry, 1.1, tuning, alpha, delta)).unwrap_or(f64::NAN),
+            derelict.map(|entry| score(entry, 1.25, tuning, alpha, delta)).unwrap_or(f64::NAN),
+            drone.map(|entry| score(entry, 1.1, tuning, alpha, delta)).unwrap_or(f64::NAN),
+            guitar.map(|entry| score(entry, 1.25, tuning, alpha, delta)).unwrap_or(f64::NAN)
         );
 
       }
