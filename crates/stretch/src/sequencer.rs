@@ -271,7 +271,11 @@ impl Stretcher {
                 .get(self.current_transient_index as usize)
                 .map(|previous| previous.period > 0.0 && ((marker.period - previous.period) / previous.period).abs() < 0.02)
                 .unwrap_or(false);
-            if marker.strength < self.tuning.weak_boundary_threshold && marker.has_loop() && (self.continued_boundaries < 2 || same_period) {
+            // Sweep-proven: continuation needs a MEASURED period. Periodic material splices perfectly,
+            // so continuing avoids needless crossfades (sine -47 dB); beating polyphony has a residual
+            // wrap comb that boundary re-anchors BREAK UP — continuing there keeps the comb coherent
+            // and audible (pads read 6 dB worse with continuation).
+            if marker.strength < self.tuning.weak_boundary_threshold && marker.period > 0.0 && marker.has_loop() && (self.continued_boundaries < 2 || same_period) {
                 let mut continued = false;
                 for voice in &mut self.voices {
                     if !voice.done() && !voice.is_fading_out() {

@@ -219,8 +219,13 @@ impl Analyzer {
         let rate = sample_rate as f64;
         let earliest_start = segment_start + self.config.loop_margin_start_seconds * rate;
         let loop_end = segment_end - self.config.loop_margin_end_seconds * rate;
+        // Weak boundaries take the FULL available region: with end-anchored loops the attack is
+        // already excluded, and a longer loop means slower wraps — fewer splices, and a wrap rate
+        // pushed below the 4-8 Hz band where AM sensitivity (ear and metric) peaks. The
+        // min..max lerp only shapes loops for mid-strength material.
+        let available = loop_end - earliest_start;
         let nominal_seconds = self.config.loop_len_min_seconds + (1.0 - strength as f64) * (self.config.loop_len_max_seconds - self.config.loop_len_min_seconds);
-        let nominal = nominal_seconds * rate;
+        let nominal = if strength < 0.25 { available } else { (nominal_seconds * rate).min(available) };
         // The loop ANCHORS AT THE SEGMENT END: the voice plays the whole segment once (attack and
         // all), then sustains on the settled tail. Anchoring at the start would loop the attack
         // ramp forever (a pad's first 200 ms are its quietest — the level guard caught that).
@@ -242,11 +247,21 @@ impl Analyzer {
         if loop_end - earliest_start < minimum_length {
             return (0.0, -1.0, 0.0);
         }
-        let candidate_start = (loop_end - nominal).max(earliest_start);
+        let mut candidate_start = (loop_end - nominal).max(earliest_start);
         // 30 ms alignment window: a chord's structure repeats far slower than any single partial —
         // a 10 ms window aligned individual partials while the full polyphonic waveform still
         // combed at each wrap (the 5-6 Hz wrap lines the excess metric caught).
-        let search = (0.020 * rate) as isize;
+        let mut search = (0.020 * rate) as isize;
+        // Beating material (detuned/chordal partials) carries an intrinsic envelope period — the
+        // beat — and a splice crossing it mid-cycle steps the envelope no matter how well the
+        // waveform correlates. Snapping the loop length to integer BEAT periods aligns every
+        // partial pair's phase DIFFERENCE — exactly what the envelope (and the ear) tracks; the
+        // correlation search then fine-aligns within half a beat.
+        if let Some(beat_period) = envelope_beat_period(mono, segment_start as usize, segment_end as usize, rate) {
+            let beats = libm::round((loop_end - candidate_start) / beat_period).max(1.0);
+            candidate_start = (loop_end - beats * beat_period).max(earliest_start);
+            search = (beat_period * 0.5).max(8.0) as isize;
+        }
         let window = (0.030 * rate) as usize;
         let (start, score) = self.best_correlated_start(mono, loop_end, candidate_start, search, window, earliest_start, loop_end - minimum_length);
         if score < 0.5 {
@@ -309,6 +324,49 @@ impl Analyzer {
     }
 }
 
+
+/// The segment's intrinsic envelope (beat) period in samples, from the autocorrelation of the
+/// rectified+smoothed envelope over 5..250 ms lags. None when the envelope is not periodic enough.
+fn envelope_beat_period(mono: &[f32], segment_start: usize, segment_end: usize, rate: f64) -> Option<f64> {
+    let length = segment_end.saturating_sub(segment_start);
+    if length < (0.5 * rate) as usize {
+        return None;
+    }
+    let hop = (rate / 1000.0) as usize;
+    let alpha = 1.0 - libm::exp(-2.0 * core::f64::consts::PI * 100.0 / rate);
+    let mut state = 0.0f64;
+    let mut envelope: Vec<f32> = Vec::with_capacity(length / hop + 1);
+    for (index, sample) in mono[segment_start..segment_end].iter().enumerate() {
+        state += alpha * (sample.abs() as f64 - state);
+        if index % hop == 0 {
+            envelope.push(state as f32);
+        }
+    }
+    let mean = envelope.iter().map(|value| *value as f64).sum::<f64>() / envelope.len() as f64;
+    let residual: Vec<f64> = envelope.iter().map(|value| *value as f64 - mean).collect();
+    let energy: f64 = residual.iter().map(|value| value * value).sum();
+    if energy < 1e-12 {
+        return None;
+    }
+    let mut best_lag = 0usize;
+    let mut best_score = 0.0f64;
+    for lag in 5..250usize.min(residual.len() / 2) {
+        let mut sum = 0.0f64;
+        for index in 0..residual.len() - lag {
+            sum += residual[index] * residual[index + lag];
+        }
+        let score = sum / energy;
+        if score > best_score {
+            best_score = score;
+            best_lag = lag;
+        }
+    }
+    if best_score < 0.5 || best_lag == 0 {
+        return None;
+    }
+    Some(best_lag as f64 / 1000.0 * rate)
+}
+
 fn mono_fold(left: &[f32], right: &[f32]) -> Vec<f32> {
     left.iter().zip(right.iter()).map(|(l, r)| 0.5 * (l + r)).collect()
 }
@@ -354,7 +412,10 @@ fn segment_rms(segment: &[f32]) -> f32 {
 /// call a slow swell from silence "strong", which is exactly wrong for fade decisions.
 fn crest_strength(mono: &[f32], sample_rate: f32, onset_index: usize) -> f32 {
     let short = (0.005 * sample_rate as f64) as usize;
-    let long = (0.050 * sample_rate as f64) as usize;
+    // 150 ms comparison windows: material that BEATS (a detuned chord wobbles at tens of Hz) must
+    // not read its own beat maxima as onset novelty — the window spans several beat periods so the
+    // beat averages out, while real onsets still tower over it.
+    let long = (0.150 * sample_rate as f64) as usize;
     let peak_in = |from: usize, to: usize| mono[from.min(mono.len())..to.min(mono.len())].iter().fold(0.0f32, |max, value| max.max(value.abs()));
     let peak_short = peak_in(onset_index, onset_index + short);
     let peak_long = peak_in(onset_index, onset_index + long);
@@ -362,8 +423,15 @@ fn crest_strength(mono: &[f32], sample_rate: f32, onset_index: usize) -> f32 {
         return 0.0;
     }
     let slope = peak_short / peak_long;
-    let ambient = segment_rms(&mono[onset_index.saturating_sub(long)..onset_index.max(1)]);
-    let novelty = ((peak_long - core::f32::consts::SQRT_2 * ambient) / peak_long).max(0.0);
+    // Novelty compares LIKE with LIKE: rms after vs rms before. Comparing peak against sqrt(2)*rms
+    // assumed a sine's crest factor — rich material (a 12-partial chord has crest ~3) floored at
+    // novelty ~0.5 while perfectly steady.
+    let after = segment_rms(&mono[onset_index..(onset_index + long).min(mono.len())]);
+    let before = segment_rms(&mono[onset_index.saturating_sub(long)..onset_index.max(1)]);
+    if after < 1e-6 {
+        return 0.0;
+    }
+    let novelty = ((after - before) / after).max(0.0);
     clamp01(slope * novelty)
 }
 

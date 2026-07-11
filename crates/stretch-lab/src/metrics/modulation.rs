@@ -39,14 +39,29 @@ fn detrend_gain(frequency: f64) -> f64 {
 /// detuned chord BEATS on its own (pitch-derived rates that survive stretching), and the stretcher
 /// must not be charged for modulation the perfect output would also have. Values are dB of excess;
 /// 0 = no more modulation than the reference, positive = added grain.
+/// Absolute audibility reference for envelope modulation: depth below this is hard to hear on
+/// sustained material regardless of frequency, so excess is never charged against a quieter floor.
+/// TUNABLE — calibrate by ear against renders.
+const MODULATION_AUDIBILITY_DB: f64 = -40.0;
+
 pub fn modulation_excess(output_env: &[f32], reference_env: &[f32], expected_loop_hz: f64) -> Option<ModulationScores> {
     let output = modulation_lines(output_env)?;
     let reference = modulation_lines(reference_env)?;
     let mut band_excess = f64::NEG_INFINITY;
     let mut expected_excess = f64::NEG_INFINITY;
     for (index, (frequency, output_db)) in output.lines.iter().enumerate() {
-        let reference_db = reference.lines[index].1;
-        let excess = output_db - reference_db.max(-70.0);
+        // Masking-aware floor: an artifact is judged against the LOUDEST of (a) the reference at
+        // this exact line, (b) partial masking from nearby loud reference lines (within ~1/3
+        // octave, 10 dB below the masker), (c) the absolute audibility reference. Baseline's grain
+        // hiding on a pad's intrinsic beating lines and adaptive's smaller-but-exposed wobble are
+        // then compared by how far each pokes above what a listener could actually notice.
+        let mut floor = reference.lines[index].1.max(MODULATION_AUDIBILITY_DB);
+        for (masker_frequency, masker_db) in &reference.lines {
+            if (frequency / masker_frequency).ln().abs() < 0.3 {
+                floor = floor.max(masker_db - 10.0);
+            }
+        }
+        let excess = output_db - floor;
         if excess > band_excess {
             band_excess = excess;
         }
