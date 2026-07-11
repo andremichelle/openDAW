@@ -2,7 +2,7 @@
 
 openDAW is a full music studio that runs entirely in your browser. There is nothing to install and no account to create.
 
-![openDAW studio](../images/studio.png)
+![openDAW studio](../images/studio.webp)
 
 ## Features
 
