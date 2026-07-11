@@ -243,8 +243,11 @@ impl Analyzer {
             return (0.0, -1.0, 0.0);
         }
         let candidate_start = (loop_end - nominal).max(earliest_start);
+        // 30 ms alignment window: a chord's structure repeats far slower than any single partial —
+        // a 10 ms window aligned individual partials while the full polyphonic waveform still
+        // combed at each wrap (the 5-6 Hz wrap lines the excess metric caught).
         let search = (0.020 * rate) as isize;
-        let window = (0.010 * rate) as usize;
+        let window = (0.030 * rate) as usize;
         let (start, score) = self.best_correlated_start(mono, loop_end, candidate_start, search, window, earliest_start, loop_end - minimum_length);
         if score < 0.5 {
             return (0.0, -1.0, 0.0);

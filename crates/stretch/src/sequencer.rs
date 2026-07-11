@@ -267,7 +267,11 @@ impl Stretcher {
             // precisely the license continuation needs.
             // Capped: chaining continuations lets one loop go stale while slowly-evolving material
             // (a real pad) moves on — after two extensions the next boundary re-anchors content.
-            if marker.strength < self.tuning.weak_boundary_threshold && marker.has_loop() && self.continued_boundaries < 2 {
+            let same_period = self.current_transient_index >= 0 && marker.period > 0.0 && markers
+                .get(self.current_transient_index as usize)
+                .map(|previous| previous.period > 0.0 && ((marker.period - previous.period) / previous.period).abs() < 0.02)
+                .unwrap_or(false);
+            if marker.strength < self.tuning.weak_boundary_threshold && marker.has_loop() && (self.continued_boundaries < 2 || same_period) {
                 let mut continued = false;
                 for voice in &mut self.voices {
                     if !voice.done() && !voice.is_fading_out() {
@@ -396,6 +400,7 @@ fn voice_params(segment_start: f64, segment_end: f64, playback_rate: f64, sample
             fade_seconds: tuning.voice_fade_seconds,
             equal_power: tuning.equal_power_fades,
             splice_equal_power: tuning.equal_power_fades,
+            splice_rho: -1.0,
             loop_start: legacy_loop_start,
             loop_end: legacy_loop_end,
             loop_fade_samples: round(tuning.loop_fade_seconds * sample_rate as f64)
@@ -440,7 +445,9 @@ fn voice_params(segment_start: f64, segment_end: f64, playback_rate: f64, sample
     let coherent = marker.period > 0.0;
     VoiceParams {
         fade_seconds, equal_power: tuning.equal_power_fades && !coherent,
-        splice_equal_power: !(marker.has_loop() && marker.loop_score > 0.35), loop_start, loop_end, loop_fade_samples
+        splice_equal_power: false,
+        splice_rho: if marker.has_loop() {math::clamp(marker.loop_score, 0.0, 1.0) as f64} else {0.0},
+        loop_start, loop_end, loop_fade_samples
     }
 }
 

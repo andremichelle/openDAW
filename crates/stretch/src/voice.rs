@@ -25,6 +25,10 @@ pub(crate) struct VoiceParams {
     pub fade_seconds: f64,
     pub equal_power: bool,
     pub splice_equal_power: bool,
+    /// Measured splice correlation for the CONSTANT-POWER law: gains (a, b) are normalized by
+    /// sqrt(a^2 + b^2 + 2*rho*a*b), exactly constant power for that rho (rho 1 -> linear,
+    /// rho 0 -> equal-power). Negative = use the legacy binary law (parity path).
+    pub splice_rho: f64,
     pub loop_start: f64,
     pub loop_end: f64,
     pub loop_fade_samples: f64
@@ -252,6 +256,7 @@ pub(crate) struct RepeatVoice {
     loop_fade_length: f64,
     loop_fade_inverse: f64,
     splice_equal_power: bool,
+    splice_rho: f64,
     pub(crate) segment_end: f64,
     pub(crate) read_position: f64,
     loop_crossfade_progress: f64,
@@ -270,7 +275,7 @@ impl RepeatVoice {
         }
         Self {
             fade, playback_rate, loop_start, loop_end, loop_fade_length, loop_fade_inverse: 1.0 / loop_fade_length,
-            splice_equal_power: params.splice_equal_power, segment_end, read_position: initial_read_position.unwrap_or(segment_start),
+            splice_equal_power: params.splice_equal_power, splice_rho: params.splice_rho, segment_end, read_position: initial_read_position.unwrap_or(segment_start),
             loop_crossfade_progress: 0.0, loop_crossfade_position: 0.0, block_offset
         }
     }
@@ -294,7 +299,14 @@ impl RepeatVoice {
             if self.loop_crossfade_progress > 0.0 {
                 if let (Some(loop_l), Some(loop_r)) = (read_interp(source.left, source.num_frames, self.loop_crossfade_position), read_interp(source.right, source.num_frames, self.loop_crossfade_position)) {
                     let crossfade = (self.loop_crossfade_progress * self.loop_fade_inverse) as f32;
-                    if self.splice_equal_power {
+                    if self.splice_rho >= 0.0 {
+                        let a = 1.0 - crossfade;
+                        let b = crossfade;
+                        let rho = self.splice_rho as f32;
+                        let norm = libm::sqrtf((a * a + b * b + 2.0 * rho * a * b).max(1e-9));
+                        sample_l = (sample_l * a + loop_l * b) / norm;
+                        sample_r = (sample_r * a + loop_r * b) / norm;
+                    } else if self.splice_equal_power {
                         let fade_out = math::cos(crossfade * core::f32::consts::PI * 0.5);
                         let fade_in = math::sin(crossfade * core::f32::consts::PI * 0.5);
                         sample_l = sample_l * fade_out + loop_l * fade_in;
