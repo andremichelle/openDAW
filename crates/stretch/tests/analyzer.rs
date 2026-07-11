@@ -52,6 +52,19 @@ fn detector_finds_clicks_where_they_are() {
 }
 
 #[test]
+fn detector_resolves_sixteenth_notes_at_128_bpm() {
+    // 16ths at 128 BPM are 117 ms apart — the old 120 ms min-separation missed every other hit
+    // and playback smeared them. The detector must resolve realistic percussion grids.
+    let positions: Vec<f64> = (0..16).map(|index| 0.25 + index as f64 * 0.1171875).collect();
+    let samples = click_train(&positions, 2.5);
+    let analyzed = Analyzer::default().analyze(&samples, &samples, RATE);
+    for &expected in &positions {
+        let hit = analyzed.markers.iter().any(|marker| (marker.position - expected).abs() < 0.02);
+        assert!(hit, "16th at {expected:.3}s detected");
+    }
+}
+
+#[test]
 fn yin_reads_1000hz_within_a_tenth_of_a_sample() {
     let count = (1.0 * RATE as f64) as usize;
     let samples: Vec<f32> = (0..count).map(|index| (0.5 * (2.0 * std::f64::consts::PI * 1000.0 * index as f64 / RATE as f64).sin()) as f32).collect();

@@ -44,7 +44,7 @@ pub fn expected_loop_hz(entry: &Entry) -> f64 {
 
 /// Measure one rendered case. `ratio > 1` enables the loop-modulation family (compression does not
 /// loop). Attack metrics need ground-truth onsets and a percussive/tonal class.
-pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_right: &[f32]) -> Vec<MetricValue> {
+pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_right: &[f32], playback_markers: Option<&[stretch::TransientDescriptor]>) -> Vec<MetricValue> {
     let engine_rate = crate::render::ENGINE_RATE as f64;
     let mut results = Vec::new();
     let source_mono = envelope::mono(spec.left, spec.right);
@@ -91,7 +91,16 @@ pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_righ
         }
     }
     if matches!(entry.class, Class::Percussive | Class::Tonal | Class::Mixed) {
-        if let Some(scores) = attack::attack_scores(&source_fast, &output_fast, &entry.transients, spec.ratio) {
+        // CONSENSUS onsets judge attacks: positions where the annotation grid and the detector
+        // agree within 20 ms are high-confidence hits — no detector judges itself, no crude
+        // annotator gets the final word either.
+        let consensus: Vec<f64> = match playback_markers {
+            Some(markers) => entry.transients.iter().copied()
+                .filter(|&onset| markers.iter().any(|marker| (marker.position - onset).abs() < 0.020))
+                .collect(),
+            None => entry.transients.clone()
+        };
+        if let Some(scores) = attack::attack_scores(&source_fast, &output_fast, &consensus, spec.ratio) {
             // Untrusted (machine-annotated, unreviewed) onsets report as advisory adv_* names —
             // outside TARGETS/GUARDS — because a gate fed by annotation noise blocks randomly in
             // both directions (baseline itself read 0.32..1.9 on those fixtures). The independent

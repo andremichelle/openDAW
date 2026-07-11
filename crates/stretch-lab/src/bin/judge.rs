@@ -84,21 +84,24 @@ fn render_case(case: &Case, engine: &Engine) -> (Vec<f32>, Vec<f32>, Vec<MetricV
         left: &entry.left, right: &entry.right, file_rate: entry.file_rate,
         transients: &entry.transients, ratio: case.ratio, mode: case.mode
     };
+    let mut playback: Option<Vec<stretch::TransientDescriptor>> = None;
     let (out_left, out_right) = match engine {
         Engine::Baseline => render::render_baseline(&spec),
         Engine::Stretch(tuning) => {
-            // Production semantics: the engine plays from DETECTED markers (sparse on smooth pads ->
-            // long segments -> slow wraps), while the annotation grid stays the ground truth for
-            // attack judging. The over-dense machine annotations were forcing 5 Hz wrap rates the
-            // real detector never would.
-            // Playback markers = the annotation grid (same positions the attack ground truth uses;
-            // detector-driven playback needs adaptive min-separation first — 120 ms misses 16th hats
-            // at 128 BPM and smeared drums-top x4, see task notes).
-            let markers = Analyzer::default().describe(&entry.left, &entry.right, entry.file_rate, &entry.transients);
-            render::render_stretch(&spec, &markers, *tuning)
+            // THE DETECTOR IS THE ENTRY POINT: real fixtures play from the new detector's markers
+            // (the system judged end-to-end); synthetic grids stay recipe-defined (they exist to
+            // force specific looping behavior with controlled inputs).
+            let markers = if entry.ideal.is_some() {
+                Analyzer::default().describe(&entry.left, &entry.right, entry.file_rate, &entry.transients)
+            } else {
+                Analyzer::default().analyze(&entry.left, &entry.right, entry.file_rate).markers
+            };
+            let rendered = render::render_stretch(&spec, &markers, *tuning);
+            playback = Some(markers);
+            rendered
         }
     };
-    let measured = metrics::measure_case(entry, &spec, &out_left, &out_right);
+    let measured = metrics::measure_case(entry, &spec, &out_left, &out_right, playback.as_deref());
     (out_left, out_right, measured)
 }
 

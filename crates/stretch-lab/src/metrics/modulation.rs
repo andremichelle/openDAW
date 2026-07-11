@@ -57,7 +57,12 @@ pub fn modulation_excess(output_env: &[f32], reference_env: &[f32], expected_loo
         // then compared by how far each pokes above what a listener could actually notice.
         let mut floor = reference.lines[index].1.max(MODULATION_AUDIBILITY_DB);
         for (masker_frequency, masker_db) in &reference.lines {
-            if (frequency / masker_frequency).ln().abs() < 0.3 {
+            let distance = (frequency / masker_frequency).ln().abs();
+            // Two-tier masking: co-band lines (same critical band) are masked near-completely;
+            // neighbors within ~1/3 octave partially. Applied symmetrically to both engines.
+            if distance < 0.05 {
+                floor = floor.max(masker_db - 3.0);
+            } else if distance < 0.3 {
                 floor = floor.max(masker_db - 10.0);
             }
         }

@@ -23,7 +23,7 @@ pub struct OnsetConfig {
 
 impl Default for OnsetConfig {
     fn default() -> Self {
-        Self {fft_size: 1024, hop: 128, log_gamma: 100.0, median_window_seconds: 0.35, median_alpha: 1.3, delta: 0.01, min_separation_seconds: 0.120}
+        Self {fft_size: 1024, hop: 128, log_gamma: 100.0, median_window_seconds: 0.35, median_alpha: 1.3, delta: 0.01, min_separation_seconds: 0.050}
     }
 }
 
