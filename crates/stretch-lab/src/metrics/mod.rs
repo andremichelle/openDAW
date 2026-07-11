@@ -75,7 +75,9 @@ pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_righ
         };
         let smooth_out = envelope::smooth_envelope(&output_mono, crate::render::ENGINE_RATE);
         let smooth_ref = envelope::smooth_envelope(reference_env, reference_rate);
-        if let Some(scores) = modulation::modulation_excess(&smooth_out, &smooth_ref, expected_loop_hz(entry)) {
+        // Real fixtures use the unstretched source as reference: rate-shift the comparison.
+        let reference_ratio = if entry.ideal.is_some() { 1.0 } else { spec.ratio };
+        if let Some(scores) = modulation::modulation_excess_rated(&smooth_out, &smooth_ref, expected_loop_hz(entry), reference_ratio) {
             if scores.expected_db.is_finite() {
                 results.push(metric("mod_expected_db", scores.expected_db, Direction::LowerBetter));
             }

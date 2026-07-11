@@ -45,8 +45,24 @@ fn detrend_gain(frequency: f64) -> f64 {
 const MODULATION_AUDIBILITY_DB: f64 = -40.0;
 
 pub fn modulation_excess(output_env: &[f32], reference_env: &[f32], expected_loop_hz: f64) -> Option<ModulationScores> {
+    modulation_excess_rated(output_env, reference_env, expected_loop_hz, 1.0)
+}
+
+/// `reference_ratio`: a perfect stretch SLOWS the material's own envelope fluctuations by the
+/// stretch ratio — the honest reference for an output line at f is the reference at f * ratio.
+/// Comparing same-frequency penalized correct slowing as if it were added grain.
+pub fn modulation_excess_rated(output_env: &[f32], reference_env: &[f32], expected_loop_hz: f64, reference_ratio: f64) -> Option<ModulationScores> {
     let output = modulation_lines(output_env)?;
     let reference = modulation_lines(reference_env)?;
+    let reference_at = |frequency: f64| -> f64 {
+        let shifted = frequency * reference_ratio;
+        let index = ((shifted - 1.0) / 0.25).round() as isize;
+        if index < 0 || index as usize >= reference.lines.len() {
+            MODULATION_AUDIBILITY_DB
+        } else {
+            reference.lines[index as usize].1
+        }
+    };
     let mut band_excess = f64::NEG_INFINITY;
     let mut expected_excess = f64::NEG_INFINITY;
     for (index, (frequency, output_db)) in output.lines.iter().enumerate() {
@@ -55,8 +71,10 @@ pub fn modulation_excess(output_env: &[f32], reference_env: &[f32], expected_loo
         // octave, 10 dB below the masker), (c) the absolute audibility reference. Baseline's grain
         // hiding on a pad's intrinsic beating lines and adaptive's smaller-but-exposed wobble are
         // then compared by how far each pokes above what a listener could actually notice.
-        let mut floor = reference.lines[index].1.max(MODULATION_AUDIBILITY_DB);
+        let _ = index;
+        let mut floor = reference_at(*frequency).max(MODULATION_AUDIBILITY_DB);
         for (masker_frequency, masker_db) in &reference.lines {
+            let masker_frequency = masker_frequency / reference_ratio;
             let distance = (frequency / masker_frequency).ln().abs();
             // Two-tier masking: co-band lines (same critical band) are masked near-completely;
             // neighbors within ~1/3 octave partially. Applied symmetrically to both engines.

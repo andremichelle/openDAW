@@ -18,6 +18,7 @@ pub mod descriptor;
 pub mod warp;
 pub mod voice;
 pub mod sequencer;
+pub mod spectral;
 
 pub use analyzer::{AnalyzedSample, Analyzer, AnalyzerConfig};
 pub use descriptor::TransientDescriptor;
