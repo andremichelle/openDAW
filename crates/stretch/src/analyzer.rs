@@ -162,9 +162,20 @@ impl Analyzer {
         }
         for lag in lag_min.max(2)..lag_max {
             if cmndf[lag] < self.config.yin_threshold as f64 && cmndf[lag] <= cmndf[lag + 1] {
-                let previous = cmndf[lag - 1];
-                let here = cmndf[lag];
-                let next = cmndf[lag + 1];
+                // Sub-sample refinement on PLAIN autocorrelation: the CMNDF parabola is skewed by
+                // its cumulative normalization, and a 0.5% period error retunes a phase-locked
+                // loop audibly (sine1000 grew a shifted carrier louder than the original — the
+                // sideband sweep caught it).
+                let autocorr = |shift: usize| -> f64 {
+                    let mut sum = 0.0f64;
+                    for index in 0..window {
+                        sum += signal[index] as f64 * signal[index + shift] as f64;
+                    }
+                    sum
+                };
+                let previous = autocorr(lag - 1);
+                let here = autocorr(lag);
+                let next = autocorr(lag + 1);
                 let denominator = previous + next - 2.0 * here;
                 let adjust = if denominator.abs() > 1e-12 {0.5 * (previous - next) / denominator} else {0.0};
                 return (lag as f64 + adjust.clamp(-0.5, 0.5)) as f32;

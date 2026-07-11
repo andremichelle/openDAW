@@ -12,6 +12,8 @@ pub const GUARD_SLACK: f64 = 0.15;
 pub const ATTACK_RISE_MIN: f64 = 0.5;
 pub const ATTACK_RISE_MAX: f64 = 1.4;
 pub const ATTACK_CREST_MIN: f64 = 0.7;
+/// Independent-analyzer attack floor: calibrated to flag catastrophic smear, not 5% shades.
+pub const SA_ATTACK_MIN: f64 = 0.6;
 pub const SPECTRAL_DELTA_MAX_DB: f64 = 2.5;
 pub const LEVEL_DELTA_MAX_DB: f64 = 2.0;
 pub const TRAILING_SILENCE_MAX: f64 = 0.15;
@@ -42,4 +44,4 @@ pub fn audibility_floor(name: &str) -> Option<f64> {
 /// the engine-agnostic (ungameable) version of the same question.
 pub const TARGETS: &[&str] = &["mod_band_peak_db", "mod_acf_peak", "sine_sideband_db", "sine_thd_db", "attack_extra_peaks"];
 /// Metrics that must hold (vs reference + absolute bands) for ANY verdict better than Mixed.
-pub const GUARDS: &[&str] = &["attack_rise_ratio", "attack_crest_ratio", "spectral_delta_db", "level_delta_db", "trailing_silence"];
+pub const GUARDS: &[&str] = &["attack_rise_ratio", "attack_crest_ratio", "sa_attack_ratio", "spectral_delta_db", "level_delta_db", "trailing_silence"];

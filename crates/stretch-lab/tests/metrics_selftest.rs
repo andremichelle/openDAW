@@ -113,3 +113,15 @@ fn smeared_clicks_score_below_one_on_crest() {
     let scores = attack::attack_scores(&source_env, &smeared_env, &source_onsets, 1.0).expect("onsets measured");
     assert!(scores.crest_ratio < 0.8 || scores.rise_ratio > 1.3, "smearing must show: crest {} rise {}", scores.crest_ratio, scores.rise_ratio);
 }
+
+#[test]
+fn pure_long_sine_has_no_sidebands_at_any_probe_offset() {
+    // The engine-agnostic sideband sweep probes f0 +/- 1..30 Hz over the FULL render length —
+    // a pure 12 s sine must read near-silence there or the measurement itself is broken
+    // (recursive Goertzel precision over millions of samples is a known hazard).
+    for f0 in [220.0f64, 1000.0] {
+        let signal = sine(f0, 12.0, 0.5);
+        let scores = modulation::sine_scores(&signal, RATE as f64, f0, 0.0);
+        assert!(scores.sideband_db < -40.0, "pure {f0} Hz sine reads sidebands {:.1} dB", scores.sideband_db);
+    }
+}

@@ -26,6 +26,7 @@ fn guard_absolute_violation(metric: &MetricValue) -> bool {
     match metric.name {
         "attack_rise_ratio" => metric.value < thresholds::ATTACK_RISE_MIN || metric.value > thresholds::ATTACK_RISE_MAX,
         "attack_crest_ratio" => metric.value < thresholds::ATTACK_CREST_MIN,
+        "sa_attack_ratio" => metric.value < thresholds::SA_ATTACK_MIN,
         "spectral_delta_db" => metric.value > thresholds::SPECTRAL_DELTA_MAX_DB,
         "level_delta_db" => metric.value > thresholds::LEVEL_DELTA_MAX_DB,
         "trailing_silence" => metric.value > thresholds::TRAILING_SILENCE_MAX,

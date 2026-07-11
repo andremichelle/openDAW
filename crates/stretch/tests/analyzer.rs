@@ -52,6 +52,15 @@ fn detector_finds_clicks_where_they_are() {
 }
 
 #[test]
+fn yin_reads_1000hz_within_a_tenth_of_a_sample() {
+    let count = (1.0 * RATE as f64) as usize;
+    let samples: Vec<f32> = (0..count).map(|index| (0.5 * (2.0 * std::f64::consts::PI * 1000.0 * index as f64 / RATE as f64).sin()) as f32).collect();
+    let markers = Analyzer::default().describe(&samples, &samples, RATE, &[0.0]);
+    let period = markers[0].period as f64;
+    assert!((period - 48.0).abs() < 0.1, "1 kHz at 48 kHz is a 48.0-sample period, read {period}");
+}
+
+#[test]
 fn yin_reads_a_sine_period_within_one_percent() {
     let samples = sine(220.0, 1.0);
     let markers = Analyzer::default().describe(&samples, &samples, RATE, &[0.0]);

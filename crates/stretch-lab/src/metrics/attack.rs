@@ -36,20 +36,23 @@ fn measure_onset(envelope: &[f32], onset_seconds: f64) -> Option<OnsetShape> {
     let peak_index = window.iter().position(|value| *value == peak).unwrap_or(0);
     let low = 0.1 * peak;
     let high = 0.9 * peak;
-    let mut t_low = None;
-    let mut t_high = None;
-    for index in (0..=peak_index).rev() {
-        if t_high.is_none() && window[index] < high {
-            t_high = Some(index + 1);
+    // Interpolated threshold crossings: real attacks rise in 1-4 ms, and integer-bin crossings on
+    // the 1 ms envelope grid quantize the ratio (3 ms / 2 ms = exactly 1.5 — the guard tripped on
+    // measurement resolution, not smear).
+    let crossing = |threshold: f32| -> f64 {
+        for index in (0..=peak_index).rev() {
+            if window[index] < threshold {
+                let above = window[(index + 1).min(peak_index)];
+                let span = above - window[index];
+                let fraction = if span > 1e-9 { (threshold - window[index]) / span } else { 0.5 };
+                return index as f64 + fraction as f64;
+            }
         }
-        if window[index] < low {
-            t_low = Some(index + 1);
-            break;
-        }
-    }
-    let t_low = t_low.unwrap_or(0);
-    let t_high = t_high.unwrap_or(peak_index);
-    let rise_ms = (t_high.saturating_sub(t_low)).max(1) as f64;
+        0.0
+    };
+    let t_low = crossing(low);
+    let t_high = crossing(high).max(t_low);
+    let rise_ms = (t_high - t_low).max(0.25);
     let sustain_to = ((center as usize) + 70).min(envelope.len());
     let sustain_from = (center.max(0) as usize).min(sustain_to);
     let sustain = &envelope[sustain_from..sustain_to];
@@ -76,8 +79,23 @@ pub fn attack_scores(source_env: &[f32], output_env: &[f32], source_onsets: &[f6
     let mut rise_ratios = Vec::new();
     let mut crest_ratios = Vec::new();
     let mut extra_total = 0usize;
-    for &onset in source_onsets {
+    for (index, &onset) in source_onsets.iter().enumerate() {
+        // Well-posedness: the 80 ms measurement window must be isolated at BOTH the source and the
+        // mapped output position, or neighboring hits contaminate the rise/crest readings (dense
+        // loops at compressing ratios were pure measurement noise).
+        let isolated = |gap: f64| gap > 0.100;
+        let previous_gap = if index == 0 { f64::INFINITY } else { onset - source_onsets[index - 1] };
+        let next_gap = source_onsets.get(index + 1).map(|next| next - onset).unwrap_or(f64::INFINITY);
+        if !isolated(previous_gap) || !isolated(next_gap) || !isolated(previous_gap * ratio) || !isolated(next_gap * ratio) {
+            continue;
+        }
         let Some(source) = measure_onset(source_env, onset) else { continue };
+        // The attack contract is about HITS: a weak source onset (a dub delay echo, a pad swell)
+        // has no percussive attack to preserve, and the engine deliberately does not re-attack
+        // weak boundaries. Crest >= 3 keeps kicks/snares/stabs; echoes sit well below.
+        if source.crest < 3.0 {
+            continue;
+        }
         let Some(output) = measure_onset(output_env, onset * ratio) else { continue };
         rise_ratios.push(output.rise_ms / source.rise_ms);
         crest_ratios.push(output.crest / source.crest);

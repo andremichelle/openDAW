@@ -40,6 +40,9 @@ pub struct Entry {
     pub left: Vec<f32>,
     pub right: Vec<f32>,
     pub transients: Vec<f64>,
+    /// Recipe positions are exact by construction; machine-annotated fixtures are NOT trusted
+    /// until reviewed by ear — untrusted onsets must not gate (they measure annotation noise).
+    pub trusted_onsets: bool,
     /// Sine probes carry their fundamental for the sideband metric.
     pub sine_f0: Option<f64>,
     /// Recipe-based entries can generate the perfect stretched output for any ratio.
@@ -79,7 +82,7 @@ fn seconds(frames: f64) -> usize {
 }
 
 fn mono_entry(id: &str, class: Class, samples: Vec<f32>, transients: Vec<f64>, sine_f0: Option<f64>, ideal: Option<Box<dyn Fn(f64) -> Vec<f32> + Send + Sync>>) -> Entry {
-    Entry {id: id.into(), class, file_rate: ENGINE_RATE, left: samples.clone(), right: samples, transients, sine_f0, ideal}
+    Entry {id: id.into(), class, file_rate: ENGINE_RATE, left: samples.clone(), right: samples, transients, trusted_onsets: true, sine_f0, ideal}
 }
 
 fn sine_wave(frequency: f64, duration: f64) -> Vec<f32> {
@@ -267,7 +270,7 @@ pub fn fixture_entries(skipped: &mut Vec<String>) -> Vec<Entry> {
             continue;
         }
         let (left, right) = data.stereo();
-        entries.push(Entry {id: (*id).into(), class: *class, file_rate: data.sample_rate, left, right, transients, sine_f0: None, ideal: None});
+        entries.push(Entry {id: (*id).into(), class: *class, file_rate: data.sample_rate, left, right, transients, trusted_onsets: false, sine_f0: None, ideal: None});
     }
     entries
 }

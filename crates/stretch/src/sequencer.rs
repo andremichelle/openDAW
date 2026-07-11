@@ -70,6 +70,9 @@ pub struct Stretcher {
     current_transient_index: i32,
     accumulated_drift: f64,
     continued_boundaries: u32,
+    /// RMS of the loop window the ACTIVE voice sustains — continuation must compare the incoming
+    /// segment's level against what would keep playing, not against the loop's own segment.
+    active_loop_rms: f32,
     tuning: Tuning
 }
 
@@ -86,7 +89,7 @@ impl Stretcher {
 
     pub fn with_tuning(tuning: Tuning) -> Self {
         // pre-reserve so steady-state spawns never grow the heap on the render path
-        Self {voices: Vec::with_capacity(8), spawn: Vec::with_capacity(4), current_transient_index: -1, accumulated_drift: 0.0, continued_boundaries: 0, tuning}
+        Self {voices: Vec::with_capacity(8), spawn: Vec::with_capacity(4), current_transient_index: -1, accumulated_drift: 0.0, continued_boundaries: 0, active_loop_rms: 0.0, tuning}
     }
 
     pub fn tuning(&self) -> &Tuning {
@@ -279,7 +282,8 @@ impl Stretcher {
             // have a YIN fundamental yet still beat in its upper partials (loop_score ~0.6) — its wrap
             // comb needs boundary re-anchors just like a chord's. Only near-perfect splices
             // (score > 0.9: sines, clean monophony) earn uninterrupted continuation.
-            let level_representative = marker.rms > 1e-6 && libm::log((marker.loop_rms / marker.rms) as f64).abs() < 0.12;
+            let sustained = if self.active_loop_rms > 1e-6 { self.active_loop_rms } else { marker.loop_rms };
+            let level_representative = marker.rms > 1e-6 && sustained > 1e-6 && libm::log((sustained / marker.rms) as f64).abs() < 0.12;
             if marker.strength < self.tuning.weak_boundary_threshold && marker.loop_score > 0.9 && level_representative && (self.continued_boundaries < 2 || same_period) {
                 let mut continued = false;
                 for voice in &mut self.voices {
@@ -360,7 +364,10 @@ impl Stretcher {
         // the new voice's read start by the mod-period residual (<= half a period — inaudible
         // micro-timing) phase-matches it to the loudest outgoing voice, so the boundary crossfade
         // sums cleanly.
-        if self.tuning.adaptive && marker.period > 0.0 {
+        // Only weak boundaries get phase-aligned: a REAL onset (a chord stab) needs exact timing —
+        // shifting it half a period (5 ms at a 100 Hz root) reads as smear at high ratios; phase
+        // coherence only matters where content continues.
+        if self.tuning.adaptive && marker.period > 0.0 && marker.strength < self.tuning.weak_boundary_threshold {
             if let Some(old_read) = self.voices.iter().find(|voice| !voice.done()).map(|voice| voice.read_position()) {
                 let period = marker.period as f64;
                 let mut residual = (old_read - voice_start_samples) % period;
@@ -376,6 +383,7 @@ impl Stretcher {
         if let Some(voice) = create_voice(voice_start_samples, info.end_samples, playback_rate, engine_rate, mode, needs_looping, None, marker, &self.tuning) {
             self.voices.push(voice);
         }
+        self.active_loop_rms = marker.loop_rms;
         self.accumulated_drift = 0.0;
         self.continued_boundaries = 0;
     }
@@ -476,7 +484,7 @@ fn create_voice(start_samples: f64, end_samples: f64, playback_rate: f64, sample
     // On a stationary tonal segment a phase-aligned Repeat splice is strictly cleaner than any
     // bounce (time-reversal breaks phase coherence no matter the alignment); Pingpong is a fill
     // strategy, not a chosen sound, so adaptive substitutes the better fill where it provably wins.
-    if tuning.adaptive && marker.has_loop() {
+    if tuning.adaptive && marker.loop_score > 0.9 {
         return Some(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial_read_position, &params)));
     }
     // Pingpong reverses direction at each bounce — time-reversal breaks phase coherence no matter

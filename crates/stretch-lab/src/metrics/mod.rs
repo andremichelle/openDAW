@@ -92,13 +92,39 @@ pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_righ
     }
     if matches!(entry.class, Class::Percussive | Class::Tonal | Class::Mixed) {
         if let Some(scores) = attack::attack_scores(&source_fast, &output_fast, &entry.transients, spec.ratio) {
-            results.push(metric("attack_rise_ratio", scores.rise_ratio, Direction::AtMostOne));
-            results.push(metric("attack_crest_ratio", scores.crest_ratio, Direction::AtLeastOne));
-            results.push(metric("attack_extra_peaks", scores.extra_peaks, Direction::LowerBetter));
+            // Untrusted (machine-annotated, unreviewed) onsets report as advisory adv_* names —
+            // outside TARGETS/GUARDS — because a gate fed by annotation noise blocks randomly in
+            // both directions (baseline itself read 0.32..1.9 on those fixtures). The independent
+            // sa_attack_ratio guards real drums meanwhile.
+            if entry.trusted_onsets {
+                results.push(metric("attack_rise_ratio", scores.rise_ratio, Direction::AtMostOne));
+                results.push(metric("attack_crest_ratio", scores.crest_ratio, Direction::AtLeastOne));
+                results.push(metric("attack_extra_peaks", scores.extra_peaks, Direction::LowerBetter));
+            } else {
+                results.push(metric("adv_attack_rise_ratio", scores.rise_ratio, Direction::AtMostOne));
+                results.push(metric("adv_attack_crest_ratio", scores.crest_ratio, Direction::AtLeastOne));
+                results.push(metric("adv_attack_extra_peaks", scores.extra_peaks, Direction::LowerBetter));
+            }
         }
     }
     #[cfg(feature = "analyzer")]
-    results.extend(crate::second_opinion::second_opinion(&source_mono, spec.file_rate, &output_mono, crate::render::ENGINE_RATE));
+    {
+        let mut second = crate::second_opinion::second_opinion(&source_mono, spec.file_rate, &output_mono, crate::render::ENGINE_RATE);
+        // HPSS attack sharpness means "attack preservation" only on percussive material — on
+        // sustained/tonal content it measures our own loop artifacts, where LOWER is better
+        // (guarding it there punished the biggest wins). Gapping Once renders skew its global
+        // statistics too. Advisory outside its domain.
+        // Pingpong deliberately REVERSES material — HPSS attack statistics on reversed clicks
+        // measure the mode's sound, not smear.
+        let attack_meaningful = matches!(entry.class, Class::Percussive | Class::Mixed) && !gapping
+            && spec.mode != crate::render::PlayMode::Pingpong;
+        for value in &mut second {
+            if value.name == "sa_attack_ratio" && !attack_meaningful {
+                value.name = "adv_sa_attack_ratio";
+            }
+        }
+        results.extend(second);
+    }
     results
 }
 

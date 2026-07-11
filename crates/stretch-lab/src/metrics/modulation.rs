@@ -149,15 +149,19 @@ pub struct SineScores {
 }
 
 pub fn sine_scores(mono_out: &[f32], sample_rate: f64, f0: f64, expected_loop_hz: f64) -> SineScores {
+    let _ = expected_loop_hz;
     let carrier = goertzel::magnitude(mono_out, sample_rate, f0);
     let carrier_power = carrier * carrier;
-    let mut sideband_power = 0.0;
-    if expected_loop_hz > 0.05 {
-        for n in 1..=2 {
-            let offset = expected_loop_hz * n as f64;
-            sideband_power += goertzel::magnitude(mono_out, sample_rate, f0 - offset).powi(2);
-            sideband_power += goertzel::magnitude(mono_out, sample_rate, f0 + offset).powi(2);
-        }
+    // Engine-agnostic sideband: the loop rate depends on the engine's chosen loop length, so probe
+    // a sweep of candidate rates and take the worst line (a fixed expected rate measured noise at
+    // the wrong frequency — the same baseline-anchored flaw mod_expected had).
+    let mut sideband_power = 0.0f64;
+    let mut offset = 1.0;
+    while offset <= 30.0 {
+        let power = goertzel::magnitude(mono_out, sample_rate, f0 - offset).powi(2)
+            + goertzel::magnitude(mono_out, sample_rate, f0 + offset).powi(2);
+        sideband_power = sideband_power.max(power);
+        offset += 0.5;
     }
     let mut harmonic_power = 0.0;
     for harmonic in 2..=5 {
