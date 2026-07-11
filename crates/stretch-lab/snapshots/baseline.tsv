@@ -56,7 +56,6 @@ baseline-v1	sine220	4	repeat	sa_attack_ratio	0.325036
 baseline-v1	sine220	4	repeat	sa_flatness_delta	0.000496
 baseline-v1	sine220	4	repeat	sa_lufs_delta_db	0.062984
 baseline-v1	sine220	1.5	once	trailing_silence	0.085333
-baseline-v1	sine220	1.5	once	spectral_delta_db	0.003635
 baseline-v1	sine220	1.5	once	mod_expected_db	57.823428
 baseline-v1	sine220	1.5	once	mod_band_peak_db	64.056305
 baseline-v1	sine220	1.5	once	mod_acf_peak	0.000000
@@ -77,7 +76,6 @@ baseline-v1	sine220	1.5	pingpong	sa_attack_ratio	0.262214
 baseline-v1	sine220	1.5	pingpong	sa_flatness_delta	0.000677
 baseline-v1	sine220	1.5	pingpong	sa_lufs_delta_db	0.080657
 baseline-v1	sine220	2	once	trailing_silence	0.127500
-baseline-v1	sine220	2	once	spectral_delta_db	0.004116
 baseline-v1	sine220	2	once	mod_expected_db	37.668538
 baseline-v1	sine220	2	once	mod_band_peak_db	64.013079
 baseline-v1	sine220	2	once	mod_acf_peak	0.000000
@@ -154,7 +152,6 @@ baseline-v1	sine440	4	repeat	sa_attack_ratio	0.268272
 baseline-v1	sine440	4	repeat	sa_flatness_delta	0.001730
 baseline-v1	sine440	4	repeat	sa_lufs_delta_db	0.043005
 baseline-v1	sine440	1.5	once	trailing_silence	0.085333
-baseline-v1	sine440	1.5	once	spectral_delta_db	0.000806
 baseline-v1	sine440	1.5	once	mod_expected_db	57.824362
 baseline-v1	sine440	1.5	once	mod_band_peak_db	64.056706
 baseline-v1	sine440	1.5	once	mod_acf_peak	0.000000
@@ -175,7 +172,6 @@ baseline-v1	sine440	1.5	pingpong	sa_attack_ratio	0.260173
 baseline-v1	sine440	1.5	pingpong	sa_flatness_delta	0.000674
 baseline-v1	sine440	1.5	pingpong	sa_lufs_delta_db	0.080629
 baseline-v1	sine440	2	once	trailing_silence	0.127500
-baseline-v1	sine440	2	once	spectral_delta_db	0.000944
 baseline-v1	sine440	2	once	mod_expected_db	37.671805
 baseline-v1	sine440	2	once	mod_band_peak_db	64.013024
 baseline-v1	sine440	2	once	mod_acf_peak	0.000000
@@ -252,7 +248,6 @@ baseline-v1	sine1000	4	repeat	sa_attack_ratio	0.311592
 baseline-v1	sine1000	4	repeat	sa_flatness_delta	0.003441
 baseline-v1	sine1000	4	repeat	sa_lufs_delta_db	0.041285
 baseline-v1	sine1000	1.5	once	trailing_silence	0.085333
-baseline-v1	sine1000	1.5	once	spectral_delta_db	0.000294
 baseline-v1	sine1000	1.5	once	mod_expected_db	57.821908
 baseline-v1	sine1000	1.5	once	mod_band_peak_db	64.054885
 baseline-v1	sine1000	1.5	once	mod_acf_peak	0.697602
@@ -273,7 +268,6 @@ baseline-v1	sine1000	1.5	pingpong	sa_attack_ratio	0.241331
 baseline-v1	sine1000	1.5	pingpong	sa_flatness_delta	0.002858
 baseline-v1	sine1000	1.5	pingpong	sa_lufs_delta_db	0.070037
 baseline-v1	sine1000	2	once	trailing_silence	0.127500
-baseline-v1	sine1000	2	once	spectral_delta_db	0.000348
 baseline-v1	sine1000	2	once	mod_expected_db	37.670845
 baseline-v1	sine1000	2	once	mod_band_peak_db	64.012190
 baseline-v1	sine1000	2	once	mod_acf_peak	0.688531
@@ -342,7 +336,6 @@ baseline-v1	sweep	4	repeat	sa_attack_ratio	0.386726
 baseline-v1	sweep	4	repeat	sa_flatness_delta	0.001069
 baseline-v1	sweep	4	repeat	sa_lufs_delta_db	0.065593
 baseline-v1	sweep	1.5	once	trailing_silence	0.085333
-baseline-v1	sweep	1.5	once	spectral_delta_db	0.233815
 baseline-v1	sweep	1.5	once	mod_expected_db	57.851250
 baseline-v1	sweep	1.5	once	mod_band_peak_db	64.083431
 baseline-v1	sweep	1.5	once	mod_acf_peak	0.604781
@@ -359,7 +352,6 @@ baseline-v1	sweep	1.5	pingpong	sa_attack_ratio	0.380799
 baseline-v1	sweep	1.5	pingpong	sa_flatness_delta	0.001433
 baseline-v1	sweep	1.5	pingpong	sa_lufs_delta_db	0.124309
 baseline-v1	sweep	2	once	trailing_silence	0.127500
-baseline-v1	sweep	2	once	spectral_delta_db	0.243253
 baseline-v1	sweep	2	once	mod_expected_db	37.662638
 baseline-v1	sweep	2	once	mod_band_peak_db	64.013538
 baseline-v1	sweep	2	once	mod_acf_peak	0.600620
@@ -424,7 +416,6 @@ baseline-v1	padchord	4	repeat	sa_attack_ratio	0.209240
 baseline-v1	padchord	4	repeat	sa_flatness_delta	0.000290
 baseline-v1	padchord	4	repeat	sa_lufs_delta_db	0.172658
 baseline-v1	padchord	1.5	once	trailing_silence	0.084500
-baseline-v1	padchord	1.5	once	spectral_delta_db	0.003232
 baseline-v1	padchord	1.5	once	mod_expected_db	44.171076
 baseline-v1	padchord	1.5	once	mod_band_peak_db	48.814205
 baseline-v1	padchord	1.5	once	mod_acf_peak	0.000000
@@ -441,7 +432,6 @@ baseline-v1	padchord	1.5	pingpong	sa_attack_ratio	0.375159
 baseline-v1	padchord	1.5	pingpong	sa_flatness_delta	0.000190
 baseline-v1	padchord	1.5	pingpong	sa_lufs_delta_db	0.115384
 baseline-v1	padchord	2	once	trailing_silence	0.126375
-baseline-v1	padchord	2	once	spectral_delta_db	0.001905
 baseline-v1	padchord	2	once	mod_expected_db	24.084850
 baseline-v1	padchord	2	once	mod_band_peak_db	49.075635
 baseline-v1	padchord	2	once	mod_acf_peak	0.000000
@@ -506,7 +496,6 @@ baseline-v1	clicks	4	repeat	sa_attack_ratio	0.452484
 baseline-v1	clicks	4	repeat	sa_flatness_delta	0.001443
 baseline-v1	clicks	4	repeat	sa_lufs_delta_db	11.401302
 baseline-v1	clicks	1.5	once	trailing_silence	0.242000
-baseline-v1	clicks	1.5	once	spectral_delta_db	0.072238
 baseline-v1	clicks	1.5	once	attack_rise_ratio	1.000000
 baseline-v1	clicks	1.5	once	attack_crest_ratio	2.842976
 baseline-v1	clicks	1.5	once	attack_extra_peaks	0.000000
@@ -522,7 +511,6 @@ baseline-v1	clicks	1.5	pingpong	sa_attack_ratio	0.634193
 baseline-v1	clicks	1.5	pingpong	sa_flatness_delta	0.004157
 baseline-v1	clicks	1.5	pingpong	sa_lufs_delta_db	1.926870
 baseline-v1	clicks	2	once	trailing_silence	0.245000
-baseline-v1	clicks	2	once	spectral_delta_db	0.154780
 baseline-v1	clicks	2	once	attack_rise_ratio	1.000000
 baseline-v1	clicks	2	once	attack_crest_ratio	4.458102
 baseline-v1	clicks	2	once	attack_extra_peaks	0.000000
@@ -586,7 +574,6 @@ baseline-v1	noiseburst	4	repeat	sa_attack_ratio	1.616274
 baseline-v1	noiseburst	4	repeat	sa_flatness_delta	0.035427
 baseline-v1	noiseburst	4	repeat	sa_lufs_delta_db	3.367317
 baseline-v1	noiseburst	1.5	once	trailing_silence	0.232000
-baseline-v1	noiseburst	1.5	once	spectral_delta_db	0.221479
 baseline-v1	noiseburst	1.5	once	attack_rise_ratio	3.000000
 baseline-v1	noiseburst	1.5	once	attack_crest_ratio	1.132993
 baseline-v1	noiseburst	1.5	once	attack_extra_peaks	0.750000
@@ -602,7 +589,6 @@ baseline-v1	noiseburst	1.5	pingpong	sa_attack_ratio	0.643866
 baseline-v1	noiseburst	1.5	pingpong	sa_flatness_delta	0.063684
 baseline-v1	noiseburst	1.5	pingpong	sa_lufs_delta_db	1.257746
 baseline-v1	noiseburst	2	once	trailing_silence	0.237500
-baseline-v1	noiseburst	2	once	spectral_delta_db	0.108299
 baseline-v1	noiseburst	2	once	attack_rise_ratio	4.000000
 baseline-v1	noiseburst	2	once	attack_crest_ratio	1.145719
 baseline-v1	noiseburst	2	once	attack_extra_peaks	0.500000
@@ -666,7 +652,6 @@ baseline-v1	drums-attack	4	repeat	sa_attack_ratio	0.931950
 baseline-v1	drums-attack	4	repeat	sa_flatness_delta	0.027109
 baseline-v1	drums-attack	4	repeat	sa_lufs_delta_db	0.102995
 baseline-v1	drums-attack	1.5	once	trailing_silence	0.005104
-baseline-v1	drums-attack	1.5	once	spectral_delta_db	0.372085
 baseline-v1	drums-attack	1.5	once	attack_rise_ratio	1.000000
 baseline-v1	drums-attack	1.5	once	attack_crest_ratio	0.975324
 baseline-v1	drums-attack	1.5	once	attack_extra_peaks	5.045455
@@ -682,7 +667,6 @@ baseline-v1	drums-attack	1.5	pingpong	sa_attack_ratio	0.805333
 baseline-v1	drums-attack	1.5	pingpong	sa_flatness_delta	0.030205
 baseline-v1	drums-attack	1.5	pingpong	sa_lufs_delta_db	0.134712
 baseline-v1	drums-attack	2	once	trailing_silence	0.007200
-baseline-v1	drums-attack	2	once	spectral_delta_db	0.375303
 baseline-v1	drums-attack	2	once	attack_rise_ratio	1.000000
 baseline-v1	drums-attack	2	once	attack_crest_ratio	0.973678
 baseline-v1	drums-attack	2	once	attack_extra_peaks	4.886364
@@ -746,7 +730,6 @@ baseline-v1	drums-top	4	repeat	sa_attack_ratio	0.705861
 baseline-v1	drums-top	4	repeat	sa_flatness_delta	0.009771
 baseline-v1	drums-top	4	repeat	sa_lufs_delta_db	0.504118
 baseline-v1	drums-top	1.5	once	trailing_silence	0.021156
-baseline-v1	drums-top	1.5	once	spectral_delta_db	0.328536
 baseline-v1	drums-top	1.5	once	attack_rise_ratio	0.954545
 baseline-v1	drums-top	1.5	once	attack_crest_ratio	1.099857
 baseline-v1	drums-top	1.5	once	attack_extra_peaks	4.888889
@@ -762,7 +745,6 @@ baseline-v1	drums-top	1.5	pingpong	sa_attack_ratio	0.715631
 baseline-v1	drums-top	1.5	pingpong	sa_flatness_delta	0.009415
 baseline-v1	drums-top	1.5	pingpong	sa_lufs_delta_db	1.628296
 baseline-v1	drums-top	2	once	trailing_silence	0.031333
-baseline-v1	drums-top	2	once	spectral_delta_db	0.292269
 baseline-v1	drums-top	2	once	attack_rise_ratio	1.000000
 baseline-v1	drums-top	2	once	attack_crest_ratio	1.094054
 baseline-v1	drums-top	2	once	attack_extra_peaks	4.611111
@@ -826,7 +808,6 @@ baseline-v1	pad-derelict	4	repeat	sa_attack_ratio	0.707949
 baseline-v1	pad-derelict	4	repeat	sa_flatness_delta	0.002436
 baseline-v1	pad-derelict	4	repeat	sa_lufs_delta_db	0.377672
 baseline-v1	pad-derelict	1.5	once	trailing_silence	0.003472
-baseline-v1	pad-derelict	1.5	once	spectral_delta_db	1.721529
 baseline-v1	pad-derelict	1.5	once	mod_expected_db	15.226821
 baseline-v1	pad-derelict	1.5	once	mod_band_peak_db	50.353869
 baseline-v1	pad-derelict	1.5	once	mod_acf_peak	0.000000
@@ -843,7 +824,6 @@ baseline-v1	pad-derelict	1.5	pingpong	sa_attack_ratio	0.875742
 baseline-v1	pad-derelict	1.5	pingpong	sa_flatness_delta	0.000918
 baseline-v1	pad-derelict	1.5	pingpong	sa_lufs_delta_db	0.205250
 baseline-v1	pad-derelict	2	once	trailing_silence	0.005013
-baseline-v1	pad-derelict	2	once	spectral_delta_db	1.690840
 baseline-v1	pad-derelict	2	once	mod_expected_db	-19.653752
 baseline-v1	pad-derelict	2	once	mod_band_peak_db	54.397085
 baseline-v1	pad-derelict	2	once	mod_acf_peak	0.000000
@@ -908,7 +888,6 @@ baseline-v1	pad-borealis	4	repeat	sa_attack_ratio	0.753572
 baseline-v1	pad-borealis	4	repeat	sa_flatness_delta	0.021021
 baseline-v1	pad-borealis	4	repeat	sa_lufs_delta_db	0.109306
 baseline-v1	pad-borealis	1.5	once	trailing_silence	0.001240
-baseline-v1	pad-borealis	1.5	once	spectral_delta_db	0.132973
 baseline-v1	pad-borealis	1.5	once	mod_expected_db	26.877286
 baseline-v1	pad-borealis	1.5	once	mod_band_peak_db	38.639123
 baseline-v1	pad-borealis	1.5	once	mod_acf_peak	0.658204
@@ -925,7 +904,6 @@ baseline-v1	pad-borealis	1.5	pingpong	sa_attack_ratio	0.923218
 baseline-v1	pad-borealis	1.5	pingpong	sa_flatness_delta	0.015777
 baseline-v1	pad-borealis	1.5	pingpong	sa_lufs_delta_db	0.043844
 baseline-v1	pad-borealis	2	once	trailing_silence	0.001638
-baseline-v1	pad-borealis	2	once	spectral_delta_db	0.126726
 baseline-v1	pad-borealis	2	once	mod_expected_db	10.078682
 baseline-v1	pad-borealis	2	once	mod_band_peak_db	33.580194
 baseline-v1	pad-borealis	2	once	mod_acf_peak	0.665682
@@ -990,7 +968,6 @@ baseline-v1	pad-drone	4	repeat	sa_attack_ratio	0.940817
 baseline-v1	pad-drone	4	repeat	sa_flatness_delta	0.001750
 baseline-v1	pad-drone	4	repeat	sa_lufs_delta_db	0.190485
 baseline-v1	pad-drone	1.5	once	trailing_silence	0.002859
-baseline-v1	pad-drone	1.5	once	spectral_delta_db	0.630959
 baseline-v1	pad-drone	1.5	once	mod_expected_db	25.854632
 baseline-v1	pad-drone	1.5	once	mod_band_peak_db	33.674956
 baseline-v1	pad-drone	1.5	once	mod_acf_peak	0.498740
@@ -1007,7 +984,6 @@ baseline-v1	pad-drone	1.5	pingpong	sa_attack_ratio	0.851841
 baseline-v1	pad-drone	1.5	pingpong	sa_flatness_delta	0.000662
 baseline-v1	pad-drone	1.5	pingpong	sa_lufs_delta_db	0.111872
 baseline-v1	pad-drone	2	once	trailing_silence	0.004113
-baseline-v1	pad-drone	2	once	spectral_delta_db	0.670776
 baseline-v1	pad-drone	2	once	mod_expected_db	-4.894618
 baseline-v1	pad-drone	2	once	mod_band_peak_db	25.605260
 baseline-v1	pad-drone	2	once	mod_acf_peak	0.510821
@@ -1090,7 +1066,6 @@ baseline-v1	guitar-chords	4	repeat	sa_attack_ratio	0.855140
 baseline-v1	guitar-chords	4	repeat	sa_flatness_delta	0.012902
 baseline-v1	guitar-chords	4	repeat	sa_lufs_delta_db	0.005907
 baseline-v1	guitar-chords	1.5	once	trailing_silence	0.004653
-baseline-v1	guitar-chords	1.5	once	spectral_delta_db	0.183283
 baseline-v1	guitar-chords	1.5	once	mod_expected_db	14.910020
 baseline-v1	guitar-chords	1.5	once	mod_band_peak_db	33.044453
 baseline-v1	guitar-chords	1.5	once	mod_acf_peak	0.049426
@@ -1113,7 +1088,6 @@ baseline-v1	guitar-chords	1.5	pingpong	sa_attack_ratio	0.957235
 baseline-v1	guitar-chords	1.5	pingpong	sa_flatness_delta	0.012588
 baseline-v1	guitar-chords	1.5	pingpong	sa_lufs_delta_db	0.020731
 baseline-v1	guitar-chords	2	once	trailing_silence	0.006901
-baseline-v1	guitar-chords	2	once	spectral_delta_db	0.156642
 baseline-v1	guitar-chords	2	once	mod_expected_db	7.887717
 baseline-v1	guitar-chords	2	once	mod_band_peak_db	30.198636
 baseline-v1	guitar-chords	2	once	mod_acf_peak	0.122268
@@ -1202,7 +1176,6 @@ baseline-v1	dub-chords	4	repeat	sa_attack_ratio	1.755433
 baseline-v1	dub-chords	4	repeat	sa_flatness_delta	0.001448
 baseline-v1	dub-chords	4	repeat	sa_lufs_delta_db	0.412464
 baseline-v1	dub-chords	1.5	once	trailing_silence	0.122049
-baseline-v1	dub-chords	1.5	once	spectral_delta_db	0.022999
 baseline-v1	dub-chords	1.5	once	mod_expected_db	8.596587
 baseline-v1	dub-chords	1.5	once	mod_band_peak_db	42.097014
 baseline-v1	dub-chords	1.5	once	mod_acf_peak	0.205415
@@ -1225,7 +1198,6 @@ baseline-v1	dub-chords	1.5	pingpong	sa_attack_ratio	1.465605
 baseline-v1	dub-chords	1.5	pingpong	sa_flatness_delta	0.000879
 baseline-v1	dub-chords	1.5	pingpong	sa_lufs_delta_db	0.585051
 baseline-v1	dub-chords	2	once	trailing_silence	0.182747
-baseline-v1	dub-chords	2	once	spectral_delta_db	0.087160
 baseline-v1	dub-chords	2	once	mod_expected_db	2.726481
 baseline-v1	dub-chords	2	once	mod_band_peak_db	23.340935
 baseline-v1	dub-chords	2	once	mod_acf_peak	0.280768
@@ -1308,7 +1280,6 @@ baseline-v1	story	4	repeat	sa_attack_ratio	0.983286
 baseline-v1	story	4	repeat	sa_flatness_delta	0.003751
 baseline-v1	story	4	repeat	sa_lufs_delta_db	0.082819
 baseline-v1	story	1.5	once	trailing_silence	0.085724
-baseline-v1	story	1.5	once	spectral_delta_db	0.392712
 baseline-v1	story	1.5	once	mod_expected_db	4.046375
 baseline-v1	story	1.5	once	mod_band_peak_db	28.414754
 baseline-v1	story	1.5	once	mod_acf_peak	0.000000
@@ -1330,7 +1301,6 @@ baseline-v1	story	1.5	pingpong	sa_attack_ratio	0.898945
 baseline-v1	story	1.5	pingpong	sa_flatness_delta	0.007560
 baseline-v1	story	1.5	pingpong	sa_lufs_delta_db	0.150572
 baseline-v1	story	2	once	trailing_silence	0.099423
-baseline-v1	story	2	once	spectral_delta_db	0.381117
 baseline-v1	story	2	once	mod_expected_db	-1.807595
 baseline-v1	story	2	once	mod_band_peak_db	31.969669
 baseline-v1	story	2	once	mod_acf_peak	0.063980

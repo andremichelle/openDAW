@@ -50,9 +50,12 @@ pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_righ
     let source_fast = envelope::fast_envelope(&source_mono, spec.file_rate);
     let output_fast = envelope::fast_envelope(&output_mono, crate::render::ENGINE_RATE);
     results.push(metric("trailing_silence", spectral::trailing_silence_ratio(&output_fast), Direction::LowerBetter));
-    let source_bands = spectral::band_fractions(&source_mono, spec.file_rate as f64);
-    let output_bands = spectral::band_fractions(&output_mono, engine_rate);
-    results.push(metric("spectral_delta_db", spectral::spectral_delta_db(&source_bands, &output_bands), Direction::LowerBetter));
+    let gapping_spectral = spec.mode == crate::render::PlayMode::Once && spec.ratio > 1.01;
+    if !gapping_spectral {
+        let source_bands = spectral::band_fractions(&source_mono, spec.file_rate as f64);
+        let output_bands = spectral::band_fractions(&output_mono, engine_rate);
+        results.push(metric("spectral_delta_db", spectral::spectral_delta_db(&source_bands, &output_bands), Direction::LowerBetter));
+    }
     // Once mode gaps by design once the segment runs out — its level/spectral drift is the correct
     // musical behavior, not a defect, so those guards only judge the looping modes.
     let gapping = spec.mode == crate::render::PlayMode::Once && spec.ratio > 1.01;

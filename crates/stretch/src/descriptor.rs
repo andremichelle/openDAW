@@ -20,14 +20,17 @@ pub struct TransientDescriptor {
     /// Precomputed pitch-snapped, correlation-aligned loop region in source SAMPLES.
     /// `loop_end <= loop_start` means "no precomputed loop" (runtime falls back to margins).
     pub loop_start: f64,
-    pub loop_end: f64
+    pub loop_end: f64,
+    /// Normalized correlation of the loop splice (0 = unaligned/fallback). Picks the splice law:
+    /// linear above ~0.35 (coherent sum), equal-power below (uncorrelated power fill).
+    pub loop_score: f32
 }
 
 impl TransientDescriptor {
     /// A position-only marker with neutral descriptors: full strength (legacy fades), aperiodic,
     /// no precomputed loop — the exact behavior of today's bare `Vec<f64>` transients.
     pub fn bare(position: f64) -> Self {
-        Self {position, strength: 1.0, period: 0.0, harmonicity: 0.0, rms: 0.0, loop_start: 0.0, loop_end: -1.0}
+        Self {position, strength: 1.0, period: 0.0, harmonicity: 0.0, rms: 0.0, loop_start: 0.0, loop_end: -1.0, loop_score: 0.0}
     }
 
     pub fn bare_all(positions: &[f64]) -> Vec<Self> {

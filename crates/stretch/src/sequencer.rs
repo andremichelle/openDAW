@@ -69,6 +69,7 @@ pub struct Stretcher {
     spawn: Vec<Voice>,
     current_transient_index: i32,
     accumulated_drift: f64,
+    continued_boundaries: u32,
     tuning: Tuning
 }
 
@@ -85,7 +86,7 @@ impl Stretcher {
 
     pub fn with_tuning(tuning: Tuning) -> Self {
         // pre-reserve so steady-state spawns never grow the heap on the render path
-        Self {voices: Vec::with_capacity(8), spawn: Vec::with_capacity(4), current_transient_index: -1, accumulated_drift: 0.0, tuning}
+        Self {voices: Vec::with_capacity(8), spawn: Vec::with_capacity(4), current_transient_index: -1, accumulated_drift: 0.0, continued_boundaries: 0, tuning}
     }
 
     pub fn tuning(&self) -> &Tuning {
@@ -260,7 +261,13 @@ impl Stretcher {
         // and pad modulation).
         if self.tuning.adaptive {
             let marker = &markers[transient_index as usize];
-            if marker.strength < self.tuning.weak_boundary_threshold {
+            // Weak alone is not continuable: a sweep's boundaries are weak yet its content drifts —
+            // continuing there loops stale material while the timeline moves on (the spectral guard
+            // caught exactly that). `has_loop()` already encodes "tonal AND stationary", which is
+            // precisely the license continuation needs.
+            // Capped: chaining continuations lets one loop go stale while slowly-evolving material
+            // (a real pad) moves on — after two extensions the next boundary re-anchors content.
+            if marker.strength < self.tuning.weak_boundary_threshold && marker.has_loop() && self.continued_boundaries < 2 {
                 let mut continued = false;
                 for voice in &mut self.voices {
                     if !voice.done() && !voice.is_fading_out() {
@@ -270,6 +277,7 @@ impl Stretcher {
                 }
                 if continued {
                     self.accumulated_drift = 0.0;
+                    self.continued_boundaries += 1;
                     return;
                 }
             }
@@ -356,6 +364,7 @@ impl Stretcher {
             self.voices.push(voice);
         }
         self.accumulated_drift = 0.0;
+        self.continued_boundaries = 0;
     }
 
     fn output_samples_until_next(&self, info: &SegmentInfo, markers: &[TransientDescriptor], warp: &[(f64, f64)], waveform_offset: f64, bpm: f32, engine_rate: f32) -> f64 {
@@ -394,7 +403,15 @@ fn voice_params(segment_start: f64, segment_end: f64, playback_rate: f64, sample
     }
     let strength = math::clamp(marker.strength, 0.0, 1.0) as f64;
     let segment_output_seconds = (segment_end - segment_start) / playback_rate / sample_rate as f64;
-    let fade_raw = tuning.voice_fade_min_seconds + (1.0 - strength) * (tuning.voice_fade_max_seconds - tuning.voice_fade_min_seconds);
+    // Long fades are for weak TONAL boundaries; a weak-but-percussive hit (ghost note over a
+    // ring-out) still wants a short fade or its attack slows past the source's. And a boundary
+    // WITHOUT a loop license (non-stationary or noisy — sweeps) crossfades DIFFERENT frequencies,
+    // where a long fade is a long beat-burst: keep those short too.
+    let mut softness = (1.0 - strength) * (0.3 + 0.7 * math::clamp(marker.harmonicity, 0.0, 1.0) as f64);
+    if !marker.has_loop() {
+        softness *= 0.25;
+    }
+    let fade_raw = tuning.voice_fade_min_seconds + softness * (tuning.voice_fade_max_seconds - tuning.voice_fade_min_seconds);
     let fade_seconds = fade_raw.min(tuning.voice_fade_segment_cap * segment_output_seconds).max(0.001);
     let (loop_start, loop_end) = if marker.has_loop() {
         (marker.loop_start.max(segment_start), marker.loop_end.min(segment_end))
@@ -403,21 +420,27 @@ fn voice_params(segment_start: f64, segment_end: f64, playback_rate: f64, sample
     };
     let harmonicity = math::clamp(marker.harmonicity, 0.0, 1.0) as f64;
     let loop_fade_raw = tuning.loop_fade_min_seconds + harmonicity * (tuning.loop_fade_max_seconds - tuning.loop_fade_min_seconds);
-    let mut loop_fade_samples = round(loop_fade_raw * sample_rate as f64);
+    let loop_length_output = (loop_end - loop_start) / playback_rate;
+    // Cap FIRST, then snap DOWN to integer periods: snapping before capping let the 25%-of-loop
+    // cap truncate a period-snapped fade to a half-period count, breaking the splice phase at
+    // every wrap (an audible comb tick at the wrap rate — the probe's 16 Hz line).
+    let fade_cap = 0.25 * loop_length_output;
+    let mut loop_fade_samples = round(loop_fade_raw * sample_rate as f64).min(fade_cap);
     if marker.period > 0.0 {
         let period_output = marker.period as f64 / playback_rate;
-        let cycles = round(loop_fade_samples / period_output).max(1.0);
-        loop_fade_samples = cycles * period_output;
+        let cycles = math::floor(loop_fade_samples / period_output);
+        if cycles >= 1.0 {
+            loop_fade_samples = cycles * period_output;
+        }
     }
-    let loop_length_output = (loop_end - loop_start) / playback_rate;
-    loop_fade_samples = loop_fade_samples.min(0.25 * loop_length_output).max(1.0);
+    loop_fade_samples = loop_fade_samples.max(1.0);
     // Fade law follows coherence: periodic material gets phase-aligned spawns, so its boundary
     // crossfades are coherent and must be LINEAR (equal-power would bump +3 dB); everything else
     // is uncorrelated and wants equal-power. Same rule for the loop splice via alignment.
     let coherent = marker.period > 0.0;
     VoiceParams {
         fade_seconds, equal_power: tuning.equal_power_fades && !coherent,
-        splice_equal_power: !marker.has_loop(), loop_start, loop_end, loop_fade_samples
+        splice_equal_power: !(marker.has_loop() && marker.loop_score > 0.35), loop_start, loop_end, loop_fade_samples
     }
 }
 
@@ -434,8 +457,20 @@ fn create_voice(start_samples: f64, end_samples: f64, playback_rate: f64, sample
     if mode == TransientPlayMode::Repeat {
         return Some(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial_read_position, &params)));
     }
+    // On a stationary tonal segment a phase-aligned Repeat splice is strictly cleaner than any
+    // bounce (time-reversal breaks phase coherence no matter the alignment); Pingpong is a fill
+    // strategy, not a chosen sound, so adaptive substitutes the better fill where it provably wins.
+    if tuning.adaptive && marker.has_loop() {
+        return Some(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial_read_position, &params)));
+    }
+    // Pingpong reverses direction at each bounce — time-reversal breaks phase coherence no matter
+    // how well the points align, and a SHORT descriptor loop just bounces faster (audibly worse).
+    // Keep the full-segment margin region for pingpong.
+    let mut pingpong_params = params;
+    pingpong_params.loop_start = start_samples + tuning.loop_margin_start_seconds * sample_rate as f64;
+    pingpong_params.loop_end = end_samples - tuning.loop_margin_end_seconds * sample_rate as f64;
     let initial = initial_read_position.map(|position| (position, 1.0));
-    Some(Voice::Pingpong(PingpongVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial, &params)))
+    Some(Voice::Pingpong(PingpongVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial, &pingpong_params)))
 }
 
 /// The sample bounds of transient `index`'s segment (to the next transient, or EOF).

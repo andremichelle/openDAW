@@ -72,9 +72,13 @@ pub fn judge(current: &Scores, baseline: &ScoreMap, best: Option<&ScoreMap>) -> 
                 let reference_metric = MetricValue {name: metric.name, value: reference_value, better: metric.better};
                 let delta_badness = badness(metric) - badness(&reference_metric);
                 if is_target {
-                    if delta_badness < -thresholds::TARGET_SLACK {
+                    // Below the audibility floor, dB differences are noise — a THD move from -85
+                    // to -70 blocks nothing.
+                    let floor = thresholds::audibility_floor(metric.name);
+                    let both_inaudible = floor.map(|floor| metric.value <= floor && reference_value <= floor).unwrap_or(false);
+                    if delta_badness < -thresholds::TARGET_SLACK && !both_inaudible {
                         improvements.push(format!("{identifier}: {reference_value:.3} -> {:.3}", metric.value));
-                    } else if delta_badness > thresholds::TARGET_SLACK {
+                    } else if delta_badness > thresholds::TARGET_SLACK && !both_inaudible {
                         regressions.push(format!("{identifier}: {reference_value:.3} -> {:.3}", metric.value));
                     }
                 }

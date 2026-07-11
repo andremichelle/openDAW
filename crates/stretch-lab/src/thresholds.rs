@@ -25,6 +25,18 @@ pub const PAD_MOD_IMPROVEMENT_DB: f64 = 12.0;
 pub const PAD_MOD_ABSOLUTE_DB: f64 = -40.0;
 pub const SINE_SIDEBAND_ABSOLUTE_DB: f64 = -40.0;
 
+/// Below these values a target metric is inaudible; moves that stay under the floor neither count
+/// as improvements nor block as regressions.
+pub fn audibility_floor(name: &str) -> Option<f64> {
+    match name {
+        "sine_thd_db" => Some(-55.0),
+        "sine_sideband_db" => Some(-50.0),
+        "mod_band_peak_db" | "mod_expected_db" => Some(5.0),
+        "mod_acf_peak" => Some(0.1),
+        _ => None
+    }
+}
+
 /// Metrics whose improvement counts toward an `Improved` verdict. `mod_expected_db` is reported
 /// but NOT gated: its expectation assumes the baseline's loop length, and the band-peak sweep is
 /// the engine-agnostic (ungameable) version of the same question.

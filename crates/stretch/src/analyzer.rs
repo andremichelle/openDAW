@@ -113,9 +113,9 @@ impl Analyzer {
             };
             let period = self.yin_period(mono, sample_rate, segment_start, segment_end);
             let harmonicity = self.harmonicity(segment, sample_rate, period);
-            let (loop_start, loop_end) = self.precompute_loop(mono, sample_rate, segment_start as f64, segment_end as f64, strength, period, harmonicity);
+            let (loop_start, loop_end, loop_score) = self.precompute_loop(mono, sample_rate, segment_start as f64, segment_end as f64, strength, period, harmonicity);
             markers.push(TransientDescriptor {
-                position: onset.seconds, strength, period, harmonicity, rms, loop_start, loop_end
+                position: onset.seconds, strength, period, harmonicity, rms, loop_start, loop_end, loop_score
             });
         }
         markers
@@ -205,16 +205,16 @@ impl Analyzer {
     /// chords, pads — no single f0 exists), the splice is aligned by a WIDE correlation search
     /// alone, and only accepted when it genuinely correlates. Sentinel (end <= start) when the
     /// segment is too short or the material is not tonal — the runtime falls back to margins.
-    fn precompute_loop(&self, mono: &[f32], sample_rate: f32, segment_start: f64, segment_end: f64, strength: f32, period: f32, harmonicity: f32) -> (f64, f64) {
+    fn precompute_loop(&self, mono: &[f32], sample_rate: f32, segment_start: f64, segment_end: f64, strength: f32, period: f32, harmonicity: f32) -> (f64, f64, f32) {
         if harmonicity < self.config.pitch_sync_gate {
-            return (0.0, -1.0);
+            return (0.0, -1.0, 0.0);
         }
         // Stationarity gate: a short loop near the segment start REPLACES the segment's later
         // content — correct for stationary material, wrong for drifting material (a sweep segment
         // would lose its rising half; the spectral guard catches exactly that). Zero-crossing rate
         // of the first vs last quarter is a cheap dominant-frequency drift probe.
         if zcr_drift(mono, segment_start as usize, segment_end as usize) > 0.15 {
-            return (0.0, -1.0);
+            return (0.0, -1.0, 0.0);
         }
         let rate = sample_rate as f64;
         let earliest_start = segment_start + self.config.loop_margin_start_seconds * rate;
@@ -229,39 +229,45 @@ impl Analyzer {
             let mut cycles = libm::round(nominal.max(period) / period).max(1.0);
             let max_cycles = libm::floor((loop_end - earliest_start) / period);
             if max_cycles < 1.0 {
-                return (0.0, -1.0);
+                return (0.0, -1.0, 0.0);
             }
             cycles = cycles.min(max_cycles);
             let candidate_start = loop_end - cycles * period;
             let window = ((2.0 * period).min(0.010 * rate).max(32.0)) as usize;
-            let (start, _score) = self.best_correlated_start(mono, loop_end, candidate_start, (period / 2.0) as isize, window, earliest_start, loop_end - period);
-            return (start, loop_end);
+            let (start, score) = self.best_correlated_start(mono, loop_end, candidate_start, (period / 2.0) as isize, window, earliest_start, loop_end - period);
+            return (start, loop_end, score as f32);
         }
         // Polyphonic/periodless tonal path: wide correlation search around the nominal length.
         let minimum_length = 0.5 * self.config.loop_len_min_seconds * rate;
         if loop_end - earliest_start < minimum_length {
-            return (0.0, -1.0);
+            return (0.0, -1.0, 0.0);
         }
         let candidate_start = (loop_end - nominal).max(earliest_start);
         let search = (0.020 * rate) as isize;
         let window = (0.010 * rate) as usize;
         let (start, score) = self.best_correlated_start(mono, loop_end, candidate_start, search, window, earliest_start, loop_end - minimum_length);
         if score < 0.5 {
-            return (0.0, -1.0);
+            return (0.0, -1.0, 0.0);
         }
-        (start, loop_end)
+        (start, loop_end, score as f32)
     }
 
     /// Slide the loop start within +/- `search` samples to maximize normalized cross-correlation
     /// with the loop end, so the splice (end -> start jump) lands phase-aligned. Returns
     /// (start, score).
+    ///
+    /// SPLICE GEOMETRY: the runtime crossfade blends `source[loop_end - F + p]` against
+    /// `source[loop_start + p]` for p in [0, F) — so the reference is the window ENDING at
+    /// `loop_end`, matched against the window STARTING at the candidate start. Referencing the
+    /// window after `loop_end` instead is off by the fade length (integer-period snapping happened
+    /// to rescue the periodic path; the polyphonic path was misaligned by construction).
     #[allow(clippy::too_many_arguments)]
     fn best_correlated_start(&self, mono: &[f32], loop_end: f64, candidate_start: f64, search: isize, window: usize, earliest_start: f64, latest_start: f64) -> (f64, f64) {
         let end_index = loop_end as usize;
-        if end_index + window >= mono.len() || window < 8 {
+        if end_index < window || end_index >= mono.len() || window < 8 {
             return (candidate_start.max(earliest_start), 0.0);
         }
-        let reference = &mono[end_index..end_index + window];
+        let reference = &mono[end_index - window..end_index];
         let reference_energy: f64 = reference.iter().map(|value| (*value as f64) * (*value as f64)).sum();
         let mut scores: Vec<(f64, f64)> = Vec::with_capacity((2 * search + 1) as usize);
         for offset in -search..=search {

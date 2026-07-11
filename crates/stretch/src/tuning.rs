@@ -66,7 +66,7 @@ impl Tuning {
     /// The descriptor-driven mode under development (Phase 4). Starts from legacy values with the
     /// adaptive machinery enabled; the harness tunes from here.
     pub fn adaptive() -> Self {
-        Self {adaptive: true, equal_power_fades: true, ..Self::legacy()}
+        Self {adaptive: true, equal_power_fades: true, weak_boundary_threshold: 0.15, ..Self::legacy()}
     }
 }
 
