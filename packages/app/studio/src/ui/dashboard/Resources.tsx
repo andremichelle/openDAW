@@ -1,7 +1,7 @@
 import css from "./Resources.sass?inline"
 import {Html} from "@opendaw/lib-dom"
 import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
-import {Await, createElement, Frag, replaceChildren} from "@opendaw/lib-jsx"
+import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {ProjectBrowser} from "@/project/ProjectBrowser"
 import {TemplateBrowser} from "@/project/TemplateBrowser"
 import {Dialogs} from "@/ui/components/dialogs"
@@ -10,7 +10,6 @@ import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
 import {StudioService} from "@/service/StudioService"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Colors} from "@opendaw/studio-enums"
-import {ProjectStorage} from "@opendaw/studio-core"
 import {DemoProjectsList} from "@/ui/dashboard/DemoProjectsList"
 
 const className = Html.adoptStyleSheet(css, "Resources")
@@ -45,24 +44,17 @@ export const Resources = ({lifecycle, service}: Construct) => {
                     switch (owner.getValue()) {
                         case Scope.Projects:
                             replaceChildren(element, (
-                                <Frag>
-                                    <ProjectBrowser service={service}
-                                                    lifecycle={scopeLifeCycle}
-                                                    select={async ([uuid, meta]) => {
-                                                        const handler = Dialogs.processMonolog("Loading...")
-                                                        await service.projectProfileService.load(uuid, meta)
-                                                        handler.close()
-                                                    }}/>
-                                    <Await factory={() => ProjectStorage.listProjects()}
-                                           loading={() => null}
-                                           failure={() => null}
-                                           success={projects => projects.length > 0 ? null : (
-                                               <div className="empty-cta"
-                                                    onclick={() => scope.setValue(Scope.Demos)}>
-                                                   No projects yet — start with a demo project →
-                                               </div>
-                                           )}/>
-                                </Frag>
+                                <ProjectBrowser service={service}
+                                                lifecycle={scopeLifeCycle}
+                                                select={async ([uuid, meta]) => {
+                                                    const handler = Dialogs.processMonolog("Loading...")
+                                                    await service.projectProfileService.load(uuid, meta)
+                                                    handler.close()
+                                                }}
+                                                empty={<div className="empty-cta"
+                                                            onclick={() => scope.setValue(Scope.Demos)}>
+                                                    No projects yet. Start with a demo project.
+                                                </div>}/>
                             ))
                             break
                         case Scope.Templates:

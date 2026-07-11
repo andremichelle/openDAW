@@ -30,9 +30,12 @@ component
       flex: 1
       min-height: 0
 
+  // rendered inside the ProjectBrowser list (its `empty` slot) when there are no saved projects; matches the
+  // position and size of the old "No projects yet." label, but blue and clickable
   .empty-cta
-    flex: 0 0 auto
-    margin-top: 0.4em
-    font-size: $fs-m
-    color: var(--color-orange)
+    margin-left: 0.5em
+    font-size: 1em
     cursor: pointer
+    display: inline-block
+    width: max-content
+    border-bottom: 0.5px rgba(white, 0.4) dashed
