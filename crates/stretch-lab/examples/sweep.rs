@@ -4,8 +4,9 @@
 
 use stretch::{Analyzer, AnalyzerConfig, Tuning};
 use stretch_lab::corpus;
-use stretch_lab::metrics::envelope::smooth_envelope;
+use stretch_lab::metrics::envelope::{rms, smooth_envelope};
 use stretch_lab::metrics::modulation::modulation_excess;
+use stretch_lab::metrics::spectral::level_delta_db;
 use stretch_lab::render::{render_stretch, PlayMode, RenderSpec, ENGINE_RATE};
 
 fn score(entry: &corpus::Entry, ratio: f64, tuning: Tuning, gate: f32) -> f64 {
@@ -23,6 +24,15 @@ fn score(entry: &corpus::Entry, ratio: f64, tuning: Tuning, gate: f32) -> f64 {
     modulation_excess(&smooth_out, &smooth_ref, 0.0).map(|scores| scores.band_peak_db).unwrap_or(f64::NAN)
 }
 
+fn level(entry: &corpus::Entry, ratio: f64, tuning: Tuning) -> f64 {
+    let markers = Analyzer::default().describe(&entry.left, &entry.right, entry.file_rate, &entry.transients);
+    let spec = RenderSpec {left: &entry.left, right: &entry.right, file_rate: entry.file_rate, transients: &entry.transients, ratio, mode: PlayMode::Repeat};
+    let (out_left, out_right) = render_stretch(&spec, &markers, tuning);
+    let output_mono: Vec<f32> = out_left.iter().zip(out_right.iter()).map(|(l, r)| 0.5 * (l + r)).collect();
+    let source_mono: Vec<f32> = entry.left.iter().zip(entry.right.iter()).map(|(l, r)| 0.5 * (l + r)).collect();
+    level_delta_db(rms(&source_mono), rms(&output_mono))
+}
+
 fn main() {
     let mut entries = corpus::synthetic_entries();
     let mut skipped = Vec::new();
@@ -36,8 +46,8 @@ fn main() {
     let drone = entries.iter().find(|entry| entry.id == "pad-drone");
     println!("baseline masked excess for reference: pad-derelict x1.5 = 12.8, x2 = 14.4, pad-drone x1.5 = 7.3");
     println!("{:<28} {:>9} {:>9} {:>9} {:>11} {:>11} {:>10}", "tuning", "chord x2", "chord x4", "sine1.25", "derelict1.5", "derelict2", "drone1.5");
-    for &(fade_min, fade_max) in &[(0.010, 0.040), (0.010, 0.080)] {
-      for &voice_max in &[0.020f64, 0.060] {
+    for &(fade_min, fade_max) in &[(0.010, 0.020), (0.010, 0.040), (0.010, 0.080)] {
+      for &voice_max in &[0.020f64] {
         let gate = 0.25f32;
         let mut tuning = Tuning::adaptive();
         tuning.loop_fade_min_seconds = fade_min;
@@ -54,6 +64,9 @@ fn main() {
             derelict.map(|entry| score(entry, 2.0, tuning, gate)).unwrap_or(f64::NAN),
             drone.map(|entry| score(entry, 1.5, tuning, gate)).unwrap_or(f64::NAN)
         );
+        if let Some(entry) = derelict {
+            println!("{:<28} derelict level x1.5 {:.2} dB  x4 {:.2} dB", "", level(entry, 1.5, tuning), level(entry, 4.0, tuning));
+        }
       }
     }
 }
