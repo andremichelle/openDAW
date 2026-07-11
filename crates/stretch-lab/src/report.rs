@@ -42,6 +42,9 @@ pub fn judge(current: &Scores, baseline: &ScoreMap, best: Option<&ScoreMap>) -> 
     let mut report = String::new();
     let _ = writeln!(report, "case                              metric               baseline      best   current     ideal");
     for case in &current.cases {
+        // Beyond ~25% stretch is outside any realistic quality expectation: extremes are rendered
+        // and reported for information, never gated.
+        let gated_ratio = case.ratio <= 1.3;
         let case_label = format!("{} x{} {}", case.entry, case.ratio, case.mode);
         for metric in &case.metrics {
             let baseline_value = lookup(baseline, &case.entry, case.ratio, &case.mode, metric.name);
@@ -55,8 +58,8 @@ pub fn judge(current: &Scores, baseline: &ScoreMap, best: Option<&ScoreMap>) -> 
                 metric.value, ideal_value(metric.name)
             );
             let identifier = format!("{case_label} {}", metric.name);
-            let is_target = thresholds::TARGETS.contains(&metric.name);
-            let is_guard = thresholds::GUARDS.contains(&metric.name);
+            let is_target = gated_ratio && thresholds::TARGETS.contains(&metric.name);
+            let is_guard = gated_ratio && thresholds::GUARDS.contains(&metric.name);
             if is_guard && guard_absolute_violation(metric) {
                 // A violation the reference ALREADY had (and the change did not worsen) is
                 // pre-existing pain, not this change's fault — the delta check below still

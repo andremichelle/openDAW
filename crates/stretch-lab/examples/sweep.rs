@@ -11,8 +11,13 @@ use stretch_lab::render::{render_stretch, PlayMode, RenderSpec, ENGINE_RATE};
 
 fn score(entry: &corpus::Entry, ratio: f64, tuning: Tuning, gate: f32) -> f64 {
     let mut config = AnalyzerConfig::default();
-    config.full_region_strength_gate = gate;
-    let markers = Analyzer::new(config).describe(&entry.left, &entry.right, entry.file_rate, &entry.transients);
+    config.chatter_strength_max = gate;
+    // End-to-end: the detector's own markers drive playback for real fixtures.
+    let markers = if entry.ideal.is_some() {
+        Analyzer::new(config).describe(&entry.left, &entry.right, entry.file_rate, &entry.transients)
+    } else {
+        Analyzer::new(config).analyze(&entry.left, &entry.right, entry.file_rate).markers
+    };
     let spec = RenderSpec {left: &entry.left, right: &entry.right, file_rate: entry.file_rate, transients: &entry.transients, ratio, mode: PlayMode::Repeat};
     let (out_left, out_right) = render_stretch(&spec, &markers, tuning);
     let output_mono: Vec<f32> = out_left.iter().zip(out_right.iter()).map(|(l, r)| 0.5 * (l + r)).collect();
@@ -44,29 +49,29 @@ fn main() {
     let sine = entries.iter().find(|entry| entry.id == "sine220").unwrap();
     let derelict = entries.iter().find(|entry| entry.id == "pad-derelict");
     let drone = entries.iter().find(|entry| entry.id == "pad-drone");
-    println!("baseline masked excess for reference: pad-derelict x1.5 = 12.8, x2 = 14.4, pad-drone x1.5 = 7.3");
-    println!("{:<28} {:>9} {:>9} {:>9} {:>11} {:>11} {:>10}", "tuning", "chord x2", "chord x4", "sine1.25", "derelict1.5", "derelict2", "drone1.5");
-    for &(fade_min, fade_max) in &[(0.010, 0.020), (0.010, 0.040), (0.010, 0.080)] {
-      for &voice_max in &[0.020f64] {
-        let gate = 0.25f32;
+    println!("{:<28} {:>9} {:>9} {:>11} {:>11} {:>9} {:>10}", "tuning", "chord1.1", "chord1.25", "derelict1.1", "derelict1.25", "drone1.1", "guitar1.25");
+    let guitar = entries.iter().find(|entry| entry.id == "guitar-chords");
+    for &(fade_min, fade_max) in &[(0.010, 0.080)] {
+      for &read_through in &[0.0f64, 1.12, 1.2, 1.35] {
+        let gate = 0.3f32;
+        let voice_max = 0.020f64;
         let mut tuning = Tuning::adaptive();
         tuning.loop_fade_min_seconds = fade_min;
         tuning.loop_fade_max_seconds = fade_max;
         tuning.voice_fade_max_seconds = voice_max;
-        let label = format!("loopfade {:.0}-{:.0}ms voicemax {:.0}ms", fade_min * 1000.0, fade_max * 1000.0, voice_max * 1000.0);
+        tuning.read_through_max_fill = read_through;
+        let label = format!("readthrough<{:.2}", read_through);
         println!(
             "{:<28} {:>9.2} {:>9.2} {:>9.2} {:>11.2} {:>11.2} {:>10.2}",
             label,
-            score(padchord, 2.0, tuning, gate),
-            score(padchord, 4.0, tuning, gate),
-            score(sine, 1.25, tuning, gate),
-            derelict.map(|entry| score(entry, 1.5, tuning, gate)).unwrap_or(f64::NAN),
-            derelict.map(|entry| score(entry, 2.0, tuning, gate)).unwrap_or(f64::NAN),
-            drone.map(|entry| score(entry, 1.5, tuning, gate)).unwrap_or(f64::NAN)
+            score(padchord, 1.1, tuning, gate),
+            score(padchord, 1.25, tuning, gate),
+            derelict.map(|entry| score(entry, 1.1, tuning, gate)).unwrap_or(f64::NAN),
+            derelict.map(|entry| score(entry, 1.25, tuning, gate)).unwrap_or(f64::NAN),
+            drone.map(|entry| score(entry, 1.1, tuning, gate)).unwrap_or(f64::NAN),
+            guitar.map(|entry| score(entry, 1.25, tuning, gate)).unwrap_or(f64::NAN)
         );
-        if let Some(entry) = derelict {
-            println!("{:<28} derelict level x1.5 {:.2} dB  x4 {:.2} dB", "", level(entry, 1.5, tuning), level(entry, 4.0, tuning));
-        }
+
       }
     }
 }

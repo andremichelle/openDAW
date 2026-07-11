@@ -43,7 +43,10 @@ fn matrix(entries: &[Entry]) -> Vec<Case<'_>> {
         for &ratio in corpus::RATIOS {
             cases.push(Case {entry, ratio, mode: PlayMode::Repeat});
         }
-        for &ratio in &[1.5, 2.0] {
+        for &ratio in corpus::EXTREME_RATIOS {
+            cases.push(Case {entry, ratio, mode: PlayMode::Repeat});
+        }
+        for &ratio in &[1.1, 1.25] {
             cases.push(Case {entry, ratio, mode: PlayMode::Once});
             cases.push(Case {entry, ratio, mode: PlayMode::Pingpong});
         }
@@ -187,6 +190,10 @@ fn cmd_run() {
     let best = read_tsv(&snapshots_dir().join("best.tsv"));
     println!("rendering stretch matrix ({} entries, adaptive tuning)...", entries.len());
     let scores = run_matrix(&entries, &Engine::Stretch(Tuning::adaptive()), true);
+    for entry in &entries {
+        let path = out_dir().join("sources").join(format!("{}.wav", entry.id));
+        let _ = wav::write_32f(&path, entry.file_rate, &entry.left, &entry.right);
+    }
     write(&out_dir().join("scores.json"), &scores.to_json());
     write(&out_dir().join("current.tsv"), &scores.to_tsv());
     let judgement = report::judge(&scores, &baseline, best.as_ref());

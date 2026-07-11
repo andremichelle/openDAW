@@ -223,7 +223,9 @@ impl Stretcher {
                     let audio_samples_needed = output_samples_until_next * effective_playback_rate;
                     let speed_ratio = segment_length / audio_samples_needed;
                     let close_to_unity = (0.99..=1.01).contains(&speed_ratio);
-                    let needs_looping = !close_to_unity && audio_samples_needed > segment_length;
+                    let fill_factor = audio_samples_needed / segment_length;
+                    let read_through = self.tuning.adaptive && marker_prefers_read_through(&markers[self.current_transient_index.max(0) as usize]) && fill_factor > 1.01 && fill_factor <= self.tuning.read_through_max_fill;
+                    let needs_looping = !close_to_unity && audio_samples_needed > segment_length && !read_through;
                     if needs_looping {
                         self.voices[index].start_fade_out(0);
                         let marker = &markers[self.current_transient_index as usize];
@@ -287,7 +289,10 @@ impl Stretcher {
             if marker.strength < self.tuning.weak_boundary_threshold && marker.loop_score > 0.9 && level_representative && (self.continued_boundaries < 2 || same_period) {
                 let mut continued = false;
                 for voice in &mut self.voices {
-                    if !voice.done() && !voice.is_fading_out() {
+                    // Continuation means "the LOOP keeps sustaining" — Once voices (including
+                    // read-through) must fade at their end and let the boundary re-sync, or they
+                    // read linearly to EOF and leave a silence step.
+                    if !voice.done() && !voice.is_fading_out() && !voice.is_once() {
                         voice.set_segment_end(info.end_samples);
                         continued = true;
                     }
@@ -346,7 +351,15 @@ impl Stretcher {
         let audio_samples_needed = output_samples_until_next * playback_rate;
         let speed_ratio = segment_length / audio_samples_needed;
         let close_to_unity = (0.99..=1.01).contains(&speed_ratio);
-        let needs_looping = !close_to_unity && audio_samples_needed > segment_length;
+        let fill_factor = audio_samples_needed / segment_length;
+        // READ-THROUGH: mild fills play once past the segment into the neighboring material
+        // instead of wrapping next to the boundary; the next boundary re-syncs with an aligned
+        // crossfade. The voice's end extends by exactly the deficit.
+        // A segment whose loop splices cleanly and sustains representatively (the continuation
+        // license) loops better than it reads through — read-through is for material that cannot
+        // splice cleanly (beating chords, dense texture, drift).
+        let read_through = self.tuning.adaptive && marker_prefers_read_through(&markers[transient_index.max(0) as usize]) && fill_factor > 1.01 && fill_factor <= self.tuning.read_through_max_fill;
+        let needs_looping = !close_to_unity && audio_samples_needed > segment_length && !read_through;
         let fade_samples_in_file = self.tuning.preroll_seconds * engine_rate as f64 * playback_rate;
         let pre_roll_start = if transient_index == 0 {
             info.start_samples
@@ -380,7 +393,12 @@ impl Stretcher {
                 voice_start_samples = (voice_start_samples + residual).max(playhead_file_samples);
             }
         }
-        if let Some(voice) = create_voice(voice_start_samples, info.end_samples, playback_rate, engine_rate, mode, needs_looping, None, marker, &self.tuning) {
+        let voice_end_samples = if read_through {
+            (info.start_samples + audio_samples_needed).min(source.num_frames as f64)
+        } else {
+            info.end_samples
+        };
+        if let Some(voice) = create_voice(voice_start_samples, voice_end_samples, playback_rate, engine_rate, mode, needs_looping, None, marker, &self.tuning) {
             self.voices.push(voice);
         }
         self.active_loop_rms = marker.loop_rms;
@@ -403,6 +421,19 @@ impl Stretcher {
     pub fn voice_count(&self) -> usize {
         self.voices.len()
     }
+}
+
+
+/// A loop that splices near-perfectly and sustains at its segment's level — the same license that
+/// authorizes boundary continuation.
+fn marker_clean_loop(marker: &TransientDescriptor) -> bool {
+    marker.loop_score > 0.9 && marker.rms > 1e-6 && libm::log((marker.loop_rms / marker.rms) as f64).abs() < 0.12
+}
+
+/// Read-through preference: beating material (no splice point is clean) or material without any
+/// precomputed loop reads through at mild fills; quasi-stationary sustains keep their loops.
+fn marker_prefers_read_through(marker: &TransientDescriptor) -> bool {
+    !marker_clean_loop(marker) && (marker.beat_seconds > 0.0 || !marker.has_loop())
 }
 
 /// Resolve the spawn-time voice parameters from `Tuning` + the segment's descriptor. Legacy: the

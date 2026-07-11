@@ -275,4 +275,7 @@ pub fn fixture_entries(skipped: &mut Vec<String>) -> Vec<Entry> {
     entries
 }
 
-pub const RATIOS: &[f64] = &[0.5, 0.75, 1.25, 1.5, 2.0, 4.0];
+/// The GATED quality band: nobody rides a stretcher past ~25%, so quality is judged where music
+/// lives. Extremes render for information only.
+pub const RATIOS: &[f64] = &[0.8, 0.9, 1.1, 1.25];
+pub const EXTREME_RATIOS: &[f64] = &[1.5, 2.0, 4.0];

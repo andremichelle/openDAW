@@ -24,6 +24,9 @@ pub struct TransientDescriptor {
     /// Normalized correlation of the loop splice (0 = unaligned/fallback). Picks the splice law:
     /// linear above ~0.35 (coherent sum), equal-power below (uncorrelated power fill).
     pub loop_score: f32,
+    /// Intrinsic envelope (beat) period in SECONDS; 0 = no beating detected. Beating material
+    /// cannot splice cleanly at any point — it prefers read-through over wrapping.
+    pub beat_seconds: f32,
     /// RMS of the loop window itself — continuation across boundaries requires the sustained
     /// window to be level-representative of the segment (a decaying texture's loop is not).
     pub loop_rms: f32
@@ -33,7 +36,7 @@ impl TransientDescriptor {
     /// A position-only marker with neutral descriptors: full strength (legacy fades), aperiodic,
     /// no precomputed loop — the exact behavior of today's bare `Vec<f64>` transients.
     pub fn bare(position: f64) -> Self {
-        Self {position, strength: 1.0, period: 0.0, harmonicity: 0.0, rms: 0.0, loop_start: 0.0, loop_end: -1.0, loop_score: 0.0, loop_rms: 0.0}
+        Self {position, strength: 1.0, period: 0.0, harmonicity: 0.0, rms: 0.0, loop_start: 0.0, loop_end: -1.0, loop_score: 0.0, beat_seconds: 0.0, loop_rms: 0.0}
     }
 
     pub fn bare_all(positions: &[f64]) -> Vec<Self> {

@@ -32,6 +32,10 @@ pub struct AnalyzerConfig {
     pub loop_len_max_seconds: f64,
     /// Below this strength a loop takes the FULL available region (1.1 = always full-region).
     pub full_region_strength_gate: f32,
+    /// Chatter thinning: a marker weaker than this, closer than chatter_gap_seconds to its
+    /// predecessor, continuing its pitch within 5%, is the same note still sounding — not an event.
+    pub chatter_strength_max: f32,
+    pub chatter_gap_seconds: f64,
     pub loop_margin_start_seconds: f64,
     pub loop_margin_end_seconds: f64
 }
@@ -52,6 +56,8 @@ impl Default for AnalyzerConfig {
             loop_len_min_seconds: 0.080,
             loop_len_max_seconds: 0.250,
             full_region_strength_gate: 0.25,
+            chatter_strength_max: 0.3,
+            chatter_gap_seconds: 0.150,
             loop_margin_start_seconds: 0.010,
             loop_margin_end_seconds: 0.020
         }
@@ -90,8 +96,8 @@ impl Analyzer {
         let mut markers: Vec<TransientDescriptor> = Vec::with_capacity(described.len());
         for marker in described {
             let chatter = markers.last().map(|previous: &TransientDescriptor| {
-                let close = marker.position - previous.position < 0.150;
-                let weak = marker.strength < 0.3;
+                let close = marker.position - previous.position < self.config.chatter_gap_seconds;
+                let weak = marker.strength < self.config.chatter_strength_max;
                 let same_pitch = marker.period > 0.0 && previous.period > 0.0
                     && ((marker.period - previous.period) / previous.period).abs() < 0.05;
                 close && weak && same_pitch
@@ -137,13 +143,16 @@ impl Analyzer {
             let period = self.yin_period(mono, sample_rate, segment_start, segment_end);
             let harmonicity = self.harmonicity(segment, sample_rate, period);
             let (loop_start, loop_end, loop_score) = self.precompute_loop(mono, sample_rate, segment_start as f64, segment_end as f64, strength, period, harmonicity);
+            let beat_seconds = envelope_beat_period(mono, segment_start, segment_end, sample_rate as f64)
+                .map(|samples| (samples / sample_rate as f64) as f32)
+                .unwrap_or(0.0);
             let loop_rms = if loop_end > loop_start {
                 segment_rms(&mono[loop_start as usize..(loop_end as usize).min(mono.len())])
             } else {
                 rms
             };
             markers.push(TransientDescriptor {
-                position: onset.seconds, strength, period, harmonicity, rms, loop_start, loop_end, loop_score, loop_rms
+                position: onset.seconds, strength, period, harmonicity, rms, loop_start, loop_end, loop_score, beat_seconds, loop_rms
             });
         }
         markers

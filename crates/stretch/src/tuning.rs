@@ -34,6 +34,11 @@ pub struct Tuning {
     pub boundary_lookahead_seconds: f64,
     /// Pre-roll read-back before a segment start on a fresh boundary spawn (legacy: coupled).
     pub preroll_seconds: f64,
+    /// Below this fill factor a segment READS THROUGH instead of wrapping: at mild stretch
+    /// (x1.25) the single wrap lands right next to the boundary — a double disturbance nothing
+    /// amortizes — while reading ahead into continuous material is nearly seamless and the next
+    /// boundary's aligned crossfade re-syncs. 0.0 disables (legacy).
+    pub read_through_max_fill: f64,
     /// Boundaries whose onset strength is below this CONTINUE the playing voices (segment end
     /// extended) instead of crossfading into a fresh spawn — a weak transient means nothing new
     /// happened, and every avoided crossfade is an avoided audible grain start. 0.0 = never.
@@ -59,7 +64,8 @@ impl Tuning {
             drift_threshold_seconds: 0.020,
             boundary_lookahead_seconds: 0.020,
             preroll_seconds: 0.020,
-            weak_boundary_threshold: 0.0
+            weak_boundary_threshold: 0.0,
+            read_through_max_fill: 0.0
         }
     }
 
@@ -70,6 +76,7 @@ impl Tuning {
             adaptive: true,
             equal_power_fades: true,
             weak_boundary_threshold: 0.15,
+            read_through_max_fill: 1.12,
             // Sweep-proven: long voice fades on beating material are long mismatch bursts — 20 ms
             // wins on every pad while sines are insensitive (continuation skips their boundaries).
             voice_fade_max_seconds: 0.020,
