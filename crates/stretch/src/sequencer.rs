@@ -279,7 +279,8 @@ impl Stretcher {
             // have a YIN fundamental yet still beat in its upper partials (loop_score ~0.6) — its wrap
             // comb needs boundary re-anchors just like a chord's. Only near-perfect splices
             // (score > 0.9: sines, clean monophony) earn uninterrupted continuation.
-            if marker.strength < self.tuning.weak_boundary_threshold && marker.loop_score > 0.9 && (self.continued_boundaries < 2 || same_period) {
+            let level_representative = marker.rms > 1e-6 && libm::log((marker.loop_rms / marker.rms) as f64).abs() < 0.12;
+            if marker.strength < self.tuning.weak_boundary_threshold && marker.loop_score > 0.9 && level_representative && (self.continued_boundaries < 2 || same_period) {
                 let mut continued = false;
                 for voice in &mut self.voices {
                     if !voice.done() && !voice.is_fading_out() {

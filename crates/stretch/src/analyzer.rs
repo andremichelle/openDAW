@@ -117,8 +117,13 @@ impl Analyzer {
             let period = self.yin_period(mono, sample_rate, segment_start, segment_end);
             let harmonicity = self.harmonicity(segment, sample_rate, period);
             let (loop_start, loop_end, loop_score) = self.precompute_loop(mono, sample_rate, segment_start as f64, segment_end as f64, strength, period, harmonicity);
+            let loop_rms = if loop_end > loop_start {
+                segment_rms(&mono[loop_start as usize..(loop_end as usize).min(mono.len())])
+            } else {
+                rms
+            };
             markers.push(TransientDescriptor {
-                position: onset.seconds, strength, period, harmonicity, rms, loop_start, loop_end, loop_score
+                position: onset.seconds, strength, period, harmonicity, rms, loop_start, loop_end, loop_score, loop_rms
             });
         }
         markers
@@ -369,6 +374,7 @@ fn envelope_beat_period(mono: &[f32], segment_start: usize, segment_end: usize, 
     }
     Some(best_lag as f64 / 1000.0 * rate)
 }
+
 
 fn mono_fold(left: &[f32], right: &[f32]) -> Vec<f32> {
     left.iter().zip(right.iter()).map(|(l, r)| 0.5 * (l + r)).collect()
