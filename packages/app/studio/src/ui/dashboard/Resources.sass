@@ -1,3 +1,5 @@
+@use "tokens" as *
+
 component
   flex: 1
   min-height: 0
@@ -8,7 +10,7 @@ component
 
   h3
     padding-left: 0.25em
-    font-size: var(--fs-l)
+    font-size: $fs-l
     border-radius: 0.25em
     width: fit-content
     white-space: nowrap
@@ -31,6 +33,6 @@ component
   .empty-cta
     flex: 0 0 auto
     margin-top: 0.4em
-    font-size: var(--fs-m)
+    font-size: $fs-m
     color: var(--color-orange)
     cursor: pointer

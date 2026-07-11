@@ -1,16 +1,12 @@
 @use "@/colors"
+@use "tokens" as *
 
 component
-  // The dashboard chrome uses exactly THREE font sizes (the list column keeps its own sizes). Everything below
-  // maps to one of these; do not introduce a fourth.
-  --fs-l: 18px
-  --fs-m: 13px
-  --fs-s: 11px
   flex: 1
   min-height: 0
   display: flex
   flex-direction: column
-  row-gap: 2.5em
+  row-gap: 1.5em
   padding: 1.75em 2em 4em 2em
   color: var(--color-dark)
   @include colors.panel-background
@@ -21,21 +17,17 @@ component
   > .hero
     display: flex
     align-items: baseline
-    column-gap: 0.7em
 
     > h1
       color: white
-      font-size: var(--fs-l)
+      font-size: 40px
       margin: 0
-
-    > span
-      color: var(--color-blue)
-      font-size: var(--fs-l)
 
   // one-pager: the three columns take the rest; only the middle list column scrolls
   > .main
     flex: 1
     min-height: 0
+    margin-top: 1.5em // extra breathing room between the intro tiles and the columns below
     // symmetric side rails so the list column sits centered; the rails share the remaining width equally.
     // the list column has a MIN-WIDTH (480px) so the tab labels never shrink enough to overlap, with a bounded
     // max so it stays a flexible range rather than a fixed width.

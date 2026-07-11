@@ -1,20 +1,9 @@
+@use "tokens" as *
+
 component
   display: flex
   flex-direction: column
   row-gap: 0.3em
-
-  > .head
-    font-size: var(--fs-s)
-    text-transform: uppercase
-    letter-spacing: 0.06em
-    color: var(--color-shadow)
-    display: flex
-    align-items: center
-    column-gap: 0.35em
-
-    > svg
-      width: 13px
-      height: 13px
 
   > .body
     display: flex
@@ -36,7 +25,7 @@ component
     background: rgba(white, 0.02)
     color: var(--color-dark)
     font: inherit
-    font-size: var(--fs-m)
+    font-size: $fs-m
     cursor: pointer
 
     &:hover
@@ -53,7 +42,7 @@ component
     column-gap: 0.5em
     color: var(--color-dark)
     font: inherit
-    font-size: var(--fs-m)
+    font-size: $fs-m
     text-decoration: none
     cursor: pointer
     background: none

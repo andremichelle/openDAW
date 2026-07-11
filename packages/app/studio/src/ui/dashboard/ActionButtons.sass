@@ -1,7 +1,12 @@
+@use "tokens" as *
+
 component
   display: flex
   flex-direction: column
-  row-gap: 0.4em
+
+  // gap only BETWEEN buttons; the label's own margin handles its spacing (not a flex row-gap on the whole column)
+  > .action + .action
+    margin-top: 0.4em
 
   > .action
     --action-color: var(--color-blue)
@@ -30,11 +35,11 @@ component
 
     > .text > .title
       color: white
-      font-size: var(--fs-l)
+      font-size: $fs-l
       font-weight: 500
 
     > .text > .desc
-      font-size: var(--fs-m)
+      font-size: $fs-m
       color: var(--color-shadow)
 
   // Open Bundle: same frame as the others, but orange (icon + hover frame)

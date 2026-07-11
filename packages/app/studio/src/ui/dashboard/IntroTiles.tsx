@@ -1,17 +1,17 @@
 import css from "./IntroTiles.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {isDefined} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
+import {SectionLabel} from "@/ui/dashboard/SectionLabel"
 
 const className = Html.adoptStyleSheet(css, "IntroTiles")
 
+// Purely informational tiles (see IntroTiles.sass): no links, no hover, styled as editorial feature columns.
 type Tile = {
     icon: IconSymbol
     title: string
     text: string
-    href?: string
 }
 
 const tiles: ReadonlyArray<Tile> = [
@@ -23,7 +23,7 @@ const tiles: ReadonlyArray<Tile> = [
     },
     {
         icon: IconSymbol.Connected,
-        title: "Live Room",
+        title: "Live Rooms",
         text: "Open a room, share the link, and make music together in real time. Everyone edits the same "
             + "session at once."
     },
@@ -41,7 +41,7 @@ const tiles: ReadonlyArray<Tile> = [
     },
     {
         icon: IconSymbol.Code,
-        title: "Open source",
+        title: "Open Source",
         text: "openDAW is open source. Inspect it, fork it, self-host it, or build your own devices and "
             + "extensions on top."
     }
@@ -49,17 +49,17 @@ const tiles: ReadonlyArray<Tile> = [
 
 export const IntroTiles = () => (
     <div className={className}>
-        {tiles.map(({icon, title, text, href}) => {
-            const body = [
-                <div className="tile-head">
-                    <Icon symbol={icon}/>
-                    <div className="tile-title">{title}</div>
-                </div>,
-                <div className="tile-text">{text}</div>
-            ]
-            return isDefined(href)
-                ? <a className="tile" href={href} target="_blank" rel="noopener noreferrer">{body}</a>
-                : <div className="tile">{body}</div>
-        })}
+        <SectionLabel title="Create Music Online"/>
+        <div className="tiles">
+            {tiles.map(({icon, title, text}) => (
+                <div className="tile">
+                    <div className="tile-head">
+                        <Icon symbol={icon}/>
+                        <div className="tile-title">{title}</div>
+                    </div>
+                    <div className="tile-text">{text}</div>
+                </div>
+            ))}
+        </div>
     </div>
 )

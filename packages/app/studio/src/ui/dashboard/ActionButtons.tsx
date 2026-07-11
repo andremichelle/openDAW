@@ -6,6 +6,7 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 import {StudioService} from "@/service/StudioService"
 import {connectRoom} from "@/service/StudioLiveRoomConnect"
+import {SectionLabel} from "@/ui/dashboard/SectionLabel"
 
 const className = Html.adoptStyleSheet(css, "ActionButtons")
 
@@ -16,6 +17,7 @@ type Construct = {
 
 export const ActionButtons = ({service}: Construct) => (
     <div className={className}>
+        <SectionLabel title="Start"/>
         <button className="action" onclick={() => service.newProject()}>
             <Icon symbol={IconSymbol.New}/>
             <div className="text">

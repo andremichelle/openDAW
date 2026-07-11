@@ -1,36 +1,40 @@
-component
-  display: grid
-  grid-template-columns: repeat(5, 1fr)
-  gap: 2em
+@use "tokens" as *
 
+component
+  display: flex
+  flex-direction: column
+  row-gap: 1em
+
+  > .tiles
+    display: grid
+    grid-template-columns: repeat(5, 1fr)
+    column-gap: 2.5em
+
+  // Informational, not buttons: no frame, no interactive cues. The icon keeps its blue accent but is small, so it
+  // reads as a marker next to the heading rather than a button icon.
   .tile
     display: flex
     flex-direction: column
-    row-gap: 0.5em
-    padding: 0.1em 1em 0.1em 0
+    row-gap: 0.6em
     color: var(--color-dark)
-    text-decoration: none
+    cursor: default
 
     > .tile-head
       display: flex
       align-items: center
-      column-gap: 0.5em
+      column-gap: 0.4em
 
       > svg
-        width: 26px
-        height: 26px
+        width: 12px
+        height: 12px
         color: var(--color-blue)
 
       > .tile-title
-        color: white
-        font-size: var(--fs-l)
+        color: var(--color-gray)
+        font-size: $fs-l
         font-weight: 500
 
     > .tile-text
-      font-size: var(--fs-m)
-      line-height: 1.45
+      font-size: $fs-m
+      line-height: 1.5
       color: var(--color-shadow)
-
-  a.tile:hover .tile-title
-    color: var(--color-blue)
-    cursor: pointer
