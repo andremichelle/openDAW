@@ -290,7 +290,6 @@ mod audio_unit;
 mod audio_region_player;
 mod midi_output;
 pub(crate) mod broadcast;
-mod time_stretch;
 mod tempo_map;
 mod script_device;
 use audio_unit::{AudioUnitBinding, Members};

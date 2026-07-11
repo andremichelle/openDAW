@@ -731,13 +731,12 @@ fn read_audio_region_reads_pitch_stretch_warp_markers_sorted() {
     let region = read_audio_region(&graph, REGION, &TempoMap::fixed(120.0)).expect("region with a file");
     assert_eq!(region.warp, vec![(0.0, 0.0), (3840.0, 1.0)], "warp markers read from the play-mode, sorted by ppqn");
     assert!(region.time_stretch.is_none(), "a PitchStretch play-mode is not a TimeStretch config");
-    assert!(region.transients.is_empty(), "transients are only read for a time-stretch region");
 }
 
 #[test]
 fn read_audio_region_reads_time_stretch_config_and_file_transients() {
     use super::tracks::read_audio_region;
-    use crate::time_stretch::TransientPlayMode;
+    use stretch::TransientPlayMode;
     const REGION: Uuid = [70u8; 16];
     const FILE: Uuid = [71u8; 16];
     const STRETCH: Uuid = [72u8; 16];
@@ -764,7 +763,6 @@ fn read_audio_region_reads_time_stretch_config_and_file_transients() {
     assert_eq!(config.warp, vec![(0.0, 0.0), (3840.0, 1.0)], "warp markers sorted by ppqn");
     assert_eq!(config.transient_play_mode, TransientPlayMode::Repeat);
     assert_eq!(config.playback_rate, 1.5);
-    assert_eq!(region.transients, vec![0.0, 0.5], "file transients read in seconds, sorted");
     assert!(region.warp.is_empty(), "the PitchStretch warp field stays empty for a time-stretch region");
 }
 

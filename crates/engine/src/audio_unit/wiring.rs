@@ -15,7 +15,7 @@ pub(crate) fn tape_region_counts(track_sets: &SharedAudioTrackSets) -> (usize, u
     for track in track_sets.borrow().iter() {
         for region in track.borrow().regions.iter() {
             total += 1;
-            if region.time_stretch.is_some() && region.transients.len() >= 2 {
+            if region.time_stretch.is_some() {
                 stretch += 1;
             }
         }

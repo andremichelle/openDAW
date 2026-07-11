@@ -534,10 +534,9 @@ pub(crate) struct AudioRegion {
     pub(crate) warp: Vec<(f64, f64)>,
     // TimeStretch play-mode config (AudioTimeStretchBox), when the region's play-mode is a time-stretch. `Some`
     // routes the player to the transient-aligned granular sequencer instead of the stateless read head.
-    pub(crate) time_stretch: Option<TimeStretchConfig>,
+    pub(crate) time_stretch: Option<RegionStretch>,
     // The SOURCE file's transient marker positions in SECONDS (sorted); read only when `time_stretch` is `Some`
     // (the sequencer aligns granular voices to these). Empty otherwise.
-    pub(crate) transients: Vec<f64>
 }
 
 impl Span for AudioRegion {
@@ -563,7 +562,6 @@ pub(crate) fn read_audio_region(graph: &BoxGraph, region_uuid: Uuid, tempo_map: 
     let to_ppqn = |value: f64| if seconds_base { tempo_map.seconds_span_to_ppqn(position, value) } else { value };
     let time_stretch = read_time_stretch(graph, region_uuid);
     // The source transient onsets are only needed for the time-stretch sequencer; skip the read otherwise.
-    let transients = if time_stretch.is_some() { read_transients(graph, file) } else { Vec::new() };
     Some(AudioRegion {
         region_uuid,
         position,
@@ -580,7 +578,6 @@ pub(crate) fn read_audio_region(graph: &BoxGraph, region_uuid: Uuid, tempo_map: 
         fade_out_slope: region_float(graph, region_uuid, &[AUDIO_REGION_FADING_KEY, 4]),
         warp: read_warp_markers(graph, region_uuid),
         time_stretch,
-        transients
     })
 }
 
@@ -607,7 +604,16 @@ pub(crate) fn read_warp_markers(graph: &BoxGraph, region_uuid: Uuid) -> Vec<(f64
 /// Read a region's TimeStretch play-mode config (`AudioTimeStretchBox`): its warp markers (content ppqn ->
 /// source seconds, sorted), the transient fill mode, and the playback-rate multiplier. `None` when the region
 /// has no play-mode or a non-time-stretch one (native / PitchStretch are handled elsewhere).
-pub(crate) fn read_time_stretch(graph: &BoxGraph, region_uuid: Uuid) -> Option<TimeStretchConfig> {
+/// The region's owned stretch configuration, built on the NEW engine's types directly (the old
+/// `time_stretch` module is deleted; nothing matches or reads the retired TS behaviors).
+#[derive(Clone)]
+pub(crate) struct RegionStretch {
+    pub(crate) warp: alloc::vec::Vec<(f64, f64)>,
+    pub(crate) transient_play_mode: stretch::TransientPlayMode,
+    pub(crate) playback_rate: f32
+}
+
+pub(crate) fn read_time_stretch(graph: &BoxGraph, region_uuid: Uuid) -> Option<RegionStretch> {
     let play_mode = graph.target_of(&Address::of(region_uuid, vec![AUDIO_REGION_PLAYMODE_KEY]))?.uuid;
     match graph.find_box(&play_mode) {
         Some(found) if found.name == "AudioTimeStretchBox" => {}
@@ -618,22 +624,12 @@ pub(crate) fn read_time_stretch(graph: &BoxGraph, region_uuid: Uuid) -> Option<T
         .map(|address| (region_pulses(graph, address.uuid, WARP_POSITION_KEY), region_float(graph, address.uuid, &[WARP_SECONDS_KEY]) as f64))
         .collect();
     warp.sort_by(|left, right| left.0.partial_cmp(&right.0).unwrap_or(core::cmp::Ordering::Equal));
-    let transient_play_mode = TransientPlayMode::from_i32(
+    let transient_play_mode = stretch::TransientPlayMode::from_i32(
         graph.field_value(&Address::of(play_mode, vec![TIME_STRETCH_PLAY_MODE_KEY])).and_then(|value| value.as_int32()).unwrap_or(0));
     let playback_rate = region_float(graph, play_mode, &[TIME_STRETCH_RATE_KEY]);
-    Some(TimeStretchConfig {warp, transient_play_mode, playback_rate})
+    Some(RegionStretch {warp, transient_play_mode, playback_rate})
 }
 
-/// Read a source file's transient onset positions (seconds, sorted) from its `AudioFileBox.transient-markers`
-/// hub. Empty when the file has none (the sequencer needs >= 2 to bracket a segment).
-pub(crate) fn read_transients(graph: &BoxGraph, file: Uuid) -> Vec<f64> {
-    let mut positions: Vec<f64> = graph.incoming(&Address::of(file, vec![AUDIO_FILE_TRANSIENTS_HUB_KEY]))
-        .into_iter()
-        .map(|address| region_float(graph, address.uuid, &[TRANSIENT_POSITION_KEY]) as f64)
-        .collect();
-    positions.sort_by(|left, right| left.partial_cmp(right).unwrap_or(core::cmp::Ordering::Equal));
-    positions
-}
 
 /// Build an AUDIO track binding (the audio analog of `build_track`): its sorted `AudioRegion` collection, a
 /// `regions` membership observer, and an `enabled` monitor.
@@ -742,7 +738,6 @@ pub(crate) const AUDIO_CLIP_GAIN_KEY: u16 = 14;
 pub(crate) fn read_audio_clip(graph: &BoxGraph, clip_uuid: Uuid, _tempo_map: &TempoMap) -> Option<(AudioRegion, bool)> {
     let file = graph.target_of(&Address::of(clip_uuid, vec![AUDIO_CLIP_FILE_KEY]))?.uuid;
     let time_stretch = read_time_stretch(graph, clip_uuid);
-    let transients = if time_stretch.is_some() { read_transients(graph, file) } else { Vec::new() };
     let looped = graph.field_value(&Address::of(clip_uuid, vec![4, 1])).and_then(|value| value.as_bool()).unwrap_or(true);
     let region = AudioRegion {
         region_uuid: clip_uuid,
@@ -760,7 +755,6 @@ pub(crate) fn read_audio_clip(graph: &BoxGraph, clip_uuid: Uuid, _tempo_map: &Te
         fade_out_slope: 0.0,
         warp: read_warp_markers(graph, clip_uuid),
         time_stretch,
-        transients
     };
     Some((region, looped))
 }

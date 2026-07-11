@@ -257,7 +257,7 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
             let source = StretchSource {left, right, num_frames: sample.frame_count as usize};
             let config = StretchConfig {
                 warp: &config.warp,
-                transient_play_mode: TransientPlayMode::from_i32(config.transient_play_mode as i32),
+                transient_play_mode: config.transient_play_mode,
                 playback_rate: config.playback_rate
             };
             let complete = region.position + region.duration;
@@ -463,7 +463,7 @@ mod tests {
         AudioRegion {
             region_uuid: [1u8; 16], position: 0.0, duration: 96_000.0, loop_offset: 0.0, loop_duration: 96_000.0,
             file: [9u8; 16], gain_db, mute: false, waveform_offset: 0.0, fade_in, fade_out,
-            fade_in_slope: 0.5, fade_out_slope: 0.5, warp: Vec::new(), time_stretch: None, transients: Vec::new()
+            fade_in_slope: 0.5, fade_out_slope: 0.5, warp: Vec::new(), time_stretch: None
         }
     }
 
