@@ -157,7 +157,24 @@ Every threshold above is an initial value, revisable when the numbers teach us o
 - **Detector replacement rollout** — new positions will differ from the TS detector on existing
   projects; needs a position-parity check before becoming the default writer.
 
-## 6. Amendments from external research review (2026-07-10)
+## 6. Integration architecture (DECIDED 2026-07-12, user-confirmed)
+
+- **No TransientMarkerBox for this system** — the box is not used; markers+descriptors travel as
+  one binary record set (64 B/marker: position/loop points f64, strength/period/harmonicity/rms/
+  loop-score/beat/loop-rms f32).
+- **One analysis pass** in the existing core-worker via a standalone analyzer wasm (`stretch-wasm`,
+  std build, own memory): detect + describe together. Measured: 1.4–3 % of realtime native
+  (~0.5–1 s per 10 s sample in wasm).
+- **Cache: `markers.bin` in OPFS** beside `audio.wav`/`peaks.bin`/`meta.json`, keyed by sample UUID
+  + analyzer version. Project load reads KBs; the worker only runs on first import, marker edits,
+  or analyzer upgrades.
+- **Delivery: SAB channel** mirroring sample delivery — engine exports `descriptors_allocate
+  (handle, count)` / `descriptors_set_ready(handle)`; main thread copies the record set into engine
+  shared memory. Until ready, the engine plays bare positions = bit-exact legacy behavior.
+- Engine adapter: `audio_region_player.rs` swaps `time_stretch.rs` for `stretch::Stretcher`
+  (~20 lines, `abi::Block` -> `BlockInfo`).
+
+## 7. Amendments from external research review (2026-07-10)
 
 A reviewed survey of the warping-engine landscape confirmed the plan's premise (no single TSM
 algorithm suits all material; adaptive, mode-plural processing is the commercial norm; import-time
