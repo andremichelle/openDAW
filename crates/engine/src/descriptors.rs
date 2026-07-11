@@ -9,24 +9,8 @@
 
 use alloc::vec::Vec;
 use crate::sample::decode_handle;
+pub(crate) use stretch::TransientDescriptor as MarkerRecord;
 
-/// The shared wire/cache record — layout-stable, matches `stretch-wasm::MarkerRecord` and
-/// `markers.bin` byte-for-byte (64 bytes, little-endian).
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct MarkerRecord {
-    pub position: f64,
-    pub loop_start: f64,
-    pub loop_end: f64,
-    pub strength: f32,
-    pub period: f32,
-    pub harmonicity: f32,
-    pub rms: f32,
-    pub loop_score: f32,
-    pub beat_seconds: f32,
-    pub loop_rms: f32,
-    pub reserved: f32
-}
 
 struct Slot {
     generation: u32,
@@ -56,10 +40,7 @@ impl DescriptorResource {
             self.slots.resize_with(index + 1, || None);
         }
         let mut records = Vec::new();
-        records.resize(count, MarkerRecord {
-            position: 0.0, loop_start: 0.0, loop_end: -1.0, strength: 1.0, period: 0.0,
-            harmonicity: 0.0, rms: 0.0, loop_score: 0.0, beat_seconds: 0.0, loop_rms: 0.0, reserved: 0.0
-        });
+        records.resize(count, MarkerRecord::bare(0.0));
         let pointer = records.as_ptr() as u32;
         self.slots[index] = Some(Slot {generation, records, ready: false});
         pointer

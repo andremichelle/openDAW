@@ -35,7 +35,7 @@ use alloc::rc::Rc;
 use core::cell::RefCell;
 use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
 use crate::audio_unit::{AudioRegion, BoundAudioClip, SharedAudioTrackSets};
-use crate::time_stretch::{Source, TimeStretchSequencer};
+use stretch::{BlockInfo, Source as StretchSource, StretchConfig, Stretcher, TransientPlayMode, Tuning};
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 
 /// The boundary declick window in seconds (matches the TS tape `VOICE_FADE_DURATION`): a region edge with no
@@ -50,7 +50,7 @@ pub(crate) struct AudioRegionPlayer {
     events: EventBuffer,
     // Persistent transient-aligned granular sequencers, one per time-stretch region (keyed by region uuid). The
     // native / pitch play-modes are stateless and need no per-region state; only time-stretch carries voices.
-    sequencers: Vec<(Uuid, TimeStretchSequencer)>,
+    sequencers: Vec<(Uuid, Stretcher)>,
     // The FREE-RUNNING read position of each NO-STRETCH region (keyed by region uuid): the read advances per
     // output sample and persists across blocks, recomputed from the tempo map ONLY at a discontinuity. Without
     // this the read offset is recomputed every block from a grid-stepped tempo integral that disagrees with the
@@ -67,7 +67,7 @@ pub(crate) struct AudioRegionPlayer {
     // next stretch region reuses it. `prepare` (reconcile) pre-warms the pool for every BOUND stretch region,
     // so the render-path `pop()` never misses; without the pre-warm each new concurrency high-water would
     // still call `TimeStretchSequencer::new` mid-render.
-    sequencer_pool: Vec<TimeStretchSequencer>,
+    sequencer_pool: Vec<Stretcher>,
     // The engine's clip-launch state machine, shared with the note sequencers (sections per track).
     clips: Rc<RefCell<ClipSequencer>>
 }
@@ -118,7 +118,7 @@ impl AudioRegionPlayer {
     /// one-time high-water category.
     pub(crate) fn prepare(&mut self, stretch_regions: usize, total_regions: usize) {
         while self.sequencer_pool.len() + self.sequencers.len() < stretch_regions {
-            self.sequencer_pool.push(TimeStretchSequencer::new());
+            self.sequencer_pool.push(Stretcher::with_tuning(Tuning::adaptive()));
         }
         self.sequencers.reserve(stretch_regions.saturating_sub(self.sequencers.len()));
         self.native_cursors.reserve(total_regions.saturating_sub(self.native_cursors.len()));
@@ -231,7 +231,7 @@ impl Processor for AudioRegionPlayer {
 #[allow(clippy::too_many_arguments)] // the player's split fields; a struct adds no clarity
 fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
                output: &mut AudioBuffer, fading_gain: &mut [f32; engine_env::RENDER_QUANTUM],
-               sequencers: &mut Vec<(Uuid, TimeStretchSequencer)>, sequencer_pool: &mut Vec<TimeStretchSequencer>,
+               sequencers: &mut Vec<(Uuid, Stretcher)>, sequencer_pool: &mut Vec<Stretcher>,
                native_cursors: &mut Vec<(Uuid, NativeCursor)>, visited: &mut Vec<Uuid>,
                tempo_map: &TempoMap, sample_rate: f32) {
     if region.mute {
@@ -240,24 +240,36 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
     let Some(sample) = crate::resolve_sample(region.file) else { return };
     let left = sample.plane(0);
     let right = if sample.channel_count >= 2 { sample.plane(1) } else { left };
-    match &region.time_stretch {
-        Some(config) if region.transients.len() >= 2 => {
+    // Markers come from the descriptor channel (worker analysis -> SAB), NOT boxes: None or too
+    // few = markerless fallback into the stateless pitch/warp path until analysis delivers.
+    let markers = region.time_stretch.as_ref().and_then(|_| crate::resolve_descriptors(region.file));
+    match (&region.time_stretch, markers) {
+        (Some(config), Some(markers)) if markers.len() >= 2 => {
             let index = match sequencers.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
                 Some(index) => index,
                 None => {
-                    let sequencer = sequencer_pool.pop().unwrap_or_else(TimeStretchSequencer::new);
+                    let sequencer = sequencer_pool.pop().unwrap_or_else(|| Stretcher::with_tuning(Tuning::adaptive()));
                     sequencers.push((region.region_uuid, sequencer));
                     sequencers.len() - 1
                 }
             };
             visited.push(region.region_uuid);
-            let source = Source {left, right, num_frames: sample.frame_count as usize};
+            let source = StretchSource {left, right, num_frames: sample.frame_count as usize};
+            let config = StretchConfig {
+                warp: &config.warp,
+                transient_play_mode: TransientPlayMode::from_i32(config.transient_play_mode as i32),
+                playback_rate: config.playback_rate
+            };
             let complete = region.position + region.duration;
             for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
                 fill_fading_gain(fading_gain, region, cycle.result_start, cycle.result_end, block);
+                let info = BlockInfo {
+                    p0: block.p0, p1: block.p1, s0: block.s0, s1: block.s1, bpm: block.bpm,
+                    discontinuous: block.flags.discontinuous()
+                };
                 sequencers[index].1.process(
-                    output, &source, sample.sample_rate, &region.transients, config,
-                    region.waveform_offset, block, cycle.raw_start, cycle.result_start, cycle.result_end,
+                    &mut output.left, &mut output.right, &source, sample.sample_rate, markers, &config,
+                    region.waveform_offset, &info, cycle.raw_start, cycle.result_start, cycle.result_end,
                     fading_gain, sample_rate);
             }
         }

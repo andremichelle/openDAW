@@ -2570,6 +2570,12 @@ pub(crate) fn resolve_sample(uuid: boxgraph::address::Uuid) -> Option<abi::Sampl
     unsafe { SAMPLES.get() }.resolve_uuid(uuid)
 }
 
+/// Transient descriptors for a sample, once analyzed+delivered; `None` = play markerless.
+pub(crate) fn resolve_descriptors(uuid: boxgraph::address::Uuid) -> Option<&'static [stretch::TransientDescriptor]> {
+    let handle = unsafe { SAMPLES.get() }.handle_by_uuid(uuid)?;
+    unsafe { DESCRIPTORS.get() }.resolve(handle)
+}
+
 /// Resolve a sample handle (Route F) for a device DURING render: write a `SampleRef` to `out_ptr` and return
 /// 1 if the sample is resident (ready), else 0. Bound into each device's `env` like the other `host_*`
 /// imports; reads the `SAMPLES` cell read-only, so it never aliases the `&mut Engine` the render path holds.

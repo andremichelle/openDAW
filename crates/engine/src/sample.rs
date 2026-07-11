@@ -156,6 +156,14 @@ impl SampleResource {
     /// Resolve an `AudioFileBox` uuid directly to its frames when ready (for an engine-side reader, e.g. the
     /// audio-region player, that holds a region's file uuid rather than a device handle). `None` when the file
     /// is unknown or not yet resident.
+    /// The current handle for `uuid`, if a slot exists (any state).
+    pub fn handle_by_uuid(&self, uuid: Uuid) -> Option<u32> {
+        self.entries.iter().enumerate().find_map(|(index, entry)| {
+            entry.slot.as_ref().filter(|slot| slot.uuid == uuid)
+                .map(|_| encode_handle(index as u32, entry.generation))
+        })
+    }
+
     pub fn resolve_uuid(&self, uuid: Uuid) -> Option<SampleRef> {
         self.resolve(self.handle_of(uuid)?)
     }

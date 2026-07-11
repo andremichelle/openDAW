@@ -452,6 +452,7 @@ dependencies = [
  "engine-env",
  "math",
  "processors",
+ "stretch",
  "studio-boxes",
  "talc",
  "transport",

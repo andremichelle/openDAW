@@ -152,7 +152,7 @@ impl Analyzer {
                 rms
             };
             markers.push(TransientDescriptor {
-                position: onset.seconds, strength, period, harmonicity, rms, loop_start, loop_end, loop_score, beat_seconds, loop_rms
+                position: onset.seconds, strength, period, harmonicity, rms, loop_start, loop_end, loop_score, beat_seconds, loop_rms, reserved: [0.0; 2]
             });
         }
         markers
