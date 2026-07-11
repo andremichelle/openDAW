@@ -19,7 +19,9 @@ pub enum Direction {
     TargetOne,
     /// Only values BELOW one are bad (smear); above one is fine (sparse impulsive material reads
     /// punchier when loops repeat its quiet tail — not a defect).
-    AtLeastOne
+    AtLeastOne,
+    /// Only values ABOVE one are bad (a slower rise is smear; a faster-than-source attack is not).
+    AtMostOne
 }
 
 #[derive(Clone, Debug)]
@@ -90,7 +92,7 @@ pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_righ
     }
     if matches!(entry.class, Class::Percussive | Class::Tonal | Class::Mixed) {
         if let Some(scores) = attack::attack_scores(&source_fast, &output_fast, &entry.transients, spec.ratio) {
-            results.push(metric("attack_rise_ratio", scores.rise_ratio, Direction::TargetOne));
+            results.push(metric("attack_rise_ratio", scores.rise_ratio, Direction::AtMostOne));
             results.push(metric("attack_crest_ratio", scores.crest_ratio, Direction::AtLeastOne));
             results.push(metric("attack_extra_peaks", scores.extra_peaks, Direction::LowerBetter));
         }
@@ -106,7 +108,8 @@ pub fn badness(value: &MetricValue) -> f64 {
         Direction::LowerBetter => value.value,
         Direction::HigherBetter => -value.value,
         Direction::TargetOne => (value.value - 1.0).abs(),
-        Direction::AtLeastOne => (1.0 - value.value).max(0.0)
+        Direction::AtLeastOne => (1.0 - value.value).max(0.0),
+        Direction::AtMostOne => (value.value - 1.0).max(0.0)
     }
 }
 

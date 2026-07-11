@@ -106,7 +106,7 @@ pub fn judge(current: &Scores, baseline: &ScoreMap, best: Option<&ScoreMap>) -> 
 
 fn guard_slack_for(direction: Direction) -> f64 {
     match direction {
-        Direction::TargetOne => thresholds::GUARD_SLACK,
+        Direction::TargetOne | Direction::AtLeastOne | Direction::AtMostOne => thresholds::GUARD_SLACK,
         _ => thresholds::GUARD_SLACK * 4.0
     }
 }

@@ -30,6 +30,8 @@ pub struct AnalyzerConfig {
     /// Nominal loop length range, chosen by strength (weak -> long).
     pub loop_len_min_seconds: f64,
     pub loop_len_max_seconds: f64,
+    /// Below this strength a loop takes the FULL available region (1.1 = always full-region).
+    pub full_region_strength_gate: f32,
     pub loop_margin_start_seconds: f64,
     pub loop_margin_end_seconds: f64
 }
@@ -49,6 +51,7 @@ impl Default for AnalyzerConfig {
             pitch_sync_gate: 0.5,
             loop_len_min_seconds: 0.080,
             loop_len_max_seconds: 0.250,
+            full_region_strength_gate: 0.25,
             loop_margin_start_seconds: 0.010,
             loop_margin_end_seconds: 0.020
         }
@@ -225,7 +228,7 @@ impl Analyzer {
         // min..max lerp only shapes loops for mid-strength material.
         let available = loop_end - earliest_start;
         let nominal_seconds = self.config.loop_len_min_seconds + (1.0 - strength as f64) * (self.config.loop_len_max_seconds - self.config.loop_len_min_seconds);
-        let nominal = if strength < 0.25 { available } else { (nominal_seconds * rate).min(available) };
+        let nominal = if strength < self.config.full_region_strength_gate { available } else { (nominal_seconds * rate).min(available) };
         // The loop ANCHORS AT THE SEGMENT END: the voice plays the whole segment once (attack and
         // all), then sustains on the settled tail. Anchoring at the start would loop the attack
         // ramp forever (a pad's first 200 ms are its quietest — the level guard caught that).

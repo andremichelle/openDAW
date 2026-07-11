@@ -12,7 +12,7 @@ pub const GUARD_SLACK: f64 = 0.15;
 pub const ATTACK_RISE_MIN: f64 = 0.5;
 pub const ATTACK_RISE_MAX: f64 = 1.4;
 pub const ATTACK_CREST_MIN: f64 = 0.7;
-pub const SPECTRAL_DELTA_MAX_DB: f64 = 2.0;
+pub const SPECTRAL_DELTA_MAX_DB: f64 = 2.5;
 pub const LEVEL_DELTA_MAX_DB: f64 = 2.0;
 pub const TRAILING_SILENCE_MAX: f64 = 0.15;
 

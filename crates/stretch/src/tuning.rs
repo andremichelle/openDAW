@@ -66,7 +66,15 @@ impl Tuning {
     /// The descriptor-driven mode under development (Phase 4). Starts from legacy values with the
     /// adaptive machinery enabled; the harness tunes from here.
     pub fn adaptive() -> Self {
-        Self {adaptive: true, equal_power_fades: true, weak_boundary_threshold: 0.15, ..Self::legacy()}
+        Self {
+            adaptive: true,
+            equal_power_fades: true,
+            weak_boundary_threshold: 0.15,
+            // Sweep-proven: long voice fades on beating material are long mismatch bursts — 20 ms
+            // wins on every pad while sines are insensitive (continuation skips their boundaries).
+            voice_fade_max_seconds: 0.020,
+            ..Self::legacy()
+        }
     }
 }
 

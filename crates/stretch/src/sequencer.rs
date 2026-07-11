@@ -275,7 +275,11 @@ impl Stretcher {
             // so continuing avoids needless crossfades (sine -47 dB); beating polyphony has a residual
             // wrap comb that boundary re-anchors BREAK UP — continuing there keeps the comb coherent
             // and audible (pads read 6 dB worse with continuation).
-            if marker.strength < self.tuning.weak_boundary_threshold && marker.period > 0.0 && marker.has_loop() && (self.continued_boundaries < 2 || same_period) {
+            // Continuation gates on MEASURED splice cleanliness, not period existence: a real pad can
+            // have a YIN fundamental yet still beat in its upper partials (loop_score ~0.6) — its wrap
+            // comb needs boundary re-anchors just like a chord's. Only near-perfect splices
+            // (score > 0.9: sines, clean monophony) earn uninterrupted continuation.
+            if marker.strength < self.tuning.weak_boundary_threshold && marker.loop_score > 0.9 && (self.continued_boundaries < 2 || same_period) {
                 let mut continued = false;
                 for voice in &mut self.voices {
                     if !voice.done() && !voice.is_fading_out() {
@@ -480,6 +484,9 @@ fn create_voice(start_samples: f64, end_samples: f64, playback_rate: f64, sample
     let mut pingpong_params = params;
     pingpong_params.loop_start = start_samples + tuning.loop_margin_start_seconds * sample_rate as f64;
     pingpong_params.loop_end = end_samples - tuning.loop_margin_end_seconds * sample_rate as f64;
+    // Shipped bounce fades: the sweep showed no benefit from adaptive fade lengths at a reversal
+    // (time-reversal is incoherent regardless), and five pingpong cases regressed with them.
+    pingpong_params.loop_fade_samples = round(tuning.loop_fade_seconds * sample_rate as f64);
     let initial = initial_read_position.map(|position| (position, 1.0));
     Some(Voice::Pingpong(PingpongVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial, &pingpong_params)))
 }
