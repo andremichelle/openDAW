@@ -127,6 +127,7 @@ export namespace NextcloudDialogs {
     // Persists the freshly loaded project into local OPFS and makes it the active project. If a project
     // with the same UUID already exists locally, asks whether to override it or save a separate copy.
     const store = async (service: StudioService, profile: ProjectProfile): Promise<void> => {
+        if (!await service.projectProfileService.approveLosingChanges()) {return}
         if (await ProjectStorage.exists(profile.uuid)) {
             const choice = await askConflict(profile.meta.name)
             if (choice === "cancel") {return}

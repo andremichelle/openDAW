@@ -1,7 +1,7 @@
 import {CaptureAudio, MenuItem, Project} from "@opendaw/studio-core"
 import {MonitoringDialog} from "@/ui/monitoring/MonitoringDialog"
 import {Browser} from "@opendaw/lib-dom"
-import {isInstanceOf, Option, Procedure, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {isInstanceOf, Option, Procedure, UUID} from "@opendaw/lib-std"
 import {
     AudioUnitBoxAdapter,
     DeviceAccepts,
@@ -94,13 +94,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             label: "Extract AudioUnit Into New Project",
             hidden: audioUnitBoxAdapter.isOutput
         }).setTriggerProcedure(async () => {
-            if (service.hasProfile && !project.editing.hasNoChanges()) {
-                const approved = await RuntimeNotifier.approve({
-                    headline: "Closing Project?",
-                    message: "You will lose all progress!"
-                })
-                if (!approved) {return}
-            }
+            if (!await service.projectProfileService.approveLosingChanges()) {return}
             const newProject = Project.new(service)
             editing.modify(() => {
                 const {boxGraph, skeleton} = newProject

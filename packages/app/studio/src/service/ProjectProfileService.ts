@@ -69,6 +69,15 @@ export class ProjectProfileService {
         return this.#profile.ifSome(profile => profile.saved() ? profile.save() : this.saveAs())
     }
 
+    async approveLosingChanges(): Promise<boolean> {
+        const hasChanges = this.#profile.mapOr(profile => profile.hasUnsavedChanges(), false)
+        if (!hasChanges) {return true}
+        return RuntimeNotifier.approve({
+            headline: "Closing Project?",
+            message: "You will lose all progress!"
+        })
+    }
+
     async saveAs(): Promise<void> {
         return this.#profile.ifSome(async profile => {
             const {status, value: meta} = await Promises.tryCatch(ProjectDialogs.showSaveDialog({
@@ -97,6 +106,7 @@ export class ProjectProfileService {
     }
 
     async openTemplate(uuid: UUID.Bytes, meta: ProjectMeta) {
+        if (!await this.approveLosingChanges()) {return}
         const {status, value: project, error} = await Promises.tryCatch(
             TemplateStorage.loadTemplate(uuid)
                 .then(buffer => Project.loadAnyVersion(this.#env, buffer))
@@ -113,6 +123,7 @@ export class ProjectProfileService {
     }
 
     async load(uuid: UUID.Bytes, meta: ProjectMeta) {
+        if (!await this.approveLosingChanges()) {return}
         const {status, value: project, error} = await Promises.tryCatch(
             ProjectStorage.loadProject(uuid).then(buffer => Project.loadAnyVersion(this.#env, buffer)))
         if (status === "rejected") {
@@ -160,6 +171,7 @@ export class ProjectProfileService {
     }
 
     async importBundle() {
+        if (!await this.approveLosingChanges()) {return}
         try {
             const [file] = await Files.open({types: [FilePickerAcceptTypes.ProjectBundleFileType]})
             const arrayBuffer = await file.arrayBuffer()
@@ -193,6 +205,7 @@ export class ProjectProfileService {
     }
 
     async loadFile() {
+        if (!await this.approveLosingChanges()) {return}
         try {
             const [file] = await Files.open({
                 types: [

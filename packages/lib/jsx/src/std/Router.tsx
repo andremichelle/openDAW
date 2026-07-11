@@ -15,18 +15,19 @@ export type PageFactory<SERVICE = never> = (context: PageContext<SERVICE>) => Js
 export type RouterConstruct<SERVICE = never> = {
     runtime: TerminableOwner
     service: SERVICE
-    routes: Array<{ path: string, factory: PageFactory<SERVICE> }>
+    routes: Array<{ path: string, factory: PageFactory<SERVICE>, reuse?: boolean }>
     fallback: PageFactory<SERVICE>
     error?: PageFactory<SERVICE>
     preloader?: Provider<Terminable>
     onshow?: Exec
 }
 
-type PageRequest = {
+type PageRequest<SERVICE> = {
     lifecycle: Terminable
     preloader: Option<Terminable>
     content: Promise<JsxValue>
     path: string
+    factory: PageFactory<SERVICE>
     state: "loading" | "cancelled"
 }
 
@@ -40,18 +41,15 @@ export const Router = <SERVICE = never>({
                                             onshow
                                         }: RouterConstruct<SERVICE>) => {
     const routing = RouteMatcher.create(routes)
-    const resolvePageFactory = (path: string): PageFactory<SERVICE> => routing
-        .resolve(path)
-        .mapOr(route => route.factory, () => fallback)
 
     const container: HTMLDivElement = <div style={{display: "contents"}}/>
 
-    let loading: Option<PageRequest> = Option.None
-    let showing: Option<PageRequest> = Option.None
+    let loading: Option<PageRequest<SERVICE>> = Option.None
+    let showing: Option<PageRequest<SERVICE>> = Option.None
 
     const fetchPage = async (pageFactory: PageFactory<SERVICE>, path: string): Promise<void> => {
         if (loading.nonEmpty()) {
-            const request: PageRequest = loading.unwrap()
+            const request: PageRequest<SERVICE> = loading.unwrap()
             request.preloader.ifSome(lifecycle => lifecycle.terminate())
             request.state = "cancelled"
             loading = Option.None
@@ -64,10 +62,11 @@ export const Router = <SERVICE = never>({
             error: ""
         })
         const content: Promise<JsxValue> = pageResult instanceof Promise ? pageResult : Promise.resolve(pageResult)
-        const request: PageRequest = {
+        const request: PageRequest<SERVICE> = {
             path,
             content,
             lifecycle,
+            factory: pageFactory,
             preloader: Option.wrap(safeExecute(preloader)),
             state: "loading"
         }
@@ -104,7 +103,14 @@ export const Router = <SERVICE = never>({
             if (showing.unwrapOrNull()?.path === location.path) {
                 return
             }
-            return fetchPage(resolvePageFactory(location.path), location.path)
+            const route = routing.resolve(location.path)
+            const factory = route.mapOr(({factory}) => factory, () => fallback)
+            const current = showing.unwrapOrNull()
+            if (isDefined(current) && current.factory === factory && route.mapOr(({reuse}) => reuse === true, false)) {
+                current.path = location.path
+                return
+            }
+            return fetchPage(factory, location.path)
         }))
     return container
 }

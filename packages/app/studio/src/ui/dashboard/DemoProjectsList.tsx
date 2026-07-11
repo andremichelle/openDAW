@@ -45,6 +45,7 @@ const ids = [
 const listUrl = `https://api.opendaw.studio/music/list-by-ids.php?ids=${ids.join(",")}`
 
 const loadDemoProject = async (service: StudioService, json: DemoProjectJson) => {
+    if (!await service.projectProfileService.approveLosingChanges()) {return}
     const approved = await RuntimeNotifier.approve({
         headline: "Install Demo Project",
         message: `Do you want to download the project bundle file (${Bytes.toString(json.bundleSize)})?`
