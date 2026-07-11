@@ -25,7 +25,6 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell, UnsafeCell};
-use bindings::indexed_collection::IndexedCollection;
 use bindings::value_collection::ValueCollection;
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 use boxgraph::address::{Address, Uuid};
@@ -294,7 +293,7 @@ pub(crate) mod broadcast;
 mod time_stretch;
 mod tempo_map;
 mod script_device;
-use audio_unit::{AudioUnitBinding, DeviceParams, Members};
+use audio_unit::{AudioUnitBinding, Members};
 mod composite;
 mod param_automation;
 use param_automation::ParamHandle;
@@ -1044,8 +1043,6 @@ struct Engine {
     solo_dirty: Rc<Cell<bool>>,
     unit_changes: Rc<RefCell<Members>>, // recorded by the audio-units membership observer, drained by reconcile
     dirty_units: Rc<RefCell<Vec<Uuid>>>, // unit uuids a related edit touched; reconcile rewires ONLY these, not all
-    output_audio: Option<IndexedCollection>, // THE output unit's audio-fx chain (built once at bind, see output_strip)
-    output_device_params: Vec<DeviceParams>, // the output-fx devices' bound params, retained so they stay observed
     // The audio-output registry (Route C): each unit's strip output keyed by its box address, so a sidechain
     // pointer resolves to the buffer to read and the node to depend on. Each unit keeps its own persistent
     // sidechain bindings (see `AudioUnitBinding::sidechains`); the resolve pass re-resolves them per reconcile.
@@ -1105,8 +1102,6 @@ impl Engine {
             solo_dirty: Rc::new(Cell::new(false)),
             unit_changes: Rc::new(RefCell::new(Members::default())),
             dirty_units: Rc::new(RefCell::new(Vec::new())),
-            output_audio: None,
-            output_device_params: Vec::new(),
             output_registry: AudioOutputBufferRegistry::new(),
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
@@ -1175,7 +1170,7 @@ impl Engine {
 
     /// Apply one forward-only transaction, returning the resulting checksum (or `Err` on a
     /// decode/apply failure). The value/note caches update themselves inside `transaction`.
-    fn apply_updates(&mut self, input: &[u8]) -> Result<[u8; 32], ()> {
+    fn apply_updates(&mut self, input: &[u8]) -> Result<(), ()> {
         let mut reader = ByteReader::new(input);
         let mut updates = decode_forward(&mut reader).map_err(|_| ())?;
         // The wire delete task carries only the uuid (frozen contract), so `decode_forward` leaves the name
@@ -1191,7 +1186,14 @@ impl Engine {
             }
         }
         self.graph.transaction(&updates, &self.registry).map_err(|_| ())?;
-        Ok(self.graph.checksum())
+        Ok(())
+    }
+
+    /// The rolling graph checksum, computed on demand (a full-graph field walk, O(all boxes)). Only the
+    /// throttled verification path (~1/s) needs it, so it must NOT run per transaction — a marquee selection
+    /// fires dozens of transactions per second, and hashing the whole graph each time dropped audio.
+    fn checksum(&self) -> [u8; 32] {
+        self.graph.checksum()
     }
 
     /// Render one quantum into `output` (planar L|R) and write the transport state into `state`.
@@ -1228,6 +1230,13 @@ impl Engine {
         let recording_start = self.recording_start;
         let denominator = self.recording_denominator;
         let sample_rate = self.sample_rate;
+        // Automated SOLO resolves at the ENGINE level (it silences other strips), so it cannot ride a single strip's
+        // per-block automation like volume / mute. Resolve it once at this quantum's start position and re-run the
+        // solo walk before the graph processes; only while transporting, so a paused block HOLDS the last solo
+        // (TS `UpdateClock` gates updates on `transporting`).
+        if self.transport.is_playing() {
+            self.resolve_automated_solo(self.transport.position());
+        }
         let Engine {transport, metronome, context, output_bus, blocks, tempo, tempo_map: _, controls, signature,
             marker_track, marker_changes, midi_out, is_recording, is_counting_in, metronome_pref, ..} = self;
         // The signature events the metronome walks: the live signature track once bound, else a single
@@ -1614,15 +1623,17 @@ impl Engine {
             None
         };
         self.tempo_map.borrow_mut().update(self.controls.bpm.get(), tempo_curve);
-        // Master summing bus: every instrument audio unit's channel strip sums into it. It is the static
-        // input bus of THE output audio unit, whose channel strip (built by `output_strip`) is the engine's
-        // final master and what `render` reads. Both the bus and the output unit are fixed singletons.
+        // Master summing bus: every audio unit's channel strip sums into it (`sum_of(None)`). It is the SUM of
+        // THE output audio unit, which reconciles like any bus (`reconcile_bus`): master-sum -> its fx chain ->
+        // its strip, whose output it republishes to `output_bus` (what `render` reads) on every rebuild.
         let output_buffer = shared_audio_buffer();
         let master = Rc::new(RefCell::new(AudioBusProcessor::new(output_buffer.clone())));
         self.master_id = self.context.register_processor(master.clone());
         self.context.set_label(self.master_id, alloc::string::String::from("master-sum"));
         self.master = Some(master);
-        self.output_bus = Some(self.output_strip(output_buffer)); // master strip output (or the bus, if no output unit)
+        // Fallback until the output unit reconciles (in `observe_audio_units` below): render the raw master sum.
+        // The output unit reconciles like any bus (`reconcile_bus`) and republishes `output_bus` to its strip.
+        self.output_bus = Some(output_buffer);
         // The MIDI-out targets must register BEFORE the units reconcile (inside `observe_audio_units`): a
         // MIDI-output unit's initial CC push resolves its device through the registry (TS resolves it off
         // the complete graph at construction).
@@ -1910,9 +1921,17 @@ pub extern "C" fn profile_report(out_ptr: u32, max: u32) -> u32 {
     }
 }
 
+/// Refresh the 32-byte checksum buffer from the current graph and return its pointer. Computing the
+/// checksum is a full-graph walk (O(all boxes)), so it runs ONLY here — on the throttled verification
+/// round-trip (~1/s), never per transaction. Called from the worklet's checksum-verify path.
 #[no_mangle]
 pub extern "C" fn checksum_ptr() -> *const u8 {
-    unsafe { CHECKSUM.get().as_ptr() }
+    unsafe {
+        if let Some(engine) = ENGINE.get().as_ref() {
+            CHECKSUM.get().copy_from_slice(&engine.checksum());
+        }
+        CHECKSUM.get().as_ptr()
+    }
 }
 
 #[no_mangle]
@@ -1962,8 +1981,7 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
         // (we never push), so index by the raw ptr; `len` is bounded by the host to the buffer capacity.
         let input = core::slice::from_raw_parts(INPUT.get().as_ptr(), len);
         match engine.apply_updates(input) {
-            Ok(checksum) => {
-                CHECKSUM.get().copy_from_slice(&checksum);
+            Ok(()) => {
                 engine.reconcile_units(); // apply any audio-unit membership change this transaction recorded
                 engine.sync_midi_targets(); // realize any MIDIOutputBox joins / leaves this transaction recorded
                 0

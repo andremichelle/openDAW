@@ -8,7 +8,8 @@
     "dev": "CI=true vite --clearScreen false --host",
     "build": "tsc && vite build",
     "preview": "vite preview --host",
-    "lint": "eslint \"src/**/*.ts\""
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "@opendaw/lib-box": "^0.0.88",

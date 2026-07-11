@@ -119,7 +119,11 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 if (dblclck && !event.shiftKey) {
                     if (target === null || target.type === "loop-duration") {
                         const rect = canvas.getBoundingClientRect()
-                        const position = Math.round(range.xToUnit(event.clientX - rect.left) - reader.offset)
+                        const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
+                        // #275: when the snapped time already holds a node, the cursor's side of it picks which member
+                        // of the same-time pair the click sets — left of the node = incoming (index 0), right = outgoing.
+                        const side = range.xToUnit(event.clientX - rect.left) - reader.offset < position
+                            ? "incoming" : "outgoing"
                         const clickValue = valueAxis.axisToValue(event.clientY - rect.top)
                         const formatValue = context.currentValue
                         const value: number = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))
@@ -128,7 +132,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             : context.quantize(clickValue)
                         return editing.modify(() =>
                             ValueEventEditing.createOrMoveEvent(reader.content, position, value,
-                                context.floating ? Interpolation.Linear : Interpolation.None), false)
+                                context.floating ? Interpolation.Linear : Interpolation.None, side), false)
                             .match({
                                 none: () => Option.None,
                                 some: adapter => {
@@ -146,7 +150,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                                         valueAxis,
                                         eventMapping,
                                         reference: adapter,
-                                        collection: reader.content
+                                        collection: reader.content,
+                                        chainPending: true
                                     }))
                                 }
                             })
@@ -192,7 +197,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             valueAxis,
                             eventMapping,
                             reference: optCutEvent,
-                            collection: reader.content
+                            collection: reader.content,
+                            chainPending: true // cut(unmarked) + settle-move sealed as ONE undo step (#208 / #306)
                         }))
                     }
                 }
@@ -221,7 +227,14 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             yAxis={valueAxis}/>
     )
     const element: HTMLElement = (
-        <div className={className} tabIndex={-1} onConnect={(self: HTMLElement) => self.focus()}>
+        <div className={className} tabIndex={-1} onConnect={(self: HTMLElement) => {
+            // Only grab focus when nothing else holds it. A content swap triggered by
+            // selecting a region in the timeline re-mounts this editor; stealing focus there
+            // would pull it out of the RegionsArea and break region shortcuts (e.g. delete)
+            // until the region is clicked again (issue #292). Mirrors NoteEditor.
+            const active = document.activeElement
+            if (!isDefined(active) || active === document.body) {self.focus()}
+        }}>
             {canvas}
             {selectionRectangle}
         </div>

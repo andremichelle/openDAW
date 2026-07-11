@@ -19,8 +19,8 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
     readonly parameterCarrierMaxFreq: AutomatableParameter<number>
     readonly parameterModulatorMinFreq: AutomatableParameter<number>
     readonly parameterModulatorMaxFreq: AutomatableParameter<number>
-    readonly parameterQMin: AutomatableParameter<number>
-    readonly parameterQMax: AutomatableParameter<number>
+    readonly parameterQStart: AutomatableParameter<number>
+    readonly parameterQEnd: AutomatableParameter<number>
     readonly parameterEnvAttack: AutomatableParameter<number>
     readonly parameterEnvRelease: AutomatableParameter<number>
     readonly parameterGain: AutomatableParameter<number>
@@ -61,15 +61,15 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
 
         const {
             carrierMinFreq, carrierMaxFreq, modulatorMinFreq, modulatorMaxFreq,
-            qMin, qMax, envAttack, envRelease, gain, mix
+            qStart, qEnd, envAttack, envRelease, gain, mix
         } = adapter.namedParameter
 
         this.parameterCarrierMinFreq = this.own(this.bindParameter(carrierMinFreq))
         this.parameterCarrierMaxFreq = this.own(this.bindParameter(carrierMaxFreq))
         this.parameterModulatorMinFreq = this.own(this.bindParameter(modulatorMinFreq))
         this.parameterModulatorMaxFreq = this.own(this.bindParameter(modulatorMaxFreq))
-        this.parameterQMin = this.own(this.bindParameter(qMin))
-        this.parameterQMax = this.own(this.bindParameter(qMax))
+        this.parameterQStart = this.own(this.bindParameter(qStart))
+        this.parameterQEnd = this.own(this.bindParameter(qEnd))
         this.parameterEnvAttack = this.own(this.bindParameter(envAttack))
         this.parameterEnvRelease = this.own(this.bindParameter(envRelease))
         this.parameterGain = this.own(this.bindParameter(gain))
@@ -219,10 +219,10 @@ export class VocoderDeviceProcessor extends AudioProcessor implements AudioEffec
             this.#dsp.modulatorMinFreq = this.parameterModulatorMinFreq.getValue()
         } else if (parameter === this.parameterModulatorMaxFreq) {
             this.#dsp.modulatorMaxFreq = this.parameterModulatorMaxFreq.getValue()
-        } else if (parameter === this.parameterQMin) {
-            this.#dsp.qMin = this.parameterQMin.getValue()
-        } else if (parameter === this.parameterQMax) {
-            this.#dsp.qMax = this.parameterQMax.getValue()
+        } else if (parameter === this.parameterQStart) {
+            this.#dsp.qStart = this.parameterQStart.getValue()
+        } else if (parameter === this.parameterQEnd) {
+            this.#dsp.qEnd = this.parameterQEnd.getValue()
         } else if (parameter === this.parameterEnvAttack) {
             this.#dsp.setAttackSeconds(this.parameterEnvAttack.getValue() * 0.001)
         } else if (parameter === this.parameterEnvRelease) {

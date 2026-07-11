@@ -72,23 +72,23 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                             frequency[k] = hz / sampleRate
                         }
                     }
-                    const {carrierMinFreq, carrierMaxFreq, modulatorMinFreq, modulatorMaxFreq, qMin, qMax} = adapter.namedParameter
+                    const {carrierMinFreq, carrierMaxFreq, modulatorMinFreq, modulatorMaxFreq, qStart, qEnd} = adapter.namedParameter
                     const cfMin = carrierMinFreq.getControlledValue()
                     const cfMax = carrierMaxFreq.getControlledValue()
                     const mfMin = modulatorMinFreq.getControlledValue()
                     const mfMax = modulatorMaxFreq.getControlledValue()
-                    const qLo = qMin.getControlledValue()
-                    const qHi = qMax.getControlledValue()
+                    const qFrom = qStart.getControlledValue()
+                    const qTo = qEnd.getControlledValue()
                     const N = adapter.box.bandCount.getValue()
                     const cfLog = Math.log(cfMax / cfMin)
                     const mfLog = Math.log(mfMax / mfMin)
-                    const qLog = Math.log(qHi / qLo)
+                    const qLog = Math.log(qFrom / qTo)
                     const denom = N === 1 ? 1 : N - 1
                     for (let i = 0; i < N; i++) {
                         const x = N === 1 ? 0 : i / denom
                         carrierFreq[i] = cfMin * Math.exp(x * cfLog)
                         modulatorFreq[i] = mfMin * Math.exp(x * mfLog)
-                        qs[i] = qLo * Math.exp(x * qLog)
+                        qs[i] = qFrom * Math.exp(-x * qLog)
                     }
                     context.save()
                     context.clearRect(0, 0, W, H)
@@ -218,8 +218,8 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                     adapter.namedParameter.carrierMaxFreq.catchupAndSubscribe(painter.requestUpdate),
                     adapter.namedParameter.modulatorMinFreq.catchupAndSubscribe(painter.requestUpdate),
                     adapter.namedParameter.modulatorMaxFreq.catchupAndSubscribe(painter.requestUpdate),
-                    adapter.namedParameter.qMin.catchupAndSubscribe(painter.requestUpdate),
-                    adapter.namedParameter.qMax.catchupAndSubscribe(painter.requestUpdate),
+                    adapter.namedParameter.qStart.catchupAndSubscribe(painter.requestUpdate),
+                    adapter.namedParameter.qEnd.catchupAndSubscribe(painter.requestUpdate),
                     adapter.box.bandCount.catchupAndSubscribe(painter.requestUpdate),
                     displayMode.subscribe(painter.requestUpdate)
                 )

@@ -37,6 +37,8 @@ const RELEASE_IN_SECONDS: f32 = 0.2;
 const LOOK_AHEAD_SECONDS: f32 = 0.005;
 const MAGIC_HEADROOM: f32 = -1e-3;
 const THRESHOLD_SMOOTH_SECONDS: f32 = 0.010;
+// Crossfade window for toggling look-ahead (the toggle changes the output latency, so fade instead of jump, #79).
+const LOOKAHEAD_CROSSFADE_SECONDS: f32 = 0.015;
 // The largest look-ahead window we ever need: 5 ms at 192 kHz. The actual frame count (from the real rate) is
 // stored and used for the ring; the array is fixed so the device allocates nothing.
 const MAX_LOOK_AHEAD_FRAMES: usize = 960;
@@ -48,6 +50,7 @@ pub struct MaximizerState {
     buffer_left: [f32; MAX_LOOK_AHEAD_FRAMES],
     buffer_right: [f32; MAX_LOOK_AHEAD_FRAMES],
     threshold: LinearRamp,
+    lookahead_mix: LinearRamp, // crossfade 0 (off) .. 1 (on) so a look-ahead toggle ramps across the latency change
     release_coeff: f32,
     look_ahead_frames: usize,
     position: usize,
@@ -78,6 +81,8 @@ impl AudioEffect for Maximizer {
     fn init(state: &mut MaximizerState, sample_rate: f32) {
         state.release_coeff = libm::expf(-1.0 / (sample_rate * RELEASE_IN_SECONDS));
         state.threshold = LinearRamp::linear(sample_rate, THRESHOLD_SMOOTH_SECONDS);
+        state.lookahead_mix = LinearRamp::linear(sample_rate, LOOKAHEAD_CROSSFADE_SECONDS);
+        state.lookahead_mix.set(1.0, false); // lookahead defaults on; the field catch-up re-sets the real value
         state.look_ahead_frames = (libm::ceilf(LOOK_AHEAD_SECONDS * sample_rate) as usize).clamp(1, MAX_LOOK_AHEAD_FRAMES);
         state.position = 0;
         state.envelope = 0.0;
@@ -112,6 +117,7 @@ impl AudioEffect for Maximizer {
         state.peak_hold_counter = 0;
         state.buffer_left = [0.0; MAX_LOOK_AHEAD_FRAMES];
         state.buffer_right = [0.0; MAX_LOOK_AHEAD_FRAMES];
+        state.lookahead_mix.set(if state.lookahead {1.0} else {0.0}, false);
     }
 
     fn process_audio(state: &mut MaximizerState, output: [&mut [f32]; 2], block: &Block) {
@@ -146,17 +152,20 @@ impl AudioEffect for Maximizer {
             }
             let headroom_gain = if threshold_ramping {db_to_gain(MAGIC_HEADROOM - threshold)} else {steady_headroom};
             let gain = db_to_gain(reduction_db) * headroom_gain;
-            if state.lookahead {
-                out_left[i] = clamp(state.buffer_left[state.position] * gain, -1.0, 1.0);
-                out_right[i] = clamp(state.buffer_right[state.position] * gain, -1.0, 1.0);
-                state.buffer_left[state.position] = inp0;
-                state.buffer_right[state.position] = inp1;
-                state.position += 1;
-                if state.position == frames {state.position = 0;} // wrap without a per-sample division
-            } else {
-                out_left[i] = inp0 * gain;
-                out_right[i] = inp1 * gain;
-            }
+            // Same gain, applied to the immediate signal (off) or the look-ahead-delayed + clamped signal (on).
+            // The ring advances EVERY sample so it never goes stale, and `lookahead_mix` crossfades the two paths
+            // when the toggle flips (#79), instead of the old hard switch + ring reset.
+            let off0 = inp0 * gain;
+            let off1 = inp1 * gain;
+            let on0 = clamp(state.buffer_left[state.position] * gain, -1.0, 1.0);
+            let on1 = clamp(state.buffer_right[state.position] * gain, -1.0, 1.0);
+            state.buffer_left[state.position] = inp0;
+            state.buffer_right[state.position] = inp1;
+            state.position += 1;
+            if state.position == frames {state.position = 0;} // wrap without a per-sample division
+            let blend = state.lookahead_mix.move_and_get();
+            out_left[i] = off0 * (1.0 - blend) + on0 * blend;
+            out_right[i] = off1 * (1.0 - blend) + on1 * blend;
         }
         if state.reduction_ptr == 0 {
             state.reduction_ptr = abi::broadcast_ptr(state.reduction_id);
@@ -226,8 +235,7 @@ pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, l
             if id == state.lookahead_field_id {
                 if let FieldValue::Bool(on) = FieldValue::from_wire(kind, bits, len) {
                     state.lookahead = on;
-                    state.position = 0;
-                    state.envelope = 0.0;
+                    state.lookahead_mix.set(if on {1.0} else {0.0}, state.processed);
                 }
             }
         })

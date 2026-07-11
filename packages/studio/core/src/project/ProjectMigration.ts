@@ -38,7 +38,8 @@ import {
     migrateValueEventCollection,
     migrateVaporisateurDeviceBox,
     migrateWarpMarkers,
-    migrateZeitgeistDeviceBox
+    migrateZeitgeistDeviceBox,
+    migrateZeroDurationRegions
 } from "./migration"
 
 export class ProjectMigration {
@@ -106,7 +107,11 @@ export class ProjectMigration {
             visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box),
             visitSelectionBox: (box: SelectionBox) => migrateSelectionBox(boxGraph, box)
         }))
-        // 3rd pass. Heal sub-ppqn overlaps that the Int32 position truncation (or the AudioFit->Seconds
+        // 3rd pass. Drop regions with a non-positive (derived) duration — legacy of the zero-length-sample
+        // bug — so they can never trip validateTrack on a later edit. Runs after per-region migration (which
+        // can rewrite audio durations) and before the overlap heal (which then sees only valid spans).
+        migrateZeroDurationRegions(boxGraph, bpmValue)
+        // 4th pass. Heal sub-ppqn overlaps that the Int32 position truncation (or the AudioFit->Seconds
         // pass above) left between seconds-based audio regions. Runs after per-region migration.
         migrateAudioRegionOverlaps(boxGraph, bpmValue)
     }

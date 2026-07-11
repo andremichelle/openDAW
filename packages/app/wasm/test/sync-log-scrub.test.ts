@@ -41,7 +41,7 @@ describe("sync-log scrub", () => {
         const checksum = (): Int8Array => new Int8Array(memory.buffer, engine.checksum_ptr(), 32).slice()
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
-                const bytes = new Uint8Array(serializeUpdateTasks(tasks, source))
+                const bytes = new Uint8Array(serializeUpdateTasks(tasks))
                 new Uint8Array(memory.buffer, engine.input_ptr(), bytes.length).set(bytes)
                 expect(engine.apply_updates(bytes.length)).toBe(0)
             },

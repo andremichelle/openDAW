@@ -33,7 +33,7 @@ export const connectSyncToEngine = (engine: SyncEngine, memory: WebAssembly.Memo
     const engineChecksum = (): Int8Array => new Int8Array(memory.buffer, engine.checksum_ptr(), 32).slice()
     const target: Synchronization<BoxIO.TypeMap> = {
         sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
-            const bytes = new Uint8Array(serializeUpdateTasks(tasks, source as never))
+            const bytes = new Uint8Array(serializeUpdateTasks(tasks))
             const pointer = engine.input_reserve(bytes.length)
             new Uint8Array(memory.buffer, pointer, bytes.length).set(bytes)
             if (engine.apply_updates(bytes.length) !== 0) {throw new Error("apply_updates rejected a transaction")}

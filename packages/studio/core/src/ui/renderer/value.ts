@@ -1,8 +1,12 @@
 import {LoopableRegion, ValueEvent} from "@opendaw/lib-dsp"
-import {asDefined, assert, Curve, Func, unitValue} from "@opendaw/lib-std"
+import {asDefined, assert, clamp, Curve, Func, unitValue} from "@opendaw/lib-std"
 import {TimelineRange} from "../../index"
 
 export namespace ValueStreamRenderer {
+    // Curve.coefficients builds an IIR recurrence whose factor m = (f2 - f1) / (f1 - y0) collapses to
+    // NaN at slope 0 (the tiny normalized term cancels against y0) and diverges as slope nears 0/1.
+    // Squeeze the slope into a range where the recurrence stays finite and matches the closed form.
+    const SLOPE_SAFE_MARGIN = 1.0e-4 as const
     export const render = (context: CanvasRenderingContext2D,
                            range: TimelineRange,
                            generator: IterableIterator<ValueEvent>,
@@ -59,7 +63,10 @@ export namespace ValueStreamRenderer {
             } else if (type === "curve") {
                 const cx0 = Math.max(x0, xMin)
                 const cx1 = Math.min(x1, xMax)
-                const definition: Curve.Definition = {slope: interpolation.slope, steps: x1 - x0, y0, y1}
+                const definition: Curve.Definition = {
+                    slope: clamp(interpolation.slope, SLOPE_SAFE_MARGIN, 1.0 - SLOPE_SAFE_MARGIN),
+                    steps: x1 - x0, y0, y1
+                }
                 if (notMoved) {
                     if (p0 > windowMin) {
                         path.moveTo(xMin, y0) // move to window edge

@@ -11,6 +11,9 @@ import {AudioProcessor} from "../../AudioProcessor"
 const RELEASE_IN_SECONDS = 0.2
 const LOOK_AHEAD_SECONDS = 0.005
 const MAGIC_HEADROOM = -1e-3
+// Toggling look-ahead changes the output latency by the look-ahead window, so crossfade between the immediate
+// and delayed paths over this window instead of jumping (which used to click, #79).
+const LOOKAHEAD_CROSSFADE_SECONDS = 0.015
 
 export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
     static ID: int = 0 | 0
@@ -25,6 +28,7 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
     readonly parameterThreshold: AutomatableParameter<number>
     readonly #buffer: [Float32Array, Float32Array]
     readonly #threshold: Ramp<number>
+    readonly #lookaheadMix: Ramp<number>
     readonly #reductionValue = new Float32Array(1)
     readonly #releaseCoeff: number
     readonly #lookAheadFrames: int
@@ -49,6 +53,7 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
         this.#outputPeaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
         this.#releaseCoeff = Math.exp(-1.0 / (sampleRate * RELEASE_IN_SECONDS))
         this.#threshold = Ramp.linear(sampleRate, 0.010)
+        this.#lookaheadMix = Ramp.linear(sampleRate, LOOKAHEAD_CROSSFADE_SECONDS)
         this.#lookAheadFrames = Math.ceil(LOOK_AHEAD_SECONDS * sampleRate) | 0
         this.#buffer = [
             new Float32Array(this.#lookAheadFrames),
@@ -68,8 +73,7 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
                 }),
             adapter.box.lookahead.catchupAndSubscribe(() => {
                 this.#lookahead = adapter.box.lookahead.getValue()
-                this.#position = 0 | 0
-                this.#envelope = 0.0
+                this.#lookaheadMix.set(this.#lookahead ? 1.0 : 0.0, this.#processed)
             })
         )
         this.readAllParameters()
@@ -90,6 +94,7 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
         this.#peakHoldCounter = 0 | 0
         this.#buffer[0].fill(0.0)
         this.#buffer[1].fill(0.0)
+        this.#lookaheadMix.set(this.#lookahead ? 1.0 : 0.0, false)
         this.#reductionMin = 0.0
     }
 
@@ -115,67 +120,44 @@ export class MaximizerDeviceProcessor extends AudioProcessor implements AudioEff
         const outR = this.#output.getChannel(1)
         const thresholdRamping = this.#threshold.isInterpolating()
         const steadyHeadroomGain = thresholdRamping ? 0.0 : this.#headroomGain
-        if (this.#lookahead) {
-            const buffer = this.#buffer
-            const frames = this.#lookAheadFrames
-            const buffer0 = buffer[0]
-            const buffer1 = buffer[1]
-            for (let i = s0; i < s1; i++) {
-                const inp0 = srcL[i]
-                const inp1 = srcR[i]
-                const peak = Math.max(Math.abs(inp0), Math.abs(inp1))
-                if (peak > this.#peakHold) {
-                    this.#peakHold = peak
-                    this.#peakHoldCounter = this.#lookAheadFrames
-                } else if (this.#peakHoldCounter > 0) {
-                    this.#peakHoldCounter--
-                } else {
-                    this.#peakHold = peak
-                }
-                if (this.#envelope < this.#peakHold) {
-                    this.#envelope = Math.min(this.#peakHold, this.#envelope + this.#peakHold / this.#lookAheadFrames)
-                } else {
-                    this.#envelope = this.#peakHold + this.#releaseCoeff * (this.#envelope - this.#peakHold)
-                }
-                const threshold = this.#threshold.moveAndGet()
-                const reductionDb = Math.min(0.0, threshold - gainToDb(this.#envelope))
-                const headroomGain = thresholdRamping ? dbToGain(MAGIC_HEADROOM - threshold) : steadyHeadroomGain
-                const gain = dbToGain(reductionDb) * headroomGain
-                const out0 = buffer0[this.#position] * gain
-                const out1 = buffer1[this.#position] * gain
-                outL[i] = clamp(out0, -1.0, +1.0)
-                outR[i] = clamp(out1, -1.0, +1.0)
-                buffer0[this.#position] = inp0
-                buffer1[this.#position] = inp1
-                this.#position = (this.#position + 1) % frames
-                if (reductionDb < this.#reductionMin) {this.#reductionMin = reductionDb}
+        const buffer0 = this.#buffer[0]
+        const buffer1 = this.#buffer[1]
+        const frames = this.#lookAheadFrames
+        // The gain/envelope computation is identical either way; only WHAT it is applied to differs: the immediate
+        // signal (off) or the look-ahead-delayed + brickwall-clamped signal (on). The ring advances EVERY sample
+        // so it never goes stale, and #lookaheadMix crossfades the two paths when the toggle flips (#79).
+        for (let i = s0; i < s1; i++) {
+            const inp0 = srcL[i]
+            const inp1 = srcR[i]
+            const peak = Math.max(Math.abs(inp0), Math.abs(inp1))
+            if (peak > this.#peakHold) {
+                this.#peakHold = peak
+                this.#peakHoldCounter = this.#lookAheadFrames
+            } else if (this.#peakHoldCounter > 0) {
+                this.#peakHoldCounter--
+            } else {
+                this.#peakHold = peak
             }
-        } else {
-            for (let i = s0; i < s1; i++) {
-                const inp0 = srcL[i]
-                const inp1 = srcR[i]
-                const peak = Math.max(Math.abs(inp0), Math.abs(inp1))
-                if (peak > this.#peakHold) {
-                    this.#peakHold = peak
-                    this.#peakHoldCounter = this.#lookAheadFrames
-                } else if (this.#peakHoldCounter > 0) {
-                    this.#peakHoldCounter--
-                } else {
-                    this.#peakHold = peak
-                }
-                if (this.#envelope < this.#peakHold) {
-                    this.#envelope = Math.min(this.#peakHold, this.#envelope + this.#peakHold / this.#lookAheadFrames)
-                } else {
-                    this.#envelope = this.#peakHold + this.#releaseCoeff * (this.#envelope - this.#peakHold)
-                }
-                const threshold = this.#threshold.moveAndGet()
-                const reductionDb = Math.min(0.0, threshold - gainToDb(this.#envelope))
-                const headroomGain = thresholdRamping ? dbToGain(MAGIC_HEADROOM - threshold) : steadyHeadroomGain
-                const gain = dbToGain(reductionDb) * headroomGain
-                outL[i] = inp0 * gain
-                outR[i] = inp1 * gain
-                if (reductionDb < this.#reductionMin) {this.#reductionMin = reductionDb}
+            if (this.#envelope < this.#peakHold) {
+                this.#envelope = Math.min(this.#peakHold, this.#envelope + this.#peakHold / this.#lookAheadFrames)
+            } else {
+                this.#envelope = this.#peakHold + this.#releaseCoeff * (this.#envelope - this.#peakHold)
             }
+            const threshold = this.#threshold.moveAndGet()
+            const reductionDb = Math.min(0.0, threshold - gainToDb(this.#envelope))
+            const headroomGain = thresholdRamping ? dbToGain(MAGIC_HEADROOM - threshold) : steadyHeadroomGain
+            const gain = dbToGain(reductionDb) * headroomGain
+            const off0 = inp0 * gain
+            const off1 = inp1 * gain
+            const on0 = clamp(buffer0[this.#position] * gain, -1.0, +1.0)
+            const on1 = clamp(buffer1[this.#position] * gain, -1.0, +1.0)
+            buffer0[this.#position] = inp0
+            buffer1[this.#position] = inp1
+            this.#position = (this.#position + 1) % frames
+            const blend = this.#lookaheadMix.moveAndGet()
+            outL[i] = off0 * (1.0 - blend) + on0 * blend
+            outR[i] = off1 * (1.0 - blend) + on1 * blend
+            if (reductionDb < this.#reductionMin) {this.#reductionMin = reductionDb}
         }
         this.#inputPeaks.process(srcL, srcR, s0, s1)
         this.#outputPeaks.process(outL, outR, s0, s1)

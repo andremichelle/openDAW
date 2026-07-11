@@ -116,8 +116,8 @@ pub struct VocoderDsp {
     target_carrier_max_freq: f32,
     target_modulator_min_freq: f32,
     target_modulator_max_freq: f32,
-    target_q_min: f32,
-    target_q_max: f32,
+    target_q_end: f32,
+    target_q_start: f32,
     coeffs_dirty: bool,
     cur_carrier_freq: [f32; MAX_BANDS],
     cur_modulator_freq: [f32; MAX_BANDS],
@@ -152,8 +152,8 @@ impl VocoderDsp {
         self.target_carrier_max_freq = 12000.0;
         self.target_modulator_min_freq = 80.0;
         self.target_modulator_max_freq = 12000.0;
-        self.target_q_min = 2.0;
-        self.target_q_max = 20.0;
+        self.target_q_end = 2.0;
+        self.target_q_start = 20.0;
         self.coeffs_dirty = true;
         self.band_gain = 75.0;
         self.output_gain = 1.0;
@@ -182,8 +182,8 @@ impl VocoderDsp {
     pub fn set_carrier_max_freq(&mut self, hz: f32) {self.target_carrier_max_freq = hz; self.coeffs_dirty = true;}
     pub fn set_modulator_min_freq(&mut self, hz: f32) {self.target_modulator_min_freq = hz; self.coeffs_dirty = true;}
     pub fn set_modulator_max_freq(&mut self, hz: f32) {self.target_modulator_max_freq = hz; self.coeffs_dirty = true;}
-    pub fn set_q_min(&mut self, q: f32) {self.target_q_min = q; self.coeffs_dirty = true;}
-    pub fn set_q_max(&mut self, q: f32) {self.target_q_max = q; self.coeffs_dirty = true;}
+    pub fn set_q_end(&mut self, q: f32) {self.target_q_end = q; self.coeffs_dirty = true;}
+    pub fn set_q_start(&mut self, q: f32) {self.target_q_start = q; self.coeffs_dirty = true;}
 
     pub fn set_mix(&mut self, value: f32) {
         let angle = value * core::f32::consts::PI * 0.5;
@@ -197,12 +197,12 @@ impl VocoderDsp {
 
     fn recompute_band_gain(&mut self) {
         let n = self.target_band_count;
-        let q_max = self.target_q_max;
-        let q_log = libm::logf(self.target_q_max / self.target_q_min);
+        let q_start = self.target_q_start;
+        let q_log = libm::logf(self.target_q_start / self.target_q_end);
         let mut sum = 0.0f32;
         for i in 0..n {
             let x = if n == 1 { 0.0 } else { i as f32 / (n - 1) as f32 };
-            let q = q_max * libm::expf(-x * q_log);
+            let q = q_start * libm::expf(-x * q_log);
             sum += 1.0 / q;
         }
         self.band_gain = GAIN_K / sum;
@@ -278,14 +278,14 @@ impl VocoderDsp {
         let mf_min = self.target_modulator_min_freq;
         let cf_log = libm::logf(self.target_carrier_max_freq / cf_min);
         let mf_log = libm::logf(self.target_modulator_max_freq / mf_min);
-        let q_min = self.target_q_min;
-        let q_log = libm::logf(self.target_q_max / q_min);
+        let q_start = self.target_q_start;
+        let q_log = libm::logf(q_start / self.target_q_end);
         let denom = if n == 1 { 1.0 } else { (n - 1) as f32 };
         for i in 0..n {
             let x = if n == 1 { 0.0 } else { i as f32 / denom };
             self.tmp_carrier_freq[i] = cf_min * libm::expf(x * cf_log);
             self.tmp_modulator_freq[i] = mf_min * libm::expf(x * mf_log);
-            self.tmp_q[i] = self.target_q_max * libm::expf(-x * q_log);
+            self.tmp_q[i] = q_start * libm::expf(-x * q_log);
         }
     }
 

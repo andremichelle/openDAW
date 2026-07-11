@@ -231,7 +231,7 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         const receiver = new BroadcastChannel(options.channel)
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
-                const bytes = serializeUpdateTasks(tasks, boxGraph)
+                const bytes = serializeUpdateTasks(tasks)
                 engine.applyUpdates(bytes)
             },
             checksum(): Promise<void> {return Promise.resolve()}

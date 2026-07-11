@@ -18,6 +18,6 @@ export const CrusherDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEf
     },
     13: {
         type: "float32", name: "mix", pointerRules: ParameterPointerRules,
-        value: 1.0, constraints: "unipolar", unit: "%"
+        value: 1.0, constraints: {min: 0.001, max: 1.0, scaling: "exponential"}, unit: "%"
     }
 })

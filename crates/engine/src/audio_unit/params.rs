@@ -241,20 +241,47 @@ impl Engine {
     pub(crate) fn bind_strip_automation(&mut self, unit: &mut AudioUnitBinding) {
         const VOLUME: Decibel = Decibel::new(-96.0, -9.0, 6.0); // TS AudioUnitBoxAdapter.VolumeMapper
         let invalidate = automation_invalidate(unit);
-        self.bind_gain_pan_automation(unit.unit, UNIT_VOLUME_KEY, UNIT_PANNING_KEY, VOLUME,
+        self.bind_gain_pan_automation(unit.unit, UNIT_VOLUME_KEY, UNIT_PANNING_KEY, VOLUME, Some(UNIT_MUTE_KEY),
             &unit.strip_automation, &mut unit.strip_param_subs, &mut unit.strip_param_collections, &invalidate);
+        // SOLO (15): unlike the strip gains, solo is resolved ENGINE-side (`resolve_automated_solo` -> `update_solo`)
+        // because it silences OTHER strips. Observe its track here so it shares the strip's sub/collection cleanup
+        // (the `bind_gain_pan_automation` above already `take`s and drops the previous pass's subs, solo included);
+        // `observe_param` also registers the UI broadcast at the solo field address so the solo button reflects it.
+        *unit.strip_automation.solo.borrow_mut() = None;
+        let (solo_handle, solo_subs, solo_collections, _) = self.observe_param(unit.unit, &[UNIT_SOLO_KEY], 3, &invalidate);
+        unit.strip_param_subs.extend(solo_subs);
+        unit.strip_param_collections.extend(solo_collections);
+        if solo_handle.track.is_some() {
+            *unit.strip_automation.solo.borrow_mut() = Some(Rc::new(move |position: f64| {
+                let (value, _kind) = solo_handle.resolve(position);
+                value
+            }));
+        } else {
+            // No solo curve (never attached, or JUST DETACHED): `resolve_automated_solo` writes the curve value into
+            // the static solo cell, so on detach restore it from the FIELD and re-resolve `forced_silent` if it moved
+            // (the field subscription only fires on a field EDIT, not on a track detach, so it would stay stale).
+            let field_solo = solo_handle.field.get() >= 0.5;
+            if unit.strip_params.solo.get() != field_solo {
+                unit.strip_params.solo.set(field_solo);
+                self.solo_dirty.set(true);
+            }
+        }
     }
 
-    /// The shared gain (dB) + pan automation binder behind the strip AND the aux sends: drop the previous
-    /// observers + curve collections (a plain drop would LEAK their hub / event / curve observers), re-observe
-    /// both fields, and install the mapped closures. Without a track an override stays `None` (static cells rule).
+    /// The shared gain (dB) + pan (+ optional mute) automation binder behind the strip AND the aux sends: drop the
+    /// previous observers + curve collections (a plain drop would LEAK their hub / event / curve observers),
+    /// re-observe the fields, and install the mapped closures. Without a track an override stays `None` (static
+    /// cells rule). `mute_key` is `Some` only for the unit strip (the aux sends have no mute); its curve carries a
+    /// 0..1 unit value the strip thresholds at >= 0.5 (TS `ValueMapping.bool`), and observing it also registers the
+    /// UI broadcast at the mute field address so the mute button reflects the automated state.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn bind_gain_pan_automation(&mut self, box_uuid: Uuid, gain_key: u16, pan_key: u16, gain_mapping: Decibel,
-                                automation: &StripAutomation, subs: &mut Vec<SubscriptionId>,
+                                mute_key: Option<u16>, automation: &StripAutomation, subs: &mut Vec<SubscriptionId>,
                                 collections: &mut Vec<ValueCollection>, invalidate: &Rc<dyn Fn()>) {
         const PAN: Linear = Linear::bipolar();
         *automation.volume.borrow_mut() = None;
         *automation.panning.borrow_mut() = None;
+        *automation.mute.borrow_mut() = None;
         for sub in core::mem::take(subs) {
             self.graph.unsubscribe(sub);
         }
@@ -281,6 +308,19 @@ impl Engine {
                 if kind == abi::PARAM_KIND_UNIT { PAN.y(value) } else { value }
             }));
         }
+        if let Some(mute_key) = mute_key {
+            let (mute_handle, mute_subs, mute_collections, _) = self.observe_param(box_uuid, &[mute_key], 2, invalidate);
+            subs.extend(mute_subs);
+            collections.extend(mute_collections);
+            // The mute field stores a bool as 0.0/1.0, so the unit-curve value and the field-fallback value are BOTH
+            // thresholded at >= 0.5 by the strip — hand back `resolve`'s raw value in either case.
+            if mute_handle.track.is_some() {
+                *automation.mute.borrow_mut() = Some(Rc::new(move |position: f64| {
+                    let (value, _kind) = mute_handle.resolve(position);
+                    value
+                }));
+            }
+        }
     }
 
     /// Bind one device's parameters: call its `init` (which records its parameter field-paths via
@@ -302,9 +342,12 @@ impl Engine {
         let mut broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)> = Vec::with_capacity(broadcast_binds.len());
         for (id, path, len, package_type) in broadcast_binds {
             let slot = engine_env::telemetry::broadcast_slot(len as usize);
+            // Honor the type the device DECLARED (via `bind_broadcast` / `bind_broadcast_float` /
+            // `bind_broadcast_ints`), not a length heuristic: a one-element FLOAT_ARRAY (the Maximizer's
+            // reduction, read with `subscribeFloats`) must NOT collapse to a scalar FLOAT.
             let package_type = match package_type {
                 crate::broadcast::PACKAGE_INT_RING => crate::broadcast::PACKAGE_INT_RING,
-                _ if len == 1 => crate::broadcast::PACKAGE_FLOAT,
+                crate::broadcast::PACKAGE_FLOAT => crate::broadcast::PACKAGE_FLOAT,
                 _ => crate::broadcast::PACKAGE_FLOAT_ARRAY
             };
             self.broadcasts.register(device_uuid, &path, package_type, &slot);
@@ -539,10 +582,23 @@ impl Engine {
         // (TS `onStartAutomation`) — the knob animates in the UI. Registered under the box uuid + field-path
         // keys; the slot Rc lives in the handle, so a rebind/teardown drops it and the sweep unregisters.
         let broadcast = track.as_ref().map(|curve| {
-            let slot = engine_env::telemetry::broadcast_slot(1);
-            slot.borrow_mut()[0] = curve.value_at(self.transport.position()).unwrap_or(0.0);
-            self.broadcasts.register(box_uuid, path, crate::broadcast::PACKAGE_FLOAT, &slot);
-            slot
+            let value = curve.value_at(self.transport.position()).unwrap_or(0.0);
+            // REUSE the parameter's existing UI slot across a re-observe (an automation edit re-runs this); only a
+            // fresh attach registers a new one. Creating a new slot each rebind would be dedup-skipped by
+            // `register` (the outgoing slot is still alive), stranding the knob on a slot the sweep then drops.
+            // Mirrors TS's persistent `onStartAutomation` broadcast.
+            match self.broadcasts.live_slot(box_uuid, path, crate::broadcast::PACKAGE_FLOAT) {
+                Some(slot) => {
+                    slot.borrow_mut()[0] = value;
+                    slot
+                }
+                None => {
+                    let slot = engine_env::telemetry::broadcast_slot(1);
+                    slot.borrow_mut()[0] = value;
+                    self.broadcasts.register(box_uuid, path, crate::broadcast::PACKAGE_FLOAT, &slot);
+                    slot
+                }
+            }
         });
         let handle = ParamHandle {id, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN)), broadcast};
         (handle, subs, collections, armed)

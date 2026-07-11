@@ -20,31 +20,11 @@ export class RegionOverlapResolver {
         this.#boxAdapters = boxAdapters
     }
 
-    static warnOverlaps(label: string, tracks: ReadonlyArray<TrackBoxAdapter>): void {
-        for (const track of tracks) {
-            const regions = track.regions.collection.asArray()
-            for (let i = 1; i < regions.length; i++) {
-                const prev = regions[i - 1]
-                const next = regions[i]
-                if (prev.complete > next.position) {
-                    console.warn(`[RegionOverlapResolver] ${label}`, {
-                        track: track.listIndex,
-                        prev: {p: prev.position, d: prev.duration, c: prev.complete, sel: prev.isSelected, type: prev.toString()},
-                        next: {p: next.position, d: next.duration, c: next.complete, sel: next.isSelected, type: next.toString()},
-                        allRegions: regions.map(region => ({p: region.position, d: region.duration, c: region.complete, sel: region.isSelected})),
-                        stack: new Error().stack
-                    })
-                }
-            }
-        }
-    }
-
     apply(tracks: ReadonlyArray<TrackBoxAdapter>,
           adapters: ReadonlyArray<AnyRegionBoxAdapter>,
           strategy: RegionModifyStrategies,
           deltaIndex: int,
           changes: (trackResolver: TrackResolver) => void): void {
-        RegionOverlapResolver.warnOverlaps("Overlap BEFORE apply", tracks)
         const behaviour = StudioPreferences.settings.editing["overlapping-regions-behaviour"]
         if (behaviour === "clip") {
             const {postProcess, trackResolver} = RegionClipResolver.fromSelection(tracks, adapters, strategy, deltaIndex)
@@ -60,7 +40,6 @@ export class RegionOverlapResolver {
                 changes(trackResolver)
                 postProcess()
             })
-            RegionOverlapResolver.warnOverlaps("Overlap AFTER apply (push-existing)", tracks)
         } else {
             // keep-existing
             const {postProcess, trackResolver} = RegionKeepExistingResolver.fromSelection(
@@ -69,7 +48,6 @@ export class RegionOverlapResolver {
                 changes(trackResolver)
                 postProcess()
             })
-            RegionOverlapResolver.warnOverlaps("Overlap AFTER apply (keep-existing)", tracks)
         }
     }
 

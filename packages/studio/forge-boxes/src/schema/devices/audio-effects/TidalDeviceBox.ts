@@ -14,7 +14,7 @@ export const TidalDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudioEffe
     },
     20: {
         type: "float32", name: "rate", pointerRules: ParameterPointerRules,
-        value: 3, constraints: "unipolar", unit: "%"
+        value: 3, constraints: {min: 0.0, max: 16.0, scaling: "linear"}, unit: ""
     },
     21: {
         type: "float32", name: "depth", pointerRules: ParameterPointerRules,

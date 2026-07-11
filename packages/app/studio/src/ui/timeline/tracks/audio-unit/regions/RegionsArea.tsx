@@ -119,6 +119,11 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             if (target === null) {return}
             if (target.type === "region") {
                 timelineFocus.focusRegion(target.region)
+                target.region.trackBoxAdapter.ifSome(trackBoxAdapter => {
+                    if (!userEditingManager.audioUnit.isEditing(trackBoxAdapter.audioUnit.editing)) {
+                        userEditingManager.audioUnit.edit(trackBoxAdapter.audioUnit.editing)
+                    }
+                })
                 // If the ContentEditor panel is open, clicking a region
                 // (whether already selected or not) brings it into
                 // edit-mode. No-op when that region is already the

@@ -1,0 +1,30 @@
+# Analyser Device (#203)
+
+**Doability:** ⭐⭐⭐☆☆ (3/5) — the pass-through device shell, FFT, windowing, and live-broadcast plumbing all already exist; oscilloscope/spectrum are near-trivial reuse, spectrogram/phase-scope/pitch-detector/loudness are new code each.
+**Type:** feature
+**Scope:** large
+
+## What is asked
+One device combining: oscilloscope, spectrum analyzer, spectrogram, stereo phase scope, pitch detector, loudness measurement.
+
+## Current behaviour / relevant code
+- `AudioAnalyser`: `packages/lib/dsp/src/AudioAnalyser.ts` — wraps `FFT` (`packages/lib/dsp/src/fft.ts`, arbitrary power-of-2 size) + Blackman `Window` (`packages/lib/dsp/src/window.ts`). `process(left, right, fromIndex, toIndex)` sums L+R into a ring buffer, runs FFT once full, computes magnitude bins with peak-hold/decay. Exposes `bins()` (spectrum) and `waveform()` (raw time-domain — usable directly for an oscilloscope). Already consumed by `RevampDeviceProcessor.ts`, `VocoderDeviceProcessor.ts`, `NeuralAmpDeviceProcessor.ts`. Rust port: `crates/dsp/src/analyser.rs` (fixed `NUM_BINS=512`), used by `device-revamp`, `device-vocoder`, `device-neural-amp`.
+- Spectrum rendering precedent: `RevampDeviceEditor.tsx` subscribes via `project.liveStreamReceiver.subscribeFloats(adapter.spectrum, values => plotSpectrum(...))`, where `adapter.spectrum` is `box.address.append(0xFFF)` (`RevampDeviceBoxAdapter.ts:38`) and `plotSpectrum` (`Revamp/Renderer.ts:8-40`) builds a log/linear-scaled `Path2D`. This is the exact recipe to reuse for the new device's spectrum view.
+- Generic pass-through processor template: `packages/studio/core-processors/src/devices/audio-effects/NopDeviceProcessor.ts` (copies input→output unchanged while running a `PeakBroadcaster`) — the closest existing "observe, don't alter" device; swap/extend its broadcast payload for `AudioAnalyser` + new measurements.
+- Live telemetry plumbing: TS `PeakBroadcaster` (`packages/studio/core-processors/src/PeakBroadcaster.ts`) broadcasts a `Float32Array` via `LiveStreamBroadcaster`/`LiveStreamReceiver` (`packages/lib/fusion/src/live-stream/`). Rust mirror: `crates/engine/src/broadcast.rs`, `crates/dsp/src/meter.rs`, synced to the UI via `packages/app/wasm/src/engine-processor.ts:136 #syncBroadcasts()` (zero-copy into wasm memory). Demo consumer: `packages/app/wasm/src/pages/live-meters/LiveMetersPage.tsx`.
+- No pitch-detection code exists anywhere (`grep -i "pitch\|autocorrelation\|yin"` only hits the MIDI `PitchDeviceBox`/`pitcheffectimpl.ts`, unrelated). No dedicated `StereoMeter` class — peak/RMS-per-channel is what `PeakBroadcaster` already does (used in `StereoToolDeviceProcessor.ts`).
+- Device folder convention: editors live in `packages/app/studio/src/ui/devices/audio-effects/<Name>DeviceEditor.tsx` with a same-named helper subfolder (`Revamp/`, `Vocoder/`, `NeuralAmp/`) for `Renderer.ts`/`Display.tsx`/`constants.ts`.
+
+## Plan
+1. Schema: new `packages/studio/forge-boxes/src/schema/devices/audio-effects/AnalyserDeviceBox.ts` via `DeviceFactory.createAudioEffect` with minimal audio params (this device doesn't alter sound) — a `mode`/view-select field (int32 enum: scope/spectrum/spectrogram/phase/pitch/loudness, or all views shown at once in tabs — decide with maintainer), plus any per-view settings (e.g. spectrogram time window, scope time window).
+2. Processor `AnalyserDeviceProcessor.ts`: pass audio through unchanged (like `NopDeviceProcessor`), and run: an `AudioAnalyser` instance for spectrum + oscilloscope (`waveform()`); a `PeakBroadcaster`-style RMS/peak computation for loudness; raw L/R sample broadcast (or correlation coefficient) for the phase scope. Broadcast each via a distinct `LiveStreamBroadcaster` address (mirror `RevampDeviceBoxAdapter.ts:38`'s `address.append(0xFFF)` pattern, one offset per data stream).
+3. New DSP: **pitch detector** — autocorrelation or YIN algorithm run on the analyser's waveform buffer (new code in `packages/lib/dsp/src/`, e.g. `pitch-detector.ts`), broadcasting a detected-Hz float. **Loudness** — start with RMS-in-dB (reuse `RMS` from `@opendaw/lib-dsp`, already used in `StereoToolDeviceProcessor.ts`); true LUFS (K-weighted, gated) is a larger follow-up, not required for v1 given no existing precedent.
+4. New editor UI: `AnalyserDeviceEditor.tsx` + `Analyser/` helper folder with `WaveformRenderer.ts` (oscilloscope — plot `waveform()` directly), reuse `plotSpectrum`-equivalent for spectrum, new `SpectrogramRenderer.ts` (scroll a column of color-mapped magnitude-per-frequency into an offscreen canvas each frame, a new but standard technique), new `PhaseScopeRenderer.ts` (plot L on x, R on y as a Lissajous dot cloud, decaying trail), numeric readouts for pitch (Hz + nearest note name) and loudness (dB).
+5. Register in `EffectFactories.ts`, `DeviceProcessorFactory.ts`, `BoxAdapters.ts`, `DeviceEditorFactory.tsx`, `DeviceManualUrls.ts`.
+6. WASM mirror: new crate `crates/stock-devices/device-analyser`, reusing `crates/dsp/src/analyser.rs`'s FFT and `crates/dsp/src/meter.rs` for loudness; pitch detection needs a new Rust port of whatever algorithm is chosen (autocorrelation is simple enough to port directly, matching the project's "mirror TS bit-exactly" convention).
+
+## Risks / open questions
+- Scope is large for one device — recommend shipping as staged sub-features (oscilloscope + spectrum first, since they're near-zero new DSP; phase scope next, cheap; pitch detector and spectrogram last, since they're the only genuinely new algorithms).
+- UI real estate: six visualizations in one device editor implies tabs or a mode switch rather than all-at-once — needs a UX decision before implementation.
+- "Loudness measurement" is ambiguous between simple RMS/peak (cheap, matches existing infra) and full LUFS per EBU R128 (no existing gating/K-weighting code) — clarify expected precision with the maintainer before committing to LUFS.
+- Pitch detection accuracy/latency tradeoffs (window size, algorithm choice) need their own small design pass; autocorrelation is simplest to port cross-engine but YIN is more accurate for low notes — pick one and document it, don't build both.

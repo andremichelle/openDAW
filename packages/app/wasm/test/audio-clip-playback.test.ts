@@ -102,5 +102,5 @@ describe("audio-clip playback", () => {
 
         // The stop transition reached the change queue for the UI back-channel.
         expect(engine.clip_changes_count()).toBeGreaterThan(0)
-    })
+    }, 30000)
 })

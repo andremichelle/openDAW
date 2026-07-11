@@ -203,9 +203,13 @@ impl Subscriptions {
         self.hubs.iter().map(|hub| hub.target.clone()).collect()
     }
 
-    /// Diff each hub's `current` incoming set against its previous, emitting Added/Removed, then store.
-    pub fn dispatch_hubs(&mut self, graph: &BoxGraph, currents: &[Vec<Address>]) {
+    /// Diff each AFFECTED hub's `current` incoming set against its previous, emitting Added/Removed, then
+    /// store. `currents[i]` is `None` for a hub the transaction did not touch (its incoming set is unchanged,
+    /// so it is skipped and its `previous` kept) — the caller only computes `Some` for hubs whose target is
+    /// in the transaction's affected set, so an unaffected hub costs nothing here.
+    pub fn dispatch_hubs(&mut self, graph: &BoxGraph, currents: &[Option<Vec<Address>>]) {
         for (hub, current) in self.hubs.iter_mut().zip(currents) {
+            let Some(current) = current else {continue};
             for source in current {
                 if !hub.previous.contains(source) {
                     (hub.observer)(graph, &HubEvent::Added(source.clone()))

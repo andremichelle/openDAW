@@ -132,11 +132,16 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
             onDeselected: (selectable: AnyClipBoxAdapter) => selectable.onDeselected()
         }),
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+            const target = capturing.captureEvent(event)
+            if (target === null || target.type !== "clip") {return}
+            const {trackBoxAdapter} = target.track
+            project.timelineFocus.focusTrack(trackBoxAdapter)
+            if (!userEditingManager.audioUnit.isEditing(trackBoxAdapter.audioUnit.editing)) {
+                userEditingManager.audioUnit.edit(trackBoxAdapter.audioUnit.editing)
+            }
             // If the ContentEditor panel is open, clicking a clip (whether
             // already selected or not) brings it into edit-mode. No-op
             // when that clip is already the current edit target.
-            const target = capturing.captureEvent(event)
-            if (target === null || target.type !== "clip") {return}
             if (!service.panelLayout.getByType(PanelType.ContentEditor).isVisible) {return}
             userEditingManager.timeline.editIfDifferent(target.clip.box)
         }),

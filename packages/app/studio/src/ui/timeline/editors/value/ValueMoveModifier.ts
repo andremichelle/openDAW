@@ -39,6 +39,7 @@ type Construct = Readonly<{
     pointerValue: unitValue
     reference: ValueEventBoxAdapter
     collection: ValueEventCollectionBoxAdapter
+    chainPending?: boolean
 }>
 
 type SnapGuide = {
@@ -63,6 +64,7 @@ export class ValueMoveModifier implements ValueModifier {
     readonly #pointerValue: unitValue
     readonly #reference: ValueEventBoxAdapter
     readonly #collection: ValueEventCollectionBoxAdapter
+    readonly #chainPending: boolean
 
     readonly #notifier: Notifier<void>
     readonly #masks: ReadonlyArray<[ppqn, ppqn]>
@@ -76,7 +78,7 @@ export class ValueMoveModifier implements ValueModifier {
 
     private constructor({
                             editing, element, context, selection, valueAxis, eventMapping, snapping,
-                            pointerPulse, pointerValue, reference, collection
+                            pointerPulse, pointerValue, reference, collection, chainPending
                         }: Construct) {
         this.#editing = editing
         this.#element = element
@@ -89,6 +91,7 @@ export class ValueMoveModifier implements ValueModifier {
         this.#pointerValue = pointerValue
         this.#reference = reference
         this.#collection = collection
+        this.#chainPending = chainPending ?? false
 
         this.#notifier = new Notifier<void>()
         this.#masks = this.#buildMasks()
@@ -180,6 +183,10 @@ export class ValueMoveModifier implements ValueModifier {
     approve(): void {
         if (this.#deltaValue === 0 && this.#deltaPosition === 0) {
             if (this.#copy) {this.#dispatchChange()} // reset visuals
+            // A double-click-create that is not dragged still ends its gesture here: seal the pending creation as its
+            // OWN history entry (#208 / #306). Without this the creation lingers in #pending unmarked, so the next
+            // placement piles onto it, and a single undo removes them all at once.
+            if (this.#chainPending) {this.#editing.mark()}
             return
         }
         // take 'em all
@@ -248,7 +255,10 @@ export class ValueMoveModifier implements ValueModifier {
             // Add back only the reused adapters (new ones are already added via onAdded)
             reusedAdapters.forEach(adapter => collection.add(adapter))
             obsoleteEvents.forEach(event => event.box.delete())
-        })
+        }, !this.#chainPending)
+        // On the double-click-create path the creation + this settle-move are committed unmarked so they form ONE
+        // undo step; seal them here at gesture end so each placement is its own history entry (#208 / #306).
+        if (this.#chainPending) {this.#editing.mark()}
         this.#dispatchChange()
     }
 

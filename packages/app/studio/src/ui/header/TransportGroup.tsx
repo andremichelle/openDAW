@@ -27,7 +27,8 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
     const recordButton: HTMLElement = (
         <Button lifecycle={lifecycle}
                 appearance={{
-                    color: Colors.red.fade(0.2), activeColor: Colors.red,
+                    color: Colors.shadow,
+                    activeColor: Colors.red,
                     tooltip: ShortcutTooltip.create("Start Recording", GlobalShortcuts["start-recording"].shortcut)
                 }}
                 onClick={event => {
@@ -43,7 +44,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
     const playButton: HTMLElement = (
         <Button lifecycle={lifecycle}
                 appearance={{
-                    color: Colors.green.saturate(0.0),
+                    color: Colors.shadow,
                     activeColor: Colors.green,
                     tooltip: ShortcutTooltip.create("Play", GlobalShortcuts["toggle-playback"].shortcut)
                 }}
@@ -105,6 +106,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
             <Button lifecycle={lifecycle}
                     onClick={() => {engine.stop(true)}}
                     appearance={{
+                        color: Colors.shadow,
                         activeColor: Colors.bright,
                         tooltip: ShortcutTooltip.create("Stop", GlobalShortcuts["stop-playback"].shortcut)
                     }}>
@@ -113,7 +115,8 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
             <Checkbox lifecycle={lifecycle}
                       model={loop}
                       appearance={{
-                          activeColor: Colors.gray,
+                          color: Colors.shadow,
+                          activeColor: Colors.white,
                           tooltip: ShortcutTooltip.create("Loop", GlobalShortcuts["toggle-loop"].shortcut)
                       }}>
                 <Icon symbol={IconSymbol.Loop}/>

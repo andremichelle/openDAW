@@ -138,6 +138,9 @@ impl Engine {
     /// built bus) falls back to the `master`. Re-wire only when the source strip or the target sum changed; a
     /// feedback loop is left unrouted (silent) rather than silently broken by the topological sort.
     pub(crate) fn resolve_one_output(&mut self, unit: &mut AudioUnitBinding) {
+        if self.is_output_unit(unit.unit) {
+            return; // terminal master: its strip output IS the render buffer (published by `reconcile_bus`), not routed onward
+        }
         let Some((strip_id, strip_output)) = unit.wired.as_ref().map(|wired| wired.strip()) else {
             self.unwire_output_route(unit); // no wired chain: drop any stale route
             return;
@@ -218,7 +221,7 @@ impl Engine {
     pub(crate) fn bind_send_automation(&mut self, send: &mut SendBinding, invalidate: &Rc<dyn Fn()>) {
         const SEND_GAIN: Decibel = Decibel::new(-72.0, -12.0, 0.0); // TS AuxSendBoxAdapter ValueMapping.DefaultDecibel
         let automation = send.automation.clone();
-        self.bind_gain_pan_automation(send.send_uuid, SEND_GAIN_KEY, SEND_PAN_KEY, SEND_GAIN,
+        self.bind_gain_pan_automation(send.send_uuid, SEND_GAIN_KEY, SEND_PAN_KEY, SEND_GAIN, None,
             &automation, &mut send.param_subs, &mut send.param_collections, invalidate);
     }
 

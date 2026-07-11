@@ -60,6 +60,7 @@ export class SyncSource<M> implements Terminable {
                     updates.push({
                         type: "update-primitive",
                         address: update.address.decompose(),
+                        primitiveType: update.serialization.type,
                         value: update.newValue
                     })
                 } else if (update.type === "pointer") {

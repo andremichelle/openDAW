@@ -216,15 +216,22 @@ export const PitchEditor = ({
                 const pitch = positioner.yToPitch(clientY)
                 const absolutePulse = reader.position + pulse
                 const duration = snapping.value(absolutePulse)
-                const boxOpt = editing.modify(() => NoteEventBox.create(project.boxGraph, UUID.generate(), box => {
-                    box.position.setValue(pulse)
-                    box.pitch.setValue(pitch)
-                    box.duration.setValue(duration)
-                    box.events.refer(reader.content.box.events)
-                }))
-                if (boxOpt.nonEmpty()) {
+                // Create AND select in one modify so the selection is captured in the same undo entry as the create
+                // (#208): a trailing select in its own mark=false modify would be a phantom second history step (two
+                // undos for one note). With the pre-flush removed, any leading SelectionRectangle deselect folds into
+                // this entry too, so the whole placement is a single undo step.
+                const boxOpt = editing.modify(() => {
+                    const box = NoteEventBox.create(project.boxGraph, UUID.generate(), box => {
+                        box.position.setValue(pulse)
+                        box.pitch.setValue(pitch)
+                        box.duration.setValue(duration)
+                        box.events.refer(reader.content.box.events)
+                    })
                     selection.deselectAll()
-                    selection.select(boxAdapters.adapterFor(boxOpt.unwrap(), NoteEventBoxAdapter))
+                    selection.select(boxAdapters.adapterFor(box, NoteEventBoxAdapter))
+                    return box
+                })
+                if (boxOpt.nonEmpty()) {
                     auditionNote(pitch, duration)
                 }
             } else if (target.type !== "loop-duration") {

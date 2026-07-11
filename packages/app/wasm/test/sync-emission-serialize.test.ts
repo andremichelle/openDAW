@@ -49,7 +49,7 @@ describe("sync: serialization happens at task emission time", () => {
         const batches: Array<ArrayBuffer> = []
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates: (tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void => {
-                batches.push(serializeUpdateTasks(tasks, source))
+                batches.push(serializeUpdateTasks(tasks))
             },
             checksum: (_value: Int8Array): Promise<void> => Promise.resolve()
         }

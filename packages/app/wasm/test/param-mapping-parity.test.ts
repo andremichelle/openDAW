@@ -8,8 +8,8 @@
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
-import {isDefined, Option, panic, Terminable, UUID} from "@opendaw/lib-std"
-import {Address, BoxGraph, PrimitiveType} from "@opendaw/lib-box"
+import {isDefined, Option, Optional, panic, Terminable, UUID} from "@opendaw/lib-std"
+import {Address, BoxGraph, Constraints, Float32Field, PrimitiveType} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, CompressorDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
     DelayDeviceBox, FoldDeviceBox, GateDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
@@ -289,4 +289,44 @@ describe("param mapping parity (wasm device vs TS BoxAdapter)", () => {
             }
         })
     }
+})
+
+// The box schema constraints and the adapter ValueMapping must describe the same range. The schema is what
+// project files and headless writers see, the mapping is what the UI and `setValue` actually clamp to, so a
+// disagreement lets a legal box value collapse on round-trip, or lets the UI express a value the schema denies.
+const floatRange = (constraints: Constraints.Float32): Optional<{min: number, max: number}> => {
+    if (constraints === "unipolar") {return {min: 0.0, max: 1.0}}
+    if (constraints === "bipolar") {return {min: -1.0, max: 1.0}}
+    if (typeof constraints === "string") {return undefined}
+    return {min: constraints.min, max: constraints.max}
+}
+
+describe("box constraints vs TS BoxAdapter value mappings", () => {
+    for (const {name, createAdapter} of CASES) {
+        it(name, () => {
+            const mismatches = collectTsParameters(createAdapter).flatMap(({path, adapter}) => {
+                const field = adapter.field
+                if (!(field instanceof Float32Field)) {return []}
+                const range = floatRange(field.constraints)
+                if (!isDefined(range)) {return []}
+                const min = adapter.valueMapping.y(0.0)
+                const max = adapter.valueMapping.y(1.0)
+                // A decibel mapping is open at the bottom (`y(0)` is silence), so only its top anchors the schema.
+                const minAgrees = !Number.isFinite(min) || Math.abs(min - range.min) < 1e-6
+                if (minAgrees && Math.abs(max - range.max) < 1e-6) {return []}
+                return [`[${path}] '${adapter.name}': schema {${range.min}, ${range.max}} vs mapping {${min}, ${max}}`]
+            })
+            expect(mismatches, `${name}: schema constraints disagree with the adapter ValueMapping`).toEqual([])
+        })
+    }
+})
+
+// Both DSPs (VocoderDsp.bandCount, dsp::vocoder::set_band_count) silently ignore anything outside {8, 12, 16},
+// so the schema must advertise that set instead of a plain range a headless writer would read as 8..16.
+describe("vocoder band-count", () => {
+    it("advertises its discrete values", () => {
+        const {bandCount} = boxes.vocoder
+        expect(bandCount.constraints).toEqual({values: [8, 12, 16]})
+        expect(bandCount.initValue).toBe(16)
+    })
 })
