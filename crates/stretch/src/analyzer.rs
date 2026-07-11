@@ -79,11 +79,31 @@ impl Analyzer {
         Self {config}
     }
 
-    /// Full pass: detect markers and measure each segment.
+    /// Full pass: detect markers and measure each segment, then thin tonal chatter: a weak marker
+    /// that CONTINUES its predecessor's pitch at close range is the same note still sounding, not a
+    /// new event (textured pads fired 7-8 markers/s of pitch-continuous flutter, fragmenting
+    /// segments into fast audible wraps). Strong onsets and pitch CHANGES always survive.
     pub fn analyze(&self, left: &[f32], right: &[f32], sample_rate: f32) -> AnalyzedSample {
         let mono = mono_fold(left, right);
         let onsets = detect(&mono, sample_rate, &self.config.onset);
-        let markers = self.describe_onsets(&mono, sample_rate, &onsets);
+        let described = self.describe_onsets(&mono, sample_rate, &onsets);
+        let mut markers: Vec<TransientDescriptor> = Vec::with_capacity(described.len());
+        for marker in described {
+            let chatter = markers.last().map(|previous: &TransientDescriptor| {
+                let close = marker.position - previous.position < 0.150;
+                let weak = marker.strength < 0.3;
+                let same_pitch = marker.period > 0.0 && previous.period > 0.0
+                    && ((marker.period - previous.period) / previous.period).abs() < 0.05;
+                close && weak && same_pitch
+            }).unwrap_or(false);
+            if !chatter {
+                markers.push(marker);
+            }
+        }
+        // Re-describe after thinning: merged segments have new bounds, so descriptors and loops
+        // must reflect what will actually play.
+        let positions: Vec<f64> = markers.iter().map(|marker| marker.position).collect();
+        let markers = self.describe(left, right, sample_rate, &positions);
         AnalyzedSample {sample_rate, num_frames: mono.len(), markers}
     }
 
