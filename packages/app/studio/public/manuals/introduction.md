@@ -1,4 +1,4 @@
-# Your Studio
+# Introduction
 
 openDAW is a full music studio that runs entirely in your browser. There is nothing to install and no account to create.
 
@@ -20,4 +20,4 @@ openDAW is a full music studio that runs entirely in your browser. There is noth
 
 Click **New Project** on the dashboard to open an empty timeline, or open one of the demo projects to see a finished track you can take apart. From there, add a track, drop in an instrument, and start writing.
 
-Everything you make is saved locally on your device.
+Everything you make is saved locally on your device. See [Project Management](/manuals/project-management) to learn where projects are stored, how to back them up, and how to share them.

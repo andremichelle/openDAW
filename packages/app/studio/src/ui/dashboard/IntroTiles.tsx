@@ -22,7 +22,7 @@ const tiles: ReadonlyArray<Tile> = [
         title: "Your Studio",
         text: "Instruments, effects, a mixer, MIDI and audio recording, all in one place. Arrange, produce and "
             + "mix complete tracks.",
-        path: "/manuals/studio"
+        path: "/manuals/introduction"
     },
     {
         icon: IconSymbol.Connected,

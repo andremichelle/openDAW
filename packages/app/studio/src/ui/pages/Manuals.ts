@@ -21,6 +21,7 @@ export const Manuals: ReadonlyArray<Manual> = [
         type: "folder",
         label: "General",
         files: [
+            {type: "page", label: "Introduction", path: "/manuals/introduction"},
             {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
             {type: "page", label: "Automation", path: "/manuals/automation"},
             {type: "page", label: "Browser Support", path: "/manuals/browser-support"},
@@ -37,9 +38,9 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Permissions", path: "/manuals/permissions"},
             {type: "page", label: "Presets", path: "/manuals/presets"},
             {type: "page", label: "Private File System", path: "/manuals/private-file-system"},
+            {type: "page", label: "Project Management", path: "/manuals/project-management"},
             {type: "page", label: "Recording", path: "/manuals/recording"},
-            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
-            {type: "page", label: "Your Studio", path: "/manuals/studio"}
+            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"}
         ]
     },
     {
