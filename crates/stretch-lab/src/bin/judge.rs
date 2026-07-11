@@ -91,12 +91,10 @@ fn render_case(case: &Case, engine: &Engine) -> (Vec<f32>, Vec<f32>, Vec<MetricV
             // long segments -> slow wraps), while the annotation grid stays the ground truth for
             // attack judging. The over-dense machine annotations were forcing 5 Hz wrap rates the
             // real detector never would.
-            let markers = if entry.ideal.is_some() {
-                // Synthetic grids are part of the case definition (they exist to force looping).
-                Analyzer::default().describe(&entry.left, &entry.right, entry.file_rate, &entry.transients)
-            } else {
-                Analyzer::default().analyze(&entry.left, &entry.right, entry.file_rate).markers
-            };
+            // Playback markers = the annotation grid (same positions the attack ground truth uses;
+            // detector-driven playback needs adaptive min-separation first — 120 ms misses 16th hats
+            // at 128 BPM and smeared drums-top x4, see task notes).
+            let markers = Analyzer::default().describe(&entry.left, &entry.right, entry.file_rate, &entry.transients);
             render::render_stretch(&spec, &markers, *tuning)
         }
     };
