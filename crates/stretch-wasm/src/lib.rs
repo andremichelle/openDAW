@@ -3,6 +3,7 @@
 //! shared with the engine's SAB descriptor channel and the OPFS `markers.bin` cache. Runs in a
 //! worker's own instance/memory — never the audio thread.
 
+use stretch::spectral::SpectralStretcher;
 use stretch::{Analyzer, TransientDescriptor};
 
 /// Allocate a buffer inside this module's memory (the worker copies PCM in, reads records out).
@@ -50,4 +51,28 @@ pub extern "C" fn record_size() -> usize {
 #[no_mangle]
 pub extern "C" fn analyzer_version() -> u32 {
     1
+}
+
+/// Spectral (phase-vocoder) stretch of one mono plane by `ratio`, with phase resets at the given
+/// sample positions (u32 array) — the measured remedy for dense textures where grain looping has
+/// its floor. The host renders segment caches with this (its call, its cadence, its cache).
+/// Returns the produced sample count (~frames * ratio); `out_ptr` must hold at least that many.
+#[no_mangle]
+pub extern "C" fn spectral_stretch(
+    input_ptr: *const f32,
+    num_frames: usize,
+    ratio: f64,
+    resets_ptr: *const u32,
+    resets_len: usize,
+    out_ptr: *mut f32,
+    out_capacity: usize
+) -> usize {
+    let input = unsafe { core::slice::from_raw_parts(input_ptr, num_frames) };
+    let resets: Vec<usize> = unsafe { core::slice::from_raw_parts(resets_ptr, resets_len) }
+        .iter().map(|&position| position as usize).collect();
+    let rendered = SpectralStretcher::new().stretch_with_resets(input, ratio, &resets);
+    let count = rendered.len().min(out_capacity);
+    let out = unsafe { core::slice::from_raw_parts_mut(out_ptr, count) };
+    out.copy_from_slice(&rendered[..count]);
+    count
 }

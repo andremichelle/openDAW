@@ -31,7 +31,9 @@ pub(crate) struct VoiceParams {
     pub splice_rho: f64,
     pub loop_start: f64,
     pub loop_end: f64,
-    pub loop_fade_samples: f64
+    pub loop_fade_samples: f64,
+    /// Per-voice output gain (dual staggered texture voices play at ~0.707 each).
+    pub gain: f32
 }
 
 /// The source planes a voice reads, threaded in per call.
@@ -213,6 +215,7 @@ impl Voice {
 /// Plays a segment once, no looping: read start -> segment end, then silence.
 pub(crate) struct OnceVoice {
     fade: Fade,
+    gain: f32,
     playback_rate: f64,
     pub(crate) segment_end: f64,
     pub(crate) read_position: f64,
@@ -221,7 +224,7 @@ pub(crate) struct OnceVoice {
 
 impl OnceVoice {
     pub(crate) fn new(segment_start: f64, segment_end: f64, playback_rate: f64, block_offset: usize, sample_rate: f32, params: &VoiceParams) -> Self {
-        Self {fade: Fade::new(segment_start, false, sample_rate, params), playback_rate, segment_end, read_position: segment_start, block_offset}
+        Self {fade: Fade::new(segment_start, false, sample_rate, params), gain: params.gain, playback_rate, segment_end, read_position: segment_start, block_offset}
     }
 
     fn process(&mut self, source: &Source, out_left: &mut [f32], out_right: &mut [f32], buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) {
@@ -235,7 +238,7 @@ impl OnceVoice {
             };
             let read = self.read_position;
             if let (Some(sample_l), Some(sample_r)) = (read_interp(source.left, source.num_frames, read), read_interp(source.right, source.num_frames, read)) {
-                let gain = (amplitude as f32) * fading_gain[i];
+                let gain = (amplitude as f32) * fading_gain[i] * self.gain;
                 let j = buffer_start + i;
                 out_left[j] += sample_l * gain;
                 out_right[j] += sample_r * gain;
@@ -250,6 +253,7 @@ impl OnceVoice {
 /// Plays a segment with a seamless forward loop, crossfading at the loop boundary.
 pub(crate) struct RepeatVoice {
     fade: Fade,
+    gain: f32,
     playback_rate: f64,
     loop_start: f64,
     loop_end: f64,
@@ -274,7 +278,7 @@ impl RepeatVoice {
             fade.state = VoiceState::Done;
         }
         Self {
-            fade, playback_rate, loop_start, loop_end, loop_fade_length, loop_fade_inverse: 1.0 / loop_fade_length,
+            fade, gain: params.gain, playback_rate, loop_start, loop_end, loop_fade_length, loop_fade_inverse: 1.0 / loop_fade_length,
             splice_equal_power: params.splice_equal_power, splice_rho: params.splice_rho, segment_end, read_position: initial_read_position.unwrap_or(segment_start),
             loop_crossfade_progress: 0.0, loop_crossfade_position: 0.0, block_offset
         }
@@ -323,7 +327,7 @@ impl RepeatVoice {
                     self.loop_crossfade_progress = 0.0;
                 }
             }
-            let gain = (amplitude as f32) * fading_gain[i];
+            let gain = (amplitude as f32) * fading_gain[i] * self.gain;
             let j = buffer_start + i;
             out_left[j] += sample_l * gain;
             out_right[j] += sample_r * gain;
@@ -337,6 +341,7 @@ impl RepeatVoice {
 /// Plays a segment bouncing forward/backward, equal-power (cos/sin) crossfade at each bounce.
 pub(crate) struct PingpongVoice {
     fade: Fade,
+    gain: f32,
     playback_rate: f64,
     loop_start: f64,
     loop_end: f64,
@@ -360,7 +365,7 @@ impl PingpongVoice {
         }
         let (read_position, direction) = initial.unwrap_or((segment_start, 1.0));
         Self {
-            fade, playback_rate, loop_start, loop_end, bounce_fade_length, segment_end, read_position, direction,
+            fade, gain: params.gain, playback_rate, loop_start, loop_end, bounce_fade_length, segment_end, read_position, direction,
             bounce_progress: 0.0, bounce_position: 0.0, block_offset
         }
     }
@@ -403,7 +408,7 @@ impl PingpongVoice {
                     self.bounce_progress = 0.0;
                 }
             }
-            let gain = (amplitude as f32) * fading_gain[i];
+            let gain = (amplitude as f32) * fading_gain[i] * self.gain;
             let j = buffer_start + i;
             out_left[j] += sample_l * gain;
             out_right[j] += sample_r * gain;

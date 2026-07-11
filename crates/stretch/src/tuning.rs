@@ -39,6 +39,10 @@ pub struct Tuning {
     /// amortizes — while reading ahead into continuous material is nearly seamless and the next
     /// boundary's aligned crossfade re-syncs. 0.0 disables (legacy).
     pub read_through_max_fill: f64,
+    /// Textured loops (no clean splice) play TWO staggered read heads half a loop apart at ~0.707
+    /// each: wrap events interleave and decorrelate, partially cancelling the wrap-comb AM that is
+    /// the last audible defect on dense material.
+    pub texture_dual_loop: bool,
     /// Boundaries whose onset strength is below this CONTINUE the playing voices (segment end
     /// extended) instead of crossfading into a fresh spawn — a weak transient means nothing new
     /// happened, and every avoided crossfade is an avoided audible grain start. 0.0 = never.
@@ -65,7 +69,8 @@ impl Tuning {
             boundary_lookahead_seconds: 0.020,
             preroll_seconds: 0.020,
             weak_boundary_threshold: 0.0,
-            read_through_max_fill: 0.0
+            read_through_max_fill: 0.0,
+            texture_dual_loop: false
         }
     }
 
@@ -77,6 +82,7 @@ impl Tuning {
             equal_power_fades: true,
             weak_boundary_threshold: 0.15,
             read_through_max_fill: 1.12,
+            texture_dual_loop: false,
             // Sweep-proven: long voice fades on beating material are long mismatch bursts — 20 ms
             // wins on every pad while sines are insensitive (continuation skips their boundaries).
             voice_fade_max_seconds: 0.020,

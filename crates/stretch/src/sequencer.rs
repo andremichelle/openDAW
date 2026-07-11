@@ -229,9 +229,7 @@ impl Stretcher {
                     if needs_looping {
                         self.voices[index].start_fade_out(0);
                         let marker = &markers[self.current_transient_index as usize];
-                        if let Some(voice) = create_voice(info.start_samples, info.end_samples, effective_playback_rate, engine_rate, mode, true, Some(read_pos), marker, &self.tuning) {
-                            self.spawn.push(voice);
-                        }
+                        spawn_voices(&mut self.spawn, info.start_samples, info.end_samples, effective_playback_rate, engine_rate, mode, true, Some(read_pos), marker, &self.tuning);
                         index += 1;
                         continue;
                     }
@@ -398,9 +396,7 @@ impl Stretcher {
         } else {
             info.end_samples
         };
-        if let Some(voice) = create_voice(voice_start_samples, voice_end_samples, playback_rate, engine_rate, mode, needs_looping, None, marker, &self.tuning) {
-            self.voices.push(voice);
-        }
+        spawn_voices(&mut self.voices, voice_start_samples, voice_end_samples, playback_rate, engine_rate, mode, needs_looping, None, marker, &self.tuning);
         self.active_loop_rms = marker.loop_rms;
         self.accumulated_drift = 0.0;
         self.continued_boundaries = 0;
@@ -451,7 +447,8 @@ fn voice_params(segment_start: f64, segment_end: f64, playback_rate: f64, sample
             splice_rho: -1.0,
             loop_start: legacy_loop_start,
             loop_end: legacy_loop_end,
-            loop_fade_samples: round(tuning.loop_fade_seconds * sample_rate as f64)
+            loop_fade_samples: round(tuning.loop_fade_seconds * sample_rate as f64),
+            gain: 1.0
         };
     }
     let strength = math::clamp(marker.strength, 0.0, 1.0) as f64;
@@ -495,28 +492,48 @@ fn voice_params(segment_start: f64, segment_end: f64, playback_rate: f64, sample
         fade_seconds, equal_power: tuning.equal_power_fades && !coherent,
         splice_equal_power: false,
         splice_rho: if marker.has_loop() {math::clamp(marker.loop_score, 0.0, 1.0) as f64} else {0.0},
-        loop_start, loop_end, loop_fade_samples
+        loop_start, loop_end, loop_fade_samples, gain: 1.0
     }
 }
 
 /// Pick the voice type for the transient play-mode + whether the segment must loop to fill.
 #[allow(clippy::too_many_arguments)]
-fn create_voice(start_samples: f64, end_samples: f64, playback_rate: f64, sample_rate: f32, mode: TransientPlayMode, needs_looping: bool, initial_read_position: Option<f64>, marker: &TransientDescriptor, tuning: &Tuning) -> Option<Voice> {
+fn spawn_voices(out: &mut Vec<Voice>, start_samples: f64, end_samples: f64, playback_rate: f64, sample_rate: f32, mode: TransientPlayMode, needs_looping: bool, initial_read_position: Option<f64>, marker: &TransientDescriptor, tuning: &Tuning) {
     if start_samples >= end_samples {
-        return None;
+        return;
     }
-    let params = voice_params(start_samples, end_samples, playback_rate, sample_rate, marker, tuning);
+    let mut params = voice_params(start_samples, end_samples, playback_rate, sample_rate, marker, tuning);
     if mode == TransientPlayMode::Once || !needs_looping {
-        return Some(Voice::Once(OnceVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, &params)));
+        out.push(Voice::Once(OnceVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, &params)));
+        return;
     }
     if mode == TransientPlayMode::Repeat {
-        return Some(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial_read_position, &params)));
+        // Staggered dual read heads for textures without a clean splice: interleaved wraps
+        // decorrelate the comb. Constant-power pair at 1/sqrt(2) each.
+        let dual = tuning.adaptive && tuning.texture_dual_loop && !marker_clean_loop(marker)
+            && params.loop_end - params.loop_start > 4.0 * params.loop_fade_samples;
+        if dual {
+            params.gain = core::f32::consts::FRAC_1_SQRT_2;
+            out.push(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial_read_position, &params)));
+            // Second head on a GOLDEN-RATIO loop length: incommensurate wrap rates never phase-lock,
+            // so the two combs smear each other instead of stacking (a half-loop stagger with equal
+            // lengths merely octaves the comb).
+            let mut partner = params;
+            let length = params.loop_end - params.loop_start;
+            partner.loop_start = params.loop_end - 0.618 * length;
+            let midpoint = 0.5 * (partner.loop_start + partner.loop_end);
+            out.push(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, Some(midpoint), &partner)));
+        } else {
+            out.push(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial_read_position, &params)));
+        }
+        return;
     }
     // On a stationary tonal segment a phase-aligned Repeat splice is strictly cleaner than any
     // bounce (time-reversal breaks phase coherence no matter the alignment); Pingpong is a fill
     // strategy, not a chosen sound, so adaptive substitutes the better fill where it provably wins.
     if tuning.adaptive && marker.loop_score > 0.9 {
-        return Some(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial_read_position, &params)));
+        out.push(Voice::Repeat(RepeatVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial_read_position, &params)));
+        return;
     }
     // Pingpong reverses direction at each bounce — time-reversal breaks phase coherence no matter
     // how well the points align, and a SHORT descriptor loop just bounces faster (audibly worse).
@@ -528,7 +545,7 @@ fn create_voice(start_samples: f64, end_samples: f64, playback_rate: f64, sample
     // (time-reversal is incoherent regardless), and five pingpong cases regressed with them.
     pingpong_params.loop_fade_samples = round(tuning.loop_fade_seconds * sample_rate as f64);
     let initial = initial_read_position.map(|position| (position, 1.0));
-    Some(Voice::Pingpong(PingpongVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial, &pingpong_params)))
+    out.push(Voice::Pingpong(PingpongVoice::new(start_samples, end_samples, playback_rate, 0, sample_rate, initial, &pingpong_params)));
 }
 
 /// The sample bounds of transient `index`'s segment (to the next transient, or EOF).
