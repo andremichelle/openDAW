@@ -26,17 +26,20 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Browser Support", path: "/manuals/browser-support"},
             {type: "page", label: "Capture MIDI", path: "/manuals/capture-midi"},
             {type: "page", label: "Cloud Backup", path: "/manuals/cloud-backup"},
+            {type: "page", label: "Education", path: "/manuals/education"},
             {type: "page", label: "Firefox MIDI", path: "/manuals/firefox-midi"},
             {type: "page", label: "Freeze AudioUnit", path: "/manuals/freeze-audiounit"},
             {type: "page", label: "Keyboard Shortcuts", path: "/manuals/keyboard-shortcuts"},
             {type: "page", label: "Live Rooms", path: "/manuals/live-rooms"},
             {type: "page", label: "Mixer", path: "/manuals/mixer"},
             {type: "page", label: "Nextcloud", path: "/manuals/nextcloud"},
+            {type: "page", label: "Open Source", path: "/manuals/open-source"},
             {type: "page", label: "Permissions", path: "/manuals/permissions"},
             {type: "page", label: "Presets", path: "/manuals/presets"},
             {type: "page", label: "Private File System", path: "/manuals/private-file-system"},
             {type: "page", label: "Recording", path: "/manuals/recording"},
-            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"}
+            {type: "page", label: "Shadertoy", path: "/manuals/shadertoy"},
+            {type: "page", label: "Your Studio", path: "/manuals/studio"}
         ]
     },
     {

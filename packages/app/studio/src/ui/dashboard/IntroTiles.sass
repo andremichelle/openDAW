@@ -10,14 +10,20 @@ component
     grid-template-columns: repeat(5, 1fr)
     column-gap: 2.5em
 
-  // Informational, not buttons: no frame, no interactive cues. The icon keeps its blue accent but is small, so it
-  // reads as a marker next to the heading rather than a button icon.
+  // Each tile links to its manual; the legend shows the destination. The whole tile is the click target.
   .tile
     display: flex
     flex-direction: column
-    row-gap: 0.6em
+    row-gap: 0.3em
     color: var(--color-dark)
-    cursor: default
+    cursor: pointer
+
+    &:hover .tile-title
+      color: white
+
+    &:hover .tile-link
+      opacity: 1
+      color: var(--color-blue)
 
     > .tile-head
       display: flex
@@ -38,3 +44,8 @@ component
       font-size: $fs-m
       line-height: 1.5
       color: var(--color-shadow)
+
+    > .tile-link
+      font-size: $fs-s
+      color: var(--color-shadow)
+      opacity: 0.5
