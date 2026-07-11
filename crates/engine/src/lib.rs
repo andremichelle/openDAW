@@ -298,6 +298,7 @@ mod composite;
 mod param_automation;
 use param_automation::ParamHandle;
 mod sample;
+pub(crate) mod descriptors;
 use sample::SampleResource;
 mod soundfont;
 use soundfont::SoundfontResource;
@@ -395,6 +396,7 @@ pub(crate) static DEVICE_BROADCAST_FREE: Shared<Vec<u32>> = Shared::new(Vec::new
 // aliases the `&mut Engine` the render path holds. Mutated only off-render (the load handshake + box
 // observer), read-only during render, so the single-threaded engine never overlaps a borrow.
 static SAMPLES: Shared<SampleResource> = Shared::new(SampleResource::new());
+static DESCRIPTORS: Shared<descriptors::DescriptorResource> = Shared::new(descriptors::DescriptorResource::new());
 // The project's TUNING REFERENCE in Hz (TS `EngineContext.baseFrequency`): `bind` catches up on + subscribes
 // to the synced `RootBox.baseFrequency` and records into this cell only. Its OWN cell (NOT `ENGINE`) so a
 // device's re-entrant `host_base_frequency` call during render (the Vaporisateur's note-on) never aliases
@@ -2608,6 +2610,21 @@ pub extern "C" fn sample_allocate(handle: u32, byte_len: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn sample_set_ready(handle: u32, frame_count: u32, channel_count: u32, sample_rate: f32) {
     unsafe { SAMPLES.get() }.set_ready(handle, frame_count, channel_count, sample_rate);
+}
+
+/// Reserve storage for `count` transient-descriptor records (64-byte MarkerRecords, the shared
+/// wire/cache format of `stretch-wasm` and OPFS `markers.bin`) tied to the sample's handle, and
+/// return the write pointer. Off-render; replaces any previous array (re-analysis).
+#[no_mangle]
+pub extern "C" fn descriptors_allocate(sample_handle: u32, count: u32) -> u32 {
+    unsafe { DESCRIPTORS.get() }.allocate(sample_handle, count as usize)
+}
+
+/// Flip the sample's descriptor array live once the host finished writing. Stretch playback binds
+/// them at the next region bind; until then it runs markerless (stateless pitch/warp path).
+#[no_mangle]
+pub extern "C" fn descriptors_set_ready(sample_handle: u32) {
+    unsafe { DESCRIPTORS.get() }.set_ready(sample_handle);
 }
 
 /// Resolve a soundfont handle for a device DURING render: write a `SoundfontRef` (ptr + len) to `out_ptr` and
