@@ -19,7 +19,6 @@ pub mod warp;
 pub mod voice;
 pub mod sequencer;
 pub mod spectral;
-pub mod signalsmith;
 
 pub use analyzer::{AnalyzedSample, Analyzer, AnalyzerConfig};
 pub use descriptor::TransientDescriptor;

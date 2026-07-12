@@ -1,0 +1,18 @@
+[package]
+name = "signalsmith"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# A clean, self-contained pure-Rust port of Signalsmith Stretch (MIT). No engine coupling:
+# its own FFT, no_std + alloc. The native C++ crate is a DEV-dependency only, used as the
+# golden oracle for the parity test suite — it never ships.
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+libm = "0.2"
+
+[dev-dependencies]
+signalsmith-stretch = "0.1"

@@ -128,37 +128,20 @@ impl SignalsmithStretch {
     fn predict_phase(&mut self, ch: usize, _time_factor: f32) {
         let base = ch*self.bands;
         let bands = self.bands;
-        let long_step = 4usize; // ~ fftSamples/interval; refined vs oracle
-        let mut new_out = vec![Cplx::default(); bands];
+        // HORIZONTAL-ONLY phase propagation (classic PV, known-correct): carry each bin's output
+        // phase forward by the input's per-bin rotation, keep the input magnitude. Vertical
+        // coherence (Signalsmith's blend) layers on once this reconstructs a clean sine.
         for b in 0..bands {
             let inp = self.input[base + b];
-            let energy = inp.norm();
-            // horizontal: rotate prev output by (prev_input -> input) twist
-            let twist = self.prev_input[base + b].conj_mul(inp);
-            let mut phase = self.output[base + b].mul(twist);
-            // vertical short steps (up/down neighbours)
-            if b > 0 {
-                let vtwist = self.input[base + b - 1].conj_mul(inp);
-                phase = phase.add(new_out[b - 1].mul(vtwist));
-            }
-            if b + 1 < bands {
-                let vtwist = self.input[base + b + 1].conj_mul(inp);
-                phase = phase.add(self.output[base + b + 1].mul(vtwist));
-            }
-            if b >= long_step {
-                let vtwist = self.input[base + b - long_step].conj_mul(inp);
-                phase = phase.add(new_out[b - long_step].mul(vtwist));
-            }
-            // energy-normalize (makeOutput)
+            let twist = self.prev_input[base + b].conj_mul(inp); // conj(prev)*cur = per-bin rotation
+            let phase = self.output[base + b].mul(twist);
             let pn = phase.norm();
-            let out = if pn <= NOISE_FLOOR {
-                inp.scale(libm::sqrtf(energy / (inp.norm() + NOISE_FLOOR)))
+            self.output[base + b] = if pn <= NOISE_FLOOR {
+                inp
             } else {
-                phase.scale(libm::sqrtf(energy / pn))
+                phase.scale(libm::sqrtf(inp.norm() / pn))
             };
-            new_out[b] = out;
         }
-        for b in 0..bands { self.output[base + b] = new_out[b]; }
     }
 
     /// IFFT this channel's output bands and overlap-add (windowed) into the accumulator.

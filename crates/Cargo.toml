@@ -2,7 +2,7 @@
 # crate compiling to a focused .wasm (one entry point per feature). Add a member per feature.
 [workspace]
 resolver = "2"
-members = ["math", "dsp", "abi", "boxgraph", "studio-boxes", "transport", "value", "bindings", "processors", "engine-env", "voicing", "stock-devices/*", "engine", "sine", "stretch", "stretch-lab", "stretch-wasm"]
+members = ["math", "dsp", "abi", "boxgraph", "studio-boxes", "transport", "value", "bindings", "processors", "engine-env", "voicing", "stock-devices/*", "engine", "sine", "stretch", "stretch-lab", "stretch-wasm", "signalsmith"]
 
 [profile.release]
 opt-level = "z"
