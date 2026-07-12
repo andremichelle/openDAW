@@ -38,7 +38,9 @@ pub struct SignalsmithStretch {
     output: Vec<Cplx>,
     mag: Vec<f32>,
     prev_phase: Vec<f32>,
+    ana_phase: Vec<f32>,
     synth_phase: Vec<f32>,
+    peaks: Vec<usize>,
     // scratch
     re: Vec<f32>,
     im: Vec<f32>,
@@ -63,7 +65,9 @@ impl SignalsmithStretch {
             output: vec![Cplx::default(); bands*channels],
             mag: vec![0.0; bands*channels],
             prev_phase: vec![0.0; bands*channels],
+            ana_phase: vec![0.0; bands*channels],
             synth_phase: vec![0.0; bands*channels],
+            peaks: Vec::with_capacity(bands),
             re: vec![0.0; block], im: vec![0.0; block], frame: vec![0.0; block],
         }
     }
@@ -96,6 +100,7 @@ impl SignalsmithStretch {
                 let mag = libm::sqrtf(a.norm());
                 let phase = libm::atan2f(a.im, a.re);
                 self.mag[base+b] = mag;
+                self.ana_phase[base+b] = phase;
                 if first {
                     self.synth_phase[base+b] = phase;
                 } else {
@@ -106,13 +111,46 @@ impl SignalsmithStretch {
                     self.synth_phase[base+b] += inst_freq * synth_hop as f32;
                 }
                 self.prev_phase[base+b] = phase;
-                self.output[base+b] = Cplx { re: mag*libm::cosf(self.synth_phase[base+b]), im: mag*libm::sinf(self.synth_phase[base+b]) };
             }
+            // RIGID PHASE LOCKING (vertical coherence, the phasiness cure): peak bins keep their
+            // free-run synthesis phase; every other bin's OUTPUT phase is tied rigidly to its
+            // nearest peak, preserving that peak's analysis-time phase relationships. The
+            // accumulated synth_phase STATE is never overwritten — only the output is derived —
+            // which is why energy stays correct (magnitudes untouched).
+            self.build_locked_output(base);
             first = false;
             self.synthesise(ch, synth, &mut acc, &mut norm);
             synth += self.interval as isize;
         }
         for i in 0..out_len { output[i] = if norm[i] > 1e-6 { acc[i]/norm[i] } else { 0.0 }; }
+    }
+
+    fn build_locked_output(&mut self, base: usize) {
+        let bands = self.bands;
+        self.peaks.clear();
+        for b in 0..bands {
+            let m = self.mag[base+b];
+            if m > 0.0
+                && (b < 1 || self.mag[base+b-1] <= m) && (b+1 >= bands || self.mag[base+b+1] < m)
+                && (b < 2 || self.mag[base+b-2] <= m) && (b+2 >= bands || self.mag[base+b+2] < m) {
+                self.peaks.push(b);
+            }
+        }
+        if self.peaks.is_empty() {
+            for b in 0..bands {
+                let sp = self.synth_phase[base+b];
+                self.output[base+b] = Cplx { re: self.mag[base+b]*libm::cosf(sp), im: self.mag[base+b]*libm::sinf(sp) };
+            }
+            return;
+        }
+        let mut pi = 0usize;
+        for b in 0..bands {
+            while pi + 1 < self.peaks.len() && (self.peaks[pi+1] as isize - b as isize).abs() < (self.peaks[pi] as isize - b as isize).abs() { pi += 1; }
+            let p = self.peaks[pi];
+            let out_phase = self.synth_phase[base+p] + (self.ana_phase[base+b] - self.ana_phase[base+p]);
+            let m = self.mag[base+b];
+            self.output[base+b] = Cplx { re: m*libm::cosf(out_phase), im: m*libm::sinf(out_phase) };
+        }
     }
 
     /// Windowed FFT of `input` centered at `center`, into this channel's `input` bands.

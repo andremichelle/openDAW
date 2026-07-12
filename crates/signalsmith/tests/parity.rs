@@ -7,6 +7,32 @@ use signalsmith_stretch::Stretch as Native;
 fn sine(freq: f64, rate: f64, n: usize) -> Vec<f32> {
     (0..n).map(|i| (0.5*(2.0*std::f64::consts::PI*freq*i as f64/rate).sin()) as f32).collect()
 }
+// mean |log-magnitude STFT| difference between two signals — how alike they actually sound,
+// phase-independent. 0 = identical spectrogram. This is the real quality target vs native.
+fn spectral_diff(a: &[f32], b: &[f32]) -> f64 {
+    let n = 1024usize; let hop = 256usize;
+    let len = a.len().min(b.len());
+    if len < n { return 0.0; }
+    let win: Vec<f64> = (0..n).map(|i| 0.5-0.5*(2.0*std::f64::consts::PI*i as f64/n as f64).cos()).collect();
+    let mag = |x: &[f32], off: usize| -> Vec<f64> {
+        let mut re = vec![0.0f64; n]; let mut im = vec![0.0f64; n];
+        for k in 0..n { for i in 0..n { let ang = -2.0*std::f64::consts::PI*(k*i) as f64/n as f64;
+            re[k] += x[off+i] as f64*win[i]*ang.cos(); im[k] += x[off+i] as f64*win[i]*ang.sin(); } }
+        (0..n/2).map(|k| (re[k]*re[k]+im[k]*im[k]).sqrt()).collect()
+    };
+    let mut sum = 0.0; let mut wsum = 0.0;
+    let mut off = n;
+    while off + n < len - n {
+        let (ma, mb) = (mag(a, off), mag(b, off));
+        for k in 1..n/2 {
+            let w = ma[k].max(mb[k]);                 // weight by real energy, ignore empty bins
+            sum += w * ((ma[k]+1e-9).ln() - (mb[k]+1e-9).ln()).abs();
+            wsum += w;
+        }
+        off += hop*8;
+    }
+    sum / wsum.max(1e-9)
+}
 fn rms(x: &[f32]) -> f64 { (x.iter().map(|v| (*v as f64).powi(2)).sum::<f64>()/x.len().max(1) as f64).sqrt() }
 // out-of-band energy (everything not near f0) as a purity proxy on a pure-sine stretch
 fn dirtiness_db(x: &[f32], rate: f64, f0: f64) -> f64 {
@@ -44,7 +70,8 @@ fn parity(label: &str, input: &[f32], ratio: f64, rate: f64) -> f64 {
     let mut port = Port::preset_default(1, rate as f32);
     let mut pout = vec![0.0f32; out_len]; port.process_mono(input, &mut pout);
     let db = 20.0*(rms(&pout)/rms(&nout).max(1e-9)).log10();
-    println!("{label:14} x{ratio}: native_rms {:.4} port_rms {:.4} ({:+.1} dB)", rms(&nout), rms(&pout), db);
+    let sd = spectral_diff(&pout, &nout);
+    println!("{label:14} x{ratio}: rms {:+.1} dB   spectral_diff {:.3}", db, sd);
     db
 }
 
