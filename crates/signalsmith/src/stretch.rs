@@ -35,9 +35,10 @@ pub struct SignalsmithStretch {
     fft: Fft,
     window: Vec<f32>,
     // per-channel band state (length bands*channels)
-    input: Vec<Cplx>,
-    prev_input: Vec<Cplx>,
     output: Vec<Cplx>,
+    mag: Vec<f32>,
+    prev_phase: Vec<f32>,
+    synth_phase: Vec<f32>,
     // scratch
     re: Vec<f32>,
     im: Vec<f32>,
@@ -59,9 +60,10 @@ impl SignalsmithStretch {
             channels, block, interval, bands,
             fft: Fft::new(block),
             window: kaiser_ola_window(block, interval),
-            input: vec![Cplx::default(); bands*channels],
-            prev_input: vec![Cplx::default(); bands*channels],
             output: vec![Cplx::default(); bands*channels],
+            mag: vec![0.0; bands*channels],
+            prev_phase: vec![0.0; bands*channels],
+            synth_phase: vec![0.0; bands*channels],
             re: vec![0.0; block], im: vec![0.0; block], frame: vec![0.0; block],
         }
     }
@@ -73,37 +75,44 @@ impl SignalsmithStretch {
     /// Whole-buffer stretch of one channel: `output.len()/input.len()` sets the ratio. Zero-pads
     /// the input at both ends by one block so edge frames are complete (matches native `exact`).
     pub fn process_mono(&mut self, input: &[f32], output: &mut [f32]) {
-        let ch = 0;
+        let ch = 0; let base = ch*self.bands;
         let out_len = output.len();
         for o in output.iter_mut() { *o = 0.0; }
-        let mut norm = vec![0.0f32; out_len + self.block];
         let mut acc = vec![0.0f32; out_len + self.block];
+        let mut norm = vec![0.0f32; out_len + self.block];
         let ratio = out_len as f64 / input.len().max(1) as f64;
-        let time_factor = 1.0 / ratio as f32; // input advance per output advance
-        // synthesis hops across the output
+        let synth_hop = self.interval as f64;
+        let two_pi = 2.0*core::f32::consts::PI;
         let mut synth = 0isize;
+        let mut prev_in_center = f64::NAN;
         let mut first = true;
         while (synth as usize) < out_len {
-            // input read center for this synthesis frame
-            let in_center = (synth as f64 / ratio) as isize;
-            self.analyse(input, ch, in_center);
-            if first {
-                // seed output phase = input phase, prev = input
-                for b in 0..self.bands {
-                    self.output[b + ch*self.bands] = self.input[b + ch*self.bands];
-                    self.prev_input[b + ch*self.bands] = self.input[b + ch*self.bands];
+            let in_center = synth as f64 / ratio;
+            let analysis_hop = if prev_in_center.is_nan() { synth_hop / ratio } else { in_center - prev_in_center };
+            prev_in_center = in_center;
+            self.analyse(input, ch, libm::round(in_center) as isize); // fills self.output[b]=analysis spectrum, tmp
+            for b in 0..self.bands {
+                let a = self.output[base+b];
+                let mag = libm::sqrtf(a.norm());
+                let phase = libm::atan2f(a.im, a.re);
+                self.mag[base+b] = mag;
+                if first {
+                    self.synth_phase[base+b] = phase;
+                } else {
+                    let expected = two_pi * b as f32 * analysis_hop as f32 / self.block as f32;
+                    let mut dev = phase - self.prev_phase[base+b] - expected;
+                    dev -= two_pi * libm::roundf(dev/two_pi);         // wrap to (-pi,pi]
+                    let inst_freq = (expected + dev) / analysis_hop as f32; // rad/sample
+                    self.synth_phase[base+b] += inst_freq * synth_hop as f32;
                 }
-                first = false;
-            } else {
-                self.predict_phase(ch, time_factor);
+                self.prev_phase[base+b] = phase;
+                self.output[base+b] = Cplx { re: mag*libm::cosf(self.synth_phase[base+b]), im: mag*libm::sinf(self.synth_phase[base+b]) };
             }
+            first = false;
             self.synthesise(ch, synth, &mut acc, &mut norm);
-            for b in 0..self.bands { self.prev_input[b + ch*self.bands] = self.input[b + ch*self.bands]; }
             synth += self.interval as isize;
         }
-        for i in 0..out_len {
-            output[i] = if norm[i] > 1e-6 { acc[i] / norm[i] } else { 0.0 };
-        }
+        for i in 0..out_len { output[i] = if norm[i] > 1e-6 { acc[i]/norm[i] } else { 0.0 }; }
     }
 
     /// Windowed FFT of `input` centered at `center`, into this channel's `input` bands.
@@ -118,31 +127,10 @@ impl SignalsmithStretch {
         self.fft.forward(&mut self.re, &mut self.im);
         let base = ch*self.bands;
         for b in 0..self.bands {
-            self.input[base + b] = Cplx { re: self.re[b], im: self.im[b] };
+            self.output[base + b] = Cplx { re: self.re[b], im: self.im[b] };
         }
     }
 
-    /// The Signalsmith phase blend (time-stretch path, identity freq map): each output bin's phase
-    /// is predicted from horizontal continuity (prev->current input rotation applied to prev output)
-    /// plus vertical coherence from neighbour bins, then energy-normalized to the input magnitude.
-    fn predict_phase(&mut self, ch: usize, _time_factor: f32) {
-        let base = ch*self.bands;
-        let bands = self.bands;
-        // HORIZONTAL-ONLY phase propagation (classic PV, known-correct): carry each bin's output
-        // phase forward by the input's per-bin rotation, keep the input magnitude. Vertical
-        // coherence (Signalsmith's blend) layers on once this reconstructs a clean sine.
-        for b in 0..bands {
-            let inp = self.input[base + b];
-            let twist = self.prev_input[base + b].conj_mul(inp); // conj(prev)*cur = per-bin rotation
-            let phase = self.output[base + b].mul(twist);
-            let pn = phase.norm();
-            self.output[base + b] = if pn <= NOISE_FLOOR {
-                inp
-            } else {
-                phase.scale(libm::sqrtf(inp.norm() / pn))
-            };
-        }
-    }
 
     /// IFFT this channel's output bands and overlap-add (windowed) into the accumulator.
     fn synthesise(&mut self, ch: usize, synth: isize, acc: &mut [f32], norm: &mut [f32]) {

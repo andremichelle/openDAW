@@ -24,15 +24,45 @@ fn dirtiness_db(x: &[f32], rate: f64, f0: f64) -> f64 {
     10.0*(dirt/total.max(1e-12)).log10()
 }
 
-#[test]
-fn matches_native_rms_within_3db() {
-    let rate = 48000.0; let input = sine(440.0, rate, 24000); let out_len = 36000;
+fn chord(rate: f64, n: usize) -> Vec<f32> {
+    (0..n).map(|i| {
+        let t = i as f64/rate;
+        (0.2*((2.0*std::f64::consts::PI*220.0*t).sin()
+            + (2.0*std::f64::consts::PI*277.18*t).sin()
+            + (2.0*std::f64::consts::PI*329.63*t).sin())) as f32
+    }).collect()
+}
+fn noise(n: usize) -> Vec<f32> {
+    let mut s = 0x2545F4914F6CDD1Du64;
+    (0..n).map(|_| { s^=s<<13; s^=s>>7; s^=s<<17; ((s>>11) as f64/(1u64<<53) as f64 - 0.5) as f32*0.4 }).collect()
+}
+
+fn parity(label: &str, input: &[f32], ratio: f64, rate: f64) -> f64 {
+    let out_len = (input.len() as f64*ratio) as usize;
     let mut native = Native::preset_default(1, rate as u32);
     let mut nout = vec![0.0f32; out_len]; native.exact(&input[..], &mut nout[..]);
     let mut port = Port::preset_default(1, rate as f32);
-    let mut pout = vec![0.0f32; out_len]; port.process_mono(&input, &mut pout);
-    let ratio_db = 20.0*(rms(&pout)/rms(&nout).max(1e-9)).log10();
-    println!("RMS: native {:.4} port {:.4} ({:+.1} dB)", rms(&nout), rms(&pout), ratio_db);
-    println!("dirtiness: native {:.1} dB  port {:.1} dB", dirtiness_db(&nout, rate, 440.0), dirtiness_db(&pout, rate, 440.0));
-    assert!(ratio_db.abs() < 3.0, "port RMS within 3 dB of native (got {ratio_db:+.1})");
+    let mut pout = vec![0.0f32; out_len]; port.process_mono(input, &mut pout);
+    let db = 20.0*(rms(&pout)/rms(&nout).max(1e-9)).log10();
+    println!("{label:14} x{ratio}: native_rms {:.4} port_rms {:.4} ({:+.1} dB)", rms(&nout), rms(&pout), db);
+    db
+}
+
+#[test]
+fn matches_native_across_material_and_ratios() {
+    let rate = 48000.0;
+    let cases: &[(&str, Vec<f32>)] = &[
+        ("sine", sine(440.0, rate, 24000)),
+        ("chord", chord(rate, 24000)),
+        ("noise", noise(24000)),
+    ];
+    for (label, input) in cases {
+        // Tonal material tracks native within ~1.5 dB; broadband noise is the PV-inherent hard
+        // case (random-phase energy loss) where native's phase randomisation helps — 3.5 dB there.
+        let tol = if label == &"noise" { 3.5 } else { 1.5 };
+        for ratio in [0.75, 1.25, 1.5, 2.0] {
+            let db = parity(label, input, ratio, rate);
+            assert!(db.abs() < tol, "{label} x{ratio}: RMS within {tol} dB of native (got {db:+.1})");
+        }
+    }
 }
