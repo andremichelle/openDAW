@@ -128,11 +128,18 @@ impl SignalsmithStretch {
     fn build_locked_output(&mut self, base: usize) {
         let bands = self.bands;
         self.peaks.clear();
+        // smoothed magnitude floor (one-pole both directions) — a peak must stand ABOVE it.
+        let alpha = 0.15f32;
+        let mut sm = 0.0f32;
+        for b in 0..bands { sm += alpha*(self.mag[base+b]-sm); self.frame[b] = sm; }
+        sm = 0.0;
+        for b in (0..bands).rev() { sm += alpha*(self.mag[base+b]-sm); self.frame[b] = 0.5*(self.frame[b]+sm); }
+        let w = 3usize;
         for b in 0..bands {
             let m = self.mag[base+b];
-            if m > 0.0
-                && (b < 1 || self.mag[base+b-1] <= m) && (b+1 >= bands || self.mag[base+b+1] < m)
-                && (b < 2 || self.mag[base+b-2] <= m) && (b+2 >= bands || self.mag[base+b+2] < m) {
+            if m <= self.frame[b] * 1.2 { continue; }             // must be prominent over the floor
+            let lo = b.saturating_sub(w); let hi = (b+w+1).min(bands);
+            if (lo..hi).all(|o| self.mag[base+o] <= m) {           // local max over +/- w bins
                 self.peaks.push(b);
             }
         }
