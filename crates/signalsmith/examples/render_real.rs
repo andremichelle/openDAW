@@ -9,8 +9,18 @@ fn read_wav(path: &str) -> (Vec<f32>, f32) {
         let body=&b[i+8..(i+8+sz).min(b.len())];
         if id==b"fmt " { fmt=u16::from_le_bytes([body[0],body[1]]); ch=u16::from_le_bytes([body[2],body[3]]) as usize; rate=u32::from_le_bytes([body[4],body[5],body[6],body[7]]); }
         else if id==b"data" { data=body.to_vec(); } i+=8+sz+(sz&1); }
-    let mono: Vec<f32> = if fmt==3 { data.chunks(4*ch).map(|c| (0..ch).map(|k| f32::from_le_bytes([c[k*4],c[k*4+1],c[k*4+2],c[k*4+3]])).sum::<f32>()/ch as f32).collect() }
-        else { data.chunks(2*ch).map(|c| (0..ch).map(|k| i16::from_le_bytes([c[k*2],c[k*2+1]]) as f32/32768.0).sum::<f32>()/ch as f32).collect() };
+    // bits from the fmt chunk (byte 14-15). Handle 16/24/32-int and 32-float.
+    let bits = { let mut i=12; let mut bb=16u16; while i+8<=b.len(){let id=&b[i..i+4];let sz=u32::from_le_bytes([b[i+4],b[i+5],b[i+6],b[i+7]]) as usize; if id==b"fmt "{bb=u16::from_le_bytes([b[i+22],b[i+23]]);} i+=8+sz+(sz&1);} bb } as usize;
+    let bps = bits/8; let frame = bps*ch;
+    let sample = |c: &[u8]| -> f32 { match (fmt, bits) {
+        (3,32) => f32::from_le_bytes([c[0],c[1],c[2],c[3]]),
+        (1,16) => i16::from_le_bytes([c[0],c[1]]) as f32/32768.0,
+        (1,24) => (((c[2] as i32)<<24 | (c[1] as i32)<<16 | (c[0] as i32)<<8) >> 8) as f32/8388608.0,
+        (1,32) => i32::from_le_bytes([c[0],c[1],c[2],c[3]]) as f32/2147483648.0,
+        _ => 0.0,
+    }};
+    let mono: Vec<f32> = data.chunks(frame).filter(|c| c.len()==frame)
+        .map(|c| (0..ch).map(|k| sample(&c[k*bps..(k+1)*bps])).sum::<f32>()/ch as f32).collect();
     (mono, rate as f32)
 }
 fn write_wav(path: &str, x: &[f32], rate: f32) {
