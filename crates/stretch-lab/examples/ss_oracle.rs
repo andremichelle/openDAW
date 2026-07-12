@@ -23,10 +23,25 @@ fn main() {
     native.exact(&input[..], &mut nout[..]);
     println!("native   : in_rms {:.4}  out_rms {:.4}  in_lat {}  out_lat {}", rms(&input), rms(&nout), native.input_latency(), native.output_latency());
 
-    // --- our port (config only so far) ---
-    let port = PortStretch::preset_default(1, rate as f32);
-    println!("port cfg : block {}  interval {}  (process() not yet implemented)", port.block_samples(), port.interval_samples());
-
-    // stash native reference for diffing
-    println!("oracle ready: {} samples of reference output at 1.5x", nout.len());
+    // --- our port ---
+    let mut port = PortStretch::preset_default(1, rate as f32);
+    let mut pout = vec![0.0f32; out_len];
+    port.process_mono(&input, &mut pout);
+    println!("port     : out_rms {:.4}  block {}  interval {}", rms(&pout), port.block_samples(), port.interval_samples());
+    // spectral purity: a pure sine stretched should stay a pure sine. Measure THD-ish: energy at
+    // 440 vs total, for both, on the steady middle.
+    let mid = |x: &[f32]| -> f64 {
+        let n = 8192; let s = out_len/2 - n/2;
+        let seg = &x[s..s+n];
+        let mut re=0.0; let mut im=0.0;
+        for (i,v) in seg.iter().enumerate() {
+            let w = 0.5-0.5*(2.0*std::f64::consts::PI*i as f64/n as f64).cos();
+            let a = 2.0*std::f64::consts::PI*440.0*(s+i) as f64/rate;
+            re += *v as f64*w*a.cos(); im += *v as f64*w*a.sin();
+        }
+        let carrier = (re*re+im*im).sqrt();
+        let total: f64 = seg.iter().enumerate().map(|(i,v)|{let w=0.5-0.5*(2.0*std::f64::consts::PI*i as f64/n as f64).cos(); (*v as f64*w).powi(2)}).sum::<f64>().sqrt();
+        20.0*((carrier/total.max(1e-9)).min(1.0)).log10()
+    };
+    println!("carrier/total dB (higher=purer): native {:.1}  port {:.1}", mid(&nout), mid(&pout));
 }
