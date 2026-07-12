@@ -20,3 +20,4 @@ engine-env = {path = "../engine-env"}
 dsp = {path = "../dsp"}
 math = {path = "../math"}
 audio_visualizer_rs = {path = "../../../audio-analyzer-rs", optional = true}
+signalsmith-stretch = "0.1"
