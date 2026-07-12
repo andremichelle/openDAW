@@ -8,6 +8,7 @@ pub mod attack;
 pub mod modulation;
 pub mod spectral;
 pub mod annotate;
+pub mod spurious;
 
 use crate::corpus::{Class, Entry};
 use crate::render::RenderSpec;
@@ -117,6 +118,10 @@ pub fn measure_case(entry: &Entry, spec: &RenderSpec, out_left: &[f32], out_righ
                 results.push(metric("adv_attack_extra_peaks", scores.extra_peaks, Direction::LowerBetter));
             }
         }
+    }
+    // The ear-calibrated grain-artifact detector: onsets that should not exist.
+    if looping {
+        results.push(metric("spurious_attacks_per_s", spurious::spurious_attack_rate(&source_fast, &output_fast, spec.ratio), Direction::LowerBetter));
     }
     #[cfg(feature = "analyzer")]
     {

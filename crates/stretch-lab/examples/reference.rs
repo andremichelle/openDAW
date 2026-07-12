@@ -36,5 +36,7 @@ fn main() {
         let score = modulation_excess_rated(&smooth_out, &smooth_ref, 0.0, reference_ratio)
             .map(|s| s.band_peak_db).unwrap_or(f64::NAN);
         println!("{:<14} {:>6} {:>9.1} {:>12.1}", id, ratio, ours_db, score);
+        let out_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("out/reference").join(format!("{id}_x{ratio}_signalsmith.wav"));
+        let _ = stretch_lab::wav::write_32f(&out_path, entry.file_rate, &rendered, &rendered);
     }
 }

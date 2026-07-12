@@ -310,7 +310,10 @@ impl Analyzer {
             candidate_start = (loop_end - beats * beat_period).max(earliest_start);
             search = (beat_period * 0.5).max(8.0) as isize;
         }
-        let window = (0.030 * rate) as usize;
+        // The alignment window must fit INSIDE the loop, or correlation reads past the splice and
+        // returns garbage (tiny tail loops shorter than 30 ms rendered broken).
+        let loop_length = loop_end - candidate_start;
+        let window = ((0.030 * rate) as usize).min((loop_length * 0.5) as usize).max(16);
         let (start, score) = self.best_correlated_start(mono, loop_end, candidate_start, search, window, earliest_start, loop_end - minimum_length);
         if score < 0.5 {
             return (0.0, -1.0, 0.0);

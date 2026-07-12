@@ -42,6 +42,6 @@ pub fn audibility_floor(name: &str) -> Option<f64> {
 /// Metrics whose improvement counts toward an `Improved` verdict. `mod_expected_db` is reported
 /// but NOT gated: its expectation assumes the baseline's loop length, and the band-peak sweep is
 /// the engine-agnostic (ungameable) version of the same question.
-pub const TARGETS: &[&str] = &["mod_band_peak_db", "mod_acf_peak", "sine_sideband_db", "sine_thd_db", "attack_extra_peaks"];
+pub const TARGETS: &[&str] = &["spurious_attacks_per_s", "mod_band_peak_db", "mod_acf_peak", "sine_sideband_db", "sine_thd_db", "attack_extra_peaks"];
 /// Metrics that must hold (vs reference + absolute bands) for ANY verdict better than Mixed.
 pub const GUARDS: &[&str] = &["attack_rise_ratio", "attack_crest_ratio", "sa_attack_ratio", "spectral_delta_db", "level_delta_db", "trailing_silence"];

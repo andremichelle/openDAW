@@ -1,0 +1,11 @@
+# Ear-verdict calibration set — ONLY verdicts the user actually gave by ear.
+# (Signalsmith files were contrast material I presented; the user never rated them — removed.)
+# file<TAB>source<TAB>verdict(0=good..3=horrible)<TAB>user's words
+out/worst-cases/1-derelict-x1.25-OURS-worst.wav	out/worst-cases/1-derelict-SOURCE.wav	3	rapid volume modulation to clicky noises
+out/worst-cases/2-guitar-x1.1-OURS.wav	out/worst-cases/2-guitar-SOURCE.wav	3	ghost playbacks
+out/worst-cases/3-padchord-x1.25-OURS.wav	out/worst-cases/3-padchord-SOURCE.wav	3	as bad as TS; random grain attacks
+out/bisect/pad-derelict-A-current.wav	out/bisect/pad-derelict.wav	3	breathes too heavily, ghost grains
+out/bisect/pad-derelict-D-C-plus-annotation-markers.wav	out/bisect/pad-derelict.wav	2	slightly better, still not good
+out/bisect/guitar-chords-D-C-plus-annotation-markers.wav	out/bisect/guitar-chords.wav	2	slightly better, still not good
+out/bisect/padchord-D-C-plus-annotation-markers.wav	out/bisect/padchord.wav	2	slightly better, still not good
+out/bisect/padchord-F-D-plus-tiny-tail-loops.wav	out/bisect/padchord.wav	3	just broken
