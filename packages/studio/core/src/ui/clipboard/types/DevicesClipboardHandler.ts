@@ -14,7 +14,7 @@ import {
 } from "@opendaw/lib-std"
 import {Box, BoxGraph} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {RootBox, TrackBox} from "@opendaw/studio-boxes"
+import {NoteEventCollectionBox, RootBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {
     AudioEffectDeviceAdapter,
     BoxAdapters,
@@ -25,7 +25,8 @@ import {
     EffectDeviceBox,
     FilteredSelection,
     InstrumentDeviceBoxAdapter,
-    MidiEffectDeviceAdapter
+    MidiEffectDeviceAdapter,
+    UnionBoxTypes
 } from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
@@ -277,7 +278,19 @@ export namespace DevicesClipboard {
                             excludeBox: box => {
                                 if (replaceInstrument) {return false}
                                 if (DeviceBoxUtils.isInstrumentDeviceBox(box)) {return true}
-                                if (isInstanceOf(box, TrackBox)) {return metadata.hasInstrument}
+                                // The unit's timeline content (tracks + their regions/clips/event-collections)
+                                // is bundled only alongside an instrument, for the REPLACE case. When an
+                                // instrument is present but we are NOT replacing, none of it may be pasted: a
+                                // region deserialized without its excluded track dangles its mandatory `regions`
+                                // pointer and rejects the whole transaction (#1049-#1051). Drop the entire
+                                // timeline subtree, not just the TrackBox. (An effect-only copy has no
+                                // instrument, so its automation tracks/regions still paste.)
+                                if (metadata.hasInstrument
+                                    && (isInstanceOf(box, TrackBox)
+                                        || UnionBoxTypes.isRegionBox(box)
+                                        || UnionBoxTypes.isClipBox(box)
+                                        || isInstanceOf(box, NoteEventCollectionBox)
+                                        || isInstanceOf(box, ValueEventCollectionBox))) {return true}
                                 return false
                             }
                         }

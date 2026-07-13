@@ -22,7 +22,7 @@ import {
     WerkstattSampleBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
-import {DeviceBoxUtils, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {DeviceBoxUtils, ProjectSkeleton, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {ClipboardUtils} from "../ClipboardUtils"
 
 describe("DevicesClipboardHandler", () => {
@@ -304,7 +304,14 @@ describe("DevicesClipboardHandler", () => {
         excludeBox: (box: Box) => {
             if (replaceInstrument) {return false}
             if (DeviceBoxUtils.isInstrumentDeviceBox(box)) {return true}
-            if (isInstanceOf(box, TrackBox)) {return hasInstrument}
+            // Mirrors DevicesClipboardHandler paste: when an instrument is bundled but not replaced, drop the
+            // whole timeline subtree so a region can't dangle its mandatory `regions` pointer (#1049-#1051).
+            if (hasInstrument
+                && (isInstanceOf(box, TrackBox)
+                    || UnionBoxTypes.isRegionBox(box)
+                    || UnionBoxTypes.isClipBox(box)
+                    || isInstanceOf(box, NoteEventCollectionBox)
+                    || isInstanceOf(box, ValueEventCollectionBox))) {return true}
             return false
         }
     })
@@ -487,6 +494,29 @@ describe("DevicesClipboardHandler", () => {
             const inputs = targetAU.input.pointerHub.incoming()
             expect(inputs.length).toBe(1)
             expect((inputs[0].box as TapeDeviceBox).label.getValue()).toBe("Existing Tape")
+        })
+        // #1049-#1051: copying an instrument bundles the unit's note tracks + regions. Pasting WITHOUT
+        // replacing must drop that whole timeline subtree; otherwise a NoteRegionBox is deserialized without
+        // its (excluded) track and its mandatory `regions` pointer dangles, rejecting the transaction.
+        it("drops the bundled note structure (no dangling regions pointer) when not replacing (#1049)", () => {
+            const sourceAU = createAudioUnit(source)
+            const vapo = addVaporisateur(source, sourceAU, "Source Vapo")
+            const noteTrack = addTrack(source, sourceAU, TrackType.Notes, 0)
+            addNoteRegion(source, noteTrack, 0, 1920)
+            const deps = collectDeviceDependencies(vapo, source.boxGraph, sourceAU)
+            const data = ClipboardUtils.serializeBoxes([vapo, ...deps])
+            const targetAU = createAudioUnit(target)
+            const editing = new BoxEditing(target.boxGraph)
+            expect(() => {
+                editing.modify(() => {
+                    ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                        makePasteMapper(targetAU, false, true))
+                })
+            }).not.toThrow()
+            const pastedTracks = targetAU.tracks.pointerHub.filter(Pointers.TrackCollection)
+                .filter(pointer => isInstanceOf(pointer.box, TrackBox))
+            expect(pastedTracks.length).toBe(0)
+            expect(target.boxGraph.boxes().some(box => isInstanceOf(box, NoteRegionBox))).toBe(false)
         })
     })
 
