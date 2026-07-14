@@ -1,2 +1,6 @@
 /target
 /stretch-lab/out
+# stretch-lab is excluded from the workspace (external audio-analyzer-rs path dep); it builds standalone
+# into its own target/ with its own lockfile that references a machine-local path — keep both out of git.
+/stretch-lab/target
+/stretch-lab/Cargo.lock
