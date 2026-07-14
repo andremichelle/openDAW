@@ -15,7 +15,7 @@ const ODSL = path.resolve(__dirname, "../public/odsl/test.odsl")
 
 describe("editing one parameter touches no other plugin", () => {
     it("changing the delay's feedback pushes exactly one parameter", async () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         const {engine, memory} = await loadFullEngine()
         const pushes = () => engine.param_push_count() >>> 0
         const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)

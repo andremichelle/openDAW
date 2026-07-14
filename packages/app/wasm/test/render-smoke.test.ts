@@ -15,7 +15,7 @@ const ODSL = path.resolve(__dirname, "../public/odsl/test.odsl")
 
 describe("render smoke", () => {
     it("the fully-built project produces audible output", async () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         const {engine, memory, drainSamples} = await loadFullEngine()
         const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)
         const steps = decodeSteps(commits)

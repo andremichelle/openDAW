@@ -12,7 +12,7 @@ const ODSL = path.resolve(__dirname, "../public/odsl/test.odsl")
 
 describe("sync-log navigation", () => {
     it("fast-forwards to the end and fully rewinds to the start", () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         expect(commits.length).toBeGreaterThan(1)
         expect(commits[0].type).toBe(COMMIT_INIT)
         const {boxGraph} = ProjectSkeleton.decode(commits[0].payload)

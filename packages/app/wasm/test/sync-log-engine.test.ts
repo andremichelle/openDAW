@@ -36,7 +36,7 @@ const loadEngine = async (): Promise<{engine: EngineExports, memory: WebAssembly
 
 describe("sync-log engine: forward to end, backward to start", () => {
     it("the engine survives a full rewind", async () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         const {engine, memory} = await loadEngine()
         const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)
         const steps = decodeSteps(commits)

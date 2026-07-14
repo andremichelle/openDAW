@@ -34,7 +34,7 @@ const tick = () => new Promise(resolve => setTimeout(resolve))
 
 describe("sync-log scrub", () => {
     it("settles on the final target after a fast-scrub barrage, engine in sync", async () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         const {engine, memory} = await loadEngine()
         const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)
         const steps = decodeSteps(commits)
