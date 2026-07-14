@@ -14,7 +14,7 @@ import {SampleStorage} from "../../sample-storage"
 // playing. The loop samples are seeded into the OPFS sample cache under fixed uuids, so the page is fully offline.
 
 const BAR = 3840          // pulses (960 PPQN * 4)
-const TRANSPORT_SPAN = 4 * BAR
+const TRANSPORT_SPAN = 8 * BAR   // a multiple of every loop's bar count (2/4/8), so each tiles cleanly
 
 type Loop = {
     readonly key: string
@@ -27,12 +27,17 @@ type Loop = {
 }
 
 const LOOPS: ReadonlyArray<Loop> = [
-    {key: "drums", name: "Techno drums", file: "/loops/techno-128.wav", uuid: "5c0a7e10-0000-4000-8000-000000000001", bpm: 128, bars: 2, seconds: 3.750},
-    {key: "pad", name: "Derelict pad", file: "/loops/pad-125.wav", uuid: "5c0a7e10-0000-4000-8000-000000000002", bpm: 125, bars: 4, seconds: 7.680},
-    {key: "chord", name: "Dub chord", file: "/loops/dub-125.wav", uuid: "5c0a7e10-0000-4000-8000-000000000003", bpm: 125, bars: 4, seconds: 7.680}
+    {key: "drums", name: "Techno drums", file: "/loops/techno-128.wav", uuid: "5c0a7e10-0000-4000-8000-000000000001", bpm: 128, bars: 2, seconds: 3.7500},
+    {key: "attack", name: "Attack hits", file: "/loops/attack-175.wav", uuid: "5c0a7e10-0000-4000-8000-000000000004", bpm: 175, bars: 4, seconds: 5.4857},
+    {key: "pad", name: "Derelict pad", file: "/loops/pad-125.wav", uuid: "5c0a7e10-0000-4000-8000-000000000002", bpm: 125, bars: 4, seconds: 7.6800},
+    {key: "chord", name: "Dub chord", file: "/loops/dub-125.wav", uuid: "5c0a7e10-0000-4000-8000-000000000003", bpm: 125, bars: 4, seconds: 7.6800},
+    {key: "guitar", name: "Guitar chords", file: "/loops/guitar-100.wav", uuid: "5c0a7e10-0000-4000-8000-000000000007", bpm: 100, bars: 8, seconds: 19.2000},
+    {key: "story", name: "HT story", file: "/loops/story-124.wav", uuid: "5c0a7e10-0000-4000-8000-000000000008", bpm: 124, bars: 4, seconds: 7.7143},
+    {key: "borealis", name: "Borealis pad", file: "/loops/borealis-85.wav", uuid: "5c0a7e10-0000-4000-8000-000000000005", bpm: 85, bars: 4, seconds: 11.2941},
+    {key: "drone", name: "Alien drone", file: "/loops/drone-135.wav", uuid: "5c0a7e10-0000-4000-8000-000000000006", bpm: 135, bars: 8, seconds: 14.2222}
 ]
 
-const START_BPM = 125
+const START_BPM = 128
 
 export const SignalsmithPage: PageFactory<Env> = ({lifecycle}) => {
     const status: HTMLParagraphElement = <p>Preparing loops…</p>
@@ -91,10 +96,18 @@ export const SignalsmithPage: PageFactory<Env> = ({lifecycle}) => {
         timelineBox.loopArea.to.setValue(TRANSPORT_SPAN)
         timelineBox.loopArea.enabled.setValue(true)
         boxGraph.endTransaction()
-        const host = createEngineHost(boxGraph, lifecycle, {channel: "signalsmith-sync"})
+        const host = createEngineHost(boxGraph, lifecycle, {channel: "signalsmith-sync", metronome: false})
         const edit = (procedure: () => void): void => {boxGraph.beginTransaction(); procedure(); boxGraph.endTransaction()}
         const label = (semitones: number): string => semitones > 0 ? `+${semitones}` : String(semitones)
         let active = entries[0]
+        const bpmValue: HTMLSpanElement = <span>{String(START_BPM)}</span>
+        const bpmInput: HTMLInputElement = <input type="range" min="40" max="220" step="1" value={String(START_BPM)}/>
+        const setBpm = (bpm: number): void => {
+            bpmValue.textContent = String(bpm)
+            if (bpmInput.value !== String(bpm)) {bpmInput.value = String(bpm)}
+            edit(() => timelineBox.bpm.setValue(bpm))
+        }
+        bpmInput.oninput = () => setBpm(parseInt(bpmInput.value, 10))
         const semiValue: HTMLSpanElement = <span>0</span>
         const semiInput: HTMLInputElement = <input type="range" min="-24" max="24" step="1" value="0"/>
         semiInput.oninput = () => {
@@ -111,21 +124,18 @@ export const SignalsmithPage: PageFactory<Env> = ({lifecycle}) => {
                 edit(() => entries.forEach(other => other.region.mute.setValue(other !== entry)))
                 semiInput.value = String(entry.semitones)
                 semiValue.textContent = label(entry.semitones)
+                setBpm(entry.loop.bpm) // jump the transport to this loop's native tempo (unstretched)
             }
             return button
         })
-        const bpmValue: HTMLSpanElement = <span>{String(START_BPM)}</span>
-        const bpmInput: HTMLInputElement = <input type="range" min="40" max="220" step="1" value={String(START_BPM)}/>
-        bpmInput.oninput = () => {
-            const bpm = parseInt(bpmInput.value, 10)
-            bpmValue.textContent = String(bpm)
-            edit(() => timelineBox.bpm.setValue(bpm))
-        }
+        const metronome: HTMLInputElement = <input type="checkbox"/>
+        metronome.onchange = () => host.setMetronome(metronome.checked)
         const controls: HTMLDivElement = (
             <div className="signalsmith-controls">
                 <div className="row"><label>Loop</label><div className="loop-buttons">{buttons}</div></div>
-                <div className="row"><label>Tempo {bpmValue} bpm</label>{bpmInput}<small>native tempos: 128 (drums), 125 (pad / chord) — move away to time-stretch</small></div>
+                <div className="row"><label>Tempo {bpmValue} bpm</label>{bpmInput}<small>selecting a loop jumps to its native tempo — move away to time-stretch</small></div>
                 <div className="row"><label>Semitones {semiValue} st</label>{semiInput}<small>pitch-shift of the active loop (tempo-independent)</small></div>
+                <div className="row"><label className="inline"><span>{metronome}</span> Metronome</label></div>
             </div>
         )
         mount.replaceChildren(host.element, controls, host.log)

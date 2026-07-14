@@ -288,11 +288,21 @@ code
       label
         color: var(--color-gray)
 
+        &.inline
+          display: flex
+          flex-direction: row
+          align-items: center
+          gap: 0.4rem
+          cursor: pointer
+
       small
         color: var(--color-shadow)
 
     input[type="range"]
       width: 100%
+      accent-color: var(--color-blue)
+
+    input[type="checkbox"]
       accent-color: var(--color-blue)
 
     .value
