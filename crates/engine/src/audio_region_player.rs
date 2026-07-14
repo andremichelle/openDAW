@@ -35,7 +35,8 @@ use alloc::rc::Rc;
 use core::cell::RefCell;
 use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
 use crate::audio_unit::{AudioRegion, BoundAudioClip, SharedAudioTrackSets};
-use crate::time_stretch::{Source, TimeStretchSequencer};
+use crate::time_stretch::{Source, StretchAlgorithm, TimeStretchSequencer};
+use crate::stretch::ComplexStretchSequencer;
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 
 /// The boundary declick window in seconds (matches the TS tape `VOICE_FADE_DURATION`): a region edge with no
@@ -68,6 +69,10 @@ pub(crate) struct AudioRegionPlayer {
     // so the render-path `pop()` never misses; without the pre-warm each new concurrency high-water would
     // still call `TimeStretchSequencer::new` mid-render.
     sequencer_pool: Vec<TimeStretchSequencer>,
+    // COMPLEX play-mode sequencers, the STFT phase-vocoder counterpart to `sequencers`, with their own pool.
+    // Kept separate (not an enum in one Vec) so each algorithm's pool pre-warms and recycles independently.
+    complex_sequencers: Vec<(Uuid, ComplexStretchSequencer)>,
+    complex_pool: Vec<ComplexStretchSequencer>,
     // The engine's clip-launch state machine, shared with the note sequencers (sections per track).
     clips: Rc<RefCell<ClipSequencer>>
 }
@@ -108,7 +113,8 @@ impl AudioRegionPlayer {
                       clips: Rc<RefCell<ClipSequencer>>) -> Self {
         Self {tracks, sample_rate, tempo_map, output: shared_audio_buffer(), events: EventBuffer::new(),
             sequencers: Vec::with_capacity(8), native_cursors: Vec::with_capacity(16), visited: Vec::with_capacity(32),
-            sequencer_pool: Vec::with_capacity(8), enabled: true,
+            sequencer_pool: Vec::with_capacity(8), complex_sequencers: Vec::with_capacity(4),
+            complex_pool: Vec::with_capacity(4), enabled: true,
             meter: engine_env::meter::Meter::new(sample_rate), clips}
     }
 
@@ -120,7 +126,16 @@ impl AudioRegionPlayer {
         while self.sequencer_pool.len() + self.sequencers.len() < stretch_regions {
             self.sequencer_pool.push(TimeStretchSequencer::new());
         }
+        // A stretch region is either granular OR complex; we don't know which per region at reconcile, so
+        // pre-warm one complex spare per stretch region too (configured, so the render-path never allocates
+        // the STFT buffers). A handful of regions -> a handful of ~100KB stretchers, the accepted high-water.
+        while self.complex_pool.len() + self.complex_sequencers.len() < stretch_regions {
+            let mut sequencer = ComplexStretchSequencer::new();
+            sequencer.prewarm(self.sample_rate);
+            self.complex_pool.push(sequencer);
+        }
         self.sequencers.reserve(stretch_regions.saturating_sub(self.sequencers.len()));
+        self.complex_sequencers.reserve(stretch_regions.saturating_sub(self.complex_sequencers.len()));
         self.native_cursors.reserve(total_regions.saturating_sub(self.native_cursors.len()));
         self.visited.reserve((total_regions * 2).saturating_sub(self.visited.len()));
     }
@@ -134,6 +149,10 @@ impl AudioRegionPlayer {
             while let Some((_, mut sequencer)) = self.sequencers.pop() {
                 sequencer.recycle();
                 self.sequencer_pool.push(sequencer);
+            }
+            while let Some((_, mut sequencer)) = self.complex_sequencers.pop() {
+                sequencer.recycle();
+                self.complex_pool.push(sequencer);
             }
             self.native_cursors.clear();
             self.meter.clear();
@@ -172,7 +191,7 @@ impl Processor for AudioRegionPlayer {
     fn process(&mut self, info: &ProcessInfo) {
         let AudioRegionPlayer {
             tracks, sample_rate, tempo_map, output, sequencers, native_cursors, visited,
-            sequencer_pool, clips, enabled, meter, ..
+            sequencer_pool, complex_sequencers, complex_pool, clips, enabled, meter, ..
         } = self;
         let mut output = output.borrow_mut();
         output.clear(); // the player is a source: it fills its own output each quantum (silence when not playing)
@@ -195,12 +214,12 @@ impl Processor for AudioRegionPlayer {
                         // Timeline regions play only in the clip-free sections (TS Tape `optClip: none`).
                         None => for region in content.regions.iterate_range(section.from, section.to) {
                             play_region(region, section.from, section.to, block, &mut output, &mut fading_gain,
-                                sequencers, sequencer_pool, native_cursors, visited, &tempo_map, sample_rate);
+                                sequencers, sequencer_pool, complex_sequencers, complex_pool, native_cursors, visited, &tempo_map, sample_rate);
                         },
                         Some(clip) => {
                             if let Some(bound) = content.clips.iter().find(|bound| bound.clip_uuid == clip) {
                                 play_region(&bound.region, section.from, section.to, block, &mut output, &mut fading_gain,
-                                    sequencers, sequencer_pool, native_cursors, visited, &tempo_map, sample_rate);
+                                    sequencers, sequencer_pool, complex_sequencers, complex_pool, native_cursors, visited, &tempo_map, sample_rate);
                             }
                         }
                     }
@@ -220,18 +239,30 @@ impl Processor for AudioRegionPlayer {
                 sequencer_pool.push(sequencer);
             }
         }
+        let mut index = 0;
+        while index < complex_sequencers.len() {
+            if visited.contains(&complex_sequencers[index].0) {
+                index += 1;
+            } else {
+                let (_, mut sequencer) = complex_sequencers.swap_remove(index);
+                sequencer.recycle();
+                complex_pool.push(sequencer);
+            }
+        }
         native_cursors.retain(|(uuid, _)| visited.contains(uuid));
     }
 }
 
 /// Play one region (a timeline region, or a launched clip's VIRTUAL region) for the pulse range
-/// `[from, to)` of `block`, routing by play strategy: a time-stretch region (with >= 2 transients to
-/// bracket a segment) goes through its persistent granular sequencer; everything else (native / pitch)
-/// is the stateless read head in `render_region`.
+/// `[from, to)` of `block`, routing by play strategy: a COMPLEX time-stretch region goes through its
+/// persistent STFT sequencer; a GRANULAR time-stretch region (with >= 2 transients to bracket a segment)
+/// through its granular sequencer; everything else (native / pitch) is the stateless read head in
+/// `render_region`.
 #[allow(clippy::too_many_arguments)] // the player's split fields; a struct adds no clarity
 fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
                output: &mut AudioBuffer, fading_gain: &mut [f32; engine_env::RENDER_QUANTUM],
                sequencers: &mut Vec<(Uuid, TimeStretchSequencer)>, sequencer_pool: &mut Vec<TimeStretchSequencer>,
+               complex_sequencers: &mut Vec<(Uuid, ComplexStretchSequencer)>, complex_pool: &mut Vec<ComplexStretchSequencer>,
                native_cursors: &mut Vec<(Uuid, NativeCursor)>, visited: &mut Vec<Uuid>,
                tempo_map: &TempoMap, sample_rate: f32) {
     if region.mute {
@@ -240,6 +271,30 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
     let Some(sample) = crate::resolve_sample(region.file) else { return };
     let left = sample.plane(0);
     let right = if sample.channel_count >= 2 { sample.plane(1) } else { left };
+    // COMPLEX time-stretch: the STFT sequencer, driven by the warp map (needs >= 2 markers, no transients).
+    if let Some(config) = &region.time_stretch {
+        if config.algorithm == StretchAlgorithm::Complex && config.warp.len() >= 2 {
+            let index = match complex_sequencers.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
+                Some(index) => index,
+                None => {
+                    let sequencer = complex_pool.pop().unwrap_or_else(ComplexStretchSequencer::new);
+                    complex_sequencers.push((region.region_uuid, sequencer));
+                    complex_sequencers.len() - 1
+                }
+            };
+            visited.push(region.region_uuid);
+            let source = Source {left, right, num_frames: sample.frame_count as usize};
+            let complete = region.position + region.duration;
+            for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
+                fill_fading_gain(fading_gain, region, cycle.result_start, cycle.result_end, block);
+                complex_sequencers[index].1.process(
+                    output, &source, sample.sample_rate, &config.warp, config.playback_rate,
+                    region.waveform_offset, block, cycle.raw_start, cycle.result_start, cycle.result_end,
+                    fading_gain, sample_rate);
+            }
+            return;
+        }
+    }
     match &region.time_stretch {
         Some(config) if region.transients.len() >= 2 => {
             let index = match sequencers.iter().position(|(uuid, _)| *uuid == region.region_uuid) {

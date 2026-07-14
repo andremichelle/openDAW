@@ -291,6 +291,7 @@ mod audio_region_player;
 mod midi_output;
 pub(crate) mod broadcast;
 mod time_stretch;
+mod stretch;
 mod tempo_map;
 mod script_device;
 use audio_unit::{AudioUnitBinding, Members};

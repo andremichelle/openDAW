@@ -46,6 +46,7 @@
     "@opendaw/studio-boxes": "^0.0.96",
     "@opendaw/studio-enums": "^0.0.79",
     "dropbox": "^10.34.0",
+    "signalsmith-stretch": "^1.3.2",
     "y-websocket": "^1.4.5",
     "yjs": "^13.6.27",
     "zod": "^4.1.12"

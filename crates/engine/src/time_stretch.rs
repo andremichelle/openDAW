@@ -48,13 +48,32 @@ impl TransientPlayMode {
     }
 }
 
+/// Which stretch engine a time-stretch region uses: the transient-aligned GRANULAR sequencer (this module),
+/// or the STFT phase-vocoder COMPLEX sequencer (`stretch`). Mirrors the `AudioTimeStretchBox.algorithm` enum
+/// (0 granular, 1 complex); an absent/old field defaults to granular.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum StretchAlgorithm {
+    Granular,
+    Complex
+}
+
+impl StretchAlgorithm {
+    pub(crate) fn from_i32(value: i32) -> Self {
+        match value {
+            1 => Self::Complex,
+            _ => Self::Granular
+        }
+    }
+}
+
 /// The `AudioTimeStretchBox` config: warp markers (content ppqn -> source seconds, sorted), the transient
-/// fill mode, and the user playback-rate multiplier.
+/// fill mode, the user playback-rate multiplier, and the stretch algorithm.
 #[derive(Clone)]
 pub(crate) struct TimeStretchConfig {
     pub(crate) warp: Vec<(f64, f64)>,
     pub(crate) transient_play_mode: TransientPlayMode,
-    pub(crate) playback_rate: f32
+    pub(crate) playback_rate: f32,
+    pub(crate) algorithm: StretchAlgorithm
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -731,8 +750,8 @@ fn floor_last_index(values: &[f64], value: f64) -> i32 {
 }
 
 /// Source seconds at content `ppqn`, linearly interpolated between bracketing warp markers (TS `#ppqnToSeconds`);
-/// `None` when no segment brackets it.
-fn ppqn_to_seconds(warp: &[(f64, f64)], ppqn: f64) -> Option<f64> {
+/// `None` when no segment brackets it. Shared with the COMPLEX stretch sequencer.
+pub(crate) fn ppqn_to_seconds(warp: &[(f64, f64)], ppqn: f64) -> Option<f64> {
     for window in warp.windows(2) {
         let (left, right) = (window[0], window[1]);
         if ppqn >= left.0 && ppqn < right.0 {
@@ -795,7 +814,7 @@ mod tests {
         // 120 bpm). Processing from the very start spawns a voice at transient 0 that reads the source -> audible.
         let source: vec::Vec<f32> = vec![1.0; 48_000];
         let transients = [0.0, 0.5];
-        let config = TimeStretchConfig {warp: vec![(0.0, 0.0), (3840.0, 1.0)], transient_play_mode: TransientPlayMode::Once, playback_rate: 1.0};
+        let config = TimeStretchConfig {warp: vec![(0.0, 0.0), (3840.0, 1.0)], transient_play_mode: TransientPlayMode::Once, playback_rate: 1.0, algorithm: StretchAlgorithm::Granular};
         let mut sequencer = TimeStretchSequencer::new();
         let mut output = AudioBuffer::new();
         let fading_gain = [1.0f32; 128];
@@ -816,7 +835,7 @@ mod tests {
         let mut source: vec::Vec<f32> = vec![0.0; 48_000];
         for frame in source.iter_mut().take(24_000) {*frame = 1.0;} // phrase only in the first half
         let transients = [0.0, 0.5];
-        let config = TimeStretchConfig {warp: vec![(0.0, 0.6), (3840.0, 1.0)], transient_play_mode: TransientPlayMode::Once, playback_rate: 1.0};
+        let config = TimeStretchConfig {warp: vec![(0.0, 0.6), (3840.0, 1.0)], transient_play_mode: TransientPlayMode::Once, playback_rate: 1.0, algorithm: StretchAlgorithm::Granular};
         let mut sequencer = TimeStretchSequencer::new();
         let mut output = AudioBuffer::new();
         let fading_gain = [1.0f32; 128];
@@ -831,7 +850,7 @@ mod tests {
     fn out_of_warp_range_renders_nothing() {
         let source: vec::Vec<f32> = vec![1.0; 48_000];
         let transients = [0.0, 0.5];
-        let config = TimeStretchConfig {warp: vec![(0.0, 0.0), (10.0, 1.0)], transient_play_mode: TransientPlayMode::Once, playback_rate: 1.0};
+        let config = TimeStretchConfig {warp: vec![(0.0, 0.0), (10.0, 1.0)], transient_play_mode: TransientPlayMode::Once, playback_rate: 1.0, algorithm: StretchAlgorithm::Granular};
         let mut sequencer = TimeStretchSequencer::new();
         let mut output = AudioBuffer::new();
         let fading_gain = [1.0f32; 128];
