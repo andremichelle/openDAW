@@ -623,4 +623,83 @@ mod tests {
         render_region(&mut output, &region(0.0, 0.0, 0.0), &source, &source, 48_000.0, started.p0, started.p1, &started, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         assert!((output.left[0] - source[6000]).abs() < 1e-3, "first sample is the correct mid-file frame: {} vs {}", output.left[0], source[6000]);
     }
+
+    fn sine48k(freq: f64, n: usize) -> Vec<f32> {
+        (0..n).map(|i| (0.5*(2.0*core::f64::consts::PI*freq*i as f64/48000.0).sin()) as f32).collect()
+    }
+    fn dominant48k(x: &[f32]) -> f64 {
+        let s = x.len()/2 - 4096; let seg = &x[s..s+8192]; let (mut bp,mut bf)=(0.0f64,0.0f64); let mut f=200.0;
+        while f<1500.0 { let w=2.0*core::f64::consts::PI*f/48000.0; let c=2.0*w.cos(); let (mut a,mut b)=(0.0f64,0.0f64);
+            for (i,v) in seg.iter().enumerate(){let win=0.5-0.5*(2.0*core::f64::consts::PI*i as f64/seg.len() as f64).cos(); let ss=*v as f64*win+c*a-b; b=a; a=ss;}
+            let pw=a*a+b*b-c*a*b; if pw>bp{bp=pw;bf=f;} f+=1.0; } bf
+    }
+    // Drive play_signalsmith across `blocks` 128-sample quanta, collecting mono output.
+    fn run_signalsmith(region: &AudioRegion, config: &SignalsmithConfig, source: &[f32], blocks: usize) -> Vec<f32> {
+        let mut players = [SignalsmithStretch::preset_default(1, 48000.0), SignalsmithStretch::preset_default(1, 48000.0)];
+        let tempo = TempoMap::fixed(120.0);
+        let mut out = Vec::with_capacity(blocks*128);
+        for k in 0..blocks {
+            // each quantum: s0..s1 local (0..128), transport p0/p1 advances by the block's pulse span
+            let (p0, p1) = ((k*128) as f64*0.04, ((k+1)*128) as f64*0.04); // 120bpm@48k: 0.04 ppqn/sample
+            let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+            let mut output = AudioBuffer::new();
+            play_signalsmith(&mut players, region, config, source, source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut output);
+            out.extend_from_slice(&output.left[..128]);
+        }
+        out
+    }
+
+    #[test]
+    fn signalsmith_transpose_up_an_octave() {
+        let source = sine48k(440.0, 48000);
+        let mut region = region(0.0, 0.0, 0.0);
+        region.duration = 96_000.0;
+        let config = SignalsmithConfig { warp: Vec::new(), transpose: 12.0 };
+        region.signalsmith = Some(SignalsmithConfig { warp: Vec::new(), transpose: 12.0 });
+        let out = run_signalsmith(&region, &config, &source, 300); // ~38k samples
+        let f = dominant48k(&out);
+        assert!((f-880.0).abs() < 20.0, "transpose +12 -> ~880 Hz, got {f:.0}");
+    }
+
+    #[test]
+    fn signalsmith_native_reproduces_pitch() {
+        let source = sine48k(440.0, 48000);
+        let mut region = region(0.0, 0.0, 0.0);
+        let config = SignalsmithConfig { warp: Vec::new(), transpose: 0.0 };
+        region.signalsmith = Some(SignalsmithConfig { warp: Vec::new(), transpose: 0.0 });
+        let out = run_signalsmith(&region, &config, &source, 300);
+        let f = dominant48k(&out);
+        assert!((f-440.0).abs() < 12.0, "no transpose -> ~440 Hz preserved, got {f:.0}");
+    }
+
+
+    #[test]
+    fn signalsmith_warp_stretch_preserves_pitch() {
+        // warp maps 1536 ppqn (~0.8s timeline @120bpm) to 0.533s of source = 1.5x slower.
+        // A time-stretch must keep the pitch at 440 while playing back slower.
+        let source = sine48k(440.0, 48000);
+        let mut region = region(0.0, 0.0, 0.0);
+        let warp = vec![(0.0, 0.0), (1536.0, 0.533)];
+        let config = SignalsmithConfig { warp: warp.clone(), transpose: 0.0 };
+        region.signalsmith = Some(SignalsmithConfig { warp, transpose: 0.0 });
+        let out = run_signalsmith(&region, &config, &source, 300);
+        let f = dominant48k(&out);
+        assert!((f-440.0).abs() < 12.0, "1.5x time-stretch keeps pitch at 440, got {f:.0}");
+    }
+
+    #[test]
+    fn signalsmith_variable_warp_stays_stable() {
+        // multi-segment warp (accelerating tempo across the region) — variable time_factor mid-play.
+        let source = sine48k(330.0, 48000);
+        let mut region = region(0.0, 0.0, 0.0);
+        // three segments with different slopes (source seconds per ppqn changes at each marker)
+        let warp = vec![(0.0, 0.0), (512.0, 0.15), (1024.0, 0.35), (1536.0, 0.45)];
+        let config = SignalsmithConfig { warp: warp.clone(), transpose: 0.0 };
+        region.signalsmith = Some(SignalsmithConfig { warp, transpose: 0.0 });
+        let out = run_signalsmith(&region, &config, &source, 300);
+        let peak = out.iter().fold(0.0f32, |m,v| m.max(v.abs()));
+        let rms = (out.iter().map(|v| (*v as f64).powi(2)).sum::<f64>()/out.len() as f64).sqrt();
+        assert!(peak < 2.0 && rms > 0.02, "stable under variable warp: peak {peak:.2} rms {rms:.3}");
+    }
+
 }
