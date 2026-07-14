@@ -59,7 +59,8 @@ pub struct SignalsmithStretch {
     mag_l: Vec<f32>, mag_r: Vec<f32>,
     ana_l: Vec<f32>, ana_r: Vec<f32>,
     prev_l: Vec<f32>, prev_r: Vec<f32>,   // per-channel prev analysis phase (for instantaneous freq)
-    sphase: Vec<f32>,        // SHARED accumulated synthesis phase per band
+    sphase: Vec<f32>, sphase_r: Vec<f32>, // PER-CHANNEL accumulated synthesis phase (L, R) — each evolves on its
+                                          // own instantaneous freq; cross-channel locking happens only at output
     peaks_s: Vec<usize>,
     ring_l: Vec<f32>, ring_r: Vec<f32>, ring_n: Vec<f32>,
     s2_synth: f64, s2_emit: usize, s2_src: f64, s2_started: bool,
@@ -94,7 +95,7 @@ impl SignalsmithStretch {
             in_l: vec![Cplx::default(); bands], in_r: vec![Cplx::default(); bands],
             mag_l: vec![0.0; bands], mag_r: vec![0.0; bands],
             ana_l: vec![0.0; bands], ana_r: vec![0.0; bands],
-            prev_l: vec![0.0; bands], prev_r: vec![0.0; bands], sphase: vec![0.0; bands], peaks_s: Vec::with_capacity(bands),
+            prev_l: vec![0.0; bands], prev_r: vec![0.0; bands], sphase: vec![0.0; bands], sphase_r: vec![0.0; bands], peaks_s: Vec::with_capacity(bands),
             ring_l: vec![0.0; block], ring_r: vec![0.0; block], ring_n: vec![0.0; block],
             s2_synth: 0.0, s2_emit: 0, s2_src: 0.0, s2_started: false, cycle_id: f64::NAN,
         }
@@ -209,7 +210,7 @@ impl SignalsmithStretch {
         for b in 0..self.bands { self.prev_phase[b]=0.0; self.ana_phase[b]=0.0; self.synth_phase[b]=0.0; }
         self.stream_synth = 0.0; self.stream_emit = 0; self.stream_src = source_pos; self.stream_started = false;
         for v in self.ring_l.iter_mut() { *v = 0.0; } for v in self.ring_r.iter_mut() { *v = 0.0; } for v in self.ring_n.iter_mut() { *v = 0.0; }
-        for b in 0..self.bands { self.prev_l[b]=0.0; self.prev_r[b]=0.0; self.sphase[b]=0.0; }
+        for b in 0..self.bands { self.prev_l[b]=0.0; self.prev_r[b]=0.0; self.sphase[b]=0.0; self.sphase_r[b]=0.0; }
         self.s2_synth = 0.0; self.s2_emit = 0; self.s2_src = source_pos; self.s2_started = false;
     }
 
@@ -311,14 +312,13 @@ impl SignalsmithStretch {
                     self.mag_l[b]=ml; self.mag_r[b]=mr; self.ana_l[b]=pl; self.ana_r[b]=pr;
                     let src = b as f32 / r;
                     if !self.s2_started {
-                        self.sphase[b] = if ml >= mr { pl } else { pr };
+                        self.sphase[b] = pl; self.sphase_r[b] = pr;
                     } else {
-                        let (ref_phase, ref_prev) = if ml >= mr { (pl, self.prev_l[b]) } else { (pr, self.prev_r[b]) };
                         let expected = two_pi * src * analysis_hop as f32 / block as f32;
-                        let mut dev = ref_phase - ref_prev - expected;
-                        dev -= two_pi * libm::roundf(dev/two_pi);
-                        let inst = (expected + dev) / analysis_hop as f32;
-                        self.sphase[b] += inst * r * interval as f32;
+                        let mut dl = pl - self.prev_l[b] - expected; dl -= two_pi * libm::roundf(dl/two_pi);
+                        self.sphase[b] += (expected + dl) / analysis_hop as f32 * r * interval as f32;
+                        let mut dr = pr - self.prev_r[b] - expected; dr -= two_pi * libm::roundf(dr/two_pi);
+                        self.sphase_r[b] += (expected + dr) / analysis_hop as f32 * r * interval as f32;
                     }
                     self.prev_l[b]=pl; self.prev_r[b]=pr;
                 }
@@ -353,12 +353,13 @@ impl SignalsmithStretch {
         }
     }
 
-    /// Vertical rigid locking on the COMBINED (L+R) magnitude with the higher-energy channel as the
-    /// phase reference. Writes each channel's final output bins back into `in_l`/`in_r`. The output
-    /// L/R phase difference equals the analysis-time difference, preserving the stereo image.
+    /// Vertical rigid locking on the COMBINED (L+R) magnitude. Each bin is voiced from its DOMINANT channel's
+    /// own accumulated phase (locked to the nearest peak); the other channel is offset by the analysis-time
+    /// inter-channel phase difference. This preserves the stereo image AND — because each channel's accumulator
+    /// tracks its own analysis phase — reconstructs the input exactly at unity (no phase scrambling on
+    /// transients). Writes each channel's final output bins back into `in_l`/`in_r`.
     fn build_locked_output_stereo(&mut self) {
         let bands = self.bands;
-        for b in 0..bands { self.ana_phase[b] = if self.mag_l[b] >= self.mag_r[b] { self.ana_l[b] } else { self.ana_r[b] }; }
         self.peaks_s.clear();
         let alpha = 0.15f32; let mut sm = 0.0f32;
         for b in 0..bands { let cm=self.mag_l[b]+self.mag_r[b]; sm += alpha*(cm-sm); self.frame[b]=sm; }
@@ -371,21 +372,23 @@ impl SignalsmithStretch {
             let lo=b.saturating_sub(w); let hi=(b+w+1).min(bands);
             if (lo..hi).all(|other| self.mag_l[other]+self.mag_r[other] <= cm) { self.peaks_s.push(b); }
         }
-        if self.peaks_s.is_empty() {
-            for b in 0..bands {
-                let rp = self.ana_phase[b];
-                let lp = self.sphase[b] + (self.ana_l[b]-rp); let rpp = self.sphase[b] + (self.ana_r[b]-rp);
-                self.in_l[b] = Cplx{re:self.mag_l[b]*libm::cosf(lp), im:self.mag_l[b]*libm::sinf(lp)};
-                self.in_r[b] = Cplx{re:self.mag_r[b]*libm::cosf(rpp), im:self.mag_r[b]*libm::sinf(rpp)};
-            }
-            return;
-        }
+        let has_peaks = !self.peaks_s.is_empty();
         let mut pi=0usize;
         for b in 0..bands {
-            while pi+1 < self.peaks_s.len() && (self.peaks_s[pi+1] as isize - b as isize).abs() < (self.peaks_s[pi] as isize - b as isize).abs() { pi+=1; }
-            let p=self.peaks_s[pi];
-            let base_phase = self.sphase[p] - self.ana_phase[p];
-            let lp = base_phase + self.ana_l[b]; let rp = base_phase + self.ana_r[b];
+            // p = the peak this bin locks to (itself when there are no peaks -> free-run, i.e. identity).
+            let p = if has_peaks {
+                while pi+1 < self.peaks_s.len() && (self.peaks_s[pi+1] as isize - b as isize).abs() < (self.peaks_s[pi] as isize - b as isize).abs() { pi+=1; }
+                self.peaks_s[pi]
+            } else { b };
+            let dom_left = self.mag_l[b] >= self.mag_r[b];
+            let (sphase_dom_p, ana_dom_p, ana_dom_b, ana_oth_b) = if dom_left {
+                (self.sphase[p], self.ana_l[p], self.ana_l[b], self.ana_r[b])
+            } else {
+                (self.sphase_r[p], self.ana_r[p], self.ana_r[b], self.ana_l[b])
+            };
+            let out_dom = sphase_dom_p + (ana_dom_b - ana_dom_p);   // dominant channel: locked to its peak
+            let out_oth = out_dom + (ana_oth_b - ana_dom_b);        // other channel: keep the input L/R phase diff
+            let (lp, rp) = if dom_left { (out_dom, out_oth) } else { (out_oth, out_dom) };
             self.in_l[b] = Cplx{re:self.mag_l[b]*libm::cosf(lp), im:self.mag_l[b]*libm::sinf(lp)};
             self.in_r[b] = Cplx{re:self.mag_r[b]*libm::cosf(rp), im:self.mag_r[b]*libm::sinf(rp)};
         }
