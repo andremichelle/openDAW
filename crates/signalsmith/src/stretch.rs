@@ -46,6 +46,13 @@ pub struct SignalsmithStretch {
     im: Vec<f32>,
     frame: Vec<f32>,
     freq_multiplier: f32,
+    // streaming (zero-alloc) state: fixed OLA output ring + reserved locking scratch
+    out_ring: Vec<f32>,
+    norm_ring: Vec<f32>,
+    stream_synth: f64,   // next synthesis frame position (output samples)
+    stream_emit: usize,  // next output sample to emit
+    stream_src: f64,     // source read position (samples) for the next frame
+    stream_started: bool,
 }
 
 impl SignalsmithStretch {
@@ -71,6 +78,8 @@ impl SignalsmithStretch {
             peaks: Vec::with_capacity(bands),
             re: vec![0.0; block], im: vec![0.0; block], frame: vec![0.0; block],
             freq_multiplier: 1.0,
+            out_ring: vec![0.0; block], norm_ring: vec![0.0; block],
+            stream_synth: 0.0, stream_emit: 0, stream_src: 0.0, stream_started: false,
         }
     }
 
@@ -81,7 +90,6 @@ impl SignalsmithStretch {
 
     pub fn block_samples(&self) -> usize { self.block }
     pub fn interval_samples(&self) -> usize { self.interval }
-    pub fn latency(&self) -> usize { self.block }
 
     /// Whole-buffer stretch of one channel: `output.len()/input.len()` sets the ratio. Zero-pads
     /// the input at both ends by one block so edge frames are complete (matches native `exact`).
@@ -173,6 +181,78 @@ impl SignalsmithStretch {
             let out_phase = self.synth_phase[base+p] + (self.ana_phase[base+b] - self.ana_phase[base+p]);
             let m = self.mag[base+b];
             self.output[base+b] = Cplx { re: m*libm::cosf(out_phase), im: m*libm::sinf(out_phase) };
+        }
+    }
+
+    /// Reset streaming state; call at a discontinuity (loop wrap, region start, transport jump).
+    /// `source_pos` is where in the source the first output frame should read from.
+    pub fn reset_stream(&mut self, source_pos: f64) {
+        for v in self.out_ring.iter_mut() { *v = 0.0; }
+        for v in self.norm_ring.iter_mut() { *v = 0.0; }
+        for b in 0..self.bands { self.prev_phase[b]=0.0; self.ana_phase[b]=0.0; self.synth_phase[b]=0.0; }
+        self.stream_synth = 0.0; self.stream_emit = 0; self.stream_src = source_pos; self.stream_started = false;
+    }
+
+    /// The processor's inherent output latency in samples (feed the source this far ahead).
+    pub fn latency(&self) -> usize { self.block / 2 }
+
+    /// STREAMING, ZERO-ALLOC: fill `output` with the next stretched samples, reading the resident
+    /// `source` directly. `time_factor` = output/input rate (the local warp slope); may change per
+    /// call (variable tempo). `pitch` = frequency multiplier. No heap allocation on this path.
+    pub fn process_stream(&mut self, source: &[f32], output: &mut [f32], time_factor: f64, pitch: f32) {
+        let base = 0usize;
+        let block = self.block; let interval = self.interval as f64;
+        let half = (block / 2) as f64;
+        let two_pi = 2.0*core::f32::consts::PI;
+        self.freq_multiplier = pitch;
+        let r = pitch;
+        for out_i in 0..output.len() {
+            let emit = self.stream_emit;
+            // run synthesis frames until every frame covering `emit` is done (centered windows -> +half)
+            while self.stream_synth <= emit as f64 + half {
+                let in_center = self.stream_src;
+                let analysis_hop = interval / time_factor.max(1e-6);
+                self.analyse(source, 0, libm::round(in_center) as isize);
+                for b in 0..self.bands {
+                    let src = b as f32 / r;
+                    let a = if r == 1.0 { self.output[base+b] } else { self.interp_spectrum(base, src) };
+                    let mag = libm::sqrtf(a.norm());
+                    let phase = libm::atan2f(a.im, a.re);
+                    self.mag[base+b] = mag; self.ana_phase[base+b] = phase;
+                    if !self.stream_started {
+                        self.synth_phase[base+b] = phase;
+                    } else {
+                        let expected = two_pi * src * analysis_hop as f32 / block as f32;
+                        let mut dev = phase - self.prev_phase[base+b] - expected;
+                        dev -= two_pi * libm::roundf(dev/two_pi);
+                        let inst = (expected + dev) / analysis_hop as f32;
+                        self.synth_phase[base+b] += inst * r * interval as f32;
+                    }
+                    self.prev_phase[base+b] = phase;
+                }
+                self.stream_started = true;
+                self.build_locked_output(base);
+                // IFFT + OLA the centered window into the ring at [synth-half, synth+half)
+                for b in 0..self.bands { self.re[b]=self.output[base+b].re; self.im[b]=self.output[base+b].im; }
+                self.re[self.bands]=0.0; self.im[self.bands]=0.0;
+                for b in 1..self.bands { self.re[block-b]=self.re[b]; self.im[block-b]=-self.im[b]; }
+                self.fft.inverse(&mut self.re, &mut self.im);
+                let start = self.stream_synth - half;
+                for i in 0..block {
+                    let pos = start + i as f64;
+                    if pos >= 0.0 {
+                        let idx = (pos as usize) % block;
+                        self.out_ring[idx] += self.re[i]*self.window[i];
+                        self.norm_ring[idx] += self.window[i]*self.window[i];
+                    }
+                }
+                self.stream_synth += interval;
+                self.stream_src += analysis_hop;
+            }
+            let idx = emit % block;
+            output[out_i] = if self.norm_ring[idx] > 1e-6 { self.out_ring[idx]/self.norm_ring[idx] } else { 0.0 };
+            self.out_ring[idx] = 0.0; self.norm_ring[idx] = 0.0;
+            self.stream_emit += 1;
         }
     }
 
