@@ -8,7 +8,6 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-stretch = {path = "../stretch"}
 boxgraph = {path = "../boxgraph"}
 studio-boxes = {path = "../studio-boxes"}
 engine-env = {path = "../engine-env"}
