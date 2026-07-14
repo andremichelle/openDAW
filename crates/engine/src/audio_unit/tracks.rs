@@ -504,6 +504,9 @@ pub(crate) const WARP_SECONDS_KEY: u16 = 3;                  // WarpMarkerBox.se
 pub(crate) const TIME_STRETCH_WARP_HUB_KEY: u16 = 1;         // AudioTimeStretchBox.warp-markers hub
 pub(crate) const TIME_STRETCH_PLAY_MODE_KEY: u16 = 2;        // transient-play-mode (int32 enum: 0 once, 1 repeat, 2 pingpong)
 pub(crate) const TIME_STRETCH_RATE_KEY: u16 = 3;             // playback-rate (f32 ratio)
+// AudioSignalsmithBox field keys (WASM CONTRACT: mirror the TS AudioSignalsmithBox schema).
+pub(crate) const SIGNALSMITH_WARP_HUB_KEY: u16 = 1;          // AudioSignalsmithBox.warp-markers hub
+pub(crate) const SIGNALSMITH_TRANSPOSE_KEY: u16 = 2;        // transpose (f32 semitones)
 // AudioFileBox / TransientMarkerBox keys (the source's transient onsets, in seconds).
 pub(crate) const AUDIO_FILE_TRANSIENTS_HUB_KEY: u16 = 10;    // AudioFileBox.transient-markers hub
 pub(crate) const TRANSIENT_POSITION_KEY: u16 = 2;            // TransientMarkerBox.position (seconds, f32)
@@ -535,6 +538,9 @@ pub(crate) struct AudioRegion {
     // TimeStretch play-mode config (AudioTimeStretchBox), when the region's play-mode is a time-stretch. `Some`
     // routes the player to the transient-aligned granular sequencer instead of the stateless read head.
     pub(crate) time_stretch: Option<TimeStretchConfig>,
+    // Signalsmith spectral play-mode (AudioSignalsmithBox): warp + transpose (semitones). `Some`
+    // when the region's play-mode is a Signalsmith box.
+    pub(crate) signalsmith: Option<SignalsmithConfig>,
     // The SOURCE file's transient marker positions in SECONDS (sorted); read only when `time_stretch` is `Some`
     // (the sequencer aligns granular voices to these). Empty otherwise.
     pub(crate) transients: Vec<f64>
@@ -580,6 +586,7 @@ pub(crate) fn read_audio_region(graph: &BoxGraph, region_uuid: Uuid, tempo_map: 
         fade_out_slope: region_float(graph, region_uuid, &[AUDIO_REGION_FADING_KEY, 4]),
         warp: read_warp_markers(graph, region_uuid),
         time_stretch,
+        signalsmith: read_signalsmith(graph, region_uuid),
         transients
     })
 }
@@ -607,6 +614,29 @@ pub(crate) fn read_warp_markers(graph: &BoxGraph, region_uuid: Uuid) -> Vec<(f64
 /// Read a region's TimeStretch play-mode config (`AudioTimeStretchBox`): its warp markers (content ppqn ->
 /// source seconds, sorted), the transient fill mode, and the playback-rate multiplier. `None` when the region
 /// has no play-mode or a non-time-stretch one (native / PitchStretch are handled elsewhere).
+/// Signalsmith play-mode config (`AudioSignalsmithBox`): warp markers (content ppqn -> source
+/// seconds, sorted) + transpose in semitones. `None` unless the region's play-mode is a Signalsmith box.
+#[derive(Clone)]
+pub(crate) struct SignalsmithConfig {
+    pub(crate) warp: alloc::vec::Vec<(f64, f64)>,
+    pub(crate) transpose: f32
+}
+
+pub(crate) fn read_signalsmith(graph: &BoxGraph, region_uuid: Uuid) -> Option<SignalsmithConfig> {
+    let play_mode = graph.target_of(&Address::of(region_uuid, alloc::vec![AUDIO_REGION_PLAYMODE_KEY]))?.uuid;
+    match graph.find_box(&play_mode) {
+        Some(found) if found.name == "AudioSignalsmithBox" => {}
+        _ => return None
+    }
+    let mut warp: alloc::vec::Vec<(f64, f64)> = graph.incoming(&Address::of(play_mode, alloc::vec![SIGNALSMITH_WARP_HUB_KEY]))
+        .into_iter()
+        .map(|address| (region_pulses(graph, address.uuid, WARP_POSITION_KEY), region_float(graph, address.uuid, &[WARP_SECONDS_KEY]) as f64))
+        .collect();
+    warp.sort_by(|left, right| left.0.partial_cmp(&right.0).unwrap_or(core::cmp::Ordering::Equal));
+    let transpose = region_float(graph, play_mode, &[SIGNALSMITH_TRANSPOSE_KEY]);
+    Some(SignalsmithConfig {warp, transpose})
+}
+
 pub(crate) fn read_time_stretch(graph: &BoxGraph, region_uuid: Uuid) -> Option<TimeStretchConfig> {
     let play_mode = graph.target_of(&Address::of(region_uuid, vec![AUDIO_REGION_PLAYMODE_KEY]))?.uuid;
     match graph.find_box(&play_mode) {
@@ -760,6 +790,7 @@ pub(crate) fn read_audio_clip(graph: &BoxGraph, clip_uuid: Uuid, _tempo_map: &Te
         fade_out_slope: 0.0,
         warp: read_warp_markers(graph, clip_uuid),
         time_stretch,
+        signalsmith: read_signalsmith(graph, clip_uuid),
         transients
     };
     Some((region, looped))

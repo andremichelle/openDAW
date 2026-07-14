@@ -34,8 +34,9 @@ use boxgraph::address::Uuid;
 use alloc::rc::Rc;
 use core::cell::RefCell;
 use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
-use crate::audio_unit::{AudioRegion, BoundAudioClip, SharedAudioTrackSets};
+use crate::audio_unit::{AudioRegion, SignalsmithConfig, BoundAudioClip, SharedAudioTrackSets};
 use crate::time_stretch::{Source, TimeStretchSequencer};
+use signalsmith::SignalsmithStretch;
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 
 /// The boundary declick window in seconds (matches the TS tape `VOICE_FADE_DURATION`): a region edge with no
@@ -68,6 +69,10 @@ pub(crate) struct AudioRegionPlayer {
     // so the render-path `pop()` never misses; without the pre-warm each new concurrency high-water would
     // still call `TimeStretchSequencer::new` mid-render.
     sequencer_pool: Vec<TimeStretchSequencer>,
+    // Signalsmith spectral players, one stereo pair per playing Signalsmith region (keyed by uuid),
+    // plus a recycle pool (pre-warmed at prepare, like the sequencers) so region entry never allocates.
+    signalsmith_players: Vec<(Uuid, [SignalsmithStretch; 2])>,
+    signalsmith_pool: Vec<[SignalsmithStretch; 2]>,
     // The engine's clip-launch state machine, shared with the note sequencers (sections per track).
     clips: Rc<RefCell<ClipSequencer>>
 }
@@ -108,7 +113,8 @@ impl AudioRegionPlayer {
                       clips: Rc<RefCell<ClipSequencer>>) -> Self {
         Self {tracks, sample_rate, tempo_map, output: shared_audio_buffer(), events: EventBuffer::new(),
             sequencers: Vec::with_capacity(8), native_cursors: Vec::with_capacity(16), visited: Vec::with_capacity(32),
-            sequencer_pool: Vec::with_capacity(8), enabled: true,
+            sequencer_pool: Vec::with_capacity(8),
+            signalsmith_players: Vec::with_capacity(4), signalsmith_pool: Vec::with_capacity(4), enabled: true,
             meter: engine_env::meter::Meter::new(sample_rate), clips}
     }
 
@@ -119,6 +125,10 @@ impl AudioRegionPlayer {
     pub(crate) fn prepare(&mut self, stretch_regions: usize, total_regions: usize) {
         while self.sequencer_pool.len() + self.sequencers.len() < stretch_regions {
             self.sequencer_pool.push(TimeStretchSequencer::new());
+        }
+        let rate = self.sample_rate;
+        while self.signalsmith_pool.len() + self.signalsmith_players.len() < stretch_regions {
+            self.signalsmith_pool.push([SignalsmithStretch::preset_default(1, rate), SignalsmithStretch::preset_default(1, rate)]);
         }
         self.sequencers.reserve(stretch_regions.saturating_sub(self.sequencers.len()));
         self.native_cursors.reserve(total_regions.saturating_sub(self.native_cursors.len()));
@@ -172,7 +182,7 @@ impl Processor for AudioRegionPlayer {
     fn process(&mut self, info: &ProcessInfo) {
         let AudioRegionPlayer {
             tracks, sample_rate, tempo_map, output, sequencers, native_cursors, visited,
-            sequencer_pool, clips, enabled, meter, ..
+            sequencer_pool, signalsmith_players, signalsmith_pool, clips, enabled, meter, ..
         } = self;
         let mut output = output.borrow_mut();
         output.clear(); // the player is a source: it fills its own output each quantum (silence when not playing)
@@ -195,12 +205,12 @@ impl Processor for AudioRegionPlayer {
                         // Timeline regions play only in the clip-free sections (TS Tape `optClip: none`).
                         None => for region in content.regions.iterate_range(section.from, section.to) {
                             play_region(region, section.from, section.to, block, &mut output, &mut fading_gain,
-                                sequencers, sequencer_pool, native_cursors, visited, &tempo_map, sample_rate);
+                                sequencers, sequencer_pool, signalsmith_players, signalsmith_pool, native_cursors, visited, &tempo_map, sample_rate);
                         },
                         Some(clip) => {
                             if let Some(bound) = content.clips.iter().find(|bound| bound.clip_uuid == clip) {
                                 play_region(&bound.region, section.from, section.to, block, &mut output, &mut fading_gain,
-                                    sequencers, sequencer_pool, native_cursors, visited, &tempo_map, sample_rate);
+                                    sequencers, sequencer_pool, signalsmith_players, signalsmith_pool, native_cursors, visited, &tempo_map, sample_rate);
                             }
                         }
                     }
@@ -232,6 +242,7 @@ impl Processor for AudioRegionPlayer {
 fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
                output: &mut AudioBuffer, fading_gain: &mut [f32; engine_env::RENDER_QUANTUM],
                sequencers: &mut Vec<(Uuid, TimeStretchSequencer)>, sequencer_pool: &mut Vec<TimeStretchSequencer>,
+               signalsmith_players: &mut Vec<(Uuid, [SignalsmithStretch; 2])>, signalsmith_pool: &mut Vec<[SignalsmithStretch; 2]>,
                native_cursors: &mut Vec<(Uuid, NativeCursor)>, visited: &mut Vec<Uuid>,
                tempo_map: &TempoMap, sample_rate: f32) {
     if region.mute {
@@ -240,6 +251,19 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
     let Some(sample) = crate::resolve_sample(region.file) else { return };
     let left = sample.plane(0);
     let right = if sample.channel_count >= 2 { sample.plane(1) } else { left };
+    if let Some(config) = &region.signalsmith {
+        let index = match signalsmith_players.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
+            Some(index) => index,
+            None => {
+                let player = signalsmith_pool.pop().unwrap_or_else(|| [SignalsmithStretch::preset_default(1, sample_rate), SignalsmithStretch::preset_default(1, sample_rate)]);
+                signalsmith_players.push((region.region_uuid, player));
+                signalsmith_players.len() - 1
+            }
+        };
+        visited.push(region.region_uuid);
+        play_signalsmith(&mut signalsmith_players[index].1, region, config, left, right, sample.sample_rate, from, to, block, sample_rate, tempo_map, output);
+        return;
+    }
     match &region.time_stretch {
         Some(config) if region.transients.len() >= 2 => {
             let index = match sequencers.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
@@ -271,6 +295,60 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
             };
             visited.push(region.region_uuid);
             render_region(output, region, left, right, sample.sample_rate, from, to, block, sample_rate, tempo_map, &mut native_cursors[index].1);
+        }
+    }
+}
+
+/// Drive the Signalsmith spectral players for one region/block: follow the warp (time) and
+/// transpose (pitch), summing into `output` with gain + fade envelope. Streams continuously; only
+/// re-primes at a discontinuity. Pitch compensates the source-vs-engine sample-rate ratio.
+#[allow(clippy::too_many_arguments)]
+fn play_signalsmith(players: &mut [SignalsmithStretch; 2], region: &AudioRegion, config: &SignalsmithConfig,
+                    left: &[f32], right: &[f32], source_rate: f32, from: f64, to: f64, block: &Block, engine_rate: f32, tempo_map: &TempoMap, output: &mut AudioBuffer) {
+    let pulses = block.p1 - block.p0;
+    if pulses <= 0.0 { return; }
+    let samples = (block.s1 - block.s0) as f64;
+    let complete = region.position + region.duration;
+    let gain = db_to_gain(region.gain_db);
+    let warp = &config.warp;
+    let pitch = math::pow(2.0, config.transpose as f64 / 12.0) as f32 * (source_rate / engine_rate);
+    let source_frames = left.len();
+    let declick_pulses = seconds_to_pulses(VOICE_FADE_DURATION, block.bpm) as f64;
+    let declick_in = region.waveform_offset > 0.0;
+    let mut scratch_l = [0.0f32; engine_env::RENDER_QUANTUM];
+    let mut scratch_r = [0.0f32; engine_env::RENDER_QUANTUM];
+    for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
+        let begin = sample_of(block, cycle.result_start, pulses, samples);
+        let end = sample_of(block, cycle.result_end, pulses, samples);
+        let count = end.saturating_sub(begin);
+        if count == 0 { continue; }
+        let (source_pos, time_factor) = if warp.is_empty() {
+            let read = (tempo_map.interval_to_seconds(cycle.raw_start, cycle.result_start) + region.waveform_offset) * source_rate as f64;
+            (read, 1.0f64)
+        } else {
+            let content_ppqn = cycle.result_start - cycle.raw_start;
+            let (first, last) = (warp[0].0, warp[warp.len()-1].0);
+            if content_ppqn < first || content_ppqn >= last { continue; }
+            let seconds = warp_seconds(warp, content_ppqn, cycle.result_start_value as f64);
+            let warp_rate = warp_playback_rate(warp, content_ppqn, source_rate, pulses, samples);
+            let source_pos = (seconds + region.waveform_offset) * source_rate as f64;
+            (source_pos, if warp_rate > 1e-9 { 1.0 / warp_rate } else { 1.0 })
+        };
+        if source_pos < 0.0 || source_pos as usize >= source_frames { continue; }
+        // Re-prime at a discontinuity (transport jump / loop wrap / region entry); otherwise flow.
+        if block.flags.discontinuous() {
+            players[0].reset_stream(source_pos);
+            players[1].reset_stream(source_pos);
+        }
+        players[0].process_stream(left, &mut scratch_l[..count], time_factor, pitch);
+        players[1].process_stream(right, &mut scratch_r[..count], time_factor, pitch);
+        for i in 0..count {
+            let index = begin + i;
+            let pulse = block.p0 + (index as f64 - block.s0 as f64) / samples * pulses;
+            let envelope = fade_gain(pulse - region.position, region.duration, region, declick_pulses, declick_in);
+            let scale = gain * envelope;
+            output.left[index] += scratch_l[i]*scale;
+            output.right[index] += scratch_r[i]*scale;
         }
     }
 }
@@ -451,7 +529,7 @@ mod tests {
         AudioRegion {
             region_uuid: [1u8; 16], position: 0.0, duration: 96_000.0, loop_offset: 0.0, loop_duration: 96_000.0,
             file: [9u8; 16], gain_db, mute: false, waveform_offset: 0.0, fade_in, fade_out,
-            fade_in_slope: 0.5, fade_out_slope: 0.5, warp: Vec::new(), time_stretch: None, transients: Vec::new()
+            fade_in_slope: 0.5, fade_out_slope: 0.5, warp: Vec::new(), time_stretch: None, signalsmith: None, transients: Vec::new()
         }
     }
 
