@@ -48,6 +48,44 @@ fn main() {
         write_wav(&format!("{out}{name}_SOURCE.wav"), &mono, rate);
         write_wav(&format!("{out}{name}_x1.5_NATIVE.wav"), &nout, rate);
         write_wav(&format!("{out}{name}_x1.5_PORT.wav"), &pout, rate);
-        println!("{name}: rendered");
+        println!("{name}: time-stretch rendered");
+    }
+    // pitch shift +7 semitones (a fifth up), same length, pad + guitar, port vs native
+    for (name, file) in [("pad-derelict","332740__mseq__derelict-pad-125.wav"),
+                         ("guitar","568315__valentinsosnitskiy__classical-loop-guitar-4-chords.wav")] {
+        let (mono, rate) = read_wav(&format!("{dir}{file}"));
+        let mut np = Native::preset_default(1, rate as u32); np.set_transpose_factor_semitones(7.0, None);
+        let mut nout = vec![0.0f32; mono.len()]; np.exact(&mono[..], &mut nout[..]);
+        let mut pp = Port::preset_default(1, rate); pp.set_transpose_semitones(7.0);
+        let mut pout = vec![0.0f32; mono.len()]; pp.process_mono(&mono, &mut pout);
+        write_wav(&format!("{out}{name}_pitch+7_NATIVE.wav"), &nout, rate);
+        write_wav(&format!("{out}{name}_pitch+7_PORT.wav"), &pout, rate);
+        println!("{name}: +7st pitch rendered");
+    }
+    // BOTH AT ONCE: 1.5x longer AND +7 semitones up (the combined mode operation), pad + guitar.
+    for (name, file) in [("pad-derelict","332740__mseq__derelict-pad-125.wav"),
+                         ("guitar","568315__valentinsosnitskiy__classical-loop-guitar-4-chords.wav")] {
+        let (mono, rate) = read_wav(&format!("{dir}{file}"));
+        let out_len = (mono.len() as f64 * 1.5) as usize;
+        let mut np = Native::preset_default(1, rate as u32); np.set_transpose_factor_semitones(7.0, None);
+        let mut nout = vec![0.0f32; out_len]; np.exact(&mono[..], &mut nout[..]);
+        let mut pp = Port::preset_default(1, rate); pp.set_transpose_semitones(7.0);
+        let mut pout = vec![0.0f32; out_len]; pp.process_mono(&mono, &mut pout);
+        write_wav(&format!("{out}{name}_x1.5+7st_NATIVE.wav"), &nout, rate);
+        write_wav(&format!("{out}{name}_x1.5+7st_PORT.wav"), &pout, rate);
+        println!("{name}: 1.5x + 7st (both) rendered");
+    }
+    // and slower + down: 0.75x AND -5 semitones, to hear the other direction
+    for (name, file) in [("pad-derelict","332740__mseq__derelict-pad-125.wav"),
+                         ("guitar","568315__valentinsosnitskiy__classical-loop-guitar-4-chords.wav")] {
+        let (mono, rate) = read_wav(&format!("{dir}{file}"));
+        let out_len = (mono.len() as f64 * 0.75) as usize;
+        let mut np = Native::preset_default(1, rate as u32); np.set_transpose_factor_semitones(-5.0, None);
+        let mut nout = vec![0.0f32; out_len]; np.exact(&mono[..], &mut nout[..]);
+        let mut pp = Port::preset_default(1, rate); pp.set_transpose_semitones(-5.0);
+        let mut pout = vec![0.0f32; out_len]; pp.process_mono(&mono, &mut pout);
+        write_wav(&format!("{out}{name}_x0.75-5st_NATIVE.wav"), &nout, rate);
+        write_wav(&format!("{out}{name}_x0.75-5st_PORT.wav"), &pout, rate);
+        println!("{name}: 0.75x - 5st (both) rendered");
     }
 }
