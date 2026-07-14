@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.156](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.155...@opendaw/app-studio@0.0.156) (2026-07-14)
+
+### Bug Fixes
+
+- **studio:** dropdown menus work inside modal dialogs; Monitoring uses DropDown ([7a519e4](https://github.com/andremichelle/openDAW/commit/7a519e48f5f2484765821bdc000695affa2fea39))
+
+### Performance Improvements
+
+- drop the silent Soundfont device fixture ([06ae0cf](https://github.com/andremichelle/openDAW/commit/06ae0cfa38539b1338227a0815042185186ede1e))
+
 ## [0.0.155](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.154...@opendaw/app-studio@0.0.155) (2026-07-07)
 
 ### Bug Fixes
