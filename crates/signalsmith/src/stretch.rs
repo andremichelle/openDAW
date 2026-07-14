@@ -63,6 +63,7 @@ pub struct SignalsmithStretch {
     peaks_s: Vec<usize>,
     ring_l: Vec<f32>, ring_r: Vec<f32>, ring_n: Vec<f32>,
     s2_synth: f64, s2_emit: usize, s2_src: f64, s2_started: bool,
+    cycle_id: f64,           // engine bookkeeping: the loop cycle's raw_start; NaN = uninitialised
 }
 
 impl SignalsmithStretch {
@@ -95,7 +96,7 @@ impl SignalsmithStretch {
             ana_l: vec![0.0; bands], ana_r: vec![0.0; bands],
             prev_l: vec![0.0; bands], prev_r: vec![0.0; bands], sphase: vec![0.0; bands], peaks_s: Vec::with_capacity(bands),
             ring_l: vec![0.0; block], ring_r: vec![0.0; block], ring_n: vec![0.0; block],
-            s2_synth: 0.0, s2_emit: 0, s2_src: 0.0, s2_started: false,
+            s2_synth: 0.0, s2_emit: 0, s2_src: 0.0, s2_started: false, cycle_id: f64::NAN,
         }
     }
 
@@ -214,6 +215,11 @@ impl SignalsmithStretch {
 
     /// The processor's inherent output latency in samples (feed the source this far ahead).
     pub fn latency(&self) -> usize { self.block / 2 }
+
+    /// Engine bookkeeping for loop-wrap detection: the raw_start of the loop cycle this stream is currently
+    /// following. `NaN` until the first cycle is set. The caller re-primes (`reset_stream`) when it changes.
+    pub fn cycle_id(&self) -> f64 { self.cycle_id }
+    pub fn set_cycle_id(&mut self, id: f64) { self.cycle_id = id }
 
     /// STREAMING, ZERO-ALLOC: fill `output` with the next stretched samples, reading the resident
     /// `source` directly. `time_factor` = output/input rate (the local warp slope); may change per

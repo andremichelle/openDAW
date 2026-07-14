@@ -335,10 +335,17 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
             (source_pos, if warp_rate > 1e-9 { 1.0 / warp_rate } else { 1.0 })
         };
         if source_pos < 0.0 || source_pos as usize >= source_frames { continue; }
-        // Re-prime at a discontinuity (transport jump / loop wrap / region entry); otherwise flow.
-        if block.flags.discontinuous() {
+        // Re-prime at a discontinuity: a transport jump (block flag), a region loop WRAP (the cycle's
+        // `raw_start` jumps by loop_duration), or region entry (cycle_id still NaN). Otherwise the stream flows
+        // across marker boundaries. Without the raw_start check a looped region reads straight past the source
+        // end after the first cycle instead of wrapping — the loop goes silent.
+        let continues = !block.flags.discontinuous()
+            && !player.cycle_id().is_nan()
+            && (player.cycle_id() - cycle.raw_start).abs() < 1e-6;
+        if !continues {
             player.reset_stream(source_pos);
         }
+        player.set_cycle_id(cycle.raw_start);
         player.process_stream_stereo(left, right, &mut scratch_l[..count], &mut scratch_r[..count], time_factor, pitch);
         for i in 0..count {
             let index = begin + i;
@@ -645,6 +652,24 @@ mod tests {
             out.extend_from_slice(&output.left[..128]);
         }
         out
+    }
+
+    #[test]
+    fn signalsmith_short_loop_tiles_to_fill_the_region() {
+        // drum-like: a 3.75s source, warp 2 bars(7680ppqn)->3.75s, region 4 bars(15360) looping every 2 bars.
+        // The loop WRAP must re-prime the stream so bars 3-4 replay the source instead of reading past its end.
+        let source = sine48k(220.0, 190_000);
+        let mut region = region(0.0, 0.0, 0.0);
+        region.position = 0.0; region.duration = 15_360.0; region.loop_offset = 0.0; region.loop_duration = 7_680.0;
+        let config = SignalsmithConfig { warp: vec![(0.0, 0.0), (7_680.0, 3.75)], transpose: 0.0 };
+        region.signalsmith = Some(config.clone());
+        let out = run_signalsmith(&region, &config, &source, 3000); // 8s = 4 bars @120bpm
+        let rms = |seg: &[f32]| -> f64 { (seg.iter().map(|v| (*v as f64).powi(2)).sum::<f64>()/seg.len() as f64).sqrt() };
+        let bars12 = rms(&out[10_000..190_000]);
+        let bars34 = rms(&out[200_000..380_000]);
+        std::eprintln!("bars 1-2 rms {bars12:.4}   bars 3-4 rms {bars34:.4}");
+        assert!(bars12 > 0.05, "bars 1-2 audible");
+        assert!(bars34 > 0.05, "bars 3-4 audible (loop tiled the 2-bar source): {bars34:.4}");
     }
 
     #[test]
