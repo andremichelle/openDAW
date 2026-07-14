@@ -192,6 +192,16 @@ Before starting, ensure you have the following installed on your system:
 - [OpenSSL](https://openssl-library.org/) For generating local development certificates (), OpenSSL needs to be
   installed on
   your system. Most Linux/macOS systems have OpenSSL pre-installed.
+- [Rust](https://www.rust-lang.org/tools/install) (via `rustup`, **>= 1.82**) is required to build the WASM
+  audio engine (`@opendaw/studio-core-wasm`). Without it, `npm run build` / `npm run dev:studio` fails to
+  resolve that package (a Vite pre-transform error), because `packages/studio/core-wasm/dist` never gets built.
+  You need:
+    - the `wasm32-unknown-unknown` target — `rustup target add wasm32-unknown-unknown`
+    - a **nightly** toolchain with the `rust-src` component (the device crates build with `-Zbuild-std=core`) —
+      `rustup toolchain install nightly && rustup component add rust-src --toolchain nightly`
+- [binaryen](https://github.com/WebAssembly/binaryen) *(optional)* provides `wasm-opt`, used to size-optimise
+  the WASM modules (`brew install binaryen`, or `apt install binaryen`). If it is missing, the build still
+  succeeds and ships unoptimised modules.
 
 ### Clone
 
