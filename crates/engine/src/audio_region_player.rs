@@ -71,8 +71,8 @@ pub(crate) struct AudioRegionPlayer {
     sequencer_pool: Vec<TimeStretchSequencer>,
     // Signalsmith spectral players, one stereo pair per playing Signalsmith region (keyed by uuid),
     // plus a recycle pool (pre-warmed at prepare, like the sequencers) so region entry never allocates.
-    signalsmith_players: Vec<(Uuid, [SignalsmithStretch; 2])>,
-    signalsmith_pool: Vec<[SignalsmithStretch; 2]>,
+    signalsmith_players: Vec<(Uuid, SignalsmithStretch)>,
+    signalsmith_pool: Vec<SignalsmithStretch>,
     // The engine's clip-launch state machine, shared with the note sequencers (sections per track).
     clips: Rc<RefCell<ClipSequencer>>
 }
@@ -128,7 +128,7 @@ impl AudioRegionPlayer {
         }
         let rate = self.sample_rate;
         while self.signalsmith_pool.len() + self.signalsmith_players.len() < stretch_regions {
-            self.signalsmith_pool.push([SignalsmithStretch::preset_default(1, rate), SignalsmithStretch::preset_default(1, rate)]);
+            self.signalsmith_pool.push(SignalsmithStretch::preset_default(2, rate));
         }
         self.sequencers.reserve(stretch_regions.saturating_sub(self.sequencers.len()));
         self.native_cursors.reserve(total_regions.saturating_sub(self.native_cursors.len()));
@@ -242,7 +242,7 @@ impl Processor for AudioRegionPlayer {
 fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
                output: &mut AudioBuffer, fading_gain: &mut [f32; engine_env::RENDER_QUANTUM],
                sequencers: &mut Vec<(Uuid, TimeStretchSequencer)>, sequencer_pool: &mut Vec<TimeStretchSequencer>,
-               signalsmith_players: &mut Vec<(Uuid, [SignalsmithStretch; 2])>, signalsmith_pool: &mut Vec<[SignalsmithStretch; 2]>,
+               signalsmith_players: &mut Vec<(Uuid, SignalsmithStretch)>, signalsmith_pool: &mut Vec<SignalsmithStretch>,
                native_cursors: &mut Vec<(Uuid, NativeCursor)>, visited: &mut Vec<Uuid>,
                tempo_map: &TempoMap, sample_rate: f32) {
     if region.mute {
@@ -255,7 +255,7 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
         let index = match signalsmith_players.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
             Some(index) => index,
             None => {
-                let player = signalsmith_pool.pop().unwrap_or_else(|| [SignalsmithStretch::preset_default(1, sample_rate), SignalsmithStretch::preset_default(1, sample_rate)]);
+                let player = signalsmith_pool.pop().unwrap_or_else(|| SignalsmithStretch::preset_default(2, sample_rate));
                 signalsmith_players.push((region.region_uuid, player));
                 signalsmith_players.len() - 1
             }
@@ -303,7 +303,7 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
 /// transpose (pitch), summing into `output` with gain + fade envelope. Streams continuously; only
 /// re-primes at a discontinuity. Pitch compensates the source-vs-engine sample-rate ratio.
 #[allow(clippy::too_many_arguments)]
-fn play_signalsmith(players: &mut [SignalsmithStretch; 2], region: &AudioRegion, config: &SignalsmithConfig,
+fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, config: &SignalsmithConfig,
                     left: &[f32], right: &[f32], source_rate: f32, from: f64, to: f64, block: &Block, engine_rate: f32, tempo_map: &TempoMap, output: &mut AudioBuffer) {
     let pulses = block.p1 - block.p0;
     if pulses <= 0.0 { return; }
@@ -337,11 +337,9 @@ fn play_signalsmith(players: &mut [SignalsmithStretch; 2], region: &AudioRegion,
         if source_pos < 0.0 || source_pos as usize >= source_frames { continue; }
         // Re-prime at a discontinuity (transport jump / loop wrap / region entry); otherwise flow.
         if block.flags.discontinuous() {
-            players[0].reset_stream(source_pos);
-            players[1].reset_stream(source_pos);
+            player.reset_stream(source_pos);
         }
-        players[0].process_stream(left, &mut scratch_l[..count], time_factor, pitch);
-        players[1].process_stream(right, &mut scratch_r[..count], time_factor, pitch);
+        player.process_stream_stereo(left, right, &mut scratch_l[..count], &mut scratch_r[..count], time_factor, pitch);
         for i in 0..count {
             let index = begin + i;
             let pulse = block.p0 + (index as f64 - block.s0 as f64) / samples * pulses;
@@ -635,7 +633,7 @@ mod tests {
     }
     // Drive play_signalsmith across `blocks` 128-sample quanta, collecting mono output.
     fn run_signalsmith(region: &AudioRegion, config: &SignalsmithConfig, source: &[f32], blocks: usize) -> Vec<f32> {
-        let mut players = [SignalsmithStretch::preset_default(1, 48000.0), SignalsmithStretch::preset_default(1, 48000.0)];
+        let mut player = SignalsmithStretch::preset_default(2, 48000.0);
         let tempo = TempoMap::fixed(120.0);
         let mut out = Vec::with_capacity(blocks*128);
         for k in 0..blocks {
@@ -643,7 +641,7 @@ mod tests {
             let (p0, p1) = ((k*128) as f64*0.04, ((k+1)*128) as f64*0.04); // 120bpm@48k: 0.04 ppqn/sample
             let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
             let mut output = AudioBuffer::new();
-            play_signalsmith(&mut players, region, config, source, source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut output);
+            play_signalsmith(&mut player, region, config, source, source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut output);
             out.extend_from_slice(&output.left[..128]);
         }
         out

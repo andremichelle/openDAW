@@ -53,6 +53,16 @@ pub struct SignalsmithStretch {
     stream_emit: usize,  // next output sample to emit
     stream_src: f64,     // source read position (samples) for the next frame
     stream_started: bool,
+    // STEREO-COUPLED state (shared phase across L/R preserves the stereo image). Separate from the
+    // mono fields so the oracle/mono path is untouched.
+    in_l: Vec<Cplx>, in_r: Vec<Cplx>,
+    mag_l: Vec<f32>, mag_r: Vec<f32>,
+    ana_l: Vec<f32>, ana_r: Vec<f32>,
+    prev_l: Vec<f32>, prev_r: Vec<f32>,   // per-channel prev analysis phase (for instantaneous freq)
+    sphase: Vec<f32>,        // SHARED accumulated synthesis phase per band
+    peaks_s: Vec<usize>,
+    ring_l: Vec<f32>, ring_r: Vec<f32>, ring_n: Vec<f32>,
+    s2_synth: f64, s2_emit: usize, s2_src: f64, s2_started: bool,
 }
 
 impl SignalsmithStretch {
@@ -80,6 +90,12 @@ impl SignalsmithStretch {
             freq_multiplier: 1.0,
             out_ring: vec![0.0; block], norm_ring: vec![0.0; block],
             stream_synth: 0.0, stream_emit: 0, stream_src: 0.0, stream_started: false,
+            in_l: vec![Cplx::default(); bands], in_r: vec![Cplx::default(); bands],
+            mag_l: vec![0.0; bands], mag_r: vec![0.0; bands],
+            ana_l: vec![0.0; bands], ana_r: vec![0.0; bands],
+            prev_l: vec![0.0; bands], prev_r: vec![0.0; bands], sphase: vec![0.0; bands], peaks_s: Vec::with_capacity(bands),
+            ring_l: vec![0.0; block], ring_r: vec![0.0; block], ring_n: vec![0.0; block],
+            s2_synth: 0.0, s2_emit: 0, s2_src: 0.0, s2_started: false,
         }
     }
 
@@ -191,6 +207,9 @@ impl SignalsmithStretch {
         for v in self.norm_ring.iter_mut() { *v = 0.0; }
         for b in 0..self.bands { self.prev_phase[b]=0.0; self.ana_phase[b]=0.0; self.synth_phase[b]=0.0; }
         self.stream_synth = 0.0; self.stream_emit = 0; self.stream_src = source_pos; self.stream_started = false;
+        for v in self.ring_l.iter_mut() { *v = 0.0; } for v in self.ring_r.iter_mut() { *v = 0.0; } for v in self.ring_n.iter_mut() { *v = 0.0; }
+        for b in 0..self.bands { self.prev_l[b]=0.0; self.prev_r[b]=0.0; self.sphase[b]=0.0; }
+        self.s2_synth = 0.0; self.s2_emit = 0; self.s2_src = source_pos; self.s2_started = false;
     }
 
     /// The processor's inherent output latency in samples (feed the source this far ahead).
@@ -253,6 +272,116 @@ impl SignalsmithStretch {
             output[out_i] = if self.norm_ring[idx] > 1e-6 { self.out_ring[idx]/self.norm_ring[idx] } else { 0.0 };
             self.out_ring[idx] = 0.0; self.norm_ring[idx] = 0.0;
             self.stream_emit += 1;
+        }
+    }
+
+    /// STREAMING, ZERO-ALLOC, STEREO-COUPLED. Both channels are stretched by ONE processor that
+    /// shares a single synthesis-phase accumulator and a single peak map, so the inter-channel
+    /// phase relationship (the stereo image) is preserved instead of two mono vocoders drifting
+    /// apart. Per band the higher-energy channel drives the horizontal phase advance and the peak
+    /// lock; the other channel is rigidly offset by its *analysis-time* phase difference, so the
+    /// output L/R phase difference equals the input's at every band.
+    pub fn process_stream_stereo(&mut self, left: &[f32], right: &[f32],
+                                 out_l: &mut [f32], out_r: &mut [f32],
+                                 time_factor: f64, pitch: f32) {
+        let block = self.block; let interval = self.interval as f64;
+        let half = (block / 2) as f64;
+        let two_pi = 2.0*core::f32::consts::PI;
+        self.freq_multiplier = pitch;
+        let r = pitch;
+        for out_i in 0..out_l.len() {
+            let emit = self.s2_emit;
+            while self.s2_synth <= emit as f64 + half {
+                let analysis_hop = interval / time_factor.max(1e-6);
+                let center = libm::round(self.s2_src) as isize;
+                self.analyse(left, 0, center);
+                for b in 0..self.bands { self.in_l[b] = if r == 1.0 { self.output[b] } else { self.interp_spectrum(0, b as f32 / r) }; }
+                self.analyse(right, 0, center);
+                for b in 0..self.bands { self.in_r[b] = if r == 1.0 { self.output[b] } else { self.interp_spectrum(0, b as f32 / r) }; }
+                for b in 0..self.bands {
+                    let al = self.in_l[b]; let ar = self.in_r[b];
+                    let ml = libm::sqrtf(al.norm()); let mr = libm::sqrtf(ar.norm());
+                    let pl = libm::atan2f(al.im, al.re); let pr = libm::atan2f(ar.im, ar.re);
+                    self.mag_l[b]=ml; self.mag_r[b]=mr; self.ana_l[b]=pl; self.ana_r[b]=pr;
+                    let src = b as f32 / r;
+                    if !self.s2_started {
+                        self.sphase[b] = if ml >= mr { pl } else { pr };
+                    } else {
+                        let (ref_phase, ref_prev) = if ml >= mr { (pl, self.prev_l[b]) } else { (pr, self.prev_r[b]) };
+                        let expected = two_pi * src * analysis_hop as f32 / block as f32;
+                        let mut dev = ref_phase - ref_prev - expected;
+                        dev -= two_pi * libm::roundf(dev/two_pi);
+                        let inst = (expected + dev) / analysis_hop as f32;
+                        self.sphase[b] += inst * r * interval as f32;
+                    }
+                    self.prev_l[b]=pl; self.prev_r[b]=pr;
+                }
+                self.s2_started = true;
+                self.build_locked_output_stereo();
+                let start = self.s2_synth - half;
+                for b in 0..self.bands { self.re[b]=self.in_l[b].re; self.im[b]=self.in_l[b].im; }
+                self.re[self.bands]=0.0; self.im[self.bands]=0.0;
+                for b in 1..self.bands { self.re[block-b]=self.re[b]; self.im[block-b]=-self.im[b]; }
+                self.fft.inverse(&mut self.re, &mut self.im);
+                for i in 0..block {
+                    let pos = start + i as f64;
+                    if pos >= 0.0 { let idx=(pos as usize)%block; self.ring_l[idx]+=self.re[i]*self.window[i]; self.ring_n[idx]+=self.window[i]*self.window[i]; }
+                }
+                for b in 0..self.bands { self.re[b]=self.in_r[b].re; self.im[b]=self.in_r[b].im; }
+                self.re[self.bands]=0.0; self.im[self.bands]=0.0;
+                for b in 1..self.bands { self.re[block-b]=self.re[b]; self.im[block-b]=-self.im[b]; }
+                self.fft.inverse(&mut self.re, &mut self.im);
+                for i in 0..block {
+                    let pos = start + i as f64;
+                    if pos >= 0.0 { let idx=(pos as usize)%block; self.ring_r[idx]+=self.re[i]*self.window[i]; }
+                }
+                self.s2_synth += interval;
+                self.s2_src += analysis_hop;
+            }
+            let idx = emit % block;
+            let nrm = self.ring_n[idx];
+            out_l[out_i] = if nrm > 1e-6 { self.ring_l[idx]/nrm } else { 0.0 };
+            out_r[out_i] = if nrm > 1e-6 { self.ring_r[idx]/nrm } else { 0.0 };
+            self.ring_l[idx]=0.0; self.ring_r[idx]=0.0; self.ring_n[idx]=0.0;
+            self.s2_emit += 1;
+        }
+    }
+
+    /// Vertical rigid locking on the COMBINED (L+R) magnitude with the higher-energy channel as the
+    /// phase reference. Writes each channel's final output bins back into `in_l`/`in_r`. The output
+    /// L/R phase difference equals the analysis-time difference, preserving the stereo image.
+    fn build_locked_output_stereo(&mut self) {
+        let bands = self.bands;
+        for b in 0..bands { self.ana_phase[b] = if self.mag_l[b] >= self.mag_r[b] { self.ana_l[b] } else { self.ana_r[b] }; }
+        self.peaks_s.clear();
+        let alpha = 0.15f32; let mut sm = 0.0f32;
+        for b in 0..bands { let cm=self.mag_l[b]+self.mag_r[b]; sm += alpha*(cm-sm); self.frame[b]=sm; }
+        sm = 0.0;
+        for b in (0..bands).rev() { let cm=self.mag_l[b]+self.mag_r[b]; sm += alpha*(cm-sm); self.frame[b]=0.5*(self.frame[b]+sm); }
+        let w=3usize;
+        for b in 0..bands {
+            let cm=self.mag_l[b]+self.mag_r[b];
+            if cm <= self.frame[b]*1.2 { continue; }
+            let lo=b.saturating_sub(w); let hi=(b+w+1).min(bands);
+            if (lo..hi).all(|other| self.mag_l[other]+self.mag_r[other] <= cm) { self.peaks_s.push(b); }
+        }
+        if self.peaks_s.is_empty() {
+            for b in 0..bands {
+                let rp = self.ana_phase[b];
+                let lp = self.sphase[b] + (self.ana_l[b]-rp); let rpp = self.sphase[b] + (self.ana_r[b]-rp);
+                self.in_l[b] = Cplx{re:self.mag_l[b]*libm::cosf(lp), im:self.mag_l[b]*libm::sinf(lp)};
+                self.in_r[b] = Cplx{re:self.mag_r[b]*libm::cosf(rpp), im:self.mag_r[b]*libm::sinf(rpp)};
+            }
+            return;
+        }
+        let mut pi=0usize;
+        for b in 0..bands {
+            while pi+1 < self.peaks_s.len() && (self.peaks_s[pi+1] as isize - b as isize).abs() < (self.peaks_s[pi] as isize - b as isize).abs() { pi+=1; }
+            let p=self.peaks_s[pi];
+            let base_phase = self.sphase[p] - self.ana_phase[p];
+            let lp = base_phase + self.ana_l[b]; let rp = base_phase + self.ana_r[b];
+            self.in_l[b] = Cplx{re:self.mag_l[b]*libm::cosf(lp), im:self.mag_l[b]*libm::sinf(lp)};
+            self.in_r[b] = Cplx{re:self.mag_r[b]*libm::cosf(rp), im:self.mag_r[b]*libm::sinf(rp)};
         }
     }
 

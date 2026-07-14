@@ -31,6 +31,58 @@ fn streaming_stretches_cleanly_in_blocks() {
     assert!((f-440.0).abs() < 8.0, "frequency preserved by time-stretch: {f:.0}");
 }
 
+// Normalized cross-correlation between L and R, maximized over a small lag window. A stereo signal
+// with a fixed inter-channel delay reads ~1.0 here; independent-per-channel processing decorrelates.
+fn interchannel_coherence(l: &[f32], r: &[f32]) -> f64 {
+    let s = l.len()/2 - 4000; let a = &l[s..s+8000]; let mut best = 0.0f64;
+    for lag in -60i64..=60 {
+        let (mut num, mut da, mut db) = (0.0, 0.0, 0.0);
+        for i in 0..a.len() {
+            let j = i as i64 + lag; if j < 0 || j as usize >= r.len() { continue; }
+            let (x, y) = (a[i] as f64, r[j as usize] as f64);
+            num += x*y; da += x*x; db += y*y;
+        }
+        if da > 0.0 && db > 0.0 { let c = num/(da*db).sqrt(); if c > best { best = c; } }
+    }
+    best
+}
+
+#[test]
+fn stereo_preserves_the_image() {
+    // L and R are the same three-tone signal but R is delayed by a few samples — a fixed stereo
+    // image. Coupled processing keeps L/R coherent; two independent mono vocoders scramble the
+    // per-band phase relationship and collapse the coherence.
+    let rate = 48000.0; let n = 24000;
+    // Both channels carry the SAME two partials (so they are correlated) but with swapped emphasis —
+    // a genuine stereo image, not a mere delay. In L the low partial dominates, in R the high one.
+    // Independent vocoders peak-lock each channel to a DIFFERENT reference partial, so the shared
+    // spectrum's phase drifts apart over the stretch; the coupled processor shares one peak map.
+    let (f1, f2) = (400.0, 424.0);
+    let ll = |t: f64| 0.5*(2.0*std::f64::consts::PI*f1*t).sin() + 0.15*(2.0*std::f64::consts::PI*f2*t).sin();
+    let rr = |t: f64| 0.15*(2.0*std::f64::consts::PI*f1*t).sin() + 0.5*(2.0*std::f64::consts::PI*f2*t).sin();
+    let mut left = vec![0.0f32; n + 4096];
+    let mut right = vec![0.0f32; n + 4096];
+    for i in 0..n { left[i] = ll(i as f64/rate) as f32; right[i] = rr(i as f64/rate) as f32; }
+    let input_coh = interchannel_coherence(&left, &right);
+    let ratio = 1.5; let out_len = (n as f64*ratio) as usize;
+    // coupled stereo processor
+    let mut stereo = Port::preset_default(2, rate as f32);
+    stereo.reset_stream(2048.0);
+    let (mut cl, mut cr) = (vec![0.0f32; out_len], vec![0.0f32; out_len]);
+    for (lc, rc) in cl.chunks_mut(128).zip(cr.chunks_mut(128)) { stereo.process_stream_stereo(&left, &right, lc, rc, ratio, 1.0); }
+    let coupled = interchannel_coherence(&cl, &cr);
+    // two independent mono processors (the rejected approach)
+    let mut ml = Port::preset_default(1, rate as f32); ml.reset_stream(2048.0);
+    let mut mr = Port::preset_default(1, rate as f32); mr.reset_stream(2048.0);
+    let (mut il, mut ir) = (vec![0.0f32; out_len], vec![0.0f32; out_len]);
+    for c in il.chunks_mut(128) { ml.process_stream(&left, c, ratio, 1.0); }
+    for c in ir.chunks_mut(128) { mr.process_stream(&right, c, ratio, 1.0); }
+    let independent = interchannel_coherence(&il, &ir);
+    println!("stereo coherence: input {input_coh:.3}  coupled {coupled:.3}  independent {independent:.3}");
+    assert!(coupled > 0.7*input_coh, "coupled retains the input's stereo image ({coupled:.3} vs input {input_coh:.3})");
+    assert!(coupled > independent + 0.2, "coupled decisively beats two independent vocoders ({coupled:.3} vs {independent:.3})");
+}
+
 #[test]
 fn streaming_variable_tempo_stays_stable() {
     // time_factor ramps from 1.0 to 2.0 mid-stream (accelerating warp) — must not glitch/blow up.

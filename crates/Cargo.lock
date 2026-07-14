@@ -617,7 +617,7 @@ dependencies = [
  "engine-env",
  "math",
  "processors",
- "stretch",
+ "signalsmith",
  "studio-boxes",
  "talc",
  "transport",
