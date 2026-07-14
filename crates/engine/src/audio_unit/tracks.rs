@@ -190,7 +190,11 @@ pub(crate) struct TrackBinding {
 /// playback data inline; the source file is resolved at render).
 pub(crate) struct AudioRegionBinding {
     pub(crate) region_uuid: Uuid,
-    pub(crate) edit_sub: SubscriptionId
+    pub(crate) edit_sub: SubscriptionId,
+    // A second re-read monitor on the region's play-mode box (Signalsmith / TimeStretch / PitchStretch), when it
+    // has one: transpose and warp markers live on that SEPARATE box, so a `Parent` monitor on the region alone
+    // never sees those edits. `None` for a native region (no play-mode).
+    pub(crate) playmode_sub: Option<SubscriptionId>
 }
 
 /// An AUDIO track binding: its sorted `AudioRegion` collection (shared with the player), its `regions`
@@ -709,6 +713,7 @@ pub(crate) fn teardown_audio_track(graph: &mut BoxGraph, audio_track_sets: &Shar
     audio_track_sets.borrow_mut().retain(|set| !Rc::ptr_eq(set, &track.content));
     for region in track.region_bindings {
         graph.unsubscribe(region.edit_sub);
+        if let Some(sub) = region.playmode_sub { graph.unsubscribe(sub); }
     }
     for clip in track.clip_bindings {
         graph.unsubscribe(clip.edit_sub);
@@ -805,6 +810,7 @@ pub(crate) fn reconcile_audio_regions(graph: &mut BoxGraph, track: &mut AudioTra
             let region = track.region_bindings.remove(index);
             track.content.borrow_mut().regions.retain(|bound| bound.region_uuid != region_uuid);
             graph.unsubscribe(region.edit_sub);
+            if let Some(sub) = region.playmode_sub { graph.unsubscribe(sub); }
         }
     }
     for region_uuid in changes.added {
@@ -823,9 +829,22 @@ pub(crate) fn reconcile_audio_regions(graph: &mut BoxGraph, track: &mut AudioTra
 pub(crate) fn build_audio_region(graph: &mut BoxGraph, content: &SharedAudioTrack, region_uuid: Uuid, tempo_map: &SharedTempoMap) -> Option<AudioRegionBinding> {
     let region = read_audio_region(graph, region_uuid, &tempo_map.borrow())?;
     content.borrow_mut().regions.add(region);
+    let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(region_uuid),
+        audio_region_reread(content, tempo_map, region_uuid));
+    // Also watch the play-mode box: a Signalsmith transpose (or warp-marker) edit lands on that box, not the
+    // region, so without this a live pitch / warp change would not refresh until the region itself is re-read.
+    let play_mode = graph.target_of(&Address::of(region_uuid, vec![AUDIO_REGION_PLAYMODE_KEY])).map(|target| target.uuid);
+    let playmode_sub = play_mode.map(|uuid|
+        graph.subscribe_vertex(Propagation::Parent, Address::box_of(uuid), audio_region_reread(content, tempo_map, region_uuid)));
+    Some(AudioRegionBinding {region_uuid, edit_sub, playmode_sub})
+}
+
+/// A re-read observer: when a watched box changes, re-read THIS region and re-sort the track's collection. Built
+/// twice per region (one monitor on the region box, one on its play-mode box), so it is a factory, not inline.
+fn audio_region_reread(content: &SharedAudioTrack, tempo_map: &SharedTempoMap, region_uuid: Uuid) -> UpdateObserver {
     let edit_regions = content.clone();
     let edit_tempo = tempo_map.clone();
-    let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(region_uuid), Box::new(move |graph, _update| {
+    Box::new(move |graph: &BoxGraph, _update: &Update| {
         let mut content = edit_regions.borrow_mut();
         let set = &mut content.regions;
         let mut moved = false;
@@ -840,8 +859,7 @@ pub(crate) fn build_audio_region(graph: &mut BoxGraph, content: &SharedAudioTrac
         if moved {
             set.resort();
         }
-    }));
-    Some(AudioRegionBinding {region_uuid, edit_sub})
+    })
 }
 
 // ---- Device parameter automation (Route D). A device's automated parameter is a Value `TrackBox` whose

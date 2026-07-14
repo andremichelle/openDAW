@@ -7,6 +7,7 @@ import {MetronomePage} from "./pages/metronome/MetronomePage"
 import {TempoAutomationPage} from "./pages/tempo-automation/TempoAutomationPage"
 import {NotesPage} from "./pages/notes/NotesPage"
 import {LoopTruncationPage} from "./pages/loop-truncation/LoopTruncationPage"
+import {SignalsmithPage} from "./pages/signalsmith/SignalsmithPage"
 import {MultiplePluginsPage} from "./pages/multiple-plugins/MultiplePluginsPage"
 import {CompositePage} from "./pages/composite/CompositePage"
 import {TidalPage} from "./pages/tidal/TidalPage"
@@ -28,6 +29,7 @@ export const App = () => {
                 <LocalLink href="/tempo-automation">Tempo Automation</LocalLink>
                 <LocalLink href="/notes">Notes</LocalLink>
                 <LocalLink href="/loop-truncation">Loop Truncation</LocalLink>
+                <LocalLink href="/signalsmith">Signalsmith</LocalLink>
                 <LocalLink href="/multiple-plugins">Multiple Plugins</LocalLink>
                 <LocalLink href="/composite">Composite</LocalLink>
                 <LocalLink href="/tidal">Tidal</LocalLink>
@@ -48,6 +50,7 @@ export const App = () => {
                         {path: "/tempo-automation", factory: TempoAutomationPage},
                         {path: "/notes", factory: NotesPage},
                         {path: "/loop-truncation", factory: LoopTruncationPage},
+                        {path: "/signalsmith", factory: SignalsmithPage},
                         {path: "/multiple-plugins", factory: MultiplePluginsPage},
                         {path: "/composite", factory: CompositePage},
                         {path: "/tidal", factory: TidalPage},
