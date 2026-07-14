@@ -45,6 +45,7 @@ pub struct SignalsmithStretch {
     re: Vec<f32>,
     im: Vec<f32>,
     frame: Vec<f32>,
+    freq_multiplier: f32,
 }
 
 impl SignalsmithStretch {
@@ -69,7 +70,13 @@ impl SignalsmithStretch {
             synth_phase: vec![0.0; bands*channels],
             peaks: Vec::with_capacity(bands),
             re: vec![0.0; block], im: vec![0.0; block], frame: vec![0.0; block],
+            freq_multiplier: 1.0,
         }
+    }
+
+    /// Independent pitch shift in semitones (spectral remap, no resampling). 0 = time-stretch only.
+    pub fn set_transpose_semitones(&mut self, semitones: f32) {
+        self.freq_multiplier = libm::powf(2.0, semitones / 12.0);
     }
 
     pub fn block_samples(&self) -> usize { self.block }
@@ -95,8 +102,10 @@ impl SignalsmithStretch {
             let analysis_hop = if prev_in_center.is_nan() { synth_hop / ratio } else { in_center - prev_in_center };
             prev_in_center = in_center;
             self.analyse(input, ch, libm::round(in_center) as isize); // fills self.output[b]=analysis spectrum, tmp
+            let r = self.freq_multiplier;
             for b in 0..self.bands {
-                let a = self.output[base+b];
+                let src = b as f32 / r;
+                let a = if r == 1.0 { self.output[base+b] } else { self.interp_spectrum(base, src) };
                 let mag = libm::sqrtf(a.norm());
                 let phase = libm::atan2f(a.im, a.re);
                 self.mag[base+b] = mag;
@@ -104,11 +113,11 @@ impl SignalsmithStretch {
                 if first {
                     self.synth_phase[base+b] = phase;
                 } else {
-                    let expected = two_pi * b as f32 * analysis_hop as f32 / self.block as f32;
+                    let expected = two_pi * src * analysis_hop as f32 / self.block as f32;
                     let mut dev = phase - self.prev_phase[base+b] - expected;
-                    dev -= two_pi * libm::roundf(dev/two_pi);         // wrap to (-pi,pi]
-                    let inst_freq = (expected + dev) / analysis_hop as f32; // rad/sample
-                    self.synth_phase[base+b] += inst_freq * synth_hop as f32;
+                    dev -= two_pi * libm::roundf(dev/two_pi);
+                    let inst_freq_in = (expected + dev) / analysis_hop as f32;
+                    self.synth_phase[base+b] += inst_freq_in * r * synth_hop as f32;
                 }
                 self.prev_phase[base+b] = phase;
             }
@@ -123,6 +132,13 @@ impl SignalsmithStretch {
             synth += self.interval as isize;
         }
         for i in 0..out_len { output[i] = if norm[i] > 1e-6 { acc[i]/norm[i] } else { 0.0 }; }
+    }
+
+    fn interp_spectrum(&self, base: usize, idx: f32) -> Cplx {
+        if idx < 0.0 || idx >= (self.bands - 1) as f32 { return Cplx::default(); }
+        let lo = idx as usize; let f = idx - lo as f32;
+        let a = self.output[base+lo]; let b = self.output[base+lo+1];
+        Cplx { re: a.re + (b.re-a.re)*f, im: a.im + (b.im-a.im)*f }
     }
 
     fn build_locked_output(&mut self, base: usize) {
