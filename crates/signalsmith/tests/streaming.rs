@@ -69,7 +69,7 @@ fn stereo_preserves_the_image() {
     let mut stereo = Port::preset_default(2, rate as f32);
     stereo.reset_stream(2048.0);
     let (mut cl, mut cr) = (vec![0.0f32; out_len], vec![0.0f32; out_len]);
-    for (lc, rc) in cl.chunks_mut(128).zip(cr.chunks_mut(128)) { stereo.process_stream_stereo(&left, &right, lc, rc, ratio, 1.0); }
+    for (lc, rc) in cl.chunks_mut(128).zip(cr.chunks_mut(128)) { stereo.process_stream_stereo(&left, &right, lc, rc, ratio, 1.0, 1.0); }
     let coupled = interchannel_coherence(&cl, &cr);
     // two independent mono processors (the rejected approach)
     let mut ml = Port::preset_default(1, rate as f32); ml.reset_stream(2048.0);

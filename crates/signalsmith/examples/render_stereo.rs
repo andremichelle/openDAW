@@ -59,7 +59,7 @@ fn main() {
         // COUPLED — the real engine path (one stereo processor, 128-sample blocks)
         let mut stereo = Port::preset_default(2, rate); stereo.reset_stream(2048.0);
         let (mut cl, mut cr) = (vec![0.0f32; out_len], vec![0.0f32; out_len]);
-        for (lc, rc) in cl.chunks_mut(128).zip(cr.chunks_mut(128)) { stereo.process_stream_stereo(&left, &right, lc, rc, ratio, 1.0); }
+        for (lc, rc) in cl.chunks_mut(128).zip(cr.chunks_mut(128)) { stereo.process_stream_stereo(&left, &right, lc, rc, ratio, 1.0, 1.0); }
         // INDEPENDENT — the rejected approach (two mono vocoders), for A/B
         let mut ml = Port::preset_default(1, rate); ml.reset_stream(2048.0);
         let mut mr = Port::preset_default(1, rate); mr.reset_stream(2048.0);

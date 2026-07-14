@@ -68,17 +68,22 @@ fn main() {
     // (a) pure UNITY passthrough — is the PV transparent at 1.0x / no shift?
     let mut p1 = Port::preset_default(2, rate); p1.reset_stream(2048.0);
     let (mut ul, mut ur) = (vec![0.0f32; src_len], vec![0.0f32; src_len]);
-    for (lc, rc) in ul.chunks_mut(128).zip(ur.chunks_mut(128)) { p1.process_stream_stereo(&left, &right, lc, rc, 1.0, 1.0); }
+    for (lc, rc) in ul.chunks_mut(128).zip(ur.chunks_mut(128)) { p1.process_stream_stereo(&left, &right, lc, rc, 1.0, 1.0, 1.0); }
     // (a2) port MONO passthrough (left only) — isolate whether the stereo coupling is what scrambles phase
     let mut pm = Port::preset_default(1, rate); pm.reset_stream(2048.0);
     let mut ml_out = vec![0.0f32; src_len];
     for c in ml_out.chunks_mut(128) { pm.process_stream(&left, c, 1.0, 1.0); }
-    // (b) engine native-tempo on a 48k engine: time_factor 48/44.1, pitch 44.1/48 (the spectral rate-shift)
-    let tf = 48000.0/44100.0; let pitch = 44100.0/48000.0f32;
-    let n48 = (src_len as f64 * tf) as usize;
+    // (b) engine native-tempo on a 48k engine, NEW path: time_factor 1.0, pitch 1.0, and the sample-rate
+    //     conversion done as a transparent time-domain resample read (resample = 44.1/48). No spectral shift.
+    let resample = 44100.0/48000.0;                    // source samples per engine sample
+    let n48 = (src_len as f64 / resample) as usize;    // engine-rate length
     let mut p2 = Port::preset_default(2, rate); p2.reset_stream(2048.0);
     let (mut rl, mut rr) = (vec![0.0f32; n48], vec![0.0f32; n48]);
-    for (lc, rc) in rl.chunks_mut(128).zip(rr.chunks_mut(128)) { p2.process_stream_stereo(&left, &right, lc, rc, tf, pitch); }
+    for (lc, rc) in rl.chunks_mut(128).zip(rr.chunks_mut(128)) { p2.process_stream_stereo(&left, &right, lc, rc, 1.0, 1.0, resample); }
+    // reference: the source linearly resampled to 48k — what transparent native playback SHOULD produce
+    let mut ref48 = vec![0.0f32; n48];
+    for i in 0..n48 { let pos = i as f64 * resample; let i0 = pos as usize; let f = (pos - i0 as f64) as f32;
+        ref48[i] = if i0+1 < src_len { left[i0]*(1.0-f) + left[i0+1]*f } else if i0 < src_len { left[i0] } else { 0.0 }; }
     // (c) NATIVE Signalsmith at unity (left channel, mono) — reconstructs the input, or decorrelation inherent?
     let mut nl = vec![0.0f32; src_len];
     Native::preset_default(1, rate as u32).exact(&left[..src_len], &mut nl[..]);
@@ -89,7 +94,7 @@ fn main() {
     println!("endeavour cleanliness vs source (1.0 = identical):");
     println!("  UNITY stereo (tf 1.0, pitch 1.0): {:.3}", cleanliness(&left[..src_len], &ul));
     println!("  UNITY mono (left only):           {:.3}", cleanliness(&left[..src_len], &ml_out));
-    println!("  RATE-SHIFT (tf 48/44.1, p 44.1/48): {:.3}  (resampled, correlation lower by construction)", cleanliness(&left[..src_len], &rl));
+    println!("  RATE 48k engine (NEW resample):   {:.3}  (vs source linearly resampled to 48k)", cleanliness(&ref48, &rl));
     println!("  NATIVE Signalsmith at unity:       {:.3}", cleanliness(&left[..src_len], &nl));
     println!("wrote SOURCE / UNITY / RATESHIFT to {out}");
 }

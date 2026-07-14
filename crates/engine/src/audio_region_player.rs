@@ -311,7 +311,12 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
     let complete = region.position + region.duration;
     let gain = db_to_gain(region.gain_db);
     let warp = &config.warp;
-    let pitch = math::pow(2.0, config.transpose as f64 / 12.0) as f32 * (source_rate / engine_rate);
+    // Pitch is the MUSICAL transpose only. The source-vs-engine sample-rate difference is handled by a
+    // time-domain `resample` read inside the processor (transparent), NOT by a spectral shift (which smears
+    // transients). So at transpose 0 the spectral pitch is exactly 1.0 and native playback is bit-transparent
+    // at any engine rate. Positions/rates below are in ENGINE-rate source samples to match.
+    let pitch = math::pow(2.0, config.transpose as f64 / 12.0) as f32;
+    let resample = source_rate as f64 / engine_rate as f64; // actual source samples per engine-rate sample
     let source_frames = left.len();
     let declick_pulses = seconds_to_pulses(VOICE_FADE_DURATION, block.bpm) as f64;
     let declick_in = region.waveform_offset > 0.0;
@@ -323,7 +328,7 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
         let count = end.saturating_sub(begin);
         if count == 0 { continue; }
         let (source_pos, time_factor) = if warp.is_empty() {
-            let read = (tempo_map.interval_to_seconds(cycle.raw_start, cycle.result_start) + region.waveform_offset) * source_rate as f64;
+            let read = (tempo_map.interval_to_seconds(cycle.raw_start, cycle.result_start) + region.waveform_offset) * engine_rate as f64;
             (read, 1.0f64)
         } else {
             let content_ppqn = cycle.result_start - cycle.raw_start;
@@ -331,10 +336,11 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
             if content_ppqn < first || content_ppqn >= last { continue; }
             let seconds = warp_seconds(warp, content_ppqn, cycle.result_start_value as f64);
             let warp_rate = warp_playback_rate(warp, content_ppqn, source_rate, pulses, samples);
-            let source_pos = (seconds + region.waveform_offset) * source_rate as f64;
-            (source_pos, if warp_rate > 1e-9 { 1.0 / warp_rate } else { 1.0 })
+            let source_pos = (seconds + region.waveform_offset) * engine_rate as f64;
+            // time_factor = MUSICAL stretch = 1/(engine-rate source samples per output sample) = resample/warp_rate.
+            (source_pos, if warp_rate > 1e-9 { resample / warp_rate } else { 1.0 })
         };
-        if source_pos < 0.0 || source_pos as usize >= source_frames { continue; }
+        if source_pos < 0.0 || (source_pos * resample) as usize >= source_frames { continue; }
         // Re-prime at a discontinuity: a transport jump (block flag), a region loop WRAP (the cycle's
         // `raw_start` jumps by loop_duration), or region entry (cycle_id still NaN). Otherwise the stream flows
         // across marker boundaries. Without the raw_start check a looped region reads straight past the source
@@ -346,7 +352,7 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
             player.reset_stream(source_pos);
         }
         player.set_cycle_id(cycle.raw_start);
-        player.process_stream_stereo(left, right, &mut scratch_l[..count], &mut scratch_r[..count], time_factor, pitch);
+        player.process_stream_stereo(left, right, &mut scratch_l[..count], &mut scratch_r[..count], time_factor, pitch, resample);
         for i in 0..count {
             let index = begin + i;
             let pulse = block.p0 + (index as f64 - block.s0 as f64) / samples * pulses;

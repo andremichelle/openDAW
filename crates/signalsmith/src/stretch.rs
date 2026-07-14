@@ -290,7 +290,7 @@ impl SignalsmithStretch {
     /// output L/R phase difference equals the input's at every band.
     pub fn process_stream_stereo(&mut self, left: &[f32], right: &[f32],
                                  out_l: &mut [f32], out_r: &mut [f32],
-                                 time_factor: f64, pitch: f32) {
+                                 time_factor: f64, pitch: f32, resample: f64) {
         let block = self.block; let interval = self.interval as f64;
         let half = (block / 2) as f64;
         let two_pi = 2.0*core::f32::consts::PI;
@@ -301,9 +301,9 @@ impl SignalsmithStretch {
             while self.s2_synth <= emit as f64 + half {
                 let analysis_hop = interval / time_factor.max(1e-6);
                 let center = libm::round(self.s2_src) as isize;
-                self.analyse(left, 0, center);
+                self.analyse_resampled(left, center, resample);
                 for b in 0..self.bands { self.in_l[b] = if r == 1.0 { self.output[b] } else { self.interp_spectrum(0, b as f32 / r) }; }
-                self.analyse(right, 0, center);
+                self.analyse_resampled(right, center, resample);
                 for b in 0..self.bands { self.in_r[b] = if r == 1.0 { self.output[b] } else { self.interp_spectrum(0, b as f32 / r) }; }
                 for b in 0..self.bands {
                     let al = self.in_l[b]; let ar = self.in_r[b];
@@ -392,6 +392,27 @@ impl SignalsmithStretch {
             self.in_l[b] = Cplx{re:self.mag_l[b]*libm::cosf(lp), im:self.mag_l[b]*libm::sinf(lp)};
             self.in_r[b] = Cplx{re:self.mag_r[b]*libm::cosf(rp), im:self.mag_r[b]*libm::sinf(rp)};
         }
+    }
+
+    /// Windowed FFT of `input` RESAMPLED to the engine rate, centered at engine-rate position `center`.
+    /// `resample` = source_rate / engine_rate (actual source samples per engine-rate sample): each engine-rate
+    /// window sample is linearly interpolated from the source, so the phase vocoder always runs at the engine
+    /// rate and the sample-rate conversion never touches the spectral pitch. `resample == 1.0` is a bit-exact
+    /// integer read. Result lands in `self.output[0..bands]`.
+    fn analyse_resampled(&mut self, input: &[f32], center: isize, resample: f64) {
+        let half = self.block as isize / 2;
+        let n = input.len();
+        for i in 0..self.block {
+            let pos = (center - half + i as isize) as f64 * resample;
+            let s = if pos >= 0.0 {
+                let i0 = pos as usize; let f = (pos - i0 as f64) as f32;
+                if i0 + 1 < n { input[i0]*(1.0 - f) + input[i0+1]*f } else if i0 < n { input[i0] } else { 0.0 }
+            } else { 0.0 };
+            self.re[i] = s * self.window[i];
+            self.im[i] = 0.0;
+        }
+        self.fft.forward(&mut self.re, &mut self.im);
+        for b in 0..self.bands { self.output[b] = Cplx { re: self.re[b], im: self.im[b] }; }
     }
 
     /// Windowed FFT of `input` centered at `center`, into this channel's `input` bands.
