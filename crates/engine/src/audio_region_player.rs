@@ -688,6 +688,35 @@ mod tests {
     }
 
     #[test]
+    fn signalsmith_loop_wrap_does_not_bleed_post_loop_content() {
+        // Loop content [0, 3.75s) is 220 Hz; the source CONTINUES past the loop end at 880 Hz. A correct loop
+        // wrap must re-read the loop's start (220 Hz), never leak the 880 Hz that lives just past the loop end.
+        // Guards the soft-seek path: its synthesis lookahead has already read past the loop end at the wrap.
+        let source: Vec<f32> = (0..190_000).map(|i| {
+            let freq = if i < 180_000 { 220.0 } else { 880.0 };
+            (0.5 * (2.0 * core::f64::consts::PI * freq * i as f64 / 48000.0).sin()) as f32
+        }).collect();
+        let mut region = region(0.0, 0.0, 0.0);
+        region.position = 0.0; region.duration = 15_360.0; region.loop_offset = 0.0; region.loop_duration = 7_680.0;
+        let config = SignalsmithConfig { warp: vec![(0.0, 0.0), (7_680.0, 3.75)], transpose: 0.0 };
+        region.signalsmith = Some(config.clone());
+        let out = run_signalsmith(&region, &config, &source, 3000);
+        // Goertzel power at a frequency over an 8192-sample window.
+        let power = |start: usize, freq: f64| -> f64 {
+            let seg = &out[start..start + 8192];
+            let w = 2.0 * core::f64::consts::PI * freq / 48000.0; let c = 2.0 * w.cos();
+            let (mut a, mut b) = (0.0f64, 0.0f64);
+            for value in seg { let s = *value as f64 + c*a - b; b = a; a = s; }
+            a*a + b*b - c*a*b
+        };
+        // The wrap lands at result 2 bars = 4 s = sample 192000. Check the window straddling it.
+        let wrap = 192_000usize;
+        let (loop_220, bleed_880) = (power(wrap, 220.0), power(wrap, 880.0));
+        std::eprintln!("at wrap: 220Hz power {loop_220:.3e}  880Hz power {bleed_880:.3e}  ratio {:.4}", bleed_880 / loop_220.max(1e-12));
+        assert!(bleed_880 < loop_220 * 0.01, "post-loop 880 Hz must not bleed at the wrap (got {:.3} of the 220 Hz)", bleed_880 / loop_220.max(1e-12));
+    }
+
+    #[test]
     fn signalsmith_transpose_up_an_octave() {
         let source = sine48k(440.0, 48000);
         let mut region = region(0.0, 0.0, 0.0);
