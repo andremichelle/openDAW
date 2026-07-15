@@ -246,6 +246,7 @@ export namespace PresetDecoder {
         insertIndex: int,
         kind: PresetHeader.ChainKind
     ): Attempt<void, string> => {
+        if (bytes.byteLength < 8) {return Attempts.err("Invalid preset header")}
         const headerInput = new ByteArrayInput(bytes.slice(0, 8))
         if (headerInput.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {
             return Attempts.err("Invalid preset header")

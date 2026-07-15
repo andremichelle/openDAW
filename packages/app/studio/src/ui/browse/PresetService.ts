@@ -214,11 +214,15 @@ export class PresetService {
                 ? PresetHeader.ChainKind.Midi
                 : PresetHeader.ChainKind.Audio
             this.project.editing.modify(() => {
-                Devices.deleteEffectDevices([effect])
+                // Insert first, delete the replaced effect only on success. insertEffectChain validates before
+                // mutating, so a corrupt preset returns a failure without touching the graph; deleting first would
+                // commit the delete (modify only rolls back on a throw) and leave a detached effect behind (#1015).
                 const attempt = PresetDecoder.insertEffectChain(bytes, audioUnitBox, insertIndex, chainKind)
                 if (attempt.isFailure()) {
                     RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
+                    return
                 }
+                Devices.deleteEffectDevices([effect])
             })
             this.project.loadScriptDevices()
         } else {
