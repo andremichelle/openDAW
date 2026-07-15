@@ -769,6 +769,53 @@ fn read_audio_region_reads_time_stretch_config_and_file_transients() {
 }
 
 #[test]
+fn a_transient_marker_drag_live_updates_a_time_stretch_region() {
+    // Editing a transient marker in the studio (issue #114) must reach the running time-stretch sequencer:
+    // the markers live on the SOURCE FILE, not the region or play-mode box, so `build_audio_region` gives each
+    // marker its own drag monitor. Regression for "moving a transient does nothing until reload".
+    use super::tracks::{build_audio_region, unsubscribe_audio_region, AudioTrackContent};
+    use value::region::RegionCollection;
+    const REGION: Uuid = [80u8; 16];
+    const FILE: Uuid = [81u8; 16];
+    const STRETCH: Uuid = [82u8; 16];
+    const W0: Uuid = [83u8; 16];
+    const W1: Uuid = [84u8; 16];
+    const T0: Uuid = [85u8; 16];
+    const T1: Uuid = [86u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(FILE, "AudioFileBox", &[(10, FieldValue::Hook)]),
+        graph_box(T0, "TransientMarkerBox", &[(1, FieldValue::Pointer(Some(Address::of(FILE, vec![10])))), (2, FieldValue::Float32(0.0))]),
+        graph_box(T1, "TransientMarkerBox", &[(1, FieldValue::Pointer(Some(Address::of(FILE, vec![10])))), (2, FieldValue::Float32(0.5))]),
+        graph_box(STRETCH, "AudioTimeStretchBox", &[(1, FieldValue::Hook), (2, FieldValue::Int32(1)), (3, FieldValue::Float32(1.0))]),
+        graph_box(W0, "WarpMarkerBox", &[(1, FieldValue::Pointer(Some(Address::of(STRETCH, vec![1])))), (2, FieldValue::Int32(0)), (3, FieldValue::Float32(0.0))]),
+        graph_box(W1, "WarpMarkerBox", &[(1, FieldValue::Pointer(Some(Address::of(STRETCH, vec![1])))), (2, FieldValue::Int32(3840)), (3, FieldValue::Float32(1.0))]),
+        graph_box(REGION, "AudioRegionBox", &[
+            (2, FieldValue::Pointer(Some(Address::box_of(FILE)))), (8, FieldValue::Pointer(Some(Address::box_of(STRETCH)))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Float32(3840.0))
+        ])
+    ]);
+    let content: super::tracks::SharedAudioTrack = Rc::new(RefCell::new(AudioTrackContent {
+        uuid: [88u8; 16], regions: RegionCollection::new(), clips: Vec::new()
+    }));
+    let tempo_map = Rc::new(RefCell::new(TempoMap::fixed(120.0)));
+    let mark = super::DirtyMark {units: Rc::new(RefCell::new(Vec::new())), unit: [88u8; 16]};
+    let region_changes = Rc::new(RefCell::new(super::Members::default()));
+    let binding = build_audio_region(&mut engine.graph, &content, REGION, &tempo_map, &mark, &region_changes)
+        .expect("a time-stretch region builds");
+    assert_eq!(content.borrow().regions.iter().next().expect("one region").transients, vec![0.0, 0.5],
+        "transients read at build");
+    // DRAG T1 0.5 -> 0.8: the per-marker monitor re-reads the region's transients live.
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(T1, vec![2]),
+        old: FieldValue::Float32(0.5), new: FieldValue::Float32(0.75)
+    }], &engine.registry).expect("drag transient marker");
+    assert_eq!(content.borrow().regions.iter().next().expect("one region").transients, vec![0.0, 0.75],
+        "a transient DRAG live-updates the region's transient positions (kept sorted)");
+    unsubscribe_audio_region(&mut engine.graph, binding);
+}
+
+#[test]
 fn read_audio_region_converts_seconds_time_base_to_ppqn() {
     // A no-stretch (NoWarp) region uses the SECONDS time-base: duration / loop-duration are in seconds and
     // MUST be converted to ppqn, else the region reads as a few pulses and plays nothing (the bug).

@@ -200,7 +200,14 @@ pub(crate) struct AudioRegionBinding {
     // when a marker is ADDED / REMOVED (so the fresh marker set gets its own drag monitors). Empty / `None`
     // for a native region.
     pub(crate) marker_subs: Vec<SubscriptionId>,
-    pub(crate) warp_hub_sub: Option<SubscriptionId>
+    pub(crate) warp_hub_sub: Option<SubscriptionId>,
+    // The SOURCE file's transient markers are their OWN boxes pointing into the file's transient hub, and only a
+    // TIME-STRETCH region reads them (the granular sequencer aligns voices to them — see `read_transients`).
+    // Neither the region nor play-mode monitor sees them, so mirror the warp pattern: `transient_subs` re-reads on
+    // a marker DRAG (position edit); `transient_hub_sub` rebuilds this region when a transient is ADDED / REMOVED
+    // (so the fresh set gets its own drag monitors). Empty / `None` unless the region is a time-stretch region.
+    pub(crate) transient_subs: Vec<SubscriptionId>,
+    pub(crate) transient_hub_sub: Option<SubscriptionId>
 }
 
 /// An AUDIO track binding: its sorted `AudioRegion` collection (shared with the player), its `regions`
@@ -833,12 +840,15 @@ pub(crate) fn reconcile_audio_regions(graph: &mut BoxGraph, track: &mut AudioTra
     }
 }
 
-/// Drop every subscription an audio region binding holds (edit + play-mode + warp markers + warp hub).
+/// Drop every subscription an audio region binding holds (edit + play-mode + warp markers + warp hub +
+/// source-file transient markers + transient hub).
 pub(crate) fn unsubscribe_audio_region(graph: &mut BoxGraph, region: AudioRegionBinding) {
     graph.unsubscribe(region.edit_sub);
     if let Some(sub) = region.playmode_sub { graph.unsubscribe(sub); }
     if let Some(sub) = region.warp_hub_sub { graph.unsubscribe(sub); }
     for sub in region.marker_subs { graph.unsubscribe(sub); }
+    for sub in region.transient_subs { graph.unsubscribe(sub); }
+    if let Some(sub) = region.transient_hub_sub { graph.unsubscribe(sub); }
 }
 
 /// Read an audio region, sorted-insert it into the track's collection, and subscribe a `Parent` edit monitor
@@ -847,6 +857,8 @@ pub(crate) fn unsubscribe_audio_region(graph: &mut BoxGraph, region: AudioRegion
 pub(crate) fn build_audio_region(graph: &mut BoxGraph, content: &SharedAudioTrack, region_uuid: Uuid,
                                  tempo_map: &SharedTempoMap, mark: &DirtyMark, region_changes: &Rc<RefCell<Members>>) -> Option<AudioRegionBinding> {
     let region = read_audio_region(graph, region_uuid, &tempo_map.borrow())?;
+    let is_time_stretch = region.time_stretch.is_some();
+    let file = region.file;
     content.borrow_mut().regions.add(region);
     let edit_sub = graph.subscribe_vertex(Propagation::Parent, Address::box_of(region_uuid),
         audio_region_reread(content, tempo_map, region_uuid));
@@ -881,7 +893,34 @@ pub(crate) fn build_audio_region(graph: &mut BoxGraph, content: &SharedAudioTrac
         primed.set(true);
         warp_hub_sub = Some(sub);
     }
-    Some(AudioRegionBinding {region_uuid, edit_sub, playmode_sub, marker_subs, warp_hub_sub})
+    // Source-file transient markers (time-stretch regions only): drag monitors per marker + a hub observer that
+    // rebuilds this region on add/remove, mirroring the warp-marker block above. Shared per file, so several
+    // regions on the same file each watch it independently; a non-time-stretch region never subscribes.
+    let mut transient_subs = Vec::new();
+    let mut transient_hub_sub = None;
+    if is_time_stretch {
+        let hub = Address::of(file, vec![AUDIO_FILE_TRANSIENTS_HUB_KEY]);
+        let markers: Vec<Uuid> = graph.incoming(&hub).into_iter().map(|address| address.uuid).collect();
+        for marker_uuid in markers {
+            transient_subs.push(graph.subscribe_vertex(Propagation::Parent, Address::box_of(marker_uuid),
+                audio_region_reread(content, tempo_map, region_uuid)));
+        }
+        let primed = Rc::new(core::cell::Cell::new(false));
+        let changes = region_changes.clone();
+        let dirty = mark.clone();
+        let flag = primed.clone();
+        let sub = graph.subscribe_pointer_hub(hub, Box::new(move |_graph, _event| {
+            if !flag.get() { return; }
+            let mut members = changes.borrow_mut();
+            members.removed.push(region_uuid);
+            members.added.push(region_uuid);
+            dirty.mark();
+        }));
+        primed.set(true);
+        transient_hub_sub = Some(sub);
+    }
+    Some(AudioRegionBinding {region_uuid, edit_sub, playmode_sub, marker_subs, warp_hub_sub,
+        transient_subs, transient_hub_sub})
 }
 
 /// A re-read observer: when a watched box changes, re-read THIS region and re-sort the track's collection. Built
