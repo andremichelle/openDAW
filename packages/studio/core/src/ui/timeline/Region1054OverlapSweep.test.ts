@@ -42,8 +42,10 @@ const createEnv = (): ProjectEnv => ({
 const makeMoveStrategy = (deltaPosition: ppqn): RegionModifyStrategies => ({
     showOrigin: () => false,
     selectedModifyStrategy: (): RegionModifyStrategy => ({
+        translateTrackIndex: (index) => index,
         readPosition: (region) => region.position + deltaPosition,
         readComplete: (region) => region.resolveComplete(region.position + deltaPosition),
+        readMirror: (region) => region.canMirror && region.isMirrowed,
         readLoopOffset: (region) => (region as AnyLoopableRegionBoxAdapter).loopOffset,
         readLoopDuration: (region) => (region as AnyLoopableRegionBoxAdapter).resolveLoopDuration(region.position + deltaPosition),
         iterateRange: (regions, from, to) => regions.iterateRange(from - deltaPosition, to - deltaPosition)
