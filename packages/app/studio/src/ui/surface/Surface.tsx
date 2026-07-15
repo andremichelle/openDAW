@@ -260,25 +260,26 @@ export class Surface implements TerminableOwner {
     }
 
     #listen(): void {
-        // Workaround for not receiving outside pointer-up events
-        // If you click inside the browser window, move outside, add another (mouse) button
-        // and release both, no pointerup is fired.
-        // TODO I see that way too often on Windows machines in error reports.
-        //  There is still something off.
+        // Workaround for not receiving a mouse pointer-up: native drag suppresses it (dragend fires instead),
+        // and clicking inside the window then releasing a second button outside also drops it. Either leaves an
+        // in-progress drag stuck "down". We recover by fabricating a pointerup on the previously-pressed target.
+        // Armed for mouse only (see the pointerdown handler) — touch/pen deliver reliable pointerup/pointercancel.
         let pointerDown: Option<EventTarget> = Option.None
         const document = this.#owner.document
         this.#terminator.ownAll(
             Events.subscribe(this.#owner, "pointerdown", (event: PointerEvent) => {
                 if (pointerDown.nonEmpty()) {
-                    // TODO There is a strange behavior on some machines, where it appears
-                    //  that the pointerdown event is sent twice immediately (related to to-do above)
                     console.debug("simulate pointerup onpointerdown", Date.now())
                     pointerDown.unwrap().dispatchEvent(new PointerEvent("pointerup", event))
                     pointerDown = Option.None
                 }
                 this.#pointer.x = event.clientX
                 this.#pointer.y = event.clientY
-                pointerDown = Option.wrap(event.target)
+                // Only a mouse can silently lose its pointerup (native drag suppresses it, or a second button
+                // released outside the window). Touch/pen deliver reliable pointerup + pointercancel, so arming
+                // the recovery for them only fabricated a pointerup on an already-removed target — the touch
+                // ghost re-trigger behind live errors 1039/1038/1020 (no device-host). Track mouse only.
+                pointerDown = event.pointerType === "mouse" ? Option.wrap(event.target) : Option.None
             }, {capture: true}),
             Events.subscribe(this.#owner, "pointermove", (event: PointerEvent) => {
                 if (pointerDown.nonEmpty() && event.buttons === 0) {
