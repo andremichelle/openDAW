@@ -19,14 +19,8 @@ use crate::approx;
 #[derive(Clone, Copy, Default)]
 struct Cplx { re: f32, im: f32 }
 impl Cplx {
-    #[inline] fn mul(self, o: Cplx) -> Cplx { Cplx { re: self.re*o.re - self.im*o.im, im: self.re*o.im + self.im*o.re } }
-    #[inline] fn conj_mul(self, o: Cplx) -> Cplx { Cplx { re: self.re*o.re + self.im*o.im, im: self.re*o.im - self.im*o.re } } // conj(self)*o
     #[inline] fn norm(self) -> f32 { self.re*self.re + self.im*self.im }
-    #[inline] fn scale(self, s: f32) -> Cplx { Cplx { re: self.re*s, im: self.im*s } }
-    #[inline] fn add(self, o: Cplx) -> Cplx { Cplx { re: self.re+o.re, im: self.im+o.im } }
 }
-
-const NOISE_FLOOR: f32 = 1e-15;
 
 /// Snapshot of the persistent streaming state right after a loop-start prime, at `s2_emit == 0`. A loop wrap
 /// re-primes to the SAME `source_pos` from the SAME zeroed state, so (for constant tempo/pitch) the primed
@@ -42,7 +36,6 @@ struct PrimedCache {
 }
 
 pub struct SignalsmithStretch {
-    channels: usize,
     block: usize,
     interval: usize,
     bands: usize,
@@ -104,7 +97,7 @@ impl SignalsmithStretch {
         assert!(block.is_power_of_two());
         let bands = block / 2;
         Self {
-            channels, block, interval, bands,
+            block, interval, bands,
             fft: Fft::new(block),
             window: kaiser_ola_window(block, interval),
             output: vec![Cplx::default(); bands*channels],
