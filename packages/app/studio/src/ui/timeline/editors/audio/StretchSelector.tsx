@@ -18,13 +18,15 @@ type Construct = {
 }
 
 export const StretchSelector = ({lifecycle, project, reader}: Construct) => {
-    const enum PlayModeEnum {NoWarp, Pitch, TimeStretch}
+    // Signalsmith sits between Pitch and Grain in the selector.
+    const enum PlayModeEnum {NoWarp, Pitch, Signalsmith, TimeStretch}
 
     const {editing} = project
     const {audioContent} = reader
     const toPlayModeEnum = (): PlayModeEnum => {
         if (audioContent.isPlayModeNoStretch) {return PlayModeEnum.NoWarp}
         if (audioContent.asPlayModePitchStretch.nonEmpty()) {return PlayModeEnum.Pitch}
+        if (audioContent.asPlayModeSignalsmith.nonEmpty()) {return PlayModeEnum.Signalsmith}
         if (audioContent.asPlayModeTimeStretch.nonEmpty()) {return PlayModeEnum.TimeStretch}
         return panic("Unknown PlayMode")
     }
@@ -37,6 +39,9 @@ export const StretchSelector = ({lifecycle, project, reader}: Construct) => {
                 editing.modify(exec)
             } else if (playModeEnum === PlayModeEnum.Pitch) {
                 const exec = await AudioContentModifier.toPitchStretch([audioContent])
+                editing.modify(exec)
+            } else if (playModeEnum === PlayModeEnum.Signalsmith) {
+                const exec = await AudioContentModifier.toSignalsmith([audioContent])
                 editing.modify(exec)
             } else if (playModeEnum === PlayModeEnum.TimeStretch) {
                 const exec = await AudioContentModifier.toTimeStretch([audioContent])
@@ -61,12 +66,16 @@ export const StretchSelector = ({lifecycle, project, reader}: Construct) => {
                                 tooltip: "Pitch Stretch"
                             },
                             {
+                                value: PlayModeEnum.Signalsmith,
+                                element: (<Icon symbol={IconSymbol.Signalsmith}/>),
+                                tooltip: "Signalsmith"
+                            },
+                            {
                                 value: PlayModeEnum.TimeStretch,
                                 element: (<Icon symbol={IconSymbol.Time}/>),
-                                tooltip: "Time Stretch"
+                                tooltip: "Grain"
                             }
                         ]}/>
-            <hr/>
             <TimeStretchEditor lifecycle={lifecycle}
                                project={project}
                                reader={reader}/>

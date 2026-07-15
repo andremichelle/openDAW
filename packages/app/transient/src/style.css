@@ -1,0 +1,101 @@
+:root {
+    --bg: #14171c;
+    --panel: #1c2128;
+    --line: #2b323c;
+    --text: #c9d2dd;
+    --muted: #7a8797;
+    --accent: #46c6ff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 14px;
+}
+
+header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+header h1 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    color: #fff;
+}
+
+select, button {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 5px 9px;
+    font: inherit;
+    cursor: pointer;
+}
+
+button:hover { border-color: var(--accent); }
+button:active { background: #232a33; }
+
+.spacer { flex: 1; }
+
+.legend { color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+.legend b { font-weight: 600; }
+.legend .detected { color: var(--accent); }
+.legend .comparison { color: #ff9d3b; }
+
+.view { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; }
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    color: var(--muted);
+}
+
+.toolbar label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+
+canvas.wave {
+    flex: 1;
+    width: 100%;
+    min-height: 320px;
+    background: #0d1014;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    display: block;
+    touch-action: none;
+    outline: none;
+}
+
+.status {
+    min-height: 18px;
+    color: var(--muted);
+    white-space: pre;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.status b { color: var(--text); font-weight: 600; }
+
+.help { color: var(--muted); font-size: 12px; }
+.help kbd {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0 4px;
+    color: var(--text);
+}

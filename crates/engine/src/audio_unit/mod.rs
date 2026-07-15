@@ -69,7 +69,7 @@ mod params;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use tracks::{AudioRegion, BoundAudioClip, BoundNoteTracks, SharedAudioTrackSets, SharedTrackSets,
+pub(crate) use tracks::{AudioRegion, SignalsmithConfig, BoundAudioClip, BoundNoteTracks, SharedAudioTrackSets, SharedTrackSets,
     TrackBinding, AudioTrackBinding, CollectionCache, reconcile_tracks, teardown_track, teardown_audio_track};
 pub(crate) use params::{resolve_and_deliver_sample, NoteSignal, set_params_signal,
     params_invalidate, automation_invalidate};

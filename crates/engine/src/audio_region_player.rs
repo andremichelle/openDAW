@@ -34,8 +34,9 @@ use boxgraph::address::Uuid;
 use alloc::rc::Rc;
 use core::cell::RefCell;
 use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
-use crate::audio_unit::{AudioRegion, BoundAudioClip, SharedAudioTrackSets};
+use crate::audio_unit::{AudioRegion, SignalsmithConfig, BoundAudioClip, SharedAudioTrackSets};
 use crate::time_stretch::{Source, TimeStretchSequencer};
+use signalsmith::SignalsmithStretch;
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 
 /// The boundary declick window in seconds (matches the TS tape `VOICE_FADE_DURATION`): a region edge with no
@@ -68,6 +69,10 @@ pub(crate) struct AudioRegionPlayer {
     // so the render-path `pop()` never misses; without the pre-warm each new concurrency high-water would
     // still call `TimeStretchSequencer::new` mid-render.
     sequencer_pool: Vec<TimeStretchSequencer>,
+    // Signalsmith spectral players, one stereo pair per playing Signalsmith region (keyed by uuid),
+    // plus a recycle pool (pre-warmed at prepare, like the sequencers) so region entry never allocates.
+    signalsmith_players: Vec<(Uuid, SignalsmithStretch)>,
+    signalsmith_pool: Vec<SignalsmithStretch>,
     // The engine's clip-launch state machine, shared with the note sequencers (sections per track).
     clips: Rc<RefCell<ClipSequencer>>
 }
@@ -108,7 +113,8 @@ impl AudioRegionPlayer {
                       clips: Rc<RefCell<ClipSequencer>>) -> Self {
         Self {tracks, sample_rate, tempo_map, output: shared_audio_buffer(), events: EventBuffer::new(),
             sequencers: Vec::with_capacity(8), native_cursors: Vec::with_capacity(16), visited: Vec::with_capacity(32),
-            sequencer_pool: Vec::with_capacity(8), enabled: true,
+            sequencer_pool: Vec::with_capacity(8),
+            signalsmith_players: Vec::with_capacity(4), signalsmith_pool: Vec::with_capacity(4), enabled: true,
             meter: engine_env::meter::Meter::new(sample_rate), clips}
     }
 
@@ -119,6 +125,10 @@ impl AudioRegionPlayer {
     pub(crate) fn prepare(&mut self, stretch_regions: usize, total_regions: usize) {
         while self.sequencer_pool.len() + self.sequencers.len() < stretch_regions {
             self.sequencer_pool.push(TimeStretchSequencer::new());
+        }
+        let rate = self.sample_rate;
+        while self.signalsmith_pool.len() + self.signalsmith_players.len() < stretch_regions {
+            self.signalsmith_pool.push(SignalsmithStretch::preset_default(2, rate));
         }
         self.sequencers.reserve(stretch_regions.saturating_sub(self.sequencers.len()));
         self.native_cursors.reserve(total_regions.saturating_sub(self.native_cursors.len()));
@@ -172,7 +182,7 @@ impl Processor for AudioRegionPlayer {
     fn process(&mut self, info: &ProcessInfo) {
         let AudioRegionPlayer {
             tracks, sample_rate, tempo_map, output, sequencers, native_cursors, visited,
-            sequencer_pool, clips, enabled, meter, ..
+            sequencer_pool, signalsmith_players, signalsmith_pool, clips, enabled, meter, ..
         } = self;
         let mut output = output.borrow_mut();
         output.clear(); // the player is a source: it fills its own output each quantum (silence when not playing)
@@ -195,12 +205,12 @@ impl Processor for AudioRegionPlayer {
                         // Timeline regions play only in the clip-free sections (TS Tape `optClip: none`).
                         None => for region in content.regions.iterate_range(section.from, section.to) {
                             play_region(region, section.from, section.to, block, &mut output, &mut fading_gain,
-                                sequencers, sequencer_pool, native_cursors, visited, &tempo_map, sample_rate);
+                                sequencers, sequencer_pool, signalsmith_players, signalsmith_pool, native_cursors, visited, &tempo_map, sample_rate);
                         },
                         Some(clip) => {
                             if let Some(bound) = content.clips.iter().find(|bound| bound.clip_uuid == clip) {
                                 play_region(&bound.region, section.from, section.to, block, &mut output, &mut fading_gain,
-                                    sequencers, sequencer_pool, native_cursors, visited, &tempo_map, sample_rate);
+                                    sequencers, sequencer_pool, signalsmith_players, signalsmith_pool, native_cursors, visited, &tempo_map, sample_rate);
                             }
                         }
                     }
@@ -232,6 +242,7 @@ impl Processor for AudioRegionPlayer {
 fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
                output: &mut AudioBuffer, fading_gain: &mut [f32; engine_env::RENDER_QUANTUM],
                sequencers: &mut Vec<(Uuid, TimeStretchSequencer)>, sequencer_pool: &mut Vec<TimeStretchSequencer>,
+               signalsmith_players: &mut Vec<(Uuid, SignalsmithStretch)>, signalsmith_pool: &mut Vec<SignalsmithStretch>,
                native_cursors: &mut Vec<(Uuid, NativeCursor)>, visited: &mut Vec<Uuid>,
                tempo_map: &TempoMap, sample_rate: f32) {
     if region.mute {
@@ -240,6 +251,28 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
     let Some(sample) = crate::resolve_sample(region.file) else { return };
     let left = sample.plane(0);
     let right = if sample.channel_count >= 2 { sample.plane(1) } else { left };
+    if let Some(config) = &region.signalsmith {
+        let index = match signalsmith_players.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
+            Some(index) => index,
+            None => {
+                let mut player = signalsmith_pool.pop().unwrap_or_else(|| SignalsmithStretch::preset_default(2, sample_rate));
+                // Stagger each voice's FFT-burst phase so concurrent voices don't all synthesize in the SAME
+                // render quantum (each voice runs one heavy FFT every `interval` samples = every `quanta`
+                // render quanta; phase-locked voices stack their peak cost). Players are per-audio-unit, so the
+                // slot must come from a GLOBAL key, not this player's index: derive it from the region uuid, so
+                // it is stable across loop-wraps/re-primes and spread over the cycle. Costs a fixed sub-cycle
+                // output latency on the voice (a pure delay; a few ms), inaudible for independent material.
+                let quanta = (player.interval_samples() / engine_env::RENDER_QUANTUM).max(1);
+                let slot = region.region_uuid.iter().fold(0usize, |acc, byte| acc.wrapping_add(*byte as usize)) % quanta;
+                player.set_phase_offset(slot * engine_env::RENDER_QUANTUM);
+                signalsmith_players.push((region.region_uuid, player));
+                signalsmith_players.len() - 1
+            }
+        };
+        visited.push(region.region_uuid);
+        play_signalsmith(&mut signalsmith_players[index].1, region, config, left, right, sample.sample_rate, from, to, block, sample_rate, tempo_map, output);
+        return;
+    }
     match &region.time_stretch {
         Some(config) if region.transients.len() >= 2 => {
             let index = match sequencers.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
@@ -271,6 +304,79 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
             };
             visited.push(region.region_uuid);
             render_region(output, region, left, right, sample.sample_rate, from, to, block, sample_rate, tempo_map, &mut native_cursors[index].1);
+        }
+    }
+}
+
+/// Drive the Signalsmith spectral players for one region/block: follow the warp (time) and
+/// transpose (pitch), summing into `output` with gain + fade envelope. Streams continuously; only
+/// re-primes at a discontinuity. Pitch compensates the source-vs-engine sample-rate ratio.
+#[allow(clippy::too_many_arguments)]
+fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, config: &SignalsmithConfig,
+                    left: &[f32], right: &[f32], source_rate: f32, from: f64, to: f64, block: &Block, engine_rate: f32, tempo_map: &TempoMap, output: &mut AudioBuffer) {
+    let pulses = block.p1 - block.p0;
+    if pulses <= 0.0 { return; }
+    let samples = (block.s1 - block.s0) as f64;
+    let complete = region.position + region.duration;
+    let gain = db_to_gain(region.gain_db);
+    let warp = &config.warp;
+    // Pitch is the MUSICAL transpose only. The source-vs-engine sample-rate difference is handled by a
+    // time-domain `resample` read inside the processor (transparent), NOT by a spectral shift (which smears
+    // transients). So at transpose 0 the spectral pitch is exactly 1.0 and native playback is bit-transparent
+    // at any engine rate. Positions/rates below are in ENGINE-rate source samples to match.
+    let pitch = math::pow(2.0, config.transpose as f64 / 12.0) as f32;
+    let resample = source_rate as f64 / engine_rate as f64; // actual source samples per engine-rate sample
+    let source_frames = left.len();
+    let declick_pulses = seconds_to_pulses(VOICE_FADE_DURATION, block.bpm) as f64;
+    let declick_in = region.waveform_offset > 0.0;
+    let mut scratch_l = [0.0f32; engine_env::RENDER_QUANTUM];
+    let mut scratch_r = [0.0f32; engine_env::RENDER_QUANTUM];
+    for cycle in locate_loops(region.position, complete, region.loop_offset, region.loop_duration, from, to) {
+        let begin = sample_of(block, cycle.result_start, pulses, samples);
+        let end = sample_of(block, cycle.result_end, pulses, samples);
+        let count = end.saturating_sub(begin);
+        if count == 0 { continue; }
+        let (source_pos, time_factor) = if warp.is_empty() {
+            let read = (tempo_map.interval_to_seconds(cycle.raw_start, cycle.result_start) + region.waveform_offset) * engine_rate as f64;
+            (read, 1.0f64)
+        } else {
+            let content_ppqn = cycle.result_start - cycle.raw_start;
+            let (first, last) = (warp[0].0, warp[warp.len()-1].0);
+            if content_ppqn < first || content_ppqn >= last { continue; }
+            let seconds = warp_seconds(warp, content_ppqn, cycle.result_start_value as f64);
+            let warp_rate = warp_playback_rate(warp, content_ppqn, source_rate, pulses, samples);
+            let source_pos = (seconds + region.waveform_offset) * engine_rate as f64;
+            // time_factor = MUSICAL stretch = 1/(engine-rate source samples per output sample) = resample/warp_rate.
+            (source_pos, if warp_rate > 1e-9 { resample / warp_rate } else { 1.0 })
+        };
+        if source_pos < 0.0 || (source_pos * resample) as usize >= source_frames { continue; }
+        // Re-prime at a discontinuity: a transport jump (block flag), a region loop WRAP (the cycle's
+        // `raw_start` jumps by loop_duration), or region entry (cycle_id still NaN). Otherwise the stream flows
+        // across marker boundaries. Without the raw_start check a looped region reads straight past the source
+        // end after the first cycle instead of wrapping — the loop goes silent.
+        // A re-prime is needed on region ENTRY (first play), a region LOOP wrap (raw_start jumped), or any
+        // transport DISCONTINUITY (an arrangement/transport loop jumping back, or a seek). All but the first
+        // entry re-prime to a position we may already have primed — a region loop and a transport loop both
+        // repeat the SAME source position deterministically — so try the cached primed snapshot (a memcpy)
+        // instead of recomputing the multi-frame priming burst. A cache miss (new position / changed tempo or
+        // pitch) falls back to reset+prime, and `arm_capture` snapshots that prime for next time.
+        let entry = player.cycle_id().is_nan();
+        let reprime = entry || block.flags.discontinuous()
+            || (player.cycle_id() - cycle.raw_start).abs() >= 1e-6;
+        let restored = reprime && !entry && player.try_restore(time_factor, pitch, resample, source_pos);
+        if reprime && !restored {
+            player.reset_stream(source_pos);
+            player.arm_capture(time_factor, pitch, resample, source_pos);
+        }
+        player.set_cycle_id(cycle.raw_start);
+        player.process_stream_stereo(left, right, &mut scratch_l[..count], &mut scratch_r[..count], time_factor, pitch, resample);
+        for i in 0..count {
+            let index = begin + i;
+            let pulse = block.p0 + (index as f64 - block.s0 as f64) / samples * pulses;
+            let envelope = fade_gain(pulse - region.position, region.duration, region, declick_pulses, declick_in);
+            let scale = gain * envelope;
+            output.left[index] += scratch_l[i]*scale;
+            output.right[index] += scratch_r[i]*scale;
         }
     }
 }
@@ -451,7 +557,7 @@ mod tests {
         AudioRegion {
             region_uuid: [1u8; 16], position: 0.0, duration: 96_000.0, loop_offset: 0.0, loop_duration: 96_000.0,
             file: [9u8; 16], gain_db, mute: false, waveform_offset: 0.0, fade_in, fade_out,
-            fade_in_slope: 0.5, fade_out_slope: 0.5, warp: Vec::new(), time_stretch: None, transients: Vec::new()
+            fade_in_slope: 0.5, fade_out_slope: 0.5, warp: Vec::new(), time_stretch: None, signalsmith: None, transients: Vec::new()
         }
     }
 
@@ -536,6 +642,27 @@ mod tests {
     }
 
     #[test]
+    fn two_touching_regions_tile_the_seam_gap_free_and_smooth() {
+        // The Rust twin of TS issue #311: two regions that MEET at a mid-block pulse boundary, both reading the
+        // same constant source. Endpoint flooring (`sample_of(end) == sample_of(start)`) tiles their sample
+        // ranges with no dropped sample; the region-end declick keeps the seam smooth (no hard jump). A dropped
+        // sample would leave a 0 amid non-zero output -> a large delta; a total gap would silence a half.
+        let source = vec![1.0f32; 200_000];
+        let full = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 480.0, s0: 0, s1: 128, bpm: 120.0};
+        let mut a = region(0.0, 0.0, 0.0); a.position = 0.0; a.duration = 240.0; a.loop_duration = 240.0; // ends at sample 64
+        let mut b = region(0.0, 0.0, 0.0); b.position = 240.0; b.duration = 240.0; b.loop_duration = 240.0; b.waveform_offset = 1.0; // starts at sample 64, mid-file
+        let mut output = AudioBuffer::new();
+        render_region(&mut output, &a, &source, &source, 48_000.0, full.p0, full.p1, &full, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        render_region(&mut output, &b, &source, &source, 48_000.0, full.p0, full.p1, &full, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        let rms = |lo: usize, hi: usize| -> f32 { (output.left[lo..hi].iter().map(|v| v*v).sum::<f32>() / (hi-lo) as f32).sqrt() };
+        assert!(rms(4, 40) > 0.5, "region A plays its half"); // away from the end declick
+        assert!(rms(88, 124) > 0.5, "region B plays its half (no total gap)"); // away from B's start declick
+        let mut max_delta = 0.0f32;
+        for i in 1..128 { max_delta = max_delta.max((output.left[i] - output.left[i-1]).abs()); }
+        assert!(max_delta < 0.1, "no hard seam discontinuity / dropped sample: max delta {max_delta}");
+    }
+
+    #[test]
     fn mid_file_start_reads_the_correct_offset_no_pop() {
         // Start playback at pulse 240 (0.125 s at 120 bpm) -> source frame 0.125 * 48000 = 6000. The first
         // output sample must be source[6000], not source[0] (the pop was reading the wrong frame).
@@ -545,4 +672,216 @@ mod tests {
         render_region(&mut output, &region(0.0, 0.0, 0.0), &source, &source, 48_000.0, started.p0, started.p1, &started, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
         assert!((output.left[0] - source[6000]).abs() < 1e-3, "first sample is the correct mid-file frame: {} vs {}", output.left[0], source[6000]);
     }
+
+    fn sine48k(freq: f64, n: usize) -> Vec<f32> {
+        (0..n).map(|i| (0.5*(2.0*core::f64::consts::PI*freq*i as f64/48000.0).sin()) as f32).collect()
+    }
+    fn dominant48k(x: &[f32]) -> f64 {
+        let s = x.len()/2 - 4096; let seg = &x[s..s+8192]; let (mut bp,mut bf)=(0.0f64,0.0f64); let mut f=200.0;
+        while f<1500.0 { let w=2.0*core::f64::consts::PI*f/48000.0; let c=2.0*w.cos(); let (mut a,mut b)=(0.0f64,0.0f64);
+            for (i,v) in seg.iter().enumerate(){let win=0.5-0.5*(2.0*core::f64::consts::PI*i as f64/seg.len() as f64).cos(); let ss=*v as f64*win+c*a-b; b=a; a=ss;}
+            let pw=a*a+b*b-c*a*b; if pw>bp{bp=pw;bf=f;} f+=1.0; } bf
+    }
+    // Drive play_signalsmith across `blocks` 128-sample quanta, collecting mono output.
+    fn run_signalsmith(region: &AudioRegion, config: &SignalsmithConfig, source: &[f32], blocks: usize) -> Vec<f32> {
+        let mut player = SignalsmithStretch::preset_default(2, 48000.0);
+        let tempo = TempoMap::fixed(120.0);
+        let mut out = Vec::with_capacity(blocks*128);
+        for k in 0..blocks {
+            // each quantum: s0..s1 local (0..128), transport p0/p1 advances by the block's pulse span
+            let (p0, p1) = ((k*128) as f64*0.04, ((k+1)*128) as f64*0.04); // 120bpm@48k: 0.04 ppqn/sample
+            let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+            let mut output = AudioBuffer::new();
+            play_signalsmith(&mut player, region, config, source, source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut output);
+            out.extend_from_slice(&output.left[..128]);
+        }
+        out
+    }
+
+    #[test]
+    fn signalsmith_short_loop_tiles_to_fill_the_region() {
+        // drum-like: a 3.75s source, warp 2 bars(7680ppqn)->3.75s, region 4 bars(15360) looping every 2 bars.
+        // The loop WRAP must re-prime the stream so bars 3-4 replay the source instead of reading past its end.
+        let source = sine48k(220.0, 190_000);
+        let mut region = region(0.0, 0.0, 0.0);
+        region.position = 0.0; region.duration = 15_360.0; region.loop_offset = 0.0; region.loop_duration = 7_680.0;
+        let config = SignalsmithConfig { warp: vec![(0.0, 0.0), (7_680.0, 3.75)], transpose: 0.0 };
+        region.signalsmith = Some(config.clone());
+        let out = run_signalsmith(&region, &config, &source, 3000); // 8s = 4 bars @120bpm = 4 bars @120bpm
+        let rms = |seg: &[f32]| -> f64 { (seg.iter().map(|v| (*v as f64).powi(2)).sum::<f64>()/seg.len() as f64).sqrt() };
+        let bars12 = rms(&out[10_000..190_000]);
+        let bars34 = rms(&out[200_000..380_000]);
+        std::eprintln!("bars 1-2 rms {bars12:.4}   bars 3-4 rms {bars34:.4}");
+        assert!(bars12 > 0.05, "bars 1-2 audible");
+        assert!(bars34 > 0.05, "bars 3-4 audible (loop tiled the 2-bar source): {bars34:.4}");
+        // The loop wrap restores the cached prime instead of re-priming; iteration 2 must reproduce iteration 1
+        // sample-for-sample (2-bar loop = 192000 output samples @120bpm/48k), proving restore == reset+prime.
+        let mut max_diff = 0.0f32;
+        for i in 10_000..180_000 { max_diff = max_diff.max((out[i] - out[i + 192_000]).abs()); }
+        std::eprintln!("iteration 1 vs 2 (restore) max abs diff {max_diff:.2e}");
+        assert!(max_diff < 1e-5, "cached-prime restore must reproduce the real prime: iterations differ by {max_diff:.2e}");
+    }
+
+    #[test]
+    fn signalsmith_loop_wrap_does_not_bleed_post_loop_content() {
+        // Loop content [0, 3.75s) is 220 Hz; the source CONTINUES past the loop end at 880 Hz. A correct loop
+        // wrap must re-read the loop's start (220 Hz), never leak the 880 Hz that lives just past the loop end.
+        // Guards the soft-seek path: its synthesis lookahead has already read past the loop end at the wrap.
+        let source: Vec<f32> = (0..190_000).map(|i| {
+            let freq = if i < 180_000 { 220.0 } else { 880.0 };
+            (0.5 * (2.0 * core::f64::consts::PI * freq * i as f64 / 48000.0).sin()) as f32
+        }).collect();
+        let mut region = region(0.0, 0.0, 0.0);
+        region.position = 0.0; region.duration = 15_360.0; region.loop_offset = 0.0; region.loop_duration = 7_680.0;
+        let config = SignalsmithConfig { warp: vec![(0.0, 0.0), (7_680.0, 3.75)], transpose: 0.0 };
+        region.signalsmith = Some(config.clone());
+        let out = run_signalsmith(&region, &config, &source, 3000);
+        // Goertzel power at a frequency over an 8192-sample window.
+        let power = |start: usize, freq: f64| -> f64 {
+            let seg = &out[start..start + 8192];
+            let w = 2.0 * core::f64::consts::PI * freq / 48000.0; let c = 2.0 * w.cos();
+            let (mut a, mut b) = (0.0f64, 0.0f64);
+            for value in seg { let s = *value as f64 + c*a - b; b = a; a = s; }
+            a*a + b*b - c*a*b
+        };
+        // The wrap lands at result 2 bars = 4 s = sample 192000. Check the window straddling it.
+        let wrap = 192_000usize;
+        let (loop_220, bleed_880) = (power(wrap, 220.0), power(wrap, 880.0));
+        std::eprintln!("at wrap: 220Hz power {loop_220:.3e}  880Hz power {bleed_880:.3e}  ratio {:.4}", bleed_880 / loop_220.max(1e-12));
+        assert!(bleed_880 < loop_220 * 0.01, "post-loop 880 Hz must not bleed at the wrap (got {:.3} of the 220 Hz)", bleed_880 / loop_220.max(1e-12));
+    }
+
+    #[test]
+    fn signalsmith_loop_wrap_cache_survives_pulse_jitter() {
+        // `time_factor` jitters by ULPs as the transport advances (pulses = p1 - p0 of GROWING positions), so an
+        // exact cache-key compare misses most wraps deep into playback and the re-prime burst returns (the
+        // studio's 80% loop-restart spike). The tolerant match must keep serving wraps from the memcpy fast path.
+        let source = sine48k(220.0, 190_000);
+        let mut region = region(0.0, 0.0, 0.0);
+        region.position = 0.0; region.duration = 3_000_000.0; region.loop_offset = 0.0; region.loop_duration = 7_680.0;
+        let config = SignalsmithConfig { warp: vec![(0.0, 0.0), (7_680.0, 3.75)], transpose: 0.0 };
+        region.signalsmith = Some(config.clone());
+        let mut player = SignalsmithStretch::preset_default(2, 48000.0);
+        let tempo = TempoMap::fixed(120.0);
+        let blocks = 40_000usize; // ~26 loop wraps, reaching pulse positions where the jitter is well past ULP
+        for k in 0..blocks {
+            let (p0, p1) = ((k*128) as f64*0.04, ((k+1)*128) as f64*0.04);
+            let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+            let mut output = AudioBuffer::new();
+            play_signalsmith(&mut player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut output);
+        }
+        let restores = player.cache_restores();
+        std::eprintln!("cache restores over {blocks} blocks: {restores} (exact-match compare only managed 19)");
+        assert!(restores >= 24, "cache must survive pulse jitter; only {restores} of ~26 wraps hit the fast path");
+    }
+
+    #[test]
+    fn signalsmith_transport_loop_cache_hits() {
+        // An arrangement/transport loop jumps the playhead back to the loop start — a DISCONTINUITY, not a
+        // region loop wrap — re-priming the region at the same source position every pass. The cache must serve
+        // these too (they are just as deterministic), else a looped section re-primes (bursts) on every pass.
+        let source = sine48k(220.0, 190_000);
+        let mut region = region(0.0, 0.0, 0.0);
+        region.position = 0.0; region.duration = 3_000_000.0; region.loop_offset = 0.0; region.loop_duration = 3_000_000.0; // region itself never wraps
+        let config = SignalsmithConfig { warp: vec![(0.0, 0.0), (7_680.0, 3.75)], transpose: 0.0 };
+        region.signalsmith = Some(config.clone());
+        let mut player = SignalsmithStretch::preset_default(2, 48000.0);
+        let tempo = TempoMap::fixed(120.0);
+        let loop_blocks = 300usize; // ~1 bar of transport per pass
+        for iteration in 0..20 {
+            for b in 0..loop_blocks {
+                let (p0, p1) = ((b*128) as f64*0.04, ((b+1)*128) as f64*0.04);
+                let disc = b == 0; // transport jumps back to the loop start at the top of every pass
+                let block = Block {index: (iteration*loop_blocks+b) as u32, flags: BlockFlags::create(true, disc, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+                let mut output = AudioBuffer::new();
+                play_signalsmith(&mut player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut output);
+            }
+        }
+        let restores = player.cache_restores();
+        std::eprintln!("transport-loop cache restores: {restores} of ~19 passes");
+        assert!(restores >= 18, "transport loop must hit the cache; only {restores} passes did");
+    }
+
+    #[test]
+    fn signalsmith_transpose_up_an_octave() {
+        let source = sine48k(440.0, 48000);
+        let mut region = region(0.0, 0.0, 0.0);
+        region.duration = 96_000.0;
+        let config = SignalsmithConfig { warp: Vec::new(), transpose: 12.0 };
+        region.signalsmith = Some(SignalsmithConfig { warp: Vec::new(), transpose: 12.0 });
+        let out = run_signalsmith(&region, &config, &source, 300); // ~38k samples
+        let f = dominant48k(&out);
+        assert!((f-880.0).abs() < 20.0, "transpose +12 -> ~880 Hz, got {f:.0}");
+    }
+
+    #[test]
+    fn signalsmith_native_reproduces_pitch() {
+        let source = sine48k(440.0, 48000);
+        let mut region = region(0.0, 0.0, 0.0);
+        let config = SignalsmithConfig { warp: Vec::new(), transpose: 0.0 };
+        region.signalsmith = Some(SignalsmithConfig { warp: Vec::new(), transpose: 0.0 });
+        let out = run_signalsmith(&region, &config, &source, 300);
+        let f = dominant48k(&out);
+        assert!((f-440.0).abs() < 12.0, "no transpose -> ~440 Hz preserved, got {f:.0}");
+    }
+
+    #[test]
+    fn signalsmith_phase_offset_delays_through_play_signalsmith() {
+        let source = sine48k(220.0, 190_000);
+        let mut region = region(0.0, 0.0, 0.0);
+        region.duration = 96_000.0;
+        let config = SignalsmithConfig { warp: Vec::new(), transpose: 0.0 };
+        region.signalsmith = Some(config.clone());
+        let render = |off: usize| -> Vec<f32> {
+            let mut player = SignalsmithStretch::preset_default(2, 48000.0);
+            player.set_phase_offset(off);
+            let tempo = TempoMap::fixed(120.0);
+            let mut out = Vec::new();
+            for k in 0..80 {
+                let (p0, p1) = ((k*128) as f64*0.04, ((k+1)*128) as f64*0.04);
+                let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+                let mut output = AudioBuffer::new();
+                play_signalsmith(&mut player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut output);
+                out.extend_from_slice(&output.left[..128]);
+            }
+            out
+        };
+        let a = render(0); let b = render(400);
+        let (mut diff, mut energy) = (0.0f64, 0.0f64);
+        for i in 20*128..60*128 { diff += ((a[i]-b[i]) as f64).abs(); energy += (a[i] as f64).abs(); }
+        let rel = diff / energy.max(1e-9);
+        std::eprintln!("play_signalsmith offset 0 vs 400 rel diff: {rel:.3}");
+        assert!(rel > 0.05, "play_signalsmith must honor phase_offset (rel diff {rel:.3})");
+    }
+
+
+    #[test]
+    fn signalsmith_warp_stretch_preserves_pitch() {
+        // warp maps 1536 ppqn (~0.8s timeline @120bpm) to 0.533s of source = 1.5x slower.
+        // A time-stretch must keep the pitch at 440 while playing back slower.
+        let source = sine48k(440.0, 48000);
+        let mut region = region(0.0, 0.0, 0.0);
+        let warp = vec![(0.0, 0.0), (1536.0, 0.533)];
+        let config = SignalsmithConfig { warp: warp.clone(), transpose: 0.0 };
+        region.signalsmith = Some(SignalsmithConfig { warp, transpose: 0.0 });
+        let out = run_signalsmith(&region, &config, &source, 300);
+        let f = dominant48k(&out);
+        assert!((f-440.0).abs() < 12.0, "1.5x time-stretch keeps pitch at 440, got {f:.0}");
+    }
+
+    #[test]
+    fn signalsmith_variable_warp_stays_stable() {
+        // multi-segment warp (accelerating tempo across the region) — variable time_factor mid-play.
+        let source = sine48k(330.0, 48000);
+        let mut region = region(0.0, 0.0, 0.0);
+        // three segments with different slopes (source seconds per ppqn changes at each marker)
+        let warp = vec![(0.0, 0.0), (512.0, 0.15), (1024.0, 0.35), (1536.0, 0.45)];
+        let config = SignalsmithConfig { warp: warp.clone(), transpose: 0.0 };
+        region.signalsmith = Some(SignalsmithConfig { warp, transpose: 0.0 });
+        let out = run_signalsmith(&region, &config, &source, 300);
+        let peak = out.iter().fold(0.0f32, |m,v| m.max(v.abs()));
+        let rms = (out.iter().map(|v| (*v as f64).powi(2)).sum::<f64>()/out.len() as f64).sqrt();
+        assert!(peak < 2.0 && rms > 0.02, "stable under variable warp: peak {peak:.2} rms {rms:.3}");
+    }
+
 }

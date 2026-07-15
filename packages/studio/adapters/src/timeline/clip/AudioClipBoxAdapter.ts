@@ -29,6 +29,7 @@ import {AudioContentBoxAdapter} from "../AudioContentBoxAdapter"
 import {AudioPlayMode} from "../../audio/AudioPlayMode"
 import {AudioPitchStretchBoxAdapter} from "../../audio/AudioPitchStretchBoxAdapter"
 import {AudioTimeStretchBoxAdapter} from "../../audio/AudioTimeStretchBoxAdapter"
+import {AudioSignalsmithBoxAdapter} from "../../audio/AudioSignalsmithBoxAdapter"
 import {WarpMarkerBoxAdapter} from "../../audio/WarpMarkerBoxAdapter"
 
 export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapter<never> {
@@ -140,6 +141,9 @@ export class AudioClipBoxAdapter implements AudioContentBoxAdapter, ClipBoxAdapt
     }
     get asPlayModeTimeStretch(): Option<AudioTimeStretchBoxAdapter> {
         return this.observableOptPlayMode.map(mode => isInstanceOf(mode, AudioTimeStretchBoxAdapter) ? mode : null)
+    }
+    get asPlayModeSignalsmith(): Option<AudioSignalsmithBoxAdapter> {
+        return this.observableOptPlayMode.map(mode => isInstanceOf(mode, AudioSignalsmithBoxAdapter) ? mode : null)
     }
     get optWarpMarkers(): Option<EventCollection<WarpMarkerBoxAdapter>> {
         return this.observableOptPlayMode.map(mode => AudioPlayMode.isAudioPlayMode(mode) ? mode.warpMarkers : null)

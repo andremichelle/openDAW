@@ -10,6 +10,7 @@ export interface EngineProtocol {
     play(): void
     pause(): void
     stop(): void
+    setMetronome(enabled: boolean): void
 }
 
 // worklet -> main: the ~30 Hz transport-state back-channel (position / bpm / playing), raw EngineState bytes.

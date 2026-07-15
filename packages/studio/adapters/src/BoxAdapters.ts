@@ -19,6 +19,7 @@ import {
     AudioClipBox,
     AudioFileBox,
     AudioPitchStretchBox,
+    AudioSignalsmithBox,
     AudioRegionBox,
     AudioTimeStretchBox,
     AudioUnitBox,
@@ -143,6 +144,7 @@ import {WaveshaperDeviceBoxAdapter} from "./devices/audio-effects/WaveshaperDevi
 import {WerkstattDeviceBoxAdapter} from "./devices/audio-effects/WerkstattDeviceBoxAdapter"
 import {NeuralAmpModelBoxAdapter} from "./nam/NeuralAmpModelBoxAdapter"
 import {AudioPitchStretchBoxAdapter} from "./audio/AudioPitchStretchBoxAdapter"
+import {AudioSignalsmithBoxAdapter} from "./audio/AudioSignalsmithBoxAdapter"
 import {TransientMarkerBoxAdapter} from "./audio/TransientMarkerBoxAdapter"
 import {WarpMarkerBoxAdapter} from "./audio/WarpMarkerBoxAdapter"
 import {AudioTimeStretchBoxAdapter} from "./audio/AudioTimeStretchBoxAdapter"
@@ -207,6 +209,7 @@ export class BoxAdapters implements Terminable {
             visitAudioFileBox: (box: AudioFileBox) => new AudioFileBoxAdapter(this.#context, box),
             visitAudioTimeStretchBox: (box: AudioTimeStretchBox) => new AudioTimeStretchBoxAdapter(this.#context, box),
             visitAudioPitchStretchBox: (box: AudioPitchStretchBox) => new AudioPitchStretchBoxAdapter(this.#context, box),
+            visitAudioSignalsmithBox: (box: AudioSignalsmithBox) => new AudioSignalsmithBoxAdapter(this.#context, box),
             visitTransientMarkerBox: (box: TransientMarkerBox) => new TransientMarkerBoxAdapter(box),
             visitWarpMarkerBox: (box: WarpMarkerBox) => new WarpMarkerBoxAdapter(this.#context, box),
             visitApparatDeviceBox: (box: ApparatDeviceBox) => new ApparatDeviceBoxAdapter(this.#context, box),

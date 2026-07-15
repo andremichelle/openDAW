@@ -133,6 +133,7 @@ export enum IconSymbol {
     SelectUp,
     Shadertoy,
     Shutdown,
+    Signalsmith,
     Sine,
     Solo,
     SoundFont,

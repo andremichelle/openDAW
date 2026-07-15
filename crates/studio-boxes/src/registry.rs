@@ -35,6 +35,7 @@ pub fn registry() -> Registry {
         ("AudioClipBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::Pointer), (3u16, FieldType::Int32), (4u16, FieldType::Object(Schema::from([(1u16, FieldType::Boolean), (2u16, FieldType::Boolean), (4u16, FieldType::Int32), (5u16, FieldType::Int32), (6u16, FieldType::Int32)]))), (5u16, FieldType::Pointer), (7u16, FieldType::Float32), (8u16, FieldType::Pointer), (10u16, FieldType::Float32), (11u16, FieldType::Boolean), (12u16, FieldType::String), (13u16, FieldType::Int32), (14u16, FieldType::Float32), (21u16, FieldType::String)])),
         ("AudioPitchStretchBox".to_string(), Schema::from([(1u16, FieldType::Hook)])),
         ("AudioTimeStretchBox".to_string(), Schema::from([(1u16, FieldType::Hook), (2u16, FieldType::Int32), (3u16, FieldType::Float32)])),
+        ("AudioSignalsmithBox".to_string(), Schema::from([(1u16, FieldType::Hook), (2u16, FieldType::Float32)])),
         ("TransientMarkerBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::Float32)])),
         ("WarpMarkerBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::Int32), (3u16, FieldType::Float32)])),
         ("MarkerBox".to_string(), Schema::from([(1u16, FieldType::Pointer), (2u16, FieldType::Int32), (3u16, FieldType::Int32), (4u16, FieldType::String), (5u16, FieldType::Int32)])),

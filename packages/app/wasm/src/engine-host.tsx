@@ -54,6 +54,7 @@ export interface EngineHost {
     play(): Promise<void>
     pause(): Promise<void>
     stop(): Promise<void>
+    setMetronome(enabled: boolean): void
 }
 
 export interface EngineHostOptions {
@@ -144,6 +145,7 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
             play(): void {dispatcher.dispatchAndForget(this.play)}
             pause(): void {dispatcher.dispatchAndForget(this.pause)}
             stop(): void {dispatcher.dispatchAndForget(this.stop)}
+            setMetronome(enabled: boolean): void {dispatcher.dispatchAndForget(this.setMetronome, enabled)}
         })
         engineRef.wrap(engine)
         lifecycle.own(Communicator.executor<TransportListener>(messenger.channel("transport"), new class implements TransportListener {
@@ -254,6 +256,9 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
     const stop = async (): Promise<void> => {
         engineRef.ifSome(engine => engine.stop())
     }
+    const setMetronome = (enabled: boolean): void => {
+        engineRef.ifSome(engine => engine.setMetronome(enabled))
+    }
     lifecycle.own({
         terminate: () => {
             node.ifSome(workletNode => workletNode.disconnect())
@@ -284,5 +289,5 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
     )
     showAudioState()
     void boot()
-    return {element, log, append, play, pause, stop}
+    return {element, log, append, play, pause, stop, setMetronome}
 }

@@ -104,6 +104,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             play(): void {processor.#engine?.play()}
             pause(): void {processor.#engine?.pause()}
             stop(): void {processor.#engine?.stop()}
+            setMetronome(enabled: boolean): void {processor.#engine?.set_metronome_enabled(enabled ? 1 : 0)}
         })
         this.#transport = Communicator.sender<TransportListener>(messenger.channel("transport"), dispatcher => new class implements TransportListener {
             state(bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.state, Communicator.makeTransferable(bytes))}

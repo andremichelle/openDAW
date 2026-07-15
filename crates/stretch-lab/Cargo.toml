@@ -1,0 +1,23 @@
+[package]
+name = "stretch-lab"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+default = ["analyzer"]
+# Independent second-opinion metrics from the user's audio-analyzer-rs (sibling checkout at
+# ../../../audio-analyzer-rs — different DSP stack, different bugs). Disable with
+# --no-default-features when the checkout is absent.
+analyzer = ["dep:audio_visualizer_rs"]
+
+[dependencies]
+stretch = {path = "../stretch"}
+engine-env = {path = "../engine-env"}
+dsp = {path = "../dsp"}
+math = {path = "../math"}
+audio_visualizer_rs = {path = "../../../audio-analyzer-rs", optional = true}
+signalsmith-stretch = "0.1"

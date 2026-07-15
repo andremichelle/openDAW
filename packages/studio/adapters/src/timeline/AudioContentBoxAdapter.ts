@@ -5,6 +5,7 @@ import {AudioPlayMode} from "../audio/AudioPlayMode"
 import {AudioFileBoxAdapter} from "../audio/AudioFileBoxAdapter"
 import {AudioTimeStretchBoxAdapter} from "../audio/AudioTimeStretchBoxAdapter"
 import {AudioPitchStretchBoxAdapter} from "../audio/AudioPitchStretchBoxAdapter"
+import {AudioSignalsmithBoxAdapter} from "../audio/AudioSignalsmithBoxAdapter"
 import {WarpMarkerBoxAdapter} from "../audio/WarpMarkerBoxAdapter"
 import {AudioClipBox, AudioRegionBox} from "@opendaw/studio-boxes"
 
@@ -18,6 +19,7 @@ export interface AudioContentBoxAdapter extends BoxAdapter {
     get isPlayModeNoStretch(): boolean
     get asPlayModePitchStretch(): Option<AudioPitchStretchBoxAdapter>
     get asPlayModeTimeStretch(): Option<AudioTimeStretchBoxAdapter>
+    get asPlayModeSignalsmith(): Option<AudioSignalsmithBoxAdapter>
     get optWarpMarkers(): Option<EventCollection<WarpMarkerBoxAdapter>>
     get canResize(): boolean
     get gain(): MutableObservableValue<number>

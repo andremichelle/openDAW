@@ -212,7 +212,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const r1 = (cycle.resultEnd - p0) / pn
         const bp0 = s0 + sn * r0
         const bp1 = s0 + sn * r1
-        const bpn = (bp1 - bp0) | 0
+        const bpn = (bp1 | 0) - (bp0 | 0) // #311a: floor the ENDPOINTS (not the span) so touching regions tile with no dropped sample; matches the Rust engine `sample_of(end) - sample_of(start)`
         const waveformOffset: number = adapter.waveformOffset.getValue()
         assert(s0 <= bp0 && bp1 <= s1, () => `Out of bounds ${bp0}, ${bp1}`)
         const asPlayModePitch = adapter.asPlayModePitchStretch
@@ -256,11 +256,23 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         } else {
             this.#fadingGainBuffer.fill(1.0, 0, bpn)
         }
+        // #311b: a region that ENDS inside this block must fade its OWN tail to silence AT the region end,
+        // completing within this final cycle, and be removed — otherwise it is carried alive into the NEXT
+        // block, where the `removeByPredicate` cleanup fades it (at UNIT gain) reading PAST the region end: a
+        // leaked ~20 ms tail that destructively crossfades with a touching successor region. Mirrors the Rust
+        // engine's region-end declick (`audio_region_player.rs::fade_gain`), which ramps the last ~20 ms to 0
+        // at `complete`. Clips (virtual, complete = +Inf) never trigger this.
+        const isFinalCycle = isInstanceOf(adapter, AudioRegionBoxAdapter)
+            && cycle.resultEnd >= adapter.position + adapter.duration - 1e-7
         const voice = lane.pitchVoices.getOrNull(sourceUuid)
         if (voice !== null) {
+            if (isFinalCycle) {
+                const fadeLengthSamples = Math.round(VOICE_FADE_DURATION * sampleRate)
+                voice.startFadeOut(Math.max(0, bpn - fadeLengthSamples)) // fade COMPLETES at the region end
+            }
             voice.process(bp0 | 0, bpn, this.#fadingGainBuffer)
-            if (voice.done()) {
-                lane.pitchVoices.removeByKey(sourceUuid)
+            if (isFinalCycle || voice.done()) {
+                lane.pitchVoices.removeByKey(sourceUuid) // gone before the next block -> no leaked tail
             }
         }
     }
@@ -334,7 +346,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const r1 = (cycle.resultEnd - p0) / pn
         const bp0 = s0 + sn * r0
         const bp1 = s0 + sn * r1
-        const bpn = (bp1 - bp0) | 0
+        const bpn = (bp1 | 0) - (bp0 | 0) // #311a: floor the ENDPOINTS (not the span) so touching regions tile with no dropped sample; matches the Rust engine `sample_of(end) - sample_of(start)`
         if (fadingConfig !== null && FadingEnvelope.hasFading(fadingConfig)) {
             const startPpqn = cycle.resultStart - regionPosition
             const endPpqn = cycle.resultEnd - regionPosition
