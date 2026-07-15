@@ -14,6 +14,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 use crate::fft::Fft;
+use crate::approx;
 
 #[derive(Clone, Copy, Default)]
 struct Cplx { re: f32, im: f32 }
@@ -326,20 +327,21 @@ impl SignalsmithStretch {
                 for b in 0..self.bands {
                     let al = self.in_l[b]; let ar = self.in_r[b];
                     let ml = libm::sqrtf(al.norm()); let mr = libm::sqrtf(ar.norm());
-                    let pl = libm::atan2f(al.im, al.re); let pr = libm::atan2f(ar.im, ar.re);
+                    let pl = approx::atan2(al.im, al.re); let pr = approx::atan2(ar.im, ar.re);
                     self.mag_l[b]=ml; self.mag_r[b]=mr; self.ana_l[b]=pl; self.ana_r[b]=pr;
                     if !self.s2_started {
                         self.sphase[b] = pl; self.sphase_r[b] = pr;
                     } else {
                         // The time-domain window read raises pitch by `pitch`, so window bin b carries the
                         // content of source bin b/pitch: its frame-to-frame phase evolves at the SOURCE rate
-                        // (hence expected uses b/pitch), and the output must advance `pitch` faster.
+                        // (hence expected uses b/pitch), and the output must advance `pitch` faster. sphase is
+                        // wrapped to [-pi,pi] so the phase polynomials never see a large (imprecise) argument.
                         let src = b as f32 / pitch;
                         let expected = two_pi * src * analysis_hop as f32 / block as f32;
-                        let mut dl = pl - self.prev_l[b] - expected; dl -= two_pi * libm::roundf(dl/two_pi);
-                        self.sphase[b] += (expected + dl) / analysis_hop as f32 * pitch * interval as f32;
-                        let mut dr = pr - self.prev_r[b] - expected; dr -= two_pi * libm::roundf(dr/two_pi);
-                        self.sphase_r[b] += (expected + dr) / analysis_hop as f32 * pitch * interval as f32;
+                        let mut dl = pl - self.prev_l[b] - expected; dl -= two_pi * approx::round_f32(dl/two_pi);
+                        self.sphase[b] = approx::wrap_pi(self.sphase[b] + (expected + dl) / analysis_hop as f32 * pitch * interval as f32);
+                        let mut dr = pr - self.prev_r[b] - expected; dr -= two_pi * approx::round_f32(dr/two_pi);
+                        self.sphase_r[b] = approx::wrap_pi(self.sphase_r[b] + (expected + dr) / analysis_hop as f32 * pitch * interval as f32);
                     }
                     self.prev_l[b]=pl; self.prev_r[b]=pr;
                 }
@@ -421,8 +423,10 @@ impl SignalsmithStretch {
             let out_dom = sphase_dom_p + (ana_dom_b - ana_dom_p);   // dominant channel: locked to its peak
             let out_oth = out_dom + (ana_oth_b - ana_dom_b);        // other channel: keep the input L/R phase diff
             let (lp, rp) = if dom_left { (out_dom, out_oth) } else { (out_oth, out_dom) };
-            self.in_l[b] = Cplx{re:self.mag_l[b]*libm::cosf(lp), im:self.mag_l[b]*libm::sinf(lp)};
-            self.in_r[b] = Cplx{re:self.mag_r[b]*libm::cosf(rp), im:self.mag_r[b]*libm::sinf(rp)};
+            let (sl, cl) = approx::sin_cos(lp);
+            let (sr, cr) = approx::sin_cos(rp);
+            self.in_l[b] = Cplx{re:self.mag_l[b]*cl, im:self.mag_l[b]*sl};
+            self.in_r[b] = Cplx{re:self.mag_r[b]*cr, im:self.mag_r[b]*sr};
         }
     }
 

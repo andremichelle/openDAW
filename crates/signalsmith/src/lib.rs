@@ -3,5 +3,6 @@
 extern crate alloc;
 
 pub mod fft;
+mod approx;
 mod stretch;
 pub use stretch::SignalsmithStretch;
