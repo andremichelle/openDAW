@@ -21,7 +21,7 @@ const SCRIPT_CONFIGS: Record<string, ScriptCompiler.Config> = {
 
 describe("load 303 project", () => {
     it("registers its scripted devices and renders audible output", async () => {
-        const arrayBuffer = readFileSync(OD).buffer as ArrayBuffer
+        const arrayBuffer = new Uint8Array(readFileSync(OD)).buffer as ArrayBuffer
         const {boxGraph} = ProjectSkeleton.decode(arrayBuffer)
 
         let scriptedDevices = 0

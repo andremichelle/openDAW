@@ -19,7 +19,7 @@ const ODSL = path.resolve(__dirname, "../public/odsl/test.odsl")
 
 describe("reorder does not rebuild devices", () => {
     it("toggling the delay/gate reorder reuses the processors", async () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         const {engine, memory, deviceBuilds} = await loadFullEngine()
         const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)
         const steps = decodeSteps(commits)

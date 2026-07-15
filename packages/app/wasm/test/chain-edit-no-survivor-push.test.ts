@@ -17,7 +17,7 @@ const ODSL = path.resolve(__dirname, "../public/odsl/test.odsl")
 
 describe("chain edit touches no existing plugin", () => {
     it("removing pushes no params; adding pushes only the joiner's", async () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         const {engine, memory} = await loadFullEngine()
         const pushes = () => engine.param_push_count() >>> 0
         const builds = () => engine.device_build_count() >>> 0

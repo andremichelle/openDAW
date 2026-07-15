@@ -67,7 +67,7 @@ const checksumsEqual = (left: Int8Array, right: Int8Array): boolean =>
 
 describe("sync: actions.odsl -> SyncSource -> wasm engine (checksum per transaction)", () => {
     it("matches the engine checksum after every transaction", async () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         expect(commits.length).toBeGreaterThan(1)
         expect(commits[0].type).toBe(COMMIT_INIT)
 

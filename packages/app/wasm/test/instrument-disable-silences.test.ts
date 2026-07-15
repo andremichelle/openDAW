@@ -17,7 +17,7 @@ const ODSL = path.resolve(__dirname, "../public/odsl/test.odsl")
 
 describe("disabling every instrument silences the project", () => {
     it("renders silent with all instruments off, audible again when re-enabled", async () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         const {engine, memory, drainSamples} = await loadFullEngine()
         const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)
         const steps = decodeSteps(commits)
