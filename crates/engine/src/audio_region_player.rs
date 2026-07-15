@@ -255,7 +255,16 @@ fn play_region(region: &AudioRegion, from: f64, to: f64, block: &Block,
         let index = match signalsmith_players.iter().position(|(uuid, _)| *uuid == region.region_uuid) {
             Some(index) => index,
             None => {
-                let player = signalsmith_pool.pop().unwrap_or_else(|| SignalsmithStretch::preset_default(2, sample_rate));
+                let mut player = signalsmith_pool.pop().unwrap_or_else(|| SignalsmithStretch::preset_default(2, sample_rate));
+                // Stagger each voice's FFT-burst phase so concurrent voices don't all synthesize in the SAME
+                // render quantum (each voice runs one heavy FFT every `interval` samples = every `quanta`
+                // render quanta; phase-locked voices stack their peak cost). Players are per-audio-unit, so the
+                // slot must come from a GLOBAL key, not this player's index: derive it from the region uuid, so
+                // it is stable across loop-wraps/re-primes and spread over the cycle. Costs a fixed sub-cycle
+                // output latency on the voice (a pure delay; a few ms), inaudible for independent material.
+                let quanta = (player.interval_samples() / engine_env::RENDER_QUANTUM).max(1);
+                let slot = region.region_uuid.iter().fold(0usize, |acc, byte| acc.wrapping_add(*byte as usize)) % quanta;
+                player.set_phase_offset(slot * engine_env::RENDER_QUANTUM);
                 signalsmith_players.push((region.region_uuid, player));
                 signalsmith_players.len() - 1
             }
@@ -699,6 +708,35 @@ mod tests {
         let out = run_signalsmith(&region, &config, &source, 300);
         let f = dominant48k(&out);
         assert!((f-440.0).abs() < 12.0, "no transpose -> ~440 Hz preserved, got {f:.0}");
+    }
+
+    #[test]
+    fn signalsmith_phase_offset_delays_through_play_signalsmith() {
+        let source = sine48k(220.0, 190_000);
+        let mut region = region(0.0, 0.0, 0.0);
+        region.duration = 96_000.0;
+        let config = SignalsmithConfig { warp: Vec::new(), transpose: 0.0 };
+        region.signalsmith = Some(config.clone());
+        let render = |off: usize| -> Vec<f32> {
+            let mut player = SignalsmithStretch::preset_default(2, 48000.0);
+            player.set_phase_offset(off);
+            let tempo = TempoMap::fixed(120.0);
+            let mut out = Vec::new();
+            for k in 0..80 {
+                let (p0, p1) = ((k*128) as f64*0.04, ((k+1)*128) as f64*0.04);
+                let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+                let mut output = AudioBuffer::new();
+                play_signalsmith(&mut player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut output);
+                out.extend_from_slice(&output.left[..128]);
+            }
+            out
+        };
+        let a = render(0); let b = render(400);
+        let (mut diff, mut energy) = (0.0f64, 0.0f64);
+        for i in 20*128..60*128 { diff += ((a[i]-b[i]) as f64).abs(); energy += (a[i] as f64).abs(); }
+        let rel = diff / energy.max(1e-9);
+        std::eprintln!("play_signalsmith offset 0 vs 400 rel diff: {rel:.3}");
+        assert!(rel > 0.05, "play_signalsmith must honor phase_offset (rel diff {rel:.3})");
     }
 
 

@@ -66,6 +66,12 @@ pub struct SignalsmithStretch {
     ring_l: Vec<f32>, ring_r: Vec<f32>, ring_n: Vec<f32>,
     s2_synth: f64, s2_emit: usize, s2_src: f64, s2_started: bool,
     cycle_id: f64,           // engine bookkeeping: the loop cycle's raw_start; NaN = uninitialised
+    // Per-voice synthesis-frame phase, in output samples [0, interval). Each voice runs one heavy FFT frame
+    // every `interval` samples; phase-locked voices burst in the SAME render quantum (peak = N frames).
+    // Seeding the synth accumulator with a distinct offset per voice spreads the bursts across quanta at the
+    // cost of a fixed `phase_offset`-sample output latency on that voice (a few ms; inaudible for independent
+    // material). Applied at `reset_stream`, so it is stable across loop-wraps.
+    phase_offset: usize,
 }
 
 impl SignalsmithStretch {
@@ -99,7 +105,15 @@ impl SignalsmithStretch {
             prev_l: vec![0.0; bands], prev_r: vec![0.0; bands], sphase: vec![0.0; bands], sphase_r: vec![0.0; bands], peaks_s: Vec::with_capacity(bands),
             ring_l: vec![0.0; block], ring_r: vec![0.0; block], ring_n: vec![0.0; block],
             s2_synth: 0.0, s2_emit: 0, s2_src: 0.0, s2_started: false, cycle_id: f64::NAN,
+            phase_offset: 0,
         }
+    }
+
+    /// Stagger this voice's synthesis-frame phase by `samples` output samples ([0, interval)). Voices with
+    /// distinct offsets run their FFT bursts in different render quanta instead of colliding. Costs a fixed
+    /// `samples`-sample output latency on this voice; takes effect at the next `reset_stream`.
+    pub fn set_phase_offset(&mut self, samples: usize) {
+        self.phase_offset = samples % self.interval.max(1);
     }
 
     /// Independent pitch shift in semitones (spectral remap, no resampling). 0 = time-stretch only.
@@ -209,10 +223,10 @@ impl SignalsmithStretch {
         for v in self.out_ring.iter_mut() { *v = 0.0; }
         for v in self.norm_ring.iter_mut() { *v = 0.0; }
         for b in 0..self.bands { self.prev_phase[b]=0.0; self.ana_phase[b]=0.0; self.synth_phase[b]=0.0; }
-        self.stream_synth = 0.0; self.stream_emit = 0; self.stream_src = source_pos; self.stream_started = false;
+        self.stream_synth = self.phase_offset as f64; self.stream_emit = 0; self.stream_src = source_pos; self.stream_started = false;
         for v in self.ring_l.iter_mut() { *v = 0.0; } for v in self.ring_r.iter_mut() { *v = 0.0; } for v in self.ring_n.iter_mut() { *v = 0.0; }
         for b in 0..self.bands { self.prev_l[b]=0.0; self.prev_r[b]=0.0; self.sphase[b]=0.0; self.sphase_r[b]=0.0; }
-        self.s2_synth = 0.0; self.s2_emit = 0; self.s2_src = source_pos; self.s2_started = false;
+        self.s2_synth = self.phase_offset as f64; self.s2_emit = 0; self.s2_src = source_pos; self.s2_started = false;
     }
 
     /// The processor's inherent output latency in samples (feed the source this far ahead).
