@@ -463,14 +463,29 @@ pub(crate) static MONITOR_OUTPUT: Shared<[f32; monitor::MONITOR_CHANNELS * RENDE
 
 // The note-bits slot of the unit CURRENTLY reconciling (its instruments capture it at construction —
 // composite slots share their unit's slot). Set around `reconcile_one`'s chain work, cleared after.
+#[cfg(not(test))]
 static CURRENT_UNIT_NOTE_BITS: Shared<Option<engine_env::telemetry::BroadcastSlot>> = Shared::new(None);
+#[cfg(test)]
+std::thread_local! {
+    // Tests run on parallel threads; the production engine is single-threaded, so the Shared cell is only
+    // sound there. Per-thread isolation keeps the tests deterministic (the PARAMS_SIGNAL pattern): the
+    // slot holds an Rc, and racing its non-atomic refcount across test threads corrupts it.
+    static CURRENT_UNIT_NOTE_BITS: core::cell::RefCell<Option<engine_env::telemetry::BroadcastSlot>> =
+        const { core::cell::RefCell::new(None) };
+}
 
 pub(crate) fn current_unit_note_bits() -> Option<engine_env::telemetry::BroadcastSlot> {
-    unsafe { CURRENT_UNIT_NOTE_BITS.get() }.clone()
+    #[cfg(not(test))]
+    { unsafe { CURRENT_UNIT_NOTE_BITS.get() }.clone() }
+    #[cfg(test)]
+    { CURRENT_UNIT_NOTE_BITS.with(|cell| cell.borrow().clone()) }
 }
 
 pub(crate) fn set_current_unit_note_bits(slot: Option<engine_env::telemetry::BroadcastSlot>) {
-    *unsafe { CURRENT_UNIT_NOTE_BITS.get() } = slot;
+    #[cfg(not(test))]
+    unsafe { *CURRENT_UNIT_NOTE_BITS.get() = slot; }
+    #[cfg(test)]
+    CURRENT_UNIT_NOTE_BITS.with(|cell| *cell.borrow_mut() = slot);
 }
 
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
