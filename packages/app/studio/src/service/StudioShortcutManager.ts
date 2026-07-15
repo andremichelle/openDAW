@@ -178,7 +178,7 @@ export namespace StudioShortcutManager {
                     screen.setValue(Arrays.getPrev(keys, current))
                 }
             ),
-            gc.register(gs["workspace-screen-dashboard"].shortcut, async () => await service.closeProject()),
+            gc.register(gs["workspace-screen-dashboard"].shortcut, () => service.switchScreen("dashboard")),
             gc.register(gs["workspace-screen-default"].shortcut, () => service.runIfProject(() => service.switchScreen("default"))),
             gc.register(gs["workspace-screen-mixer"].shortcut, () => service.runIfProject(() => service.switchScreen("mixer"))),
             gc.register(gs["workspace-screen-piano"].shortcut, () => service.runIfProject(() => service.switchScreen("piano"))),

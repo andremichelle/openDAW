@@ -1,0 +1,70 @@
+@use "tokens" as *
+
+component
+  display: flex
+  flex-direction: column
+
+  > .body
+    display: flex
+    flex-wrap: wrap
+    gap: 0.3em
+
+    &.vertical
+      flex-direction: column
+      flex-wrap: nowrap
+      row-gap: 0.4em
+
+  .chip
+    display: flex
+    align-items: center
+    column-gap: 0.35em
+    padding: 0.3em 0.5em
+    border-radius: 3px
+    border: 1px solid rgba(white, 0.08)
+    background: rgba(white, 0.02)
+    color: var(--color-dark)
+    font: inherit
+    font-size: $fs-m
+    cursor: pointer
+
+    &:hover
+      color: var(--color-orange)
+      border-color: var(--color-orange)
+
+    > svg
+      width: 16px
+      height: 16px
+
+  .link
+    display: inline-flex
+    width: max-content
+    align-items: center
+    column-gap: 0.5em
+    color: var(--color-dark)
+    font: inherit
+    font-size: $fs-m
+    text-decoration: none
+    cursor: pointer
+    background: none
+    border: none
+    padding: 0
+    text-align: left
+
+    &:hover
+      color: var(--color-blue)
+
+    > svg
+      width: 16px
+      height: 16px
+
+  .sponsors
+    width: 100%
+    display: grid
+    grid-template-columns: repeat(auto-fill, 32px)
+    gap: 4px
+
+    > a > img
+      width: 32px
+      height: 32px
+      border-radius: 50%
+      display: block

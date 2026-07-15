@@ -33,14 +33,14 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo.ts"
 import {SamplePlayback} from "@/service/SamplePlayback"
 import {ProjectProfileService} from "./ProjectProfileService"
+import {StudioNavigation} from "./StudioNavigation"
 import {StudioSignal} from "./StudioSignal"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FooterLabel} from "@/service/FooterLabel"
-import {RouteLocation} from "@opendaw/lib-jsx"
 import {PPQN} from "@opendaw/lib-dsp"
 import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {EngineAddresses, ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
+import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
 import {
     AudioContentFactory,
@@ -120,6 +120,7 @@ export class StudioService implements ProjectEnv {
     readonly #softwareKeyboardLifeCycle = new Terminator()
     readonly #signals = new Notifier<StudioSignal>()
     readonly #projectProfileService: ProjectProfileService
+    readonly #navigation: StudioNavigation
     readonly #sampleService: SampleService
     readonly #soundfontService: SoundfontService
 
@@ -159,6 +160,7 @@ export class StudioService implements ProjectEnv {
             soundfontService: this.#soundfontService, soundfontManager: this.soundfontManager
         })
 
+        this.#navigation = new StudioNavigation(this.layout.screen, this.#projectProfileService)
         this.#listenProject()
         this.#installConsoleCommands()
         this.#populateSpotlightData()
@@ -220,33 +222,12 @@ export class StudioService implements ProjectEnv {
     }
 
     async newProject() {
-        if (this.hasProfile && !this.project.editing.hasNoChanges()) {
-            const approved = await RuntimeNotifier.approve({
-                headline: "Closing Project?",
-                message: "You will lose all progress!"
-            })
-            if (!approved) {return}
-        }
+        if (!await this.#projectProfileService.approveLosingChanges()) {return}
         this.#projectProfileService.setValue(Option.wrap(
             new ProjectProfile(UUID.generate(), Project.new(this), ProjectMeta.init("Untitled"), Option.None)))
     }
 
-    async closeProject() {
-        RouteLocation.get().navigateTo("/")
-        if (!this.hasProfile) {
-            this.switchScreen("dashboard")
-            return
-        }
-        if (this.project.editing.hasNoChanges()) {
-            this.#projectProfileService.setValue(Option.None)
-        } else {
-            const approved = await RuntimeNotifier.approve({
-                headline: "Closing Project?",
-                message: "You will lose all progress!"
-            })
-            if (approved) {this.#projectProfileService.setValue(Option.None)}
-        }
-    }
+    async closeProject() {return this.#navigation.closeProject()}
 
     async browseLocalProjects(): Promise<void> {
         const {status, value} = await Promises.tryCatch(ProjectDialogs.showBrowseDialog(this))
@@ -422,10 +403,7 @@ export class StudioService implements ProjectEnv {
         })
     }
 
-    switchScreen(key: Nullable<Workspace.ScreenKeys>): void {
-        this.layout.screen.setValue(key)
-        RouteLocation.get().navigateTo("/")
-    }
+    switchScreen(key: Nullable<Workspace.ScreenKeys>): void {this.#navigation.switchScreen(key)}
 
     registerFooter(factory: Provider<FooterLabel>): void {
         this.#factoryFooterLabel = Option.wrap(factory)
@@ -448,8 +426,7 @@ export class StudioService implements ProjectEnv {
             : state.previousScreen
         this.layout.screen.setValue(null)
         this.#activeCodeEditor.wrap({...state, previousScreen})
-        this.layout.screen.setValue("code")
-        RouteLocation.get().navigateTo("/")
+        this.switchScreen("code")
     }
 
     closeCodeEditor(): void {
@@ -490,9 +467,7 @@ export class StudioService implements ProjectEnv {
     #listenProject(): void {
         const lifeTime = new Terminator()
         const observer = (optProfile: Option<ProjectProfile>) => {
-            const path = RouteLocation.get().path
-            const isRoot = path === "/"
-            if (isRoot) {this.layout.screen.setValue(null)}
+            this.layout.screen.setValue(null)
             lifeTime.terminate()
             document.body.classList.toggle("no-project", optProfile.isEmpty())
             if (optProfile.nonEmpty()) {
@@ -569,12 +544,12 @@ export class StudioService implements ProjectEnv {
                         .ifSome(() => AnimationFrame.once(() => this.panelLayout.showIfAvailable(PanelType.ContentEditor)))),
                     timelineBox.durationInPulses.catchupAndSubscribe(owner => range.maxUnits = owner.getValue() + PPQN.Bar)
                 )
-                if (isRoot) {this.switchScreen("default")}
+                this.#navigation.onProjectOpened()
             } else {
                 this.engine.releaseWorklet()
                 range.maxUnits = PPQN.fromSignature(128, 1)
                 range.showUnitInterval(0, PPQN.fromSignature(9, 1))
-                this.layout.screen.setValue("dashboard")
+                this.#navigation.onProjectClosed()
             }
         }
         this.#projectProfileService.catchupAndSubscribe(observer)
@@ -602,62 +577,6 @@ export class StudioService implements ProjectEnv {
             })
         ConsoleCommands.exportMethod("engine.position", () => this.engine.position.getValue())
         ConsoleCommands.exportMethod("engine.isPlaying", () => this.engine.isPlaying.getValue())
-        // A LiveStream liveness probe: subscribes the master PEAKS once (like the header meter, a
-        // profile-lifetime subscription) and returns the dispatch count — if it stops growing while
-        // playing, telemetry died (e.g. across an engine swap).
-        const meterProbe = {count: 0, subscribed: false}
-        ConsoleCommands.exportMethod("engine.meterTest",
-            () => this.runIfProject(project => {
-                if (!meterProbe.subscribed) {
-                    meterProbe.subscribed = true
-                    project.liveStreamReceiver.subscribeFloats(EngineAddresses.PEAKS, () => meterProbe.count++)
-                }
-                return meterProbe.count
-            }).unwrapOrNull())
-        // An offline-export probe: renders the current project's mixdown exactly like `Mixdowns.exportMixdown`
-        // (through the wasm variant when the engine toggle is on) and reports level + length, so a headless
-        // run can compare a TS export against a WASM export without touching the file dialogs.
-        ConsoleCommands.exportMethod("engine.exportTest",
-            async () => this.runIfProject(async project => {
-                const {OfflineEngineRenderer} = await import("@opendaw/studio-core")
-                const {WasmEngine} = await import("@opendaw/studio-core-wasm")
-                const progress = new DefaultObservableValue(0.0)
-                const audio = await OfflineEngineRenderer.start(
-                    project.copy(), Option.None, progress, undefined, 48_000, WasmEngine.useForExports())
-                let sum = 0.0
-                for (const channel of audio.frames) {
-                    for (const value of channel) {sum += value * value}
-                }
-                const rms = Math.sqrt(sum / (audio.numberOfFrames * audio.numberOfChannels))
-                return {variant: WasmEngine.useForExports() ? "wasm" : "ts", frames: audio.numberOfFrames, rms}
-            }).unwrapOrNull())
-        // The STEM-export probe: exports every instrument unit as a stem (default options) exactly like
-        // `Mixdowns.exportStems` and reports per-stem levels, for headless TS-vs-WASM comparisons.
-        ConsoleCommands.exportMethod("engine.exportStemsTest",
-            async () => this.runIfProject(async project => {
-                const {OfflineEngineRenderer} = await import("@opendaw/studio-core")
-                const {WasmEngine} = await import("@opendaw/studio-core-wasm")
-                const {UUID} = await import("@opendaw/lib-std")
-                const stems: Record<string, {includeAudioEffects: boolean, includeSends: boolean, useInstrumentOutput: boolean, fileName: string}> = {}
-                for (const box of project.boxGraph.boxes()) {
-                    if (box.name !== "AudioUnitBox") {continue}
-                    const type = (box as unknown as {type: {getValue(): string}}).type.getValue()
-                    if (type !== "instrument") {continue}
-                    stems[UUID.toString(box.address.uuid)] =
-                        {includeAudioEffects: true, includeSends: true, useInstrumentOutput: false, fileName: UUID.toString(box.address.uuid).slice(0, 8)}
-                }
-                const progress = new DefaultObservableValue(0.0)
-                const audio = await OfflineEngineRenderer.start(
-                    project.copy(), Option.wrap({stems}), progress, undefined, 48_000, WasmEngine.useForExports())
-                const perStem: Array<number> = []
-                for (let stem = 0; stem < audio.numberOfChannels / 2; stem++) {
-                    let sum = 0.0
-                    for (const value of audio.frames[stem * 2]) {sum += value * value}
-                    for (const value of audio.frames[stem * 2 + 1]) {sum += value * value}
-                    perStem.push(Math.sqrt(sum / (audio.numberOfFrames * 2)))
-                }
-                return {variant: WasmEngine.useForExports() ? "wasm" : "ts", frames: audio.numberOfFrames, perStem}
-            }).unwrapOrNull())
     }
 
     #populateSpotlightData(): void {
@@ -667,14 +586,12 @@ export class StudioService implements ProjectEnv {
     }
 
     #configBeforeUnload(): void {
-        if (!Browser.isLocalHost()) {
-            window.addEventListener("beforeunload", (event: Event) => {
-                if (!navigator.onLine) {event.preventDefault()}
-                if (this.hasProfile && this.profile.hasUnsavedChanges()) {
-                    event.preventDefault()
-                }
-            })
-        }
+        window.addEventListener("beforeunload", (event: Event) => {
+            if (!navigator.onLine) {event.preventDefault()}
+            if (this.hasProfile && this.profile.hasUnsavedChanges()) {
+                event.preventDefault()
+            }
+        })
     }
 
     #checkRecovery(): void {

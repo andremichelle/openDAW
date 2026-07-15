@@ -11,11 +11,24 @@ export class RouteLocation {
         this.#setCanonical()
     }
 
+    // Pushes a new history entry, so the browser's back button returns to the previous path.
     navigateTo(path: string): boolean {
         if (this.path === path) {
             return false
         }
         history.pushState(null, "", path)
+        this.#setCanonical()
+        this.#notifier.notify(this)
+        return true
+    }
+
+    // Replaces the current history entry, so the previous path cannot be reached with the back button
+    // (for redirects and consumed deep links that must not be revisited).
+    replaceWith(path: string): boolean {
+        if (this.path === path) {
+            return false
+        }
+        history.replaceState(null, "", path)
         this.#setCanonical()
         this.#notifier.notify(this)
         return true

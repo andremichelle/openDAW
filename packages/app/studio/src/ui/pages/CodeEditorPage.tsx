@@ -41,7 +41,8 @@ const loadMonacoSetup = dynamicImportWithRetry(() => import("./code-editor/monac
 export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}: PageContext<StudioService>) => {
     const pendingSamples = UUID.newSet<UUID.Bytes>(uuid => uuid)
     const host = new ScriptHost({
-        openProject: (buffer: ArrayBufferLike, name?: string): void => {
+        openProject: async (buffer: ArrayBufferLike, name?: string): Promise<void> => {
+            if (!await service.projectProfileService.approveLosingChanges()) {return}
             const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
             boxGraph.fromArrayBuffer(buffer, false)
             const mandatoryBoxes = ProjectSkeleton.findMandatoryBoxes(boxGraph)
@@ -49,7 +50,6 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
             pendingSamples.forEach(uuid => project.trackUserCreatedSample(uuid))
             pendingSamples.clear()
             service.projectProfileService.setProject(project, name ?? "Scripted Project")
-            service.switchScreen("default")
         },
         fetchProject: async (): Promise<{ buffer: ArrayBuffer; name: string }> => {
             return service.projectProfileService.getValue().match({
@@ -118,7 +118,7 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                         <div className="content">
                             <header>
                                 <Button lifecycle={lifecycle}
-                                        onClick={() => RouteLocation.get().navigateTo("/")}
+                                        onClick={() => RouteLocation.get().navigateTo(service.hasProfile ? "/create" : "/")}
                                         appearance={{tooltip: "Exit editor"}}>
                                     <span>Exit</span> <Icon symbol={IconSymbol.Exit}/>
                                 </Button>

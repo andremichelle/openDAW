@@ -8,7 +8,6 @@ import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"
 import {newRoomSessionId, reportRoomResult, RoomResultStatus, startRoomDurationHeartbeat} from "@/service/RoomStatsReporter"
 import {ChatService} from "@/chat/ChatService"
 import {Events} from "@opendaw/lib-dom"
-import {RouteLocation} from "@opendaw/lib-jsx"
 
 const classifyConnectError = (error: unknown): RoomResultStatus => {
     if (Errors.isAbort(error)) {return "abort"}
@@ -88,7 +87,6 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
             label.setTitle("Room Users")
             update()
         })
-        RouteLocation.get().navigateTo("/")
         service.projectProfileService.setProject(project, roomName)
         service.projectProfileService.getValue().ifSome(profile => {
             // Creator: the room project is a copy of the source, so the same cover-id already has its bytes locally.

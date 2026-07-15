@@ -1,10 +1,15 @@
 import css from "./Dashboard.sass?inline"
 import {Lifecycle} from "@opendaw/lib-std"
-import {createElement, LocalLink} from "@opendaw/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Html} from "@opendaw/lib-dom"
 import {Resources} from "@/ui/dashboard/Resources"
-import {DemoProjects} from "@/ui/dashboard/DemoProjects"
+import {IntroTiles} from "@/ui/dashboard/IntroTiles"
+import {ActionButtons} from "@/ui/dashboard/ActionButtons"
+import {Backup} from "@/ui/dashboard/Backup"
+import {Sponsors} from "@/ui/dashboard/Sponsors"
+import {HelpFeedback} from "@/ui/dashboard/HelpFeedback"
+import {Links} from "@/ui/dashboard/Links"
 
 const className = Html.adoptStyleSheet(css, "Dashboard")
 
@@ -13,32 +18,25 @@ type Construct = {
     service: StudioService
 }
 
-export const Dashboard = ({lifecycle, service}: Construct) => {
-    return (
-        <div className={className}>
-            <article>
-                <h1>Welcome to openDAW</h1>
-                <h2>A new holistic exploration of music creation inside your browser</h2>
-                <p style={{margin: "0.5em 0 0 0"}}>
-                    openDAW is an open source web based music studio with a clear focus on <a
-                    href="https://opendaw.org/education" target="education">education</a> and <LocalLink
-                    href="/privacy">data privacy</LocalLink>,
-                    open to everyone with no login required so you can start creating <a
-                    href="https://music.opendaw.studio/" target="music">music</a> right away. The studio is still
-                    evolving and not production ready yet.
-                </p>
-                <div className="columns">
-                    <DemoProjects lifecycle={lifecycle} service={service}/>
-                    <Resources lifecycle={lifecycle} service={service}/>
-                </div>
-                <p style={{marginTop: "3em", fontSize: "11px", textAlign: "center"}}>
-                    Visit <a
-                    href="https://discord.opendaw.studio/" target="discord">Discord</a> and <a
-                    href="https://github.com/andremichelle/opendaw" target="github">GitHub</a> for more information.
-                    Subscribe to our <a href="https://buttondown.com/opendaw" target="newsletter">Newsletter</a>.
-                    Built with ❤️
-                </p>
-            </article>
+export const Dashboard = ({lifecycle, service}: Construct) => (
+    <div className={className}>
+        <header className="hero">
+            <h1>openDAW</h1>
+        </header>
+        <IntroTiles/>
+        <div className="main">
+            <div className="rail left">
+                <ActionButtons lifecycle={lifecycle} service={service}/>
+                <Backup service={service}/>
+                <Sponsors/>
+            </div>
+            <div className="lists">
+                <Resources lifecycle={lifecycle} service={service}/>
+            </div>
+            <div className="rail right">
+                <HelpFeedback/>
+                <Links/>
+            </div>
         </div>
-    )
-}
+    </div>
+)
