@@ -4,6 +4,7 @@
 //! reusable, hence this generalized sibling.
 
 use alloc::vec::Vec;
+use crate::simd::Simd4;
 
 pub struct Fft {
     size: usize,
@@ -67,18 +68,45 @@ impl Fft {
             let block = half_block * 2;
             let stride = size / block;
             for start in (0..size).step_by(block) {
-                let mut twiddle = 0;
-                for even in start..start + half_block {
-                    let odd = even + half_block;
-                    let cos = self.cos_table[twiddle];
-                    let sin = if inverse { -self.sin_table[twiddle] } else { self.sin_table[twiddle] };
-                    let odd_re = re[odd] * cos - im[odd] * sin;
-                    let odd_im = re[odd] * sin + im[odd] * cos;
-                    re[odd] = re[even] - odd_re;
-                    im[odd] = im[even] - odd_im;
-                    re[even] += odd_re;
-                    im[even] += odd_im;
-                    twiddle += stride;
+                if half_block >= 4 {
+                    // 4 butterflies per step. `even..even+4` and `odd..odd+4` are contiguous (odd = even +
+                    // half_block); the twiddles are strided by `stride`, so they're gathered. Same per-lane
+                    // math and order as the scalar path below -> bit-identical result.
+                    let mut even = start;
+                    let mut twiddle = 0;
+                    while even < start + half_block {
+                        let odd = even + half_block;
+                        let (mut cg, mut sg) = ([0.0f32; 4], [0.0f32; 4]);
+                        for k in 0..4 {
+                            let t = twiddle + k * stride;
+                            cg[k] = self.cos_table[t];
+                            sg[k] = if inverse { -self.sin_table[t] } else { self.sin_table[t] };
+                        }
+                        let (cos_v, sin_v) = (Simd4::load(&cg), Simd4::load(&sg));
+                        let ro = Simd4::load(&re[odd..]); let io = Simd4::load(&im[odd..]);
+                        let re_e = Simd4::load(&re[even..]); let im_e = Simd4::load(&im[even..]);
+                        let odd_re = ro.mul(cos_v).sub(io.mul(sin_v));
+                        let odd_im = ro.mul(sin_v).add(io.mul(cos_v));
+                        re_e.sub(odd_re).store(&mut re[odd..]);
+                        im_e.sub(odd_im).store(&mut im[odd..]);
+                        re_e.add(odd_re).store(&mut re[even..]);
+                        im_e.add(odd_im).store(&mut im[even..]);
+                        even += 4; twiddle += 4 * stride;
+                    }
+                } else {
+                    let mut twiddle = 0;
+                    for even in start..start + half_block {
+                        let odd = even + half_block;
+                        let cos = self.cos_table[twiddle];
+                        let sin = if inverse { -self.sin_table[twiddle] } else { self.sin_table[twiddle] };
+                        let odd_re = re[odd] * cos - im[odd] * sin;
+                        let odd_im = re[odd] * sin + im[odd] * cos;
+                        re[odd] = re[even] - odd_re;
+                        im[odd] = im[even] - odd_im;
+                        re[even] += odd_re;
+                        im[even] += odd_im;
+                        twiddle += stride;
+                    }
                 }
             }
             half_block = block;

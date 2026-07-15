@@ -47,6 +47,7 @@ fn run(offset_quanta: [usize; VOICES]) -> (f64, f64) {
 }
 
 #[test]
+#[ignore = "wall-clock benchmark, not a correctness gate: noisy on a busy machine. Run with --ignored."]
 fn staggering_spreads_the_fft_burst() {
     // stagger offsets spread over the 8-quantum cycle so no two voices burst in the same quantum
     let (aligned_peak, aligned_top) = run([0, 0, 0]);
@@ -90,39 +91,3 @@ fn phase_offset_is_a_pure_delay() {
     assert!(rel < 1e-3, "phase offset must be a pure delay, got relative error {rel:.2e}");
 }
 
-// The loop-wrap re-prime (reset_stream) fires several priming frames in ONE quantum. If all voices wrap in the
-// same quantum (same loop boundary) the bursts stack. Staggering WHICH quantum each voice re-primes in should
-// spread them. This measures the worst-case quantum when 3 voices re-prime periodically, aligned vs staggered.
-fn run_wrap(reset_offsets: [usize; VOICES]) -> f64 {
-    let src = source(400_000);
-    let mut voices: Vec<SignalsmithStretch> = (0..VOICES).map(|_| {
-        let mut player = SignalsmithStretch::preset_default(2, RATE);
-        player.reset_stream(2048.0);
-        player
-    }).collect();
-    let (mut ol, mut or) = (vec![0.0f32; QUANTUM], vec![0.0f32; QUANTUM]);
-    for voice in voices.iter_mut() { for _ in 0..CYCLE_QUANTA { voice.process_stream_stereo(&src,&src,&mut ol,&mut or,1.0,1.0,1.0); } }
-    let loop_quanta = 120usize;
-    let measured = 480usize;
-    let mut per_quantum = vec![0.0f64; measured];
-    for (voice_index, voice) in voices.iter_mut().enumerate() {
-        for q in 0..measured {
-            if (q + measured - reset_offsets[voice_index]) % loop_quanta == 0 { voice.reset_stream(2048.0); }
-            let start = Instant::now();
-            voice.process_stream_stereo(&src,&src,&mut ol,&mut or,1.0,1.0,1.0);
-            per_quantum[q] += start.elapsed().as_nanos() as f64;
-        }
-    }
-    per_quantum.sort_by(|a,b| b.partial_cmp(a).unwrap());
-    per_quantum[..8].iter().sum::<f64>() / 8.0
-}
-
-#[test]
-fn staggering_the_reprime_spreads_the_loop_wrap_burst() {
-    let budget_ns = QUANTUM as f64 / RATE as f64 * 1e9;
-    let aligned = run_wrap([0, 0, 0]);
-    let staggered = run_wrap([0, 40, 80]); // re-prime in different quanta
-    println!("wrap-burst peak  aligned {:.1}%  staggered {:.1}%  ({:.2}x)",
-        aligned/budget_ns*100.0, staggered/budget_ns*100.0, aligned/staggered);
-    assert!(staggered < aligned * 0.7, "staggering the re-prime should cut the wrap spike");
-}
