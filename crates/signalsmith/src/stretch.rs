@@ -15,7 +15,6 @@ use alloc::vec;
 use alloc::vec::Vec;
 use crate::fft::Fft;
 use crate::approx;
-use crate::simd::Simd4;
 
 #[derive(Clone, Copy, Default)]
 struct Cplx { re: f32, im: f32 }
@@ -410,53 +409,26 @@ impl SignalsmithStretch {
                     let nb = if b == 0 { 0 } else { block - b };
                     self.in_r[b] = Cplx { re: (self.im[b] + self.im[nb]) * 0.5, im: (self.re[nb] - self.re[b]) * 0.5 };
                 }
-                // Magnitude + analysis phase + phase-locking, 4 bands per iteration (f32x4). `Simd4` is wasm
-                // SIMD intrinsics on wasm32 and a scalar fallback natively; the `approx::*4` polynomials are
-                // bit-identical to their scalar forms, so this stays epsilon-equal to the scalar loop it replaced.
-                // The time-domain window read raises pitch by `pitch`, so window bin b carries source bin b/pitch:
-                // its phase evolves at the SOURCE rate (expected uses b/pitch) and the output advances `pitch`
-                // faster; sphase is wrapped to [-pi,pi] so the polynomials never see a large (imprecise) argument.
-                // The `started` store branch is loop-invariant; the phase update is computed unconditionally
-                // (harmless on the first frame — prev/sphase are zeroed at reset — and discarded there).
-                let two_pi_v = Simd4::splat(two_pi);
-                let ah_v = Simd4::splat(analysis_hop as f32);
-                let block_v = Simd4::splat(block as f32);
-                let pitch_v = Simd4::splat(pitch);
-                let interval_v = Simd4::splat(interval as f32);
-                let started = self.s2_started;
-                let mut b = 0;
-                while b < self.bands {
-                    let (mut alr, mut ali, mut arr, mut ari, mut bf) =
-                        ([0.0f32; 4], [0.0f32; 4], [0.0f32; 4], [0.0f32; 4], [0.0f32; 4]);
-                    for k in 0..4 {
-                        let al = self.in_l[b+k]; let ar = self.in_r[b+k];
-                        alr[k]=al.re; ali[k]=al.im; arr[k]=ar.re; ari[k]=ar.im; bf[k]=(b+k) as f32;
-                    }
-                    let (alr, ali) = (Simd4::load(&alr), Simd4::load(&ali));
-                    let (arr, ari) = (Simd4::load(&arr), Simd4::load(&ari));
-                    let ml = approx::sqrt4(alr.mul(alr).add(ali.mul(ali)));
-                    let mr = approx::sqrt4(arr.mul(arr).add(ari.mul(ari)));
-                    let pl = approx::atan2_4(ali, alr);
-                    let pr = approx::atan2_4(ari, arr);
-                    ml.store(&mut self.mag_l[b..]); mr.store(&mut self.mag_r[b..]);
-                    pl.store(&mut self.ana_l[b..]); pr.store(&mut self.ana_r[b..]);
-                    let src = Simd4::load(&bf).div(pitch_v);
-                    let expected = two_pi_v.mul(src).mul(ah_v).div(block_v);
-                    let mut dl = pl.sub(Simd4::load(&self.prev_l[b..])).sub(expected);
-                    dl = dl.sub(two_pi_v.mul(approx::round4(dl.div(two_pi_v))));
-                    let upd_l = approx::wrap_pi4(Simd4::load(&self.sphase[b..])
-                        .add(expected.add(dl).div(ah_v).mul(pitch_v).mul(interval_v)));
-                    let mut dr = pr.sub(Simd4::load(&self.prev_r[b..])).sub(expected);
-                    dr = dr.sub(two_pi_v.mul(approx::round4(dr.div(two_pi_v))));
-                    let upd_r = approx::wrap_pi4(Simd4::load(&self.sphase_r[b..])
-                        .add(expected.add(dr).div(ah_v).mul(pitch_v).mul(interval_v)));
-                    if started {
-                        upd_l.store(&mut self.sphase[b..]); upd_r.store(&mut self.sphase_r[b..]);
+                for b in 0..self.bands {
+                    let al = self.in_l[b]; let ar = self.in_r[b];
+                    let ml = approx::sqrt(al.norm()); let mr = approx::sqrt(ar.norm());
+                    let pl = approx::atan2(al.im, al.re); let pr = approx::atan2(ar.im, ar.re);
+                    self.mag_l[b]=ml; self.mag_r[b]=mr; self.ana_l[b]=pl; self.ana_r[b]=pr;
+                    if !self.s2_started {
+                        self.sphase[b] = pl; self.sphase_r[b] = pr;
                     } else {
-                        pl.store(&mut self.sphase[b..]); pr.store(&mut self.sphase_r[b..]);
+                        // The time-domain window read raises pitch by `pitch`, so window bin b carries the
+                        // content of source bin b/pitch: its frame-to-frame phase evolves at the SOURCE rate
+                        // (hence expected uses b/pitch), and the output must advance `pitch` faster. sphase is
+                        // wrapped to [-pi,pi] so the phase polynomials never see a large (imprecise) argument.
+                        let src = b as f32 / pitch;
+                        let expected = two_pi * src * analysis_hop as f32 / block as f32;
+                        let mut dl = pl - self.prev_l[b] - expected; dl -= two_pi * approx::round_f32(dl/two_pi);
+                        self.sphase[b] = approx::wrap_pi(self.sphase[b] + (expected + dl) / analysis_hop as f32 * pitch * interval as f32);
+                        let mut dr = pr - self.prev_r[b] - expected; dr -= two_pi * approx::round_f32(dr/two_pi);
+                        self.sphase_r[b] = approx::wrap_pi(self.sphase_r[b] + (expected + dr) / analysis_hop as f32 * pitch * interval as f32);
                     }
-                    pl.store(&mut self.prev_l[b..]); pr.store(&mut self.prev_r[b..]);
-                    b += 4;
+                    self.prev_l[b]=pl; self.prev_r[b]=pr;
                 }
                 self.s2_started = true;
                 self.build_locked_output_stereo();
