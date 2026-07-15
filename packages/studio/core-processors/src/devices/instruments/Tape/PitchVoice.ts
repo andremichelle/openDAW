@@ -96,7 +96,11 @@ export class PitchVoice {
             } else {
                 amplitude = 1.0
             }
-            const finalAmplitude = amplitude * fadingGainBuffer[i]
+            // #312: combine the internal declick fade with the region clip-fade by MIN, not product — stacking
+            // two 0->1 ramps squares the entry and dips a linear crossfade ~-1.2 dB. MIN lets the authored fade
+            // replace the declick where it is smaller, and keeps the declick for an un-faded (unity) entry.
+            // Mirrors the Rust engine `audio_region_player.rs::fade_gain` (`fade_in.min(fade_out)`).
+            const finalAmplitude = Math.min(amplitude, fadingGainBuffer[i])
             lastFinalAmplitude = finalAmplitude
             const readInt = readPosition | 0
             if (readInt >= 0 && readInt < numberOfFrames - 1) {

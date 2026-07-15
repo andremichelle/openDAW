@@ -212,7 +212,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const r1 = (cycle.resultEnd - p0) / pn
         const bp0 = s0 + sn * r0
         const bp1 = s0 + sn * r1
-        const bpn = (bp1 - bp0) | 0
+        const bpn = (bp1 | 0) - (bp0 | 0) // #311a: floor the ENDPOINTS (not the span) so touching regions tile with no dropped sample; matches the Rust engine `sample_of(end) - sample_of(start)`
         const waveformOffset: number = adapter.waveformOffset.getValue()
         assert(s0 <= bp0 && bp1 <= s1, () => `Out of bounds ${bp0}, ${bp1}`)
         const asPlayModePitch = adapter.asPlayModePitchStretch
@@ -334,7 +334,7 @@ export class TapeDeviceProcessor extends AbstractProcessor implements DeviceProc
         const r1 = (cycle.resultEnd - p0) / pn
         const bp0 = s0 + sn * r0
         const bp1 = s0 + sn * r1
-        const bpn = (bp1 - bp0) | 0
+        const bpn = (bp1 | 0) - (bp0 | 0) // #311a: floor the ENDPOINTS (not the span) so touching regions tile with no dropped sample; matches the Rust engine `sample_of(end) - sample_of(start)`
         if (fadingConfig !== null && FadingEnvelope.hasFading(fadingConfig)) {
             const startPpqn = cycle.resultStart - regionPosition
             const endPpqn = cycle.resultEnd - regionPosition
