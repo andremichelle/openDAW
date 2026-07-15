@@ -29,6 +29,19 @@ impl Cplx {
 
 const NOISE_FLOOR: f32 = 1e-15;
 
+/// Snapshot of the persistent streaming state right after a loop-start prime, at `s2_emit == 0`. A loop wrap
+/// re-primes to the SAME `source_pos` from the SAME zeroed state, so (for constant tempo/pitch) the primed
+/// state is identical every iteration: capture it once, then restore it with a memcpy at each wrap instead of
+/// recomputing the multi-frame priming burst. `params`/`source_pos` gate the cache — anything the priming
+/// depends on differing (e.g. tempo/pitch automation) invalidates it and falls back to a real reset+prime.
+struct PrimedCache {
+    valid: bool,
+    ring_l: Vec<f32>, ring_r: Vec<f32>, ring_n: Vec<f32>,
+    prev_l: Vec<f32>, prev_r: Vec<f32>, sphase: Vec<f32>, sphase_r: Vec<f32>,
+    s2_synth: f64, s2_src: f64, s2_emit: usize, s2_started: bool,
+    time_factor: f64, pitch: f32, resample: f64, source_pos: f64,
+}
+
 pub struct SignalsmithStretch {
     channels: usize,
     block: usize,
@@ -73,6 +86,10 @@ pub struct SignalsmithStretch {
     // cost of a fixed `phase_offset`-sample output latency on that voice (a few ms; inaudible for independent
     // material). Applied at `reset_stream`, so it is stable across loop-wraps.
     phase_offset: usize,
+    // Loop-wrap fast path: a snapshot of the primed state (see `PrimedCache`) plus a flag armed at reset that
+    // tells `process_stream_stereo` to capture the snapshot once, right after the emit==0 priming.
+    cache: PrimedCache,
+    capture_pending: bool,
 }
 
 impl SignalsmithStretch {
@@ -107,6 +124,14 @@ impl SignalsmithStretch {
             ring_l: vec![0.0; block], ring_r: vec![0.0; block], ring_n: vec![0.0; block],
             s2_synth: 0.0, s2_emit: 0, s2_src: 0.0, s2_started: false, cycle_id: f64::NAN,
             phase_offset: 0,
+            cache: PrimedCache {
+                valid: false,
+                ring_l: vec![0.0; block], ring_r: vec![0.0; block], ring_n: vec![0.0; block],
+                prev_l: vec![0.0; bands], prev_r: vec![0.0; bands], sphase: vec![0.0; bands], sphase_r: vec![0.0; bands],
+                s2_synth: 0.0, s2_src: 0.0, s2_emit: 0, s2_started: false,
+                time_factor: 0.0, pitch: 0.0, resample: 0.0, source_pos: f64::NAN,
+            },
+            capture_pending: false,
         }
     }
 
@@ -228,6 +253,52 @@ impl SignalsmithStretch {
         for v in self.ring_l.iter_mut() { *v = 0.0; } for v in self.ring_r.iter_mut() { *v = 0.0; } for v in self.ring_n.iter_mut() { *v = 0.0; }
         for b in 0..self.bands { self.prev_l[b]=0.0; self.prev_r[b]=0.0; self.sphase[b]=0.0; self.sphase_r[b]=0.0; }
         self.s2_synth = self.phase_offset as f64; self.s2_emit = 0; self.s2_src = source_pos; self.s2_started = false;
+        self.capture_pending = false;
+    }
+
+    /// Arm a one-shot capture of the primed state after the next `emit == 0` prime, tagging it with the params
+    /// and position it is valid for. Call right after `reset_stream` when priming at a loop-startable position;
+    /// `process_stream_stereo` then snapshots the state once the priming frames have run.
+    pub fn arm_capture(&mut self, time_factor: f64, pitch: f32, resample: f64, source_pos: f64) {
+        self.capture_pending = true;
+        self.cache.valid = false;
+        self.cache.time_factor = time_factor; self.cache.pitch = pitch;
+        self.cache.resample = resample; self.cache.source_pos = source_pos;
+    }
+
+    /// Loop-wrap fast path: restore the primed snapshot instead of re-priming, IF one was captured for these
+    /// exact params/position. Returns true on a hit (no priming burst); false means the caller must reset+prime.
+    pub fn try_restore(&mut self, time_factor: f64, pitch: f32, resample: f64, source_pos: f64) -> bool {
+        let cache = &self.cache;
+        if !cache.valid || cache.time_factor != time_factor || cache.pitch != pitch
+            || cache.resample != resample || cache.source_pos != source_pos {
+            return false;
+        }
+        self.ring_l.copy_from_slice(&self.cache.ring_l);
+        self.ring_r.copy_from_slice(&self.cache.ring_r);
+        self.ring_n.copy_from_slice(&self.cache.ring_n);
+        self.prev_l.copy_from_slice(&self.cache.prev_l);
+        self.prev_r.copy_from_slice(&self.cache.prev_r);
+        self.sphase.copy_from_slice(&self.cache.sphase);
+        self.sphase_r.copy_from_slice(&self.cache.sphase_r);
+        self.s2_synth = self.cache.s2_synth; self.s2_src = self.cache.s2_src;
+        self.s2_emit = self.cache.s2_emit; self.s2_started = self.cache.s2_started;
+        self.capture_pending = false;
+        true
+    }
+
+    fn capture_primed(&mut self) {
+        self.cache.ring_l.copy_from_slice(&self.ring_l);
+        self.cache.ring_r.copy_from_slice(&self.ring_r);
+        self.cache.ring_n.copy_from_slice(&self.ring_n);
+        self.cache.prev_l.copy_from_slice(&self.prev_l);
+        self.cache.prev_r.copy_from_slice(&self.prev_r);
+        self.cache.sphase.copy_from_slice(&self.sphase);
+        self.cache.sphase_r.copy_from_slice(&self.sphase_r);
+        self.cache.s2_synth = self.s2_synth; self.cache.s2_src = self.s2_src;
+        self.cache.s2_emit = self.s2_emit; self.cache.s2_started = self.s2_started;
+        self.cache.valid = true;
+        self.capture_pending = false;
     }
 
     /// The processor's inherent output latency in samples (feed the source this far ahead).
@@ -412,6 +483,11 @@ impl SignalsmithStretch {
                 }
                 self.s2_synth += interval;
                 self.s2_src += analysis_hop;
+            }
+            // The priming frames for this reset have all run; snapshot the primed state so future loop wraps to
+            // the same position restore it instead of re-priming. Only at emit==0 (the block right after a reset).
+            if self.capture_pending && emit == 0 {
+                self.capture_primed();
             }
             let idx = emit % block;
             let nrm = self.ring_n[idx];

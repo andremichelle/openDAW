@@ -354,11 +354,14 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
         // `raw_start` jumps by loop_duration), or region entry (cycle_id still NaN). Otherwise the stream flows
         // across marker boundaries. Without the raw_start check a looped region reads straight past the source
         // end after the first cycle instead of wrapping — the loop goes silent.
-        let continues = !block.flags.discontinuous()
-            && !player.cycle_id().is_nan()
-            && (player.cycle_id() - cycle.raw_start).abs() < 1e-6;
-        if !continues {
+        let hard_reset = block.flags.discontinuous() || player.cycle_id().is_nan();
+        let loop_wrap = !hard_reset && (player.cycle_id() - cycle.raw_start).abs() >= 1e-6;
+        // A loop wrap re-primes to the SAME loop start from the same state, so restore the cached primed
+        // snapshot (a memcpy) instead of recomputing the multi-frame priming burst; only reset+re-prime on a
+        // real discontinuity or a cache miss (e.g. tempo/pitch changed). `arm_capture` snapshots the next prime.
+        if hard_reset || (loop_wrap && !player.try_restore(time_factor, pitch, resample, source_pos)) {
             player.reset_stream(source_pos);
+            player.arm_capture(time_factor, pitch, resample, source_pos);
         }
         player.set_cycle_id(cycle.raw_start);
         player.process_stream_stereo(left, right, &mut scratch_l[..count], &mut scratch_r[..count], time_factor, pitch, resample);
@@ -685,6 +688,12 @@ mod tests {
         std::eprintln!("bars 1-2 rms {bars12:.4}   bars 3-4 rms {bars34:.4}");
         assert!(bars12 > 0.05, "bars 1-2 audible");
         assert!(bars34 > 0.05, "bars 3-4 audible (loop tiled the 2-bar source): {bars34:.4}");
+        // The loop wrap restores the cached prime instead of re-priming; iteration 2 must reproduce iteration 1
+        // sample-for-sample (2-bar loop = 192000 output samples @120bpm/48k), proving restore == reset+prime.
+        let mut max_diff = 0.0f32;
+        for i in 10_000..180_000 { max_diff = max_diff.max((out[i] - out[i + 192_000]).abs()); }
+        std::eprintln!("iteration 1 vs 2 (restore) max abs diff {max_diff:.2e}");
+        assert!(max_diff < 1e-5, "cached-prime restore must reproduce the real prime: iterations differ by {max_diff:.2e}");
     }
 
     #[test]
