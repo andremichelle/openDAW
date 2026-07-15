@@ -1,12 +1,12 @@
 import {BoxGraph} from "@opendaw/lib-box"
-import {AudioPitchStretchBox, AudioTimeStretchBox, WarpMarkerBox} from "@opendaw/studio-boxes"
+import {AudioPitchStretchBox, AudioSignalsmithBox, AudioTimeStretchBox, WarpMarkerBox} from "@opendaw/studio-boxes"
 import {ppqn, seconds} from "@opendaw/lib-dsp"
 import {panic, UUID} from "@opendaw/lib-std"
 import {WarpMarkerTemplate} from "./WarpMarkerTemplate"
 
 export namespace AudioContentHelpers {
     export const addDefaultWarpMarkers = (boxGraph: BoxGraph,
-                                          playMode: AudioPitchStretchBox | AudioTimeStretchBox,
+                                          playMode: AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox,
                                           durationInPPQN: ppqn,
                                           durationInSeconds: seconds) => {
         if (durationInPPQN <= 0 || durationInSeconds <= 0) {

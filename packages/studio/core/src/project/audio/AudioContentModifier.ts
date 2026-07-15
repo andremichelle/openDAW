@@ -1,13 +1,15 @@
-import {EmptyExec, Exec, isDefined, isInstanceOf, isNotNull, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {EmptyExec, Exec, isDefined, isInstanceOf, isNotNull, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {BoxGraph} from "@opendaw/lib-box"
 import {EventCollection, ppqn, seconds, TimeBase} from "@opendaw/lib-dsp"
 import {
     AudioPitchStretchBox,
     AudioRegionBox,
+    AudioSignalsmithBox,
     AudioTimeStretchBox,
     TransientMarkerBox,
     WarpMarkerBox
 } from "@opendaw/studio-boxes"
-import {AudioContentBoxAdapter, AudioRegionBoxAdapter, WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioContentBoxAdapter, AudioPlayMode, AudioRegionBoxAdapter, WarpMarkerBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioContentHelpers} from "./AudioContentHelpers"
 import {Workers} from "../../Workers"
 import {Pointers} from "@opendaw/studio-enums"
@@ -25,11 +27,9 @@ export namespace AudioContentModifier {
             if (loopOffsetSeconds !== 0) {
                 adapter.box.waveformOffset.setValue(adapter.waveformOffset.getValue() + loopOffsetSeconds)
             }
+            const optPrev: Option<AudioPlayMode> = adapter.observableOptPlayMode.map(mode => mode)
             adapter.box.playMode.defer()
-            adapter.asPlayModeTimeStretch.ifSome(({box}) => {
-                if (box.pointerHub.filter(Pointers.AudioPlayMode).length === 0) {box.delete()}
-            })
-            adapter.asPlayModePitchStretch.ifSome(({box}) => {
+            optPrev.ifSome(({box}) => {
                 if (box.pointerHub.filter(Pointers.AudioPlayMode).length === 0) {box.delete()}
             })
             switchTimeBaseToSeconds(adapter, audibleDuration)
@@ -40,29 +40,24 @@ export namespace AudioContentModifier {
         const audioAdapters = adapters.filter(adapter => adapter.asPlayModePitchStretch.isEmpty())
         if (audioAdapters.length === 0) {return EmptyExec}
         return () => audioAdapters.forEach((adapter) => {
-            const optTimeStretch = adapter.asPlayModeTimeStretch
+            const optPrev: Option<AudioPlayMode> = adapter.observableOptPlayMode.map(mode => mode)
             const boxGraph = adapter.box.graph
             const pitchStretch = AudioPitchStretchBox.create(boxGraph, UUID.generate())
             adapter.box.playMode.refer(pitchStretch)
-            if (optTimeStretch.nonEmpty()) {
-                const timeStretch = optTimeStretch.unwrap()
-                const numPointers = timeStretch.box.pointerHub.filter(Pointers.AudioPlayMode).length
-                if (numPointers === 0) {
-                    timeStretch.warpMarkers.asArray()
-                        .forEach(({box: {owner}}) => owner.refer(pitchStretch.warpMarkers))
-                    timeStretch.box.delete()
-                } else {
-                    timeStretch.warpMarkers.asArray()
-                        .forEach(({box: source}) => WarpMarkerBox.create(boxGraph, UUID.generate(), box => {
-                            box.position.setValue(source.position.getValue())
-                            box.seconds.setValue(source.seconds.getValue())
-                            box.owner.refer(pitchStretch.warpMarkers)
-                        }))
-                }
-            } else {
-                const {ppqn, seconds} = sampleExtent(adapter)
-                AudioContentHelpers.addDefaultWarpMarkers(boxGraph, pitchStretch, ppqn, seconds)
-            }
+            adoptWarpMarkers(optPrev, pitchStretch, boxGraph, adapter)
+            switchTimeBaseToMusical(adapter)
+        })
+    }
+
+    export const toSignalsmith = async (adapters: ReadonlyArray<AudioContentBoxAdapter>): Promise<Exec> => {
+        const audioAdapters = adapters.filter(adapter => adapter.asPlayModeSignalsmith.isEmpty())
+        if (audioAdapters.length === 0) {return EmptyExec}
+        return () => audioAdapters.forEach((adapter) => {
+            const optPrev: Option<AudioPlayMode> = adapter.observableOptPlayMode.map(mode => mode)
+            const boxGraph = adapter.box.graph
+            const signalsmith = AudioSignalsmithBox.create(boxGraph, UUID.generate())
+            adapter.box.playMode.refer(signalsmith)
+            adoptWarpMarkers(optPrev, signalsmith, boxGraph, adapter)
             switchTimeBaseToMusical(adapter)
         })
     }
@@ -82,29 +77,11 @@ export namespace AudioContentModifier {
         }))
         handler.terminate()
         return () => tasks.forEach(({adapter, transients}) => {
-            const optPitchStretch = adapter.asPlayModePitchStretch
+            const optPrev: Option<AudioPlayMode> = adapter.observableOptPlayMode.map(mode => mode)
             const boxGraph = adapter.box.graph
             const timeStretch = AudioTimeStretchBox.create(boxGraph, UUID.generate())
             adapter.box.playMode.refer(timeStretch)
-            if (optPitchStretch.nonEmpty()) {
-                const pitchStretch = optPitchStretch.unwrap()
-                const numPointers = pitchStretch.box.pointerHub.filter(Pointers.AudioPlayMode).length
-                if (numPointers === 0) {
-                    pitchStretch.warpMarkers.asArray()
-                        .forEach(({box: {owner}}) => owner.refer(timeStretch.warpMarkers))
-                    pitchStretch.box.delete()
-                } else {
-                    pitchStretch.warpMarkers.asArray()
-                        .forEach(({box: source}) => WarpMarkerBox.create(boxGraph, UUID.generate(), box => {
-                            box.position.setValue(source.position.getValue())
-                            box.seconds.setValue(source.seconds.getValue())
-                            box.owner.refer(timeStretch.warpMarkers)
-                        }))
-                }
-            } else {
-                const {ppqn, seconds} = sampleExtent(adapter)
-                AudioContentHelpers.addDefaultWarpMarkers(boxGraph, timeStretch, ppqn, seconds)
-            }
+            adoptWarpMarkers(optPrev, timeStretch, boxGraph, adapter)
             if (isDefined(transients) && adapter.file.transients.length() === 0) {
                 const markersField = adapter.file.box.transientMarkers
                 transients.forEach(position => TransientMarkerBox.create(boxGraph, UUID.generate(), box => {
@@ -141,6 +118,33 @@ export namespace AudioContentModifier {
         }
         return {ppqn: adapter.duration, seconds: adapter.box.duration.getValue()}
     }
+
+    // Move the warp markers of the previous play-mode (if any) onto the new play-mode box, so switching between
+    // Pitch / Grain / Signalsmith preserves the user's warp edits; delete the old box if nothing else points at
+    // it (else clone the markers). With no previous stretch (was NoWarp), seed default markers instead.
+    const adoptWarpMarkers = (optPrev: Option<AudioPlayMode>,
+                              newBox: AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox,
+                              boxGraph: BoxGraph,
+                              adapter: AudioContentBoxAdapter): void => optPrev.match({
+        none: () => {
+            const {ppqn, seconds} = sampleExtent(adapter)
+            AudioContentHelpers.addDefaultWarpMarkers(boxGraph, newBox, ppqn, seconds)
+        },
+        some: from => {
+            const to = newBox.warpMarkers
+            const shared = from.box.pointerHub.filter(Pointers.AudioPlayMode).length > 0
+            if (shared) {
+                from.warpMarkers.asArray().forEach(({box: source}) => WarpMarkerBox.create(boxGraph, UUID.generate(), box => {
+                    box.position.setValue(source.position.getValue())
+                    box.seconds.setValue(source.seconds.getValue())
+                    box.owner.refer(to)
+                }))
+            } else {
+                from.warpMarkers.asArray().forEach(({box: {owner}}) => owner.refer(to))
+                from.box.delete()
+            }
+        }
+    })
 
     const switchTimeBaseToSeconds = ({box, timeBase}: AudioContentBoxAdapter, audibleDuration: seconds): void => {
         if (timeBase === TimeBase.Seconds) {return}

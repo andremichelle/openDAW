@@ -59,25 +59,6 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                     }))
             )
         }}>
-            <RadioGroup lifecycle={lifecycle}
-                        model={transientPlayModeEnumValue}
-                        elements={[
-                            {
-                                value: TransientPlayMode.Once,
-                                element: (<Icon symbol={IconSymbol.PlayOnce}/>),
-                                tooltip: "Play transient once"
-                            },
-                            {
-                                value: TransientPlayMode.Repeat,
-                                element: (<Icon symbol={IconSymbol.PlayRepeat}/>),
-                                tooltip: "Repeat transient"
-                            },
-                            {
-                                value: TransientPlayMode.Pingpong,
-                                element: (<Icon symbol={IconSymbol.PlayAlternate}/>),
-                                tooltip: "Alternate playback"
-                            }
-                        ]}/>
             <NumberInput lifecycle={lifecycle}
                          mapper={StringMapping.numeric({unit: "cents"})}
                          className="input"
@@ -85,6 +66,28 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                          step={1}
                          model={observableCents}/>
             <span>cents</span>
+            {/* The grain transient play-modes are deactivated for now (kept visible for layout). */}
+            <div className="playback-modes">
+                <RadioGroup lifecycle={lifecycle}
+                            model={transientPlayModeEnumValue}
+                            elements={[
+                                {
+                                    value: TransientPlayMode.Once,
+                                    element: (<Icon symbol={IconSymbol.PlayOnce}/>),
+                                    tooltip: "Play transient once"
+                                },
+                                {
+                                    value: TransientPlayMode.Repeat,
+                                    element: (<Icon symbol={IconSymbol.PlayRepeat}/>),
+                                    tooltip: "Repeat transient"
+                                },
+                                {
+                                    value: TransientPlayMode.Pingpong,
+                                    element: (<Icon symbol={IconSymbol.PlayAlternate}/>),
+                                    tooltip: "Alternate playback"
+                                }
+                            ]}/>
+            </div>
         </div>
     )
 }
