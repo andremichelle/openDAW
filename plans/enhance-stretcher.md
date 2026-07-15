@@ -1,6 +1,9 @@
 # Enhance the Time-Stretcher — detector-first update
 
-Status: **planned 2026-07-15, ready for implementation**. Supersedes the *status claims* of
+Status: **in progress (updated 2026-07-15)**. Done: **D** (#311/#312 fixes + both-engine regression tests),
+**A** (Transient Lab versioned, `judge import` + trusted-label mechanism), **E** (#114 editable transients +
+engine live-follow), **F** (this doc). Blocked on the human labeling gate: **B** (detector v2), **C** (production
+swap) — both wait on the user's labeling pass (§3 step 2). Supersedes the *status claims* of
 [`plans/stretch/README.md`](stretch/README.md) (stale: says "Phase 4 iterating"; reality below) and absorbs the
 still-valid parts of [`plans/wasm-audio/time-stretch-v2.md`](wasm-audio/time-stretch-v2.md). Companion issue plans:
 [`plans/issues/114-editable-transients.md`](issues/114-editable-transients.md) (in scope),
@@ -252,10 +255,17 @@ Follow `plans/issues/114-editable-transients.md` (which builds on the in-repo de
    - Coordinate conversion: keep `TransientMarkerUtils.secondsToUnits` (warp-based) — consistent with rendering.
    - Shared ownership: markers live on `AudioFileBox` → editing affects every region using the file. Surface via
      tooltip/hint; per-region overrides are OUT of scope.
-4. **Engine already follows live edits**: `tracks.rs` subscribes region + play-mode + markers (the Signalsmith
-   session generalized this — verify transient-marker boxes are covered by the same subscription pattern as warp
-   markers; if not, extend `build_audio_region` the same way).
-5. Tests: adapter-level (add/move/delete updates the sorted engine set), plus a manual studio checklist.
+4. **Engine live-follow — VERIFIED + EXTENDED**: `tracks.rs` subscribed the region + play-mode + *warp* markers,
+   but NOT the source-file transient markers, so an edit did nothing until reload. `build_audio_region` now gives
+   a time-stretch region a per-transient drag monitor + a transient-hub add/remove rebuild, mirroring the warp
+   block (`transient_subs`/`transient_hub_sub`). Only time-stretch regions subscribe; a native/pitch/Signalsmith
+   region on the same file does not.
+5. Tests: engine regression `a_transient_marker_drag_live_updates_a_time_stretch_region` (a drag re-reads
+   `region.transients` live). Studio side typechecks; interactive drag/add/delete needs a manual pass in the app.
+
+**Delivered** (commit `bef368d0`): `TransientMarkerBoxAdapter` implements `Selectable`;
+`TransientMarkerUtils.unitsToSeconds`; `TransientMarkerEditing.install` (seconds-domain, 50 ms clamp, no anchors)
+wired into `TransientMarkerEditor.tsx` with `editing.subscribe` repaint; the `tracks.rs` live-follow + test.
 
 ## 8. Workstream F — docs + hygiene
 
@@ -314,7 +324,9 @@ highest-certainty win; do it first to bank it).
 ## 12. Open items
 
 - `judge import` naming/UX — trivial, implementer's choice.
-- Whether #114 wants a "Re-detect transients" action (§5.3) — decide during E.
+- Whether #114 wants a "Re-detect transients" action (§5.3) — **deferred**: it belongs with Workstream C
+  (the production detector swap), where re-running detection is the natural trigger. Left out of E to keep the
+  editing feature independent of the blocked detector work.
 
 ## 13. Notes for the implementing session
 

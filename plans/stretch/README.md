@@ -1,8 +1,10 @@
 # Time-Stretch v2 — adaptive playback with a self-judging harness
 
-Status: **Phases 0–3 gates passed; Phase 4 iterating** (see `crates/stretch`, `crates/stretch-lab`;
-run `cargo run -p stretch-lab --release --bin judge`). Supersedes the sketch in
-[`plans/wasm-audio/time-stretch-v2.md`](../wasm-audio/time-stretch-v2.md).
+Status: **SUPERSEDED by [`plans/enhance-stretcher.md`](../enhance-stretcher.md)** (2026-07-15). The adaptive
+granular `Stretcher` this doc describes was built and then **reverted** (`9770d9d9`); Signalsmith shipped
+separately as its own play-mode. The current direction is *detector-first* (better transient positions through
+the unchanged pipe), not adaptive playback — see the superseding plan. The harness (`crates/stretch-lab`, the
+`judge` loop) and the frozen baseline remain valid and in use; the "Phase 4 iterating" claim below is stale.
 
 The goal: replace the audio-region time-stretch with a system that sounds great on *different input
 styles* — drums stay punchy, pads stop graining — and prove every step with numbers, not opinions.
