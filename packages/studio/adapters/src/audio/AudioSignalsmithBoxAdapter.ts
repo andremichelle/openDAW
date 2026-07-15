@@ -49,6 +49,10 @@ export class AudioSignalsmithBoxAdapter implements BoxAdapter {
     get transpose(): number {return this.#box.transpose.getValue()}
     set transpose(value: number) {this.#box.transpose.setValue(value)}
 
+    // The pitch shift expressed in cents (100 cents = 1 semitone), so the editor's cents input can drive it.
+    get cents(): number {return this.#box.transpose.getValue() * 100.0}
+    set cents(value: number) {this.#box.transpose.setValue(value / 100.0)}
+
     clone(): AudioSignalsmithBox {
         const signalsmithBox = AudioSignalsmithBox.create(this.#box.graph, UUID.generate())
         signalsmithBox.transpose.setValue(this.#box.transpose.getValue())
