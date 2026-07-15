@@ -642,6 +642,27 @@ mod tests {
     }
 
     #[test]
+    fn two_touching_regions_tile_the_seam_gap_free_and_smooth() {
+        // The Rust twin of TS issue #311: two regions that MEET at a mid-block pulse boundary, both reading the
+        // same constant source. Endpoint flooring (`sample_of(end) == sample_of(start)`) tiles their sample
+        // ranges with no dropped sample; the region-end declick keeps the seam smooth (no hard jump). A dropped
+        // sample would leave a 0 amid non-zero output -> a large delta; a total gap would silence a half.
+        let source = vec![1.0f32; 200_000];
+        let full = Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 480.0, s0: 0, s1: 128, bpm: 120.0};
+        let mut a = region(0.0, 0.0, 0.0); a.position = 0.0; a.duration = 240.0; a.loop_duration = 240.0; // ends at sample 64
+        let mut b = region(0.0, 0.0, 0.0); b.position = 240.0; b.duration = 240.0; b.loop_duration = 240.0; b.waveform_offset = 1.0; // starts at sample 64, mid-file
+        let mut output = AudioBuffer::new();
+        render_region(&mut output, &a, &source, &source, 48_000.0, full.p0, full.p1, &full, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        render_region(&mut output, &b, &source, &source, 48_000.0, full.p0, full.p1, &full, 48_000.0, &TempoMap::fixed(120.0), &mut NativeCursor::new());
+        let rms = |lo: usize, hi: usize| -> f32 { (output.left[lo..hi].iter().map(|v| v*v).sum::<f32>() / (hi-lo) as f32).sqrt() };
+        assert!(rms(4, 40) > 0.5, "region A plays its half"); // away from the end declick
+        assert!(rms(88, 124) > 0.5, "region B plays its half (no total gap)"); // away from B's start declick
+        let mut max_delta = 0.0f32;
+        for i in 1..128 { max_delta = max_delta.max((output.left[i] - output.left[i-1]).abs()); }
+        assert!(max_delta < 0.1, "no hard seam discontinuity / dropped sample: max delta {max_delta}");
+    }
+
+    #[test]
     fn mid_file_start_reads_the_correct_offset_no_pop() {
         // Start playback at pulse 240 (0.125 s at 120 bpm) -> source frame 0.125 * 48000 = 6000. The first
         // output sample must be source[6000], not source[0] (the pop was reading the wrong frame).
