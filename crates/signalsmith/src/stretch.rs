@@ -301,9 +301,25 @@ impl SignalsmithStretch {
             while self.s2_synth <= emit as f64 + half {
                 let analysis_hop = interval / time_factor.max(1e-6);
                 let center = libm::round(self.s2_src) as isize;
-                self.analyse_resampled(left, center, resample);
+                // ONE complex FFT for BOTH channels: pack left into the real part and right into the imaginary
+                // part of the windowed+resampled frame, transform once, then unpack the two real-input spectra
+                // (the classic two-reals-for-one-FFT trick) — halves the analysis FFT cost.
+                let half_b = block as isize / 2;
+                for i in 0..block {
+                    let pos = (center - half_b + i as isize) as f64 * resample;
+                    self.re[i] = resample_read(left, pos) * self.window[i];
+                    self.im[i] = resample_read(right, pos) * self.window[i];
+                }
+                self.fft.forward(&mut self.re, &mut self.im);
+                for b in 0..self.bands {
+                    let nb = if b == 0 { 0 } else { block - b };
+                    self.output[b] = Cplx { re: (self.re[b] + self.re[nb]) * 0.5, im: (self.im[b] - self.im[nb]) * 0.5 };
+                }
                 for b in 0..self.bands { self.in_l[b] = if r == 1.0 { self.output[b] } else { self.interp_spectrum(0, b as f32 / r) }; }
-                self.analyse_resampled(right, center, resample);
+                for b in 0..self.bands {
+                    let nb = if b == 0 { 0 } else { block - b };
+                    self.output[b] = Cplx { re: (self.im[b] + self.im[nb]) * 0.5, im: (self.re[nb] - self.re[b]) * 0.5 };
+                }
                 for b in 0..self.bands { self.in_r[b] = if r == 1.0 { self.output[b] } else { self.interp_spectrum(0, b as f32 / r) }; }
                 for b in 0..self.bands {
                     let al = self.in_l[b]; let ar = self.in_r[b];
@@ -325,21 +341,25 @@ impl SignalsmithStretch {
                 self.s2_started = true;
                 self.build_locked_output_stereo();
                 let start = self.s2_synth - half;
-                for b in 0..self.bands { self.re[b]=self.in_l[b].re; self.im[b]=self.in_l[b].im; }
-                self.re[self.bands]=0.0; self.im[self.bands]=0.0;
-                for b in 1..self.bands { self.re[block-b]=self.re[b]; self.im[block-b]=-self.im[b]; }
-                self.fft.inverse(&mut self.re, &mut self.im);
-                for i in 0..block {
-                    let pos = start + i as f64;
-                    if pos >= 0.0 { let idx=(pos as usize)%block; self.ring_l[idx]+=self.re[i]*self.window[i]; self.ring_n[idx]+=self.window[i]*self.window[i]; }
+                // ONE inverse FFT for BOTH channels: pack the output spectra as Z = left + j*right; the IFFT of
+                // the full hermitian Z yields Re = left time-signal, Im = right (the inverse of the trick above).
+                for b in 0..self.bands {
+                    self.re[b] = self.in_l[b].re - self.in_r[b].im;
+                    self.im[b] = self.in_l[b].im + self.in_r[b].re;
                 }
-                for b in 0..self.bands { self.re[b]=self.in_r[b].re; self.im[b]=self.in_r[b].im; }
-                self.re[self.bands]=0.0; self.im[self.bands]=0.0;
-                for b in 1..self.bands { self.re[block-b]=self.re[b]; self.im[block-b]=-self.im[b]; }
+                for b in 1..self.bands - 1 {
+                    self.re[block - b] = self.in_l[b].re + self.in_r[b].im;
+                    self.im[block - b] = self.in_r[b].re - self.in_l[b].im;
+                }
                 self.fft.inverse(&mut self.re, &mut self.im);
                 for i in 0..block {
                     let pos = start + i as f64;
-                    if pos >= 0.0 { let idx=(pos as usize)%block; self.ring_r[idx]+=self.re[i]*self.window[i]; }
+                    if pos >= 0.0 {
+                        let idx = (pos as usize) % block;
+                        self.ring_l[idx] += self.re[i] * self.window[i];
+                        self.ring_r[idx] += self.im[i] * self.window[i];
+                        self.ring_n[idx] += self.window[i] * self.window[i];
+                    }
                 }
                 self.s2_synth += interval;
                 self.s2_src += analysis_hop;
@@ -361,8 +381,11 @@ impl SignalsmithStretch {
     fn build_locked_output_stereo(&mut self) {
         let bands = self.bands;
         self.peaks_s.clear();
-        let alpha = 0.15f32; let mut sm = 0.0f32;
-        for b in 0..bands { let cm=self.mag_l[b]+self.mag_r[b]; sm += alpha*(cm-sm); self.frame[b]=sm; }
+        let alpha = 0.15f32; let mut sm = 0.0f32; let mut max_cm = 0.0f32;
+        for b in 0..bands { let cm=self.mag_l[b]+self.mag_r[b]; if cm > max_cm { max_cm = cm; } sm += alpha*(cm-sm); self.frame[b]=sm; }
+        // Below this the bin is inaudible, so its output is ~0 regardless of phase — skip the cos/sin (the hot
+        // transcendentals). Relative + tiny, so it only ever drops true silence (most bins in typical spectra).
+        let gate = max_cm * 1e-4;
         sm = 0.0;
         for b in (0..bands).rev() { let cm=self.mag_l[b]+self.mag_r[b]; sm += alpha*(cm-sm); self.frame[b]=0.5*(self.frame[b]+sm); }
         let w=3usize;
@@ -380,6 +403,10 @@ impl SignalsmithStretch {
                 while pi+1 < self.peaks_s.len() && (self.peaks_s[pi+1] as isize - b as isize).abs() < (self.peaks_s[pi] as isize - b as isize).abs() { pi+=1; }
                 self.peaks_s[pi]
             } else { b };
+            if self.mag_l[b] + self.mag_r[b] <= gate {
+                self.in_l[b] = Cplx::default(); self.in_r[b] = Cplx::default();
+                continue;
+            }
             let dom_left = self.mag_l[b] >= self.mag_r[b];
             let (sphase_dom_p, ana_dom_p, ana_dom_b, ana_oth_b) = if dom_left {
                 (self.sphase[p], self.ana_l[p], self.ana_l[b], self.ana_r[b])
@@ -392,27 +419,6 @@ impl SignalsmithStretch {
             self.in_l[b] = Cplx{re:self.mag_l[b]*libm::cosf(lp), im:self.mag_l[b]*libm::sinf(lp)};
             self.in_r[b] = Cplx{re:self.mag_r[b]*libm::cosf(rp), im:self.mag_r[b]*libm::sinf(rp)};
         }
-    }
-
-    /// Windowed FFT of `input` RESAMPLED to the engine rate, centered at engine-rate position `center`.
-    /// `resample` = source_rate / engine_rate (actual source samples per engine-rate sample): each engine-rate
-    /// window sample is linearly interpolated from the source, so the phase vocoder always runs at the engine
-    /// rate and the sample-rate conversion never touches the spectral pitch. `resample == 1.0` is a bit-exact
-    /// integer read. Result lands in `self.output[0..bands]`.
-    fn analyse_resampled(&mut self, input: &[f32], center: isize, resample: f64) {
-        let half = self.block as isize / 2;
-        let n = input.len();
-        for i in 0..self.block {
-            let pos = (center - half + i as isize) as f64 * resample;
-            let s = if pos >= 0.0 {
-                let i0 = pos as usize; let f = (pos - i0 as f64) as f32;
-                if i0 + 1 < n { input[i0]*(1.0 - f) + input[i0+1]*f } else if i0 < n { input[i0] } else { 0.0 }
-            } else { 0.0 };
-            self.re[i] = s * self.window[i];
-            self.im[i] = 0.0;
-        }
-        self.fft.forward(&mut self.re, &mut self.im);
-        for b in 0..self.bands { self.output[b] = Cplx { re: self.re[b], im: self.im[b] }; }
     }
 
     /// Windowed FFT of `input` centered at `center`, into this channel's `input` bands.
@@ -455,6 +461,18 @@ impl SignalsmithStretch {
             }
         }
     }
+}
+
+/// Linearly-interpolated read of `input` at fractional sample `pos` (out of range -> 0). `pos = engine_index *
+/// resample` converts the engine-rate window to the source rate, so the phase vocoder runs at the engine rate
+/// and the sample-rate conversion never touches the spectral pitch.
+#[inline]
+fn resample_read(input: &[f32], pos: f64) -> f32 {
+    if pos < 0.0 { return 0.0; }
+    let i0 = pos as usize;
+    let f = (pos - i0 as f64) as f32;
+    let n = input.len();
+    if i0 + 1 < n { input[i0] * (1.0 - f) + input[i0 + 1] * f } else if i0 < n { input[i0] } else { 0.0 }
 }
 
 fn kaiser_ola_window(block: usize, interval: usize) -> Vec<f32> {
