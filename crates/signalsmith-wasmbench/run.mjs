@@ -1,20 +1,16 @@
 import fs from 'fs';
-const path = process.argv[2];
-const buf = fs.readFileSync(path);
+const buf = fs.readFileSync(process.argv[2]);
 const { instance } = await WebAssembly.instantiate(buf, {});
-const { bench, reset_arena } = instance.exports;
-function run(blocks, res) {
-  reset_arena();
-  bench(64, res); // warmup
-  reset_arena();
-  const t0 = process.hrtime.bigint();
-  const r = bench(blocks, res);
-  const t1 = process.hrtime.bigint();
-  const ms = Number(t1 - t0) / 1e6;
-  const audio = blocks * 128 / 48000;
-  const pct = ms / 1000 / audio * 100;
-  console.log(`  resample ${(res/1000).toFixed(3)}: ${ms.toFixed(0)}ms / ${audio.toFixed(1)}s -> ${(audio/(ms/1000)).toFixed(1)}x realtime = ${pct.toFixed(1)}% of one core`);
+const { setup, step } = instance.exports;
+const BLOCKS = 4000, budget = 128/48000*1000; // 2.667ms callback budget
+for (const res of [1000, 919]) {
+  setup(BLOCKS, res);
+  for (let i=0;i<200;i++) step(); // warm
+  const t = new Float64Array(BLOCKS);
+  for (let i=0;i<BLOCKS;i++){ const a=process.hrtime.bigint(); step(); t[i]=Number(process.hrtime.bigint()-a)/1e6; }
+  const s=[...t].sort((a,b)=>a-b);
+  const mean=t.reduce((a,b)=>a+b,0)/BLOCKS;
+  const pk=s[BLOCKS-1], p99=s[Math.floor(BLOCKS*0.99)], p50=s[Math.floor(BLOCKS*0.5)];
+  const heavy = t.filter(x=>x>budget*0.2).length;
+  console.log(`resample ${(res/1000).toFixed(3)}: mean ${(mean/budget*100).toFixed(1)}%  median ${(p50/budget*100).toFixed(1)}%  p99 ${(p99/budget*100).toFixed(1)}%  PEAK ${(pk/budget*100).toFixed(1)}%  (${heavy} of ${BLOCKS} blocks >20% budget)`);
 }
-console.log(process.argv[3] || '');
-run(3750, 1000);  // native rate
-run(3750, 919);   // 44.1k -> 48k (the drum case)

@@ -17,3 +17,11 @@ strip = true
 
 [profile.release.package.signalsmith]
 opt-level = 3
+[profile.release.package.engine]
+opt-level = 3
+[profile.release.package.dsp]
+opt-level = 3
+[profile.release.package.math]
+opt-level = 3
+[profile.release.package.processors]
+opt-level = 3
