@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.1.0](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.156...@opendaw/app-studio@0.1.0) (2026-07-15)
+
+### Features
+
+- **stats:** add a raw "Daily Visitors" graph alongside daily-unique ([ead34e0](https://github.com/andremichelle/openDAW/commit/ead34e0cad283224b990bd2e84c9b096b4745195))
+- **studio:** cents input drives Signalsmith transpose ([a496cdb](https://github.com/andremichelle/openDAW/commit/a496cdb37e56eccef2931ea9bfd50ce1e86d26f5))
+- **studio:** editable transient markers ([#114](https://github.com/andremichelle/openDAW/issues/114)) ([bef368d](https://github.com/andremichelle/openDAW/commit/bef368d0b53b0f33bba9299315d570222aa4b35f))
+- **studio:** Signalsmith play-mode in the audio region/clip editor ([ce7d211](https://github.com/andremichelle/openDAW/commit/ce7d211653db3f0478b80795fd2e8d7c5a4ded80))
+- **studio:** use the Signalsmith icon for its play-mode in the audio editor ([b433de0](https://github.com/andremichelle/openDAW/commit/b433de0de59c301e7348acc38d1a3b96664485e8))
+
 ## [0.0.156](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.155...@opendaw/app-studio@0.0.156) (2026-07-14)
 
 ### Bug Fixes

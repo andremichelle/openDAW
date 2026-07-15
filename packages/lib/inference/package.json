@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/lib-inference",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,9 +21,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@opendaw/lib-fusion": "^0.0.97",
-    "@opendaw/lib-runtime": "^0.0.82",
-    "@opendaw/lib-std": "^0.0.81",
+    "@opendaw/lib-fusion": "^0.0.98",
+    "@opendaw/lib-runtime": "^0.0.83",
+    "@opendaw/lib-std": "^0.0.82",
     "onnxruntime-web": "^1.25.1"
   },
   "devDependencies": {

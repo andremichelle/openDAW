@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/lib-jsx",
-  "version": "0.0.86",
+  "version": "0.0.87",
   "license": "LGPL-3.0-or-later",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -23,8 +23,8 @@
     "test": "echo \"No tests to run\""
   },
   "dependencies": {
-    "@opendaw/lib-dom": "^0.0.86",
-    "@opendaw/lib-std": "^0.0.81"
+    "@opendaw/lib-dom": "^0.0.87",
+    "@opendaw/lib-std": "^0.0.82"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",

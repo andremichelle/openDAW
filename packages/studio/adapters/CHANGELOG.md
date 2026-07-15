@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.1.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.0.120...@opendaw/studio-adapters@0.1.0) (2026-07-15)
+
+### Features
+
+- **studio:** cents input drives Signalsmith transpose ([a496cdb](https://github.com/andremichelle/openDAW/commit/a496cdb37e56eccef2931ea9bfd50ce1e86d26f5))
+- **studio:** editable transient markers ([#114](https://github.com/andremichelle/openDAW/issues/114)) ([bef368d](https://github.com/andremichelle/openDAW/commit/bef368d0b53b0f33bba9299315d570222aa4b35f))
+- **studio:** Signalsmith play-mode in the audio region/clip editor ([ce7d211](https://github.com/andremichelle/openDAW/commit/ce7d211653db3f0478b80795fd2e8d7c5a4ded80))
+
 ## [0.0.120](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.0.119...@opendaw/studio-adapters@0.0.120) (2026-07-14)
 
 **Note:** Version bump only for package @opendaw/studio-adapters

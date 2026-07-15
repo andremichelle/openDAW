@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/transient",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
