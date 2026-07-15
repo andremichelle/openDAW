@@ -128,6 +128,16 @@ export class ErrorHandler {
             event.preventDefault()
             return true
         }
+        // Resource/media LOAD failures (an <audio>/<video>/<img>/<script>/<link> whose source could not be
+        // fetched or decoded) dispatch a plain "error" Event with the failing element as target — not an
+        // ErrorEvent. They are not app crashes (e.g. a browser lacking the codec: "no supported source"); the
+        // element's own onerror owns any UX. Ignore them so they do not fall through to the fatal path (#1022).
+        if (event.type === "error" && !(event instanceof ErrorEvent) && event.target instanceof HTMLElement) {
+            const detail = event.target instanceof HTMLMediaElement ? event.target.error?.message : undefined
+            console.warn("Resource load error ignored:", detail ?? event.target.nodeName)
+            event.preventDefault()
+            return true
+        }
         if (!(event instanceof PromiseRejectionEvent)) {return false}
         const {reason} = event
         const reasonMessage = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : undefined
