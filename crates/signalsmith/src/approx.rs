@@ -35,6 +35,18 @@ pub fn sin_cos(x: f32) -> (f32, f32) {
     (sin_a, cos_sign * cos_a)
 }
 
+/// sqrt via fast inverse-sqrt + two Newton steps (`x * rsqrt(x)`). Pure arithmetic + bitcast (vectorizable),
+/// ~1e-5 relative error — plenty for a magnitude. Zero/negative -> 0.
+#[inline]
+pub fn sqrt(x: f32) -> f32 {
+    let i = 0x5f37_5a86u32.wrapping_sub(x.to_bits() >> 1);
+    let mut y = f32::from_bits(i);
+    y = y * (1.5 - 0.5 * x * y * y);
+    y = y * (1.5 - 0.5 * x * y * y);
+    let r = x * y;
+    if x > 0.0 { r } else { 0.0 }
+}
+
 /// atan2(y, x), branch-light (the comparisons lower to `select`). Accurate to ~3e-5.
 #[inline]
 pub fn atan2(y: f32, x: f32) -> f32 {
@@ -68,6 +80,20 @@ mod tests {
         }
         println!("sin_cos max abs err {max:.2e}");
         assert!(max < 5e-5, "sin_cos error {max:.2e}");
+    }
+
+    #[test]
+    fn sqrt_matches_libm() {
+        let mut max = 0.0f32;
+        let mut x = 0.0f32;
+        while x < 100.0 {
+            let a = sqrt(x); let b = libm::sqrtf(x);
+            if b > 1e-6 { max = max.max(((a - b) / b).abs()); }
+            x += 0.001;
+        }
+        println!("sqrt max rel err {max:.2e}");
+        assert!(max < 1e-4, "sqrt error {max:.2e}");
+        assert_eq!(sqrt(0.0), 0.0);
     }
 
     #[test]

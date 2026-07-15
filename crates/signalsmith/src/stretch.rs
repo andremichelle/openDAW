@@ -326,7 +326,7 @@ impl SignalsmithStretch {
                 }
                 for b in 0..self.bands {
                     let al = self.in_l[b]; let ar = self.in_r[b];
-                    let ml = libm::sqrtf(al.norm()); let mr = libm::sqrtf(ar.norm());
+                    let ml = approx::sqrt(al.norm()); let mr = approx::sqrt(ar.norm());
                     let pl = approx::atan2(al.im, al.re); let pr = approx::atan2(ar.im, ar.re);
                     self.mag_l[b]=ml; self.mag_r[b]=mr; self.ana_l[b]=pl; self.ana_r[b]=pr;
                     if !self.s2_started {
