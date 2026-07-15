@@ -816,6 +816,69 @@ fn a_transient_marker_drag_live_updates_a_time_stretch_region() {
 }
 
 #[test]
+fn switching_play_mode_live_rebinds_so_new_box_field_edits_take_effect() {
+    // Bug: after switching a region TO time-stretch, changing Once/Repeat/Pingpong (or transpose/rate) did nothing
+    // until save+reopen — `playmode_sub` was bound once to the play-mode target present AT BUILD (here: none, the
+    // region starts native) and never re-resolved when the pointer was repointed to the new box. The pointer
+    // monitor must queue a region rebuild on repoint so the new box's subsequent field edits are seen live.
+    use super::tracks::{build_audio_region, unsubscribe_audio_region, AudioTrackContent, AUDIO_REGION_PLAYMODE_KEY};
+    use crate::time_stretch::TransientPlayMode;
+    use value::region::RegionCollection;
+    const REGION: Uuid = [90u8; 16];
+    const FILE: Uuid = [91u8; 16];
+    const STRETCH: Uuid = [92u8; 16];
+    const W0: Uuid = [93u8; 16];
+    const W1: Uuid = [94u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(FILE, "AudioFileBox", &[(10, FieldValue::Hook)]),
+        // A time-stretch play-mode box exists (mode 1 = Repeat) but the region starts NATIVE (playMode = None).
+        graph_box(STRETCH, "AudioTimeStretchBox", &[(1, FieldValue::Hook), (2, FieldValue::Int32(1)), (3, FieldValue::Float32(1.0))]),
+        graph_box(W0, "WarpMarkerBox", &[(1, FieldValue::Pointer(Some(Address::of(STRETCH, vec![1])))), (2, FieldValue::Int32(0)), (3, FieldValue::Float32(0.0))]),
+        graph_box(W1, "WarpMarkerBox", &[(1, FieldValue::Pointer(Some(Address::of(STRETCH, vec![1])))), (2, FieldValue::Int32(3840)), (3, FieldValue::Float32(1.0))]),
+        graph_box(REGION, "AudioRegionBox", &[
+            (2, FieldValue::Pointer(Some(Address::box_of(FILE)))),
+            (AUDIO_REGION_PLAYMODE_KEY, FieldValue::Pointer(None)),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Float32(3840.0))
+        ])
+    ]);
+    let content: super::tracks::SharedAudioTrack = Rc::new(RefCell::new(AudioTrackContent {
+        uuid: [99u8; 16], regions: RegionCollection::new(), clips: Vec::new()
+    }));
+    let tempo_map = Rc::new(RefCell::new(TempoMap::fixed(120.0)));
+    let mark = super::DirtyMark {units: Rc::new(RefCell::new(Vec::new())), unit: [99u8; 16]};
+    let region_changes = Rc::new(RefCell::new(super::Members::default()));
+    let binding = build_audio_region(&mut engine.graph, &content, REGION, &tempo_map, &mark, &region_changes)
+        .expect("native region builds");
+    assert!(content.borrow().regions.iter().next().expect("one region").time_stretch.is_none(), "starts native");
+    // SWITCH to time-stretch: repoint the region's play-mode pointer to the new box.
+    engine.graph.transaction(&[Update::Pointer {
+        address: Address::of(REGION, vec![AUDIO_REGION_PLAYMODE_KEY]),
+        old: None, new: Some(Address::box_of(STRETCH))
+    }], &engine.registry).expect("switch to time-stretch");
+    assert!(region_changes.borrow().removed.contains(&REGION) && region_changes.borrow().added.contains(&REGION),
+        "repointing the play-mode pointer queues a full region rebuild (else the new box's subs never bind)");
+    // Play out the queued rebuild the way reconcile_audio_regions would: drop the stale binding, rebuild fresh.
+    content.borrow_mut().regions.retain(|region| region.region_uuid != REGION);
+    unsubscribe_audio_region(&mut engine.graph, binding);
+    region_changes.borrow_mut().removed.clear();
+    region_changes.borrow_mut().added.clear();
+    let binding = build_audio_region(&mut engine.graph, &content, REGION, &tempo_map, &mark, &region_changes)
+        .expect("rebuilt time-stretch region");
+    assert_eq!(content.borrow().regions.iter().next().expect("one region").time_stretch.as_ref()
+        .expect("now time-stretch").transient_play_mode, TransientPlayMode::Repeat, "rebuilt region reads the new box");
+    // THE FIX: editing Once/Repeat/Pingpong on the now-bound box must re-read the region live (Repeat -> Once).
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(STRETCH, vec![2]),
+        old: FieldValue::Int32(1), new: FieldValue::Int32(0)
+    }], &engine.registry).expect("change transient play-mode");
+    assert_eq!(content.borrow().regions.iter().next().expect("one region").time_stretch.as_ref()
+        .expect("still time-stretch").transient_play_mode, TransientPlayMode::Once,
+        "a transient-play-mode edit updates the region live after a live play-mode switch");
+    unsubscribe_audio_region(&mut engine.graph, binding);
+}
+
+#[test]
 fn read_audio_region_converts_seconds_time_base_to_ppqn() {
     // A no-stretch (NoWarp) region uses the SECONDS time-base: duration / loop-duration are in seconds and
     // MUST be converted to ppqn, else the region reads as a few pulses and plays nothing (the bug).

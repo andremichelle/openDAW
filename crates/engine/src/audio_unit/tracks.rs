@@ -207,7 +207,13 @@ pub(crate) struct AudioRegionBinding {
     // a marker DRAG (position edit); `transient_hub_sub` rebuilds this region when a transient is ADDED / REMOVED
     // (so the fresh set gets its own drag monitors). Empty / `None` unless the region is a time-stretch region.
     pub(crate) transient_subs: Vec<SubscriptionId>,
-    pub(crate) transient_hub_sub: Option<SubscriptionId>
+    pub(crate) transient_hub_sub: Option<SubscriptionId>,
+    // Every sub above (playmode / warp / transient) is resolved ONCE from the region's play-mode pointer at build.
+    // Switching the region's play-mode REPOINTS that pointer to a DIFFERENT box (e.g. native -> a new
+    // AudioTimeStretchBox), which none of them re-resolve — so edits on the new box (transient-play-mode, transpose,
+    // rate, its warp/transient markers) went unseen until a save+reload rebuilt from scratch. This monitor watches
+    // the pointer itself and queues a full region rebuild on repoint, exactly like the hub observers above.
+    pub(crate) playmode_pointer_sub: SubscriptionId
 }
 
 /// An AUDIO track binding: its sorted `AudioRegion` collection (shared with the player), its `regions`
@@ -840,10 +846,11 @@ pub(crate) fn reconcile_audio_regions(graph: &mut BoxGraph, track: &mut AudioTra
     }
 }
 
-/// Drop every subscription an audio region binding holds (edit + play-mode + warp markers + warp hub +
-/// source-file transient markers + transient hub).
+/// Drop every subscription an audio region binding holds (edit + play-mode pointer + play-mode box + warp markers
+/// + warp hub + source-file transient markers + transient hub).
 pub(crate) fn unsubscribe_audio_region(graph: &mut BoxGraph, region: AudioRegionBinding) {
     graph.unsubscribe(region.edit_sub);
+    graph.unsubscribe(region.playmode_pointer_sub);
     if let Some(sub) = region.playmode_sub { graph.unsubscribe(sub); }
     if let Some(sub) = region.warp_hub_sub { graph.unsubscribe(sub); }
     for sub in region.marker_subs { graph.unsubscribe(sub); }
@@ -919,8 +926,22 @@ pub(crate) fn build_audio_region(graph: &mut BoxGraph, content: &SharedAudioTrac
         primed.set(true);
         transient_hub_sub = Some(sub);
     }
+    // Switching the region's play-mode REPOINTS its play-mode pointer to a different box; every subscription above
+    // was resolved from the OLD target and would keep watching it. Watch the pointer FIELD itself and queue a full
+    // rebuild on repoint, so playmode_sub + warp + transient subs all re-resolve against the new box. `This` fires
+    // only on the pointer edit, not on the region's other field edits, so a gain/fade tweak never forces a rebuild;
+    // `subscribe_vertex` never catch-up fires, so the rebuild's fresh monitor cannot self-trigger a loop.
+    let rebuild_changes = region_changes.clone();
+    let rebuild_mark = mark.clone();
+    let playmode_pointer_sub = graph.subscribe_vertex(Propagation::This,
+        Address::of(region_uuid, vec![AUDIO_REGION_PLAYMODE_KEY]), Box::new(move |_graph, _update| {
+            let mut members = rebuild_changes.borrow_mut();
+            members.removed.push(region_uuid);
+            members.added.push(region_uuid);
+            rebuild_mark.mark();
+        }));
     Some(AudioRegionBinding {region_uuid, edit_sub, playmode_sub, marker_subs, warp_hub_sub,
-        transient_subs, transient_hub_sub})
+        transient_subs, transient_hub_sub, playmode_pointer_sub})
 }
 
 /// A re-read observer: when a watched box changes, re-read THIS region and re-sort the track's collection. Built
