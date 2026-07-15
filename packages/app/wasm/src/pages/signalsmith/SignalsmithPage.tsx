@@ -27,6 +27,7 @@ type Loop = {
 }
 
 const LOOPS: ReadonlyArray<Loop> = [
+    {key: "dnb", name: "DnB 175", file: "/loops/dnb-175.wav", uuid: "ae2360d9-3829-47d5-8c4d-4ba67c37451f", bpm: 175, bars: 4, seconds: 5.4857},
     {key: "endeavour", name: "Dark dub drums", file: "/loops/endeavour-140.wav", uuid: "5c0a7e10-0000-4000-8000-000000000009", bpm: 140, bars: 2, seconds: 3.4286},
     {key: "chipshop", name: "ChipShop combo", file: "/loops/chipshop-140.wav", uuid: "5c0a7e10-0000-4000-8000-00000000000a", bpm: 140, bars: 4, seconds: 6.8572},
     {key: "drums", name: "Techno drums", file: "/loops/techno-128.wav", uuid: "5c0a7e10-0000-4000-8000-000000000001", bpm: 128, bars: 2, seconds: 3.7500},
@@ -39,7 +40,7 @@ const LOOPS: ReadonlyArray<Loop> = [
     {key: "drone", name: "Alien drone", file: "/loops/drone-135.wav", uuid: "5c0a7e10-0000-4000-8000-000000000006", bpm: 135, bars: 8, seconds: 14.2222}
 ]
 
-const START_BPM = 140
+const START_BPM = 175
 
 export const SignalsmithPage: PageFactory<Env> = ({lifecycle}) => {
     const status: HTMLParagraphElement = <p>Preparing loops…</p>
