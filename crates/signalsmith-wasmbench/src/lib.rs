@@ -37,6 +37,9 @@ pub extern "C" fn setup(blocks: u32, resample_x1000: u32) {
     unsafe { B = Some(Box::new(Bench { port, left, right, ol: vec![0.0;128], or: vec![0.0;128], resample: resample_x1000 as f64/1000.0, acc: 0.0 })); }
 }
 
+#[no_mangle]
+pub extern "C" fn reset() { unsafe { B.as_mut().unwrap().port.reset_stream(2048.0); } }
+
 /// Process ONE 128-sample block. Host times each call to find the per-block peak.
 #[no_mangle]
 pub extern "C" fn step() -> f32 {
