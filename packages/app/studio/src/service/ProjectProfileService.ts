@@ -66,7 +66,20 @@ export class ProjectProfileService {
     }
 
     async save(): Promise<void> {
-        return this.#profile.ifSome(profile => profile.saved() ? profile.save() : this.saveAs())
+        return this.#profile.ifSome(async profile => {
+            if (!profile.saved()) {return this.saveAs()}
+            // OPFS can go unavailable AFTER a successful boot probe (Safari/Firefox flakiness, storage eviction),
+            // so the write can reject even though startup passed. Fail soft and retryable: the profile and its
+            // unsaved changes stay intact, the user can save again.
+            const {status, error} = await Promises.tryCatch(profile.save())
+            if (status === "rejected") {
+                console.warn(error)
+                RuntimeNotifier.notify({
+                    message: "Could not save project (storage temporarily unavailable). Please try again.",
+                    icon: "Warning"
+                })
+            }
+        })
     }
 
     async saveAs(): Promise<void> {
@@ -76,7 +89,15 @@ export class ProjectProfileService {
                 meta: profile.meta
             }))
             if (status === "rejected") {return}
-            const optProfile = await profile.saveAs(meta)
+            const {status: saveStatus, value: optProfile, error} = await Promises.tryCatch(profile.saveAs(meta))
+            if (saveStatus === "rejected") {
+                console.warn(error)
+                RuntimeNotifier.notify({
+                    message: "Could not save project (storage temporarily unavailable). Please try again.",
+                    icon: "Warning"
+                })
+                return
+            }
             optProfile.ifSome(profile => this.#profile.wrap(profile))
         })
     }
