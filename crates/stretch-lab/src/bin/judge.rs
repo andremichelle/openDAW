@@ -302,6 +302,82 @@ fn cmd_annotate() {
     }
 }
 
+/// Extract the string value of a top-level `"field": "..."` from a JSON blob (minimal, no dep — the
+/// `.transients.json` shape is fixed).
+fn json_string(json: &str, field: &str) -> Option<String> {
+    let key = format!("\"{field}\"");
+    let after = &json[json.find(&key)? + key.len()..];
+    let after = &after[after.find(':')? + 1..];
+    let start = after.find('"')? + 1;
+    let rest = &after[start..];
+    Some(rest[..rest.find('"')?].to_string())
+}
+
+/// Extract every marker's `"seconds"` value. In `.transients.json` only markers carry a `seconds` field.
+fn json_marker_seconds(json: &str) -> Vec<f64> {
+    let mut out = Vec::new();
+    let mut rest = json;
+    while let Some(pos) = rest.find("\"seconds\"") {
+        rest = &rest[pos + "\"seconds\"".len()..];
+        let Some(colon) = rest.find(':') else { break };
+        let value = rest[colon + 1..].trim_start();
+        let end = value.find(|c: char| !(c.is_ascii_digit() || matches!(c, '.' | '-' | '+' | 'e' | 'E'))).unwrap_or(value.len());
+        if let Ok(parsed) = value[..end].parse::<f64>() {
+            out.push(parsed);
+        }
+        rest = value;
+    }
+    out
+}
+
+/// `judge import <file.transients.json | dir>` — write hand-corrected Transient Lab labels into
+/// `fixtures/<id>.onsets.txt` with a `# trusted:` header so they GATE the detector (unlike machine
+/// `annotate` output). Maps each JSON to a fixture by matching its `"file"` against the fixture prefixes.
+fn cmd_import() {
+    let arg = std::env::args().nth(2).unwrap_or_else(|| {
+        eprintln!("usage: judge import <file.transients.json | dir-of-them>");
+        std::process::exit(1);
+    });
+    let path = PathBuf::from(&arg);
+    let files: Vec<PathBuf> = if path.is_dir() {
+        std::fs::read_dir(&path)
+            .map(|read_dir| read_dir.filter_map(|item| item.ok().map(|item| item.path()))
+                .filter(|path| path.to_string_lossy().ends_with(".transients.json")).collect())
+            .unwrap_or_default()
+    } else {
+        vec![path]
+    };
+    if files.is_empty() {
+        println!("no .transients.json files at {arg}");
+        return;
+    }
+    for file in files {
+        let json = match std::fs::read_to_string(&file) {
+            Ok(text) => text,
+            Err(error) => { println!("SKIPPED {}: {error}", file.display()); continue; }
+        };
+        let Some(wav_name) = json_string(&json, "file") else {
+            println!("SKIPPED {}: no \"file\" field", file.display()); continue;
+        };
+        let Some((_, id, _)) = corpus::FIXTURES.iter().find(|(prefix, _, _)| wav_name.starts_with(prefix)) else {
+            println!("SKIPPED {}: file '{wav_name}' matches no fixture prefix", file.display()); continue;
+        };
+        let mut seconds = json_marker_seconds(&json);
+        seconds.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        seconds.dedup_by(|next, prev| (*next - *prev).abs() < 1e-6);
+        if seconds.len() < 2 {
+            println!("SKIPPED {}: fewer than 2 markers", file.display()); continue;
+        }
+        let mut text = String::from("# trusted: hand-corrected in the Transient Lab, imported via `judge import`\n");
+        for onset in &seconds {
+            text.push_str(&format!("{onset:.6}\n"));
+        }
+        let out_path = corpus::annotations_dir().join(format!("{id}.onsets.txt"));
+        write(&out_path, &text);
+        println!("{id}: imported {} onsets from {} -> {}", seconds.len(), file.display(), out_path.display());
+    }
+}
+
 fn main() {
     let command = std::env::args().nth(1).unwrap_or_else(|| "run".into());
     match command.as_str() {
@@ -310,8 +386,9 @@ fn main() {
         "accept" => cmd_accept(),
         "listen" => cmd_listen(),
         "annotate" => cmd_annotate(),
+        "import" => cmd_import(),
         other => {
-            println!("unknown command '{other}' — use: baseline | run | accept | listen | annotate");
+            println!("unknown command '{other}' — use: baseline | run | accept | listen | annotate | import");
             std::process::exit(1);
         }
     }
