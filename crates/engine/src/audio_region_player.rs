@@ -356,10 +356,11 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
         // end after the first cycle instead of wrapping — the loop goes silent.
         let hard_reset = block.flags.discontinuous() || player.cycle_id().is_nan();
         let loop_wrap = !hard_reset && (player.cycle_id() - cycle.raw_start).abs() >= 1e-6;
+        let restored = loop_wrap && player.try_restore(time_factor, pitch, resample, source_pos);
         // A loop wrap re-primes to the SAME loop start from the same state, so restore the cached primed
         // snapshot (a memcpy) instead of recomputing the multi-frame priming burst; only reset+re-prime on a
         // real discontinuity or a cache miss (e.g. tempo/pitch changed). `arm_capture` snapshots the next prime.
-        if hard_reset || (loop_wrap && !player.try_restore(time_factor, pitch, resample, source_pos)) {
+        if hard_reset || (loop_wrap && !restored) {
             player.reset_stream(source_pos);
             player.arm_capture(time_factor, pitch, resample, source_pos);
         }
@@ -681,7 +682,7 @@ mod tests {
         region.position = 0.0; region.duration = 15_360.0; region.loop_offset = 0.0; region.loop_duration = 7_680.0;
         let config = SignalsmithConfig { warp: vec![(0.0, 0.0), (7_680.0, 3.75)], transpose: 0.0 };
         region.signalsmith = Some(config.clone());
-        let out = run_signalsmith(&region, &config, &source, 3000); // 8s = 4 bars @120bpm
+        let out = run_signalsmith(&region, &config, &source, 3000); // 8s = 4 bars @120bpm = 4 bars @120bpm
         let rms = |seg: &[f32]| -> f64 { (seg.iter().map(|v| (*v as f64).powi(2)).sum::<f64>()/seg.len() as f64).sqrt() };
         let bars12 = rms(&out[10_000..190_000]);
         let bars34 = rms(&out[200_000..380_000]);
@@ -723,6 +724,30 @@ mod tests {
         let (loop_220, bleed_880) = (power(wrap, 220.0), power(wrap, 880.0));
         std::eprintln!("at wrap: 220Hz power {loop_220:.3e}  880Hz power {bleed_880:.3e}  ratio {:.4}", bleed_880 / loop_220.max(1e-12));
         assert!(bleed_880 < loop_220 * 0.01, "post-loop 880 Hz must not bleed at the wrap (got {:.3} of the 220 Hz)", bleed_880 / loop_220.max(1e-12));
+    }
+
+    #[test]
+    fn signalsmith_loop_wrap_cache_survives_pulse_jitter() {
+        // `time_factor` jitters by ULPs as the transport advances (pulses = p1 - p0 of GROWING positions), so an
+        // exact cache-key compare misses most wraps deep into playback and the re-prime burst returns (the
+        // studio's 80% loop-restart spike). The tolerant match must keep serving wraps from the memcpy fast path.
+        let source = sine48k(220.0, 190_000);
+        let mut region = region(0.0, 0.0, 0.0);
+        region.position = 0.0; region.duration = 3_000_000.0; region.loop_offset = 0.0; region.loop_duration = 7_680.0;
+        let config = SignalsmithConfig { warp: vec![(0.0, 0.0), (7_680.0, 3.75)], transpose: 0.0 };
+        region.signalsmith = Some(config.clone());
+        let mut player = SignalsmithStretch::preset_default(2, 48000.0);
+        let tempo = TempoMap::fixed(120.0);
+        let blocks = 40_000usize; // ~26 loop wraps, reaching pulse positions where the jitter is well past ULP
+        for k in 0..blocks {
+            let (p0, p1) = ((k*128) as f64*0.04, ((k+1)*128) as f64*0.04);
+            let block = Block {index: k as u32, flags: BlockFlags::create(true, k==0, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+            let mut output = AudioBuffer::new();
+            play_signalsmith(&mut player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut output);
+        }
+        let restores = player.cache_restores();
+        std::eprintln!("cache restores over {blocks} blocks: {restores} (exact-match compare only managed 19)");
+        assert!(restores >= 24, "cache must survive pulse jitter; only {restores} of ~26 wraps hit the fast path");
     }
 
     #[test]

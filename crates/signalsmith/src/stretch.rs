@@ -89,6 +89,7 @@ pub struct SignalsmithStretch {
     // tells `process_stream_stereo` to capture the snapshot once, right after the emit==0 priming.
     cache: PrimedCache,
     capture_pending: bool,
+    cache_restores: usize, // diagnostics: how many loop wraps took the memcpy fast path (vs re-priming)
 }
 
 impl SignalsmithStretch {
@@ -131,6 +132,8 @@ impl SignalsmithStretch {
                 time_factor: 0.0, pitch: 0.0, resample: 0.0, source_pos: f64::NAN,
             },
             capture_pending: false,
+
+            cache_restores: 0,
         }
     }
 
@@ -269,8 +272,17 @@ impl SignalsmithStretch {
     /// exact params/position. Returns true on a hit (no priming burst); false means the caller must reset+prime.
     pub fn try_restore(&mut self, time_factor: f64, pitch: f32, resample: f64, source_pos: f64) -> bool {
         let cache = &self.cache;
-        if !cache.valid || cache.time_factor != time_factor || cache.pitch != pitch
-            || cache.resample != resample || cache.source_pos != source_pos {
+        // Tolerant match, NOT exact `!=`: `time_factor` jitters by ULPs across wraps (it derives from
+        // pulses = p1 - p0, a subtraction of GROWING transport positions), so an exact compare misses most
+        // wraps and the re-prime burst returns. The tolerances absorb that (~1e-12) while still catching
+        // genuine automation (a tempo/pitch change moves these by >> 1e-6); the sub-tolerance mismatch between
+        // the cached prime and the actual params is far below audibility (< 1e-3 source sample).
+        let near = |a: f64, b: f64, tol: f64| (a - b).abs() <= tol * a.abs().max(b.abs()).max(1.0);
+        if !cache.valid
+            || !near(cache.time_factor, time_factor, 1e-9)
+            || !near(cache.resample, resample, 1e-9)
+            || (cache.pitch - pitch).abs() > 1e-6
+            || (cache.source_pos - source_pos).abs() > 1e-3 {
             return false;
         }
         self.ring_l.copy_from_slice(&self.cache.ring_l);
@@ -283,8 +295,12 @@ impl SignalsmithStretch {
         self.s2_synth = self.cache.s2_synth; self.s2_src = self.cache.s2_src;
         self.s2_emit = self.cache.s2_emit; self.s2_started = self.cache.s2_started;
         self.capture_pending = false;
+        self.cache_restores += 1;
         true
     }
+
+    /// Diagnostics: number of loop wraps served from the primed-state cache (no re-prime burst).
+    pub fn cache_restores(&self) -> usize { self.cache_restores }
 
     fn capture_primed(&mut self) {
         self.cache.ring_l.copy_from_slice(&self.ring_l);
