@@ -18,7 +18,7 @@ type Construct = {
 }
 
 export const StretchSelector = ({lifecycle, project, reader}: Construct) => {
-    // Signalsmith sits between Pitch and Grain in the selector (dummy icon for now).
+    // Signalsmith sits between Pitch and Grain in the selector.
     const enum PlayModeEnum {NoWarp, Pitch, Signalsmith, TimeStretch}
 
     const {editing} = project
@@ -67,7 +67,7 @@ export const StretchSelector = ({lifecycle, project, reader}: Construct) => {
                             },
                             {
                                 value: PlayModeEnum.Signalsmith,
-                                element: (<Icon symbol={IconSymbol.Waveform}/>),
+                                element: (<Icon symbol={IconSymbol.Signalsmith}/>),
                                 tooltip: "Signalsmith"
                             },
                             {
