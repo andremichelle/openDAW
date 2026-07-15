@@ -4,5 +4,6 @@ extern crate alloc;
 
 pub mod fft;
 mod approx;
+mod simd;
 mod stretch;
 pub use stretch::SignalsmithStretch;
