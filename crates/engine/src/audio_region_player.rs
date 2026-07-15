@@ -354,13 +354,17 @@ fn play_signalsmith(player: &mut SignalsmithStretch, region: &AudioRegion, confi
         // `raw_start` jumps by loop_duration), or region entry (cycle_id still NaN). Otherwise the stream flows
         // across marker boundaries. Without the raw_start check a looped region reads straight past the source
         // end after the first cycle instead of wrapping — the loop goes silent.
-        let hard_reset = block.flags.discontinuous() || player.cycle_id().is_nan();
-        let loop_wrap = !hard_reset && (player.cycle_id() - cycle.raw_start).abs() >= 1e-6;
-        let restored = loop_wrap && player.try_restore(time_factor, pitch, resample, source_pos);
-        // A loop wrap re-primes to the SAME loop start from the same state, so restore the cached primed
-        // snapshot (a memcpy) instead of recomputing the multi-frame priming burst; only reset+re-prime on a
-        // real discontinuity or a cache miss (e.g. tempo/pitch changed). `arm_capture` snapshots the next prime.
-        if hard_reset || (loop_wrap && !restored) {
+        // A re-prime is needed on region ENTRY (first play), a region LOOP wrap (raw_start jumped), or any
+        // transport DISCONTINUITY (an arrangement/transport loop jumping back, or a seek). All but the first
+        // entry re-prime to a position we may already have primed — a region loop and a transport loop both
+        // repeat the SAME source position deterministically — so try the cached primed snapshot (a memcpy)
+        // instead of recomputing the multi-frame priming burst. A cache miss (new position / changed tempo or
+        // pitch) falls back to reset+prime, and `arm_capture` snapshots that prime for next time.
+        let entry = player.cycle_id().is_nan();
+        let reprime = entry || block.flags.discontinuous()
+            || (player.cycle_id() - cycle.raw_start).abs() >= 1e-6;
+        let restored = reprime && !entry && player.try_restore(time_factor, pitch, resample, source_pos);
+        if reprime && !restored {
             player.reset_stream(source_pos);
             player.arm_capture(time_factor, pitch, resample, source_pos);
         }
@@ -748,6 +752,33 @@ mod tests {
         let restores = player.cache_restores();
         std::eprintln!("cache restores over {blocks} blocks: {restores} (exact-match compare only managed 19)");
         assert!(restores >= 24, "cache must survive pulse jitter; only {restores} of ~26 wraps hit the fast path");
+    }
+
+    #[test]
+    fn signalsmith_transport_loop_cache_hits() {
+        // An arrangement/transport loop jumps the playhead back to the loop start — a DISCONTINUITY, not a
+        // region loop wrap — re-priming the region at the same source position every pass. The cache must serve
+        // these too (they are just as deterministic), else a looped section re-primes (bursts) on every pass.
+        let source = sine48k(220.0, 190_000);
+        let mut region = region(0.0, 0.0, 0.0);
+        region.position = 0.0; region.duration = 3_000_000.0; region.loop_offset = 0.0; region.loop_duration = 3_000_000.0; // region itself never wraps
+        let config = SignalsmithConfig { warp: vec![(0.0, 0.0), (7_680.0, 3.75)], transpose: 0.0 };
+        region.signalsmith = Some(config.clone());
+        let mut player = SignalsmithStretch::preset_default(2, 48000.0);
+        let tempo = TempoMap::fixed(120.0);
+        let loop_blocks = 300usize; // ~1 bar of transport per pass
+        for iteration in 0..20 {
+            for b in 0..loop_blocks {
+                let (p0, p1) = ((b*128) as f64*0.04, ((b+1)*128) as f64*0.04);
+                let disc = b == 0; // transport jumps back to the loop start at the top of every pass
+                let block = Block {index: (iteration*loop_blocks+b) as u32, flags: BlockFlags::create(true, disc, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+                let mut output = AudioBuffer::new();
+                play_signalsmith(&mut player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo, &mut output);
+            }
+        }
+        let restores = player.cache_restores();
+        std::eprintln!("transport-loop cache restores: {restores} of ~19 passes");
+        assert!(restores >= 18, "transport loop must hit the cache; only {restores} passes did");
     }
 
     #[test]
