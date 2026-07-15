@@ -294,47 +294,50 @@ impl SignalsmithStretch {
         let block = self.block; let interval = self.interval as f64;
         let half = (block / 2) as f64;
         let two_pi = 2.0*core::f32::consts::PI;
-        self.freq_multiplier = pitch;
-        let r = pitch;
         for out_i in 0..out_l.len() {
             let emit = self.s2_emit;
             while self.s2_synth <= emit as f64 + half {
                 let analysis_hop = interval / time_factor.max(1e-6);
                 let center = libm::round(self.s2_src) as isize;
                 // ONE complex FFT for BOTH channels: pack left into the real part and right into the imaginary
-                // part of the windowed+resampled frame, transform once, then unpack the two real-input spectra
-                // (the classic two-reals-for-one-FFT trick) — halves the analysis FFT cost.
-                let half_b = block as isize / 2;
+                // part of the windowed frame, transform once, then unpack the two real-input spectra (the
+                // classic two-reals-for-one-FFT trick) — halves the analysis FFT cost.
+                // PITCH is done here, in the TIME domain: the window CENTRE advances at the native rate (so
+                // duration/tempo is unchanged) but each window sample steps by `resample * pitch` — a wider read
+                // compresses the content, raising pitch. No spectral bin interpolation (which smears complex
+                // phases), so a 1-cent shift barely widens the window and stays clean. pitch 1.0 == native read.
+                let half_b = block as f64 / 2.0;
+                let center_src = center as f64 * resample;
+                let step = resample * pitch as f64;
                 for i in 0..block {
-                    let pos = (center - half_b + i as isize) as f64 * resample;
+                    let pos = center_src + (i as f64 - half_b) * step;
                     self.re[i] = resample_read(left, pos) * self.window[i];
                     self.im[i] = resample_read(right, pos) * self.window[i];
                 }
                 self.fft.forward(&mut self.re, &mut self.im);
                 for b in 0..self.bands {
                     let nb = if b == 0 { 0 } else { block - b };
-                    self.output[b] = Cplx { re: (self.re[b] + self.re[nb]) * 0.5, im: (self.im[b] - self.im[nb]) * 0.5 };
+                    self.in_l[b] = Cplx { re: (self.re[b] + self.re[nb]) * 0.5, im: (self.im[b] - self.im[nb]) * 0.5 };
                 }
-                for b in 0..self.bands { self.in_l[b] = if r == 1.0 { self.output[b] } else { self.interp_spectrum(0, b as f32 / r) }; }
                 for b in 0..self.bands {
                     let nb = if b == 0 { 0 } else { block - b };
-                    self.output[b] = Cplx { re: (self.im[b] + self.im[nb]) * 0.5, im: (self.re[nb] - self.re[b]) * 0.5 };
+                    self.in_r[b] = Cplx { re: (self.im[b] + self.im[nb]) * 0.5, im: (self.re[nb] - self.re[b]) * 0.5 };
                 }
-                for b in 0..self.bands { self.in_r[b] = if r == 1.0 { self.output[b] } else { self.interp_spectrum(0, b as f32 / r) }; }
                 for b in 0..self.bands {
                     let al = self.in_l[b]; let ar = self.in_r[b];
                     let ml = libm::sqrtf(al.norm()); let mr = libm::sqrtf(ar.norm());
                     let pl = libm::atan2f(al.im, al.re); let pr = libm::atan2f(ar.im, ar.re);
                     self.mag_l[b]=ml; self.mag_r[b]=mr; self.ana_l[b]=pl; self.ana_r[b]=pr;
-                    let src = b as f32 / r;
                     if !self.s2_started {
                         self.sphase[b] = pl; self.sphase_r[b] = pr;
                     } else {
-                        let expected = two_pi * src * analysis_hop as f32 / block as f32;
+                        // Pitch is now applied in the time domain, so the spectrum is at native bin spacing:
+                        // the phase advance is the standard pitch-preserving time-stretch (no spectral scaling).
+                        let expected = two_pi * b as f32 * analysis_hop as f32 / block as f32;
                         let mut dl = pl - self.prev_l[b] - expected; dl -= two_pi * libm::roundf(dl/two_pi);
-                        self.sphase[b] += (expected + dl) / analysis_hop as f32 * r * interval as f32;
+                        self.sphase[b] += (expected + dl) / analysis_hop as f32 * interval as f32;
                         let mut dr = pr - self.prev_r[b] - expected; dr -= two_pi * libm::roundf(dr/two_pi);
-                        self.sphase_r[b] += (expected + dr) / analysis_hop as f32 * r * interval as f32;
+                        self.sphase_r[b] += (expected + dr) / analysis_hop as f32 * interval as f32;
                     }
                     self.prev_l[b]=pl; self.prev_r[b]=pr;
                 }
