@@ -331,13 +331,15 @@ impl SignalsmithStretch {
                     if !self.s2_started {
                         self.sphase[b] = pl; self.sphase_r[b] = pr;
                     } else {
-                        // Pitch is now applied in the time domain, so the spectrum is at native bin spacing:
-                        // the phase advance is the standard pitch-preserving time-stretch (no spectral scaling).
-                        let expected = two_pi * b as f32 * analysis_hop as f32 / block as f32;
+                        // The time-domain window read raises pitch by `pitch`, so window bin b carries the
+                        // content of source bin b/pitch: its frame-to-frame phase evolves at the SOURCE rate
+                        // (hence expected uses b/pitch), and the output must advance `pitch` faster.
+                        let src = b as f32 / pitch;
+                        let expected = two_pi * src * analysis_hop as f32 / block as f32;
                         let mut dl = pl - self.prev_l[b] - expected; dl -= two_pi * libm::roundf(dl/two_pi);
-                        self.sphase[b] += (expected + dl) / analysis_hop as f32 * interval as f32;
+                        self.sphase[b] += (expected + dl) / analysis_hop as f32 * pitch * interval as f32;
                         let mut dr = pr - self.prev_r[b] - expected; dr -= two_pi * libm::roundf(dr/two_pi);
-                        self.sphase_r[b] += (expected + dr) / analysis_hop as f32 * interval as f32;
+                        self.sphase_r[b] += (expected + dr) / analysis_hop as f32 * pitch * interval as f32;
                     }
                     self.prev_l[b]=pl; self.prev_r[b]=pr;
                 }

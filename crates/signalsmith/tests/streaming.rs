@@ -84,6 +84,26 @@ fn stereo_preserves_the_image() {
 }
 
 #[test]
+fn pitch_shift_is_clean_not_comb() {
+    // A 440 Hz sine pitched up 1.5x must come out a STEADY 660 Hz tone. Phase-incoherent synthesis (the
+    // "comb filter" symptom) beats the amplitude, so we gate on the envelope's coefficient of variation.
+    let rate = 48000.0; let n = 48000;
+    let mut src = sine(440.0, rate, n); src.extend(std::iter::repeat(0.0).take(8192));
+    let p = 1.5f32;
+    let mut port = Port::preset_default(2, rate as f32); port.reset_stream(2048.0);
+    let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
+    for (lc, rc) in ol.chunks_mut(128).zip(or.chunks_mut(128)) { port.process_stream_stereo(&src, &src, lc, rc, 1.0, p, 1.0); }
+    let f = dominant(&ol, rate);
+    let seg = &ol[8000..40000];
+    let env: Vec<f64> = seg.chunks(256).map(|c| rms(c)).collect();
+    let mean = env.iter().sum::<f64>() / env.len() as f64;
+    let cv = (env.iter().map(|e| (e - mean).powi(2)).sum::<f64>() / env.len() as f64).sqrt() / mean.max(1e-9);
+    println!("pitch 1.5x: freq {f:.0} (want 660)  envelope CV {cv:.3}");
+    assert!((f - 660.0).abs() < 12.0, "pitch correct: {f:.0}");
+    assert!(cv < 0.12, "steady amplitude, no comb beating: CV {cv:.3}");
+}
+
+#[test]
 fn streaming_variable_tempo_stays_stable() {
     // time_factor ramps from 1.0 to 2.0 mid-stream (accelerating warp) — must not glitch/blow up.
     let rate = 48000.0;
