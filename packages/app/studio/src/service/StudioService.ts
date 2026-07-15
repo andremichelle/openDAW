@@ -548,6 +548,11 @@ export class StudioService implements ProjectEnv {
                 this.engine.releaseWorklet()
                 const {status, value: worklet, error} = tryCatch(() => project.startAudioWorklet(restart, {}))
                 if (status === "failure") {
+                    // The worklet failed to start, so #worklet stays None. The profile is still installed and
+                    // DevicePanel is bound to it, so it would mount worklet-dependent device editors (e.g. Apparat's
+                    // subscribeDeviceMessage) that unwrap the absent worklet and panic. Leave no worklet-dependent
+                    // screen up.
+                    this.layout.screen.setValue("dashboard")
                     Dialogs.info({
                         headline: "Audio-Engine Error",
                         message: `Could not start the audio engine. Your browser may not support all required features. (${Errors.toString(error)})`,
