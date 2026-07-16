@@ -4,7 +4,19 @@
 // replacement leans on (device benchmarks, offline parity renders, later exports). The project snapshot
 // is decoded here and streamed into the engine as one full-dump transaction; samples/soundfonts/NAM
 // arrive over the EngineToClient RPC exactly like the realtime worklet host.
-import {Arrays, int, isDefined, Nullable, Option, SyncStream, Terminable, TimeSpan, tryCatch, UUID} from "@opendaw/lib-std"
+import {
+    Arrays,
+    int,
+    isDefined,
+    Nullable,
+    Option,
+    Optional,
+    SyncStream,
+    Terminable,
+    TimeSpan,
+    tryCatch,
+    UUID
+} from "@opendaw/lib-std"
 import {Communicator, Messenger, Wait} from "@opendaw/lib-runtime"
 import {AudioAnalyser, AudioData, dbToGain, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
@@ -14,8 +26,10 @@ import {
     ClipSequencingUpdates,
     EngineAddresses,
     EngineCommands,
+    EngineSettingsSchema,
     EngineStateSchema,
     EngineToClient,
+    ExportConfiguration,
     MonitoringMapEntry,
     NoteSignal,
     OfflineEngineInitializeConfig,
@@ -108,9 +122,38 @@ Communicator.executor<OfflineEngineProtocol>(
                     ready() {dispatcher.dispatchAndForget(this.ready)}
                 })
             const engine = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient)
-            // Parity with the TS offline engine (metronome preference defaults OFF there); an enabled
-            // metronome would also click into the rendered audio.
-            engine.set_metronome_enabled(0)
+            // The metronome is OFF unless the export configuration asks for it: a mixdown must never pick up a
+            // click by accident. The LIVE engine takes these off the "engine-preferences" channel, which an
+            // offline render has no host for, so they are settled once here (TS ExportMetronomeConfiguration).
+            const metronomeConfig = config.exportConfiguration?.metronome
+            const metronomeAudible = ExportConfiguration
+                .isMetronomeAudible(Option.wrap(config.exportConfiguration))
+            engine.set_metronome_enabled(metronomeAudible ? 1 : 0)
+            if (metronomeAudible) {
+                const {gain, beatSubDivision, monophonic} = {
+                    ...EngineSettingsSchema.parse({}).metronome, ...metronomeConfig?.settings
+                }
+                engine.set_metronome_gain(gain)
+                engine.set_metronome_beat_sub_division(beatSubDivision)
+                engine.set_metronome_monophonic(monophonic ? 1 : 0)
+                // Custom click PCM, mirroring the realtime processor's loadClickSound: allocate, copy the
+                // planes into wasm memory, attach. Absent slots keep the engine's synthesized 880/440Hz
+                // defaults. These arrive in the config rather than as a command because the render loop never
+                // yields, so a racing command would only land after the render had finished.
+                const setClickSound = (index: 0 | 1, data: Optional<AudioData>): void => {
+                    if (!isDefined(data)) {return}
+                    const {frames, numberOfFrames, numberOfChannels, sampleRate} = data
+                    const channels = Math.min(numberOfChannels, 2)
+                    const pcm = engine.click_allocate(numberOfFrames, channels)
+                    for (let channel = 0; channel < channels; channel++) {
+                        new Float32Array(memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
+                            .set(frames[channel])
+                    }
+                    engine.set_click_sound(index, numberOfFrames, channels, sampleRate)
+                }
+                setClickSound(0, metronomeConfig?.clickSounds?.downbeat)
+                setClickSound(1, metronomeConfig?.clickSounds?.beat)
+            }
             // The project snapshot as ONE full-dump transaction (the SyncSource initialize analog).
             const {boxGraph} = ProjectSkeleton.decode(config.project)
             const tasks: Array<UpdateTask<BoxIO.TypeMap>> = boxGraph.boxes().map(box =>
@@ -126,17 +169,25 @@ Communicator.executor<OfflineEngineProtocol>(
             // 8 skipChannelStrip) — the chain wiring consults them (TS builds units with AudioUnitOptions).
             const stems = config.exportConfiguration?.stems
             const stemKeys = isDefined(stems) ? Object.keys(stems) : []
-            if (stemKeys.length > 0) {
-                const recordsPtr = engine.input_reserve(stemKeys.length * 20)
-                const view = new DataView(memory.buffer, recordsPtr, stemKeys.length * 20)
-                stemKeys.forEach((key, index) => {
-                    const stem = stems![key]
-                    new Uint8Array(memory.buffer, recordsPtr + index * 20, 16).set(UUID.parse(key))
-                    view.setUint32(index * 20 + 16,
-                        (stem.includeAudioEffects ? 1 : 0) | (stem.includeSends ? 2 : 0)
-                        | (stem.useInstrumentOutput ? 4 : 0) | ((stem.skipChannelStrip ?? false) ? 8 : 0), true)
-                })
-                engine.set_stem_export(stemKeys.length)
+            // The metronome stem is appended AFTER the unit stems and only exists in a stems render (in a
+            // mixdown the click mixes into the stereo pair instead of adding one).
+            const metronomeStem = isDefined(stems) && isDefined(metronomeConfig?.stem)
+            const stemPairs = stemKeys.length + (metronomeStem ? 1 : 0)
+            if (stemPairs > 0) {
+                // Guarded: a metronome-ONLY export (every unit deselected) has no records to write, and
+                // reserving zero bytes to hand the engine an empty slice is meaningless.
+                if (stemKeys.length > 0) {
+                    const recordsPtr = engine.input_reserve(stemKeys.length * 20)
+                    const view = new DataView(memory.buffer, recordsPtr, stemKeys.length * 20)
+                    stemKeys.forEach((key, index) => {
+                        const stem = stems![key]
+                        new Uint8Array(memory.buffer, recordsPtr + index * 20, 16).set(UUID.parse(key))
+                        view.setUint32(index * 20 + 16,
+                            (stem.includeAudioEffects ? 1 : 0) | (stem.includeSends ? 2 : 0)
+                            | (stem.useInstrumentOutput ? 4 : 0) | ((stem.skipChannelStrip ?? false) ? 8 : 0), true)
+                    })
+                }
+                engine.set_stem_export(stemKeys.length, metronomeStem ? 1 : 0)
             }
             if (engine.bind() !== 0) {
                 throw new Error("the project snapshot carries no TimelineBox")
@@ -198,8 +249,10 @@ Communicator.executor<OfflineEngineProtocol>(
             state = Option.wrap({
                 engine, memory, stateSender, pending, midi, broadcaster, analyser, broadcasts,
                 sampleRate: config.sampleRate,
-                numberOfChannels: stemKeys.length > 0 ? stemKeys.length * 2 : 2,
-                stems: stemKeys.length,
+                // `stemPairs` already counts the metronome stem, so the channel count and the staging read
+                // below stay in step with what `set_stem_export` allocated.
+                numberOfChannels: stemPairs > 0 ? stemPairs * 2 : 2,
+                stems: stemPairs,
                 totalFrames: 0,
                 running: false
             })

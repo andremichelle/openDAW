@@ -21,12 +21,20 @@ export type EditableExportStemsConfiguration = Record<string, ExportStemConfigur
     include: boolean
 }>
 
+// The metronome row. It is not an audio unit (it has no strip, no effects and no sends), so it lives beside
+// the unit rows rather than in them: only "Export" and a file name apply.
+export type EditableExportMetronomeConfiguration = {
+    include: boolean
+    fileName: string
+}
+
 type Construct = {
     lifecycle: Lifecycle
     configuration: EditableExportStemsConfiguration
+    metronome: EditableExportMetronomeConfiguration
 }
 
-export const ExportStemsConfigurator = ({lifecycle, configuration}: Construct) => {
+export const ExportStemsConfigurator = ({lifecycle, configuration, metronome}: Construct) => {
     const includeAll = new DefaultObservableValue(true)
     const includeAudioEffectsAll = new DefaultObservableValue(true)
     const includeSendsAll = new DefaultObservableValue(true)
@@ -94,6 +102,30 @@ export const ExportStemsConfigurator = ({lifecycle, configuration}: Construct) =
                         </Frag>
                     )
                 })}
+                {(() => {
+                    const include = new DefaultObservableValue(metronome.include)
+                    const fileName = new DefaultObservableValue(metronome.fileName)
+                    lifecycle.ownAll(
+                        include.subscribe(owner => metronome.include = owner.getValue()),
+                        fileName.subscribe(owner => metronome.fileName = owner.getValue())
+                        // Deliberately NOT wired to `includeAll`: that toggles the project's audio units, and
+                        // the click is not one of them. It also stays off unless asked for, so a stems export
+                        // can never pick one up by accident.
+                    )
+                    return (
+                        <Frag>
+                            <div className="name" style={{color: Colors.gray.toString()}}>Metronome</div>
+                            <Checkbox lifecycle={lifecycle}
+                                      model={include}
+                                      appearance={{activeColor: Colors.cream}}>
+                                <Icon symbol={IconSymbol.Checkbox}/>
+                            </Checkbox>
+                            <div/>
+                            <div/>
+                            <TextInput lifecycle={lifecycle} model={fileName}/>
+                        </Frag>
+                    )
+                })()}
             </div>
         </div>
     )

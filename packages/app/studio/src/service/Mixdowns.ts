@@ -1,4 +1,4 @@
-import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {assert, DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
 import {
     ExternalLib,
@@ -85,7 +85,7 @@ export namespace Mixdowns {
             return
         }
         const {status: zipStatus, error: zipError} = await Promises.tryCatch(
-            saveZipFile(value, meta, Object.values(config.stems ?? {}).map(({fileName}) => fileName)))
+            saveZipFile(value, meta, ExportConfiguration.stemFileNames(config)))
         if (zipStatus === "rejected") {
             console.warn(zipError)
             RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
@@ -151,6 +151,10 @@ export namespace Mixdowns {
         }
         const dialog = RuntimeNotifier.progress({headline: "Creating Zip File..."})
         const numStems = audioData.numberOfChannels >> 1
+        // One name per rendered pair, or `trackNames[stemIndex]` quietly yields undefined and writes
+        // "undefined.wav" instead of failing (which is exactly what a missing metronome name did).
+        assert(trackNames.length === numStems,
+            () => `Expected ${numStems} stem names for the rendered pairs, got ${trackNames.length}`)
         const zip = new libResult.value()
         for (let stemIndex = 0; stemIndex < numStems; stemIndex++) {
             const l = audioData.frames[stemIndex * 2]

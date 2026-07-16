@@ -618,7 +618,9 @@ impl Engine {
     /// Copy each stem's TAP (per its options: chain start / pre-strip / strip, TS `unit.audioOutput()`)
     /// into the stem staging (planar, stem i -> channels 2i / 2i+1). Runs right after `render`.
     pub(crate) fn copy_stem_outputs(&mut self) {
-        if self.stem_exports.is_empty() {
+        // `metronome_stem` alone is a valid export (every unit deselected, just the click), and it has no
+        // entry in `stem_exports`, so an emptiness check on that list alone would silently drop it.
+        if self.stem_exports.is_empty() && !self.metronome_stem {
             return;
         }
         let stems = core::mem::take(&mut self.stem_exports);
@@ -631,6 +633,13 @@ impl Engine {
             self.stem_staging[base + engine_env::RENDER_QUANTUM..base + 2 * engine_env::RENDER_QUANTUM].copy_from_slice(&buffer.right);
         }
         self.stem_exports = stems;
+        // The metronome is not an audio unit and has no tap, so it is appended by hand as the LAST pair, from
+        // the buffer `render` just filled. `set_stem_export` sized the staging for it.
+        if self.metronome_stem {
+            let base = self.stem_exports.len() * 2 * engine_env::RENDER_QUANTUM;
+            self.stem_staging[base..base + 2 * engine_env::RENDER_QUANTUM]
+                .copy_from_slice(&self.metronome_staging);
+        }
     }
 
     /// Mark `uuids` for a chain re-wire (e.g. the monitoring map changed) and enqueue them; the next

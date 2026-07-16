@@ -1025,6 +1025,14 @@ struct Engine {
     // into `stem_staging` after every render (stem i -> planar channels 2i / 2i+1).
     stem_exports: Vec<StemEntry>,
     stem_staging: Vec<f32>,
+    // The metronome renders HERE rather than straight into `output`, so its signal can be routed twice: it is
+    // always mixed into `output` (the live engine's and the mixdown's behaviour, unchanged), and when
+    // `metronome_stem` is set it is ALSO copied into the stem staging as the LAST pair
+    // (TS `exportConfiguration.metronome.stem`). A fixed array: no allocation on the render path.
+    metronome_staging: [f32; RENDER_QUANTUM * 2],
+    // Append the metronome as an additional stem, after every unit stem. Set together with `stem_exports`,
+    // which sizes `stem_staging` to include this extra pair.
+    metronome_stem: bool,
     // FROZEN units (TS `setFrozenAudio`): pre-rendered PCM per unit — the chain wiring swaps the
     // instrument + fx for a `FrozenPlayback` while an entry exists. `frozen_pending` holds the buffer the
     // worklet fills between `frozen_allocate` and `set_frozen_audio`.
@@ -1100,6 +1108,8 @@ impl Engine {
             monitoring_map: Vec::new(),
             stem_exports: Vec::new(),
             stem_staging: Vec::new(),
+            metronome_staging: [0.0; RENDER_QUANTUM * 2],
+            metronome_stem: false,
             frozen_audio: Vec::new(),
             frozen_pending: Vec::new(),
             tempo: None,
@@ -1252,8 +1262,12 @@ impl Engine {
         if self.transport.is_playing() {
             self.resolve_automated_solo(self.transport.position());
         }
-        let Engine {transport, metronome, context, output_bus, blocks, tempo, tempo_map: _, controls, signature,
-            marker_track, marker_changes, midi_out, is_recording, is_counting_in, metronome_pref, ..} = self;
+        let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
+            controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
+            metronome_pref, ..} = self;
+        // `Metronome::process` mixes ADDITIVELY, so its buffer starts cleared every quantum, exactly like
+        // `output` above.
+        metronome_staging.fill(0.0);
         // The signature events the metronome walks: the live signature track once bound, else a single
         // storage-signature entry from the controls (the pre-bind fallback).
         let signature_events = signature.as_ref().map(|track| track.events());
@@ -1278,7 +1292,9 @@ impl Engine {
             let active = events.as_deref().filter(|collection| !collection.is_empty());
             // collect this quantum's blocks (converting transport flags) and run the metronome per block
             transport.render_quantum(active, marker_slice, markers_enabled, |block| {
-                let (left, right) = output.split_at_mut(RENDER_QUANTUM);
+                // into the metronome's OWN buffer, not `output`: it is mixed into the output below and may
+                // additionally be copied out as its own stem.
+                let (left, right) = metronome_staging.split_at_mut(RENDER_QUANTUM);
                 metronome.process(block, signature_slice, &mut left[block.s0..block.s1], &mut right[block.s0..block.s1]);
                 blocks.push(Block {
                     index: blocks.len() as u32,
@@ -1341,6 +1357,12 @@ impl Engine {
         // messages and emit the 24-ppq Clock ticks over the transporting blocks, gated by the registered
         // MIDIOutputBoxes. Off-graph like the metronome.
         midi_output::process_transport_clock(midi_out, blocks.as_slice(), sample_rate);
+        // The metronome into the main mix. Identical to when it wrote into `output` directly (both mixes are
+        // additive into a cleared buffer), and it stays unconditional: a stems render never reads `output`
+        // (the worker takes the stem staging and returns early), so there is nothing to gate it on.
+        for index in 0..RENDER_QUANTUM * 2 {
+            output[index] += metronome_staging[index];
+        }
         // drive the processor graph over the quantum's blocks (advancing or static), then mix the output bus in
         context.process(&ProcessInfo {blocks: blocks.as_slice()});
         if let Some(buffer) = output_bus.as_ref() {
@@ -2034,10 +2056,14 @@ pub extern "C" fn render() {
 /// LE]` (bit0 includeAudioEffects, bit1 includeSends, bit2 useInstrumentOutput, bit3 skipChannelStrip) in
 /// the input scratch, in EXPORT ORDER. Call BEFORE `bind` (an offline render configures once); allocates
 /// the staging each render fills (stem i -> planar channels 2i / 2i+1 at `stem_output_ptr`).
+/// `metronome_stem` (TS `exportConfiguration.metronome.stem`) appends the metronome as one further pair
+/// AFTER the unit stems, so it is part of the same allocation rather than a second call that could leave the
+/// staging a pair short.
 #[no_mangle]
-pub extern "C" fn set_stem_export(count: u32) {
+pub extern "C" fn set_stem_export(count: u32, metronome_stem: u32) {
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
+            engine.metronome_stem = metronome_stem != 0;
             let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), count as usize * 20);
             let mut stems = Vec::with_capacity(count as usize);
             for index in 0..count as usize {
@@ -2053,7 +2079,8 @@ pub extern "C" fn set_stem_export(count: u32) {
                     skip_channel_strip: flags & 8 != 0
                 });
             }
-            engine.stem_staging = alloc::vec![0.0; stems.len() * 2 * RENDER_QUANTUM];
+            let pairs = stems.len() + usize::from(engine.metronome_stem);
+            engine.stem_staging = alloc::vec![0.0; pairs * 2 * RENDER_QUANTUM];
             engine.stem_exports = stems;
         }
     }

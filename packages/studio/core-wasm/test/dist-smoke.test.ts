@@ -41,4 +41,30 @@ describe("dist smoke", () => {
         const module = await WebAssembly.compile(bytes)
         expect(WebAssembly.Module.exports(module).some(entry => entry.name === "render")).toBe(true)
     })
+    // A JS->wasm call SILENTLY drops surplus arguments, so a binary left behind by an ABI change does not
+    // throw: it just ignores the new parameter. `set_stem_export(count, metronomeStem)` against a stale
+    // 1-parameter engine would render a metronome stem into a staging buffer sized one pair short. Pin the
+    // arity of the exports whose signature the offline worker depends on.
+    it("the metronome/stem exports match the arity the offline worker calls them with", async () => {
+        const bytes = readFileSync(path.join(dist, "wasm/engine.wasm"))
+        const module = await WebAssembly.compile(bytes)
+        const imports: Record<string, Record<string, unknown>> = {}
+        for (const entry of WebAssembly.Module.imports(module)) {
+            imports[entry.module] ??= {}
+            imports[entry.module][entry.name] =
+                entry.kind === "function" ? () => 0
+                    : entry.kind === "memory" ? new WebAssembly.Memory({initial: 256, maximum: 16384, shared: true})
+                        : entry.kind === "table" ? new WebAssembly.Table({initial: 1024, element: "anyfunc"})
+                            : new WebAssembly.Global({value: "i32", mutable: false}, 0)
+        }
+        const {exports} = await WebAssembly.instantiate(module, imports)
+        const arity = (name: string): number => (exports[name] as Function).length
+        expect(arity("set_stem_export"), "count + metronomeStem").toBe(2)
+        expect(arity("set_metronome_enabled")).toBe(1)
+        expect(arity("set_metronome_gain")).toBe(1)
+        expect(arity("set_metronome_beat_sub_division")).toBe(1)
+        expect(arity("set_metronome_monophonic")).toBe(1)
+        expect(arity("click_allocate"), "frameCount + channels").toBe(2)
+        expect(arity("set_click_sound"), "index + frameCount + channels + sampleRate").toBe(4)
+    })
 })
