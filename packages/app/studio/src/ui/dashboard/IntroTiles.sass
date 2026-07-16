@@ -5,10 +5,15 @@ component
   flex-direction: column
   margin-top: 1.5em // breathing room between the columns above and the tiles
 
+  // THE dashboard grid from tokens.sass, identical to `.main`'s (Dashboard.sass). This container and `.main`
+  // are both full-width children of the same flex column, so the same tracks put each tile exactly under one
+  // dashboard column: tile 4 under the rail's first column (Privacy under Links), tile 5 under its second.
+  // Never give these their own gap or track sizing, the alignment is only guaranteed while both read the
+  // shared tokens.
   > .tiles
     display: grid
-    grid-template-columns: repeat(5, 1fr)
-    column-gap: 2.5em
+    grid-template-columns: repeat(5, minmax($col-min, 1fr))
+    column-gap: $col-gap
 
   // Each tile links to its manual; the legend shows the destination. The whole tile is the click target.
   .tile

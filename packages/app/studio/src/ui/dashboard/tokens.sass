@@ -3,3 +3,17 @@
 $fs-l: 15px
 $fs-m: 12px
 $fs-s: 10px
+
+// THE dashboard column grid, shared by `.main` (Dashboard.sass) and the intro tiles (IntroTiles.sass). Both are
+// full-width children of the same flex column, so an identical track definition puts their columns in identical
+// places: the panel spans 1-3, the rail 4-5, and each tile is one column, all edge to edge.
+// These MUST stay the single source of truth. Two grids with independently chosen gaps cannot be made to line
+// up: an `Nfr` split subtracts ONE gap, while spanning 3 of 5 columns reclaims TWO, so a 3fr/2fr split and a
+// 3-of-5 span differ by 0.2*gap however the gaps are tuned.
+$col-gap: 3em
+// The two min-widths the old `minmax(390px, 3fr) minmax(280px, 2fr)` carried, restated as a per-column floor.
+// A span reclaims the gaps inside it, so each implies a minimum column width:
+//   panel: 3c + 2*gap >= 390px  ->  c >= 98px   (below this the tab labels start to overlap)
+//   rail:  2c + 1*gap >= 280px  ->  c >= 116px  (binding at the current 3em gap)
+// max() keeps BOTH satisfied, so whichever binds wins and neither floor can be lost by retuning $col-gap.
+$col-min: max(calc((390px - 2 * #{$col-gap}) / 3), calc((280px - #{$col-gap}) / 2))

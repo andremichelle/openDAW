@@ -1,6 +1,7 @@
 @use "@/colors"
 @use "tokens" as *
 
+
 component
   flex: 1
   min-height: 0
@@ -35,14 +36,19 @@ component
     // Floor for BOTH columns, since they share the grid row. Sized for the panel alone (its chrome is ~6.5em:
     // tabs, search, list header) plus a few rows; the rail no longer dictates it because it scrolls internally
     // rather than spilling over the tiles. Under this floor the dashboard scrolls as a whole.
+    // Must stay EXPLICIT: as a flex item, an `auto` min-height would resolve to min-content, and the panel
+    // would then be stretched by whatever the list wants to be.
     min-height: 12em
     margin-top: 1.5em // extra breathing room between the action buttons and the columns below
-    // the panel has a MIN-WIDTH (390px) so the tab labels never shrink enough to overlap; the rail takes the rest
+    // The shared 5-column grid ($col-gap/$col-min in tokens.sass, used verbatim by the intro tiles below, whose
+    // container is the same width): the panel spans 1-3 and the rail 4-5, so the rail's columns land exactly on
+    // the tiles beneath them (Links over Privacy, Sponsors over Open Source).
     display: grid
-    grid-template-columns: minmax(390px, 3fr) minmax(280px, 2fr)
-    column-gap: 3em
+    grid-template-columns: repeat(5, minmax($col-min, 1fr))
+    column-gap: $col-gap
 
     > .panel
+      grid-column: span 3
       min-height: 0
       display: flex
       flex-direction: column
@@ -52,10 +58,13 @@ component
       background: rgba(white, 0.01)
 
     > .rail
+      grid-column: span 2
+      // subgrid, NOT `1fr 1fr`: the rail's two columns must BE grid columns 4 and 5. With its own track
+      // definition, column 2 is placed by the rail's own gap and drifts off the tile below it.
+      display: grid
+      grid-template-columns: subgrid
+      row-gap: 1.5em // column-gap comes from the parent grid, so it stays in lockstep
       min-width: 0
       min-height: 0
       overflow-y: auto
-      display: grid
-      grid-template-columns: 1fr 1fr
       align-content: start
-      gap: 1.5em 2em
