@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/nam-test",
   "private": true,
-  "version": "0.0.20",
+  "version": "0.0.21",
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "scripts": {
@@ -13,7 +13,7 @@
   "dependencies": {
     "@opendaw/lib-dom": "^0.0.87",
     "@opendaw/lib-dsp": "^0.0.88",
-    "@opendaw/lib-jsx": "^0.0.87",
+    "@opendaw/lib-jsx": "^0.0.88",
     "@opendaw/lib-runtime": "^0.0.83",
     "@opendaw/lib-std": "^0.0.82",
     "@opendaw/nam-wasm": "^1.2.0"
