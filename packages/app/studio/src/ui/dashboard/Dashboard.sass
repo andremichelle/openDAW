@@ -9,8 +9,6 @@ component
   row-gap: 1em
   padding: 1.75em 2em 4em 2em
   color: var(--color-dark)
-  // the one-pager only fits down to a point; past it the whole dashboard scrolls rather than the rail
-  // overflowing onto the tiles below (see the min-height floor on .main)
   overflow-y: auto
   @include colors.panel-background
 
@@ -34,11 +32,10 @@ component
   // one-pager: the panel and the rail take the rest; only the list inside the panel scrolls
   > .main
     flex: 1
-    // The panel shrinks freely (its list scrolls internally), but the rail is intrinsic content that cannot:
-    // crushed below it, the rail spills out over the tiles. min-content is not usable as the floor here, since it
-    // resolves at min-content WIDTH and collapses the sponsor grid to one avatar per row. Hence a fixed floor,
-    // comfortably above the rail's natural ~18em; under it the dashboard scrolls as a whole.
-    min-height: 22em
+    // Floor for BOTH columns, since they share the grid row. Sized for the panel alone (its chrome is ~6.5em:
+    // tabs, search, list header) plus a few rows; the rail no longer dictates it because it scrolls internally
+    // rather than spilling over the tiles. Under this floor the dashboard scrolls as a whole.
+    min-height: 12em
     margin-top: 1.5em // extra breathing room between the action buttons and the columns below
     // the panel has a MIN-WIDTH (390px) so the tab labels never shrink enough to overlap; the rail takes the rest
     display: grid
@@ -55,8 +52,12 @@ component
       background: rgba(white, 0.02)
 
     // 2x2: Help & Feedback | Backup & Sync above Links | Sponsors
+    // The rail is intrinsic content and cannot shrink: crushed, it used to spill over the tiles below. It scrolls
+    // internally instead, so the row floor above answers to the panel only.
     > .rail
       min-width: 0
+      min-height: 0
+      overflow-y: auto
       display: grid
       grid-template-columns: 1fr 1fr
       align-content: start

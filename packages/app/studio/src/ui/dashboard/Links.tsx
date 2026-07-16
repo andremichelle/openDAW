@@ -10,7 +10,8 @@ const links: ReadonlyArray<Link> = [
     {label: "GitHub", href: "https://github.com/andremichelle/openDAW", icon: IconSymbol.Github},
     {label: "Discord", href: "https://discord.opendaw.studio/", icon: IconSymbol.Discord},
     {label: "Instagram", href: "https://www.instagram.com/opendaw.studio", icon: IconSymbol.Instagram},
-    {label: "LinkedIn", href: "https://www.linkedin.com/company/opendaw-org", icon: IconSymbol.LinkedIn}
+    {label: "LinkedIn", href: "https://www.linkedin.com/company/opendaw-org", icon: IconSymbol.LinkedIn},
+    {label: "Newsletter", href: "https://buttondown.com/opendaw", icon: IconSymbol.Notification}
 ]
 
 export const Links = () => (
