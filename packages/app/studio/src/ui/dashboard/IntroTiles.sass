@@ -1,0 +1,51 @@
+@use "tokens" as *
+
+component
+  display: flex
+  flex-direction: column
+  margin-top: 1.5em // breathing room between the columns above and the tiles
+
+  > .tiles
+    display: grid
+    grid-template-columns: repeat(5, 1fr)
+    column-gap: 2.5em
+
+  // Each tile links to its manual; the legend shows the destination. The whole tile is the click target.
+  .tile
+    display: flex
+    flex-direction: column
+    row-gap: 0.3em
+    color: var(--color-dark)
+    cursor: pointer
+
+    &:hover .tile-title
+      color: white
+
+    &:hover .tile-link
+      opacity: 1
+      color: var(--color-blue)
+
+    > .tile-head
+      display: flex
+      align-items: center
+      column-gap: 0.4em
+
+      > svg
+        width: 12px
+        height: 12px
+        color: var(--color-blue)
+
+      > .tile-title
+        color: var(--color-gray)
+        font-size: $fs-l
+        font-weight: 500
+
+    > .tile-text
+      font-size: $fs-m
+      line-height: 1.5
+      color: var(--color-shadow)
+
+    > .tile-link
+      font-size: $fs-s
+      color: var(--color-shadow)
+      opacity: 0.75

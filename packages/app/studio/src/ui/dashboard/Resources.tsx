@@ -10,8 +10,11 @@ import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
 import {StudioService} from "@/service/StudioService"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Colors} from "@opendaw/studio-enums"
+import {DemoProjectsList} from "@/ui/dashboard/DemoProjectsList"
 
 const className = Html.adoptStyleSheet(css, "Resources")
+
+const enum Scope { Projects, Templates, Demos, Samples, Soundfonts }
 
 type Construct = {
     lifecycle: Lifecycle
@@ -19,7 +22,7 @@ type Construct = {
 }
 
 export const Resources = ({lifecycle, service}: Construct) => {
-    const scope = new DefaultObservableValue(0)
+    const scope = new DefaultObservableValue<Scope>(Scope.Projects)
     return (
         <div className={className}>
             <RadioGroup lifecycle={lifecycle}
@@ -27,18 +30,19 @@ export const Resources = ({lifecycle, service}: Construct) => {
                         appearance={{activeColor: Colors.orange}}
                         model={scope}
                         elements={[
-                            {value: 0, element: (<h3>Projects</h3>)},
-                            {value: 1, element: (<h3>Templates</h3>)},
-                            {value: 2, element: (<h3>Samples</h3>)},
-                            {value: 3, element: (<h3>Soundfonts</h3>)}
+                            {value: Scope.Projects, element: (<h3>Projects</h3>)},
+                            {value: Scope.Templates, element: (<h3>Templates</h3>)},
+                            {value: Scope.Demos, element: (<h3>Demos</h3>)},
+                            {value: Scope.Samples, element: (<h3>Samples</h3>)},
+                            {value: Scope.Soundfonts, element: (<h3>Soundfonts</h3>)}
                         ]}/>
-            <div style={{display: "contents"}} onInit={element => {
+            <div className="content" onInit={element => {
                 const scopeLifeCycle = lifecycle.own(new Terminator())
                 lifecycle.own(scope.catchupAndSubscribe(owner => {
                     replaceChildren(element)
                     scopeLifeCycle.terminate()
                     switch (owner.getValue()) {
-                        case 0:
+                        case Scope.Projects:
                             replaceChildren(element, (
                                 <ProjectBrowser service={service}
                                                 lifecycle={scopeLifeCycle}
@@ -46,10 +50,14 @@ export const Resources = ({lifecycle, service}: Construct) => {
                                                     const handler = Dialogs.processMonolog("Loading...")
                                                     await service.projectProfileService.load(uuid, meta)
                                                     handler.close()
-                                                }}/>
+                                                }}
+                                                empty={<div className="empty-cta"
+                                                            onclick={() => scope.setValue(Scope.Demos)}>
+                                                    No projects yet. Start with a demo project.
+                                                </div>}/>
                             ))
                             break
-                        case 1:
+                        case Scope.Templates:
                             replaceChildren(element, (
                                 <TemplateBrowser service={service}
                                                  lifecycle={scopeLifeCycle}
@@ -60,12 +68,17 @@ export const Resources = ({lifecycle, service}: Construct) => {
                                                  }}/>
                             ))
                             break
-                        case 2:
+                        case Scope.Demos:
+                            replaceChildren(element, (
+                                <DemoProjectsList lifecycle={scopeLifeCycle} service={service}/>
+                            ))
+                            break
+                        case Scope.Samples:
                             replaceChildren(element, (
                                 <SampleBrowser lifecycle={scopeLifeCycle} service={service}/>
                             ))
                             break
-                        case 3:
+                        case Scope.Soundfonts:
                             replaceChildren(element, (
                                 <SoundfontBrowser lifecycle={scopeLifeCycle} service={service}/>
                             ))

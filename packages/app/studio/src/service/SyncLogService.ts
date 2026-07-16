@@ -23,6 +23,7 @@ export namespace SyncLogService {
     }
 
     export const append = async (service: StudioService) => {
+        if (!await service.projectProfileService.approveLosingChanges()) {return}
         const openResult = await Promises.tryCatch(window.showOpenFilePicker(FilePickerAcceptTypes.ProjectSyncLog))
         if (openResult.status === "rejected") {return}
         const handle = asDefined(openResult.value[0], "No handle")

@@ -24,7 +24,7 @@ export const PreferencesPage: PageFactory<StudioService> = ({lifecycle, service}
         contexts[key] = ShortcutDefinitions.copy(shortcuts.workingDefinition))
     return (
         <div className={className}>
-            <BackButton/>
+            <BackButton service={service}/>
             <h1>Preferences</h1>
             <div className="sections">
                 <section>
