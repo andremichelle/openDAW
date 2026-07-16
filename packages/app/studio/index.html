@@ -37,40 +37,6 @@
     <link rel="icon" type="image/x-icon" href="/favicon.svg">
     <link rel="canonical" href="https://opendaw.studio">
     <title>🎧 openDAW Studio | Web-Based DAW for Music Education</title>
-    <script type="application/ld+json">
-        {
-            "@context": "https://schema.org",
-            "@type": ["SoftwareApplication", "LearningResource"],
-            "name": "openDAW Studio",
-            "url": "https://opendaw.studio",
-            "applicationCategory": "EducationalApplication",
-            "applicationSubCategory": "Digital Audio Workstation",
-            "operatingSystem": "Any (modern web browser)",
-            "browserRequirements": "Requires WebAssembly SIMD, SharedArrayBuffer and AudioWorklet support",
-            "description": "openDAW is a free, open-source digital audio workstation built for music education. Record, sequence, mix and master in your browser. No installation, no cost.",
-            "image": "https://opendaw.studio/images/studio-meta.jpg",
-            "license": "https://www.gnu.org/licenses/lgpl-3.0.html",
-            "isAccessibleForFree": true,
-            "educationalUse": ["instruction", "assignment", "self-study"],
-            "learningResourceType": "Digital audio workstation",
-            "teaches": "Music production, audio recording, sequencing, mixing and mastering",
-            "audience": {
-                "@type": "EducationalAudience",
-                "educationalRole": ["student", "teacher"]
-            },
-            "keywords": "music education, digital audio workstation, DAW, browser DAW, music production, music technology, audio education, mixing, mastering, sequencing",
-            "offers": {
-                "@type": "Offer",
-                "price": "0",
-                "priceCurrency": "EUR"
-            },
-            "author": {
-                "@type": "Organization",
-                "name": "openDAW",
-                "url": "https://opendaw.org"
-            }
-        }
-    </script>
     <style>
         html, body {
             width: 100%;
@@ -128,5 +94,38 @@
 </head>
 <body>
 <span id="preloader"></span>
+<div itemscope itemtype="https://schema.org/SoftwareApplication https://schema.org/LearningResource">
+    <meta itemprop="name" content="openDAW Studio"/>
+    <link itemprop="url" href="https://opendaw.studio"/>
+    <meta itemprop="description"
+          content="openDAW is a free, open-source digital audio workstation built for music education. Record, sequence, mix and master in your browser. No installation, no cost."/>
+    <meta itemprop="applicationCategory" content="EducationalApplication"/>
+    <meta itemprop="applicationSubCategory" content="Digital Audio Workstation"/>
+    <meta itemprop="operatingSystem" content="Any (modern web browser)"/>
+    <meta itemprop="browserRequirements"
+          content="Requires WebAssembly SIMD, SharedArrayBuffer and AudioWorklet support"/>
+    <link itemprop="image" href="https://opendaw.studio/images/studio-meta.jpg"/>
+    <link itemprop="license" href="https://www.gnu.org/licenses/lgpl-3.0.html"/>
+    <meta itemprop="isAccessibleForFree" content="true"/>
+    <meta itemprop="educationalUse" content="instruction"/>
+    <meta itemprop="educationalUse" content="assignment"/>
+    <meta itemprop="educationalUse" content="self-study"/>
+    <meta itemprop="learningResourceType" content="Digital audio workstation"/>
+    <meta itemprop="teaches" content="Music production, audio recording, sequencing, mixing and mastering"/>
+    <meta itemprop="keywords"
+          content="music education, digital audio workstation, DAW, browser DAW, music production, music technology, audio education, mixing, mastering, sequencing"/>
+    <div itemprop="audience" itemscope itemtype="https://schema.org/EducationalAudience">
+        <meta itemprop="educationalRole" content="student"/>
+        <meta itemprop="educationalRole" content="teacher"/>
+    </div>
+    <div itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+        <meta itemprop="price" content="0"/>
+        <meta itemprop="priceCurrency" content="EUR"/>
+    </div>
+    <div itemprop="author" itemscope itemtype="https://schema.org/Organization">
+        <meta itemprop="name" content="openDAW"/>
+        <link itemprop="url" href="https://opendaw.org"/>
+    </div>
+</div>
 </body>
 </html>
