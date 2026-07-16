@@ -31,23 +31,15 @@ export type WasmEngineUrls = {
 }
 
 export namespace WasmEngine {
-    const FLAG_KEY = "opendaw-wasm-engine"
     const modules = new MutableObservableOption<EngineModules>()
     const config = new MutableObservableOption<WasmEngineUrls>()
-
-    export const isEnabled = (): boolean => localStorage.getItem(FLAG_KEY) !== "false"
-
-    export const setEnabled = (enabled: boolean): void => localStorage.setItem(FLAG_KEY, String(enabled))
 
     // Whether the wasm modules are compiled and the processor is registered (i.e. `ensureReady` succeeded).
     export const isReady = (): boolean => modules.nonEmpty()
 
-    // Whether an offline render (mixdown, stems, publish, video audio) should run through the wasm variant:
-    // the engine is enabled, its artifacts actually loaded, and the offline worker is installed.
-    export const useForExports = (): boolean => isEnabled() && isReady() && OfflineEngineRenderer.hasVariant()
-
     // Compile the wasm modules + register the processor module (both once). Returns false when the engine
-    // artifacts are unavailable (e.g. a deploy without them), so callers can revert to the TS engine.
+    // artifacts are unavailable (e.g. a deploy without them). There is no other engine to fall back to, so a
+    // caller that gets false has no working engine and must say so rather than carry on.
     export const ensureReady = async (context: BaseAudioContext): Promise<boolean> => {
         if (modules.nonEmpty()) {return true}
         const {processorUrl, wasmUrl} = config.unwrap("WasmEngine.install must run before ensureReady")
@@ -67,11 +59,10 @@ export namespace WasmEngine {
         config.wrap(urls)
         // The OFFLINE render path (mixdown/stems/freeze/benchmarks): the worker self-loads the wasm
         // artifacts from `wasmUrl`, so no preloading is needed here.
-        OfflineEngineRenderer.installVariant(urls.offlineWorkerUrl, {wasmUrl: urls.wasmUrl})
-        OfflineEngineRenderer.installVariantPolicy(() => useForExports()) // freeze/consolidation follow the toggle
-        EngineVariant.install((): Nullable<EngineWorkletVariant> => {
-            if (!isEnabled() || modules.isEmpty()) {return null}
-            const {engineModule, deviceModules, deviceBoxTypes, composites} = modules.unwrap()
+        OfflineEngineRenderer.install(urls.offlineWorkerUrl, {wasmUrl: urls.wasmUrl})
+        EngineVariant.install((): EngineWorkletVariant => {
+            const {engineModule, deviceModules, deviceBoxTypes, composites} =
+                modules.unwrap("WasmEngine.ensureReady must succeed before an engine boots")
             const attachment: WasmEngineAttachment = {
                 // A FRESH shared memory per boot: re-instantiating the engine re-applies its data segments,
                 // but a recycled heap would leak every allocation of the previous engine instance.

@@ -13,7 +13,6 @@ export * from "./ysync"
 
 export * from "./AudioConsolidation"
 export * from "./AudioDevices"
-export * from "./AudioOfflineRenderer"
 export * from "./OfflineEngineRenderer"
 export * from "./AudioUtils"
 export * from "./BufferUnderrunDetector"

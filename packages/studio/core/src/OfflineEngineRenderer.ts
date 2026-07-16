@@ -33,49 +33,32 @@ import {AudioWorklets} from "./AudioWorklets"
 import {MIDIReceiver} from "./midi"
 import type {SoundFont2} from "soundfont2"
 
-let workerUrl: Option<string> = Option.None
-let variantWorker: Option<{url: string, attachment: Record<string, unknown>}> = Option.None
-let variantPolicy: () => boolean = () => false
+// The engine worker every offline render runs in: the wasm engine, installed by `WasmEngine.install`.
+// studio-core cannot import studio-core-wasm (that package depends on THIS one), so the url + artifact
+// attachment are injected here rather than imported.
+let engineWorker: Option<{url: string, attachment: Record<string, unknown>}> = Option.None
 
 export class OfflineEngineRenderer {
-    static install(url: string): void {
+    // `attachment` travels to the worker as `config.variant` (the wasm artifacts base url).
+    static install(url: string, attachment: Record<string, unknown>): void {
         console.debug(`OfflineEngineWorkerUrl: '${url}'`)
-        workerUrl = Option.wrap(url)
+        engineWorker = Option.wrap({url, attachment})
     }
 
-    // An alternative engine worker (e.g. the WASM engine) speaking the same OfflineEngineProtocol;
-    // `attachment` travels to it as `config.variant` (e.g. the artifacts base url).
-    static installVariant(url: string, attachment: Record<string, unknown>): void {
-        console.debug(`OfflineEngineVariantUrl: '${url}'`)
-        variantWorker = Option.wrap({url, attachment})
-    }
-
-    static getWorkerUrl(): string {
-        return workerUrl.unwrap("OfflineEngineWorkerUrl is missing (call 'install' first)")
-    }
-
-    static hasVariant(): boolean {return variantWorker.nonEmpty()}
-
-    /// The DEFAULT for renders that do not pass `variant` explicitly (freeze, consolidation): installed by
-    /// the studio's engine toggle so background renders follow the engine the user hears.
-    static installVariantPolicy(policy: () => boolean): void {variantPolicy = policy}
+    static isInstalled(): boolean {return engineWorker.nonEmpty()}
 
     static async create(source: Project,
                         optExportConfiguration: Option<ExportConfiguration>,
                         sampleRate: int = 48_000,
-                        variant?: boolean,
                         abortSignal?: AbortSignal
     ): Promise<OfflineEngineRenderer> {
-        variant ??= variantPolicy()
         const numStems = ExportConfiguration.countStems(optExportConfiguration)
         if (numStems === 0) {return panic("Nothing to export")}
         if (isDefined(abortSignal) && abortSignal.aborted) {return Promise.reject(Errors.AbortError)}
 
         const numberOfChannels = numStems * 2
-        const optVariant = variant
-            ? Option.wrap(variantWorker.unwrap("No variant engine installed (call 'installVariant' first)"))
-            : Option.None
-        const worker = new Worker(optVariant.mapOr(entry => entry.url, this.getWorkerUrl()), {type: "module"})
+        const engine = engineWorker.unwrap("No engine worker installed (WasmEngine.install must run first)")
+        const worker = new Worker(engine.url, {type: "module"})
         const messenger = Messenger.for(worker)
         const protocol = Communicator.sender<OfflineEngineProtocol>(
             messenger.channel("offline-engine"),
@@ -206,12 +189,11 @@ export class OfflineEngineRenderer {
             await protocol.initialize(channel.port1, {
                 sampleRate,
                 numberOfChannels,
-                processorsUrl: AudioWorklets.processorsUrl,
                 syncStreamBuffer: reader.buffer,
                 controlFlagsBuffer,
                 project: source.toArrayBuffer(),
                 exportConfiguration: optExportConfiguration.unwrapOrUndefined(),
-                variant: optVariant.mapOr(entry => entry.attachment, undefined)
+                variant: engine.attachment
             })
         }
         const {promise: abortPromise, reject: rejectOnAbort} = Promise.withResolvers<never>()
@@ -243,10 +225,8 @@ export class OfflineEngineRenderer {
                        optExportConfiguration: Option<ExportConfiguration>,
                        progress: DefaultObservableValue<number>,
                        abortSignal?: AbortSignal,
-                       sampleRate: int = 48_000,
-                       variant?: boolean
+                       sampleRate: int = 48_000
     ): Promise<AudioData> {
-        variant ??= variantPolicy()
         const {timelineBox: {loopArea: {enabled}}, boxGraph} = source
         const wasEnabled = enabled.getValue()
         boxGraph.beginTransaction()
@@ -261,7 +241,7 @@ export class OfflineEngineRenderer {
         })
         const maxDurationSeconds = source.tempoMap.intervalToSeconds(startPosition, endPosition) + 30
         const result = await Promises.tryCatch(
-            this.create(source, optExportConfiguration, sampleRate, variant, abortSignal).then(renderer =>
+            this.create(source, optExportConfiguration, sampleRate, abortSignal).then(renderer =>
                 renderer.render({maxDurationSeconds}, startPosition, endPosition, progress, abortSignal)))
         boxGraph.beginTransaction()
         enabled.setValue(wasEnabled)

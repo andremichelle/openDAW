@@ -10,7 +10,7 @@
     "lint": "eslint \"**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && esbuild src/register.ts --bundle --format=esm --platform=browser --minify --sourcemap --outfile=../core/dist/processors.js",
-    "test": "vitest run"
+    "test": "echo \"No tests to run\""
   },
   "dependencies": {
     "@opendaw/lib-box": "^0.0.90",

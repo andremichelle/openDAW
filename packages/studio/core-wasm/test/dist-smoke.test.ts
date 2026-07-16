@@ -48,17 +48,17 @@ describe("dist smoke", () => {
     it("the metronome/stem exports match the arity the offline worker calls them with", async () => {
         const bytes = readFileSync(path.join(dist, "wasm/engine.wasm"))
         const module = await WebAssembly.compile(bytes)
-        const imports: Record<string, Record<string, unknown>> = {}
+        const imports: WebAssembly.Imports = {}
         for (const entry of WebAssembly.Module.imports(module)) {
-            imports[entry.module] ??= {}
-            imports[entry.module][entry.name] =
+            const moduleImports: WebAssembly.ModuleImports = imports[entry.module] ??= {}
+            moduleImports[entry.name] =
                 entry.kind === "function" ? () => 0
                     : entry.kind === "memory" ? new WebAssembly.Memory({initial: 256, maximum: 16384, shared: true})
                         : entry.kind === "table" ? new WebAssembly.Table({initial: 1024, element: "anyfunc"})
                             : new WebAssembly.Global({value: "i32", mutable: false}, 0)
         }
         const {exports} = await WebAssembly.instantiate(module, imports)
-        const arity = (name: string): number => (exports[name] as Function).length
+        const arity = (name: string): number => (exports[name] as CallableFunction).length
         expect(arity("set_stem_export"), "count + metronomeStem").toBe(2)
         expect(arity("set_metronome_enabled")).toBe(1)
         expect(arity("set_metronome_gain")).toBe(1)

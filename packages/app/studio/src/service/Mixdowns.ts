@@ -12,7 +12,6 @@ import {Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {ExportConfiguration} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs"
-import {WasmEngine} from "@opendaw/studio-core-wasm"
 
 export namespace Mixdowns {
     export const exportMixdown = async ({project: source, meta}: ProjectProfile): Promise<void> => {
@@ -25,7 +24,7 @@ export namespace Mixdowns {
             cancel: () => abortController.abort()
         })
         const result = await Promises.tryCatch(OfflineEngineRenderer
-            .start(project, Option.None, progress, abortController.signal, 48_000, WasmEngine.useForExports()))
+            .start(project, Option.None, progress, abortController.signal, 48_000))
         dialog.terminate()
         if (result.status === "rejected") {
             if (!Errors.isAbort(result.error)) {
@@ -76,7 +75,7 @@ export namespace Mixdowns {
             cancel: () => abortController.abort()
         })
         const {status, value, error: renderError} = await Promises.tryCatch(OfflineEngineRenderer
-            .start(project, Option.wrap(config), progress, abortController.signal, 48_000, WasmEngine.useForExports()))
+            .start(project, Option.wrap(config), progress, abortController.signal, 48_000))
         dialog.terminate()
         if (status === "rejected") {
             if (Errors.isAbort(renderError)) {return}

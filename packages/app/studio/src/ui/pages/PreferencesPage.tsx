@@ -12,7 +12,6 @@ import {Button} from "@/ui/components/Button"
 import {Colors} from "@opendaw/studio-enums"
 import {Promises} from "@opendaw/lib-runtime"
 import {PreferencesPageLabels} from "@/ui/pages/PreferencesPageLabels"
-import {WasmEngineToggle} from "@/ui/pages/WasmEngineToggle"
 
 const className = Html.adoptStyleSheet(css, "PreferencesPage")
 
@@ -43,7 +42,6 @@ export const PreferencesPage: PageFactory<StudioService> = ({lifecycle, service}
                         <span>(Changes are applied immediately)</span>
                     </div>
                     <div className="engine-variant">
-                        <WasmEngineToggle lifecycle={lifecycle} service={service}/>
                     </div>
                     <PreferencePanel lifecycle={lifecycle}
                                      preferences={service.engine.preferences}

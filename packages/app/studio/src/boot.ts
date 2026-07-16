@@ -16,7 +16,6 @@ import {
     FactoryCatalog,
     GlobalSampleLoaderManager,
     GlobalSoundfontLoaderManager,
-    OfflineEngineRenderer,
     Workers
 } from "@opendaw/studio-core"
 import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI} from "@/opendaw-api"
@@ -44,8 +43,8 @@ const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
     .then(x => BuildInfo.parse(x))
 
-export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProcessorUrl, wasmOfflineWorkerUrl}: {
-    workersUrl: string, workletsUrl: string, offlineEngineUrl: string
+export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOfflineWorkerUrl}: {
+    workersUrl: string, workletsUrl: string
     wasmProcessorUrl: string, wasmOfflineWorkerUrl: string
 }) => {
     console.debug("booting...")
@@ -59,7 +58,6 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProce
     await FontLoader.load()
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)
-    OfflineEngineRenderer.install(offlineEngineUrl)
     const testFeaturesResult = await Promises.tryCatch(testFeatures())
     if (testFeaturesResult.status === "rejected") {
         document.querySelector("#preloader")?.remove()
@@ -84,10 +82,15 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProce
         offlineWorkerUrl: wasmOfflineWorkerUrl,
         wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`
     })
-    if (WasmEngine.isEnabled() && !await WasmEngine.ensureReady(context)) {
-        // Session-only fallback (the EngineVariant provider yields null while the modules are absent):
-        // persisting the opt-out would strand the user on the TS engine after the artifacts return.
-        console.warn("WASM engine artifacts unavailable — falling back to the TypeScript engine.")
+    // The engine IS the wasm engine, so this is a hard boot requirement: without its artifacts there is no
+    // engine to fall back to, and every worklet-dependent screen would fail on construction instead.
+    if (!await WasmEngine.ensureReady(context)) {
+        document.querySelector("#preloader")?.remove()
+        Dialogs.info({
+            headline: "Engine Unavailable",
+            message: "openDAW could not load its audio engine. This is usually a temporary network issue, please reload the page."
+        }).finally()
+        return
     }
     if (context.state === "suspended") {
         window.addEventListener("click",

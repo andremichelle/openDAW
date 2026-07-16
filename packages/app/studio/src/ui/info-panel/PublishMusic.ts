@@ -2,7 +2,6 @@ import {OfflineEngineRenderer, ProjectBundle, ProjectProfile} from "@opendaw/stu
 import {WavFile} from "@opendaw/lib-dsp"
 import {DefaultObservableValue, isDefined, Option, panic, Procedure, Progress} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {WasmEngine} from "@opendaw/studio-core-wasm"
 
 export namespace PublishMusic {
     export const publishMusic = async (profile: ProjectProfile, progress: Progress.Handler, log: Procedure<string>): Promise<string> => {
@@ -14,7 +13,7 @@ export namespace PublishMusic {
         }
         log("Mixdown audio...")
         const renderProgress = new DefaultObservableValue(0.0)
-        const mixdownResult = await Promises.tryCatch(OfflineEngineRenderer.start(profile.project.copy(), Option.None, renderProgress, undefined, 48_000, WasmEngine.useForExports()))
+        const mixdownResult = await Promises.tryCatch(OfflineEngineRenderer.start(profile.project.copy(), Option.None, renderProgress, undefined, 48_000))
         if (mixdownResult.status === "rejected") {
             return panic(mixdownResult.error)
         }

@@ -2,6 +2,8 @@ import {MemoryBacking, MemoryPattern, MemoryThread} from "./MemoryBenchmark"
 
 export type BenchmarkCategory = "Baseline" | "Audio Effect" | "Instrument" | "Memory"
 
+// One row of the benchmark. These are the engine's numbers: there is one engine (the wasm engine), so the
+// parallel `wasm*` fields this carried while the two engines were measured side by side are gone.
 export type BenchmarkResult = {
     readonly category: BenchmarkCategory
     readonly name: string
@@ -11,12 +13,6 @@ export type BenchmarkResult = {
     readonly durationSeconds: number
     readonly audio?: Float32Array[]
     readonly error?: string
-    // The WASM engine's numbers for the same render (side-by-side comparison; absent for memory rows).
-    readonly wasmRenderMs?: number
-    readonly wasmMarginalMs?: number
-    readonly wasmPerQuantumUs?: number
-    readonly wasmAudio?: Float32Array[]
-    readonly wasmError?: string
     readonly memory?: {
         readonly backing: MemoryBacking
         readonly pattern: MemoryPattern

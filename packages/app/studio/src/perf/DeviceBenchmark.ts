@@ -311,12 +311,12 @@ const computePeak = (audio: ReadonlyArray<Float32Array>): number => {
 }
 
 const renderAndMeasure = async (service: StudioService, skeleton: ProjectSkeleton,
-                                sampleData: AudioData | null, variant: boolean): Promise<RenderResult> => {
+                                sampleData: AudioData | null): Promise<RenderResult> => {
     if (sampleData !== null) {
         injectSample(service, sampleData)
     }
     const project = Project.fromSkeleton(service, skeleton, false)
-    const renderer = await OfflineEngineRenderer.create(project, Option.None, SAMPLE_RATE, variant)
+    const renderer = await OfflineEngineRenderer.create(project, Option.None, SAMPLE_RATE)
     await renderer.waitForLoading()
     await renderer.play()
     const start = performance.now()
@@ -335,21 +335,15 @@ export type BenchmarkProgress = {
 }
 
 const tryRender = async (service: StudioService, skeleton: ProjectSkeleton,
-                         sampleData: AudioData | null, variant: boolean): Promise<RenderResult | string> => {
+                         sampleData: AudioData | null): Promise<RenderResult | string> => {
     try {
-        return await renderAndMeasure(service, skeleton, sampleData, variant)
+        return await renderAndMeasure(service, skeleton, sampleData)
     } catch (error: unknown) {
         return error instanceof Error ? error.message : String(error)
     }
 }
 
-// Render the SAME spec through both engines (fresh skeletons — a skeleton is consumed by its project).
-const tryRenderBoth = async (service: StudioService, makeSkeleton: () => ProjectSkeleton,
-                             sampleData: AudioData | null): Promise<[RenderResult | string, RenderResult | string]> => {
-    const ts = await tryRender(service, makeSkeleton(), sampleData, false)
-    const wasm = await tryRender(service, makeSkeleton(), sampleData, true)
-    return [ts, wasm]
-}
+
 
 export const runAllBenchmarks = async (
     service: StudioService,
@@ -368,55 +362,47 @@ export const runAllBenchmarks = async (
         }
         return undefined
     }
-    const emitResult = (ts: RenderResult | string, wasm: RenderResult | string, category: BenchmarkCategory,
-                        name: string, baselines: {ts: number, wasm: number}, expectAudio: boolean) => {
-        const tsError = failure(ts, expectAudio)
-        const wasmError = failure(wasm, expectAudio)
-        const tsResult = typeof ts === "string" ? undefined : ts
-        const wasmResult = typeof wasm === "string" ? undefined : wasm
-        const marginalMs = (tsResult?.elapsed ?? 0) - baselines.ts
-        const wasmMarginalMs = (wasmResult?.elapsed ?? 0) - baselines.wasm
+    const emitResult = (rendered: RenderResult | string, category: BenchmarkCategory,
+                        name: string, baseline: number, expectAudio: boolean) => {
+        const error = failure(rendered, expectAudio)
+        const result = typeof rendered === "string" ? undefined : rendered
+        const marginalMs = (result?.elapsed ?? 0) - baseline
         onResult({
             category, name,
-            renderMs: tsResult?.elapsed ?? 0,
+            renderMs: result?.elapsed ?? 0,
             marginalMs,
             perQuantumUs: (marginalMs / totalQuanta) * 1000,
-            wasmRenderMs: wasmResult?.elapsed,
-            wasmMarginalMs: wasmResult === undefined ? undefined : wasmMarginalMs,
-            wasmPerQuantumUs: wasmResult === undefined ? undefined : (wasmMarginalMs / totalQuanta) * 1000,
             durationSeconds: RENDER_SECONDS,
-            audio: tsError === undefined ? tsResult?.audio : undefined,
-            wasmAudio: wasmError === undefined ? wasmResult?.audio : undefined,
-            error: tsError,
-            wasmError
+            audio: error === undefined ? result?.audio : undefined,
+            error
         })
     }
     const elapsedOf = (result: RenderResult | string): number => typeof result === "string" ? 0 : result.elapsed
     onProgress({current: "Warmup", index: step, total: totalDevices})
-    await tryRenderBoth(service, () => ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}), null)
+    await tryRender(service, ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}), null)
     step++
     onProgress({current: "Empty engine", index: step, total: totalDevices})
-    const [emptyTs, emptyWasm] = await tryRenderBoth(service,
-        () => ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}), null)
-    const emptyBaselines = {ts: elapsedOf(emptyTs), wasm: elapsedOf(emptyWasm)}
-    emitResult(emptyTs, emptyWasm, "Baseline", "Empty engine", emptyBaselines, false)
+    const empty = await tryRender(service,
+        ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}), null)
+    const emptyBaseline = elapsedOf(empty)
+    emitResult(empty, "Baseline", "Empty engine", emptyBaseline, false)
     step++
     onProgress({current: "Tape only", index: step, total: totalDevices})
-    const [tapeTs, tapeWasm] = await tryRenderBoth(service, () => createTapeSkeleton(null), sampleData)
-    const baselines = {ts: elapsedOf(tapeTs), wasm: elapsedOf(tapeWasm)}
-    emitResult(tapeTs, tapeWasm, "Baseline", "Tape only", emptyBaselines, true)
+    const tape = await tryRender(service, createTapeSkeleton(null), sampleData)
+    const baseline = elapsedOf(tape)
+    emitResult(tape, "Baseline", "Tape only", emptyBaseline, true)
     step++
     for (const effect of audioEffects) {
         onProgress({current: effect.name, index: step, total: totalDevices})
-        const [ts, wasm] = await tryRenderBoth(service, () => createTapeSkeleton(effect), sampleData)
-        emitResult(ts, wasm, "Audio Effect", effect.name, baselines, true)
+        emitResult(await tryRender(service, createTapeSkeleton(effect), sampleData),
+            "Audio Effect", effect.name, baseline, true)
         step++
     }
     for (const instrument of instruments) {
         onProgress({current: instrument.name, index: step, total: totalDevices})
-        const [ts, wasm] = await tryRenderBoth(service, () => createInstrumentSkeleton(instrument),
-            instrument.needsSample ? sampleData : null)
-        emitResult(ts, wasm, "Instrument", instrument.name, baselines, true)
+        emitResult(await tryRender(service, createInstrumentSkeleton(instrument),
+                instrument.needsSample ? sampleData : null),
+            "Instrument", instrument.name, baseline, true)
         step++
     }
     await service.audioContext.resume()
