@@ -40,6 +40,30 @@ RewriteRule ^(.*)$ $1.br [QSA,L]
 </FilesMatch>
 
 # --------------------------------------------------
+# Search engine indexing
+# --------------------------------------------------
+
+# Live collaboration rooms (/join/) and project deep links (/open-bundle/) are private user
+# content. This is an SPA, so they are served the very same index.html as every other route,
+# and that page's meta robots tag says "index, follow" — a meta tag cannot distinguish paths,
+# so this header is the only per-route lever.
+#
+# These two paths are deliberately NOT disallowed in robots.txt: a disallowed URL is never
+# fetched, so the crawler would never see this noindex and could still list the bare URL if
+# someone shares the link. Letting the crawler fetch it is what makes the noindex binding, and
+# it leaks nothing — the response is the empty SPA shell, never any room or project data.
+RewriteCond %{REQUEST_URI} ^/(join|open-bundle)(/|$) [NC]
+RewriteRule ^ - [E=NOINDEX_ROUTE:1]
+
+<IfModule mod_headers.c>
+    # The SPA fallback below is an internal redirect, which re-exports env vars under a
+    # REDIRECT_ prefix, so the rewritten request only matches the second line. Both spellings
+    # are needed to cover the request whether or not it got rewritten.
+    Header set X-Robots-Tag "noindex, nofollow" env=NOINDEX_ROUTE
+    Header set X-Robots-Tag "noindex, nofollow" env=REDIRECT_NOINDEX_ROUTE
+</IfModule>
+
+# --------------------------------------------------
 
 # SPA fallback - route all non-file requests to index.html
 # Note: We only skip files (!-f), not directories (!-d), because the SPA router
