@@ -79,6 +79,11 @@ export namespace OpfsWorker {
                 return result
             }
 
+            async isAvailable(): Promise<boolean> {
+                const {status} = await Promises.tryCatch(getOpfsRoot())
+                return status === "resolved"
+            }
+
             async clear(): Promise<void> {
                 const root = await getOpfsRoot()
                 for await (const [name, handle] of root.entries()) {

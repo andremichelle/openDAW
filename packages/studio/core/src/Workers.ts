@@ -48,6 +48,7 @@ export class Workers {
                     exists(path: string): Promise<boolean> {return router.dispatchAndReturn(this.exists, path)}
                     delete(path: string): Promise<void> {return router.dispatchAndReturn(this.delete, path)}
                     list(path: string): Promise<ReadonlyArray<OpfsProtocol.Entry>> {return router.dispatchAndReturn(this.list, path)}
+                    isAvailable(): Promise<boolean> {return router.dispatchAndReturn(this.isAvailable)}
                 })
     }
 

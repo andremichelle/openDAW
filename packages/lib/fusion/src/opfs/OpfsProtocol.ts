@@ -9,4 +9,5 @@ export interface OpfsProtocol {
     exists(path: string): Promise<boolean>
     delete(path: string): Promise<void>
     list(path: string): Promise<ReadonlyArray<OpfsProtocol.Entry>>
+    isAvailable(): Promise<boolean>
 }

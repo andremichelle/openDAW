@@ -145,8 +145,8 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProce
         notify: ({message, icon, origin}) => Surface.get(origin)
             .toast(message, isDefined(icon) ? IconSymbol.fromName(icon) : IconSymbol.Notification)
     })
-    const opfsProbe = await Promises.tryCatch(navigator.storage.getDirectory())
-    if (opfsProbe.status === "rejected") {
+    const opfsProbe = await Promises.tryCatch(Workers.Opfs.isAvailable())
+    if (opfsProbe.status === "rejected" || !opfsProbe.value) {
         Dialogs.info({
             headline: "Storage Unavailable",
             message: "openDAW cannot start because the browser is blocking access to private storage, so samples, presets and projects cannot be persisted. This typically happens in Private Browsing mode. Please reopen openDAW in a regular browser window."

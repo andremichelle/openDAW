@@ -254,6 +254,18 @@ describe("OpfsWorker", () => {
         })
     })
 
+    describe("isAvailable", () => {
+        it("should return true when OPFS root resolves", async () => {
+            expect(await protocol.isAvailable()).toBe(true)
+        })
+        it("should return false when getDirectory rejects (worker has no OPFS access)", async () => {
+            vi.stubGlobal("navigator", {
+                storage: {getDirectory: async () => {throw new DOMException("denied", "SecurityError")}}
+            })
+            expect(await protocol.isAvailable()).toBe(false)
+        })
+    })
+
     describe("clear", () => {
         it("should remove all files and directories from root", async () => {
             await protocol.write("file1.bin", new Uint8Array([1]))
