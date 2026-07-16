@@ -2,46 +2,30 @@
 
 component
   display: flex
-  flex-direction: column
-
-  // gap only BETWEEN buttons; the label's own margin handles its spacing (not a flex row-gap on the whole column)
-  > .action + .action
-    margin-top: 0.4em
+  justify-content: center
+  column-gap: 1.5em
 
   > .action
-    --action-color: var(--color-blue)
     display: flex
     align-items: center
-    column-gap: 0.6em
-    padding: 0.6em 0.75em
-    border-radius: 4px
-    border: 1px solid rgba(white, 0.08)
-    background: rgba(white, 0.02)
-    color: var(--color-dark)
-    text-align: left
+    column-gap: 0.5em
+    padding: 0.5em 1.75em
+    border-radius: 999px
+    border: 1px solid var(--color-blue)
+    background: none
+    color: var(--color-blue)
     cursor: pointer
     font: inherit
+    font-size: $fs-l
+    white-space: nowrap
 
-    // only the frame reacts to hover; it takes the icon's color
     &:hover
-      border-color: var(--action-color)
-      background: rgba(white, 0.04)
+      border: 1px solid white
+      background: rgba(white, 0.03)
+      color: white
+      box-shadow: 0 0 16px 0 rgba(white, 0.15)
 
     > svg
-      width: 24px
-      height: 24px
+      width: 16px
+      height: 16px
       flex: 0 0 auto
-      color: var(--action-color)
-
-    > .text > .title
-      color: white
-      font-size: $fs-l
-      font-weight: 500
-
-    > .text > .desc
-      font-size: $fs-m
-      color: var(--color-shadow)
-
-  // Open Bundle: same frame as the others, but orange (icon + hover frame)
-  > .action.import
-    --action-color: var(--color-orange)

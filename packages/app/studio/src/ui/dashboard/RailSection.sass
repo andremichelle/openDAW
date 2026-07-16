@@ -14,26 +14,26 @@ component
       flex-wrap: nowrap
       row-gap: 0.4em
 
-  .chip
+  // a body row pairing a .link with a trailing .help button
+  .entry
     display: flex
     align-items: center
-    column-gap: 0.35em
-    padding: 0.3em 0.5em
-    border-radius: 3px
-    border: 1px solid rgba(white, 0.08)
-    background: rgba(white, 0.02)
-    color: var(--color-dark)
-    font: inherit
-    font-size: $fs-m
+    column-gap: 0.4em
+
+  .help
+    display: inline-flex
+    color: var(--color-shadow)
+    background: none
+    border: none
+    padding: 0
     cursor: pointer
 
     &:hover
-      color: var(--color-orange)
-      border-color: var(--color-orange)
+      color: var(--color-blue)
 
     > svg
-      width: 16px
-      height: 16px
+      width: 13px
+      height: 13px
 
   .link
     display: inline-flex

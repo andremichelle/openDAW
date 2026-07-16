@@ -22,21 +22,20 @@ export const Dashboard = ({lifecycle, service}: Construct) => (
     <div className={className}>
         <header className="hero">
             <h1>openDAW</h1>
+            <div className="tagline">Create Music Online</div>
         </header>
-        <IntroTiles/>
+        <ActionButtons lifecycle={lifecycle} service={service}/>
         <div className="main">
-            <div className="rail left">
-                <ActionButtons lifecycle={lifecycle} service={service}/>
-                <Backup service={service}/>
-                <Sponsors/>
-            </div>
-            <div className="lists">
+            <div className="panel">
                 <Resources lifecycle={lifecycle} service={service}/>
             </div>
-            <div className="rail right">
+            <div className="rail">
                 <HelpFeedback/>
+                <Backup service={service}/>
                 <Links/>
+                <Sponsors/>
             </div>
         </div>
+        <IntroTiles/>
     </div>
 )

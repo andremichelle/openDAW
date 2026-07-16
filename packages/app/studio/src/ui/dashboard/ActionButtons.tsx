@@ -6,7 +6,6 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 import {StudioService} from "@/service/StudioService"
 import {connectRoom} from "@/service/StudioLiveRoomConnect"
-import {SectionLabel} from "@/ui/dashboard/SectionLabel"
 
 const className = Html.adoptStyleSheet(css, "ActionButtons")
 
@@ -17,27 +16,17 @@ type Construct = {
 
 export const ActionButtons = ({service}: Construct) => (
     <div className={className}>
-        <SectionLabel title="Start"/>
-        <button className="action" onclick={() => service.newProject()}>
-            <Icon symbol={IconSymbol.New}/>
-            <div className="text">
-                <div className="title">New Project</div>
-                <div className="desc">Empty timeline, start from a clean slate.</div>
-            </div>
+        <button className="action" title="Empty timeline, start from a clean slate."
+                onclick={() => service.newProject()}>
+            <Icon symbol={IconSymbol.New}/><span>New Project</span>
         </button>
-        <button className="action" onclick={() => connectRoom(service)}>
-            <Icon symbol={IconSymbol.Connected}/>
-            <div className="text">
-                <div className="title">New Live Room</div>
-                <div className="desc">Jam with others in real time, share a link.</div>
-            </div>
+        <button className="action" title="Jam with others in real time, share a link."
+                onclick={() => connectRoom(service)}>
+            <Icon symbol={IconSymbol.Connected}/><span>New Live Room</span>
         </button>
-        <button className="action import" onclick={() => service.importBundle()}>
-            <Icon symbol={IconSymbol.Folder}/>
-            <div className="text">
-                <div className="title">Open Bundle</div>
-                <div className="desc">Load a project bundle (.odb) from disk.</div>
-            </div>
+        <button className="action" title="Load a project bundle (.odb) from disk."
+                onclick={() => service.importBundle()}>
+            <Icon symbol={IconSymbol.Folder}/><span>Open Bundle</span>
         </button>
     </div>
 )

@@ -3,7 +3,6 @@ import {Html} from "@opendaw/lib-dom"
 import {createElement, RouteLocation} from "@opendaw/lib-jsx"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
-import {SectionLabel} from "@/ui/dashboard/SectionLabel"
 
 const className = Html.adoptStyleSheet(css, "IntroTiles")
 
@@ -56,7 +55,6 @@ const tiles: ReadonlyArray<Tile> = [
 
 export const IntroTiles = () => (
     <div className={className}>
-        <SectionLabel title="Create Music Online"/>
         <div className="tiles">
             {tiles.map(({icon, title, text, path}) => (
                 <div className="tile" onclick={() => RouteLocation.get().navigateTo(path)}>
