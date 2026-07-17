@@ -11,6 +11,7 @@ import {AutomationControl} from "@/ui/components/AutomationControl"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {CompositeEntryDrop} from "@/ui/devices/CompositeEntryDrop"
+import {AudioCompositeEntryReorder} from "@/ui/devices/AudioCompositeEntryReorder"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {StudioService} from "@/service/StudioService"
@@ -40,17 +41,21 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
     const remove: HTMLElement = fixed ? <div/> : <Icon symbol={IconSymbol.Delete} className="remove"/>
+    // The label doubles as the reorder DRAG HANDLE (see below): the knobs keep their own pointer dragging, so
+    // the handle must be an element that carries no control of its own.
+    const labelElement: HTMLElement = <div className="label">{label}</div>
     // Bare Knob + Checkbox built exactly as the track header's channel controls, so a branch reads the same as
     // its track. AutomationControl still gives automation, midi-learn, and the parameter menu.
     const element: HTMLElement = (
         <div className={className}>
-            <div className="label">{label}</div>
+            {labelElement}
             <div className="knob" data-swallow-click="">
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                                    tracks={tracks} parameter={entry.namedParameter.gain} offset={2}>
                     <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
                                                parameter={entry.namedParameter.gain} options={SnapCommonDecibel}>
-                        <Knob lifecycle={lifecycle} value={entry.namedParameter.gain} anchor={0.0} color={Colors.yellow}/>
+                        <Knob lifecycle={lifecycle} value={entry.namedParameter.gain} anchor={0.0}
+                              color={Colors.yellow}/>
                     </RelativeUnitValueDragging>
                 </AutomationControl>
             </div>
@@ -77,12 +82,14 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
         </div>
     )
     // A branch that holds effects reads brighter than an empty (pass-through) one.
-    if (entry.audioEffects.mapOr(chain => chain.adapters().length, 0) > 0) {element.classList.add("has-effects")}
+    if (entry.audioEffects.mapOr(chain => chain.adapters().length, 0) > 0) {
+        element.classList.add("has-effects")
+    }
     lifecycle.ownAll(
         connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.mute)),
         connectBoolean(soloValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.solo)),
         TextTooltip.default(element, () => "Edit entry chain"),
-        // The knobs and checkboxes live INSIDE the row: swallow their clicks so adjusting a control does not
+        // The knobs and checkboxes live INSIDE the row: swallow their clicks, so adjusting a control does not
         // also open the chain.
         Events.subscribe(element, "click", (event: Event) => {
             const target = event.target
@@ -95,6 +102,7 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
         CompositeEntryDrop.install({element, project, chainField: entry.box.audioEffects, accepts: "audio"})
     )
     if (!fixed) {
+        const getIndex = () => entry.indexField.getValue()
         lifecycle.ownAll(
             TextTooltip.default(remove, () => "Delete entry"),
             Events.subscribe(remove, "click", (event: Event) => {
@@ -107,7 +115,13 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
                     entry.box.delete()
                     survivors.forEach((other, index) => other.indexField.setValue(index))
                 })
-            })
+            }),
+            // Drag the label to reorder: the handle is the SOURCE, the whole row is the drop TARGET. A fixed
+            // (split) composite maps entries by index, so it gets neither.
+            AudioCompositeEntryReorder.installSource({
+                handle: labelElement, classReceiver: element, composite, uuid: entry.uuid, getIndex
+            }),
+            AudioCompositeEntryReorder.installTarget({element, project, composite, getIndex})
         )
     }
     return element

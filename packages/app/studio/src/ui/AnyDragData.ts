@@ -38,6 +38,14 @@ export type DragDevice = (
         uuid: string
     }) & DragCopyHint
 export type DragChannelStrip = { type: "channelstrip", uuid: string, start_index: int } & DragCopyHint
+// One AudioComposite entry dragged to reorder it among its siblings. `composite` scopes the drop so an entry
+// only reorders within its OWN composite; `index` is the dragged entry's current order.
+export type DragCompositeEntry = {
+    type: "composite-entry"
+    uuid: UUID.String
+    index: int
+    composite: UUID.String
+} & DragCopyHint
 export type DragPreset = {
     type: "preset"
     category: PresetCategory
@@ -46,4 +54,5 @@ export type DragPreset = {
     device: Nullable<InstrumentFactories.Keys>
 } & DragCopyHint
 
-export type AnyDragData = DragSample | DragFile | DragDevice | DragChannelStrip | DragSoundfont | DragPreset
+export type AnyDragData =
+    DragSample | DragFile | DragDevice | DragChannelStrip | DragSoundfont | DragPreset | DragCompositeEntry

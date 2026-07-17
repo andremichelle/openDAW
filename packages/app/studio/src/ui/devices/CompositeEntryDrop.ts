@@ -36,7 +36,7 @@ export namespace CompositeEntryDrop {
                 editing.modify(() => project.api.insertEffect(chainField, factory, index))
                 event.preventDefault()
             },
-            enter: () => element.classList.add("drop-target"),
+            enter: (allowDrop: boolean) => element.classList.toggle("drop-target", allowDrop),
             leave: () => element.classList.remove("drop-target")
         })
     }
