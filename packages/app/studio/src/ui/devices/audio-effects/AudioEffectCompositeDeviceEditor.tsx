@@ -8,6 +8,7 @@ import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
+import {SnapCommonDecibel} from "@/ui/configs.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {CompositeEntryList} from "@/ui/devices/CompositeEntryList"
 import {AudioCompositeEntry} from "@/ui/devices/AudioCompositeEntry"
@@ -58,18 +59,23 @@ export const AudioEffectCompositeDeviceEditor = ({lifecycle, service, adapter, d
                       populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
                       populateControls={() => (
                           <div className={className}>
-                              <div className="mix">
-                                  {Object.values(adapter.namedParameter)
-                                      .map(parameter => ControlBuilder.createKnob({
-                                          lifecycle, editing, midiLearning, adapter, parameter
-                                      }))}
-                              </div>
                               <CompositeEntryList lifecycle={lifecycle}
                                                   rows={rows}
                                                   watch={update => adapter.entries.subscribe({
                                                       onAdd: update, onRemove: update, onReorder: update
                                                   })}
                                                   footer={footer}/>
+                              <div className="mix">
+                                  {ControlBuilder.createKnob({
+                                      lifecycle, editing, midiLearning, adapter,
+                                      parameter: adapter.namedParameter.dry, options: SnapCommonDecibel
+                                  })}
+                                  {ControlBuilder.createKnob({
+                                      lifecycle, editing, midiLearning, adapter,
+                                      parameter: adapter.namedParameter.wet, options: SnapCommonDecibel
+                                  })}
+                                  <div/>
+                              </div>
                           </div>)}
                       populateMeter={() => (
                           <DevicePeakMeter lifecycle={lifecycle}
