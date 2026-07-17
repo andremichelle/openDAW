@@ -127,6 +127,8 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         // A ONE-SIDED host (a composite entry) hosts only one chain kind; the section it does not host stays empty.
         const midiAdapters = deviceHost.midiEffects.mapOr(chain => chain.adapters(), [])
         appendChildren(midiEffectsContainer, midiAdapters.map((adapter) => mounts.get(adapter.uuid).editor()))
+        // A composite entry's back editor is AUDIO, so its slot line reads blue, not the instrument green.
+        instrumentContainer.classList.toggle("as-audio", instrument.isEmpty() && !deviceHost.hostsInstrument)
         appendChildren(instrumentContainer, instrument.match({
             // A host that holds no instrument AT ALL is a composite entry: show the way back out, not a void.
             none: () => deviceHost.hostsInstrument

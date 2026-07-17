@@ -10,13 +10,10 @@ component
     display: flex
     align-items: center
     gap: 0.375em
+    cursor: pointer
 
     .back
-      cursor: pointer
       opacity: 0.6
-
-      &:hover
-        opacity: 1.0
 
     .label
       font-size: 0.625em
@@ -25,13 +22,19 @@ component
       opacity: 0.6
       white-space: nowrap
 
+    &:hover
+      .back, .label
+        opacity: 1.0
+
   .controls
     display: flex
-    align-items: flex-start
-    gap: 0.5em
+    align-items: center
+    gap: 0.375em
+
+    .knob
+      font-size: 0.625em
 
     .checkboxes
+      font-size: 0.5em
       display: flex
-      flex-direction: column
-      gap: 0.125em
-      margin-top: 0.5em
+      gap: 0.5em

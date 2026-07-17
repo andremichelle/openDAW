@@ -7,7 +7,10 @@ import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {AudioEffectCompositeCellBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
 import {Icon} from "@/ui/components/Icon"
 import {Checkbox} from "@/ui/components/Checkbox"
-import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
+import {Knob} from "@/ui/components/Knob.tsx"
+import {AutomationControl} from "@/ui/components/AutomationControl"
+import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
+import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {StudioService} from "@/service/StudioService"
@@ -20,30 +23,45 @@ type Construct = {
     host: DeviceHost
 }
 
-// What the device panel shows in the INSTRUMENT slot while a composite ENTRY is being edited: an entry hosts no
-// instrument (its signal comes from the composite), so the slot would otherwise be empty. It carries the way
-// BACK out plus the entry's own bar controls (gain, pan, mute, solo), so they stay reachable while you edit the
-// branch chain — the entry strip is a real ChannelStrip, so pan is a genuine control.
+// Shown in the instrument slot while a composite ENTRY is edited: the way BACK to the parent composite plus the
+// entry's own gain / pan / mute / solo, matching the entry row's controls.
 export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     const {editing, midiLearning, userEditingManager} = service.project
-    const back: HTMLElement = <Icon symbol={IconSymbol.ArrowLeft} className="back"/>
-    // Where BACK returns to: the immediate PARENT host (the composite's own host) — the audio unit for a
-    // top-level entry, or the OUTER entry's chain when composites are nested. Going straight to the audio unit
-    // would skip the intermediate composites. The vertex the editing pointer may target differs by host: a
-    // composite CELL accepts the Editing pointer at the box level (like a Playfield slot), while an AUDIO UNIT
-    // accepts it only through its `editing` FIELD — pointing at the unit box itself throws.
+    // A composite CELL accepts the Editing pointer at the box level; an AUDIO UNIT only through its `editing`.
     const parent = host.deviceHost()
     const backTarget: Vertex<Pointers> = parent instanceof AudioEffectCompositeCellBoxAdapter
         ? parent.box
         : parent.audioUnitBoxAdapter().box.editing
-    // The entry adapter, when this host IS a composite entry (it always is here) — for its bar controls.
     const entry = host instanceof AudioEffectCompositeCellBoxAdapter ? host : null
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
+    const name: HTMLElement = <div className="label"/>
+    const header: HTMLElement = (
+        <div className="header">
+            <Icon symbol={IconSymbol.ArrowLeft} className="back"/>
+            {name}
+        </div>
+    )
     const controls = entry === null ? <div/> : (
         <div className="controls">
-            {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter: entry.compositeDevice(), parameter: entry.namedParameter.gain})}
-            {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter: entry.compositeDevice(), parameter: entry.namedParameter.pan})}
+            <div className="knob">
+                <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                                   tracks={entry.audioUnitBoxAdapter().tracks} parameter={entry.namedParameter.gain} offset={2}>
+                    <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
+                                               parameter={entry.namedParameter.gain} options={SnapCommonDecibel}>
+                        <Knob lifecycle={lifecycle} value={entry.namedParameter.gain} anchor={0.0} color={Colors.yellow}/>
+                    </RelativeUnitValueDragging>
+                </AutomationControl>
+            </div>
+            <div className="knob">
+                <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                                   tracks={entry.audioUnitBoxAdapter().tracks} parameter={entry.namedParameter.pan} offset={2}>
+                    <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
+                                               parameter={entry.namedParameter.pan} options={SnapCenter}>
+                        <Knob lifecycle={lifecycle} value={entry.namedParameter.pan} anchor={0.5} color={Colors.green}/>
+                    </RelativeUnitValueDragging>
+                </AutomationControl>
+            </div>
             <div className="checkboxes">
                 <Checkbox lifecycle={lifecycle} model={muteValue}
                           appearance={{activeColor: Colors.red, framed: true, tooltip: "Mute entry"}}>
@@ -56,24 +74,19 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             </div>
         </div>
     )
-    const element: HTMLElement = (
-        <div className={className}>
-            <div className="header">
-                {back}
-                <div className="label">{host.label}</div>
-            </div>
-            {controls}
-        </div>
-    )
+    const element: HTMLElement = <div className={className}>{header}{controls}</div>
     lifecycle.ownAll(
-        TextTooltip.default(back, () => "Back to the parent chain"),
-        Events.subscribe(back, "click", () => userEditingManager.audioUnit.edit(backTarget))
+        TextTooltip.default(header, () => "Back to the parent chain"),
+        Events.subscribe(header, "click", () => userEditingManager.audioUnit.edit(backTarget))
     )
     if (entry !== null) {
         lifecycle.ownAll(
+            entry.compositeDevice().labelField.catchupAndSubscribe(owner => name.textContent = owner.getValue()),
             connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.mute)),
             connectBoolean(soloValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.solo))
         )
+    } else {
+        name.textContent = host.label
     }
     return element
 }
