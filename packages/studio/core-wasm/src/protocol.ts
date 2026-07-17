@@ -1,5 +1,5 @@
 import type {UUID} from "@opendaw/lib-std"
-import type {CompositeSpec} from "./engine-modules"
+import type {CompositeSpec, EffectCompositeSpec} from "./engine-modules"
 
 // The structured-clonable extras the wasm engine processor receives as `processorOptions.variant`.
 export type WasmEngineAttachment = {
@@ -7,6 +7,7 @@ export type WasmEngineAttachment = {
     deviceModules: ReadonlyArray<WebAssembly.Module>
     deviceBoxTypes: ReadonlyArray<string>
     composites: ReadonlyArray<CompositeSpec>
+    effectComposites: ReadonlyArray<EffectCompositeSpec>
     memory: WebAssembly.Memory
 }
 

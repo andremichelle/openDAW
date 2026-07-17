@@ -1,6 +1,8 @@
 import {UUID} from "@opendaw/lib-std"
 import {
     ArpeggioDeviceBox,
+    AudioEffectCompositeBox,
+    AudioEffectCompositeCellBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
@@ -18,6 +20,7 @@ import {
     PitchDeviceBox,
     RevampDeviceBox,
     ReverbDeviceBox,
+    StereoCompositeBox,
     StereoToolDeviceBox,
     TidalDeviceBox,
     SpielwerkDeviceBox,
@@ -33,6 +36,10 @@ import {EffectFactory} from "./EffectFactory"
 import {EffectParameterDefaults} from "./EffectParameterDefaults"
 
 export namespace EffectFactories {
+    // The stereo split's FIXED entries, in the order the engine's distributor maps them: index 0 = left,
+    // index 1 = right. The UI offers no add / remove / reorder for them (StereoCompositeBoxAdapter.entriesFixed).
+    export const STEREO_ENTRY_LABELS: ReadonlyArray<string> = ["L", "R"]
+
     export const Arpeggio: EffectFactory = {
         defaultName: "Arpeggio",
         defaultIcon: IconSymbol.Stack,
@@ -446,6 +453,54 @@ export namespace EffectFactories {
         }
     }
 
+    // A parallel FX stack: the user drags effects into its entries, so it starts EMPTY — an empty composite
+    // passes its input through untouched, so inserting one never kills the chain.
+    export const AudioEffectComposite: EffectFactory = {
+        defaultName: "FX Composite",
+        defaultIcon: IconSymbol.Stack,
+        briefDescription: "Parallel FX stack",
+        description: "Runs several effect chains in parallel and mixes them back (dry/wet)",
+        manualPage: DeviceManualUrls.AudioEffectComposite,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index) =>
+            AudioEffectCompositeBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("FX Composite")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    // The stereo SPLIT: unlike the plain stack its entries are FIXED — the engine feeds entry 0 the left
+    // channel and entry 1 the right, so the two are created here and the UI offers no add / remove.
+    export const StereoComposite: EffectFactory = {
+        defaultName: "Stereo Split",
+        defaultIcon: IconSymbol.Stereo,
+        briefDescription: "Per-channel split",
+        description: "Processes the left and right channels through their own effect chains",
+        manualPage: DeviceManualUrls.StereoComposite,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index) => {
+            const composite = StereoCompositeBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Stereo Split")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+            // Entry 0 = left, entry 1 = right: the distributor maps them BY INDEX, so both must exist and
+            // keep their order. Their chains start empty, which sums back to the untouched input.
+            STEREO_ENTRY_LABELS.forEach((label, entryIndex) =>
+                AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+                    box.composite.refer(composite.entries)
+                    box.index.setValue(entryIndex)
+                    box.label.setValue(label)
+                }))
+            return composite
+        }
+    }
+
     export const MidiNamed = {
         Arpeggio,
         Pitch,
@@ -455,6 +510,8 @@ export namespace EffectFactories {
     }
 
     export const AudioNamed = {
+        AudioEffectComposite, // FX Composite
+        StereoComposite,      // Stereo Split
         Compressor,
         Crusher,
         DattorroReverb,  // Dattorro Reverb

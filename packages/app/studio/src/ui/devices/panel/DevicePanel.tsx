@@ -30,6 +30,7 @@ import {installAutoScroll} from "@/ui/AutoScroll"
 import {deferNextFrame, Events, Html, Keyboard, ShortcutManager} from "@opendaw/lib-dom"
 import {DevicePanelShortcuts} from "@/ui/shortcuts/DevicePanelShortcuts"
 import {DevicePanelDragAndDrop} from "@/ui/devices/DevicePanelDragAndDrop"
+import {CompositeCellEditor} from "@/ui/devices/CompositeCellEditor"
 import {NoAudioUnitSelectedPlaceholder} from "@/ui/devices/panel/NoAudioUnitSelectedPlaceholder"
 import {NoEffectPlaceholder} from "@/ui/devices/panel/NoEffectPlaceholder"
 import {DeviceMount} from "@/ui/devices/panel/DeviceMount"
@@ -88,7 +89,10 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
             visitPlayfieldSampleBox: (box: PlayfieldSampleBox): Context => ({
                 deviceHost,
                 instrument: new MutableObservableOption(project.boxAdapters.adapterFor(box, PlayfieldSampleBoxAdapter))
-            })
+            }),
+            // A composite ENTRY is a host in its own right, but hosts no instrument: its signal comes from the
+            // composite. The instrument slot shows the way back out instead (see `updateDom`).
+            visitAudioEffectCompositeCellBox: (): Context => ({deviceHost, instrument: new MutableObservableOption()})
         }))
     }
 
@@ -120,15 +124,19 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
                 ))
             }
         }
-        const midiEffects = deviceHost.midiEffects
-        appendChildren(midiEffectsContainer, midiEffects.adapters().map((adapter) => mounts.get(adapter.uuid).editor()))
+        // A ONE-SIDED host (a composite entry) hosts only one chain kind; the section it does not host stays empty.
+        const midiAdapters = deviceHost.midiEffects.mapOr(chain => chain.adapters(), [])
+        appendChildren(midiEffectsContainer, midiAdapters.map((adapter) => mounts.get(adapter.uuid).editor()))
         appendChildren(instrumentContainer, instrument.match({
-            none: () => <div/>,
+            // A host that holds no instrument AT ALL is a composite entry: show the way back out, not a void.
+            none: () => deviceHost.hostsInstrument
+                ? <div/>
+                : <CompositeCellEditor lifecycle={chainLifecycle} service={service} host={deviceHost}/>,
             some: (type: AudioUnitInputAdapter) => mounts.get(type.uuid).editor()
         }))
-        const audioEffects = deviceHost.audioEffects
-        appendChildren(audioEffectsContainer, audioEffects.adapters().map((adapter) => mounts.get(adapter.uuid).editor()))
-        const hidden = !optEditing.nonEmpty() || !(audioEffects.isEmpty() && midiEffects.isEmpty())
+        const audioAdapters = deviceHost.audioEffects.mapOr(chain => chain.adapters(), [])
+        appendChildren(audioEffectsContainer, audioAdapters.map((adapter) => mounts.get(adapter.uuid).editor()))
+        const hidden = !optEditing.nonEmpty() || midiAdapters.length > 0 || audioAdapters.length > 0
         noEffectPlaceholder.classList.toggle("hidden", hidden)
         appendChildren(channelStripContainer, (
             <ChannelStrip lifecycle={chainLifecycle}
@@ -140,25 +148,26 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
     }))
 
     const subscribeChain = ({midiEffects, instrument, audioEffects, host}: {
-        midiEffects: IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>,
+        midiEffects: Option<IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>>,
         instrument: ObservableOption<AudioUnitInputAdapter>,
-        audioEffects: IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>,
+        audioEffects: Option<IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>>,
         host: DeviceHost
     }): Terminable => {
         const terminator = new Terminator()
         const instrumentLifecycle = new Terminator()
+        // A ONE-SIDED host has no chain of the other kind: nothing to observe, nothing to mount.
+        midiEffects.ifSome(chain => terminator.own(chain.catchupAndSubscribe({
+            onAdd: (adapter: MidiEffectDeviceAdapter) => {
+                mounts.add(DeviceMount.forMidiEffect(service, adapter, host, updateDom.request))
+                updateDom.request()
+            },
+            onRemove: (adapter: MidiEffectDeviceAdapter) => {
+                mounts.removeByKey(adapter.uuid).terminate()
+                updateDom.request()
+            },
+            onReorder: (_adapter: MidiEffectDeviceAdapter) => updateDom.request()
+        })))
         terminator.ownAll(
-            midiEffects.catchupAndSubscribe({
-                onAdd: (adapter: MidiEffectDeviceAdapter) => {
-                    mounts.add(DeviceMount.forMidiEffect(service, adapter, host, updateDom.request))
-                    updateDom.request()
-                },
-                onRemove: (adapter: MidiEffectDeviceAdapter) => {
-                    mounts.removeByKey(adapter.uuid).terminate()
-                    updateDom.request()
-                },
-                onReorder: (_adapter: MidiEffectDeviceAdapter) => updateDom.request()
-            }),
             instrument.catchupAndSubscribe(owner => {
                 instrumentLifecycle.terminate()
                 owner.ifSome(adapter => {
@@ -171,26 +180,26 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
                     })
                 })
                 updateDom.request()
-            }),
-            audioEffects.catchupAndSubscribe({
-                onAdd: (adapter: AudioEffectDeviceAdapter) => {
-                    mounts.add(DeviceMount.forAudioEffect(service, adapter, host, updateDom.request))
-                    updateDom.request()
-                },
-                onRemove: (adapter: AudioEffectDeviceAdapter) => {
-                    mounts.removeByKey(adapter.uuid).terminate()
-                    updateDom.request()
-                },
-                onReorder: (_adapter: AudioEffectDeviceAdapter) => updateDom.request()
-            }),
-            {
-                terminate: () => {
-                    mounts.forEach(mount => mount.terminate())
-                    mounts.clear()
-                    updateDom.request()
-                }
-            }
+            })
         )
+        audioEffects.ifSome(chain => terminator.own(chain.catchupAndSubscribe({
+            onAdd: (adapter: AudioEffectDeviceAdapter) => {
+                mounts.add(DeviceMount.forAudioEffect(service, adapter, host, updateDom.request))
+                updateDom.request()
+            },
+            onRemove: (adapter: AudioEffectDeviceAdapter) => {
+                mounts.removeByKey(adapter.uuid).terminate()
+                updateDom.request()
+            },
+            onReorder: (_adapter: AudioEffectDeviceAdapter) => updateDom.request()
+        })))
+        terminator.own({
+            terminate: () => {
+                mounts.forEach(mount => mount.terminate())
+                mounts.clear()
+                updateDom.request()
+            }
+        })
         updateDom.request()
         return terminator
     }
@@ -284,8 +293,10 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
                 const selected = new Set(deviceSelection.selected().filter(adapter => adapter.type !== "instrument"))
                 if (selected.size === 0) {return}
                 event.preventDefault()
-                const remainingMidi = host.midiEffects.adapters().filter(adapter => !selected.has(adapter))
-                const remainingAudio = host.audioEffects.adapters().filter(adapter => !selected.has(adapter))
+                const remainingMidi = host.midiEffects
+                    .mapOr(chain => chain.adapters().filter(adapter => !selected.has(adapter)), [])
+                const remainingAudio = host.audioEffects
+                    .mapOr(chain => chain.adapters().filter(adapter => !selected.has(adapter)), [])
                 editing.modify(() => {
                     selected.forEach(adapter => adapter.box.delete())
                     remainingMidi.forEach((adapter, index) => adapter.indexField.setValue(index))

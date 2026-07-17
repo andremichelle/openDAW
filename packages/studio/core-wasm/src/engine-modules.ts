@@ -20,11 +20,42 @@ export type CompositeSpec = {
     childMuteKey: number, childSoloKey: number
 }
 
+// An EFFECT composite box type: an audio or midi EFFECT hosting a collection of ENTRIES, each its own effect
+// chain, run in PARALLEL and mixed back. Registered as data exactly like a CompositeSpec — the engine hardcodes
+// no box name or field key, so a new split container is a registration, not engine code.
+//
+// `kind` is the device kind the composite acts as (audio-effect / midi-effect). `distributor` selects how the
+// input reaches the entries. For a MIDI composite (no gain, no dry/wet, no input tap) those keys are 0.
+// WASM CONTRACT: mirrors `EffectCompositeSpec` + `Distributor` in crates/engine/src/lib.rs.
+export type EffectCompositeSpec = {
+    boxType: string
+    kind: EffectCompositeKind
+    distributor: EffectCompositeDistributor
+    entriesField: number    // the composite's entry collection (host field)
+    indexKey: number        // the entry box's `index` (UI + sum / merge order)
+    chainField: number      // the entry box's fx-host collection (audio or midi, per `kind`)
+    labelKey: number        // the entry box's `label`
+    gainKey: number         // the entry's gain (dB); 0 for a midi composite
+    panKey: number          // the entry's pan (bipolar); 0 = none
+    muteKey: number         // the entry's mute (automatable; an entry has no `enabled`)
+    soloKey: number         // the entry's solo (resolved across siblings)
+    dryKey: number          // the composite's dry gain (dB); 0 for a midi composite
+    wetKey: number          // the composite's wet gain (dB); 0 for a midi composite
+    inputTapField: number   // the vertex a nested sidechain taps for the composite's INPUT; 0 = none
+}
+
+// WASM CONTRACT: mirrors abi DEVICE_KIND_* (crates/abi/src/lib.rs).
+export enum EffectCompositeKind {AudioEffect = 1, MidiEffect = 2}
+
+// WASM CONTRACT: mirrors `Distributor` in crates/engine/src/lib.rs.
+export enum EffectCompositeDistributor {Broadcast = 0, Stereo = 1}
+
 export type EngineModules = {
     engineModule: WebAssembly.Module
     deviceModules: ReadonlyArray<WebAssembly.Module> // PIC side modules, in load order (device 0, 1, ...)
     deviceBoxTypes: ReadonlyArray<string> // parallel to deviceModules: the device-box type each plugin realizes
     composites: ReadonlyArray<CompositeSpec> // composite box types the engine should host as child collections
+    effectComposites: ReadonlyArray<EffectCompositeSpec> // parallel fx / midi stacks the engine hosts itself
 }
 
 // The engine's single linear memory: SHARED, so the main thread can see the WASM heap (e.g. to write
@@ -95,11 +126,35 @@ export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
         childMuteKey: 0, childSoloKey: 0}
 ]
 
+// The EFFECT composite box types (parallel fx / midi stacks). Each hosts its ENTRIES at field 10, ordered by the
+// entry's own `index` (3); an entry holds its chain at field 2, its label at 4, and its gain / mute / solo at
+// 40 / 41 / 42. An audio composite additionally has its input tap at 11 and dry / wet at 12 / 13. The entry
+// boxes are NOT plugins — the engine realizes them itself, so nothing is added to DEVICES for them.
+export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
+    // The parallel FX stack: the input is BROADCAST to every entry, their outputs mixed into the wet sum.
+    {
+        boxType: "AudioEffectCompositeBox", kind: EffectCompositeKind.AudioEffect,
+        distributor: EffectCompositeDistributor.Broadcast,
+        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
+        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11
+    },
+    // The stereo SPLIT: same shape and same entry box, but entry 0 gets left and entry 1 gets right.
+    {
+        boxType: "StereoCompositeBox", kind: EffectCompositeKind.AudioEffect,
+        distributor: EffectCompositeDistributor.Stereo,
+        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
+        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11
+    }
+]
+
 export const loadEngineModules = async (base: string = ""): Promise<EngineModules> => {
     const urls = [`${base}/wasm/engine.wasm`, ...DEVICES.map(device => `${base}${device.url}`)]
     const buffers = await Promise.all(urls.map(url => fetch(url).then(response => response.ok
         ? response.arrayBuffer()
         : Promise.reject(new Error(`Could not load wasm module '${url}' (${response.status} ${response.statusText})`)))))
     const [engineModule, ...deviceModules] = await Promise.all(buffers.map(bytes => WebAssembly.compile(bytes)))
-    return {engineModule, deviceModules, deviceBoxTypes: DEVICES.map(device => device.boxType), composites: COMPOSITES}
+    return {
+        engineModule, deviceModules, deviceBoxTypes: DEVICES.map(device => device.boxType),
+        composites: COMPOSITES, effectComposites: EFFECT_COMPOSITES
+    }
 }

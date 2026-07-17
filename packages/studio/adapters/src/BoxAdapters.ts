@@ -52,8 +52,11 @@ import {
     NoteEventCollectionBox,
     NoteRegionBox,
     PitchDeviceBox,
+    AudioEffectCompositeBox,
+    AudioEffectCompositeCellBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
+    StereoCompositeBox,
     RevampDeviceBox,
     ReverbDeviceBox,
     RootBox,
@@ -121,6 +124,9 @@ import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
 import {PlayfieldDeviceBoxAdapter} from "./devices/instruments/PlayfieldDeviceBoxAdapter"
 import {StereoToolDeviceBoxAdapter} from "./devices/audio-effects/StereoToolDeviceBoxAdapter"
 import {PlayfieldSampleBoxAdapter} from "./devices/instruments/Playfield/PlayfieldSampleBoxAdapter"
+import {AudioEffectCompositeBoxAdapter} from "./devices/audio-effects/AudioEffectCompositeBoxAdapter"
+import {StereoCompositeBoxAdapter} from "./devices/audio-effects/StereoCompositeBoxAdapter"
+import {AudioEffectCompositeCellBoxAdapter} from "./devices/audio-effects/AudioEffectComposite/AudioEffectCompositeCellBoxAdapter"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 import {BoxAdapter} from "./BoxAdapter"
 import {ZeitgeistDeviceBoxAdapter} from "./devices/midi-effects/ZeitgeistDeviceBoxAdapter"
@@ -247,6 +253,9 @@ export class BoxAdapters implements Terminable {
             visitPitchDeviceBox: (box: PitchDeviceBox) => new PitchDeviceBoxAdapter(this.#context, box),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox) => new PlayfieldDeviceBoxAdapter(this.#context, box),
             visitPlayfieldSampleBox: (box: PlayfieldSampleBox) => new PlayfieldSampleBoxAdapter(this.#context, box),
+            visitAudioEffectCompositeBox: (box: AudioEffectCompositeBox) => new AudioEffectCompositeBoxAdapter(this.#context, box),
+            visitAudioEffectCompositeCellBox: (box: AudioEffectCompositeCellBox) => new AudioEffectCompositeCellBoxAdapter(this.#context, box),
+            visitStereoCompositeBox: (box: StereoCompositeBox) => new StereoCompositeBoxAdapter(this.#context, box),
             visitRevampDeviceBox: (box: RevampDeviceBox) => new RevampDeviceBoxAdapter(this.#context, box),
             visitReverbDeviceBox: (box: ReverbDeviceBox) => new ReverbDeviceBoxAdapter(this.#context, box),
             visitRootBox: (box: RootBox): BoxAdapter => new RootBoxAdapter(this.#context, box),

@@ -16,25 +16,21 @@ impl Engine {
         for unit in &mut units {
             match &mut unit.wired {
                 Some(Wired::Leaf(chain)) => {
+                    // `visit_member_sidechains` recurses into an effect composite's entries, so a device
+                    // nested inside a stack re-resolves exactly like a top-level one.
                     for member in &mut chain.audio {
-                        if let Some(binding) = &mut member.sidechain {
-                            self.resolve_one_sidechain(binding);
-                        }
+                        visit_member_sidechains(member, &mut |binding| self.resolve_one_sidechain(binding));
                     }
                 }
                 Some(Wired::Composite(composite)) => {
                     composite.binding.for_each_sidechain(&mut |binding| self.resolve_one_sidechain(binding));
                     for member in &mut composite.audio {
-                        if let Some(binding) = &mut member.sidechain {
-                            self.resolve_one_sidechain(binding);
-                        }
+                        visit_member_sidechains(member, &mut |binding| self.resolve_one_sidechain(binding));
                     }
                 }
                 Some(Wired::Tape(tape)) => {
                     for member in &mut tape.audio {
-                        if let Some(binding) = &mut member.sidechain {
-                            self.resolve_one_sidechain(binding);
-                        }
+                        visit_member_sidechains(member, &mut |binding| self.resolve_one_sidechain(binding));
                     }
                 }
                 Some(Wired::Bus(bus)) => {
@@ -45,9 +41,7 @@ impl Engine {
                 Some(Wired::Frozen(_)) => {} // pre-rendered: no live devices, no sidechains
                 Some(Wired::MidiOut(midi)) => {
                     for member in &mut midi.audio {
-                        if let Some(binding) = &mut member.sidechain {
-                            self.resolve_one_sidechain(binding);
-                        }
+                        visit_member_sidechains(member, &mut |binding| self.resolve_one_sidechain(binding));
                     }
                 }
                 None => {}
@@ -65,6 +59,13 @@ impl Engine {
         for port in &mut binding.ports {
             let target = self.graph.target_of(&Address::of(binding.device_uuid, port.path.clone())).cloned();
             let resolution = target.and_then(|target| {
+                // A pointer at a FIELD of a box resolves by its FULL address first: that is how a device nested
+                // in an effect composite taps the composite's INPUT (its `input` vertex, registered to the
+                // distributor's tap) rather than the composite's mixed output. A pointer at a BOX carries an
+                // empty path, so its full address IS the bare uuid — every existing target resolves as before.
+                if let Some(output) = self.output_registry.resolve(&target) {
+                    return Some((output.processor, output.buffer.clone()));
+                }
                 // The sidechain pointer targets a UNIT (its strip output), a BUS (its raw sum), or a DEVICE.
                 // Every BUILT device registers its own output under its box uuid (mirroring TS, where every
                 // device processor registers `adapter.address -> output`), so a device target taps that device's

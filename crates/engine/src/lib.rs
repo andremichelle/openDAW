@@ -114,6 +114,51 @@ pub(crate) struct CompositeSpec {
     pub(crate) child_solo_key: u16
 }
 
+/// How an effect composite hands its INPUT to its entries. `Broadcast` gives every entry the same signal (the
+/// plain parallel stack); `Stereo` splits per channel (entry 0 = left, entry 1 = right). Further splits
+/// (frequency, mid/side, tonal) become further variants — the rest of the composite is unchanged.
+// WASM CONTRACT: mirrors `EffectCompositeSpec["distributor"]` in core-wasm/src/engine-modules.ts.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Distributor {
+    Broadcast = 0,
+    Stereo = 1
+}
+
+impl Distributor {
+    fn from_u32(value: u32) -> Self {
+        match value {
+            1 => Self::Stereo,
+            _ => Self::Broadcast
+        }
+    }
+}
+
+/// An EFFECT composite box type: an audio or midi EFFECT that, instead of being a single leaf DSP, hosts a
+/// collection of ENTRIES, each its own effect chain, run in PARALLEL and mixed back together. Registered as
+/// data exactly like `CompositeSpec`, so the engine hardcodes no box name or field key.
+///
+/// Audio (`kind == DEVICE_KIND_AUDIO_EFFECT`): the input is distributed to every entry, each entry's chain
+/// output passes its own gain / mute / solo strip into the wet sum, and the composite emits
+/// `dry * input + wet * wetSum`. Note (`DEVICE_KIND_MIDI_EFFECT`): the incoming note stream is teed to every
+/// entry and their events merged; `gain_key` / `dry_key` / `wet_key` / `input_tap_field` are 0.
+#[derive(Clone)]
+pub(crate) struct EffectCompositeSpec {
+    box_type: String,
+    pub(crate) kind: u8,                     // DEVICE_KIND_AUDIO_EFFECT | DEVICE_KIND_MIDI_EFFECT
+    pub(crate) distributor: Distributor,
+    pub(crate) entries_field: u16,           // the composite's entry collection (host field)
+    pub(crate) index_key: u16,               // the entry box's own `index` (UI + sum / merge order)
+    pub(crate) chain_field: u16,             // the entry box's fx-host collection (audio or midi, per `kind`)
+    pub(crate) label_key: u16,               // the entry box's `label`
+    pub(crate) gain_key: u16,                // the entry's gain (dB); 0 for a midi composite (no gain)
+    pub(crate) pan_key: u16,                 // the entry's pan (bipolar); 0 = none (its strip stays centred)
+    pub(crate) mute_key: u16,                // the entry's mute (automatable; an entry has no `enabled`)
+    pub(crate) solo_key: u16,                // the entry's solo (resolved across siblings, like the mixer's)
+    pub(crate) dry_key: u16,                 // the composite's dry gain (dB); 0 for a midi composite
+    pub(crate) wet_key: u16,                 // the composite's wet gain (dB); 0 for a midi composite
+    pub(crate) input_tap_field: u16          // the vertex a nested sidechain taps for the composite's INPUT; 0 = none
+}
+
 // Call a device's `process` through the shared function table: a wasm function pointer IS a table index,
 // so transmuting the index to a fn and calling it emits `call_indirect` on the imported table.
 #[cfg(target_family = "wasm")]
@@ -295,6 +340,17 @@ mod tempo_map;
 mod script_device;
 use audio_unit::{AudioUnitBinding, Members};
 mod composite;
+mod effect_composite;
+
+/// Serialises every test that touches the global `PULL` context. The production engine is single-threaded
+/// (only the audio thread runs engine code), so `PULL` is a plain `Shared` cell — but the test harness runs
+/// tests on parallel threads, where concurrent access is a data race (it segfaults). ONE lock for the crate:
+/// per-module mutexes would not serialise against each other.
+#[cfg(test)]
+pub(crate) fn pull_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 mod param_automation;
 use param_automation::ParamHandle;
 mod sample;
@@ -1086,6 +1142,7 @@ struct Engine {
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
     device_box_types: Vec<(String, usize)>, // box-type name -> index into `devices`: the ONLY device glue.
     composites: Vec<CompositeSpec>,    // registered composite box types (host of a child collection); data, not code
+    effect_composites: Vec<EffectCompositeSpec>, // registered EFFECT composite box types (parallel fx entries)
     device_allocs: Vec<Box<[u8]>>,     // talc-owned regions handed to devices (data + stacks); kept alive
     controls: Rc<Controls>
 }
@@ -1136,6 +1193,7 @@ impl Engine {
             devices: Vec::new(),
             device_box_types: Vec::new(),
             composites: Vec::new(),
+            effect_composites: Vec::new(),
             device_allocs: Vec::new(),
             controls: Rc::new(Controls::new())
         }
@@ -1191,6 +1249,22 @@ impl Engine {
     /// Cloned so a caller can use it while it also holds `&mut self` to build the children.
     pub(crate) fn composite_for_type(&self, box_type: &str) -> Option<CompositeSpec> {
         self.composites.iter().find(|spec| spec.box_type == box_type).cloned()
+    }
+
+    /// Register an EFFECT composite box type (parallel fx / note entries). The sibling of `register_composite`:
+    /// the whole glue is this one record, so a new split container is a registration, not engine code.
+    #[allow(clippy::too_many_arguments)] // one positional field key per facet, matching the loader
+    fn register_effect_composite(&mut self, box_type: String, kind: u8, distributor: Distributor, entries_field: u16,
+                                 index_key: u16, chain_field: u16, label_key: u16, gain_key: u16, pan_key: u16,
+                                 mute_key: u16, solo_key: u16, dry_key: u16, wet_key: u16, input_tap_field: u16) {
+        self.effect_composites.push(EffectCompositeSpec {box_type, kind, distributor, entries_field, index_key,
+            chain_field, label_key, gain_key, pan_key, mute_key, solo_key, dry_key, wet_key, input_tap_field});
+    }
+
+    /// The effect-composite spec for a box TYPE, if it is a registered parallel composite (else `None`, a leaf
+    /// effect). Cloned so a caller can use it while it also holds `&mut self` to build the entries.
+    pub(crate) fn effect_composite_for_type(&self, box_type: &str) -> Option<EffectCompositeSpec> {
+        self.effect_composites.iter().find(|spec| spec.box_type == box_type).cloned()
     }
 
     /// Apply one forward-only transaction, returning the resulting checksum (or `Err` on a
@@ -2599,6 +2673,30 @@ pub extern "C" fn composite_register(name_len: usize, children_field: u32, index
             engine.register_composite(String::from(name), children_field as u16, index_key as u16, exclude_key as u16,
                 cell_instrument_field as u16, cell_midi_field as u16, cell_audio_field as u16, child_enabled_key as u16,
                 child_mute_key as u16, child_solo_key as u16);
+        }
+    }
+}
+
+/// Register an EFFECT composite box type (a parallel fx / note stack): its entry collection + the entry box's
+/// field keys + the composite's dry / wet + input tap. The sibling of `composite_register`; the engine reads no
+/// specifics beyond this record, so a new split container needs no engine change.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn effect_composite_register(name_len: usize, kind: u32, distributor: u32, entries_field: u32,
+                                            index_key: u32, chain_field: u32, label_key: u32, gain_key: u32,
+                                            pan_key: u32, mute_key: u32, solo_key: u32, dry_key: u32, wet_key: u32,
+                                            input_tap_field: u32) {
+    unsafe {
+        let engine = match ENGINE.get().as_mut() {
+            Some(engine) => engine,
+            None => return
+        };
+        let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), name_len);
+        if let Ok(name) = core::str::from_utf8(bytes) {
+            engine.register_effect_composite(String::from(name), kind as u8, Distributor::from_u32(distributor),
+                entries_field as u16, index_key as u16, chain_field as u16, label_key as u16, gain_key as u16,
+                pan_key as u16, mute_key as u16, solo_key as u16, dry_key as u16, wet_key as u16,
+                input_tap_field as u16);
         }
     }
 }

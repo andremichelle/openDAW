@@ -75,11 +75,12 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
     get iconField(): StringField {return this.#box.icon}
     get defaultTrackType(): TrackType {return TrackType.Notes}
     get acceptsMidiEvents(): boolean {return true}
-    get midiEffectsField(): Field<Pointers.MIDIEffectHost> {return this.#box.midiEffects}
+    get midiEffectsField(): Option<Field<Pointers.MIDIEffectHost>> {return Option.wrap(this.#box.midiEffects)}
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput> {return this.audioUnitBoxAdapter().box.input}
-    get audioEffectsField(): Field<Pointers.AudioEffectHost> {return this.#box.audioEffects}
+    get audioEffectsField(): Option<Field<Pointers.AudioEffectHost>> {return Option.wrap(this.#box.audioEffects)}
     get tracksField(): Field<Pointers.TrackCollection> {return this.audioUnitBoxAdapter().box.tracks}
     get isAudioUnit(): boolean {return false}
+    get hostsInstrument(): boolean {return true} // the slot's own sample player heads its chains
 
     file(): Option<AudioFileBoxAdapter> {return this.#file}
     fileUUID(): UUID.Bytes {return this.#box.file.targetAddress.unwrap("file.targetAddr").uuid}
@@ -115,14 +116,15 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
         })
     }
 
-    get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost> {
-        return this.#midiEffects
+    // A Playfield slot hosts BOTH chain kinds around its sample (see `DeviceHost` for why these are `Option`).
+    get midiEffects(): Option<IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>> {
+        return Option.wrap(this.#midiEffects)
     }
     get inputAdapter(): Option<AudioUnitInputAdapter> {
         return Option.wrap(this)
     }
-    get audioEffects(): IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost> {
-        return this.#audioEffects
+    get audioEffects(): Option<IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>> {
+        return Option.wrap(this.#audioEffects)
     }
 
     get labelField(): StringField {return asInstanceOf(this.#box.file.targetVertex.unwrap("file.target").box, AudioFileBox).fileName}

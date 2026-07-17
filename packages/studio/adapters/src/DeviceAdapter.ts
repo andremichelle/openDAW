@@ -54,22 +54,51 @@ export interface InstrumentDeviceBoxAdapter extends DeviceBoxAdapter, LabeledAud
     get acceptsMidiEvents(): boolean
 }
 
+// A host of device chains. A host is ONE-SIDED when it hosts only one kind of chain: an AudioEffectCompositeCellBox
+// entry hosts audio effects but no midi effects. So the chain accessors are `Option`: `None` means "this host
+// does not host that kind at all", which is NOT the same as an empty chain.
+// The `Option` IS the capability flag — a caller that wants to insert / render / copy a chain must handle absence,
+// so a midi effect can never be inserted into an audio-only entry.
 export interface DeviceHost extends BoxAdapter, LabeledAudioOutputsOwner {
     readonly class: "device-host"
 
-    get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>
-    get midiEffectsField(): Field<Pointers.MIDIEffectHost>
+    get midiEffects(): Option<IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>>
+    get midiEffectsField(): Option<Field<Pointers.MIDIEffectHost>>
     get inputAdapter(): Option<AudioUnitInputAdapter>
-    get audioEffects(): IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>
-    get audioEffectsField(): Field<Pointers.AudioEffectHost>
+    get audioEffects(): Option<IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>>
+    get audioEffectsField(): Option<Field<Pointers.AudioEffectHost>>
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput>
     get tracksField(): Field<Pointers.TrackCollection>
     get minimizedField(): BooleanField
     get isAudioUnit(): boolean
+    // Whether this host holds an INSTRUMENT at the head of its chains (an audio unit, a Playfield slot). A
+    // composite entry does not: it processes a signal handed to it by its composite. Distinct from
+    // `inputAdapter.isEmpty()`, which for an instrument-hosting host only means "no instrument YET".
+    get hostsInstrument(): boolean
     get label(): string
 
     deviceHost(): DeviceHost
     audioUnitBoxAdapter(): AudioUnitBoxAdapter
+}
+
+export namespace DeviceHost {
+    // The chain collection a host keeps for effects of `accepts`, or `None` when it hosts no such chain.
+    export const chainOf = (host: DeviceHost, accepts: "audio" | "midi")
+        : Option<IndexedBoxAdapterCollection<EffectDeviceBoxAdapter, EffectPointerType>> =>
+        accepts === "audio" ? host.audioEffects : host.midiEffects
+
+    // The chain HOST FIELD an effect of `accepts` attaches to, or `None` when the host takes no such chain.
+    export const chainFieldOf = (host: DeviceHost, accepts: "audio" | "midi"): Option<Field<EffectPointerType>> =>
+        accepts === "audio" ? host.audioEffectsField : host.midiEffectsField
+
+    // Whether an effect of `accepts` may be inserted into this host. The host must hold a chain of that kind
+    // at all; a MIDI effect additionally requires a note CONSUMER, so an instrument-hosting host must have an
+    // instrument that takes notes. A composite entry hosts no instrument — its notes flow on to whatever
+    // consumes them downstream — so there the chain's presence alone decides.
+    export const takesEffect = (host: DeviceHost, accepts: "audio" | "midi"): boolean =>
+        chainFieldOf(host, accepts).nonEmpty()
+        && (accepts === "audio" || !host.hostsInstrument
+            || host.inputAdapter.mapOr(input => input.accepts === "midi", false))
 }
 
 export interface DeviceBoxAdapter extends BoxAdapter {
@@ -108,11 +137,11 @@ export namespace Devices {
         assert(Arrays.satisfy(devices, (a, b) => a.deviceHost().address.equals(b.deviceHost().address)),
             "Devices are not connected to the same host")
         const device: EffectDeviceBoxAdapter = devices[0]
-        const targets = device.accepts === "audio"
-            ? device.deviceHost().audioEffects.field().pointerHub.filter(Pointers.AudioEffectHost)
-            : device.accepts === "midi"
-                ? device.deviceHost().midiEffects.field().pointerHub.filter(Pointers.MIDIEffectHost)
-                : panic("unknown type")
+        const field = DeviceHost.chainFieldOf(device.deviceHost(), device.accepts)
+            .unwrap(`host takes no ${device.accepts} effects`)
+        const targets = field.pointerHub.filter(device.accepts === "audio"
+            ? Pointers.AudioEffectHost
+            : Pointers.MIDIEffectHost)
         targets.map(({box}) => DeviceBoxUtils.lookupIndexField(box))
             .filter(index => devices.some(device => UUID.Comparator(device.uuid, index.address.uuid) !== 0))
             .sort((a, b) => a.getValue() - b.getValue())

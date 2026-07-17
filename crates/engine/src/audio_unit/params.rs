@@ -58,6 +58,19 @@ pub(crate) fn bind_paths(reg: DeviceReg, state_ptr: u32, sample_rate: f32) -> Ve
     core::mem::take(unsafe { BIND.get() })
 }
 
+/// Push ONE chain member's parameter values. A member that is not a plugin (an effect composite) has no device
+/// params of its own — but its ENTRIES hold real plugins, so the refresh recurses into its binding. Every
+/// per-member refresh goes through here, so a composite anywhere in a chain is never skipped.
+#[allow(clippy::needless_pass_by_ref_mut)] // reads only; `&Member` keeps every call site's loop immutable
+pub(crate) fn refresh_member(member: &Member, position: f64) {
+    if let Some(params) = &member.params {
+        refresh_params(&params.handles, params.reg, params.state_ptr, position);
+    }
+    if let ProcHandle::EffectComposite(binding) = &member.proc {
+        binding.refresh_params_at(position);
+    }
+}
+
 /// Push each parameter's resolved value (its automation at `position`, else its real field value) to the
 /// device via its `parameter_changed` export, but only when it CHANGED since the last push (the TS
 /// `updateAutomation` compare). The `kind` tag tells the device how to read the value (uniform automation to
@@ -582,7 +595,14 @@ impl Engine {
         // (TS `onStartAutomation`) — the knob animates in the UI. Registered under the box uuid + field-path
         // keys; the slot Rc lives in the handle, so a rebind/teardown drops it and the sweep unregisters.
         let broadcast = track.as_ref().map(|curve| {
-            let value = curve.value_at(self.transport.position()).unwrap_or(0.0);
+            // NO curve value at the transport position (an attach with no region / clip / events yet) publishes
+            // NaN, NOT 0.0: the slot carries a UNIT value, so 0.0 is the MINIMUM of every mapping and pinned
+            // each knob to min the moment automation was attached. `resolve` only writes this slot while the
+            // curve DOES cover the position, so the bogus seed was never overwritten. NaN is the codebase's
+            // existing "no value yet" sentinel (see `ParamHandle::last`); the UI reads it as "keep showing the
+            // parameter's own storage value" (AutomatableParameterFieldAdapter). Holding the last automated
+            // value PAST a region end is unaffected: that path never writes the slot at all.
+            let value = curve.value_at(self.transport.position()).unwrap_or(f32::NAN);
             // REUSE the parameter's existing UI slot across a re-observe (an automation edit re-runs this); only a
             // fresh attach registers a new one. Creating a new slot each rebind would be dedup-skipped by
             // `register` (the outgoing slot is still alive), stranding the knob on a slot the sweep then drops.
@@ -662,23 +682,23 @@ impl Engine {
         };
         match &mut wired {
             Wired::Leaf(chain) => {
-                refresh_params(&chain.instrument.params.handles, chain.instrument.params.reg, chain.instrument.params.state_ptr, position);
+                refresh_member(&chain.instrument, position);
                 for member in &chain.midi {
-                    refresh_params(&member.params.handles, member.params.reg, member.params.state_ptr, position);
+                    refresh_member(member, position);
                 }
                 for member in &chain.audio {
-                    refresh_params(&member.params.handles, member.params.reg, member.params.state_ptr, position);
+                    refresh_member(member, position);
                 }
             }
             Wired::Composite(composite) => {
                 composite.binding.for_each_params(&mut |params| refresh_params(&params.handles, params.reg, params.state_ptr, position));
                 for member in &composite.audio {
-                    refresh_params(&member.params.handles, member.params.reg, member.params.state_ptr, position);
+                    refresh_member(member, position);
                 }
             }
             Wired::Tape(tape) => {
                 for member in &tape.audio {
-                    refresh_params(&member.params.handles, member.params.reg, member.params.state_ptr, position);
+                    refresh_member(member, position);
                 }
             }
             Wired::Bus(bus) => {
@@ -691,10 +711,10 @@ impl Engine {
                 // CC value edits reach the node through the observed field cells (diffed per block);
                 // only the fx members carry device params to refresh.
                 for member in &midi.midi {
-                    refresh_params(&member.params.handles, member.params.reg, member.params.state_ptr, position);
+                    refresh_member(member, position);
                 }
                 for member in &midi.audio {
-                    refresh_params(&member.params.handles, member.params.reg, member.params.state_ptr, position);
+                    refresh_member(member, position);
                 }
             }
         }
@@ -710,33 +730,33 @@ impl Engine {
         };
         match &mut wired {
             Wired::Leaf(chain) => {
-                self.rebind_one(&mut chain.instrument.params, &invalidate, position);
+                self.rebind_member(&mut chain.instrument, &invalidate, position);
                 for member in &mut chain.midi {
-                    self.rebind_one(&mut member.params, &invalidate, position);
+                    self.rebind_member(member, &invalidate, position);
                 }
                 for member in &mut chain.audio {
-                    self.rebind_one(&mut member.params, &invalidate, position);
+                    self.rebind_member(member, &invalidate, position);
                 }
             }
             Wired::Composite(composite) => {
                 composite.binding.for_each_params(&mut |params| self.rebind_one(params, &invalidate, position));
                 for member in &mut composite.audio {
-                    self.rebind_one(&mut member.params, &invalidate, position);
+                    self.rebind_member(member, &invalidate, position);
                 }
             }
             Wired::Tape(tape) => {
                 for member in &mut tape.audio {
-                    self.rebind_one(&mut member.params, &invalidate, position);
+                    self.rebind_member(member, &invalidate, position);
                 }
             }
             Wired::Bus(_) => {} // a bus's fx params are bound at (wholesale) build; live automation re-bind deferred
             Wired::Frozen(_) => {} // pre-rendered: no live parameters
             Wired::MidiOut(midi) => {
                 for member in &mut midi.midi {
-                    self.rebind_one(&mut member.params, &invalidate, position);
+                    self.rebind_member(member, &invalidate, position);
                 }
                 for member in &mut midi.audio {
-                    self.rebind_one(&mut member.params, &invalidate, position);
+                    self.rebind_member(member, &invalidate, position);
                 }
                 // CC automation attach / detach / curve edit: re-observe the parameter bindings in place,
                 // carrying each survivor's last emitted value (no spurious CC re-emission).
@@ -752,6 +772,23 @@ impl Engine {
             }
         }
         unit.wired = Some(wired);
+    }
+
+    /// Re-observe ONE chain member's automation. A member that is not a plugin (an effect composite) has no
+    /// device params of its own — but its ENTRIES hold real plugins, so the re-bind recurses into its binding.
+    /// Every per-member re-bind goes through here, so a composite anywhere in a chain is never skipped.
+    pub(crate) fn rebind_member(&mut self, member: &mut Member, invalidate: &Rc<dyn Fn()>, position: f64) {
+        if let Some(params) = &mut member.params {
+            self.rebind_one(params, invalidate, position);
+        }
+        // Its entries' devices re-bind exactly like a leaf chain's, one level down. `binding` borrows
+        // `member`, never `self`, so the visitor may take `self` (the composite unit does the same).
+        if let ProcHandle::EffectComposite(binding) = &mut member.proc {
+            binding.for_each_params(&mut |params| self.rebind_one(params, invalidate, position));
+            // The composite's OWN parameters (dry / wet, and each entry's gain / mute / solo) are not device
+            // params, so the visitor above never reaches them — re-observe them here.
+            self.rebind_effect_composite_params(binding, invalidate);
+        }
     }
 
     /// Re-observe ONE device's automation in place: drop the old field subscriptions + curve collections,

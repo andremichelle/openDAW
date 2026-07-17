@@ -3,6 +3,7 @@ import {
     clamp,
     ControlSource,
     ControlSourceListener,
+    isNull,
     Listeners,
     Notifier,
     Nullable,
@@ -80,6 +81,17 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
                         if (this.#context.isMainThread) {
                             this.#automationHandle = Option.wrap(this.#context.liveStreamReceiver
                                 .subscribeFloat(this.#field.address, value => {
+                                    // NaN is the engine's "the curve yields NO value here" sentinel: automation
+                                    // is attached but has no region / clip / events yet. The parameter must then
+                                    // keep showing its STORAGE value (`getControlledUnitValue` falls back to
+                                    // `getUnitValue` while `#controlledValue` is null) — a real value of 0 would
+                                    // otherwise read as unit 0, pinning the knob to its minimum.
+                                    if (isNaN(value)) {
+                                        if (isNull(this.#controlledValue)) {return}
+                                        this.#controlledValue = null
+                                        this.#valueChangeNotifier.notify(this)
+                                        return
+                                    }
                                     if (this.#controlledValue === value) {return}
                                     this.#controlledValue = value
                                     this.#valueChangeNotifier.notify(this)

@@ -26,6 +26,8 @@ export namespace DeviceManualUrls {
     export const Vocoder = "manuals/devices/audio/vocoder"
     export const Waveshaper = "manuals/devices/audio/waveshaper"
     export const Werkstatt = "manuals/devices/audio/werkstatt"
+    export const AudioEffectComposite = "manuals/devices/audio/effect-composite"
+    export const StereoComposite = "manuals/devices/audio/stereo-composite"
 
     // Instruments
     export const Apparat = "manuals/devices/instruments/apparat"

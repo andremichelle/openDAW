@@ -61,12 +61,13 @@ export namespace WasmEngine {
         // artifacts from `wasmUrl`, so no preloading is needed here.
         OfflineEngineRenderer.install(urls.offlineWorkerUrl, {wasmUrl: urls.wasmUrl})
         EngineVariant.install((): EngineWorkletVariant => {
-            const {engineModule, deviceModules, deviceBoxTypes, composites} =
+            const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} =
                 modules.unwrap("WasmEngine.ensureReady must succeed before an engine boots")
             const attachment: WasmEngineAttachment = {
                 // A FRESH shared memory per boot: re-instantiating the engine re-applies its data segments,
                 // but a recycled heap would leak every allocation of the previous engine instance.
-                engineModule, deviceModules, deviceBoxTypes, composites, memory: createEngineMemory()
+                engineModule, deviceModules, deviceBoxTypes, composites, effectComposites,
+                memory: createEngineMemory()
             }
             return {
                 processorName: WASM_ENGINE_PROCESSOR_NAME,

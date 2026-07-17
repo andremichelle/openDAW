@@ -151,8 +151,8 @@ export namespace AudioUnitsClipboard {
         if (inputAdapter.nonEmpty() && inputAdapter.unwrap().type === "instrument") {
             inputAdapter.unwrap().box.delete()
         }
-        outputAdapter.midiEffects.adapters().forEach(effect => effect.box.delete())
-        outputAdapter.audioEffects.adapters().forEach(effect => effect.box.delete())
+        outputAdapter.midiEffects.unwrap("midiEffects").adapters().forEach(effect => effect.box.delete())
+        outputAdapter.audioEffects.unwrap("audioEffects").adapters().forEach(effect => effect.box.delete())
     }
 
     const pasteOutputContent = (data: ArrayBufferLike,

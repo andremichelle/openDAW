@@ -95,13 +95,19 @@ export namespace PresetEncoder {
                 : Pointers.MIDIEffectHost
             PointerField.decodeWith({
                 map: (pointer, address) => {
+                    // An INTERNAL target (a box copied along with the chain) always re-targets to its copy —
+                    // checked FIRST, and including host pointers: an effect nested inside a copied composite
+                    // entry is hosted BY THAT ENTRY, and re-targeting it onto the wrapper chain would rip it
+                    // out and flatten the composite.
+                    const internal = address.flatMap(addr =>
+                        uuidMap.opt(addr.uuid).map(({target}) => addr.moveTo(target)))
+                    if (internal.nonEmpty()) {return internal}
+                    // A host pointing OUTSIDE the copied set is a chain ROOT: re-target it onto the wrapper.
                     if (pointer.pointerType === hostPointerType) {
                         return Option.wrap(targetField.address)
                     }
-                    return address.flatMap(addr => uuidMap.opt(addr.uuid).match({
-                        some: ({target}) => Option.wrap(addr.moveTo(target)),
-                        none: () => boxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None
-                    }))
+                    return address.flatMap(addr =>
+                        boxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None)
                 }
             }, () => {
                 effects.forEach((source, i) => {

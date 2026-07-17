@@ -264,11 +264,9 @@ impl Engine {
         // leaf unit. Without this an audio track's effects (EQ / compressor / gain) are silently dropped.
         let mut audio_members: Vec<Member> = Vec::new();
         for uuid in unit.audio.sorted() {
-            let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
-            if let Some(device) = device {
-                if device.kind == DEVICE_KIND_AUDIO_EFFECT {
-                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, signal, invalidate, rewire));
-                }
+            // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
+            if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, signal, invalidate, rewire) {
+                audio_members.push(member);
             }
         }
         for (_, member) in core::mem::take(&mut pool) {
@@ -296,12 +294,16 @@ impl Engine {
             if !self.device_enabled(member.uuid) {
                 continue;
             }
-            if let ProcHandle::Audio(node) = &member.proc {
-                node.borrow_mut().set_audio_source(output.clone());
+            match &member.proc {
+                ProcHandle::Audio(node) => node.borrow_mut().set_audio_source(output.clone()),
+                // An effect composite takes its input at its DISTRIBUTOR and hands the chain on from its MIX.
+                ProcHandle::EffectComposite(binding) => binding.set_audio_source(output.clone()),
+                _ => {}
             }
             let node_id = member.node_id.expect("member.node_id");
-            self.context.register_edge(output_node, node_id);
-            edges.push((output_node, node_id));
+            let entry_node = member.input_node.unwrap_or(node_id);
+            self.context.register_edge(output_node, entry_node);
+            edges.push((output_node, entry_node));
             output = member.output.clone().expect("member.output");
             output_node = node_id;
         }
@@ -428,8 +430,7 @@ impl Engine {
         // The unit's midi-fx members (reusing survivors, like a leaf) folded into the node's pull chain.
         let mut midi_members: Vec<Member> = Vec::new();
         for uuid in unit.midi.sorted() {
-            let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
-            if let Some(device) = device {
+            if let Some(device) = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
                 if device.kind == DEVICE_KIND_MIDI_EFFECT {
                     midi_members.push(self.take_or_build_midi(&mut pool, uuid, device, invalidate, rewire));
                 }
@@ -466,11 +467,9 @@ impl Engine {
         let signal = unit.mark.signal();
         let mut audio_members: Vec<Member> = Vec::new();
         for uuid in unit.audio.sorted() {
-            let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
-            if let Some(device) = device {
-                if device.kind == DEVICE_KIND_AUDIO_EFFECT {
-                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, &signal, invalidate, rewire));
-                }
+            // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
+            if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, &signal, invalidate, rewire) {
+                audio_members.push(member);
             }
         }
         for (_, member) in core::mem::take(&mut pool) {
@@ -496,12 +495,16 @@ impl Engine {
             if !self.device_enabled(member.uuid) {
                 continue;
             }
-            if let ProcHandle::Audio(fx_node) = &member.proc {
-                fx_node.borrow_mut().set_audio_source(output.clone());
+            match &member.proc {
+                ProcHandle::Audio(fx_node) => fx_node.borrow_mut().set_audio_source(output.clone()),
+                // An effect composite takes its input at its DISTRIBUTOR and hands the chain on from its MIX.
+                ProcHandle::EffectComposite(binding) => binding.set_audio_source(output.clone()),
+                _ => {}
             }
             let fx_id = member.node_id.expect("member.node_id");
-            self.context.register_edge(output_node, fx_id);
-            edges.push((output_node, fx_id));
+            let entry_node = member.input_node.unwrap_or(fx_id);
+            self.context.register_edge(output_node, entry_node);
+            edges.push((output_node, entry_node));
             output = member.output.clone().expect("member.output");
             output_node = fx_id;
         }
@@ -610,11 +613,9 @@ impl Engine {
         // exactly like a leaf / tape unit.
         let mut audio_members: Vec<Member> = Vec::new();
         for uuid in unit.audio.sorted() {
-            let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
-            if let Some(device) = device {
-                if device.kind == DEVICE_KIND_AUDIO_EFFECT {
-                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, signal, invalidate, rewire));
-                }
+            // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
+            if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, signal, invalidate, rewire) {
+                audio_members.push(member);
             }
         }
         for (_, member) in core::mem::take(&mut pool) {
@@ -643,12 +644,16 @@ impl Engine {
             if !self.device_enabled(member.uuid) {
                 continue;
             }
-            if let ProcHandle::Audio(node) = &member.proc {
-                node.borrow_mut().set_audio_source(output.clone());
+            match &member.proc {
+                ProcHandle::Audio(node) => node.borrow_mut().set_audio_source(output.clone()),
+                // An effect composite takes its input at its DISTRIBUTOR and hands the chain on from its MIX.
+                ProcHandle::EffectComposite(binding) => binding.set_audio_source(output.clone()),
+                _ => {}
             }
             let node_id = member.node_id.expect("member.node_id");
-            self.context.register_edge(output_node, node_id);
-            tail_edges.push((output_node, node_id));
+            let entry_node = member.input_node.unwrap_or(node_id);
+            self.context.register_edge(output_node, entry_node);
+            tail_edges.push((output_node, entry_node));
             output = member.output.clone().expect("member.output");
             output_node = node_id;
         }
@@ -711,8 +716,7 @@ impl Engine {
         let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, instrument_device, invalidate, rewire);
         let mut midi_members: Vec<Member> = Vec::new();
         for uuid in unit.midi.sorted() {
-            let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
-            if let Some(device) = device {
+            if let Some(device) = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
                 if device.kind == DEVICE_KIND_MIDI_EFFECT {
                     midi_members.push(self.take_or_build_midi(&mut pool, uuid, device, invalidate, rewire));
                 }
@@ -720,11 +724,9 @@ impl Engine {
         }
         let mut audio_members: Vec<Member> = Vec::new();
         for uuid in unit.audio.sorted() {
-            let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
-            if let Some(device) = device {
-                if device.kind == DEVICE_KIND_AUDIO_EFFECT {
-                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, signal, invalidate, rewire));
-                }
+            // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
+            if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, signal, invalidate, rewire) {
+                audio_members.push(member);
             }
         }
         // Whatever remains pooled left the chain (a leaver): terminate it (node + sidechain monitors + params).
@@ -817,7 +819,7 @@ impl Engine {
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
 
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
-        Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), output: Some(output), params, sidechain: None, enabled_sub}
+        Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain: None, enabled_sub}
     }
 
     /// Reuse the pooled midi-fx (a survivor) or build + bind a fresh one (a joiner). A midi-fx has no audio
@@ -837,7 +839,7 @@ impl Engine {
         let note_bits = effect.note_bits_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_INT_ARRAY, &note_bits);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
-        Member {uuid, proc: ProcHandle::Midi(effect), node_id: None, output: None, params, sidechain: None, enabled_sub}
+        Member {uuid, proc: ProcHandle::Midi(effect), node_id: None, input_node: None, output: None, params: Some(params), sidechain: None, enabled_sub}
     }
 
     /// Reuse the pooled audio-fx (a survivor: its delay tail / filter history live on) or build + bind a fresh
@@ -878,7 +880,7 @@ impl Engine {
             Some(SidechainBinding {effect: node.clone(), node_id, device_uuid: uuid, ports})
         };
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
-        Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), output: Some(output), params, sidechain, enabled_sub}
+        Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain, enabled_sub}
     }
 
     /// Wire a cluster's persistent members edge-only (shared by a leaf unit and a composite slot): fold the
@@ -935,12 +937,19 @@ impl Engine {
             if !self.device_enabled(member.uuid) {
                 continue; // a disabled audio-fx is BYPASSED: not wired into the signal path; processor untouched
             }
-            if let ProcHandle::Audio(node) = &member.proc {
-                node.borrow_mut().set_audio_source(output.clone());
+            match &member.proc {
+                ProcHandle::Audio(node) => node.borrow_mut().set_audio_source(output.clone()),
+                // An EFFECT COMPOSITE takes its input at its DISTRIBUTOR (which owns the copy its entries and
+                // its dry path read) and hands the chain on from its MIX.
+                ProcHandle::EffectComposite(binding) => binding.set_audio_source(output.clone()),
+                _ => {}
             }
             let node_id = member.node_id.expect("member.node_id");
-            self.context.register_edge(output_node, node_id);
-            edges.push((output_node, node_id));
+            // The upstream edges into the member's ENTRY node — the same node for a plugin, the distributor
+            // for a composite — while the chain continues from its exit (`node_id`).
+            let entry_node = member.input_node.unwrap_or(node_id);
+            self.context.register_edge(output_node, entry_node);
+            edges.push((output_node, entry_node));
             output = member.output.clone().expect("member.output");
             output_node = node_id;
         }
@@ -978,10 +987,9 @@ impl Engine {
         }
         let mut audio_members: Vec<Member> = Vec::new();
         for uuid in audio_uuids.iter().copied() {
-            if let Some(device) = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
-                if device.kind == DEVICE_KIND_AUDIO_EFFECT {
-                    audio_members.push(self.take_or_build_audio(&mut pool, uuid, device, signal, invalidate, rewire));
-                }
+            // One builder for every audio chain: a plugin effect OR an effect composite (an FX stack / split).
+            if let Some(member) = self.take_or_build_audio_member(&mut pool, uuid, signal, invalidate, rewire) {
+                audio_members.push(member);
             }
         }
         for (_, member) in core::mem::take(&mut pool) {

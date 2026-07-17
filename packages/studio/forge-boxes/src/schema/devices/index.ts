@@ -35,6 +35,9 @@ import {ApparatDeviceBox} from "./instruments/ApparatDeviceBox"
 import {NoopInstrumentBox} from "./instruments/NoopInstrumentBox"
 import {CompositeDeviceBox} from "./instruments/CompositeDeviceBox"
 import {CompositeCellBox} from "./instruments/CompositeCellBox"
+import {AudioEffectCompositeBox} from "./audio-effects/AudioEffectCompositeBox"
+import {AudioEffectCompositeCellBox} from "./audio-effects/AudioEffectCompositeCellBox"
+import {StereoCompositeBox} from "./audio-effects/StereoCompositeBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -75,5 +78,8 @@ export const DeviceDefinitions = [
     ApparatDeviceBox,
     NoopInstrumentBox,
     CompositeDeviceBox,
-    CompositeCellBox
+    CompositeCellBox,
+    AudioEffectCompositeBox,
+    AudioEffectCompositeCellBox,
+    StereoCompositeBox
 ]

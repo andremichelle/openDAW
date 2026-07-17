@@ -12,7 +12,7 @@ import {ScriptCompiler} from "@opendaw/studio-adapters"
 import {serializeUpdateTasks} from "../../../../studio/core-wasm/src/sync/serialize-update-tasks"
 import {ScriptBridges, ScriptEngine} from "../../../../studio/core-wasm/src/script-bridge"
 import {NamBridges} from "../../../../studio/core-wasm/src/nam-bridge"
-import {linkDevice, registerComposite} from "../../../../studio/core-wasm/src/device-linker"
+import {linkDevice, registerComposite, registerEffectComposite} from "../../../../studio/core-wasm/src/device-linker"
 import {loadEngineModules} from "../../../../studio/core-wasm/src/engine-modules"
 import {loadSoundfontBlob, simplifySoundfontBytes} from "../soundfont-fetch"
 import type {Bundle} from "../bundle"
@@ -119,7 +119,7 @@ const drainResources = async (engine: any, memory: WebAssembly.Memory, bundle: B
 }
 
 export const renderWasmOffline = async (bundle: Bundle, quanta: number, sampleRate = 48000): Promise<OfflineResult> => {
-    const {engineModule, deviceModules, deviceBoxTypes, composites} = await loadEngineModules()
+    const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} = await loadEngineModules()
     const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engine = new WebAssembly.Instance(engineModule, {env: {
@@ -143,6 +143,9 @@ export const renderWasmOffline = async (bundle: Bundle, quanta: number, sampleRa
     }
     for (const composite of composites) {
         registerComposite(engine, memory, composite)
+    }
+    for (const composite of effectComposites) {
+        registerEffectComposite(engine, memory, composite)
     }
     const sync = connectSync(engine, memory, bundle.boxGraph)
     await sync.settle(); engine.bind(); await sync.settle()

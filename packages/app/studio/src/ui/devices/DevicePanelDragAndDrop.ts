@@ -1,10 +1,11 @@
-import {asDefined, isAbsent, isDefined, panic, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
+import {asDefined, isAbsent, isDefined, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {
     AudioBusBoxAdapter,
     AudioUnitBoxAdapter,
+    DeviceHost,
     Devices,
     InstrumentBox,
     InstrumentFactories,
@@ -44,12 +45,13 @@ export namespace DevicePanelDragAndDrop {
                         return true
                     }
                     if (dragData.category === "audio-effect" || dragData.category === "audio-effect-chain") {
+                        if (!DeviceHost.takesEffect(deviceHost, "audio")) {return false}
                         const [_index, successor] = DragAndDrop.findInsertLocation(event, audioEffectsContainer)
                         audioEffectsContainer.insertBefore(insertMarker, successor)
                         return true
                     }
                     if (dragData.category === "midi-effect" || dragData.category === "midi-effect-chain") {
-                        if (deviceHost.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {return false}
+                        if (!DeviceHost.takesEffect(deviceHost, "midi")) {return false}
                         const [_index, successor] = DragAndDrop.findInsertLocation(event, midiEffectsContainer)
                         midiEffectsContainer.insertBefore(insertMarker, successor)
                         return true
@@ -58,11 +60,10 @@ export namespace DevicePanelDragAndDrop {
                 }
                 let container: HTMLElement
                 if (type === "audio-effect") {
+                    if (!DeviceHost.takesEffect(deviceHost, "audio")) {return false}
                     container = audioEffectsContainer
                 } else if (type === "midi-effect") {
-                    if (deviceHost.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
-                        return false
-                    }
+                    if (!DeviceHost.takesEffect(deviceHost, "midi")) {return false}
                     container = midiEffectsContainer
                 } else if (type === "instrument" && deviceHost.isAudioUnit) {
                     if (dragData.device === null) {return false}
@@ -110,17 +111,14 @@ export namespace DevicePanelDragAndDrop {
                     })
                     return
                 }
-                let container: HTMLElement
-                let field
-                if (type === "audio-effect") {
-                    container = audioEffectsContainer
-                    field = deviceHost.audioEffects.field()
-                } else if (type === "midi-effect") {
-                    container = midiEffectsContainer
-                    field = deviceHost.midiEffects.field()
-                } else {
-                    return panic(`Unknown type: ${type}`)
-                }
+                if (type === "instrument") {return} // an instrument drop onto a non-audio-unit host: nothing to do
+                const accepts = type === "audio-effect" ? "audio" : "midi"
+                // The `drag` gate already refused a host that takes no chain of this kind; re-checked here
+                // because `drop` is reachable on its own.
+                const optField = DeviceHost.chainFieldOf(deviceHost, accepts)
+                if (optField.isEmpty()) {return}
+                const field = optField.unwrap()
+                const container = accepts === "audio" ? audioEffectsContainer : midiEffectsContainer
                 const [index] = DragAndDrop.findInsertLocation(event, container)
                 if (dragData.uuids === null) {
                     editing.modify(() => {

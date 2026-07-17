@@ -16,7 +16,7 @@ import {
 import {Promises} from "@opendaw/lib-runtime"
 import {Files} from "@opendaw/lib-dom"
 import {Box, IndexedBox} from "@opendaw/lib-box"
-import {DeviceBoxAdapter, DeviceBoxUtils, Devices, EffectDeviceBoxAdapter, InstrumentFactories, PresetDecoder, PresetEncoder, PresetHeader} from "@opendaw/studio-adapters"
+import {DeviceBoxAdapter, DeviceBoxUtils, DeviceHost, Devices, EffectDeviceBoxAdapter, InstrumentFactories, PresetDecoder, PresetEncoder, PresetHeader} from "@opendaw/studio-adapters"
 import {
     AudioEffectChainPresetMeta,
     AudioEffectPresetMeta,
@@ -266,18 +266,17 @@ export class PresetService {
         }
         audioUnitOption.ifSome(vertex => {
             const deviceHost = this.project.boxAdapters.adapterFor(vertex.box, Devices.isHost)
-            if (kind === "midi-effect" && deviceHost.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
+            const accepts = kind === "audio-effect" ? "audio" : kind === "midi-effect" ? "midi" : panic(`Unknown ${kind}`)
+            if (!DeviceHost.takesEffect(deviceHost, accepts)) {
                 RuntimeNotifier.notify({
-                    message: "The selected audio unit does not have a midi input.",
+                    message: accepts === "midi"
+                        ? "The selected target does not accept midi effects."
+                        : "The selected target does not accept audio effects.",
                     icon: "Info"
                 })
                 return
             }
-            const field = kind === "audio-effect"
-                ? deviceHost.audioEffects.field()
-                : kind === "midi-effect"
-                    ? deviceHost.midiEffects.field()
-                    : panic(`Unknown ${kind}`)
+            const field = DeviceHost.chainFieldOf(deviceHost, accepts).unwrap(`${accepts} chain`)
             this.project.editing.modify(() => factory.create(this.project, field, field.pointerHub.incoming().length))
         })
     }
@@ -800,11 +799,17 @@ export class PresetService {
             }
             const host = this.project.boxAdapters.adapterFor(editing.unwrap().box, Devices.isHost)
             const isMidi = entry.category === "midi-effect" || entry.category === "midi-effect-chain"
-            if (isMidi && host.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
-                RuntimeNotifier.notify({message: "The selected audio unit does not accept MIDI.", icon: "Info"})
+            const accepts = isMidi ? "midi" : "audio"
+            if (!DeviceHost.takesEffect(host, accepts)) {
+                RuntimeNotifier.notify({
+                    message: isMidi
+                        ? "The selected target does not accept MIDI."
+                        : "The selected target does not accept audio effects.",
+                    icon: "Info"
+                })
                 return
             }
-            const field = isMidi ? host.midiEffects.field() : host.audioEffects.field()
+            const field = DeviceHost.chainFieldOf(host, accepts).unwrap(`${accepts} chain`)
             const insertIndex = field.pointerHub.incoming().length
             const chainKind = isMidi ? PresetHeader.ChainKind.Midi : PresetHeader.ChainKind.Audio
             this.project.editing.modify(() => {

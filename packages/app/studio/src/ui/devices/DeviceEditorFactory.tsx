@@ -3,6 +3,8 @@ import {
     ApparatDeviceBox,
     ArpeggioDeviceBox,
     AudioBusBox,
+    AudioEffectCompositeBox,
+    StereoCompositeBox,
     BoxVisitor,
     CompressorDeviceBox,
     CrusherDeviceBox,
@@ -35,10 +37,14 @@ import {
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {ArpeggioDeviceEditor} from "@/ui/devices/midi-effects/ArpeggioDeviceEditor.tsx"
+import {AudioEffectCompositeDeviceEditor} from "@/ui/devices/audio-effects/AudioEffectCompositeDeviceEditor"
+import {EffectFactories as CoreEffectFactories} from "@opendaw/studio-core"
 import {
     ApparatDeviceBoxAdapter,
     ArpeggioDeviceBoxAdapter,
     AudioBusBoxAdapter,
+    AudioEffectCompositeBoxAdapter,
+    StereoCompositeBoxAdapter,
     CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter,
     DattorroReverbDeviceBoxAdapter,
@@ -214,6 +220,22 @@ export namespace DeviceEditorFactory {
                                            adapter={service.project.boxAdapters
                                                .adapterFor(box, UnknownAudioEffectDeviceBoxAdapter)}
                                            deviceHost={deviceHost}/>
+            ),
+            visitAudioEffectCompositeBox: (box: AudioEffectCompositeBox) => (
+                <AudioEffectCompositeDeviceEditor lifecycle={lifecycle}
+                                                  service={service}
+                                                  adapter={service.project.boxAdapters
+                                                      .adapterFor(box, AudioEffectCompositeBoxAdapter)}
+                                                  deviceHost={deviceHost}
+                                                  icon={CoreEffectFactories.AudioNamed.AudioEffectComposite.defaultIcon}/>
+            ),
+            visitStereoCompositeBox: (box: StereoCompositeBox) => (
+                <AudioEffectCompositeDeviceEditor lifecycle={lifecycle}
+                                                  service={service}
+                                                  adapter={service.project.boxAdapters
+                                                      .adapterFor(box, StereoCompositeBoxAdapter)}
+                                                  deviceHost={deviceHost}
+                                                  icon={CoreEffectFactories.AudioNamed.StereoComposite.defaultIcon}/>
             ),
             visitStereoToolDeviceBox: (box: StereoToolDeviceBox) => (
                 <StereoToolDeviceEditor lifecycle={lifecycle}

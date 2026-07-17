@@ -35,6 +35,10 @@ type ClipboardDevices = ClipboardEntry<"devices">
 
 type InstrumentContent = "notes" | "audio"
 
+// The chain kind an effect device box belongs in.
+const effectAccepts = (box: EffectDeviceBox): "audio" | "midi" =>
+    box.tags.deviceType === "audio-effect" ? "audio" : "midi"
+
 type DeviceMetadata = {
     hasInstrument: boolean
     instrumentContent: InstrumentContent | ""
@@ -183,8 +187,10 @@ export namespace DevicesClipboard {
                     if (optHost.isEmpty()) {return}
                     const host = optHost.unwrap()
                     const selected = new Set(selection.selected().filter(adapter => adapter.type !== "instrument"))
-                    const remainingMidi = host.midiEffects.adapters().filter(adapter => !selected.has(adapter))
-                    const remainingAudio = host.audioEffects.adapters().filter(adapter => !selected.has(adapter))
+                    const remainingMidi = host.midiEffects
+                        .mapOr(chain => chain.adapters().filter(adapter => !selected.has(adapter)), [])
+                    const remainingAudio = host.audioEffects
+                        .mapOr(chain => chain.adapters().filter(adapter => !selected.has(adapter)), [])
                     editing.modify(() => {
                         selected.forEach(adapter => adapter.box.delete())
                         remainingMidi.forEach((adapter, index) => adapter.indexField.setValue(index))
@@ -233,18 +239,22 @@ export namespace DevicesClipboard {
                         }
                         selectedInstrument.box.delete()
                     }
-                    for (const adapter of host.midiEffects.adapters()) {
-                        const currentIndex = adapter.indexField.getValue()
-                        if (currentIndex >= midiInsertIndex) {
-                            adapter.indexField.setValue(currentIndex + metadata.midiEffectCount)
+                    host.midiEffects.ifSome(chain => {
+                        for (const adapter of chain.adapters()) {
+                            const currentIndex = adapter.indexField.getValue()
+                            if (currentIndex >= midiInsertIndex) {
+                                adapter.indexField.setValue(currentIndex + metadata.midiEffectCount)
+                            }
                         }
-                    }
-                    for (const adapter of host.audioEffects.adapters()) {
-                        const currentIndex = adapter.indexField.getValue()
-                        if (currentIndex >= audioInsertIndex) {
-                            adapter.indexField.setValue(currentIndex + metadata.audioEffectCount)
+                    })
+                    host.audioEffects.ifSome(chain => {
+                        for (const adapter of chain.adapters()) {
+                            const currentIndex = adapter.indexField.getValue()
+                            if (currentIndex >= audioInsertIndex) {
+                                adapter.indexField.setValue(currentIndex + metadata.audioEffectCount)
+                            }
                         }
-                    }
+                    })
                     const boxes = ClipboardUtils.deserializeBoxes(
                         entry.data,
                         boxGraph,
@@ -255,10 +265,10 @@ export namespace DevicesClipboard {
                                     return Option.wrap(host.inputField.address)
                                 }
                                 if (pointer.pointerType === Pointers.MIDIEffectHost) {
-                                    return Option.wrap(host.midiEffectsField.address)
+                                    return host.midiEffectsField.map(field => field.address)
                                 }
                                 if (pointer.pointerType === Pointers.AudioEffectHost) {
-                                    return Option.wrap(host.audioEffectsField.address)
+                                    return host.audioEffectsField.map(field => field.address)
                                 }
                                 if (pointer.pointerType === Pointers.TrackCollection) {
                                     return Option.wrap(host.audioUnitBoxAdapter().tracksField.address)
@@ -276,6 +286,13 @@ export namespace DevicesClipboard {
                                 return Option.None
                             },
                             excludeBox: box => {
+                                // A ONE-SIDED host (a composite entry) takes only ONE chain kind. An effect of the
+                                // other kind has nowhere to attach: `mapPointer` finds no host field, so its
+                                // mandatory `host` would dangle and reject the whole transaction (as the timeline
+                                // subtree below would). Drop it rather than paste a broken box. Checked BEFORE the
+                                // replaceInstrument bail: that case must not smuggle an unattachable effect in.
+                                if (DeviceBoxUtils.isEffectDeviceBox(box)
+                                    && DeviceHost.chainFieldOf(host, effectAccepts(box)).isEmpty()) {return true}
                                 if (replaceInstrument) {return false}
                                 if (DeviceBoxUtils.isInstrumentDeviceBox(box)) {return true}
                                 // The unit's timeline content (tracks + their regions/clips/event-collections)

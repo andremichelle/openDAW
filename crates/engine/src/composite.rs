@@ -157,7 +157,7 @@ impl CompositeBinding {
     /// Visit every device's bound parameters in this composite (recursing into nested composites), so the unit
     /// can re-bind automation across the whole cascade.
     pub(crate) fn for_each_params(&mut self, visit: &mut dyn FnMut(&mut DeviceParams)) {
-        for member in &mut self.unit_midi_members { visit(&mut member.params); }
+        for member in &mut self.unit_midi_members { crate::audio_unit::visit_member_params(member, visit); }
         for child in &mut self.members {
             match &mut child.body {
                 ChildBody::Slot {cluster, ..} => cluster.for_each_params(visit),

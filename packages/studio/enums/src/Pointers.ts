@@ -57,4 +57,5 @@ export enum Pointers {
     WarpMarkers,
     NeuralAmpModel,
     CompositeCell,
+    AudioEffectCompositeCell,
 }

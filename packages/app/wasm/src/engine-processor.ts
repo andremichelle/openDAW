@@ -14,13 +14,13 @@ import {isDefined, Terminable, UUID} from "@opendaw/lib-std"
 import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import {CompositeSpec} from "../../../studio/core-wasm/src/engine-modules"
+import {CompositeSpec, EffectCompositeSpec} from "../../../studio/core-wasm/src/engine-modules"
 import {SampleInfo, SampleLoader} from "./sample-loader"
 import {SoundfontInfo, SoundfontLoader} from "./soundfont-loader"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
 import {ScriptBridges, ScriptEngine} from "../../../studio/core-wasm/src/script-bridge"
 import {NamBridges} from "../../../studio/core-wasm/src/nam-bridge"
-import {linkDevice, registerComposite} from "../../../studio/core-wasm/src/device-linker"
+import {linkDevice, registerComposite, registerEffectComposite} from "../../../studio/core-wasm/src/device-linker"
 import {NamLoader} from "../../../studio/core-wasm/src/nam-loader"
 import {EngineExports} from "../../../studio/core-wasm/src/engine-exports"
 
@@ -31,6 +31,7 @@ type BootOptions = {
     deviceModules: ReadonlyArray<WebAssembly.Module> // PIC side modules, in load order (device 0, 1, ...)
     deviceBoxTypes: ReadonlyArray<string> // parallel to deviceModules: the device-box type each plugin realizes
     composites: ReadonlyArray<CompositeSpec> // composite box types the engine hosts as child collections
+    effectComposites: ReadonlyArray<EffectCompositeSpec> // parallel fx / midi stacks the engine hosts itself
     memory: WebAssembly.Memory // SHARED, created on the main thread so it can see the WASM heap
     sampleRate: number
     metronome?: boolean // default true; the note's page sets false to hear only the instrument
@@ -61,7 +62,7 @@ class EngineProcessor extends AudioWorkletProcessor {
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
-        const {engineModule, deviceModules, deviceBoxTypes, composites, memory, sampleRate, metronome}: BootOptions = options?.processorOptions
+        const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites, memory, sampleRate, metronome}: BootOptions = options?.processorOptions
         this.#sampleRate = sampleRate
         // the one SHARED linear memory, created on the main thread and handed in (so the main thread can
         // see the WASM heap). talc grows it on demand; shared memory grows in place without detaching.
@@ -91,6 +92,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         deviceModules.forEach((deviceModule, index) =>
             linkDevice(engine, memory, this.#table, deviceModule, deviceBoxTypes[index], sampleRate, bridgeImports))
         composites.forEach(composite => registerComposite(engine, memory, composite))
+        effectComposites.forEach(composite => registerEffectComposite(engine, memory, composite))
         if (metronome === false) {engine.set_metronome_enabled(0)}
         // ONE Messenger over the engine port, split into typed Communicator protocols, one per named channel
         // (each channel is a single sender -> executor direction): `engine` receives the SyncSource transaction

@@ -1,0 +1,37 @@
+component
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: 0.5em
+  padding: 0.75em 1em
+  align-self: center
+
+  .header
+    display: flex
+    align-items: center
+    gap: 0.375em
+
+    .back
+      cursor: pointer
+      opacity: 0.6
+
+      &:hover
+        opacity: 1.0
+
+    .label
+      font-size: 0.625em
+      text-transform: uppercase
+      letter-spacing: 0.05em
+      opacity: 0.6
+      white-space: nowrap
+
+  .controls
+    display: flex
+    align-items: flex-start
+    gap: 0.5em
+
+    .checkboxes
+      display: flex
+      flex-direction: column
+      gap: 0.125em
+      margin-top: 0.5em

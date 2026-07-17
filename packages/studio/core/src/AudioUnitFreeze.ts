@@ -53,7 +53,7 @@ export class AudioUnitFreeze implements Terminable {
         const edges = audioUnitBoxAdapter.box.graph.edges()
         for (const otherUnit of this.#project.rootBoxAdapter.audioUnits.adapters()) {
             if (UUID.equals(otherUnit.uuid, audioUnitBoxAdapter.uuid)) {continue}
-            for (const effect of otherUnit.audioEffects.adapters()) {
+            for (const effect of otherUnit.audioEffects.unwrap("audioEffects").adapters()) {
                 for (const [_, target] of edges.outgoingEdgesOf(effect.box)) {
                     if (targetAddresses.some(addr => addr.equals(target))) {
                         return true

@@ -4,8 +4,8 @@
 import {isDefined, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
 import {EngineToClient} from "@opendaw/studio-adapters"
 import {EngineExports, readPanicMessage} from "./engine-exports"
-import {CompositeSpec} from "./engine-modules"
-import {linkDevice, registerComposite} from "./device-linker"
+import {CompositeSpec, EffectCompositeSpec} from "./engine-modules"
+import {linkDevice, registerComposite, registerEffectComposite} from "./device-linker"
 import {ScriptBridges, ScriptEngine} from "./script-bridge"
 import {NamBridges} from "./nam-bridge"
 import {simplifySoundfont} from "./soundfont-simplify"
@@ -17,6 +17,7 @@ export type WasmEngineModules = {
     deviceModules: ReadonlyArray<WebAssembly.Module>
     deviceBoxTypes: ReadonlyArray<string>
     composites: ReadonlyArray<CompositeSpec>
+    effectComposites: ReadonlyArray<EffectCompositeSpec>
 }
 
 // A wasm trap surfaces as an anonymous "RuntimeError: unreachable" (panic=abort strips the message);
@@ -43,6 +44,7 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
     modules.deviceModules.forEach((deviceModule, index) =>
         linkDevice(engine, memory, table, deviceModule, modules.deviceBoxTypes[index], sampleRate, bridgeImports))
     modules.composites.forEach(composite => registerComposite(engine, memory, composite))
+    modules.effectComposites.forEach(composite => registerEffectComposite(engine, memory, composite))
     return engine
 }
 

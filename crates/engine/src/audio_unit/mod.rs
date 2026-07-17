@@ -56,6 +56,7 @@ use crate::plugin_audio_effect::PluginAudioEffect;
 use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::composite::CompositeBinding;
+use crate::effect_composite::EffectCompositeBinding;
 use crate::audio_region_player::AudioRegionPlayer;
 use crate::midi_output::{self, CcBinding, MidiOutControls, MidiOutProcessor};
 use crate::time_stretch::{TimeStretchConfig, TransientPlayMode};
@@ -65,7 +66,7 @@ use crate::{call_device_init, call_device_field_changed, call_device_parameter_c
 mod wiring;
 mod routing;
 mod tracks;
-mod params;
+pub(crate) mod params;
 #[cfg(test)]
 mod tests;
 
@@ -301,7 +302,11 @@ pub(crate) struct TapeWired {
 pub(crate) enum ProcHandle {
     Instrument(Rc<RefCell<PluginInstrument>>),
     Audio(Rc<RefCell<PluginAudioEffect>>),
-    Midi(Rc<PluginMidiEffect>)
+    Midi(Rc<PluginMidiEffect>),
+    // A parallel EFFECT COMPOSITE: not one plugin but a whole sub-graph (distributor -> entries -> wet sum ->
+    // dry/wet mix) the engine owns itself. It sits in an audio chain like any other member — see `Member`'s
+    // `input_node` for how the chain wires through it.
+    EffectComposite(Box<EffectCompositeBinding>)
 }
 
 /// One persistent chain member: its device box uuid, the held processor, its graph node (none for a midi-fx,
@@ -311,9 +316,17 @@ pub(crate) enum ProcHandle {
 pub(crate) struct Member {
     pub(crate) uuid: Uuid,
     pub(crate) proc: ProcHandle,
+    // The chain's EXIT node for this member: what the next member reads / edges from. For a plugin it is the
+    // plugin's node; for an effect composite it is the dry/wet mix at the composite's end.
     pub(crate) node_id: Option<NodeId>,
+    // The chain's ENTRY node: what the PREVIOUS member edges INTO. `None` means "same as `node_id`", which is
+    // every plugin. An effect composite differs: the upstream feeds its DISTRIBUTOR while its exit is the mix,
+    // so the chain wires `prev -> input_node` and continues from `node_id`.
+    pub(crate) input_node: Option<NodeId>,
     pub(crate) output: Option<SharedAudioBuffer>,
-    pub(crate) params: DeviceParams,
+    // The device's bound parameters. `None` for a member that is NOT a plugin (an effect composite: its dry /
+    // wet and its entries' gain / mute / solo are bound by its own binding, not through the device ABI).
+    pub(crate) params: Option<DeviceParams>,
     pub(crate) sidechain: Option<SidechainBinding>,
     // A TARGETED `This` monitor on the device's `enabled` field: toggling it re-wires the unit (edge-only —
     // a disabled effect is skipped in the chain, its processor + params + DSP state left untouched).
@@ -340,6 +353,25 @@ pub(crate) struct LeafChain {
     pub(crate) monitor_node: Option<NodeId> // the EFFECTS-monitoring injector, rebuilt per re-wire
 }
 
+/// Visit one chain member's device parameters, recursing into an effect composite's ENTRIES — so an automation
+/// re-bind / param visit reaches every device in the cascade, not just the top-level plugins. A member that is
+/// not a plugin (a composite) contributes none of its own.
+pub(crate) fn visit_member_params(member: &mut Member, visit: &mut dyn FnMut(&mut DeviceParams)) {
+    if let Some(params) = &mut member.params { visit(params); }
+    if let ProcHandle::EffectComposite(binding) = &mut member.proc {
+        binding.for_each_params(visit);
+    }
+}
+
+/// Visit one chain member's sidechain bindings, recursing into an effect composite's ENTRIES — so the unit's
+/// sidechain re-resolve reaches a device nested inside a composite.
+pub(crate) fn visit_member_sidechains(member: &mut Member, visit: &mut dyn FnMut(&mut SidechainBinding)) {
+    if let Some(binding) = &mut member.sidechain { visit(binding); }
+    if let ProcHandle::EffectComposite(composite) = &mut member.proc {
+        composite.for_each_sidechain(visit);
+    }
+}
+
 /// A composite SLOT's persistent cluster (a direct-instrument child, e.g. a Playfield slot): the same per-member
 /// machinery as a leaf unit (instrument + midi/audio members + note source), reconciled EDGE-ONLY so a chain edit
 /// or an effect `enabled` toggle keeps every survivor's DSP state. Defined here (not in `composite`) so it can
@@ -363,9 +395,9 @@ impl SlotCluster {
 
     /// Visit every member's bound parameters (instrument + midi + audio), for the unit's automation re-bind.
     pub(crate) fn for_each_params(&mut self, visit: &mut dyn FnMut(&mut DeviceParams)) {
-        visit(&mut self.instrument.params);
-        for member in &mut self.midi { visit(&mut member.params); }
-        for member in &mut self.audio { visit(&mut member.params); }
+        if let Some(params) = &mut self.instrument.params { visit(params); }
+        for member in &mut self.midi { visit_member_params(member, visit); }
+        for member in &mut self.audio { visit_member_params(member, visit); }
     }
 
     /// Visit every audio member's sidechain binding, for the unit's sidechain re-resolve.
@@ -1038,6 +1070,14 @@ impl Engine {
     /// never registered one; the remove is a no-op), remove its processor node (a midi-fx has none), drop its
     /// sidechain ports' pointer monitors, and unsubscribe its parameter observations.
     pub(crate) fn terminate_member(&mut self, member: Member) {
+        // An EFFECT COMPOSITE member is a whole sub-graph, not one node: hand it to its own teardown (which
+        // drops every entry, its three nodes, its edges, its dry/wet bindings and its observations). Removing
+        // just `node_id` here would leak all of that.
+        if let ProcHandle::EffectComposite(binding) = member.proc {
+            self.graph.unsubscribe(member.enabled_sub);
+            self.teardown_effect_composite(*binding);
+            return;
+        }
         self.output_registry.remove(&Address::of(member.uuid, vec![]));
         if let Some(node_id) = member.node_id {
             self.context.remove_processor(node_id);
@@ -1048,8 +1088,11 @@ impl Engine {
             }
         }
         self.graph.unsubscribe(member.enabled_sub);
-        self.teardown_device_params(vec![member.params]);
+        if let Some(params) = member.params {
+            self.teardown_device_params(vec![params]);
+        }
     }
+
 
     /// Build a unit binding: its per-track region collections list (`track_sets`, shared with the
     /// sequencer), the track-membership subscription (key 20) the cascade fills, and the three device-chain

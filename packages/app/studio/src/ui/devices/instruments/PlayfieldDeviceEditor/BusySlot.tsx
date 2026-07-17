@@ -100,7 +100,7 @@ export const BusySlot = ({
     )
     let noteLifeTime: Terminable = Terminable.Empty
     let fileHandlerSubscription: Terminable = Terminable.Empty
-    const audioEffectsField = sample.audioEffectsField.pointerHub
+    const audioEffectsField = sample.audioEffectsField.unwrap("audioEffectsField").pointerHub
     lifecycle.ownAll(
         connectBoolean(muteValue, muteWrapper),
         connectBoolean(soloValue, soloWrapper),

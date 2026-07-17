@@ -316,13 +316,19 @@ export namespace PresetDecoder {
         ])
         PointerField.decodeWith({
             map: (pointer: PointerField, address: Option<Address>): Option<Address> => {
+                // An INTERNAL target (a box inserted along with the chain) always re-targets to its copy —
+                // checked FIRST, and including host pointers: an effect nested inside a composite entry is
+                // hosted BY THAT ENTRY, and re-targeting it onto the destination chain would rip it out and
+                // flatten the composite.
+                const internal = address.flatMap(addr =>
+                    uuidMap.opt(addr.uuid).map(({target}) => addr.moveTo(target)))
+                if (internal.nonEmpty()) {return internal}
+                // A host pointing OUTSIDE the inserted set is a chain ROOT: re-target it onto the destination.
                 if (pointer.pointerType === hostPointerType) {
                     return Option.wrap(targetFieldAddress)
                 }
-                return address.flatMap(addr => uuidMap.opt(addr.uuid).match({
-                    some: ({target}) => Option.wrap(addr.moveTo(target)),
-                    none: () => targetGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None
-                }))
+                return address.flatMap(addr =>
+                    targetGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None)
             }
         }, () => {
             effects.forEach((source, i) => {

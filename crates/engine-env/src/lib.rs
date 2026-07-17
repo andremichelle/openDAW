@@ -15,6 +15,7 @@ pub mod audio_bus_processor;
 pub mod aux_send;
 pub mod channel_strip;
 pub mod clip_sequencer;
+pub mod composite_mix;
 pub mod telemetry;
 pub mod ramp;
 pub mod audio_generator;

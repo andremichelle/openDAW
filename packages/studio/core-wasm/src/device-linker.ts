@@ -5,6 +5,10 @@
 // the box-type / composite name mapping. A new engine export added here reaches every context at once; a
 // loader that misses one fails LOUDLY at link time with the import's name instead of a cryptic LinkError.
 
+// Type-only (erased at compile time), so the linker stays runtime-independent of the module table while an
+// effect-composite registration keeps ONE definition.
+import type {EffectCompositeSpec} from "./engine-modules"
+
 export const DEVICE_STACK_SIZE = 256 * 1024 // talc-allocated stack handed to each loaded device
 
 export type BridgeImports = Record<string, (...args: Array<number>) => number | void>
@@ -57,6 +61,10 @@ export type LinkerEngine = {
     composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number,
                          cellInstrumentField: number, cellMidiField: number, cellAudioField: number,
                          childEnabledKey: number, childMuteKey: number, childSoloKey: number) => void
+    effect_composite_register: (nameLen: number, kind: number, distributor: number, entriesField: number,
+                                indexKey: number, chainField: number, labelKey: number, gainKey: number,
+                                panKey: number, muteKey: number, soloKey: number, dryKey: number, wetKey: number,
+                                inputTapField: number) => void
     input_reserve: (len: number) => number
 }
 
@@ -159,4 +167,14 @@ export const registerComposite = (engine: LinkerEngine, memory: WebAssembly.Memo
     engine.composite_register(writeName(engine, memory, spec.boxType), spec.childrenField, spec.indexKey,
         spec.excludeKey, spec.cellInstrumentField, spec.cellMidiField, spec.cellAudioField, spec.childEnabledKey,
         spec.childMuteKey, spec.childSoloKey)
+}
+
+// Register one EFFECT COMPOSITE box type (a parallel fx / midi stack): write its name, then map its entry
+// collection + the entry box's field keys. Its entries are realized by the engine itself, so — unlike a
+// composite's child instrument — there is no plugin to `linkDevice`.
+export const registerEffectComposite = (engine: LinkerEngine, memory: WebAssembly.Memory,
+                                        spec: EffectCompositeSpec): void => {
+    engine.effect_composite_register(writeName(engine, memory, spec.boxType), spec.kind, spec.distributor,
+        spec.entriesField, spec.indexKey, spec.chainField, spec.labelKey, spec.gainKey, spec.panKey,
+        spec.muteKey, spec.soloKey, spec.dryKey, spec.wetKey, spec.inputTapField)
 }
