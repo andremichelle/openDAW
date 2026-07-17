@@ -1,40 +1,44 @@
 component
   display: flex
   flex-direction: column
-  align-items: center
-  gap: 0.5em
-  padding: 0.75em 1em
-  align-self: center
+  height: 100%
 
   .header
+    margin: 0
+    height: 2rem
     display: flex
     align-items: center
-    gap: 0.375em
-    cursor: pointer
+    padding: 0 0.25rem
+    font-size: 11px
 
     .back
-      opacity: 0.6
+      display: flex
+      align-items: center
+      gap: 0.25em
+      cursor: pointer
 
-    .label
-      font-size: 0.625em
-      text-transform: uppercase
-      letter-spacing: 0.05em
-      opacity: 0.6
-      white-space: nowrap
+      .device-name
+        border-radius: 2px
+        padding: 0 0.35em
+        line-height: 1.4em
+        color: rgba(0, 0, 0, 0.8)
+        white-space: nowrap
 
-    &:hover
-      .back, .label
-        opacity: 1.0
-
+  // The exact track-header channel controls.
   .controls
     display: flex
     align-items: center
-    gap: 0.375em
+    column-gap: 0.3em
+    padding: 0.375em 0.25rem
 
-    .knob
-      font-size: 0.625em
-
-    .checkboxes
-      font-size: 0.5em
+    .channel-mix
       display: flex
-      gap: 0.5em
+      flex-direction: row
+      font-size: 0.625em
+      column-gap: 0.375em
+
+    .channel-isolation
+      display: flex
+      flex-direction: row
+      font-size: 0.5em
+      column-gap: 0.5em

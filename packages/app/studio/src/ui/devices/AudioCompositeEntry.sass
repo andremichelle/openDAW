@@ -7,7 +7,7 @@ component
   cursor: pointer
 
   &:hover
-    background-color: rgba(255, 255, 255, 0.06)
+    background-color: rgba(255, 255, 255, 0.03)
 
   &.drop-target
     outline: 1px dashed currentColor
@@ -42,15 +42,20 @@ component
       color: rgba(black, 0.9)
       background-color: var(--color-blue)
 
-  .knob
-    font-size: 0.625em
-
-  .checkboxes
-    font-size: 0.5em
+  // The exact track-header channel controls: knobs in a 0.625em group, mute / solo in a 0.5em group.
+  .channel-mix
     display: flex
-    gap: 0.5em
+    flex-direction: row
+    font-size: 0.625em
+    column-gap: 0.375em
 
-  .knob, .checkboxes
+  .channel-isolation
+    display: flex
+    flex-direction: row
+    font-size: 0.5em
+    column-gap: 0.5em
+
+  .channel-mix, .channel-isolation
     cursor: default
 
   .remove

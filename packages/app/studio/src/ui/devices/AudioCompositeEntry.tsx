@@ -53,17 +53,14 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
     const element: HTMLElement = (
         <div className={className}>
             {iconsElement}
-            <div className="knob" data-swallow-click="">
+            <div className="channel-mix" data-swallow-click="">
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                                    tracks={tracks} parameter={entry.namedParameter.gain} offset={2}>
                     <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
                                                parameter={entry.namedParameter.gain} options={SnapCommonDecibel}>
-                        <Knob lifecycle={lifecycle} value={entry.namedParameter.gain} anchor={0.0}
-                              color={Colors.yellow}/>
+                        <Knob lifecycle={lifecycle} value={entry.namedParameter.gain} anchor={0.0} color={Colors.yellow}/>
                     </RelativeUnitValueDragging>
                 </AutomationControl>
-            </div>
-            <div className="knob" data-swallow-click="">
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                                    tracks={tracks} parameter={entry.namedParameter.pan} offset={2}>
                     <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
@@ -72,9 +69,9 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
                     </RelativeUnitValueDragging>
                 </AutomationControl>
             </div>
-            <div className="checkboxes" data-swallow-click="">
+            <div className="channel-isolation" data-swallow-click="">
                 <Checkbox lifecycle={lifecycle} model={muteValue}
-                          appearance={{activeColor: Colors.red, framed: true, tooltip: "Mute entry"}}>
+                          appearance={{activeColor: Colors.orange, framed: true, tooltip: "Mute entry"}}>
                     <Icon symbol={IconSymbol.Mute}/>
                 </Checkbox>
                 <Checkbox lifecycle={lifecycle} model={soloValue}

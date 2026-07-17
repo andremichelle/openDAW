@@ -35,16 +35,18 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     const entry = host instanceof AudioEffectCompositeCellBoxAdapter ? host : null
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
-    const name: HTMLElement = <div className="label"/>
-    const header: HTMLElement = (
-        <div className="header">
-            <Icon symbol={IconSymbol.ArrowLeft} className="back"/>
+    // The parent composite's name as a clickable pill (with a back arrow) that goes back, like the Playfield.
+    const name: HTMLElement = <span className="device-name" style={{backgroundColor: Colors.blue.toString()}}/>
+    const back: HTMLElement = (
+        <div className="back">
+            <Icon symbol={IconSymbol.ArrowLeft}/>
             {name}
         </div>
     )
+    const header: HTMLElement = <h1 className="header">{back}</h1>
     const controls = entry === null ? <div/> : (
         <div className="controls">
-            <div className="knob">
+            <div className="channel-mix">
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                                    tracks={entry.audioUnitBoxAdapter().tracks} parameter={entry.namedParameter.gain} offset={2}>
                     <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
@@ -52,8 +54,6 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
                         <Knob lifecycle={lifecycle} value={entry.namedParameter.gain} anchor={0.0} color={Colors.yellow}/>
                     </RelativeUnitValueDragging>
                 </AutomationControl>
-            </div>
-            <div className="knob">
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                                    tracks={entry.audioUnitBoxAdapter().tracks} parameter={entry.namedParameter.pan} offset={2}>
                     <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing}
@@ -62,9 +62,9 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
                     </RelativeUnitValueDragging>
                 </AutomationControl>
             </div>
-            <div className="checkboxes">
+            <div className="channel-isolation">
                 <Checkbox lifecycle={lifecycle} model={muteValue}
-                          appearance={{activeColor: Colors.red, framed: true, tooltip: "Mute entry"}}>
+                          appearance={{activeColor: Colors.orange, framed: true, tooltip: "Mute entry"}}>
                     <Icon symbol={IconSymbol.Mute}/>
                 </Checkbox>
                 <Checkbox lifecycle={lifecycle} model={soloValue}
@@ -76,8 +76,8 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     )
     const element: HTMLElement = <div className={className}>{header}{controls}</div>
     lifecycle.ownAll(
-        TextTooltip.default(header, () => "Back to the parent chain"),
-        Events.subscribe(header, "click", () => userEditingManager.audioUnit.edit(backTarget))
+        TextTooltip.default(back, () => "Back to the parent chain"),
+        Events.subscribe(back, "click", () => userEditingManager.audioUnit.edit(backTarget))
     )
     if (entry !== null) {
         lifecycle.ownAll(
