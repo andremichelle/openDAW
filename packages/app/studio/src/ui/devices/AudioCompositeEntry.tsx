@@ -91,7 +91,6 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
         entry.audioEffects.mapOr(collection => collection.subscribe({
             onAdd: rebuildIcons, onRemove: rebuildIcons, onReorder: rebuildIcons
         }), Terminable.Empty),
-        TextTooltip.default(element, () => "Edit entry chain"),
         Events.subscribe(element, "click", (event: Event) => {
             const target = event.target
             if (target instanceof Element && isDefined(target.closest("[data-swallow-click]"))) {

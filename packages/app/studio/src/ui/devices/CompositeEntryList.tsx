@@ -21,7 +21,9 @@ type Construct = {
 // Effect footer at the bottom. It is pure layout — a row's look and behaviour lives in the AudioCompositeEntry
 // the owner builds.
 export const CompositeEntryList = ({lifecycle, rows, watch, footer}: Construct) => {
-    const element: HTMLElement = <div className={className}/>
+    // `data-composite-drop`: a drop over this list is handled by a branch (into its chain / as a new branch),
+    // NOT by the parent device chain — the device panel's drag reads this and suppresses its insert marker here.
+    const element: HTMLElement = <div className={className} data-composite-drop=""/>
     // Everything a row owns (knobs, checkbox binds, tooltips, drop target) dies when the rows are rebuilt.
     const rowLifecycle = lifecycle.own(new Terminator())
     const update = () => {

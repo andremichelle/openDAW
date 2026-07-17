@@ -30,6 +30,12 @@ export namespace DevicePanelDragAndDrop {
         return DragAndDrop.installTarget(editors, {
             drag: (event: DragEvent, dragData: AnyDragData): boolean => {
                 instrumentContainer.style.opacity = "1.0"
+                // A drop over a composite's branch list goes INTO a branch (or makes a new one), not into this
+                // parent chain. Its own target handles it, so suppress this chain's insert marker while there.
+                if (event.target instanceof Element && isDefined(event.target.closest("[data-composite-drop]"))) {
+                    if (insertMarker.isConnected) {insertMarker.remove()}
+                    return false
+                }
                 const editingDeviceChain = userEditingManager.audioUnit.get()
                 if (editingDeviceChain.isEmpty()) {return false}
                 const deviceHost = boxAdapters.adapterFor(editingDeviceChain.unwrap().box, Devices.isHost)
