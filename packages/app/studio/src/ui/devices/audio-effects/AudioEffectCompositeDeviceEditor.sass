@@ -5,7 +5,8 @@ component
   align-items: flex-start
   gap: 0.5em
 
-  // dry / wet on the RIGHT, in a single-column control grid so they line up on the standard 3.5em cells like
-  // every other device (Reverb): dry in the 1st cell, wet in the 2nd, the 3rd left empty.
   .mix
-    @include mixins.ControlLayout(1)
+    display: grid
+    grid-template: repeat(3, 3.5em) / min-content
+    row-gap: 0.25em
+    @include mixins.Control

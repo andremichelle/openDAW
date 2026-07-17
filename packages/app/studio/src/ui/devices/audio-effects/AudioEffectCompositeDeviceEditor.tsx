@@ -36,20 +36,17 @@ export const AudioEffectCompositeDeviceEditor = ({lifecycle, service, adapter, d
                                  entry={entry}
                                  fixed={adapter.entriesFixed}/>
         ))
-    // The Add Effect footer: a menu of every audio effect (each appends a new branch holding it), which also
-    // takes an effect dragged onto it. A fixed split owns its branches by index, so it gets no footer.
     const footer: Option<HTMLElement> = adapter.entriesFixed ? Option.None : Option.wrap(
         <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
             .addMenuItem(...EffectFactories.AudioList.map(factory => MenuItem.default({
                 label: factory.defaultName, icon: factory.defaultIcon, separatorBefore: factory.separatorBefore
             }).setTriggerProcedure(() =>
                 AudioCompositeEntryDnD.insertBranch(project, adapter, adapter.entries.adapters().length, factory)))))}
-                    appearance={{framed: true, tooltip: "Add a parallel effect branch"}}
-                    stretch={true}
+                    appearance={{tooltip: "Add a parallel effect branch"}}
                     onInit={button => lifecycle.own(AudioCompositeEntryDnD.installAppendTarget({
                         element: button, project, composite: adapter
                     }))}>
-            <span className="add-effect">+ Add Effect</span>
+            <span className="add-effect">+</span>
         </MenuButton>
     )
     return (

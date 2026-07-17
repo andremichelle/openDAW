@@ -2,6 +2,7 @@ import css from "./CompositeEntryList.sass?inline"
 import {Exec, Func, Lifecycle, Option, Subscription, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 const className = Html.adoptStyleSheet(css, "CompositeEntryList")
 
@@ -24,19 +25,22 @@ export const CompositeEntryList = ({lifecycle, rows, watch, footer}: Construct) 
     // `data-composite-drop`: a drop over this list is handled by a branch (into its chain / as a new branch),
     // NOT by the parent device chain — the device panel's drag reads this and suppresses its insert marker here.
     const element: HTMLElement = <div className={className} data-composite-drop=""/>
+    // The rows scroll within a capped height so the footer stays pinned below; our own overlay scrollbars.
+    const scroll: HTMLElement = <div className="scroll" onConnect={host => lifecycle.own(installScrollbars(host))}/>
     // Everything a row owns (knobs, checkbox binds, tooltips, drop target) dies when the rows are rebuilt.
     const rowLifecycle = lifecycle.own(new Terminator())
     const update = () => {
         rowLifecycle.terminate()
-        Html.empty(element)
+        Html.empty(scroll)
         const current = rows(rowLifecycle)
         if (current.length === 0) {
-            element.appendChild(<div className="empty">No entries — drop an effect to add one</div>)
+            scroll.appendChild(<div className="empty">No entries — drop an effect to add one</div>)
         }
-        for (const row of current) {element.appendChild(row)}
-        footer.ifSome(node => element.appendChild(node))
+        for (const row of current) {scroll.appendChild(row)}
     }
     update()
+    element.appendChild(scroll)
+    footer.ifSome(node => element.appendChild(node))
     lifecycle.own(watch(update))
     return element
 }

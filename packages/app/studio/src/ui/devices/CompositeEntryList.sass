@@ -1,12 +1,23 @@
 component
   display: flex
   flex-direction: column
-  gap: 0.125em
   padding: 0.5em 0.25em
   min-width: 12em
 
-  // The Add Effect footer (a MenuButton). It also lights up as a drop target when an effect is dragged onto it.
+  .scroll
+    display: flex
+    flex-direction: column
+    gap: 0.125em
+    max-height: 9rem
+    overflow: hidden auto
+    width: max-content
+    min-width: 100%
+    // Clear the 8px floating overlay scrollbar so it does not sit over the rows.
+    padding-right: 8px
+
   > button
+    flex: 0 0 auto
+    align-self: center
     margin-top: 0.25em
 
     &.drop-target
