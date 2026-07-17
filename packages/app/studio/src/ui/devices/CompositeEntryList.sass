@@ -5,52 +5,6 @@ component
   padding: 0.5em 0.25em
   min-width: 12em
 
-  .entry
-    display: flex
-    align-items: center
-    gap: 0.375em
-    padding: 0.125em 0.25em
-    border-radius: 2px
-    cursor: pointer
-
-    &:hover
-      background-color: rgba(255, 255, 255, 0.06)
-
-    // A branch that holds effects reads brighter than an empty (pass-through) one.
-    &.has-effects .label
-      opacity: 1.0
-
-    &.drop-target
-      outline: 1px dashed currentColor
-      background-color: rgba(255, 255, 255, 0.08)
-
-    .label
-      flex: 1
-      font-size: 0.625em
-      text-transform: uppercase
-      letter-spacing: 0.05em
-      white-space: nowrap
-      overflow: hidden
-      text-overflow: ellipsis
-      opacity: 0.7
-
-    .checkboxes
-      font-size: 0.625em
-      display: flex
-      gap: 0.125em
-
-    // The controls inside the row keep their own cursor: clicking them must not read as "open the chain".
-    .knob, .checkboxes
-      cursor: default
-
-    .remove
-      cursor: pointer
-      opacity: 0.35
-
-      &:hover
-        opacity: 1.0
-        color: var(--color-red, currentColor)
-
   .add
     align-self: flex-start
     cursor: pointer
