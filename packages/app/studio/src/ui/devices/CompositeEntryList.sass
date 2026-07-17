@@ -3,6 +3,9 @@ component
   flex-direction: column
   padding: 0.5em 0.25em
   min-width: 12em
+  // Be the positioned ancestor for the overlay scrollbar (installScrollbars mounts it in offsetParent). Without
+  // this it lands in the far device panel and stays put while the panel scrolls horizontally — the bar "walks".
+  position: relative
 
   .scroll
     display: flex
@@ -14,6 +17,10 @@ component
     min-width: 100%
     // Clear the 8px floating overlay scrollbar so it does not sit over the rows.
     padding-right: 8px
+    // Fade the bottom edge to transparent, so the last visible entry hints at more below. The mask is pinned
+    // to the scroll viewport, so it stays at the bottom as the list scrolls.
+    mask-image: linear-gradient(to bottom, black calc(100% - 1.5em), transparent)
+    -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1.5em), transparent)
 
   > button
     flex: 0 0 auto
