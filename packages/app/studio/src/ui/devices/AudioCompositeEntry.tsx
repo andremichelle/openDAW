@@ -1,9 +1,18 @@
 import css from "./AudioCompositeEntry.sass?inline"
-import {DefaultObservableValue, isDefined, Lifecycle, MutableObservableValue, Terminable} from "@opendaw/lib-std"
+import {
+    DefaultObservableValue,
+    isDefined,
+    Lifecycle,
+    MutableObservableValue,
+    Optional,
+    Terminable
+} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
+import {Box} from "@opendaw/lib-box"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AudioEffectCompositeCellBoxAdapter} from "@opendaw/studio-adapters"
+import {EffectFactories, EffectFactory} from "@opendaw/studio-core"
 import {Icon} from "@/ui/components/Icon"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Knob} from "@/ui/components/Knob.tsx"
@@ -25,30 +34,25 @@ type Construct = {
     fixed: boolean
 }
 
-// ONE parallel branch of an AudioComposite: its gain / pan knobs, mute / solo, and a click target that ENTERS
-// the branch (the device panel then shows that entry's own chain, as entering a Playfield slot does). The row
-// is also a DROP TARGET, so an effect / preset can be dragged straight into it. Its own file and sass, so a
-// branch is styled on its own.
 export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construct) => {
     const {project} = service
     const {editing, midiLearning, userEditingManager} = project
-    // The composite this entry belongs to — used for its automation tracks (an entry resolves to that same
-    // owning unit) and for reindexing on delete.
     const composite = entry.compositeDevice()
     const tracks = entry.audioUnitBoxAdapter().tracks
     const getIndex = () => entry.indexField.getValue()
-    const label = entry.label.length === 0 ? `Entry ${entry.indexField.getValue() + 1}` : entry.label
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
     const remove: HTMLElement = fixed ? <div/> : <Icon symbol={IconSymbol.Delete} className="remove"/>
-    // The label doubles as the reorder DRAG HANDLE (see below): the knobs keep their own pointer dragging, so
-    // the handle must be an element that carries no control of its own.
-    const labelElement: HTMLElement = <div className="label">{label}</div>
-    // Bare Knob + Checkbox built exactly as the track header's channel controls, so a branch reads the same as
-    // its track. AutomationControl still gives automation, midi-learn, and the parameter menu.
+    const iconsElement: HTMLElement = <div className="icons"/>
+    const rebuildIcons = () => {
+        Html.empty(iconsElement)
+        entry.audioEffects.ifSome(collection => collection.adapters()
+            .forEach(effect => iconsElement.appendChild(<Icon symbol={effectIcon(effect.box)}/>)))
+    }
+    rebuildIcons()
     const element: HTMLElement = (
         <div className={className}>
-            {labelElement}
+            {iconsElement}
             <div className="knob" data-swallow-click="">
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                                    tracks={tracks} parameter={entry.namedParameter.gain} offset={2}>
@@ -81,26 +85,20 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
             {remove}
         </div>
     )
-    // A branch that holds effects reads brighter than an empty (pass-through) one.
-    if (entry.audioEffects.mapOr(chain => chain.adapters().length, 0) > 0) {
-        element.classList.add("has-effects")
-    }
     lifecycle.ownAll(
         connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.mute)),
         connectBoolean(soloValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.solo)),
+        entry.audioEffects.mapOr(collection => collection.subscribe({
+            onAdd: rebuildIcons, onRemove: rebuildIcons, onReorder: rebuildIcons
+        }), Terminable.Empty),
         TextTooltip.default(element, () => "Edit entry chain"),
-        // The knobs and checkboxes live INSIDE the row: swallow their clicks, so adjusting a control does not
-        // also open the chain.
         Events.subscribe(element, "click", (event: Event) => {
             const target = event.target
             if (target instanceof Element && isDefined(target.closest("[data-swallow-click]"))) {
                 event.stopPropagation()
             }
         }, {capture: true}),
-        // Clicking the ROW opens its chain (opening the branch is the primary action, so it needs no button).
         Events.subscribe(element, "click", () => userEditingManager.audioUnit.edit(entry.box)),
-        // Drop target for a reorder AND a new effect: onto the middle adds to this branch's chain, top / bottom
-        // makes a new branch (a fixed split allows only into-chain).
         AudioCompositeEntryDnD.installTarget({element, project, composite, entry, getIndex, branchable: !fixed})
     )
     if (!fixed) {
@@ -108,24 +106,24 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
             TextTooltip.default(remove, () => "Delete entry"),
             Events.subscribe(remove, "click", (event: Event) => {
                 event.stopPropagation() // deleting must not also enter the row being deleted
-                // Deleting the cell CASCADES to the effects it hosts (their `host` is mandatory), so a branch's
-                // chain goes with it. The survivors are captured BEFORE the delete and reindexed to stay
-                // 0..n-1 — the engine reads that index as the entry's order.
                 const survivors = composite.entries.adapters().filter(other => other !== entry)
                 editing.modify(() => {
                     entry.box.delete()
                     survivors.forEach((other, index) => other.indexField.setValue(index))
                 })
             }),
-            // Drag the label to reorder: the handle is the SOURCE (so the knobs keep their pointer dragging),
-            // the whole row is the drop TARGET (installed above). A fixed split maps entries by index, so it
-            // gets no handle.
             AudioCompositeEntryDnD.installHandle({
-                handle: labelElement, classReceiver: element, composite, uuid: entry.uuid, getIndex
+                handle: iconsElement, classReceiver: element, composite, uuid: entry.uuid, getIndex
             })
         )
     }
     return element
+}
+
+const effectIcon = (box: Box): IconSymbol => {
+    const key = box.name.replace(/DeviceBox$/, "").replace(/Box$/, "")
+    const factory: Optional<EffectFactory> = (EffectFactories.AudioNamed as Record<string, EffectFactory>)[key]
+    return isDefined(factory) ? factory.defaultIcon : IconSymbol.Effects
 }
 
 // Two-way bind a checkbox model to its parameter wrapper (mirrors the Playfield slot's own helper).
