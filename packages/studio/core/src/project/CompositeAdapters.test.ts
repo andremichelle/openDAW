@@ -256,6 +256,54 @@ describe("Deleting a composite entry", () => {
     })
 })
 
+// REPRO for the delete crash: the device editor rebuilds its row list on every entries notification, and each
+// row resolves `compositeDevice()` / `audioUnitBoxAdapter()`. If a notification fires while an entry's mandatory
+// `composite` pointer is transiently detached, that resolve panics ("composite.target").
+describe("Deleting an entry while the list re-renders", () => {
+    it("does not resolve a detached entry during the delete transaction", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(createEnv(),
+            ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const {composite, entryA} = project.editing.modify(() => {
+            const product = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+            const composite = AudioEffectCompositeBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(product.audioUnitBox.audioEffects)
+                box.index.setValue(0)
+            })
+            const make = (index: number, label: string) =>
+                AudioEffectCompositeCellBox.create(project.boxGraph, UUID.generate(), box => {
+                    box.composite.refer(composite.entries)
+                    box.index.setValue(index)
+                    box.label.setValue(label)
+                })
+            const entryA = make(0, "A")
+            make(1, "B")
+            make(2, "C")
+            StereoToolDeviceBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(entryA.audioEffects)
+                box.index.setValue(0)
+            })
+            return {composite, entryA}
+        }).unwrap()
+        const adapter = project.boxAdapters.adapterFor(composite, AudioEffectCompositeBoxAdapter)
+        // What AudioCompositeEntry does at construction, for every row, on every rebuild: resolve the mandatory
+        // `composite` pointer. A notification for a half-deleted entry used to render it here and panic.
+        const render = () => adapter.entries.adapters().forEach(entry => {
+            entry.compositeDevice()
+            entry.audioUnitBoxAdapter()
+        })
+        const subscription = adapter.entries.subscribe({onAdd: render, onRemove: render, onReorder: render})
+        const survivors = adapter.entries.adapters().filter(other => other.box !== entryA)
+        expect(() => project.editing.modify(() => {
+            entryA.box.delete()
+            survivors.forEach((other, index) => other.indexField.setValue(index))
+        }), "the delete button must not crash the reactive list").not.toThrow()
+        expect(adapter.entries.adapters().map(entry => entry.label)).toStrictEqual(["B", "C"])
+        subscription.terminate()
+        project.terminate()
+    })
+})
+
 // The composite INPUT tap is scoped: only a device INSIDE the composite may pick it as a sidechain source
 // (SidechainButton walks the host chain via `compositeDevice()`). A device outside sees no composite ancestor.
 describe("Composite input-tap scoping", () => {
