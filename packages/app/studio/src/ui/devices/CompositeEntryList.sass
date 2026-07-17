@@ -5,17 +5,18 @@ component
   padding: 0.5em 0.25em
   min-width: 12em
 
-  .add
-    align-self: flex-start
-    cursor: pointer
+  // The Add Effect footer (a MenuButton). It also lights up as a drop target when an effect is dragged onto it.
+  > button
+    margin-top: 0.25em
+
+    &.drop-target
+      outline: 1px dashed currentColor
+      background-color: rgba(255, 255, 255, 0.08)
+
+  .add-effect
     font-size: 0.625em
     text-transform: uppercase
     letter-spacing: 0.05em
-    opacity: 0.5
-    padding: 0.25em
-
-    &:hover
-      opacity: 1.0
 
   .empty
     font-size: 0.625em

@@ -10,8 +10,7 @@ import {Knob} from "@/ui/components/Knob.tsx"
 import {AutomationControl} from "@/ui/components/AutomationControl"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
-import {CompositeEntryDrop} from "@/ui/devices/CompositeEntryDrop"
-import {AudioCompositeEntryReorder} from "@/ui/devices/AudioCompositeEntryReorder"
+import {AudioCompositeEntryDnD} from "@/ui/devices/AudioCompositeEntryDnD"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {StudioService} from "@/service/StudioService"
@@ -37,6 +36,7 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
     // owning unit) and for reindexing on delete.
     const composite = entry.compositeDevice()
     const tracks = entry.audioUnitBoxAdapter().tracks
+    const getIndex = () => entry.indexField.getValue()
     const label = entry.label.length === 0 ? `Entry ${entry.indexField.getValue() + 1}` : entry.label
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
@@ -99,10 +99,11 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
         }, {capture: true}),
         // Clicking the ROW opens its chain (opening the branch is the primary action, so it needs no button).
         Events.subscribe(element, "click", () => userEditingManager.audioUnit.edit(entry.box)),
-        CompositeEntryDrop.install({element, project, chainField: entry.box.audioEffects, accepts: "audio"})
+        // Drop target for a reorder AND a new effect: onto the middle adds to this branch's chain, top / bottom
+        // makes a new branch (a fixed split allows only into-chain).
+        AudioCompositeEntryDnD.installTarget({element, project, composite, entry, getIndex, branchable: !fixed})
     )
     if (!fixed) {
-        const getIndex = () => entry.indexField.getValue()
         lifecycle.ownAll(
             TextTooltip.default(remove, () => "Delete entry"),
             Events.subscribe(remove, "click", (event: Event) => {
@@ -116,12 +117,12 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
                     survivors.forEach((other, index) => other.indexField.setValue(index))
                 })
             }),
-            // Drag the label to reorder: the handle is the SOURCE, the whole row is the drop TARGET. A fixed
-            // (split) composite maps entries by index, so it gets neither.
-            AudioCompositeEntryReorder.installSource({
+            // Drag the label to reorder: the handle is the SOURCE (so the knobs keep their pointer dragging),
+            // the whole row is the drop TARGET (installed above). A fixed split maps entries by index, so it
+            // gets no handle.
+            AudioCompositeEntryDnD.installHandle({
                 handle: labelElement, classReceiver: element, composite, uuid: entry.uuid, getIndex
-            }),
-            AudioCompositeEntryReorder.installTarget({element, project, composite, getIndex})
+            })
         )
     }
     return element
