@@ -310,17 +310,17 @@ impl Processor for DryWetMixProcessor {
         let wet_sum = self.wet_sum.clone();
         let mut output = output.borrow_mut();
         let dry = tap.borrow();
+        let wet = wet_sum.borrow();
         // An EMPTY composite passes its input through untouched, whatever dry / wet say, so inserting a fresh
-        // stack never kills the chain. Same output buffer, so nothing downstream re-wires.
+        // stack never kills the chain. It does so as a dry/wet mix with dry at UNITY and wet MUTED — NOT a hard
+        // copy — so ADDING the first branch or REMOVING the last one RAMPS through these gains (de-click)
+        // instead of jumping the output. Same output buffer, so nothing downstream re-wires.
         if self.params.bypass.get() {
-            output.left[..RENDER_QUANTUM].copy_from_slice(&dry.left[..RENDER_QUANTUM]);
-            output.right[..RENDER_QUANTUM].copy_from_slice(&dry.right[..RENDER_QUANTUM]);
-            // The ramps must not carry a stale target into the next non-bypassed block.
-            self.processing = false;
+            self.retarget(0.0, f32::NEG_INFINITY);
+            self.apply(&dry, &wet, &mut output, 0, RENDER_QUANTUM);
             self.meter.process(&output.left, &output.right); // an empty stack still shows its pass-through
             return;
         }
-        let wet = wet_sum.borrow();
         let automated = self.automation.volume.borrow().is_some() || self.automation.panning.borrow().is_some();
         if !automated {
             // Static parameters: one retarget for the whole quantum (the ramps de-click any edit).

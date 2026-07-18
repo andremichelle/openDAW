@@ -125,6 +125,26 @@ fn mixer(params: Rc<DryWetParams>, automation: Rc<StripAutomation>,
 }
 
 #[test]
+fn leaving_bypass_ramps_the_output_instead_of_jumping() {
+    let params = Rc::new(DryWetParams::new()); // dry -inf, wet 0 dB, bypass true (an empty composite)
+    let tap = filled(1.0, 1.0);
+    let wet = filled(-1.0, -1.0); // the wet sum differs sharply from the input, so a jump would be obvious
+    let mut mix = mixer(params.clone(), Rc::new(StripAutomation::new()), tap, wet);
+    // Bypassed: the input passes through, and the de-click ramps settle.
+    mix.process(&ProcessInfo {blocks: &[]});
+    assert_eq!(mix.audio_output().borrow().left[0], 1.0, "an empty composite passes its input through");
+    // Add the first branch (bypass off). The output must RAMP from the input toward the wet mix, not JUMP: the
+    // first sample stays near the bypass value; before the fix `processing=false` jumped it straight to -1.0.
+    params.bypass.set(false);
+    mix.process(&ProcessInfo {blocks: &[]});
+    let out = mix.audio_output();
+    let out = out.borrow();
+    assert!((out.left[0] - 1.0).abs() < 0.05,
+        "the first active sample stays near the bypass value (ramp start), not the wet mix");
+    assert!(out.left[RENDER_QUANTUM - 1] < out.left[0] - 0.1, "and it ramps toward the wet mix");
+}
+
+#[test]
 fn an_empty_composite_is_an_exact_identity_whatever_dry_and_wet_say() {
     let params = Rc::new(DryWetParams::new());
     params.bypass.set(true);
