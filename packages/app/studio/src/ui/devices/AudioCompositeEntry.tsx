@@ -42,7 +42,7 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
     const getIndex = () => entry.indexField.getValue()
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
-    const remove: HTMLElement = fixed ? <div/> : <Icon symbol={IconSymbol.Delete} className="remove"/>
+    const remove: HTMLElement = fixed ? <div/> : <Icon symbol={IconSymbol.Close} className="remove"/>
     const iconsElement: HTMLElement = <div className="icons"/>
     const rebuildIcons = () => {
         Html.empty(iconsElement)
@@ -50,8 +50,10 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
             .forEach(effect => iconsElement.appendChild(<Icon symbol={effectIcon(effect.box)}/>)))
     }
     rebuildIcons()
+    const indexLabel: HTMLElement = <div className="index"/>
     const element: HTMLElement = (
         <div className={className}>
+            {indexLabel}
             {iconsElement}
             <div className="channel-mix" data-swallow-click="">
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
@@ -83,6 +85,7 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
         </div>
     )
     lifecycle.ownAll(
+        entry.indexField.catchupAndSubscribe(field => indexLabel.textContent = String(field.getValue() + 1)),
         connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.mute)),
         connectBoolean(soloValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.solo)),
         entry.audioEffects.mapOr(collection => collection.subscribe({
