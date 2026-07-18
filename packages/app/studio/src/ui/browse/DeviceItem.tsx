@@ -105,7 +105,7 @@ export const DeviceItem = ({
             drag: (_event, dragData) => {
                 if (acceptsEffect && !isRackIntentEffect(dragData)) {
                     const effects = presetService.resolveEffectBoxesFromDrag(dropKind, dragData)
-                    if (effects.length === 1 && effects[0].name.replace(/DeviceBox$/, "") === device.key) {
+                    if (effects.length === 1 && EffectFactories.keyOfBox(effects[0]) === device.key) {
                         return true
                     }
                 }
@@ -117,7 +117,7 @@ export const DeviceItem = ({
             drop: (_event, dragData) => {
                 if (acceptsEffect && !isRackIntentEffect(dragData)) {
                     const effects = presetService.resolveEffectBoxesFromDrag(dropKind, dragData)
-                    if (effects.length === 1 && effects[0].name.replace(/DeviceBox$/, "") === device.key) {
+                    if (effects.length === 1 && EffectFactories.keyOfBox(effects[0]) === device.key) {
                         onDrop(effects).catch(console.warn)
                         header.classList.remove("accept-drop")
                         return

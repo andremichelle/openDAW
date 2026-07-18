@@ -1,4 +1,5 @@
-import {UUID} from "@opendaw/lib-std"
+import {Optional, UUID} from "@opendaw/lib-std"
+import {Box} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox,
     AudioEffectCompositeBox,
@@ -535,4 +536,8 @@ export namespace EffectFactories {
     export const MergedNamed = {...MidiNamed, ...AudioNamed}
     export type MidiEffectKeys = keyof typeof MidiNamed
     export type AudioEffectKeys = keyof typeof AudioNamed
+
+    export const keyOfBox = (box: Box): Optional<MidiEffectKeys | AudioEffectKeys> =>
+        (Object.keys(MergedNamed) as Array<MidiEffectKeys | AudioEffectKeys>)
+            .find(key => box.name === `${key}DeviceBox` || box.name === `${key}Box`)
 }
