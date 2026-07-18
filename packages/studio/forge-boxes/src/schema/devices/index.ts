@@ -7,6 +7,7 @@ import {VaporisateurDeviceBox} from "./instruments/VaporisateurDeviceBox"
 import {ArpeggioDeviceBox} from "./midi-effects/ArpeggioDeviceBox"
 import {PitchDeviceBox} from "./midi-effects/PitchDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
+import {ReSoulDeviceBox} from "./instruments/ReSoulDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
 import {StereoToolDeviceBox} from "./audio-effects/StereoToolDeviceBox"
 import {ZeitgeistDeviceBox} from "./midi-effects/ZeitGeistDeviceBox"
@@ -59,6 +60,7 @@ export const DeviceDefinitions = [
     MIDIOutputParameterBox,
     SoundfontDeviceBox,
     NanoDeviceBox,
+    ReSoulDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
     TapeDeviceBox,

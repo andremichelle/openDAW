@@ -18,6 +18,7 @@ import {
     PlayfieldDeviceBox,
     RevampDeviceBox,
     ReverbDeviceBox,
+    ReSoulDeviceBox,
     SoundfontDeviceBox,
     SpielwerkDeviceBox,
     StereoToolDeviceBox,
@@ -48,6 +49,7 @@ import {
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
     NeuralAmpDeviceBoxAdapter,
+    ReSoulDeviceBoxAdapter,
     PitchDeviceBoxAdapter,
     PlayfieldDeviceBoxAdapter,
     RevampDeviceBoxAdapter,
@@ -78,6 +80,7 @@ import {PitchDeviceProcessor} from "./devices/midi-effects/PitchDeviceProcessor"
 import {RevampDeviceProcessor} from "./devices/audio-effects/RevampDeviceProcessor"
 import {ReverbDeviceProcessor} from "./devices/audio-effects/ReverbDeviceProcessor"
 import {NanoDeviceProcessor} from "./devices/instruments/NanoDeviceProcessor"
+import {ReSoulDeviceProcessor} from "./devices/instruments/ReSoulDeviceProcessor"
 import {PlayfieldDeviceProcessor} from "./devices/instruments/PlayfieldDeviceProcessor"
 import {StereoToolDeviceProcessor} from "./devices/audio-effects/StereoToolDeviceProcessor"
 import {ZeitgeistDeviceProcessor} from "./devices/midi-effects/ZeitgeistDeviceProcessor"
@@ -114,6 +117,8 @@ export namespace InstrumentDeviceProcessorFactory {
                 new VaporisateurDeviceProcessor(context, context.boxAdapters.adapterFor(box, VaporisateurDeviceBoxAdapter)),
             visitNanoDeviceBox: (box: NanoDeviceBox) =>
                 new NanoDeviceProcessor(context, context.boxAdapters.adapterFor(box, NanoDeviceBoxAdapter)),
+            visitReSoulDeviceBox: (box: ReSoulDeviceBox) =>
+                new ReSoulDeviceProcessor(context, context.boxAdapters.adapterFor(box, ReSoulDeviceBoxAdapter)),
             visitTapeDeviceBox: (box: TapeDeviceBox) =>
                 new TapeDeviceProcessor(context, context.boxAdapters.adapterFor(box, TapeDeviceBoxAdapter)),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox) =>
