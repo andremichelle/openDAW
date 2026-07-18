@@ -45,13 +45,15 @@ pub enum DistributorMode {
 /// Copies the composite's input into a tap it OWNS, and presents one source buffer per entry.
 ///
 /// For `Broadcast` every entry shares the tap itself, so no per-entry copy happens at all. For `Stereo` the
-/// branches are separate buffers holding one channel each. An entry index beyond the distributor's branch
-/// count falls back to branch 0 (a robustness rule: the engine never enforces a split's entry count).
+/// branches are separate buffers holding one channel each. An entry index beyond the distributor's branch count
+/// reads SILENCE: a split's entry count is a UI invariant the engine does not enforce, so a stray extra entry
+/// (a corrupt project, a future regression) contributes nothing rather than DOUBLING a channel into the mix.
 pub struct DistributorProcessor {
     mode: DistributorMode,
     input: Option<SharedAudioBuffer>,
     tap: SharedAudioBuffer,
     branches: Vec<SharedAudioBuffer>,
+    silent: SharedAudioBuffer, // fixed cleared buffer for out-of-range entries (never written)
     events: EventBuffer
 }
 
@@ -63,7 +65,7 @@ impl DistributorProcessor {
             DistributorMode::Broadcast => Vec::new(),
             DistributorMode::Stereo => alloc::vec![shared_audio_buffer(), shared_audio_buffer()]
         };
-        Self {mode, input: None, tap, branches, events: EventBuffer::new()}
+        Self {mode, input: None, tap, branches, silent: shared_audio_buffer(), events: EventBuffer::new()}
     }
 
     /// The composite's INPUT copy: the dry source, and the buffer a nested sidechain taps.
@@ -75,7 +77,7 @@ impl DistributorProcessor {
     pub fn branch(&self, index: usize) -> SharedAudioBuffer {
         match self.mode {
             DistributorMode::Broadcast => self.tap.clone(),
-            DistributorMode::Stereo => self.branches.get(index).unwrap_or(&self.branches[0]).clone()
+            DistributorMode::Stereo => self.branches.get(index).unwrap_or(&self.silent).clone()
         }
     }
 

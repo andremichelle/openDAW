@@ -103,10 +103,19 @@ fn stereo_splits_the_channels_and_the_untouched_branches_recombine_exactly() {
 }
 
 #[test]
-fn a_stereo_entry_beyond_the_branch_count_falls_back_to_branch_zero() {
-    let distributor = DistributorProcessor::new(DistributorMode::Stereo);
-    assert!(Rc::ptr_eq(&distributor.branch(5), &distributor.branch(0)),
-        "a third entry on a stereo split reads branch 0 rather than panicking");
+fn a_stereo_entry_beyond_the_branch_count_reads_silence() {
+    let mut distributor = distributor_with(DistributorMode::Stereo, 0.75, -0.5);
+    distributor.process(&ProcessInfo {blocks: &[]});
+    // An out-of-range entry reads a fixed SILENT buffer, NOT branch 0: summing an aliased branch 0 would double
+    // the left channel into the wet sum (+6 dB). A split's entry count is a UI invariant, not engine-enforced.
+    let extra = distributor.branch(5);
+    assert!(!Rc::ptr_eq(&extra, &distributor.branch(0)), "an extra entry does not alias branch 0");
+    let buffer = extra.borrow();
+    for index in 0..RENDER_QUANTUM {
+        assert_eq!(buffer.left[index], 0.0, "the out-of-range branch is silent (left)");
+        assert_eq!(buffer.right[index], 0.0, "the out-of-range branch is silent (right)");
+    }
+    assert_eq!(distributor.branch(0).borrow().left[0], 0.75, "branch 0 still carries the left channel");
 }
 
 // dry = tap, wet = the entries' sum.
