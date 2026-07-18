@@ -546,6 +546,8 @@ impl Engine {
         });
         // The entry's post-gain output under its own box uuid, so a sidechain can target the ENTRY.
         self.output_registry.register(Address::of(uuid, vec![]), strip_output.clone(), strip_id);
+        let entry_meter = strip.borrow().meter_slot();
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &entry_meter);
         let effects_dirty = Rc::new(Cell::new(false));
         let uuids = chain.sorted();
         let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();

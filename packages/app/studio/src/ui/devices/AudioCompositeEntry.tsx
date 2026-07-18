@@ -20,6 +20,7 @@ import {AutomationControl} from "@/ui/components/AutomationControl"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {AudioCompositeEntryDnD} from "@/ui/devices/AudioCompositeEntryDnD"
+import {EntryPeakMeter} from "@/ui/devices/EntryPeakMeter"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {StudioService} from "@/service/StudioService"
@@ -55,6 +56,7 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
         <div className={className}>
             {indexLabel}
             {iconsElement}
+            <EntryPeakMeter lifecycle={lifecycle} receiver={project.liveStreamReceiver} address={entry.address}/>
             <div className="channel-mix" data-swallow-click="">
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
                                    tracks={tracks} parameter={entry.namedParameter.gain} offset={2}>
