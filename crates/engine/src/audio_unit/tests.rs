@@ -2275,6 +2275,186 @@ fn soloing_one_entry_silences_every_sibling() {
     assert_eq!(composite_of(&unit).entry_silent(ENTRY_A), Some(false), "un-solo restores the sibling");
 }
 
+// A composite with two EMPTY entries (identity branches) whose gains differ, so the two are separable in the
+// rendered mix. Dry is off and wet at unity, so the output is exactly the entry strips' sum.
+fn entry_box_gain(uuid: Uuid, index: i32, label: &str, gain_db: f32) -> GraphBox {
+    graph_box(uuid, "TestCompositeCell", &[
+        (ENTRY_COMPOSITE_KEY, FieldValue::Pointer(Some(Address::of(COMP, vec![ENTRIES_FIELD])))),
+        (ENTRY_CHAIN_FIELD, FieldValue::Hook),
+        (ENTRY_INDEX_KEY, FieldValue::Int32(index)),
+        (ENTRY_LABEL_KEY, FieldValue::String(label.to_string())),
+        (ENTRY_GAIN_KEY, FieldValue::Float32(gain_db)),
+        (ENTRY_PAN_KEY, FieldValue::Float32(0.0)),
+        (ENTRY_MUTE_KEY, FieldValue::Boolean(false)),
+        (ENTRY_SOLO_KEY, FieldValue::Boolean(false))
+    ])
+}
+
+fn fx_render_graph(gain_a_db: f32, gain_b_db: f32) -> BoxGraph {
+    BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))
+        ]),
+        graph_box(COMP, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))),
+            (EFFECT_INDEX_KEY, FieldValue::Int32(0)),
+            (DEVICE_ENABLED_KEY, FieldValue::Boolean(true)),
+            (ENTRIES_FIELD, FieldValue::Hook),
+            (INPUT_TAP_FIELD, FieldValue::Hook),
+            (DRY_KEY, FieldValue::Float32(f32::NEG_INFINITY)),
+            (WET_KEY, FieldValue::Float32(0.0))
+        ]),
+        entry_box_gain(ENTRY_A, 0, "A", gain_a_db),
+        entry_box_gain(ENTRY_B, 1, "B", gain_b_db)
+    ])
+}
+
+// Feed a DC of 1.0 straight into the distributor (reconcile re-points it at the silent stub instrument, so
+// this is re-applied every call) and render enough quanta for the strip de-click ramps to settle; return the
+// composite's steady-state mix output.
+fn render_mix(engine: &mut Engine, unit: &AudioUnitBinding) -> (f32, f32) {
+    let dc = shared_audio_buffer();
+    {
+        let mut buffer = dc.borrow_mut();
+        for index in 0..engine_env::RENDER_QUANTUM {
+            buffer.left[index] = 1.0;
+            buffer.right[index] = 1.0;
+        }
+    }
+    composite_of(unit).set_audio_source(dc);
+    let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
+        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+    for _ in 0..16 {
+        engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
+    }
+    let out = composite_of(unit).mix_output.borrow();
+    (out.left[0], out.right[0])
+}
+
+fn set_bool(engine: &mut Engine, uuid: Uuid, key: u16, from: bool, to: bool) {
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(uuid, vec![key]),
+        old: FieldValue::Boolean(from), new: FieldValue::Boolean(to)
+    }], &engine.registry).expect("toggle bool field");
+}
+
+// Render through the PRODUCTION reconcile loop: the unit lives in `engine.audio_units` and a field edit must
+// enqueue it into `dirty_units` for `reconcile_units` to pick up — exactly the live path (a manual
+// `reconcile_one` bypasses that enqueue). Returns the composite's steady-state mix output.
+fn render_mix_live(engine: &mut Engine, unit_uuid: Uuid) -> (f32, f32) {
+    let dc = shared_audio_buffer();
+    {
+        let mut buffer = dc.borrow_mut();
+        for index in 0..engine_env::RENDER_QUANTUM {
+            buffer.left[index] = 1.0;
+            buffer.right[index] = 1.0;
+        }
+    }
+    let mix_output = {
+        let unit = engine.audio_units.iter().find(|binding| binding.unit == unit_uuid).expect("unit");
+        let composite = composite_of(unit);
+        composite.set_audio_source(dc);
+        composite.mix_output.clone()
+    };
+    let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
+        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+    for _ in 0..16 {
+        engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
+    }
+    let out = mix_output.borrow();
+    (out.left[0], out.right[0])
+}
+
+#[test]
+fn muting_an_entry_through_the_production_loop_removes_it_from_the_mix() {
+    let mut engine = engine_with_composite();
+    engine.graph = fx_render_graph(0.0, -12.0);
+    engine.unit_changes.borrow_mut().added.push(UNIT);
+    engine.reconcile_units();
+    let (base_left, _) = render_mix_live(&mut engine, UNIT);
+    assert!((base_left - 1.251).abs() < 0.02, "both entries sum into the mix (got {base_left})");
+    set_bool(&mut engine, ENTRY_A, ENTRY_MUTE_KEY, false, true);
+    engine.reconcile_units(); // the edit must enqueue the unit; a drain that no-ops here IS the live bug
+    let (muted_left, _) = render_mix_live(&mut engine, UNIT);
+    assert!((muted_left - 0.251).abs() < 0.02, "muting A leaves only B (got {muted_left})");
+}
+
+#[test]
+fn soloing_an_entry_through_the_production_loop_keeps_only_that_entry() {
+    let mut engine = engine_with_composite();
+    engine.graph = fx_render_graph(0.0, -12.0);
+    engine.unit_changes.borrow_mut().added.push(UNIT);
+    engine.reconcile_units();
+    set_bool(&mut engine, ENTRY_A, ENTRY_SOLO_KEY, false, true);
+    engine.reconcile_units();
+    let (solo_left, _) = render_mix_live(&mut engine, UNIT);
+    assert!((solo_left - 1.0).abs() < 0.02, "soloing A keeps A (~1.0), not B's ~0.25 (got {solo_left})");
+}
+
+#[test]
+fn panning_an_entry_through_the_production_loop_removes_its_right_channel() {
+    let mut engine = engine_with_composite();
+    engine.graph = fx_render_graph(0.0, -12.0);
+    engine.unit_changes.borrow_mut().added.push(UNIT);
+    engine.reconcile_units();
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(ENTRY_A, vec![ENTRY_PAN_KEY]),
+        old: FieldValue::Float32(0.0), new: FieldValue::Float32(-1.0)
+    }], &engine.registry).expect("pan A hard left");
+    engine.reconcile_units();
+    let (_, pan_right) = render_mix_live(&mut engine, UNIT);
+    assert!((pan_right - 0.251).abs() < 0.02, "A drops off the right, leaving only B (got {pan_right})");
+}
+
+#[test]
+fn muting_an_entry_removes_it_from_the_rendered_mix() {
+    let mut engine = engine_with_composite();
+    engine.graph = fx_render_graph(0.0, -12.0); // A at 0 dB (~1.0), B at -12 dB (~0.25)
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let (base_left, _) = render_mix(&mut engine, &unit);
+    assert!((base_left - 1.251).abs() < 0.02, "both entries sum into the mix (got {base_left})");
+    set_bool(&mut engine, ENTRY_A, ENTRY_MUTE_KEY, false, true);
+    engine.reconcile_one(&mut unit);
+    let (muted_left, _) = render_mix(&mut engine, &unit);
+    assert!((muted_left - 0.251).abs() < 0.02, "muting A leaves only B in the mix (got {muted_left})");
+}
+
+#[test]
+fn soloing_an_entry_keeps_only_that_entry_in_the_rendered_mix() {
+    let mut engine = engine_with_composite();
+    engine.graph = fx_render_graph(0.0, -12.0); // A at 0 dB (~1.0), B at -12 dB (~0.25)
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    set_bool(&mut engine, ENTRY_A, ENTRY_SOLO_KEY, false, true);
+    engine.reconcile_one(&mut unit);
+    let (solo_left, _) = render_mix(&mut engine, &unit);
+    assert!((solo_left - 1.0).abs() < 0.02,
+        "soloing A keeps A (~1.0) and silences B; a wrong-chain solo would read B's ~0.25 (got {solo_left})");
+}
+
+#[test]
+fn panning_an_entry_hard_left_removes_its_right_channel_from_the_mix() {
+    let mut engine = engine_with_composite();
+    engine.graph = fx_render_graph(0.0, -12.0);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let (_, base_right) = render_mix(&mut engine, &unit);
+    assert!((base_right - 1.251).abs() < 0.02, "both entries feed the right channel (got {base_right})");
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(ENTRY_A, vec![ENTRY_PAN_KEY]),
+        old: FieldValue::Float32(0.0), new: FieldValue::Float32(-1.0)
+    }], &engine.registry).expect("pan A hard left");
+    engine.reconcile_one(&mut unit);
+    let (pan_left, pan_right) = render_mix(&mut engine, &unit);
+    assert!((pan_left - 1.251).abs() < 0.02, "A stays full on the left (got {pan_left})");
+    assert!((pan_right - 0.251).abs() < 0.02, "A drops off the right, leaving only B (got {pan_right})");
+}
+
 #[test]
 fn disabling_a_nested_effect_bypasses_it_edge_only_keeping_its_processor() {
     let mut engine = engine_with_composite();

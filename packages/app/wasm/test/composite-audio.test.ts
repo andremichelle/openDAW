@@ -6,7 +6,7 @@ import {UUID} from "@opendaw/lib-std"
 import {AudioEffectCompositeBox, AudioEffectCompositeCellBox, StereoCompositeBox, StereoToolDeviceBox} from "@opendaw/studio-boxes"
 import type {AudioUnitBox} from "@opendaw/studio-boxes"
 import type {Box, BoxGraph} from "@opendaw/lib-box"
-import {buildEffectProject, renderEffect, peakOf, allFinite} from "./helpers/effect-harness"
+import {buildEffectProject, renderEffect, renderEffectToggling, peakOf, allFinite} from "./helpers/effect-harness"
 
 const LEN = 256 // engine output_len: planar L|R, 128 each (matches load-full-engine's quantum)
 const channelPeaks = (out: Float32Array): [number, number] => {
@@ -106,6 +106,94 @@ describe("AudioComposite (audible)", () => {
         const [left, right] = channelPeaks(out)
         expect(right).toBeGreaterThan(0.1) // the right channel sounds
         expect(left).toBeLessThan(1e-3)    // the left is panned away — proves the entry strip pans
+    }, 30000)
+
+    // The reported bug: mute / pan / solo set BEFORE load (initial dump) work, but TOGGLING an entry control
+    // after load does nothing. These flip the field mid-playback through the incremental sync.
+    const buildOneEntry = (): {source: BoxGraph, entry: AudioEffectCompositeCellBox} => {
+        let cell: AudioEffectCompositeCellBox | undefined
+        const source = buildEffectProject(0.3, (src: BoxGraph, unit: AudioUnitBox): Box => {
+            const composite = AudioEffectCompositeBox.create(src, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(0)
+            })
+            cell = AudioEffectCompositeCellBox.create(src, UUID.generate(), box => {
+                box.composite.refer(composite.entries)
+                box.index.setValue(0)
+            })
+            return composite
+        })
+        if (cell === undefined) {throw new Error("entry not built")}
+        return {source, entry: cell}
+    }
+
+    const settled = (out: Float32Array, fromQuantum: number, toQuantum: number): Float32Array =>
+        out.subarray(fromQuantum * LEN, toQuantum * LEN)
+
+    it("toggling an entry's MUTE after load silences it", async () => {
+        const {source, entry} = buildOneEntry()
+        const out = await renderEffectToggling(source, () => entry.mute.setValue(true), {quanta: 48, toggleAt: 24})
+        expect(peakOf(settled(out, 4, 20))).toBeGreaterThan(0.1)   // audible before the toggle
+        expect(peakOf(settled(out, 40, 48))).toBeLessThan(1e-3)    // silent after it
+    }, 30000)
+
+    it("toggling an entry's PAN hard right after load moves it off the left", async () => {
+        const {source, entry} = buildOneEntry()
+        const out = await renderEffectToggling(source, () => entry.pan.setValue(1.0), {quanta: 48, toggleAt: 24})
+        expect(channelPeaks(settled(out, 4, 20))[0]).toBeGreaterThan(0.1) // left audible before
+        expect(channelPeaks(settled(out, 40, 48))[0]).toBeLessThan(1e-3)  // left gone after
+    }, 30000)
+
+    it("toggling both DRY and WET off after load silences the composite", async () => {
+        let composite: AudioEffectCompositeBox | undefined
+        const source = buildEffectProject(0.3, (src: BoxGraph, unit: AudioUnitBox): Box => {
+            const box = AudioEffectCompositeBox.create(src, UUID.generate(), b => {
+                b.host.refer(unit.audioEffects)
+                b.index.setValue(0)
+            }) // default dry -inf / wet 0 dB: audible through the entry
+            AudioEffectCompositeCellBox.create(src, UUID.generate(), b => {
+                b.composite.refer(box.entries)
+                b.index.setValue(0)
+            })
+            composite = box
+            return box
+        })
+        if (composite === undefined) {throw new Error("composite not built")}
+        const target = composite
+        const out = await renderEffectToggling(source, () => {
+            target.wet.setValue(Number.NEGATIVE_INFINITY)
+            target.dry.setValue(Number.NEGATIVE_INFINITY)
+        }, {quanta: 48, toggleAt: 24})
+        expect(peakOf(settled(out, 4, 20))).toBeGreaterThan(0.1) // audible before
+        expect(peakOf(settled(out, 40, 48))).toBeLessThan(1e-3)  // dead silent after both are off
+    }, 30000)
+
+    it("two entries with effects, dry AND wet at -inf, is dead silent", async () => {
+        // The reported screenshot: FX Composite, two populated entries, dry = wet = -inf dB. Output must be silent.
+        const out = await renderEffect(buildEffectProject(0.3, (source: BoxGraph, unit: AudioUnitBox): Box => {
+            const composite = AudioEffectCompositeBox.create(source, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(0)
+                box.dry.setValue(Number.NEGATIVE_INFINITY)
+                box.wet.setValue(Number.NEGATIVE_INFINITY)
+            })
+            const entryA = AudioEffectCompositeCellBox.create(source, UUID.generate(), box => {
+                box.composite.refer(composite.entries)
+                box.index.setValue(0)
+            })
+            const entryB = AudioEffectCompositeCellBox.create(source, UUID.generate(), box => {
+                box.composite.refer(composite.entries)
+                box.index.setValue(1)
+            })
+            StereoToolDeviceBox.create(source, UUID.generate(), box => {
+                box.host.refer(entryA.audioEffects); box.index.setValue(0); box.volume.setValue(0.0)
+            })
+            StereoToolDeviceBox.create(source, UUID.generate(), box => {
+                box.host.refer(entryB.audioEffects); box.index.setValue(0); box.volume.setValue(0.0)
+            })
+            return composite
+        }))
+        expect(peakOf(out)).toBeLessThan(1e-3)
     }, 30000)
 
     it("a STEREO split routes each channel to its own entry", async () => {

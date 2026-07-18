@@ -96,6 +96,31 @@ describe("Composite adapters", () => {
         project.terminate()
     })
 
+    it("toggling an entry's mute through its parameter adapter writes the box field", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(createEnv(),
+            ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const {entryA} = project.editing.modify(() => {
+            const product = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+            const composite = AudioEffectCompositeBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(product.audioUnitBox.audioEffects)
+                box.index.setValue(0)
+            })
+            const entryA = AudioEffectCompositeCellBox.create(project.boxGraph, UUID.generate(), box => {
+                box.composite.refer(composite.entries)
+                box.index.setValue(0)
+            })
+            return {entryA}
+        }).unwrap()
+        const entryAdapter = project.boxAdapters.adapterFor(entryA, AudioEffectCompositeCellBoxAdapter)
+        expect(entryA.mute.getValue()).toBe(false)
+        project.editing.modify(() => entryAdapter.namedParameter.mute.setValue(true))
+        expect(entryA.mute.getValue(), "the adapter write reached the box field").toBe(true)
+        project.editing.modify(() => entryAdapter.namedParameter.pan.setValue(-1.0))
+        expect(entryA.pan.getValue(), "pan write reached the box field").toBe(-1.0)
+        project.terminate()
+    })
+
     it("an audio unit still hosts both chains, and gates midi on its instrument", async () => {
         const {Project} = await import("./Project")
         const project = Project.fromSkeleton(createEnv(),

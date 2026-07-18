@@ -95,11 +95,9 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
         }), Terminable.Empty),
         Events.subscribe(element, "click", (event: Event) => {
             const target = event.target
-            if (target instanceof Element && isDefined(target.closest("[data-swallow-click]"))) {
-                event.stopPropagation()
-            }
-        }, {capture: true}),
-        Events.subscribe(element, "click", () => userEditingManager.audioUnit.edit(entry.box)),
+            if (target instanceof Element && isDefined(target.closest("[data-swallow-click]"))) {return}
+            userEditingManager.audioUnit.edit(entry.box)
+        }),
         AudioCompositeEntryDnD.installTarget({element, project, composite, entry, getIndex, branchable: !fixed})
     )
     if (!fixed) {
