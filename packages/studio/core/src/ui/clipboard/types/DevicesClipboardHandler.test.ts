@@ -23,7 +23,9 @@ import {
 } from "@opendaw/studio-boxes"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {DeviceBoxUtils, ProjectSkeleton, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
+import {AudioEffectCompositeBox, AudioEffectCompositeCellBox, StereoToolDeviceBox} from "@opendaw/studio-boxes"
 import {ClipboardUtils} from "../ClipboardUtils"
+import {DevicesClipboard} from "./DevicesClipboardHandler"
 
 describe("DevicesClipboardHandler", () => {
     let source: ProjectSkeleton
@@ -193,6 +195,31 @@ describe("DevicesClipboardHandler", () => {
         return effect
     }
 
+    const addComposite = (skeleton: ProjectSkeleton, audioUnit: AudioUnitBox): {
+        composite: AudioEffectCompositeBox, entry: AudioEffectCompositeCellBox, nested: StereoToolDeviceBox
+    } => {
+        const {boxGraph} = skeleton
+        let composite!: AudioEffectCompositeBox
+        let entry!: AudioEffectCompositeCellBox
+        let nested!: StereoToolDeviceBox
+        boxGraph.beginTransaction()
+        composite = AudioEffectCompositeBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(audioUnit.audioEffects)
+            box.index.setValue(0)
+        })
+        entry = AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+            box.composite.refer(composite.entries)
+            box.index.setValue(0)
+            box.label.setValue("Branch")
+        })
+        nested = StereoToolDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(entry.audioEffects)
+            box.index.setValue(0)
+        })
+        boxGraph.endTransaction()
+        return {composite, entry, nested}
+    }
+
     const addWerkstattParam = (skeleton: ProjectSkeleton, paramsField: Field<Pointers.Parameter>,
                                label: string, value: number, index: number): WerkstattParameterBox => {
         const {boxGraph} = skeleton
@@ -232,24 +259,11 @@ describe("DevicesClipboardHandler", () => {
         return {sampleBox, audioFile}
     }
 
-    // Mirrors the exact dependency collection logic from DevicesClipboardHandler.copyDevices
+    // The device dependencies come from the REAL production function (no drift). Only the audio-unit timeline,
+    // which copyDevices bundles separately alongside an instrument, is mirrored here.
     const collectDeviceDependencies = (deviceBox: Box, boxGraph: BoxGraph,
                                        audioUnit?: AudioUnitBox): Box[] => {
-        const ownedChildren = deviceBox.incomingEdges()
-            .filter(pointer => pointer.mandatory && !pointer.box.ephemeral
-                && !isDefined(pointer.box.resource))
-            .map(pointer => pointer.box)
-        const mandatoryDeps = Array.from(boxGraph.dependenciesOf(deviceBox, {
-            alwaysFollowMandatory: true,
-            stopAtResources: true,
-            excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-                || dep.name === RootBox.ClassName
-        }).boxes).filter(dep => dep.resource !== "preserved")
-        const preserved = [deviceBox, ...ownedChildren].flatMap(root =>
-            Array.from(boxGraph.dependenciesOf(root, {
-                alwaysFollowMandatory: true,
-                excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-            }).boxes).filter(dep => dep.resource === "preserved"))
+        const deviceDeps = DevicesClipboard.collectDeviceDependencies([deviceBox], boxGraph)
         const trackContent: Box[] = []
         if (audioUnit !== undefined) {
             const trackPointers = audioUnit.tracks.pointerHub.incoming()
@@ -273,7 +287,7 @@ describe("DevicesClipboardHandler", () => {
             }
         }
         const seen = new Set<string>()
-        return [...ownedChildren, ...mandatoryDeps, ...preserved, ...trackContent].filter(box => {
+        return [...deviceDeps, ...trackContent].filter(box => {
             const uuid = UUID.toString(box.address.uuid)
             if (seen.has(uuid)) return false
             seen.add(uuid)
@@ -347,6 +361,73 @@ describe("DevicesClipboardHandler", () => {
                     makePasteMapper(targetAU, false))
             })
             expect(targetAU.audioEffects.pointerHub.incoming().length).toBe(2)
+        })
+    })
+
+    // ─────────────────────────────────────────────────────────
+    // Composite: nested effects survive copy + paste (not flattened)
+    // ─────────────────────────────────────────────────────────
+
+    describe("composite copy/paste preserves nested effects", () => {
+        it("collects a composite's entry cells AND the effects nested in them", () => {
+            const audioUnit = createAudioUnit(source)
+            const {composite, entry, nested} = addComposite(source, audioUnit)
+            const deps = collectDeviceDependencies(composite, source.boxGraph)
+            expect(deps).toContain(entry)
+            expect(deps).toContain(nested)
+            expect(deps.filter(box => isInstanceOf(box, AudioEffectCompositeCellBox)).length).toBe(1)
+            expect(deps.filter(box => isInstanceOf(box, StereoToolDeviceBox)).length).toBe(1)
+        })
+        it("round-trips: the pasted entry hosts the pasted effect, not the top host", () => {
+            const sourceAU = createAudioUnit(source)
+            const {composite} = addComposite(source, sourceAU)
+            const deps = collectDeviceDependencies(composite, source.boxGraph)
+            const data = ClipboardUtils.serializeBoxes([composite, ...deps])
+            const targetAU = createAudioUnit(target)
+            const editing = new BoxEditing(target.boxGraph)
+            editing.modify(() => {
+                ClipboardUtils.deserializeBoxes(data, target.boxGraph, makePasteMapper(targetAU, false, false))
+            })
+            const pastedComposites = targetAU.audioEffects.pointerHub.incoming()
+                .filter(pointer => isInstanceOf(pointer.box, AudioEffectCompositeBox))
+                .map(pointer => pointer.box as AudioEffectCompositeBox)
+            expect(pastedComposites.length).toBe(1)
+            const pastedEntries = pastedComposites[0].entries.pointerHub.incoming()
+                .filter(pointer => isInstanceOf(pointer.box, AudioEffectCompositeCellBox))
+                .map(pointer => pointer.box as AudioEffectCompositeCellBox)
+            expect(pastedEntries.length).toBe(1)
+            expect(pastedEntries[0].audioEffects.pointerHub.incoming()
+                .filter(pointer => isInstanceOf(pointer.box, StereoToolDeviceBox)).length,
+            "the nested effect came along, hosted by the entry").toBe(1)
+            expect(targetAU.audioEffects.pointerHub.incoming()
+                .filter(pointer => isInstanceOf(pointer.box, StereoToolDeviceBox)).length,
+            "and was NOT flattened onto the top host").toBe(0)
+        })
+        it("re-indexes only the top-level composite on paste, so it lands before the following device", () => {
+            const sourceAU = createAudioUnit(source)
+            const {composite} = addComposite(source, sourceAU)
+            const deps = collectDeviceDependencies(composite, source.boxGraph)
+            const data = ClipboardUtils.serializeBoxes([composite, ...deps])
+            const targetAU = createAudioUnit(target)
+            const existing = addAudioEffect(target, targetAU, "Reverb", 0)
+            const editing = new BoxEditing(target.boxGraph)
+            editing.modify(() => {
+                // Insert at index 0 (before the existing effect): the handler shifts existing effects up by the
+                // copied top-level count (1), then re-indexes the pasted top-level effects from the insert index.
+                existing.index.setValue(existing.index.getValue() + 1)
+                const boxes = ClipboardUtils.deserializeBoxes(data, target.boxGraph, makePasteMapper(targetAU, false, false))
+                DevicesClipboard.reindexPastedTopLevelEffects(boxes,
+                    Option.wrap(targetAU.audioEffects.address), Option.None, 0, 0)
+            })
+            const pastedComposite = target.boxGraph.boxes()
+                .find(box => box instanceof AudioEffectCompositeBox) as AudioEffectCompositeBox
+            expect(pastedComposite.index.getValue(), "the composite takes the insert slot").toBe(0)
+            expect(pastedComposite.index.getValue(), "and sits before the following device")
+                .toBeLessThan(existing.index.getValue())
+            const pastedNested = target.boxGraph.boxes()
+                .find(box => box instanceof StereoToolDeviceBox) as StereoToolDeviceBox
+            expect(pastedNested.index.getValue(),
+                "the nested effect keeps its in-entry index, not a top-level slot").toBe(0)
         })
     })
 

@@ -12,7 +12,7 @@ import {
     RuntimeNotifier,
     UUID
 } from "@opendaw/lib-std"
-import {Box, BoxGraph} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {NoteEventCollectionBox, RootBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {
@@ -81,6 +81,68 @@ export namespace DevicesClipboard {
         }
     }
 
+    // Every box a set of selected devices OWNS and depends on, for the clipboard. The owned subtree is walked
+    // RECURSIVELY through mandatory incoming edges — a composite's entry cells, the effects nested inside them,
+    // deeper composites and their chains — and each box in it contributes its mandatory deps and preserved
+    // resources (so a nested effect's soundfont / NN model comes along too). A one-level walk that stopped at
+    // the entry cells, plus the `isDeviceBox` exclusion, previously dropped everything hosted in a composite
+    // entry. Excludes device boxes and the RootBox from the OUTGOING dep walks; the audio-unit timeline is
+    // bundled separately (only alongside an instrument).
+    export const collectDeviceDependencies = (deviceBoxes: ReadonlyArray<Box>,
+                                              boxGraph: BoxGraph): ReadonlyArray<Box> => {
+        const collectOwned = (root: Box): ReadonlyArray<Box> => {
+            const owned: Array<Box> = []
+            const seen = new Set<Box>()
+            const visit = (box: Box): void => box.incomingEdges().forEach(pointer => {
+                if (!pointer.mandatory || pointer.box.ephemeral || isDefined(pointer.box.resource)
+                    || seen.has(pointer.box)) {return}
+                seen.add(pointer.box)
+                owned.push(pointer.box)
+                visit(pointer.box)
+            })
+            visit(root)
+            return owned
+        }
+        return deviceBoxes.flatMap(box => {
+            const owned = collectOwned(box)
+            const roots = [box, ...owned]
+            const mandatoryDeps = roots.flatMap(root => Array.from(boxGraph.dependenciesOf(root, {
+                alwaysFollowMandatory: true,
+                stopAtResources: true,
+                excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
+                    || dep.name === RootBox.ClassName
+            }).boxes).filter(dep => dep.resource !== "preserved"))
+            const preserved = roots.flatMap(root => Array.from(boxGraph.dependenciesOf(root, {
+                alwaysFollowMandatory: true,
+                excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
+            }).boxes).filter(dep => dep.resource === "preserved"))
+            return [...owned, ...mandatoryDeps, ...preserved]
+        })
+    }
+
+    // Place the freshly pasted effects into the destination chain at the insert index. ONLY top-level effects
+    // (hosted by the destination chain field) are re-indexed; effects nested inside a pasted composite entry are
+    // hosted by their entry, keep the in-entry index they were copied with, and must NOT compete for a top-level
+    // slot — otherwise the composite itself lands at a wrong index (e.g. after the following device).
+    export const reindexPastedTopLevelEffects = (pastedBoxes: ReadonlyArray<Box>,
+                                                 audioChainAddress: Option<Address>,
+                                                 midiChainAddress: Option<Address>,
+                                                 audioInsertIndex: int,
+                                                 midiInsertIndex: int): void => {
+        const hostedByChain = (box: EffectDeviceBox, chain: Option<Address>): boolean =>
+            chain.mapOr(address => box.host.targetVertex
+                .mapOr(vertex => vertex.address.equals(address), false), false)
+        const effects = pastedBoxes.filter(DeviceBoxUtils.isEffectDeviceBox)
+        const newMidi = effects
+            .filter(box => box.tags.deviceType === "midi-effect" && hostedByChain(box, midiChainAddress))
+            .sort((a, b) => a.index.getValue() - b.index.getValue())
+        const newAudio = effects
+            .filter(box => box.tags.deviceType === "audio-effect" && hostedByChain(box, audioChainAddress))
+            .sort((a, b) => a.index.getValue() - b.index.getValue())
+        newMidi.forEach((box, idx) => box.index.setValue(midiInsertIndex + idx))
+        newAudio.forEach((box, idx) => box.index.setValue(audioInsertIndex + idx))
+    }
+
     export const createHandler = ({
                                       getEnabled,
                                       editing,
@@ -120,24 +182,7 @@ export namespace DevicesClipboard {
                 ...midiEffects.map(adapter => adapter.box),
                 ...audioEffects.map(adapter => adapter.box)
             ]
-            const dependencies = deviceBoxes.flatMap(box => {
-                const ownedChildren = box.incomingEdges()
-                    .filter(pointer => pointer.mandatory && !pointer.box.ephemeral
-                        && !isDefined(pointer.box.resource))
-                    .map(pointer => pointer.box)
-                const mandatoryDeps = Array.from(boxGraph.dependenciesOf(box, {
-                    alwaysFollowMandatory: true,
-                    stopAtResources: true,
-                    excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-                        || dep.name === RootBox.ClassName
-                }).boxes).filter(dep => dep.resource !== "preserved")
-                const preserved = [box, ...ownedChildren].flatMap(root =>
-                    Array.from(boxGraph.dependenciesOf(root, {
-                        alwaysFollowMandatory: true,
-                        excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-                    }).boxes).filter(dep => dep.resource === "preserved"))
-                return [...ownedChildren, ...mandatoryDeps, ...preserved]
-            })
+            const dependencies = collectDeviceDependencies(deviceBoxes, boxGraph)
             const trackContent: Box[] = []
             if (isNotNull(instrument)) {
                 getHost().ifSome(host => {
@@ -313,16 +358,10 @@ export namespace DevicesClipboard {
                         }
                     )
                     const deviceBoxes = boxes.filter(box => DeviceBoxUtils.isDeviceBox(box))
-                    const newMidiEffects = deviceBoxes
-                        .filter((box): box is EffectDeviceBox =>
-                            DeviceBoxUtils.isEffectDeviceBox(box) && box.tags.deviceType === "midi-effect")
-                        .sort((a, b) => a.index.getValue() - b.index.getValue())
-                    const newAudioEffects = deviceBoxes
-                        .filter((box): box is EffectDeviceBox =>
-                            DeviceBoxUtils.isEffectDeviceBox(box) && box.tags.deviceType === "audio-effect")
-                        .sort((a, b) => a.index.getValue() - b.index.getValue())
-                    newMidiEffects.forEach((box, idx) => box.index.setValue(midiInsertIndex + idx))
-                    newAudioEffects.forEach((box, idx) => box.index.setValue(audioInsertIndex + idx))
+                    reindexPastedTopLevelEffects(boxes,
+                        host.audioEffectsField.map(field => field.address),
+                        host.midiEffectsField.map(field => field.address),
+                        audioInsertIndex, midiInsertIndex)
                     const tracksField = host.audioUnitBoxAdapter().tracksField
                     const allTracks = tracksField.pointerHub.filter(Pointers.TrackCollection)
                         .filter(pointer => isInstanceOf(pointer.box, TrackBox))
