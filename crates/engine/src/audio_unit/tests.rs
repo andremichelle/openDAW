@@ -2216,6 +2216,35 @@ fn muting_an_entry_silences_only_that_entry() {
     assert_eq!(binding.entry_silent(ENTRY_B), Some(false), "its sibling is untouched");
 }
 
+// A pure REORDER (swap two entries' index fields, no chain change) must re-point each survivor onto its new
+// distributor branch. Broadcast makes this audibly a no-op, but a positional distributor (a stereo split) reads
+// the branch by position, so a survivor left on its old branch would silently swap the channels.
+#[test]
+fn reordering_entries_rewires_each_to_its_new_branch() {
+    let mut engine = engine_with_composite();
+    engine.graph = fx_composite_graph();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(composite_of(&unit).entry_branch(ENTRY_A), Some(0), "A starts on branch 0");
+    assert_eq!(composite_of(&unit).entry_branch(ENTRY_B), Some(1), "B starts on branch 1");
+    let swap = [
+        Update::Primitive {
+            address: Address::of(ENTRY_A, vec![ENTRY_INDEX_KEY]),
+            old: FieldValue::Int32(0), new: FieldValue::Int32(1)
+        },
+        Update::Primitive {
+            address: Address::of(ENTRY_B, vec![ENTRY_INDEX_KEY]),
+            old: FieldValue::Int32(1), new: FieldValue::Int32(0)
+        }
+    ];
+    engine.graph.transaction(&swap, &engine.registry).expect("swap entry order");
+    engine.reconcile_one(&mut unit);
+    let binding = composite_of(&unit);
+    assert_eq!(binding.entry_branch(ENTRY_A), Some(1), "A moved to branch 1");
+    assert_eq!(binding.entry_branch(ENTRY_B), Some(0), "B moved to branch 0");
+    assert_eq!(binding.entry_count(), 2, "both entries survived the reorder");
+}
+
 #[test]
 fn soloing_one_entry_silences_every_sibling() {
     let mut engine = engine_with_composite();

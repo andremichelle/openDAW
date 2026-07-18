@@ -71,7 +71,8 @@ pub(crate) struct CompositeEntry {
     field_subs: Vec<SubscriptionId>,
     edges: Vec<(NodeId, NodeId)>,      // the entry's internal edges (distributor -> fx... -> strip -> wet sum)
     summed: bool,                      // whether `strip_output` is currently a source of the wet sum
-    effects_dirty: Rc<Cell<bool>>      // set by a member `enabled` toggle -> re-wire THIS entry
+    effects_dirty: Rc<Cell<bool>>,     // set by a member `enabled` toggle -> re-wire THIS entry
+    wired_index: usize                 // the distributor branch this entry is currently wired to
 }
 
 /// An effect composite's PERSISTENT cascade, owned by the chain member it is. Its nodes (`distributor` /
@@ -191,6 +192,12 @@ impl EffectCompositeBinding {
     #[cfg(test)]
     pub(crate) fn entry_wired_count(&self, uuid: Uuid) -> Option<usize> {
         self.members.iter().find(|entry| entry.uuid == uuid).map(|entry| entry.edges.len())
+    }
+
+    /// The distributor branch this entry is currently wired to — for a positional distributor this IS its channel.
+    #[cfg(test)]
+    pub(crate) fn entry_branch(&self, uuid: Uuid) -> Option<usize> {
+        self.members.iter().find(|entry| entry.uuid == uuid).map(|entry| entry.wired_index)
     }
 
     /// The composite nested at `nested_uuid` inside entry `entry_uuid`'s chain — for tests / introspection.
@@ -500,6 +507,12 @@ impl Engine {
                 self.terminate_member(stale);
             }
             self.wire_entry(binding, &mut entry, index);
+        } else if entry.wired_index != index {
+            // Position changed but the chain did not: re-point this entry onto its NEW distributor branch. For a
+            // POSITIONAL distributor (a stereo split) this re-routes its channel; for a broadcast stack every
+            // branch carries the same input, so it is a harmless refresh.
+            self.unwire_entry(binding, &mut entry);
+            self.wire_entry(binding, &mut entry, index);
         }
         self.bind_entry_params(&mut entry, spec, invalidate);
         entry
@@ -560,7 +573,7 @@ impl Engine {
         let mut entry = CompositeEntry {
             uuid, chain, audio, strip, strip_id, strip_params, strip_automation, strip_output,
             param_subs: Vec::new(), param_collections: Vec::new(), field_subs, edges: Vec::new(),
-            summed: false, effects_dirty
+            summed: false, effects_dirty, wired_index: usize::MAX
         };
         self.wire_entry(binding, &mut entry, index);
         self.bind_entry_params(&mut entry, spec, invalidate);
@@ -599,6 +612,7 @@ impl Engine {
             binding.wet_sum.borrow_mut().add_audio_source(entry.strip_output.clone());
             entry.summed = true;
         }
+        entry.wired_index = index;
     }
 
     /// Drop an entry's current wiring (its internal edges + its wet-sum source), before a re-wire / teardown.
