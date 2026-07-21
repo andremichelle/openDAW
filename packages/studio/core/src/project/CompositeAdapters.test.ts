@@ -121,6 +121,75 @@ describe("Composite adapters", () => {
         project.terminate()
     })
 
+    it("moveEffects re-homes an effect INTO a branch and reindexes both chains", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(createEnv(),
+            ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const {cell, crusher, stereoTool, composite} = project.editing.modify(() => {
+            const product = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+            const chain = product.audioUnitBox.audioEffects // parent chain: composite(0), crusher(1), stereoTool(2)
+            const composite = AudioEffectCompositeBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(chain)
+                box.index.setValue(0)
+            })
+            const cell = AudioEffectCompositeCellBox.create(project.boxGraph, UUID.generate(), box => {
+                box.composite.refer(composite.entries)
+                box.index.setValue(0)
+            })
+            const crusher = CrusherDeviceBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(chain)
+                box.index.setValue(1)
+            })
+            const stereoTool = StereoToolDeviceBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(chain)
+                box.index.setValue(2)
+            })
+            return {cell, crusher, stereoTool, composite}
+        }).unwrap()
+        project.editing.modify(() => project.api.moveEffects(cell.audioEffects, [crusher], 0))
+        expect(crusher.host.targetVertex.unwrap("host").box, "re-homed onto the branch cell").toBe(cell)
+        expect(crusher.index.getValue()).toBe(0)
+        expect(composite.index.getValue(), "the parent chain reindexed contiguously").toBe(0)
+        expect(stereoTool.index.getValue(), "the parent chain reindexed contiguously").toBe(1)
+        project.terminate()
+    })
+
+    it("moveEffects moves effects OUT of a branch to the parent chain, preserving order", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(createEnv(),
+            ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const {chain, cell, nestedA, nestedB, composite} = project.editing.modify(() => {
+            const product = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+            const chain = product.audioUnitBox.audioEffects
+            const composite = AudioEffectCompositeBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(chain)
+                box.index.setValue(0)
+            })
+            const cell = AudioEffectCompositeCellBox.create(project.boxGraph, UUID.generate(), box => {
+                box.composite.refer(composite.entries)
+                box.index.setValue(0)
+            })
+            const nestedA = CrusherDeviceBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(cell.audioEffects)
+                box.index.setValue(0)
+            })
+            const nestedB = StereoToolDeviceBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(cell.audioEffects)
+                box.index.setValue(1)
+            })
+            return {chain, cell, nestedA, nestedB, composite}
+        }).unwrap()
+        project.editing.modify(() => project.api.moveEffects(chain, [nestedA, nestedB], 1))
+        expect(cell.audioEffects.pointerHub.incoming().length, "the branch is emptied").toBe(0)
+        expect(nestedA.host.targetVertex.unwrap("host"), "nestedA moved onto the parent chain").toBe(chain)
+        expect(nestedB.host.targetVertex.unwrap("host"), "nestedB moved onto the parent chain").toBe(chain)
+        // Parent chain: composite(0), nestedA(1), nestedB(2) — order preserved.
+        expect(composite.index.getValue()).toBe(0)
+        expect(nestedA.index.getValue()).toBe(1)
+        expect(nestedB.index.getValue()).toBe(2)
+        project.terminate()
+    })
+
     it("an audio unit still hosts both chains, and gates midi on its instrument", async () => {
         const {Project} = await import("./Project")
         const project = Project.fromSkeleton(createEnv(),

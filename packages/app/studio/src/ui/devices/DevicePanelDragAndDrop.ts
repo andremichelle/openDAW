@@ -14,7 +14,7 @@ import {
     PresetHeader
 } from "@opendaw/studio-adapters"
 import {InsertMarker} from "@/ui/components/InsertMarker"
-import {EffectFactories, PresetSource, Project} from "@opendaw/studio-core"
+import {EffectBox, EffectFactories, PresetSource, Project} from "@opendaw/studio-core"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
@@ -134,14 +134,21 @@ export namespace DevicePanelDragAndDrop {
                 } else {
                     const uuids = dragData.uuids
                     if (uuids.length === 0) {return}
-                    const startIndices = uuids
+                    const deviceType = accepts === "audio" ? "audio-effect" : "midi-effect"
+                    const boxes = uuids
                         .map(uuidStr => project.boxGraph.findBox(UUID.parse(uuidStr)).unwrapOrNull())
                         .filter(isDefined)
-                        .filter(IndexedBox.isIndexedBox)
-                        .map(box => box.index.getValue())
-                        .toSorted((a, b) => a - b)
-                    if (startIndices.length === 0) {return}
-                    editing.modify(() => IndexedBox.moveIndices(field, startIndices, index))
+                        .filter((box): box is EffectBox => box.tags.deviceType === deviceType)
+                    if (boxes.length === 0) {return}
+                    const sameChain = boxes.every(box => box.host.targetVertex.mapOr(vertex => vertex === field, false))
+                    if (sameChain) {
+                        // A plain reorder WITHIN this chain: keep the slot-shuffling semantics.
+                        const startIndices = boxes.map(box => box.index.getValue()).toSorted((a, b) => a - b)
+                        editing.modify(() => IndexedBox.moveIndices(field, startIndices, index))
+                    } else {
+                        // A cross-chain MOVE (e.g. an effect dragged out of a composite branch): re-home it here.
+                        editing.modify(() => project.api.moveEffects(field, boxes, index))
+                    }
                 }
             },
             enter: () => {},

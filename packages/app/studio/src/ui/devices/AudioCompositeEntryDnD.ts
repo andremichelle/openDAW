@@ -1,5 +1,6 @@
-import {int, isDefined, Subscription, UUID} from "@opendaw/lib-std"
-import {EffectFactories, EffectFactory, Project} from "@opendaw/studio-core"
+import {int, isDefined, Nullable, Optional, Provider, Subscription, UUID} from "@opendaw/lib-std"
+import {Box} from "@opendaw/lib-box"
+import {EffectBox, EffectFactories, EffectFactory, Project} from "@opendaw/studio-core"
 import {AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioEffectCompositeCellBox} from "@opendaw/studio-boxes"
 import {DragAndDrop} from "@/ui/DragAndDrop"
@@ -59,6 +60,11 @@ export namespace AudioCompositeEntryDnD {
                     mark(element, zone === "before" ? "insert-before" : zone === "after" ? "insert-after" : "drop-target")
                     return true
                 }
+                if (isExistingAudioEffect(data) && acceptsExistingEffect(project, composite, data)) {
+                    const zone = branchable ? zoneOf(event, element) : "onto"
+                    mark(element, zone === "before" ? "insert-before" : zone === "after" ? "insert-after" : "drop-target")
+                    return true
+                }
                 return false
             },
             drop: (event: DragEvent, data: AnyDragData): void => {
@@ -79,26 +85,52 @@ export namespace AudioCompositeEntryDnD {
                     } else {
                         insertBranch(project, composite, zone === "before" ? getIndex() : getIndex() + 1, factory)
                     }
+                } else if (isExistingAudioEffect(data) && acceptsExistingEffect(project, composite, data)) {
+                    event.preventDefault()
+                    const boxes = resolveAudioEffectBoxes(project, data.uuids)
+                    const zone = branchable ? zoneOf(event, element) : "onto"
+                    if (zone === "onto") {
+                        // MOVE the dragged effects into THIS branch's serial chain (re-homing them out of their source).
+                        const insertIndex = entry.box.audioEffects.pointerHub.incoming().length
+                        project.editing.modify(() => project.api.moveEffects(entry.box.audioEffects, boxes, insertIndex))
+                    } else {
+                        moveToNewBranch(project, composite, zone === "before" ? getIndex() : getIndex() + 1, boxes)
+                    }
                 }
             },
             enter: () => {},
             leave: () => mark(element, null)
         })
 
-    type AppendConstruct = { element: HTMLElement, project: Project, composite: AudioCompositeAdapter }
+    type AppendConstruct = {
+        element: HTMLElement
+        project: Project
+        composite: AudioCompositeAdapter
+        // Gate the whole target (e.g. the entry-list body only accepts when the list is EMPTY, so it never
+        // fights the per-row targets). Defaults to always-on for the Add-Effect footer button.
+        active?: Provider<boolean>
+    }
 
-    // The Add Effect footer as a drop target: a new effect dropped on it appends a branch (the empty-list case
-    // and the plain "add at the end").
-    export const installAppendTarget = ({element, project, composite}: AppendConstruct): Subscription =>
+    // A drop target that APPENDS a branch: a new effect creates one holding it, an existing effect is moved into
+    // one. Used by the Add Effect footer button and by the entry list's empty body.
+    export const installAppendTarget = ({element, project, composite, active}: AppendConstruct): Subscription =>
         DragAndDrop.installTarget(element, {
-            drag: (_event: DragEvent, data: AnyDragData): boolean => isNewAudioEffect(data),
+            drag: (_event: DragEvent, data: AnyDragData): boolean =>
+                (active?.() ?? true)
+                && (isNewAudioEffect(data) || acceptsExistingEffect(project, composite, data)),
             drop: (event: DragEvent, data: AnyDragData): void => {
                 element.classList.remove("drop-target")
-                if (!isNewAudioEffect(data)) {return}
-                const factory = EffectFactories.MergedNamed[data.device]
-                if (!isDefined(factory)) {return}
-                event.preventDefault()
-                insertBranch(project, composite, composite.entries.adapters().length, factory)
+                if (active?.() === false) {return}
+                const atIndex = composite.entries.adapters().length
+                if (isNewAudioEffect(data)) {
+                    const factory = EffectFactories.MergedNamed[data.device]
+                    if (!isDefined(factory)) {return}
+                    event.preventDefault()
+                    insertBranch(project, composite, atIndex, factory)
+                } else if (isExistingAudioEffect(data) && acceptsExistingEffect(project, composite, data)) {
+                    event.preventDefault()
+                    moveToNewBranch(project, composite, atIndex, resolveAudioEffectBoxes(project, data.uuids))
+                }
             },
             enter: (allowDrop: boolean) => element.classList.toggle("drop-target", allowDrop),
             leave: () => element.classList.remove("drop-target")
@@ -121,6 +153,61 @@ export namespace AudioCompositeEntryDnD {
 
     const isNewAudioEffect = (data: AnyDragData): data is Extract<AnyDragData, { type: "audio-effect" }> & { uuids: null } =>
         data.type === "audio-effect" && data.uuids === null
+
+    // An EXISTING audio effect (or several) being dragged out of a chain to be MOVED, as opposed to a new one
+    // created from the browser (`uuids === null`).
+    type ExistingAudioEffectDrag = { type: "audio-effect", uuids: ReadonlyArray<UUID.String>, instrument: Nullable<UUID.String> }
+    const isExistingAudioEffect = (data: AnyDragData): data is ExistingAudioEffectDrag =>
+        data.type === "audio-effect" && data.uuids !== null
+
+    const resolveAudioEffectBoxes = (project: Project, uuids: ReadonlyArray<UUID.String>): ReadonlyArray<EffectBox> =>
+        uuids.map(uuid => project.boxGraph.findBox(UUID.parse(uuid)).unwrapOrNull())
+            .filter(isDefined)
+            .filter((box): box is EffectBox => box.tags.deviceType === "audio-effect")
+
+    // Walk up from a box through its host chain (an effect's `host`, a composite entry's `composite`) to its
+    // owner. Stops at the audio unit (which has no such pointer).
+    const ancestorOf = (box: Box): Optional<Box> => {
+        if (box instanceof AudioEffectCompositeCellBox) {
+            return box.composite.targetVertex.unwrapOrNull()?.box
+        }
+        if (box.tags.deviceType === "audio-effect" || box.tags.deviceType === "midi-effect") {
+            return (box as EffectBox).host.targetVertex.unwrapOrNull()?.box
+        }
+        return undefined
+    }
+
+    // Dropping a box into a branch of a composite that lives inside that box's OWN subtree would be a cycle
+    // (e.g. dragging a composite into one of its own branches). Reject it by walking the target composite's
+    // ancestry and looking for any dragged box.
+    const wouldCycle = (draggedUuids: ReadonlySet<UUID.String>, composite: AudioCompositeAdapter): boolean => {
+        let current: Optional<Box> = composite.box
+        while (isDefined(current)) {
+            if (draggedUuids.has(UUID.toString(current.address.uuid))) {return true}
+            current = ancestorOf(current)
+        }
+        return false
+    }
+
+    const acceptsExistingEffect = (project: Project, composite: AudioCompositeAdapter, data: AnyDragData): boolean =>
+        isExistingAudioEffect(data)
+        && resolveAudioEffectBoxes(project, data.uuids).length > 0
+        && !wouldCycle(new Set(data.uuids), composite)
+
+    // Move existing effect boxes into a NEW branch created at `atIndex`, shifting the branches at or after it down.
+    const moveToNewBranch = (project: Project, composite: AudioCompositeAdapter,
+                             atIndex: int, boxes: ReadonlyArray<EffectBox>): void => {
+        project.editing.modify(() => {
+            composite.entries.adapters()
+                .filter(other => other.indexField.getValue() >= atIndex)
+                .forEach(other => other.indexField.setValue(other.indexField.getValue() + 1))
+            const cell = AudioEffectCompositeCellBox.create(project.boxGraph, UUID.generate(), box => {
+                box.composite.refer(composite.box.entries)
+                box.index.setValue(atIndex)
+            })
+            project.api.moveEffects(cell.audioEffects, boxes, 0)
+        })
+    }
 
     const zoneOf = (event: DragEvent, element: HTMLElement): "before" | "onto" | "after" => {
         const rect = element.getBoundingClientRect()

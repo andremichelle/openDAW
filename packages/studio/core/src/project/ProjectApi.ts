@@ -18,7 +18,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioClipBox,
@@ -168,6 +168,28 @@ export class ProjectApi {
 
     insertEffect(field: Field<EffectPointerType>, factory: EffectFactory, insertIndex: int = Number.MAX_SAFE_INTEGER): EffectBox {
         return factory.create(this.#project, field, IndexedBox.insertOrder(field, insertIndex))
+    }
+
+    // MOVE existing effect boxes into `targetField` at `insertIndex`: re-home each box's `host` pointer (so it
+    // leaves its current chain) and reindex both the source chains and the target chain contiguously. Direction-
+    // agnostic — the source may be the parent chain, another composite branch, or `targetField` itself (a plain
+    // same-chain reorder). The caller guards against a cycle (moving a composite into its own subtree).
+    moveEffects(targetField: Field<EffectPointerType>, boxes: ReadonlyArray<EffectBox>, insertIndex: int): void {
+        if (boxes.length === 0) {return}
+        const movedSet = new Set<Box>(boxes)
+        // The chains the boxes currently live in, captured BEFORE re-homing so they can be reindexed afterwards.
+        const sourceFields = new Set<Field<EffectPointerType>>()
+        boxes.forEach(box => box.host.targetVertex.ifSome(vertex => sourceFields.add(vertex as Field<EffectPointerType>)))
+        const moved = boxes.slice().sort((left, right) => left.index.getValue() - right.index.getValue())
+        const kept = IndexedBox.collectIndexedBoxes(targetField).filter(box => !movedSet.has(box))
+        const at = clamp(insertIndex, 0, kept.length)
+        const finalOrder: ReadonlyArray<IndexedBox> = [...kept.slice(0, at), ...moved, ...kept.slice(at)]
+        moved.forEach(box => box.host.refer(targetField))
+        finalOrder.forEach((box, index) => box.index.setValue(index))
+        sourceFields.forEach(field => {
+            if (field === targetField) {return}
+            IndexedBox.collectIndexedBoxes(field).forEach((box, index) => box.index.setValue(index))
+        })
     }
 
     createNoteTrack(audioUnitBox: AudioUnitBox, insertIndex: int = Number.MAX_SAFE_INTEGER): TrackBox {

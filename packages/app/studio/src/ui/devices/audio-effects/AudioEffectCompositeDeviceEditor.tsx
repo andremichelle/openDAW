@@ -54,14 +54,26 @@ export const AudioEffectCompositeDeviceEditor = ({lifecycle, service, adapter, d
                       service={service}
                       adapter={adapter}
                       populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
-                      populateControls={() => (
-                          <div className={className}>
+                      populateControls={() => {
+                          const list: HTMLElement = (
                               <CompositeEntryList lifecycle={lifecycle}
                                                   rows={rows}
                                                   watch={update => adapter.entries.subscribe({
                                                       onAdd: update, onRemove: update, onReorder: update
                                                   })}
                                                   footer={footer}/>
+                          )
+                          if (!adapter.entriesFixed) {
+                              // With no branches there are no per-row targets, so let the WHOLE list body accept a
+                              // drop (dropping on the tiny + button is tedious); once a branch exists the rows take over.
+                              lifecycle.own(AudioCompositeEntryDnD.installAppendTarget({
+                                  element: list, project, composite: adapter,
+                                  active: () => adapter.entries.adapters().length === 0
+                              }))
+                          }
+                          return (
+                          <div className={className}>
+                              {list}
                               <div className="mix">
                                   {ControlBuilder.createKnob({
                                       lifecycle, editing, midiLearning, adapter,
@@ -73,7 +85,8 @@ export const AudioEffectCompositeDeviceEditor = ({lifecycle, service, adapter, d
                                   })}
                                   <div/>
                               </div>
-                          </div>)}
+                          </div>)
+                      }}
                       populateMeter={() => (
                           <DevicePeakMeter lifecycle={lifecycle}
                                            receiver={project.liveStreamReceiver}
