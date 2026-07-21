@@ -3,10 +3,9 @@ import {AudioCompositeAdapter, DeviceHost} from "@opendaw/studio-adapters"
 import {Lifecycle, Option} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
-import {EffectFactories, MenuItem} from "@opendaw/studio-core"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
-import {MenuButton} from "@/ui/components/MenuButton"
+import {AddEffectButton} from "@/ui/devices/AddEffectButton"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
 import {SnapCommonDecibel} from "@/ui/configs.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
@@ -37,17 +36,11 @@ export const AudioEffectCompositeDeviceEditor = ({lifecycle, service, adapter, d
                                  fixed={adapter.entriesFixed}/>
         ))
     const footer: Option<HTMLElement> = adapter.entriesFixed ? Option.None : Option.wrap(
-        <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
-            .addMenuItem(...EffectFactories.AudioList.map(factory => MenuItem.default({
-                label: factory.defaultName, icon: factory.defaultIcon, separatorBefore: factory.separatorBefore
-            }).setTriggerProcedure(() =>
-                AudioCompositeEntryDnD.insertBranch(project, adapter, adapter.entries.adapters().length, factory)))))}
-                    appearance={{tooltip: "Add a parallel effect branch"}}
-                    onInit={button => lifecycle.own(AudioCompositeEntryDnD.installAppendTarget({
-                        element: button, project, composite: adapter
-                    }))}>
-            <span className="add-effect">+ Add Effect</span>
-        </MenuButton>
+        <AddEffectButton
+            select={factory => AudioCompositeEntryDnD.insertBranch(project, adapter, adapter.entries.adapters().length, factory)}
+            onInit={button => lifecycle.own(AudioCompositeEntryDnD.installAppendTarget({
+                element: button, project, composite: adapter
+            }))}/>
     )
     return (
         <DeviceEditor lifecycle={lifecycle}

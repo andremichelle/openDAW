@@ -29,18 +29,8 @@ component
     mask-image: linear-gradient(to bottom, black calc(100% - 1.5em * var(--fade-bottom, 0)), transparent)
     -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1.5em * var(--fade-bottom, 0)), transparent)
 
-  > button
+  // The footer (Add Effect button) is the only non-scroll child; center it below the list.
+  > :not(.scroll)
     flex: 0 0 auto
     align-self: center
     margin-top: calc(0.25em + 2px)
-
-    &.drop-target
-      outline: 1px dashed currentColor
-      background-color: rgba(255, 255, 255, 0.08)
-
-  .add-effect
-    font-size: 0.625em
-    text-transform: uppercase
-    letter-spacing: 0.05em
-    padding: 0 0.35em
-    white-space: nowrap
