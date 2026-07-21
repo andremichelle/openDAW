@@ -89,6 +89,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "FX Composite",
+                        path: "/manuals/devices/audio/effect-composite",
+                        icon: EffectFactories.AudioEffectComposite.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "Gate",
                         path: "/manuals/devices/audio/gate",
                         icon: EffectFactories.Gate.defaultIcon
@@ -104,6 +110,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                         label: "Revamp",
                         path: "/manuals/devices/audio/revamp",
                         icon: EffectFactories.Revamp.defaultIcon
+                    },
+                    {
+                        type: "page",
+                        label: "Stereo Split",
+                        path: "/manuals/devices/audio/stereo-composite",
+                        icon: EffectFactories.StereoComposite.defaultIcon
                     },
                     {
                         type: "page",
