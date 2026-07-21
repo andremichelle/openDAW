@@ -3,6 +3,10 @@
 component
   display: flex
   align-items: flex-start
+  // Fill the editor's visible content row so a stretched (empty) entry list matches the VISIBLE area, not the
+  // taller dry/wet column — otherwise its bottom (and drop outline) spills past the editor's `overflow: hidden`.
+  height: 100%
+  min-height: 0
 
   .mix
     display: grid

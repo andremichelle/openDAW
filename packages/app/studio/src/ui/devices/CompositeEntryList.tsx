@@ -47,9 +47,7 @@ export const CompositeEntryList = ({lifecycle, rows, watch, footer}: Construct) 
         rowLifecycle.terminate()
         Html.empty(scroll)
         const current = rows(rowLifecycle)
-        if (current.length === 0) {
-            scroll.appendChild(<div className="empty">No entries — drop an effect to add one</div>)
-        }
+        element.classList.toggle("empty", current.length === 0)
         for (const row of current) {scroll.appendChild(row)}
         updateFade()
     }

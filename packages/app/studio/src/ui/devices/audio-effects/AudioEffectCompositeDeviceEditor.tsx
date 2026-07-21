@@ -46,7 +46,7 @@ export const AudioEffectCompositeDeviceEditor = ({lifecycle, service, adapter, d
                     onInit={button => lifecycle.own(AudioCompositeEntryDnD.installAppendTarget({
                         element: button, project, composite: adapter
                     }))}>
-            <span className="add-effect">+</span>
+            <span className="add-effect">+ Add Effect</span>
         </MenuButton>
     )
     return (
