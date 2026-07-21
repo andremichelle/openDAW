@@ -9,6 +9,7 @@ import {
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
+    FrequencySplitBox,
     GateDeviceBox,
     GrooveShuffleBox,
     MaximizerDeviceBox,
@@ -40,6 +41,8 @@ export namespace EffectFactories {
     // The stereo split's FIXED entries, in the order the engine's distributor maps them: index 0 = left,
     // index 1 = right. The UI offers no add / remove / reorder for them (StereoCompositeBoxAdapter.entriesFixed).
     export const STEREO_ENTRY_LABELS: ReadonlyArray<string> = ["L", "R"]
+
+    export const FREQUENCY_SPLIT_ENTRY_LABELS: ReadonlyArray<string> = ["Low", "Low Mid", "High Mid", "High"]
 
     export const Arpeggio: EffectFactory = {
         defaultName: "Arpeggio",
@@ -502,6 +505,31 @@ export namespace EffectFactories {
         }
     }
 
+    export const FrequencySplit: EffectFactory = {
+        defaultName: "Frequency Split",
+        defaultIcon: IconSymbol.Charts,
+        briefDescription: "Multiband split",
+        description: "Splits the signal into frequency bands and processes each on its own chain",
+        manualPage: DeviceManualUrls.FrequencySplit,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index) => {
+            const composite = FrequencySplitBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Frequency Split")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+            FREQUENCY_SPLIT_ENTRY_LABELS.forEach((label, entryIndex) =>
+                AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+                    box.composite.refer(composite.entries)
+                    box.index.setValue(entryIndex)
+                    box.label.setValue(label)
+                }))
+            return composite
+        }
+    }
+
     export const MidiNamed = {
         Arpeggio,
         Pitch,
@@ -513,6 +541,7 @@ export namespace EffectFactories {
     export const AudioNamed = {
         AudioEffectComposite, // FX Composite
         StereoComposite,      // Stereo Split
+        FrequencySplit,       // Frequency Split
         Compressor,
         Crusher,
         DattorroReverb,  // Dattorro Reverb

@@ -2064,6 +2064,8 @@ fn update_positions_gate_on_transporting_blocks() {
 const COMP: Uuid = [20u8; 16];
 const ENTRY_A: Uuid = [21u8; 16];
 const ENTRY_B: Uuid = [22u8; 16];
+const ENTRY_C: Uuid = [23u8; 16];
+const ENTRY_D: Uuid = [24u8; 16];
 const NESTED_A: Uuid = [23u8; 16];
 const NESTED_B: Uuid = [24u8; 16];
 
@@ -2072,6 +2074,9 @@ const ENTRIES_FIELD: u16 = 10;
 const INPUT_TAP_FIELD: u16 = 11;
 const DRY_KEY: u16 = 12;
 const WET_KEY: u16 = 13;
+const CROSSOVER1_KEY: u16 = 14;
+const CROSSOVER2_KEY: u16 = 15;
+const CROSSOVER3_KEY: u16 = 16;
 const ENTRY_INDEX_KEY: u16 = 3;
 const ENTRY_CHAIN_FIELD: u16 = 2;
 const ENTRY_LABEL_KEY: u16 = 4;
@@ -2085,7 +2090,8 @@ fn engine_with_composite() -> Engine {
     let mut engine = engine_with_devices();
     engine.register_effect_composite("TestComposite".to_string(), DEVICE_KIND_AUDIO_EFFECT as u8,
         crate::Distributor::Broadcast, ENTRIES_FIELD, ENTRY_INDEX_KEY, ENTRY_CHAIN_FIELD, ENTRY_LABEL_KEY,
-        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, DRY_KEY, WET_KEY, INPUT_TAP_FIELD);
+        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, DRY_KEY, WET_KEY, INPUT_TAP_FIELD,
+        [0, 0, 0]);
     engine
 }
 
@@ -2408,6 +2414,135 @@ fn panning_an_entry_through_the_production_loop_removes_its_right_channel() {
     engine.reconcile_units();
     let (_, pan_right) = render_mix_live(&mut engine, UNIT);
     assert!((pan_right - 0.251).abs() < 0.02, "A drops off the right, leaving only B (got {pan_right})");
+}
+
+fn engine_with_frequency_composite() -> Engine {
+    let mut engine = engine_with_devices();
+    engine.register_effect_composite("TestComposite".to_string(), DEVICE_KIND_AUDIO_EFFECT as u8,
+        crate::Distributor::Frequency, ENTRIES_FIELD, ENTRY_INDEX_KEY, ENTRY_CHAIN_FIELD, ENTRY_LABEL_KEY,
+        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, DRY_KEY, WET_KEY, INPUT_TAP_FIELD,
+        [CROSSOVER1_KEY, 0, 0]);
+    engine
+}
+
+fn frequency_render_graph() -> BoxGraph {
+    BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))
+        ]),
+        graph_box(COMP, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))),
+            (EFFECT_INDEX_KEY, FieldValue::Int32(0)),
+            (DEVICE_ENABLED_KEY, FieldValue::Boolean(true)),
+            (ENTRIES_FIELD, FieldValue::Hook),
+            (INPUT_TAP_FIELD, FieldValue::Hook),
+            (DRY_KEY, FieldValue::Float32(f32::NEG_INFINITY)),
+            (WET_KEY, FieldValue::Float32(0.0)),
+            (CROSSOVER1_KEY, FieldValue::Float32(1_000.0))
+        ]),
+        entry_box_gain(ENTRY_A, 0, "Low", 0.0),
+        entry_box_gain(ENTRY_B, 1, "High", 0.0)
+    ])
+}
+
+fn engine_with_frequency_composite_bands() -> Engine {
+    let mut engine = engine_with_devices();
+    engine.register_effect_composite("TestComposite".to_string(), DEVICE_KIND_AUDIO_EFFECT as u8,
+        crate::Distributor::Frequency, ENTRIES_FIELD, ENTRY_INDEX_KEY, ENTRY_CHAIN_FIELD, ENTRY_LABEL_KEY,
+        ENTRY_GAIN_KEY, ENTRY_PAN_KEY, ENTRY_MUTE_KEY, ENTRY_SOLO_KEY, DRY_KEY, WET_KEY, INPUT_TAP_FIELD,
+        [CROSSOVER1_KEY, CROSSOVER2_KEY, CROSSOVER3_KEY]);
+    engine
+}
+
+fn frequency_render_graph_4() -> BoxGraph {
+    BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))
+        ]),
+        graph_box(COMP, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))),
+            (EFFECT_INDEX_KEY, FieldValue::Int32(0)),
+            (DEVICE_ENABLED_KEY, FieldValue::Boolean(true)),
+            (ENTRIES_FIELD, FieldValue::Hook),
+            (INPUT_TAP_FIELD, FieldValue::Hook),
+            (DRY_KEY, FieldValue::Float32(f32::NEG_INFINITY)),
+            (WET_KEY, FieldValue::Float32(0.0)),
+            (CROSSOVER1_KEY, FieldValue::Float32(200.0)),
+            (CROSSOVER2_KEY, FieldValue::Float32(1_000.0)),
+            (CROSSOVER3_KEY, FieldValue::Float32(5_000.0))
+        ]),
+        entry_box_gain(ENTRY_A, 0, "Low", 0.0),
+        entry_box_gain(ENTRY_B, 1, "LowMid", 0.0),
+        entry_box_gain(ENTRY_C, 2, "HighMid", 0.0),
+        entry_box_gain(ENTRY_D, 3, "High", 0.0)
+    ])
+}
+
+// Feed a steady sine into the distributor and return the mix output's RMS relative to the input's, over the
+// settled tail. An allpass reconstruction preserves magnitude, so a band that actually carries the tone gives ~1.
+fn frequency_sine_rms_ratio(engine: &mut Engine, unit: &AudioUnitBinding, freq: f32) -> f64 {
+    let src = shared_audio_buffer();
+    composite_of(unit).set_audio_source(src.clone());
+    let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
+        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+    let step = 2.0 * core::f32::consts::PI * freq / 48_000.0;
+    let mut phase = 0.0f32;
+    let (mut energy_in, mut energy_out) = (0.0f64, 0.0f64);
+    for round in 0..24 {
+        {
+            let mut buffer = src.borrow_mut();
+            for index in 0..engine_env::RENDER_QUANTUM {
+                let value = math::sin(phase);
+                buffer.left[index] = value;
+                buffer.right[index] = value;
+                phase += step;
+            }
+        }
+        engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
+        if round >= 12 {
+            let out = composite_of(unit).mix_output.borrow();
+            let input = src.borrow();
+            for index in 0..engine_env::RENDER_QUANTUM {
+                energy_in += (input.left[index] as f64).powi(2);
+                energy_out += (out.left[index] as f64).powi(2);
+            }
+        }
+    }
+    (energy_out / energy_in).sqrt()
+}
+
+#[test]
+fn a_four_band_split_keeps_the_two_highest_bands_audible() {
+    for &(freq, band) in &[(8_000.0f32, "top"), (2_500.0f32, "high-mid")] {
+        let mut engine = engine_with_frequency_composite_bands();
+        engine.graph = frequency_render_graph_4();
+        let mut unit = engine.build_unit(UNIT);
+        engine.reconcile_one(&mut unit);
+        let ratio = frequency_sine_rms_ratio(&mut engine, &unit, freq);
+        assert!(ratio > 0.9, "the {band} band must pass a {freq}Hz tone (out/in RMS {ratio})");
+    }
+}
+
+#[test]
+fn a_frequency_composite_routes_dc_to_the_low_band_only() {
+    let mut engine = engine_with_frequency_composite();
+    engine.graph = frequency_render_graph();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let (left, right) = render_mix(&mut engine, &unit);
+    // DC (0 Hz) passes the lowpass band at unity and is blocked by the highpass band, so the two empty bands sum
+    // back to the input (1.0), NOT to 2.0 as a broadcast to both entries would. This is the whole point of the
+    // Linkwitz-Riley split, and it proves the Frequency distributor is wired end to end.
+    assert!((left - 1.0).abs() < 0.02, "DC reaches only the low band, summing to 1.0 (got {left})");
+    assert!((right - 1.0).abs() < 0.02, "and the same on the right (got {right})");
 }
 
 #[test]

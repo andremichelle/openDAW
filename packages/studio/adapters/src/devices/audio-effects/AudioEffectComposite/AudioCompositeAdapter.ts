@@ -1,6 +1,6 @@
 import {Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Field, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
-import {AudioEffectCompositeBox, StereoCompositeBox} from "@opendaw/studio-boxes"
+import {AudioEffectCompositeBox, FrequencySplitBox, StereoCompositeBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../../LabeledAudioOutputsOwner"
@@ -13,7 +13,7 @@ import {AudioEffectCompositeCellBoxAdapter} from "./AudioEffectCompositeCellBoxA
 // The two audio composites share ONE field layout (entries 10, input 11, dry 12, wet 13) and one entry type; they
 // differ only in how the engine DISTRIBUTES the input to the entries (broadcast vs per-channel split), which the
 // engine selects by box type. So the adapter behaviour lives here once.
-export type AudioCompositeBox = AudioEffectCompositeBox | StereoCompositeBox
+export type AudioCompositeBox = AudioEffectCompositeBox | StereoCompositeBox | FrequencySplitBox
 
 // A parallel audio composite: hosts AudioEffectCompositeCellBox ENTRIES, each its own audio-fx chain, mixed through
 // their own gain / mute / solo into the wet sum, and blended with the dry input by `dry` / `wet`.

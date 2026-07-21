@@ -42,13 +42,14 @@ export type EffectCompositeSpec = {
     dryKey: number          // the composite's dry gain (dB); 0 for a midi composite
     wetKey: number          // the composite's wet gain (dB); 0 for a midi composite
     inputTapField: number   // the vertex a nested sidechain taps for the composite's INPUT; 0 = none
+    crossoverKeys: [number, number, number] // the Frequency distributor's interior crossover fields; all 0 otherwise
 }
 
 // WASM CONTRACT: mirrors abi DEVICE_KIND_* (crates/abi/src/lib.rs).
 export enum EffectCompositeKind {AudioEffect = 1, MidiEffect = 2}
 
 // WASM CONTRACT: mirrors `Distributor` in crates/engine/src/lib.rs.
-export enum EffectCompositeDistributor {Broadcast = 0, Stereo = 1}
+export enum EffectCompositeDistributor {Broadcast = 0, Stereo = 1, Frequency = 2}
 
 export type EngineModules = {
     engineModule: WebAssembly.Module
@@ -136,14 +137,25 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
         boxType: "AudioEffectCompositeBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Broadcast,
         entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
-        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11
+        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
+        crossoverKeys: [0, 0, 0]
     },
     // The stereo SPLIT: same shape and same entry box, but entry 0 gets left and entry 1 gets right.
     {
         boxType: "StereoCompositeBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Stereo,
         entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
-        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11
+        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
+        crossoverKeys: [0, 0, 0]
+    },
+    // The frequency SPLIT: the input is separated into bands (one per entry, low to high) by the Frequency
+    // distributor's Linkwitz-Riley crossovers at fields 14 / 15 / 16.
+    {
+        boxType: "FrequencySplitBox", kind: EffectCompositeKind.AudioEffect,
+        distributor: EffectCompositeDistributor.Frequency,
+        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
+        gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
+        crossoverKeys: [14, 15, 16]
     }
 ]
 

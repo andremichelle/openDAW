@@ -64,7 +64,8 @@ export type LinkerEngine = {
     effect_composite_register: (nameLen: number, kind: number, distributor: number, entriesField: number,
                                 indexKey: number, chainField: number, labelKey: number, gainKey: number,
                                 panKey: number, muteKey: number, soloKey: number, dryKey: number, wetKey: number,
-                                inputTapField: number) => void
+                                inputTapField: number, crossover1Key: number, crossover2Key: number,
+                                crossover3Key: number) => void
     input_reserve: (len: number) => number
 }
 
@@ -176,5 +177,6 @@ export const registerEffectComposite = (engine: LinkerEngine, memory: WebAssembl
                                         spec: EffectCompositeSpec): void => {
     engine.effect_composite_register(writeName(engine, memory, spec.boxType), spec.kind, spec.distributor,
         spec.entriesField, spec.indexKey, spec.chainField, spec.labelKey, spec.gainKey, spec.panKey,
-        spec.muteKey, spec.soloKey, spec.dryKey, spec.wetKey, spec.inputTapField)
+        spec.muteKey, spec.soloKey, spec.dryKey, spec.wetKey, spec.inputTapField,
+        spec.crossoverKeys[0], spec.crossoverKeys[1], spec.crossoverKeys[2])
 }

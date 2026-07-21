@@ -121,13 +121,15 @@ pub(crate) struct CompositeSpec {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Distributor {
     Broadcast = 0,
-    Stereo = 1
+    Stereo = 1,
+    Frequency = 2
 }
 
 impl Distributor {
     fn from_u32(value: u32) -> Self {
         match value {
             1 => Self::Stereo,
+            2 => Self::Frequency,
             _ => Self::Broadcast
         }
     }
@@ -156,7 +158,8 @@ pub(crate) struct EffectCompositeSpec {
     pub(crate) solo_key: u16,                // the entry's solo (resolved across siblings, like the mixer's)
     pub(crate) dry_key: u16,                 // the composite's dry gain (dB); 0 for a midi composite
     pub(crate) wet_key: u16,                 // the composite's wet gain (dB); 0 for a midi composite
-    pub(crate) input_tap_field: u16          // the vertex a nested sidechain taps for the composite's INPUT; 0 = none
+    pub(crate) input_tap_field: u16,         // the vertex a nested sidechain taps for the composite's INPUT; 0 = none
+    pub(crate) crossover_keys: [u16; 3]      // the Frequency distributor's interior crossover fields; all 0 otherwise
 }
 
 // Call a device's `process` through the shared function table: a wasm function pointer IS a table index,
@@ -1256,9 +1259,11 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // one positional field key per facet, matching the loader
     fn register_effect_composite(&mut self, box_type: String, kind: u8, distributor: Distributor, entries_field: u16,
                                  index_key: u16, chain_field: u16, label_key: u16, gain_key: u16, pan_key: u16,
-                                 mute_key: u16, solo_key: u16, dry_key: u16, wet_key: u16, input_tap_field: u16) {
+                                 mute_key: u16, solo_key: u16, dry_key: u16, wet_key: u16, input_tap_field: u16,
+                                 crossover_keys: [u16; 3]) {
         self.effect_composites.push(EffectCompositeSpec {box_type, kind, distributor, entries_field, index_key,
-            chain_field, label_key, gain_key, pan_key, mute_key, solo_key, dry_key, wet_key, input_tap_field});
+            chain_field, label_key, gain_key, pan_key, mute_key, solo_key, dry_key, wet_key, input_tap_field,
+            crossover_keys});
     }
 
     /// The effect-composite spec for a box TYPE, if it is a registered parallel composite (else `None`, a leaf
@@ -2685,7 +2690,8 @@ pub extern "C" fn composite_register(name_len: usize, children_field: u32, index
 pub extern "C" fn effect_composite_register(name_len: usize, kind: u32, distributor: u32, entries_field: u32,
                                             index_key: u32, chain_field: u32, label_key: u32, gain_key: u32,
                                             pan_key: u32, mute_key: u32, solo_key: u32, dry_key: u32, wet_key: u32,
-                                            input_tap_field: u32) {
+                                            input_tap_field: u32, crossover1_key: u32, crossover2_key: u32,
+                                            crossover3_key: u32) {
     unsafe {
         let engine = match ENGINE.get().as_mut() {
             Some(engine) => engine,
@@ -2696,7 +2702,8 @@ pub extern "C" fn effect_composite_register(name_len: usize, kind: u32, distribu
             engine.register_effect_composite(String::from(name), kind as u8, Distributor::from_u32(distributor),
                 entries_field as u16, index_key as u16, chain_field as u16, label_key as u16, gain_key as u16,
                 pan_key as u16, mute_key as u16, solo_key as u16, dry_key as u16, wet_key as u16,
-                input_tap_field as u16);
+                input_tap_field as u16,
+                [crossover1_key as u16, crossover2_key as u16, crossover3_key as u16]);
         }
     }
 }

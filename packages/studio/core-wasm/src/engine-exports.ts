@@ -16,7 +16,7 @@ export type EngineExports = {
     // box-type UTF-8 name is written into the input buffer (nameLen bytes) first, then its child collection's
     // host field key + the child index/routing key are passed. Mirrors device_set_box_type.
     composite_register: (nameLen: number, childrenField: number, indexKey: number, excludeKey: number, cellInstrumentField: number, cellMidiField: number, cellAudioField: number, childEnabledKey: number, childMuteKey: number, childSoloKey: number) => void
-    effect_composite_register: (nameLen: number, kind: number, distributor: number, entriesField: number, indexKey: number, chainField: number, labelKey: number, gainKey: number, panKey: number, muteKey: number, soloKey: number, dryKey: number, wetKey: number, inputTapField: number) => void
+    effect_composite_register: (nameLen: number, kind: number, distributor: number, entriesField: number, indexKey: number, chainField: number, labelKey: number, gainKey: number, panKey: number, muteKey: number, soloKey: number, dryKey: number, wetKey: number, inputTapField: number, crossover1Key: number, crossover2Key: number, crossover3Key: number) => void
     input_ptr: () => number
     input_capacity: () => number
     input_reserve: (len: number) => number // ensure the input scratch holds `len`, grow if needed, return its (current) ptr

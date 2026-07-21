@@ -22,6 +22,10 @@ use crate::audio_buffer::{shared_audio_buffer, AudioBuffer, SharedAudioBuffer};
 use crate::audio_generator::AudioGenerator;
 use crate::audio_input::AudioInput;
 use crate::block::Block;
+use crate::frequency_split::FrequencySplitter;
+use crate::telemetry::{broadcast_slot, BroadcastSlot};
+use dsp::analyser::{AudioAnalyser, NUM_BINS};
+use alloc::boxed::Box;
 use crate::channel_strip::StripAutomation;
 use crate::event_buffer::EventBuffer;
 use crate::event_receiver::EventReceiver;
@@ -39,7 +43,10 @@ pub enum DistributorMode {
     Broadcast,
     /// Per-channel split: entry 0 reads `(left, 0)`, entry 1 reads `(0, right)`. Summing the untouched
     /// branches recombines the input EXACTLY, so an empty stereo split is bit-identical to a bypass.
-    Stereo
+    Stereo,
+    /// Multiband split: entry `i` reads frequency band `i` (low to high), separated by Linkwitz-Riley crossovers
+    /// with allpass phase-compensation, so the untouched bands recombine to a flat-magnitude allpass of the input.
+    Frequency
 }
 
 /// Copies the composite's input into a tap it OWNS, and presents one source buffer per entry.
@@ -53,19 +60,36 @@ pub struct DistributorProcessor {
     input: Option<SharedAudioBuffer>,
     tap: SharedAudioBuffer,
     branches: Vec<SharedAudioBuffer>,
+    frequency: Option<FrequencySplitter>,
+    analyser: Option<Box<AudioAnalyser>>, // input-spectrum FFT for the Frequency editor; None for other modes
+    spectrum: BroadcastSlot,
     silent: SharedAudioBuffer, // fixed cleared buffer for out-of-range entries (never written)
     events: EventBuffer
 }
 
 impl DistributorProcessor {
-    pub fn new(mode: DistributorMode) -> Self {
+    pub fn new(mode: DistributorMode, sample_rate: f32) -> Self {
         let tap = shared_audio_buffer();
         // Broadcast hands every entry the tap itself; a stereo split needs one buffer per channel.
         let branches = match mode {
-            DistributorMode::Broadcast => Vec::new(),
-            DistributorMode::Stereo => alloc::vec![shared_audio_buffer(), shared_audio_buffer()]
+            DistributorMode::Stereo => alloc::vec![shared_audio_buffer(), shared_audio_buffer()],
+            _ => Vec::new()
         };
-        Self {mode, input: None, tap, branches, silent: shared_audio_buffer(), events: EventBuffer::new()}
+        let frequency = match mode {
+            DistributorMode::Frequency => Some(FrequencySplitter::new(sample_rate as f64, 2, &[])),
+            _ => None
+        };
+        let analyser = match mode {
+            DistributorMode::Frequency => Some(Box::new(AudioAnalyser::new(0.0))),
+            _ => None
+        };
+        Self {mode, input: None, tap, branches, frequency, analyser, spectrum: broadcast_slot(NUM_BINS),
+            silent: shared_audio_buffer(), events: EventBuffer::new()}
+    }
+
+    /// The input-spectrum broadcast slot (Frequency mode): NUM_BINS FFT magnitudes the editor plots.
+    pub fn spectrum_slot(&self) -> BroadcastSlot {
+        self.spectrum.clone()
     }
 
     /// The composite's INPUT copy: the dry source, and the buffer a nested sidechain taps.
@@ -77,7 +101,23 @@ impl DistributorProcessor {
     pub fn branch(&self, index: usize) -> SharedAudioBuffer {
         match self.mode {
             DistributorMode::Broadcast => self.tap.clone(),
-            DistributorMode::Stereo => self.branches.get(index).unwrap_or(&self.silent).clone()
+            DistributorMode::Stereo => self.branches.get(index).unwrap_or(&self.silent).clone(),
+            DistributorMode::Frequency => self.frequency.as_ref()
+                .map_or_else(|| self.silent.clone(), |splitter| splitter.band(index))
+        }
+    }
+
+    /// The number of frequency bands (Frequency mode only). Changing it re-configures the crossover cascade.
+    pub fn set_band_count(&mut self, band_count: usize) {
+        if let Some(splitter) = self.frequency.as_mut() {
+            splitter.set_band_count(band_count);
+        }
+    }
+
+    /// Set interior crossover `index` (Frequency mode only) in Hz.
+    pub fn set_crossover(&mut self, index: usize, frequency: f64) {
+        if let Some(splitter) = self.frequency.as_mut() {
+            splitter.set_crossover(index, frequency);
         }
     }
 
@@ -112,28 +152,48 @@ impl Processor for DistributorProcessor {
         for branch in &self.branches {
             branch.borrow_mut().clear();
         }
+        if let Some(splitter) = self.frequency.as_mut() {
+            splitter.reset();
+        }
+        if let Some(analyser) = self.analyser.as_mut() {
+            analyser.clear();
+        }
     }
 
     fn process(&mut self, _info: &ProcessInfo) {
-        let tap = self.tap.clone();
-        let mut tap = tap.borrow_mut();
-        match &self.input {
-            Some(input) => {
-                let source = input.borrow();
-                tap.left[..RENDER_QUANTUM].copy_from_slice(&source.left[..RENDER_QUANTUM]);
-                tap.right[..RENDER_QUANTUM].copy_from_slice(&source.right[..RENDER_QUANTUM]);
+        {
+            let tap = self.tap.clone();
+            let mut tap = tap.borrow_mut();
+            match &self.input {
+                Some(input) => {
+                    let source = input.borrow();
+                    tap.left[..RENDER_QUANTUM].copy_from_slice(&source.left[..RENDER_QUANTUM]);
+                    tap.right[..RENDER_QUANTUM].copy_from_slice(&source.right[..RENDER_QUANTUM]);
+                }
+                None => tap.clear_range(0, RENDER_QUANTUM)
             }
-            None => tap.clear_range(0, RENDER_QUANTUM)
+            if self.mode == DistributorMode::Stereo {
+                let mut left = self.branches[0].borrow_mut();
+                let mut right = self.branches[1].borrow_mut();
+                for index in 0..RENDER_QUANTUM {
+                    left.left[index] = tap.left[index];
+                    left.right[index] = 0.0;
+                    right.left[index] = 0.0;
+                    right.right[index] = tap.right[index];
+                }
+            }
         }
-        if self.mode == DistributorMode::Stereo {
-            let mut left = self.branches[0].borrow_mut();
-            let mut right = self.branches[1].borrow_mut();
-            for index in 0..RENDER_QUANTUM {
-                left.left[index] = tap.left[index];
-                left.right[index] = 0.0;
-                right.left[index] = 0.0;
-                right.right[index] = tap.right[index];
-            }
+        if let Some(splitter) = self.frequency.as_mut() {
+            splitter.process(&self.tap);
+        }
+        if self.analyser.is_some() {
+            let tap = self.tap.clone();
+            let spectrum = self.spectrum.clone();
+            let analyser = self.analyser.as_mut().unwrap();
+            let source = tap.borrow();
+            analyser.process(&source.left[..RENDER_QUANTUM], &source.right[..RENDER_QUANTUM]);
+            spectrum.borrow_mut().copy_from_slice(analyser.bins());
+            analyser.decay = true;
         }
     }
 }

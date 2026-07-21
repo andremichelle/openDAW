@@ -31,6 +31,17 @@ pub struct AudioAnalyser {
 }
 
 impl AudioAnalyser {
+    /// Build a fresh analyser (for owners that are not the zeroed device-state block).
+    pub fn new(decay_factor: f32) -> Self {
+        let mut analyser = Self {
+            cos_table: [0.0; NUM_BINS], sin_table: [0.0; NUM_BINS], window: [0.0; FFT_SIZE],
+            real: [0.0; FFT_SIZE], imag: [0.0; FFT_SIZE], bins: [0.0; NUM_BINS],
+            index: 0, decay_factor: 0.0, decay: false
+        };
+        analyser.init(decay_factor);
+        analyser
+    }
+
     /// Build IN PLACE (the state block arrives zeroed; this fills the twiddle + window tables).
     pub fn init(&mut self, decay_factor: f32) {
         for index in 0..NUM_BINS {

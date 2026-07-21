@@ -33,7 +33,7 @@ fn filled(left: f32, right: f32) -> SharedAudioBuffer {
 }
 
 fn distributor_with(mode: DistributorMode, left: f32, right: f32) -> DistributorProcessor {
-    let mut distributor = DistributorProcessor::new(mode);
+    let mut distributor = DistributorProcessor::new(mode, SR);
     distributor.set_audio_source(filled(left, right));
     distributor
 }

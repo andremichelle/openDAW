@@ -4,6 +4,7 @@ import {
     ArpeggioDeviceBox,
     AudioBusBox,
     AudioEffectCompositeBox,
+    FrequencySplitBox,
     StereoCompositeBox,
     BoxVisitor,
     CompressorDeviceBox,
@@ -38,12 +39,14 @@ import {
 } from "@opendaw/studio-boxes"
 import {ArpeggioDeviceEditor} from "@/ui/devices/midi-effects/ArpeggioDeviceEditor.tsx"
 import {AudioEffectCompositeDeviceEditor} from "@/ui/devices/audio-effects/AudioEffectCompositeDeviceEditor"
+import {FrequencySplitDeviceEditor} from "@/ui/devices/audio-effects/FrequencySplit/FrequencySplitDeviceEditor"
 import {EffectFactories as CoreEffectFactories} from "@opendaw/studio-core"
 import {
     ApparatDeviceBoxAdapter,
     ArpeggioDeviceBoxAdapter,
     AudioBusBoxAdapter,
     AudioEffectCompositeBoxAdapter,
+    FrequencySplitBoxAdapter,
     StereoCompositeBoxAdapter,
     CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter,
@@ -236,6 +239,13 @@ export namespace DeviceEditorFactory {
                                                       .adapterFor(box, StereoCompositeBoxAdapter)}
                                                   deviceHost={deviceHost}
                                                   icon={CoreEffectFactories.AudioNamed.StereoComposite.defaultIcon}/>
+            ),
+            visitFrequencySplitBox: (box: FrequencySplitBox) => (
+                <FrequencySplitDeviceEditor lifecycle={lifecycle}
+                                            service={service}
+                                            adapter={service.project.boxAdapters
+                                                .adapterFor(box, FrequencySplitBoxAdapter)}
+                                            deviceHost={deviceHost}/>
             ),
             visitStereoToolDeviceBox: (box: StereoToolDeviceBox) => (
                 <StereoToolDeviceEditor lifecycle={lifecycle}

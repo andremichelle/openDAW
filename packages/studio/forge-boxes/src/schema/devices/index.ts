@@ -38,6 +38,7 @@ import {CompositeCellBox} from "./instruments/CompositeCellBox"
 import {AudioEffectCompositeBox} from "./audio-effects/AudioEffectCompositeBox"
 import {AudioEffectCompositeCellBox} from "./audio-effects/AudioEffectCompositeCellBox"
 import {StereoCompositeBox} from "./audio-effects/StereoCompositeBox"
+import {FrequencySplitBox} from "./audio-effects/FrequencySplitBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -81,5 +82,6 @@ export const DeviceDefinitions = [
     CompositeCellBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
-    StereoCompositeBox
+    StereoCompositeBox,
+    FrequencySplitBox
 ]

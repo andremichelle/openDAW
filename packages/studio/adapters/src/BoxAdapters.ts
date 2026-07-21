@@ -57,6 +57,7 @@ import {
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
     StereoCompositeBox,
+    FrequencySplitBox,
     RevampDeviceBox,
     ReverbDeviceBox,
     RootBox,
@@ -126,6 +127,7 @@ import {StereoToolDeviceBoxAdapter} from "./devices/audio-effects/StereoToolDevi
 import {PlayfieldSampleBoxAdapter} from "./devices/instruments/Playfield/PlayfieldSampleBoxAdapter"
 import {AudioEffectCompositeBoxAdapter} from "./devices/audio-effects/AudioEffectCompositeBoxAdapter"
 import {StereoCompositeBoxAdapter} from "./devices/audio-effects/StereoCompositeBoxAdapter"
+import {FrequencySplitBoxAdapter} from "./devices/audio-effects/FrequencySplitBoxAdapter"
 import {AudioEffectCompositeCellBoxAdapter} from "./devices/audio-effects/AudioEffectComposite/AudioEffectCompositeCellBoxAdapter"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 import {BoxAdapter} from "./BoxAdapter"
@@ -256,6 +258,7 @@ export class BoxAdapters implements Terminable {
             visitAudioEffectCompositeBox: (box: AudioEffectCompositeBox) => new AudioEffectCompositeBoxAdapter(this.#context, box),
             visitAudioEffectCompositeCellBox: (box: AudioEffectCompositeCellBox) => new AudioEffectCompositeCellBoxAdapter(this.#context, box),
             visitStereoCompositeBox: (box: StereoCompositeBox) => new StereoCompositeBoxAdapter(this.#context, box),
+            visitFrequencySplitBox: (box: FrequencySplitBox) => new FrequencySplitBoxAdapter(this.#context, box),
             visitRevampDeviceBox: (box: RevampDeviceBox) => new RevampDeviceBoxAdapter(this.#context, box),
             visitReverbDeviceBox: (box: ReverbDeviceBox) => new ReverbDeviceBoxAdapter(this.#context, box),
             visitRootBox: (box: RootBox): BoxAdapter => new RootBoxAdapter(this.#context, box),

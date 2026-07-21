@@ -254,9 +254,10 @@ impl Engine {
         entries.set_on_dirty(rewire.clone());
         let mode = match spec.distributor {
             Distributor::Broadcast => DistributorMode::Broadcast,
-            Distributor::Stereo => DistributorMode::Stereo
+            Distributor::Stereo => DistributorMode::Stereo,
+            Distributor::Frequency => DistributorMode::Frequency
         };
-        let distributor = Rc::new(RefCell::new(DistributorProcessor::new(mode)));
+        let distributor = Rc::new(RefCell::new(DistributorProcessor::new(mode, self.sample_rate)));
         let tap = distributor.borrow().tap();
         let distributor_id = self.context.register_processor(distributor.clone());
         self.context.set_label(distributor_id, alloc::string::String::from("composite-distributor"));
@@ -276,6 +277,12 @@ impl Engine {
         // the composite's meter has no package to subscribe to and simply never moves.
         let meter_slot = mix.borrow().meter_slot();
         self.broadcasts.register(composite_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
+        // The Frequency editor's input spectrum: the distributor FFTs its tap into this slot (adapter reads it at
+        // [0xFFF], mirroring the Revamp device's spectrum).
+        if matches!(spec.distributor, Distributor::Frequency) {
+            let spectrum_slot = distributor.borrow().spectrum_slot();
+            self.broadcasts.register(composite_uuid, &[0xFFF], crate::broadcast::PACKAGE_FLOAT_ARRAY, &spectrum_slot);
+        }
         // The dry path and the wet sum both feed the mix; ordering edges only (the mix reads the buffers).
         self.context.register_edge(distributor_id, mix_id);
         self.context.register_edge(wet_sum_id, mix_id);
@@ -319,6 +326,17 @@ impl Engine {
                 Address::of(binding.composite_uuid, vec![binding.spec.wet_key]), move |value| {
                     if let Some(value) = value.as_float32() { params.wet_db.set(value) }
                 }));
+        }
+        for (index, &key) in binding.spec.crossover_keys.iter().enumerate() {
+            if key != 0 {
+                let distributor = binding.distributor.clone();
+                subs.push(self.graph.catchup_and_subscribe(
+                    Address::of(binding.composite_uuid, vec![key]), move |value| {
+                        if let Some(value) = value.as_float32() {
+                            distributor.borrow_mut().set_crossover(index, value as f64);
+                        }
+                    }));
+            }
         }
         subs
     }
@@ -469,6 +487,10 @@ impl Engine {
         let spec = binding.spec.clone();
         let desired = binding.entries.sorted();
         let infos = self.entry_infos(&desired, &spec);
+        // Set the band count BEFORE wiring: each entry wires to `distributor.branch(index)`, and the Frequency
+        // distributor only hands out a real band buffer for `index < band_count` (else silence). Wiring first
+        // would pin the extra bands to silence. (A no-op for the other distributors.)
+        binding.distributor.borrow_mut().set_band_count(infos.len());
         let mut pool: BTreeMap<Uuid, CompositeEntry> =
             binding.members.drain(..).map(|entry| (entry.uuid, entry)).collect();
         let mut members: Vec<CompositeEntry> = Vec::new();
