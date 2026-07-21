@@ -154,6 +154,10 @@ export namespace DevicesClipboard {
         const isCopyable = (adapter: DeviceBoxAdapter): boolean => adapter.box.tags.copyable !== false
         const copyableSelected = (): ReadonlyArray<DeviceBoxAdapter> => selection.selected().filter(isCopyable)
         const copyDevices = (): Option<ClipboardDevices> => {
+            // Seal any pending UI-state (e.g. the editing-chain pointer set when entering a composite branch) as
+            // its own history step, so the following PASTE does not fold it into the paste's undo entry — undoing
+            // the paste must remove the pasted device without also navigating out of the branch.
+            editing.mark()
             const selected = copyableSelected()
             if (selected.length === 0) {return Option.None}
             let instrument: InstrumentDeviceBoxAdapter | null = null

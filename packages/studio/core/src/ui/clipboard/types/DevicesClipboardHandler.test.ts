@@ -23,7 +23,7 @@ import {
 } from "@opendaw/studio-boxes"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {DeviceBoxUtils, ProjectSkeleton, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
-import {AudioEffectCompositeBox, AudioEffectCompositeCellBox, StereoToolDeviceBox} from "@opendaw/studio-boxes"
+import {AudioEffectCompositeBox, AudioEffectCompositeCellBox, StereoToolDeviceBox, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {ClipboardUtils} from "../ClipboardUtils"
 import {DevicesClipboard} from "./DevicesClipboardHandler"
 
@@ -1475,6 +1475,51 @@ describe("DevicesClipboardHandler", () => {
             } else {
                 expect.unreachable("Expected TrackBox")
             }
+        })
+    })
+
+    // The reported bug: enter a composite branch, copy+paste a device, undo. Undo must remove the pasted device
+    // WITHOUT also reverting the branch navigation. Entering a branch writes the editing-chain pointer UNMARKED
+    // (UI-state), so a following MARKED paste folds it into the paste's undo entry. copyDevices now calls
+    // editing.mark() first, sealing that navigation as its own step.
+    describe("undo after paste keeps you in the branch", () => {
+        const uiBoxOf = (skeleton: ProjectSkeleton): UserInterfaceBox =>
+            skeleton.boxGraph.boxes().find(box => box instanceof UserInterfaceBox) as UserInterfaceBox
+        const enterBranch = (editing: BoxEditing, ui: UserInterfaceBox, cell: AudioEffectCompositeCellBox): void => {
+            editing.modify(() => ui.editingDeviceChain.refer(cell), false) // UNMARKED UI-state, like UserEditing.edit
+        }
+        const pasteInto = (editing: BoxEditing, cell: AudioEffectCompositeCellBox): void => {
+            editing.modify(() => CompressorDeviceBox.create(target.boxGraph, UUID.generate(), box => {
+                box.host.refer(cell.audioEffects)
+                box.index.setValue(1)
+            }))
+        }
+        const inBranch = (ui: UserInterfaceBox, cell: AudioEffectCompositeCellBox): boolean =>
+            ui.editingDeviceChain.targetVertex.mapOr(vertex => vertex === cell, false)
+
+        it("WITHOUT sealing, undoing the paste also leaves the branch (the bug)", () => {
+            const audioUnit = createAudioUnit(target)
+            const {entry} = addComposite(target, audioUnit)
+            const ui = uiBoxOf(target)
+            const editing = new BoxEditing(target.boxGraph)
+            enterBranch(editing, ui, entry)
+            pasteInto(editing, entry) // no mark() first: the paste folds the navigation in
+            editing.undo()
+            expect(entry.audioEffects.pointerHub.incoming().length, "the pasted device is removed").toBe(1)
+            expect(inBranch(ui, entry), "and the navigation was reverted too").toBe(false)
+        })
+
+        it("copy's editing.mark() seals the navigation so undo keeps you in the branch (the fix)", () => {
+            const audioUnit = createAudioUnit(target)
+            const {entry} = addComposite(target, audioUnit)
+            const ui = uiBoxOf(target)
+            const editing = new BoxEditing(target.boxGraph)
+            enterBranch(editing, ui, entry)
+            editing.mark() // what copyDevices now does before the paste
+            pasteInto(editing, entry)
+            editing.undo()
+            expect(entry.audioEffects.pointerHub.incoming().length, "the pasted device is removed").toBe(1)
+            expect(inBranch(ui, entry), "and you stay in the branch").toBe(true)
         })
     })
 })
