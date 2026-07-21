@@ -90,6 +90,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "Frequency Split",
+                        path: "/manuals/devices/audio/frequency-split",
+                        icon: EffectFactories.FrequencySplit.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "FX Composite",
                         path: "/manuals/devices/audio/effect-composite",
                         icon: EffectFactories.AudioEffectComposite.defaultIcon
