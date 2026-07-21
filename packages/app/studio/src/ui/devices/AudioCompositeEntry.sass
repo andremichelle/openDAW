@@ -1,15 +1,16 @@
 component
   display: flex
   align-items: center
-  gap: 3px
-  padding: 3px
-  border-radius: 3px
+  column-gap: 2px
+  padding: 1px
 
   &:hover
     background-color: rgba(255, 255, 255, 0.03)
 
   &.drop-target
-    outline: 1px dashed currentColor
+    outline: 0.5px dashed currentColor
+    outline-offset: -0.5px
+    border-radius: 3px
     background-color: rgba(255, 255, 255, 0.08)
 
   &.dragging
@@ -30,26 +31,27 @@ component
   .icons
     flex: 1 0 auto
     min-width: 5em
-    min-height: calc(1em + 6px)
+    min-height: 20px
     display: flex
     align-items: center
     column-gap: 2px
-    font-size: 0.75em
+    font-size: 16px
     cursor: grab
-    padding: 2px 3px
+    padding: 1px 2px
     border-radius: 2px
-    background-color: rgba(black, 0.25)
+    background-color: rgba(black, 0.2)
 
     > svg
       padding: 1px
       border-radius: 2px
       color: rgba(black, 0.9)
+      opacity: 0.9
       background-color: var(--color-blue)
 
   .channel-mix
     display: flex
     flex-direction: row
-    margin-left: 0.5em
+    margin: 0 0.5em
     font-size: 0.625em
     column-gap: 0.375em
 
@@ -63,6 +65,7 @@ component
     cursor: default
 
   .remove
+    margin-left: 4px
     font-size: 0.75em
     cursor: pointer
     opacity: 0.5
