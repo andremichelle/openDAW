@@ -6,6 +6,7 @@
 
 pub mod adsr;
 pub mod analyser;
+pub mod autotune;
 pub mod biquad;
 pub mod crusher;
 pub mod dattorro;
@@ -18,6 +19,7 @@ pub mod meter;
 pub mod osc;
 pub mod panning;
 pub mod ppqn;
+pub mod psola;
 pub mod ramp;
 pub mod resampler;
 pub mod simple_limiter;

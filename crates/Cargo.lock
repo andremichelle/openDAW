@@ -234,6 +234,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-autotune"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-compressor"
 version = "0.0.0"
 dependencies = [
