@@ -1,7 +1,7 @@
 import {int, isDefined, Nullable, Optional, Provider, Subscription, UUID} from "@opendaw/lib-std"
-import {Box} from "@opendaw/lib-box"
+import {Box, Field} from "@opendaw/lib-box"
 import {EffectBox, EffectFactories, EffectFactory, Project} from "@opendaw/studio-core"
-import {AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, EffectPointerType} from "@opendaw/studio-adapters"
 import {AudioEffectCompositeCellBox} from "@opendaw/studio-boxes"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
@@ -131,6 +131,27 @@ export namespace AudioCompositeEntryDnD {
                     event.preventDefault()
                     moveToNewBranch(project, composite, atIndex, resolveAudioEffectBoxes(project, data.uuids))
                 }
+            },
+            enter: (allowDrop: boolean) => element.classList.toggle("drop-target", allowDrop),
+            leave: () => element.classList.remove("drop-target")
+        })
+
+    // A drop target that MOVES existing effects OUT into `targetField` (e.g. the branch editor's back-to-parent
+    // pill: drop an effect on it to lift it from the branch onto the parent chain). Appends to the target.
+    export const installMoveOutTarget = ({element, project, targetField}: {
+        element: HTMLElement, project: Project, targetField: Field<EffectPointerType>
+    }): Subscription =>
+        DragAndDrop.installTarget(element, {
+            drag: (_event: DragEvent, data: AnyDragData): boolean =>
+                isExistingAudioEffect(data) && resolveAudioEffectBoxes(project, data.uuids).length > 0,
+            drop: (event: DragEvent, data: AnyDragData): void => {
+                element.classList.remove("drop-target")
+                if (!isExistingAudioEffect(data)) {return}
+                const boxes = resolveAudioEffectBoxes(project, data.uuids)
+                if (boxes.length === 0) {return}
+                event.preventDefault()
+                const insertIndex = targetField.pointerHub.incoming().length
+                project.editing.modify(() => project.api.moveEffects(targetField, boxes, insertIndex))
             },
             enter: (allowDrop: boolean) => element.classList.toggle("drop-target", allowDrop),
             leave: () => element.classList.remove("drop-target")

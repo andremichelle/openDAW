@@ -13,6 +13,7 @@ import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.
 import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
+import {AudioCompositeEntryDnD} from "@/ui/devices/AudioCompositeEntryDnD"
 import {StudioService} from "@/service/StudioService"
 
 const className = Html.adoptStyleSheet(css, "CompositeCellEditor")
@@ -79,6 +80,9 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
         TextTooltip.default(back, () => "Back to the parent chain"),
         Events.subscribe(back, "click", () => userEditingManager.audioUnit.edit(backTarget))
     )
+    // Drop an effect on the back pill to MOVE it out of this branch onto the parent chain (where the composite sits).
+    DeviceHost.chainFieldOf(parent, "audio").ifSome(parentField => lifecycle.own(
+        AudioCompositeEntryDnD.installMoveOutTarget({element: back, project: service.project, targetField: parentField})))
     if (entry !== null) {
         lifecycle.ownAll(
             entry.compositeDevice().labelField.catchupAndSubscribe(owner => name.textContent = owner.getValue()),
