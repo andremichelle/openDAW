@@ -103,6 +103,3 @@ To move an effect between two branches, move it out to the parent chain and then
 - The input is broadcast to every branch identically; branches never feed one another.
 - Each branch's output passes through its own channel strip (gain, pan, mute) before it is summed; solo is resolved across all branches, like the mixer.
 - The output is `dry · input + wet · Σ(branches)`. With Dry at −∞ and Wet at 0 dB (the default), the output is exactly the sum of the branches.
-- An empty composite is a unity pass-through, so inserting one — or emptying it — never kills the chain.
-- Adding, removing or muting a branch is de-clicked, so edits during playback do not pop.
-- **Stereo Split** is a sibling device with the same layout, but its two fixed branches receive the left and right input channels separately instead of the full signal.

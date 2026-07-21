@@ -86,5 +86,3 @@ By default Wet is at 0 dB.
 - Each branch's output passes through its own channel strip (gain, pan, mute) before the sum; solo is resolved across the two branches.
 - The output is `dry · input + wet · (L + R)`. With Dry at −∞ and Wet at 0 dB (the default), the output is the recombined channels.
 - With empty branches the recombination is bit-identical to the input, so an empty Stereo Split is a true bypass.
-- Adding, removing or muting a branch is de-clicked, so edits during playback do not pop.
-- For running arbitrary parallel chains on the **full** signal (rather than split channels), use the **FX Composite** instead.
