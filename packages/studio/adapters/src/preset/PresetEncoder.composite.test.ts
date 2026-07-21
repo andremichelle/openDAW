@@ -53,7 +53,7 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         boxGraph.beginTransaction()
         const capture = CaptureAudioBox.create(boxGraph, UUID.generate())
         const targetUnit = AudioUnitFactory.create(target, AudioUnitType.Instrument, Option.wrap(capture))
-        const attempt = PresetDecoder.insertEffectChain(bytes, targetUnit, 0, PresetHeader.ChainKind.Audio)
+        const attempt = PresetDecoder.insertEffectChain(bytes, targetUnit.audioEffects, 0, PresetHeader.ChainKind.Audio)
         boxGraph.endTransaction()
         expect(attempt.isFailure()).toBe(false)
         // Exactly ONE composite, and it is what sits on the target unit's chain.
@@ -84,7 +84,7 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         boxGraph.beginTransaction()
         const capture = CaptureAudioBox.create(boxGraph, UUID.generate())
         const targetUnit = AudioUnitFactory.create(target, AudioUnitType.Instrument, Option.wrap(capture))
-        const attempt = PresetDecoder.insertEffectChain(bytes, targetUnit, 0, PresetHeader.ChainKind.Audio)
+        const attempt = PresetDecoder.insertEffectChain(bytes, targetUnit.audioEffects, 0, PresetHeader.ChainKind.Audio)
         boxGraph.endTransaction()
         expect(attempt.isFailure(), "decode should succeed").toBe(false)
         return {boxGraph, targetUnit}
@@ -205,5 +205,43 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         const stereoTool = targetGraph.boxes().find(box => box instanceof StereoToolDeviceBox) as StereoToolDeviceBox
         expect((stereoTool.host.targetVertex.unwrap("stereoTool.host").box as AudioEffectCompositeCellBox)
             .label.getValue(), "the deepest effect stays hosted by the inner entry").toBe("inner")
+    })
+
+    // The reported bug: applying / dropping an effect preset onto a device that lives INSIDE a composite branch
+    // must insert into that branch's chain, not the audio unit. The fix is that `insertEffectChain` targets the
+    // FIELD it is given, so a caller passing the cell's `audioEffects` keeps the new device in the branch.
+    it("inserts an effect preset into the target FIELD, hosting the device on a composite branch cell", () => {
+        const source = ProjectSkeleton.empty({createDefaultUser: false, createOutputMaximizer: false})
+        source.boxGraph.beginTransaction()
+        const sourceCapture = CaptureAudioBox.create(source.boxGraph, UUID.generate())
+        const sourceUnit = AudioUnitFactory.create(source, AudioUnitType.Instrument, Option.wrap(sourceCapture))
+        const sourceEffect = StereoToolDeviceBox.create(source.boxGraph, UUID.generate(), box => {
+            box.host.refer(sourceUnit.audioEffects)
+            box.index.setValue(0)
+        })
+        source.boxGraph.endTransaction()
+        const bytes = PresetEncoder.encodeEffects([sourceEffect], PresetHeader.ChainKind.Audio) as ArrayBuffer
+        const target = ProjectSkeleton.empty({createDefaultUser: false, createOutputMaximizer: false})
+        const {boxGraph} = target
+        boxGraph.beginTransaction()
+        const capture = CaptureAudioBox.create(boxGraph, UUID.generate())
+        const targetUnit = AudioUnitFactory.create(target, AudioUnitType.Instrument, Option.wrap(capture))
+        const composite = AudioEffectCompositeBox.create(boxGraph, UUID.generate(), box => {
+            box.host.refer(targetUnit.audioEffects)
+            box.index.setValue(0)
+        })
+        const cell = AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+            box.composite.refer(composite.entries)
+            box.index.setValue(0)
+            box.label.setValue("A")
+        })
+        const attempt = PresetDecoder.insertEffectChain(bytes, cell.audioEffects, 0, PresetHeader.ChainKind.Audio)
+        boxGraph.endTransaction()
+        expect(attempt.isFailure()).toBe(false)
+        const inserted = boxGraph.boxes().filter(box => box instanceof StereoToolDeviceBox)
+        expect(inserted.length).toBe(1)
+        // The host field's OWNER box must be the branch cell, not the audio unit (the #report regression).
+        const hostBox = inserted[0].host.targetVertex.unwrap("inserted.host").box
+        expect(hostBox, "the preset device is hosted by the branch cell, not the unit").toBe(cell)
     })
 })

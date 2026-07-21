@@ -210,14 +210,22 @@ export class PresetService {
             if (!Devices.isEffect(adapter)) {return}
             const effect = adapter as EffectDeviceBoxAdapter
             const insertIndex = effect.indexField.getValue()
+            const accepts = entry.category === "midi-effect" ? "midi" : "audio"
             const chainKind = entry.category === "midi-effect"
                 ? PresetHeader.ChainKind.Midi
                 : PresetHeader.ChainKind.Audio
+            // The effect's OWN host chain, which is the composite branch cell for a nested effect — NOT the audio
+            // unit. Targeting the unit would re-home the replacement onto the parent chain and rip it out (#report).
+            const targetField = DeviceHost.chainFieldOf(effect.deviceHost(), accepts)
+            if (targetField.isEmpty()) {
+                RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
+                return
+            }
             this.project.editing.modify(() => {
                 // Insert first, delete the replaced effect only on success. insertEffectChain validates before
                 // mutating, so a corrupt preset returns a failure without touching the graph; deleting first would
                 // commit the delete (modify only rolls back on a throw) and leave a detached effect behind (#1015).
-                const attempt = PresetDecoder.insertEffectChain(bytes, audioUnitBox, insertIndex, chainKind)
+                const attempt = PresetDecoder.insertEffectChain(bytes, targetField.unwrap(`${accepts} chain`), insertIndex, chainKind)
                 if (attempt.isFailure()) {
                     RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                     return
@@ -814,7 +822,7 @@ export class PresetService {
             const chainKind = isMidi ? PresetHeader.ChainKind.Midi : PresetHeader.ChainKind.Audio
             this.project.editing.modify(() => {
                 const attempt = PresetDecoder.insertEffectChain(
-                    loaded.value, host.audioUnitBoxAdapter().box, insertIndex, chainKind)
+                    loaded.value, field, insertIndex, chainKind)
                 if (attempt.isFailure()) {
                     RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }

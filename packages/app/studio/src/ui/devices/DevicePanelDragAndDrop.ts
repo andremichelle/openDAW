@@ -173,8 +173,8 @@ export namespace DevicePanelDragAndDrop {
                                     dropIndex: number): Promise<void> => {
         const editing = project.userEditingManager.audioUnit.get()
         if (editing.isEmpty()) {return}
-        const targetAudioUnit = project.boxAdapters
-            .adapterFor(editing.unwrap().box, Devices.isHost).audioUnitBoxAdapter().box
+        const host = project.boxAdapters.adapterFor(editing.unwrap().box, Devices.isHost)
+        const targetAudioUnit = host.audioUnitBoxAdapter().box
         const load = await Promises.tryCatch(PresetApplication.loadBytes(dragData.uuid, dragData.source))
         if (load.status === "rejected") {
             console.warn(load.error)
@@ -208,11 +208,17 @@ export namespace DevicePanelDragAndDrop {
         }
         if (dragData.category === "audio-effect" || dragData.category === "midi-effect"
             || dragData.category === "audio-effect-chain" || dragData.category === "midi-effect-chain") {
-            const chainKind = dragData.category === "midi-effect" || dragData.category === "midi-effect-chain"
-                ? PresetHeader.ChainKind.Midi
-                : PresetHeader.ChainKind.Audio
+            const isMidi = dragData.category === "midi-effect" || dragData.category === "midi-effect-chain"
+            const chainKind = isMidi ? PresetHeader.ChainKind.Midi : PresetHeader.ChainKind.Audio
+            // The chain being EDITED (a composite branch cell when inside one), not the audio unit, so a preset
+            // dropped while inside a branch lands in the branch.
+            const field = DeviceHost.chainFieldOf(host, isMidi ? "midi" : "audio")
+            if (field.isEmpty()) {
+                RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
+                return
+            }
             project.editing.modify(() => {
-                const attempt = PresetDecoder.insertEffectChain(load.value, targetAudioUnit, dropIndex, chainKind)
+                const attempt = PresetDecoder.insertEffectChain(load.value, field.unwrap("effect chain"), dropIndex, chainKind)
                 if (attempt.isFailure()) {
                     RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }

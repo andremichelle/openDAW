@@ -13,7 +13,8 @@ import {
     tryCatch,
     UUID
 } from "@opendaw/lib-std"
-import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {EffectPointerType} from "../DeviceAdapter"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioFileBox,
@@ -242,7 +243,7 @@ export namespace PresetDecoder {
 
     export const insertEffectChain = (
         bytes: ArrayBufferLike,
-        targetAudioUnit: AudioUnitBox,
+        targetField: Field<EffectPointerType>,
         insertIndex: int,
         kind: PresetHeader.ChainKind
     ): Attempt<void, string> => {
@@ -273,14 +274,11 @@ export namespace PresetDecoder {
             : sourceAudioUnit.midiEffects
         const effects = IndexedBox.collectIndexedBoxes(sourceField)
         if (effects.length === 0) {return Attempts.err("Preset contains no effects of the requested kind")}
-        const targetField = kind === PresetHeader.ChainKind.Audio
-            ? targetAudioUnit.audioEffects
-            : targetAudioUnit.midiEffects
         const targetFieldAddress = targetField.address
         const hostPointerType: Pointers = kind === PresetHeader.ChainKind.Audio
             ? Pointers.AudioEffectHost
             : Pointers.MIDIEffectHost
-        const targetGraph = targetAudioUnit.graph
+        const targetGraph = targetField.box.graph
         const count = effects.length
         const existing = IndexedBox.collectIndexedBoxes(targetField)
         for (let i = existing.length - 1; i >= 0; i--) {
