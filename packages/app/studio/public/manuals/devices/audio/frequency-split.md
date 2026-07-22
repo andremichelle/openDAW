@@ -104,8 +104,8 @@ By default Wet is at 0 dB.
 
 ## 9. Technical Notes
 
-- The bands are separated by fourth-order Linkwitz-Riley crossovers. Each already-separated lower band is passed through an allpass at every higher crossover, so the bands stay phase-aligned and their sum has a flat magnitude response.
-- With empty bands the summed output is a flat, uncoloured version of the input (the split itself adds no level change).
+- The bands use a subtractive crossover: each band lowpasses the remaining signal (a 24 dB/oct topology-preserving filter) and subtracts itself out, so the bands sum back to the exact input. That makes an unprocessed split a bit-identical pass-through, with no phase, level or peak change, and it lets the crossovers be dragged without artifacts.
+- With empty bands the summed output is bit-identical to the input.
 - Each band's output passes through its own channel strip (gain, pan, mute) before the sum. Solo is resolved across all bands.
 - The output is `dry · input + wet · (sum of bands)`. With Dry at −∞ and Wet at 0 dB (the default), the output is the summed bands.
 - Crossover frequencies run on a fixed 20 Hz to 20 kHz scale, independent of the project sample rate.

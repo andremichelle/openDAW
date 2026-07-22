@@ -2520,6 +2520,49 @@ fn frequency_sine_rms_ratio(engine: &mut Engine, unit: &AudioUnitBinding, freq: 
 }
 
 #[test]
+fn dragging_a_low_crossover_through_the_engine_stays_bounded() {
+    let mut engine = engine_with_frequency_composite_bands();
+    engine.graph = frequency_render_graph_4();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let src = shared_audio_buffer();
+    composite_of(&unit).set_audio_source(src.clone());
+    let block = abi::Block {index: 0, flags: abi::BlockFlags::create(true, false, false, false),
+        p0: 0.0, p1: 1.0, s0: 0, s1: engine_env::RENDER_QUANTUM as u32, bpm: 120.0};
+    let mut seed = 0x9e37_79b9u32;
+    let mut current = 200.0f32;
+    let mut peak = 0.0f32;
+    for round in 0..300 {
+        {
+            let mut buffer = src.borrow_mut();
+            for index in 0..engine_env::RENDER_QUANTUM {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                let value = (seed >> 8) as f32 / 8_388_608.0 - 1.0; // broadband noise (the case that blew up)
+                buffer.left[index] = value;
+                buffer.right[index] = value;
+            }
+        }
+        // Simulate a live drag of the lowest crossover down to 25 Hz by editing its field through the real graph
+        // path (the subscription applies it to the distributor exactly as the studio does).
+        let target = 200.0 - (200.0 - 25.0) * (round as f32 / 150.0).min(1.0);
+        if (target - current).abs() > 0.01 {
+            engine.graph.transaction(&[Update::Primitive {
+                address: Address::of(COMP, vec![CROSSOVER1_KEY]),
+                old: FieldValue::Float32(current), new: FieldValue::Float32(target)
+            }], &engine.registry).expect("edit crossover");
+            current = target;
+        }
+        engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[block]});
+        let out = composite_of(&unit).mix_output.borrow();
+        for index in 0..engine_env::RENDER_QUANTUM {
+            assert!(out.left[index].is_finite(), "engine produced a non-finite sample");
+            peak = peak.max(out.left[index].abs());
+        }
+    }
+    assert!(peak < 4.0, "dragging the low crossover through the engine must stay bounded (peak {peak})");
+}
+
+#[test]
 fn a_four_band_split_keeps_the_two_highest_bands_audible() {
     for &(freq, band) in &[(8_000.0f32, "top"), (2_500.0f32, "high-mid")] {
         let mut engine = engine_with_frequency_composite_bands();

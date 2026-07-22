@@ -4,8 +4,6 @@ use engine_env::RENDER_QUANTUM;
 use std::f64::consts::PI;
 
 const SR: f64 = 48_000.0;
-const SAMPLES: usize = 16_384;
-const SETTLE: usize = SAMPLES / 2;
 
 fn fill_sine(buffer: &SharedAudioBuffer, phase: &mut f64, freq: f64) {
     let step = 2.0 * PI * freq / SR;
@@ -18,44 +16,65 @@ fn fill_sine(buffer: &SharedAudioBuffer, phase: &mut f64, freq: f64) {
     }
 }
 
-fn reconstruction_ratio(band_count: usize, crossovers: &[f64], freq: f64) -> f64 {
-    let mut splitter = FrequencySplitter::new(SR, band_count, crossovers);
-    let input = shared_audio_buffer();
-    let mut phase = 0.0;
-    let (mut energy_in, mut energy_out) = (0.0f64, 0.0f64);
-    let mut processed = 0usize;
-    while processed < SAMPLES {
-        fill_sine(&input, &mut phase, freq);
-        splitter.process(&input);
-        let input_ref = input.borrow();
-        let bands: Vec<_> = (0..band_count).map(|index| splitter.band(index)).collect();
-        for index in 0..RENDER_QUANTUM {
-            if processed + index >= SETTLE {
-                let inp = input_ref.left[index] as f64;
-                let sum: f64 = bands.iter().map(|band| band.borrow().left[index] as f64).sum();
-                energy_in += inp * inp;
-                energy_out += sum * sum;
+fn fill_noise(buffer: &SharedAudioBuffer, seed: &mut u32) {
+    let mut inner = buffer.borrow_mut();
+    for index in 0..RENDER_QUANTUM {
+        *seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        let value = (*seed >> 8) as f32 / 8_388_608.0 - 1.0;
+        inner.left[index] = value;
+        inner.right[index] = value;
+    }
+}
+
+fn max_reconstruction_error(splitter: &FrequencySplitter, input: &SharedAudioBuffer, band_count: usize) -> f32 {
+    let inp = input.borrow();
+    let bands: Vec<_> = (0..band_count).map(|index| splitter.band(index)).collect();
+    let mut error = 0.0f32;
+    for index in 0..RENDER_QUANTUM {
+        let sum: f32 = bands.iter().map(|band| band.borrow().left[index]).sum();
+        assert!(sum.is_finite(), "the summed output is non-finite");
+        error = error.max((sum - inp.left[index]).abs());
+    }
+    error
+}
+
+#[test]
+fn bands_sum_back_to_the_exact_input() {
+    // The subtractive crossover reconstructs the input sample-for-sample (not merely flat magnitude like a
+    // Linkwitz-Riley allpass sum), so an unprocessed split is a true pass-through: identical waveform and peak.
+    for &count in &[2usize, 3, 4] {
+        let mut splitter = FrequencySplitter::new(SR, count, &[200.0, 1_000.0, 5_000.0]);
+        let input = shared_audio_buffer();
+        let mut seed = 0x1234_5678u32;
+        let mut error = 0.0f32;
+        for round in 0..1_000 {
+            fill_noise(&input, &mut seed);
+            splitter.process(&input);
+            if round > 50 {
+                error = error.max(max_reconstruction_error(&splitter, &input, count));
             }
         }
-        processed += RENDER_QUANTUM;
-    }
-    (energy_out / energy_in).sqrt()
-}
-
-#[test]
-fn two_bands_reconstruct_flat() {
-    for &freq in &[60.0, 250.0, 1_000.0, 4_000.0, 12_000.0] {
-        let ratio = reconstruction_ratio(2, &[1_000.0], freq);
-        assert!((ratio - 1.0).abs() < 0.02, "2-band sum flat at {freq}Hz (ratio {ratio})");
+        assert!(error < 1.0e-4, "{count}-band sum must equal the input sample-for-sample (max error {error})");
     }
 }
 
 #[test]
-fn four_bands_reconstruct_flat_across_all_crossovers() {
-    for &freq in &[60.0, 200.0, 450.0, 1_000.0, 2_500.0, 5_000.0, 9_000.0, 15_000.0] {
-        let ratio = reconstruction_ratio(4, &[200.0, 1_000.0, 5_000.0], freq);
-        assert!((ratio - 1.0).abs() < 0.03, "4-band sum flat at {freq}Hz (ratio {ratio})");
+fn dragging_a_low_crossover_under_noise_keeps_the_output_identical() {
+    // The failing case: broadband material while a low crossover is dragged. The direct-form Linkwitz-Riley went
+    // unstable (tens of dB) here; the subtractive TPT split keeps the summed output equal to the input at every
+    // sample, so there is neither a blow-up nor any peak change while dragging.
+    let mut splitter = FrequencySplitter::new(SR, 4, &[200.0, 1_000.0, 5_000.0]);
+    let input = shared_audio_buffer();
+    let mut seed = 0x9e37_79b9u32;
+    let mut error = 0.0f32;
+    for round in 0..2_000 {
+        fill_noise(&input, &mut seed);
+        let phase01 = (round % 300) as f64 / 300.0;
+        splitter.set_crossover(0, 30.0 * (200.0f64 / 30.0).powf((phase01 - 0.5).abs() * 2.0));
+        splitter.process(&input);
+        error = error.max(max_reconstruction_error(&splitter, &input, 4));
     }
+    assert!(error < 1.0e-4, "the output stays identical to the input while dragging (max error {error})");
 }
 
 #[test]
