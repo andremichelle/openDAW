@@ -2,16 +2,39 @@ component
   display: flex
   flex-direction: column
   height: 100%
+  outline: none
+
+  .navigation
+    flex: 1
+    display: flex
+    flex-direction: column
+    align-items: center
+    justify-content: center
+    row-gap: 0.5rem
+
+    .back-button
+      display: grid
+      place-items: center
+      font-size: 0.75em
+      width: 20px
+      height: 20px
+      border-radius: 10px
+      cursor: pointer
+      color: var(--color-shadow)
+      background-color: rgba(white, 0.04)
+
+      &:hover
+        color: var(--color-blue)
+        background-color: rgba(white, 0.08)
+
+      > svg
+        transform: translateY(-1px)
 
   .entry-numbers
-    flex: 1
     display: grid
     grid-template-columns: repeat(4, min-content)
-    align-content: center
     gap: 2px
     padding: 0 0.25rem
-    width: fit-content
-    margin: auto
 
     .entry-number
       flex: 0 0 20px
@@ -22,11 +45,12 @@ component
       place-items: center
       border-radius: 10px
       color: var(--color-shadow)
-      background-color: rgba(black, 0.2)
+      background-color: rgba(black, 0.08)
       cursor: pointer
 
       &.current
         color: var(--color-blue)
+        background-color: rgba(white, 0.08)
 
   .header
     margin: 0
@@ -35,25 +59,22 @@ component
     align-items: center
     padding: 0 0.25rem
     font-size: 11px
+    color: var(--color-blue)
+    outline: none
 
-    .back
-      display: flex
-      align-items: center
-      gap: 0.25em
-      padding-right: 0.5rem
-      cursor: pointer
-      border-radius: 2px
+    &.selected
+      border-radius: 0 0 3px 3px
+      background-color: rgba(white, 0.03)
 
-      &.drop-target
-        outline: 1px dashed var(--color-blue)
-        outline-offset: 2px
-
-      .device-name
-        border-radius: 2px
-        padding: 0 0.35em
-        line-height: 1.4em
-        color: rgba(0, 0, 0, 0.8)
-        white-space: nowrap
+    > h1
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+      font-size: inherit
+      letter-spacing: 0.03em
+      min-height: 2rem
+      line-height: 2rem
+      margin: 0
 
   .controls
     display: flex

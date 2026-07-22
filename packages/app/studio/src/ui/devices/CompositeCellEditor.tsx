@@ -1,8 +1,11 @@
 import css from "./CompositeCellEditor.sass?inline"
-import {DefaultObservableValue, Lifecycle, MutableObservableValue, Terminable} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, Lifecycle, MutableObservableValue, Option, panic, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Vertex} from "@opendaw/lib-box"
 import {Events, Html} from "@opendaw/lib-dom"
+import {Promises} from "@opendaw/lib-runtime"
+import {TextScroller} from "@/ui/TextScroller"
+import {Surface} from "@/ui/surface/Surface"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {AudioEffectCompositeCellBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
 import {Icon} from "@/ui/components/Icon"
@@ -13,9 +16,8 @@ import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.
 import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
-import {AudioCompositeEntryDnD} from "@/ui/devices/AudioCompositeEntryDnD"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {MenuItem} from "@opendaw/studio-core"
+import {ClipboardManager, DevicesClipboard, MenuItem} from "@opendaw/studio-core"
 import {MenuItems} from "@/ui/devices/menu-items"
 import {DebugMenus} from "@/ui/menu/debug"
 import {StudioService} from "@/service/StudioService"
@@ -31,7 +33,7 @@ type Construct = {
 // Shown in the instrument slot while a composite ENTRY is edited: the way BACK to the parent composite plus the
 // entry's own gain / pan / mute / solo, matching the entry row's controls.
 export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
-    const {editing, midiLearning, userEditingManager} = service.project
+    const {editing, midiLearning, userEditingManager, deviceSelection} = service.project
     // A composite CELL accepts the Editing pointer at the box level; an AUDIO UNIT only through its `editing`.
     const parent = host.deviceHost()
     const backTarget: Vertex<Pointers> = parent instanceof AudioEffectCompositeCellBoxAdapter
@@ -40,13 +42,26 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     const entry = host instanceof AudioEffectCompositeCellBoxAdapter ? host : null
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
-    // The parent composite's name as a clickable pill (with a back arrow) that goes back, like the Playfield.
-    const name: HTMLElement = <span className="device-name" style={{backgroundColor: Colors.blue.toString()}}/>
-    const back: HTMLElement = (
-        <div className="back">
-            <Icon symbol={IconSymbol.ArrowLeft}/>
-            {name}
-        </div>
+    // The parent composite's name as a NORMAL device-header label (scroller + dblclick rename, no pill):
+    // clicking SELECTS it (clearing the device selection), so a following paste lands at the start of this
+    // branch's chain — the instrument-header semantics. Going back moves to the button above the numbers.
+    const name: HTMLElement = (
+        <h1 onInit={element => {
+            lifecycle.ownAll(
+                TextScroller.install(element),
+                Events.subscribeDblDwn(element, async event => {
+                    if (entry === null) {return}
+                    const labelField = entry.compositeDevice().labelField
+                    const {status, error, value} = await Promises.tryCatch(Surface.get(element)
+                        .requestFloatingTextInput(event, labelField.getValue()))
+                    if (status === "rejected") {
+                        if (!Errors.isAbort(error)) {return panic(error)}
+                    } else {
+                        editing.modify(() => labelField.setValue(value))
+                    }
+                })
+            )
+        }}/>
     )
     // The standard device-editor hamburger: the same menu as every input-slot editor. For a one-sided
     // host it offers exactly the audio "Add ..." entries, targeting THIS branch's chain.
@@ -63,7 +78,12 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             <Icon symbol={IconSymbol.Menu}/>
         </MenuButton>
     )
-    const header: HTMLElement = <h1 className="header">{back}{menu}</h1>
+    const header: HTMLElement = <h1 className="header" tabIndex={0}>{name}{menu}</h1>
+    const backButton: HTMLElement = (
+        <div className="back-button">
+            <Icon symbol={IconSymbol.RoundUp}/>
+        </div>
+    )
     const controls = entry === null ? <div/> : (
         <div className="controls">
             <div className="channel-mix">
@@ -97,14 +117,36 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     // Every sibling branch as a clickable number badge, the edited one highlighted: quick navigation
     // between the composite's chains without going back to the parent.
     const numbers: HTMLElement = <div className="entry-numbers"/>
-    const element: HTMLElement = <div className={className}>{header}{controls}{numbers}</div>
-    lifecycle.ownAll(
-        TextTooltip.default(back, () => "Back to the parent chain"),
-        Events.subscribe(back, "click", () => userEditingManager.audioUnit.edit(backTarget))
+    const navigation: HTMLElement = (
+        <div className="navigation">
+            {backButton}
+            {numbers}
+        </div>
     )
-    // Drop an effect on the back pill to MOVE it out of this branch onto the parent chain (where the composite sits).
-    DeviceHost.chainFieldOf(parent, "audio").ifSome(parentField => lifecycle.own(
-        AudioCompositeEntryDnD.installMoveOutTarget({element: back, project: service.project, targetField: parentField})))
+    const element: HTMLElement = <div className={className}>{header}{controls}{navigation}</div>
+    lifecycle.ownAll(
+        TextTooltip.default(backButton, () => "Back to the parent chain"),
+        Events.subscribe(backButton, "click", () => userEditingManager.audioUnit.edit(backTarget)),
+        Events.subscribe(name, "pointerdown", () => {
+            deviceSelection.deselectAll()
+            header.classList.add("selected")
+            header.focus()
+        }),
+        deviceSelection.catchupAndSubscribe({
+            onSelected: () => header.classList.remove("selected"),
+            onDeselected: () => {}
+        }),
+        // The focused header receives the clipboard, exactly like a device header: with the selection
+        // cleared by the click above, a paste lands at the start of this branch's chain.
+        ClipboardManager.install(header, DevicesClipboard.createHandler({
+            getEnabled: () => true,
+            editing,
+            selection: deviceSelection,
+            boxGraph: service.project.boxGraph,
+            boxAdapters: service.project.boxAdapters,
+            getHost: (): Option<DeviceHost> => Option.wrap(host)
+        }))
+    )
     if (entry !== null) {
         const composite = entry.compositeDevice()
         const rebuildNumbers = () => {
