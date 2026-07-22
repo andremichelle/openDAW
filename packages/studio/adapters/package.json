@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-adapters",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "LGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
@@ -31,8 +31,8 @@
     "@opendaw/lib-midi": "^0.0.70",
     "@opendaw/lib-runtime": "^0.0.83",
     "@opendaw/lib-std": "^0.0.82",
-    "@opendaw/studio-boxes": "^0.0.99",
-    "@opendaw/studio-enums": "^0.0.82",
+    "@opendaw/studio-boxes": "^0.0.100",
+    "@opendaw/studio-enums": "^0.0.83",
     "soundfont2": "^0.5.0"
   },
   "devDependencies": {

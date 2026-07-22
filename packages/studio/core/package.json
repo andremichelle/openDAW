@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "LGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
@@ -42,9 +42,9 @@
     "@opendaw/lib-runtime": "^0.0.83",
     "@opendaw/lib-std": "^0.0.82",
     "@opendaw/nam-wasm": "^1.2.0",
-    "@opendaw/studio-adapters": "^0.1.1",
-    "@opendaw/studio-boxes": "^0.0.99",
-    "@opendaw/studio-enums": "^0.0.82",
+    "@opendaw/studio-adapters": "^0.1.2",
+    "@opendaw/studio-boxes": "^0.0.100",
+    "@opendaw/studio-enums": "^0.0.83",
     "dropbox": "^10.34.0",
     "y-websocket": "^1.4.5",
     "yjs": "^13.6.27",
@@ -58,9 +58,9 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@opendaw/eslint-config": "^0.0.28",
-    "@opendaw/studio-core-processors": "^0.0.128",
-    "@opendaw/studio-core-workers": "^0.0.117",
-    "@opendaw/studio-forge-boxes": "^0.0.99",
+    "@opendaw/studio-core-processors": "^0.0.129",
+    "@opendaw/studio-core-workers": "^0.0.118",
+    "@opendaw/studio-forge-boxes": "^0.0.100",
     "@opendaw/typescript-config": "^0.0.32"
   },
   "gitHead": "e4f70170c5947610932306da94e7f0bb817e43b3"
