@@ -702,8 +702,8 @@ impl Engine {
                 }
             }
             Wired::Bus(bus) => {
-                for params in &bus.device_params {
-                    refresh_params(&params.handles, params.reg, params.state_ptr, position);
+                for member in &bus.audio {
+                    refresh_member(member, position);
                 }
             }
             Wired::Frozen(_) => {} // pre-rendered: no live parameters
@@ -749,7 +749,11 @@ impl Engine {
                     self.rebind_member(member, &invalidate, position);
                 }
             }
-            Wired::Bus(_) => {} // a bus's fx params are bound at (wholesale) build; live automation re-bind deferred
+            Wired::Bus(bus) => {
+                for member in &mut bus.audio {
+                    self.rebind_member(member, &invalidate, position);
+                }
+            }
             Wired::Frozen(_) => {} // pre-rendered: no live parameters
             Wired::MidiOut(midi) => {
                 for member in &mut midi.midi {

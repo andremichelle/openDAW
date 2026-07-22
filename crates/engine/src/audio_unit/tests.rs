@@ -1820,15 +1820,78 @@ fn adding_an_effect_to_the_output_unit_wires_it_live() {
         .expect("the output unit reconciles like a normal bus unit (not a static singleton)");
     match unit.wired.as_ref().expect("wired after reconcile") {
         Wired::Bus(bus) => {
-            // The master sum is shared (kept out of `nodes` so a teardown never removes it), so the output unit's
-            // nodes are the built effect + strip, and its device_params carry the live-added effect.
-            assert_eq!(bus.device_params.len(), 1, "the live-added output effect is built into the chain");
-            assert!(bus.nodes.len() >= 2, "the effect + strip are wired ({} nodes)", bus.nodes.len());
+            // The master sum is shared (`sum_node` is None so a teardown never removes it); the live-added
+            // effect is a chain member wired between the shared sum and the strip.
+            assert!(bus.sum_node.is_none(), "the output unit reuses the shared master sum");
+            assert_eq!(bus.audio.len(), 1, "the live-added output effect is built into the chain");
+            assert!(bus.edges.len() >= 2, "the effect + strip are wired ({} edges)", bus.edges.len());
         }
         _ => panic!("expected the output unit to reconcile as a Bus")
     }
     // And the terminal wiring: `render` reads the output unit's strip output, not the raw master sum.
     assert!(engine.output_bus.is_some(), "the output unit republished its strip as the render buffer");
+}
+
+#[test]
+fn an_effect_composite_on_the_output_unit_is_realized() {
+    // A bus / output chain must build composites through the same member path as every other chain.
+    // Regression for "a Frequency Split added to the output bus is inert: no spectrum, band solo does nothing"
+    // — the old bus builder resolved plugin effects only and silently skipped composite boxes.
+    use super::BUS_ENABLED_KEY;
+    const OUT_UNIT: Uuid = [80u8; 16];
+    const OUT_BUS: Uuid = [81u8; 16];
+    const BUS_COMP: Uuid = [82u8; 16];
+    const BUS_ENTRY: Uuid = [83u8; 16];
+    const TYPE_KEY: u16 = 1;
+    let mut engine = engine_with_composite();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(OUT_UNIT, "AudioUnitBox", &[
+            (TYPE_KEY, FieldValue::String("output".into())),
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(OUT_BUS, "AudioBusBox", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(OUT_UNIT, vec![UNIT_INPUT_KEY])))),
+            (6, FieldValue::Hook),
+            (BUS_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(BUS_COMP, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(OUT_UNIT, vec![UNIT_AUDIO_KEY])))),
+            (EFFECT_INDEX_KEY, FieldValue::Int32(0)),
+            (DEVICE_ENABLED_KEY, FieldValue::Boolean(true)),
+            (ENTRIES_FIELD, FieldValue::Hook),
+            (INPUT_TAP_FIELD, FieldValue::Hook),
+            (DRY_KEY, FieldValue::Float32(f32::NEG_INFINITY)),
+            (WET_KEY, FieldValue::Float32(0.0))
+        ]),
+        graph_box(BUS_ENTRY, "TestCompositeCell", &[
+            (ENTRY_COMPOSITE_KEY, FieldValue::Pointer(Some(Address::of(BUS_COMP, vec![ENTRIES_FIELD])))),
+            (ENTRY_CHAIN_FIELD, FieldValue::Hook),
+            (ENTRY_INDEX_KEY, FieldValue::Int32(0)),
+            (ENTRY_LABEL_KEY, FieldValue::String("A".to_string())),
+            (ENTRY_GAIN_KEY, FieldValue::Float32(0.0)),
+            (ENTRY_PAN_KEY, FieldValue::Float32(0.0)),
+            (ENTRY_MUTE_KEY, FieldValue::Boolean(false)),
+            (ENTRY_SOLO_KEY, FieldValue::Boolean(false))
+        ])
+    ]);
+    engine.unit_changes.borrow_mut().added.push(OUT_UNIT);
+    engine.reconcile_units();
+    let unit = engine.audio_units.iter().find(|unit| unit.unit == OUT_UNIT).expect("output unit");
+    match unit.wired.as_ref().expect("wired after reconcile") {
+        Wired::Bus(bus) => {
+            assert_eq!(bus.audio.len(), 1, "the composite is built into the master chain");
+            let member = &bus.audio[0];
+            assert!(matches!(member.proc, ProcHandle::EffectComposite(_)),
+                "the member is the realized composite, not silently skipped");
+            assert!(member.input_node.is_some(), "the chain enters at the composite's distributor");
+            assert!(bus.edges.len() >= 2, "sum -> composite -> strip are wired ({} edges)", bus.edges.len());
+            if let ProcHandle::EffectComposite(binding) = &member.proc {
+                assert_eq!(binding.entry_count(), 1, "the composite's entry is built");
+            }
+        }
+        _ => panic!("expected the output unit to reconcile as a Bus")
+    }
 }
 
 #[test]

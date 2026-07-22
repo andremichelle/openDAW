@@ -240,15 +240,14 @@ impl Wired {
 pub(crate) struct BusWired {
     pub(crate) bus_uuid: Uuid, // the AudioBusBox uuid; its sum node + `bus_registry` entry are dropped on teardown
     pub(crate) sum_buffer: SharedAudioBuffer, // the RAW sum (pre-fx), the `useInstrumentOutput` stem tap
+    pub(crate) sum_node: Option<NodeId>, // this bus's own sum; `None` for the output unit (the shared master is never removed)
     pub(crate) pre_strip: SharedAudioBuffer, // the fx-chain output feeding the strip (the send tap)
     pub(crate) pre_strip_node: NodeId,
     pub(crate) strip_id: NodeId,
     pub(crate) strip_output: SharedAudioBuffer,
-    pub(crate) nodes: Vec<NodeId>,           // sum + fx nodes + strip (removed on teardown)
+    pub(crate) audio: Vec<Member>,           // the bus's AUDIO-effects chain (sum -> fx0 -> ... -> strip), like a leaf
     pub(crate) edges: Vec<(NodeId, NodeId)>, // sum -> fx0 -> ... -> strip
-    pub(crate) device_params: Vec<DeviceParams>,
-    pub(crate) sidechains: Vec<SidechainBinding>, // a sidechained bus effect (e.g. a ducking compressor) resolved each pass
-    pub(crate) subs: Vec<SubscriptionId>     // the bus `enabled` monitor + each fx device's `enabled` monitor
+    pub(crate) subs: Vec<SubscriptionId>     // the bus `enabled` monitor
 }
 
 /// A unit's currently-wired OUTPUT route: which target bus sum its channel strip feeds. `bus` is the target
@@ -1008,26 +1007,21 @@ impl Engine {
             Wired::Bus(bus) => {
                 // Drop this bus from the registry FIRST so any source unit still routed to it re-resolves to the
                 // master fallback (and skips removing its summed source from the now-gone sum). Then remove the
-                // enabled monitors, the fx params, the internal edges, and every node (sum + fx + strip).
+                // enabled monitor, the internal edges, the strip + own sum, and terminate every fx member.
                 self.bus_registry.remove(&bus.bus_uuid);
                 self.output_registry.remove(&Address::of(bus.bus_uuid, vec![]));
                 for sub in bus.subs {
                     self.graph.unsubscribe(sub);
                 }
-                for binding in bus.sidechains {
-                    for port in binding.ports {
-                        self.graph.unsubscribe(port.pointer_sub);
-                    }
-                }
-                for params in &bus.device_params {
-                    self.output_registry.remove(&Address::of(params.device_uuid(), vec![]));
-                }
-                self.teardown_device_params(bus.device_params);
                 for (source, target) in &bus.edges {
                     self.context.remove_edge(*source, *target);
                 }
-                for node in bus.nodes {
-                    self.context.remove_processor(node);
+                self.context.remove_processor(bus.strip_id);
+                if let Some(sum_node) = bus.sum_node {
+                    self.context.remove_processor(sum_node);
+                }
+                for member in bus.audio {
+                    self.terminate_member(member);
                 }
             }
             Wired::Frozen(frozen) => {

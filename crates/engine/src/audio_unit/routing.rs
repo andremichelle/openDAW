@@ -34,8 +34,8 @@ impl Engine {
                     }
                 }
                 Some(Wired::Bus(bus)) => {
-                    for binding in &mut bus.sidechains {
-                        self.resolve_one_sidechain(binding);
+                    for member in &mut bus.audio {
+                        visit_member_sidechains(member, &mut |binding| self.resolve_one_sidechain(binding));
                     }
                 }
                 Some(Wired::Frozen(_)) => {} // pre-rendered: no live devices, no sidechains

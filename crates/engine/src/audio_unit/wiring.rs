@@ -60,8 +60,32 @@ impl Engine {
         }));
     }
 
-    pub(crate) fn reconcile_bus(&mut self, unit: &mut AudioUnitBinding, bus_uuid: Uuid, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) {
-        self.teardown_unit_wired(unit);
+    pub(crate) fn reconcile_bus(&mut self, unit: &mut AudioUnitBinding, bus_uuid: Uuid, signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) {
+        // Pool the previous bus fx members so survivors keep their DSP state across a chain edit (mirrors
+        // `reconcile_tape`); the sum + strip are rebuilt fresh.
+        let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
+        match unit.wired.take() {
+            Some(Wired::Bus(bus)) => {
+                self.bus_registry.remove(&bus.bus_uuid);
+                self.output_registry.remove(&Address::of(bus.bus_uuid, vec![]));
+                self.output_registry.remove(&Address::of(unit.unit, vec![]));
+                for sub in bus.subs {
+                    self.graph.unsubscribe(sub);
+                }
+                for (source, target) in &bus.edges {
+                    self.context.remove_edge(*source, *target);
+                }
+                self.context.remove_processor(bus.strip_id);
+                if let Some(sum_node) = bus.sum_node {
+                    self.context.remove_processor(sum_node);
+                }
+                for member in bus.audio {
+                    pool.insert(member.uuid, member);
+                }
+            }
+            Some(other) => self.teardown_wired_value(unit.unit, other),
+            None => {}
+        }
         // THE output (terminal master) unit is a bus whose SUM is the engine's shared master-sum node (every unit
         // routes into it via `sum_of(None)`), and whose STRIP output is what `render` reads. So it reuses `master`
         // instead of creating a fresh sum, and keeps `master_id` OUT of `nodes` so a chain-edit teardown never
@@ -83,10 +107,7 @@ impl Engine {
         // that targets this bus (e.g. a vocoder modulated by a MUTED submix) taps its full signal. Mirrors TS
         // `AudioBusProcessor` registering `adapter.address -> #audioOutput` (the sum), NOT the strip output.
         self.output_registry.register(Address::of(bus_uuid, vec![]), sum_buffer.clone(), sum_id);
-        let mut nodes = if is_output { Vec::new() } else { vec![sum_id] };
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
-        let mut device_params: Vec<DeviceParams> = Vec::new();
-        let mut sidechains: Vec<SidechainBinding> = Vec::new();
         let mut subs: Vec<SubscriptionId> = Vec::new();
         // A disabled bus (`enabled` = 4) sums nothing (emits silence). The master never disables (it is the output).
         if !is_output {
@@ -95,57 +116,36 @@ impl Engine {
                 if let Some(enabled) = value.as_bool() { sum_enable.borrow_mut().set_enabled(enabled) }
             }));
         }
-        // The bus's own audio-effect chain (host 23), ordered by index, enabled only: sum -> fx0 -> ... Each
-        // enabled / disabled effect gets a `This` monitor so a toggle re-wires (wholesale, like a chain edit).
+        // The bus's own audio-effect chain (host 23), ordered by index: one builder for every audio chain —
+        // a plugin effect OR an effect composite (an FX stack / split), exactly like a leaf / tape unit.
+        let mut audio_members: Vec<Member> = Vec::new();
+        for device_uuid in unit.audio.sorted() {
+            if let Some(member) = self.take_or_build_audio_member(&mut pool, device_uuid, signal, invalidate, rewire) {
+                audio_members.push(member);
+            }
+        }
+        for (_, member) in core::mem::take(&mut pool) {
+            self.terminate_member(member);
+        }
+        // Wire sum -> fx0 -> ... (a disabled effect is SKIPPED, its processor + state untouched).
         let mut source = sum_buffer.clone();
         let mut source_id = sum_id;
-        for device_uuid in unit.audio.sorted() {
-            let resolved = self.graph.find_box(&device_uuid).and_then(|device_box| self.device_for_type(&device_box.name));
-            let device = match resolved {
-                Some(device) if device.kind == DEVICE_KIND_AUDIO_EFFECT => device,
-                _ => continue
-            };
-            let rewire = Self::rewire_signal(unit);
-            subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(device_uuid, vec![DEVICE_ENABLED_KEY]),
-                Box::new(move |_graph, _update| rewire())));
-            if !self.device_enabled(device_uuid) {
-                continue; // bypassed: not built, not wired into the chain
+        for member in &audio_members {
+            if !self.device_enabled(member.uuid) {
+                continue;
             }
-            let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
-            let node_state = node.borrow().state_ptr();
-            let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
-            let params = self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink), invalidate);
-            node.borrow_mut().set_audio_source(source);
-            source = node.borrow().audio_output();
-            let node_id = self.context.register_processor(node.clone());
-            self.context.set_label(node_id, device_label(&self.graph, &device_uuid));
-            // The effect's own output under its box uuid, for direct sidechain targeting (see
-            // `take_or_build_audio`); torn down via `device_params` in `teardown_wired_value`.
-            self.output_registry.register(Address::of(device_uuid, vec![]), source.clone(), node_id);
-            let meter_slot = node.borrow().meter_slot();
-            self.broadcasts.register(device_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
-            // A sidechained bus effect (e.g. a ducking compressor on a submix): build its sidechain binding so the
-            // resolve pass feeds it the source unit's signal. Without this it detects on its own (hot) main input
-            // and over-ducks everything routed through the bus.
-            if !params.sidechain_paths.is_empty() {
-                let mut ports = Vec::new();
-                for (index, path) in params.sidechain_paths.iter().cloned().enumerate() {
-                    let port_signal = signal.clone();
-                    let pointer_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(device_uuid, path.clone()),
-                        Box::new(move |_graph, _update| port_signal()));
-                    ports.push(SidechainPort {port_id: index as u32 + 2, path, resolved: None, pointer_sub});
-                }
-                sidechains.push(SidechainBinding {effect: node.clone(), node_id, device_uuid, ports});
+            match &member.proc {
+                ProcHandle::Audio(node) => node.borrow_mut().set_audio_source(source.clone()),
+                // An effect composite takes its input at its DISTRIBUTOR and hands the chain on from its MIX.
+                ProcHandle::EffectComposite(binding) => binding.set_audio_source(source.clone()),
+                _ => {}
             }
-            device_params.push(params);
-            self.context.register_edge(source_id, node_id);
-            edges.push((source_id, node_id));
-            nodes.push(node_id);
+            let node_id = member.node_id.expect("member.node_id");
+            let entry_node = member.input_node.unwrap_or(node_id);
+            self.context.register_edge(source_id, entry_node);
+            edges.push((source_id, entry_node));
+            source = member.output.clone().expect("member.output");
             source_id = node_id;
-        }
-        let position = self.transport.position();
-        for params in &device_params {
-            refresh_params(&params.handles, params.reg, params.state_ptr, position);
         }
         let pre_strip = source.clone();
         let pre_strip_node = source_id;
@@ -158,15 +158,16 @@ impl Engine {
         self.context.set_label(strip_id, format!("strip:bus {:02x}{:02x}", bus_uuid[0], bus_uuid[1]));
         self.context.register_edge(source_id, strip_id);
         edges.push((source_id, strip_id));
-        nodes.push(strip_id);
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
         // The terminal master unit's strip output IS the engine's final render buffer: republish it on every
         // rebuild so `render` reads the current chain (an added / removed master effect takes effect live).
         if is_output {
             self.output_bus = Some(strip_output.clone());
         }
+        let sum_node = if is_output { None } else { Some(sum_id) };
         unit.wired = Some(Wired::Bus(BusWired {
-            bus_uuid, sum_buffer, pre_strip, pre_strip_node, strip_id, strip_output, nodes, edges, device_params, sidechains, subs
+            bus_uuid, sum_buffer, sum_node, pre_strip, pre_strip_node, strip_id, strip_output,
+            audio: audio_members, edges, subs
         }));
     }
 
@@ -197,7 +198,7 @@ impl Engine {
         let invalidate = automation_invalidate(unit);
         let rewire = Self::rewire_signal(unit); // a device `enabled` toggle re-wires the chain edge-only
         if box_name == BUS_BOX_TYPE {
-            self.reconcile_bus(unit, instrument_uuid, &signal, &invalidate); // a RETURN / submix bus unit
+            self.reconcile_bus(unit, instrument_uuid, &signal, &invalidate, &rewire); // a RETURN / submix bus unit
         } else if let Some(spec) = self.composite_for_type(&box_name) {
             self.reconcile_composite(unit, instrument_uuid, spec, &signal, &invalidate, &rewire);
         } else if box_name == TAPE_BOX_TYPE {
