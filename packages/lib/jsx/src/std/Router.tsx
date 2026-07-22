@@ -52,6 +52,12 @@ export const Router = <SERVICE = never>({
             const request: PageRequest<SERVICE> = loading.unwrap()
             request.preloader.ifSome(lifecycle => lifecycle.terminate())
             request.state = "cancelled"
+            // Tear the cancelled page down NOW, before its replacement's factory runs. Its factory has already
+            // executed (side effects like screen subscriptions and singleton panel bindings are live), and the
+            // replacement is created synchronously below; without this a reused singleton (the workspace panels)
+            // would be bound twice while this page still holds it. Deferring to the awaited cleanup below is too
+            // late. Terminate is idempotent, so the later `cancelled` cleanup is a harmless no-op.
+            request.lifecycle.terminate()
             loading = Option.None
         }
         const lifecycle = new Terminator()
