@@ -298,10 +298,17 @@ export class ProjectApi {
         })
     }
 
-    duplicateRegion<R extends AnyRegionBoxAdapter>(region: R, options?: { findFreeSpace?: boolean }): Option<R> {
+    // The copy is created DIRECTLY at its final position and overlap behavior (clip / push-existing /
+    // keep-existing) is evaluated exactly once, at that final range. An explicit `position` wins over both
+    // defaults; without one the copy lands after the region (`region.complete`). Never resolve against a
+    // transient placement: an abutting neighbor must not be trimmed / pushed for a collision that only
+    // exists because the caller repositions the copy one statement later.
+    duplicateRegion<R extends AnyRegionBoxAdapter>(region: R,
+                                                  options?: { findFreeSpace?: boolean, position?: ppqn }): Option<R> {
         if (region.trackBoxAdapter.isEmpty()) {return Option.None}
         const track = region.trackBoxAdapter.unwrap()
-        if (options?.findFreeSpace === true) {
+        const explicitPosition = options?.position
+        if (!isDefined(explicitPosition) && options?.findFreeSpace === true) {
             let insert = region.complete
             for (const {position, complete} of track.regions.collection.iterateFrom(region.complete)) {
                 if (insert + region.duration <= position) {break}
@@ -311,18 +318,18 @@ export class ProjectApi {
                 position: insert,
                 consolidate: true
             }) as R)
-        } else {
-            const clearFrom = region.complete
-            const clearTo = region.complete + region.duration
-            const targetTrack = this.#project.overlapResolver.resolveTargetTrack(track, clearFrom, clearTo)
-            const solver = this.#project.overlapResolver.fromRange(targetTrack, clearFrom, clearTo)
-            const duplicate = region.copyTo({
-                position: region.complete,
-                consolidate: true
-            }) as R
-            solver()
-            return Option.wrap(duplicate)
         }
+        const position = explicitPosition ?? region.complete
+        const complete = position + region.duration
+        const targetTrack = this.#project.overlapResolver.resolveTargetTrack(track, position, complete)
+        const solver = this.#project.overlapResolver.fromRange(targetTrack, position, complete)
+        const duplicate = region.copyTo({
+            position,
+            target: targetTrack.box.regions,
+            consolidate: true
+        }) as R
+        solver()
+        return Option.wrap(duplicate)
     }
 
     async exportMIDI(collection: NoteEventCollectionBoxAdapter, suggestedName: string = "notes.mid") {
