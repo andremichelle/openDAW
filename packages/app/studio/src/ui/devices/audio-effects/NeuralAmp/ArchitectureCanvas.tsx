@@ -19,7 +19,7 @@ const isLayerGated = (layer: NamModelLayerConfig): boolean => {
 }
 
 export const ArchitectureCanvas = ({lifecycle, model}: Construct) => {
-    const layers = model.config.layers
+    const layers = model.config?.layers
     if (!isDefined(layers) || layers.length === 0) return (<div className="empty">No layers</div>)
     const canvas: HTMLCanvasElement = (<canvas/>)
     lifecycle.own(Html.watchResize(canvas, () => {
