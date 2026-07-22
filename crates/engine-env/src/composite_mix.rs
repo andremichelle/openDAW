@@ -63,6 +63,7 @@ pub struct DistributorProcessor {
     frequency: Option<FrequencySplitter>,
     analyser: Option<Box<AudioAnalyser>>, // input-spectrum FFT for the Frequency editor; None for other modes
     spectrum: BroadcastSlot,
+    spectrum_active: Rc<Cell<bool>>, // gates the FFT to when the editor actually subscribes
     silent: SharedAudioBuffer, // fixed cleared buffer for out-of-range entries (never written)
     events: EventBuffer
 }
@@ -84,12 +85,17 @@ impl DistributorProcessor {
             _ => None
         };
         Self {mode, input: None, tap, branches, frequency, analyser, spectrum: broadcast_slot(NUM_BINS),
-            silent: shared_audio_buffer(), events: EventBuffer::new()}
+            spectrum_active: Rc::new(Cell::new(false)), silent: shared_audio_buffer(), events: EventBuffer::new()}
     }
 
     /// The input-spectrum broadcast slot (Frequency mode): NUM_BINS FFT magnitudes the editor plots.
     pub fn spectrum_slot(&self) -> BroadcastSlot {
         self.spectrum.clone()
+    }
+
+    /// The flag the engine drives from the editor's subscription; the FFT only runs while it is set.
+    pub fn spectrum_active_flag(&self) -> Rc<Cell<bool>> {
+        self.spectrum_active.clone()
     }
 
     /// The composite's INPUT copy: the dry source, and the buffer a nested sidechain taps.
@@ -186,7 +192,7 @@ impl Processor for DistributorProcessor {
         if let Some(splitter) = self.frequency.as_mut() {
             splitter.process(&self.tap);
         }
-        if self.analyser.is_some() {
+        if self.spectrum_active.get() && self.analyser.is_some() {
             let tap = self.tap.clone();
             let spectrum = self.spectrum.clone();
             let analyser = self.analyser.as_mut().unwrap();

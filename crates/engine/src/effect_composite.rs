@@ -280,8 +280,11 @@ impl Engine {
         // The Frequency editor's input spectrum: the distributor FFTs its tap into this slot (adapter reads it at
         // [0xFFF], mirroring the Revamp device's spectrum).
         if matches!(spec.distributor, Distributor::Frequency) {
-            let spectrum_slot = distributor.borrow().spectrum_slot();
+            let (spectrum_slot, spectrum_active) =
+                {let borrowed = distributor.borrow(); (borrowed.spectrum_slot(), borrowed.spectrum_active_flag())};
             self.broadcasts.register(composite_uuid, &[0xFFF], crate::broadcast::PACKAGE_FLOAT_ARRAY, &spectrum_slot);
+            self.broadcasts.attach_producer_active(composite_uuid, &[0xFFF],
+                crate::broadcast::PACKAGE_FLOAT_ARRAY, spectrum_active);
         }
         // The dry path and the wet sum both feed the mix; ordering edges only (the mix reads the buffers).
         self.context.register_edge(distributor_id, mix_id);

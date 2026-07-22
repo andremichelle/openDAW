@@ -118,6 +118,24 @@ fn a_stereo_entry_beyond_the_branch_count_reads_silence() {
     assert_eq!(distributor.branch(0).borrow().left[0], 0.75, "branch 0 still carries the left channel");
 }
 
+#[test]
+fn the_spectrum_fft_runs_only_while_the_editor_subscribes() {
+    let mut distributor = distributor_with(DistributorMode::Frequency, 0.5, 0.5);
+    let spectrum = distributor.spectrum_slot();
+    let active = distributor.spectrum_active_flag();
+    // Unsubscribed: the FFT is skipped, so the broadcast slot stays cleared (no wasted CPU with the panel closed).
+    for _ in 0..40 {
+        distributor.process(&ProcessInfo {blocks: &[]});
+    }
+    assert!(spectrum.borrow().iter().all(|&bin| bin == 0.0), "the FFT must not run while unsubscribed");
+    // Subscribed: the analyser fills the bins.
+    active.set(true);
+    for _ in 0..40 {
+        distributor.process(&ProcessInfo {blocks: &[]});
+    }
+    assert!(spectrum.borrow().iter().any(|&bin| bin != 0.0), "the FFT runs once the editor subscribes");
+}
+
 // dry = tap, wet = the entries' sum.
 fn mixer(params: Rc<DryWetParams>, automation: Rc<StripAutomation>,
          tap: SharedAudioBuffer, wet: SharedAudioBuffer) -> DryWetMixProcessor {
