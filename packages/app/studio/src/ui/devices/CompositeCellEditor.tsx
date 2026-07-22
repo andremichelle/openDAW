@@ -14,6 +14,10 @@ import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {AudioCompositeEntryDnD} from "@/ui/devices/AudioCompositeEntryDnD"
+import {MenuButton} from "@/ui/components/MenuButton"
+import {MenuItem} from "@opendaw/studio-core"
+import {MenuItems} from "@/ui/devices/menu-items"
+import {DebugMenus} from "@/ui/menu/debug"
 import {StudioService} from "@/service/StudioService"
 
 const className = Html.adoptStyleSheet(css, "CompositeCellEditor")
@@ -44,7 +48,22 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             {name}
         </div>
     )
-    const header: HTMLElement = <h1 className="header">{back}</h1>
+    // The standard device-editor hamburger: the same menu as every input-slot editor. For a one-sided
+    // host it offers exactly the audio "Add ..." entries, targeting THIS branch's chain.
+    const menu: HTMLElement = (
+        <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => {
+            if (entry === null) {
+                MenuItems.forAudioUnitInput(parent, service, host)
+            } else {
+                MenuItems.forCompositeCell(parent, service, host, entry.compositeDevice())
+            }
+            parent.addMenuItem(DebugMenus.debugBox(entry === null ? host.audioUnitBoxAdapter().box : entry.box))
+        })} style={{minWidth: "0", fontSize: "14px", marginLeft: "auto"}}
+                    appearance={{color: Colors.shadow, activeColor: Colors.bright}}>
+            <Icon symbol={IconSymbol.Menu}/>
+        </MenuButton>
+    )
+    const header: HTMLElement = <h1 className="header">{back}{menu}</h1>
     const controls = entry === null ? <div/> : (
         <div className="controls">
             <div className="channel-mix">
@@ -75,7 +94,8 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             </div>
         </div>
     )
-    const element: HTMLElement = <div className={className}>{header}{controls}</div>
+    const number: HTMLElement = <div className="entry-number"/>
+    const element: HTMLElement = <div className={className}>{header}{controls}{number}</div>
     lifecycle.ownAll(
         TextTooltip.default(back, () => "Back to the parent chain"),
         Events.subscribe(back, "click", () => userEditingManager.audioUnit.edit(backTarget))
@@ -86,6 +106,7 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     if (entry !== null) {
         lifecycle.ownAll(
             entry.compositeDevice().labelField.catchupAndSubscribe(owner => name.textContent = owner.getValue()),
+            entry.indexField.catchupAndSubscribe(owner => number.textContent = String(owner.getValue() + 1)),
             connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.mute)),
             connectBoolean(soloValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.solo))
         )

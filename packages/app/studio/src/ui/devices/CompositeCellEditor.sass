@@ -3,6 +3,19 @@ component
   flex-direction: column
   height: 100%
 
+  .entry-number
+    flex: 0 0 24px
+    display: grid
+    margin: auto
+    font-size: 0.625em
+    width: 24px
+    height: 24px
+    place-self: center
+    place-items: center
+    border-radius: 16px
+    color: var(--color-blue)
+    background-color: rgba(black, 0.2)
+
   .header
     margin: 0
     height: 2rem
@@ -15,6 +28,7 @@ component
       display: flex
       align-items: center
       gap: 0.25em
+      padding-right: 0.5rem
       cursor: pointer
       border-radius: 2px
 
@@ -29,10 +43,10 @@ component
         color: rgba(0, 0, 0, 0.8)
         white-space: nowrap
 
-  // The exact track-header channel controls.
   .controls
     display: flex
     align-items: center
+    justify-content: center
     column-gap: 0.3em
     padding: 0.375em 0.25rem
 

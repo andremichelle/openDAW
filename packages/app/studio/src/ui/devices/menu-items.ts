@@ -1,4 +1,11 @@
-import {DeviceHost, Devices, EffectDeviceBoxAdapter, InstrumentFactories, PresetHeader} from "@opendaw/studio-adapters"
+import {
+    AudioCompositeAdapter,
+    DeviceHost,
+    Devices,
+    EffectDeviceBoxAdapter,
+    InstrumentFactories,
+    PresetHeader
+} from "@opendaw/studio-adapters"
 import {EffectFactories, MenuItem} from "@opendaw/studio-core"
 import {IndexedBox, PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
 import {Editing, isDefined, RuntimeNotifier, UUID} from "@opendaw/lib-std"
@@ -59,6 +66,31 @@ export namespace MenuItems {
                                                               value: V) =>
         MenuItem.default({label, checked: primitive.getValue() === value})
             .setTriggerProcedure(() => editing.modify(() => primitive.setValue(value)))
+
+    // The hamburger of a composite BRANCH (cell) editor: the manual goes to the PARENT composite device,
+    // and "Add Audio Effect" inserts into this branch's own chain (a cell hosts no midi chain, no instrument).
+    export const forCompositeCell = (parent: MenuItem,
+                                     service: StudioService,
+                                     host: DeviceHost,
+                                     composite: AudioCompositeAdapter): void => {
+        const {editing, api} = service.project
+        const optAudioField = host.audioEffectsField
+        parent.addMenuItem(
+            populateMenuItemToNavigateToManual(composite.manualUrl, composite.labelField.getValue()),
+            MenuItem.default({
+                label: "Add Audio Effect",
+                separatorBefore: true,
+                hidden: optAudioField.isEmpty()
+            }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.AudioList
+                .map(entry => MenuItem.default({
+                    label: entry.defaultName,
+                    icon: entry.defaultIcon,
+                    separatorBefore: entry.separatorBefore
+                }).setTriggerProcedure(() => editing.modify(() =>
+                    api.insertEffect(optAudioField.unwrap("audioEffectsField"), entry, 0))))
+            ))
+        )
+    }
 
     export const forEffectDevice = (parent: MenuItem,
                                     service: StudioService,
