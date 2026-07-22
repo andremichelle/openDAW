@@ -94,8 +94,10 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             </div>
         </div>
     )
-    const number: HTMLElement = <div className="entry-number"/>
-    const element: HTMLElement = <div className={className}>{header}{controls}{number}</div>
+    // Every sibling branch as a clickable number badge, the edited one highlighted: quick navigation
+    // between the composite's chains without going back to the parent.
+    const numbers: HTMLElement = <div className="entry-numbers"/>
+    const element: HTMLElement = <div className={className}>{header}{controls}{numbers}</div>
     lifecycle.ownAll(
         TextTooltip.default(back, () => "Back to the parent chain"),
         Events.subscribe(back, "click", () => userEditingManager.audioUnit.edit(backTarget))
@@ -104,9 +106,22 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     DeviceHost.chainFieldOf(parent, "audio").ifSome(parentField => lifecycle.own(
         AudioCompositeEntryDnD.installMoveOutTarget({element: back, project: service.project, targetField: parentField})))
     if (entry !== null) {
+        const composite = entry.compositeDevice()
+        const rebuildNumbers = () => {
+            Html.empty(numbers)
+            composite.entries.adapters().forEach(sibling => numbers.appendChild((
+                <div className={Html.buildClassList("entry-number", sibling === entry && "current")}
+                     onclick={() => {
+                         if (sibling !== entry) {userEditingManager.audioUnit.edit(sibling.box)}
+                     }}>{String(sibling.indexField.getValue() + 1)}</div>
+            )))
+        }
+        rebuildNumbers()
         lifecycle.ownAll(
-            entry.compositeDevice().labelField.catchupAndSubscribe(owner => name.textContent = owner.getValue()),
-            entry.indexField.catchupAndSubscribe(owner => number.textContent = String(owner.getValue() + 1)),
+            composite.entries.subscribe({
+                onAdd: rebuildNumbers, onRemove: rebuildNumbers, onReorder: rebuildNumbers
+            }),
+            composite.labelField.catchupAndSubscribe(owner => name.textContent = owner.getValue()),
             connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.mute)),
             connectBoolean(soloValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.solo))
         )

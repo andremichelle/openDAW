@@ -3,18 +3,30 @@ component
   flex-direction: column
   height: 100%
 
-  .entry-number
-    flex: 0 0 24px
+  .entry-numbers
+    flex: 1
     display: grid
+    grid-template-columns: repeat(4, min-content)
+    align-content: center
+    gap: 2px
+    padding: 0 0.25rem
+    width: fit-content
     margin: auto
-    font-size: 0.625em
-    width: 24px
-    height: 24px
-    place-self: center
-    place-items: center
-    border-radius: 16px
-    color: var(--color-blue)
-    background-color: rgba(black, 0.2)
+
+    .entry-number
+      flex: 0 0 20px
+      display: grid
+      font-size: 0.625em
+      width: 20px
+      height: 20px
+      place-items: center
+      border-radius: 10px
+      color: var(--color-shadow)
+      background-color: rgba(black, 0.2)
+      cursor: pointer
+
+      &.current
+        color: var(--color-blue)
 
   .header
     margin: 0
