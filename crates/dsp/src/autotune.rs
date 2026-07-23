@@ -404,7 +404,11 @@ impl Autotune {
         self.deviation_ring[self.deviation_head] = deviation_now;
         self.deviation_head = (self.deviation_head + 1) % DEVIATION_RING;
         let delayed = self.deviation_ring[(self.deviation_head + DEVIATION_RING - 1 - self.flatten_delay) % DEVIATION_RING];
-        self.flatten = self.hardness * delayed;
+        // The flatten cancels VIBRATO only: while the glide is still travelling to a new note the
+        // deviation is transition, not vibrato, and chasing it fights the retune (measured: step settle
+        // WORSENED with higher retune). Fade the flatten in with glide settledness instead.
+        let settle = 1.0 - math::clamp(libm::fabs(self.note_target - self.note_glide) / 0.5, 0.0, 1.0);
+        self.flatten = self.hardness * delayed * settle;
     }
 }
 
