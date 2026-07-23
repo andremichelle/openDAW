@@ -29,6 +29,7 @@ import {
 import type {SoundFont2} from "soundfont2"
 import {HRClock} from "../../core-processors/src/HRClock"
 import {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
+import {GonioCapture, LoudnessMeter, StereoAnalyser} from "./analysis-dsp"
 import {EngineExports} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
 import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
@@ -40,6 +41,8 @@ import {
     WasmFrozenProtocol,
     WasmSyncProtocol
 } from "./protocol"
+
+const GONIO_PAIRS = 512
 
 class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #terminator: Terminator = new Terminator()
@@ -55,8 +58,17 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #broadcastSubs: Array<Terminable> = []
     readonly #peaks: PeakBroadcaster
     readonly #analyser: AudioAnalyser
+    readonly #stereo: StereoAnalyser = new StereoAnalyser()
+    readonly #gonio: GonioCapture = new GonioCapture(GONIO_PAIRS)
+    readonly #loudness: LoudnessMeter = new LoudnessMeter(sampleRate)
+    readonly #stereoValues: Float32Array = new Float32Array(5)
+    readonly #gonioValues: Float32Array = new Float32Array(GONIO_PAIRS * 2)
+    readonly #loudnessValues: Float32Array = new Float32Array(5)
     #spectrumActive: boolean = false
     #waveformActive: boolean = false
+    #stereoActive: boolean = false
+    #gonioActive: boolean = false
+    #loudnessActive: boolean = false
     readonly #midi: WasmMidiDrain = new WasmMidiDrain()
     readonly #pendingResources: Set<Promise<unknown>> = new Set()
 
@@ -130,6 +142,15 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 if (!hasSubscribers) {return}
                 waveform.set(this.#analyser.waveform())
             }),
+            this.#broadcaster.broadcastFloats(EngineAddresses.STEREO, this.#stereoValues,
+                (hasSubscribers) => {this.#stereoActive = hasSubscribers}),
+            this.#broadcaster.broadcastFloats(EngineAddresses.GONIO, this.#gonioValues,
+                (hasSubscribers) => {this.#gonioActive = hasSubscribers}),
+            this.#broadcaster.broadcastFloats(EngineAddresses.LOUDNESS, this.#loudnessValues,
+                (hasSubscribers) => {
+                    this.#loudnessActive = hasSubscribers
+                    if (hasSubscribers) {this.#loudness.fill(this.#loudnessValues)}
+                }),
             this.#preferences.catchupAndSubscribe(enabled =>
                 engine.set_metronome_enabled(enabled ? 1 : 0), "metronome", "enabled"),
             this.#preferences.catchupAndSubscribe(gain =>
@@ -344,10 +365,15 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         const right = new Float32Array(buffer, pointer + frames * Float32Array.BYTES_PER_ELEMENT, frames)
         mainOutput[0].set(left)
         if (mainOutput.length > 1) {mainOutput[1].set(right)}
-        this.#peaks.process(mainOutput[0], mainOutput[1] ?? mainOutput[0])
+        const chLeft = mainOutput[0]
+        const chRight = mainOutput[1] ?? mainOutput[0]
+        this.#peaks.process(chLeft, chRight)
         if (this.#spectrumActive || this.#waveformActive) {
-            this.#analyser.process(mainOutput[0], mainOutput[1] ?? mainOutput[0], 0, RenderQuantum)
+            this.#analyser.process(chLeft, chRight, 0, RenderQuantum)
         }
+        if (this.#stereoActive) {this.#stereo.process(chLeft, chRight, this.#stereoValues)}
+        if (this.#gonioActive) {this.#gonio.process(chLeft, chRight, this.#gonioValues)}
+        if (this.#loudnessActive) {this.#loudness.process(chLeft, chRight)}
         this.#syncBroadcasts()
         if (this.#measureLoad) {
             this.#hrClock.end()

@@ -1,6 +1,6 @@
 import css from "./AnalysisPanel.sass?inline"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
-import {AnimationFrame, Html} from "@opendaw/lib-dom"
+import {Html} from "@opendaw/lib-dom"
 import {clamp, DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
 import {AudioAnalyser, gainToDb} from "@opendaw/lib-dsp"
 import {CanvasPainter, LinearScale, LogScale, Scale} from "@opendaw/studio-core"
@@ -29,7 +29,8 @@ export const AnalysisPanel = ({lifecycle, service}: Construct) => {
     const lufsHistory = new Float32Array(96)
     const vuL = lifecycle.own(new DefaultObservableValue(0.0))
     const vuR = lifecycle.own(new DefaultObservableValue(0.0))
-    const clock = {t: 0.0}
+    const gonioHolder = {pairs: new Float32Array(0)}
+    const hist = {write: 0, count: 0}
     const sampleRate = {value: 48000}
     const xAxis: Scale = new LogScale(20.0, 20_000.0)
     const yAxis: Scale = new LinearScale(-96.0, 0.0)
@@ -46,19 +47,9 @@ export const AnalysisPanel = ({lifecycle, service}: Construct) => {
         painter => drawSpectrum(painter, spectrum, sampleRate.value, xAxis, yAxis)))
     const levelPainter = lifecycle.own(new CanvasPainter(levelCanvas, painter => drawLevel(painter, level)))
     const phasePainter = lifecycle.own(new CanvasPainter(phaseCanvas, painter => drawPhase(painter, stereo)))
-    const gonioPainter = lifecycle.own(new CanvasPainter(gonioCanvas, painter => drawGonio(painter, clock.t)))
+    const gonioPainter = lifecycle.own(new CanvasPainter(gonioCanvas, painter => drawGonio(painter, gonioHolder.pairs)))
     const scopePainter = lifecycle.own(new CanvasPainter(scopeCanvas, painter => drawScope(painter, waveform)))
     const lufsPainter = lifecycle.own(new CanvasPainter(lufsCanvas, painter => drawSparkline(painter, lufsHistory)))
-
-    lifecycle.own(AnimationFrame.add(() => {
-        clock.t += 1.0 / 60.0
-        updateDummy(clock.t, stereo, lufsHistory)
-        lufsReadout.textContent = `M ${(-14 + Math.sin(clock.t) * 1.5).toFixed(1)} LUFS   `
-            + `S -13.8   I -15.1   LRA 6.2 LU   TP -1.0 dBTP`
-        phasePainter.requestUpdate()
-        gonioPainter.requestUpdate()
-        lufsPainter.requestUpdate()
-    }))
 
     const runtime = lifecycle.own(new Terminator())
     lifecycle.own(service.projectProfileService.catchupAndSubscribe(optProfile => {
@@ -72,7 +63,6 @@ export const AnalysisPanel = ({lifecycle, service}: Construct) => {
                     level.peakR = values[1]
                     level.rmsL = values[2]
                     level.rmsR = values[3]
-                    level.lufs += ((values[2] + values[3]) * 0.5 - level.lufs) * 0.05
                     vuL.setValue(values[0] >= vuL.getValue() ? values[0] : vuL.getValue() * 0.98)
                     vuR.setValue(values[1] >= vuR.getValue() ? values[1] : vuR.getValue() * 0.98)
                     levelPainter.requestUpdate()
@@ -84,6 +74,30 @@ export const AnalysisPanel = ({lifecycle, service}: Construct) => {
                 liveStreamReceiver.subscribeFloats(EngineAddresses.WAVEFORM, values => {
                     waveform.set(values)
                     scopePainter.requestUpdate()
+                }),
+                liveStreamReceiver.subscribeFloats(EngineAddresses.STEREO, values => {
+                    stereo.corr = values[0]
+                    stereo.width = values[1]
+                    phasePainter.requestUpdate()
+                }),
+                liveStreamReceiver.subscribeFloats(EngineAddresses.GONIO, values => {
+                    if (gonioHolder.pairs.length !== values.length) {
+                        gonioHolder.pairs = new Float32Array(values.length)
+                    }
+                    gonioHolder.pairs.set(values)
+                    gonioPainter.requestUpdate()
+                }),
+                liveStreamReceiver.subscribeFloats(EngineAddresses.LOUDNESS, values => {
+                    const momentary = values[0]
+                    lufsReadout.textContent = `M ${fmtLufs(momentary)} LUFS   S ${fmtLufs(values[1])}   `
+                        + `I ${fmtLufs(values[2])}   LRA ${values[3].toFixed(1)} LU   TP ${values[4].toFixed(1)} dBTP`
+                    level.lufs = clamp((momentary + 40.0) / 40.0, 0.0, 1.0)
+                    if (++hist.count % 6 === 0) {
+                        lufsHistory[hist.write] = clamp((values[1] + 40.0) / 40.0, 0.0, 1.0)
+                        hist.write = (hist.write + 1) % lufsHistory.length
+                    }
+                    lufsPainter.requestUpdate()
+                    levelPainter.requestUpdate()
                 })
             )
         })
@@ -152,12 +166,7 @@ export const AnalysisPanel = ({lifecycle, service}: Construct) => {
     return element
 }
 
-const updateDummy = (t: number, stereo: { corr: number, width: number }, lufsHistory: Float32Array): void => {
-    stereo.corr = Math.sin(t * 0.7)
-    stereo.width = 0.5 + 0.4 * Math.sin(t * 0.5)
-    const head = (Math.floor(t * 12) % lufsHistory.length + lufsHistory.length) % lufsHistory.length
-    lufsHistory[head] = 0.5 + 0.4 * Math.sin(t * 1.3)
-}
+const fmtLufs = (value: number): string => value <= -100.0 ? "-∞" : value.toFixed(1)
 
 const clearBg = ({context, actualWidth, actualHeight}: CanvasPainter): void =>
     context.clearRect(0, 0, actualWidth, actualHeight)
@@ -272,7 +281,7 @@ const drawLevel = (painter: CanvasPainter,
     drawBar(peakR, levelNorm(level.peakR), -1)
     drawBar(rmsL, levelNorm(level.rmsL), -1)
     drawBar(rmsR, levelNorm(level.rmsR), -1)
-    drawBar(lufsX, levelNorm(level.lufs), -1)
+    drawBar(lufsX, clamp(level.lufs, 0.0, 1.0), -1)
     const yAt = (db: number): number =>
         (1.0 - (db - LEVEL_FLOOR) / (LEVEL_CEIL - LEVEL_FLOOR)) * plotH
     unitLabel(context, "0 dBFS", pad, yAt(0), "left", "top")
@@ -309,7 +318,7 @@ const drawPhase = (painter: CanvasPainter, stereo: { corr: number, width: number
     unitLabel(context, "width 0..1", pad, h - pad, "left", "bottom")
 }
 
-const drawGonio = (painter: CanvasPainter, t: number): void => {
+const drawGonio = (painter: CanvasPainter, pairs: Float32Array): void => {
     clearBg(painter)
     const {context, actualWidth: w, actualHeight: h} = painter
     const cx = w / 2
@@ -319,14 +328,13 @@ const drawGonio = (painter: CanvasPainter, t: number): void => {
     context.beginPath()
     context.arc(cx, cy, radius, 0, Math.PI * 2)
     context.stroke()
-    const count = 220
+    const count = pairs.length >> 1
+    const dot = Math.max(1.0, devicePixelRatio)
+    context.fillStyle = "rgba(150,205,255,0.45)"
     for (let k = 0; k < count; k++) {
-        const p = k / count
-        const phase = t * 2.0 + p * Math.PI * 2.0 * 3.0
-        const l = Math.sin(phase)
-        const r = Math.sin(phase * 1.01 + Math.sin(t) * 0.8)
-        context.fillStyle = `rgba(150,205,255,${0.12 + 0.5 * p})`
-        context.fillRect(cx + ((l - r) / 2) * radius, cy - ((l + r) / 2) * radius, 2, 2)
+        const l = pairs[k * 2]
+        const r = pairs[k * 2 + 1]
+        context.fillRect(cx + (l - r) * 0.5 * radius, cy - (l + r) * 0.5 * radius, dot, dot)
     }
     const pad = 3 * devicePixelRatio
     unitLabel(context, "M", cx, cy - radius - 3 * devicePixelRatio, "center", "bottom")
