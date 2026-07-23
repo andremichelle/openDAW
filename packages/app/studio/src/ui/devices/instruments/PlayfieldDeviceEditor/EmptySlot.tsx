@@ -5,9 +5,10 @@ import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {SampleSelector} from "@/ui/devices/SampleSelector"
 import {SlotDragAndDrop} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotDragAndDrop"
+import {ChopTrigger} from "@/ui/devices/instruments/PlayfieldDeviceEditor/ChopTrigger"
 import {NoteLabel} from "@/ui/devices/instruments/PlayfieldDeviceEditor/NoteLabel"
 import {Icon} from "@/ui/components/Icon"
-import {NoteStreamReceiver} from "@opendaw/studio-adapters"
+import {NoteStreamReceiver, PlayfieldDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ContextMenu} from "@opendaw/studio-core"
 
@@ -16,6 +17,7 @@ const className = Html.adoptStyleSheet(css, "EmptySlot")
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
+    adapter: PlayfieldDeviceBoxAdapter
     noteReceiver: NoteStreamReceiver
     sampleSelector: SampleSelector
     octave: ObservableValue<int>
@@ -23,7 +25,8 @@ type Construct = {
 }
 
 export const EmptySlot = (
-    {lifecycle, service: {project}, noteReceiver, sampleSelector, octave, semitone}: Construct) => {
+    {lifecycle, service, adapter, noteReceiver, sampleSelector, octave, semitone}: Construct) => {
+    const {project} = service
     const browseButton: HTMLElement = (
         <div className="audio-file">
             <Icon symbol={IconSymbol.AudioFile}/>
@@ -48,7 +51,8 @@ export const EmptySlot = (
             project,
             getSlotIndex: () => octave.getValue() * 12 + semitone
         }),
-        sampleSelector.configureDrop(element),
+        sampleSelector.configureDrop(element, sample =>
+            ChopTrigger.forSample(service, adapter, sample, octave.getValue() * 12 + semitone)),
         sampleSelector.configureBrowseClick(browseButton),
         noteReceiver.subscribe((receiver) => browseButton.classList
             .toggle("playing", receiver.isNoteOn(octave.getValue() * 12 + semitone))),

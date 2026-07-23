@@ -18,7 +18,7 @@ const iconSymbolToCursor = (symbol: IconSymbol, hotspotX: number, hotspotY: numb
 }
 
 export const enum Cursor {
-    Pencil, Scissors, ExpandWidth, LoopEnd, LoopStart
+    Pencil, Scissors, ExpandWidth, LoopEnd, LoopStart, Speaker, Erase
 }
 
 export const installCursors = () => {
@@ -27,4 +27,6 @@ export const installCursors = () => {
     CssUtils.registerCustomCursor(Cursor.Scissors, iconSymbolToCursor(IconSymbol.Scissors, 10, 10, "auto"))
     CssUtils.registerCustomCursor(Cursor.LoopEnd, iconSymbolToCursor(IconSymbol.LoopEnd, 8, 8, "auto"))
     CssUtils.registerCustomCursor(Cursor.LoopStart, iconSymbolToCursor(IconSymbol.LoopStart, 12, 8, "auto"))
+    CssUtils.registerCustomCursor(Cursor.Speaker, iconSymbolToCursor(IconSymbol.Speaker, 10, 10, "pointer"))
+    CssUtils.registerCustomCursor(Cursor.Erase, iconSymbolToCursor(IconSymbol.Eraser, 10, 10, "auto"))
 }

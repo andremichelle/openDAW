@@ -12,6 +12,7 @@ import {SampleSelection} from "@/ui/browse/SampleSelection"
 import {Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {DragAndDrop} from "@/ui/DragAndDrop"
+import {ChopTrigger} from "@/ui/devices/instruments/PlayfieldDeviceEditor/ChopTrigger"
 import {StudioService} from "@/service/StudioService"
 
 const className = Html.adoptStyleSheet(css, "Sample")
@@ -35,6 +36,8 @@ export const SampleView = ({lifecycle, service, sampleSelection, sample, playbac
                  ContextMenu.subscribe(element, collector => collector.addItems(
                      MenuItem.default({label: "Create Audio Track(s)", selectable: service.hasProfile})
                          .setTriggerProcedure(() => sampleSelection.requestDevice()),
+                     MenuItem.default({label: "Auto-chop into Playfield", selectable: service.hasProfile})
+                         .setTriggerProcedure(() => ChopTrigger.intoNewPlayfield(service, sample)),
                      MenuItem.default({label: "Delete Sample(s)", selectable: location === AssetLocation.Local})
                          .setTriggerProcedure(async () => {
                              await sampleSelection.deleteSelected()

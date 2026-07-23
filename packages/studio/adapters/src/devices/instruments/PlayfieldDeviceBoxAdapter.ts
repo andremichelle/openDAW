@@ -1,7 +1,7 @@
-import {PlayfieldDeviceBox} from "@opendaw/studio-boxes"
+import {AudioFileBox, PlayfieldDeviceBox, PlayfieldSampleBox} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {Option, UUID} from "@opendaw/lib-std"
+import {int, Option, unitValue, UUID} from "@opendaw/lib-std"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
@@ -11,6 +11,14 @@ import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {LabeledAudioOutput, LabeledAudioOutputsOwner} from "../../LabeledAudioOutputsOwner"
+
+export type PlayfieldChopSlice = {start: unitValue, end: unitValue}
+
+export type PlayfieldChopOptions = {
+    file: AudioFileBox
+    startKey: int
+    slices: ReadonlyArray<PlayfieldChopSlice>
+}
 
 export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, LabeledAudioOutputsOwner {
     readonly type = "instrument"
@@ -33,6 +41,26 @@ export class PlayfieldDeviceBoxAdapter implements InstrumentDeviceBoxAdapter, La
     }
 
     reset(): void {this.#samples.adapters().forEach(adapter => adapter.box.delete())}
+
+    chop({file, startKey, slices}: PlayfieldChopOptions): void {
+        const endKey = startKey + slices.length - 1
+        this.#samples.adapters()
+            .filter(adapter => {
+                const index = adapter.box.index.getValue()
+                return index >= startKey && index <= endKey
+            })
+            .forEach(adapter => adapter.box.delete())
+        slices.forEach(({start, end}, sliceIndex) => {
+            PlayfieldSampleBox.create(this.#context.boxGraph, UUID.generate(), box => {
+                box.file.refer(file)
+                box.device.refer(this.#box.samples)
+                box.index.setValue(startKey + sliceIndex)
+                box.sampleStart.setValue(start)
+                box.sampleEnd.setValue(end)
+                box.exclude.setValue(true)
+            })
+        })
+    }
 
     get box(): PlayfieldDeviceBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}

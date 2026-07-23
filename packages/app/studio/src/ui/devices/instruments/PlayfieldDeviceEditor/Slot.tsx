@@ -50,6 +50,7 @@ export const Slot = (
                 none: () => (
                     <EmptySlot lifecycle={sampleLifecycle}
                                service={service}
+                               adapter={adapter}
                                noteReceiver={noteReceiver}
                                sampleSelector={sampleSelector}
                                octave={octave}
