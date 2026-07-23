@@ -99,6 +99,7 @@ skyboundzoo, JHINZ, Mark Dammer, fork-kun, Martin Eigel
 
 * Apparat (programmable instrument scripted in JavaScript)
 * Arpeggio (plays the notes of a chord one after another)
+* Autotune (real-time monophonic pitch correction)
 * Cheap Reverb (FreeVerb variation)
 * Crusher (degenerates audio signal)
 * Dattorro Reverb (dense algorithmic reverb based on Dattorro's design)
