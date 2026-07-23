@@ -55,6 +55,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #broadcastSubs: Array<Terminable> = []
     readonly #peaks: PeakBroadcaster
     readonly #analyser: AudioAnalyser
+    #spectrumActive: boolean = false
+    #waveformActive: boolean = false
     readonly #midi: WasmMidiDrain = new WasmMidiDrain()
     readonly #pendingResources: Set<Promise<unknown>> = new Set()
 
@@ -118,11 +120,13 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#preferences = new PreferencesClient(messenger.channel("engine-preferences"), EngineSettingsSchema.parse({}))
         this.#terminator.ownAll(
             this.#broadcaster.broadcastFloats(EngineAddresses.SPECTRUM, spectrum, (hasSubscribers) => {
+                this.#spectrumActive = hasSubscribers
                 if (!hasSubscribers) {return}
                 spectrum.set(this.#analyser.bins())
                 this.#analyser.decay = true
             }),
             this.#broadcaster.broadcastFloats(EngineAddresses.WAVEFORM, waveform, (hasSubscribers) => {
+                this.#waveformActive = hasSubscribers
                 if (!hasSubscribers) {return}
                 waveform.set(this.#analyser.waveform())
             }),
@@ -341,7 +345,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         mainOutput[0].set(left)
         if (mainOutput.length > 1) {mainOutput[1].set(right)}
         this.#peaks.process(mainOutput[0], mainOutput[1] ?? mainOutput[0])
-        this.#analyser.process(mainOutput[0], mainOutput[1] ?? mainOutput[0], 0, RenderQuantum)
+        if (this.#spectrumActive || this.#waveformActive) {
+            this.#analyser.process(mainOutput[0], mainOutput[1] ?? mainOutput[0], 0, RenderQuantum)
+        }
         this.#syncBroadcasts()
         if (this.#measureLoad) {
             this.#hrClock.end()

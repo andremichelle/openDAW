@@ -1,8 +1,10 @@
 import css from "./AnalysisPanel.sass?inline"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
-import {clamp, DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
-import {CanvasPainter} from "@opendaw/studio-core"
+import {clamp, DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
+import {AudioAnalyser, gainToDb} from "@opendaw/lib-dsp"
+import {CanvasPainter, LinearScale, LogScale, Scale} from "@opendaw/studio-core"
+import {EngineAddresses} from "@opendaw/studio-adapters"
 import {Colors} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {VUMeterDesign} from "@/ui/meter/VUMeterDesign"
@@ -15,17 +17,22 @@ const className = Html.adoptStyleSheet(css, "AnalysisPanel")
 
 type Construct = { lifecycle: Lifecycle, service: StudioService }
 
-// Dummy-data preview of the mixer Analysis panel. Values are synthesised on the animation frame so
-// the responsive layout can be exercised without engine telemetry.
-export const AnalysisPanel = ({lifecycle, service: _service}: Construct) => {
-    const bins = new Float32Array(112)
-    const scope = new Float32Array(256)
-    const level = {l: 0.0, r: 0.0, pkL: 0.0, pkR: 0.0, rmsL: 0.0, rmsR: 0.0, lufs: 0.0}
+// Mixer Analysis panel. Spectrum, level, scope and VU are driven by the engine's master telemetry
+// (EngineAddresses via the LiveStream broadcaster) and only produced while this panel is subscribed,
+// i.e. visible/not minimized. Phase, goniometer and loudness are still synthesised dummy data
+// (Phase 2 will add their engine DSP).
+export const AnalysisPanel = ({lifecycle, service}: Construct) => {
+    const spectrum = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
+    const waveform = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
+    const level = {peakL: 0.0, peakR: 0.0, rmsL: 0.0, rmsR: 0.0, lufs: 0.0}
     const stereo = {corr: 0.0, width: 0.0}
     const lufsHistory = new Float32Array(96)
     const vuL = lifecycle.own(new DefaultObservableValue(0.0))
     const vuR = lifecycle.own(new DefaultObservableValue(0.0))
     const clock = {t: 0.0}
+    const sampleRate = {value: 48000}
+    const xAxis: Scale = new LogScale(20.0, 20_000.0)
+    const yAxis: Scale = new LinearScale(-96.0, 0.0)
 
     const spectrumCanvas: HTMLCanvasElement = (<canvas/>)
     const levelCanvas: HTMLCanvasElement = (<canvas/>)
@@ -35,23 +42,51 @@ export const AnalysisPanel = ({lifecycle, service: _service}: Construct) => {
     const lufsCanvas: HTMLCanvasElement = (<canvas/>)
     const lufsReadout: HTMLElement = (<span className="readout"/>)
 
-    const painters = [
-        lifecycle.own(new CanvasPainter(spectrumCanvas, painter => drawSpectrum(painter, bins))),
-        lifecycle.own(new CanvasPainter(levelCanvas, painter => drawLevel(painter, level))),
-        lifecycle.own(new CanvasPainter(phaseCanvas, painter => drawPhase(painter, stereo))),
-        lifecycle.own(new CanvasPainter(gonioCanvas, painter => drawGonio(painter, clock.t))),
-        lifecycle.own(new CanvasPainter(scopeCanvas, painter => drawScope(painter, scope))),
-        lifecycle.own(new CanvasPainter(lufsCanvas, painter => drawSparkline(painter, lufsHistory)))
-    ]
+    const spectrumPainter = lifecycle.own(new CanvasPainter(spectrumCanvas,
+        painter => drawSpectrum(painter, spectrum, sampleRate.value, xAxis, yAxis)))
+    const levelPainter = lifecycle.own(new CanvasPainter(levelCanvas, painter => drawLevel(painter, level)))
+    const phasePainter = lifecycle.own(new CanvasPainter(phaseCanvas, painter => drawPhase(painter, stereo)))
+    const gonioPainter = lifecycle.own(new CanvasPainter(gonioCanvas, painter => drawGonio(painter, clock.t)))
+    const scopePainter = lifecycle.own(new CanvasPainter(scopeCanvas, painter => drawScope(painter, waveform)))
+    const lufsPainter = lifecycle.own(new CanvasPainter(lufsCanvas, painter => drawSparkline(painter, lufsHistory)))
 
     lifecycle.own(AnimationFrame.add(() => {
         clock.t += 1.0 / 60.0
-        updateDummy(clock.t, bins, scope, level, stereo, lufsHistory)
-        vuL.setValue(0.28 + 0.55 * Math.abs(Math.sin(clock.t * 1.7)))
-        vuR.setValue(0.28 + 0.55 * Math.abs(Math.sin(clock.t * 1.7 + 0.6)))
+        updateDummy(clock.t, stereo, lufsHistory)
         lufsReadout.textContent = `M ${(-14 + Math.sin(clock.t) * 1.5).toFixed(1)} LUFS   `
             + `S -13.8   I -15.1   LRA 6.2 LU   TP -1.0 dBTP`
-        painters.forEach(painter => painter.requestUpdate())
+        phasePainter.requestUpdate()
+        gonioPainter.requestUpdate()
+        lufsPainter.requestUpdate()
+    }))
+
+    const runtime = lifecycle.own(new Terminator())
+    lifecycle.own(service.projectProfileService.catchupAndSubscribe(optProfile => {
+        runtime.terminate()
+        optProfile.ifSome(({project}) => {
+            const {liveStreamReceiver} = project
+            sampleRate.value = project.engine.sampleRate
+            runtime.ownAll(
+                liveStreamReceiver.subscribeFloats(EngineAddresses.PEAKS, values => {
+                    level.peakL = values[0]
+                    level.peakR = values[1]
+                    level.rmsL = values[2]
+                    level.rmsR = values[3]
+                    level.lufs += ((values[2] + values[3]) * 0.5 - level.lufs) * 0.05
+                    vuL.setValue(values[0] >= vuL.getValue() ? values[0] : vuL.getValue() * 0.98)
+                    vuR.setValue(values[1] >= vuR.getValue() ? values[1] : vuR.getValue() * 0.98)
+                    levelPainter.requestUpdate()
+                }),
+                liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, values => {
+                    spectrum.set(values)
+                    spectrumPainter.requestUpdate()
+                }),
+                liveStreamReceiver.subscribeFloats(EngineAddresses.WAVEFORM, values => {
+                    waveform.set(values)
+                    scopePainter.requestUpdate()
+                })
+            )
+        })
     }))
 
     const toggle = (label: string, initial: boolean = false): HTMLElement => {
@@ -111,51 +146,17 @@ export const AnalysisPanel = ({lifecycle, service: _service}: Construct) => {
 
     const element: HTMLElement = (
         <div className={className}>
-            <div className="toolbar">
-                <span className="source">Master</span>
-                <span className="spacer"/>
-                <span className="control">settings</span>
-            </div>
             {cards}
         </div>
     )
     return element
 }
 
-const updateDummy = (t: number, bins: Float32Array, scope: Float32Array,
-                     level: {
-                         l: number, r: number, pkL: number, pkR: number,
-                         rmsL: number, rmsR: number, lufs: number
-                     },
-                     stereo: { corr: number, width: number },
-                     lufsHistory: Float32Array): void => {
-    for (let i = 0; i < bins.length; i++) {
-        const f = i / bins.length
-        const tilt = Math.pow(1.0 - f, 1.4)
-        const wobble = 0.5 + 0.5 * Math.sin(t * 2.0 + i * 0.35)
-        const target = clamp(tilt * (0.35 + 0.6 * wobble * (0.4 + 0.6 * pseudoNoise(i, t))), 0.0, 1.0)
-        bins[i] += (target - bins[i]) * 0.35
-    }
-    for (let i = 0; i < scope.length; i++) {
-        const p = i / scope.length
-        scope[i] = Math.sin(p * Math.PI * 6.0 + t * 5.0) * 0.7 * (0.6 + 0.4 * Math.sin(t * 0.8))
-    }
-    level.l = clamp(0.5 + 0.45 * Math.sin(t * 2.3), 0.0, 1.0)
-    level.r = clamp(0.5 + 0.45 * Math.sin(t * 2.3 + 0.7), 0.0, 1.0)
-    level.pkL = level.l > level.pkL ? level.l : level.pkL * 0.985
-    level.pkR = level.r > level.pkR ? level.r : level.pkR * 0.985
-    level.rmsL += (level.l * 0.72 - level.rmsL) * 0.06
-    level.rmsR += (level.r * 0.72 - level.rmsR) * 0.06
-    level.lufs += ((level.l + level.r) * 0.5 * 0.66 - level.lufs) * 0.02
+const updateDummy = (t: number, stereo: { corr: number, width: number }, lufsHistory: Float32Array): void => {
     stereo.corr = Math.sin(t * 0.7)
     stereo.width = 0.5 + 0.4 * Math.sin(t * 0.5)
     const head = (Math.floor(t * 12) % lufsHistory.length + lufsHistory.length) % lufsHistory.length
     lufsHistory[head] = 0.5 + 0.4 * Math.sin(t * 1.3)
-}
-
-const pseudoNoise = (i: number, t: number): number => {
-    const value = Math.sin(i * 12.9898 + Math.floor(t * 8.0) * 78.233) * 43758.5453
-    return value - Math.floor(value)
 }
 
 const clearBg = ({context, actualWidth, actualHeight}: CanvasPainter): void =>
@@ -172,27 +173,38 @@ const unitLabel = (context: CanvasRenderingContext2D, text: string, x: number, y
     context.fillText(text, x, y)
 }
 
-const drawSpectrum = (painter: CanvasPainter, bins: Float32Array): void => {
+const drawSpectrum = (painter: CanvasPainter, spectrum: Float32Array,
+                      sampleRate: number, xAxis: Scale, yAxis: Scale): void => {
     clearBg(painter)
     const {context, actualWidth: w, actualHeight: h} = painter
     const dpr = devicePixelRatio
+    const pad = 3 * dpr
     const bottomMargin = 12 * dpr
     const plotH = h - bottomMargin
+    const numBins = spectrum.length
+    const freqStep = sampleRate / (numBins << 1)
+    const nyquist = sampleRate * 0.5
+    const xOf = (freq: number): number => xAxis.unitToNorm(freq) * w
+    const yOf = (gain: number): number => (1.0 - yAxis.unitToNorm(gainToDb(Math.max(gain, 1e-7)))) * plotH
+    const yAt = (db: number): number => (1.0 - yAxis.unitToNorm(db)) * plotH
     context.strokeStyle = "rgba(255,255,255,0.05)"
     context.lineWidth = 1
-    for (let row = 1; row < 4; row++) {
-        const y = (plotH * row) / 4
+    for (const db of [-30, -60, -90]) {
+        const y = yAt(db)
         context.beginPath()
         context.moveTo(0, y)
         context.lineTo(w, y)
         context.stroke()
     }
+    const firstBin = Math.max(1, Math.ceil(20.0 / freqStep))
+    const lastBin = Math.min(numBins - 1, Math.floor(Math.min(20_000.0, nyquist) / freqStep))
+    const lastX = xOf(lastBin * freqStep)
+    const y0 = yOf(spectrum[firstBin])
     context.beginPath()
     context.moveTo(0, plotH)
-    for (let i = 0; i < bins.length; i++) {
-        context.lineTo((i / (bins.length - 1)) * w, plotH - bins[i] * (plotH - 2))
-    }
-    context.lineTo(w, plotH)
+    context.lineTo(0, y0)
+    for (let i = firstBin; i <= lastBin; i++) {context.lineTo(xOf(i * freqStep), yOf(spectrum[i]))}
+    context.lineTo(lastX, plotH)
     context.closePath()
     const gradient = context.createLinearGradient(0, 0, 0, plotH)
     gradient.addColorStop(0, "rgba(120,190,255,0.5)")
@@ -202,29 +214,27 @@ const drawSpectrum = (painter: CanvasPainter, bins: Float32Array): void => {
     context.strokeStyle = "rgba(150,205,255,0.85)"
     context.lineWidth = 1.5
     context.beginPath()
-    for (let i = 0; i < bins.length; i++) {
-        const x = (i / (bins.length - 1)) * w
-        const y = plotH - bins[i] * (plotH - 2)
-        if (i === 0) {context.moveTo(x, y)} else {context.lineTo(x, y)}
-    }
+    context.moveTo(0, y0)
+    for (let i = firstBin; i <= lastBin; i++) {context.lineTo(xOf(i * freqStep), yOf(spectrum[i]))}
     context.stroke()
-    const pad = 3 * dpr
     unitLabel(context, "0 dB", w - pad, pad, "right", "top")
-    unitLabel(context, "-30", w - pad, plotH / 4 + pad, "right", "top")
-    unitLabel(context, "-60", w - pad, plotH / 2 + pad, "right", "top")
+    unitLabel(context, "-30", w - pad, yAt(-30) + pad, "right", "top")
+    unitLabel(context, "-60", w - pad, yAt(-60) + pad, "right", "top")
     const fy = h - dpr
     unitLabel(context, "20 Hz", pad, fy, "left", "bottom")
-    unitLabel(context, "100", w * 0.24, fy, "center", "bottom")
-    unitLabel(context, "1k", w * 0.5, fy, "center", "bottom")
-    unitLabel(context, "10k", w * 0.78, fy, "center", "bottom")
+    unitLabel(context, "100", xOf(100), fy, "center", "bottom")
+    unitLabel(context, "1k", xOf(1_000), fy, "center", "bottom")
+    unitLabel(context, "10k", xOf(10_000), fy, "center", "bottom")
     unitLabel(context, "20 kHz", w - pad, fy, "right", "bottom")
 }
 
+const LEVEL_FLOOR = -60.0
+const LEVEL_CEIL = 6.0
+const levelNorm = (gain: number): number =>
+    clamp((gainToDb(Math.max(gain, 1e-7)) - LEVEL_FLOOR) / (LEVEL_CEIL - LEVEL_FLOOR), 0.0, 1.0)
+
 const drawLevel = (painter: CanvasPainter,
-                   level: {
-                       l: number, r: number, pkL: number, pkR: number,
-                       rmsL: number, rmsR: number, lufs: number
-                   }): void => {
+                   level: { peakL: number, peakR: number, rmsL: number, rmsR: number, lufs: number }): void => {
     clearBg(painter)
     const {context, actualWidth: w, actualHeight: h} = painter
     const dpr = devicePixelRatio
@@ -258,15 +268,17 @@ const drawLevel = (painter: CanvasPainter,
     const rmsL = peakR + barWidth + groupGap
     const rmsR = rmsL + barWidth + pairGap
     const lufsX = rmsR + barWidth + groupGap
-    drawBar(peakL, level.l, level.pkL)
-    drawBar(peakR, level.r, level.pkR)
-    drawBar(rmsL, level.rmsL, -1)
-    drawBar(rmsR, level.rmsR, -1)
-    drawBar(lufsX, level.lufs, -1)
-    unitLabel(context, "0 dBFS", pad, pad, "left", "top")
-    unitLabel(context, "-12", pad, plotH * 0.25, "left", "top")
-    unitLabel(context, "-24", pad, plotH * 0.5, "left", "top")
-    unitLabel(context, "-48", pad, plotH * 0.75, "left", "top")
+    drawBar(peakL, levelNorm(level.peakL), -1)
+    drawBar(peakR, levelNorm(level.peakR), -1)
+    drawBar(rmsL, levelNorm(level.rmsL), -1)
+    drawBar(rmsR, levelNorm(level.rmsR), -1)
+    drawBar(lufsX, levelNorm(level.lufs), -1)
+    const yAt = (db: number): number =>
+        (1.0 - (db - LEVEL_FLOOR) / (LEVEL_CEIL - LEVEL_FLOOR)) * plotH
+    unitLabel(context, "0 dBFS", pad, yAt(0), "left", "top")
+    unitLabel(context, "-12", pad, yAt(-12), "left", "top")
+    unitLabel(context, "-24", pad, yAt(-24), "left", "top")
+    unitLabel(context, "-48", pad, yAt(-48), "left", "top")
     unitLabel(context, "peak L R", (peakL + peakR + barWidth) / 2, h - dpr, "center", "bottom")
     unitLabel(context, "rms L R", (rmsL + rmsR + barWidth) / 2, h - dpr, "center", "bottom")
     unitLabel(context, "LUFS M", lufsX + barWidth / 2, h - dpr, "center", "bottom")
@@ -336,7 +348,7 @@ const drawScope = (painter: CanvasPainter, scope: Float32Array): void => {
     context.beginPath()
     for (let i = 0; i < scope.length; i++) {
         const x = (i / (scope.length - 1)) * w
-        const y = h / 2 - scope[i] * (h / 2 - 2)
+        const y = h / 2 - clamp(scope[i] * 0.5, -1.0, 1.0) * (h / 2 - 2)
         if (i === 0) {context.moveTo(x, y)} else {context.lineTo(x, y)}
     }
     context.stroke()
