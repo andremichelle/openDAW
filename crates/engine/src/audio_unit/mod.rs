@@ -285,14 +285,14 @@ pub(crate) struct TapeWired {
     pub(crate) enabled_sub: SubscriptionId, // TapeDeviceBox `enabled` (4): gates the player, resets on disable (TS mirror)
     pub(crate) player_id: NodeId,
     pub(crate) instrument_uuid: Uuid,        // the TapeDeviceBox uuid: the player output is registered under it so a SIDECHAIN
-                                  // targeting the tape device taps its RAW output (pre fx / strip), matching TS
+                                  // targeting the tape device taps its output — which now includes the monitored
+                                  // live input (the player sums it in), so an armed tape drives such a side-chain
     pub(crate) audio: Vec<Member>,           // the unit's AUDIO-effects chain (player -> fx0 -> ... -> strip), like a leaf
     pub(crate) pre_strip: SharedAudioBuffer, // the fx-chain output feeding the strip (the send tap; == player output if no fx)
     pub(crate) pre_strip_node: NodeId,
     pub(crate) strip_id: NodeId,
     pub(crate) strip_output: SharedAudioBuffer,
-    pub(crate) edges: Vec<(NodeId, NodeId)>, // player -> fx0 -> ... -> strip
-    pub(crate) monitor_node: Option<NodeId>  // the EFFECTS-monitoring injector, rebuilt per re-wire
+    pub(crate) edges: Vec<(NodeId, NodeId)>  // player -> fx0 -> ... -> strip
 }
 
 /// A held device processor, kept alive across rewires so its DSP state (voices, delay tails, filter history)
@@ -997,9 +997,6 @@ impl Engine {
                 }
                 self.context.remove_processor(tape.strip_id);
                 self.context.remove_processor(tape.player_id);
-                if let Some(node) = tape.monitor_node {
-                    self.context.remove_processor(node);
-                }
                 for member in tape.audio {
                     self.terminate_member(member);
                 }

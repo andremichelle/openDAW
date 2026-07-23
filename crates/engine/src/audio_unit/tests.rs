@@ -961,6 +961,46 @@ fn a_tape_instrument_unit_builds_the_audio_region_player() {
     assert_eq!(unit.audio_track_sets.borrow()[0].borrow().regions.len(), 1, "the player reads the unit's audio region");
 }
 
+#[test]
+fn an_armed_tape_meters_and_carries_the_monitored_live_input() {
+    // The armed tape sums its staged live input into its own output: the tape device meters it (a peak
+    // shows) and a side-chain tapping the tape device (e.g. a vocoder modulator) receives it. Regression
+    // for "monitoring with effects gives the tape device no signal / no peak".
+    use crate::monitor::MonitorEntry;
+    const TAPE: Uuid = [55u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(TAPE, "TapeDeviceBox", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+    ]);
+    let quantum = engine_env::RENDER_QUANTUM;
+    {
+        let staging = unsafe { crate::MONITOR_INPUT.get() };
+        for sample in staging.iter_mut() {*sample = 0.0;}
+        for index in 0..quantum {
+            staging[index] = 0.5;
+            staging[quantum + index] = 0.5;
+        }
+    }
+    engine.monitoring_map = alloc::vec![MonitorEntry {uuid: UNIT, left: 0, right: 1}];
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    engine.context.process(&engine_env::process_info::ProcessInfo {blocks: &[]});
+    match unit.wired.as_ref().expect("wired") {
+        Wired::Tape(tape) => {
+            let output = tape.player.borrow().audio_output();
+            assert!((0..quantum).all(|index| (output.borrow().left[index] - 0.5).abs() < 1e-6),
+                "the tape device output (its side-chain tap) carries the monitored live input");
+            assert!(tape.player.borrow().meter_slot().borrow()[0] > 0.0,
+                "the tape device meters the monitored live input (peak L)");
+        }
+        _ => panic!("expected a tape unit")
+    }
+}
+
 // ---- Composite per-child lifecycle ----
 // A composite (Playfield) unit: adding a child slot must KEEP the existing slots' processors. Same
 // identity-by-NodeId proof as the leaf case, one level down.

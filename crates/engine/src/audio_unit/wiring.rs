@@ -230,9 +230,6 @@ impl Engine {
                 }
                 self.context.remove_processor(tape.strip_id);
                 self.context.remove_processor(tape.player_id);
-                if let Some(node) = tape.monitor_node {
-                    self.context.remove_processor(node);
-                }
                 self.output_registry.remove(&Address::of(unit.unit, vec![]));
                 self.output_registry.remove(&Address::of(tape.instrument_uuid, vec![]));
                 for member in tape.audio {
@@ -243,6 +240,9 @@ impl Engine {
             None => {}
         }
         let player = Rc::new(RefCell::new(AudioRegionPlayer::new(unit.audio_track_sets.clone(), self.sample_rate, self.tempo_map.clone(), self.clip_sequencer.clone())));
+        // EFFECTS monitoring: the armed tape sums its staged live input into its OWN output, so the tape
+        // device (meter + a side-chain tapping it) carries the live signal and it flows through the fx chain.
+        player.borrow_mut().set_monitor(self.monitor_channels_of(&unit.unit));
         let player_output = player.borrow().audio_output();
         let player_id = self.context.register_processor(player.clone());
         let (stretch_regions, total_regions) = tape_region_counts(&unit.audio_track_sets);
@@ -277,16 +277,6 @@ impl Engine {
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut output = player_output;
         let mut output_node = player_id;
-        // EFFECTS monitoring (an armed audio track): inject the staged live input after the player, PRE-FX.
-        let monitor_node = self.monitor_channels_of(&unit.unit).map(|(left, right)| {
-            let mixer = Rc::new(RefCell::new(crate::monitor::MonitorMix::new(output.clone(), left, right)));
-            let mixer_id = self.context.register_processor(mixer);
-            self.context.set_label(mixer_id, alloc::string::String::from("monitor-mix"));
-            self.context.register_edge(output_node, mixer_id);
-            edges.push((output_node, mixer_id));
-            output_node = mixer_id;
-            mixer_id
-        });
         let include_fx = self.unit_options(&unit.unit).include_audio_effects;
         for member in &audio_members {
             if !include_fx {
@@ -319,7 +309,7 @@ impl Engine {
         edges.push((output_node, strip_id));
         // The strip's output is routed to the unit's OUTPUT bus by `resolve_outputs` (not wired to master here).
         self.output_registry.register(Address::of(unit.unit, vec![]), strip_output.clone(), strip_id);
-        unit.wired = Some(Wired::Tape(TapeWired {player, enabled_sub, player_id, instrument_uuid, audio: audio_members, pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges, monitor_node}));
+        unit.wired = Some(Wired::Tape(TapeWired {player, enabled_sub, player_id, instrument_uuid, audio: audio_members, pre_strip: output, pre_strip_node: output_node, strip_id, strip_output, edges}));
     }
 
     /// The MIDI-OUTPUT instrument path (TS `MIDIOutputDeviceProcessor`, engine-side like the tape): the

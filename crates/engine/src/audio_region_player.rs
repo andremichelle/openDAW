@@ -63,6 +63,10 @@ pub(crate) struct AudioRegionPlayer {
     visited: Vec<Uuid>,
     // TapeDeviceBox `enabled` (TS observes it, resets on disable, and renders silence while off).
     enabled: bool,
+    // EFFECTS-mode input monitoring: the armed tape's staged live-input channels, summed into the player's
+    // OWN output so the tape device (its meter + any side-chain tapping it) carries the live input — the tape
+    // IS the source. `None` when the unit is not monitoring. Re-set on rebuild (the map change rewires).
+    monitor: Option<(i32, i32)>,
     meter: engine_env::meter::Meter, // peaks/RMS of the tape output (a broadcast slot)
     // Recycled sequencers: a pruned region's sequencer parks here (voices cleared, capacity kept) and the
     // next stretch region reuses it. `prepare` (reconcile) pre-warms the pool for every BOUND stretch region,
@@ -115,7 +119,13 @@ impl AudioRegionPlayer {
             sequencers: Vec::with_capacity(8), native_cursors: Vec::with_capacity(16), visited: Vec::with_capacity(32),
             sequencer_pool: Vec::with_capacity(8),
             signalsmith_players: Vec::with_capacity(4), signalsmith_pool: Vec::with_capacity(4), enabled: true,
-            meter: engine_env::meter::Meter::new(sample_rate), clips}
+            monitor: None, meter: engine_env::meter::Meter::new(sample_rate), clips}
+    }
+
+    /// Set the staged live-input channels summed into the output (EFFECTS monitoring), or `None`. The
+    /// monitoring-map change that alters this rewires the unit, so it is set at each (re)build.
+    pub(crate) fn set_monitor(&mut self, monitor: Option<(i32, i32)>) {
+        self.monitor = monitor;
     }
 
     /// Pre-warm at RECONCILE (region bind / edit), so region entry during playback never allocates: park a
@@ -182,7 +192,7 @@ impl Processor for AudioRegionPlayer {
     fn process(&mut self, info: &ProcessInfo) {
         let AudioRegionPlayer {
             tracks, sample_rate, tempo_map, output, sequencers, native_cursors, visited,
-            sequencer_pool, signalsmith_players, signalsmith_pool, clips, enabled, meter, ..
+            sequencer_pool, signalsmith_players, signalsmith_pool, clips, enabled, monitor, meter, ..
         } = self;
         let mut output = output.borrow_mut();
         output.clear(); // the player is a source: it fills its own output each quantum (silence when not playing)
@@ -215,6 +225,24 @@ impl Processor for AudioRegionPlayer {
                         }
                     }
                 });
+            }
+        }
+        // Sum the staged live input into the player output (post regions, pre meter): the tape device is the
+        // monitored source, so its meter and any side-chain tapping it carry the live signal. Runs regardless
+        // of transport (monitoring works while stopped); mirrors the channel resolution of `MonitorMix`.
+        if let Some((left, right)) = *monitor {
+            let staging = unsafe { crate::MONITOR_INPUT.get() };
+            let left_channel = left as usize;
+            if left >= 0 && left_channel < crate::monitor::MONITOR_CHANNELS {
+                let right_channel = if (0..crate::monitor::MONITOR_CHANNELS as i32).contains(&right) {
+                    right as usize
+                } else {
+                    left_channel
+                };
+                for index in 0..engine_env::RENDER_QUANTUM {
+                    output.left[index] += staging[left_channel * engine_env::RENDER_QUANTUM + index];
+                    output.right[index] += staging[right_channel * engine_env::RENDER_QUANTUM + index];
+                }
             }
         }
         meter.process(&output.left, &output.right);
@@ -564,6 +592,48 @@ mod tests {
     // A playing block covering the first 64 samples from transport 0 at 120 bpm.
     fn block() -> Block {
         Block {index: 0, flags: BlockFlags::create(true, false, true, false), p0: 0.0, p1: 240.0, s0: 0, s1: 64, bpm: 120.0}
+    }
+
+    fn empty_player() -> AudioRegionPlayer {
+        AudioRegionPlayer::new(
+            Rc::new(RefCell::new(Vec::new())), 48_000.0,
+            Rc::new(RefCell::new(TempoMap::fixed(120.0))),
+            Rc::new(RefCell::new(ClipSequencer::new())))
+    }
+
+    // The fix for "monitoring-with-effects gives the tape device no signal": the armed tape sums the staged
+    // live input into its OWN output (no separate downstream node), so the tape device — its meter and any
+    // side-chain tapping it (e.g. a vocoder modulator) — carries the live input. No regions, transport idle.
+    #[test]
+    fn monitoring_sums_the_staged_input_into_the_tape_output() {
+        let quantum = engine_env::RENDER_QUANTUM;
+        {
+            let staging = unsafe { crate::MONITOR_INPUT.get() };
+            for sample in staging.iter_mut() {*sample = 0.0;}
+            for index in 0..quantum {
+                staging[index] = 0.5; // channel 0 -> left
+                staging[quantum + index] = -0.5; // channel 1 -> right
+            }
+        }
+        let mut player = empty_player();
+        player.set_monitor(Some((0, 1)));
+        player.process(&ProcessInfo {blocks: &[]});
+        let output = player.audio_output();
+        let buffer = output.borrow();
+        assert!((0..quantum).all(|index| (buffer.left[index] - 0.5).abs() < 1e-6),
+            "the staged left channel is summed into the tape output");
+        assert!((0..quantum).all(|index| (buffer.right[index] + 0.5).abs() < 1e-6),
+            "the staged right channel is summed into the tape output");
+        let slot = player.meter_slot();
+        assert!(slot.borrow()[0] > 0.0, "the tape device meters the live input (peak L)");
+        drop(buffer);
+        // Without a monitor mapping the tape output stays silent (the map change rewires and re-sets this).
+        player.set_monitor(None);
+        player.process(&ProcessInfo {blocks: &[]});
+        let output = player.audio_output();
+        let buffer = output.borrow();
+        assert!((0..quantum).all(|index| buffer.left[index] == 0.0 && buffer.right[index] == 0.0),
+            "no monitor mapping leaves the tape output silent");
     }
 
     #[test]
