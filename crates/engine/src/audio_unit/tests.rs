@@ -1001,6 +1001,42 @@ fn an_armed_tape_meters_and_carries_the_monitored_live_input() {
     }
 }
 
+#[test]
+fn arming_a_tape_drops_the_old_player_so_its_meter_re_registers() {
+    // Regression for "the tape device meter freezes when arming + monitoring": setting the monitoring map
+    // rewires the unit; the rebuild must DROP the old player so its (now stale) meter slot dies and the fresh
+    // meter registers instead of being dedup-skipped. The old player leaked through its unsubscribed `enabled`
+    // observer's captured Rc, so the UI kept reading the old, no-longer-processed slot — frozen.
+    use crate::monitor::MonitorEntry;
+    use alloc::rc::Weak;
+    const TAPE: Uuid = [55u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(TAPE, "TapeDeviceBox", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+    ]);
+    engine.unit_changes.borrow_mut().added.push(UNIT);
+    engine.reconcile_units();
+    let old_player: Weak<_> = match engine.audio_units.iter().find(|u| u.unit == UNIT)
+        .and_then(|u| u.wired.as_ref()).expect("wired") {
+        Wired::Tape(tape) => alloc::rc::Rc::downgrade(&tape.player),
+        _ => panic!("expected a tape unit")
+    };
+    engine.set_monitoring_map(alloc::vec![MonitorEntry {uuid: UNIT, left: 0, right: 1}]); // arm+monitor -> rewire
+    engine.broadcasts.sweep();
+    assert!(old_player.upgrade().is_none(),
+        "arming rewires the tape and drops the old player (its enabled observer is unsubscribed)");
+    let alive_meters = (0..engine.broadcasts.len()).filter(|index| {
+        let entry = engine.broadcasts.entry(*index).expect("entry");
+        entry.uuid == TAPE && entry.keys.is_empty()
+            && entry.package_type == crate::broadcast::PACKAGE_FLOAT_ARRAY && entry.alive()
+    }).count();
+    assert_eq!(alive_meters, 1, "exactly one alive tape-device meter after arming (the fresh one, not the frozen old)");
+}
+
 // ---- Composite per-child lifecycle ----
 // A composite (Playfield) unit: adding a child slot must KEEP the existing slots' processors. Same
 // identity-by-NodeId proof as the leaf case, one level down.

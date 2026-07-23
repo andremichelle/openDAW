@@ -225,6 +225,11 @@ impl Engine {
         let mut pool: BTreeMap<Uuid, Member> = BTreeMap::new();
         match unit.wired.take() {
             Some(Wired::Tape(tape)) => {
+                // Unsubscribe the old player's `enabled` observer: its closure holds an Rc of the old player,
+                // so leaving it subscribed keeps the old player (and its meter slot) alive past the rebuild.
+                // A live old meter slot then dedup-SKIPS the fresh meter registration (see `Broadcasts::register`),
+                // and the UI keeps reading the old, no-longer-processed slot — the tape meter freezes.
+                self.graph.unsubscribe(tape.enabled_sub);
                 for (source, target) in &tape.edges {
                     self.context.remove_edge(*source, *target);
                 }
