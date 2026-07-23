@@ -54,6 +54,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                 files: [
                     {
                         type: "page",
+                        label: "Autotune",
+                        path: "/manuals/devices/audio/autotune",
+                        icon: EffectFactories.Autotune.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "Compressor",
                         path: "/manuals/devices/audio/compressor",
                         icon: EffectFactories.Compressor.defaultIcon
