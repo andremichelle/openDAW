@@ -19,6 +19,7 @@ import {ShadertoyPreview} from "@/ui/shadertoy/ShadertoyPreview"
 import {ShadertoyEditor} from "@/ui/shadertoy/ShadertoyEditor"
 import {CodeEditorPanel} from "@/ui/code-editor/CodeEditorPanel"
 import {TapTempo} from "@/ui/pages/TapTempo"
+import {AnalysisPanel} from "@/ui/analysis/AnalysisPanel"
 
 export const createPanelFactory = (service: StudioService): PanelContentFactory => ({
     create: (lifecycle: Lifecycle, type: PanelType): JsxValue => {
@@ -53,6 +54,8 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<CodeEditorPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.TapTempo:
                 return (<TapTempo lifecycle={lifecycle} service={service}/>)
+            case PanelType.Analysis:
+                return (<AnalysisPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.EmptyFlexSpace:
                 return (<FlexSpace/>)
             default:

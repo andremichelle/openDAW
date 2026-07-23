@@ -14,5 +14,6 @@ export enum PanelType {
     ShadertoyEditor,
     CodeEditor,
     EmptyFlexSpace,
-    TapTempo
+    TapTempo,
+    Analysis
 }

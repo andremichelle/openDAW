@@ -34,6 +34,14 @@ const ProjectInfoPanel = PanelState.create({
     notMinimizable: true,
     constrains: {type: "flex", minSize: 384, flex: 1}
 })
+const AnalysisPanel = PanelState.create({
+    type: "panel",
+    name: "Analysis",
+    icon: IconSymbol.Charts,
+    panelType: PanelType.Analysis,
+    constrains: {type: "flex", minSize: 320, maxSize: 640, flex: 1.0},
+    minimized: true
+})
 
 /*const ModularSystem = PanelState.create({
     type: "panel",
@@ -124,7 +132,8 @@ export const DefaultWorkspace = Object.freeze({
                         DevicesPanel
                     ],
                     constrains: {type: "flex", minSize: 0, flex: 1}
-                }
+                },
+                AnalysisPanel
             ],
             constrains: {type: "flex", minSize: 20, flex: 1}
         }
