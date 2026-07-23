@@ -94,7 +94,7 @@ export const AnalysisPanel = ({lifecycle, service: _service}: Construct) => {
             {card("VU · L", dropdown("6.5em", "-18 dBFS", "-12 dBFS", "-14 dBFS", "-16 dBFS",
                 "-18 dBFS", "-20 dBFS", "-22 dBFS"),
                 (<div className="vu"><VUMeterDesign.Default model={vuL}/></div>), false, "meter")}
-            {card("VU · R", toggle("Mono"),
+            {card("VU · R", [],
                 (<div className="vu"><VUMeterDesign.Default model={vuR}/></div>), false, "meter")}
             {card("Spectrum", [radio("Line", "Line", "Bars", "Spectro"), toggle("Log", true),
                 dropdown("8em", "4.5 dB/oct", "0 dB/oct", "3 dB/oct", "4.5 dB/oct", "6 dB/oct"),
