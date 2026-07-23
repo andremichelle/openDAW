@@ -251,6 +251,12 @@ impl Autotune {
         } else {
             raw
         };
+        // On a note change, jump the vibrato reference with the note: `m_slow` otherwise catches up at
+        // NOTE_TAU and the step reads as deviation, which the flatten would chase (the hard-retune
+        // settle defect). The intra-note offset is preserved; only the note delta is skipped.
+        if self.prev_target >= 0 && chosen != self.prev_target {
+            self.m_slow += (chosen - self.prev_target) as f64;
+        }
         self.prev_target = chosen;
         chosen
     }
