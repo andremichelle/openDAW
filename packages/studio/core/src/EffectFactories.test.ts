@@ -11,6 +11,7 @@ describe("EffectFactories.keyOfBox", () => {
     it("resolves regular <Key>DeviceBox effects to their factory key", () => {
         expect(EffectFactories.keyOfBox(make("DelayDeviceBox"))).toBe("Delay")
         expect(EffectFactories.keyOfBox(make("ArpeggioDeviceBox"))).toBe("Arpeggio")
+        expect(EffectFactories.keyOfBox(make("AutotuneDeviceBox"))).toBe("Autotune")
     })
     it("resolves composite <Key>Box effects to their factory key", () => {
         expect(EffectFactories.keyOfBox(make("AudioEffectCompositeBox"))).toBe("AudioEffectComposite")

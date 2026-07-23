@@ -11,13 +11,13 @@ import {readFileSync} from "node:fs"
 import {isDefined, Option, Optional, panic, Terminable, UUID} from "@opendaw/lib-std"
 import {Address, BoxGraph, Constraints, Float32Field, PrimitiveType} from "@opendaw/lib-box"
 import {
-    ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, CompressorDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
+    ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
     DelayDeviceBox, FoldDeviceBox, GateDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
     PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
     TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox
 } from "@opendaw/studio-boxes"
 import {
-    ArpeggioDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
+    ArpeggioDeviceBoxAdapter, AutotuneDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
     GateDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
     ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
@@ -103,6 +103,7 @@ const buildBoxes = () => {
     const tidal = TidalDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(11)})
     const vocoder = VocoderDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(12)})
     const waveshaper = WaveshaperDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(13)})
+    const autotune = AutotuneDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(14)})
     const arpeggio = ArpeggioDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(0)})
     const pitch = PitchDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(1)})
     const velocity = VelocityDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(2)})
@@ -124,7 +125,7 @@ const buildBoxes = () => {
     })
     boxGraph.endTransaction()
     return {boxGraph, compressor, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
-        stereoTool, tidal, vocoder, waveshaper, arpeggio, pitch, velocity, vaporisateur, nano, playfieldSample}
+        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, velocity, vaporisateur, nano, playfieldSample}
 }
 
 const boxes = buildBoxes()
@@ -197,6 +198,8 @@ type DeviceCase = {
 const CASES: ReadonlyArray<DeviceCase> = [
     {name: "arpeggio", file: "device_arpeggio.wasm",
         createAdapter: context => new ArpeggioDeviceBoxAdapter(context, boxes.arpeggio), tsOnly: []},
+    {name: "autotune", file: "device_autotune.wasm",
+        createAdapter: context => new AutotuneDeviceBoxAdapter(context, boxes.autotune), tsOnly: []},
     {name: "compressor", file: "device_compressor.wasm",
         createAdapter: context => new CompressorDeviceBoxAdapter(context, boxes.compressor), tsOnly: []},
     {name: "crusher", file: "device_crusher.wasm",

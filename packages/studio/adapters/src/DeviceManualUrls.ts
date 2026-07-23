@@ -10,6 +10,7 @@ export namespace DeviceManualUrls {
     export const Zeitgeist = "manuals/devices/midi/zeitgeist"
 
     // Audio Effects
+    export const Autotune = "manuals/devices/audio/autotune"
     export const StereoTool = "manuals/devices/audio/stereo-tool"
     export const Delay = "manuals/devices/audio/delay"
     export const DattorroReverb = "manuals/devices/audio/dattorro-reverb"

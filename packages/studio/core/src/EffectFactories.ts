@@ -4,6 +4,7 @@ import {
     ArpeggioDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
+    AutotuneDeviceBox,
     CompressorDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
@@ -262,6 +263,23 @@ export namespace EffectFactories {
             ReverbDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Reverb")
                 box.preDelay.setInitValue(0.001)
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    export const Autotune: EffectFactory = {
+        defaultName: "Autotune",
+        defaultIcon: IconSymbol.Note,
+        briefDescription: "Pitch Correction",
+        description: "Shifts the signal towards the nearest note of a key and scale",
+        manualPage: DeviceManualUrls.Autotune,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): AutotuneDeviceBox =>
+            AutotuneDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Autotune")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -542,6 +560,7 @@ export namespace EffectFactories {
         AudioEffectComposite, // FX Composite
         StereoComposite,      // Stereo Split
         FrequencySplit,       // Frequency Split
+        Autotune,
         Compressor,
         Crusher,
         DattorroReverb,  // Dattorro Reverb
