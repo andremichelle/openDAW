@@ -1,8 +1,8 @@
 import css from "./AnalysisPanel.sass?inline"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
-import {clamp, DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
-import {AudioAnalyser, gainToDb} from "@opendaw/lib-dsp"
+import {clamp, DefaultObservableValue, isDefined, Lifecycle, MutableObservableValue, Terminator} from "@opendaw/lib-std"
+import {AudioAnalyser, dbToGain, gainToDb} from "@opendaw/lib-dsp"
 import {CanvasPainter, LinearScale, LogScale, Scale} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {Colors} from "@opendaw/studio-enums"
@@ -17,10 +17,6 @@ const className = Html.adoptStyleSheet(css, "AnalysisPanel")
 
 type Construct = { lifecycle: Lifecycle, service: StudioService }
 
-// Mixer Analysis panel. Spectrum, level, scope and VU are driven by the engine's master telemetry
-// (EngineAddresses via the LiveStream broadcaster) and only produced while this panel is subscribed,
-// i.e. visible/not minimized. Phase, goniometer and loudness are still synthesised dummy data
-// (Phase 2 will add their engine DSP).
 export const AnalysisPanel = ({lifecycle, service}: Construct) => {
     const spectrum = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
     const waveform = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
@@ -32,8 +28,22 @@ export const AnalysisPanel = ({lifecycle, service}: Construct) => {
     const gonioHolder = {pairs: new Float32Array(0)}
     const hist = {write: 0, count: 0}
     const sampleRate = {value: 48000}
-    const xAxis: Scale = new LogScale(20.0, 20_000.0)
-    const yAxis: Scale = new LinearScale(-96.0, 0.0)
+    const specHold = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
+    const spectro = {canvas: document.createElement("canvas"), w: 0, h: 0}
+
+    const spectrumMode = lifecycle.own(new DefaultObservableValue("Line"))
+    const spectrumLog = lifecycle.own(new DefaultObservableValue(true))
+    const spectrumSlope = lifecycle.own(new DefaultObservableValue("4.5 dB/oct"))
+    const spectrumHold = lifecycle.own(new DefaultObservableValue(false))
+    const spectrumAvg = lifecycle.own(new DefaultObservableValue(false))
+    const levelScale = lifecycle.own(new DefaultObservableValue("dBFS"))
+    const gonioMode = lifecycle.own(new DefaultObservableValue("L/R"))
+    const gonioFade = lifecycle.own(new DefaultObservableValue(true))
+    const vuRef = lifecycle.own(new DefaultObservableValue("0 dBFS"))
+    const scopeTrig = lifecycle.own(new DefaultObservableValue(false))
+    const vuRefGain = {value: 1.0}
+    lifecycle.own(vuRef.catchupAndSubscribe(owner => vuRefGain.value = dbToGain(-parseFloat(owner.getValue()))))
+    lifecycle.own(spectrumHold.catchupAndSubscribe(owner => {if (owner.getValue()) {specHold.set(spectrum)}}))
 
     const spectrumCanvas: HTMLCanvasElement = (<canvas/>)
     const levelCanvas: HTMLCanvasElement = (<canvas/>)
@@ -43,13 +53,51 @@ export const AnalysisPanel = ({lifecycle, service}: Construct) => {
     const lufsCanvas: HTMLCanvasElement = (<canvas/>)
     const lufsReadout: HTMLElement = (<span className="readout"/>)
 
-    const spectrumPainter = lifecycle.own(new CanvasPainter(spectrumCanvas,
-        painter => drawSpectrum(painter, spectrum, sampleRate.value, xAxis, yAxis)))
-    const levelPainter = lifecycle.own(new CanvasPainter(levelCanvas, painter => drawLevel(painter, level)))
+    const spectrumPainter = lifecycle.own(new CanvasPainter(spectrumCanvas, painter =>
+        drawSpectrum(painter, spectrum, sampleRate.value, spectrumLog.getValue(),
+            parseFloat(spectrumSlope.getValue()), spectrumMode.getValue(), spectro.canvas)))
+    const levelPainter = lifecycle.own(new CanvasPainter(levelCanvas,
+        painter => drawLevel(painter, level, levelScale.getValue())))
     const phasePainter = lifecycle.own(new CanvasPainter(phaseCanvas, painter => drawPhase(painter, stereo)))
-    const gonioPainter = lifecycle.own(new CanvasPainter(gonioCanvas, painter => drawGonio(painter, gonioHolder.pairs)))
-    const scopePainter = lifecycle.own(new CanvasPainter(scopeCanvas, painter => drawScope(painter, waveform)))
+    const gonioPainter = lifecycle.own(new CanvasPainter(gonioCanvas,
+        painter => drawGonio(painter, gonioHolder.pairs, gonioMode.getValue(), gonioFade.getValue())))
+    const scopePainter = lifecycle.own(new CanvasPainter(scopeCanvas,
+        painter => drawScope(painter, waveform, scopeTrig.getValue())))
     const lufsPainter = lifecycle.own(new CanvasPainter(lufsCanvas, painter => drawSparkline(painter, lufsHistory)))
+    lifecycle.ownAll(
+        spectrumMode.subscribe(spectrumPainter.requestUpdate),
+        spectrumLog.subscribe(spectrumPainter.requestUpdate),
+        spectrumSlope.subscribe(spectrumPainter.requestUpdate),
+        spectrumHold.subscribe(spectrumPainter.requestUpdate),
+        spectrumAvg.subscribe(spectrumPainter.requestUpdate),
+        levelScale.subscribe(levelPainter.requestUpdate),
+        gonioMode.subscribe(gonioPainter.requestUpdate),
+        gonioFade.subscribe(gonioPainter.requestUpdate),
+        scopeTrig.subscribe(scopePainter.requestUpdate)
+    )
+
+    const pushSpectroColumn = (): void => {
+        const w = spectrumPainter.actualWidth
+        const ph = Math.round(spectrumPainter.actualHeight - 12 * devicePixelRatio)
+        if (w <= 0 || ph <= 0) {return}
+        if (spectro.w !== w || spectro.h !== ph) {
+            spectro.canvas.width = w
+            spectro.canvas.height = ph
+            spectro.w = w
+            spectro.h = ph
+        }
+        const ctx = spectro.canvas.getContext("2d")
+        if (!isDefined(ctx)) {return}
+        ctx.drawImage(spectro.canvas, -1, 0)
+        const freqStep = sampleRate.value / (spectrum.length << 1)
+        for (let y = 0; y < ph; y++) {
+            const freq = SPEC_X_LOG.normToUnit(1.0 - y / ph)
+            const bin = Math.min(spectrum.length - 1, Math.max(1, Math.round(freq / freqStep)))
+            const t = clamp((gainToDb(Math.max(spectrum[bin], 1e-7)) + 96.0) / 96.0, 0.0, 1.0)
+            ctx.fillStyle = `hsl(${260 * (1 - t)}, 85%, ${8 + t * 46}%)`
+            ctx.fillRect(w - 1, y, 1, 1)
+        }
+    }
 
     const runtime = lifecycle.own(new Terminator())
     lifecycle.own(service.projectProfileService.catchupAndSubscribe(optProfile => {
@@ -63,12 +111,24 @@ export const AnalysisPanel = ({lifecycle, service}: Construct) => {
                     level.peakR = values[1]
                     level.rmsL = values[2]
                     level.rmsR = values[3]
-                    vuL.setValue(values[0] >= vuL.getValue() ? values[0] : vuL.getValue() * 0.98)
-                    vuR.setValue(values[1] >= vuR.getValue() ? values[1] : vuR.getValue() * 0.98)
+                    const targetL = values[2] * vuRefGain.value
+                    const targetR = values[3] * vuRefGain.value
+                    vuL.setValue(vuL.getValue() + (targetL - vuL.getValue()) * 0.1)
+                    vuR.setValue(vuR.getValue() + (targetR - vuR.getValue()) * 0.1)
                     levelPainter.requestUpdate()
                 }),
                 liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, values => {
-                    spectrum.set(values)
+                    if (spectrumHold.getValue()) {
+                        for (let i = 0; i < values.length; i++) {
+                            if (values[i] > specHold[i]) {specHold[i] = values[i]}
+                            spectrum[i] = specHold[i]
+                        }
+                    } else if (spectrumAvg.getValue()) {
+                        for (let i = 0; i < values.length; i++) {spectrum[i] += (values[i] - spectrum[i]) * 0.2}
+                    } else {
+                        spectrum.set(values)
+                    }
+                    if (spectrumMode.getValue() === "Spectro") {pushSpectroColumn()}
                     spectrumPainter.requestUpdate()
                 }),
                 liveStreamReceiver.subscribeFloats(EngineAddresses.WAVEFORM, values => {
@@ -103,28 +163,24 @@ export const AnalysisPanel = ({lifecycle, service}: Construct) => {
         })
     }))
 
-    const toggle = (label: string, initial: boolean = false): HTMLElement => {
-        const model = lifecycle.own(new DefaultObservableValue(initial))
-        return (
-            <Checkbox lifecycle={lifecycle} model={model}>
-                <span>{label}</span>
-            </Checkbox>
-        )
-    }
-    const radio = (initial: string, ...options: ReadonlyArray<string>): HTMLElement => {
-        const model = lifecycle.own(new DefaultObservableValue(initial))
-        return (
-            <RadioGroup lifecycle={lifecycle} model={model}
-                        elements={options.map(label => ({value: label, element: (<span>{label}</span>)}))}/>
-        )
-    }
-    const dropdown = (width: string, initial: string, ...options: ReadonlyArray<string>): HTMLElement => {
-        const model = lifecycle.own(new DefaultObservableValue(initial))
-        return (
-            <DropDown lifecycle={lifecycle} owner={model} provider={() => options}
-                      mapping={value => value} appearance={{color: Colors.gray}} width={width}/>
-        )
-    }
+    const toggle = (model: MutableObservableValue<boolean>, label: string): HTMLElement => (
+        <Checkbox lifecycle={lifecycle} model={model}>
+            <span>{label}</span>
+        </Checkbox>
+    )
+    const radio = (model: MutableObservableValue<string>, ...options: ReadonlyArray<string>): HTMLElement => (
+        <RadioGroup lifecycle={lifecycle} model={model}
+                    elements={options.map(label => ({value: label, element: (<span>{label}</span>)}))}/>
+    )
+    const dropdown = (model: MutableObservableValue<string>, width: string,
+                      ...options: ReadonlyArray<string>): HTMLElement => (
+        <DropDown lifecycle={lifecycle} owner={model} provider={() => options}
+                  mapping={value => value} appearance={{color: Colors.gray}} width={width}/>
+    )
+    const pendingBool = (initial: boolean = false): MutableObservableValue<boolean> =>
+        lifecycle.own(new DefaultObservableValue(initial))
+    const pendingStr = (initial: string): MutableObservableValue<string> =>
+        lifecycle.own(new DefaultObservableValue(initial))
     const action = (label: string): HTMLElement => (<span className="control action">{label}</span>)
 
     const card = (title: string, controlRow: JsxValue, body: JsxValue,
@@ -140,20 +196,21 @@ export const AnalysisPanel = ({lifecycle, service}: Construct) => {
 
     const cards: HTMLElement = (
         <div className="cards" onConnect={host => lifecycle.own(installScrollbars(host))}>
-            {card("VU · L", dropdown("6.5em", "-18 dBFS", "-12 dBFS", "-14 dBFS", "-16 dBFS",
-                "-18 dBFS", "-20 dBFS", "-22 dBFS"),
+            {card("VU · L", dropdown(vuRef, "6.5em", "0 dBFS", "-14 dBFS", "-18 dBFS", "-20 dBFS"),
                 (<div className="vu"><VUMeterDesign.Default model={vuL}/></div>), false, "meter")}
             {card("VU · R", [],
                 (<div className="vu"><VUMeterDesign.Default model={vuR}/></div>), false, "meter")}
-            {card("Spectrum", [radio("Line", "Line", "Bars", "Spectro"), toggle("Log", true),
-                dropdown("8em", "4.5 dB/oct", "0 dB/oct", "3 dB/oct", "4.5 dB/oct", "6 dB/oct"),
-                dropdown("4.5em", "4096", "1024", "2048", "4096", "8192", "16384"),
-                toggle("Hold"), toggle("Avg")], spectrumCanvas, true)}
-            {card("Level", [radio("dBFS", "dBFS", "K-14", "K-20"), toggle("TP"), toggle("Hold")], levelCanvas)}
-            {card("Phase", radio("300 ms", "100 ms", "300 ms", "1 s"), phaseCanvas)}
-            {card("Gonio", [radio("L/R", "L/R", "M/S"), toggle("Fade", true)], gonioCanvas)}
-            {card("Scope", [toggle("Trig"), radio("10 ms", "10 ms", "50 ms", "100 ms")], scopeCanvas)}
-            {card("Loudness", [radio("R128", "R128", "K"), action("reset")],
+            {card("Spectrum", [radio(spectrumMode, "Line", "Bars", "Spectro"), toggle(spectrumLog, "Log"),
+                dropdown(spectrumSlope, "8em", "0 dB/oct", "3 dB/oct", "4.5 dB/oct", "6 dB/oct"),
+                dropdown(pendingStr("4096"), "4.5em", "1024", "2048", "4096", "8192", "16384"),
+                toggle(spectrumHold, "Hold"), toggle(spectrumAvg, "Avg")], spectrumCanvas, true)}
+            {card("Level", [radio(levelScale, "dBFS", "K-14", "K-20"), toggle(pendingBool(), "TP"),
+                toggle(pendingBool(), "Hold")], levelCanvas)}
+            {card("Phase", radio(pendingStr("300 ms"), "100 ms", "300 ms", "1 s"), phaseCanvas)}
+            {card("Gonio", [radio(gonioMode, "L/R", "M/S"), toggle(gonioFade, "Fade")], gonioCanvas)}
+            {card("Scope", [toggle(scopeTrig, "Trig"), radio(pendingStr("10 ms"), "10 ms", "50 ms", "100 ms")],
+                scopeCanvas)}
+            {card("Loudness", [radio(pendingStr("R128"), "R128", "K"), action("reset")],
                 (<div className="lufs">{lufsReadout}{lufsCanvas}</div>), true)}
         </div>
     )
@@ -182,8 +239,16 @@ const unitLabel = (context: CanvasRenderingContext2D, text: string, x: number, y
     context.fillText(text, x, y)
 }
 
-const drawSpectrum = (painter: CanvasPainter, spectrum: Float32Array,
-                      sampleRate: number, xAxis: Scale, yAxis: Scale): void => {
+const SPEC_Y: Scale = new LinearScale(-96.0, 0.0)
+const SPEC_X_LOG: Scale = new LogScale(20.0, 20_000.0)
+const SPEC_X_LIN: Scale = new LinearScale(20.0, 20_000.0)
+const FREQ_TICKS: ReadonlyArray<readonly [number, string]> = [
+    [20, "20"], [50, "50"], [100, "100"], [200, "200"], [500, "500"],
+    [1_000, "1k"], [2_000, "2k"], [5_000, "5k"], [10_000, "10k"], [20_000, "20k"]
+]
+
+const drawSpectrum = (painter: CanvasPainter, spectrum: Float32Array, sampleRate: number,
+                      log: boolean, slopeDbOct: number, mode: string, spectroCanvas: HTMLCanvasElement): void => {
     clearBg(painter)
     const {context, actualWidth: w, actualHeight: h} = painter
     const dpr = devicePixelRatio
@@ -193,63 +258,112 @@ const drawSpectrum = (painter: CanvasPainter, spectrum: Float32Array,
     const numBins = spectrum.length
     const freqStep = sampleRate / (numBins << 1)
     const nyquist = sampleRate * 0.5
-    const xOf = (freq: number): number => xAxis.unitToNorm(freq) * w
-    const yOf = (gain: number): number => (1.0 - yAxis.unitToNorm(gainToDb(Math.max(gain, 1e-7)))) * plotH
-    const yAt = (db: number): number => (1.0 - yAxis.unitToNorm(db)) * plotH
-    context.strokeStyle = "rgba(255,255,255,0.05)"
-    context.lineWidth = 1
-    for (const db of [-30, -60, -90]) {
-        const y = yAt(db)
-        context.beginPath()
-        context.moveTo(0, y)
-        context.lineTo(w, y)
-        context.stroke()
+    const xScale = log ? SPEC_X_LOG : SPEC_X_LIN
+    const xOf = (freq: number): number => xScale.unitToNorm(freq) * w
+    const yOf = (gain: number, freq: number): number => (1.0 - SPEC_Y.unitToNorm(
+        gainToDb(Math.max(gain, 1e-7)) + slopeDbOct * Math.log2(Math.max(freq, 20.0) / 1000.0))) * plotH
+    const yAt = (db: number): number => (1.0 - SPEC_Y.unitToNorm(db)) * plotH
+    if (mode !== "Spectro") {
+        context.strokeStyle = "rgba(255,255,255,0.05)"
+        context.lineWidth = 1
+        for (const db of [-30, -60, -90]) {
+            const y = yAt(db)
+            context.beginPath()
+            context.moveTo(0, y)
+            context.lineTo(w, y)
+            context.stroke()
+        }
     }
     const firstBin = Math.max(1, Math.ceil(20.0 / freqStep))
     const lastBin = Math.min(numBins - 1, Math.floor(Math.min(20_000.0, nyquist) / freqStep))
-    const lastX = xOf(lastBin * freqStep)
-    const y0 = yOf(spectrum[firstBin])
-    context.beginPath()
-    context.moveTo(0, plotH)
-    context.lineTo(0, y0)
-    for (let i = firstBin; i <= lastBin; i++) {context.lineTo(xOf(i * freqStep), yOf(spectrum[i]))}
-    context.lineTo(lastX, plotH)
-    context.closePath()
-    const gradient = context.createLinearGradient(0, 0, 0, plotH)
-    gradient.addColorStop(0, "rgba(120,190,255,0.5)")
-    gradient.addColorStop(1, "rgba(120,190,255,0.04)")
-    context.fillStyle = gradient
-    context.fill()
-    context.strokeStyle = "rgba(150,205,255,0.85)"
-    context.lineWidth = 1.5
-    context.beginPath()
-    context.moveTo(0, y0)
-    for (let i = firstBin; i <= lastBin; i++) {context.lineTo(xOf(i * freqStep), yOf(spectrum[i]))}
-    context.stroke()
-    unitLabel(context, "0 dB", w - pad, pad, "right", "top")
-    unitLabel(context, "-30", w - pad, yAt(-30) + pad, "right", "top")
-    unitLabel(context, "-60", w - pad, yAt(-60) + pad, "right", "top")
-    const fy = h - dpr
-    unitLabel(context, "20 Hz", pad, fy, "left", "bottom")
-    unitLabel(context, "100", xOf(100), fy, "center", "bottom")
-    unitLabel(context, "1k", xOf(1_000), fy, "center", "bottom")
-    unitLabel(context, "10k", xOf(10_000), fy, "center", "bottom")
-    unitLabel(context, "20 kHz", w - pad, fy, "right", "bottom")
+    if (mode === "Spectro") {
+        if (spectroCanvas.width > 0 && spectroCanvas.height > 0) {context.drawImage(spectroCanvas, 0, 0)}
+    } else if (mode === "Bars") {
+        const bands = 56
+        context.fillStyle = "rgba(140,195,255,0.7)"
+        for (let b = 0; b < bands; b++) {
+            const f0 = 20.0 * Math.pow(1000.0, b / bands)
+            const f1 = 20.0 * Math.pow(1000.0, (b + 1) / bands)
+            const i0 = Math.max(1, Math.floor(f0 / freqStep))
+            const i1 = Math.min(numBins - 1, Math.ceil(f1 / freqStep))
+            let mag = 0.0
+            for (let i = i0; i <= i1; i++) {if (spectrum[i] > mag) {mag = spectrum[i]}}
+            const x0b = xOf(f0)
+            const y = yOf(mag, (f0 + f1) * 0.5)
+            context.fillRect(x0b, y, Math.max(1.0, xOf(f1) - x0b - dpr), plotH - y)
+        }
+    } else {
+        const lastX = xOf(lastBin * freqStep)
+        const y0 = yOf(spectrum[firstBin], firstBin * freqStep)
+        context.beginPath()
+        context.moveTo(0, plotH)
+        context.lineTo(0, y0)
+        for (let i = firstBin; i <= lastBin; i++) {context.lineTo(xOf(i * freqStep), yOf(spectrum[i], i * freqStep))}
+        context.lineTo(lastX, plotH)
+        context.closePath()
+        const gradient = context.createLinearGradient(0, 0, 0, plotH)
+        gradient.addColorStop(0, "rgba(120,190,255,0.5)")
+        gradient.addColorStop(1, "rgba(120,190,255,0.04)")
+        context.fillStyle = gradient
+        context.fill()
+        context.strokeStyle = "rgba(150,205,255,0.85)"
+        context.lineWidth = 1.5
+        context.beginPath()
+        context.moveTo(0, y0)
+        for (let i = firstBin; i <= lastBin; i++) {context.lineTo(xOf(i * freqStep), yOf(spectrum[i], i * freqStep))}
+        context.stroke()
+    }
+    if (mode === "Spectro") {
+        const yFreq = (freq: number): number => (1.0 - SPEC_X_LOG.unitToNorm(freq)) * plotH
+        let lastY = -1e9
+        for (let t = FREQ_TICKS.length - 1; t >= 0; t--) {
+            const [freq, label] = FREQ_TICKS[t]
+            const top = t === FREQ_TICKS.length - 1
+            const bottom = t === 0
+            const y = top ? pad : bottom ? plotH - pad : yFreq(freq)
+            if (!top && !bottom && y < lastY + 12 * dpr) {continue}
+            unitLabel(context, label, pad, y, "left", top ? "top" : bottom ? "bottom" : "middle")
+            lastY = y
+        }
+    } else {
+        unitLabel(context, "0 dB", w - pad, pad, "right", "top")
+        unitLabel(context, "-30", w - pad, yAt(-30) + pad, "right", "top")
+        unitLabel(context, "-60", w - pad, yAt(-60) + pad, "right", "top")
+        const fy = h - dpr
+        let lastX = -1e9
+        for (let t = 0; t < FREQ_TICKS.length; t++) {
+            const [freq, label] = FREQ_TICKS[t]
+            const first = t === 0
+            const last = t === FREQ_TICKS.length - 1
+            const x = first ? pad : last ? w - pad : xOf(freq)
+            if (!first && !last && x < lastX + 20 * dpr) {continue}
+            unitLabel(context, label, x, fy, first ? "left" : last ? "right" : "center", "bottom")
+            lastX = x
+        }
+    }
 }
 
-const LEVEL_FLOOR = -60.0
-const LEVEL_CEIL = 6.0
-const levelNorm = (gain: number): number =>
-    clamp((gainToDb(Math.max(gain, 1e-7)) - LEVEL_FLOOR) / (LEVEL_CEIL - LEVEL_FLOOR), 0.0, 1.0)
+const LEVEL_FLOOR = -40.0
+const LEVEL_CEIL = 14.0
+const LEVEL_SCALES: Record<string, { off: number, ticks: ReadonlyArray<number>, unit: string }> = {
+    "dBFS": {off: 0.0, ticks: [0, -12, -24, -36], unit: "dBFS"},
+    "K-14": {off: 14.0, ticks: [8, 0, -8, -16], unit: "K"},
+    "K-20": {off: 20.0, ticks: [6, 0, -10, -20], unit: "K"}
+}
+const levelNorm = (gain: number, off: number): number =>
+    clamp((gainToDb(Math.max(gain, 1e-7)) + off - LEVEL_FLOOR) / (LEVEL_CEIL - LEVEL_FLOOR), 0.0, 1.0)
 
 const drawLevel = (painter: CanvasPainter,
-                   level: { peakL: number, peakR: number, rmsL: number, rmsR: number, lufs: number }): void => {
+                   level: { peakL: number, peakR: number, rmsL: number, rmsR: number, lufs: number },
+                   scale: string): void => {
     clearBg(painter)
     const {context, actualWidth: w, actualHeight: h} = painter
     const dpr = devicePixelRatio
     const pad = 3 * dpr
     const bottomMargin = 12 * dpr
     const plotH = h - bottomMargin
+    const off = (LEVEL_SCALES[scale] ?? LEVEL_SCALES["dBFS"]).off
+    const spec = LEVEL_SCALES[scale] ?? LEVEL_SCALES["dBFS"]
     const scaleW = 32 * dpr
     const pairGap = 5 * dpr
     const groupGap = 15 * dpr
@@ -277,17 +391,15 @@ const drawLevel = (painter: CanvasPainter,
     const rmsL = peakR + barWidth + groupGap
     const rmsR = rmsL + barWidth + pairGap
     const lufsX = rmsR + barWidth + groupGap
-    drawBar(peakL, levelNorm(level.peakL), -1)
-    drawBar(peakR, levelNorm(level.peakR), -1)
-    drawBar(rmsL, levelNorm(level.rmsL), -1)
-    drawBar(rmsR, levelNorm(level.rmsR), -1)
+    drawBar(peakL, levelNorm(level.peakL, off), -1)
+    drawBar(peakR, levelNorm(level.peakR, off), -1)
+    drawBar(rmsL, levelNorm(level.rmsL, off), -1)
+    drawBar(rmsR, levelNorm(level.rmsR, off), -1)
     drawBar(lufsX, clamp(level.lufs, 0.0, 1.0), -1)
     const yAt = (db: number): number =>
         (1.0 - (db - LEVEL_FLOOR) / (LEVEL_CEIL - LEVEL_FLOOR)) * plotH
-    unitLabel(context, "0 dBFS", pad, yAt(0), "left", "top")
-    unitLabel(context, "-12", pad, yAt(-12), "left", "top")
-    unitLabel(context, "-24", pad, yAt(-24), "left", "top")
-    unitLabel(context, "-48", pad, yAt(-48), "left", "top")
+    spec.ticks.forEach((tick, index) =>
+        unitLabel(context, index === 0 ? `${tick} ${spec.unit}` : `${tick}`, pad, yAt(tick), "left", "top"))
     unitLabel(context, "peak L R", (peakL + peakR + barWidth) / 2, h - dpr, "center", "bottom")
     unitLabel(context, "rms L R", (rmsL + rmsR + barWidth) / 2, h - dpr, "center", "bottom")
     unitLabel(context, "LUFS M", lufsX + barWidth / 2, h - dpr, "center", "bottom")
@@ -318,9 +430,14 @@ const drawPhase = (painter: CanvasPainter, stereo: { corr: number, width: number
     unitLabel(context, "width 0..1", pad, h - pad, "left", "bottom")
 }
 
-const drawGonio = (painter: CanvasPainter, pairs: Float32Array): void => {
-    clearBg(painter)
+const drawGonio = (painter: CanvasPainter, pairs: Float32Array, mode: string, fade: boolean): void => {
     const {context, actualWidth: w, actualHeight: h} = painter
+    if (fade) {
+        context.fillStyle = "rgba(0,0,0,0.12)"
+        context.fillRect(0, 0, w, h)
+    } else {
+        clearBg(painter)
+    }
     const cx = w / 2
     const cy = h / 2
     const radius = Math.min(w, h) * 0.4
@@ -328,22 +445,37 @@ const drawGonio = (painter: CanvasPainter, pairs: Float32Array): void => {
     context.beginPath()
     context.arc(cx, cy, radius, 0, Math.PI * 2)
     context.stroke()
+    const midSide = mode === "M/S"
     const count = pairs.length >> 1
     const dot = Math.max(1.0, devicePixelRatio)
-    context.fillStyle = "rgba(150,205,255,0.45)"
+    context.fillStyle = "rgba(150,205,255,0.5)"
     for (let k = 0; k < count; k++) {
         const l = pairs[k * 2]
         const r = pairs[k * 2 + 1]
-        context.fillRect(cx + (l - r) * 0.5 * radius, cy - (l + r) * 0.5 * radius, dot, dot)
+        const x = midSide ? cx + (l - r) * 0.5 * radius : cx + l * radius
+        const y = midSide ? cy - (l + r) * 0.5 * radius : cy - r * radius
+        context.fillRect(x, y, dot, dot)
     }
     const pad = 3 * devicePixelRatio
-    unitLabel(context, "M", cx, cy - radius - 3 * devicePixelRatio, "center", "bottom")
-    unitLabel(context, "S", w - pad, cy, "right", "middle")
-    unitLabel(context, "L", cx - radius, cy - radius, "right", "bottom")
-    unitLabel(context, "R", cx + radius, cy - radius, "left", "bottom")
+    if (midSide) {
+        unitLabel(context, "M", cx, cy - radius - 3 * devicePixelRatio, "center", "bottom")
+        unitLabel(context, "S", w - pad, cy, "right", "middle")
+        unitLabel(context, "L", cx - radius, cy - radius, "right", "bottom")
+        unitLabel(context, "R", cx + radius, cy - radius, "left", "bottom")
+    } else {
+        unitLabel(context, "L", w - pad, cy, "right", "middle")
+        unitLabel(context, "R", cx, cy - radius - 3 * devicePixelRatio, "center", "bottom")
+    }
 }
 
-const drawScope = (painter: CanvasPainter, scope: Float32Array): void => {
+const triggerIndex = (waveform: Float32Array): number => {
+    for (let i = 1; i < waveform.length; i++) {
+        if (waveform[i - 1] <= 0.0 && waveform[i] > 0.0) {return i}
+    }
+    return 0
+}
+
+const drawScope = (painter: CanvasPainter, scope: Float32Array, trig: boolean): void => {
     clearBg(painter)
     const {context, actualWidth: w, actualHeight: h} = painter
     context.strokeStyle = "rgba(255,255,255,0.1)"
@@ -351,13 +483,15 @@ const drawScope = (painter: CanvasPainter, scope: Float32Array): void => {
     context.moveTo(0, h / 2)
     context.lineTo(w, h / 2)
     context.stroke()
+    const len = scope.length
+    const start = trig ? triggerIndex(scope) : 0
     context.strokeStyle = "hsl(150,65%,60%)"
     context.lineWidth = 1.5
     context.beginPath()
-    for (let i = 0; i < scope.length; i++) {
-        const x = (i / (scope.length - 1)) * w
-        const y = h / 2 - clamp(scope[i] * 0.5, -1.0, 1.0) * (h / 2 - 2)
-        if (i === 0) {context.moveTo(x, y)} else {context.lineTo(x, y)}
+    for (let j = 0; j < len; j++) {
+        const x = (j / (len - 1)) * w
+        const y = h / 2 - clamp(scope[(start + j) % len] * 0.5, -1.0, 1.0) * (h / 2 - 2)
+        if (j === 0) {context.moveTo(x, y)} else {context.lineTo(x, y)}
     }
     context.stroke()
     const pad = 3 * devicePixelRatio
