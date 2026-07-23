@@ -26,11 +26,13 @@ export const StudioSettingsSchema = z.object({
     "engine": z.object({
         "note-audition-while-editing": z.boolean(),
         "auto-create-output-maximizer": z.boolean(),
-        "stop-playback-when-overloading": z.boolean()
+        "stop-playback-when-overloading": z.boolean(),
+        "latency-warning-threshold": z.number().catch(25)
     }).default({
         "note-audition-while-editing": true,
         "auto-create-output-maximizer": true,
-        "stop-playback-when-overloading": true
+        "stop-playback-when-overloading": true,
+        "latency-warning-threshold": 25
     }),
     "pointer": z.object({
         "dragging-use-pointer-lock": z.boolean(),

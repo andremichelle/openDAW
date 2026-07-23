@@ -1,6 +1,6 @@
 import css from "./Footer.sass?inline"
 import {createElement, Frag, LocalLink, replaceChildren} from "@opendaw/lib-jsx"
-import {isDefined, Lifecycle, Terminator, TimeSpan} from "@opendaw/lib-std"
+import {isDefined, isNotNull, Lifecycle, Nullable, Terminator, TimeSpan} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {Surface} from "@/ui/surface/Surface"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
@@ -11,6 +11,7 @@ import {Colors} from "@opendaw/studio-enums"
 import {UserCounter} from "@/UserCounter"
 import {AudioData} from "@opendaw/lib-dsp"
 import {FooterItem} from "@/ui/FooterItem"
+import {LatencyWarning} from "@/ui/LatencyWarning"
 
 const className = Html.adoptStyleSheet(css, "footer")
 
@@ -55,13 +56,38 @@ export const Footer = ({lifecycle, service}: Construct) => {
                         }}/>
             <FooterItem title="SampleRate">{audioContext.sampleRate}</FooterItem>
             <FooterItem title="Latency" minWidth="6ch"
-                        onInit={({value}) => {
-                            lifecycle.own(Runtime.scheduleInterval(() => {
-                                const outputLatency = audioContext.outputLatency
-                                if (outputLatency > 0.0) {
-                                    value.textContent = `${(outputLatency * 1000.0).toFixed(1)}ms`
-                                }
-                            }, 1000))
+                        onInit={({component, value}) => {
+                            const threshold = () =>
+                                StudioPreferences.settings.engine["latency-warning-threshold"] / 1000.0
+                            const state: { warning: Nullable<HTMLElement>, dismissed: boolean } =
+                                {warning: null, dismissed: false}
+                            const hide = () => {
+                                state.warning?.remove()
+                                state.warning = null
+                            }
+                            const show = () => {
+                                if (isNotNull(state.warning) || state.dismissed) {return}
+                                const warning: HTMLElement = (
+                                    <LatencyWarning anchor={component} dismiss={() => {
+                                        state.dismissed = true
+                                        hide()
+                                    }}/>
+                                )
+                                state.warning = warning
+                                component.appendChild(warning)
+                            }
+                            lifecycle.ownAll(
+                                Runtime.scheduleInterval(() => {
+                                    const outputLatency = audioContext.outputLatency
+                                    if (outputLatency > 0.0) {
+                                        value.textContent = `${(outputLatency * 1000.0).toFixed(1)}ms`
+                                        value.style.color = outputLatency > threshold()
+                                            ? Colors.orange.toString() : ""
+                                    }
+                                    if (outputLatency > threshold()) {show()} else {hide()}
+                                }, 1000),
+                                {terminate: hide}
+                            )
                         }}>N/A</FooterItem>
             <FooterItem title="CPU Load" minWidth="4ch"
                         onInit={({component, value}) => {
