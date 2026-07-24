@@ -129,10 +129,25 @@ component
 
     > .readout
       font-size: 9px
-      color: var(--color-gray)
-      font-family: monospace
-      white-space: pre
-      font-variant-numeric: tabular-nums
+      display: flex
+      flex-wrap: wrap
+      align-items: baseline
+      column-gap: 8px
+      row-gap: 2px
+
+      .metric
+        display: flex
+        align-items: baseline
+        column-gap: 3px
+
+      .name, .unit
+        color: var(--color-shadow)
+
+      .value
+        color: var(--color-gray)
+        font-variant-numeric: tabular-nums
+        min-width: 34px
+        text-align: right
 
     > canvas
       flex: 1 1 auto

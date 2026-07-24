@@ -79,7 +79,18 @@ export const LevelCard = ({lifecycle, service}: Construct): HTMLElement => {
     const level: LevelValues = {peakL: 0.0, peakR: 0.0, rmsL: 0.0, rmsR: 0.0, lufs: 0.0}
     const scale = owned(lifecycle, "dBFS")
     const canvas: HTMLCanvasElement = (<canvas/>)
-    const readout: HTMLElement = (<span className="readout"/>)
+    const mVal: HTMLElement = (<span className="value"/>)
+    const sVal: HTMLElement = (<span className="value"/>)
+    const iVal: HTMLElement = (<span className="value"/>)
+    const tpVal: HTMLElement = (<span className="value"/>)
+    const readout: HTMLElement = (
+        <span className="readout">
+            <span className="metric"><span className="name">M</span>{mVal}</span>
+            <span className="metric"><span className="name">S</span>{sVal}</span>
+            <span className="metric"><span className="name">I</span>{iVal}<span className="unit">LUFS</span></span>
+            <span className="metric"><span className="name">TP</span>{tpVal}<span className="unit">dBTP</span></span>
+        </span>
+    )
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => drawLevel(painter, level, scale.getValue())))
     lifecycle.own(scale.subscribe(painter.requestUpdate))
     observeProject(lifecycle, service, (project, runtime) => {
@@ -94,8 +105,10 @@ export const LevelCard = ({lifecycle, service}: Construct): HTMLElement => {
             }),
             liveStreamReceiver.subscribeFloats(EngineAddresses.LOUDNESS, values => {
                 const momentary = values[0]
-                readout.textContent = `M ${fmtLufs(momentary).padStart(5)}  S ${fmtLufs(values[1]).padStart(5)}  `
-                    + `I ${fmtLufs(values[2]).padStart(5)} LUFS  TP ${values[4].toFixed(1).padStart(6)} dBTP`
+                mVal.textContent = fmtLufs(momentary)
+                sVal.textContent = fmtLufs(values[1])
+                iVal.textContent = fmtLufs(values[2])
+                tpVal.textContent = values[4].toFixed(1)
                 level.lufs = clamp((momentary + 40.0) / 40.0, 0.0, 1.0)
                 painter.requestUpdate()
             })

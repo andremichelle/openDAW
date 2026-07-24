@@ -3,21 +3,16 @@ import {Lifecycle} from "@opendaw/lib-std"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
-import {card, owned, radio, toggle} from "./AnalysisControls.tsx"
+import {card, owned, radio} from "./AnalysisControls.tsx"
 import {observeProject} from "./AnalysisSource.ts"
 import {clearBg} from "./AnalysisCommon.ts"
 
-const drawGonio = (painter: CanvasPainter, pairs: Float32Array, mode: string, fade: boolean): void => {
+const drawGonio = (painter: CanvasPainter, pairs: Float32Array, mode: string): void => {
+    clearBg(painter)
     const {context, actualWidth: w, actualHeight: h} = painter
-    if (fade) {
-        context.fillStyle = "rgba(0,0,0,0.12)"
-        context.fillRect(0, 0, w, h)
-    } else {
-        clearBg(painter)
-    }
     const cx = w / 2
     const cy = h / 2
-    const radius = Math.min(w, h) - 1
+    const radius = Math.min(w, h) * 0.5 - 1.0
     context.strokeStyle = "rgba(255,255,255,0.1)"
     context.beginPath()
     context.arc(cx, cy, radius, 0, Math.PI * 2)
@@ -40,11 +35,10 @@ type Construct = { lifecycle: Lifecycle, service: StudioService }
 export const GonioCard = ({lifecycle, service}: Construct): HTMLElement => {
     const holder = {pairs: new Float32Array(0)}
     const mode = owned(lifecycle, "L/R")
-    const fade = owned(lifecycle, true)
     const canvas: HTMLCanvasElement = (<canvas/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter =>
-        drawGonio(painter, holder.pairs, mode.getValue(), fade.getValue())))
-    lifecycle.ownAll(mode.subscribe(painter.requestUpdate), fade.subscribe(painter.requestUpdate))
+        drawGonio(painter, holder.pairs, mode.getValue())))
+    lifecycle.own(mode.subscribe(painter.requestUpdate))
     observeProject(lifecycle, service, (project, runtime) => {
         runtime.own(project.liveStreamReceiver.subscribeFloats(EngineAddresses.GONIO, values => {
             if (holder.pairs.length !== values.length) {holder.pairs = new Float32Array(values.length)}
@@ -52,5 +46,5 @@ export const GonioCard = ({lifecycle, service}: Construct): HTMLElement => {
             painter.requestUpdate()
         }))
     })
-    return card("Gonio", [radio(lifecycle, mode, "L/R", "M/S"), toggle(lifecycle, fade, "Fade")], canvas)
+    return card("Gonio", radio(lifecycle, mode, "L/R", "M/S"), canvas)
 }
