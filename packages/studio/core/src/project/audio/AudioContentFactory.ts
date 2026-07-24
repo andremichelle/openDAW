@@ -1,4 +1,4 @@
-import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
+import {ppqn, PPQN, TempoMap, TimeBase} from "@opendaw/lib-dsp"
 import {ColorCodes, Sample, TrackType} from "@opendaw/studio-adapters"
 import {int, isDefined, panic, quantizeRound, UUID} from "@opendaw/lib-std"
 import {
@@ -44,10 +44,17 @@ export namespace AudioContentFactory {
      * Calculates the duration of an audio region based on sample properties.
      * Returns duration in PPQN for stretched regions, or in seconds for non-stretched.
      */
-    export const calculateDuration = (sample: Sample, disableQuantize: boolean = false): ppqn => {
+    // A bpm-less sample becomes a SECONDS-timebase region whose ppqn extent depends on the project tempo at
+    // its position, so the conversion must go through the tempo map — the same math as
+    // `TimeBaseConverter.toPPQN` — or the returned span disagrees with the region the drop creates. Returning
+    // the raw seconds here (the old behaviour) produced a near-zero clip mask, leaving the regions underneath
+    // a dropped file un-clipped: the silent creator of the "regions overlap" panics (#1054 family, #1080).
+    export const calculateDuration = (sample: Sample, tempoMap: TempoMap, position: ppqn,
+                                      disableQuantize: boolean = false): ppqn => {
         const {duration: durationInSeconds, bpm} = sample
         if (bpm === 0) {
-            return durationInSeconds
+            const startSeconds = tempoMap.ppqnToSeconds(position)
+            return tempoMap.intervalToPPQN(startSeconds, startSeconds + durationInSeconds)
         }
         const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
         if (disableQuantize || pulses < PPQN.SemiQuaver) {

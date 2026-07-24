@@ -97,6 +97,8 @@ export class RegionClipResolver {
         const dump = (region: AnyRegionBoxAdapter, i: int) => ({
             i,
             uuid: UUID.toString(region.uuid),
+            type: region.isAudioRegion() ? "audio" : region.isNoteRegion() ? "note" : "value",
+            timeBase: region.isAudioRegion() ? region.box.timeBase.getValue() : undefined,
             position: region.position,
             duration: region.duration,
             complete: region.complete,
