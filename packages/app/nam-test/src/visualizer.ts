@@ -1,4 +1,4 @@
-import {isDefined} from "@opendaw/lib-std"
+import {isDefined, TAU} from "@opendaw/lib-std"
 import {NamModel} from "@opendaw/nam-wasm"
 
 // Colors matching DisplayPaint style
@@ -430,13 +430,13 @@ export const drawNetworkGraph = (canvas: HTMLCanvasElement, model: NamModel): vo
     const maxNodes = 12
     const nodeRadius = 4
     const padding = 40
-    const layerPositions: Array<{x: number, nodes: Array<{y: number}>}> = []
+    const layerPositions: Array<{ x: number, nodes: Array<{ y: number }> }> = []
     const totalLayers = layers.length + 2
     const layerSpacing = (width - padding * 2) / (totalLayers - 1)
-    const getNodePositions = (count: number): Array<{y: number}> => {
+    const getNodePositions = (count: number): Array<{ y: number }> => {
         const displayCount = Math.min(count, maxNodes)
         const nodeSpacing = (height - padding * 2) / (displayCount + 1)
-        const nodes: Array<{y: number}> = []
+        const nodes: Array<{ y: number }> = []
         for (let index = 0; index < displayCount; index++) {
             nodes.push({y: padding + nodeSpacing * (index + 1)})
         }
