@@ -1,17 +1,17 @@
 import {dbToGain, gainToDb} from "@opendaw/lib-dsp"
-import {unitValue, ValueMapping} from "@opendaw/lib-std"
+import {clampUnit, unitValue, ValueMapping} from "@opendaw/lib-std"
 
 export class GainMapping implements ValueMapping<number> {
-    private readonly linear: ValueMapping<number>
-    private readonly bend: number
+    readonly #max: number
+    readonly #bend: number
 
     constructor(maxDb: number, bend: number = 1.0) {
-        this.linear = ValueMapping.linear(0.0, dbToGain(maxDb))
-        this.bend = bend
+        this.#max = dbToGain(maxDb)
+        this.#bend = bend
     }
 
-    x(y: number): unitValue {return Math.pow(this.linear.x(dbToGain(y)), 1.0 / this.bend)}
-    y(x: unitValue): number {return gainToDb(this.linear.y(Math.pow(x, this.bend)))}
+    x(y: number): unitValue {return Math.pow(clampUnit(dbToGain(y) / this.#max), 1.0 / this.#bend)}
+    y(x: unitValue): number {return gainToDb(Math.pow(x, this.#bend) * this.#max)}
     clamp(y: number): number {return y}
     floating(): boolean {return true}
 }

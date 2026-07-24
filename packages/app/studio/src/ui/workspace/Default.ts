@@ -39,7 +39,7 @@ const AnalysisPanel = PanelState.create({
     name: "Analysis",
     icon: IconSymbol.Charts,
     panelType: PanelType.Analysis,
-    constrains: {type: "flex", minSize: 320, maxSize: 640, flex: 1.0},
+    constrains: {type: "flex", minSize: 480, maxSize: 480, flex: 1.0},
     minimized: true
 })
 

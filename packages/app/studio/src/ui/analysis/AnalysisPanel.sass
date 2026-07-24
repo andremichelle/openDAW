@@ -24,21 +24,32 @@ component
       flex: 1 1 auto
 
   > .cards
-    flex: 1 1 auto
+    flex: 1
     min-height: 0
-    overflow-y: auto
-    display: grid
-    grid-template-columns: 1fr 1fr
-    grid-auto-rows: min-content
+    display: flex
+    flex-direction: column
     gap: 1em
     padding: 0.5em
-    padding-right: 16px
-    align-content: start
+
+    > .meters
+      flex: 0 0 auto
+      display: grid
+      grid-template-columns: 1fr 1fr
+      gap: 1em
+
+    > .grid
+      flex: 1
+      min-height: 0
+      display: grid
+      grid-template-columns: 1fr 1fr
+      grid-auto-rows: 1fr
+      gap: 1em
 
   .card
     display: flex
     flex-direction: column
     min-width: 0
+    min-height: 0
 
     &.full
       grid-column: 1 / -1
@@ -47,7 +58,7 @@ component
       flex: 0 0 auto
       display: flex
       align-items: center
-      min-height: 1.9em
+      min-height: 21px
       column-gap: 0.75em
       padding: 0 0 0.5em 0
       font-size: 0.7em
@@ -75,17 +86,15 @@ component
           font-size: 1em
 
     > .card-body
-      flex: 0 0 auto
-      height: 120px
+      flex: 1 1 auto
+      min-height: 0
       display: flex
 
       > canvas
         width: 100%
         height: 100%
         display: block
-
-    &.full > .card-body
-      height: 168px
+        border-radius: 3px
 
   .control
     color: rgba(white, 0.3)
@@ -96,7 +105,7 @@ component
       color: rgba(white, 0.7)
 
   .controls [data-class="checkbox"], .controls [data-class="radio-group"]
-    --color: rgba(white, 0.35)
+    --color: var(--color-shadow)
 
   .card.meter > .card-body
     height: auto
@@ -119,8 +128,11 @@ component
     padding: 4px
 
     > .readout
-      font-size: 0.62em
+      font-size: 9px
       color: var(--color-gray)
+      font-family: monospace
+      white-space: pre
+      font-variant-numeric: tabular-nums
 
     > canvas
       flex: 1 1 auto
