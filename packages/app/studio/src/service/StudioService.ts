@@ -5,7 +5,6 @@ import {
     Errors,
     Func,
     int,
-    clamp,
     isAbsent,
     MutableObservableOption,
     Notifier,
