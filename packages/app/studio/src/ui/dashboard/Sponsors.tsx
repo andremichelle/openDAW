@@ -21,5 +21,12 @@ export const Sponsors = () => (
                        ))}
                    </div>
                )}/>
+        <a className="link"
+           href="https://github.com/sponsors/andremichelle"
+           style={{marginTop: "16px", textDecoration: "underline"}}
+           target="_blank"
+           rel="noopener noreferrer">
+            <span>Join them!</span><Icon symbol={IconSymbol.Heart}/>
+        </a>
     </RailSection>
 )
