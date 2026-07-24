@@ -10,8 +10,6 @@ import {clearBg, FREQ_TICKS, SPEC_X_LOG, unitLabel} from "./AnalysisCommon.ts"
 
 type SpectroBuffer = { canvas: HTMLCanvasElement, w: number, h: number }
 
-const SPECTRO_SILENCE = "hsl(260, 85%, 8%)" // spectrogram color at t=0 (silence), pre-fills the scroll buffer
-
 const pushSpectroColumn = (spectro: SpectroBuffer, width: number, height: number,
                            spectrum: Float32Array, sampleRate: number): void => {
     if (width <= 0 || height <= 0) {return}
@@ -22,16 +20,19 @@ const pushSpectroColumn = (spectro: SpectroBuffer, width: number, height: number
         spectro.canvas.height = height
         spectro.w = width
         spectro.h = height
-        ctx.fillStyle = SPECTRO_SILENCE
-        ctx.fillRect(0, 0, width, height)
     }
+    // `copy` shifts the whole buffer left by one pixel and clears the vacated column, so transparency
+    // is preserved (a plain source-over drawImage of the canvas onto itself would leave old pixels behind).
+    ctx.globalCompositeOperation = "copy"
     ctx.drawImage(spectro.canvas, -1, 0)
+    ctx.globalCompositeOperation = "source-over"
     const freqStep = sampleRate / (spectrum.length << 1)
     for (let y = 0; y < height; y++) {
         const freq = SPEC_X_LOG.normToUnit(1.0 - y / height)
         const bin = Math.min(spectrum.length - 1, Math.max(1, Math.round(freq / freqStep)))
         const t = clamp((gainToDb(Math.max(spectrum[bin], 1e-7)) + 96.0) / 96.0, 0.0, 1.0)
-        ctx.fillStyle = `hsl(${260 * (1 - t)}, 85%, ${8 + t * 46}%)`
+        if (t <= 0.02) {continue} // leave silence transparent so the panel shows through
+        ctx.fillStyle = `hsla(${260 * (1 - t)}, 85%, 55%, ${t})`
         ctx.fillRect(width - 1, y, 1, 1)
     }
 }

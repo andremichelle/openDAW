@@ -130,15 +130,15 @@ component
     > .readout
       font-size: 9px
       display: flex
-      flex-wrap: wrap
+      flex-wrap: nowrap
       align-items: baseline
-      column-gap: 8px
-      row-gap: 2px
+      column-gap: 7px
+      white-space: nowrap
 
       .metric
         display: flex
         align-items: baseline
-        column-gap: 3px
+        column-gap: 2px
 
       .name, .unit
         color: var(--color-shadow)
@@ -146,8 +146,7 @@ component
       .value
         color: var(--color-gray)
         font-variant-numeric: tabular-nums
-        min-width: 34px
-        text-align: right
+        min-width: 24px
 
     > canvas
       flex: 1 1 auto

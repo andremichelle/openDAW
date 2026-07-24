@@ -35,7 +35,7 @@ export const VuMetersCard = ({lifecycle, service}: Construct): HTMLElement => {
     })
     return (
         <div className="meters">
-            {card("VU · L", dropdown(lifecycle, vuRef, "72px", "0 dBFS", "-14 dBFS", "-18 dBFS", "-20 dBFS"),
+            {card("VU · L", dropdown(lifecycle, vuRef, "72px", "0 dBFS", "-7 dBFS", "-14 dBFS", "-18 dBFS", "-20 dBFS"),
                 (<div className="vu"><VUMeterDesign.Default model={vuL}/></div>), false, "meter")}
             {card("VU · R", [],
                 (<div className="vu"><VUMeterDesign.Default model={vuR}/></div>), false, "meter")}

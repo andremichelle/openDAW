@@ -20,6 +20,6 @@ export const SPEC_Y: Scale = new LinearScale(-96.0, 0.0)
 export const SPEC_X_LOG: Scale = new LogScale(20.0, 20_000.0)
 export const SPEC_X_LIN: Scale = new LinearScale(20.0, 20_000.0)
 export const FREQ_TICKS: ReadonlyArray<readonly [number, string]> = [
-    [20, "20"], [50, "50"], [100, "100"], [200, "200"], [500, "500"],
-    [1_000, "1k"], [2_000, "2k"], [5_000, "5k"], [10_000, "10k"], [20_000, "20k"]
+    [20, "20"], [50, "50"], [100, "100"], [200, "200"], [400, "400"],
+    [1_000, "1k"], [2_000, "2k"], [4_000, "4k"], [8_000, "8k"], [20_000, "20k"]
 ]

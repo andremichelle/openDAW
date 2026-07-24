@@ -4,7 +4,7 @@ import {AudioAnalyser} from "@opendaw/lib-dsp"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
-import {card, owned, radio, toggle} from "./AnalysisControls.tsx"
+import {card, owned, toggle} from "./AnalysisControls.tsx"
 import {observeProject} from "./AnalysisSource.ts"
 import {clearBg, unitLabel} from "./AnalysisCommon.ts"
 
@@ -45,7 +45,6 @@ type Construct = { lifecycle: Lifecycle, service: StudioService }
 export const ScopeCard = ({lifecycle, service}: Construct): HTMLElement => {
     const waveform = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
     const trig = owned(lifecycle, false)
-    const timebase = owned(lifecycle, "10 ms")
     const canvas: HTMLCanvasElement = (<canvas/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => drawScope(painter, waveform, trig.getValue())))
     lifecycle.own(trig.subscribe(painter.requestUpdate))
@@ -55,6 +54,5 @@ export const ScopeCard = ({lifecycle, service}: Construct): HTMLElement => {
             painter.requestUpdate()
         }))
     })
-    return card("Scope", [toggle(lifecycle, trig, "Trig"),
-        radio(lifecycle, timebase, "10 ms", "50 ms", "100 ms")], canvas)
+    return card("Scope", toggle(lifecycle, trig, "Trig"), canvas)
 }

@@ -70,7 +70,6 @@ export const SpectrumCard = ({lifecycle, service}: Construct): HTMLElement => {
     const slope = owned(lifecycle, "4.5 dB/oct")
     const hold = owned(lifecycle, false)
     const avg = owned(lifecycle, false)
-    const fft = owned(lifecycle, "4096")
     const canvas: HTMLCanvasElement = (<canvas/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter =>
         drawSpectrum(painter, spectrum, sampleRate.value, log.getValue(), parseFloat(slope.getValue()))))
@@ -99,6 +98,5 @@ export const SpectrumCard = ({lifecycle, service}: Construct): HTMLElement => {
     })
     return card("Spectrum", [toggle(lifecycle, log, "Log"),
         dropdown(lifecycle, slope, "90px", "0 dB/oct", "3 dB/oct", "4.5 dB/oct", "6 dB/oct"),
-        dropdown(lifecycle, fft, "50px", "1024", "2048", "4096", "8192", "16384"),
         toggle(lifecycle, hold, "Hold"), toggle(lifecycle, avg, "Avg")], canvas, true)
 }

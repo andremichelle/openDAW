@@ -363,3 +363,17 @@ grow each phase.
 - v1 scope: which panels ship in the first usable version (recommend spectrum + level + correlation).
 - Colormap set for the spectrogram.
 - Ballistics home: PPM / VU integration in the engine (accuracy) vs UI (simplicity).
+
+## Deferred controls (later iteration)
+
+These controls were removed from the UI for now because they need work that is out of scope for the
+current pass. Re-add them when the backing behaviour lands.
+
+- Spectrum FFT-size (1024/2048/4096/8192/16384). Needs the worklet to rebuild its `AudioAnalyser` and
+  re-register the SPECTRUM/WAVEFORM broadcasts at the new bin count (prebuilt `wasm-processor.js`
+  rebuild). The UI reads the actual size back from the broadcast `values.length * 2`; recommendation is
+  a dedicated engine command rather than a persisted `EngineSettings` field. Note: SPECTRUM and WAVEFORM
+  share the analyser, so this also changes the Scope resolution.
+- Level TP (true-peak hold indicator) and Hold (peak hold).
+- Scope timebase (10 / 50 / 100 ms per division); `drawScope` currently draws the whole broadcast frame
+  with a hardcoded "10 ms/div" label.

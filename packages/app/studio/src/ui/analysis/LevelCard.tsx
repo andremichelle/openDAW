@@ -4,7 +4,7 @@ import {gainToDb} from "@opendaw/lib-dsp"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
-import {card, owned, radio, toggle} from "./AnalysisControls.tsx"
+import {card, owned, radio} from "./AnalysisControls.tsx"
 import {observeProject} from "./AnalysisSource.ts"
 import {clearBg, unitLabel, UNIT_COLOR_DIM} from "./AnalysisCommon.ts"
 
@@ -114,7 +114,6 @@ export const LevelCard = ({lifecycle, service}: Construct): HTMLElement => {
             })
         )
     })
-    return card("Level", [radio(lifecycle, scale, "dBFS", "K-14", "K-20"),
-        toggle(lifecycle, owned(lifecycle, false), "TP"), toggle(lifecycle, owned(lifecycle, false), "Hold")],
+    return card("Level", radio(lifecycle, scale, "dBFS", "K-14", "K-20"),
         (<div className="lufs">{readout}{canvas}</div>))
 }

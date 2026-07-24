@@ -13,7 +13,6 @@ import {ProjectProfileInfo} from "@/ui/info-panel/ProjectProfileInfo.tsx"
 import {BrowserPanel} from "@/ui/browse/BrowserPanel.tsx"
 import {NotePadPanel} from "@/ui/NotePadPanel"
 import {FlexSpace} from "./FlexSpace"
-import {VUMeterPanel} from "@/ui/meter/VUMeterPanel"
 import {PianoModePanel} from "@/ui/piano-panel/PianoModePanel.tsx"
 import {ShadertoyPreview} from "@/ui/shadertoy/ShadertoyPreview"
 import {ShadertoyEditor} from "@/ui/shadertoy/ShadertoyEditor"
@@ -40,8 +39,6 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<Mixer lifecycle={lifecycle} service={service}/>)
             case PanelType.ModularSystem:
                 return (<Modular lifecycle={lifecycle} service={service}/>)
-            case PanelType.VUMeter:
-                return (<VUMeterPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.ProjectInfo:
                 return (<ProjectProfileInfo lifecycle={lifecycle} service={service}/>)
             case PanelType.MidiFall:

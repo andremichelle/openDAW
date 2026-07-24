@@ -34,13 +34,12 @@ const ProjectInfoPanel = PanelState.create({
     notMinimizable: true,
     constrains: {type: "flex", minSize: 384, flex: 1}
 })
-const AnalysisPanel = PanelState.create({
+const AnalysisPanel: PanelState = PanelState.create({
     type: "panel",
     name: "Analysis",
     icon: IconSymbol.Charts,
     panelType: PanelType.Analysis,
-    constrains: {type: "flex", minSize: 480, maxSize: 480, flex: 1.0},
-    minimized: true
+    constrains: {type: "flex", minSize: 448, maxSize: 448, flex: 1.0}
 })
 
 /*const ModularSystem = PanelState.create({
@@ -216,18 +215,6 @@ export const DefaultWorkspace = Object.freeze({
             ],
             constrains: {type: "flex", minSize: 0, flex: 1}
         }
-    },
-    "meter": {
-        name: "VU-Meter",
-        icon: IconSymbol.VUMeter,
-        content: PanelState.create({
-            type: "panel",
-            name: "VU-Meter",
-            icon: IconSymbol.VUMeter,
-            panelType: PanelType.VUMeter,
-            notMinimizable: true,
-            constrains: {type: "flex", minSize: 0, flex: 1}
-        })
     },
     "code": {
         name: "Code",
