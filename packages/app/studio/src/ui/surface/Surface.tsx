@@ -183,7 +183,17 @@ export class Surface implements TerminableOwner {
     get floating(): DomElement {return this.#floating}
     get hasFlyout(): boolean {return this.#flyout.firstChild !== null}
     get owner(): Window {return this.#owner}
-    get width(): number {return this.#owner.innerWidth}
+    get width(): number {
+        // Firefox throws NS_ERROR_UNEXPECTED reading innerWidth off a stale WindowProxy (#1073), and the
+        // reported crash stack shows only this getter. Capture the caller chain, then rethrow (diagnostics only,
+        // no behaviour change) so the next occurrence reveals who reads a dead surface's width.
+        const {status, value, error} = tryCatch(() => this.#owner.innerWidth)
+        if (status === "failure") {
+            console.debug("Surface.width read failed", error, new Error("Surface.width caller").stack)
+            throw error
+        }
+        return value
+    }
     get height(): number {return this.#owner.innerHeight}
     get textTooltip(): TextTooltip {return this.#textTooltip}
     get valueTooltip(): ValueTooltip {return this.#valueTooltip}
