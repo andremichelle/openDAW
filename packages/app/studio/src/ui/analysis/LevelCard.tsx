@@ -4,7 +4,8 @@ import {gainToDb} from "@opendaw/lib-dsp"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
-import {card, owned, radio} from "./AnalysisControls.tsx"
+import {card, radio} from "./AnalysisControls.tsx"
+import {AnalysisSettings} from "./AnalysisSettings.ts"
 import {observeProject} from "./AnalysisSource.ts"
 import {clearBg, unitLabel, UNIT_COLOR_DIM} from "./AnalysisCommon.ts"
 
@@ -77,7 +78,7 @@ type Construct = { lifecycle: Lifecycle, service: StudioService }
 
 export const LevelCard = ({lifecycle, service}: Construct): HTMLElement => {
     const level: LevelValues = {peakL: 0.0, peakR: 0.0, rmsL: 0.0, rmsR: 0.0, lufs: 0.0}
-    const scale = owned(lifecycle, "dBFS")
+    const scale = AnalysisSettings.levelScale
     const canvas: HTMLCanvasElement = (<canvas/>)
     const mVal: HTMLElement = (<span className="value"/>)
     const sVal: HTMLElement = (<span className="value"/>)

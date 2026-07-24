@@ -3,7 +3,8 @@ import {Lifecycle, TAU} from "@opendaw/lib-std"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
-import {card, owned, radio} from "./AnalysisControls.tsx"
+import {card, radio} from "./AnalysisControls.tsx"
+import {AnalysisSettings} from "./AnalysisSettings.ts"
 import {observeProject} from "./AnalysisSource.ts"
 import {clearBg} from "./AnalysisCommon.ts"
 
@@ -34,7 +35,7 @@ type Construct = { lifecycle: Lifecycle, service: StudioService }
 
 export const GonioCard = ({lifecycle, service}: Construct): HTMLElement => {
     const holder = {pairs: new Float32Array(0)}
-    const mode = owned(lifecycle, "L/R")
+    const mode = AnalysisSettings.gonioMode
     const canvas: HTMLCanvasElement = (<canvas/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter =>
         drawGonio(painter, holder.pairs, mode.getValue())))

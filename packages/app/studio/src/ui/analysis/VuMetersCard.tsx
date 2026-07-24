@@ -5,6 +5,7 @@ import {EngineAddresses} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {VUMeterDesign} from "@/ui/meter/VUMeterDesign"
 import {card, dropdown, owned} from "./AnalysisControls.tsx"
+import {AnalysisSettings} from "./AnalysisSettings.ts"
 import {observeProject} from "./AnalysisSource.ts"
 
 const VU_TAU = 0.065 // single-pole time constant: 99% of a step in ~300 ms (IEC 60268-17 VU ballistics)
@@ -15,7 +16,7 @@ type Construct = { lifecycle: Lifecycle, service: StudioService }
 export const VuMetersCard = ({lifecycle, service}: Construct): HTMLElement => {
     const vuL = owned(lifecycle, 0.0)
     const vuR = owned(lifecycle, 0.0)
-    const vuRef = owned(lifecycle, "0 dBFS")
+    const vuRef = AnalysisSettings.vuRef
     const refDb = {value: 0.0}
     const ballistic = {left: VU_FLOOR, right: VU_FLOOR, last: performance.now()}
     lifecycle.own(vuRef.catchupAndSubscribe(owner => refDb.value = parseFloat(owner.getValue())))

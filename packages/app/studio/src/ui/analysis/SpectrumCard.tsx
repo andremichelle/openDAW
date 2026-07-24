@@ -4,7 +4,8 @@ import {AudioAnalyser, gainToDb} from "@opendaw/lib-dsp"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
-import {card, dropdown, owned, toggle} from "./AnalysisControls.tsx"
+import {card, dropdown, toggle} from "./AnalysisControls.tsx"
+import {AnalysisSettings} from "./AnalysisSettings.ts"
 import {observeProject} from "./AnalysisSource.ts"
 import {clearBg, FREQ_TICKS, SPEC_X_LIN, SPEC_X_LOG, SPEC_Y, unitLabel} from "./AnalysisCommon.ts"
 
@@ -66,10 +67,7 @@ export const SpectrumCard = ({lifecycle, service}: Construct): HTMLElement => {
     const spectrum = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
     const specHold = new Float32Array(AudioAnalyser.DEFAULT_SIZE)
     const sampleRate = {value: 48000}
-    const log = owned(lifecycle, true)
-    const slope = owned(lifecycle, "4.5 dB/oct")
-    const hold = owned(lifecycle, false)
-    const avg = owned(lifecycle, false)
+    const {spectrumLog: log, spectrumSlope: slope, spectrumHold: hold, spectrumAvg: avg} = AnalysisSettings
     const canvas: HTMLCanvasElement = (<canvas/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter =>
         drawSpectrum(painter, spectrum, sampleRate.value, log.getValue(), parseFloat(slope.getValue()))))
