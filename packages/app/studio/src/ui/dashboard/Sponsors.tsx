@@ -23,10 +23,10 @@ export const Sponsors = () => (
                )}/>
         <a className="link"
            href="https://github.com/sponsors/andremichelle"
-           style={{marginTop: "16px", textDecoration: "underline"}}
+           style={{marginTop: "16px", borderBottom: "dotted 1px rgba(255, 255, 255, 0.2)"}}
            target="_blank"
            rel="noopener noreferrer">
-            <span>Join them!</span><Icon symbol={IconSymbol.Heart}/>
+            <span>Join them ♡</span>
         </a>
     </RailSection>
 )
