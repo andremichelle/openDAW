@@ -107,6 +107,11 @@ impl Engine {
         // that targets this bus (e.g. a vocoder modulated by a MUTED submix) taps its full signal. Mirrors TS
         // `AudioBusProcessor` registering `adapter.address -> #audioOutput` (the sum), NOT the strip output.
         self.output_registry.register(Address::of(bus_uuid, vec![]), sum_buffer.clone(), sum_id);
+        // Meter the RAW SUM (pre-fx, pre-strip) and broadcast it under the AudioBusBox uuid, so the bus / output
+        // device editor (`AudioBusEditor`, subscribing at `adapter.address`) shows the bus INPUT signal. The
+        // post-fader strip meter the mixer reads is a separate broadcast at the audio-unit address.
+        let sum_meter = sum.borrow_mut().meter_slot(self.sample_rate);
+        self.broadcasts.register(bus_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &sum_meter);
         let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
         let mut subs: Vec<SubscriptionId> = Vec::new();
         // A disabled bus (`enabled` = 4) sums nothing (emits silence). The master never disables (it is the output).

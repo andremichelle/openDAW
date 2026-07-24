@@ -11,18 +11,28 @@ use crate::event_buffer::EventBuffer;
 use crate::event_receiver::EventReceiver;
 use crate::process_info::ProcessInfo;
 use crate::processor::Processor;
+use crate::meter::Meter;
+use crate::telemetry::BroadcastSlot;
 use crate::RENDER_QUANTUM;
 
 pub struct AudioBusProcessor {
     output: SharedAudioBuffer,
     sources: Vec<SharedAudioBuffer>,
     enabled: bool,
-    events: EventBuffer
+    events: EventBuffer,
+    meter: Option<Meter>
 }
 
 impl AudioBusProcessor {
     pub fn new(output: SharedAudioBuffer) -> Self {
-        Self {output, sources: Vec::new(), enabled: true, events: EventBuffer::new()}
+        Self {output, sources: Vec::new(), enabled: true, events: EventBuffer::new(), meter: None}
+    }
+
+    /// Enable metering of this bus's RAW SUM (pre-fx, pre-strip) and return its broadcast slot. Lazy: the meter
+    /// is created once. Used by the bus / output wiring so the `AudioBusBox` device editor shows the bus INPUT
+    /// signal (the post-fader strip meter the mixer reads lives at the audio-unit address instead).
+    pub fn meter_slot(&mut self, sample_rate: f32) -> BroadcastSlot {
+        self.meter.get_or_insert_with(|| Meter::new(sample_rate)).slot()
     }
 
     /// Enable / disable the bus. A disabled bus outputs silence (it stops summing its sources). Used to bypass a
@@ -62,17 +72,23 @@ impl AudioGenerator for AudioBusProcessor {
 impl Processor for AudioBusProcessor {
     fn reset(&mut self) {
         self.output.borrow_mut().clear();
+        if let Some(meter) = self.meter.as_mut() {
+            meter.clear();
+        }
     }
 
     fn process(&mut self, _info: &ProcessInfo) {
         let mut output = self.output.borrow_mut();
         output.clear_range(0, RENDER_QUANTUM);
-        if !self.enabled {
-            return; // disabled (bypassed composite): emit silence, sum nothing
+        if self.enabled {
+            for source in &self.sources {
+                let source = source.borrow();
+                output.add_range(&source, 0, RENDER_QUANTUM);
+            }
         }
-        for source in &self.sources {
-            let source = source.borrow();
-            output.add_range(&source, 0, RENDER_QUANTUM);
+        // A disabled (bypassed) bus meters its silence; the peak decays to zero.
+        if let Some(meter) = self.meter.as_mut() {
+            meter.process(&output.left, &output.right);
         }
     }
 }
