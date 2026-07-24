@@ -110,11 +110,6 @@ export class StudioService implements ProjectEnv {
             signature: new DefaultObservableValue(false)
         }
     } as const
-    readonly #softwareKeyboard = {
-        octave: new DefaultObservableValue(5, {guard: (value: number): number => clamp(value, 0, 10)}),
-        channel: new DefaultObservableValue(0, {guard: (value: number): number => clamp(value, 0, 15)}),
-        velocity: new DefaultObservableValue(100, {guard: (value: number): number => clamp(value, 0, 100)}),
-    } as const
     readonly menu = populateStudioMenu(this)
     readonly panelLayout = new PanelContents(createPanelFactory(this))
     readonly spotlightDataSupplier = new SpotlightDataSupplier()
@@ -461,10 +456,7 @@ export class StudioService implements ProjectEnv {
         } else {
             const element = SoftwareMIDIPanel({
                 lifecycle: this.#softwareKeyboardLifeCycle,
-                service: this,
-                octave: this.#softwareKeyboard.octave,
-                channel: this.#softwareKeyboard.channel,
-                velocity: this.#softwareKeyboard.velocity,
+                service: this
             })
             Surface.get(window).floating.appendChild(element)
             this.#softwareKeyboardLifeCycle.own(Terminable.create(() => element.remove()))
