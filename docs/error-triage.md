@@ -25,8 +25,44 @@ Match by the error message (a stable substring); the log ids are just examples o
 | fixed | `no device-host` (preset-decode) | `PresetService.applyPresetTo` deleted the target effect before `insertEffectChain`, in one transaction. A corrupt preset (`RangeError: Offset is outside the bounds of the DataView`) fails decode, so `insertEffectChain` (validates before mutating) returns a failure without inserting, but the `modify` callback returns normally so the delete commits anyway (modify only rolls back on a throw). The detached effect's follow-up Delete panics | `9910b2e05` (insert first, delete replaced effect only on success; guard `insertEffectChain` header read for truncated presets) | live id 1015 |
 | fixed | `{ValueEventBoxAdapter position: … index: …} and {…}` | Collaborative (YSync) merge: two peers each add a value event at the same position, both picking index 0, so the merged doc holds two `ValueEventBox`es at `(position, 0)`. The `(position, index)` uniqueness invariant is not checked at `endTransaction`; it only trips the SortedSet comparator lazily in `asArray`, so the merge commits and crashes later on selection (`onSelected → onEventPropertyChanged → asArray`). `deterministicReconcile` only handled exclusive-target overflow | `b8e3713f7` (add a value-event rule to `deterministicReconcile`: per position first@0/last@1, delete surplus, uuid-tiebroken; mirrors `migrateValueEventCollection` so reconciled + freshly-loaded graphs converge) + `Reconcile.test.ts` | live id 1047 |
 | parked | `Cannot access file.` | `AudioRegionBoxAdapter.get file` (line 189) hard-unwraps `#fileAdapter`; the safe `optFile` exists and `RegionRenderer` uses it. `file` is a MANDATORY pointer, so a region resolves its file except in a transient sub-transaction window (file box deleted, region not yet cascade-deleted). A reactive reader using hard `get file` fired in that window. NOT the double-import: `AudioFileBoxFactory.createModifier` re-checks and reuses an existing box (lines 37-45), and both drop paths create region + file atomically, so nothing dangles. Reporter could not reproduce by dropping the same sample twice on a Tape. The failing reader is a lazy-chunk frame not mappable without the sourcemap | — (parked: occ=1, not reproducible from the log; revisit on recurrence or with a resolvable stack) | live id 1021 |
-| fixed | `Storage not available` | Two distinct causes, same message (thrown by `OpfsWorker.getOpfsRoot`, OpfsWorker.ts). (1) 1055/1024: `ProjectProfileService.save`/`saveAs` were the only storage flows not wrapped in `tryCatch`, so a mid-session OPFS rejection escaped as an uncaught crash. (2) 1056: the availability gate probes the WRONG runtime — `features.ts:10` + `boot.ts:148` check `navigator.storage.getDirectory()` on the MAIN thread, but every real op runs in the WORKER. Firefox can resolve `getDirectory()` on the window yet reject it in a DedicatedWorker (privacy/persistence config), so boot green-lit a session where the worker could never reach OPFS and the first uncaught worker op crashed (my earlier "evicted after boot" theory was wrong) | 1055/1024: `92936c29a` (wrap both writes; retryable notice, work preserved). 1056: worker-side `OpfsProtocol.isAvailable()` (pings `getOpfsRoot` in the worker) + `boot.ts` gate now awaits `Workers.Opfs.isAvailable()` instead of the main-thread call, so a worker-OPFS-less session shows the "Storage Unavailable" dialog and never starts + `OpfsWorker.test.ts` regression (uncommitted) | live ids 1055, 1024, 1056 |
+| root-cause-known | `Storage not available` | Two distinct causes, same message (thrown by `OpfsWorker.getOpfsRoot`, OpfsWorker.ts). (1) 1055/1024: `ProjectProfileService.save`/`saveAs` were the only storage flows not wrapped in `tryCatch`, so a mid-session OPFS rejection escaped as an uncaught crash. (2) 1056: the availability gate probes the WRONG runtime — `features.ts:10` + `boot.ts:148` check `navigator.storage.getDirectory()` on the MAIN thread, but every real op runs in the WORKER. Firefox can resolve `getDirectory()` on the window yet reject it in a DedicatedWorker (privacy/persistence config), so boot green-lit a session where the worker could never reach OPFS and the first uncaught worker op crashed (my earlier "evicted after boot" theory was wrong) | 1055/1024: `92936c29a` (wrap both writes; retryable notice, work preserved). 1056: worker-side `OpfsProtocol.isAvailable()` (pings `getOpfsRoot` in the worker) + `boot.ts` gate now awaits `Workers.Opfs.isAvailable()` instead of the main-thread call, so a worker-OPFS-less session shows the "Storage Unavailable" dialog and never starts + `OpfsWorker.test.ts` regression (uncommitted) | RECURRED on post-fix builds via the worker READ path (1067/1075): the boot gate + save-wrapping do not cover raw `read`/`write` calls — see the OPFS caller audit below. live ids 1055, 1024, 1056, 1067, 1075 |
+| root-cause-known | `A requested file or directory could not be found` (NotFoundError DOMException) | A `read` of a missing OPFS file. `delete`/`list`/`exists` `tryCatch` internally (no-op / empty / bool), so only `read` throws NotFound; the raw read callers (enumeration loops + load-by-uuid) propagate it. See the OPFS caller audit below | Fix order: group 1 (enumeration skips) first, then load-by-uuid caller-by-caller | live ids 1058, 1059 |
 | fixed | `Failed to load because no supported source was found.` | A media element failing to load its source (browser lacking the codec, "no supported source") dispatches a plain `"error"` Event (target = the element), not an `ErrorEvent`/`PromiseRejectionEvent`. `ErrorHandler.#tryIgnore` only filtered ErrorEvent/CSP/Monaco, so it fell through `processError`'s fatal path and was reported as a crash. The underlying media failure is environmental, but reporting it as fatal was a classification bug | `723431ddb` (ignore resource-load errors: a plain `"error"` Event whose `target instanceof HTMLElement`; real JS errors arrive as `ErrorEvent` and are unaffected) | live id 1022 |
+
+## OPFS storage errors — `Storage not available` + `NotFoundError` caller audit (2026-07-24)
+
+Both live errors come from the same `OpfsWorker` layer and share one analysis.
+
+**Already safe by construction.** `delete`, `list`, `exists`, `isAvailable` each `tryCatch` internally: `delete`
+no-ops on any failure (incl. NotFound and Storage-not-available), `list` returns `[]` for a missing/unavailable
+folder, `exists`/`isAvailable` return a bool. So every delete/list/exists caller (~55 of the 98 call sites) is
+already covered — none can crash.
+
+**The only throwing surface.**
+- `read` → `NotFoundError` (missing file) or `Storage not available` (getOpfsRoot fails)
+- `write` → `Storage not available` only (it creates parents via `{create:true}`, so no NotFound)
+
+So `NotFoundError` is always a `read` of a missing file, and `Storage not available` rides the same read/write
+calls. Hardening the reads covers both.
+
+**read callers — guarded (already graceful):** `Recovery.ts:20-26` (inside `tryCatch(Promise.all)` → `None`),
+`Storage.ts:21`, `ProjectStorage.ts:40/51/65/67/95`, `TemplateStorage.ts:41/84/86/114`,
+`PresetStorage.ts:67/125/139/170`.
+
+**read callers — raw (propagate), all recoverable:**
+1. Enumeration reads (one bad entry breaks the whole listing) — the clear bug; fix = skip the unreadable entry
+   like `ProjectStorage.listUsedAssets` already does: `ProjectStorage.ts:29`, `TemplateStorage.ts:30`,
+   `Storage.ts:36`.
+2. Load-by-uuid (missing → surface "not found", not crash): `ProjectStorage.ts:43/47`, `TemplateStorage.ts:44/48`,
+   `SampleStorage.ts:53/62/63/64`, `SoundfontStorage.ts:35/37`, `PresetStorage.ts:98`, `NamTone3000.ts:57/71`.
+3. Export/bundle (missing referenced file → export fails gracefully): `ProjectBundle.ts:109/110/111/133/134`.
+4. Cloud: `SharedFolderSync.ts:383`, `StudioLiveRoomConnect.ts:53/54`.
+
+**Verdict.** None of the raw reads is genuinely unrecoverable — every one has a sane fallback (absent / skip /
+failed-load notice). Root-fix order: group 1 (enumeration skips, self-contained and clearly correct), then
+groups 2-4 caller-by-caller (each needs a fallback decision: `Option.None` vs a user-facing notice). `write`
+throws only Storage-not-available; the save path is wrapped (`92936c29a`), other writes remain raw but only fail
+when storage is genuinely gone.
 
 ## How to extend
 
