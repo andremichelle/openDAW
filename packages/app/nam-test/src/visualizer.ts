@@ -476,7 +476,7 @@ export const drawNetworkGraph = (canvas: HTMLCanvasElement, model: NamModel): vo
         }
         for (const node of layer.nodes) {
             ctx.beginPath()
-            ctx.arc(layer.x, node.y, nodeRadius, 0, Math.PI * 2)
+            ctx.arc(layer.x, node.y, nodeRadius, 0, TAU)
             ctx.fill()
         }
     }

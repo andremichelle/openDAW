@@ -1,5 +1,5 @@
 import {createElement} from "@opendaw/lib-jsx"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle, TAU} from "@opendaw/lib-std"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
@@ -15,7 +15,7 @@ const drawGonio = (painter: CanvasPainter, pairs: Float32Array, mode: string): v
     const radius = Math.min(w, h) * 0.5 - 1.0
     context.strokeStyle = "rgba(255,255,255,0.1)"
     context.beginPath()
-    context.arc(cx, cy, radius, 0, Math.PI * 2)
+    context.arc(cx, cy, radius, 0.0, TAU)
     context.stroke()
     const midSide = mode === "M/S"
     const count = pairs.length >> 1
