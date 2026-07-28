@@ -1,6 +1,7 @@
 import SftpClient from "ssh2-sftp-client"
 import * as fs from "fs"
 import {execSync} from "child_process"
+import Anthropic from "@anthropic-ai/sdk"
 
 const config = {
     host: process.env.SFTP_HOST,
@@ -17,6 +18,50 @@ const isMainBranch = branchName === "main"
 const domain = isMainBranch ? "opendaw.studio" : "dev.opendaw.studio"
 const envFolder = isMainBranch ? "main" : "dev"
 const readBuildInfo = () => JSON.parse(fs.readFileSync(buildInfoPath, "utf8"))
+const lastCommitFile = `/${envFolder}/last-deployed-commit.txt`
+const readCommitLog = (previousCommit: string): string | null => {
+    try {
+        return execSync(`git log ${previousCommit}..HEAD --no-merges --pretty=format:%s`, {encoding: "utf8"}).trim()
+    } catch (err) {
+        console.warn(`could not read commit log ${previousCommit}..HEAD:`, err)
+        return null
+    }
+}
+const generateSummary = async (commitLog: string): Promise<string | null> => {
+    if (!process.env.ANTHROPIC_API_KEY) {
+        console.log("no ANTHROPIC_API_KEY, skipping deploy summary")
+        return null
+    }
+    try {
+        const anthropic = new Anthropic()
+        const response = await anthropic.messages.create({
+            model: "claude-opus-4-8",
+            max_tokens: 1000,
+            thinking: {type: "adaptive"},
+            system: [
+                "You write short deploy announcements for the openDAW community Discord.",
+                "openDAW is a free browser-based digital audio workstation.",
+                "You receive the raw git commit subjects since the last deploy.",
+                "Summarize only what users of the app would notice: new features, fixed bugs, audible or visible changes.",
+                "Merge related commits into one line. Skip internal refactors, build tooling, docs, and version bumps unless they matter to users.",
+                "Write warm, plain language. No marketing tone, no hype words, no emoji, no headings.",
+                "Format: at most 6 lines, each starting with '- ', lowercase except proper nouns.",
+                "If nothing is user-visible, reply with exactly: NOTHING_USER_VISIBLE"
+            ].join(" "),
+            messages: [{role: "user", content: `Commits since the last deploy:\n${commitLog}`}]
+        })
+        const text = response.content
+            .filter(block => block.type === "text")
+            .map(block => block.text)
+            .join("")
+            .trim()
+        if (text.length === 0 || text.includes("NOTHING_USER_VISIBLE")) return null
+        return text.length > 1500 ? `${text.slice(0, 1500)}…` : text
+    } catch (err) {
+        console.warn("deploy summary generation failed:", err)
+        return null
+    }
+}
 const createRootHtaccess = (mainReleaseDir: string, devReleaseDir: string) => `# openDAW
 #
 RewriteEngine On
@@ -60,6 +105,14 @@ RewriteRule ^(.*)$ ${mainReleaseDir}/$1 [L]
 
     const {uuid} = readBuildInfo()
     const releaseDir = `/${envFolder}/releases/${uuid}`
+    const currentCommit = execSync("git rev-parse HEAD", {encoding: "utf8"}).trim()
+    let previousCommit: string | null = null
+    try {
+        previousCommit = (await sftp.get(lastCommitFile)).toString().trim() || null
+        console.log(`last deployed commit: ${previousCommit}`)
+    } catch (err) {
+        console.log("no last-deployed-commit file found, skipping deploy summary")
+    }
 
     console.log(`deploying branch "${branchName}" to ${domain}`)
     console.log("creating", releaseDir)
@@ -143,15 +196,19 @@ RewriteRule ^(.*)$ ${mainReleaseDir}/$1 [L]
     await sftp.put(tmpFile, "/.htaccess")
     fs.unlinkSync(tmpFile)
 
+    await sftp.put(Buffer.from(`${currentCommit}\n`), lastCommitFile)
     await sftp.end()
     console.log(`✅ Release uploaded and activated: ${releaseDir}`)
 
     const webhookUrl = process.env.DISCORD_WEBHOOK
     if (webhookUrl) {
+        const commitLog = previousCommit && previousCommit !== currentCommit ? readCommitLog(previousCommit) : null
+        const summary = commitLog ? await generateSummary(commitLog) : null
         const now = Math.floor(Date.now() / 1000)
         const branchInfo = isMainBranch ? "" : ` (\`${branchName}\`)`
         const content =
             `🚀 **openDAW** deployed <https://${domain}>${branchInfo} using release \`${uuid}\` <t:${now}:R>.`
+            + (summary ? `\n\nwhat's new:\n${summary}` : "")
         try {
             const response = await fetch(webhookUrl, {
                 method: "POST",
