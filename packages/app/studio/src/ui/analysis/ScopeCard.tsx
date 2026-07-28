@@ -55,5 +55,5 @@ export const ScopeCard = ({lifecycle, service}: Construct): HTMLElement => {
             painter.requestUpdate()
         }))
     })
-    return card("Scope", toggle(lifecycle, trig, "Trig"), canvas)
+    return card("Scope", toggle(lifecycle, trig, "Trigger"), canvas)
 }

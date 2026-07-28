@@ -5,7 +5,7 @@ import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 
 export class PeakBroadcaster implements Terminable {
     static readonly PEAK_DECAY = Math.exp(-1.0 / (sampleRate * 0.250))
-    static readonly RMS_WINDOW = Math.floor(sampleRate * 0.100)
+    static readonly RMS_WINDOW = Math.floor(sampleRate * 0.300)
 
     readonly #broadcaster: LiveStreamBroadcaster
     readonly #address: Address

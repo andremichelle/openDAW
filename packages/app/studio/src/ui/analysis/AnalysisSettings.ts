@@ -12,5 +12,5 @@ export const AnalysisSettings = {
     spectrumAvg: new DefaultObservableValue(false),
     levelScale: new DefaultObservableValue("dBFS"),
     gonioMode: new DefaultObservableValue("L/R"),
-    scopeTrig: new DefaultObservableValue(false)
+    scopeTrig: new DefaultObservableValue(true)
 } as const

@@ -20,7 +20,7 @@ export class MeterWorklet extends AudioWorkletNode implements Terminable {
             processorOptions: {
                 sab: receiver.buffer,
                 numberOfChannels,
-                rmsWindowInSeconds: 0.100,
+                rmsWindowInSeconds: 0.300,
                 valueDecay: 0.200
             } satisfies PeakMeterProcessorOptions
         })

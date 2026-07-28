@@ -1,12 +1,12 @@
 //! A stereo peak + RMS meter for DEVICE-side telemetry (the TS `PeakBroadcaster` DSP + lib-dsp `RMS`):
-//! a 250 ms peak decay and a 100 ms sliding RMS window per channel, written as `[peakL, peakR, rmsL, rmsR]`
+//! a 250 ms peak decay and a 300 ms sliding RMS window per channel, written as `[peakL, peakR, rmsL, rmsR]`
 //! into a caller-provided slice (a device's broadcast slot). ALLOCATION-FREE (device crates have no
 //! allocator): fixed-capacity rings sized for up to 96 kHz, built IN PLACE via `init`. The engine-side
 //! twin (`engine_env::meter`) owns a shared slot and may allocate; this one is for plugin crates.
 
 const PEAK_DECAY_SECONDS: f64 = 0.250; // TS PeakBroadcaster.PEAK_DECAY
-const RMS_WINDOW_SECONDS: f32 = 0.100; // TS PeakBroadcaster.RMS_WINDOW
-const RMS_CAPACITY: usize = 9600; // 100 ms at 96 kHz; higher rates clamp the window
+const RMS_WINDOW_SECONDS: f32 = 0.300; // TS PeakBroadcaster.RMS_WINDOW
+const RMS_CAPACITY: usize = 28800; // 300 ms at 96 kHz; higher rates clamp the window
 
 /// The sliding-window RMS (lib-dsp `RMS`): a ring of squares with a running sum.
 struct Rms {

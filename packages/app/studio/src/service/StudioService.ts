@@ -198,6 +198,7 @@ export class StudioService implements ProjectEnv {
                     })
                 },
                 load: (engine: EngineWorklet) => {
+                    if (!this.optProject.contains(project)) {return}
                     this.engine.setWorklet(engine)
                     this.switchScreen(screen)
                 }
@@ -516,6 +517,7 @@ export class StudioService implements ProjectEnv {
                         })
                     },
                     load: (engine: EngineWorklet) => {
+                        if (!this.#projectProfileService.getValue().contains(profile)) {return}
                         this.engine.setWorklet(engine)
                         this.switchScreen(screen)
                     }

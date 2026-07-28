@@ -27,7 +27,7 @@ export class StudioNavigation {
     }
 
     switchScreen(key: Nullable<Workspace.ScreenKeys>): void {
-        if (key === "dashboard") {
+        if (key === "dashboard" || (isDefined(key) && this.#profiles.getValue().isEmpty())) {
             this.closeProject().then(EmptyExec)
         } else {
             this.#screen.setValue(key)
