@@ -51,7 +51,7 @@ const drain = async (engine: EngineExports, memory: WebAssembly.Memory, client: 
 
 describe("boot dead-handle guard", () => {
     it("never writes at address 0 when sample_allocate returns 0 (dead handle)", async () => {
-        const memory = new WebAssembly.Memory({initial: 4, maximum: 16, shared: true})
+        const memory = new WebAssembly.Memory({initial: 4})
         new Uint8Array(memory.buffer, SENTINEL_AT, 256).fill(0xAB) // pre-fill where the bug wrote
         const calls: Calls = {allocations: [], ready: []}
         await drain(mockEngine(0, calls), memory, mockClient(testAudio()))
@@ -61,7 +61,7 @@ describe("boot dead-handle guard", () => {
         expect(region.every(byte => byte === 0xAB), "address 0 must be untouched").toBe(true)
     })
     it("delivers normally when sample_allocate returns a live pointer", async () => {
-        const memory = new WebAssembly.Memory({initial: 4, maximum: 16, shared: true})
+        const memory = new WebAssembly.Memory({initial: 4})
         const calls: Calls = {allocations: [], ready: []}
         await drain(mockEngine(WRITE_AT, calls), memory, mockClient(testAudio()))
         expect(calls.ready).toEqual([[7, 64, 2, 48000]])

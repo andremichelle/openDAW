@@ -41,7 +41,7 @@ type WasmDevice = {parameters: ReadonlyArray<WasmParameter>, map: (id: number, u
 const loadWasmDevice = (file: string): WasmDevice => {
     const module = new WebAssembly.Module(readFileSync(path.join(PLUGINS, file)))
     const {memorySize, tableSize} = parseDylink(module)
-    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: Math.max(tableSize, 1), element: "anyfunc"})
     const memoryBase = 1024
     const stackBase = alignUp(memoryBase + memorySize, 16)

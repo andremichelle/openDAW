@@ -85,7 +85,8 @@ const setup = async (flags: [number, number]) => {
         const peaks: [number, number] = [0, 0]
         for (let quantum = 0; quantum < quanta; quantum++) {
             engine.render()
-            const staging = new Float32Array(memory.buffer, engine.stem_output_ptr(), 2 * 2 * QUANTUM)
+            const enginePtr = engine.stem_output_ptr()
+            const staging = new Float32Array(memory.buffer, enginePtr, 2 * 2 * QUANTUM)
             for (let stem = 0; stem < 2; stem++) {
                 for (let index = 0; index < 2 * QUANTUM; index++) {
                     peaks[stem] = Math.max(peaks[stem], Math.abs(staging[stem * 2 * QUANTUM + index]))

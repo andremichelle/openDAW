@@ -116,7 +116,8 @@ describe("80s.od full-length freeze render", () => {
             let firstBad = -1
             for (let quantum = 0; quantum < quanta && firstBad < 0; quantum++) {
                 engine.render()
-                const staging = new Float32Array(memory.buffer, engine.stem_output_ptr(), 2 * QUANTUM)
+                const enginePtr = engine.stem_output_ptr()
+                const staging = new Float32Array(memory.buffer, enginePtr, 2 * QUANTUM)
                 for (let index = 0; index < staging.length; index++) {
                     const value = staging[index]
                     if (!Number.isFinite(value)) {

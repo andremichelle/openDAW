@@ -80,7 +80,8 @@ describe("apparat mid-block note onset", () => {
         const left = new Float32Array(QUANTA * half)
         for (let q = 0; q < QUANTA; q++) {
             engine.render()
-            left.set(new Float32Array(memory.buffer, engine.output_ptr(), half), q * half)
+            const enginePtr = engine.output_ptr()
+            left.set(new Float32Array(memory.buffer, enginePtr, half), q * half)
         }
         const firstNonZero = left.findIndex(sample => Math.abs(sample) > 1e-9)
         expect(firstNonZero).toBeGreaterThan(0)        // the note did NOT sound from sample 0 (not delivered up front)

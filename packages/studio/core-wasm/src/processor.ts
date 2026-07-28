@@ -35,12 +35,11 @@ import {WasmMidiDrain} from "./midi-drain"
 import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 import {
     WASM_ENGINE_PROCESSOR_NAME,
-    WASM_FROZEN_CHANNEL,
     WASM_SYNC_CHANNEL,
     WasmEngineAttachment,
-    WasmFrozenProtocol,
     WasmSyncProtocol
 } from "./protocol"
+import {createEngineMemory} from "./engine-modules"
 
 const GONIO_PAIRS = 512
 
@@ -73,6 +72,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     readonly #pendingResources: Set<Promise<unknown>> = new Set()
 
     #broadcastGeneration: int = -1
+    #broadcastBuffer: Nullable<ArrayBufferLike> = null
     #monitoringMap: ReadonlyArray<MonitoringMapEntry> = []
     #bound: boolean = false
     #valid: boolean = true
@@ -85,8 +85,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
         super()
         const {syncStreamBuffer, controlFlagsBuffer, hrClockBuffer, variant} = processorOptions
-        const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites, memory} = variant as WasmEngineAttachment
-        this.#memory = memory
+        const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} = variant as WasmEngineAttachment
+        this.#memory = createEngineMemory()
         const messenger = Messenger.for(this.port)
         this.#engineToClient = Communicator.sender<EngineToClient>(
             messenger.channel("engine-to-client"),
@@ -106,12 +106,13 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
         const engine = instantiateWasmEngine({engineModule, deviceModules, deviceBoxTypes, composites, effectComposites},
-            memory, sampleRate, this.#engineToClient)
+            this.#memory, sampleRate, this.#engineToClient)
         this.#engine = engine
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)
         this.#hrClock = new HRClock(hrClockBuffer)
         this.#stateSender = SyncStream.writer(EngineStateSchema(), syncStreamBuffer, state => {
-            const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
+            const statePtr = engine.engine_state_ptr()
+            const view = new DataView(this.#memory.buffer, statePtr, engine.engine_state_len())
             state.position = view.getFloat32(0)
             state.bpm = view.getFloat32(4)
             state.playbackTimestamp = this.#playbackTimestamp
@@ -179,29 +180,6 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             Communicator.executor<WasmSyncProtocol>(messenger.channel(WASM_SYNC_CHANNEL), {
                 applyUpdates: (bytes: ArrayBuffer): void => this.#guarded(() => this.#applyUpdates(bytes)),
                 checksum: (bytes: Int8Array): Promise<void> => this.#verifyChecksum(bytes)
-            }),
-            // Freeze PCM delivery (WasmEngine.connectFrozenAudio): the MAIN thread writes the frames into
-            // the shared memory between allocate and attach — nothing here copies sample data.
-            Communicator.executor<WasmFrozenProtocol>(messenger.channel(WASM_FROZEN_CHANNEL), {
-                frozenAllocate: (frameCount: number, channels: number): Promise<number> => {
-                    const {status, value, error} = tryCatch(() => engine.frozen_allocate(frameCount, channels))
-                    if (status === "failure") {
-                        this.#fail(error)
-                        return Promise.reject(error)
-                    }
-                    return Promise.resolve(value)
-                },
-                frozenAttach: (uuid: UUID.Bytes, frameCount: number, channels: number, sampleRate: number): void =>
-                    this.#guarded(() => {
-                        const pointer = engine.input_reserve(16)
-                        new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
-                        engine.set_frozen_audio(frameCount, channels, sampleRate)
-                    }),
-                frozenClear: (uuid: UUID.Bytes): void => this.#guarded(() => {
-                    const pointer = engine.input_reserve(16)
-                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
-                    engine.clear_frozen_audio()
-                })
             }),
             Communicator.executor<EngineCommands>(messenger.channel("engine-commands"), {
                 play: (): void => this.#guarded(() => this.#play()),
@@ -328,7 +306,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     // tracks the source. A divergence permanently desyncs playback: escalate so the studio's restart flow
     // reboots from a fresh full dump.
     #verifyChecksum(bytes: Int8Array): Promise<void> {
-        const local = new Int8Array(this.#memory.buffer, this.#engine.checksum_ptr(), 32)
+        const pointer = this.#engine.checksum_ptr() // may compute lazily and grow: call BEFORE reading buffer
+        const local = new Int8Array(this.#memory.buffer, pointer, 32)
         if (bytes.length === local.length && bytes.every((byte, index) => byte === local[index])) {
             return Promise.resolve()
         }
@@ -348,7 +327,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         const monitoring = this.#monitoringMap
         if (monitoring.length > 0) {
             const input = inputs[0] ?? []
-            const staging = new Float32Array(this.#memory.buffer, engine.monitor_input_ptr(), 8 * RenderQuantum)
+            const inputPtr = engine.monitor_input_ptr()
+            const staging = new Float32Array(this.#memory.buffer, inputPtr, 8 * RenderQuantum)
             staging.fill(0.0)
             for (const {channels} of monitoring) {
                 for (const channel of channels) {
@@ -359,7 +339,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         }
         engine.render()
         if (monitoring.length > 0 && monitorOutput !== undefined) {
-            const staged = new Float32Array(this.#memory.buffer, engine.monitor_output_ptr(), 8 * RenderQuantum)
+            const outputPtr = engine.monitor_output_ptr()
+            const staged = new Float32Array(this.#memory.buffer, outputPtr, 8 * RenderQuantum)
             for (const {channels} of monitoring) {
                 for (const channel of channels) {
                     const target = monitorOutput[channel]
@@ -461,7 +442,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #stop(reset: boolean): void {
         // The engine can start transporting on its own (a clip launch), so consult ITS state too — the
         // local flag alone would misread a clip-launched playback as "not transporting" and hard-reset.
-        const view = new DataView(this.#memory.buffer, this.#engine.engine_state_ptr(), this.#engine.engine_state_len())
+        const statePtr = this.#engine.engine_state_ptr()
+        const view = new DataView(this.#memory.buffer, statePtr, this.#engine.engine_state_len())
         const wasTransporting = this.#transporting || view.getUint8(16) === 1
         const wasRecording = view.getUint8(17) === 1 || view.getUint8(18) === 1
         this.#transporting = false
@@ -497,8 +479,14 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     // Mirror the engine's broadcast table onto the LiveStreamBroadcaster whenever its generation moved (a
     // reconcile registered or swept telemetry slots): terminate every stale package, then register each entry
     // as a package whose Float32Array view points straight into wasm memory — the broadcaster reads the LIVE
-    // values at flush, so the render path never copies.
+    // values at flush, so the render path never copies. A grow DETACHES those held views (non-shared
+    // memory relocates), so a buffer identity change forces re-registration.
     #syncBroadcasts(): void {
+        const buffer = this.#memory.buffer
+        if (buffer !== this.#broadcastBuffer) {
+            this.#broadcastBuffer = buffer
+            this.#broadcastGeneration = -1
+        }
         const generation = this.#engine.broadcast_generation()
         if (generation === this.#broadcastGeneration) {return}
         this.#broadcastGeneration = generation

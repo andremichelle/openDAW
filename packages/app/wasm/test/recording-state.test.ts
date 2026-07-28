@@ -54,7 +54,8 @@ const build = () => {
 type State = {position: number, countInBeatsRemaining: number, isPlaying: boolean, isCountingIn: boolean, isRecording: boolean}
 
 const readState = (engine: {engine_state_ptr(): number, engine_state_len(): number}, memory: WebAssembly.Memory): State => {
-    const view = new DataView(memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
+    const enginePtr = engine.engine_state_ptr()
+    const view = new DataView(memory.buffer, enginePtr, engine.engine_state_len())
     return {
         position: view.getFloat32(0),
         countInBeatsRemaining: view.getFloat32(12),
@@ -86,7 +87,8 @@ describe("recording state machine", () => {
         let flipped: State | null = null
         for (let quantum = 0; quantum < 800; quantum++) {
             engine.render()
-            const output = new Float32Array(memory.buffer, engine.output_ptr(), len)
+            const enginePtr2 = engine.output_ptr()
+            const output = new Float32Array(memory.buffer, enginePtr2, len)
             const state = readState(engine, memory)
             if (state.isCountingIn) {
                 for (let index = 0; index < len; index++) {clickPeak = Math.max(clickPeak, Math.abs(output[index]))}
@@ -143,7 +145,8 @@ describe("recording state machine", () => {
             let peak = 0
             for (let quantum = 0; quantum < quanta; quantum++) {
                 engine.render()
-                const output = new Float32Array(memory.buffer, engine.output_ptr(), len)
+                const enginePtr3 = engine.output_ptr()
+                const output = new Float32Array(memory.buffer, enginePtr3, len)
                 for (let index = 0; index < len; index++) {peak = Math.max(peak, Math.abs(output[index]))}
             }
             return peak

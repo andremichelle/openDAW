@@ -40,7 +40,8 @@ describe("disabling every instrument silences the project", () => {
             let peak = 0
             for (let q = 0; q < quanta; q++) {
                 engine.render()
-                const out = new Float32Array(memory.buffer, engine.output_ptr(), engine.output_len())
+                const enginePtr = engine.output_ptr()
+                const out = new Float32Array(memory.buffer, enginePtr, engine.output_len())
                 for (let i = 0; i < out.length; i++) {
                     const magnitude = Math.abs(out[i])
                     expect(Number.isFinite(out[i])).toBe(true)

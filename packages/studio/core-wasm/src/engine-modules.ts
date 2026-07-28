@@ -1,4 +1,3 @@
-import {Option} from "@opendaw/lib-std"
 
 // Fetch + compile the wasm modules the engine worklet needs: the engine (the dynamic-linker host) and
 // the device PLUGINS (PIC side modules the engine loads at host-assigned bases). All are handed to the
@@ -59,25 +58,13 @@ export type EngineModules = {
     effectComposites: ReadonlyArray<EffectCompositeSpec> // parallel fx / midi stacks the engine hosts itself
 }
 
-// The engine's single linear memory: SHARED, so the main thread can see the WASM heap (e.g. to write
-// decoded sample data straight into it at an engine-allocated offset). A SHARED memory cannot be reallocated
-// on grow (its base must stay fixed for every thread), so the runtime RESERVES the entire `maximum` as VIRTUAL
-// address space at creation — physical pages still commit lazily on grow, but that reservation itself can fail
-// on a memory-constrained device (a low-end Chromebook reported `RangeError: could not allocate memory`, #1030).
-// So request the wasm32 ceiling (65536 pages = 4 GiB) and fall back to smaller maxima until one is accepted; the
-// talc allocator grows on demand up to whatever ceiling succeeded. The engine.wasm memory import declares
-// max=65536, and a smaller provided max still satisfies it (verified: it instantiates down to 8192).
-// Needs cross-origin isolation (COOP/COEP, set in vite.config). Passed into the worklet via processorOptions.
-export const createEngineMemory = (): WebAssembly.Memory => {
-    const initial = 256
-    for (const maximum of [65536, 32768, 16384, 8192]) {
-        console.debug(`Try ${maximum} bytes for engine memory...`)
-        const memory = Option.tryCatch(() => new WebAssembly.Memory({initial, maximum, shared: true}))
-        if (memory.nonEmpty()) {return memory.unwrap()}
-    }
-    // Smallest workable ceiling; if even this throws, the device genuinely cannot host the engine.
-    return new WebAssembly.Memory({initial, maximum: 4096, shared: true})
-}
+// The engine's single linear memory: NON-shared, created INSIDE the worklet/worker that runs the engine
+// (a non-shared memory cannot be postMessaged). Without the shared flag the runtime may RELOCATE the
+// buffer on grow, so no upfront address-space reservation is needed — the reservation ladder that failed
+// on constrained devices (#1030, the Riffle Android crash) is gone; talc grows on demand. The price:
+// every grow DETACHES existing JS views, so views over the memory must be constructed fresh after any
+// allocation (the code does this throughout; long-held broadcast views re-register on buffer change).
+export const createEngineMemory = (): WebAssembly.Memory => new WebAssembly.Memory({initial: 256})
 
 // The device PIC side modules to load: each wasm plus the device-BOX TYPE it realizes. This is the device
 // table the engine uses to instantiate a device box: when the box graph presents e.g. an ArpeggioDeviceBox,

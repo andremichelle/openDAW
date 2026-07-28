@@ -86,7 +86,8 @@ describe("apparat limiter parity", () => {
         const wasm = new Float32Array(QUANTA * len)
         for (let q = 0; q < QUANTA; q++) {
             engine.render()
-            wasm.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+            const enginePtr = engine.output_ptr()
+            wasm.set(new Float32Array(memory.buffer, enginePtr, len), q * len)
         }
         // The limiter has a 3 ms attack, so the onset transient still passes ~1.5; in STEADY STATE (the second
         // half, well past the attack) it must have pulled the raw 1.5 down to ~unity — proving it engaged.

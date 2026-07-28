@@ -1,10 +1,10 @@
 import {createElement} from "@opendaw/lib-jsx"
-import {asDefined, ByteArrayInput, Lifecycle, MutableObservableOption, Procedure, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, Lifecycle, MutableObservableOption, Procedure, UUID} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {ApparatDeviceBox, BoxIO, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
 import {EngineStateSchema, ProjectSkeleton, ScriptCompiler} from "@opendaw/studio-adapters"
-import {AudioData, PPQN} from "@opendaw/lib-dsp"
+import {PPQN} from "@opendaw/lib-dsp"
 import {SampleInfo, SampleLoader} from "./sample-loader"
 import {SoundfontInfo, SoundfontLoader} from "./soundfont-loader"
 import {NamLoader} from "../../../studio/core-wasm/src/nam-loader"
@@ -12,7 +12,7 @@ import {loadSoundfontBlob} from "./soundfont-fetch"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
 import {loadSampleCached} from "./sample-fetch"
 import {serializeUpdateTasks} from "../../../studio/core-wasm/src/sync/serialize-update-tasks"
-import {createEngineMemory, loadEngineModules} from "../../../studio/core-wasm/src/engine-modules"
+import {loadEngineModules} from "../../../studio/core-wasm/src/engine-modules"
 import processorURL from "./engine-processor.ts?worker&url"
 
 // The box graph type ProjectSkeleton hands back; every page drives the engine from one of these.
@@ -126,10 +126,9 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         // starts rendering, so their bridges find a Processor at globalThis.openDAW.<registry>[uuid].
         await loadScriptDevices(ctx, boxGraph, append)
         const {engineModule, deviceModules, deviceBoxTypes, composites} = await loadEngineModules()
-        const memory = createEngineMemory()
         const workletNode = new AudioWorkletNode(ctx, "engine", {
             outputChannelCount: [2], // STEREO out; without this the node defaults to mono and drops the right channel
-            processorOptions: {engineModule, deviceModules, deviceBoxTypes, composites, memory, sampleRate: ctx.sampleRate, metronome: options.metronome ?? false}
+            processorOptions: {engineModule, deviceModules, deviceBoxTypes, composites, sampleRate: ctx.sampleRate, metronome: options.metronome ?? false}
         })
         node.wrap(workletNode)
         workletNode.connect(ctx.destination)
@@ -158,64 +157,43 @@ export const createEngineHost = (boxGraph: EngineBoxGraph, lifecycle: Lifecycle,
         lifecycle.own(Communicator.executor<ScriptListener>(messenger.channel("script"), new class implements ScriptListener {
             deviceMessage(uuid: string, message: string): void {append(`script ${uuid}: ${message}`)}
         }))
-        // Route F: the sample loader. The worklet drives the handshake; this executor fetches + decodes a sample
-        // and writes its PLANAR frames into the SAB at the engine-allocated pointer.
-        const held = new Map<string, AudioData>()
+        // Route F: the sample loader. The worklet drives the handshake; this executor fetches + decodes and
+        // returns the planar frames (SAB-backed, shared zero-copy); the WORKLET writes them into its memory.
         const sampleLoader: SampleLoader = new class implements SampleLoader {
             async decode(uuid: UUID.Bytes): Promise<SampleInfo> {
                 const id = UUID.toString(uuid)
                 append(`sample ${id}: requesting…`)
                 try {
                     const data = await loadSampleCached(uuid)
-                    held.set(id, data)
                     append(`sample ${id}: decoded ${data.numberOfFrames} frames, ${data.numberOfChannels}ch @ ${data.sampleRate} Hz`)
                     return {
                         byteLength: data.numberOfFrames * data.numberOfChannels * Float32Array.BYTES_PER_ELEMENT,
                         frameCount: data.numberOfFrames,
                         channelCount: data.numberOfChannels,
-                        sampleRate: data.sampleRate
+                        sampleRate: data.sampleRate,
+                        frames: data.frames
                     }
                 } catch (error) {
                     append(`sample ${id}: FAILED ${error instanceof Error ? error.message : String(error)}`)
                     throw error
                 }
             }
-            async write(uuid: UUID.Bytes, pointer: number): Promise<void> {
-                const key = UUID.toString(uuid)
-                const data = asDefined(held.get(key), "sample not decoded")
-                const frames = data.numberOfFrames
-                for (let channel = 0; channel < data.numberOfChannels; channel++) {
-                    const offset = pointer + channel * frames * Float32Array.BYTES_PER_ELEMENT
-                    new Float32Array(memory.buffer, offset, frames).set(data.frames[channel])
-                }
-                append(`sample ${key}: written @ ptr ${pointer} (${frames * data.numberOfChannels * Float32Array.BYTES_PER_ELEMENT} bytes)`)
-                held.delete(key)
-            }
         }
         lifecycle.own(Communicator.executor<SampleLoader>(messenger.channel("samples"), sampleLoader))
-        // The soundfont analog: fetch + parse the .sf2 on the main thread, build the simplified blob, and write
-        // it into the engine allocation. The wasm side only ever sees the blob.
-        const heldSoundfonts = new Map<string, Uint8Array>()
+        // The soundfont analog: fetch + parse the .sf2 on the main thread, build the simplified blob and
+        // return it; the WORKLET writes it into the engine allocation.
         const soundfontLoader: SoundfontLoader = new class implements SoundfontLoader {
             async decode(uuid: UUID.Bytes): Promise<SoundfontInfo> {
                 const id = UUID.toString(uuid)
                 append(`soundfont ${id}: requesting…`)
                 try {
                     const blob = new Uint8Array(await loadSoundfontBlob(uuid))
-                    heldSoundfonts.set(id, blob)
                     append(`soundfont ${id}: built ${blob.byteLength} bytes`)
-                    return {byteLength: blob.byteLength}
+                    return {byteLength: blob.byteLength, blob}
                 } catch (error) {
                     append(`soundfont ${id}: FAILED ${error instanceof Error ? error.message : String(error)}`)
                     throw error
                 }
-            }
-            async write(uuid: UUID.Bytes, pointer: number): Promise<void> {
-                const key = UUID.toString(uuid)
-                const blob = asDefined(heldSoundfonts.get(key), "soundfont not built")
-                new Uint8Array(memory.buffer, pointer, blob.byteLength).set(blob)
-                append(`soundfont ${key}: written @ ptr ${pointer} (${blob.byteLength} bytes)`)
-                heldSoundfonts.delete(key)
             }
         }
         lifecycle.own(Communicator.executor<SoundfontLoader>(messenger.channel("soundfonts"), soundfontLoader))

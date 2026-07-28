@@ -75,7 +75,8 @@ describe("base frequency (RootBox.baseFrequency -> wasm engine -> device tuning)
             const left = new Float32Array(quanta * half)
             for (let quantum = 0; quantum < quanta; quantum++) {
                 engine.render()
-                left.set(new Float32Array(memory.buffer, engine.output_ptr(), half), quantum * half)
+                const outputPtr = engine.output_ptr()
+                left.set(new Float32Array(memory.buffer, outputPtr, half), quantum * half)
             }
             return left
         }

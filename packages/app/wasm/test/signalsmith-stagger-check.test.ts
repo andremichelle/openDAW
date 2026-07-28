@@ -53,7 +53,8 @@ const capture = async (count: number, quanta: number): Promise<Float32Array> => 
     const out = new Float32Array(quanta * 128)
     for (let q = 0; q < quanta; q++) {
         engine.render()
-        const left = new Float32Array(memory.buffer, engine.output_ptr(), 128)
+        const enginePtr = engine.output_ptr()
+        const left = new Float32Array(memory.buffer, enginePtr, 128)
         out.set(left, q * 128)
     }
     sync.close()

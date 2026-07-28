@@ -65,7 +65,8 @@ const render = (engine: Awaited<ReturnType<typeof loadFullEngine>>["engine"], me
     const output = new Float32Array(quanta * len)
     for (let quantum = 0; quantum < quanta; quantum++) {
         engine.render()
-        output.set(new Float32Array(memory.buffer, engine.output_ptr(), len), quantum * len)
+        const enginePtr = engine.output_ptr()
+        output.set(new Float32Array(memory.buffer, enginePtr, len), quantum * len)
     }
     return output
 }

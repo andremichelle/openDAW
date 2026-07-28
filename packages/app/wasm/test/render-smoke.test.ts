@@ -33,7 +33,8 @@ describe("render smoke", () => {
         let samples = 0
         for (let q = 0; q < 1200; q++) { // ~3.2s of audio at 48k
             engine.render()
-            const out = new Float32Array(memory.buffer, engine.output_ptr(), engine.output_len())
+            const enginePtr = engine.output_ptr()
+            const out = new Float32Array(memory.buffer, enginePtr, engine.output_len())
             for (let i = 0; i < out.length; i++) {
                 const value = out[i]
                 const magnitude = Math.abs(value)

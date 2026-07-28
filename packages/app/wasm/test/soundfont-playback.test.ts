@@ -66,7 +66,8 @@ const renderWasmPeak = async (source: BoxGraph, quanta: number): Promise<number>
     for (let q = 0; q < quanta; q++) {
         engine.render()
         if (q < quanta / 2) {continue}
-        const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+        const enginePtr = engine.output_ptr()
+        const out = new Float32Array(memory.buffer, enginePtr, len)
         for (let i = 0; i < len; i++) {peak = Math.max(peak, Math.abs(out[i]))}
     }
     return peak
