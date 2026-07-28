@@ -8,4 +8,5 @@ export namespace EngineAddresses {
     export const STEREO = Address.compose(UUID.Lowest).append(3)
     export const GONIO = Address.compose(UUID.Lowest).append(4)
     export const LOUDNESS = Address.compose(UUID.Lowest).append(5)
+    export const HEAP = Address.compose(UUID.Lowest).append(6)
 }

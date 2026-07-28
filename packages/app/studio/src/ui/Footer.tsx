@@ -11,6 +11,7 @@ import {Colors} from "@opendaw/studio-enums"
 import {UserCounter} from "@/UserCounter"
 import {AudioData} from "@opendaw/lib-dsp"
 import {FooterItem} from "@/ui/FooterItem"
+import {EngineAddresses} from "@opendaw/studio-adapters"
 import {LatencyWarning} from "@/ui/LatencyWarning"
 
 const className = Html.adoptStyleSheet(css, "footer")
@@ -101,6 +102,23 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                     : percent > 75 ? Colors.orange.toString() : ""
                             }))
                         }}>0%</FooterItem>
+            <FooterItem title="Memory" minWidth="11ch"
+                        onInit={({value}) => {
+                            const runtime = lifecycle.own(new Terminator())
+                            const megabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(0)
+                            lifecycle.own(projectProfileService.catchupAndSubscribe(optProfile => {
+                                runtime.terminate()
+                                if (optProfile.isEmpty()) {
+                                    value.textContent = "N/A"
+                                    return
+                                }
+                                const {project} = optProfile.unwrap()
+                                runtime.own(project.liveStreamReceiver
+                                    .subscribeFloats(EngineAddresses.HEAP, values =>
+                                        value.textContent =
+                                            `${megabytes(values[0])}/${megabytes(values[2])}M`))
+                            }))
+                        }}>N/A</FooterItem>
             <FooterItem title="FPS"
                         onInit={({component, value}) => {
                             const lifeSpan = lifecycle.own(new Terminator())

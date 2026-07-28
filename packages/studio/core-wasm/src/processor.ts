@@ -129,6 +129,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#analyser = new AudioAnalyser()
         const spectrum = new Float32Array(this.#analyser.numBins())
         const waveform = new Float32Array(this.#analyser.numBins())
+        const heap = new Float32Array(3)
         this.#preferences = new PreferencesClient(messenger.channel("engine-preferences"), EngineSettingsSchema.parse({}))
         this.#terminator.ownAll(
             this.#broadcaster.broadcastFloats(EngineAddresses.SPECTRUM, spectrum, (hasSubscribers) => {
@@ -151,6 +152,14 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     this.#loudnessActive = hasSubscribers
                     if (hasSubscribers) {this.#loudness.fill(this.#loudnessValues)}
                 }),
+            // [heap_used, heap_claimed, committed memory] in bytes (f32 loses sub-KB precision — irrelevant
+            // for display). Subscription-gated like the other telemetry: no subscriber, no export calls.
+            this.#broadcaster.broadcastFloats(EngineAddresses.HEAP, heap, (hasSubscribers) => {
+                if (!hasSubscribers) {return}
+                heap[0] = engine.heap_used()
+                heap[1] = engine.heap_claimed()
+                heap[2] = this.#memory.buffer.byteLength
+            }),
             this.#preferences.catchupAndSubscribe(enabled =>
                 engine.set_metronome_enabled(enabled ? 1 : 0), "metronome", "enabled"),
             this.#preferences.catchupAndSubscribe(gain =>
