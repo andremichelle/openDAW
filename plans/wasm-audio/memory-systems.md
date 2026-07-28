@@ -3,6 +3,10 @@
 Companion to `memory-ceiling.md`. Everything here is evaluated against the tools we have today
 (current Chrome/Firefox/Safari, current Rust toolchain, current codebase).
 
+> **STATUS 2026-07-28: Fix 1 SHIPPED** (`84f763642`) — non-shared memory, worklet-owned, no ladder, frozen
+> audio via the `setFrozenAudio` command, grow-safety (view re-registration + call-first-then-view at every
+> pointer site), test harnesses flipped, full wasm suite green. Fix 2 and Fix 3 remain open, gated on data.
+
 ## The real problem, one paragraph
 
 The engine memory CAN grow — but only up to a `maximum` that must be reserved as address space at
@@ -28,7 +32,7 @@ The shared flag exists "so the main thread can see the WASM heap" (build-wasm.sh
 
 So the shared memory carries exactly one consumer. The design note that justified it is stale.
 
-## Fix 1 — drop `shared: true` (the foundation; do this)
+## Fix 1 — drop `shared: true` (DONE, `84f763642`)
 
 1. **Create the memory inside the worklet/worker.** Non-shared memories cannot be postMessaged, so
    `createEngineMemory()` moves from the main-thread factory (`WasmEngine.ts:70`) into the processor
@@ -74,7 +78,16 @@ correctness once Fix 1 lands — it is a footprint optimization. Do not start it
 
 ## Order
 
-1. Fix 1 offline worker (one flag + delete ladder there) — kills the reported crash immediately.
-2. Fix 1 realtime (memory into worklet, frozen-audio delivery, build flags).
-3. Heap high-water meter, then decide Fix 2 by data.
-4. Fix 3 only on measured SDK demand.
+1. ~~Fix 1~~ DONE (`84f763642`, realtime + offline in one pass; the heap meter shipped before it).
+2. Watch the heap high-water (footer "Memory") on heavy real projects, then decide Fix 2 by data.
+3. Fix 3 only on measured SDK demand.
+
+## Residency note (2026-07-28, corrected)
+
+An ACTIVE sample is resident twice by DESIGN: the main-thread `GlobalSampleLoaderManager` cache (SAB-backed
+`AudioData`) plus the engine's wasm copy. This is refcounted — deleting the sample releases the main-thread
+side (verified live: the "Samples (GC)" footer counter falls). NOT a leak. A consume-on-deliver refactor
+(loaders drop their reference after handing to the engine) was implemented and fully REVERTED (user call,
+2026-07-28) — the churn across ten consumer sites outweighed the win. Revisit only as a deliberate,
+user-designed change if mobile footprint demands it; the raw fact: it would roughly halve PCM residency
+per open project.
