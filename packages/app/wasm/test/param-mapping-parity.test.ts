@@ -225,7 +225,9 @@ const CASES: ReadonlyArray<DeviceCase> = [
         // mute / solo / exclude are composite-child routing flags the engine reads via the Playfield
         // composite registration (childMuteKey / childSoloKey / excludeKey), not device parameters.
         tsOnly: [fieldPath(boxes.playfieldSample.mute.address), fieldPath(boxes.playfieldSample.solo.address),
-            fieldPath(boxes.playfieldSample.exclude.address)]},
+            fieldPath(boxes.playfieldSample.exclude.address),
+            // volume / panning are the slot's channel STRIP, applied by the composite engine-side, not the device.
+            fieldPath(boxes.playfieldSample.volume.address), fieldPath(boxes.playfieldSample.panning.address)]},
     {name: "revamp", file: "device_revamp.wasm",
         createAdapter: context => new RevampDeviceBoxAdapter(context, boxes.revamp), tsOnly: []},
     {name: "reverb", file: "device_reverb.wasm",

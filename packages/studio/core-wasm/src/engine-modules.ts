@@ -16,7 +16,10 @@ export type CompositeSpec = {
     childEnabledKey: number,
     // A child's `mute` / `solo` BooleanFields (0 = unsupported): a muted (or not-soloed while a sibling is
     // soloed) child gets no note STARTS (releases still pass), mirroring TS SampleProcessor.handleEvent.
-    childMuteKey: number, childSoloKey: number
+    childMuteKey: number, childSoloKey: number,
+    // A child's volume (dB) / panning Float32Fields (0 = no per-child strip): a ChannelStrip between the
+    // child's output (post its own fx chain) and the composite sum. Playfield's slot keys are 50 / 51.
+    childVolumeKey: number, childPanKey: number
 }
 
 // An EFFECT composite box type: an audio or midi EFFECT hosting a collection of ENTRIES, each its own effect
@@ -106,13 +109,13 @@ export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
     // Playfield: direct children (self-hosting slots, device-declared chains), routed by note index + choke.
     {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
         cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0, childEnabledKey: 22,
-        childMuteKey: 40, childSoloKey: 41},
+        childMuteKey: 40, childSoloKey: 41, childVolumeKey: 50, childPanKey: 51},
     // A generic instrument bundle: children are CELLS (CompositeCellBox) at field 10, each wrapping one
     // instrument (field 2) plus its midi-fx (3) and audio-fx (4) chains, ordered by the cell's own `index`
     // (field 5, UI position + engine sort). No note routing, no choke.
     {boxType: "CompositeDeviceBox", childrenField: 10, indexKey: 5, excludeKey: 0,
         cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4, childEnabledKey: 0,
-        childMuteKey: 0, childSoloKey: 0}
+        childMuteKey: 0, childSoloKey: 0, childVolumeKey: 0, childPanKey: 0}
 ]
 
 // The EFFECT composite box types (parallel fx / midi stacks). Each hosts its ENTRIES at field 10, ordered by the

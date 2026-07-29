@@ -33,7 +33,7 @@ component
   > div.columns
     display: grid
     grid-template-rows: subgrid
-    grid-template-columns: 1.75em repeat(7, 2.25em)
+    grid-template-columns: 1.75em repeat(6, 2.25em)
     grid-area: 2 / 1 / -1 / -1
     column-gap: 1em
 
@@ -86,3 +86,11 @@ component
 
     div.parameter-label label
       place-self: self-end
+
+    div.parameter-stack
+      display: flex
+      flex-direction: column
+      row-gap: 0.25em
+
+      label
+        align-self: flex-end

@@ -111,7 +111,12 @@ pub(crate) struct CompositeSpec {
     // a child is SILENT (its note STARTS dropped, releases still pass) when muted, or when any sibling is
     // soloed and it is not. Playfield's slot keys are 40 / 41.
     pub(crate) child_mute_key: u16,
-    pub(crate) child_solo_key: u16
+    pub(crate) child_solo_key: u16,
+    // A child's volume (dB) / panning Float32Fields (0 = the composite has no per-child strip). A declared
+    // strip runs a `ChannelStripProcessor` between the child's output and the sum. Playfield's slot keys
+    // are 50 / 51.
+    pub(crate) child_volume_key: u16,
+    pub(crate) child_pan_key: u16
 }
 
 /// How an effect composite hands its INPUT to its entries. `Broadcast` gives every entry the same signal (the
@@ -1243,9 +1248,10 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // one positional field key per composite facet, matching the loader
     fn register_composite(&mut self, box_type: String, children_field: u16, index_key: u16, exclude_key: u16,
                           cell_instrument_field: u16, cell_midi_field: u16, cell_audio_field: u16, child_enabled_key: u16,
-                          child_mute_key: u16, child_solo_key: u16) {
+                          child_mute_key: u16, child_solo_key: u16, child_volume_key: u16, child_pan_key: u16) {
         self.composites.push(CompositeSpec {box_type, children_field, index_key, exclude_key,
-            cell_instrument_field, cell_midi_field, cell_audio_field, child_enabled_key, child_mute_key, child_solo_key});
+            cell_instrument_field, cell_midi_field, cell_audio_field, child_enabled_key, child_mute_key, child_solo_key,
+            child_volume_key, child_pan_key});
     }
 
     /// The composite spec for a box TYPE, if it is a registered composite host (else `None`, a leaf device).
@@ -2667,7 +2673,7 @@ pub extern "C" fn device_set_box_type(device_id: u32, name_len: usize) {
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn composite_register(name_len: usize, children_field: u32, index_key: u32, exclude_key: u32,
                                      cell_instrument_field: u32, cell_midi_field: u32, cell_audio_field: u32, child_enabled_key: u32,
-                                     child_mute_key: u32, child_solo_key: u32) {
+                                     child_mute_key: u32, child_solo_key: u32, child_volume_key: u32, child_pan_key: u32) {
     unsafe {
         let engine = match ENGINE.get().as_mut() {
             Some(engine) => engine,
@@ -2677,7 +2683,7 @@ pub extern "C" fn composite_register(name_len: usize, children_field: u32, index
         if let Ok(name) = core::str::from_utf8(bytes) {
             engine.register_composite(String::from(name), children_field as u16, index_key as u16, exclude_key as u16,
                 cell_instrument_field as u16, cell_midi_field as u16, cell_audio_field as u16, child_enabled_key as u16,
-                child_mute_key as u16, child_solo_key as u16);
+                child_mute_key as u16, child_solo_key as u16, child_volume_key as u16, child_pan_key as u16);
         }
     }
 }

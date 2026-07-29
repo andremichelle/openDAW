@@ -740,6 +740,7 @@ impl Engine {
             }
             Wired::Composite(composite) => {
                 composite.binding.for_each_params(&mut |params| self.rebind_one(params, &invalidate, position));
+                self.rebind_composite_strips(&mut composite.binding, &invalidate);
                 for member in &mut composite.audio {
                     self.rebind_member(member, &invalidate, position);
                 }

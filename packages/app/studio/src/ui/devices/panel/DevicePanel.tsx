@@ -122,6 +122,10 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
                                          address={deviceHost.audioUnitBoxAdapter().address}/>
                     </div>
                 ))
+            } else {
+                // Same footprint as the midi meter (8px + 0.25em margins), so every instrument-hosting chain
+                // (a Playfield slot, Tape) aligns with the midi-metered ones.
+                appendChildren(midiEffectsContainer, <div style={{width: "1em"}}/>)
             }
         }
         // A ONE-SIDED host (a composite entry) hosts only one chain kind; the section it does not host stays empty.
