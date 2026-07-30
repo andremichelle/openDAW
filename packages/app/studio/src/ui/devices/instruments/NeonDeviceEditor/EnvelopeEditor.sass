@@ -34,9 +34,23 @@ component
       margin-left: auto
 
     > div.readout
+      display: flex
+      column-gap: 6px
       font-size: 8px
       color: var(--color-shadow)
       white-space: nowrap
+
+      > span.editable
+        color: var(--color-bright)
+        outline: 0.5px solid hsla(200, 40%, 70%, 0.15)
+        outline-offset: 1px
+        border-radius: 1px
+        padding: 0 2px
+        width: 40px
+        text-align: center
+
+      > span.editable:last-child
+        width: 44px
 
   > canvas
     width: 100%

@@ -75,9 +75,8 @@ const MONO_STACK: usize = 16;
 
 const LINE_SELECT_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const MODULATION_MAPPING: LinearInteger = LinearInteger {min: 0, max: 2};
-const OCTAVE_MAPPING: LinearInteger = LinearInteger {min: -1, max: 1};
+const OCTAVE_MAPPING: LinearInteger = LinearInteger {min: -3, max: 3};
 const DETUNE_MAPPING: Linear = Linear {min: -1200.0, max: 1200.0};
-const BEND_MAPPING: LinearInteger = LinearInteger {min: 0, max: 12};
 const VIBRATO_WAVE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const CZ_MAPPING: LinearInteger = LinearInteger {min: 0, max: 99};
 const WAVE1_MAPPING: LinearInteger = LinearInteger {min: 0, max: 7};
@@ -93,21 +92,20 @@ mod param {
     pub const OCTAVE: usize = 2;
     pub const DETUNE: usize = 3;
     pub const GLIDE_TIME: usize = 4;
-    pub const BEND_RANGE: usize = 5;
-    pub const VOICING_MODE: usize = 6;
-    pub const VIBRATO_WAVE: usize = 7;
-    pub const VIBRATO_DELAY: usize = 8;
-    pub const VIBRATO_RATE: usize = 9;
-    pub const VIBRATO_DEPTH: usize = 10;
-    pub const LINE_A_WAVE1: usize = 11;
-    pub const LINE_A_WAVE2: usize = 12;
-    pub const LINE_A_DCW_KF: usize = 13;
-    pub const LINE_A_DCA_KF: usize = 14;
-    pub const LINE_B_WAVE1: usize = 15;
-    pub const LINE_B_WAVE2: usize = 16;
-    pub const LINE_B_DCW_KF: usize = 17;
-    pub const LINE_B_DCA_KF: usize = 18;
-    pub const COUNT: usize = 19;
+    pub const VOICING_MODE: usize = 5;
+    pub const VIBRATO_WAVE: usize = 6;
+    pub const VIBRATO_DELAY: usize = 7;
+    pub const VIBRATO_RATE: usize = 8;
+    pub const VIBRATO_DEPTH: usize = 9;
+    pub const LINE_A_WAVE1: usize = 10;
+    pub const LINE_A_WAVE2: usize = 11;
+    pub const LINE_A_DCW_KF: usize = 12;
+    pub const LINE_A_DCA_KF: usize = 13;
+    pub const LINE_B_WAVE1: usize = 14;
+    pub const LINE_B_WAVE2: usize = 15;
+    pub const LINE_B_DCW_KF: usize = 16;
+    pub const LINE_B_DCA_KF: usize = 17;
+    pub const COUNT: usize = 18;
 }
 
 const ENVELOPES: usize = 6;
@@ -123,8 +121,6 @@ pub struct NeonState {
     sample_rate: f32,
     glide_time: f64,
     detune_cents: f32,
-    #[allow(dead_code)] // stored for the coming engine-side pitch-bend routing
-    bend_range: i32,
     ids: [u32; param::COUNT],
     env_ids: [u32; ENV_FIELD_COUNT]
 }
@@ -195,7 +191,6 @@ impl Instrument for Neon {
         state.ids[param::OCTAVE] = abi::bind_parameter(&[12]);
         state.ids[param::DETUNE] = abi::bind_parameter(&[13]);
         state.ids[param::GLIDE_TIME] = abi::bind_parameter(&[15]);
-        state.ids[param::BEND_RANGE] = abi::bind_parameter(&[16]);
         state.ids[param::VOICING_MODE] = abi::bind_parameter(&[17]);
         state.ids[param::VIBRATO_WAVE] = abi::bind_parameter(&[20, 1]);
         state.ids[param::VIBRATO_DELAY] = abi::bind_parameter(&[20, 2]);
@@ -255,7 +250,6 @@ impl Instrument for Neon {
                 update_detune(state);
             }
             param::GLIDE_TIME => state.glide_time = float_value(value, &UNIPOLAR) as f64 * ppqn::BAR,
-            param::BEND_RANGE => state.bend_range = int_value(value, &BEND_MAPPING),
             param::VOICING_MODE => state.voicing.set_mode(VoicingMode::from_index(int_value(value, &Values::new(&VOICING_MODE_VALUES)))),
             param::VIBRATO_WAVE => state.params.vibrato.wave = int_value(value, &VIBRATO_WAVE_MAPPING),
             param::VIBRATO_DELAY => state.params.vibrato.delay_seconds = vibrato_delay_seconds(int_value(value, &CZ_MAPPING)),
@@ -354,7 +348,6 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         param::OCTAVE => int_value(value, &OCTAVE_MAPPING) as f32,
         param::DETUNE => float_value(value, &DETUNE_MAPPING),
         param::GLIDE_TIME => float_value(value, &UNIPOLAR),
-        param::BEND_RANGE => int_value(value, &BEND_MAPPING) as f32,
         param::VOICING_MODE => int_value(value, &Values::new(&VOICING_MODE_VALUES)) as f32,
         param::VIBRATO_WAVE => int_value(value, &VIBRATO_WAVE_MAPPING) as f32,
         param::VIBRATO_DELAY | param::VIBRATO_RATE | param::VIBRATO_DEPTH => int_value(value, &CZ_MAPPING) as f32,

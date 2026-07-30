@@ -14,6 +14,32 @@ component
 
     &.left
       grid-template-columns: repeat(4, 3.5em)
+      position: relative
+
+      > div.label
+        top: -1px
+        left: 2px
+        width: calc(100% - 4px)
+        height: 12px
+        position: absolute
+        pointer-events: none
+        border-radius: 2px
+        background: color-mix(in srgb, var(--color) 9%, transparent)
+        z-index: 0
+
+        &.play-section
+          grid-row: 2 / 2
+          grid-column: 1 / -1
+          --color: var(--color-blue)
+
+        &.vibrato-section
+          grid-row: 4 / 4
+          grid-column: 1 / -1
+          --color: var(--color-purple)
+
+      > div.row-spacer
+        grid-column: 1 / -1
+        height: 2px
 
     &.right
       grid-template-columns: repeat(5, 3.5em)
@@ -24,6 +50,7 @@ component
     grid-template-rows: 0.625em 2em 0.625em
     justify-items: center
     align-items: center
+    align-content: center
     min-width: 0
     margin: 0 1px
 
@@ -40,7 +67,6 @@ component
       flex-wrap: nowrap
       justify-content: center
       align-items: center
-      gap: 3px
       white-space: nowrap
       grid-row: 2 / 4
       align-self: center
@@ -57,10 +83,8 @@ component
       overflow: hidden
       max-width: 3.4em
 
-  div.cell.copy-cell
-    grid-template-rows: 1fr
-
   span.copy-button
+    grid-row: 2
     font-size: 8px
     letter-spacing: 0.5px
     padding: 1px 5px
@@ -75,28 +99,36 @@ component
 
     > .tabs
       display: flex
+      align-items: flex-end
       column-gap: 1px
 
       label
         display: inline-block
-        font-size: 8px
-        letter-spacing: 0.5px
-        padding: 6px 10px
+        height: auto
+        font-size: 9px
+        font-weight: 700
+        letter-spacing: 1px
+        padding: 8px 10px
         border-radius: 3px 3px 0 0
         color: var(--color-shadow)
+        line-height: 1
+        background: color-mix(in srgb, var(--color-green) 2%, transparent)
 
       input:checked + label
-        color: var(--color-bright)
+        color: var(--color-green)
         background: color-mix(in srgb, var(--color-green) 5%, transparent)
+
+  div.block.right:has(.tabs input:first-of-type:checked) div.line-body
+    border-top-left-radius: 0
 
   div.line-body
     grid-column: 1 / -1
     display: grid
     grid-template-columns: subgrid
-    grid-template-rows: auto 108px
+    grid-template-rows: 3.25em 90px
     row-gap: 0.25em
-    padding: 3px 0 2px 0
-    border-radius: 0 3px 3px 3px
+    padding: 0.5em 0 0.25em
+    border-radius: 3px
     background: color-mix(in srgb, var(--color-green) 5%, transparent)
 
     > div.cells

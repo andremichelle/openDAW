@@ -170,6 +170,8 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                       populateControls={() => (
                           <div className={className}>
                               <div className="block left">
+                                  <div className="label play-section"/>
+                                  <div className="label vibrato-section"/>
                                   {radioCell("Lines", lineSelect,
                                       Neon.LineSelect.map((label, index) => ({value: index, element: <span>{label}</span>})), "8px", 2)}
                                   {radioCell("Mode", modulation, [
@@ -178,19 +180,20 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                       {value: 2, tooltip: "Noise", element: <Icon symbol={IconSymbol.Noise}/>}
                                   ], "12px")}
                                   <div className="cell"/>
-                                  {radioCell("Play", voicingMode, [
+                                  {radioCell("Play-Mode", voicingMode, [
                                       {value: 0, element: <span>MONO</span>},
                                       {value: 1, element: <span>POLY</span>}
                                   ], "8px")}
                                   {knob(octave)}
                                   {knob(detune)}
-                                  {knob(glideTime, "Glide")}
+                                  {knob(glideTime, "Glide time")}
+                                  <div className="row-spacer"/>
                                   {radioCell("Vibrato", vibrato.wave, [
                                       {value: 0, tooltip: "Triangle", element: <Icon symbol={IconSymbol.Triangle}/>},
                                       {value: 1, tooltip: "Saw Up", element: <Icon symbol={IconSymbol.Sawtooth}/>},
                                       {value: 2, tooltip: "Saw Down", element: flipped(IconSymbol.Sawtooth)},
                                       {value: 3, tooltip: "Square", element: <Icon symbol={IconSymbol.Square}/>}
-                                  ], "11px")}
+                                  ], "9px")}
                                   {knob(vibrato.delay, "Delay")}
                                   {knob(vibrato.rate, "Rate")}
                                   {knob(vibrato.depth, "Depth")}
@@ -200,7 +203,6 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                       <RadioGroup lifecycle={lifecycle}
                                                   model={lineIndex}
                                                   className="tabs"
-                                                  style={{fontSize: "8px"}}
                                                   elements={[
                                                       {value: 0, element: <span>LINE 1</span>},
                                                       {value: 1, element: <span>LINE 2</span>}

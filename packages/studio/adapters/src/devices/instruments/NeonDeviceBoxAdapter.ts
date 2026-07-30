@@ -83,7 +83,7 @@ export class NeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                 StringMapping.indices("", Neon.Modulation), "Mod"),
             octave: this.#parametric.createParameter(
                 box.octave,
-                ValueMapping.linearInteger(-1, 1),
+                ValueMapping.linearInteger(-3, 3),
                 StringMapping.numeric({unit: "oct"}), "Octave", 0.5),
             detune: this.#parametric.createParameter(
                 box.detune,
@@ -93,10 +93,6 @@ export class NeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                 box.glideTime,
                 ValueMapping.unipolar(),
                 StringMapping.percent({fractionDigits: 1}), "Glide time", 0.0),
-            bendRange: this.#parametric.createParameter(
-                box.bendRange,
-                ValueMapping.linearInteger(0, 12),
-                StringMapping.numeric({unit: "st"}), "Bend Range"),
             voicingMode: this.#parametric.createParameter(
                 box.voicingMode,
                 ValueMapping.values(VoiceModes),

@@ -8,6 +8,8 @@ import {Int32Field} from "@opendaw/lib-box"
 import {NeonEnvelope} from "@opendaw/studio-boxes"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
+import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
+import {Surface} from "@/ui/surface/Surface"
 
 const className = Html.adoptStyleSheet(css, "NeonEnvelopeEditor")
 
@@ -41,20 +43,82 @@ const levelFields = (envelope: NeonEnvelope): ReadonlyArray<Int32Field> => [
 // stage strip; DRAG a badge to move it (S left of stage 1 = off), CLICK a bare stage to move E there.
 export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Construct) => {
     const tabIndex = lifecycle.own(new DefaultObservableValue<int>(2))
-    const readout: HTMLElement = (<div className="readout">·</div>)
+    const selectedStage = lifecycle.own(new DefaultObservableValue<int>(0))
+    const stageLabel: HTMLElement = (<span/>)
+    const timeValue: HTMLElement = (<span className="editable"/>)
+    const levelValue: HTMLElement = (<span className="editable"/>)
+    const readout: HTMLElement = (
+        <div className="readout">
+            {stageLabel}
+            {timeValue}
+            {levelValue}
+        </div>
+    )
     const canvas: HTMLCanvasElement = (<canvas/>)
     const lane: HTMLElement = (<div className="lane"/>)
     const active = (): NeonEnvelope => envelopes[lineIndex.getValue() * 3 + tabIndex.getValue()]
     const handleX = (stage: int, rate: number): number => (stage + (99.0 - rate) / 99.0) / STAGES
     const showStage = (stage: int) => {
+        selectedStage.setValue(stage)
         const envelope = active()
         const rate = rateFields(envelope)[stage].getValue()
         const levels = levelFields(envelope)
         const level = levels[stage].getValue()
         const from = stage === 0 ? 0 : levels[stage - 1].getValue()
         const seconds = fullSwingSeconds(rate) * Math.abs(level - from) / 99.0
-        readout.textContent = `stage ${stage + 1} · ${formatSeconds(seconds)} · level ${level}`
+        stageLabel.textContent = `stage ${stage + 1}`
+        timeValue.textContent = formatSeconds(seconds)
+        levelValue.textContent = `level ${level}`
     }
+    // Click-to-type on the readout: TIME resolves back through the measured rate law (rate from the
+    // wanted swing time and the stage's level delta), LEVEL is the raw 0-99 value.
+    const editNumber = (anchor: HTMLElement, current: number, unit: string, apply: (value: number) => void) => {
+        const rect = anchor.getBoundingClientRect()
+        const resolvers = Promise.withResolvers<string>()
+        resolvers.promise.then(input => {
+            const value = Number.parseFloat(input.replace(",", "."))
+            if (Number.isFinite(value)) {
+                editing.modify(() => apply(value))
+                editing.mark()
+            }
+        }, () => {})
+        Surface.get(anchor).flyout.appendChild(
+            <FloatingTextInput position={{x: rect.left, y: rect.top + (rect.height >> 1)}}
+                               value={String(current)}
+                               unit={unit}
+                               numeric
+                               resolvers={resolvers}/>
+        )
+    }
+    lifecycle.ownAll(
+        Events.subscribe(timeValue, "pointerdown", (event: PointerEvent) => {
+            event.stopPropagation()
+            const stage = selectedStage.getValue()
+            const envelope = active()
+            const levels = levelFields(envelope)
+            const level = levels[stage].getValue()
+            const from = stage === 0 ? 0 : levels[stage - 1].getValue()
+            const delta = Math.abs(level - from)
+            const rate = rateFields(envelope)[stage].getValue()
+            const seconds = fullSwingSeconds(rate) * delta / 99.0
+            editNumber(timeValue, Number((seconds * 1000).toFixed(1)), "ms", milliseconds => {
+                if (delta === 0) {return}
+                const swing = Math.max(0.0015, milliseconds / 1000.0 * 99.0 / delta)
+                const value = Math.round(60.0 - 6.7 * Math.log2(swing / 0.1967))
+                rateFields(envelope)[stage].setValue(Math.max(0, Math.min(99, value)))
+                showStage(stage)
+            })
+        }),
+        Events.subscribe(levelValue, "pointerdown", (event: PointerEvent) => {
+            event.stopPropagation()
+            const stage = selectedStage.getValue()
+            const envelope = active()
+            editNumber(levelValue, levelFields(envelope)[stage].getValue(), "", level => {
+                levelFields(envelope)[stage].setValue(Math.max(0, Math.min(99, Math.round(level))))
+                showStage(stage)
+            })
+        })
+    )
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const {context, actualWidth, actualHeight, devicePixelRatio} = painter
         const envelope = active()

@@ -34,7 +34,7 @@ export const NeonDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument
     },
     12: {
         type: "int32", name: "octave", pointerRules: ParameterPointerRules,
-        value: 0, constraints: {min: -1, max: 1}, unit: "oct"
+        value: 0, constraints: {min: -3, max: 3}, unit: "oct"
     },
     13: {
         // One continuous detune in CENTS (the .syx note+fine pair folds into this on import).
@@ -44,10 +44,6 @@ export const NeonDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument
     15: {
         type: "float32", name: "glide-time", pointerRules: ParameterPointerRules,
         value: 0.0, ...UnipolarConstraints
-    },
-    16: {
-        type: "int32", name: "bend-range", pointerRules: ParameterPointerRules,
-        value: 2, constraints: {min: 0, max: 12}, unit: "st"
     },
     17: {
         type: "int32", name: "voicing-mode", pointerRules: ParameterPointerRules,
