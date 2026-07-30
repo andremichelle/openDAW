@@ -158,14 +158,52 @@ Counts for layout. "Env" = one custom 8-stage envelope widget (per stage rate + 
 
 - `packages/app/studio/src/ui/devices/instruments/NeonDeviceEditor.tsx` + sass; layout by the table above (user lays out).
 
-### Editor v4 — HOUSE KNOBS + section strips (2026-07-30, browser-verified, 3rd agent review round)
+### Editor v6 — FINAL: canonical grid + LINE TABS (2026-07-30)
+
+The user revisited their v4 objection: each line DOES have two waveforms, so the tabbed
+"everything-for-one-line" view was the right interaction model after all (the v5 both-lines-visible
+rows are retired). Final form:
+
+- LEFT (4 canonical 3.5em columns, NO section strips): r1 Lines(span 2)·Mode·Play (titled radios,
+  cream titles, radio content vertically centered across the cell's lower rows, Mode icons 12px),
+  r2 Octave·Detune·Glide·(spare), r3 Vibrato(shape icons 11px)·Delay·Rate·Depth — ALL vibrato
+  controls on ONE line.
+- RIGHT (5 columns): LINE 1/LINE 2 attached TABS — the ACTIVE tab's background is IDENTICAL to the
+  body background (one continuous surface), the inactive tab has NO background — over the body showing
+  the SELECTED line: Wave 1 | Wave 2 (glyphs, name beneath) | KF DCW | KF DCA | "→ Lx" copy cell, then
+  the envelope (PITCH/DCW/DCA + canvas + S/E lane). NO custom css cursors anywhere on the right
+  (crosshair/ew-resize/grab/pointer all removed per user), taller tab padding (5px vertical).
+- Cell titles + wave names use the knob-title cream hsl(65,20%,83%) — one title color everywhere.
+
+##### Editor v5 — CANONICAL GRID + LINE ROWS (2026-07-30, FINAL, design-agent-reviewed spec)
+
+Rebuilt on the app's canonical control grid (`mixins.ControlLayout` cells: 3.5em tracks, 0.25em gaps)
+after the user rejected v4's flex rows ("no grid, no alignment") and the L1/L2-tabs-over-Wave1/Wave2
+ambiguity. Spec reviewed by a design agent before implementation (DesignSync has NO openDAW project yet
+— `list_projects` empty — so the grid foundation came from the codebase mixin).
+
+- LEFT block, 3 columns: GLOBAL strip / Line·Mod·Play radios / Octave·Detune·Glide knobs /
+  VIBRATO strip (the 4 shape icons aligned to the col-3 track INSIDE the 13px strip) / Delay·Rate·Depth.
+- RIGHT block, 8 columns: LINES strip / row 1 = BOTH line rows always visible — [LINE 1 header | its
+  Wave 1 | its Wave 2] [LINE 2 header | Wave 1 | Wave 2] + [KF DCW | KF DCA] knobs showing the SELECTED
+  line / rows 2-3 = the envelope (108px: "LINE n · PITCH DCW DCA · COPY → Lx" header, full-width canvas,
+  S/E lane). Selection = tinted header+wave trio connecting to the envelope body tint. This kills the
+  one-wave-per-line misread: each line visibly owns its labeled wave pair.
+- GOTCHA: a strip using `grid-template-columns: subgrid` places children by source order — a stray
+  filler <span> steals a column slot and pushes the next child to an implicit second row (the
+  icons-below-strip bug).
+
+##### Editor v4 — HOUSE KNOBS + section strips (2026-07-30, browser-verified, 3rd agent review round)
 
 User: "check all devices for the best controls" — 23 of the device editors use `ControlBuilder.createKnob`
 (rotary ParameterLabelKnob with the name above), only 11 use bare label cells. Neon now uses the knobs:
 
 - LEFT column (14.5em): GLOBAL strip → radios row (Line | Mod icons | Play) → knob row
   (Octave | Detune ct | Glide) → VIBRATO strip → one row (shape icons + Delay | Rate | Depth knobs).
-- RIGHT column (19em): LINE strip carrying the L1/L2 edit CHIPS and the copy → Lx button inline →
+- RIGHT column (19em): a NOTEBOOK — LINE 1 / LINE 2 as attached TABS over a tinted, framed body that
+  contains EVERYTHING they switch (wave swatches with the wave NAME beneath, key-follow knobs, and the
+  envelope editor), COPY → Lx uppercase on the tab bar; the active tab connects to the body tint, so
+  the switch scope is visually explicit. (Replaced the v4 detail below:) LINE strip carrying chips →
   row (Wave 1 | Wave 2 glyph swatches, equal fixed size + KF DCW | KF DCA knobs) → the tabbed envelope
   canvas (flex-fills the column so both columns bottom out together) + S/E marker lane.
 - Section strips: uniform 13px tinted title strips (GLOBAL blue, VIBRATO purple, LINE green) — one

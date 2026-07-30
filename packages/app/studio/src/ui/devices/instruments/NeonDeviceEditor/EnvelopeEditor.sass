@@ -13,10 +13,14 @@ component
     z-index: 1
 
     label
-      cursor: pointer
 
     input:checked + label
       color: hsl(200, 83%, 60%)
+
+    > span.line-label
+      font-size: 8px
+      letter-spacing: 0.5px
+      color: var(--color-bright)
 
     > span.line-chip
       font-size: 8px
@@ -40,13 +44,11 @@ component
     min-height: 0
     border-radius: 3px
     box-shadow: 0 0 4px 0 hsla(200, 83%, 60%, 0.04) inset, 0 0 1px 0 hsla(200, 83%, 60%, 0.04) inset
-    cursor: crosshair
 
   > div.lane
     display: grid
     grid-template-columns: repeat(9, 1fr)
     align-items: center
-    cursor: ew-resize
     user-select: none
 
     > span
@@ -60,7 +62,6 @@ component
       opacity: 0.35
 
     > span.slot.sustain, > span.slot.end
-      cursor: grab
 
       &:hover
         filter: brightness(1.25)
@@ -71,7 +72,6 @@ component
       outline: 0.5px dashed hsla(35, 80%, 60%, 0.5)
       outline-offset: -0.5px
       margin: 0 4px
-      cursor: grab
 
       &.visible
         visibility: visible

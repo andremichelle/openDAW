@@ -17,7 +17,7 @@ type Construct = {
     lifecycle: Lifecycle
     editing: Editing
     envelopes: ReadonlyArray<NeonEnvelope> // ALL SIX: line1 pitch/DCW/DCA, line2 pitch/DCW/DCA
-    lineIndex: DefaultObservableValue<int> // shared with the line-controls section
+    lineIndex: DefaultObservableValue<int> // shared with the LINE tabs above
 }
 
 // The measured envelope rate law (envelope.rs): seconds for a FULL 0-99 swing at `rate`.
@@ -42,7 +42,6 @@ const levelFields = (envelope: NeonEnvelope): ReadonlyArray<Int32Field> => [
 export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Construct) => {
     const tabIndex = lifecycle.own(new DefaultObservableValue<int>(2))
     const readout: HTMLElement = (<div className="readout">·</div>)
-    const lineChip: HTMLElement = (<span className="line-chip">L1</span>)
     const canvas: HTMLCanvasElement = (<canvas/>)
     const lane: HTMLElement = (<div className="lane"/>)
     const active = (): NeonEnvelope => envelopes[lineIndex.getValue() * 3 + tabIndex.getValue()]
@@ -186,7 +185,6 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Const
         rebuildLane()
     }
     lifecycle.ownAll(
-        lineIndex.catchupAndSubscribe(owner => lineChip.textContent = `L${owner.getValue() + 1}`),
         tabIndex.subscribe(watchActive),
         lineIndex.subscribe(watchActive),
         Events.subscribe(canvas, "pointerdown", (event: PointerEvent) => {
@@ -231,7 +229,6 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Const
     return (
         <div className={className}>
             <div className="tabs">
-                {lineChip}
                 <RadioGroup lifecycle={lifecycle}
                             model={tabIndex}
                             style={{fontSize: "9px"}}

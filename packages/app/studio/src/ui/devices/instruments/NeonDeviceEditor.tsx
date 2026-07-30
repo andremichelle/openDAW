@@ -41,9 +41,9 @@ const envLevels = (envelope: NeonEnvelope) => [
     envelope.level5, envelope.level6, envelope.level7, envelope.level8
 ]
 
-// TWO balanced columns in the house control language (ControlBuilder knobs + section strips):
-// LEFT — GLOBAL (radios, then Octave/Detune/Glide knobs) and VIBRATO (shape + three knobs, one row).
-// RIGHT — LINE (Edit L1/L2 chips + copy in the strip, wave glyphs + key-follow knobs) over the tabbed
+// Everything snaps to the canonical control grid (3.5em tracks). LEFT — GLOBAL (title-less radios over
+// Octave/Detune/Glide knobs) and VIBRATO (shape icons in the strip, three knobs). RIGHT — LINE 1/LINE 2
+// TABS over a tinted body holding the SELECTED line: Wave 1, Wave 2, key follows, copy, and the tabbed
 // envelope canvas with the S/E marker lane. plans/neon.md "Editor".
 export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
@@ -55,39 +55,25 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
     const knob = (parameter: AutomatableParameterFieldAdapter<number>, label?: string) =>
         ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter, label})
     const radioCell = (title: string, parameter: AutomatableParameterFieldAdapter<number>,
-                       labels: ReadonlyArray<string>, values?: ReadonlyArray<number>) => (
-        <div className="cell">
+                       elements: ReadonlyArray<{value: number, tooltip?: string, element: HTMLElement | SVGSVGElement}>,
+                       fontSize: string, span?: number) => (
+        <div className="cell" style={span === undefined ? undefined : {gridColumn: `span ${span}`}}>
             <h3>{title}</h3>
             <RadioGroup lifecycle={lifecycle}
                         model={EditWrapper.forAutomatableParameter(editing, parameter)}
                         className="radios"
-                        style={{fontSize: "8px"}}
-                        elements={labels.map((label, index) => ({
-                            value: values === undefined ? index : values[index],
-                            element: <span>{label}</span>
-                        }))}/>
+                        style={{fontSize}}
+                        elements={elements}/>
         </div>
     )
-    const iconRadioCell = (title: string, parameter: AutomatableParameterFieldAdapter<number>,
-                           icons: ReadonlyArray<{symbol: IconSymbol, flip?: boolean, name: string}>) => (
-        <div className="cell">
-            <h3>{title}</h3>
-            <RadioGroup lifecycle={lifecycle}
-                        model={EditWrapper.forAutomatableParameter(editing, parameter)}
-                        className="radios"
-                        style={{fontSize: "9px"}}
-                        elements={icons.map(({symbol, flip, name}, index) => ({
-                            value: index,
-                            tooltip: name,
-                            element: (
-                                <span style={flip === true ? {transform: "scaleX(-1)", display: "inline-flex"} : {display: "inline-flex"}}>
-                                    <Icon symbol={symbol}/>
-                                </span>
-                            )
-                        }))}/>
-        </div>
+    const flipped = (symbol: IconSymbol): HTMLElement => (
+        <span style={{transform: "scaleX(-1)", display: "inline-flex"}}>
+            <Icon symbol={symbol}/>
+        </span>
     )
     const waveCell = (title: string, parameter: AutomatableParameterFieldAdapter<number>, offValue: boolean) => {
+        const name: HTMLElement = (<span className="wave-name"/>)
+        lifecycle.own(parameter.catchupAndSubscribe(() => name.textContent = parameter.getPrintValue().value))
         const display: HTMLElement = (
             <AutomationControl lifecycle={lifecycle}
                                editing={editing}
@@ -103,14 +89,11 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                 </RelativeUnitValueDragging>
             </AutomationControl>
         )
-        lifecycle.own(TextTooltip.default(display, () => {
-            const printValue = parameter.getPrintValue()
-            return `${parameter.name}: ${printValue.value}`
-        }))
         return (
             <div className="cell">
                 <h3>{title}</h3>
                 {display}
+                {name}
             </div>
         )
     }
@@ -154,45 +137,27 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
     const lineIndex = lifecycle.own(new DefaultObservableValue<int>(0))
     const lineLifecycle = lifecycle.own(new Terminator())
     const lineCells: HTMLElement = (<div style={{display: "contents"}}/>)
-    const copySlot: HTMLElement = (<span className="copy-slot"/>)
     lifecycle.own(lineIndex.catchupAndSubscribe(owner => {
         lineLifecycle.terminate()
         const index = owner.getValue() as 0 | 1
         const other: 0 | 1 = index === 0 ? 1 : 0
         const copyButton: HTMLElement = (
-            <span className="copy-button" onclick={() => copyLine(index, other)}>{`copy → L${other + 1}`}</span>
+            <span className="copy-button" onclick={() => copyLine(index, other)}>{`→ L${other + 1}`}</span>
         )
         lineLifecycle.own(TextTooltip.default(copyButton, () =>
             `Copy waves, key follows and all three envelopes of line ${index + 1} to line ${other + 1} (undoable)`))
-        replaceChildren(copySlot, copyButton)
         replaceChildren(lineCells, (
             <Frag>
                 {waveCell("Wave 1", lines[index].wave1, false)}
                 {waveCell("Wave 2", lines[index].wave2, true)}
                 {knob(lines[index].dcwKeyFollow, "KF DCW")}
                 {knob(lines[index].dcaKeyFollow, "KF DCA")}
+                <div className="cell copy-cell">
+                    {copyButton}
+                </div>
             </Frag>
         ))
     }))
-    const strip = (title: string, kind: string, extra?: HTMLElement) => (
-        <div className={`strip ${kind}`}>
-            <span>{title}</span>
-            {extra}
-        </div>
-    )
-    const editChips: HTMLElement = (
-        <div className="edit-chips">
-            <RadioGroup lifecycle={lifecycle}
-                        model={lineIndex}
-                        className="radios edit-line"
-                        style={{fontSize: "8px"}}
-                        elements={[
-                            {value: 0, element: <span>L1</span>},
-                            {value: 1, element: <span>L2</span>}
-                        ]}/>
-            {copySlot}
-        </div>
-    )
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
@@ -204,47 +169,53 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                       }}
                       populateControls={() => (
                           <div className={className}>
-                              <div className="column-left">
-                                  {strip("GLOBAL", "global")}
-                                  <div className="row radios-row">
-                                      {radioCell("Line", lineSelect, Neon.LineSelect)}
-                                      {iconRadioCell("Mod", modulation, [
-                                          {symbol: IconSymbol.Close, name: "Off"},
-                                          {symbol: IconSymbol.Ring, name: "Ring"},
-                                          {symbol: IconSymbol.Noise, name: "Noise"}
-                                      ])}
-                                      {radioCell("Play", voicingMode, ["MONO", "POLY"], [0, 1])}
-                                  </div>
-                                  <div className="row knobs-row">
-                                      {knob(octave)}
-                                      {knob(detune)}
-                                      {knob(glideTime, "Glide")}
-                                  </div>
-                                  {strip("VIBRATO", "vibrato")}
-                                  <div className="row knobs-row vibrato-row">
-                                      <div className="shape-cell">
-                                          {iconRadioCell("Shape", vibrato.wave, [
-                                              {symbol: IconSymbol.Triangle, name: "Triangle"},
-                                              {symbol: IconSymbol.Sawtooth, name: "Saw Up"},
-                                              {symbol: IconSymbol.Sawtooth, flip: true, name: "Saw Down"},
-                                              {symbol: IconSymbol.Square, name: "Square"}
-                                          ])}
-                                      </div>
-                                      {knob(vibrato.delay, "Delay")}
-                                      {knob(vibrato.rate, "Rate")}
-                                      {knob(vibrato.depth, "Depth")}
-                                  </div>
+                              <div className="block left">
+                                  {radioCell("Lines", lineSelect,
+                                      Neon.LineSelect.map((label, index) => ({value: index, element: <span>{label}</span>})), "8px", 2)}
+                                  {radioCell("Mode", modulation, [
+                                      {value: 0, tooltip: "Off", element: <Icon symbol={IconSymbol.Close}/>},
+                                      {value: 1, tooltip: "Ring", element: <Icon symbol={IconSymbol.Ring}/>},
+                                      {value: 2, tooltip: "Noise", element: <Icon symbol={IconSymbol.Noise}/>}
+                                  ], "12px")}
+                                  <div className="cell"/>
+                                  {radioCell("Play", voicingMode, [
+                                      {value: 0, element: <span>MONO</span>},
+                                      {value: 1, element: <span>POLY</span>}
+                                  ], "8px")}
+                                  {knob(octave)}
+                                  {knob(detune)}
+                                  {knob(glideTime, "Glide")}
+                                  {radioCell("Vibrato", vibrato.wave, [
+                                      {value: 0, tooltip: "Triangle", element: <Icon symbol={IconSymbol.Triangle}/>},
+                                      {value: 1, tooltip: "Saw Up", element: <Icon symbol={IconSymbol.Sawtooth}/>},
+                                      {value: 2, tooltip: "Saw Down", element: flipped(IconSymbol.Sawtooth)},
+                                      {value: 3, tooltip: "Square", element: <Icon symbol={IconSymbol.Square}/>}
+                                  ], "11px")}
+                                  {knob(vibrato.delay, "Delay")}
+                                  {knob(vibrato.rate, "Rate")}
+                                  {knob(vibrato.depth, "Depth")}
                               </div>
-                              <div className="column-right">
-                                  {strip("LINE", "line", editChips)}
-                                  <div className="row knobs-row">
-                                      {lineCells}
+                              <div className="block right">
+                                  <div className="line-tabs">
+                                      <RadioGroup lifecycle={lifecycle}
+                                                  model={lineIndex}
+                                                  className="tabs"
+                                                  style={{fontSize: "8px"}}
+                                                  elements={[
+                                                      {value: 0, element: <span>LINE 1</span>},
+                                                      {value: 1, element: <span>LINE 2</span>}
+                                                  ]}/>
                                   </div>
-                                  <div className="envelopes">
-                                      <EnvelopeEditor lifecycle={lifecycle}
-                                                      editing={editing}
-                                                      envelopes={box.envelopes.fields()}
-                                                      lineIndex={lineIndex}/>
+                                  <div className="line-body">
+                                      <div className="cells">
+                                          {lineCells}
+                                      </div>
+                                      <div className="envelopes">
+                                          <EnvelopeEditor lifecycle={lifecycle}
+                                                          editing={editing}
+                                                          envelopes={box.envelopes.fields()}
+                                                          lineIndex={lineIndex}/>
+                                      </div>
                                   </div>
                               </div>
                           </div>

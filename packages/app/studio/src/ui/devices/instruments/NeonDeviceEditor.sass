@@ -2,66 +2,36 @@
 
 component
   display: flex
-  column-gap: 12px
-  align-items: stretch
+  column-gap: 14px
+  align-items: start
   @include mixins.Control
 
-  > div.column-left, > div.column-right
-    display: flex
-    flex-direction: column
-    row-gap: 4px
+  > div.block
+    display: grid
+    column-gap: 0.25em
+    row-gap: 0.25em
+    align-content: start
 
-  > div.column-left
-    width: 14.5em
+    &.left
+      grid-template-columns: repeat(4, 3.5em)
 
-  > div.column-right
-    width: 19em
-
-  div.strip
-    display: flex
-    align-items: center
-    justify-content: space-between
-    height: 13px
-    padding: 0 5px
-    border-radius: 2px
-    background: color-mix(in srgb, var(--color) 10%, transparent)
-
-    > span
-      font-size: 8px
-      letter-spacing: 1px
-      color: var(--color-shadow)
-
-    &.global
-      --color: var(--color-blue)
-
-    &.vibrato
-      --color: var(--color-purple)
-
-    &.line
-      --color: var(--color-green)
-
-  div.row
-    display: flex
-    justify-content: space-evenly
-    align-items: start
-    column-gap: 2px
-
-  div.radios-row
-    align-items: stretch
+    &.right
+      grid-template-columns: repeat(5, 3.5em)
+      row-gap: 0
 
   div.cell
     display: grid
-    grid-template-rows: 12px auto
-    row-gap: 2px
+    grid-template-rows: 0.625em 2em 0.625em
     justify-items: center
     align-items: center
     min-width: 0
+    margin: 0 1px
 
     > h3
       font-size: 8px
       letter-spacing: 0.5px
       text-align: center
-      color: var(--color-shadow)
+      color: hsl(65, 20%, 83%)
       white-space: nowrap
       align-self: center
 
@@ -72,39 +42,66 @@ component
       align-items: center
       gap: 3px
       white-space: nowrap
+      grid-row: 2 / 4
+      align-self: center
 
     .wave-frame
       position: relative
-      width: 4em
-      height: 26px
+      width: 3.25em
+      height: 2em
 
-  div.edit-chips
+    > span.wave-name
+      font-size: 8px
+      color: hsl(65, 20%, 83%)
+      white-space: nowrap
+      overflow: hidden
+      max-width: 3.4em
+
+  div.cell.copy-cell
+    grid-template-rows: 1fr
+
+  span.copy-button
+    font-size: 8px
+    letter-spacing: 0.5px
+    padding: 1px 5px
+    border-radius: 2px
+    color: var(--color-bright)
+    outline: 0.5px solid hsla(200, 40%, 70%, 0.15)
+
+  div.line-tabs
+    grid-column: 1 / -1
     display: flex
-    align-items: center
-    column-gap: 8px
+    align-items: flex-end
 
-    > .radios.edit-line
+    > .tabs
       display: flex
-      column-gap: 2px
+      column-gap: 1px
 
       label
-        padding: 0 5px
-        border-radius: 2px
-        cursor: pointer
+        display: inline-block
         font-size: 8px
+        letter-spacing: 0.5px
+        padding: 6px 10px
+        border-radius: 3px 3px 0 0
+        color: var(--color-shadow)
 
       input:checked + label
-        color: black
-        background: hsl(200, 83%, 60%)
+        color: var(--color-bright)
+        background: color-mix(in srgb, var(--color-green) 5%, transparent)
 
-    span.copy-button
-      font-size: 8px
-      padding: 0 4px
-      border-radius: 2px
-      cursor: pointer
-      color: var(--color-bright)
-      outline: 0.5px solid hsla(200, 40%, 70%, 0.15)
+  div.line-body
+    grid-column: 1 / -1
+    display: grid
+    grid-template-columns: subgrid
+    grid-template-rows: auto 108px
+    row-gap: 0.25em
+    padding: 3px 0 2px 0
+    border-radius: 0 3px 3px 3px
+    background: color-mix(in srgb, var(--color-green) 5%, transparent)
 
-  div.envelopes
-    flex: 1
-    min-height: 0
+    > div.cells
+      display: contents
+
+    > div.envelopes
+      grid-column: 1 / -1
+      padding: 0 3px
