@@ -111,7 +111,7 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Const
             const y = levelToY(levels[stage])
             context.beginPath()
             context.arc(x, y, devicePixelRatio * 2.5, 0.0, Math.PI * 2)
-            context.fillStyle = stage < end ? DisplayPaint.strokeStyle(0.9) : DisplayPaint.strokeStyle(0.25)
+            context.fillStyle = stage < end ? DisplayPaint.strokeStyle(0.9) : DisplayPaint.strokeStyle(0.12)
             context.fill()
         }
     }))

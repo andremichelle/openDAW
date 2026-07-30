@@ -2,65 +2,52 @@
 
 component
   display: flex
-  column-gap: 10px
-  align-items: start
+  column-gap: 12px
+  align-items: stretch
   @include mixins.Control
 
-  > div.globals
-    display: grid
-    grid-template-columns: repeat(4, 4.3em)
-    column-gap: 2px
+  > div.column-left, > div.column-right
+    display: flex
+    flex-direction: column
     row-gap: 4px
-    align-content: start
-    position: relative
 
-    > div.label
-      &.global-section
-        grid-row: 1 / 1
-        grid-column: 1 / -1
-        --color: var(--color-blue)
+  > div.column-left
+    width: 14.5em
 
-      &.vibrato-section
-        grid-row: 3 / 3
-        grid-column: 1 / -1
-        --color: var(--color-purple)
+  > div.column-right
+    width: 19em
 
-  > div.line-side
-    display: grid
-    grid-template-columns: repeat(6, 4.3em)
-    column-gap: 2px
-    row-gap: 4px
-    align-content: start
-    position: relative
-
-    > div.label
-      &.line-section
-        grid-row: 1 / 1
-        grid-column: 1 / -1
-        --color: var(--color-green)
-
-      &.envelope-section
-        grid-row: 2 / 2
-        grid-column: 1 / -1
-        --color: var(--color-yellow)
-        background: color-mix(in srgb, var(--color) 13%, transparent)
-
-    > div.envelopes
-      grid-row: 2 / 2
-      grid-column: 1 / -1
-      z-index: 1
-      height: 148px
-
-  div.label
-    top: 0
-    left: 2px
-    width: calc(100% - 4px)
-    height: 12px
-    position: absolute
-    pointer-events: none
+  div.strip
+    display: flex
+    align-items: center
+    justify-content: space-between
+    height: 13px
+    padding: 0 5px
     border-radius: 2px
-    background: color-mix(in srgb, var(--color) 9%, transparent)
-    z-index: 0
+    background: color-mix(in srgb, var(--color) 10%, transparent)
+
+    > span
+      font-size: 8px
+      letter-spacing: 1px
+      color: var(--color-shadow)
+
+    &.global
+      --color: var(--color-blue)
+
+    &.vibrato
+      --color: var(--color-purple)
+
+    &.line
+      --color: var(--color-green)
+
+  div.row
+    display: flex
+    justify-content: space-evenly
+    align-items: start
+    column-gap: 2px
+
+  div.radios-row
+    align-items: stretch
 
   div.cell
     display: grid
@@ -69,7 +56,6 @@ component
     justify-items: center
     align-items: center
     min-width: 0
-    z-index: 1
 
     > h3
       font-size: 8px
@@ -89,13 +75,36 @@ component
 
     .wave-frame
       position: relative
-      width: 3.5em
-      height: 18px
+      width: 4em
+      height: 26px
 
-    > span.copy-button
+  div.edit-chips
+    display: flex
+    align-items: center
+    column-gap: 8px
+
+    > .radios.edit-line
+      display: flex
+      column-gap: 2px
+
+      label
+        padding: 0 5px
+        border-radius: 2px
+        cursor: pointer
+        font-size: 8px
+
+      input:checked + label
+        color: black
+        background: hsl(200, 83%, 60%)
+
+    span.copy-button
       font-size: 8px
-      padding: 1px 4px
+      padding: 0 4px
       border-radius: 2px
       cursor: pointer
       color: var(--color-bright)
       outline: 0.5px solid hsla(200, 40%, 70%, 0.15)
+
+  div.envelopes
+    flex: 1
+    min-height: 0

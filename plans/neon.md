@@ -158,7 +158,22 @@ Counts for layout. "Env" = one custom 8-stage envelope widget (per stage rate + 
 
 - `packages/app/studio/src/ui/devices/instruments/NeonDeviceEditor.tsx` + sass; layout by the table above (user lays out).
 
-### Editor v3 — TWO MAIN COLUMNS (2026-07-30, browser-verified)
+### Editor v4 — HOUSE KNOBS + section strips (2026-07-30, browser-verified, 3rd agent review round)
+
+User: "check all devices for the best controls" — 23 of the device editors use `ControlBuilder.createKnob`
+(rotary ParameterLabelKnob with the name above), only 11 use bare label cells. Neon now uses the knobs:
+
+- LEFT column (14.5em): GLOBAL strip → radios row (Line | Mod icons | Play) → knob row
+  (Octave | Detune ct | Glide) → VIBRATO strip → one row (shape icons + Delay | Rate | Depth knobs).
+- RIGHT column (19em): LINE strip carrying the L1/L2 edit CHIPS and the copy → Lx button inline →
+  row (Wave 1 | Wave 2 glyph swatches, equal fixed size + KF DCW | KF DCA knobs) → the tabbed envelope
+  canvas (flex-fills the column so both columns bottom out together) + S/E marker lane.
+- Section strips: uniform 13px tinted title strips (GLOBAL blue, VIBRATO purple, LINE green) — one
+  consistent band treatment instead of the v3 per-row name bands (which read "smashed + wasted space").
+- Active tab/selection state now uses the house COLOR convention (no underline); Edit chips = filled
+  pills; copy tooltip states its full scope (waves + kf + all three envelopes, undoable).
+
+##### Editor v3 — TWO MAIN COLUMNS (2026-07-30, browser-verified)
 
 User-directed final layout: GLOBALS LEFT, LINE+ENVELOPES RIGHT (both in the Vaporisateur band language).
 

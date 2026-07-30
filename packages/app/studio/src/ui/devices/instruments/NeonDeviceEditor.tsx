@@ -15,11 +15,11 @@ import {StudioService} from "@/service/StudioService"
 import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {MenuItem} from "@opendaw/studio-core"
-import {ParameterLabel} from "@/ui/components/ParameterLabel"
-import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
-import {AutomationControl} from "@/ui/components/AutomationControl"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
+import {AutomationControl} from "@/ui/components/AutomationControl"
+import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
+import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
 import {EnvelopeEditor} from "@/ui/devices/instruments/NeonDeviceEditor/EnvelopeEditor"
 import {WaveDisplay} from "@/ui/devices/instruments/NeonDeviceEditor/WaveDisplay"
 
@@ -41,9 +41,10 @@ const envLevels = (envelope: NeonEnvelope) => [
     envelope.level5, envelope.level6, envelope.level7, envelope.level8
 ]
 
-// The Vaporisateur editor language: SECTION ROWS, each a tinted band holding the parameter names with
-// the values beneath — GLOBAL, VIBRATO (one line), LINE (follows the L1/L2 edit selector) and the
-// envelope canvas. plans/neon.md "Editor".
+// TWO balanced columns in the house control language (ControlBuilder knobs + section strips):
+// LEFT — GLOBAL (radios, then Octave/Detune/Glide knobs) and VIBRATO (shape + three knobs, one row).
+// RIGHT — LINE (Edit L1/L2 chips + copy in the strip, wave glyphs + key-follow knobs) over the tabbed
+// envelope canvas with the S/E marker lane. plans/neon.md "Editor".
 export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project} = service
     const {editing, midiLearning} = project
@@ -51,30 +52,8 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
         lineSelect, modulation, octave, detune, glideTime, voicingMode, vibrato, lines
     } = adapter.namedParameter
     const box = adapter.box
-    const valueLabel = (parameter: AutomatableParameterFieldAdapter<number>, threshold?: number) => (
-        <AutomationControl lifecycle={lifecycle}
-                           editing={editing}
-                           midiLearning={midiLearning}
-                           tracks={adapter.deviceHost().audioUnitBoxAdapter().tracks}
-                           parameter={parameter}>
-            <RelativeUnitValueDragging lifecycle={lifecycle}
-                                       editing={editing}
-                                       parameter={parameter}
-                                       options={threshold === undefined ? undefined : {snap: {threshold}}}
-                                       supressValueFlyout={true}>
-                <ParameterLabel lifecycle={lifecycle}
-                                parameter={parameter}
-                                classList={["center"]}
-                                framed={true}/>
-            </RelativeUnitValueDragging>
-        </AutomationControl>
-    )
-    const cell = (title: string, parameter: AutomatableParameterFieldAdapter<number>, threshold?: number) => (
-        <div className="cell">
-            <h3>{title}</h3>
-            {valueLabel(parameter, threshold)}
-        </div>
-    )
+    const knob = (parameter: AutomatableParameterFieldAdapter<number>, label?: string) =>
+        ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter, label})
     const radioCell = (title: string, parameter: AutomatableParameterFieldAdapter<number>,
                        labels: ReadonlyArray<string>, values?: ReadonlyArray<number>) => (
         <div className="cell">
@@ -175,6 +154,7 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
     const lineIndex = lifecycle.own(new DefaultObservableValue<int>(0))
     const lineLifecycle = lifecycle.own(new Terminator())
     const lineCells: HTMLElement = (<div style={{display: "contents"}}/>)
+    const copySlot: HTMLElement = (<span className="copy-slot"/>)
     lifecycle.own(lineIndex.catchupAndSubscribe(owner => {
         lineLifecycle.terminate()
         const index = owner.getValue() as 0 | 1
@@ -182,31 +162,35 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
         const copyButton: HTMLElement = (
             <span className="copy-button" onclick={() => copyLine(index, other)}>{`copy → L${other + 1}`}</span>
         )
-        lineLifecycle.own(TextTooltip.default(copyButton, () => `Copy line ${index + 1} to line ${other + 1}`))
+        lineLifecycle.own(TextTooltip.default(copyButton, () =>
+            `Copy waves, key follows and all three envelopes of line ${index + 1} to line ${other + 1} (undoable)`))
+        replaceChildren(copySlot, copyButton)
         replaceChildren(lineCells, (
             <Frag>
                 {waveCell("Wave 1", lines[index].wave1, false)}
                 {waveCell("Wave 2", lines[index].wave2, true)}
-                {cell("KF DCW", lines[index].dcwKeyFollow)}
-                {cell("KF DCA", lines[index].dcaKeyFollow)}
-                <div className="cell">
-                    <h3>Copy</h3>
-                    {copyButton}
-                </div>
+                {knob(lines[index].dcwKeyFollow, "KF DCW")}
+                {knob(lines[index].dcaKeyFollow, "KF DCA")}
             </Frag>
         ))
     }))
-    const editRadio: HTMLElement = (
-        <div className="cell">
-            <h3>Edit</h3>
+    const strip = (title: string, kind: string, extra?: HTMLElement) => (
+        <div className={`strip ${kind}`}>
+            <span>{title}</span>
+            {extra}
+        </div>
+    )
+    const editChips: HTMLElement = (
+        <div className="edit-chips">
             <RadioGroup lifecycle={lifecycle}
                         model={lineIndex}
-                        className="radios"
+                        className="radios edit-line"
                         style={{fontSize: "8px"}}
                         elements={[
-                            {value: 0, element: <span>LINE 1</span>},
-                            {value: 1, element: <span>LINE 2</span>}
+                            {value: 0, element: <span>L1</span>},
+                            {value: 1, element: <span>L2</span>}
                         ]}/>
+            {copySlot}
         </div>
     )
     return (
@@ -220,36 +204,42 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                       }}
                       populateControls={() => (
                           <div className={className}>
-                              <div className="globals">
-                                  <div className="label global-section"/>
-                                  <div className="label vibrato-section"/>
-                                  {radioCell("Line", lineSelect, Neon.LineSelect)}
-                                  {iconRadioCell("Mod", modulation, [
-                                      {symbol: IconSymbol.Close, name: "Off"},
-                                      {symbol: IconSymbol.Ring, name: "Ring"},
-                                      {symbol: IconSymbol.Noise, name: "Noise"}
-                                  ])}
-                                  {radioCell("Play-Mode", voicingMode, ["MONO", "POLY"], [0, 1])}
-                                  {cell("Octave", octave, 0.5)}
-                                  {cell("Glide", glideTime)}
-                                  {cell("Detune", detune, 0.5)}
-                                  <div className="cell"/>
-                                  <div className="cell"/>
-                                  {iconRadioCell("Vibrato", vibrato.wave, [
-                                      {symbol: IconSymbol.Triangle, name: "Triangle"},
-                                      {symbol: IconSymbol.Sawtooth, name: "Saw Up"},
-                                      {symbol: IconSymbol.Sawtooth, flip: true, name: "Saw Down"},
-                                      {symbol: IconSymbol.Square, name: "Square"}
-                                  ])}
-                                  {cell("Delay", vibrato.delay)}
-                                  {cell("Rate", vibrato.rate)}
-                                  {cell("Depth", vibrato.depth)}
+                              <div className="column-left">
+                                  {strip("GLOBAL", "global")}
+                                  <div className="row radios-row">
+                                      {radioCell("Line", lineSelect, Neon.LineSelect)}
+                                      {iconRadioCell("Mod", modulation, [
+                                          {symbol: IconSymbol.Close, name: "Off"},
+                                          {symbol: IconSymbol.Ring, name: "Ring"},
+                                          {symbol: IconSymbol.Noise, name: "Noise"}
+                                      ])}
+                                      {radioCell("Play", voicingMode, ["MONO", "POLY"], [0, 1])}
+                                  </div>
+                                  <div className="row knobs-row">
+                                      {knob(octave)}
+                                      {knob(detune)}
+                                      {knob(glideTime, "Glide")}
+                                  </div>
+                                  {strip("VIBRATO", "vibrato")}
+                                  <div className="row knobs-row vibrato-row">
+                                      <div className="shape-cell">
+                                          {iconRadioCell("Shape", vibrato.wave, [
+                                              {symbol: IconSymbol.Triangle, name: "Triangle"},
+                                              {symbol: IconSymbol.Sawtooth, name: "Saw Up"},
+                                              {symbol: IconSymbol.Sawtooth, flip: true, name: "Saw Down"},
+                                              {symbol: IconSymbol.Square, name: "Square"}
+                                          ])}
+                                      </div>
+                                      {knob(vibrato.delay, "Delay")}
+                                      {knob(vibrato.rate, "Rate")}
+                                      {knob(vibrato.depth, "Depth")}
+                                  </div>
                               </div>
-                              <div className="line-side">
-                                  <div className="label line-section"/>
-                                  <div className="label envelope-section"/>
-                                  {editRadio}
-                                  {lineCells}
+                              <div className="column-right">
+                                  {strip("LINE", "line", editChips)}
+                                  <div className="row knobs-row">
+                                      {lineCells}
+                                  </div>
                                   <div className="envelopes">
                                       <EnvelopeEditor lifecycle={lifecycle}
                                                       editing={editing}
