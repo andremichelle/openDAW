@@ -12,14 +12,14 @@ import {isDefined, Option, Optional, panic, Terminable, UUID} from "@opendaw/lib
 import {Address, BoxGraph, Constraints, Float32Field, PrimitiveType} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
-    DelayDeviceBox, FoldDeviceBox, GateDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
+    DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
     PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
     TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox
 } from "@opendaw/studio-boxes"
 import {
     ArpeggioDeviceBoxAdapter, AutotuneDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
-    GateDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
+    GateDeviceBoxAdapter, NeonDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
     ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
     RevampDeviceBoxAdapter, ReverbDeviceBoxAdapter, SampleLoader, SampleLoaderManager, StereoToolDeviceBoxAdapter,
     TidalDeviceBoxAdapter, VaporisateurDeviceBoxAdapter, VelocityDeviceBoxAdapter, VocoderDeviceBoxAdapter,
@@ -111,6 +111,8 @@ const buildBoxes = () => {
     const nanoUnit = createUnit(3)
     const playfieldUnit = createUnit(4)
     const vaporisateur = VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(vaporisateurUnit.input))
+    const neonUnit = createUnit(5)
+    const neon = NeonDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(neonUnit.input))
     const nano = NanoDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(nanoUnit.input))
     const playfield = PlayfieldDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(playfieldUnit.input))
     const file = AudioFileBox.create(boxGraph, UUID.generate(), box => {
@@ -125,7 +127,7 @@ const buildBoxes = () => {
     })
     boxGraph.endTransaction()
     return {boxGraph, compressor, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
-        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, velocity, vaporisateur, nano, playfieldSample}
+        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, velocity, vaporisateur, neon, nano, playfieldSample}
 }
 
 const boxes = buildBoxes()
@@ -212,6 +214,8 @@ const CASES: ReadonlyArray<DeviceCase> = [
         createAdapter: context => new FoldDeviceBoxAdapter(context, boxes.fold), tsOnly: []},
     {name: "gate", file: "device_gate.wasm",
         createAdapter: context => new GateDeviceBoxAdapter(context, boxes.gate), tsOnly: []},
+    {name: "neon", file: "device_neon.wasm",
+        createAdapter: context => new NeonDeviceBoxAdapter(context, boxes.neon), tsOnly: []},
     {name: "maximizer", file: "device_maximizer.wasm",
         createAdapter: context => new MaximizerDeviceBoxAdapter(context, boxes.maximizer), tsOnly: []},
     {name: "nano", file: "device_nano.wasm",

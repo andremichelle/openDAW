@@ -1,0 +1,32 @@
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: column
+  row-gap: 0.5em
+  width: 20em
+  @include mixins.Control
+
+  > div.preset-row
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+    font-size: 0.625em
+    padding: 0.5em
+    border-radius: 2px
+    background-color: rgba(black, 0.08)
+
+    > span.preset-name
+      flex: 1
+      overflow: hidden
+      text-overflow: ellipsis
+      white-space: nowrap
+      color: var(--color-bright)
+
+    > .load
+      cursor: pointer
+
+  > div.hint
+    font-size: 0.5em
+    color: var(--color-shadow)
+    padding: 0 0.5em
