@@ -2,31 +2,100 @@
 
 component
   display: flex
-  flex-direction: column
-  row-gap: 0.5em
-  width: 20em
+  column-gap: 10px
+  align-items: start
   @include mixins.Control
 
-  > div.preset-row
-    display: flex
-    align-items: center
-    column-gap: 0.5em
-    font-size: 0.625em
-    padding: 0.5em
+  > div.globals
+    display: grid
+    grid-template-columns: repeat(4, 4.3em)
+    column-gap: 2px
+    row-gap: 4px
+    align-content: start
+    position: relative
+
+    > div.label
+      &.global-section
+        grid-row: 1 / 1
+        grid-column: 1 / -1
+        --color: var(--color-blue)
+
+      &.vibrato-section
+        grid-row: 3 / 3
+        grid-column: 1 / -1
+        --color: var(--color-purple)
+
+  > div.line-side
+    display: grid
+    grid-template-columns: repeat(6, 4.3em)
+    column-gap: 2px
+    row-gap: 4px
+    align-content: start
+    position: relative
+
+    > div.label
+      &.line-section
+        grid-row: 1 / 1
+        grid-column: 1 / -1
+        --color: var(--color-green)
+
+      &.envelope-section
+        grid-row: 2 / 2
+        grid-column: 1 / -1
+        --color: var(--color-yellow)
+        background: color-mix(in srgb, var(--color) 13%, transparent)
+
+    > div.envelopes
+      grid-row: 2 / 2
+      grid-column: 1 / -1
+      z-index: 1
+      height: 148px
+
+  div.label
+    top: 0
+    left: 2px
+    width: calc(100% - 4px)
+    height: 12px
+    position: absolute
+    pointer-events: none
     border-radius: 2px
-    background-color: rgba(black, 0.08)
+    background: color-mix(in srgb, var(--color) 9%, transparent)
+    z-index: 0
 
-    > span.preset-name
-      flex: 1
-      overflow: hidden
-      text-overflow: ellipsis
+  div.cell
+    display: grid
+    grid-template-rows: 12px auto
+    row-gap: 2px
+    justify-items: center
+    align-items: center
+    min-width: 0
+    z-index: 1
+
+    > h3
+      font-size: 8px
+      letter-spacing: 0.5px
+      text-align: center
+      color: var(--color-shadow)
       white-space: nowrap
-      color: var(--color-bright)
+      align-self: center
 
-    > .load
+    > .radios
+      display: flex
+      flex-wrap: nowrap
+      justify-content: center
+      align-items: center
+      gap: 3px
+      white-space: nowrap
+
+    .wave-frame
+      position: relative
+      width: 3.5em
+      height: 18px
+
+    > span.copy-button
+      font-size: 8px
+      padding: 1px 4px
+      border-radius: 2px
       cursor: pointer
-
-  > div.hint
-    font-size: 0.5em
-    color: var(--color-shadow)
-    padding: 0 0.5em
+      color: var(--color-bright)
+      outline: 0.5px solid hsla(200, 40%, 70%, 0.15)

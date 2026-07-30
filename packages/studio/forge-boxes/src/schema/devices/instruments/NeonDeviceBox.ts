@@ -37,14 +37,9 @@ export const NeonDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument
         value: 0, constraints: {min: -1, max: 1}, unit: "oct"
     },
     13: {
-        // The .syx detune range: sign × (octave 0-3 × 12 + note 0-11) semitones.
-        type: "int32", name: "detune-note", pointerRules: ParameterPointerRules,
-        value: 0, constraints: {min: -48, max: 48}, unit: "st"
-    },
-    14: {
-        // The CZ's fine detune steps: 60 steps per semitone.
-        type: "int32", name: "detune-fine", pointerRules: ParameterPointerRules,
-        value: 0, constraints: {min: -60, max: 60}, unit: ""
+        // One continuous detune in CENTS (the .syx note+fine pair folds into this on import).
+        type: "float32", name: "detune", pointerRules: ParameterPointerRules,
+        value: 0.0, constraints: {min: -1200, max: 1200, scaling: "linear"}, unit: "ct"
     },
     15: {
         type: "float32", name: "glide-time", pointerRules: ParameterPointerRules,

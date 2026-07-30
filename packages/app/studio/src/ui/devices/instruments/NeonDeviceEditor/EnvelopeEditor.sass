@@ -1,0 +1,91 @@
+component
+  display: grid
+  grid-template-rows: 12px 1fr 13px
+  row-gap: 2px
+  min-width: 0
+  height: 100%
+
+  > div.tabs
+    display: flex
+    align-items: center
+    column-gap: 8px
+    padding: 0 4px
+    z-index: 1
+
+    label
+      cursor: pointer
+
+    input:checked + label
+      text-decoration: underline
+      text-underline-offset: 2px
+
+    > span.line-chip
+      font-size: 8px
+      font-weight: bold
+      padding: 0 4px
+      border-radius: 2px
+      color: black
+      background: hsl(200, 83%, 60%)
+
+    > div.readout
+      margin-left: auto
+
+    > div.readout
+      font-size: 8px
+      color: var(--color-shadow)
+      white-space: nowrap
+
+  > canvas
+    width: 100%
+    height: 100%
+    min-height: 0
+    border-radius: 3px
+    box-shadow: 0 0 4px 0 hsla(200, 83%, 60%, 0.04) inset, 0 0 1px 0 hsla(200, 83%, 60%, 0.04) inset
+    cursor: crosshair
+
+  > div.lane
+    display: grid
+    grid-template-columns: repeat(9, 1fr)
+    align-items: center
+    cursor: ew-resize
+    user-select: none
+
+    > span
+      font-size: 8px
+      text-align: center
+      border-radius: 2px
+      padding: 1px 0
+      color: rgba(255, 255, 255, 0.4)
+
+    > span.slot.dead
+      opacity: 0.35
+
+    > span.slot.sustain, > span.slot.end
+      cursor: grab
+
+      &:hover
+        filter: brightness(1.25)
+
+    > span.off-sustain
+      visibility: hidden
+      color: var(--color-orange)
+      outline: 0.5px dashed hsla(35, 80%, 60%, 0.5)
+      outline-offset: -0.5px
+      margin: 0 4px
+      cursor: grab
+
+      &.visible
+        visibility: visible
+
+    > span.slot.sustain
+      color: black
+      background: var(--color-orange)
+      margin: 0 4px
+
+    > span.slot.end
+      color: black
+      background: hsl(200, 83%, 60%)
+      margin: 0 4px
+
+    > span.slot.sustain.end
+      background: linear-gradient(90deg, var(--color-orange) 50%, hsl(200, 83%, 60%) 50%)

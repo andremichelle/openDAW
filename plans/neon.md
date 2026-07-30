@@ -157,8 +157,87 @@ Counts for layout. "Env" = one custom 8-stage envelope widget (per stage rate + 
 ## 4. Editor
 
 - `packages/app/studio/src/ui/devices/instruments/NeonDeviceEditor.tsx` + sass; layout by the table above (user lays out).
-- `EnvelopeEditor` component (canvas): draws the stage polyline, drag stage handles (rate = x-delta, level = y), right-click / modifier to set sustain + end markers; writes the 18 fields per envelope through `editing.modify`.
-- Live data (phase 2, optional): envelope-position broadcast per line like Vaporisateur's env phases.
+
+### Editor v3 — TWO MAIN COLUMNS (2026-07-30, browser-verified)
+
+User-directed final layout: GLOBALS LEFT, LINE+ENVELOPES RIGHT (both in the Vaporisateur band language).
+
+- LEFT (4 × 4.3em): GLOBAL band rows [Line | Mod | Play-Mode | Octave] and [Glide | Detune], then the
+  VIBRATO band [shape icons | Delay | Rate | Depth] in one line.
+- RIGHT (6 × 4.3em): LINE band [Edit L1/L2 | Wave 1 | Wave 2 | KF DCW | KF DCA | copy → Lx] above the
+  ENVELOPE block — the yellow band is the tab strip (L-chip, PITCH/DCW/DCA, live readout) over a TALL
+  canvas (~120px, was 55) and the S/E marker lane.
+- DETUNE is now ONE continuous parameter in CENTS (±1200): schema field 13 float32 "detune" replaces
+  detune-note/detune-fine (14 removed), engine param DETUNE (path [13], detune_ratio = 2^(cents/1200),
+  param indices renumbered — bind order is the parity contract), .syx import folds note+fine into cents
+  and CLAMPS at ±1200 (hardware allows ±48 st — presets detuned wider lose the excess; the offline
+  calibration harness keeps the full range via detune_ratio directly, so corpus sweeps are unaffected).
+- The envelope readout shows STAGE DURATION IN TIME UNITS: seconds from the measured rate law
+  (0.1967·2^((60−r)/6.7) scaled by the level swing), "245 ms" / "1.32 s" formatting.
+
+##### Editor v2 (historical) — Editor v2 — Vaporisateur section language (2026-07-30, browser-verified, two design-agent reviews)
+
+Final structure (replaces the 3×3.5em cell grid): SECTION ROWS in the Vaporisateur editor language,
+7 columns × 4.3em, each section a tinted name band with the values beneath:
+
+1. GLOBAL (blue): Line | Mod (icon radio) | Play-Mode | Glide | Octave | Detune | Fine
+2. VIBRATO (purple, ONE line): shape icon radio | Delay | Rate | Depth
+3. LINE (green): Edit L1/L2 selector | Wave 1 glyph | Wave 2 glyph | KF DCW | KF DCA | copy → Lx button
+4. ENVELOPE (yellow band = the tab strip): [L-chip] PITCH/DCW/DCA tabs (active underlined) + live
+   stage readout, the canvas, and the MARKER LANE: stage strip 1-8 where the S (orange) and E (blue)
+   pill badges are DRAGGED to their stages (S left of stage 1 = off, bare-stage click moves E);
+   stages past E dim; canvas handle drag stays relative (dx=rate, dy=level, shift=fine).
+   The L1/L2 selector switches waves+kf+copy+envelopes together; the chip inside the tab row always
+   shows the edited line. Wave-2 "Off" renders as a dashed flat line (intentional, not broken).
+
+Verified interactions (Chrome, precise JS-rect coordinates): E click-move, S drag, S-off drag,
+relative handle drag with live readout, L1/L2 rebinding, tab switching, silent cmd+s saves.
+
+AUTOMATION-SAFE RELOADS: `localStorage["opendaw-suppress-unload-guard"]` makes boot.ts swallow every
+beforeunload prompt (capture + stopImmediatePropagation) — set in automated sessions so scripted/HMR
+reloads never hang on the native dialog. Scratch project "NeonUI" holds the test setup.
+
+Design-agent feedback DEFERRED (noted, not implemented): left display-gutter mini-graphs per section,
+per-column modulation dots (the Vaporisateur ● markers), click-to-type numeric entry on envelope
+stages, larger pop-out envelope view, real units on the raw-99 values (falls out of the float-parameter
+migration below).
+
+#### Editor v1 (historical)
+##### Editor IMPLEMENTED (2026-07-30, browser-verified)
+
+Final layout (narrower than the first proposal after user feedback): three 3.5em control rows —
+radios (line select / modulation / play MONO-POLY), octave/detune/fine, glide/bend, vibrato
+(wave radio, delay·rate pair, depth), then ONE line-controls column (wave 1, wave 2, kf pair + copy)
+and ONE envelope canvas. An L1/L2 selector in the canvas tab row switches the ENTIRE line section
+(wave cells, key follows, copy target AND the envelopes — Vaporisateur's oscillator-switcher
+pattern with replaceChildren). The canvas tabs select PITCH / DCW / DCA.
+
+- Wave cells render one-cycle GLYPHS of the actual engine phase-map shapes (WaveDisplay canvas,
+  full-DCW formulas from pd.rs; wave 2 index 0 draws a flat "off" line); drag to change.
+- Envelope canvas: 8 equal stage slots, handle x inside the slot = (99−rate)/99, y = level; dragging
+  grabs the NEAREST handle and edits rate+level RELATIVE to the grab (shift = ¼ fine), no snap-to-click;
+  stage axis: click = END step, shift/alt-click = SUSTAIN toggle; readout row shows the dragged stage;
+  sustain = dashed orange line; handles past END dimmed.
+- Both canvases (wave glyphs + envelope) use the Vaporisateur display language: DisplayPaint stroke,
+  gradient fill to the zero line, inset-shadow frame instead of a solid background.
+- The .syx preset loader lives in the DEVICE MENU ("Load Casio CZ .syx…"), not on the editor surface.
+- Neon has its own IconSymbol.Neon (circled-N, user-supplied SVG) in IconLibrary + the factory.
+- Radio groups never wrap: modulation uses ICONS (Close / new IconSymbol.Ring two-circles / new
+  IconSymbol.Noise zigzag), vibrato wave uses Triangle / Sawtooth / flipped Sawtooth / Square,
+  line select stays compact single-line text.
+- Files: NeonDeviceEditor.tsx/.sass + NeonDeviceEditor/EnvelopeEditor.tsx/.sass + WaveDisplay.tsx/.sass.
+- GOTCHA verified live: an absolutely-positioned canvas inside the automation-control wrappers needs
+  its own positioned .wave-frame ANCESTOR via descendant selector — the wrappers sit between the cell
+  and the frame, and a bare canvas's intrinsic 300×150 stretches fixed grid rows.
+
+### Planned: FLOAT parameters instead of raw 0-99 steps
+
+The 0-99 integer domain is the HARDWARE sysex domain, not a UI contract. The parameters (DCW levels,
+envelope rates/levels, vibrato values, key follows) should become CONTINUOUS floats: schema float32
+fields with unit ranges, the engine mapping tables interpolating (they already interpolate), and the
+.syx importer quantizing INTO the float domain (raw/99). Benefits: smooth automation curves, finer
+dragging, unit-true display. Migration: new float fields alongside, importer writes both, engine reads
+float; the 0-99 display stays available via StringMapping for CZ authenticity.
 
 ## 5. SysEx import (`.syx`)
 

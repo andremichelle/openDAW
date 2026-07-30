@@ -76,8 +76,7 @@ const MONO_STACK: usize = 16;
 const LINE_SELECT_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const MODULATION_MAPPING: LinearInteger = LinearInteger {min: 0, max: 2};
 const OCTAVE_MAPPING: LinearInteger = LinearInteger {min: -1, max: 1};
-const DETUNE_NOTE_MAPPING: LinearInteger = LinearInteger {min: -48, max: 48};
-const DETUNE_FINE_MAPPING: LinearInteger = LinearInteger {min: -60, max: 60};
+const DETUNE_MAPPING: Linear = Linear {min: -1200.0, max: 1200.0};
 const BEND_MAPPING: LinearInteger = LinearInteger {min: 0, max: 12};
 const VIBRATO_WAVE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const CZ_MAPPING: LinearInteger = LinearInteger {min: 0, max: 99};
@@ -92,24 +91,23 @@ mod param {
     pub const LINE_SELECT: usize = 0;
     pub const MODULATION: usize = 1;
     pub const OCTAVE: usize = 2;
-    pub const DETUNE_NOTE: usize = 3;
-    pub const DETUNE_FINE: usize = 4;
-    pub const GLIDE_TIME: usize = 5;
-    pub const BEND_RANGE: usize = 6;
-    pub const VOICING_MODE: usize = 7;
-    pub const VIBRATO_WAVE: usize = 8;
-    pub const VIBRATO_DELAY: usize = 9;
-    pub const VIBRATO_RATE: usize = 10;
-    pub const VIBRATO_DEPTH: usize = 11;
-    pub const LINE_A_WAVE1: usize = 12;
-    pub const LINE_A_WAVE2: usize = 13;
-    pub const LINE_A_DCW_KF: usize = 14;
-    pub const LINE_A_DCA_KF: usize = 15;
-    pub const LINE_B_WAVE1: usize = 16;
-    pub const LINE_B_WAVE2: usize = 17;
-    pub const LINE_B_DCW_KF: usize = 18;
-    pub const LINE_B_DCA_KF: usize = 19;
-    pub const COUNT: usize = 20;
+    pub const DETUNE: usize = 3;
+    pub const GLIDE_TIME: usize = 4;
+    pub const BEND_RANGE: usize = 5;
+    pub const VOICING_MODE: usize = 6;
+    pub const VIBRATO_WAVE: usize = 7;
+    pub const VIBRATO_DELAY: usize = 8;
+    pub const VIBRATO_RATE: usize = 9;
+    pub const VIBRATO_DEPTH: usize = 10;
+    pub const LINE_A_WAVE1: usize = 11;
+    pub const LINE_A_WAVE2: usize = 12;
+    pub const LINE_A_DCW_KF: usize = 13;
+    pub const LINE_A_DCA_KF: usize = 14;
+    pub const LINE_B_WAVE1: usize = 15;
+    pub const LINE_B_WAVE2: usize = 16;
+    pub const LINE_B_DCW_KF: usize = 17;
+    pub const LINE_B_DCA_KF: usize = 18;
+    pub const COUNT: usize = 19;
 }
 
 const ENVELOPES: usize = 6;
@@ -124,8 +122,7 @@ pub struct NeonState {
     limiter: dsp::simple_limiter::SimpleLimiter,
     sample_rate: f32,
     glide_time: f64,
-    detune_note: f32,
-    detune_fine: f32,
+    detune_cents: f32,
     #[allow(dead_code)] // stored for the coming engine-side pitch-bend routing
     bend_range: i32,
     ids: [u32; param::COUNT],
@@ -156,8 +153,7 @@ impl DcBlocker {
 }
 
 fn update_detune(state: &mut NeonState) {
-    let semitones = state.detune_note + state.detune_fine / 60.0;
-    state.params.detune_ratio = libm::exp2f(semitones / 12.0);
+    state.params.detune_ratio = libm::exp2f(state.detune_cents / 1200.0);
 }
 
 /// The env-field slot for `(envelope, key)` in bind order; see `init`.
@@ -197,8 +193,7 @@ impl Instrument for Neon {
         state.ids[param::LINE_SELECT] = abi::bind_parameter(&[10]);
         state.ids[param::MODULATION] = abi::bind_parameter(&[11]);
         state.ids[param::OCTAVE] = abi::bind_parameter(&[12]);
-        state.ids[param::DETUNE_NOTE] = abi::bind_parameter(&[13]);
-        state.ids[param::DETUNE_FINE] = abi::bind_parameter(&[14]);
+        state.ids[param::DETUNE] = abi::bind_parameter(&[13]);
         state.ids[param::GLIDE_TIME] = abi::bind_parameter(&[15]);
         state.ids[param::BEND_RANGE] = abi::bind_parameter(&[16]);
         state.ids[param::VOICING_MODE] = abi::bind_parameter(&[17]);
@@ -255,12 +250,8 @@ impl Instrument for Neon {
             param::LINE_SELECT => state.params.line_select = int_value(value, &LINE_SELECT_MAPPING),
             param::MODULATION => state.params.modulation = int_value(value, &MODULATION_MAPPING),
             param::OCTAVE => state.params.octave_multiplier = libm::exp2f(int_value(value, &OCTAVE_MAPPING) as f32),
-            param::DETUNE_NOTE => {
-                state.detune_note = int_value(value, &DETUNE_NOTE_MAPPING) as f32;
-                update_detune(state);
-            }
-            param::DETUNE_FINE => {
-                state.detune_fine = int_value(value, &DETUNE_FINE_MAPPING) as f32;
+            param::DETUNE => {
+                state.detune_cents = float_value(value, &DETUNE_MAPPING);
                 update_detune(state);
             }
             param::GLIDE_TIME => state.glide_time = float_value(value, &UNIPOLAR) as f64 * ppqn::BAR,
@@ -361,8 +352,7 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         param::LINE_SELECT => int_value(value, &LINE_SELECT_MAPPING) as f32,
         param::MODULATION => int_value(value, &MODULATION_MAPPING) as f32,
         param::OCTAVE => int_value(value, &OCTAVE_MAPPING) as f32,
-        param::DETUNE_NOTE => int_value(value, &DETUNE_NOTE_MAPPING) as f32,
-        param::DETUNE_FINE => int_value(value, &DETUNE_FINE_MAPPING) as f32,
+        param::DETUNE => float_value(value, &DETUNE_MAPPING),
         param::GLIDE_TIME => float_value(value, &UNIPOLAR),
         param::BEND_RANGE => int_value(value, &BEND_MAPPING) as f32,
         param::VOICING_MODE => int_value(value, &Values::new(&VOICING_MODE_VALUES)) as f32,

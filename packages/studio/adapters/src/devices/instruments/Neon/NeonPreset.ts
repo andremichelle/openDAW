@@ -25,8 +25,10 @@ export namespace NeonPreset {
         box.lineSelect.setValue(tone.lineSelect)
         box.modulation.setValue(tone.modulation)
         box.octave.setValue(tone.octave)
-        box.detuneNote.setValue(tone.detuneNote)
-        box.detuneFine.setValue(tone.detuneFine)
+        // The .syx note+fine pair folds into one cents value (60 fine steps per semitone); the box
+        // range is ±1200ct — wider hardware detunes clamp.
+        const cents = tone.detuneNote * 100.0 + tone.detuneFine * (100.0 / 60.0)
+        box.detune.setValue(Math.max(-1200.0, Math.min(1200.0, cents)))
         box.vibrato.wave.setValue(tone.vibratoWave)
         box.vibrato.delay.setValue(tone.vibratoDelay)
         box.vibrato.rate.setValue(tone.vibratoRate)

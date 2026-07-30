@@ -104,7 +104,7 @@ export namespace InstrumentFactories {
 
     export const Neon: InstrumentFactory<void, NeonDeviceBox> = {
         defaultName: "Neon",
-        defaultIcon: IconSymbol.Waveform,
+        defaultIcon: IconSymbol.Neon,
         briefDescription: "Phase Distortion Synth",
         description: "CZ-style phase distortion synthesizer",
         manualPage: DeviceManualUrls.Neon,

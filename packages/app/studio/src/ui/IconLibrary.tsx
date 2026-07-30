@@ -8,6 +8,18 @@ export const IconLibrary = () => (
                     viewBox="0 0 20 20">
                 <rect width={20} height={20}/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Ring)} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx={9.5} cy={12} r={6} stroke-width={2}/>
+                <circle cx={14.5} cy={12} r={6} stroke-width={2}/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Noise)} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width={2} stroke-linejoin="round"
+                      d="M2 13 L5 7 L8 17 L11 5 L14 19 L17 9 L20 15 L22 11"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Neon)} fill="currentColor" stroke="none" viewBox="0 0 24 24">
+                <path fill-rule="evenodd" clip-rule="evenodd"
+                      d="M12 21c4.97 0 9-4.027 9-8.994C21.013 7.026 16.97 3 12 3s-9 4.027-9 8.994S7.03 21 12 21M8.517 8.17l3.369 3.366V8.348c0-.026 0-.064.012-.089a.3.3 0 0 1 .051-.076c.026-.026.051-.038.076-.051s.064-.013.09-.013h3.813c.025 0 .063.013.089.013c.025.013.05.025.076.05s.038.052.051.077a.2.2 0 0 1 .013.089v7.571c0 .038 0 .063-.013.089a.3.3 0 0 1-.05.076a.3.3 0 0 1-.077.05c-.025.014-.064.014-.09.014c-.037 0-.063 0-.1-.013c-.026-.013-.064-.026-.077-.051l-3.369-3.366v3.2c0 .026 0 .064-.012.09a.3.3 0 0 1-.051.076a.3.3 0 0 1-.076.05c-.026.014-.064.014-.09.014H8.34c-.025 0-.064-.013-.089-.013a.3.3 0 0 1-.076-.051a.3.3 0 0 1-.051-.076c-.013-.026-.013-.064-.013-.09v-3.785c0-.025 0-.038.013-.063V8.348a.3.3 0 0 1 .038-.14a.2.2 0 0 1 .114-.089c.039-.012.09-.025.14-.012a.4.4 0 0 1 .102.063"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.Checkbox)} viewBox="0 0 24 24" fill="currentColor"
                     stroke="none">
                 <path
