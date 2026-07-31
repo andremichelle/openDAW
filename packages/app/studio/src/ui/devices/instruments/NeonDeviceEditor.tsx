@@ -172,10 +172,10 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                               <div className="block left">
                                   <div className="label play-section"/>
                                   <div className="label vibrato-section"/>
-                                  {radioCell("Lines", lineSelect,
+                                  {radioCell("LINES", lineSelect,
                                       Neon.LineSelect.map((label, index) => ({value: index, element: <span>{label}</span>})), "8px", 2)}
-                                  {radioCell("Mode", modulation, [
-                                      {value: 0, tooltip: "Off", element: <Icon symbol={IconSymbol.Close}/>},
+                                  {radioCell("MODE", modulation, [
+                                      {value: 0, tooltip: "Off", element: <Icon symbol={IconSymbol.Sine}/>},
                                       {value: 1, tooltip: "Ring", element: <Icon symbol={IconSymbol.Ring}/>},
                                       {value: 2, tooltip: "Noise", element: <Icon symbol={IconSymbol.Noise}/>}
                                   ], "12px")}

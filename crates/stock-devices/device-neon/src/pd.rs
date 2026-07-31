@@ -32,41 +32,41 @@ fn knee(w: f32, identity: f32, full: f32) -> f32 {
     identity + (full - identity) * w
 }
 
-fn m_saw(x: f32, w: f32) -> f32 {
-    let d = knee(w, 0.5, 0.022);
+fn m_saw(x: f32, w: f32, edge: f32) -> f32 {
+    let d = knee(w, 0.5, 0.0).max(0.022 * edge);
     if x < d {0.5 * x / d} else {0.5 + 0.5 * (x - d) / (1.0 - d)}
 }
 
-fn m_square(x: f32, w: f32) -> f32 {
-    let d = knee(w, 0.5, 0.03);
+fn m_square(x: f32, w: f32, edge: f32) -> f32 {
+    let d = knee(w, 0.5, 0.0).max(0.03 * edge);
     if x < d {0.5 * x / d}
     else if x < 0.5 {0.5}
     else if x < 0.5 + d {0.5 + 0.5 * (x - 0.5) / d}
     else {1.0}
 }
 
-fn m_pulse(x: f32, w: f32) -> f32 {
-    let d = knee(w, 1.0, 0.048);
+fn m_pulse(x: f32, w: f32, edge: f32) -> f32 {
+    let d = knee(w, 1.0, 0.0).max(0.048 * edge);
     if x < d {x / d} else {1.0}
 }
 
 // Measured on the VirtualCZ DCW sweep: double sine is ALWAYS two full cycles — EQUAL at DCW 0 (a pure
 // octave sine) and squeezing the second cycle as DCW rises, until the fundamental dominates with a flat
 // ≈ −24dB overtone shelf at DCW 99 (the impulse-like squeezed cycle). Matches the pete reference.
-fn m_double_sine(x: f32, w: f32) -> f32 {
-    let a = 0.5 + 0.475 * w;
+fn m_double_sine(x: f32, w: f32, edge: f32) -> f32 {
+    let a = (0.5 + 0.5 * w).min(1.0 - 0.025 * edge);
     if x < a {x / a} else {1.0 + (x - a) / (1.0 - a)}
 }
 
-fn m_saw_pulse(x: f32, w: f32) -> f32 {
-    let d = knee(w, 0.5, 0.022);
+fn m_saw_pulse(x: f32, w: f32, edge: f32) -> f32 {
+    let d = knee(w, 0.5, 0.0).max(0.022 * edge);
     if x < 0.5 {x}
     else if x < 0.5 + d {0.5 + 0.5 * (x - 0.5) / d}
     else {1.0}
 }
 
-fn bent(x: f32, w: f32, map: fn(f32, f32) -> f32) -> f32 {
-    cosine(map(x, w))
+fn bent(x: f32, w: f32, edge: f32, map: fn(f32, f32, f32) -> f32) -> f32 {
+    cosine(map(x, w, edge))
 }
 
 fn window_saw(x: f32) -> f32 {
@@ -93,14 +93,26 @@ pub fn orientation(wave: i32) -> bool {
     matches!(wave, WAVE_SQUARE | WAVE_PULSE | WAVE_DOUBLE_SINE)
 }
 
+/// SOLO waves whose cycles alternate forward/reversed (period-2 structures on the hardware): the
+/// reversed-orientation family — fresh VirtualCZ measurements put their dominant energy on the
+/// half-note grid at every DCW (the reso waves show half-note content too, but a plain cycle reversal
+/// breaks their edge pinning — they need their own model, see plans).
+pub fn period_two(wave: i32) -> bool {
+    orientation(wave) || wave == WAVE_SAW_PULSE || wave >= WAVE_RES_SAW
+}
+
 /// One sample of panel wave `wave` at phase `x` (0..1) with distortion amount `w` (0..1).
-pub fn render(wave: i32, x: f32, w: f32) -> f32 {
+/// The DCW laws live in PHASE domain (mid-amount knees are pitch-independent, preset battery p02/p04/
+/// p07/p22), but the w→1 extreme is clamped at a constant-TIME floor: `edge` = frequency / 261.63 scales
+/// only the FLOOR — low notes keep sharp edges (were 25-31dB dull on top), note-60 calibration exact.
+pub fn render(wave: i32, x: f32, w: f32, edge: f32) -> f32 {
+    let edge = edge.clamp(0.05, 10.0);
     match wave {
-        WAVE_SAW => bent(x, w, m_saw),
-        WAVE_SQUARE => bent(x, w, m_square),
-        WAVE_PULSE => bent(x, w, m_pulse),
-        WAVE_DOUBLE_SINE => bent(x, w, m_double_sine),
-        WAVE_SAW_PULSE => bent(x, w, m_saw_pulse),
+        WAVE_SAW => bent(x, w, edge, m_saw),
+        WAVE_SQUARE => bent(x, w, edge, m_square),
+        WAVE_PULSE => bent(x, w, edge, m_pulse),
+        WAVE_DOUBLE_SINE => bent(x, w, edge, m_double_sine),
+        WAVE_SAW_PULSE => bent(x, w, edge, m_saw_pulse),
         WAVE_RES_SAW => resonant(x, w, window_saw),
         WAVE_RES_TRIANGLE => resonant(x, w, window_triangle),
         _ => resonant(x, w, window_trapezoid)
@@ -116,7 +128,7 @@ mod tests {
     fn cycle(wave: i32, w: f32) -> [f32; N] {
         let mut out = [0.0f32; N];
         for (index, sample) in out.iter_mut().enumerate() {
-            *sample = render(wave, index as f32 / N as f32, w);
+            *sample = render(wave, index as f32 / N as f32, w, 1.0);
         }
         out
     }
@@ -158,8 +170,8 @@ mod tests {
     fn resonant_waves_are_continuous_at_the_wrap() {
         for wave in [WAVE_RES_SAW, WAVE_RES_TRIANGLE, WAVE_RES_TRAPEZOID] {
             for w in [0.25, 0.5, 1.0] {
-                let head = render(wave, 0.0, w);
-                let tail = render(wave, 1.0 - 1.0e-4, w);
+                let head = render(wave, 0.0, w, 1.0);
+                let tail = render(wave, 1.0 - 1.0e-4, w, 1.0);
                 assert!((head - tail).abs() < 0.1, "wave {wave} w {w} wraps {tail} -> {head}");
             }
         }

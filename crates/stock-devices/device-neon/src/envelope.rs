@@ -26,13 +26,50 @@ fn full_swing_seconds(rate: f32) -> f32 {
     (0.1967 * libm::exp2f((60.0 - rate) / 6.7)).max(0.0015)
 }
 
+/// PEG full swing: measured on VirtualCZ pitch-track probes (settle times 12.96s/2.76s/0.49s/0.09s/0.02s
+/// at rates 25/40/55/70/85) — its own law, slower than the DCA/DCW one at low rates.
+fn full_swing_seconds_pitch(rate: f32) -> f32 {
+    (0.29 * libm::exp2f((60.0 - rate) / 6.4)).max(0.002)
+}
+
+/// Raw pitch-env level to SEMITONES at the hardware depth: fresh VirtualCZ sustained ladder (default
+/// depth, note-48 pitch tracks). Gentle to 63, the hardware jump region 63-70, then ~2 st per unit.
+pub fn pitch_semitones(raw: f32) -> f32 {
+    const POINTS: [(f32, f32); 18] = [
+        (0.0, 0.0), (5.0, 0.35), (10.0, 1.02), (20.0, 2.26), (33.0, 4.01), (45.0, 5.5), (55.0, 6.75),
+        (63.0, 7.62), (65.0, 9.87), (67.0, 11.87), (70.0, 19.87), (75.0, 27.88), (80.0, 37.88),
+        (85.0, 47.87), (90.0, 59.88), (93.0, 63.88), (96.0, 71.87), (99.0, 79.0)
+    ];
+    let value = raw.clamp(0.0, 99.0);
+    let mut semitones = 0.0;
+    for pair in POINTS.windows(2) {
+        let ((x0, y0), (x1, y1)) = (pair[0], pair[1]);
+        if value <= x1 {
+            semitones = y0 + (y1 - y0) * (value - x0) / (x1 - x0);
+            break;
+        }
+        semitones = y1;
+    }
+    semitones
+}
+
+const PITCH_RANGE_SEMITONES: f32 = 79.0;
+
 /// One running envelope instance (per voice, per line). Valid when zeroed.
 #[derive(Clone, Copy, Default)]
 pub struct Envelope {
     value: f32,
     stage: usize,
     releasing: bool,
-    holding: bool
+    holding: bool,
+    draining: bool // one-shot ran past step 8 still audible: ramp to zero at the last step's rate
+}
+
+/// A sustain marker past the end step is dead weight the hardware ignores (real dumps carry them, e.g.
+/// synthlib's mr-drummin DCA s3/e2, and the editor allows dragging S past E) — treat it as no sustain,
+/// otherwise the envelope wrongly HOLDS the end step's level while gated.
+fn effective_sustain(spec: &EnvelopeSpec, end: usize) -> i32 {
+    if spec.sustain > end as i32 {0} else {spec.sustain}
 }
 
 impl Envelope {
@@ -41,34 +78,58 @@ impl Envelope {
         self.stage = 0;
         self.releasing = false;
         self.holding = false;
+        self.draining = false;
     }
 
     pub fn release(&mut self, spec: &EnvelopeSpec) {
         let end = spec.end.clamp(1, STAGES as i32) as usize;
+        let sustain = effective_sustain(spec, end);
         self.releasing = true;
-        self.holding = false;
-        self.stage = if spec.sustain > 0 {(spec.sustain as usize).min(end - 1)} else {end - 1};
-    }
-
-    pub fn force_finish(&mut self) {
-        self.releasing = true;
-        self.holding = true;
-        self.value = 0.0;
+        if sustain > 0 {
+            self.holding = false;
+            self.stage = (sustain as usize).min(end - 1);
+        }
+        // No sustain: a ONE-SHOT envelope — note-off must not restart a stage (jumping back to the end
+        // stage re-targeted its level from the current value: an audible warp), the walk just continues.
     }
 
     pub fn finished(&self) -> bool {
         self.releasing && self.holding
     }
 
+    /// The envelope has ARRIVED at its end (draining or done). The NOISE gate closes here — measured on
+    /// the user's drum patch: VirtualCZ kills the noise at end-ARRIVAL (~40ms) while the audible line's
+    /// drain keeps running (~96ms more).
+    pub fn past_end(&self) -> bool {
+        self.draining || (self.releasing && self.holding)
+    }
+
     /// Advance by `dt` seconds (scaled by the caller's key follow) and return the raw 0-99 value.
     pub fn process(&mut self, spec: &EnvelopeSpec, dt: f32) -> f32 {
+        self.advance(spec, dt, false)
+    }
+
+    /// The PITCH envelope: measured on VirtualCZ, the PEG traverses LINEARLY IN SEMITONES (a 0→63 rise
+    /// settles in 40ms where raw-linear predicts 318ms) under its own rate law — the value is held and
+    /// returned in SEMITONES.
+    pub fn process_pitch(&mut self, spec: &EnvelopeSpec, dt: f32) -> f32 {
+        self.advance(spec, dt, true)
+    }
+
+    fn advance(&mut self, spec: &EnvelopeSpec, dt: f32, pitch: bool) -> f32 {
         if self.holding {
             return self.value;
         }
         let end = spec.end.clamp(1, STAGES as i32) as usize;
-        let stage = self.stage.min(end - 1);
-        let target = spec.levels[stage].clamp(0.0, 99.0);
-        let step = 99.0 * dt / full_swing_seconds(spec.rates[stage].clamp(0.0, 99.0));
+        let stage = self.stage.min(STAGES - 1);
+        let rate = spec.rates[stage].clamp(0.0, 99.0);
+        let (target, step) = if pitch {
+            let target = if self.draining {0.0} else {pitch_semitones(spec.levels[stage])};
+            (target, PITCH_RANGE_SEMITONES * dt / full_swing_seconds_pitch(rate))
+        } else {
+            let target = if self.draining {0.0} else {spec.levels[stage].clamp(0.0, 99.0)};
+            (target, 99.0 * dt / full_swing_seconds(rate))
+        };
         let reached = if self.value < target {
             self.value = (self.value + step).min(target);
             self.value == target
@@ -80,18 +141,23 @@ impl Envelope {
         };
         if reached {
             let step_number = (stage + 1) as i32;
-            if !self.releasing && spec.sustain > 0 && step_number == spec.sustain {
+            let sustain = effective_sustain(spec, end);
+            if !self.releasing && sustain > 0 && step_number == sustain {
                 self.holding = true; // hold at the sustain step until note-off
-            } else if stage + 1 >= end {
-                self.holding = true;
-                if spec.sustain == 0 {
-                    // Measured on VirtualCZ: with sustain OFF an envelope IDLES AT ZERO past its end
-                    // step, it does not hold the final level — a DCA env silences the note even while
-                    // the key is held (level-staircase probe), and a DCW env falls back to a pure
-                    // cosine (the dcw-level staircase reads h2 ≈ −71dB after its end).
+            } else if sustain == 0 && stage + 1 >= end {
+                // MEASURED on VirtualCZ (step3-rate probe: tail time identical for step3 rate 90 vs 30):
+                // steps past the end byte are NEVER played; a non-zero end level DRAINS to zero at the
+                // END step's OWN rate (35@rate53 -> ~0.14s), then the envelope idles at zero. This is the
+                // one rule for audible lines AND modulators (their noise burst fades at the same law).
+                if self.value <= 0.0 {
                     self.releasing = true;
+                    self.holding = true;
                     self.value = 0.0;
+                } else {
+                    self.draining = true;
                 }
+            } else if stage + 1 >= end {
+                self.holding = true; // valid sustain: the post-sustain tail parks on the end step's level
             } else {
                 self.stage = stage + 1;
             }
@@ -148,6 +214,49 @@ mod tests {
         let value = run(&mut env, &spec, 0.2);
         assert_eq!(value, 0.0, "idles at ZERO past the end step (not the end step's level)");
         assert!(env.finished(), "sustain OFF: the end step finishes the envelope while gated");
+    }
+
+    #[test]
+    fn a_sustain_marker_past_the_end_step_is_ignored() {
+        // mr-drummin line1 DCA: end 2 at level 35 with a stray sustain flag on step 3 — the drum must
+        // decay and silence, not hold at 35 forever while the key is down.
+        let spec = EnvelopeSpec {
+            rates: [99.0; STAGES],
+            levels: [99.0, 35.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            sustain: 3,
+            end: 2
+        };
+        let mut env = Envelope::default();
+        env.start();
+        let value = run(&mut env, &spec, 0.2);
+        assert_eq!(value, 0.0, "invalid sustain: idles at zero past the end step, got {value}");
+        assert!(env.finished(), "the envelope finishes while gated");
+    }
+
+    #[test]
+    fn a_one_shot_envelope_plays_the_staircase_past_its_end_byte_and_never_jumps() {
+        // mr-drummin line1 DCA: end 2 (level 35) with the real decay in step 3 (35→0). The walk must
+        // continue smoothly past the end byte, and note-off must not restart a stage.
+        let spec = EnvelopeSpec {
+            rates: [99.0, 40.0, 40.0, 99.0, 99.0, 99.0, 99.0, 99.0],
+            levels: [99.0, 35.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            sustain: 0,
+            end: 2
+        };
+        let mut env = Envelope::default();
+        env.start();
+        run(&mut env, &spec, 0.05); // into the 99→35 decay
+        env.release(&spec);
+        let mut previous = env.value;
+        let mut maximum_rise = 0.0f32;
+        for _ in 0..(3.0 / DT) as usize {
+            let value = env.process(&spec, DT);
+            maximum_rise = maximum_rise.max(value - previous);
+            previous = value;
+        }
+        assert!(maximum_rise <= 0.0, "monotonic decay through the staircase, rose by {maximum_rise}");
+        assert_eq!(env.value, 0.0, "landed at zero");
+        assert!(env.finished(), "finished after draining");
     }
 
     #[test]

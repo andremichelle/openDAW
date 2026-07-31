@@ -1,6 +1,6 @@
 import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {NeonDeviceBox, NeonEnvelope} from "@opendaw/studio-boxes"
-import {Address, BooleanField, Int32Field, StringField} from "@opendaw/lib-box"
+import {Address, BooleanField, Float32Field, StringField} from "@opendaw/lib-box"
 import {Pointers, VoicingMode} from "@opendaw/studio-enums"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
@@ -69,8 +69,8 @@ export class NeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     #wrapParameters(box: NeonDeviceBox) {
         const VoiceModes = [VoicingMode.Monophonic, VoicingMode.Polyphonic]
-        const czValue = (field: Int32Field<Pointers.Automation | Pointers.MIDIControl | Pointers.Modulation>, name: string) =>
-            this.#parametric.createParameter(field, ValueMapping.linearInteger(0, 99),
+        const czValue = (field: Float32Field<Pointers.Automation | Pointers.MIDIControl | Pointers.Modulation>, name: string) =>
+            this.#parametric.createParameter(field, ValueMapping.linear(0, 99),
                 StringMapping.numeric({unit: "", fractionDigits: 0}), name)
         return {
             lineSelect: this.#parametric.createParameter(
@@ -87,7 +87,7 @@ export class NeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                 StringMapping.numeric({unit: "oct"}), "Octave", 0.5),
             detune: this.#parametric.createParameter(
                 box.detune,
-                ValueMapping.linear(-1200, 1200),
+                ValueMapping.linear(-4800, 4800),
                 StringMapping.numeric({unit: "ct", fractionDigits: 0}), "Detune", 0.5),
             glideTime: this.#parametric.createParameter(
                 box.glideTime,
@@ -117,12 +117,12 @@ export class NeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                     StringMapping.indices("", ["Off", ...Neon.Waves]), "Wave 2"),
                 dcwKeyFollow: this.#parametric.createParameter(
                     line.dcwKeyFollow,
-                    ValueMapping.linearInteger(0, 9),
-                    StringMapping.numeric({unit: ""}), "DCW Key Follow"),
+                    ValueMapping.linear(0, 9),
+                    StringMapping.numeric({unit: "", fractionDigits: 1}), "DCW Key Follow"),
                 dcaKeyFollow: this.#parametric.createParameter(
                     line.dcaKeyFollow,
-                    ValueMapping.linearInteger(0, 9),
-                    StringMapping.numeric({unit: ""}), "DCA Key Follow")
+                    ValueMapping.linear(0, 9),
+                    StringMapping.numeric({unit: "", fractionDigits: 1}), "DCA Key Follow")
             }))
         } as const
     }

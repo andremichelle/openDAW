@@ -35,7 +35,7 @@ component
         &.vibrato-section
           grid-row: 4 / 4
           grid-column: 1 / -1
-          --color: var(--color-purple)
+          --color: var(--color-green)
 
       > div.row-spacer
         grid-column: 1 / -1
@@ -109,14 +109,15 @@ component
         font-weight: 700
         letter-spacing: 1px
         padding: 8px 10px
-        border-radius: 3px 3px 0 0
-        color: var(--color-shadow)
+        border-radius: 2px 2px 0 0
+        border-top: initial
+        color: rgba(white, 0.2)
         line-height: 1
-        background: color-mix(in srgb, var(--color-green) 2%, transparent)
 
       input:checked + label
-        color: var(--color-green)
-        background: color-mix(in srgb, var(--color-green) 5%, transparent)
+        color: var(--color-blue)
+        background: color-mix(in srgb, var(--color-blue) 5%, transparent)
+        border-top: 0.5px rgba(white, 0.04) solid
 
   div.block.right:has(.tabs input:first-of-type:checked) div.line-body
     border-top-left-radius: 0
@@ -128,8 +129,8 @@ component
     grid-template-rows: 3.25em 90px
     row-gap: 0.25em
     padding: 0.5em 0 0.25em
-    border-radius: 3px
-    background: color-mix(in srgb, var(--color-green) 5%, transparent)
+    border-radius: 2px
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--color-blue) 5%, transparent) 0, transparent 125%)
 
     > div.cells
       display: contents

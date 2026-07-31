@@ -69,9 +69,9 @@ pub fn render_tone(tone: &ToneDescription, notes: &[(u32, f32, f32)], seconds: f
     state.params.octave_multiplier = libm::exp2f(tone.octave as f32);
     state.params.detune_ratio = libm::exp2f((tone.detune_note as f32 + tone.detune_fine as f32 / 60.0) / 12.0);
     state.params.vibrato.wave = tone.vibrato[0];
-    state.params.vibrato.delay_seconds = vibrato_delay_seconds(tone.vibrato[1]);
-    state.params.vibrato.rate_hz = vibrato_rate_hz(tone.vibrato[2]);
-    state.params.vibrato.depth_cents = vibrato_depth_cents(tone.vibrato[3]);
+    state.params.vibrato.delay_seconds = vibrato_delay_seconds(tone.vibrato[1] as f32);
+    state.params.vibrato.rate_hz = vibrato_rate_hz(tone.vibrato[2] as f32);
+    state.params.vibrato.depth_cents = vibrato_depth_cents(tone.vibrato[3] as f32);
     for line_index in 0..2 {
         let config = &mut state.params.lines[line_index];
         config.wave1 = tone.waves[line_index][0];

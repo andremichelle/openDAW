@@ -4,7 +4,7 @@ import {Events, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
-import {Int32Field} from "@opendaw/lib-box"
+import {Float32Field, Int32Field} from "@opendaw/lib-box"
 import {NeonEnvelope} from "@opendaw/studio-boxes"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
@@ -28,11 +28,11 @@ const fullSwingSeconds = (rate: number): number => Math.max(0.0015, 0.1967 * Mat
 const formatSeconds = (seconds: number): string =>
     seconds < 1.0 ? `${Math.round(seconds * 1000)} ms` : `${seconds.toFixed(2)} s`
 
-const rateFields = (envelope: NeonEnvelope): ReadonlyArray<Int32Field> => [
+const rateFields = (envelope: NeonEnvelope): ReadonlyArray<Float32Field> => [
     envelope.rate1, envelope.rate2, envelope.rate3, envelope.rate4,
     envelope.rate5, envelope.rate6, envelope.rate7, envelope.rate8
 ]
-const levelFields = (envelope: NeonEnvelope): ReadonlyArray<Int32Field> => [
+const levelFields = (envelope: NeonEnvelope): ReadonlyArray<Float32Field> => [
     envelope.level1, envelope.level2, envelope.level3, envelope.level4,
     envelope.level5, envelope.level6, envelope.level7, envelope.level8
 ]
@@ -68,7 +68,7 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Const
         const seconds = fullSwingSeconds(rate) * Math.abs(level - from) / 99.0
         stageLabel.textContent = `stage ${stage + 1}`
         timeValue.textContent = formatSeconds(seconds)
-        levelValue.textContent = `level ${level}`
+        levelValue.textContent = `level ${Math.round(level)}`
     }
     // Click-to-type on the readout: TIME resolves back through the measured rate law (rate from the
     // wanted swing time and the stage's level delta), LEVEL is the raw 0-99 value.
@@ -104,8 +104,8 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Const
             editNumber(timeValue, Number((seconds * 1000).toFixed(1)), "ms", milliseconds => {
                 if (delta === 0) {return}
                 const swing = Math.max(0.0015, milliseconds / 1000.0 * 99.0 / delta)
-                const value = Math.round(60.0 - 6.7 * Math.log2(swing / 0.1967))
-                rateFields(envelope)[stage].setValue(Math.max(0, Math.min(99, value)))
+                const value = 60.0 - 6.7 * Math.log2(swing / 0.1967)
+                rateFields(envelope)[stage].setValue(clamp(value, 0.0, 99.0))
                 showStage(stage)
             })
         }),
@@ -113,8 +113,8 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Const
             event.stopPropagation()
             const stage = selectedStage.getValue()
             const envelope = active()
-            editNumber(levelValue, levelFields(envelope)[stage].getValue(), "", level => {
-                levelFields(envelope)[stage].setValue(Math.max(0, Math.min(99, Math.round(level))))
+            editNumber(levelValue, Math.round(levelFields(envelope)[stage].getValue()), "", level => {
+                levelFields(envelope)[stage].setValue(clamp(level, 0.0, 99.0))
                 showStage(stage)
             })
         })
@@ -239,7 +239,7 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Const
     const watchActive = () => {
         fieldWatcher.terminate()
         const envelope = active()
-        const fields: ReadonlyArray<Int32Field> =
+        const fields: ReadonlyArray<Float32Field | Int32Field> =
             [...rateFields(envelope), ...levelFields(envelope), envelope.sustain, envelope.end]
         fields.forEach(field => fieldWatcher.own(field.subscribe(() => {
             painter.requestUpdate()
@@ -272,8 +272,8 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Const
                 const fine = moveEvent.shiftKey ? 0.25 : 1.0
                 const deltaRate = (moveEvent.clientX - downX) / (rect.width / STAGES) * 99.0 * fine
                 const deltaLevel = (downY - moveEvent.clientY) / rect.height * 99.0 * fine
-                const rate = Math.round(clamp(startRate - deltaRate, 0.0, 99.0))
-                const level = Math.round(clamp(startLevel + deltaLevel, 0.0, 99.0))
+                const rate = clamp(startRate - deltaRate, 0.0, 99.0)
+                const level = clamp(startLevel + deltaLevel, 0.0, 99.0)
                 editing.modify(() => {
                     rates[stage].setValue(rate)
                     levels[stage].setValue(level)

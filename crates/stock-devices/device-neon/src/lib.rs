@@ -29,29 +29,36 @@ use voice::{NeonParams, NeonVoice};
 // piecewise-doubling ramps; see the youngmonkey spec). Scales calibrated to the VirtualCZ a03 render:
 // rate 25 ≈ 2Hz and depth 20 ≈ ±60 cents (the 2Hz/4Hz AM pair = the LFO sweeping the detune beat through
 // zero); the delay scale is a single-constant estimate.
-pub(crate) fn vibrato_delay_seconds(raw: i32) -> f32 {
-    raw as f32 / 99.0 * 3.0
+pub(crate) fn vibrato_delay_seconds(raw: f32) -> f32 {
+    raw / 99.0 * 3.0
 }
 
-pub(crate) fn vibrato_rate_hz(raw: i32) -> f32 {
-    let value = raw.clamp(0, 99);
-    let increment = match value {
+fn vibrato_rate_increment(value: i32) -> i32 {
+    match value {
         0..=31 => 32 * (value + 1),
         32..=47 => 1120 + 64 * (value - 32),
         48..=63 => 2272 + 128 * (value - 48),
         64..=79 => 4576 + 256 * (value - 64),
         80..=95 => 9184 + 512 * (value - 80),
         _ => 18400 + 1024 * (value - 96)
-    };
-    0.00183 * increment as f32 // measured: rates 25/50 -> 1.54/4.62 Hz on VirtualCZ
+    }
 }
 
-pub(crate) fn vibrato_depth_cents(raw: i32) -> f32 {
+pub(crate) fn vibrato_rate_hz(raw: f32) -> f32 {
+    let value = raw.clamp(0.0, 99.0);
+    let lower = value as i32;
+    let fraction = value - lower as f32;
+    let from = vibrato_rate_increment(lower) as f32;
+    let to = vibrato_rate_increment((lower + 1).min(99)) as f32;
+    0.00183 * (from + (to - from) * fraction) // measured: rates 25/50 -> 1.54/4.62 Hz on VirtualCZ
+}
+
+pub(crate) fn vibrato_depth_cents(raw: f32) -> f32 {
     // Measured on VirtualCZ (instantaneous-frequency probes): ≈1.8ct per step up to 30 (linear),
     // then the piecewise-doubling hardware ramp takes over — ±185ct @60, ±611ct @99 (wide-range probes).
     const POINTS: [(f32, f32); 7] =
         [(0.0, 0.0), (5.0, 8.9), (10.0, 18.6), (20.0, 35.1), (30.0, 52.9), (60.0, 185.0), (99.0, 611.0)];
-    let value = (raw as f32).clamp(0.0, 99.0);
+    let value = raw.clamp(0.0, 99.0);
     let mut result = POINTS[POINTS.len() - 1].1;
     for pair in POINTS.windows(2) {
         let ((x0, y0), (x1, y1)) = (pair[0], pair[1]);
@@ -76,12 +83,12 @@ const MONO_STACK: usize = 16;
 const LINE_SELECT_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const MODULATION_MAPPING: LinearInteger = LinearInteger {min: 0, max: 2};
 const OCTAVE_MAPPING: LinearInteger = LinearInteger {min: -3, max: 3};
-const DETUNE_MAPPING: Linear = Linear {min: -1200.0, max: 1200.0};
+const DETUNE_MAPPING: Linear = Linear {min: -4800.0, max: 4800.0};
 const VIBRATO_WAVE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
-const CZ_MAPPING: LinearInteger = LinearInteger {min: 0, max: 99};
+const CZ_MAPPING: Linear = Linear {min: 0.0, max: 99.0};
 const WAVE1_MAPPING: LinearInteger = LinearInteger {min: 0, max: 7};
 const WAVE2_MAPPING: LinearInteger = LinearInteger {min: 0, max: 8};
-const KEY_FOLLOW_MAPPING: LinearInteger = LinearInteger {min: 0, max: 9};
+const KEY_FOLLOW_MAPPING: Linear = Linear {min: 0.0, max: 9.0};
 const UNIPOLAR: Linear = Linear::unipolar();
 const VOICING_MODE_VALUES: [i32; 2] = [0, 1];
 
@@ -153,7 +160,7 @@ fn update_detune(state: &mut NeonState) {
 }
 
 /// The env-field slot for `(envelope, key)` in bind order; see `init`.
-fn env_slot_value(state: &mut NeonState, index: usize, value: i32) {
+fn env_slot_value(state: &mut NeonState, index: usize, value: f32) {
     let envelope_index = index / ENV_FIELDS;
     let slot = index % ENV_FIELDS;
     let line = envelope_index / 3;
@@ -164,10 +171,10 @@ fn env_slot_value(state: &mut NeonState, index: usize, value: i32) {
         _ => &mut config.dca_env
     };
     match slot {
-        0..=7 => spec.rates[slot] = value as f32,
-        8..=15 => spec.levels[slot - 8] = value as f32,
-        16 => spec.sustain = value,
-        _ => spec.end = value
+        0..=7 => spec.rates[slot] = value,
+        8..=15 => spec.levels[slot - 8] = value,
+        16 => spec.sustain = value as i32,
+        _ => spec.end = value as i32
     }
 }
 
@@ -233,8 +240,12 @@ impl Instrument for Neon {
     fn process_audio(state: &mut NeonState, output: [&mut [f32]; 2], block: &Block) {
         let [out_left, out_right] = output;
         state.voicing.process([&mut *out_left, &mut *out_right], block, &state.params);
-        state.blocker.process(out_left, out_right);
-        state.limiter.replace(out_left, out_right, 0, out_left.len());
+        if option_env!("NEON_NO_BLOCKER").is_none() {
+            state.blocker.process(out_left, out_right);
+        }
+        if option_env!("NEON_NO_LIMITER").is_none() {
+            state.limiter.replace(out_left, out_right, 0, out_left.len());
+        }
     }
 
     fn parameter_changed(state: &mut NeonState, id: u32, value: ParamValue) {
@@ -252,17 +263,17 @@ impl Instrument for Neon {
             param::GLIDE_TIME => state.glide_time = float_value(value, &UNIPOLAR) as f64 * ppqn::BAR,
             param::VOICING_MODE => state.voicing.set_mode(VoicingMode::from_index(int_value(value, &Values::new(&VOICING_MODE_VALUES)))),
             param::VIBRATO_WAVE => state.params.vibrato.wave = int_value(value, &VIBRATO_WAVE_MAPPING),
-            param::VIBRATO_DELAY => state.params.vibrato.delay_seconds = vibrato_delay_seconds(int_value(value, &CZ_MAPPING)),
-            param::VIBRATO_RATE => state.params.vibrato.rate_hz = vibrato_rate_hz(int_value(value, &CZ_MAPPING)),
-            param::VIBRATO_DEPTH => state.params.vibrato.depth_cents = vibrato_depth_cents(int_value(value, &CZ_MAPPING)),
+            param::VIBRATO_DELAY => state.params.vibrato.delay_seconds = vibrato_delay_seconds(float_value(value, &CZ_MAPPING)),
+            param::VIBRATO_RATE => state.params.vibrato.rate_hz = vibrato_rate_hz(float_value(value, &CZ_MAPPING)),
+            param::VIBRATO_DEPTH => state.params.vibrato.depth_cents = vibrato_depth_cents(float_value(value, &CZ_MAPPING)),
             param::LINE_A_WAVE1 => state.params.lines[0].wave1 = int_value(value, &WAVE1_MAPPING),
             param::LINE_A_WAVE2 => state.params.lines[0].wave2 = int_value(value, &WAVE2_MAPPING),
-            param::LINE_A_DCW_KF => state.params.lines[0].dcw_key_follow = int_value(value, &KEY_FOLLOW_MAPPING) as f32,
-            param::LINE_A_DCA_KF => state.params.lines[0].dca_key_follow = int_value(value, &KEY_FOLLOW_MAPPING) as f32,
+            param::LINE_A_DCW_KF => state.params.lines[0].dcw_key_follow = float_value(value, &KEY_FOLLOW_MAPPING),
+            param::LINE_A_DCA_KF => state.params.lines[0].dca_key_follow = float_value(value, &KEY_FOLLOW_MAPPING),
             param::LINE_B_WAVE1 => state.params.lines[1].wave1 = int_value(value, &WAVE1_MAPPING),
             param::LINE_B_WAVE2 => state.params.lines[1].wave2 = int_value(value, &WAVE2_MAPPING),
-            param::LINE_B_DCW_KF => state.params.lines[1].dcw_key_follow = int_value(value, &KEY_FOLLOW_MAPPING) as f32,
-            param::LINE_B_DCA_KF => state.params.lines[1].dca_key_follow = int_value(value, &KEY_FOLLOW_MAPPING) as f32,
+            param::LINE_B_DCW_KF => state.params.lines[1].dcw_key_follow = float_value(value, &KEY_FOLLOW_MAPPING),
+            param::LINE_B_DCA_KF => state.params.lines[1].dca_key_follow = float_value(value, &KEY_FOLLOW_MAPPING),
             _ => {}
         }
     }
@@ -271,8 +282,10 @@ impl Instrument for Neon {
         let Some(index) = state.env_ids.iter().position(|bound| *bound == id) else {
             return;
         };
-        let FieldValue::Int(raw) = value else {
-            panic!("Neon envelope fields must be int fields")
+        let raw = match (index % ENV_FIELDS, value) {
+            (0..=15, FieldValue::Float(rate_or_level)) => rate_or_level,
+            (16 | 17, FieldValue::Int(marker)) => marker as f32,
+            _ => panic!("Neon envelope field kind mismatch")
         };
         env_slot_value(state, index, raw);
     }
@@ -350,10 +363,10 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         param::GLIDE_TIME => float_value(value, &UNIPOLAR),
         param::VOICING_MODE => int_value(value, &Values::new(&VOICING_MODE_VALUES)) as f32,
         param::VIBRATO_WAVE => int_value(value, &VIBRATO_WAVE_MAPPING) as f32,
-        param::VIBRATO_DELAY | param::VIBRATO_RATE | param::VIBRATO_DEPTH => int_value(value, &CZ_MAPPING) as f32,
+        param::VIBRATO_DELAY | param::VIBRATO_RATE | param::VIBRATO_DEPTH => float_value(value, &CZ_MAPPING),
         param::LINE_A_WAVE1 | param::LINE_B_WAVE1 => int_value(value, &WAVE1_MAPPING) as f32,
         param::LINE_A_WAVE2 | param::LINE_B_WAVE2 => int_value(value, &WAVE2_MAPPING) as f32,
-        param::LINE_A_DCW_KF | param::LINE_A_DCA_KF | param::LINE_B_DCW_KF | param::LINE_B_DCA_KF => int_value(value, &KEY_FOLLOW_MAPPING) as f32,
+        param::LINE_A_DCW_KF | param::LINE_A_DCA_KF | param::LINE_B_DCW_KF | param::LINE_B_DCA_KF => float_value(value, &KEY_FOLLOW_MAPPING),
         _ => f32::NAN
     }
 }
@@ -374,11 +387,11 @@ mod tests {
     #[test]
     fn vibrato_depth_is_near_zero_at_the_bottom_and_linear_to_thirty() {
         // Measured (VirtualCZ instantaneous-frequency probe): ±1.8ct @1, ±18.6ct @10, ±52.9ct @30.
-        assert!(vibrato_depth_cents(0) == 0.0);
-        assert!(vibrato_depth_cents(1) < 3.0, "depth 1 = {}", vibrato_depth_cents(1));
-        assert!((vibrato_depth_cents(10) - 18.6).abs() < 1.0);
-        assert!((vibrato_depth_cents(30) - 52.9).abs() < 1.0);
-        assert!((vibrato_depth_cents(99) - 611.0).abs() < 1.0);
+        assert!(vibrato_depth_cents(0.0) == 0.0);
+        assert!(vibrato_depth_cents(1.0) < 3.0, "depth 1 = {}", vibrato_depth_cents(1.0));
+        assert!((vibrato_depth_cents(10.0) - 18.6).abs() < 1.0);
+        assert!((vibrato_depth_cents(30.0) - 52.9).abs() < 1.0);
+        assert!((vibrato_depth_cents(99.0) - 611.0).abs() < 1.0);
     }
 
     fn organ_env() -> EnvelopeSpec {
@@ -449,6 +462,25 @@ mod tests {
         render(&mut bright, &[note_on(1, 60)], &mut left, &mut right, SR);
         assert!(peak(&left) > 0.05 && dull_peak > 0.05, "both audible");
         let _ = zero_crossings;
+    }
+
+    #[test]
+    fn mono_retrigger_fades_the_stolen_voice_without_a_click() {
+        let mut state = configured();
+        // Nearly pure cosine (smooth waveform) with a LONG release so the tail is loud at retrigger.
+        state.params.lines[0].dcw_env.levels[0] = 0.0;
+        state.params.lines[0].dca_env.rates[1] = 25.0;
+        state.voicing.set_mode(VoicingMode::Monophonic);
+        let (mut left, mut right) = (vec![0.0f32; 4800], vec![0.0f32; 4800]);
+        let mut stitched: Vec<f32> = Vec::new();
+        render(&mut state, &[note_on(1, 48)], &mut left, &mut right, SR);
+        render(&mut state, &[note_off(1)], &mut left, &mut right, SR);
+        assert!(peak(&left) > 0.05, "the release tail is still audible, got {}", peak(&left));
+        stitched.extend_from_slice(&left);
+        render(&mut state, &[note_on(2, 55)], &mut left, &mut right, SR);
+        stitched.extend_from_slice(&left);
+        let max_delta = stitched.windows(2).map(|pair| (pair[1] - pair[0]).abs()).fold(0.0f32, f32::max);
+        assert!(max_delta < 0.02, "a mono retrigger must fade the old voice, not cut it: max sample delta {max_delta}");
     }
 
     #[test]

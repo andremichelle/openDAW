@@ -3,13 +3,14 @@ import {Pointers, VoicingMode} from "@opendaw/studio-enums"
 import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 import {DeviceFactory} from "../../std/DeviceFactory"
 
-// A CZ hardware value (0-99), stored RAW so a .syx import round-trips losslessly; the DSP owns the
-// hardware rate/level tables.
+// A CZ hardware value in the 0-99 domain, stored as a CONTINUOUS float so typed times/levels land
+// exactly; a .syx import writes whole numbers, the DSP owns the hardware rate/level tables.
 const czParameter = (name: string) => ({
-    type: "int32", name, value: 0, pointerRules: ParameterPointerRules, constraints: {min: 0, max: 99}, unit: ""
+    type: "float32", name, value: 0.0, pointerRules: ParameterPointerRules,
+    constraints: {min: 0, max: 99, scaling: "linear"}, unit: ""
 } as const)
 const czStage = (name: string) => ({
-    type: "int32", name, value: 0, constraints: {min: 0, max: 99}, unit: ""
+    type: "float32", name, value: 0.0, constraints: {min: 0, max: 99, scaling: "linear"}, unit: ""
 } as const)
 
 // One 8-stage envelope (DCO pitch / DCW / DCA): per stage a rate and a level (raw 0-99), the sustain stage
@@ -37,9 +38,10 @@ export const NeonDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument
         value: 0, constraints: {min: -3, max: 3}, unit: "oct"
     },
     13: {
-        // One continuous detune in CENTS (the .syx note+fine pair folds into this on import).
+        // One continuous detune in CENTS (the .syx note+fine pair folds into this on import). The
+        // hardware range is ±(3 octaves + 11 notes + 60 fine) ≈ ±48 semitones.
         type: "float32", name: "detune", pointerRules: ParameterPointerRules,
-        value: 0.0, constraints: {min: -1200, max: 1200, scaling: "linear"}, unit: "ct"
+        value: 0.0, constraints: {min: -4800, max: 4800, scaling: "linear"}, unit: "ct"
     },
     15: {
         type: "float32", name: "glide-time", pointerRules: ParameterPointerRules,
@@ -79,12 +81,12 @@ export const NeonDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument
                         value: 0, constraints: {length: 9}, unit: "" // Off + the 8 waves
                     },
                     3: {
-                        type: "int32", name: "dcw-key-follow", pointerRules: ParameterPointerRules,
-                        value: 0, constraints: {min: 0, max: 9}, unit: ""
+                        type: "float32", name: "dcw-key-follow", pointerRules: ParameterPointerRules,
+                        value: 0.0, constraints: {min: 0, max: 9, scaling: "linear"}, unit: ""
                     },
                     4: {
-                        type: "int32", name: "dca-key-follow", pointerRules: ParameterPointerRules,
-                        value: 0, constraints: {min: 0, max: 9}, unit: ""
+                        type: "float32", name: "dca-key-follow", pointerRules: ParameterPointerRules,
+                        value: 0.0, constraints: {min: 0, max: 9, scaling: "linear"}, unit: ""
                     }
                 }
             }

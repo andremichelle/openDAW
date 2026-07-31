@@ -43,12 +43,16 @@ fn sustain_window(tone: &ToneDescription) -> Vec<f32> {
 }
 
 #[test]
-fn square_at_full_dcw_is_an_ideal_odd_square() {
-    // Measured: h3 −9.6, h5 −14.1, h7 −17.1 (VirtualCZ square DCW ladder).
+fn square_at_full_dcw_is_a_period_two_structure() {
+    // FRESH VirtualCZ measurement (octave-corrected references): the solo square is a PERIOD-2
+    // waveform — dominant energy at HALF the note (x0.5), the note fundamental ~−14dB below it, and a
+    // half-integer series (x1.5 ≈ −13dB rel x0.5). The old "ideal odd square" expectation was pinned
+    // against the octave_shift(−1) reference bug.
     let seg = sustain_window(&tone("wave 0 1 0\nenv 1 99 0 0 0 0 0 0 0 99 0 0 0 0 0 0 0 1 2\n"));
-    assert!((harmonic_db(&seg, 3) - -9.6).abs() < 2.0, "h3 {}", harmonic_db(&seg, 3));
-    assert!((harmonic_db(&seg, 5) - -14.1).abs() < 2.0, "h5 {}", harmonic_db(&seg, 5));
-    assert!(harmonic_db(&seg, 2) < -30.0, "square has no even harmonics, h2 {}", harmonic_db(&seg, 2));
+    let sub = 20.0 * (goertzel(&seg, C4 * 0.5) / goertzel(&seg, C4).max(1.0e-12)).max(1.0e-9).log10();
+    let one_and_half = 20.0 * (goertzel(&seg, C4 * 1.5) / goertzel(&seg, C4 * 0.5).max(1.0e-12)).max(1.0e-9).log10();
+    assert!(sub > 6.0, "the x0.5 subharmonic dominates the note fundamental, got {sub}dB");
+    assert!((-20.0..=-6.0).contains(&one_and_half), "x1.5 sits ~-13dB below x0.5, got {one_and_half}");
 }
 
 #[test]
@@ -71,11 +75,13 @@ fn double_sine_at_zero_dcw_is_a_pure_octave() {
 }
 
 #[test]
-fn saw_pulse_at_full_dcw_is_a_bright_saw_like_spectrum() {
-    // Measured: h2 −6.0, h3 −12.0, h5 −16.5 (VirtualCZ sawpulse DCW ladder, knee d = 0.5 − 0.478w).
+fn saw_pulse_at_full_dcw_is_a_period_two_bright_saw() {
+    // FRESH VirtualCZ (octave-corrected refs): solo saw-pulse is PERIOD-2 like the other bent waves —
+    // a bright saw-like integer series PLUS a half-integer series (x0.5 ≈ −9dB, x1.5 ≈ −7dB rel x1).
     let seg = sustain_window(&tone("wave 0 4 0\nenv 1 99 0 0 0 0 0 0 0 99 0 0 0 0 0 0 0 1 2\n"));
-    assert!((harmonic_db(&seg, 2) - -6.0).abs() < 1.5, "h2 {}", harmonic_db(&seg, 2));
-    assert!((harmonic_db(&seg, 5) - -16.5).abs() < 2.0, "h5 {}", harmonic_db(&seg, 5));
+    let sub = 20.0 * (goertzel(&seg, C4 * 0.5) / goertzel(&seg, C4).max(1.0e-12)).max(1.0e-9).log10();
+    assert!((-20.0..=0.0).contains(&sub), "half-integer content present (x0.5 rel x1), got {sub}dB");
+    assert!(harmonic_db(&seg, 3) > -25.0, "keeps a bright integer series, h3 {}", harmonic_db(&seg, 3));
 }
 
 fn subharmonic_ratio_db(tone: &ToneDescription) -> (f32, f32) {

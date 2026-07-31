@@ -1,15 +1,15 @@
 import {NeonDeviceBox, NeonEnvelope} from "@opendaw/studio-boxes"
-import {Int32Field} from "@opendaw/lib-box"
+import {Float32Field} from "@opendaw/lib-box"
 import {CzEnvelope, CzTone} from "./CzSysex"
 
 // Writes a decoded CZ tone into a NeonDeviceBox (raw hardware values, lossless). Call inside
 // `editing.modify` so a preset load is one undoable transaction.
 export namespace NeonPreset {
-    const rateFields = (envelope: NeonEnvelope): ReadonlyArray<Int32Field> => [
+    const rateFields = (envelope: NeonEnvelope): ReadonlyArray<Float32Field> => [
         envelope.rate1, envelope.rate2, envelope.rate3, envelope.rate4,
         envelope.rate5, envelope.rate6, envelope.rate7, envelope.rate8
     ]
-    const levelFields = (envelope: NeonEnvelope): ReadonlyArray<Int32Field> => [
+    const levelFields = (envelope: NeonEnvelope): ReadonlyArray<Float32Field> => [
         envelope.level1, envelope.level2, envelope.level3, envelope.level4,
         envelope.level5, envelope.level6, envelope.level7, envelope.level8
     ]
@@ -25,10 +25,9 @@ export namespace NeonPreset {
         box.lineSelect.setValue(tone.lineSelect)
         box.modulation.setValue(tone.modulation)
         box.octave.setValue(tone.octave)
-        // The .syx note+fine pair folds into one cents value (60 fine steps per semitone); the box
-        // range is ±1200ct — wider hardware detunes clamp.
+        // The .syx note+fine pair folds into one cents value (60 fine steps per semitone).
         const cents = tone.detuneNote * 100.0 + tone.detuneFine * (100.0 / 60.0)
-        box.detune.setValue(Math.max(-1200.0, Math.min(1200.0, cents)))
+        box.detune.setValue(Math.max(-4800.0, Math.min(4800.0, cents)))
         box.vibrato.wave.setValue(tone.vibratoWave)
         box.vibrato.delay.setValue(tone.vibratoDelay)
         box.vibrato.rate.setValue(tone.vibratoRate)

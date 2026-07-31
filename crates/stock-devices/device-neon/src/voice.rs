@@ -94,14 +94,32 @@ fn dca_gain(raw: f32) -> f32 {
         return 0.0;
     }
     let value = raw.clamp(1.0, 99.0);
-    let mut decibel = POINTS[0].1;
-    for pair in POINTS.windows(2) {
-        let ((x0, y0), (x1, y1)) = (pair[0], pair[1]);
-        if value <= x1 {
-            decibel = if value <= x0 {y0} else {y0 + (y1 - y0) * (value - x0) / (x1 - x0)};
+    // Slope-continuous Catmull-Rom through the measured knots: piecewise-LINEAR interpolation kinked the
+    // amplitude slope at every knot crossing, AM-ing decays with ±(knot-rate) sidebands (~23Hz on
+    // mr-drummin, −34dB) that VirtualCZ's smooth curve does not have. Knot values stay exact.
+    let mut decibel = POINTS[POINTS.len() - 1].1;
+    for index in 0..POINTS.len() - 1 {
+        let (x1, y1) = POINTS[index];
+        let (x2, y2) = POINTS[index + 1];
+        if value <= x2 {
+            if value <= x1 && index == 0 {
+                decibel = y1;
+                break;
+            }
+            let (x0, y0) = if index == 0 {(x1, y1)} else {POINTS[index - 1]};
+            let (x3, y3) = if index + 2 < POINTS.len() {POINTS[index + 2]} else {(x2, y2)};
+            let tangent1 = (y2 - y0) / (x2 - x0).max(1.0e-6);
+            let tangent2 = (y3 - y1) / (x3 - x1).max(1.0e-6);
+            let width = x2 - x1;
+            let t = ((value - x1) / width).clamp(0.0, 1.0);
+            let t2 = t * t;
+            let t3 = t2 * t;
+            decibel = (2.0 * t3 - 3.0 * t2 + 1.0) * y1
+                + (t3 - 2.0 * t2 + t) * tangent1 * width
+                + (-2.0 * t3 + 3.0 * t2) * y2
+                + (t3 - t2) * tangent2 * width;
             break;
         }
-        decibel = y1;
     }
     libm::powf(10.0, decibel / 20.0)
 }
@@ -110,28 +128,6 @@ fn dca_gain(raw: f32) -> f32 {
 /// the corrected shape identities, raw 73 lands exactly at the w = 0.73 spectrum of each knee family).
 fn dcw_amount(raw: f32) -> f32 {
     (raw / 99.0).clamp(0.0, 1.0)
-}
-
-/// Raw pitch-env level 0-99 to semitones: the MEASURED VirtualCZ table (sustained pitch ladder at env
-/// depth 84). Piecewise linear with the hardware's region jumps (fine steps to 63, whole-tone zone
-/// 64-70, slow zone to 93, top jump at 96).
-fn pitch_semitones(raw: f32) -> f32 {
-    const POINTS: [(f32, f32); 16] = [
-        (0.0, 0.0), (5.0, 0.52), (10.0, 1.12), (20.0, 2.37), (33.0, 3.95), (45.0, 5.57), (55.0, 6.78),
-        (63.0, 7.79), (64.0, 7.94), (67.0, 13.94), (70.0, 19.94), (80.0, 20.86), (90.0, 21.83),
-        (93.0, 22.86), (96.0, 35.95), (99.0, 35.95)
-    ];
-    let value = raw.clamp(0.0, 99.0);
-    let mut semitones = 0.0;
-    for pair in POINTS.windows(2) {
-        let ((x0, y0), (x1, y1)) = (pair[0], pair[1]);
-        if value <= x1 {
-            semitones = y0 + (y1 - y0) * (value - x0) / (x1 - x0);
-            break;
-        }
-        semitones = y1;
-    }
-    semitones
 }
 
 fn xorshift(state: &mut u32) -> f32 {
@@ -148,6 +144,7 @@ struct LineVoice {
     phase: f32,
     second_wave: bool,
     noise_ratio: f32,
+    noise_clock: u32,
     pitch_env: Envelope,
     dcw_env: Envelope,
     dca_env: Envelope
@@ -155,7 +152,11 @@ struct LineVoice {
 
 pub struct NeonVoice {
     gate: bool,
+    dcw_amount0: f32, // line 1's live dcw amount (gates the noise product)
+    dca_gain0: f32, // line 1's dca gain: scales the additive noise
     pending_release: bool,
+    dying: bool, // force-stopped: keep rendering through a short output fade instead of cutting
+    fade: f32,
     note: f32,
     glide: Glide,
     lines: [LineVoice; 2],
@@ -167,16 +168,23 @@ pub struct NeonVoice {
 
 impl Default for NeonVoice {
     fn default() -> Self {
-        Self {gate: false, pending_release: false, note: 0.0, glide: Glide::default(),
+        Self {gate: false, dcw_amount0: 0.0, dca_gain0: 0.0, pending_release: false, dying: false, fade: 1.0, note: 0.0, glide: Glide::default(),
             lines: [LineVoice::default(); 2], vib_phase: 0.0, age_seconds: 0.0, rng: 0, sample_rate: 0.0}
     }
 }
+
+const FORCE_STOP_FADE_SECONDS: f32 = 0.003; // the vapo VCA smoother's time constant
+const FADE_SILENCE: f32 = 1.0e-4; // −80dB: the fade is done
 
 impl NeonVoice {
     fn process_window(&mut self, out_left: &mut [f32], out_right: &mut [f32], shared: &NeonParams, work: &mut Workspace) -> bool {
         let len = out_left.len();
         let sample_rate = shared.sample_rate;
         let dt = 1.0 / sample_rate;
+        let fade_coeff = if self.dying {libm::expf(-1.0 / (FORCE_STOP_FADE_SECONDS * sample_rate.max(1.0)))} else {1.0};
+        let noise_period: u32 = option_env!("NEON_NOISE_CLOCK").and_then(|value| value.parse().ok()).unwrap_or(0);
+        let noise_lo: f32 = option_env!("NEON_NOISE_LO").and_then(|value| value.parse().ok()).unwrap_or(0.0);
+        let noise_hi: f32 = option_env!("NEON_NOISE_HI").and_then(|value| value.parse().ok()).unwrap_or(2.8);
         let route = routing(shared.line_select);
         let two_lines = route[1].0 != usize::MAX;
         if self.pending_release {
@@ -216,7 +224,7 @@ impl NeonVoice {
                 if *config_index == usize::MAX {continue}
                 let config = &shared.lines[*config_index];
                 let line = &mut self.lines[slot];
-                let semis = pitch_semitones(line.pitch_env.process(&config.pitch_env, dt));
+                let semis = line.pitch_env.process_pitch(&config.pitch_env, dt);
                 let dcw_raw = line.dcw_env.process(&config.dcw_env, dt);
                 // Measured on the VirtualCZ kf-dca decay ladder: the follow REFERENCES C2 (note 36) — at
                 // kf 9 a C4 decay already runs 1.5× and C6 3.3×, while C2 matches kf 0 exactly.
@@ -230,32 +238,72 @@ impl NeonVoice {
                     frequency *= libm::exp2f(semis / 12.0);
                 }
                 if shared.modulation == MOD_NOISE && two_lines && slot == 1 {
+                    // Measured on the VirtualCZ note ladder (36..84): the noise spectrum PEAKS ~2-3× the
+                    // note with a steep low-side rolloff — the random pitch ratio only goes UP from the
+                    // note (log-uniform, ~2.8 octaves), never below it. Reseeding happens per CYCLE only
+                    // (the wrap below): any mid-cycle re-clock smears the harmonics into broadband mids
+                    // the reference does not have (mr-drummin burst bands).
+                    if noise_period > 0 {
+                        line.noise_clock = line.noise_clock.wrapping_add(1);
+                        if line.noise_clock >= noise_period {
+                            line.noise_clock = 0;
+                            line.noise_ratio = libm::exp2f(noise_lo + xorshift(&mut self.rng) * (noise_hi - noise_lo));
+                        }
+                    }
                     frequency *= line.noise_ratio.max(0.0625);
                 }
                 line.phase += frequency * dt;
                 if line.phase >= 1.0 {
                     line.phase -= libm::floorf(line.phase);
-                    if config.wave2 > 0 {
+                    // Pairs alternate wave1/wave2; SOLO reversed-family waves (square/pulse/dblsine)
+                    // alternate forward/reversed cycles of THEMSELVES — measured on VirtualCZ: their
+                    // dominant energy sits at HALF the note (x0.5 grid) at every DCW, they are period-2
+                    // structures (the old period-1 model only ever "matched" against the octave_shift(-1)
+                    // reference bug).
+                    if config.wave2 > 0 || pd::period_two(config.wave1) {
                         line.second_wave = !line.second_wave;
                     }
-                    line.noise_ratio = libm::exp2f(xorshift(&mut self.rng) * 4.0 - 2.0);
+                    line.noise_ratio = libm::exp2f(noise_lo + xorshift(&mut self.rng) * (noise_hi - noise_lo));
                 }
                 // Measured on the VirtualCZ pair probes (integer AND f/2 sub-grids, all pairs vs saw +
                 // square/pulse cross-checks): each panel wave has a fixed ORIENTATION; the wave2 cycle
                 // plays time-reversed exactly when the pair's orientations differ.
                 let second = line.second_wave && config.wave2 > 0;
-                let (wave, phase) = if second && pd::orientation(config.wave1) != pd::orientation(config.wave2 - 1) {
-                    (config.wave2 - 1, 1.0 - line.phase)
-                } else if second {
-                    (config.wave2 - 1, line.phase)
-                } else {
-                    (config.wave1, line.phase)
-                };
-                // Measured on the VirtualCZ kf-dcw ladder: no effect at or below C4, C6 at kf 9 reads
-                // like DCW ≈ 70/99 (≈ 0.013 amount per semitone above note 60).
-                let follow = 1.0 - config.dcw_key_follow / 9.0 * (kf_note - 60.0).max(0.0) * 0.013;
+                let solo_flip = line.second_wave && config.wave2 == 0 && pd::period_two(config.wave1);
+                // Measured on the VirtualCZ kf-dcw harmonic ladder (36/48/55/60): the follow acts
+                // continuously from C2 like the DCA follow — C6 at kf 9 reads like DCW ≈ 70/99
+                // (≈ 0.00625 amount per semitone above note 36).
+                let follow = 1.0 - config.dcw_key_follow / 9.0 * (kf_note - 36.0).max(0.0) * 0.00625;
                 let amount = (dcw_amount(dcw_raw) * follow).clamp(0.0, 1.0);
-                outs[slot] = pd::render(wave, phase, amount) * dca_gain(dca_raw);
+                if slot == 0 {
+                    self.dcw_amount0 = amount;
+                }
+                let (wave, phase, cycle_amount) = if second && pd::orientation(config.wave1) != pd::orientation(config.wave2 - 1) {
+                    (config.wave2 - 1, 1.0 - line.phase, amount)
+                } else if second {
+                    (config.wave2 - 1, line.phase, amount)
+                } else if solo_flip && config.wave1 >= pd::WAVE_RES_SAW {
+                    // Reso alternate cycle: a PLAIN fundamental cosine (measured on the VirtualCZ
+                    // waveforms — [ripple train][full cosine] alternation; saw map at amount 0 is exact).
+                    (pd::WAVE_SAW, line.phase, 0.0)
+                } else if solo_flip {
+                    (config.wave1, 1.0 - line.phase, amount)
+                } else {
+                    (config.wave1, line.phase, amount)
+                };
+                // MEASURED on the VirtualCZ aeg2-level ladder (99/70/50/20 → 0/-12/-24/-56dB): the
+                // modulator's DCA level scales the noise through the NORMAL dca curve; on top of that
+                // the noise cuts hard when the envelope ARRIVES at its end stage (mr-drummin's 40ms
+                // plateau despite its end level of 92).
+                let gain = if two_lines && slot == 1 && shared.modulation == MOD_NOISE && line.dca_env.past_end() {
+                    0.0
+                } else {
+                    dca_gain(dca_raw)
+                };
+                outs[slot] = pd::render(wave, phase, cycle_amount, frequency / 261.63) * gain;
+                if slot == 0 {
+                    self.dca_gain0 = gain;
+                }
             }
             if finished && !self.gate {
                 return true;
@@ -263,13 +311,32 @@ impl NeonVoice {
             let combined = if two_lines {
                 // Measured on VirtualCZ (ring-sine probe): pure cosines at f and f/2 ring to EQUAL ±6dB
                 // sidebands at 0.5f/1.5f over a full-level f component = line1 + line1 × line2.
-                if shared.modulation == MOD_RING {outs[0] + outs[0] * outs[1]} else {outs[0] + outs[1]}
+                // NOISE is ring modulation with a noise source (the manual's own definition): the
+                // noise-clocked line multiplies line 1 as a MODULATOR — summing it as an audible voice
+                // drowned patches in noise the hardware only uses as texture.
+                if shared.modulation == MOD_NOISE {
+                    let mix: f32 = option_env!("NEON_NOISE_MIX").and_then(|value| value.parse().ok()).unwrap_or(0.3);
+                    // ADDITIVE noise scaled by the carrier's DCA gain (battery-proven vs the product:
+                    // VirtualCZ's noise spectrum is independent of the carrier's DCW — a product with a
+                    // dull carrier collapsed 15dB by 700Hz; level still tracks the dca_gain ladder).
+                    outs[0] + outs[1] * self.dca_gain0 * mix
+                } else if shared.modulation == MOD_RING {
+                    outs[0] + outs[0] * outs[1]
+                } else {
+                    outs[0] + outs[1]
+                }
             } else {
                 outs[0]
             };
-            let sample = combined * 0.25;
+            let sample = combined * 0.25 * self.fade;
             out_left[index] += sample;
             out_right[index] += sample;
+            if self.dying {
+                self.fade *= fade_coeff;
+                if self.fade < FADE_SILENCE {
+                    return true;
+                }
+            }
         }
         false
     }
@@ -281,6 +348,8 @@ impl Voice for NeonVoice {
     fn start(&mut self, event: &EventRecord, frequency: f32, _gain: f32, _spread: f32, _unison: usize, shared: &NeonParams) {
         self.gate = true;
         self.pending_release = false;
+        self.dying = false;
+        self.fade = 1.0;
         self.note = event.pitch as f32;
         self.sample_rate = shared.sample_rate;
         self.glide = Glide::default();
@@ -292,6 +361,7 @@ impl Voice for NeonVoice {
             line.phase = 0.0;
             line.second_wave = false;
             line.noise_ratio = 1.0;
+            line.noise_clock = 0;
             line.pitch_env.start();
             line.dcw_env.start();
             line.dca_env.start();
@@ -306,11 +376,7 @@ impl Voice for NeonVoice {
     fn force_stop(&mut self) {
         self.gate = false;
         self.pending_release = false;
-        for line in self.lines.iter_mut() {
-            line.pitch_env.force_finish();
-            line.dcw_env.force_finish();
-            line.dca_env.force_finish();
-        }
+        self.dying = true;
     }
 
     fn start_glide(&mut self, target_frequency: f32, glide_duration: f64) {
