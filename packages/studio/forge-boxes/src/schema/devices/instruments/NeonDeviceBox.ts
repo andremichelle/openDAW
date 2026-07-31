@@ -47,6 +47,12 @@ export const NeonDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument
         type: "float32", name: "glide-time", pointerRules: ParameterPointerRules,
         value: 0.0, ...UnipolarConstraints
     },
+    16: {
+        // Master tune in CENTS: shifts the WHOLE instrument (both lines) — unlike detune, which
+        // only offsets the primed line of the 1+1'/1+2' selections.
+        type: "float32", name: "tune", pointerRules: ParameterPointerRules,
+        value: 0.0, constraints: {min: -1200, max: 1200, scaling: "linear"}, unit: "ct"
+    },
     17: {
         type: "int32", name: "voicing-mode", pointerRules: ParameterPointerRules,
         value: VoicingMode.Polyphonic, constraints: {values: [VoicingMode.Monophonic, VoicingMode.Polyphonic]}, unit: ""

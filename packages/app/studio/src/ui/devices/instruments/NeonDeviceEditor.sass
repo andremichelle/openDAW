@@ -9,7 +9,7 @@ component
   > div.block
     display: grid
     column-gap: 0.25em
-    row-gap: 0.25em
+    row-gap: 6px
     align-content: start
 
     &.left
@@ -17,7 +17,7 @@ component
       position: relative
 
       > div.label
-        top: -1px
+        top: 0
         left: 2px
         width: calc(100% - 4px)
         height: 12px
@@ -37,6 +37,11 @@ component
           grid-column: 1 / -1
           --color: var(--color-green)
 
+        &.mode-section
+          grid-row: 1 / 1
+          grid-column: 3 / -1
+          --color: var(--color-yellow)
+
       > div.row-spacer
         grid-column: 1 / -1
         height: 2px
@@ -54,13 +59,17 @@ component
     min-width: 0
     margin: 0 1px
 
-    > h3
+    // IDENTICAL to the ControlBuilder knob titles (same tag, same metrics): any imitation via other
+    // elements or centering mechanisms landed the glyphs a sub-pixel off the knob-title line.
+    > h5
       font-size: 8px
-      letter-spacing: 0.5px
+      line-height: 12px
+      letter-spacing: 0.08em
       text-align: center
       color: hsl(65, 20%, 83%)
       white-space: nowrap
-      align-self: center
+      position: relative
+      top: 1px // the knob titles sit inside their AutomationControl wrapper 1px lower
 
     > .radios
       display: flex

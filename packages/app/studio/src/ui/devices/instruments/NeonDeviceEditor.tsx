@@ -49,7 +49,7 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
     const {project} = service
     const {editing, midiLearning} = project
     const {
-        lineSelect, modulation, octave, detune, glideTime, voicingMode, vibrato, lines
+        lineSelect, modulation, octave, detune, tune, glideTime, voicingMode, vibrato, lines
     } = adapter.namedParameter
     const box = adapter.box
     const knob = (parameter: AutomatableParameterFieldAdapter<number>, label?: string) =>
@@ -58,7 +58,7 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                        elements: ReadonlyArray<{value: number, tooltip?: string, element: HTMLElement | SVGSVGElement}>,
                        fontSize: string, span?: number) => (
         <div className="cell" style={span === undefined ? undefined : {gridColumn: `span ${span}`}}>
-            <h3>{title}</h3>
+            <h5>{title}</h5>
             <RadioGroup lifecycle={lifecycle}
                         model={EditWrapper.forAutomatableParameter(editing, parameter)}
                         className="radios"
@@ -91,7 +91,7 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
         )
         return (
             <div className="cell">
-                <h3>{title}</h3>
+                <h5>{title}</h5>
                 {display}
                 {name}
             </div>
@@ -172,20 +172,21 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                               <div className="block left">
                                   <div className="label play-section"/>
                                   <div className="label vibrato-section"/>
-                                  {radioCell("LINES", lineSelect,
+                                  <div className="label mode-section"/>
+                                  {radioCell("Line", lineSelect,
                                       Neon.LineSelect.map((label, index) => ({value: index, element: <span>{label}</span>})), "8px", 2)}
-                                  {radioCell("MODE", modulation, [
+                                  {radioCell("Mode", modulation, [
                                       {value: 0, tooltip: "Off", element: <Icon symbol={IconSymbol.Sine}/>},
                                       {value: 1, tooltip: "Ring", element: <Icon symbol={IconSymbol.Ring}/>},
                                       {value: 2, tooltip: "Noise", element: <Icon symbol={IconSymbol.Noise}/>}
                                   ], "12px")}
-                                  <div className="cell"/>
+                                  {knob(detune)}
                                   {radioCell("Play-Mode", voicingMode, [
                                       {value: 0, element: <span>MONO</span>},
                                       {value: 1, element: <span>POLY</span>}
                                   ], "8px")}
                                   {knob(octave)}
-                                  {knob(detune)}
+                                  {knob(tune)}
                                   {knob(glideTime, "Glide time")}
                                   <div className="row-spacer"/>
                                   {radioCell("Vibrato", vibrato.wave, [

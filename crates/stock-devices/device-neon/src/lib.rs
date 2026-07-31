@@ -84,6 +84,7 @@ const LINE_SELECT_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const MODULATION_MAPPING: LinearInteger = LinearInteger {min: 0, max: 2};
 const OCTAVE_MAPPING: LinearInteger = LinearInteger {min: -3, max: 3};
 const DETUNE_MAPPING: Linear = Linear {min: -4800.0, max: 4800.0};
+const TUNE_MAPPING: Linear = Linear {min: -1200.0, max: 1200.0};
 const VIBRATO_WAVE_MAPPING: LinearInteger = LinearInteger {min: 0, max: 3};
 const CZ_MAPPING: Linear = Linear {min: 0.0, max: 99.0};
 const WAVE1_MAPPING: LinearInteger = LinearInteger {min: 0, max: 7};
@@ -112,7 +113,8 @@ mod param {
     pub const LINE_B_WAVE2: usize = 15;
     pub const LINE_B_DCW_KF: usize = 16;
     pub const LINE_B_DCA_KF: usize = 17;
-    pub const COUNT: usize = 18;
+    pub const TUNE: usize = 18;
+    pub const COUNT: usize = 19;
 }
 
 const ENVELOPES: usize = 6;
@@ -136,6 +138,8 @@ pub struct NeonState {
     sample_rate: f32,
     glide_time: f64,
     detune_cents: f32,
+    octave: f32,
+    tune_cents: f32,
     ids: [u32; param::COUNT],
     env_ids: [u32; ENV_FIELD_COUNT],
     playhead_id: u32,
@@ -163,6 +167,11 @@ impl DcBlocker {
             }
         }
     }
+}
+
+/// Octave and master tune fold into ONE whole-instrument frequency multiplier.
+fn update_pitch(state: &mut NeonState) {
+    state.params.octave_multiplier = libm::exp2f(state.octave + state.tune_cents / 1200.0);
 }
 
 fn update_detune(state: &mut NeonState) {
@@ -223,6 +232,7 @@ impl Instrument for Neon {
         state.ids[param::LINE_B_WAVE2] = abi::bind_parameter(&[30, 1, 2]);
         state.ids[param::LINE_B_DCW_KF] = abi::bind_parameter(&[30, 1, 3]);
         state.ids[param::LINE_B_DCA_KF] = abi::bind_parameter(&[30, 1, 4]);
+        state.ids[param::TUNE] = abi::bind_parameter(&[16]);
         let mut cursor = 0;
         for envelope_index in 0..ENVELOPES as u16 {
             for key in 1..=8u16 {
@@ -284,7 +294,14 @@ impl Instrument for Neon {
         match index {
             param::LINE_SELECT => state.params.line_select = int_value(value, &LINE_SELECT_MAPPING),
             param::MODULATION => state.params.modulation = int_value(value, &MODULATION_MAPPING),
-            param::OCTAVE => state.params.octave_multiplier = libm::exp2f(int_value(value, &OCTAVE_MAPPING) as f32),
+            param::OCTAVE => {
+                state.octave = int_value(value, &OCTAVE_MAPPING) as f32;
+                update_pitch(state);
+            }
+            param::TUNE => {
+                state.tune_cents = float_value(value, &TUNE_MAPPING);
+                update_pitch(state);
+            }
             param::DETUNE => {
                 state.detune_cents = float_value(value, &DETUNE_MAPPING);
                 update_detune(state);
@@ -388,6 +405,7 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         param::LINE_SELECT => int_value(value, &LINE_SELECT_MAPPING) as f32,
         param::MODULATION => int_value(value, &MODULATION_MAPPING) as f32,
         param::OCTAVE => int_value(value, &OCTAVE_MAPPING) as f32,
+        param::TUNE => float_value(value, &TUNE_MAPPING),
         param::DETUNE => float_value(value, &DETUNE_MAPPING),
         param::GLIDE_TIME => float_value(value, &UNIPOLAR),
         param::VOICING_MODE => int_value(value, &Values::new(&VOICING_MODE_VALUES)) as f32,

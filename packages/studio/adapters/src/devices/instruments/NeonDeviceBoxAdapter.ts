@@ -89,6 +89,10 @@ export class NeonDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                 box.detune,
                 ValueMapping.linear(-4800, 4800),
                 StringMapping.numeric({unit: "ct", fractionDigits: 0}), "Detune", 0.5),
+            tune: this.#parametric.createParameter(
+                box.tune,
+                ValueMapping.linear(-1200, 1200),
+                StringMapping.numeric({unit: "ct", fractionDigits: 0}), "Tune", 0.5),
             glideTime: this.#parametric.createParameter(
                 box.glideTime,
                 ValueMapping.unipolar(),
