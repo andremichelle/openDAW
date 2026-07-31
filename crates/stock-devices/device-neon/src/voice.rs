@@ -277,7 +277,12 @@ impl NeonVoice {
                 // square/pulse cross-checks): each panel wave has a fixed ORIENTATION; the wave2 cycle
                 // plays time-reversed exactly when the pair's orientations differ.
                 let second = line.second_wave && config.wave2 > 0;
-                let solo_flip = line.second_wave && config.wave2 == 0 && pd::period_two(config.wave1);
+                // RING renders solo waves PERIOD-1: the real-hardware synthlib previews (Grounded,
+                // note-29 comb: half grid at the -60..-85 noise floor) have NO alternation content in
+                // ring mode. VirtualCZ DOES alternate here (halves at -12..-16 — the harsh metallic
+                // hash the preview lacks); this is a measured, deliberate deviation from VirtualCZ.
+                let solo_flip = line.second_wave && config.wave2 == 0 && pd::period_two(config.wave1)
+                    && shared.modulation != MOD_RING;
                 // Measured on the VirtualCZ kf-dcw harmonic ladder (36/48/55/60): the follow acts
                 // continuously from C2 like the DCA follow — C6 at kf 9 reads like DCW ≈ 70/99
                 // (≈ 0.00625 amount per semitone above note 36).

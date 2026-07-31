@@ -875,3 +875,17 @@ released on sight (idempotent heal at the top of the slot loop). Regression test
 a_line_routed_in_after_note_off_still_dies (slow slot-0 tail so the switch lands mid-voice; proven
 red without the fix at 0.27 sustained peak). Suites green, deployed. A HELD note switching modes still
 starts the newly routed line from its attack — that is the intended semantic, not the bug.
+
+### Fix (2026-07-31): ring mode renders solo waves PERIOD-1 — hardware-truth over VirtualCZ
+
+User report: synthlib "Grounded" (ring, both lines solo saw-pulse, +2750ct detune) warm/soft on the
+hardware preview, harsh/metallic in openDAW. Measured at the patch's note 29: the HARDWARE preview has
+NO half-harmonics (comb at the -60..-85 floor = period-1), while VirtualCZ's own render of the same tone
+HAS them (-12..-16) — VirtualCZ deviates from the real CZ-101 here, and our VCZ-calibrated saw-pair
+alternation inherited the hash; ringing it across the inharmonic detune interval was the metal. Fix:
+solo_flip is disabled in MOD_RING (explicit wave PAIRS still alternate). Grounded's halves drop ~35dB to
+the hardware's structure; p12 3.8→3.7. KNOWN COST: p22-high-bell scores 18.7 against its VirtualCZ
+reference — that cell now measures the deliberate deviation (VCZ's alternating ring), not an error; the
+hardware evidence outranks it. Two intermediate ring models (cosine alternate, split direct/product
+terms) were measured and rejected on the same evidence. Battery mean 2.8 (2.1 excluding p22), suites
+green, deployed. A/B pair for listening: ~/Downloads/neon-ab/grounded-{ours,hardware}.wav.
