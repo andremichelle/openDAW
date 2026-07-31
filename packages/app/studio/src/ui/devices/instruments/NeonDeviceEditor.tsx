@@ -188,7 +188,6 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                   {knob(octave)}
                                   {knob(tune)}
                                   {knob(glideTime, "Glide time")}
-                                  <div className="row-spacer"/>
                                   {radioCell("Vibrato", vibrato.wave, [
                                       {value: 0, tooltip: "Triangle", element: <Icon symbol={IconSymbol.Triangle}/>},
                                       {value: 1, tooltip: "Saw Up", element: <Icon symbol={IconSymbol.Sawtooth}/>},

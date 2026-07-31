@@ -9,7 +9,7 @@ component
   > div.block
     display: grid
     column-gap: 0.25em
-    row-gap: 6px
+    row-gap: 8px
     align-content: start
 
     &.left
@@ -34,7 +34,7 @@ component
           --color: var(--color-blue)
 
         &.vibrato-section
-          grid-row: 4 / 4
+          grid-row: 3 / 3
           grid-column: 1 / -1
           --color: var(--color-green)
 
@@ -43,9 +43,6 @@ component
           grid-column: 3 / -1
           --color: var(--color-yellow)
 
-      > div.row-spacer
-        grid-column: 1 / -1
-        height: 2px
 
     &.right
       grid-template-columns: repeat(5, 3.5em)
@@ -56,7 +53,7 @@ component
   div[class^="Column"]
     > :not(h5) svg, label[class^="ParameterLabel"]
       position: relative
-      top: 3px
+      top: 2px
 
   div.cell
     display: grid
