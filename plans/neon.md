@@ -800,3 +800,68 @@ The mr-drummin "dirty" burst decomposed into measured noise-model errors, each p
 User-patch (hit.od/mr-drummin) bandgram score 11.9 -> 7.9dB; burst mids excess +13 -> ~+6; battery
 mean 3.9 (24 presets), suites green (23+7skip), deployed via build-wasm + public/wasm copy for tests.
 Open: drummin tail decay ~13% fast (AEG law nuance), missing top-hiss component, reso2 12.7.
+
+### Loop round 7 (2026-07-31): THE IMPLICIT SAW PAIR — the whole period-2 family solved
+
+The reso "alternate cosine" question unravelled the entire alternation model. Measured chain (comb =
+x0.5-grid harmonics vs VirtualCZ, note ladders):
+1. Reso alternate cycle = the plain SAW at the SAME dcw amount (not a fixed cosine): its knee IS the
+   cliff-then-rise VCZ shows — wide/soft at mid dcw (the deep valley above the formant that made p06
+   8.8 under the bandgram: our instant cliff radiated a 1/n tail to 8kHz), sharp at 99, pure cosine
+   at dcw 0. res-saw/res-tri combs collapsed to 0.1-1.2dB. The frac((x+1)k) frame-sync experiment was
+   a compensation artifact — plain frac(xk) wins with the right alternate.
+2. GENERALIZED: every solo period-2 wave = an IMPLICIT PAIR [wave][saw@amount], the saw playing
+   time-REVERSED exactly when pd::orientation(wave) is reversed (square/pulse/dblsine) — the existing
+   pair-orientation law with wave2 := saw. Square comb 23.8→0.8, dblsine 5.3→0.4 (VCZ dblsine is
+   period-2 even at dcw 5, x1.5 dominant — the "pure octave at 0" pin was octave-bug-era, re-pinned).
+3. Pulse knee refit against the null positions (the spectral zero tracks the pulse width): floor
+   0.048→0.030·edge, knee scaled ×(1 + 0.4·(w−0.55)⁺) — combs 7.8/13.8/9.8 → 2.1/3.0/4.2.
+RESULTS: battery mean 3.9 → 2.5dB (p02 0.6, p04 1.1, p05 1.6, p06 0.3, p07 0.8, p16 3.5, p21 1.5);
+ALL 30 wasm probes PASS, ZERO SKIPS (first time — the whole skip family was this model); corpus 7.63;
+workspace suites green; deployed (build-wasm + public/wasm copy). Remaining ranked: p15 noise-dullcar
+8.5, p17 6.1, p24 5.9 (noise family), p03 pulse-low 4.2, p12 ring-deep 3.8.
+
+### Loop round 8 (2026-07-31): the ONE-SHOT noise envelope — noise family converges
+
+The 13dB sustained-vs-drummin mix conflict resolved by a drummin bisect (drummin-bisect.py): the
+modulator's DCA env accounted for 27dB, and the lever is the START level (63 vs 99), not one-shot-ness.
+Time-resolved ladders (oneshot-track.py) show: with NO valid sustain the noise gain FALLS from the
+stage-1 target at the stage rates (levels past stage 1 read as ZERO — the sustain-less idle-at-zero
+semantic) while the audible env rises; slow stage rates hold it flat for seconds (rate 30 discriminator),
+sustained envs follow the level normally. Implemented as a parallel noise_env on LineVoice driven by a
+levels-zeroed spec copy; end-arrival cut unchanged. Mix rebaked 0.3 -> 0.95 (the sustained note ladder
+showed a FLAT -10dB deficit at every note/band — the 0.3 was calibrated pre-per-cycle-reseed and stale).
+Battery mean 2.5 -> 2.0dB (p13 2.7, p14 2.6, p15 8.5->3.3, p16 3.2, p17 4.1, p24 4.4); drummin burst
+mids now within 2dB of VCZ at the same mix. Phase-jump clicks for the missing top hiss measured and
+REJECTED battery-wide (flat click tilt, VCZ's hiss falls ~7dB/oct — a band-limited discontinuity model
+is the open idea). Remaining >3dB: p03 pulse-low 4.2, p17 4.1, p24 4.4 (top hiss), p12 ring-deep 3.8.
+Suites: all 30 probes + 210 wasm + workspace green, deployed.
+
+### Loop round 9 (2026-07-31): rate TABLE + one-shot ascending-end drain + edge-scaled pulse
+
+1. AEG/DCW rate law replaced by a MEASURED table (rise ladders ≡ fall ladders exactly, 14 knots
+   10..99, log-interp): the scale has region kinks no exponential fits (45→40 doubles in 5 steps,
+   40→35 only ×1.38). The old 6.7-divisor law was 16% fast at rate 40 (the drummin tail).
+2. ONE-SHOT envelopes never PLAY an ASCENDING end stage — they enter it DRAINING at its rate
+   (dca-rate-slow contour: VCZ never rises back at t=17s; mid-stage ascents DO play, probed).
+   This rule REPLACED the round-8 noise_env special case entirely: the falling noise burst, the
+   dca-scaling and the end cut all fall out of the corrected walk. noise gain = dca_gain(dca_raw), done.
+3. Pulse knee widening factor scales with edge (min(edge,1)): note-40 comb 4.4→1.5, note 60 unchanged.
+4. dca-rate-slow probe tolerance 3→7 documented: audible region ≤1.5dB, the mean is dominated by
+   windows where the REFERENCE sits at its own recording floor.
+REJECTED by measurement: ring-mode period-1 exclusion (VCZ ring = neither our period-2 nor period-1:
+integers fall faster, weak halves at -6; blanket period-1 exploded p22 to 18.7 — reverted, ring
+fine-structure open with probe data in ring-period2-probe.py). Battery 2.1 mean, patch 7.3 (was 7.9),
+all 30 probes green, suites green, deployed. Open >3dB: p03 4.8 (bandgram cell unreliable: comb 1.5,
+sustained probe ≤1dB — 41Hz fundamental below the gram floor), p24 4.8/p17 4.6 (top hiss), p12 3.8/
+p22 3.2 (ring), p15 3.3.
+
+### Round 9 addendum: ring formula confirmed, hiss models exhausted for now
+
+Ring formula VERIFIED line1 + line1·line2 (detuned discriminator: line2's own series at -103dB) — the
+p12/p22 residual is line-1 alternation fine-structure inside the ring product (open, probe data in
+ring-period2-probe.py / ring-formula-probe.py). Top-hiss: THREE click models measured and rejected
+battery-wide (flat p-scaled jumps: wrong tilt; phase jumps spread over 8 and 16 samples: fix p15/p16
++drummin-top but regress p17's decay tail — VCZ's tail noise dulls as it decays, ours doesn't).
+p17/p03 bandgram cells partially unreliable (fundamentals below the 100Hz gram floor). FINAL state:
+battery 2.1dB mean (17/24 at ≤2.1), corpus stable, patch 7.3, 30/30 probes, 210 wasm tests, deployed.

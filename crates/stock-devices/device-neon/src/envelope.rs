@@ -20,10 +20,33 @@ impl EnvelopeSpec {
     }
 }
 
-/// Seconds for a FULL 0..99 swing at `rate`, fitted to the VirtualCZ staircase probes (16 measured
-/// segments, 2ms @95 to 6.7s @25): doubling every ~6.7 rate steps, anchored at 197ms @60.
+/// Seconds for a FULL 0..99 swing at `rate`: the MEASURED VirtualCZ decay ladder (2026-07-31,
+/// -5..-40dB windows / 0.566 span), log-time interpolated — the scale has region kinks (e.g. 45→40
+/// doubles in 5 steps but 40→35 only ×1.38) that no single exponential fits.
 fn full_swing_seconds(rate: f32) -> f32 {
-    (0.1967 * libm::exp2f((60.0 - rate) / 6.7)).max(0.0015)
+    const POINTS: [(f32, f32); 14] = [
+        (10.0, 40.43), (15.0, 20.28), (20.0, 14.45), (25.0, 8.509), (30.0, 4.240), (35.0, 2.519),
+        (40.0, 1.820), (45.0, 0.901), (53.0, 0.428), (60.0, 0.187), (70.0, 0.064), (80.0, 0.028),
+        (85.0, 0.014), (99.0, 0.0022)
+    ];
+    let first = POINTS[0];
+    let last = POINTS[POINTS.len() - 1];
+    if rate <= first.0 {
+        return first.1 * libm::exp2f((first.0 - rate) / 5.0);
+    }
+    if rate >= last.0 {
+        return last.1.max(0.0015);
+    }
+    let mut seconds = last.1;
+    for pair in POINTS.windows(2) {
+        let ((x0, y0), (x1, y1)) = (pair[0], pair[1]);
+        if rate <= x1 {
+            let t = (rate - x0) / (x1 - x0);
+            seconds = libm::exp2f(libm::log2f(y0) + (libm::log2f(y1) - libm::log2f(y0)) * t);
+            break;
+        }
+    }
+    seconds.max(0.0015)
 }
 
 /// PEG full swing: measured on VirtualCZ pitch-track probes (settle times 12.96s/2.76s/0.49s/0.09s/0.02s
@@ -97,13 +120,6 @@ impl Envelope {
         self.releasing && self.holding
     }
 
-    /// The envelope has ARRIVED at its end (draining or done). The NOISE gate closes here — measured on
-    /// the user's drum patch: VirtualCZ kills the noise at end-ARRIVAL (~40ms) while the audible line's
-    /// drain keeps running (~96ms more).
-    pub fn past_end(&self) -> bool {
-        self.draining || (self.releasing && self.holding)
-    }
-
     /// Advance by `dt` seconds (scaled by the caller's key follow) and return the raw 0-99 value.
     pub fn process(&mut self, spec: &EnvelopeSpec, dt: f32) -> f32 {
         self.advance(spec, dt, false)
@@ -158,6 +174,13 @@ impl Envelope {
                 }
             } else if stage + 1 >= end {
                 self.holding = true; // valid sustain: the post-sustain tail parks on the end step's level
+            } else if sustain == 0 && stage + 2 == end && spec.levels[end - 1] > self.value {
+                // MEASURED on VirtualCZ (dca-rate-slow contour + every one-shot noise ladder): a
+                // one-shot env never PLAYS an ASCENDING end stage — it enters it DRAINING to zero at
+                // that stage's rate (mid-stage ascents DO play; this rule also yields the noise-mode
+                // falling burst, no separate noise envelope needed).
+                self.stage = stage + 1;
+                self.draining = true;
             } else {
                 self.stage = stage + 1;
             }

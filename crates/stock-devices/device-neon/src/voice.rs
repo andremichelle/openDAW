@@ -283,23 +283,21 @@ impl NeonVoice {
                 } else if second {
                     (config.wave2 - 1, line.phase, amount)
                 } else if solo_flip && config.wave1 >= pd::WAVE_RES_SAW {
-                    // Reso alternate cycle: a PLAIN fundamental cosine (measured on the VirtualCZ
-                    // waveforms — [ripple train][full cosine] alternation; saw map at amount 0 is exact).
-                    (pd::WAVE_SAW, line.phase, 0.0)
+                    // Reso alternate cycle: the plain SAW at the SAME dcw amount (p06/p07 waveform +
+                    // band A/Bs) — its knee IS VirtualCZ's cliff-then-rise: wide/soft at mid dcw (the
+                    // deep valley above the formant), sharp at 99, and a pure cosine at dcw 0.
+                    (pd::WAVE_SAW, line.phase, amount)
+                } else if solo_flip && pd::orientation(config.wave1) {
+                    (pd::WAVE_SAW, 1.0 - line.phase, amount)
                 } else if solo_flip {
-                    (config.wave1, 1.0 - line.phase, amount)
+                    (pd::WAVE_SAW, line.phase, amount)
                 } else {
                     (config.wave1, line.phase, amount)
                 };
-                // MEASURED on the VirtualCZ aeg2-level ladder (99/70/50/20 → 0/-12/-24/-56dB): the
-                // modulator's DCA level scales the noise through the NORMAL dca curve; on top of that
-                // the noise cuts hard when the envelope ARRIVES at its end stage (mr-drummin's 40ms
-                // plateau despite its end level of 92).
-                let gain = if two_lines && slot == 1 && shared.modulation == MOD_NOISE && line.dca_env.past_end() {
-                    0.0
-                } else {
-                    dca_gain(dca_raw)
-                };
+                // The noise modulator needs NO special gain path: the measured VirtualCZ behaviors
+                // (aeg2 ladder = the normal dca curve; the drummin falling burst; the end cut) all
+                // fall out of the one-shot ascending-end-stage drain rule in envelope.rs.
+                let gain = dca_gain(dca_raw);
                 outs[slot] = pd::render(wave, phase, cycle_amount, frequency / 261.63) * gain;
                 if slot == 0 {
                     self.dca_gain0 = gain;
@@ -315,7 +313,7 @@ impl NeonVoice {
                 // noise-clocked line multiplies line 1 as a MODULATOR — summing it as an audible voice
                 // drowned patches in noise the hardware only uses as texture.
                 if shared.modulation == MOD_NOISE {
-                    let mix: f32 = option_env!("NEON_NOISE_MIX").and_then(|value| value.parse().ok()).unwrap_or(0.3);
+                    let mix: f32 = option_env!("NEON_NOISE_MIX").and_then(|value| value.parse().ok()).unwrap_or(0.95);
                     // ADDITIVE noise scaled by the carrier's DCA gain (battery-proven vs the product:
                     // VirtualCZ's noise spectrum is independent of the carrier's DCW — a product with a
                     // dull carrier collapsed 15dB by 700Hz; level still tracks the dca_gain ladder).

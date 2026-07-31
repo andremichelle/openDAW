@@ -46,7 +46,7 @@ fn m_square(x: f32, w: f32, edge: f32) -> f32 {
 }
 
 fn m_pulse(x: f32, w: f32, edge: f32) -> f32 {
-    let d = knee(w, 1.0, 0.0).max(0.048 * edge);
+    let d = (knee(w, 1.0, 0.0) * (1.0 + 0.4 * (w - 0.55).max(0.0) * edge.min(1.0))).max(0.030 * edge);
     if x < d {x / d} else {1.0}
 }
 

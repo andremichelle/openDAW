@@ -56,22 +56,29 @@ fn square_at_full_dcw_is_a_period_two_structure() {
 }
 
 #[test]
-fn double_sine_at_full_dcw_is_a_fundamental_with_a_flat_shelf() {
-    // Measured: h2 −22.7, h3 −24.7, h4 −25.3, h6 −25.6 — flat ≈ −24dB shelf (NOT an octave sweep).
+fn double_sine_at_full_dcw_is_a_period_two_saw_pair() {
+    // FRESH VirtualCZ comb (implicit-saw-pair model, ours matches ≤1dB): x0.5 ≈ −1, h2 −11, h3 −15,
+    // h4 −19, h6 −21 rel h1 — a declining integer series PLUS an equal half-integer comb.
     let seg = sustain_window(&tone("wave 0 3 0\nenv 1 99 0 0 0 0 0 0 0 99 0 0 0 0 0 0 0 1 2\n"));
-    for harmonic in [2u32, 3, 4, 6] {
+    let sub = 20.0 * (goertzel(&seg, C4 * 0.5) / goertzel(&seg, C4).max(1.0e-12)).max(1.0e-9).log10();
+    assert!((-5.0..=2.0).contains(&sub), "x0.5 rides at the fundamental's level, got {sub}dB");
+    for (harmonic, expected) in [(2u32, -11.0f32), (3, -15.0), (4, -19.0), (6, -21.0)] {
         let level = harmonic_db(&seg, harmonic);
-        assert!((-29.0..=-19.0).contains(&level), "h{harmonic} {level} outside the measured shelf");
+        assert!((level - expected).abs() < 4.0, "h{harmonic} {level} vs measured {expected}");
     }
 }
 
 #[test]
-fn double_sine_at_zero_dcw_is_a_pure_octave() {
-    // Measured: at DCW 0 double sine renders TWO equal cycles — the octave, not the fundamental.
+fn double_sine_at_zero_dcw_is_a_period_two_cluster() {
+    // FRESH VirtualCZ comb at DCW 5 (ours bit-matches): x1.5 DOMINATES with x1/x2 ≈ −2 and x0.5 ≈ −11
+    // — the implicit saw pair keeps double sine period-2 even at zero distortion (the old "pure
+    // octave" pin came from the octave_shift(−1) reference era).
     let seg = sustain_window(&tone("wave 0 3 0\nenv 1 99 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 2\n"));
-    let h1 = goertzel(&seg, C4);
-    let h2 = goertzel(&seg, C4 * 2.0);
-    assert!(h2 > h1 * 10.0, "octave dominates: h1 {h1} h2 {h2}");
+    let x15 = goertzel(&seg, C4 * 1.5).max(1.0e-12);
+    for (grid, expected) in [(0.5f32, -11.0f32), (1.0, -2.0), (2.0, -2.0)] {
+        let level = 20.0 * (goertzel(&seg, C4 * grid) / x15).max(1.0e-9).log10();
+        assert!((level - expected).abs() < 5.0, "x{grid} {level} vs measured {expected}");
+    }
 }
 
 #[test]
