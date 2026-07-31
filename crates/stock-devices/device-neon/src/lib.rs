@@ -121,10 +121,11 @@ const ENV_FIELD_COUNT: usize = ENVELOPES * ENV_FIELDS;
 
 // The editor's envelope playheads at address.append(0) (the Vaporisateur pattern): per sounding voice
 // 12 floats — (position, level) for each of the 6 envelopes in box order — with -2 closing the stream
-// (-1 inside a record means "line silent"). Written only while the UI subscribes.
+// (-1 inside a record means "line silent"). Written only while the UI subscribes. Sized for the FULL
+// voice pool — a smaller buffer made dots vanish as pool churn changed which voices won a record.
 const PLAYHEAD_FIELD: [u16; 1] = [0];
 const PLAYHEAD_STRIDE: usize = 12;
-const PLAYHEAD_VALUES: usize = 64;
+const PLAYHEAD_VALUES: usize = POLY_VOICES * PLAYHEAD_STRIDE + 1;
 
 /// The device's per-instance state, interpreted from the engine-allocated (zeroed) block.
 pub struct NeonState {

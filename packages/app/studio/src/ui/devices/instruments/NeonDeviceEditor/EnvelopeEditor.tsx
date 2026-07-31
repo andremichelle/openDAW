@@ -65,9 +65,10 @@ const levelFields = (envelope: NeonEnvelope): ReadonlyArray<Float32Field> => [
 // dy = level; shift = ¼ fine). Below: the MARKER LANE — the S(ustain) and E(nd) badges live on the
 // stage strip; DRAG a badge to move it (S left of stage 1 = off), CLICK a bare stage to move E there.
 const PLAYHEAD_STRIDE = 12 // (position, level) x 6 envelopes per sounding voice, -2 closes the stream
+const PLAYHEAD_VALUES = 16 * PLAYHEAD_STRIDE + 1 // the engine's full voice pool
 
 export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex, receiver, address}: Construct) => {
-    const playheads = new Float32Array(64).fill(-2)
+    const playheads = new Float32Array(PLAYHEAD_VALUES).fill(-2)
     const tabIndex = lifecycle.own(new DefaultObservableValue<int>(2))
     const selectedStage = lifecycle.own(new DefaultObservableValue<int>(0))
     const stageLabel: HTMLElement = (<span/>)
@@ -223,7 +224,13 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex, receiv
         // The first delivery after subscribing is the engine's still-zeroed buffer (the -2 terminator
         // only appears once the engine has processed a block) — zeros would parse as six playheads
         // parked on the curve origin. Only accept frames carrying a valid terminator.
-        const terminated = [0, 12, 24, 36, 48, 60].some(index => values[index] === -2)
+        let terminated = false
+        for (let index = 0; index < values.length; index += PLAYHEAD_STRIDE) {
+            if (values[index] === -2) {
+                terminated = true
+                break
+            }
+        }
         if (!terminated) {return}
         playheads.set(values.subarray(0, playheads.length))
         painter.requestUpdate()
