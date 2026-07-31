@@ -216,7 +216,9 @@ export const NeonDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                           <EnvelopeEditor lifecycle={lifecycle}
                                                           editing={editing}
                                                           envelopes={box.envelopes.fields()}
-                                                          lineIndex={lineIndex}/>
+                                                          lineIndex={lineIndex}
+                                                          receiver={project.liveStreamReceiver}
+                                                          address={adapter.address.append(0)}/>
                                       </div>
                                   </div>
                               </div>

@@ -119,6 +119,13 @@ const ENVELOPES: usize = 6;
 const ENV_FIELDS: usize = 18; // 8 rates, 8 levels, sustain, end
 const ENV_FIELD_COUNT: usize = ENVELOPES * ENV_FIELDS;
 
+// The editor's envelope playheads at address.append(0) (the Vaporisateur pattern): per sounding voice
+// 12 floats — (position, level) for each of the 6 envelopes in box order — with -2 closing the stream
+// (-1 inside a record means "line silent"). Written only while the UI subscribes.
+const PLAYHEAD_FIELD: [u16; 1] = [0];
+const PLAYHEAD_STRIDE: usize = 12;
+const PLAYHEAD_VALUES: usize = 64;
+
 /// The device's per-instance state, interpreted from the engine-allocated (zeroed) block.
 pub struct NeonState {
     voicing: Voicing<NeonVoice, POLY_VOICES, MONO_STACK>,
@@ -129,7 +136,9 @@ pub struct NeonState {
     glide_time: f64,
     detune_cents: f32,
     ids: [u32; param::COUNT],
-    env_ids: [u32; ENV_FIELD_COUNT]
+    env_ids: [u32; ENV_FIELD_COUNT],
+    playhead_id: u32,
+    playhead_ptr: u32
 }
 
 /// One-pole DC blocker on the device output: the resonance waves are pinned to +1 (hardware-faithful), so
@@ -193,6 +202,8 @@ impl Instrument for Neon {
         for line in state.params.lines.iter_mut() {
             *line = voice::LineConfig::default();
         }
+        state.playhead_id = abi::bind_broadcast(&PLAYHEAD_FIELD, PLAYHEAD_VALUES as u32);
+        state.playhead_ptr = 0;
         state.ids[param::LINE_SELECT] = abi::bind_parameter(&[10]);
         state.ids[param::MODULATION] = abi::bind_parameter(&[11]);
         state.ids[param::OCTAVE] = abi::bind_parameter(&[12]);
@@ -245,6 +256,23 @@ impl Instrument for Neon {
         }
         if option_env!("NEON_NO_LIMITER").is_none() {
             state.limiter.replace(out_left, out_right, 0, out_left.len());
+        }
+        if abi::broadcast_active(state.playhead_id) {
+            if state.playhead_ptr == 0 {
+                state.playhead_ptr = abi::broadcast_ptr(state.playhead_id);
+            }
+            if state.playhead_ptr != 0 {
+                let values = unsafe { core::slice::from_raw_parts_mut(state.playhead_ptr as *mut f32, PLAYHEAD_VALUES) };
+                let mut index = 0;
+                state.voicing.for_each_active(&mut |voice: &NeonVoice| {
+                    if index + PLAYHEAD_STRIDE >= PLAYHEAD_VALUES {
+                        return;
+                    }
+                    voice.env_positions(&state.params, &mut values[index..index + PLAYHEAD_STRIDE]);
+                    index += PLAYHEAD_STRIDE;
+                });
+                values[index] = -2.0;
+            }
         }
     }
 

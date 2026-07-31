@@ -4,7 +4,8 @@ import {Events, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
-import {Float32Field, Int32Field} from "@opendaw/lib-box"
+import {Address, Float32Field, Int32Field} from "@opendaw/lib-box"
+import {LiveStreamReceiver} from "@opendaw/lib-fusion"
 import {NeonEnvelope} from "@opendaw/studio-boxes"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
@@ -20,10 +21,32 @@ type Construct = {
     editing: Editing
     envelopes: ReadonlyArray<NeonEnvelope> // ALL SIX: line1 pitch/DCW/DCA, line2 pitch/DCW/DCA
     lineIndex: DefaultObservableValue<int> // shared with the LINE tabs above
+    receiver: LiveStreamReceiver
+    address: Address // the engine's playhead broadcast (device address + [0])
 }
 
-// The measured envelope rate law (envelope.rs): seconds for a FULL 0-99 swing at `rate`.
-const fullSwingSeconds = (rate: number): number => Math.max(0.0015, 0.1967 * Math.pow(2.0, (60.0 - rate) / 6.7))
+// The measured envelope rate law (mirrors envelope.rs): seconds for a FULL 0-99 swing at `rate`,
+// log-time interpolated through the VirtualCZ decay-ladder knots.
+const RATE_POINTS: ReadonlyArray<[number, number]> = [
+    [10.0, 40.43], [15.0, 20.28], [20.0, 14.45], [25.0, 8.509], [30.0, 4.240], [35.0, 2.519],
+    [40.0, 1.820], [45.0, 0.901], [53.0, 0.428], [60.0, 0.187], [70.0, 0.064], [80.0, 0.028],
+    [85.0, 0.014], [99.0, 0.0022]
+]
+const fullSwingSeconds = (rate: number): number => {
+    const [firstRate, firstSeconds] = RATE_POINTS[0]
+    const [lastRate, lastSeconds] = RATE_POINTS[RATE_POINTS.length - 1]
+    if (rate <= firstRate) {return firstSeconds * Math.pow(2.0, (firstRate - rate) / 5.0)}
+    if (rate >= lastRate) {return Math.max(0.0015, lastSeconds)}
+    for (let index = 1; index < RATE_POINTS.length; index++) {
+        const [x1, y1] = RATE_POINTS[index]
+        if (rate <= x1) {
+            const [x0, y0] = RATE_POINTS[index - 1]
+            const t = (rate - x0) / (x1 - x0)
+            return Math.max(0.0015, Math.pow(2.0, Math.log2(y0) + (Math.log2(y1) - Math.log2(y0)) * t))
+        }
+    }
+    return Math.max(0.0015, lastSeconds)
+}
 
 const formatSeconds = (seconds: number): string =>
     seconds < 1.0 ? `${Math.round(seconds * 1000)} ms` : `${seconds.toFixed(2)} s`
@@ -41,7 +64,10 @@ const levelFields = (envelope: NeonEnvelope): ReadonlyArray<Float32Field> => [
 // selector). Canvas: drag the NEAREST handle RELATIVE to its values (dx per slot = full rate range,
 // dy = level; shift = ¼ fine). Below: the MARKER LANE — the S(ustain) and E(nd) badges live on the
 // stage strip; DRAG a badge to move it (S left of stage 1 = off), CLICK a bare stage to move E there.
-export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Construct) => {
+const PLAYHEAD_STRIDE = 12 // (position, level) x 6 envelopes per sounding voice, -2 closes the stream
+
+export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex, receiver, address}: Construct) => {
+    const playheads = new Float32Array(64).fill(-2)
     const tabIndex = lifecycle.own(new DefaultObservableValue<int>(2))
     const selectedStage = lifecycle.own(new DefaultObservableValue<int>(0))
     const stageLabel: HTMLElement = (<span/>)
@@ -177,6 +203,25 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Const
             context.fillStyle = stage < end ? DisplayPaint.strokeStyle(0.9) : DisplayPaint.strokeStyle(0.12)
             context.fill()
         }
+        const envelopeOffset = (lineIndex.getValue() * 3 + tabIndex.getValue()) * 2
+        for (let base = 0; base + PLAYHEAD_STRIDE <= playheads.length; base += PLAYHEAD_STRIDE) {
+            if (playheads[base] === -2) {break}
+            const position = playheads[base + envelopeOffset]
+            if (position < 0) {continue}
+            const positionStage = clamp(Math.floor(position), 0, STAGES - 1)
+            const fraction = position - positionStage
+            const rampStart = positionStage / STAGES
+            const x = (rampStart + (handleX(positionStage, rates[positionStage]) - rampStart) * fraction) * actualWidth
+            const y = levelToY(playheads[base + envelopeOffset + 1] * 99.0)
+            context.beginPath()
+            context.arc(x, y, devicePixelRatio * 1.5, 0.0, Math.PI * 2)
+            context.fillStyle = "hsl(200, 83%, 75%)"
+            context.fill()
+        }
+    }))
+    lifecycle.own(receiver.subscribeFloats(address, values => {
+        playheads.set(values.subarray(0, playheads.length))
+        painter.requestUpdate()
     }))
     const rebuildLane = () => {
         const envelope = active()

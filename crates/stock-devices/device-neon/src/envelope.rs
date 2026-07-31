@@ -124,6 +124,35 @@ impl Envelope {
         self.releasing
     }
 
+    /// The UI playhead: (stage + fraction-through-its-ramp, display level 0..1 in the RAW domain), or
+    /// (-1, 0) when nothing should show. The fraction interpolates the nominal stage endpoints, so the
+    /// dot rides the drawn curve; drains re-traverse the end stage toward zero.
+    pub fn ui_position(&self, spec: &EnvelopeSpec, pitch: bool) -> (f32, f32) {
+        if self.releasing && self.holding {
+            return (-1.0, 0.0);
+        }
+        let stage = self.stage.min(STAGES - 1);
+        let raw_target = if self.draining {0.0} else {spec.levels[stage].clamp(0.0, 99.0)};
+        let raw_from = if self.draining {
+            spec.levels[stage].clamp(0.0, 99.0)
+        } else if stage == 0 {
+            0.0
+        } else {
+            spec.levels[stage - 1].clamp(0.0, 99.0)
+        };
+        let (from, target) = if pitch {
+            (pitch_semitones(raw_from), pitch_semitones(raw_target))
+        } else {
+            (raw_from, raw_target)
+        };
+        let fraction = if libm::fabsf(target - from) < 1.0e-3 {
+            1.0
+        } else {
+            ((self.value - from) / (target - from)).clamp(0.0, 1.0)
+        };
+        (stage as f32 + fraction, (raw_from + (raw_target - raw_from) * fraction) / 99.0)
+    }
+
     /// Advance by `dt` seconds (scaled by the caller's key follow) and return the raw 0-99 value.
     pub fn process(&mut self, spec: &EnvelopeSpec, dt: f32) -> f32 {
         self.advance(spec, dt, false)

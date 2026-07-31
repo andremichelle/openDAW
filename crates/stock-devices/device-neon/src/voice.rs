@@ -177,6 +177,33 @@ const FORCE_STOP_FADE_SECONDS: f32 = 0.003; // the vapo VCA smoother's time cons
 const FADE_SILENCE: f32 = 1.0e-4; // −80dB: the fade is done
 
 impl NeonVoice {
+    /// The envelope playheads for the editor broadcast: (position, level) per envelope in the box
+    /// order (line1 pitch/DCW/DCA, line2 …), -1 positions for lines the current routing leaves silent.
+    pub fn env_positions(&self, shared: &NeonParams, out: &mut [f32]) {
+        let route = routing(shared.line_select);
+        for config_index in 0..2usize {
+            let base = config_index * 6;
+            match route.iter().position(|(index, _)| *index == config_index) {
+                Some(slot) => {
+                    let line = &self.lines[slot];
+                    let config = &shared.lines[config_index];
+                    let (pitch_pos, pitch_level) = line.pitch_env.ui_position(&config.pitch_env, true);
+                    let (dcw_pos, dcw_level) = line.dcw_env.ui_position(&config.dcw_env, false);
+                    let (dca_pos, dca_level) = line.dca_env.ui_position(&config.dca_env, false);
+                    out[base] = pitch_pos;
+                    out[base + 1] = pitch_level;
+                    out[base + 2] = dcw_pos;
+                    out[base + 3] = dcw_level;
+                    out[base + 4] = dca_pos;
+                    out[base + 5] = dca_level;
+                }
+                None => {
+                    out[base..base + 6].fill(-1.0);
+                }
+            }
+        }
+    }
+
     fn process_window(&mut self, out_left: &mut [f32], out_right: &mut [f32], shared: &NeonParams, work: &mut Workspace) -> bool {
         let len = out_left.len();
         let sample_rate = shared.sample_rate;
