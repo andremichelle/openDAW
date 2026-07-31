@@ -865,3 +865,13 @@ battery-wide (flat p-scaled jumps: wrong tilt; phase jumps spread over 8 and 16 
 +drummin-top but regress p17's decay tail — VCZ's tail noise dulls as it decays, ours doesn't).
 p17/p03 bandgram cells partially unreliable (fundamentals below the 100Hz gram floor). FINAL state:
 battery 2.1dB mean (17/24 at ≤2.1), corpus stable, patch 7.3, 30/30 probes, 210 wasm tests, deployed.
+
+### Fix (2026-07-31): stuck voice on line-select edits
+
+Switching line select while a released voice's tail still sounds routes slot 1 in with envelopes the
+note-off never released (release() only walks the CURRENT route): the late slot played its attack and
+HELD its sustain forever — the "restart + stuck" report. Fix: any active slot on a gate-off voice is
+released on sight (idempotent heal at the top of the slot loop). Regression test
+a_line_routed_in_after_note_off_still_dies (slow slot-0 tail so the switch lands mid-voice; proven
+red without the fix at 0.27 sustained peak). Suites green, deployed. A HELD note switching modes still
+starts the newly routed line from its attack — that is the intended semantic, not the bug.

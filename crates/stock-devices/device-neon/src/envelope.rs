@@ -120,6 +120,10 @@ impl Envelope {
         self.releasing && self.holding
     }
 
+    pub fn is_released(&self) -> bool {
+        self.releasing
+    }
+
     /// Advance by `dt` seconds (scaled by the caller's key follow) and return the raw 0-99 value.
     pub fn process(&mut self, spec: &EnvelopeSpec, dt: f32) -> f32 {
         self.advance(spec, dt, false)

@@ -224,6 +224,14 @@ impl NeonVoice {
                 if *config_index == usize::MAX {continue}
                 let config = &shared.lines[*config_index];
                 let line = &mut self.lines[slot];
+                // A line-select edit can route a slot in AFTER note-off (its envelopes were never
+                // released): without this the slot plays its attack and SUSTAINS forever — the voice
+                // never finishes. Release any active slot the moment the gate is off.
+                if !self.gate && !self.pending_release && !line.dca_env.is_released() {
+                    line.pitch_env.release(&config.pitch_env);
+                    line.dcw_env.release(&config.dcw_env);
+                    line.dca_env.release(&config.dca_env);
+                }
                 let semis = line.pitch_env.process_pitch(&config.pitch_env, dt);
                 let dcw_raw = line.dcw_env.process(&config.dcw_env, dt);
                 // Measured on the VirtualCZ kf-dca decay ladder: the follow REFERENCES C2 (note 36) — at

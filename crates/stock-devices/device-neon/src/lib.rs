@@ -437,6 +437,23 @@ mod tests {
     }
 
     #[test]
+    fn a_line_routed_in_after_note_off_still_dies() {
+        // Switching line select can route slot 1 in AFTER the release only touched slot 0 — the
+        // late slot must not play its attack and sustain forever (the stuck-voice report). Slot 0
+        // gets a SLOW release tail so the voice is still alive when the mode changes.
+        let mut state = configured();
+        state.params.lines[0].dca_env.rates[1] = 40.0;
+        let (mut left, mut right) = (vec![0.0f32; 4800], vec![0.0f32; 4800]);
+        render(&mut state, &[note_on(1, 60)], &mut left, &mut right, SR);
+        render(&mut state, &[note_off(1)], &mut left, &mut right, SR);
+        state.params.line_select = 3; // 1+2' now routes slot 1, whose envelopes were never released
+        for _ in 0..20 {
+            render(&mut state, &[], &mut left, &mut right, SR);
+        }
+        assert!(peak(&left) < 1.0e-3, "the late-routed line decays to silence, got {}", peak(&left));
+    }
+
+    #[test]
     fn line_select_dual_is_louder_than_single_and_detune_applies() {
         let mut state = configured();
         let (mut left, mut right) = (vec![0.0f32; 4800], vec![0.0f32; 4800]);
