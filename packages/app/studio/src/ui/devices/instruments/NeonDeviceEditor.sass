@@ -50,6 +50,13 @@ component
       grid-template-columns: repeat(5, 3.5em)
       row-gap: 0
 
+  // The knob body and its value label sit ~2px too high against the row's optical center — shift
+  // the REAL elements (the knob svg, the value label): their wrappers are display:contents.
+  div[class^="Column"]
+    > :not(h5) svg, label[class^="ParameterLabel"]
+      position: relative
+      top: 3px
+
   div.cell
     display: grid
     grid-template-rows: 0.625em 2em 0.625em
