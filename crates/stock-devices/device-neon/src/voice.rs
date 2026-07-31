@@ -209,9 +209,9 @@ impl NeonVoice {
         let sample_rate = shared.sample_rate;
         let dt = 1.0 / sample_rate;
         let fade_coeff = if self.dying {libm::expf(-1.0 / (FORCE_STOP_FADE_SECONDS * sample_rate.max(1.0)))} else {1.0};
-        let noise_period: u32 = option_env!("NEON_NOISE_CLOCK").and_then(|value| value.parse().ok()).unwrap_or(0);
-        let noise_lo: f32 = option_env!("NEON_NOISE_LO").and_then(|value| value.parse().ok()).unwrap_or(0.0);
-        let noise_hi: f32 = option_env!("NEON_NOISE_HI").and_then(|value| value.parse().ok()).unwrap_or(2.8);
+        let noise_period: u32 = option_env!("NEON_NOISE_CLOCK").and_then(|value| value.parse().ok()).unwrap_or(8);
+        let noise_jump: f32 = option_env!("NEON_NOISE_JUMP").and_then(|value| value.parse().ok()).unwrap_or(32.0);
+        let noise_ratio_high = libm::exp2f(noise_jump / 12.0);
         let route = routing(shared.line_select);
         let two_lines = route[1].0 != usize::MAX;
         if self.pending_release {
@@ -278,38 +278,28 @@ impl NeonVoice {
                     // note (log-uniform, ~2.8 octaves), never below it. Reseeding happens per CYCLE only
                     // (the wrap below): any mid-cycle re-clock smears the harmonics into broadband mids
                     // the reference does not have (mr-drummin burst bands).
-                    if noise_period > 0 {
-                        line.noise_clock = line.noise_clock.wrapping_add(1);
-                        if line.noise_clock >= noise_period {
-                            line.noise_clock = 0;
-                            line.noise_ratio = libm::exp2f(noise_lo + xorshift(&mut self.rng) * (noise_hi - noise_lo));
-                        }
+                    // The HARDWARE noise law (uPD933: "pitch modulated by noise — 0 or 32 semitones
+                    // above base pitch", re-rolled every 8 samples): a BINARY pitch jump whose fast
+                    // switching also supplies the sideband skirt/hiss the earlier continuous
+                    // per-cycle model lacked.
+                    line.noise_clock = line.noise_clock.wrapping_add(1);
+                    if line.noise_clock >= noise_period {
+                        line.noise_clock = 0;
+                        line.noise_ratio = if xorshift(&mut self.rng) < 0.5 {1.0} else {noise_ratio_high};
                     }
-                    frequency *= line.noise_ratio.max(0.0625);
+                    frequency *= line.noise_ratio.max(1.0);
                 }
                 line.phase += frequency * dt;
                 if line.phase >= 1.0 {
                     line.phase -= libm::floorf(line.phase);
-                    // Pairs alternate wave1/wave2; SOLO reversed-family waves (square/pulse/dblsine)
-                    // alternate forward/reversed cycles of THEMSELVES — measured on VirtualCZ: their
-                    // dominant energy sits at HALF the note (x0.5 grid) at every DCW, they are period-2
-                    // structures (the old period-1 model only ever "matched" against the octave_shift(-1)
-                    // reference bug).
-                    if config.wave2 > 0 || pd::period_two(config.wave1) {
+                    if config.wave2 > 0 {
                         line.second_wave = !line.second_wave;
                     }
-                    line.noise_ratio = libm::exp2f(noise_lo + xorshift(&mut self.rng) * (noise_hi - noise_lo));
                 }
                 // Measured on the VirtualCZ pair probes (integer AND f/2 sub-grids, all pairs vs saw +
                 // square/pulse cross-checks): each panel wave has a fixed ORIENTATION; the wave2 cycle
                 // plays time-reversed exactly when the pair's orientations differ.
                 let second = line.second_wave && config.wave2 > 0;
-                // RING renders solo waves PERIOD-1: the real-hardware synthlib previews (Grounded,
-                // note-29 comb: half grid at the -60..-85 noise floor) have NO alternation content in
-                // ring mode. VirtualCZ DOES alternate here (halves at -12..-16 — the harsh metallic
-                // hash the preview lacks); this is a measured, deliberate deviation from VirtualCZ.
-                let solo_flip = line.second_wave && config.wave2 == 0 && pd::period_two(config.wave1)
-                    && shared.modulation != MOD_RING;
                 // Measured on the VirtualCZ kf-dcw harmonic ladder (36/48/55/60): the follow acts
                 // continuously from C2 like the DCA follow — C6 at kf 9 reads like DCW ≈ 70/99
                 // (≈ 0.00625 amount per semitone above note 36).
@@ -318,19 +308,13 @@ impl NeonVoice {
                 if slot == 0 {
                     self.dcw_amount0 = amount;
                 }
+                // SOLO waves are PERIOD-1 (uPD933 firmware: wave[1] = wave[0]; kasploosh "010+010 = 010";
+                // melodiblock hardware preview). The earlier period-2 "implicit saw pair" family was a
+                // probe-harness artifact: VirtualCZ's shape_b has no off state and DEFAULTS TO SAW.
                 let (wave, phase, cycle_amount) = if second && pd::orientation(config.wave1) != pd::orientation(config.wave2 - 1) {
                     (config.wave2 - 1, 1.0 - line.phase, amount)
                 } else if second {
                     (config.wave2 - 1, line.phase, amount)
-                } else if solo_flip && config.wave1 >= pd::WAVE_RES_SAW {
-                    // Reso alternate cycle: the plain SAW at the SAME dcw amount (p06/p07 waveform +
-                    // band A/Bs) — its knee IS VirtualCZ's cliff-then-rise: wide/soft at mid dcw (the
-                    // deep valley above the formant), sharp at 99, and a pure cosine at dcw 0.
-                    (pd::WAVE_SAW, line.phase, amount)
-                } else if solo_flip && pd::orientation(config.wave1) {
-                    (pd::WAVE_SAW, 1.0 - line.phase, amount)
-                } else if solo_flip {
-                    (pd::WAVE_SAW, line.phase, amount)
                 } else {
                     (config.wave1, line.phase, amount)
                 };

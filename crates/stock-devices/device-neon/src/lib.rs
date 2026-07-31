@@ -465,6 +465,30 @@ mod tests {
     }
 
     #[test]
+    fn env_positions_broadcast_layout_is_pitch_dcw_dca_per_line() {
+        let mut state = configured();
+        state.params.lines[0].pitch_env = EnvelopeSpec {
+            rates: [99.0; 8], levels: [40.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], sustain: 1, end: 2
+        };
+        state.params.lines[0].dcw_env = EnvelopeSpec {
+            rates: [99.0; 8], levels: [80.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], sustain: 1, end: 2
+        };
+        let (mut left, mut right) = (vec![0.0f32; 4800], vec![0.0f32; 4800]);
+        render(&mut state, &[note_on(1, 60)], &mut left, &mut right, SR);
+        let mut values = [0.0f32; 12];
+        let mut count = 0;
+        state.voicing.for_each_active(&mut |voice: &voice::NeonVoice| {
+            voice.env_positions(&state.params, &mut values);
+            count += 1;
+        });
+        assert_eq!(count, 1);
+        assert!((values[1] - 40.0 / 99.0).abs() < 0.02, "pitch level slot, got {}", values[1]);
+        assert!((values[3] - 80.0 / 99.0).abs() < 0.02, "dcw level slot, got {}", values[3]);
+        assert!((values[5] - 1.0).abs() < 0.02, "dca level slot, got {}", values[5]);
+        assert!(values[6] == -1.0, "line 2 silent in lineSelect 0, got {}", values[6]);
+    }
+
+    #[test]
     fn a_line_routed_in_after_note_off_still_dies() {
         // Switching line select can route slot 1 in AFTER the release only touched slot 0 — the
         // late slot must not play its attack and sustain forever (the stuck-voice report). Slot 0

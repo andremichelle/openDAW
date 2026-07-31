@@ -889,3 +889,70 @@ reference — that cell now measures the deliberate deviation (VCZ's alternating
 hardware evidence outranks it. Two intermediate ring models (cosine alternate, split direct/product
 terms) were measured and rejected on the same evidence. Battery mean 2.8 (2.1 excluding p22), suites
 green, deployed. A/B pair for listening: ~/Downloads/neon-ab/grounded-{ours,hardware}.wav.
+
+### RESEARCH (2026-07-31): real CZ-101 internals vs our implementation — CRITICAL harness bug found
+
+Sources: MAME uPD933 emulation (Devin Acker's hardware RE, src/devices/sound/upd933.cpp), kasploosh.com
+CZ spelunking (real-hardware sysex experiments), our synthlib hardware previews, VirtualCZ param dump.
+
+THE BIG ONE — solo waves are PERIOD-1, our period-2 model is a PROBE-HARNESS ARTIFACT:
+- uPD933: wave slots alternate per cycle via phase bit 11; with no second wave the firmware sets
+  m_wave[1] = m_wave[0] → solo = same shape every cycle.
+- kasploosh (real hardware): "programming waves 010 + 010 is the same as just using 010 by itself".
+- melodiblock hardware preview (solo square, plain): x0.5/x1.5 at -54/-56 = period-1. ✓
+- ROOT CAUSE: VirtualCZ's line{n}_shape_b has NO OFF STATE and DEFAULTS TO SAW. Our harnesses only set
+  shape_a for solo waves → every solo-wave VCZ reference ever rendered was secretly the PAIR
+  [wave, saw]. Proof: solo square with shape_b mirrored → x0.5 -97dB, pure odd-harmonic square.
+- CONSEQUENCES: the round-21 "period-2 discovery", the round-7 "implicit saw pair" (which correctly
+  identified the partner as... the saw we failed to unset), the solo-reso alternate cliff/rise cycle,
+  and ALL solo-wave references (probes, battery, matrix, mr-drummin's solo line2) are contaminated.
+  The ring period-1 fix was right for the wrong reason — period-1 is right EVERYWHERE for solo waves.
+
+Other findings (hardware vs ours):
+- NOISE: hardware pitch-jumps BINARY 0 or +32 semitones re-rolled every 8 samples (+ an undocumented
+  milder noise2). Ours: continuous log-uniform 0..+33.6st per cycle — same range top, different law.
+- ENVELOPES: linear per-sample steps; rate = (8|mantissa)<<exponent — the mantissa/exponent quantization
+  IS the "region kinks" our measured rate table captured. DCA output curve = pure exponential (2^x).
+  Our measured tables are structurally hardware-true. ✓
+- RESONANCE: phase = pos + (pos·dcw)>>6, hard-synced, amplitude-windowed (saw/tri/trapezoid) — matches
+  our k = 1+15w windowed-sync within mapping. ✓
+- DCW ANTI-ALIAS LIMIT: hardware clamps max DCW as pitch rises (dcw_limit) — we do not model it.
+- UNDOCUMENTED MODES (sysex-reachable): ring 2/3, noise 2, free wave+window combos (216 unique), extra
+  line-select/mute options — neither we nor VirtualCZ model them; wild syx dumps could contain them.
+
+FIX PLAN (pending approval): (1) harnesses set shape_b = shape_a when wave2 == 0 (vcz-presets,
+regen-probe-refs, all probe scripts); (2) regenerate every solo-wave reference incl. the battery and
+virtualcz-note55.wav; (3) remove solo_flip from the engine (solo = period-1; explicit pairs keep the
+orientation law — pair refs were rendered correctly and stay valid); (4) re-pin the period-2 calibration
+tests; (5) re-run the full loop (battery/probes/corpus) — expect the reso solo model and several knee
+fits to shift.
+
+### FIX CASCADE EXECUTED (2026-07-31): period-1 solo waves + hardware noise law
+
+1. Harnesses: shape_b now MIRRORS shape_a for solo waves in every VCZ renderer (vcz-presets,
+   regen-probe-refs, reso-matrix/compare, pulse-fit, regen-note55).
+2. Engine: solo_flip + pd::period_two REMOVED — solo waves are period-1; explicit pairs keep the
+   per-cycle alternation and the orientation-reversal law (their references were always rendered
+   correctly and stay valid).
+3. References regenerated: all 24 battery refs, the 7 solo dcw-sweep probe refs, virtualcz-note55.
+4. The four period-2 calibration pins re-pinned — the measured period-1 truths turned out to be the
+   ORIGINAL pre-period-2 pins (dblsine flat -23dB shelf, pure octave at dcw 0) restored.
+5. Pulse knee refit in the clean space: widen factor 0.4→1.0 (edge-scaled), floor 0.030→0.033 —
+   integer rows match corrected VCZ within ~1dB including the h11 null at dcw 85.
+6. NOISE = the HARDWARE law (uPD933): binary pitch jump 0 or +32 semitones re-rolled every 8 samples
+   (NEON_NOISE_JUMP/CLOCK tunables). The switching sidebands supply the skirt/hiss the per-cycle
+   continuous model lacked. Mix stays 0.95 (battery-swept), dull-carrier ladder within ±2dB at 36-72.
+RESULTS: user patch 5.1dB vs the corrected reference (best ever), battery mean 2.5 clean-space
+(p06 0.2, p07 0.5, p03 1.4), ALL 30 probes at strict tolerances zero skips, 210 wasm + cargo green,
+corpus 7.78 (recording-floor bound; deep-thoughts 4.9→3.3), deployed. Remaining: p24 noise-hat 10.6
+(2-frame onset transient on a 4-frame note — fragile metric cell), p17 5.2, p21 4.1, p22 3.9.
+
+### CLOSED (2026-07-31): grounded-cz = dump-vs-preview mismatch, PROVEN
+
+The corpus rate-fit (hw-rate-fit.py): every one-shot patch's hardware recording matches the decoded
+dump through our engine within ~10% — melodiblock (rate 50) EXACTLY (0.30s pred/0.30s measured) —
+except Grounded (rate 52) whose recording decays 10x slower with a dead-straight dB slope (a real
+envelope, not reverb; mono, no knee) equivalent to rate ~28. Substituting that ONE byte reproduces
+the preview's contour through our engine (table in the session log). The synthlib preview was
+recorded from a different edit of the patch than the exported .syx. Our render is dump-faithful;
+no engine change. Workaround for the demo sound: DCA stage-2 rate ≈ 28 after import.

@@ -46,7 +46,7 @@ fn m_square(x: f32, w: f32, edge: f32) -> f32 {
 }
 
 fn m_pulse(x: f32, w: f32, edge: f32) -> f32 {
-    let d = (knee(w, 1.0, 0.0) * (1.0 + 0.4 * (w - 0.55).max(0.0) * edge.min(1.0))).max(0.030 * edge);
+    let d = (knee(w, 1.0, 0.0) * (1.0 + 1.0 * (w - 0.55).max(0.0) * edge.min(1.0))).max(0.033 * edge);
     if x < d {x / d} else {1.0}
 }
 
@@ -91,14 +91,6 @@ fn resonant(x: f32, w: f32, window: fn(f32) -> f32) -> f32 {
 /// rendering is orientation-invariant). Cross-checked: square+pulse SAME, pulse+reso1 OPPOSITE.
 pub fn orientation(wave: i32) -> bool {
     matches!(wave, WAVE_SQUARE | WAVE_PULSE | WAVE_DOUBLE_SINE)
-}
-
-/// SOLO waves whose cycles alternate forward/reversed (period-2 structures on the hardware): the
-/// reversed-orientation family — fresh VirtualCZ measurements put their dominant energy on the
-/// half-note grid at every DCW (the reso waves show half-note content too, but a plain cycle reversal
-/// breaks their edge pinning — they need their own model, see plans).
-pub fn period_two(wave: i32) -> bool {
-    orientation(wave) || wave == WAVE_SAW_PULSE || wave >= WAVE_RES_SAW
 }
 
 /// One sample of panel wave `wave` at phase `x` (0..1) with distortion amount `w` (0..1).

@@ -220,6 +220,11 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex, receiv
         }
     }))
     lifecycle.own(receiver.subscribeFloats(address, values => {
+        // The first delivery after subscribing is the engine's still-zeroed buffer (the -2 terminator
+        // only appears once the engine has processed a block) — zeros would parse as six playheads
+        // parked on the curve origin. Only accept frames carrying a valid terminator.
+        const terminated = [0, 12, 24, 36, 48, 60].some(index => values[index] === -2)
+        if (!terminated) {return}
         playheads.set(values.subarray(0, playheads.length))
         painter.requestUpdate()
     }))

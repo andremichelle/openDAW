@@ -43,52 +43,46 @@ fn sustain_window(tone: &ToneDescription) -> Vec<f32> {
 }
 
 #[test]
-fn square_at_full_dcw_is_a_period_two_structure() {
-    // FRESH VirtualCZ measurement (octave-corrected references): the solo square is a PERIOD-2
-    // waveform — dominant energy at HALF the note (x0.5), the note fundamental ~−14dB below it, and a
-    // half-integer series (x1.5 ≈ −13dB rel x0.5). The old "ideal odd square" expectation was pinned
-    // against the octave_shift(−1) reference bug.
+fn square_at_full_dcw_is_an_odd_harmonic_square() {
+    // PERIOD-1 (uPD933: wave[1] = wave[0] for solo waves; the old period-2 pin measured VirtualCZ's
+    // shape_b DEFAULTING TO SAW — a probe-harness artifact): odd harmonics only, h3 ≈ -9dB.
     let seg = sustain_window(&tone("wave 0 1 0\nenv 1 99 0 0 0 0 0 0 0 99 0 0 0 0 0 0 0 1 2\n"));
     let sub = 20.0 * (goertzel(&seg, C4 * 0.5) / goertzel(&seg, C4).max(1.0e-12)).max(1.0e-9).log10();
-    let one_and_half = 20.0 * (goertzel(&seg, C4 * 1.5) / goertzel(&seg, C4 * 0.5).max(1.0e-12)).max(1.0e-9).log10();
-    assert!(sub > 6.0, "the x0.5 subharmonic dominates the note fundamental, got {sub}dB");
-    assert!((-20.0..=-6.0).contains(&one_and_half), "x1.5 sits ~-13dB below x0.5, got {one_and_half}");
+    assert!(sub < -40.0, "no half-note content on a solo square, got {sub}dB");
+    assert!((-15.0..=-3.0).contains(&harmonic_db(&seg, 3)), "h3 ≈ -9dB, got {}", harmonic_db(&seg, 3));
+    assert!(harmonic_db(&seg, 2) < -40.0, "no even harmonics, got h2 {}", harmonic_db(&seg, 2));
 }
 
 #[test]
-fn double_sine_at_full_dcw_is_a_period_two_saw_pair() {
-    // FRESH VirtualCZ comb (implicit-saw-pair model, ours matches ≤1dB): x0.5 ≈ −1, h2 −11, h3 −15,
-    // h4 −19, h6 −21 rel h1 — a declining integer series PLUS an equal half-integer comb.
+fn double_sine_at_full_dcw_is_a_fundamental_with_a_flat_shelf() {
+    // PERIOD-1 restored (the period-2 pin measured the shape_b-defaults-to-saw harness artifact):
+    // fundamental + a flat ≈ -23dB harmonic shelf, no half-note content.
     let seg = sustain_window(&tone("wave 0 3 0\nenv 1 99 0 0 0 0 0 0 0 99 0 0 0 0 0 0 0 1 2\n"));
     let sub = 20.0 * (goertzel(&seg, C4 * 0.5) / goertzel(&seg, C4).max(1.0e-12)).max(1.0e-9).log10();
-    assert!((-5.0..=2.0).contains(&sub), "x0.5 rides at the fundamental's level, got {sub}dB");
-    for (harmonic, expected) in [(2u32, -11.0f32), (3, -15.0), (4, -19.0), (6, -21.0)] {
+    assert!(sub < -40.0, "no half-note content on a solo double sine, got {sub}dB");
+    for harmonic in [2u32, 3, 4, 6] {
         let level = harmonic_db(&seg, harmonic);
-        assert!((level - expected).abs() < 4.0, "h{harmonic} {level} vs measured {expected}");
+        assert!((-29.0..=-17.0).contains(&level), "h{harmonic} {level} outside the measured shelf");
     }
 }
 
 #[test]
-fn double_sine_at_zero_dcw_is_a_period_two_cluster() {
-    // FRESH VirtualCZ comb at DCW 5 (ours bit-matches): x1.5 DOMINATES with x1/x2 ≈ −2 and x0.5 ≈ −11
-    // — the implicit saw pair keeps double sine period-2 even at zero distortion (the old "pure
-    // octave" pin came from the octave_shift(−1) reference era).
+fn double_sine_at_zero_dcw_is_a_pure_octave() {
+    // PERIOD-1 restored: two equal half-cosine cycles per period = the octave, nothing else.
     let seg = sustain_window(&tone("wave 0 3 0\nenv 1 99 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 2\n"));
-    let x15 = goertzel(&seg, C4 * 1.5).max(1.0e-12);
-    for (grid, expected) in [(0.5f32, -11.0f32), (1.0, -2.0), (2.0, -2.0)] {
-        let level = 20.0 * (goertzel(&seg, C4 * grid) / x15).max(1.0e-9).log10();
-        assert!((level - expected).abs() < 5.0, "x{grid} {level} vs measured {expected}");
-    }
+    let h1 = goertzel(&seg, C4);
+    let h2 = goertzel(&seg, C4 * 2.0);
+    assert!(h2 > h1 * 10.0, "octave dominates: h1 {h1} h2 {h2}");
 }
 
 #[test]
-fn saw_pulse_at_full_dcw_is_a_period_two_bright_saw() {
-    // FRESH VirtualCZ (octave-corrected refs): solo saw-pulse is PERIOD-2 like the other bent waves —
-    // a bright saw-like integer series PLUS a half-integer series (x0.5 ≈ −9dB, x1.5 ≈ −7dB rel x1).
+fn saw_pulse_at_full_dcw_is_a_bright_integer_series() {
+    // PERIOD-1 restored: a bright saw-like integer series (h2 ≈ -5, h3 ≈ -12), no half-note content.
     let seg = sustain_window(&tone("wave 0 4 0\nenv 1 99 0 0 0 0 0 0 0 99 0 0 0 0 0 0 0 1 2\n"));
     let sub = 20.0 * (goertzel(&seg, C4 * 0.5) / goertzel(&seg, C4).max(1.0e-12)).max(1.0e-9).log10();
-    assert!((-20.0..=0.0).contains(&sub), "half-integer content present (x0.5 rel x1), got {sub}dB");
-    assert!(harmonic_db(&seg, 3) > -25.0, "keeps a bright integer series, h3 {}", harmonic_db(&seg, 3));
+    assert!(sub < -40.0, "no half-note content on a solo saw-pulse, got {sub}dB");
+    assert!((-10.0..=0.0).contains(&harmonic_db(&seg, 2)), "h2 ≈ -5dB, got {}", harmonic_db(&seg, 2));
+    assert!(harmonic_db(&seg, 3) > -20.0, "bright series, h3 {}", harmonic_db(&seg, 3));
 }
 
 fn subharmonic_ratio_db(tone: &ToneDescription) -> (f32, f32) {
