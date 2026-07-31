@@ -244,9 +244,11 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex}: Const
         fields.forEach(field => fieldWatcher.own(field.subscribe(() => {
             painter.requestUpdate()
             rebuildLane()
+            showStage(selectedStage.getValue())
         })))
         painter.requestUpdate()
         rebuildLane()
+        showStage(selectedStage.getValue())
     }
     lifecycle.ownAll(
         tabIndex.subscribe(watchActive),
