@@ -12,6 +12,7 @@ import {
 import {network, Promises} from "@opendaw/lib-runtime"
 import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {SampleAPI} from "@opendaw/studio-core"
+import {AccessKey} from "./AccessKey"
 import {base64Credentials, OpenDAWHeaders} from "./OpenDAWHeaders"
 import {z} from "zod"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
@@ -91,8 +92,7 @@ export class OpenSampleAPI implements SampleAPI {
         const dialog = RuntimeNotifier.progress({headline: "Uploading", progress})
         const formData = new FormData()
         Object.entries(metaData).forEach(([key, value]) => formData.set(key, String(value)))
-        const params = new URLSearchParams(location.search)
-        const accessKey = asDefined(params.get("access-key"), "Cannot upload without access-key.")
+        const accessKey = AccessKey.get().unwrap("Cannot upload without access-key.")
         formData.set("key", accessKey)
         formData.append("file", new Blob([arrayBuffer]))
         console.log("upload data", Array.from(formData.entries()), arrayBuffer.byteLength)
