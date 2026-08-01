@@ -1,5 +1,7 @@
 @use "@/colors"
 
+$tree-guide-color: var(--color-black)
+
 component
   padding: 0 0.25em 0 0.5em
   display: grid
@@ -12,6 +14,26 @@ component
 
   &.accept-drop
     background-color: rgba(white, 0.04)
+
+  // Tree guide: a vertical drop from the device name's first letter (geometry vars set on the Track root)
+  // and a horizontal stub to this lane's label.
+  &::after
+    content: ""
+    position: absolute
+    left: 47px
+    top: var(--guide-top, 50%)
+    bottom: var(--guide-bottom, 0px)
+    width: 1px
+    background-color: $tree-guide-color
+
+  &::before
+    content: ""
+    position: absolute
+    left: 47px
+    top: var(--stub-top, calc(50% + 7px))
+    width: 6px
+    height: 1px
+    background-color: $tree-guide-color
 
   > div.icon-container
     position: relative
@@ -44,13 +66,20 @@ component
       white-space: nowrap
       text-transform: capitalize
 
-// Header dedup (classes set by TracksManager): a lane repeating its predecessor's icon / device / label keeps
-// the layout (visibility, not display) so the remaining columns stay aligned.
+    > h5.device-name
+      color: var(--color-gray) !important
+
+    > h5.control-label
+      padding-left: 1.2em
+      margin-top: 2px
+
+// Header dedup (classes set by TracksManager). The repeated device name is removed from the flow
+// (display) so the lone label centers vertically in the lane.
 .repeat-icon div.icon-container
   visibility: hidden
 
 .repeat-device h5.device-name
-  visibility: hidden
+  display: none
 
-.repeat-label h5.control-label
-  visibility: hidden
+.repeat-device h5.control-label
+  margin-top: 0

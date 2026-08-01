@@ -334,25 +334,25 @@ export class TracksManager implements Terminable {
         this.#refreshHeaderDedup()
     }
 
-    // Header dedup: a lane repeating its predecessor's type icon / device name / label (within the same unit)
-    // hides that column — the first lane of each run keeps it. Each column dedups independently.
+    // Header dedup + tree guides: a device GROUP is a run of lanes sharing unit, type and device name. The
+    // first lane shows the device name, every lane always shows its own label, and the guide runs from the
+    // device name down to the group's last label ("group-end"). The type icon shows once per type-run.
     #refreshHeaderDedup(): void {
         const tracks = this.tracks()
+        const sameGroup = (a: TrackContext, b: TrackContext): boolean =>
+            a.audioUnitBoxAdapter === b.audioUnitBoxAdapter
+            && a.trackBoxAdapter.type === b.trackBoxAdapter.type
+            && a.path.nonEmpty() && b.path.nonEmpty()
+            && a.path.unwrap()[0] === b.path.unwrap()[0]
         tracks.forEach((context, index) => {
-            const previous = index > 0 && tracks[index - 1].audioUnitBoxAdapter === context.audioUnitBoxAdapter
-                ? Option.wrap(tracks[index - 1])
-                : Option.None
+            const previous = index > 0 ? Option.wrap(tracks[index - 1]) : Option.None
+            const next = index < tracks.length - 1 ? Option.wrap(tracks[index + 1]) : Option.None
             const sameType = previous.mapOr(scope =>
-                scope.trackBoxAdapter.type === context.trackBoxAdapter.type, false)
-            const sameDevice = previous.mapOr(scope =>
-                scope.path.nonEmpty() && context.path.nonEmpty()
-                && scope.path.unwrap()[0] === context.path.unwrap()[0], false)
-            const sameLabel = previous.mapOr(scope =>
-                scope.path.nonEmpty() && context.path.nonEmpty()
-                && scope.path.unwrap()[1] === context.path.unwrap()[1], false)
+                scope.audioUnitBoxAdapter === context.audioUnitBoxAdapter
+                && scope.trackBoxAdapter.type === context.trackBoxAdapter.type, false)
             context.element.classList.toggle("repeat-icon", sameType)
-            context.element.classList.toggle("repeat-device", sameDevice)
-            context.element.classList.toggle("repeat-label", sameLabel)
+            context.element.classList.toggle("repeat-device", previous.mapOr(scope => sameGroup(scope, context), false))
+            context.element.classList.toggle("group-end", next.mapOr(scope => !sameGroup(context, scope), true))
         })
     }
 
