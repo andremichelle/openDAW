@@ -8,6 +8,11 @@ component
   --guide-top: calc(50% + 1px)
   --guide-bottom: 0px
   --stub-top: calc(50% + 7px)
+  --guide-display: block
+
+  // A unit without a real track target (aux send, group) has no label to point at.
+  &.no-guide
+    --guide-display: none
 
   &.repeat-device
     --guide-top: 0px

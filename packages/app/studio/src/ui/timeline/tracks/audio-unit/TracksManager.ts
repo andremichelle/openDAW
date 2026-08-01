@@ -353,6 +353,8 @@ export class TracksManager implements Terminable {
             context.element.classList.toggle("repeat-icon", sameType)
             context.element.classList.toggle("repeat-device", previous.mapOr(scope => sameGroup(scope, context), false))
             context.element.classList.toggle("group-end", next.mapOr(scope => !sameGroup(context, scope), true))
+            context.element.classList.toggle("no-guide",
+                context.path.mapOr(path => path[1].trim().length === 0, true))
         })
     }
 
