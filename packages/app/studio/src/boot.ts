@@ -1,4 +1,10 @@
 import "./main.sass"
+
+// Escape hatch for AUTOMATED browser sessions (set `localStorage["opendaw-suppress-unload-guard"]`):
+// swallow every beforeunload prompt so scripted reloads never hang on the native dialog.
+if (localStorage.getItem("opendaw-suppress-unload-guard") !== null) {
+    window.addEventListener("beforeunload", event => event.stopImmediatePropagation(), {capture: true})
+}
 import {App} from "@/ui/App.tsx"
 import {isDefined, panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"

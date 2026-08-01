@@ -1,0 +1,154 @@
+@use "@/mixins"
+
+component
+  display: flex
+  column-gap: 14px
+  align-items: start
+  @include mixins.Control
+
+  > div.block
+    display: grid
+    column-gap: 0.25em
+    row-gap: 8px
+    align-content: start
+
+    &.left
+      grid-template-columns: repeat(4, 3.5em)
+      position: relative
+
+      > div.label
+        top: 0
+        left: 2px
+        width: calc(100% - 4px)
+        height: 11px
+        padding: 1px 0
+        position: absolute
+        pointer-events: none
+        border-radius: 2px
+        background: color-mix(in srgb, var(--color) 9%, transparent)
+        z-index: 0
+
+        &.play-section
+          grid-row: 2 / 2
+          grid-column: 1 / -1
+          --color: var(--color-blue)
+
+        &.vibrato-section
+          grid-row: 3 / 3
+          grid-column: 1 / -1
+          --color: var(--color-green)
+
+        &.mode-section
+          grid-row: 1 / 1
+          grid-column: 3 / -1
+          --color: var(--color-yellow)
+
+
+    &.right
+      grid-template-columns: repeat(5, 3.5em)
+      row-gap: 0
+
+  // The knob body and its value label sit ~2px too high against the row's optical center — shift
+  // the REAL elements (the knob svg, the value label): their wrappers are display:contents.
+  div[class^="Column"]
+    > :not(h5) svg, label[class^="ParameterLabel"]
+      position: relative
+      top: 2px
+
+  div.cell
+    display: grid
+    grid-template-rows: 0.625em 2em 0.625em
+    justify-items: center
+    align-items: center
+    align-content: center
+    min-width: 0
+    margin: 0 1px
+
+    // IDENTICAL to the ControlBuilder knob titles (same tag, same metrics): any imitation via other
+    // elements or centering mechanisms landed the glyphs a sub-pixel off the knob-title line.
+    > h5
+      font-size: 8px
+      line-height: 12px
+      letter-spacing: 0.08em
+      text-align: center
+      color: hsl(65, 20%, 83%)
+      white-space: nowrap
+      position: relative
+      top: 1px // the knob titles sit inside their AutomationControl wrapper 1px lower
+
+    > .radios
+      display: flex
+      flex-wrap: nowrap
+      justify-content: center
+      align-items: center
+      white-space: nowrap
+      grid-row: 2 / 4
+      align-self: center
+
+    .wave-frame
+      position: relative
+      width: 3.25em
+      height: 2em
+
+    > span.wave-name
+      font-size: 8px
+      color: hsl(65, 20%, 83%)
+      white-space: nowrap
+      overflow: hidden
+      max-width: 3.4em
+
+  span.copy-button
+    grid-row: 2
+    font-size: 8px
+    letter-spacing: 0.5px
+    padding: 1px 5px
+    border-radius: 2px
+    color: var(--color-bright)
+    outline: 0.5px solid hsla(200, 40%, 70%, 0.15)
+
+  div.line-tabs
+    grid-column: 1 / -1
+    display: flex
+    align-items: flex-end
+
+    > .tabs
+      display: flex
+      align-items: flex-end
+      column-gap: 1px
+
+      label
+        display: inline-block
+        height: auto
+        font-size: 9px
+        font-weight: 700
+        letter-spacing: 1px
+        padding: 8px 10px
+        border-radius: 2px 2px 0 0
+        border-top: initial
+        color: rgba(white, 0.2)
+        line-height: 1
+
+      input:checked + label
+        color: var(--color-blue)
+        background: color-mix(in srgb, var(--color-blue) 5%, transparent)
+        border-top: 0.5px rgba(white, 0.04) solid
+
+  div.block.right:has(.tabs input:first-of-type:checked) div.line-body
+    border-top-left-radius: 0
+
+  div.line-body
+    grid-column: 1 / -1
+    display: grid
+    grid-template-columns: subgrid
+    grid-template-rows: 3.25em 90px
+    row-gap: 0.25em
+    padding: 0.5em 0 0.25em
+    border-radius: 2px
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--color-blue) 5%, transparent) 0, transparent 125%)
+
+    > div.cells
+      display: contents
+
+    > div.envelopes
+      grid-column: 1 / -1
+      padding: 0 3px

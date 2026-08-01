@@ -171,6 +171,9 @@ export enum IconSymbol {
     Discord,
     Instagram,
     LinkedIn,
+    Neon,
+    Ring,
+    Noise,
 }
 
 export namespace IconSymbol {

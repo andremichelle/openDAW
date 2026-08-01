@@ -2,6 +2,7 @@ import {
     ApparatDeviceBox,
     AudioFileBox,
     BoxIO,
+    NeonDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,
@@ -101,6 +102,41 @@ export namespace InstrumentFactories {
         }
     }
 
+    export const Neon: InstrumentFactory<void, NeonDeviceBox> = {
+        defaultName: "Neon",
+        defaultIcon: IconSymbol.Neon,
+        briefDescription: "Phase Distortion Synth",
+        description: "CZ-style phase distortion synthesizer",
+        manualPage: DeviceManualUrls.Neon,
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): NeonDeviceBox =>
+            NeonDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                // The init tone: line 1 saw, DCW fully open, organ-style DCA (full until note-off, short
+                // release stage). Envelope array order: line1 pitch/DCW/DCA, line2 pitch/DCW/DCA.
+                for (const line of [0, 1]) {
+                    const dcw = box.envelopes.fields()[line * 3 + 1]
+                    dcw.rate1.setInitValue(99)
+                    dcw.level1.setInitValue(99)
+                    dcw.sustain.setInitValue(1)
+                    dcw.end.setInitValue(2)
+                    dcw.rate2.setInitValue(99)
+                    const dca = box.envelopes.fields()[line * 3 + 2]
+                    dca.rate1.setInitValue(99)
+                    dca.level1.setInitValue(99)
+                    dca.sustain.setInitValue(1)
+                    dca.end.setInitValue(2)
+                    dca.rate2.setInitValue(70)
+                }
+                box.host.refer(host)
+            })
+    }
+
     export const Vaporisateur: InstrumentFactory<void, VaporisateurDeviceBox> = {
         defaultName: "Vaporisateur",
         defaultIcon: IconSymbol.Piano,
@@ -186,7 +222,7 @@ export namespace InstrumentFactories {
         })
     }
 
-    export const Named = {Apparat, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
+    export const Named = {Apparat, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
     const useAudioFile = (boxGraph: BoxGraph, fileUUID: UUID.Bytes, name: string, duration: number) =>
