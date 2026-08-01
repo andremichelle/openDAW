@@ -43,3 +43,14 @@ component
       text-overflow: ellipsis
       white-space: nowrap
       text-transform: capitalize
+
+// Header dedup (classes set by TracksManager): a lane repeating its predecessor's icon / device / label keeps
+// the layout (visibility, not display) so the remaining columns stay aligned.
+.repeat-icon div.icon-container
+  visibility: hidden
+
+.repeat-device h5.device-name
+  visibility: hidden
+
+.repeat-label h5.control-label
+  visibility: hidden

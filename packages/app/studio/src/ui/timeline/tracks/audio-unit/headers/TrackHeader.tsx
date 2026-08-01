@@ -25,8 +25,8 @@ type Construct = {
 }
 
 export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAdapter}: Construct) => {
-    const nameLabel: HTMLElement = <h5 style={{color: Colors.dark.toString()}}/>
-    const controlLabel: HTMLElement = <h5 style={{color: Colors.shadow.toString()}}/>
+    const nameLabel: HTMLElement = <h5 className="device-name" style={{color: Colors.dark.toString()}}/>
+    const controlLabel: HTMLElement = <h5 className="control-label" style={{color: Colors.shadow.toString()}}/>
     const {project} = service
     lifecycle.own(
         trackBoxAdapter.catchupAndSubscribePath(option => option.match({
