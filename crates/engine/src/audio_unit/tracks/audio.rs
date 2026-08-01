@@ -363,20 +363,26 @@ pub(crate) const AUDIO_CLIP_WAVEFORM_OFFSET_KEY: u16 = 7;
 pub(crate) const AUDIO_CLIP_DURATION_KEY: u16 = 10;
 pub(crate) const AUDIO_CLIP_MUTE_KEY: u16 = 11;
 pub(crate) const AUDIO_CLIP_GAIN_KEY: u16 = 14;
+pub(crate) const AUDIO_CLIP_TIMEBASE_KEY: u16 = 21;          // "musical" (ppqn) or "seconds"; gates the duration unit
 
 /// Read an audio CLIP as its virtual region (TS Tape clip branch: `{position: 0, loopDuration: clip.duration,
 /// loopOffset: 0, complete: +Infinity}`, no fades) plus the `triggerMode.loop` flag for the sequencer.
-pub(crate) fn read_audio_clip(graph: &BoxGraph, clip_uuid: Uuid, _tempo_map: &TempoMap) -> Option<(AudioRegion, bool)> {
+pub(crate) fn read_audio_clip(graph: &BoxGraph, clip_uuid: Uuid, tempo_map: &TempoMap) -> Option<(AudioRegion, bool)> {
     let file = graph.target_of(&Address::of(clip_uuid, vec![AUDIO_CLIP_FILE_KEY]))?.uuid;
     let time_stretch = read_time_stretch(graph, clip_uuid);
     let transients = if time_stretch.is_some() { read_transients(graph, file) } else { Vec::new() };
     let looped = graph.field_value(&Address::of(clip_uuid, vec![4, 1])).and_then(|value| value.as_bool()).unwrap_or(true);
+    // The not-stretched import stores the clip duration in SECONDS (timeBase "seconds"); convert at the
+    // virtual region's position 0 (TS `TimeBaseConverter.toPPQN(0)`).
+    let seconds_base = graph.field_value(&Address::of(clip_uuid, vec![AUDIO_CLIP_TIMEBASE_KEY]))
+        .and_then(|value| value.as_str()).is_some_and(|base| base == "seconds");
+    let duration_raw = region_float(graph, clip_uuid, &[AUDIO_CLIP_DURATION_KEY]) as f64;
     let region = AudioRegion {
         region_uuid: clip_uuid,
         position: 0.0,
         duration: f64::INFINITY,
         loop_offset: 0.0,
-        loop_duration: region_float(graph, clip_uuid, &[AUDIO_CLIP_DURATION_KEY]) as f64,
+        loop_duration: if seconds_base { tempo_map.seconds_span_to_ppqn(0.0, duration_raw) } else { duration_raw },
         file,
         gain_db: region_float(graph, clip_uuid, &[AUDIO_CLIP_GAIN_KEY]),
         mute: graph.field_value(&Address::of(clip_uuid, vec![AUDIO_CLIP_MUTE_KEY])).and_then(|value| value.as_bool()).unwrap_or(false),
