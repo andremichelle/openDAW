@@ -102,7 +102,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                                     : percent > 75 ? Colors.orange.toString() : ""
                             }))
                         }}>0%</FooterItem>
-            <FooterItem title="Memory" minWidth="11ch"
+            <FooterItem title="Memory" minWidth="7ch"
                         onInit={({value}) => {
                             const runtime = lifecycle.own(new Terminator())
                             const megabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(0)

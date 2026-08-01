@@ -1,0 +1,77 @@
+openDAW Neon announcement
+=========================
+
+
+-----------------------------------------
+DISCORD
+-----------------------------------------
+# Update: Meet Neon, a Phase Distortion Synthesizer!
+
+Something new to play with. Neon is a synth in the spirit of the old Casio CZ series. There is no
+filter in there, just one knob that bends a soft tone into saws, squares, and screaming resonant
+sweeps. Put an envelope on that knob, and you get the whole 80s digital sound.
+
+The fun part: it loads real CZ-101 patches. Grab any .syx file from the archives around the web,
+load it from the device menu, and you are playing sounds someone programmed on the hardware forty
+years ago. We spent a lot of time measuring real CZ hardware to get the envelopes and waveforms
+right, so those old patches sound the way they should.
+
+There is also ring modulation for metallic bells and a noise mode for drums. The
+[manual](https://opendaw.studio/manuals/devices/instruments/neon) explains every knob. Now go make
+some bell pads.
+
+
+-----------------------------------------
+LINKEDIN
+-----------------------------------------
+openDAW has a new instrument: Neon, a phase distortion synthesizer.
+
+openDAW is a free, browser-based digital audio workstation. Neon recreates the phase distortion
+synthesis of the classic Casio CZ series, an approach from 1984 that shapes timbre without any
+filter. It runs entirely in the browser on openDAW's Rust audio engine, no installation, no plugins.
+
+Why it matters for education:
+• Phase distortion is a wonderful way to teach synthesis. One knob sweeps a pure tone into rich
+  waveforms, so students hear the connection between waveform and timbre immediately.
+• Students can load thousands of freely available original CZ-101 patches as .syx files and study
+  how classic sounds were programmed.
+• The instrument was calibrated against measurements of real CZ hardware, so what students hear is
+  faithful to the original instrument.
+
+Two synthesis lines, eight waveforms including resonant sweeps, three 8-stage envelopes per line,
+ring and noise modulation, vibrato, and glide.
+
+Free and open: https://opendaw.studio
+Manual: https://opendaw.studio/manuals/devices/instruments/neon
+
+#musiceducation #edtech #synthesizer #phasedistortion #opensource #musicproduction #DAW
+
+
+-----------------------------------------
+NEWSLETTER
+-----------------------------------------
+Subject: Neon, a classic 80s synthesizer for your classroom
+
+openDAW has a new instrument. Neon brings phase distortion synthesis, the sound of the classic
+Casio CZ series from 1984, straight into the browser.
+
+Why this matters for schools
+• Phase distortion makes synthesis teachable. There is no filter. One control morphs a pure tone
+  into saws, squares, pulses, and resonant sweeps, so students hear how waveform shapes timbre.
+• The original CZ-101 was the affordable classroom synthesizer of its era. Neon revives it for
+  every student at once, with no hardware to buy and nothing to install.
+• Thousands of original CZ patches are freely available on the web as .syx files. Students can load
+  them directly into Neon and study how the classic sounds were built.
+• Neon was calibrated against measurements and recordings of real CZ hardware, so the sound is
+  faithful to the original instrument.
+
+What is inside
+Two synthesis lines, eight waveforms including three resonant ones, three 8-stage envelopes per
+line for pitch, brightness and level, ring and noise modulation, vibrato, glide, and full patch
+import from Casio CZ .syx files.
+
+Getting started
+Add Neon from the instrument list and play. The manual explains every section:
+https://opendaw.studio/manuals/devices/instruments/neon
+
+openDAW is free and open. Happy teaching,

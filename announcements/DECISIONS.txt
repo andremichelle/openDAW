@@ -8,9 +8,11 @@ Writing style (all channels)
 • Plain language. No marketing speak (for example, avoid "The point:").
 
 Per channel
-• Discord: supports markdown. Big headline uses "# " and starts with "Update: ", sublines use "### ".
-  All headlines in Title Case (keep brand casing like openDAW and Nextcloud). Links use markdown
-  masked links [label](url). Casual and factual, no emoji, no salesy phrasing.
+• Discord: supports markdown. Big headline uses "# " and starts with "Update: ", in Title Case
+  (keep brand casing like openDAW and Nextcloud). Links use markdown masked links [label](url).
+  The tone is familiar, we talk to our community like friends. No business speech, no endless
+  feature lists, no spec sheets. Short flowing paragraphs that tell what is fun about the thing.
+  Use "### " sublines sparingly, only when a post really needs structure. No emoji.
 • LinkedIn: professional. Hashtags at the end.
 • Newsletter: focus on the schools angle. No greeting line (no "Hi ..."). No beta or pilot note.
 
@@ -26,6 +28,16 @@ Feature framing (Nextcloud)
 • Samples and soundfonts are deduplicated, stored once and reused.
 • openDAW is free and open.
 • This is not a beta. Do not call it a beta.
+
+Feature framing (Neon)
+• A phase distortion synthesizer in the spirit of the Casio CZ series (1984). Say "in the spirit of",
+  do not claim to be a Casio product.
+• Education angle: phase distortion is teachable synthesis, one control morphs waveform and timbre,
+  no filter involved.
+• Real CZ-101 .syx patches load directly, thousands are freely available.
+• Calibrated against measurements and recordings of real CZ hardware. Faithful, not "emulation
+  perfect", avoid absolute claims.
+• Manual: https://opendaw.studio/manuals/devices/instruments/neon
 
 Still open (see the questions at the bottom of nextcloud.txt)
 • Release status and whether to call for pilot schools.
