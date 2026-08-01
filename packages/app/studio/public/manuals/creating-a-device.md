@@ -7,12 +7,16 @@ significant manual work. This guide documents how to create a complete audio eff
 
 ## Overview
 
+The audio engine is written in **Rust** and runs as WebAssembly. Every device's DSP is its own small Rust
+crate, compiled to a side module the engine loads at runtime. The TypeScript side owns the data model
+(schema/box), the automation value mappings (the adapter is the source of truth), and the UI.
+
 Creating a device requires these components:
 
 1. **Schema** - Defines the data structure (fields, parameters)
 2. **Box** - Auto-generated runtime class from schema
 3. **Adapter** - Wraps parameters for automation and UI binding
-4. **Processor** - DSP logic that processes audio
+4. **Device crate (Rust)** - DSP logic, compiled to WebAssembly
 5. **Editor** - UI component with controls
 6. **Factory registrations** - Makes the device available in the UI
 7. **Manual** - User-facing documentation for the device
@@ -142,94 +146,149 @@ export class YourDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 }
 ```
 
-## Step 5: Create the Processor
+## Step 5: Create the Rust Device Crate
 
-Location: `packages/studio/core-processors/src/devices/audio-effects/`
+Location: `crates/stock-devices/`
 
-Create **YourDeviceProcessor.ts**:
+Create a new crate **device-your-device** (the Cargo workspace picks up `stock-devices/*` automatically):
 
-```typescript
-import {int, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioEffectDeviceAdapter, YourDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {EngineContext} from "../../EngineContext"
-import {Block, Processor} from "../../processing"
-import {PeakBroadcaster} from "../../PeakBroadcaster"
-import {AutomatableParameter} from "../../AutomatableParameter"
-import {AudioEffectDeviceProcessor} from "../../AudioEffectDeviceProcessor"
-import {AudioBuffer, RenderQuantum} from "@opendaw/lib-dsp"
-import {AudioProcessor} from "../../AudioProcessor"
+**Cargo.toml**
 
-export class YourDeviceProcessor extends AudioProcessor implements AudioEffectDeviceProcessor {
-    static ID: int = 0 | 0
+```toml
+[package]
+name = "device-your-device"
+version = "0.0.0"
+edition = "2021"
+publish = false
 
-    readonly #id: int = YourDeviceProcessor.ID++
-    readonly #adapter: YourDeviceBoxAdapter
-    readonly #output: AudioBuffer
-    readonly #peaks: PeakBroadcaster
-    readonly parameterSomeParam: AutomatableParameter<number>
+[lib]
+crate-type = ["cdylib", "lib"]
 
-    #source: Option<AudioBuffer> = Option.None
+[dependencies]
+abi = {path = "../../abi"}
+math = {path = "../../math"}
+dsp = {path = "../../dsp"}
 
-    constructor(context: EngineContext, adapter: YourDeviceBoxAdapter) {
-        super(context)
-        this.#adapter = adapter
-        this.#output = new AudioBuffer()
-        this.#peaks = this.own(new PeakBroadcaster(context.broadcaster, adapter.address))
+[dependencies.libm]
+version = "0.2"
+```
 
-        const {someParam} = adapter.namedParameter
-        this.parameterSomeParam = this.own(this.bindParameter(someParam))
+**src/lib.rs** - implement the SDK's `AudioEffect` template (instruments implement `Instrument`,
+MIDI effects `NoteEffect`):
 
-        this.ownAll(
-            context.registerProcessor(this),
-            context.audioOutputBufferRegistry.register(adapter.address, this.#output, this.outgoing)
-        )
-        this.readAllParameters()
+```rust
+#![cfg_attr(target_family = "wasm", no_std)]
+
+#[cfg(target_family = "wasm")]
+use core::panic::PanicInfo;
+use abi::{float_value, AudioEffect, Block, ParamValue, Ports};
+use math::value_mapping::Linear;
+
+#[cfg(target_family = "wasm")]
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    abi::panic_to_host(info)
+}
+
+// Field paths = the SCHEMA KEYS of the box ([10] = the field at key 10).
+const SOME_PARAM_FIELD: [u16; 1] = [11];
+// The device owns its value mappings — they MUST mirror the adapter's `ValueMapping` exactly
+// (a parity test enforces this, see Step 8).
+const SOME_PARAM_MAPPING: Linear = Linear {min: -30.0, max: 0.0};
+
+/// Per-instance state: engine-allocated and ZEROED — build everything in `init`.
+pub struct YourDeviceState {
+    some_param: f32,
+    some_param_id: u32
+}
+
+pub struct YourDevice;
+
+impl AudioEffect for YourDevice {
+    type State = YourDeviceState;
+
+    fn init(state: &mut YourDeviceState, _sample_rate: f32) {
+        // Automatable parameters bind; non-automatable fields observe (delivered via field_changed).
+        state.some_param_id = abi::bind_parameter(&SOME_PARAM_FIELD);
     }
 
-    get incoming(): Processor {return this}
-    get outgoing(): Processor {return this}
-
-    reset(): void {
-        this.#peaks.clear()
-        this.#output.clear()
-        this.eventInput.clear()
-    }
-
-    get uuid(): UUID.Bytes {return this.#adapter.uuid}
-    get audioOutput(): AudioBuffer {return this.#output}
-
-    setAudioSource(source: AudioBuffer): Terminable {
-        this.#source = Option.wrap(source)
-        return {terminate: () => this.#source = Option.None}
-    }
-
-    index(): int {return this.#adapter.indexField.getValue()}
-    adapter(): AudioEffectDeviceAdapter {return this.#adapter}
-
-    processAudio(_block: Block, fromIndex: int, toIndex: int): void {
-        if (this.#source.isEmpty()) {return}
-        const source = this.#source.unwrap()
-
-        // Your DSP processing here
-        const srcL = source.getChannel(0)
-        const srcR = source.getChannel(1)
-        const outL = this.#output.getChannel(0)
-        const outR = this.#output.getChannel(1)
-
-        for (let i = fromIndex; i < toIndex; i++) {
-            outL[i] = srcL[i]
-            outR[i] = srcR[i]
+    fn parameter_changed(state: &mut YourDeviceState, id: u32, value: ParamValue) {
+        if id == state.some_param_id {
+            state.some_param = float_value(value, &SOME_PARAM_MAPPING);
         }
-
-        this.#peaks.process(outL, outR, fromIndex, toIndex)
     }
 
-    parameterChanged(parameter: AutomatableParameter): void {
-        if (parameter === this.parameterSomeParam) {
-            // Handle parameter change
+    fn reset(_state: &mut YourDeviceState) {}
+
+    fn process_audio(state: &mut YourDeviceState, output: [&mut [f32]; 2], block: &Block) {
+        let Some(input) = abi::resolve_input(abi::MAIN_INPUT) else {return};
+        let [in_left, in_right] = input.channels();
+        let [out_left, out_right] = output;
+        let (s0, s1) = (block.s0 as usize, block.s1 as usize);
+        for i in s0..s1 {
+            out_left[i] = in_left[i]; // your DSP here
+            out_right[i] = in_right[i];
         }
     }
 }
+
+// The flat exports the engine loader calls (identical shape for every device).
+#[no_mangle]
+pub extern "C" fn kind() -> u32 {
+    abi::DEVICE_KIND_AUDIO_EFFECT
+}
+
+#[no_mangle]
+pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
+    core::mem::size_of::<YourDeviceState>() as u32
+}
+
+#[no_mangle]
+pub extern "C" fn process(desc_ptr: u32) {
+    let ports = unsafe { Ports::<YourDeviceState>::from_descriptor(desc_ptr) };
+    abi::render_effect::<YourDevice>(ports);
+}
+
+#[no_mangle]
+pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <YourDevice as AudioEffect>::init(state, sample_rate)) }
+}
+
+#[no_mangle]
+pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <YourDevice as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+}
+```
+
+**Key points:**
+
+- The crate is `no_std` on wasm; use `libm` for float math, never `std`.
+- The state struct is allocated (zeroed) by the engine — `init` must make it valid; no heap allocation
+  during rendering.
+- `abi::bind_parameter(&[key])` subscribes an automatable parameter by its schema key path;
+  `abi::observe_field(&[key])` subscribes any other field (delivered through `field_changed`).
+- The device maps unit automation values to real values itself: the mapping constants MUST match the
+  TS adapter's `ValueMapping` (Step 4) — that adapter is the source of truth.
+- Look at `crates/stock-devices/device-fold` for a small complete audio effect, `device-gate` for
+  sidechain input, and `device-nano` for an instrument.
+
+### 5.1 Register the crate in the build
+
+Edit **build-wasm.sh** at `packages/studio/core-wasm/` and add the crate name to `DEVICE_CRATES`:
+
+```bash
+DEVICE_CRATES="... device-your-device"
+```
+
+The wasm artifact basename is the crate name with `-` replaced by `_` (`device_your_device.wasm`).
+
+### 5.2 Register the module with the engine loader
+
+Edit **engine-modules.ts** at `packages/studio/core-wasm/src/` and add an entry mapping the box type to
+the wasm module:
+
+```typescript
+{url: "/wasm/plugins/device_your_device.wasm", boxType: "YourDeviceBox"}, // audio effect
 ```
 
 ## Step 6: Create the Editor UI
@@ -357,21 +416,7 @@ export type EffectBox =
     | /* existing */ | YourDeviceBox
 ```
 
-### 7.3 DeviceProcessorFactory
-
-Edit **DeviceProcessorFactory.ts** at `packages/studio/core-processors/src/`:
-
-```typescript
-import {YourDeviceBox} from "@opendaw/studio-boxes"
-import {YourDeviceBoxAdapter} from "@opendaw/studio-adapters"
-import {YourDeviceProcessor} from "./devices/audio-effects/YourDeviceProcessor"
-
-// In AudioEffectDeviceProcessorFactory.create():
-visitYourDeviceBox: (box: YourDeviceBox): AudioEffectDeviceProcessor =>
-    new YourDeviceProcessor(context, context.boxAdapters.adapterFor(box, YourDeviceBoxAdapter)),
-```
-
-### 7.4 DeviceEditorFactory
+### 7.3 DeviceEditorFactory
 
 Edit **DeviceEditorFactory.tsx** at `packages/app/studio/src/ui/devices/`:
 
@@ -390,7 +435,7 @@ deviceHost = {deviceHost}
 ),
 ```
 
-### 7.5 BoxAdapters
+### 7.4 BoxAdapters
 
 Edit **BoxAdapters.ts** at `packages/studio/adapters/src/`:
 
@@ -405,10 +450,19 @@ visitYourDeviceBox: (box: YourDeviceBox) => new YourDeviceBoxAdapter(this.#conte
 ## Step 8: Build and Test
 
 ```bash
-npm run build
+npm run build        # TypeScript packages
+npm run build-wasm   # the engine + all device crates (needs the Rust toolchain + binaryen)
 ```
 
-The device should now appear in the audio effects menu when adding effects to a track.
+The device should now appear in the audio effects menu when adding effects to a track. Hard-reload the
+studio after `build-wasm` so the browser drops the cached wasm.
+
+**Parity test:** add your device to `packages/app/wasm/test/param-mapping-parity.test.ts` — it loads the
+wasm standalone and asserts every bound parameter's value mapping matches the TS adapter's. Run with:
+
+```bash
+cd packages/app/wasm && npx vitest run test/param-mapping-parity.test.ts
+```
 
 ## Common Patterns
 
@@ -498,17 +552,19 @@ This makes the manual accessible via the device's context menu in the UI.
 
 ## File Summary
 
-| Component        | Location                                                        |
-|------------------|-----------------------------------------------------------------|
-| Schema           | `packages/studio/forge-boxes/src/schema/devices/audio-effects/` |
-| Box (generated)  | `packages/studio/boxes/src/`                                    |
-| Adapter          | `packages/studio/adapters/src/devices/audio-effects/`           |
-| Processor        | `packages/studio/core-processors/src/devices/audio-effects/`    |
-| Editor           | `packages/app/studio/src/ui/devices/audio-effects/`             |
-| EffectFactories  | `packages/studio/core/src/EffectFactories.ts`                   |
-| EffectBox        | `packages/studio/core/src/EffectBox.ts`                         |
-| ProcessorFactory | `packages/studio/core-processors/src/DeviceProcessorFactory.ts` |
-| EditorFactory    | `packages/app/studio/src/ui/devices/DeviceEditorFactory.tsx`    |
-| BoxAdapters      | `packages/studio/adapters/src/BoxAdapters.ts`                   |
-| Manual           | `packages/app/studio/public/manuals/devices/<category>/`        |
-| ManualUrls       | `packages/studio/adapters/src/DeviceManualUrls.ts`              |
+| Component           | Location                                                        |
+|---------------------|-----------------------------------------------------------------|
+| Schema              | `packages/studio/forge-boxes/src/schema/devices/audio-effects/` |
+| Box (generated)     | `packages/studio/boxes/src/`                                    |
+| Adapter             | `packages/studio/adapters/src/devices/audio-effects/`           |
+| Device crate (Rust) | `crates/stock-devices/device-your-device/`                      |
+| Build registration  | `packages/studio/core-wasm/build-wasm.sh` (`DEVICE_CRATES`)     |
+| Module registration | `packages/studio/core-wasm/src/engine-modules.ts`               |
+| Editor              | `packages/app/studio/src/ui/devices/audio-effects/`             |
+| EffectFactories     | `packages/studio/core/src/EffectFactories.ts`                   |
+| EffectBox           | `packages/studio/core/src/EffectBox.ts`                         |
+| EditorFactory       | `packages/app/studio/src/ui/devices/DeviceEditorFactory.tsx`    |
+| BoxAdapters         | `packages/studio/adapters/src/BoxAdapters.ts`                   |
+| Parity test         | `packages/app/wasm/test/param-mapping-parity.test.ts`           |
+| Manual              | `packages/app/studio/public/manuals/devices/<category>/`        |
+| ManualUrls          | `packages/studio/adapters/src/DeviceManualUrls.ts`              |
