@@ -956,3 +956,14 @@ envelope, not reverb; mono, no knee) equivalent to rate ~28. Substituting that O
 the preview's contour through our engine (table in the session log). The synthlib preview was
 recorded from a different edit of the patch than the exported .syx. Our render is dump-faithful;
 no engine change. Workaround for the demo sound: DCA stage-2 rate ≈ 28 after import.
+
+### Fix (2026-08-01): 5ms DCW sweep floor — the release-click guarantee
+
+User-verified: sub-5ms DCW sweeps snap the waveform shape mid-cycle into phase-dependent clicks
+(first surfaced by the factory bank's rate-99 filler releases; the bank got authored release stages,
+and the ENGINE now guarantees it): Envelope::process_dcw floors the full swing at 5ms. DCA keeps its
+2.2ms top rate (drum snap; gain ramps don't click) and the pitch env is untouched. A deliberate
+deviation from the hardware's 2.2ms top DCW rate; cost = dca-level probe harmTol 3→4 (a burst of
+2-20ms stages, the most floor-sensitive content). Battery 2.4 mean, 30/30 probes, suites green,
+deployed. Factory bank: presets/neon-factory (16 originals + build-bank.mts; rule: sustained envs
+need AUTHORED release stages, encoder fillers are rate 99 = 2ms).

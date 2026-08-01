@@ -36,7 +36,9 @@ const KF_NOTES: NotePlan = [
 
 const PROBES: ReadonlyArray<Probe> = [
     {name: "alternation", hold: 6, contourTol: 1.0, harmTol: 3.0, tailTol: -50},
-    {name: "dca-level", hold: 8, contourTol: 8.0, harmTol: 3.0, tailTol: -40}, // coarse: a 0.4s self-idling burst of 2-20ms stages, ~1 hop of timing drift dominates
+    // coarse: a 0.4s self-idling burst of 2-20ms stages, ~1 hop of timing drift dominates; harm 4.0
+    // absorbs the DELIBERATE 5ms DCW-sweep floor (anti-click) on this floor-sensitive content.
+    {name: "dca-level", hold: 8, contourTol: 8.0, harmTol: 4.0, tailTol: -40},
     {name: "dca-rate-fast", hold: 6, contourTol: 3.5, harmTol: 3.0, tailTol: -40},
     {name: "dca-rate-mid", hold: 20, contourTol: 3.0, harmTol: 3.0, tailTol: -40},
     // audible region ≤1.5dB (measured rate table + ascending-end-stage drain); the mean is dominated by

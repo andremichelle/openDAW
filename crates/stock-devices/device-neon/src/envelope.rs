@@ -150,17 +150,24 @@ impl Envelope {
 
     /// Advance by `dt` seconds (scaled by the caller's key follow) and return the raw 0-99 value.
     pub fn process(&mut self, spec: &EnvelopeSpec, dt: f32) -> f32 {
-        self.advance(spec, dt, false)
+        self.advance(spec, dt, false, 0.0)
+    }
+
+    /// The DCW envelope: like [`Self::process`] but the full swing is floored at 5ms — faster shape
+    /// morphs snap the waveform mid-cycle into an audible, phase-dependent click (user-verified: the
+    /// clicks vanish at ≥5ms). A deliberate deviation from the hardware's 2.2ms top rate.
+    pub fn process_dcw(&mut self, spec: &EnvelopeSpec, dt: f32) -> f32 {
+        self.advance(spec, dt, false, 0.005)
     }
 
     /// The PITCH envelope: measured on VirtualCZ, the PEG traverses LINEARLY IN SEMITONES (a 0→63 rise
     /// settles in 40ms where raw-linear predicts 318ms) under its own rate law — the value is held and
     /// returned in SEMITONES.
     pub fn process_pitch(&mut self, spec: &EnvelopeSpec, dt: f32) -> f32 {
-        self.advance(spec, dt, true)
+        self.advance(spec, dt, true, 0.0)
     }
 
-    fn advance(&mut self, spec: &EnvelopeSpec, dt: f32, pitch: bool) -> f32 {
+    fn advance(&mut self, spec: &EnvelopeSpec, dt: f32, pitch: bool, min_full_swing: f32) -> f32 {
         if self.holding {
             return self.value;
         }
@@ -172,7 +179,7 @@ impl Envelope {
             (target, PITCH_RANGE_SEMITONES * dt / full_swing_seconds_pitch(rate))
         } else {
             let target = if self.draining {0.0} else {spec.levels[stage].clamp(0.0, 99.0)};
-            (target, 99.0 * dt / full_swing_seconds(rate))
+            (target, 99.0 * dt / full_swing_seconds(rate).max(min_full_swing))
         };
         let reached = if self.value < target {
             self.value = (self.value + step).min(target);

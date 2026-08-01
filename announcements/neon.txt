@@ -20,7 +20,6 @@ There is also ring modulation for metallic bells and a noise mode for drums. The
 [manual](https://opendaw.studio/manuals/devices/instruments/neon) explains every knob. Now go make
 some bell pads.
 
-
 -----------------------------------------
 LINKEDIN
 -----------------------------------------

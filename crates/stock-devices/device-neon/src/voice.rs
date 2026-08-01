@@ -260,7 +260,7 @@ impl NeonVoice {
                     line.dca_env.release(&config.dca_env);
                 }
                 let semis = line.pitch_env.process_pitch(&config.pitch_env, dt);
-                let dcw_raw = line.dcw_env.process(&config.dcw_env, dt);
+                let dcw_raw = line.dcw_env.process_dcw(&config.dcw_env, dt);
                 // Measured on the VirtualCZ kf-dca decay ladder: the follow REFERENCES C2 (note 36) — at
                 // kf 9 a C4 decay already runs 1.5× and C6 3.3×, while C2 matches kf 0 exactly.
                 let dca_dt = dt * libm::exp2f(config.dca_key_follow / 9.0 * (kf_note - 36.0).max(0.0) * 0.026);
