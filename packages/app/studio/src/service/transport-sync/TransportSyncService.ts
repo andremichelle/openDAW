@@ -1,6 +1,7 @@
 import {DefaultObservableValue, isDefined, Option, Optional, Subscription, Terminable, Terminator} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Engine} from "@opendaw/studio-core"
+import {deferNextFrame, DeferExec} from "@opendaw/lib-dom"
 import {TransportAnchor} from "@/service/transport-sync/TransportAnchor"
 import {TransportChannel} from "@/service/transport-sync/TransportChannel"
 
@@ -22,17 +23,47 @@ export class TransportSyncService implements Terminable {
     readonly #follow = new DefaultObservableValue(false)
     readonly #rejoinGrid = new DefaultObservableValue<RejoinGrid>("bar")
 
+    readonly #positionBroadcast: DeferExec
+
     #channel: Option<TransportChannel> = Option.None
     #channelSubscription: Option<Subscription> = Option.None
     #latestAnchor: Option<TransportAnchor> = Option.None
     #rejoinTimeoutId: Optional<number> = undefined
     #driftIntervalId: Optional<number> = undefined
+    #applyingRemote: boolean = false
+    #tickPosition: Optional<ppqn> = undefined
+    #tickTimestamp: Optional<number> = undefined
 
     constructor(engine: Engine) {
         this.#engine = engine
+        this.#positionBroadcast = this.#terminator.own(deferNextFrame(() => this.publishLocal(true)))
         this.#terminator.own(this.#follow.subscribe(owner => {
             if (owner.getValue()) {this.#latestAnchor.ifSome(anchor => this.#reconcile(anchor))}
             else {this.#cancelRejoin(); this.#cancelDriftWatch()}
+        }))
+        // `engine.position` ticks continuously during normal playback (every engine state message),
+        // not just on seeks, so we can't republish on every change. Instead compare against where
+        // playback should naturally be since the last tick; a local seek (dragging the ruler,
+        // jump-to-grid, etc.) shows up as a jump far outside that expectation and re-anchors the
+        // stream — otherwise followers keep extrapolating from the pre-seek position. The baseline
+        // is still updated while #applyingRemote (this service itself following someone else's
+        // anchor), just without triggering a broadcast, so the tick right after isn't mistaken for
+        // a fresh local seek.
+        this.#terminator.own(this.#engine.position.subscribe(() => {
+            const isPlaying = this.#engine.isPlaying.getValue()
+            if (!isPlaying) {this.#tickPosition = undefined; this.#tickTimestamp = undefined; return}
+            const now = Date.now()
+            const actual = this.#engine.position.getValue()
+            if (!this.#applyingRemote && this.#channel.nonEmpty()
+                && isDefined(this.#tickPosition) && isDefined(this.#tickTimestamp)) {
+                const bpm = this.#engine.bpm.getValue()
+                const expected = this.#tickPosition + PPQN.secondsToPulses((now - this.#tickTimestamp) / 1000, bpm)
+                if (Math.abs(PPQN.pulsesToSeconds(actual - expected, bpm) * 1000) > ToleranceMillis) {
+                    this.#positionBroadcast.request()
+                }
+            }
+            this.#tickPosition = actual
+            this.#tickTimestamp = now
         }))
     }
 
@@ -82,8 +113,10 @@ export class TransportSyncService implements Terminable {
     }
 
     #snapToAnchor(anchor: TransportAnchor): void {
+        this.#applyingRemote = true
         this.#engine.setPosition(TransportAnchor.recompute(anchor, Date.now()))
         if (!this.#engine.isPlaying.getValue()) {this.#engine.play()}
+        this.#applyingRemote = false
         this.#ensureDriftWatch()
     }
 
@@ -97,7 +130,9 @@ export class TransportSyncService implements Terminable {
         const delayMillis = PPQN.pulsesToSeconds(nextGridLine - localPosition, anchor.bpm) * 1000
         this.#rejoinTimeoutId = window.setTimeout(() => {
             this.#rejoinTimeoutId = undefined
+            this.#applyingRemote = true
             this.#engine.setPosition(TransportAnchor.recompute(anchor, Date.now()))
+            this.#applyingRemote = false
             this.#ensureDriftWatch()
         }, delayMillis)
     }
