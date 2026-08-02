@@ -8,6 +8,7 @@ import {RoomAwareness, writeIdentity} from "@/service/RoomAwareness"
 import {newRoomSessionId, reportRoomResult, RoomResultStatus, startRoomDurationHeartbeat} from "@/service/RoomStatsReporter"
 import {ChatService} from "@/chat/ChatService"
 import {Events} from "@opendaw/lib-dom"
+import {TransportYjsChannel} from "@/service/transport-sync/TransportYjsChannel"
 
 const classifyConnectError = (error: unknown): RoomResultStatus => {
     if (Errors.isAbort(error)) {return "abort"}
@@ -68,6 +69,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         terminator.own({terminate: () => window.removeEventListener("pagehide", pagehideHandler)})
         const roomAwareness = new RoomAwareness(provider.awareness, roomName, userName, userColor)
         terminator.own(roomAwareness)
+        terminator.own(service.transportSync.follow.catchupAndSubscribe(owner => roomAwareness.follow.setValue(owner.getValue())))
         terminator.own(Events.subscribe(window, "pointermove", (event: PointerEvent) => {
             const target = event.target
             if (target instanceof Element) {
@@ -111,6 +113,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         terminator.own(chatService)
         service.chatService.wrap(chatService)
         terminator.own({terminate: () => service.chatService.clear()})
+        terminator.own(service.transportSync.attach(new TransportYjsChannel(provider.doc)))
         await Wait.timeSpan(TimeSpan.seconds(1))
     } else {
         reportRoomResult(sessionId, classifyConnectError(error))
