@@ -6,21 +6,102 @@ import {
     BinarySearch,
     DefaultObservableValue,
     int,
+    isNotNull,
     Lifecycle,
     NumberComparator,
+    Nullable,
     Option,
     SortedSet,
     Terminable,
     Terminator,
     UUID
 } from "@opendaw/lib-std"
-import {AudioUnitBoxAdapter, IndexComparator, TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, BoxAdapters, DeviceBoxAdapter,
+    DeviceHost, Devices, IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection,
+    PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter, TrackBoxAdapter, TrackType
+} from "@opendaw/studio-adapters"
+import {Box} from "@opendaw/lib-box"
+import {Pointers} from "@opendaw/studio-enums"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 import {StudioService} from "@/service/StudioService.ts"
 import {AudioUnitTracks} from "@/ui/timeline/tracks/audio-unit/AudioUnitTracks.tsx"
 import {ClipModifier} from "./clips/ClipModifier"
 import {Dragging} from "@opendaw/lib-dom"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
+
+// Group order within a unit (mirrors the device panel): instrument tracks, midi-fx automation, instrument
+// automation, audio-fx automation. `path` is the device's index chain from the unit's chain down through
+// nested composites (composite index, cell/slot index, inner device index, ...), compared lexicographically,
+// so one device's automation stays together and nested devices sort right after their composite.
+type TrackOrderKey = {category: int, path: ReadonlyArray<int>}
+
+const InstrumentTracks: TrackOrderKey = {category: 0, path: Arrays.empty()}
+const Unresolved: TrackOrderKey = {category: 9, path: Arrays.empty()}
+
+// A composite's nested chain host (FX Composite cell, Playfield slot) with its branch index and owning device.
+const nestedHost = (host: DeviceHost): Option<{parent: DeviceBoxAdapter, index: int}> =>
+    host instanceof AudioEffectCompositeCellBoxAdapter
+        ? Option.wrap({parent: host.compositeDevice(), index: host.indexField.getValue()})
+        : host instanceof PlayfieldSampleBoxAdapter
+            ? Option.wrap({parent: host.device(), index: host.indexField.getValue()})
+            : Option.None
+
+const deviceOrderKey = (adapter: DeviceBoxAdapter): TrackOrderKey => {
+    const ownIndex = Devices.isEffect(adapter) ? adapter.indexField.getValue() : 0
+    const host = adapter.deviceHost()
+    if (host.isAudioUnit) {
+        const category = Devices.isMidiEffect(adapter) ? 1
+            : Devices.isInstrument(adapter) ? 2
+                : Devices.isAudioEffect(adapter) ? 3 : 9
+        return {category, path: [ownIndex]}
+    }
+    return nestedHost(host).match({
+        none: () => ({category: 9, path: [ownIndex]}),
+        some: ({parent, index}) => {
+            const outer = deviceOrderKey(parent)
+            return {category: outer.category, path: [...outer.path, index, ownIndex]}
+        }
+    })
+}
+
+// An indirectly targeted parameter (modular) reaches its device through a Parameter edge
+// (mirrors TrackBoxAdapter#resolveOwnerDeviceBox).
+const ownerDeviceBox = (box: Box): Option<Box> => {
+    for (const [pointer] of box.outgoingEdges()) {
+        if (pointer.pointerType === Pointers.Parameter) {
+            return pointer.targetVertex.map(vertex => vertex.box)
+        }
+    }
+    return Option.None
+}
+
+const trackOrderKey = (boxAdapters: BoxAdapters, adapter: TrackBoxAdapter): TrackOrderKey => {
+    if (adapter.type !== TrackType.Value) {return InstrumentTracks}
+    return adapter.target.targetVertex.match({
+        none: () => Unresolved,
+        some: targetVertex => {
+            const box = targetVertex.box
+            const direct = boxAdapters.optAdapter(box).flatMap(deviceAdapter =>
+                Devices.isAny(deviceAdapter) ? Option.wrap(deviceAdapter) : Option.None)
+            const resolved = direct.nonEmpty()
+                ? direct
+                : ownerDeviceBox(box)
+                    .flatMap(owner => boxAdapters.optAdapter(owner))
+                    .flatMap(deviceAdapter =>
+                        Devices.isAny(deviceAdapter) ? Option.wrap(deviceAdapter) : Option.None)
+            return resolved.mapOr(deviceOrderKey, Unresolved)
+        }
+    })
+}
+
+const comparePaths = (a: ReadonlyArray<int>, b: ReadonlyArray<int>): int => {
+    const shared = Math.min(a.length, b.length)
+    for (let level = 0; level < shared; level++) {
+        if (a[level] !== b[level]) {return a[level] - b[level]}
+    }
+    return a.length - b.length
+}
 
 export interface TrackFactory {
     create(manager: TracksManager,
@@ -161,6 +242,8 @@ export class TracksManager implements Terminable {
                         adapter: audioUnitBoxAdapter
                     })
                     this.#scrollContainer.appendChild(unitTracks)
+                    audioUnitBoxAdapter.midiEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
+                    audioUnitBoxAdapter.audioEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
                     audioUnitLifecycle.ownAll(
                         {
                             terminate: () => {
@@ -184,6 +267,10 @@ export class TracksManager implements Terminable {
                                 })
                                 this.#tracks.add(track)
                                 trackLifecycle.own({terminate: () => element.remove()})
+                                trackLifecycle.own(trackBoxAdapter.catchupAndSubscribePath(option => {
+                                    track.path = option
+                                    this.#refreshHeaderDedup()
+                                }))
                                 this.#invalidateOrder()
                             },
                             onRemove: ({uuid}) => {
@@ -209,18 +296,114 @@ export class TracksManager implements Terminable {
         )
     }
 
+    // Any device add / remove / re-index anywhere in a unit's chains changes automation-track grouping, so the
+    // timeline order must re-sort. Recurses into composite cells and Playfield slots (their chains re-sort too).
+    #watchDeviceChain<ADAPTER extends IndexedBoxAdapter, POINTER extends Pointers>(
+        lifecycle: Terminator, collection: IndexedBoxAdapterCollection<ADAPTER, POINTER>): void {
+        const watchers = UUID.newSet<{uuid: UUID.Bytes, lifecycle: Terminator}>(({uuid}) => uuid)
+        lifecycle.own(collection.catchupAndSubscribe({
+            onAdd: (adapter: ADAPTER) => {
+                const deviceLifecycle = lifecycle.spawn()
+                watchers.add({uuid: adapter.uuid, lifecycle: deviceLifecycle})
+                if (adapter instanceof AudioCompositeAdapter) {
+                    this.#watchDeviceChain(deviceLifecycle, adapter.entries)
+                } else if (adapter instanceof AudioEffectCompositeCellBoxAdapter) {
+                    adapter.audioEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
+                } else if (adapter instanceof PlayfieldDeviceBoxAdapter) {
+                    this.#watchDeviceChain(deviceLifecycle, adapter.samples)
+                } else if (adapter instanceof PlayfieldSampleBoxAdapter) {
+                    adapter.midiEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
+                    adapter.audioEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
+                }
+                this.#invalidateOrder()
+            },
+            onRemove: ({uuid}: ADAPTER) => {
+                watchers.removeByKey(uuid).lifecycle.terminate()
+                this.#invalidateOrder()
+            },
+            onReorder: () => this.#invalidateOrder()
+        }))
+    }
+
     #invalidateOrder(): void {
         this.#orderedByIndex = Option.None
-        this.tracks().forEach(({trackBoxAdapter}, index) => trackBoxAdapter.listIndex = index)
+        // The sorted order drives the hit-test index and the DOM order (grid auto-placement), so display,
+        // DOM and interaction always agree. The DOM is only touched when a container's order actually
+        // deviates: appendChild MOVES a node, and moving the element a native drag was just pressed on
+        // silently cancels the drag (the "first drag dead, second works" symptom).
+        const tracks = this.tracks()
+        tracks.forEach(({trackBoxAdapter}, index) => trackBoxAdapter.listIndex = index)
+        const byParent = new Map<HTMLElement, Array<HTMLElement>>()
+        tracks.forEach(({element}) => {
+            const parent: Nullable<HTMLElement> = element.parentElement
+            if (isNotNull(parent)) {
+                const list = byParent.get(parent) ?? []
+                if (list.length === 0) {byParent.set(parent, list)}
+                list.push(element)
+            }
+        })
+        byParent.forEach((elements, parent) => {
+            const current = Array.from(parent.children)
+            const inOrder = current.length === elements.length
+                && elements.every((lane, index) => current[index] === lane)
+            if (!inOrder) {elements.forEach(lane => parent.appendChild(lane))}
+        })
+        this.#refreshHeaderDedup()
+    }
+
+    // Header dedup + tree guides: a device GROUP is a run of lanes sharing unit, type and device name. The
+    // first lane shows the device name, every lane always shows its own label, and the guide runs from the
+    // device name down to the group's last label ("group-end"). The type icon shows once per type-run.
+    // A device GROUP: lanes sharing unit, track type and device name (consecutive in display order).
+    #sameGroup(a: TrackContext, b: TrackContext): boolean {
+        return a.audioUnitBoxAdapter === b.audioUnitBoxAdapter
+            && a.trackBoxAdapter.type === b.trackBoxAdapter.type
+            && a.path.nonEmpty() && b.path.nonEmpty()
+            && a.path.unwrap()[0] === b.path.unwrap()[0]
+    }
+
+    // The display-ordered members of the device group containing `uuid` (empty when unknown).
+    groupMembers(uuid: UUID.Bytes): ReadonlyArray<TrackContext> {
+        const tracks = this.tracks()
+        const center = tracks.findIndex(context => UUID.equals(context.trackBoxAdapter.uuid, uuid))
+        if (center === -1) {return Arrays.empty()}
+        let first = center
+        while (first > 0 && this.#sameGroup(tracks[first - 1], tracks[center])) {first--}
+        let last = center
+        while (last < tracks.length - 1 && this.#sameGroup(tracks[last + 1], tracks[center])) {last++}
+        return tracks.slice(first, last + 1)
+    }
+
+    #refreshHeaderDedup(): void {
+        const tracks = this.tracks()
+        const sameGroup = (a: TrackContext, b: TrackContext): boolean => this.#sameGroup(a, b)
+        tracks.forEach((context, index) => {
+            const previous = index > 0 ? Option.wrap(tracks[index - 1]) : Option.None
+            const next = index < tracks.length - 1 ? Option.wrap(tracks[index + 1]) : Option.None
+            const sameType = previous.mapOr(scope =>
+                scope.audioUnitBoxAdapter === context.audioUnitBoxAdapter
+                && scope.trackBoxAdapter.type === context.trackBoxAdapter.type, false)
+            context.element.classList.toggle("repeat-icon", sameType)
+            context.element.classList.toggle("repeat-device", previous.mapOr(scope => sameGroup(scope, context), false))
+            context.element.classList.toggle("group-end", next.mapOr(scope => !sameGroup(context, scope), true))
+            context.element.classList.toggle("no-guide",
+                context.path.mapOr(path => path[1].trim().length === 0, true))
+        })
     }
 
     #toSortedTrackScopes(): ReadonlyArray<TrackContext> {
         return this.#tracks.values()
             .toSorted((a: TrackContext, b: TrackContext) => {
-                const diff = IndexComparator(
+                const unitDiff = IndexComparator(
                     a.audioUnitBoxAdapter.indexField.getValue(),
                     b.audioUnitBoxAdapter.indexField.getValue())
-                if (diff !== 0) {return diff}
+                if (unitDiff !== 0) {return unitDiff}
+                const boxAdapters = this.#service.project.boxAdapters
+                const keyA = trackOrderKey(boxAdapters, a.trackBoxAdapter)
+                const keyB = trackOrderKey(boxAdapters, b.trackBoxAdapter)
+                if (keyA.category !== keyB.category) {return keyA.category - keyB.category}
+                const pathDiff = comparePaths(keyA.path, keyB.path)
+                if (pathDiff !== 0) {return pathDiff}
                 return IndexComparator(a.trackBoxAdapter.indexField.getValue(), b.trackBoxAdapter.indexField.getValue())
             })
     }

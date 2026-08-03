@@ -1,5 +1,5 @@
 import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
-import {asDefined, Terminable} from "@opendaw/lib-std"
+import {asDefined, Option, Terminable} from "@opendaw/lib-std"
 
 export type Construct = {
     audioUnitBoxAdapter: AudioUnitBoxAdapter
@@ -13,6 +13,10 @@ export class TrackContext {
     readonly #trackBoxAdapter: TrackBoxAdapter
     readonly #element: HTMLElement
     readonly #lifecycle: Terminable
+
+    // The header's [device, target] path as currently displayed, kept by TracksManager's path subscription
+    // and read by its header dedup pass.
+    path: Option<[string, string]> = Option.None
 
     constructor({audioUnitBoxAdapter, trackBoxAdapter, element, lifecycle}: Construct) {
         this.#audioUnitBoxAdapter = audioUnitBoxAdapter

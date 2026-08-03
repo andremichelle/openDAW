@@ -24,6 +24,7 @@ export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, tr
         <div className={className}>
             <TrackHeader lifecycle={lifecycle}
                          service={service}
+                         trackManager={trackManager}
                          audioUnitBoxAdapter={audioUnitBoxAdapter}
                          trackBoxAdapter={trackBoxAdapter}/>
             <ClipLane lifecycle={lifecycle}
@@ -36,10 +37,7 @@ export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, tr
                         range={service.timeline.range}/>
         </div>
     )
-    const {indexField, box: {enabled}} = trackBoxAdapter
-    lifecycle.ownAll(
-        indexField.catchupAndSubscribe(owner => element.style.gridRow = String(owner.getValue() + 1)),
-        enabled.catchupAndSubscribe(owner => element.classList.toggle("mute", !owner.getValue()))
-    )
+    const {box: {enabled}} = trackBoxAdapter
+    lifecycle.own(enabled.catchupAndSubscribe(owner => element.classList.toggle("mute", !owner.getValue())))
     return element
 }

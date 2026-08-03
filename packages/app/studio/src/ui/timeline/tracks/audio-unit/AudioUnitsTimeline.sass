@@ -12,6 +12,15 @@ component
   --rest-height: 0
   --extra-space: 0
 
+  > div.unit-insert-line
+    position: absolute
+    left: 0
+    right: 0
+    height: 2px
+    background-color: var(--color-blue)
+    pointer-events: none
+    z-index: 1
+
   > div.scrollable
     display: grid
     grid-template-columns: subgrid

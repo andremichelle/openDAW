@@ -75,8 +75,11 @@ unit boundary — the first track of a unit always shows everything.
 ## Steps
 
 1. Fix `trackCategoryRank` order: instrument tracks 0, MIDI FX 1, instrument 2, Audio FX 3.
-2. Extend the sort with a device rank between category and track index: `[unit.index, categoryRank, device.index, track.index]` (device resolved via the parameter edge, as `trackCategoryRank` already does).
-3. Constrain user drag re-ordering of tracks to the same device group.
-4. Header dedup: hide icon / device name when the predecessor track shows the same value (extends the
-   existing `repeats-device` mechanism in `TracksManager#refreshNameDedup` to the icon column).
-5. Visual grouping clues in the header column (separate step, to be designed).
+2. Extend the sort with a device index PATH between category and track index: `[unit.index, categoryRank,
+   devicePath..., track.index]`. The path is the index chain from the unit's chain down through nested
+   composites (FX Composite cells, Playfield slots): composite index, cell/slot index, inner device index,
+   recursively — compared lexicographically, so nested-device automation sorts right after its composite's own.
+3. Header dedup: hide icon / device name / label when the predecessor track shows the same value (extends
+   the existing `repeats-device` mechanism in `TracksManager#refreshNameDedup` to all three columns).
+4. Visual grouping clues in the header column (to be designed).
+5. Constrain user drag re-ordering of tracks to the same device group.

@@ -15,7 +15,7 @@ component
   @include mixins.unit-type-colors
 
   &.editing:before
-    border-left: 0.125em var(--color) solid
+    border-left: 4px var(--color) solid
 
   &:before
     content: ""
@@ -23,5 +23,6 @@ component
     height: 100%
     grid-column: 1 / 2
     position: absolute
-    border-left: 0.125em var(--color-black) solid
+    border-radius: 2px 0 0 2px
+    border-left: 4px var(--color-black) solid
     @include colors.panel-background
