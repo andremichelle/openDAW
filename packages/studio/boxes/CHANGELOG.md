@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.103](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.102...@opendaw/studio-boxes@0.0.103) (2026-08-03)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
 ## [0.0.102](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.101...@opendaw/studio-boxes@0.0.102) (2026-07-29)
 
 **Note:** Version bump only for package @opendaw/studio-boxes
