@@ -30,10 +30,7 @@ export const installTrackHeaderMenu = (service: StudioService,
     return parent.addMenuItem(
         MenuItem.default({label: "Enabled", checked: trackBoxAdapter.enabled.getValue()})
             .setTriggerProcedure(() => editing.modify(() => trackBoxAdapter.enabled.toggle())),
-        MenuItem.default({
-            label: `New ${TrackType.toLabelString(trackType)} Track`,
-            hidden: trackBoxAdapter.type === TrackType.Undefined
-        }).setTriggerProcedure(() => editing.modify(() => {
+        MenuItem.default({label: `New ${TrackType.toLabelString(trackType)} Track`}).setTriggerProcedure(() => editing.modify(() => {
             TrackBox.create(project.boxGraph, UUID.generate(), box => {
                 box.type.setValue(trackType)
                 box.tracks.refer(audioUnitBoxAdapter.box.tracks)

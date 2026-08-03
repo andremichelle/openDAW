@@ -335,6 +335,8 @@ export namespace DawProjectImport {
                 const audioUnitBox = asDefined(audioUnits.get(trackId), `Cannot find track for '${trackId}'`)
                 if (audioUnitBox.type.getValue() === AudioUnitType.Output) {return Promise.resolve()}
                 const inputTrackType = readInputTrackType(audioUnitBox)
+                // No resolvable content type: regions cannot be expressed on this unit (was an Undefined track).
+                if (inputTrackType === TrackType.Undefined) {return Promise.resolve()}
                 const index = audioUnitBox.tracks.pointerHub.incoming().length
                 const trackBox: TrackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
                     box.tracks.refer(audioUnitBox.tracks)
@@ -529,6 +531,8 @@ export namespace DawProjectImport {
             if (audioUnitBox.type.getValue() !== AudioUnitType.Output
                 && audioUnitBox.tracks.pointerHub.incoming().length === 0) {
                 const inputTrackType = readInputTrackType(audioUnitBox)
+                // A track-less unit renders as a synthetic unit lane; only a resolvable content type gets a track.
+                if (inputTrackType === TrackType.Undefined) {return}
                 TrackBox.create(boxGraph, UUID.generate(), box => {
                     box.tracks.refer(audioUnitBox.tracks)
                     box.target.refer(audioUnitBox)

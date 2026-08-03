@@ -1,5 +1,5 @@
 import css from "./AudioUnitsTimeline.sass?inline"
-import {clamp, int, isDefined, Lifecycle, Option, UUID} from "@opendaw/lib-std"
+import {clamp, DefaultObservableValue, int, isDefined, Lifecycle, Option, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -61,12 +61,14 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         create: (manager: TracksManager,
                  lifecycle: Lifecycle,
                  audioUnitBoxAdapter: AudioUnitBoxAdapter,
-                 trackBoxAdapter: TrackBoxAdapter): HTMLElement => (
+                 trackBoxAdapter: TrackBoxAdapter,
+                 unitHead: DefaultObservableValue<boolean>): HTMLElement => (
             <Track lifecycle={lifecycle}
                    service={service}
                    trackManager={manager}
                    audioUnitBoxAdapter={audioUnitBoxAdapter}
-                   trackBoxAdapter={trackBoxAdapter}/>
+                   trackBoxAdapter={trackBoxAdapter}
+                   unitHead={unitHead}/>
         )
     }
     const manager: TracksManager = lifecycle.own(new TracksManager(service, scrollContainer, factory))

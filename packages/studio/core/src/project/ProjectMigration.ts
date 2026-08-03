@@ -37,6 +37,7 @@ import {
     migrateTimelineBox,
     migrateValueEventBox,
     migrateValueEventCollection,
+    migrateUndefinedTracks,
     migrateVaporisateurDeviceBox,
     migrateWarpMarkers,
     migrateZeitgeistDeviceBox,
@@ -113,6 +114,9 @@ export class ProjectMigration {
         // are unusable and crash editors. Runs after per-unit migration, which ensures each unit has a
         // capture box, so the comparison reflects the current instrument.
         migrateCaptureTrackMismatch(boxGraph)
+        // Placeholder Undefined tracks (the old timeline face of track-less units) are gone; the timeline
+        // renders a synthetic unit lane instead.
+        migrateUndefinedTracks(boxGraph)
         // 4th pass. Drop regions with a non-positive (derived) duration — legacy of the zero-length-sample
         // bug — so they can never trip validateTrack on a later edit. Runs after per-region migration (which
         // can rewrite audio durations) and before the overlap heal (which then sees only valid spans).

@@ -103,7 +103,7 @@ export namespace RecordAudio {
                 for (const track of capture.audioUnitBox.tracks.pointerHub.incoming()
                     .map(({box}) => asInstanceOf(box, TrackBox))) {
                     const trackType = track.type.getValue()
-                    if (trackType === TrackType.Value || trackType === TrackType.Undefined) {continue}
+                    if (trackType === TrackType.Value) {continue}
                     if (track === trackBox) {continue}
                     if (olderTakeAction === "disable-track") {
                         if (track.isAttached()) {

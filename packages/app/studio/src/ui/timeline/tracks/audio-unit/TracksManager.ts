@@ -29,6 +29,7 @@ import {AudioUnitTracks} from "@/ui/timeline/tracks/audio-unit/AudioUnitTracks.t
 import {ClipModifier} from "./clips/ClipModifier"
 import {Dragging} from "@opendaw/lib-dom"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
+import {UnitLane} from "@/ui/timeline/tracks/audio-unit/UnitLane.tsx"
 
 // Group order within a unit (mirrors the device panel): instrument tracks, midi-fx automation, instrument
 // automation, audio-fx automation. `path` is the device's index chain from the unit's chain down through
@@ -107,7 +108,8 @@ export interface TrackFactory {
     create(manager: TracksManager,
            lifecycle: Lifecycle,
            audioUnitBoxAdapter: AudioUnitBoxAdapter,
-           trackBoxAdapter: TrackBoxAdapter): HTMLElement
+           trackBoxAdapter: TrackBoxAdapter,
+           unitHead: DefaultObservableValue<boolean>): HTMLElement
 }
 
 export class TracksManager implements Terminable {
@@ -244,6 +246,25 @@ export class TracksManager implements Terminable {
                     this.#scrollContainer.appendChild(unitTracks)
                     audioUnitBoxAdapter.midiEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
                     audioUnitBoxAdapter.audioEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
+                    // A non-output unit WITHOUT notes/audio tracks shows one synthetic unit lane (the former
+                    // TrackType.Undefined placeholder, now render-only), swapped as content tracks come and go.
+                    const syntheticLifecycle = audioUnitLifecycle.own(new Terminator())
+                    const updateSynthetic = () => {
+                        const wants = !audioUnitBoxAdapter.isOutput && !audioUnitBoxAdapter.tracks.values()
+                            .some(track => track.type === TrackType.Notes || track.type === TrackType.Audio)
+                        const mounted = isNotNull(unitTracks.querySelector(":scope > .unit-lane"))
+                        if (wants && !mounted) {
+                            const laneElement = UnitLane({
+                                lifecycle: syntheticLifecycle,
+                                service: this.#service,
+                                audioUnitBoxAdapter
+                            })
+                            syntheticLifecycle.own({terminate: () => laneElement.remove()})
+                            unitTracks.prepend(laneElement)
+                        } else if (!wants && mounted) {
+                            syntheticLifecycle.terminate()
+                        }
+                    }
                     audioUnitLifecycle.ownAll(
                         {
                             terminate: () => {
@@ -257,13 +278,15 @@ export class TracksManager implements Terminable {
                         audioUnitBoxAdapter.tracks.catchupAndSubscribe({
                             onAdd: (trackBoxAdapter: TrackBoxAdapter) => {
                                 const trackLifecycle = audioUnitLifecycle.spawn()
-                                const element = this.#factory.create(this, trackLifecycle, audioUnitBoxAdapter, trackBoxAdapter)
+                                const unitHead = trackLifecycle.own(new DefaultObservableValue<boolean>(false))
+                                const element = this.#factory.create(this, trackLifecycle, audioUnitBoxAdapter, trackBoxAdapter, unitHead)
                                 unitTracks.appendChild(element)
                                 const track = new TrackContext({
                                     audioUnitBoxAdapter,
                                     trackBoxAdapter,
                                     element,
-                                    lifecycle: trackLifecycle
+                                    lifecycle: trackLifecycle,
+                                    unitHead
                                 })
                                 this.#tracks.add(track)
                                 trackLifecycle.own({terminate: () => element.remove()})
@@ -272,10 +295,12 @@ export class TracksManager implements Terminable {
                                     this.#refreshHeaderDedup()
                                 }))
                                 this.#invalidateOrder()
+                                updateSynthetic()
                             },
                             onRemove: ({uuid}) => {
                                 this.#tracks.removeByKey(uuid).lifecycle.terminate()
                                 this.#invalidateOrder()
+                                updateSynthetic()
                             },
                             onReorder: () => this.#invalidateOrder()
                         })
@@ -286,6 +311,7 @@ export class TracksManager implements Terminable {
                         lifecycle: audioUnitLifecycle
                     })
                     this.#invalidateOrder()
+                    updateSynthetic()
                 },
                 onRemove: (audioUnitBoxAdapter) => {
                     this.#audioUnits.removeByKey(audioUnitBoxAdapter.uuid).lifecycle.terminate()
@@ -343,7 +369,8 @@ export class TracksManager implements Terminable {
             }
         })
         byParent.forEach((elements, parent) => {
-            const current = Array.from(parent.children)
+            // The synthetic unit lane (if any) stays the container's first child, outside the sorted set.
+            const current = Array.from(parent.children).filter(child => !child.classList.contains("unit-lane"))
             const inOrder = current.length === elements.length
                 && elements.every((lane, index) => current[index] === lane)
             if (!inOrder) {elements.forEach(lane => parent.appendChild(lane))}
@@ -378,6 +405,12 @@ export class TracksManager implements Terminable {
         const tracks = this.tracks()
         const sameGroup = (a: TrackContext, b: TrackContext): boolean => this.#sameGroup(a, b)
         tracks.forEach((context, index) => {
+            // Head duties (channel controls, unit drag) live on the unit's FIRST DISPLAYED lane — always a
+            // content track (they sort first); a unit without one delegates to its synthetic lane instead.
+            const firstOfUnit = index === 0 || tracks[index - 1].audioUnitBoxAdapter !== context.audioUnitBoxAdapter
+            const hasContent = context.audioUnitBoxAdapter.tracks.values()
+                .some(track => track.type === TrackType.Notes || track.type === TrackType.Audio)
+            context.unitHead.setValue(firstOfUnit && hasContent)
             const previous = index > 0 ? Option.wrap(tracks[index - 1]) : Option.None
             const next = index < tracks.length - 1 ? Option.wrap(tracks[index + 1]) : Option.None
             const sameType = previous.mapOr(scope =>

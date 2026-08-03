@@ -1,4 +1,4 @@
-import {isAbsent, isNotNull, Nullable, Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {isAbsent, isNotNull, Nullable, Option, panic, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, Sample, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
@@ -15,6 +15,12 @@ export type CreateParameters = {
     audioFileBox: AudioFileBox
     sample: Sample
     type: "sample" | "file"
+}
+
+export type ResolvedSampleDrop = {
+    sample: Sample
+    type: "sample" | "file"
+    audioFileBoxFactory: Provider<AudioFileBox>
 }
 
 export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionCaptureTarget)> {
@@ -52,14 +58,13 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         return Option.wrap(target ?? "instrument")
     }
 
-    async drop(event: DragEvent, data: AnyDragData) {
-        const optDrop = this.canDrop(event, data)
-        if (optDrop.isEmpty()) {return}
-        const drop = optDrop.unwrap()
-        const project = this.project
-        const {boxAdapters, boxGraph, editing, api} = project
+    // Resolve a sample/file drag to a playable sample plus an AudioFileBox factory (imports OS files, loads
+    // the audio data, computes transients). `None` when the drag carries no sample or resolution failed.
+    static async resolveSample(service: StudioService, data: AnyDragData): Promise<Option<ResolvedSampleDrop>> {
+        const project = service.project
+        const {boxGraph} = project
         let aborted = false
-        const subscription = this.#service.projectProfileService.subscribe(() => {aborted = true})
+        const subscription = service.projectProfileService.subscribe(() => {aborted = true})
         let sample: Sample
         let sampleType: "sample" | "file"
         if (data.type === "sample") {
@@ -67,27 +72,59 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
             sampleType = "sample"
         } else if (data.type === "file") {
             const file = data.file
-            if (isAbsent(file)) {subscription.terminate(); return}
+            if (isAbsent(file)) {subscription.terminate(); return Option.None}
             const {status, value, error} = await Promises.tryCatch(file.arrayBuffer()
-                .then(arrayBuffer => this.#service.sampleService.importFile({name: file.name, arrayBuffer})))
-            if (aborted) {subscription.terminate(); return}
+                .then(arrayBuffer => service.sampleService.importFile({name: file.name, arrayBuffer})))
+            if (aborted) {subscription.terminate(); return Option.None}
             if (status === "rejected") {
                 console.warn(error)
                 subscription.terminate()
-                return
+                return Option.None
             }
             project.trackUserCreatedSample(UUID.parse(value.uuid))
             sample = value
             sampleType = "file"
-        } else if (data.type === "instrument") {
+        } else {
             subscription.terminate()
+            return Option.None
+        }
+        const {uuid: uuidAsString, name} = sample
+        const uuid = UUID.parse(uuidAsString)
+        const audioDataResult = await Promises.tryCatch(service.sampleManager.getAudioData(uuid))
+        if (aborted) {subscription.terminate(); return Option.None}
+        if (audioDataResult.status === "rejected") {
+            console.warn("Failed to load sample:", audioDataResult.error)
+            subscription.terminate()
+            RuntimeNotifier.notify({message: `Failed to load sample '${name}'.`, icon: "Info"})
+            return Option.None
+        }
+        const audioFileBoxResult = await Promises.tryCatch(AudioFileBoxFactory
+            .createModifier(Workers.Transients, boxGraph, audioDataResult.value, uuid, name))
+        if (aborted) {subscription.terminate(); return Option.None}
+        if (audioFileBoxResult.status === "rejected") {
+            console.warn("Failed to create audio file:", audioFileBoxResult.error)
+            subscription.terminate()
+            RuntimeNotifier.notify({message: `Failed to process sample '${name}'.`, icon: "Info"})
+            return Option.None
+        }
+        subscription.terminate()
+        return Option.wrap({sample, type: sampleType, audioFileBoxFactory: audioFileBoxResult.value})
+    }
+
+    async drop(event: DragEvent, data: AnyDragData) {
+        const optDrop = this.canDrop(event, data)
+        if (optDrop.isEmpty()) {return}
+        const drop = optDrop.unwrap()
+        const project = this.project
+        const {boxAdapters, editing, api} = project
+        if (data.type === "instrument") {
             const factoryKey = data.device
             if (factoryKey !== null) {
                 editing.modify(() => api.createAnyInstrument(InstrumentFactories[factoryKey]))
             }
             return
-        } else if (data.type === "preset") {
-            subscription.terminate()
+        }
+        if (data.type === "preset") {
             if (data.category === "audio-unit") {
                 PresetApplication.createNewAudioUnitFromRack(project, data.uuid, data.source)
                     .catch(console.warn)
@@ -96,31 +133,10 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
                     project, data.uuid, data.device, data.source).catch(console.warn)
             }
             return
-        } else {
-            subscription.terminate()
-            return
         }
-        const {uuid: uuidAsString, name} = sample
-        const uuid = UUID.parse(uuidAsString)
-        const audioDataResult = await Promises.tryCatch(this.#service.sampleManager.getAudioData(uuid))
-        if (aborted) {subscription.terminate(); return}
-        if (audioDataResult.status === "rejected") {
-            console.warn("Failed to load sample:", audioDataResult.error)
-            subscription.terminate()
-            RuntimeNotifier.notify({message: `Failed to load sample '${name}'.`, icon: "Info"})
-            return
-        }
-        const audioFileBoxResult = await Promises.tryCatch(AudioFileBoxFactory
-            .createModifier(Workers.Transients, boxGraph, audioDataResult.value, uuid, name))
-        if (aborted) {subscription.terminate(); return}
-        if (audioFileBoxResult.status === "rejected") {
-            console.warn("Failed to create audio file:", audioFileBoxResult.error)
-            subscription.terminate()
-            RuntimeNotifier.notify({message: `Failed to process sample '${name}'.`, icon: "Info"})
-            return
-        }
-        subscription.terminate()
-        const audioFileBoxFactory = audioFileBoxResult.value
+        const optResolved = await TimelineDragAndDrop.resolveSample(this.#service, data)
+        if (optResolved.isEmpty()) {return}
+        const {sample, type: sampleType, audioFileBoxFactory} = optResolved.unwrap()
         editing.modify(() => {
             let trackBoxAdapter: TrackBoxAdapter
             if (drop === "instrument") {

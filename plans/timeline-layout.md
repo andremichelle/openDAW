@@ -83,3 +83,16 @@ unit boundary — the first track of a unit always shows everything.
    the existing `repeats-device` mechanism in `TracksManager#refreshNameDedup` to all three columns).
 4. Visual grouping clues in the header column (to be designed).
 5. Constrain user drag re-ordering of tracks to the same device group.
+6. LATER — true LOCAL indices: today the track `index` stays ONE global sequence per unit (grouping is a
+   display-time sort, the index only tiebreaks within a group; no migration was needed). Restarting the
+   count from zero PER DEVICE GROUP is a box-format change: schema semantics, `getMinFreeIndex`/delete
+   reindex scoped per group, head-lane gating (`index === 0`) re-defined, plus a project migration for
+   existing files.
+7. DECIDED (2026-08-03) — the synthetic unit lane (replacing TrackType.Undefined for units without
+   notes/audio tracks) is UNIFORM for every non-output unit, including a track-less Tape (live-input
+   monitoring keeps it meaningful; a lane keeps it reachable). Drops delegate by the unit's accept type
+   (`input.adapter().accepts`): a sample on a Tape's synthetic lane creates the audio track + region at the
+   drop position (the synthetic lane disappears as the content track mounts), a MIDI file on a note
+   instrument creates the note track + region, mismatching content is rejected, buses accept no content.
+   Effect drags on the synthetic header behave like on any track header. Delete rule stays uniform
+   (deleting the last content track keeps the unit).

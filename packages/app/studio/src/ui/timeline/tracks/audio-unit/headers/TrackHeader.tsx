@@ -1,5 +1,5 @@
 import css from "./TrackHeader.sass?inline"
-import {Errors, Lifecycle, panic, Terminator, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, Lifecycle, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
@@ -24,9 +24,10 @@ type Construct = {
     trackManager: TracksManager
     trackBoxAdapter: TrackBoxAdapter
     audioUnitBoxAdapter: AudioUnitBoxAdapter
+    unitHead: DefaultObservableValue<boolean>
 }
 
-export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, audioUnitBoxAdapter}: Construct) => {
+export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, audioUnitBoxAdapter, unitHead}: Construct) => {
     const nameLabel: HTMLElement = <h5 className="device-name" style={{color: Colors.dark.toString()}}/>
     const controlLabel: HTMLElement = <h5 className="control-label" style={{color: Colors.shadow.toString()}}/>
     const {project} = service
@@ -62,11 +63,11 @@ export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, 
             {labels}
             <Group onInit={element => {
                 const channelLifeCycle = lifecycle.own(new Terminator())
-                trackBoxAdapter.indexField
+                unitHead
                     .catchupAndSubscribe(owner => {
                         channelLifeCycle.terminate()
                         Html.empty(element)
-                        if (owner.getValue() === 0) {
+                        if (owner.getValue()) {
                             replaceChildren(element, (
                                 <AudioUnitChannelControls lifecycle={channelLifeCycle}
                                                           service={service}
@@ -96,10 +97,10 @@ export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, 
     // payload as a mixer channel strip, so timeline and mixer drops interoperate.
     const dragLifecycle = lifecycle.own(new Terminator())
     lifecycle.ownAll(
-        trackBoxAdapter.indexField.catchupAndSubscribe(owner => {
+        unitHead.catchupAndSubscribe(owner => {
             dragLifecycle.terminate()
             iconContainer.draggable = false
-            if (owner.getValue() === 0 && !audioUnitBoxAdapter.isOutput) {
+            if (owner.getValue() && !audioUnitBoxAdapter.isOutput) {
                 dragLifecycle.own(DragAndDrop.installSource(iconContainer, () => ({
                     uuid: UUID.toString(audioUnitBoxAdapter.uuid),
                     type: "channelstrip",
@@ -133,13 +134,9 @@ export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, 
         }),
         Events.subscribe(element, "keydown", (event) => {
             if (!Keyboard.isDelete(event)) {return}
-            project.editing.modify(() => {
-                if (audioUnitBoxAdapter.tracks.collection.size() === 1) {
-                    project.api.deleteAudioUnit(audioUnitBoxAdapter.box)
-                } else {
-                    audioUnitBoxAdapter.deleteTrack(trackBoxAdapter)
-                }
-            })
+            // Deleting the LAST content track keeps the unit: its synthetic lane takes over (deleting the
+            // unit itself is the synthetic lane's / menu's job).
+            project.editing.modify(() => audioUnitBoxAdapter.deleteTrack(trackBoxAdapter))
         }),
         DragAndDrop.installTarget(element, {
             drag: (_event: DragEvent, data: AnyDragData): boolean =>
