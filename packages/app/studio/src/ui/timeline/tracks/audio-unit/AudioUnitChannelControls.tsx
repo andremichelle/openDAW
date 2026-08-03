@@ -120,7 +120,8 @@ export const AudioUnitChannelControls = ({lifecycle, service, adapter}: Construc
                 </div>
                 <div className="channel-isolation">
                     {muteControl}
-                    {soloControl}
+                    {/* The output is the master: it can't be soloed (mirrors the mixer strip). */}
+                    {!adapter.isOutput && soloControl}
                 </div>
                 <div className="channel-capture">
                     {captureOption.ifSome(capture => {

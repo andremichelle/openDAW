@@ -50,14 +50,17 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
                                               adapter={audioUnitBoxAdapter}/>
                 ))
             }}/>
-            <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
-                .addMenuItem(MenuItem.default({label: "Delete"})
-                    .setTriggerProcedure(() => project.editing.modify(() =>
-                        project.api.deleteAudioUnit(audioUnitBoxAdapter.box)))))}
-                        style={{minWidth: "0", justifySelf: "end"}}
-                        appearance={{color: Colors.shadow, activeColor: Colors.cream}}>
-                <Icon symbol={IconSymbol.Menu} style={{fontSize: "0.75em"}}/>
-            </MenuButton>
+            {/* The only menu action is Delete, which the mandatory output can't offer — so no menu icon there. */}
+            {audioUnitBoxAdapter.isOutput ? <div/> : (
+                <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
+                    .addMenuItem(MenuItem.default({label: "Delete"})
+                        .setTriggerProcedure(() => project.editing.modify(() =>
+                            project.api.deleteAudioUnit(audioUnitBoxAdapter.box)))))}
+                            style={{minWidth: "0", justifySelf: "end"}}
+                            appearance={{color: Colors.shadow, activeColor: Colors.cream}}>
+                    <Icon symbol={IconSymbol.Menu} style={{fontSize: "0.75em"}}/>
+                </MenuButton>
+            )}
         </div>
     )
     const regionArea: HTMLElement = <div className={Html.buildClassList(regionClassName, "deactive")}/>
@@ -163,6 +166,8 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
         }),
         Events.subscribe(header, "keydown", (event) => {
             if (!Keyboard.isDelete(event)) {return}
+            // The output unit is mandatory: never delete it (the engine rejects the transaction and desyncs).
+            if (audioUnitBoxAdapter.isOutput) {return}
             project.editing.modify(() => project.api.deleteAudioUnit(audioUnitBoxAdapter.box))
         })
     )

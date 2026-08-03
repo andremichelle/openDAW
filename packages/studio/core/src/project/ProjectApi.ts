@@ -457,6 +457,8 @@ export class ProjectApi {
     }
 
     deleteAudioUnit(audioUnitBox: AudioUnitBox): void {
+        // The output unit is mandatory; deleting it desyncs the engine (it rejects the transaction).
+        if (audioUnitBox.type.getValue() === AudioUnitType.Output) {return}
         const {rootBox} = this.#project
         IndexedBox.removeOrder(rootBox.audioUnits, audioUnitBox.index.getValue())
         audioUnitBox.delete()

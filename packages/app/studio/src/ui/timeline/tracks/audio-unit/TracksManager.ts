@@ -23,6 +23,7 @@ import {
 } from "@opendaw/studio-adapters"
 import {Box} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
+import {StudioPreferences} from "@opendaw/studio-core"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 import {StudioService} from "@/service/StudioService.ts"
 import {AudioUnitTracks} from "@/ui/timeline/tracks/audio-unit/AudioUnitTracks.tsx"
@@ -249,12 +250,17 @@ export class TracksManager implements Terminable {
                     this.#scrollContainer.appendChild(unitTracks)
                     audioUnitBoxAdapter.midiEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
                     audioUnitBoxAdapter.audioEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
-                    // A non-output unit WITHOUT notes/audio tracks shows one synthetic unit lane (the former
+                    // A unit WITHOUT notes/audio tracks shows one synthetic unit lane (the former
                     // TrackType.Undefined placeholder, now render-only), swapped as content tracks come and go.
+                    // The output unit is the exception: it only shows the lane once it HAS automation (a value
+                    // track), or when the studio preference forces it (a bare output stays hidden for beginners).
                     const syntheticLifecycle = audioUnitLifecycle.own(new Terminator())
                     const updateSynthetic = () => {
-                        const wants = !audioUnitBoxAdapter.isOutput && !audioUnitBoxAdapter.tracks.values()
+                        const hasContent = audioUnitBoxAdapter.tracks.values()
                             .some(track => track.type === TrackType.Notes || track.type === TrackType.Audio)
+                        const wants = !hasContent && (!audioUnitBoxAdapter.isOutput
+                            || audioUnitBoxAdapter.tracks.values().length > 0
+                            || StudioPreferences.settings.visibility["show-output-track"])
                         const mounted = isNotNull(unitTracks.querySelector(":scope > .unit-lane"))
                         if (wants && !mounted) {
                             const laneElement = UnitLane({
@@ -306,7 +312,9 @@ export class TracksManager implements Terminable {
                                 updateSynthetic()
                             },
                             onReorder: () => this.#invalidateOrder()
-                        })
+                        }),
+                        // The output unit's lane visibility follows the force-output-track preference.
+                        StudioPreferences.catchupAndSubscribe(() => updateSynthetic(), "visibility", "show-output-track")
                     )
                     this.#audioUnits.add({
                         uuid: audioUnitBoxAdapter.uuid,
