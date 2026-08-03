@@ -207,6 +207,9 @@ export class TracksManager implements Terminable {
     indexToGlobal(index: int): number {
         if (index < 0) {return 0}
         const tracks = this.tracks()
+        // A unit shown by only its synthetic lane contributes no TrackContext: there is no track to place,
+        // so the empty band's bottom is the answer (a clip-area marquee here selects nothing, never throws).
+        if (tracks.length === 0) {return this.tracksLocalBottom()}
         const offset = this.tracksLocalBottom()
         return asDefined(tracks.at(Math.min(index, tracks.length - 1))).position + offset
     }

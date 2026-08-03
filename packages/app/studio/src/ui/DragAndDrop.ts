@@ -52,11 +52,9 @@ export namespace DragAndDrop {
                     if (!isDefined(dataTransfer)) {return}
                     const data = provider()
                     if (!isDefined(data)) {
-                        console.debug("dragstart vetoed by provider")
                         event.preventDefault()
                         return
                     }
-                    console.debug(`dragstart type=${data.type}`)
                     dataTransfer.setData("application/json", "{custom: true}")
                     dataTransfer.effectAllowed = "copyMove"
                     classReceiver.classList.add("dragging")
