@@ -11,6 +11,9 @@ component
   color: var(--color-dark)
   outline: none
   pointer-events: all
+  // The device panel's section wash (DevicePanel.sass, top-down there), rotated left > right. Tinted like
+  // the unit's left border: the unit color while editing (--wash-color, set on AudioUnitTracks), else grey.
+  background: linear-gradient(to right, var(--wash-color, var(--color-black)) -500%, transparent 24px)
 
   &.accept-drop
     background-color: rgba(white, 0.04)
