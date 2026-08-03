@@ -7,6 +7,7 @@ import {EffectFactories, MenuItem} from "@opendaw/studio-core"
 import {AudioUnitBoxAdapter, ColorCodes, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
 import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts"
+import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {Surface} from "@/ui/surface/Surface"
@@ -20,11 +21,12 @@ const className = Html.adoptStyleSheet(css, "TrackHeader")
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
+    trackManager: TracksManager
     trackBoxAdapter: TrackBoxAdapter
     audioUnitBoxAdapter: AudioUnitBoxAdapter
 }
 
-export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAdapter}: Construct) => {
+export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, audioUnitBoxAdapter}: Construct) => {
     const nameLabel: HTMLElement = <h5 className="device-name" style={{color: Colors.dark.toString()}}/>
     const controlLabel: HTMLElement = <h5 className="control-label" style={{color: Colors.shadow.toString()}}/>
     const {project} = service
@@ -42,16 +44,22 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
     )
     const color = ColorCodes.forAudioType(audioUnitBoxAdapter.type)
     const lockIcon: HTMLElement = <Icon symbol={IconSymbol.Lock} className="lock-icon"/>
+    const iconContainer: HTMLElement = (
+        <div className="icon-container">
+            <Icon symbol={TrackType.toIconSymbol(trackBoxAdapter.type)} style={{color: color.toString()}}/>
+            {lockIcon}
+        </div>
+    )
+    const labels: HTMLElement = (
+        <div className="labels">
+            {nameLabel}
+            {controlLabel}
+        </div>
+    )
     const element: HTMLElement = (
         <div className={Html.buildClassList(className, "is-primary")} tabindex={-1}>
-            <div className="icon-container">
-                <Icon symbol={TrackType.toIconSymbol(trackBoxAdapter.type)} style={{color: color.toString()}}/>
-                {lockIcon}
-            </div>
-            <div className="labels">
-                {nameLabel}
-                {controlLabel}
-            </div>
+            {iconContainer}
+            {labels}
             <Group onInit={element => {
                 const channelLifeCycle = lifecycle.own(new Terminator())
                 trackBoxAdapter.indexField
@@ -84,7 +92,27 @@ export const TrackHeader = ({lifecycle, service, trackBoxAdapter, audioUnitBoxAd
     }
     updateFrozenState()
     const audioUnitEditing = project.userEditingManager.audioUnit
+    // The unit's head lane doubles as the unit reorder handle: dragging its type icon carries the same
+    // payload as a mixer channel strip, so timeline and mixer drops interoperate.
+    const dragLifecycle = lifecycle.own(new Terminator())
     lifecycle.ownAll(
+        trackBoxAdapter.indexField.catchupAndSubscribe(owner => {
+            dragLifecycle.terminate()
+            iconContainer.draggable = false
+            if (owner.getValue() === 0 && !audioUnitBoxAdapter.isOutput) {
+                dragLifecycle.own(DragAndDrop.installSource(iconContainer, () => ({
+                    uuid: UUID.toString(audioUnitBoxAdapter.uuid),
+                    type: "channelstrip",
+                    start_index: audioUnitBoxAdapter.indexField.getValue()
+                }), element))
+            }
+        }),
+        DragAndDrop.installSource(labels, () =>
+            trackManager.groupMembers(trackBoxAdapter.uuid).length < 2
+                ? null // a single-lane group has nowhere to go: veto, no ghost
+                : {uuid: UUID.toString(trackBoxAdapter.uuid), type: "track"}, element),
+        project.timelineFocus.track.catchupAndSubscribe(optTrack =>
+            element.classList.toggle("focused", optTrack.mapOr(track => track === trackBoxAdapter, false))),
         audioUnitFreeze.subscribe((uuid: UUID.Bytes) => {
             if (UUID.equals(uuid, audioUnitBoxAdapter.uuid)) {updateFrozenState()}
         }),

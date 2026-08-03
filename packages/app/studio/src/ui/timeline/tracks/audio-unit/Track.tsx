@@ -24,6 +24,7 @@ export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, tr
         <div className={className}>
             <TrackHeader lifecycle={lifecycle}
                          service={service}
+                         trackManager={trackManager}
                          audioUnitBoxAdapter={audioUnitBoxAdapter}
                          trackBoxAdapter={trackBoxAdapter}/>
             <ClipLane lifecycle={lifecycle}

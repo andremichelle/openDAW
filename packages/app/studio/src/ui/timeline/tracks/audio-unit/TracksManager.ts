@@ -6,8 +6,10 @@ import {
     BinarySearch,
     DefaultObservableValue,
     int,
+    isNotNull,
     Lifecycle,
     NumberComparator,
+    Nullable,
     Option,
     SortedSet,
     Terminable,
@@ -325,11 +327,26 @@ export class TracksManager implements Terminable {
 
     #invalidateOrder(): void {
         this.#orderedByIndex = Option.None
-        // One pass: the sorted order drives the hit-test index and, by re-appending each lane to the end of
-        // its unit container, the DOM order — so display, DOM and interaction always agree (grid auto-placement).
-        this.tracks().forEach(({trackBoxAdapter, element}, index) => {
-            trackBoxAdapter.listIndex = index
-            element.parentElement?.appendChild(element)
+        // The sorted order drives the hit-test index and the DOM order (grid auto-placement), so display,
+        // DOM and interaction always agree. The DOM is only touched when a container's order actually
+        // deviates: appendChild MOVES a node, and moving the element a native drag was just pressed on
+        // silently cancels the drag (the "first drag dead, second works" symptom).
+        const tracks = this.tracks()
+        tracks.forEach(({trackBoxAdapter}, index) => trackBoxAdapter.listIndex = index)
+        const byParent = new Map<HTMLElement, Array<HTMLElement>>()
+        tracks.forEach(({element}) => {
+            const parent: Nullable<HTMLElement> = element.parentElement
+            if (isNotNull(parent)) {
+                const list = byParent.get(parent) ?? []
+                if (list.length === 0) {byParent.set(parent, list)}
+                list.push(element)
+            }
+        })
+        byParent.forEach((elements, parent) => {
+            const current = Array.from(parent.children)
+            const inOrder = current.length === elements.length
+                && elements.every((lane, index) => current[index] === lane)
+            if (!inOrder) {elements.forEach(lane => parent.appendChild(lane))}
         })
         this.#refreshHeaderDedup()
     }
@@ -337,13 +354,29 @@ export class TracksManager implements Terminable {
     // Header dedup + tree guides: a device GROUP is a run of lanes sharing unit, type and device name. The
     // first lane shows the device name, every lane always shows its own label, and the guide runs from the
     // device name down to the group's last label ("group-end"). The type icon shows once per type-run.
-    #refreshHeaderDedup(): void {
-        const tracks = this.tracks()
-        const sameGroup = (a: TrackContext, b: TrackContext): boolean =>
-            a.audioUnitBoxAdapter === b.audioUnitBoxAdapter
+    // A device GROUP: lanes sharing unit, track type and device name (consecutive in display order).
+    #sameGroup(a: TrackContext, b: TrackContext): boolean {
+        return a.audioUnitBoxAdapter === b.audioUnitBoxAdapter
             && a.trackBoxAdapter.type === b.trackBoxAdapter.type
             && a.path.nonEmpty() && b.path.nonEmpty()
             && a.path.unwrap()[0] === b.path.unwrap()[0]
+    }
+
+    // The display-ordered members of the device group containing `uuid` (empty when unknown).
+    groupMembers(uuid: UUID.Bytes): ReadonlyArray<TrackContext> {
+        const tracks = this.tracks()
+        const center = tracks.findIndex(context => UUID.equals(context.trackBoxAdapter.uuid, uuid))
+        if (center === -1) {return Arrays.empty()}
+        let first = center
+        while (first > 0 && this.#sameGroup(tracks[first - 1], tracks[center])) {first--}
+        let last = center
+        while (last < tracks.length - 1 && this.#sameGroup(tracks[last + 1], tracks[center])) {last++}
+        return tracks.slice(first, last + 1)
+    }
+
+    #refreshHeaderDedup(): void {
+        const tracks = this.tracks()
+        const sameGroup = (a: TrackContext, b: TrackContext): boolean => this.#sameGroup(a, b)
         tracks.forEach((context, index) => {
             const previous = index > 0 ? Option.wrap(tracks[index - 1]) : Option.None
             const next = index < tracks.length - 1 ? Option.wrap(tracks[index + 1]) : Option.None

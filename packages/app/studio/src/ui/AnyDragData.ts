@@ -38,6 +38,9 @@ export type DragDevice = (
         uuid: string
     }) & DragCopyHint
 export type DragChannelStrip = { type: "channelstrip", uuid: string, start_index: int } & DragCopyHint
+// One timeline track lane dragged to reorder it among the lanes sharing its device group (same unit, same
+// track type, same device).
+export type DragTrack = { type: "track", uuid: UUID.String } & DragCopyHint
 // One AudioComposite entry dragged to reorder it among its siblings. `composite` scopes the drop so an entry
 // only reorders within its OWN composite; `index` is the dragged entry's current order.
 export type DragCompositeEntry = {
@@ -55,4 +58,4 @@ export type DragPreset = {
 } & DragCopyHint
 
 export type AnyDragData =
-    DragSample | DragFile | DragDevice | DragChannelStrip | DragSoundfont | DragPreset | DragCompositeEntry
+    DragSample | DragFile | DragDevice | DragChannelStrip | DragTrack | DragSoundfont | DragPreset | DragCompositeEntry
