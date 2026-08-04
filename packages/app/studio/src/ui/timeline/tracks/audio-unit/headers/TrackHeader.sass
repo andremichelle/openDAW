@@ -25,21 +25,18 @@ component
     left: 22px
     bottom: 2px
     font-size: 0.7em
-    color: var(--color-dark)
+    color: var(--color)
     cursor: pointer
     visibility: hidden
     transform: translateX(-50%)
-    transition: transform 0.1s, color 0.1s
+    transition: transform 0.1s
     pointer-events: all
 
     &.visible
       visibility: visible
 
-    &:hover
-      color: var(--color-cream)
-
     &.collapsed
-      transform: translateX(-50%) rotate(180deg)
+      transform: translateX(-50%) rotate(-90deg)
 
   // Tree guide: a vertical drop from the device name's first letter (geometry vars set on the Track root)
   // and a horizontal stub to this lane's label.
