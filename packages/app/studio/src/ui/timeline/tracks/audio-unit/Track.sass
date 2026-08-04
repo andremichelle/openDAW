@@ -10,6 +10,10 @@ component
   --stub-top: calc(50% + 7px)
   --guide-display: block
 
+  // An automation lane whose unit is collapsed: out of flow (grid skips it).
+  &.collapsed-away
+    display: none
+
   // A unit without a real track target (aux send, group) has no label to point at.
   &.no-guide
     --guide-display: none

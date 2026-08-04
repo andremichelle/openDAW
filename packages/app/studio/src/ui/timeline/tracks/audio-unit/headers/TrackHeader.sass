@@ -18,6 +18,29 @@ component
   &.accept-drop
     background-color: rgba(white, 0.04)
 
+  // The collapse-automation button: centred under the head lane's type icon, below it. Absolutely placed so
+  // it stays out of the header grid. Hidden unless `.visible` (head lane of a unit that has automation).
+  > svg.collapse-automation
+    position: absolute
+    left: 22px
+    bottom: 2px
+    font-size: 0.7em
+    color: var(--color-dark)
+    cursor: pointer
+    visibility: hidden
+    transform: translateX(-50%)
+    transition: transform 0.1s, color 0.1s
+    pointer-events: all
+
+    &.visible
+      visibility: visible
+
+    &:hover
+      color: var(--color-cream)
+
+    &.collapsed
+      transform: translateX(-50%) rotate(180deg)
+
   // Tree guide: a vertical drop from the device name's first letter (geometry vars set on the Track root)
   // and a horizontal stub to this lane's label.
   &::after

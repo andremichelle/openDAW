@@ -2,7 +2,7 @@ import trackCss from "./Track.sass?inline"
 import headerCss from "./headers/TrackHeader.sass?inline"
 import clipCss from "./clips/ClipLane.sass?inline"
 import regionCss from "./regions/RegionLane.sass?inline"
-import {Arrays, Lifecycle, Terminator, UUID} from "@opendaw/lib-std"
+import {Arrays, DefaultObservableValue, Lifecycle, Terminator, UUID} from "@opendaw/lib-std"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
@@ -14,6 +14,7 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {AudioContentFactory, MenuItem} from "@opendaw/studio-core"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
 import {DragAndDrop} from "@/ui/DragAndDrop"
+import {CollapseAutomationButton} from "@/ui/timeline/tracks/audio-unit/headers/CollapseAutomationButton.tsx"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-unit/TimelineDragAndDrop"
 
@@ -38,6 +39,9 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
     const header: HTMLElement = (
         <div className={Html.buildClassList(headerClassName, "is-primary")} tabindex={-1}>
             {iconHost}
+            <CollapseAutomationButton lifecycle={lifecycle} service={service}
+                                      audioUnitBoxAdapter={audioUnitBoxAdapter}
+                                      head={new DefaultObservableValue<boolean>(true)}/>
             <div className="labels">
                 {nameLabel}
                 <h5 className="control-label"/>

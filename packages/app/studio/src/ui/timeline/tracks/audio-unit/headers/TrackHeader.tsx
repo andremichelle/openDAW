@@ -7,6 +7,7 @@ import {EffectFactories, MenuItem} from "@opendaw/studio-core"
 import {AudioUnitBoxAdapter, ColorCodes, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
 import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts"
+import {CollapseAutomationButton} from "@/ui/timeline/tracks/audio-unit/headers/CollapseAutomationButton.tsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
@@ -60,6 +61,8 @@ export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, 
     const element: HTMLElement = (
         <div className={Html.buildClassList(className, "is-primary")} tabindex={-1}>
             {iconContainer}
+            <CollapseAutomationButton lifecycle={lifecycle} service={service}
+                                      audioUnitBoxAdapter={audioUnitBoxAdapter} head={unitHead}/>
             {labels}
             <Group onInit={element => {
                 const channelLifeCycle = lifecycle.own(new Terminator())

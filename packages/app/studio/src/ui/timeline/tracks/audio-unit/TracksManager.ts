@@ -250,6 +250,9 @@ export class TracksManager implements Terminable {
                     this.#scrollContainer.appendChild(unitTracks)
                     audioUnitBoxAdapter.midiEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
                     audioUnitBoxAdapter.audioEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
+                    // Collapsing/expanding this unit's automation re-sorts (its value lanes leave/rejoin the set).
+                    audioUnitLifecycle.own(audioUnitBoxAdapter.automationCollapsed
+                        .subscribe(() => this.#invalidateOrder()))
                     // A unit WITHOUT notes/audio tracks shows one synthetic unit lane (the former
                     // TrackType.Undefined placeholder, now render-only), swapped as content tracks come and go.
                     // The output unit is the exception: it only shows the lane once it HAS automation (a value
@@ -368,6 +371,9 @@ export class TracksManager implements Terminable {
         // DOM and interaction always agree. The DOM is only touched when a container's order actually
         // deviates: appendChild MOVES a node, and moving the element a native drag was just pressed on
         // silently cancels the drag (the "first drag dead, second works" symptom).
+        // Collapsed automation lanes are display:none'd out of flow; everything else is shown.
+        this.#tracks.values().forEach(track =>
+            track.element.classList.toggle("collapsed-away", this.#isCollapsedAway(track)))
         const tracks = this.tracks()
         tracks.forEach(({trackBoxAdapter}, index) => trackBoxAdapter.listIndex = index)
         const byParent = new Map<HTMLElement, Array<HTMLElement>>()
@@ -380,8 +386,9 @@ export class TracksManager implements Terminable {
             }
         })
         byParent.forEach((elements, parent) => {
-            // The synthetic unit lane (if any) stays the container's first child, outside the sorted set.
-            const current = Array.from(parent.children).filter(child => !child.classList.contains("unit-lane"))
+            // The synthetic unit lane and collapsed-away lanes stay put, outside the sorted (visible) set.
+            const current = Array.from(parent.children).filter(child =>
+                !child.classList.contains("unit-lane") && !child.classList.contains("collapsed-away"))
             const inOrder = current.length === elements.length
                 && elements.every((lane, index) => current[index] === lane)
             if (!inOrder) {elements.forEach(lane => parent.appendChild(lane))}
@@ -435,8 +442,16 @@ export class TracksManager implements Terminable {
         })
     }
 
+    // A value (automation) track hidden because its unit's automation is collapsed. Such tracks leave the
+    // sorted set entirely (no hit-test, no display order) and their element is display:none'd.
+    #isCollapsedAway(track: TrackContext): boolean {
+        return track.trackBoxAdapter.type === TrackType.Value
+            && track.audioUnitBoxAdapter.automationCollapsed.getValue()
+    }
+
     #toSortedTrackScopes(): ReadonlyArray<TrackContext> {
         return this.#tracks.values()
+            .filter(scope => !this.#isCollapsedAway(scope))
             .toSorted((a: TrackContext, b: TrackContext) => {
                 const unitDiff = IndexComparator(
                     a.audioUnitBoxAdapter.indexField.getValue(),

@@ -59,6 +59,14 @@ export const AudioUnitBox: BoxSchema<Pointers> = {
                 type: "pointer",
                 name: "capture",
                 pointerType: Pointers.Capture, mandatory: false
+            },
+            30: {
+                type: "object", name: "user-interface", class: {
+                    name: "AudioUnitUserInterface",
+                    fields: {
+                        1: {type: "boolean", name: "automation-collapsed"}
+                    }
+                }
             }
         } as const
     },
