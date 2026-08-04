@@ -23,8 +23,9 @@ export const StudioSettingsSchema = z.object({
         "musical": z.boolean(),
         "absolute": z.boolean(),
         "details": z.boolean(),
+        "count-bars-from-zero": z.boolean(),
         "fps": z.union(FpsOptions.map(value => z.literal(value)))
-    }).default({musical: true, absolute: false, details: false, fps: 25}),
+    }).default({musical: true, absolute: false, details: false, "count-bars-from-zero": false, fps: 25}),
     "engine": z.object({
         "note-audition-while-editing": z.boolean(),
         "auto-create-output-maximizer": z.boolean(),

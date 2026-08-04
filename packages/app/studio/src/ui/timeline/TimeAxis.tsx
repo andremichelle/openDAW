@@ -2,7 +2,7 @@ import css from "./TimeAxis.sass?inline"
 import {clamp, EmptyExec, isDefined, Lifecycle, Nullable, Option} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {CanvasPainter, TimeGrid, TimelineRange} from "@opendaw/studio-core"
+import {CanvasPainter, StudioPreferences, TimeGrid, TimelineRange} from "@opendaw/studio-core"
 import {Colors} from "@opendaw/studio-enums"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
@@ -39,6 +39,7 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
     } = service
     const {position, playbackTimestamp} = engine
     const canvas: HTMLCanvasElement = (<canvas/>)
+    const barOffset = () => StudioPreferences.settings["time-display"]["count-bars-from-zero"] ? 0 : 1
     const painter = lifecycle.own(new CanvasPainter(canvas, ({context}) => {
         const {height} = canvas
         const {fontFamily, fontSize} = getComputedStyle(canvas)
@@ -52,11 +53,11 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
                 const textX = x + 5
                 if (isBar) {
                     context.fillRect(x, 0, devicePixelRatio, height)
-                    context.fillText((bars + 1).toFixed(0), textX, textY)
+                    context.fillText((bars + barOffset()).toFixed(0), textX, textY)
                 } else if (isBeat) {
                     context.fillRect(x, height * 0.5, 1, height * 0.5)
                     context.fillRect(x, height * 0.5, 4, 1)
-                    context.fillText((bars + 1) + "•" + (beats + 1), textX, textY)
+                    context.fillText((bars + barOffset()) + "•" + (beats + 1), textX, textY)
                 } else {
                     context.fillRect(x, height * 0.5, 1, height * 0.5)
                 }
@@ -115,7 +116,8 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
         Html.watchResize(canvas, onResize),
         range.subscribe(painter.requestUpdate),
         playbackTimestamp.subscribe(painter.requestUpdate),
-        signatureTrack.subscribe(painter.requestUpdate)
+        signatureTrack.subscribe(painter.requestUpdate),
+        StudioPreferences.subscribe(painter.requestUpdate, "time-display", "count-bars-from-zero")
     )
     return (
         <div className={className} tabIndex={-1} onmousedown={event => event.preventDefault()}>
@@ -125,12 +127,12 @@ export const TimeAxis = ({lifecycle, service, snapping, range, mapper}: Construc
                 resolvers.promise.then((value: string) => {
                     const number = parseFloat(value)
                     if (isNaN(number)) {return}
-                    editing.modify(() => durationInPulses.setValue(clamp((number - 1) * PPQN.Bar, MIN_TRACK_DURATION, MAX_TRACK_DURATION)))
+                    editing.modify(() => durationInPulses.setValue(clamp((number - barOffset()) * PPQN.Bar, MIN_TRACK_DURATION, MAX_TRACK_DURATION)))
                 }, EmptyExec)
                 return resolvers
             }} provider={() => ({
                 unit: "bars",
-                value: (signatureTrack.toParts(durationInPulses.getValue()).bars + 1).toString()
+                value: (signatureTrack.toParts(durationInPulses.getValue()).bars + barOffset()).toString()
             })} location={() => {
                 const rect = endMarkerElement.getBoundingClientRect()
                 return {x: rect.left - 32, y: rect.top}

@@ -21,6 +21,7 @@ export namespace PreferencesPageLabels {
                 musical: "Show musical time",
                 absolute: "Show absolute time",
                 details: "Show details",
+                "count-bars-from-zero": "Count bars from zero",
                 fps: "Frame rate"
             }
         },
