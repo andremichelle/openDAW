@@ -36,8 +36,9 @@ import {NoEffectPlaceholder} from "@/ui/devices/panel/NoEffectPlaceholder"
 import {DeviceMount} from "@/ui/devices/panel/DeviceMount"
 import {Box} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {Project, ProjectProfile} from "@opendaw/studio-core"
+import {DevicesClipboard, Project, ProjectProfile} from "@opendaw/studio-core"
 import {ShadertoyPreview} from "@/ui/devices/panel/ShadertoyPreview"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 const className = Html.adoptStyleSheet(css, "DevicePanel")
 
@@ -267,8 +268,25 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
     // the instrument container, so Delete on the focused instrument removes
     // the whole audio unit without competing with global Delete handling.
     const instrumentShortcuts = ShortcutManager.get().createContext(instrumentContainer, "DevicePanel/Instrument")
+    // Panel-scoped Ctrl+D: duplicate the selected effect(s). When no effect is selected it returns false so the
+    // global "copy-device" shortcut takes over and duplicates the whole audio unit instead. Higher priority than
+    // the global context so it is consulted first while focus is inside the panel.
+    const effectShortcuts = ShortcutManager.get().createContext(element, "DevicePanel/Effects", 1)
     lifecycle.ownAll(
         instrumentShortcuts,
+        effectShortcuts,
+        effectShortcuts.register(GlobalShortcuts["copy-device"].shortcut, () => {
+            const {editing, deviceSelection, boxGraph, boxAdapters} = service.project
+            const effects = deviceSelection.selected().filter(adapter => adapter.type !== "instrument")
+            if (effects.length === 0) {return false}
+            const host = effects[0].deviceHost()
+            DevicesClipboard.duplicate({
+                getEnabled: () => true,
+                editing, selection: deviceSelection, boxGraph, boxAdapters,
+                getHost: () => Option.wrap(host)
+            })
+            return true
+        }),
         instrumentShortcuts.register(DevicePanelShortcuts["delete-audio-unit"].shortcut, () => {
             const optHost = getCurrentDeviceHost()
             if (optHost.isEmpty()) {return false}

@@ -143,6 +143,13 @@ export namespace DevicesClipboard {
         newAudio.forEach((box, idx) => box.index.setValue(audioInsertIndex + idx))
     }
 
+    // Duplicate the current device selection in place (copy then paste through an internal clipboard entry,
+    // leaving the OS clipboard untouched). Paste inserts the copies right after the selection and re-selects them.
+    export const duplicate = (context: Context): void => {
+        const handler = createHandler(context)
+        handler.copy().ifSome(entry => handler.paste(entry))
+    }
+
     export const createHandler = ({
                                       getEnabled,
                                       editing,

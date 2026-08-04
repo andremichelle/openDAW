@@ -6,13 +6,14 @@ import {
     InstrumentFactories,
     PresetHeader
 } from "@opendaw/studio-adapters"
-import {EffectFactories, MenuItem} from "@opendaw/studio-core"
+import {DevicesClipboard, EffectFactories, MenuItem} from "@opendaw/studio-core"
 import {IndexedBox, PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
-import {Editing, isDefined, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Editing, isDefined, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {StudioService} from "@/service/StudioService"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {PresetService, PresetEffectKind} from "@/ui/browse/PresetService"
+import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 export namespace MenuItems {
     export const forAudioUnitInput = (parent: MenuItem, service: StudioService, deviceHost: DeviceHost): void => {
@@ -103,7 +104,35 @@ export namespace MenuItems {
             populateMenuItemToCreateEffect(service, host, device)
         )
         populatePresetSubmenu(parent, service, host, {kind: "effect-context", device})
-        parent.addMenuItem(populateMenuItemToDeleteDevice(editing, device, {separatorBefore: true}))
+        parent.addMenuItem(
+            populateMenuItemToDuplicateDevice(service, host, device, {separatorBefore: true}),
+            populateMenuItemToDeleteDevice(editing, device)
+        )
+    }
+
+    const populateMenuItemToDuplicateDevice = (service: StudioService,
+                                               host: DeviceHost,
+                                               device: EffectDeviceBoxAdapter,
+                                               options?: { separatorBefore?: boolean }) => {
+        const {editing, deviceSelection, boxGraph, boxAdapters} = service.project
+        return MenuItem.default({
+            label: `Duplicate '${device.labelField.getValue()}'`,
+            shortcut: GlobalShortcuts["copy-device"].shortcut.format(),
+            separatorBefore: options?.separatorBefore
+        }).setTriggerProcedure(() => {
+            if (!deviceSelection.isSelected(device)) {
+                deviceSelection.deselectAll()
+                deviceSelection.select(device)
+            }
+            DevicesClipboard.duplicate({
+                getEnabled: () => true,
+                editing,
+                selection: deviceSelection,
+                boxGraph,
+                boxAdapters,
+                getHost: () => Option.wrap(host)
+            })
+        })
     }
 
     const populateMenuItemToNavigateToManual = (path: string, name: string) => {
