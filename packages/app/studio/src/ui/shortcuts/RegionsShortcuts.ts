@@ -3,6 +3,7 @@ import {CommonShortcuts} from "@/ui/shortcuts/CommonShortcuts"
 
 export const RegionsShortcutsFactory = ShortcutValidator.validate({
     ...CommonShortcuts.Selection,
+    ...CommonShortcuts.Snapping,
     "toggle-mute": {
         shortcut: Shortcut.of(Key.KeyM),
         description: "Toggle mute"

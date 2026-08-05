@@ -15,6 +15,17 @@ export namespace CommonShortcuts {
         }
     }
 
+    export const Snapping = {
+        "snapping-finer": {
+            shortcut: Shortcut.of(Key.Comma, {shift}),
+            description: "Use a finer snapping grid"
+        },
+        "snapping-coarser": {
+            shortcut: Shortcut.of(Key.Period, {shift}),
+            description: "Use a coarser snapping grid"
+        }
+    }
+
     export const Selection = {
         "select-all": {
             shortcut: Shortcut.of(Key.KeyA, {ctrl}),
