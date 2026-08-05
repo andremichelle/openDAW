@@ -15,6 +15,7 @@ import {
     quantizeRound,
     Strings,
     Subscription,
+    unitValue,
     UUID
 } from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
@@ -32,6 +33,7 @@ import {
     NoteRegionBox,
     TrackBox,
     ValueClipBox,
+    ValueEventBox,
     ValueEventCollectionBox,
     ValueRegionBox
 } from "@opendaw/studio-boxes"
@@ -433,8 +435,13 @@ export class ProjectApi {
                     }))
                 }
                 case TrackType.Value: {
+                    // #271: a new automation region inherits a single node from its surroundings — the preceding
+                    // region's held (outgoing) value, else the following region's incoming value, else the
+                    // parameter's current dial value. Computed BEFORE creating the region so the scan sees only
+                    // the existing regions.
+                    const seed = this.#automationSeedValue(trackBox, trackAdapter, startPosition)
                     const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
-                    return Option.wrap(ValueRegionBox.create(boxGraph, UUID.generate(), box => {
+                    const region = ValueRegionBox.create(boxGraph, UUID.generate(), box => {
                         box.position.setValue(startPosition)
                         box.label.setValue(name ?? "Automation")
                         box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
@@ -443,13 +450,35 @@ export class ProjectApi {
                         box.loopDuration.setValue(duration)
                         box.events.refer(events.owners)
                         box.regions.refer(trackBox.regions)
+                    })
+                    seed.ifSome(value => ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                        box.position.setValue(0)
+                        box.value.setValue(value)
+                        box.events.refer(events.events)
                     }))
+                    return Option.wrap(region)
                 }
             }
             return Option.None
         })()
         if (created.nonEmpty()) {solver()}
         return created
+    }
+
+    // #271: the value a freshly drawn automation region should hold. Hold-from-left: the preceding region's
+    // outgoing (held) value wins; else the following region's incoming value; else the parameter's current dial
+    // value. Returns None only when the track's target parameter cannot be resolved (a bug — seed no node then).
+    #automationSeedValue(trackBox: TrackBox, trackAdapter: TrackBoxAdapter, position: ppqn): Option<unitValue> {
+        return trackBox.target.targetVertex
+            .flatMap(vertex => this.#project.parameterFieldAdapters.opt(vertex.address))
+            .map(parameter => {
+                const dial = parameter.getControlledUnitValue()
+                const preceding = trackAdapter.regions.collection.lowerEqual(position)
+                if (isDefined(preceding) && preceding.isValueRegion()) {return preceding.outgoingValue(dial)}
+                const following = trackAdapter.regions.collection.greaterEqual(position)
+                if (isDefined(following) && following.isValueRegion()) {return following.incomingValue(dial)}
+                return dial
+            })
     }
 
     createNoteEvent({owner, position, duration, velocity, pitch, chance, cent}: NoteEventParams): NoteEventBox {
