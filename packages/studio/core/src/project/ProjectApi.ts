@@ -410,35 +410,46 @@ export class ProjectApi {
         if (duration <= 0.0) {return Option.None}
         const {boxGraph} = this.#project
         const type = trackBox.type.getValue()
-        switch (type) {
-            case TrackType.Notes: {
-                const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
-                return Option.wrap(NoteRegionBox.create(boxGraph, UUID.generate(), box => {
-                    box.position.setValue(Math.max(position, 0))
-                    box.label.setValue(name ?? "Notes")
-                    box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
-                    box.mute.setValue(false)
-                    box.duration.setValue(duration)
-                    box.loopDuration.setValue(duration)
-                    box.events.refer(events.owners)
-                    box.regions.refer(trackBox.regions)
-                }))
+        const startPosition = Math.max(position, 0)
+        // Resolve overlaps against existing regions BEFORE creating (mirrors duplicateRegion): drawing a region
+        // over an existing one must clip / push / keep per the setting, never STACK a second region at the same
+        // position. A raw create left two regions overlapping, which a later validateTracks hard-asserts on and
+        // crashes the app (live errors 1086/1087).
+        const trackAdapter = this.#project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
+        const solver = this.#project.overlapResolver.fromRange(trackAdapter, startPosition, startPosition + duration)
+        const created: Option<AnyRegionBox> = (() => {
+            switch (type) {
+                case TrackType.Notes: {
+                    const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
+                    return Option.wrap(NoteRegionBox.create(boxGraph, UUID.generate(), box => {
+                        box.position.setValue(startPosition)
+                        box.label.setValue(name ?? "Notes")
+                        box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
+                        box.mute.setValue(false)
+                        box.duration.setValue(duration)
+                        box.loopDuration.setValue(duration)
+                        box.events.refer(events.owners)
+                        box.regions.refer(trackBox.regions)
+                    }))
+                }
+                case TrackType.Value: {
+                    const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+                    return Option.wrap(ValueRegionBox.create(boxGraph, UUID.generate(), box => {
+                        box.position.setValue(startPosition)
+                        box.label.setValue(name ?? "Automation")
+                        box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
+                        box.mute.setValue(false)
+                        box.duration.setValue(duration)
+                        box.loopDuration.setValue(duration)
+                        box.events.refer(events.owners)
+                        box.regions.refer(trackBox.regions)
+                    }))
+                }
             }
-            case TrackType.Value: {
-                const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
-                return Option.wrap(ValueRegionBox.create(boxGraph, UUID.generate(), box => {
-                    box.position.setValue(Math.max(position, 0))
-                    box.label.setValue(name ?? "Automation")
-                    box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
-                    box.mute.setValue(false)
-                    box.duration.setValue(duration)
-                    box.loopDuration.setValue(duration)
-                    box.events.refer(events.owners)
-                    box.regions.refer(trackBox.regions)
-                }))
-            }
-        }
-        return Option.None
+            return Option.None
+        })()
+        if (created.nonEmpty()) {solver()}
+        return created
     }
 
     createNoteEvent({owner, position, duration, velocity, pitch, chance, cent}: NoteEventParams): NoteEventBox {
