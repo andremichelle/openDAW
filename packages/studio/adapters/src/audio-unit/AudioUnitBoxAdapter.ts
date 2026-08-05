@@ -76,7 +76,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
         return this.#box.output.targetVertex.mapOr(output =>
             output.box.address.equals(this.#context.rootBoxAdapter.address), false)
     }
-
+    get automationCollapsed(): BooleanField {return this.#box.userInterface.automationCollapsed}
     get midiEffectsField(): Option<Field<Pointers.MIDIEffectHost>> {return Option.wrap(this.#box.midiEffects)}
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput> {return this.#box.input}
     get audioEffectsField(): Option<Field<Pointers.AudioEffectHost>> {return Option.wrap(this.#box.audioEffects)}

@@ -78,7 +78,8 @@ describe("late sample click", () => {
         for (let q = 0; q < QUANTA; q++) {
             if (!readyBeforePlay && q === DELAY_BLOCKS) {expect(drainSamples()).toBeGreaterThan(0)}
             engine.render()
-            output.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+            const outputPtr = engine.output_ptr()
+            output.set(new Float32Array(memory.buffer, outputPtr, len), q * len)
         }
         return output
     }

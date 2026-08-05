@@ -198,6 +198,7 @@ export class StudioService implements ProjectEnv {
                     })
                 },
                 load: (engine: EngineWorklet) => {
+                    if (!this.optProject.contains(project)) {return}
                     this.engine.setWorklet(engine)
                     this.switchScreen(screen)
                 }
@@ -516,6 +517,7 @@ export class StudioService implements ProjectEnv {
                         })
                     },
                     load: (engine: EngineWorklet) => {
+                        if (!this.#projectProfileService.getValue().contains(profile)) {return}
                         this.engine.setWorklet(engine)
                         this.switchScreen(screen)
                     }
@@ -586,12 +588,12 @@ export class StudioService implements ProjectEnv {
     }
 
     #configBeforeUnload(): void {
-        window.addEventListener("beforeunload", (event: Event) => {
+        /*window.addEventListener("beforeunload", (event: Event) => {
             if (!navigator.onLine) {event.preventDefault()}
             if (this.hasProfile && this.profile.hasUnsavedChanges()) {
                 event.preventDefault()
             }
-        })
+        })*/
     }
 
     #checkRecovery(): void {

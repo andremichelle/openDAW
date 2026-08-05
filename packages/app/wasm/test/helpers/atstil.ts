@@ -91,7 +91,8 @@ export const renderAtstilWasm = async (boxGraph: BoxGraph, samples: ReadonlyArra
     const output = new Float32Array(quanta * len)
     for (let q = 0; q < quanta; q++) {
         engine.render()
-        output.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+        const enginePtr = engine.output_ptr()
+        output.set(new Float32Array(memory.buffer, enginePtr, len), q * len)
     }
     return output
 }

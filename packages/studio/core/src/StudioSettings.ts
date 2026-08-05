@@ -9,20 +9,23 @@ export const StudioSettingsSchema = z.object({
         "enable-history-buttons": z.boolean(),
         "auto-open-clips": z.boolean(),
         "base-frequency": z.boolean(),
-        "toasts": z.boolean()
+        "toasts": z.boolean(),
+        "show-output-track": z.boolean()
     }).default({
         "visible-help-hints": true,
         "enable-history-buttons": navigator.maxTouchPoints > 0,
         "auto-open-clips": true,
         "base-frequency": false,
-        "toasts": true
+        "toasts": true,
+        "show-output-track": false
     }),
     "time-display": z.object({
         "musical": z.boolean(),
         "absolute": z.boolean(),
         "details": z.boolean(),
+        "count-bars-from-zero": z.boolean(),
         "fps": z.union(FpsOptions.map(value => z.literal(value)))
-    }).default({musical: true, absolute: false, details: false, fps: 25}),
+    }).default({musical: true, absolute: false, details: false, "count-bars-from-zero": false, fps: 25}),
     "engine": z.object({
         "note-audition-while-editing": z.boolean(),
         "auto-create-output-maximizer": z.boolean(),

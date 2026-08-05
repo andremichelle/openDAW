@@ -62,7 +62,8 @@ const renderRun = (engine: any, memory: WebAssembly.Memory, quanta: number) => {
     const records: Array<MarkerRecord> = []
     for (let quantum = 0; quantum < quanta; quantum++) {
         engine.render()
-        const view = new DataView(memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
+        const enginePtr = engine.engine_state_ptr()
+        const view = new DataView(memory.buffer, enginePtr, engine.engine_state_len())
         positions.push(view.getFloat32(0))
         records.push(...drainMarkerRecords(engine, memory))
     }

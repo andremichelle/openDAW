@@ -53,7 +53,7 @@ describe("dist smoke", () => {
             const moduleImports: WebAssembly.ModuleImports = imports[entry.module] ??= {}
             moduleImports[entry.name] =
                 entry.kind === "function" ? () => 0
-                    : entry.kind === "memory" ? new WebAssembly.Memory({initial: 256, maximum: 16384, shared: true})
+                    : entry.kind === "memory" ? new WebAssembly.Memory({initial: 256, maximum: 16384})
                         : entry.kind === "table" ? new WebAssembly.Table({initial: 1024, element: "anyfunc"})
                             : new WebAssembly.Global({value: "i32", mutable: false}, 0)
         }

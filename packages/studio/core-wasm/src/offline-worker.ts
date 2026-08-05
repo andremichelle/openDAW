@@ -72,16 +72,17 @@ const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: F
         throw describeEngineTrap(engine, memory, rendered.error)
     }
     midi.drain(engine, memory)
-    const buffer = memory.buffer // re-read each block: talc may have grown the buffer
     if (stems > 0) {
         // STEM export: each stem's tap lands planar in the stem staging (stem i -> channels 2i / 2i+1).
-        const staging = new Float32Array(buffer, engine.stem_output_ptr(), stems * 2 * RenderQuantum)
+        const stagingPtr = engine.stem_output_ptr()
+        const staging = new Float32Array(memory.buffer, stagingPtr, stems * 2 * RenderQuantum)
         for (let channel = 0; channel < out.length && channel < stems * 2; channel++) {
             out[channel].set(staging.subarray(channel * RenderQuantum, (channel + 1) * RenderQuantum))
         }
         return
     }
     const pointer = engine.output_ptr()
+    const buffer = memory.buffer // read AFTER every pointer call: a growing call detaches the old buffer
     out[0].set(new Float32Array(buffer, pointer, RenderQuantum))
     if (out.length > 1) {
         out[1].set(new Float32Array(buffer, pointer + RenderQuantum * Float32Array.BYTES_PER_ELEMENT, RenderQuantum))
@@ -215,7 +216,8 @@ Communicator.executor<OfflineEngineProtocol>(
             drainResourceRequests(engine, memory, engineToClient, pending, config.sampleRate,
                 reason => engineToClient.error(describeEngineTrap(engine, memory, reason)))
             const stateSender = SyncStream.writer(EngineStateSchema(), config.syncStreamBuffer, engineState => {
-                const view = new DataView(memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
+                const statePtr = engine.engine_state_ptr()
+                const view = new DataView(memory.buffer, statePtr, engine.engine_state_len())
                 engineState.position = view.getFloat32(0)
                 engineState.bpm = view.getFloat32(4)
                 engineState.playbackTimestamp = 0

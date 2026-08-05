@@ -90,7 +90,8 @@ const renderPeak = async (source: ReturnType<typeof build>): Promise<number> => 
     let peak = 0
     for (let q = 0; q < 16; q++) {
         engine.render()
-        const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+        const enginePtr = engine.output_ptr()
+        const out = new Float32Array(memory.buffer, enginePtr, len)
         for (let i = 0; i < len; i++) {peak = Math.max(peak, Math.abs(out[i]))}
     }
     return peak

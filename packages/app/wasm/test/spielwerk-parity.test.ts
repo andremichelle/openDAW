@@ -97,7 +97,8 @@ const renderTransform = async (spielwerkCode: string, transformedPitch: number) 
     const wasm = new Float32Array(QUANTA * len)
     for (let q = 0; q < QUANTA; q++) {
         engine.render()
-        wasm.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+        const enginePtr = engine.output_ptr()
+        wasm.set(new Float32Array(memory.buffer, enginePtr, len), q * len)
     }
 
     // Reference: the SAME Apparat voiced directly at the transformed pitch (the note rings the whole window).

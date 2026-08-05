@@ -71,7 +71,8 @@ const renderFreezeStem = async (boxGraph: BoxGraph, unit: AudioUnitBox, quanta: 
     const pcm = new Float32Array(quanta * 2 * QUANTUM) // planar per quantum: L128 R128
     for (let quantum = 0; quantum < quanta; quantum++) {
         engine.render()
-        pcm.set(new Float32Array(memory.buffer, engine.stem_output_ptr(), 2 * QUANTUM), quantum * 2 * QUANTUM)
+        const enginePtr = engine.stem_output_ptr()
+        pcm.set(new Float32Array(memory.buffer, enginePtr, 2 * QUANTUM), quantum * 2 * QUANTUM)
     }
     return pcm
 }
@@ -128,7 +129,8 @@ const playFrozen = async (boxGraph: BoxGraph, unit: AudioUnitBox, stemPcm: Float
     const renderScan = (count: number, phase: string): void => {
         for (let quantum = 0; quantum < count; quantum++) {
             engine.render()
-            const output = new Float32Array(memory.buffer, engine.output_ptr(), len)
+            const enginePtr2 = engine.output_ptr()
+            const output = new Float32Array(memory.buffer, enginePtr2, len)
             scanNonFinite(output, `master output ${phase} @ quantum ${quantum}`)
             const meter = meterSlot()
             scanNonFinite(meter, `strip meter ${phase} @ quantum ${quantum}`)

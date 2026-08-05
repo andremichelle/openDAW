@@ -7,6 +7,7 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {DragPreset} from "@/ui/AnyDragData"
 import {PresetService} from "@/ui/browse/PresetService"
+import {AccessKey} from "@/opendaw-api/AccessKey"
 import {Icon} from "../components/Icon"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
@@ -22,7 +23,7 @@ type Construct = {
 export const PresetItem = ({entry, presetService, lifecycle}: Construct): HTMLElement => {
     const userMenuRoot: Nullable<MenuItem> = entry.source === "user"
         ? MenuItem.root().setRuntimeChildrenProcedure(parent => {
-            const canUpload = new URLSearchParams(location.search).has("access-key")
+            const canUpload = AccessKey.get().nonEmpty()
             parent.addMenuItem(
                 MenuItem.default({label: "Edit…"})
                     .setTriggerProcedure(() => presetService.editPreset(entry).catch(console.warn)),

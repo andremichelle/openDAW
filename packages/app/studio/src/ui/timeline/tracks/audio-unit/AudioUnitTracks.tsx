@@ -20,7 +20,7 @@ export const AudioUnitTracks = ({lifecycle, project, adapter}: Construct) => {
     const isAux = adapter.type === AudioUnitType.Aux
     const isOutput = adapter.type === AudioUnitType.Output
     const element: HTMLElement = (<div className={Html.buildClassList(className,
-        isAux && "aux", isBus && "bus", isOutput && "output")}/>)
+        isAux && "aux", isBus && "bus", isOutput && "output")} data-drag/>)
     const audioUnitEditing = project.userEditingManager.audioUnit
     lifecycle.ownAll(
         adapter.indexField.catchupAndSubscribe(field => element.style.gridRow = `${field.getValue() + 1}`),

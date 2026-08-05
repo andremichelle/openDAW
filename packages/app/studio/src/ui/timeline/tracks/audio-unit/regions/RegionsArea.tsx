@@ -112,6 +112,8 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             editing.modify(() => selected.forEach(({box: {mute}}) => mute.toggle()))
             return true
         }),
+        shortcuts.register(RegionsShortcuts["snapping-finer"].shortcut, () => snapping.stepFiner(), {allowRepeat: true}),
+        shortcuts.register(RegionsShortcuts["snapping-coarser"].shortcut, () => snapping.stepCoarser(), {allowRepeat: true}),
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
             const target = capturing.captureEvent(event)

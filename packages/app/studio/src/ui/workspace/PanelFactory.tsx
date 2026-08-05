@@ -13,12 +13,12 @@ import {ProjectProfileInfo} from "@/ui/info-panel/ProjectProfileInfo.tsx"
 import {BrowserPanel} from "@/ui/browse/BrowserPanel.tsx"
 import {NotePadPanel} from "@/ui/NotePadPanel"
 import {FlexSpace} from "./FlexSpace"
-import {VUMeterPanel} from "@/ui/meter/VUMeterPanel"
 import {PianoModePanel} from "@/ui/piano-panel/PianoModePanel.tsx"
 import {ShadertoyPreview} from "@/ui/shadertoy/ShadertoyPreview"
 import {ShadertoyEditor} from "@/ui/shadertoy/ShadertoyEditor"
 import {CodeEditorPanel} from "@/ui/code-editor/CodeEditorPanel"
 import {TapTempo} from "@/ui/pages/TapTempo"
+import {AnalysisPanel} from "@/ui/analysis/AnalysisPanel"
 
 export const createPanelFactory = (service: StudioService): PanelContentFactory => ({
     create: (lifecycle: Lifecycle, type: PanelType): JsxValue => {
@@ -39,8 +39,6 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<Mixer lifecycle={lifecycle} service={service}/>)
             case PanelType.ModularSystem:
                 return (<Modular lifecycle={lifecycle} service={service}/>)
-            case PanelType.VUMeter:
-                return (<VUMeterPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.ProjectInfo:
                 return (<ProjectProfileInfo lifecycle={lifecycle} service={service}/>)
             case PanelType.MidiFall:
@@ -53,6 +51,8 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<CodeEditorPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.TapTempo:
                 return (<TapTempo lifecycle={lifecycle} service={service}/>)
+            case PanelType.Analysis:
+                return (<AnalysisPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.EmptyFlexSpace:
                 return (<FlexSpace/>)
             default:

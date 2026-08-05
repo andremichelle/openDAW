@@ -22,7 +22,7 @@ type EngineExports = {
 
 const loadEngine = async () => {
     const module = await WebAssembly.compile(readFileSync(WASM))
-    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engine = new WebAssembly.Instance(module, {env: {memory, __indirect_function_table: table, host_perf_now: () => performance.now() * 1000.0}})
         .exports as unknown as EngineExports
@@ -38,11 +38,15 @@ describe("sync-log scrub", () => {
         const {engine, memory} = await loadEngine()
         const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)
         const steps = decodeSteps(commits)
-        const checksum = (): Int8Array => new Int8Array(memory.buffer, engine.checksum_ptr(), 32).slice()
+        const checksum = (): Int8Array => {
+            const pointer = engine.checksum_ptr() // must re-run per read (lazy recompute); call BEFORE reading buffer
+            return new Int8Array(memory.buffer, pointer, 32).slice()
+        }
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
                 const bytes = new Uint8Array(serializeUpdateTasks(tasks))
-                new Uint8Array(memory.buffer, engine.input_ptr(), bytes.length).set(bytes)
+                const enginePtr2 = engine.input_ptr()
+                new Uint8Array(memory.buffer, enginePtr2, bytes.length).set(bytes)
                 expect(engine.apply_updates(bytes.length)).toBe(0)
             },
             checksum(): Promise<void> {return Promise.resolve()}
@@ -71,7 +75,8 @@ describe("sync-log scrub", () => {
         await stepper.whenIdle()
         expect(current).toBe(final)
         await tick(); await tick() // let the last transaction's engine apply drain
-        expect(checksum()).toEqual(new Int8Array(memory.buffer, engine.checksum_ptr(), 32).slice())
+        const enginePtr3 = engine.checksum_ptr()
+        expect(checksum()).toEqual(new Int8Array(memory.buffer, enginePtr3, 32).slice())
         // The engine must match the source at the settled step.
         expect(Array.from(checksum())).toEqual(Array.from(new Int8Array(source.checksum())))
         console.log(`settled at ${current}; engine in sync`)

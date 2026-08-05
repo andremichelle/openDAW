@@ -3,3 +3,28 @@ component
   grid-template-columns: subgrid
   grid-column: 1 / -1
   height: var(--lane-height)
+  // Tree-guide geometry, consumed by the header's pseudo elements: the vertical drop starts below the device
+  // name on a group's first lane, passes through on followers, and stops at the label on the last lane.
+  --guide-top: calc(50% + 1px)
+  --guide-bottom: 0px
+  --stub-top: calc(50% + 7px)
+  --guide-display: block
+
+  // An automation lane whose unit is collapsed: out of flow (grid skips it).
+  &.collapsed-away
+    display: none
+
+  // A unit without a real track target (aux send, group) has no label to point at.
+  &.no-guide
+    --guide-display: none
+
+  &.repeat-device
+    --guide-top: 0px
+    // Without a device name the label is centered, so the stub (and a closing guide) meet the lane center.
+    --stub-top: 50%
+
+  &.group-end
+    --guide-bottom: calc(50% - 7px)
+
+  &.group-end.repeat-device
+    --guide-bottom: 50%

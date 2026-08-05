@@ -47,7 +47,8 @@ describe("scriptless device reporting", () => {
         let peak = 0
         for (let quantum = 0; quantum < 400; quantum++) {
             engine.render()
-            const output = new Float32Array(memory.buffer, engine.output_ptr(), len)
+            const enginePtr = engine.output_ptr()
+            const output = new Float32Array(memory.buffer, enginePtr, len)
             for (let index = 0; index < len; index++) {peak = Math.max(peak, Math.abs(output[index]))}
         }
         expect(peak).toBe(0)

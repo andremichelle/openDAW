@@ -140,7 +140,8 @@ describe("80s.od live clip playback scan", () => {
                 generation = currentGeneration
                 slots = readFloatSlots(engine, memory)
             }
-            const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+            const enginePtr = engine.output_ptr()
+            const out = new Float32Array(memory.buffer, enginePtr, len)
             for (let index = 0; index < len; index++) {
                 if (!Number.isFinite(out[index]) && !flagged.has("main")) {
                     flagged.add("main")
@@ -243,7 +244,8 @@ describe("80s.od live clip playback scan", () => {
                 generation = currentGeneration
                 slots = readFloatSlots(engine, memory)
             }
-            const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+            const enginePtr2 = engine.output_ptr()
+            const out = new Float32Array(memory.buffer, enginePtr2, len)
             for (let index = 0; index < len; index++) {
                 const value = out[index]
                 if (!Number.isFinite(value) && !flagged.has("main")) {

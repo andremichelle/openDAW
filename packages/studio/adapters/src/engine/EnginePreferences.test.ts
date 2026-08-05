@@ -45,9 +45,9 @@ describe("EnginePreferences", () => {
     it<TestContext>("should send initial state to client", async ({client}) => {
         await waitForBroadcast()
 
-        expect(client.settings.metronome.enabled).toBe(false)
-        expect(client.settings.metronome.gain).toBe(0.5)
-        expect(client.settings.metronome.beatSubDivision).toBe(4)
+        expect(client.settings.metronome.enabled).toBe(EngineSettingsDefaults.metronome.enabled)
+        expect(client.settings.metronome.gain).toBe(EngineSettingsDefaults.metronome.gain)
+        expect(client.settings.metronome.beatSubDivision).toBe(EngineSettingsDefaults.metronome.beatSubDivision)
     })
 
     it<TestContext>("should broadcast changes to client", async ({host, client}) => {
@@ -67,13 +67,13 @@ describe("EnginePreferences", () => {
         updateSpy.mockClear()
 
         host.settings.metronome.enabled = false
-        host.settings.metronome.gain = 0.3
+        host.settings.metronome.gain = -12.0
         host.settings.metronome.beatSubDivision = 2
         await waitForBroadcast()
 
         expect(updateSpy).toHaveBeenCalledTimes(1)
         expect(client.settings.metronome.enabled).toBe(false)
-        expect(client.settings.metronome.gain).toBe(0.3)
+        expect(client.settings.metronome.gain).toBe(-12.0)
         expect(client.settings.metronome.beatSubDivision).toBe(2)
     })
 
@@ -92,13 +92,13 @@ describe("EnginePreferences", () => {
 
         const observer = vi.fn()
         client.catchupAndSubscribe(observer, "metronome", "gain")
-        expect(observer).toHaveBeenCalledWith(0.5)
+        expect(observer).toHaveBeenCalledWith(EngineSettingsDefaults.metronome.gain)
 
         observer.mockClear()
-        host.settings.metronome.gain = 0.9
+        host.settings.metronome.gain = -3.0
         await waitForBroadcast()
 
-        expect(observer).toHaveBeenCalledWith(0.9)
+        expect(observer).toHaveBeenCalledWith(-3.0)
     })
 
     it<TestContext>("should only notify changed keys on client", async ({host, client}) => {
@@ -108,7 +108,7 @@ describe("EnginePreferences", () => {
         client.catchupAndSubscribe(metronomeObserver, "metronome")
         metronomeObserver.mockClear()
 
-        host.settings.metronome.gain = 0.7
+        host.settings.metronome.gain = -9.0
         await waitForBroadcast()
 
         expect(metronomeObserver).toHaveBeenCalledTimes(1)

@@ -11,7 +11,8 @@ export namespace PreferencesPageLabels {
                 "enable-history-buttons": "Show Undo/Redo buttons",
                 "auto-open-clips": "Always open clip view",
                 "base-frequency": "Show base frequency",
-                "toasts": "Show notifications"
+                "toasts": "Show notifications",
+                "show-output-track": "Always show the output track"
             }
         },
         "time-display": {
@@ -20,6 +21,7 @@ export namespace PreferencesPageLabels {
                 musical: "Show musical time",
                 absolute: "Show absolute time",
                 details: "Show details",
+                "count-bars-from-zero": "Count bars from zero",
                 fps: "Frame rate"
             }
         },

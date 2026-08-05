@@ -55,6 +55,7 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
     constructor(manager: CaptureDevices, audioUnitBox: AudioUnitBox, captureMidiBox: CaptureMidiBox) {
         super(manager, audioUnitBox, captureMidiBox)
         this.#streamGenerator = Promises.sequentialize(() => this.#updateStream())
+        const accessSubscription = new Terminator()
         this.ownAll(
             captureMidiBox.channel.catchupAndSubscribe(async owner => {
                 const channel = owner.getValue()
@@ -80,6 +81,21 @@ export class CaptureMidi extends Capture<CaptureMidiBox> {
             }),
             this.#notifier.subscribe((signal: NoteSignal) => manager.project.engine.noteSignal(signal)),
             this.#notifier.subscribe((signal: NoteSignal) => this.#bufferNote(signal)),
+            accessSubscription,
+            // The stream snapshots the input devices when arming — MIDI access granted AFTER arming
+            // (the header toggle) or a hot-plugged device must rebuild the stream of an armed capture.
+            MidiDevices.available().catchupAndSubscribe(async () => {
+                accessSubscription.terminate()
+                MidiDevices.get().ifSome(access => accessSubscription.own(
+                    Events.subscribe(access, "statechange", async () => {
+                        if (this.armed.getValue()) {
+                            await this.#streamGenerator()
+                        }
+                    })))
+                if (this.armed.getValue()) {
+                    await this.#streamGenerator()
+                }
+            }),
             Terminable.create(() => {
                 this.#stopStream()
                 this.#stopCapture()

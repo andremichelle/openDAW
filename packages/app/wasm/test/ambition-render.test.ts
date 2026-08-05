@@ -44,7 +44,8 @@ const renderRms = async (boxGraph: BoxGraph, samples: ReadonlyArray<{uuid: UUID.
     let sum = 0, peak = 0, count = 0
     for (let q = 0; q < quanta; q++) {
         engine.render()
-        const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+        const enginePtr = engine.output_ptr()
+        const out = new Float32Array(memory.buffer, enginePtr, len)
         buffer.set(out, q * len)
         for (let i = 0; i < len; i++) {sum += out[i] * out[i]; peak = Math.max(peak, Math.abs(out[i])); count++}
     }

@@ -64,7 +64,10 @@ export const disableLoopArea = (boxGraph: BoxGraph): void => {
 let channelCounter = 0
 const connectSync = (engine: any, memory: WebAssembly.Memory, source: {checksum(): Int8Array}) => {
     const channelName = `perf-sync-${channelCounter++}`
-    const engineChecksum = (): Int8Array => new Int8Array(memory.buffer, engine.checksum_ptr(), 32).slice()
+    const engineChecksum = (): Int8Array => {
+        const pointer = engine.checksum_ptr()
+        return new Int8Array(memory.buffer, pointer, 32).slice()
+    }
     const target: Synchronization<BoxIO.TypeMap> = {
         sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
             const bytes = new Uint8Array(serializeUpdateTasks(tasks))
@@ -120,7 +123,7 @@ const drainResources = async (engine: any, memory: WebAssembly.Memory, bundle: B
 
 export const renderWasmOffline = async (bundle: Bundle, quanta: number, sampleRate = 48000): Promise<OfflineResult> => {
     const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} = await loadEngineModules()
-    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engine = new WebAssembly.Instance(engineModule, {env: {
         memory, __indirect_function_table: table,
@@ -159,7 +162,8 @@ export const renderWasmOffline = async (bundle: Bundle, quanta: number, sampleRa
     const t0 = performance.now()
     for (let q = 0; q < quanta; q++) {
         engine.render()
-        const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+        const outputPtr = engine.output_ptr()
+        const out = new Float32Array(memory.buffer, outputPtr, len)
         left.set(out.subarray(0, half), q * half)
         right.set(out.subarray(half, len), q * half)
     }

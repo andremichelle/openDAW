@@ -320,6 +320,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-neon"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+ "voicing",
+]
+
+[[package]]
 name = "device-neural-amp"
 version = "0.0.0"
 dependencies = [

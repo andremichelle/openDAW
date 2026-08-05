@@ -1,49 +1,67 @@
 //! A stereo peak + RMS meter for DEVICE-side telemetry (the TS `PeakBroadcaster` DSP + lib-dsp `RMS`):
-//! a 250 ms peak decay and a 100 ms sliding RMS window per channel, written as `[peakL, peakR, rmsL, rmsR]`
+//! a 250 ms peak decay and a 300 ms sliding RMS window per channel, written as `[peakL, peakR, rmsL, rmsR]`
 //! into a caller-provided slice (a device's broadcast slot). ALLOCATION-FREE (device crates have no
-//! allocator): fixed-capacity rings sized for up to 96 kHz, built IN PLACE via `init`. The engine-side
-//! twin (`engine_env::meter`) owns a shared slot and may allocate; this one is for plugin crates.
+//! allocator), built IN PLACE via `init`. The ring stores one mean-square per 128-frame bucket (not per
+//! sample), so the window slides in bucket steps: rate-correct at any sample rate, 2 KB per channel.
+//! The engine-side twin (`engine_env::meter`) owns a shared slot and may allocate; this one is for
+//! plugin crates.
 
 const PEAK_DECAY_SECONDS: f64 = 0.250; // TS PeakBroadcaster.PEAK_DECAY
-const RMS_WINDOW_SECONDS: f32 = 0.100; // TS PeakBroadcaster.RMS_WINDOW
-const RMS_CAPACITY: usize = 9600; // 100 ms at 96 kHz; higher rates clamp the window
+const RMS_WINDOW_SECONDS: f32 = 0.300; // TS PeakBroadcaster.RMS_WINDOW
+const BUCKET_FRAMES: usize = 128; // one render quantum; sub-quantum blocks accumulate until full
+const RING_CAPACITY: usize = 512; // 300 ms in buckets up to ~218 kHz
 
-/// The sliding-window RMS (lib-dsp `RMS`): a ring of squares with a running sum.
 struct Rms {
-    values: [f32; RMS_CAPACITY],
-    window: usize,
-    inv: f64,
+    values: [f32; RING_CAPACITY], // per-bucket mean-squares
+    window: usize,                // window length in buckets
     index: usize,
-    sum: f64
+    sum: f64,                     // running sum of the ring window's mean-squares
+    bucket_sum: f64,              // squares accumulated in the open bucket
+    bucket_count: usize
 }
 
 impl Rms {
-    fn init(&mut self, window: usize) {
-        self.window = window.clamp(1, RMS_CAPACITY);
-        self.inv = 1.0 / self.window as f64;
+    fn init(&mut self, window_buckets: usize) {
+        self.window = window_buckets.clamp(1, RING_CAPACITY);
         self.values[..self.window].fill(0.0);
         self.index = 0;
         self.sum = 0.0;
+        self.bucket_sum = 0.0;
+        self.bucket_count = 0;
     }
 
     fn process_block(&mut self, samples: &[f32]) -> f32 {
         for &sample in samples {
-            let squared = (sample * sample) as f64;
-            self.sum -= self.values[self.index] as f64;
-            self.sum += squared;
-            self.values[self.index] = squared as f32;
-            self.index += 1;
-            if self.index == self.window {
-                self.index = 0;
+            self.bucket_sum += (sample * sample) as f64;
+            self.bucket_count += 1;
+            if self.bucket_count == BUCKET_FRAMES {
+                let mean = (self.bucket_sum / BUCKET_FRAMES as f64) as f32;
+                self.sum -= self.values[self.index] as f64;
+                self.sum += mean as f64;
+                self.values[self.index] = mean;
+                self.index += 1;
+                if self.index == self.window {
+                    self.index = 0;
+                }
+                self.bucket_sum = 0.0;
+                self.bucket_count = 0;
             }
         }
-        if self.sum <= 0.0 { 0.0 } else { math::sqrt(self.sum * self.inv) as f32 }
+        let total = self.sum.max(0.0) * BUCKET_FRAMES as f64 + self.bucket_sum;
+        if total <= 0.0 {
+            0.0
+        } else {
+            let count = (self.window * BUCKET_FRAMES + self.bucket_count) as f64;
+            math::sqrt(total / count) as f32
+        }
     }
 
     fn clear(&mut self) {
         self.values[..self.window].fill(0.0);
         self.sum = 0.0;
         self.index = 0;
+        self.bucket_sum = 0.0;
+        self.bucket_count = 0;
     }
 }
 
@@ -58,7 +76,7 @@ pub struct StereoMeter {
 impl StereoMeter {
     /// Build IN PLACE (the state block arrives zeroed).
     pub fn init(&mut self, sample_rate: f32) {
-        let window = (sample_rate * RMS_WINDOW_SECONDS) as usize;
+        let window = (((sample_rate * RMS_WINDOW_SECONDS) as usize) + BUCKET_FRAMES / 2) / BUCKET_FRAMES;
         self.decay_base = math::exp(-1.0 / (sample_rate as f64 * PEAK_DECAY_SECONDS));
         self.peak_left = 0.0;
         self.peak_right = 0.0;

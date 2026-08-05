@@ -52,7 +52,8 @@ describe("load 303 project", () => {
         let peak = 0
         for (let q = 0; q < QUANTA; q++) {
             engine.render()
-            const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+            const enginePtr = engine.output_ptr()
+            const out = new Float32Array(memory.buffer, enginePtr, len)
             for (let i = 0; i < len; i++) {peak = Math.max(peak, Math.abs(out[i]))}
         }
         expect(peak, "the scripted project produced audio").toBeGreaterThan(0.01)

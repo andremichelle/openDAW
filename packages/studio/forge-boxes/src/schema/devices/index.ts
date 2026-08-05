@@ -6,6 +6,7 @@ import {TapeDeviceBox} from "./instruments/TapeDeviceBox"
 import {VaporisateurDeviceBox} from "./instruments/VaporisateurDeviceBox"
 import {ArpeggioDeviceBox} from "./midi-effects/ArpeggioDeviceBox"
 import {PitchDeviceBox} from "./midi-effects/PitchDeviceBox"
+import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
 import {StereoToolDeviceBox} from "./audio-effects/StereoToolDeviceBox"
@@ -64,6 +65,7 @@ export const DeviceDefinitions = [
     MIDIOutputBox,
     MIDIOutputParameterBox,
     SoundfontDeviceBox,
+    NeonDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,

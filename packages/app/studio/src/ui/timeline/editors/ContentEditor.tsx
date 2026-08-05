@@ -263,7 +263,9 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 engine.setPosition(Math.max(0, snapping.ceil(pos) - snapping.value(pos)))
             }
         }, {allowRepeat: true}),
-        shortcuts.register(ContentEditorShortcuts["zoom-to-loop-duration"].shortcut, zoomToLoopDuration)
+        shortcuts.register(ContentEditorShortcuts["zoom-to-loop-duration"].shortcut, zoomToLoopDuration),
+        shortcuts.register(ContentEditorShortcuts["snapping-finer"].shortcut, () => snapping.stepFiner(), {allowRepeat: true}),
+        shortcuts.register(ContentEditorShortcuts["snapping-coarser"].shortcut, () => snapping.stepCoarser(), {allowRepeat: true})
     )
     return element
 }

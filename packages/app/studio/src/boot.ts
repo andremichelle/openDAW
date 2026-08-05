@@ -1,4 +1,10 @@
 import "./main.sass"
+
+// Escape hatch for AUTOMATED browser sessions (set `localStorage["opendaw-suppress-unload-guard"]`):
+// swallow every beforeunload prompt so scripted reloads never hang on the native dialog.
+if (localStorage.getItem("opendaw-suppress-unload-guard") !== null) {
+    window.addEventListener("beforeunload", event => event.stopImmediatePropagation(), {capture: true})
+}
 import {App} from "@/ui/App.tsx"
 import {isDefined, panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
@@ -16,6 +22,7 @@ import {
     FactoryCatalog,
     GlobalSampleLoaderManager,
     GlobalSoundfontLoaderManager,
+    RegionClipResolver,
     Workers
 } from "@opendaw/studio-core"
 import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI} from "@/opendaw-api"
@@ -55,6 +62,9 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         return
     }
     console.debug("buildInfo", JSON.stringify(buildInfo, null, 2))
+    // A residual region overlap must never crash a user's session: log-and-continue in production, keep the
+    // fail-fast throw in dev so resolver bugs surface. See RegionClipResolver.validateTrack.
+    RegionClipResolver.fatal = buildInfo.env !== "production"
     await FontLoader.load()
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)

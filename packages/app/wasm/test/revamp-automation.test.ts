@@ -128,7 +128,8 @@ describe("revamp automation", () => {
         const rms: number[] = []
         for (let q = 0; q < QUANTA; q++) {
             engine.render()
-            const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+            const enginePtr = engine.output_ptr()
+            const out = new Float32Array(memory.buffer, enginePtr, len)
             let sum = 0
             for (let i = 0; i < len; i++) {sum += out[i] * out[i]}
             rms.push(Math.sqrt(sum / len))

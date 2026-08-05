@@ -1,5 +1,7 @@
 @use "@/colors"
 
+$tree-guide-color: var(--color-black)
+
 component
   padding: 0 0.25em 0 0.5em
   display: grid
@@ -9,15 +11,63 @@ component
   color: var(--color-dark)
   outline: none
   pointer-events: all
+  // The device panel's section wash (DevicePanel.sass, top-down there), rotated left > right. Tinted like
+  // the unit's left border: the unit color while editing (--wash-color, set on AudioUnitTracks), else grey.
+  background: linear-gradient(to right, var(--wash-color, var(--color-black)) -500%, transparent 24px)
 
   &.accept-drop
     background-color: rgba(white, 0.04)
+
+  // The collapse-automation button: centred under the head lane's type icon, below it. Absolutely placed so
+  // it stays out of the header grid. Hidden unless `.visible` (head lane of a unit that has automation).
+  > svg.collapse-automation
+    position: absolute
+    left: 22px
+    bottom: 2px
+    font-size: 0.7em
+    color: var(--color)
+    cursor: pointer
+    visibility: hidden
+    transform: translateX(-50%)
+    transition: transform 0.1s
+    pointer-events: all
+
+    &.visible
+      visibility: visible
+
+    &.collapsed
+      transform: translateX(-50%) rotate(-90deg)
+
+  // Tree guide: a vertical drop from the device name's first letter (geometry vars set on the Track root)
+  // and a horizontal stub to this lane's label.
+  &::after
+    content: ""
+    display: var(--guide-display, block)
+    position: absolute
+    left: 47px
+    top: var(--guide-top, 50%)
+    bottom: var(--guide-bottom, 0px)
+    width: 1px
+    background-color: $tree-guide-color
+
+  &::before
+    content: ""
+    display: var(--guide-display, block)
+    position: absolute
+    left: 47px
+    top: var(--stub-top, calc(50% + 7px))
+    width: 6px
+    height: 1px
+    background-color: $tree-guide-color
 
   > div.icon-container
     position: relative
     place-self: center
     display: grid
     place-items: center
+
+    &[draggable="true"]
+      cursor: grab
 
     > svg
       font-size: 1.25em
@@ -43,3 +93,24 @@ component
       text-overflow: ellipsis
       white-space: nowrap
       text-transform: capitalize
+
+    > h5.device-name
+      color: var(--color-gray) !important
+
+    > h5.control-label
+      padding-left: 1.2em
+      margin-top: 2px
+
+  &.focused > div.labels > h5.control-label
+    color: var(--color-cream) !important
+
+// Header dedup (classes set by TracksManager). The repeated device name is removed from the flow
+// (display) so the lone label centers vertically in the lane.
+.repeat-icon div.icon-container
+  visibility: hidden
+
+.repeat-device h5.device-name
+  display: none
+
+.repeat-device h5.control-label
+  margin-top: 0

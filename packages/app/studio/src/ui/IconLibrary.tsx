@@ -8,6 +8,18 @@ export const IconLibrary = () => (
                     viewBox="0 0 20 20">
                 <rect width={20} height={20}/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Ring)} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx={9.5} cy={12} r={6} stroke-width={2}/>
+                <circle cx={14.5} cy={12} r={6} stroke-width={2}/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Noise)} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-width={2} stroke-linejoin="round"
+                      d="M2 13 L5 7 L8 17 L11 5 L14 19 L17 9 L20 15 L22 11"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Neon)} fill="currentColor" stroke="none" viewBox="0 0 24 24">
+                <path fill-rule="evenodd" clip-rule="evenodd"
+                      d="M12 21c4.97 0 9-4.027 9-8.994C21.013 7.026 16.97 3 12 3s-9 4.027-9 8.994S7.03 21 12 21M8.517 8.17l3.369 3.366V8.348c0-.026 0-.064.012-.089a.3.3 0 0 1 .051-.076c.026-.026.051-.038.076-.051s.064-.013.09-.013h3.813c.025 0 .063.013.089.013c.025.013.05.025.076.05s.038.052.051.077a.2.2 0 0 1 .013.089v7.571c0 .038 0 .063-.013.089a.3.3 0 0 1-.05.076a.3.3 0 0 1-.077.05c-.025.014-.064.014-.09.014c-.037 0-.063 0-.1-.013c-.026-.013-.064-.026-.077-.051l-3.369-3.366v3.2c0 .026 0 .064-.012.09a.3.3 0 0 1-.051.076a.3.3 0 0 1-.076.05c-.026.014-.064.014-.09.014H8.34c-.025 0-.064-.013-.089-.013a.3.3 0 0 1-.076-.051a.3.3 0 0 1-.051-.076c-.013-.026-.013-.064-.013-.09v-3.785c0-.025 0-.038.013-.063V8.348a.3.3 0 0 1 .038-.14a.2.2 0 0 1 .114-.089c.039-.012.09-.025.14-.012a.4.4 0 0 1 .102.063"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.Checkbox)} viewBox="0 0 24 24" fill="currentColor"
                     stroke="none">
                 <path
@@ -335,10 +347,10 @@ export const IconLibrary = () => (
                 <path
                     d="M23,17L23,21C23,22.104 22.104,23 21,23L12,23C10.896,23 10,22.104 10,21L10,17C10,15.896 10.896,15 12,15L21,15C22.104,15 23,15.896 23,17Z"/>
             </symbol>
-            <symbol id={IconSymbol.toName(IconSymbol.Automation)} viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor">
-                <circle cx="12" cy="12" r="11"/>
-                <path d="M4.5,11.2L9.3,4L9.3,20C9.3,20 10.9,11.2 20.5,11.2"/>
+            <symbol id={IconSymbol.toName(IconSymbol.Automation)} viewBox="0 0 24 24" fill="currentColor"
+                    stroke="none">
+                <path
+                    d="M17.0001 12C17.5524 12 18.0001 12.4477 18.0001 13V22H16.0001V14H8.00015V22H6.00015V13C6.00015 12.4477 6.44786 12 7.00015 12H17.0001ZM12.0001 16V18H10.0001V16H12.0001ZM12.0001 6C14.3491 6 16.3827 7.34978 17.3678 9.31602L15.5787 10.2108C14.922 8.89991 13.5662 8 12.0001 8C10.4341 8 9.07833 8.89991 8.42163 10.2108L6.63247 9.31602C7.61755 7.34978 9.65122 6 12.0001 6ZM12.0001 2C15.9153 2 19.3049 4.24991 20.9466 7.5273L19.1576 8.42242C17.8443 5.80019 15.1325 4 12.0001 4C8.86783 4 6.15596 5.80019 4.84271 8.42242L3.05371 7.5273C4.69541 4.24991 8.08503 2 12.0001 2Z"/>
             </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.Embed)} viewBox="0 0 24 24" fill="currentColor">
                 <path

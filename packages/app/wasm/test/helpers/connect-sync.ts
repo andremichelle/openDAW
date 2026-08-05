@@ -30,7 +30,10 @@ let channelCounter = 0
 export const connectSyncToEngine = (engine: SyncEngine, memory: WebAssembly.Memory,
                                     source: {checksum(): Int8Array}): EngineSync => {
     const channelName = `engine-sync-${channelCounter++}`
-    const engineChecksum = (): Int8Array => new Int8Array(memory.buffer, engine.checksum_ptr(), 32).slice()
+    const engineChecksum = (): Int8Array => {
+        const pointer = engine.checksum_ptr() // may compute lazily and grow: call BEFORE reading buffer
+        return new Int8Array(memory.buffer, pointer, 32).slice()
+    }
     const target: Synchronization<BoxIO.TypeMap> = {
         sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
             const bytes = new Uint8Array(serializeUpdateTasks(tasks))

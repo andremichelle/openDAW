@@ -1104,7 +1104,7 @@ fn composite_engine() -> Engine {
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: 0, cell_midi_field: 0, cell_audio_field: 0, // direct instruments, no choke
-        child_enabled_key: CHILD_ENABLED_KEY, child_mute_key: 0, child_solo_key: 0
+        child_enabled_key: CHILD_ENABLED_KEY, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
     }];
     engine
 }
@@ -1119,7 +1119,7 @@ fn a_cell_composite_builds_its_hosted_instrument_and_keeps_it_across_reconcile()
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
-        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
     }];
     engine.graph = BoxGraph::from_boxes(vec![
         graph_box(UNIT, "AudioUnitBox", &[
@@ -1155,7 +1155,7 @@ fn live_note_signal_reaches_a_cell_composites_sequencer() {
     engine.composites = vec![CompositeSpec {
         box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
         cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
-        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
     }];
     engine.graph = BoxGraph::from_boxes(vec![
         graph_box(UNIT, "AudioUnitBox", &[
@@ -1271,6 +1271,158 @@ fn removing_a_composite_child_keeps_the_others() {
     assert_eq!(child_instrument_node(&unit, CHILD_A), None, "the removed child is gone");
     assert_eq!(child_instrument_node(&unit, CHILD_B), Some(child_b_node), "the surviving child keeps its processor");
     assert_eq!(composite_sum_sources(&unit), 1, "the removed child no longer feeds the sum (no stale buffer)");
+}
+
+// ---- Composite per-child STRIP (volume / pan) ----
+// A composite declaring `child_volume_key` / `child_pan_key` (Playfield's slot keys 50 / 51) runs one
+// `ChannelStripProcessor` per child between the child's output and the sum.
+const CHILD_VOLUME_KEY: u16 = 50;
+const CHILD_PAN_KEY: u16 = 51;
+
+fn composite_engine_with_strip() -> Engine {
+    let mut engine = engine_with_devices();
+    engine.composites = vec![CompositeSpec {
+        box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
+        cell_instrument_field: 0, cell_midi_field: 0, cell_audio_field: 0,
+        child_enabled_key: CHILD_ENABLED_KEY, child_mute_key: 0, child_solo_key: 0,
+        child_volume_key: CHILD_VOLUME_KEY, child_pan_key: CHILD_PAN_KEY
+    }];
+    engine
+}
+
+fn strip_composite_boxes() -> Vec<GraphBox> {
+    vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(COMPOSITE, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))),
+            (CHILDREN_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CHILD_A, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))),
+            (CHILD_ENABLED_KEY, FieldValue::Boolean(true)),
+            (CHILD_VOLUME_KEY, FieldValue::Float32(0.0)), (CHILD_PAN_KEY, FieldValue::Float32(0.0))
+        ]),
+        graph_box(CHILD_B, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))),
+            (CHILD_ENABLED_KEY, FieldValue::Boolean(true)),
+            (CHILD_VOLUME_KEY, FieldValue::Float32(0.0)), (CHILD_PAN_KEY, FieldValue::Float32(0.0))
+        ])
+    ]
+}
+
+fn strip_composite_graph() -> BoxGraph {
+    BoxGraph::from_boxes(strip_composite_boxes())
+}
+
+fn strip_values(unit: &AudioUnitBinding, child: Uuid) -> Option<(f32, f32)> {
+    match unit.wired.as_ref().expect("wired after reconcile") {
+        Wired::Composite(composite) => composite.binding.child_strip_values(child),
+        _ => panic!("expected a composite chain")
+    }
+}
+
+fn child_sum_node(unit: &AudioUnitBinding, child: Uuid) -> Option<NodeId> {
+    match unit.wired.as_ref().expect("wired after reconcile") {
+        Wired::Composite(composite) => composite.binding.child_output_node(child),
+        _ => panic!("expected a composite chain")
+    }
+}
+
+fn volume_automated(unit: &AudioUnitBinding, child: Uuid) -> bool {
+    match unit.wired.as_ref().expect("wired after reconcile") {
+        Wired::Composite(composite) => composite.binding.child_volume_automated(child),
+        _ => panic!("expected a composite chain")
+    }
+}
+
+#[test]
+fn slot_strip_sits_between_the_child_and_the_sum() {
+    let mut engine = composite_engine_with_strip();
+    engine.graph = strip_composite_graph();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(composite_sum_sources(&unit), 2, "both children feed the sum through their strips");
+    let instrument = child_instrument_node(&unit, CHILD_A).expect("CHILD_A built");
+    let sum_node = child_sum_node(&unit, CHILD_A).expect("CHILD_A wired");
+    assert_ne!(sum_node, instrument, "the sum reads the STRIP node, not the child's own output");
+    assert_eq!(strip_values(&unit, CHILD_A), Some((0.0, 0.0)), "0dB / centre by default (bit-transparent)");
+}
+
+#[test]
+fn slot_volume_and_pan_reach_the_strip_live_without_a_rebuild() {
+    let mut engine = composite_engine_with_strip();
+    engine.graph = strip_composite_graph();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let instrument = child_instrument_node(&unit, CHILD_A).expect("CHILD_A built");
+    let strip_node = child_sum_node(&unit, CHILD_A).expect("CHILD_A wired");
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(CHILD_A, vec![CHILD_VOLUME_KEY]),
+        old: FieldValue::Float32(0.0), new: FieldValue::Float32(-6.0)
+    }, Update::Primitive {
+        address: Address::of(CHILD_A, vec![CHILD_PAN_KEY]),
+        old: FieldValue::Float32(0.0), new: FieldValue::Float32(-1.0)
+    }], &engine.registry).expect("drag volume + pan");
+    assert_eq!(strip_values(&unit, CHILD_A), Some((-6.0, -1.0)), "the drag reaches the strip cells live");
+    assert_eq!(strip_values(&unit, CHILD_B), Some((0.0, 0.0)), "the sibling's strip is untouched");
+    engine.reconcile_one(&mut unit);
+    assert_eq!(child_instrument_node(&unit, CHILD_A), Some(instrument), "a drag never rebuilds the child (voices live on)");
+    assert_eq!(child_sum_node(&unit, CHILD_A), Some(strip_node), "the strip keeps its identity");
+}
+
+#[test]
+fn automating_slot_volume_installs_the_curve_and_unbinds_without_leaks() {
+    const VOLUME_TRACK: Uuid = [50u8; 16];
+    const VOLUME_REGION: Uuid = [51u8; 16];
+    const VOLUME_COLLECTION: Uuid = [52u8; 16];
+    const VOLUME_EVENT: Uuid = [53u8; 16];
+    let mut engine = composite_engine_with_strip();
+    let mut boxes = strip_composite_boxes();
+    boxes.push(graph_box(VOLUME_TRACK, "TrackBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))),
+        (2, FieldValue::Pointer(None)), // target: attached LIVE by the test
+        (TRACK_TYPE_KEY, FieldValue::Int32(2)), // Value
+        (TRACK_REGIONS_KEY, FieldValue::Hook),
+        (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+        (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+    ]));
+    boxes.push(graph_box(VOLUME_REGION, "ValueRegionBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(VOLUME_TRACK, vec![TRACK_REGIONS_KEY])))),
+        (2, FieldValue::Pointer(Some(Address::of(VOLUME_COLLECTION, vec![2])))),
+        (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+        (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+    ]));
+    boxes.push(graph_box(VOLUME_COLLECTION, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]));
+    boxes.push(graph_box(VOLUME_EVENT, "ValueEventBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(VOLUME_COLLECTION, vec![1])))),
+        (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+    ]));
+    engine.graph = BoxGraph::from_boxes(boxes);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    assert!(!volume_automated(&unit, CHILD_A), "nothing is automated before the track is aimed");
+    let baseline = engine.graph.subscription_count();
+    for _cycle in 0..2 {
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(VOLUME_TRACK, vec![2]),
+            old: None,
+            new: Some(Address::of(CHILD_A, vec![CHILD_VOLUME_KEY]))
+        }], &engine.registry).expect("aim the track at the slot volume");
+        engine.reconcile_one(&mut unit);
+        assert!(volume_automated(&unit, CHILD_A), "the curve now drives the strip — with no reload");
+        engine.graph.transaction(&[Update::Pointer {
+            address: Address::of(VOLUME_TRACK, vec![2]),
+            old: Some(Address::of(CHILD_A, vec![CHILD_VOLUME_KEY])),
+            new: None
+        }], &engine.registry).expect("detach the track");
+        engine.reconcile_one(&mut unit);
+        assert!(!volume_automated(&unit, CHILD_A), "detaching drops the override (static cells rule again)");
+    }
+    assert_eq!(engine.graph.subscription_count(), baseline,
+        "attach / detach cycles leave no observers behind (subs + curve collections balanced)");
 }
 
 fn child_instrument(unit: &AudioUnitBinding, child: Uuid) -> Option<NodeId> {

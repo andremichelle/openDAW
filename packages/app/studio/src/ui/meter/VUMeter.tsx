@@ -1,6 +1,6 @@
 import {Svg} from "@opendaw/lib-dom"
 import {gainToDb} from "@opendaw/lib-dsp"
-import {clamp, int, ObservableValue, Point, unitValue, ValueMapping} from "@opendaw/lib-std"
+import {int, ObservableValue, Point, unitValue, ValueMapping} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 
 export namespace VUMeter {
@@ -85,7 +85,7 @@ export namespace VUMeter {
         unitToU(unit: number, offset: number = 0.0): number {return this.positionToU(this.#mapping.x(unit), offset)}
 
         unitToNeedleDegree(unit: number): number {
-            const p = Point.subtract(this.localToGlobal(clamp(this.#mapping.x(unit), 0.0, 1.0), 0.0), this.#needleAnchor)
+            const p = Point.subtract(this.localToGlobal(this.#mapping.x(unit), 0.0), this.#needleAnchor)
             return Math.atan2(p.x, -p.y) * 180.0 / Math.PI
         }
 

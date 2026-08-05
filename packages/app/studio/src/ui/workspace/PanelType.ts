@@ -7,12 +7,12 @@ export enum PanelType {
     Notepad,
     Mixer,
     ModularSystem,
-    VUMeter,
     MidiFall,
     ProjectInfo,
     ShadertoyPreview,
     ShadertoyEditor,
     CodeEditor,
     EmptyFlexSpace,
-    TapTempo
+    TapTempo,
+    Analysis
 }

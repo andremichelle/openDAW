@@ -50,7 +50,8 @@ const renderImpulses = (engine: any, memory: WebAssembly.Memory, quanta: number)
     const clicks: Array<[number, number]> = []
     for (let quantum = 0; quantum < quanta; quantum++) {
         engine.render()
-        const output = new Float32Array(memory.buffer, engine.output_ptr(), len)
+        const enginePtr = engine.output_ptr()
+        const output = new Float32Array(memory.buffer, enginePtr, len)
         const frames = len >> 1
         for (let index = 0; index < frames; index++) {
             if (output[index] !== 0.0) {clicks.push([quantum * frames + index, output[index]])}
@@ -111,7 +112,8 @@ describe("metronome + signature track", () => {
         engine.set_position(3840) // recording starts where 3/4 is in effect
         engine.prepare_recording_state(1, 1.0)
         engine.render()
-        const view = new DataView(memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
+        const enginePtr2 = engine.engine_state_ptr()
+        const view = new DataView(memory.buffer, enginePtr2, engine.engine_state_len())
         const position = view.getFloat32(0)
         expect(view.getUint8(17), "counting in").toBe(1)
         // one 3/4 bar = 2880 pulses (a static 4/4 count-in would rewind to 0)

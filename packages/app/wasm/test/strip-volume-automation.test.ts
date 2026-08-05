@@ -107,7 +107,8 @@ describe("strip volume automation", () => {
         const left = new Float32Array(QUANTA * half)
         for (let quantum = 0; quantum < QUANTA; quantum++) {
             engine.render()
-            left.set(new Float32Array(memory.buffer, engine.output_ptr(), half), quantum * half)
+            const enginePtr = engine.output_ptr()
+            left.set(new Float32Array(memory.buffer, enginePtr, half), quantum * half)
         }
         const firstQuantumPeak = left.subarray(0, half).reduce((max, sample) => Math.max(max, Math.abs(sample)), 0)
         const lastQuantumPeak = left.subarray(left.length - half).reduce((max, sample) => Math.max(max, Math.abs(sample)), 0)

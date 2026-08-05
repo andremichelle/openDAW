@@ -4,21 +4,18 @@
 // construction, and wires the offline render variant. `ensureReady` compiles the modules + registers the
 // processor module once. The WASM engine is the DEFAULT; localStorage only records an explicit opt-out.
 // Every engine (re)boot re-reads it, so the existing restart machinery swaps engines without a page reload.
-import {isNull, MutableObservableOption, Nullable, Terminable, UUID} from "@opendaw/lib-std"
-import {AudioData} from "@opendaw/lib-dsp"
+import {MutableObservableOption, Terminable} from "@opendaw/lib-std"
 import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {Synchronization, SyncSource, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter, OfflineEngineRenderer, Project} from "@opendaw/studio-core"
-import {createEngineMemory, EngineModules, loadEngineModules} from "./engine-modules"
+import {EngineVariant, EngineWorkletVariant, OfflineEngineRenderer, Project} from "@opendaw/studio-core"
+import {EngineModules, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {createSyncLoopback} from "./sync/loopback"
 import {
     WASM_ENGINE_PROCESSOR_NAME,
-    WASM_FROZEN_CHANNEL,
     WASM_SYNC_CHANNEL,
     WasmEngineAttachment,
-    WasmFrozenProtocol,
     WasmSyncProtocol
 } from "./protocol"
 export type WasmEngineUrls = {
@@ -63,60 +60,16 @@ export namespace WasmEngine {
         EngineVariant.install((): EngineWorkletVariant => {
             const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} =
                 modules.unwrap("WasmEngine.ensureReady must succeed before an engine boots")
-            const attachment: WasmEngineAttachment = {
-                // A FRESH shared memory per boot: re-instantiating the engine re-applies its data segments,
-                // but a recycled heap would leak every allocation of the previous engine instance.
-                engineModule, deviceModules, deviceBoxTypes, composites, effectComposites,
-                memory: createEngineMemory()
-            }
+            const attachment: WasmEngineAttachment =
+                {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites}
             return {
                 processorName: WASM_ENGINE_PROCESSOR_NAME,
                 attachment,
-                connectSync: (messenger: Messenger, project: Project): Terminable => connectSync(messenger, project),
-                connectFrozenAudio: (messenger: Messenger): FrozenAudioWriter =>
-                    connectFrozenAudio(messenger, attachment.memory)
+                connectSync: (messenger: Messenger, project: Project): Terminable => connectSync(messenger, project)
+                // No connectFrozenAudio: the memory is worklet-owned (non-shared), so frozen PCM travels
+                // through the `setFrozenAudio` engine command and is copied worklet-side.
             }
         })
-    }
-
-    // Freeze PCM delivery: the worklet only ALLOCATES (a small RPC returning the engine's planar stereo
-    // pointer) and ATTACHES — the bulk copy runs here on the MAIN thread, straight into the shared engine
-    // memory. Operations chain sequentially: a second freeze reallocates `frozen_pending`, so no write may
-    // start while another is between allocate and attach (the engine reboot replay sends several at once).
-    // The worklet may memory.grow inside `frozen_allocate`, which leaves previously obtained buffer
-    // references stale (they keep their pre-grow length), so the buffer is re-read after the RPC returns.
-    const connectFrozenAudio = (messenger: Messenger, memory: WebAssembly.Memory): FrozenAudioWriter => {
-        const sender = Communicator.sender<WasmFrozenProtocol>(messenger.channel(WASM_FROZEN_CHANNEL),
-            dispatcher => new class implements WasmFrozenProtocol {
-                frozenAllocate(frameCount: number, channels: number): Promise<number> {
-                    return dispatcher.dispatchAndReturn(this.frozenAllocate, frameCount, channels)
-                }
-                frozenAttach(uuid: UUID.Bytes, frameCount: number, channels: number, sampleRate: number): void {
-                    dispatcher.dispatchAndForget(this.frozenAttach, uuid, frameCount, channels, sampleRate)
-                }
-                frozenClear(uuid: UUID.Bytes): void {dispatcher.dispatchAndForget(this.frozenClear, uuid)}
-            })
-        const queue = {tail: Promise.resolve()}
-        return (uuid: UUID.Bytes, audioData: Nullable<AudioData>): void => {
-            queue.tail = queue.tail.then(() => {
-                if (isNull(audioData)) {
-                    sender.frozenClear(uuid)
-                    return
-                }
-                const {frames, numberOfFrames, numberOfChannels, sampleRate} = audioData
-                const channels = Math.min(numberOfChannels, 2)
-                return sender.frozenAllocate(numberOfFrames, channels).then(pointer => {
-                    if (pointer === 0) {return}
-                    const buffer = memory.buffer
-                    for (let channel = 0; channel < channels; channel++) {
-                        new Float32Array(buffer,
-                            pointer + channel * numberOfFrames * Float32Array.BYTES_PER_ELEMENT, numberOfFrames)
-                            .set(frames[channel])
-                    }
-                    sender.frozenAttach(uuid, numberOfFrames, channels, sampleRate)
-                })
-            }).catch(reason => console.warn("frozen audio delivery failed:", reason))
-        }
     }
 
     // SyncSource (unchanged) -> SYNCHRONOUS loopback -> serialize at emission time (the source graph's

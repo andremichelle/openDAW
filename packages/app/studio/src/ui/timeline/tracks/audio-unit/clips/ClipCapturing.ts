@@ -21,6 +21,9 @@ export namespace ClipCapturing {
                     .rightMostMapped(tracks, y, NumberComparator, component => component.position)
                 if (trackIndex < 0 || trackIndex >= tracks.length) {return null}
                 const track = tracks[trackIndex]
+                // A y outside the resolved lane's own bounds sits in a band no TrackContext covers (the
+                // synthetic unit lane): capture nothing there.
+                if (y >= track.position + track.size) {return null}
                 const clipIndex = Math.floor(x / ClipWidth)
                 return track.trackBoxAdapter.clips.collection.getAdapterByIndex(clipIndex)
                     .match<ClipCaptureTarget>({

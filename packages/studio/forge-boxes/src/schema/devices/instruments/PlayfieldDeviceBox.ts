@@ -56,7 +56,12 @@ export const PlayfieldSampleBox: BoxSchema<Pointers> = {
             49: {
                 type: "float32", name: "release", pointerRules: ParameterPointerRules,
                 value: 0.020, constraints: {min: 0.001, max: 5.0, scaling: "exponential"}, unit: "s"
-            }
+            },
+            50: {
+                type: "float32", name: "volume", pointerRules: ParameterPointerRules,
+                value: 0.0, constraints: "decibel", unit: "dB"
+            },
+            51: {type: "float32", name: "panning", pointerRules: ParameterPointerRules, constraints: "bipolar", unit: ""}
         }
     },
     pointerRules: {accepts: [Pointers.Editing, Pointers.SideChain, Pointers.Selection], mandatory: false},

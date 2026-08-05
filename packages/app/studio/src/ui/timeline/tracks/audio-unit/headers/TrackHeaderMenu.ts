@@ -30,10 +30,7 @@ export const installTrackHeaderMenu = (service: StudioService,
     return parent.addMenuItem(
         MenuItem.default({label: "Enabled", checked: trackBoxAdapter.enabled.getValue()})
             .setTriggerProcedure(() => editing.modify(() => trackBoxAdapter.enabled.toggle())),
-        MenuItem.default({
-            label: `New ${TrackType.toLabelString(trackType)} Track`,
-            hidden: trackBoxAdapter.type === TrackType.Undefined
-        }).setTriggerProcedure(() => editing.modify(() => {
+        MenuItem.default({label: `New ${TrackType.toLabelString(trackType)} Track`}).setTriggerProcedure(() => editing.modify(() => {
             TrackBox.create(project.boxGraph, UUID.generate(), box => {
                 box.type.setValue(trackType)
                 box.tracks.refer(audioUnitBoxAdapter.box.tracks)
@@ -104,24 +101,6 @@ export const installTrackHeaderMenu = (service: StudioService,
             })
             service.projectProfileService.setProject(newProject, "NEW")
         }),
-        MenuItem.default({label: "Move", separatorBefore: true, selectable: !isFrozen})
-            .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-                MenuItem.default({label: "Track 1 Up", selectable: trackBoxAdapter.indexField.getValue() > 0})
-                    .setTriggerProcedure(() => editing.modify(() => audioUnitBoxAdapter.moveTrack(trackBoxAdapter, -1))),
-                MenuItem.default({
-                    label: "Track 1 Down",
-                    selectable: trackBoxAdapter.indexField.getValue() < audioUnitBoxAdapter.tracks.collection.size() - 1
-                }).setTriggerProcedure(() => editing.modify(() => audioUnitBoxAdapter.moveTrack(trackBoxAdapter, 1))),
-                MenuItem.default({
-                    label: "AudioUnit 1 Up",
-                    selectable: audioUnitBoxAdapter.indexField.getValue() > 0
-                }).setTriggerProcedure(() => editing.modify(() => audioUnitBoxAdapter.move(-1))),
-                MenuItem.default({
-                    label: "AudioUnit 1 Down",
-                    selectable: audioUnitBoxAdapter.indexField.getValue() < project.rootBoxAdapter.audioUnits.adapters()
-                        .filter(adapter => !adapter.isOutput).length - 1
-                }).setTriggerProcedure(() => editing.modify(() => audioUnitBoxAdapter.move(1)))
-            )),
         MenuItem.default({
             label: "Select Clips",
             selectable: !trackBoxAdapter.clips.collection.isEmpty() && !isFrozen

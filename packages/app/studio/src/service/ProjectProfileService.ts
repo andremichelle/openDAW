@@ -170,23 +170,20 @@ export class ProjectProfileService {
                 RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                 return
             }
-            const {status: approveStatus} = await Promises.tryCatch(Dialogs.approve({
+            const {status: approveStatus, value: approved} = await Promises.tryCatch(Dialogs.approve({
                 headline: "Save Project Bundle",
                 message: "",
                 approveText: "Save"
             }))
-            if (approveStatus === "rejected") {return}
-            try {
-                await Files.save(arrayBuffer, {
-                    suggestedName: `${profile.meta.name}.odb`,
-                    types: [FilePickerAcceptTypes.ProjectBundleFileType],
-                    startIn: "desktop"
-                })
-            } catch (error) {
-                if (!Errors.isAbort(error)) {
-                    console.warn(error)
-                    RuntimeNotifier.notify({message: "Could not export project.", icon: "Warning"})
-                }
+            if (approveStatus === "rejected" || !approved) {return}
+            const {status: saveStatus} = await Promises.tryCatch(Files.save(arrayBuffer, {
+                suggestedName: `${profile.meta.name}.odb`,
+                types: [FilePickerAcceptTypes.ProjectBundleFileType],
+                startIn: "desktop"
+            }))
+            if (saveStatus === "rejected" && !Errors.isAbort(error)) {
+                console.warn(error)
+                RuntimeNotifier.notify({message: "Could not export project.", icon: "Warning"})
             }
         })
     }
@@ -219,7 +216,7 @@ export class ProjectProfileService {
             } catch (error) {
                 if (!Errors.isAbort(error)) {
                     console.warn(error)
-                RuntimeNotifier.notify({message: "Could not save project.", icon: "Warning"})
+                    RuntimeNotifier.notify({message: "Could not save project.", icon: "Warning"})
                 }
             }
         })

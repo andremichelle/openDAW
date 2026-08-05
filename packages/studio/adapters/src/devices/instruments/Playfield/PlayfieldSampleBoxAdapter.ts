@@ -96,6 +96,8 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
         this.#box.sampleStart.reset()
         this.#box.sampleEnd.reset()
         this.#box.gate.reset()
+        this.#box.volume.reset()
+        this.#box.panning.reset()
     }
 
     copyToIndex(index: int): void {
@@ -112,6 +114,8 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
             box.pitch.setValue(this.#box.pitch.getValue())
             box.exclude.setValue(this.#box.exclude.getValue())
             box.gate.setValue(this.#box.gate.getValue())
+            box.volume.setValue(this.#box.volume.getValue())
+            box.panning.setValue(this.#box.panning.getValue())
             // TODO Copy effects?
         })
     }
@@ -175,7 +179,10 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
                 unit: "s",
                 unitPrefix: true,
                 fractionDigits: 1
-            }), "Release")
+            }), "Release"),
+            volume: this.#parametric.createParameter(box.volume, ValueMapping.DefaultDecibel,
+                StringMapping.numeric({unit: "dB", fractionDigits: 1}), "Volume"),
+            panning: this.#parametric.createParameter(box.panning, ValueMapping.bipolar(), StringMapping.panning, "Pan", 0.5)
         } as const
     }
 }

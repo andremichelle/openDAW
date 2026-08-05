@@ -53,6 +53,10 @@ export class Snapping implements Observable<Snapping> {
     }
     get units(): ReadonlyArray<SnapUnit> {return this.#units}
 
+    // Units run coarse to fine as the index grows (Smart, Bar, 1/2, ... 1/128).
+    stepFiner(): void {this.index = Math.min(this.#units.length - 1, this.#index + 1)}
+    stepCoarser(): void {this.index = Math.max(0, this.#index - 1)}
+
     value(position: ppqn): ppqn {return this.#enabled ? this.#units[this.#index].ppqn(position) : 1}
 
     registerSignatureTrackAdapter(adapter: SignatureTrackAdapter): Subscription {

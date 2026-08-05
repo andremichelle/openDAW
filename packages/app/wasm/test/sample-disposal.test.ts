@@ -27,7 +27,7 @@ type EngineExports = {
 
 const loadEngine = async () => {
     const module = await WebAssembly.compile(readFileSync(WASM))
-    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engine = new WebAssembly.Instance(module, {env: {memory, __indirect_function_table: table, host_perf_now: () => performance.now() * 1000.0}})
         .exports as unknown as EngineExports
@@ -46,7 +46,8 @@ describe("sample disposal", () => {
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
                 const bytes = new Uint8Array(serializeUpdateTasks(tasks))
-                new Uint8Array(memory.buffer, engine.input_ptr(), bytes.length).set(bytes)
+                const inputPtr = engine.input_ptr()
+                new Uint8Array(memory.buffer, inputPtr, bytes.length).set(bytes)
                 expect(engine.apply_updates(bytes.length)).toBe(0)
             },
             checksum(): Promise<void> {return Promise.resolve()}

@@ -1,4 +1,3 @@
-import {Option} from "@opendaw/lib-std"
 
 // Fetch + compile the wasm modules the engine worklet needs: the engine (the dynamic-linker host) and
 // the device PLUGINS (PIC side modules the engine loads at host-assigned bases). All are handed to the
@@ -17,7 +16,10 @@ export type CompositeSpec = {
     childEnabledKey: number,
     // A child's `mute` / `solo` BooleanFields (0 = unsupported): a muted (or not-soloed while a sibling is
     // soloed) child gets no note STARTS (releases still pass), mirroring TS SampleProcessor.handleEvent.
-    childMuteKey: number, childSoloKey: number
+    childMuteKey: number, childSoloKey: number,
+    // A child's volume (dB) / panning Float32Fields (0 = no per-child strip): a ChannelStrip between the
+    // child's output (post its own fx chain) and the composite sum. Playfield's slot keys are 50 / 51.
+    childVolumeKey: number, childPanKey: number
 }
 
 // An EFFECT composite box type: an audio or midi EFFECT hosting a collection of ENTRIES, each its own effect
@@ -59,25 +61,13 @@ export type EngineModules = {
     effectComposites: ReadonlyArray<EffectCompositeSpec> // parallel fx / midi stacks the engine hosts itself
 }
 
-// The engine's single linear memory: SHARED, so the main thread can see the WASM heap (e.g. to write
-// decoded sample data straight into it at an engine-allocated offset). A SHARED memory cannot be reallocated
-// on grow (its base must stay fixed for every thread), so the runtime RESERVES the entire `maximum` as VIRTUAL
-// address space at creation — physical pages still commit lazily on grow, but that reservation itself can fail
-// on a memory-constrained device (a low-end Chromebook reported `RangeError: could not allocate memory`, #1030).
-// So request the wasm32 ceiling (65536 pages = 4 GiB) and fall back to smaller maxima until one is accepted; the
-// talc allocator grows on demand up to whatever ceiling succeeded. The engine.wasm memory import declares
-// max=65536, and a smaller provided max still satisfies it (verified: it instantiates down to 8192).
-// Needs cross-origin isolation (COOP/COEP, set in vite.config). Passed into the worklet via processorOptions.
-export const createEngineMemory = (): WebAssembly.Memory => {
-    const initial = 256
-    for (const maximum of [65536, 32768, 16384, 8192]) {
-        console.debug(`Try ${maximum} bytes for engine memory...`)
-        const memory = Option.tryCatch(() => new WebAssembly.Memory({initial, maximum, shared: true}))
-        if (memory.nonEmpty()) {return memory.unwrap()}
-    }
-    // Smallest workable ceiling; if even this throws, the device genuinely cannot host the engine.
-    return new WebAssembly.Memory({initial, maximum: 4096, shared: true})
-}
+// The engine's single linear memory: NON-shared, created INSIDE the worklet/worker that runs the engine
+// (a non-shared memory cannot be postMessaged). Without the shared flag the runtime may RELOCATE the
+// buffer on grow, so no upfront address-space reservation is needed — the reservation ladder that failed
+// on constrained devices (#1030, the Riffle Android crash) is gone; talc grows on demand. The price:
+// every grow DETACHES existing JS views, so views over the memory must be constructed fresh after any
+// allocation (the code does this throughout; long-held broadcast views re-register on buffer change).
+export const createEngineMemory = (): WebAssembly.Memory => new WebAssembly.Memory({initial: 256})
 
 // The device PIC side modules to load: each wasm plus the device-BOX TYPE it realizes. This is the device
 // table the engine uses to instantiate a device box: when the box graph presents e.g. an ArpeggioDeviceBox,
@@ -85,6 +75,7 @@ export const createEngineMemory = (): WebAssembly.Memory => {
 // each unit's chains from the box, ordered by the device `index`); only the type mapping matters.
 export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_vaporisateur.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
+    {url: "/wasm/plugins/device_neon.wasm", boxType: "NeonDeviceBox"},   // instrument (phase distortion)
     {url: "/wasm/plugins/device_nano.wasm", boxType: "NanoDeviceBox"},         // instrument (sampler)
     {url: "/wasm/plugins/device_revamp.wasm", boxType: "RevampDeviceBox"},     // audio effect
     {url: "/wasm/plugins/device_tidal.wasm", boxType: "TidalDeviceBox"},       // audio effect
@@ -119,13 +110,13 @@ export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
     // Playfield: direct children (self-hosting slots, device-declared chains), routed by note index + choke.
     {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
         cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0, childEnabledKey: 22,
-        childMuteKey: 40, childSoloKey: 41},
+        childMuteKey: 40, childSoloKey: 41, childVolumeKey: 50, childPanKey: 51},
     // A generic instrument bundle: children are CELLS (CompositeCellBox) at field 10, each wrapping one
     // instrument (field 2) plus its midi-fx (3) and audio-fx (4) chains, ordered by the cell's own `index`
     // (field 5, UI position + engine sort). No note routing, no choke.
     {boxType: "CompositeDeviceBox", childrenField: 10, indexKey: 5, excludeKey: 0,
         cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4, childEnabledKey: 0,
-        childMuteKey: 0, childSoloKey: 0}
+        childMuteKey: 0, childSoloKey: 0, childVolumeKey: 0, childPanKey: 0}
 ]
 
 // The EFFECT composite box types (parallel fx / midi stacks). Each hosts its ENTRIES at field 10, ordered by the

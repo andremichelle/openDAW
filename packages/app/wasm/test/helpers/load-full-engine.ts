@@ -33,7 +33,7 @@ export type FullEngine = {
 
 export const loadFullEngine = async (sampleRate = 48000,
                                      onScriptMessage: (uuid: string, message: string) => void = () => {}): Promise<FullEngine> => {
-    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engineModule = await WebAssembly.compile(readFileSync(path.join(PUBLIC, "wasm", "engine.wasm")))
     const engine = new WebAssembly.Instance(engineModule, {env: {

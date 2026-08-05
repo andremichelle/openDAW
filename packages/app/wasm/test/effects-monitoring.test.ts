@@ -53,11 +53,13 @@ const setup = async (fxVolumeDb: number | null) => {
     }
     const renderMonitored = (): {monitorPeak: number} => {
         // Stage a constant 0.5 on channels 0/1 (the worklet writes fresh input each quantum), then render.
-        const staging = new Float32Array(memory.buffer, engine.monitor_input_ptr(), 8 * QUANTUM)
+        const enginePtr = engine.monitor_input_ptr()
+        const staging = new Float32Array(memory.buffer, enginePtr, 8 * QUANTUM)
         staging.fill(0.0)
         staging.fill(0.5, 0, QUANTUM * 2)
         engine.render()
-        const staged = new Float32Array(memory.buffer, engine.monitor_output_ptr(), 8 * QUANTUM)
+        const enginePtr2 = engine.monitor_output_ptr()
+        const staged = new Float32Array(memory.buffer, enginePtr2, 8 * QUANTUM)
         let monitorPeak = 0
         for (let index = 0; index < QUANTUM * 2; index++) {monitorPeak = Math.max(monitorPeak, Math.abs(staged[index]))}
         return {monitorPeak}

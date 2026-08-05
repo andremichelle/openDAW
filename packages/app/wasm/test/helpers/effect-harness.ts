@@ -86,7 +86,8 @@ export const renderEffect = async (source: BoxGraph, quanta = 32): Promise<Float
     const out = new Float32Array(quanta * len)
     for (let q = 0; q < quanta; q++) {
         engine.render()
-        out.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+        const enginePtr = engine.output_ptr()
+        out.set(new Float32Array(memory.buffer, enginePtr, len), q * len)
     }
     return out
 }
@@ -112,7 +113,8 @@ export const renderEffectToggling = async (source: BoxGraph, mutate: Procedure<v
             await sync.settle()
         }
         engine.render()
-        out.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+        const enginePtr2 = engine.output_ptr()
+        out.set(new Float32Array(memory.buffer, enginePtr2, len), q * len)
     }
     return out
 }

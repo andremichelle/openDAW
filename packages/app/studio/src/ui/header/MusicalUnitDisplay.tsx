@@ -26,19 +26,22 @@ export const MusicalUnitDisplay = ({lifecycle, service}: Construct) => {
     ]
     return (
         <div className={className} onInit={element => {
+            const update = () => {
+                const position = service.engine.position.getValue()
+                const barOffset = StudioPreferences.settings["time-display"]["count-bars-from-zero"] ? 0 : 1
+                const {bars, beats, semiquavers, ticks} = service.projectProfileService.getValue().match({
+                    some: ({project}) => project.timelineBoxAdapter.signatureTrack.toParts(position),
+                    none: () => ({bars: 0, beats: 0, semiquavers: 0, ticks: 0})
+                })
+                barUnitString.setValue((bars + barOffset).toString().padStart(3, "0"))
+                beatUnitString.setValue((beats + 1).toString())
+                semiquaverUnitString.setValue((semiquavers + 1).toString())
+                ticksUnitString.setValue(ticks.toString().padStart(3, "0"))
+                element.classList.toggle("negative", position < 0)
+            }
             lifecycle.ownAll(
-                service.engine.position.catchupAndSubscribe(owner => {
-                    const position = owner.getValue()
-                    const {bars, beats, semiquavers, ticks} = service.projectProfileService.getValue().match({
-                        some: ({project}) => project.timelineBoxAdapter.signatureTrack.toParts(position),
-                        none: () => ({bars: 0, beats: 0, semiquavers: 0, ticks: 0})
-                    })
-                    barUnitString.setValue((bars + 1).toString().padStart(3, "0"))
-                    beatUnitString.setValue((beats + 1).toString())
-                    semiquaverUnitString.setValue((semiquavers + 1).toString())
-                    ticksUnitString.setValue(ticks.toString().padStart(3, "0"))
-                    element.classList.toggle("negative", position < 0)
-                }),
+                service.engine.position.catchupAndSubscribe(update),
+                StudioPreferences.subscribe(update, "time-display", "count-bars-from-zero"),
                 StudioPreferences.catchupAndSubscribe(enabled =>
                     element.classList.toggle("hidden", !enabled), "time-display", "musical"),
                 StudioPreferences.catchupAndSubscribe(details => {

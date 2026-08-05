@@ -193,6 +193,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "Neon",
+                        path: "/manuals/devices/instruments/neon",
+                        icon: InstrumentFactories.Neon.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "Playfield",
                         path: "/manuals/devices/instruments/playfield",
                         icon: InstrumentFactories.Playfield.defaultIcon

@@ -73,7 +73,8 @@ const renderPeak = async (source: BoxGraph, quanta = 48): Promise<number> => {
     let peak = 0
     for (let q = 0; q < quanta; q++) {
         engine.render()
-        const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+        const enginePtr = engine.output_ptr()
+        const out = new Float32Array(memory.buffer, enginePtr, len)
         for (let i = 0; i < len; i++) {
             expect(Number.isFinite(out[i])).toBe(true)
             peak = Math.max(peak, Math.abs(out[i]))

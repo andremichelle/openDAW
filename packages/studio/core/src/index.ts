@@ -12,6 +12,7 @@ export * from "./ui"
 export * from "./ysync"
 
 export * from "./AudioConsolidation"
+export * from "./AutoEq"
 export * from "./AudioDevices"
 export * from "./OfflineEngineRenderer"
 export * from "./AudioUtils"

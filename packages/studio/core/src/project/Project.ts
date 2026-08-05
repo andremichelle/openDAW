@@ -163,6 +163,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly #timelineBoxAdapter: TimelineBoxAdapter
     readonly #loadedScriptUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
 
+    #terminated: boolean = false
+
     private constructor(env: ProjectEnv, boxGraph: BoxGraph, {
         rootBox,
         userInterfaceBoxes,
@@ -276,6 +278,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             worklet.removeEventListener("processorerror", handler)
             lifecycle.terminate()
             await safeExecute(restart?.unload, event)
+            if (this.#terminated) {return}
             safeExecute(restart?.load, this.startAudioWorklet(restart))
         }
         worklet.addEventListener("error", handler)
@@ -522,6 +525,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     }
 
     terminate(): void {
+        this.#terminated = true
         this.#sampleRegistrations.forEach(({terminable}) => terminable.terminate())
         this.#sampleRegistrations.clear()
         this.#terminator.terminate()

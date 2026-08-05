@@ -40,7 +40,8 @@ describe("fuzz: random enable/disable", () => {
             let nonFinite = false
             for (let q = 0; q < 8; q++) {
                 engine.render()
-                const out = new Float32Array(memory.buffer, engine.output_ptr(), engine.output_len())
+                const enginePtr = engine.output_ptr()
+                const out = new Float32Array(memory.buffer, enginePtr, engine.output_len())
                 for (let i = 0; i < out.length; i++) {
                     if (!Number.isFinite(out[i])) {nonFinite = true; break}
                 }

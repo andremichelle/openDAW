@@ -12,6 +12,7 @@ import {
 import {createElement} from "@opendaw/lib-jsx"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Events, Html} from "@opendaw/lib-dom"
+import {StudioPreferences} from "@opendaw/studio-core"
 
 const defaultClassName = Html.adoptStyleSheet(css, "TimeCodeInput")
 
@@ -33,7 +34,10 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
         {amount: PPQN.SemiQuaver, maxChars: 1},
         {amount: 1, maxChars: 3}
     ]
-    const unitOffset = oneBased === true ? 1 : 0
+    const subOffset = oneBased === true ? 1 : 0
+    const barOffset = () => oneBased === true
+        ? StudioPreferences.settings["time-display"]["count-bars-from-zero"] ? 0 : 1
+        : 0
     const inputs: ReadonlyArray<HTMLElement> = units.map(({maxChars}) => (
         <div contentEditable="true" style={{width: `calc(0.5em + ${maxChars * 6 + 1}px)`}}/>
     ))
@@ -47,10 +51,13 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
         const negative = value < 0
         element.classList.toggle("negative", negativeWarning === true && negative)
         const {bars, beats, semiquavers, ticks} = PPQN.toParts(value, upper, lower)
-        inputs[0].textContent = negative ? String(bars) : String(bars + unitOffset).padStart(3, "0")
-        inputs[1].textContent = String(beats + unitOffset)
-        inputs[2].textContent = String(semiquavers + unitOffset)
+        inputs[0].textContent = negative ? String(bars) : String(bars + barOffset()).padStart(3, "0")
+        inputs[1].textContent = String(beats + subOffset)
+        inputs[2].textContent = String(semiquavers + subOffset)
         inputs[3].textContent = String(ticks).padStart(3, "0")
+    }
+    if (oneBased === true) {
+        lifecycle.own(StudioPreferences.subscribe(updateDigits, "time-display", "count-bars-from-zero"))
     }
     lifecycle.ownAll(
         model.subscribe(updateDigits),
@@ -105,9 +112,9 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
                     const prevValue = model.getValue()
                     const {bars, beats, semiquavers, ticks} = PPQN.toParts(prevValue, upper, lower)
                     const nextValue: int =
-                        units[0].amount * (index === 0 ? prevValue >= 0 ? unit - unitOffset : unit : bars)
-                        + units[1].amount * (index === 1 ? unit - unitOffset : beats)
-                        + units[2].amount * (index === 2 ? unit - unitOffset : semiquavers)
+                        units[0].amount * (index === 0 ? prevValue >= 0 ? unit - barOffset() : unit : bars)
+                        + units[1].amount * (index === 1 ? unit - subOffset : beats)
+                        + units[2].amount * (index === 2 ? unit - subOffset : semiquavers)
                         + units[3].amount * (index === 3 ? unit : ticks)
                     if (prevValue === nextValue) {
                         updateDigits()
