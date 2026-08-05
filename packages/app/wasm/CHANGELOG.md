@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.1.6](https://github.com/andremichelle/openDAW/compare/@opendaw/app-wasm@0.1.5...@opendaw/app-wasm@0.1.6) (2026-08-05)
+
+**Note:** Version bump only for package @opendaw/app-wasm
+
 ## [0.1.5](https://github.com/andremichelle/openDAW/compare/@opendaw/app-wasm@0.1.4...@opendaw/app-wasm@0.1.5) (2026-08-03)
 
 **Note:** Version bump only for package @opendaw/app-wasm
