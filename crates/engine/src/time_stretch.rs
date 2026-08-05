@@ -549,6 +549,27 @@ impl TimeStretchSequencer {
         self.voices.retain(|voice| !voice.done());
     }
 
+    /// Ring the currently-live granular voices out to silence over their own fade length, advancing their read
+    /// heads but spawning NO new grains — a natural granular continuation past the region end (so a cut seam
+    /// crossfades with the next region's fade-in) or past a transport stop (so a pause does not hard-cut). Renders
+    /// `[buffer_start, buffer_start + buffer_count)`; `fading_gain` is a unity buffer of at least that length (the
+    /// voices' own fade-out shapes the ramp). Returns whether any voice is still sounding (drive again next block).
+    pub(crate) fn render_release(&mut self, source: &Source, output: &mut AudioBuffer, buffer_start: usize, buffer_count: usize, fading_gain: &[f32]) -> bool {
+        for voice in &mut self.voices {
+            if !voice.is_fading_out() {
+                voice.start_fade_out(0);
+            }
+            voice.process(source, output, buffer_start, buffer_count, fading_gain);
+        }
+        self.voices.retain(|voice| !voice.done());
+        !self.voices.is_empty()
+    }
+
+    /// Whether any granular voice is still live (used to decide if a stopped/ended sequencer has a release to ring).
+    pub(crate) fn has_voices(&self) -> bool {
+        !self.voices.is_empty()
+    }
+
     /// The OnceVoice maintenance pass (TS lines 82-130): fade out voices that reached their segment end, and,
     /// when looping is needed to fill the remaining output, replace them with a looping voice.
     #[allow(clippy::too_many_arguments)]
