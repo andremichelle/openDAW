@@ -6,6 +6,7 @@ import {
     AudioFileBox,
     AudioPitchStretchBox,
     AudioRegionBox,
+    AudioSignalsmithBox,
     AudioTimeStretchBox,
     TrackBox,
     ValueEventCollectionBox
@@ -37,6 +38,8 @@ export namespace AudioContentFactory {
     } & Props
 
     export type PitchStretchedProps = { /* Has no additional properties yet */ } & Props
+
+    export type SignalsmithProps = { transpose?: number } & Props
 
     export type NotStretchedProps = { /* Has no additional properties yet */ } & Props
 
@@ -77,6 +80,13 @@ export namespace AudioContentFactory {
         return createRegionWithWarpMarkers(AudioPitchStretchBox.create(props.boxGraph, UUID.generate()), props)
     }
 
+    export const createSignalsmithRegion = (props: SignalsmithProps & Region): AudioRegionBox => {
+        const {boxGraph, transpose} = props
+        return createRegionWithWarpMarkers(AudioSignalsmithBox.create(boxGraph, UUID.generate(), box => {
+            if (isDefined(transpose)) {box.transpose.setValue(transpose)}
+        }), props)
+    }
+
     export const createNotStretchedRegion = (props: NotStretchedProps & Region): AudioRegionBox => {
         const {boxGraph, targetTrack, position, audioFileBox, sample: {name, duration: durationInSeconds}} = props
         const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
@@ -110,6 +120,13 @@ export namespace AudioContentFactory {
         return createClipWithWarpMarkers(AudioTimeStretchBox.create(boxGraph, UUID.generate()), props)
     }
 
+    export const createSignalsmithClip = (props: SignalsmithProps & Clip): AudioClipBox => {
+        const {boxGraph, transpose} = props
+        return createClipWithWarpMarkers(AudioSignalsmithBox.create(boxGraph, UUID.generate(), box => {
+            if (isDefined(transpose)) {box.transpose.setValue(transpose)}
+        }), props)
+    }
+
     export const createNotStretchedClip = (props: NotStretchedProps & Clip): AudioClipBox => {
         const {boxGraph, targetTrack, index, audioFileBox, sample: {name, duration: durationInSeconds}} = props
         const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
@@ -128,8 +145,8 @@ export namespace AudioContentFactory {
 
     // ---- HELPERS ---- //
 
-    const createRegionWithWarpMarkers = (playMode: AudioPitchStretchBox | AudioTimeStretchBox,
-                                         props: (TimeStretchedProps | PitchStretchedProps) & Region): AudioRegionBox => {
+    const createRegionWithWarpMarkers = (playMode: AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox,
+                                         props: (TimeStretchedProps | PitchStretchedProps | SignalsmithProps) & Region): AudioRegionBox => {
         const {boxGraph, targetTrack, position, audioFileBox, sample} = props
         if (targetTrack.type.getValue() !== TrackType.Audio) {
             return panic("Cannot create audio-region on non-audio track")
@@ -160,8 +177,8 @@ export namespace AudioContentFactory {
         })
     }
 
-    const createClipWithWarpMarkers = (playMode: AudioPitchStretchBox | AudioTimeStretchBox,
-                                       props: (TimeStretchedProps | PitchStretchedProps) & Clip): AudioClipBox => {
+    const createClipWithWarpMarkers = (playMode: AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox,
+                                       props: (TimeStretchedProps | PitchStretchedProps | SignalsmithProps) & Clip): AudioClipBox => {
         const {boxGraph, targetTrack, audioFileBox, sample} = props
         if (targetTrack.type.getValue() !== TrackType.Audio) {
             return panic("Cannot create audio-region on non-audio track")
