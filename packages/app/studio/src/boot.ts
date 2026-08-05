@@ -22,6 +22,7 @@ import {
     FactoryCatalog,
     GlobalSampleLoaderManager,
     GlobalSoundfontLoaderManager,
+    RegionClipResolver,
     Workers
 } from "@opendaw/studio-core"
 import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI} from "@/opendaw-api"
@@ -61,6 +62,9 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         return
     }
     console.debug("buildInfo", JSON.stringify(buildInfo, null, 2))
+    // A residual region overlap must never crash a user's session: log-and-continue in production, keep the
+    // fail-fast throw in dev so resolver bugs surface. See RegionClipResolver.validateTrack.
+    RegionClipResolver.fatal = buildInfo.env !== "production"
     await FontLoader.load()
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)
