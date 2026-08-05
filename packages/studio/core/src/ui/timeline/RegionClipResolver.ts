@@ -82,7 +82,7 @@ export class RegionClipResolver {
         for (let i = 1; i < array.length; i++) {
             const next = array[i]
             assert(next.duration > 0, `duration(${next.duration}) must be positive`)
-            const overlaps = !allowOverlap(prev) && prev.complete > next.position
+            const overlaps = !allowOverlap(prev) && prev.complete > next.position + boundaryTolerance(next.position)
             if (overlaps) {RegionClipResolver.#reportOverlap(track, array, i)}
             assert(!overlaps,
                 `regions overlap: prev.complete(${prev.complete}) > next.position(${next.position})`)
