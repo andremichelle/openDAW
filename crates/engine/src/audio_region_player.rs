@@ -373,6 +373,22 @@ impl Processor for AudioRegionPlayer {
             }
         }
         native_cursors.retain(|(uuid, _)| visited.contains(uuid));
+        reset_idle_signalsmith_players(signalsmith_players, visited, signalsmith_releases);
+    }
+}
+
+/// Signalsmith players persist (their stream buffers are expensive to rebuild), but a STOP seeds a release that
+/// drives the player's stream FORWARD to ring out (`render_signalsmith_releases`), leaving the read head advanced.
+/// Unlike the sequencers/cursors pruned alongside, the player is not recycled — so mark an idle player (not visited
+/// this quantum, not ringing a release) for a fresh entry re-prime by clearing its cycle_id. Without this the next
+/// play free-runs from the release-advanced position, and each stop advances it further: "a different section of
+/// the sample every time I start playing".
+fn reset_idle_signalsmith_players(players: &mut [(Uuid, SignalsmithStretch)], visited: &[Uuid],
+                                  releases: &[SignalsmithRelease]) {
+    for (uuid, player) in players.iter_mut() {
+        if !visited.contains(uuid) && !releases.iter().any(|release| release.region_uuid == *uuid) {
+            player.set_cycle_id(f64::NAN);
+        }
     }
 }
 
@@ -1328,6 +1344,58 @@ mod tests {
         let restores = player.cache_restores();
         std::eprintln!("transport-loop cache restores: {restores} of ~19 passes");
         assert!(restores >= 18, "transport loop must hit the cache; only {restores} passes did");
+    }
+
+    #[test]
+    fn signalsmith_replay_after_stop_reprimes_to_region_start() {
+        // Reported bug: after cutting a Signalsmith region, EVERY start plays a DIFFERENT section of the sample.
+        // Cause: a STOP seeds a release that drives the persisted player's stream forward to ring out the tail
+        // (advancing the read head); the player is never recycled, so on the next play — from the same transport
+        // position, so no discontinuity and cycle_id already equals raw_start — reprime does NOT fire and the
+        // stream free-runs from the advanced head. `reset_idle_signalsmith_players` clears the idle player's
+        // cycle_id so the next play is a fresh entry that re-primes to the region start. Source is a chirp so a
+        // free-run's advanced read head lands on an audibly different frequency than a correct re-prime.
+        let source: Vec<f32> = (0..600_000)
+            .map(|i| {let t = i as f32 / 48_000.0; (2.0 * core::f32::consts::PI * (110.0 + t * 200.0) * t).sin()})
+            .collect();
+        let mut region = region(0.0, 0.0, 0.0);
+        region.duration = 96_000.0; region.loop_duration = 3_000_000.0; // long: the region never wraps in this test
+        let config = SignalsmithConfig {warp: Vec::new(), transpose: 0.0}; // native rate: source advances ~1:1
+        region.signalsmith = Some(config.clone());
+        let tempo = TempoMap::fixed(120.0);
+        // One play pass from transport 0 with NO discontinuity flag (a plain play-from-stop, the head does not jump).
+        let play_pass = |player: &mut SignalsmithStretch, templates: &mut Vec<(Uuid, SignalsmithRelease)>| -> Vec<f32> {
+            let mut out = Vec::with_capacity(40 * 128);
+            for b in 0..40 {
+                let (p0, p1) = ((b * 128) as f64 * 0.04, ((b + 1) * 128) as f64 * 0.04);
+                let block = Block {index: b as u32, flags: BlockFlags::create(true, false, true, false), p0, p1, s0: 0, s1: 128, bpm: 120.0};
+                let mut output = AudioBuffer::new();
+                play_signalsmith(player, &region, &config, &source, &source, 48_000.0, p0, p1, &block, 48_000.0, &tempo,
+                    &mut Vec::new(), templates, &mut output);
+                out.extend_from_slice(&output.left[..128]);
+            }
+            out
+        };
+        // Reference: a fresh player's first pass (the correct, re-primed-at-start output).
+        let reference = play_pass(&mut SignalsmithStretch::preset_default(2, 48_000.0), &mut Vec::new());
+        // Under test: play once, STOP (drive the release to advance the read head), idle-reset, then replay.
+        let mut players: Vec<(Uuid, SignalsmithStretch)> = vec![(region.region_uuid, SignalsmithStretch::preset_default(2, 48_000.0))];
+        let mut templates: Vec<(Uuid, SignalsmithRelease)> = Vec::new();
+        let _first = play_pass(&mut players[0].1, &mut templates);
+        let mut releases: Vec<SignalsmithRelease> = Vec::new();
+        if let Some((_, template)) = templates.iter().find(|(uuid, _)| *uuid == region.region_uuid) {
+            releases.push(*template);
+        }
+        for b in 0..8 { // ring out the stop tail — this is what advances the persisted player's read head
+            let block = Block {index: 100 + b, flags: BlockFlags::create(false, false, false, false), p0: 0.0, p1: 0.0, s0: 0, s1: 128, bpm: 120.0};
+            let mut output = AudioBuffer::new();
+            render_signalsmith_releases(&mut releases, &mut players, &mut templates, &mut output, &block);
+        }
+        reset_idle_signalsmith_players(&mut players, &[], &releases); // THE FIX: no region visited, release done
+        let replay = play_pass(&mut players[0].1, &mut templates);
+        let diff: f64 = reference.iter().zip(&replay).map(|(a, b)| (*a as f64 - *b as f64).powi(2)).sum::<f64>()
+            / reference.len() as f64;
+        assert!(diff < 1e-3, "replay after stop must re-prime to the region start, not free-run (rms^2 diff {diff:.6})");
     }
 
     #[test]
