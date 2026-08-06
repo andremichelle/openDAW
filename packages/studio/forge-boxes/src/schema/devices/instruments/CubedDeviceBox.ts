@@ -10,8 +10,8 @@ export const CubedDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrumen
     13: {type: "float32", name: "env-mod", pointerRules: ParameterPointerRules, value: 0.55, ...UnipolarConstraints},
     14: {type: "float32", name: "decay", pointerRules: ParameterPointerRules, value: 0.4, ...UnipolarConstraints},
     15: {type: "float32", name: "accent", pointerRules: ParameterPointerRules, value: 0.7, ...UnipolarConstraints},
-    16: {type: "float32", name: "volume", pointerRules: ParameterPointerRules, value: 0.75, ...UnipolarConstraints},
-    17: {type: "string", name: "waveform", value: "sawtooth"},
+    16: {type: "float32", name: "volume", pointerRules: ParameterPointerRules, value: 0.0, constraints: "decibel", unit: "dB"},
+    17: {type: "int32", name: "waveform", pointerRules: ParameterPointerRules, value: 0, constraints: {values: [0, 1]}, unit: ""},
     20: {type: "int32", name: "pattern-index", pointerRules: ParameterPointerRules, value: 0, constraints: {min: 0, max: 127}, unit: ""},
     30: {type: "field", name: "patterns", pointerRules: {accepts: [Pointers.Pattern], mandatory: false}},
     99: {type: "int32", name: "version", constraints: "any", unit: ""}
