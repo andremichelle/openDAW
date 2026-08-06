@@ -58,4 +58,5 @@ export enum Pointers {
     NeuralAmpModel,
     CompositeCell,
     AudioEffectCompositeCell,
+    Pattern,
 }
