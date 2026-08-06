@@ -32,6 +32,7 @@ import {
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
     NeonDeviceBox,
+    CubedDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     VocoderDeviceBox,
@@ -76,6 +77,7 @@ import {
     UnknownAudioEffectDeviceBoxAdapter,
     UnknownMidiEffectDeviceBoxAdapter,
     NeonDeviceBoxAdapter,
+    CubedDeviceBoxAdapter,
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
     VocoderDeviceBoxAdapter,
@@ -92,6 +94,7 @@ import {Box} from "@opendaw/lib-box"
 import {PitchDeviceEditor} from "./midi-effects/PitchDeviceEditor"
 import {TapeDeviceEditor} from "@/ui/devices/instruments/TapeDeviceEditor.tsx"
 import {VaporisateurDeviceEditor} from "@/ui/devices/instruments/VaporisateurDeviceEditor.tsx"
+import {CubedDeviceEditor} from "@/ui/devices/instruments/CubedDeviceEditor.tsx"
 import {NeonDeviceEditor} from "@/ui/devices/instruments/NeonDeviceEditor.tsx"
 import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
 import {ApparatDeviceEditor} from "./instruments/ApparatDeviceEditor"
@@ -177,6 +180,12 @@ export namespace DeviceEditorFactory {
                                   service={service}
                                   adapter={service.project.boxAdapters.adapterFor(box, TapeDeviceBoxAdapter)}
                                   deviceHost={deviceHost}/>
+            ),
+            visitCubedDeviceBox: (box: CubedDeviceBox): JsxValue => (
+                <CubedDeviceEditor lifecycle={lifecycle}
+                                   service={service}
+                                   adapter={service.project.boxAdapters.adapterFor(box, CubedDeviceBoxAdapter)}
+                                   deviceHost={deviceHost}/>
             ),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox): JsxValue => (
                 <VaporisateurDeviceEditor lifecycle={lifecycle}
