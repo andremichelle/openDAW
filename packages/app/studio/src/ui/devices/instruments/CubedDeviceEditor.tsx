@@ -1,5 +1,5 @@
 import css from "./CubedDeviceEditor.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
+import {Lifecycle, ValueGuide} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
@@ -11,6 +11,7 @@ import {StudioService} from "@/service/StudioService"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Icon} from "@/ui/components/Icon"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
+import {PatternControls} from "@/ui/devices/instruments/CubedDeviceEditor/PatternControls"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "CubedDeviceEditor")
@@ -26,8 +27,8 @@ export const CubedDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const {project} = service
     const {editing, midiLearning} = project
     const {tuning, cutoff, resonance, envMod, decay, accent, volume, waveform} = adapter.namedParameter
-    const knob = (parameter: AutomatableParameterFieldAdapter, anchor?: number) =>
-        ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter, anchor, color: Colors.black})
+    const knob = (parameter: AutomatableParameterFieldAdapter, anchor?: number, options?: ValueGuide.Options) =>
+        ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter, anchor, options, color: Colors.black})
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
@@ -39,12 +40,13 @@ export const CubedDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   <div className="waveform">
                                       <RadioGroup lifecycle={lifecycle}
                                                   model={EditWrapper.forAutomatableParameter(editing, waveform)}
+                                                  appearance={{landscape: true, activeColor: Colors.orange}}
                                                   elements={[
                                                       {value: 0, element: <Icon symbol={IconSymbol.Sawtooth}/>},
                                                       {value: 1, element: <Icon symbol={IconSymbol.Square}/>}
                                                   ]}/>
                                   </div>
-                                  {knob(tuning, 0.5)}
+                                  {knob(tuning, 0.5, {snap: {threshold: 0.5}})}
                                   {knob(cutoff)}
                                   {knob(resonance)}
                                   {knob(envMod)}
@@ -52,7 +54,9 @@ export const CubedDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   {knob(accent)}
                                   {knob(volume)}
                               </div>
-                              <div className="pattern-area"/>
+                              <div className="body">
+                                  <PatternControls lifecycle={lifecycle} editing={editing} adapter={adapter}/>
+                              </div>
                           </div>
                       )}
                       populateMeter={() => (

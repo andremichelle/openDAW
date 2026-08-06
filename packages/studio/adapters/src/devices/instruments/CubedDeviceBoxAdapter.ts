@@ -63,7 +63,8 @@ export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         const unipolar = (field: Parameters<ParameterAdapterSet["createParameter"]>[0], name: string, anchor?: number) =>
             this.#parametric.createParameter(field, ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), name, anchor)
         return {
-            tuning: unipolar(box.tuning, "Tuning", 0.5),
+            tuning: this.#parametric.createParameter(
+                box.tuning, ValueMapping.linear(-1200, 1200), StringMapping.numeric({unit: "ct", fractionDigits: 0}), "Tuning", 0.5),
             cutoff: unipolar(box.cutoff, "Cutoff"),
             resonance: unipolar(box.resonance, "Resonance"),
             envMod: unipolar(box.envMod, "Env Mod"),

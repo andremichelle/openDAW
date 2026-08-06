@@ -3,20 +3,22 @@
 component
   display: flex
   flex-direction: column
-  gap: 0.5em
   @include mixins.Control
-  .controls
+  > .controls
     display: grid
     grid-template-columns: repeat(8, 3.75em)
     column-gap: 2px
     align-items: start
-  .waveform
-    align-self: center
+
+    > .waveform
+      align-self: center
+      display: flex
+      align-items: center
+      justify-content: center
+      font-size: 0.75em
+
+  > .body
     display: flex
-    align-items: center
-    justify-content: center
-    font-size: 0.75em
-  .pattern-area
-    min-height: 8em
-    background: rgba(white, 0.03)
+    flex-direction: column
     border-radius: 0.25em
+    padding: 0.5em

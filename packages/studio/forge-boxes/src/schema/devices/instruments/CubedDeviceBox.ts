@@ -4,7 +4,7 @@ import {DeviceFactory} from "../../std/DeviceFactory"
 import {IndexConstraints, ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 
 export const CubedDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("CubedDeviceBox", "notes", {
-    10: {type: "float32", name: "tuning", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
+    10: {type: "float32", name: "tuning", pointerRules: ParameterPointerRules, value: 0.0, constraints: {min: -1200, max: 1200, scaling: "linear"}, unit: "ct"},
     11: {type: "float32", name: "cutoff", pointerRules: ParameterPointerRules, value: 0.4, ...UnipolarConstraints},
     12: {type: "float32", name: "resonance", pointerRules: ParameterPointerRules, value: 0.6, ...UnipolarConstraints},
     13: {type: "float32", name: "env-mod", pointerRules: ParameterPointerRules, value: 0.55, ...UnipolarConstraints},
