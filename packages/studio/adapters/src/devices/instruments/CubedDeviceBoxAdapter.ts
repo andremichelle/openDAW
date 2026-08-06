@@ -65,7 +65,7 @@ export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         return {
             tuning: unipolar(box.tuning, "Tuning", 0.5),
             cutoff: unipolar(box.cutoff, "Cutoff"),
-            resonance: unipolar(box.resonance, "Reso"),
+            resonance: unipolar(box.resonance, "Resonance"),
             envMod: unipolar(box.envMod, "Env Mod"),
             decay: unipolar(box.decay, "Decay"),
             accent: unipolar(box.accent, "Accent"),

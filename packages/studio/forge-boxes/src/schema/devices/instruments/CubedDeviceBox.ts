@@ -25,7 +25,7 @@ export const CubedPatternBox: BoxSchema<Pointers> = {
             10: {type: "pointer", name: "device", pointerType: Pointers.Pattern, mandatory: true},
             11: {type: "int32", name: "index", ...IndexConstraints},
             12: {type: "int32", name: "length", value: 16, constraints: {min: 1, max: 64}, unit: ""},
-            // each int32 packs note-in-octave (4 bits), octave (2), on/off (1), slide (1), accent (1). adapter packs/unpacks
+            // each int32 packs midi-note (7 bits), on/off (1), slide (1), accent (1). adapter packs/unpacks
             20: {type: "array", name: "steps", length: 64, element: {type: "int32", constraints: "any", unit: ""}}
         }
     },

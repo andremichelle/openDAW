@@ -5,8 +5,7 @@ import {IndexedBoxAdapter} from "../../../IndexedBoxAdapterCollection"
 import {BoxAdaptersContext} from "../../../BoxAdaptersContext"
 
 export type CubedStep = {
-    note: int      // 0..12 within one octave; octave -1/0/+1; slide carries the tie
-    octave: int
+    note: int      // MIDI note 0..127; slide carries the tie
     active: boolean
     slide: boolean
     accent: boolean
@@ -32,29 +31,22 @@ export class CubedPatternBoxAdapter implements IndexedBoxAdapter {
     getStep(index: int): CubedStep {return CubedPatternBoxAdapter.unpack(this.#box.steps.fields()[index].getValue())}
     setStep(index: int, step: CubedStep): void {this.#box.steps.fields()[index].setValue(CubedPatternBoxAdapter.pack(step))}
 
-    stepToMidi(index: int, base: int): int {
-        const step = this.getStep(index)
-        return base + step.note + 12 * step.octave
-    }
-
     terminate(): void {}
 
-    // one int32 per step: note 0..3, octave 4..5 (stored 0/1/2 for -1/0/+1), active 6, slide 7, accent 8
+    // one int32 per step: midi-note 0..6, active 7, slide 8, accent 9
     static pack(step: CubedStep): int {
-        return (step.note & 0xF)
-            | (((step.octave + 1) & 0x3) << 4)
-            | ((step.active ? 1 : 0) << 6)
-            | ((step.slide ? 1 : 0) << 7)
-            | ((step.accent ? 1 : 0) << 8)
+        return (step.note & 0x7F)
+            | ((step.active ? 1 : 0) << 7)
+            | ((step.slide ? 1 : 0) << 8)
+            | ((step.accent ? 1 : 0) << 9)
     }
 
     static unpack(bits: int): CubedStep {
         return {
-            note: bits & 0xF,
-            octave: ((bits >> 4) & 0x3) - 1,
-            active: ((bits >> 6) & 1) === 1,
-            slide: ((bits >> 7) & 1) === 1,
-            accent: ((bits >> 8) & 1) === 1
+            note: bits & 0x7F,
+            active: ((bits >> 7) & 1) === 1,
+            slide: ((bits >> 8) & 1) === 1,
+            accent: ((bits >> 9) & 1) === 1
         }
     }
 }
