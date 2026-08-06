@@ -1,6 +1,6 @@
-import {EmptyExec, Exec, isDefined, isInstanceOf, isNotNull, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {EmptyExec, Exec, isDefined, isInstanceOf, isNotNull, Option, quantizeRound, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {BoxGraph} from "@opendaw/lib-box"
-import {EventCollection, ppqn, seconds, TimeBase} from "@opendaw/lib-dsp"
+import {EventCollection, ppqn, PPQN, seconds, TimeBase} from "@opendaw/lib-dsp"
 import {
     AudioPitchStretchBox,
     AudioRegionBox,
@@ -13,6 +13,7 @@ import {AudioContentBoxAdapter, AudioPlayMode, AudioRegionBoxAdapter, WarpMarker
 import {AudioContentHelpers} from "./AudioContentHelpers"
 import {Workers} from "../../Workers"
 import {Pointers} from "@opendaw/studio-enums"
+import {SampleStorage} from "../../samples/SampleStorage"
 
 export namespace AudioContentModifier {
     export const toNotStretched = async (adapters: ReadonlyArray<AudioContentBoxAdapter>): Promise<Exec> => {
@@ -39,12 +40,13 @@ export namespace AudioContentModifier {
     export const toPitchStretch = async (adapters: ReadonlyArray<AudioContentBoxAdapter>): Promise<Exec> => {
         const audioAdapters = adapters.filter(adapter => adapter.asPlayModePitchStretch.isEmpty())
         if (audioAdapters.length === 0) {return EmptyExec}
-        return () => audioAdapters.forEach((adapter) => {
+        const tasks = await Promise.all(audioAdapters.map(async adapter => ({adapter, bpm: await readSampleBpm(adapter)})))
+        return () => tasks.forEach(({adapter, bpm}) => {
             const optPrev: Option<AudioPlayMode> = adapter.observableOptPlayMode.map(mode => mode)
             const boxGraph = adapter.box.graph
             const pitchStretch = AudioPitchStretchBox.create(boxGraph, UUID.generate())
             adapter.box.playMode.refer(pitchStretch)
-            adoptWarpMarkers(optPrev, pitchStretch, boxGraph, adapter)
+            adoptWarpMarkers(optPrev, pitchStretch, boxGraph, adapter, bpm)
             switchTimeBaseToMusical(adapter)
         })
     }
@@ -52,12 +54,13 @@ export namespace AudioContentModifier {
     export const toSignalsmith = async (adapters: ReadonlyArray<AudioContentBoxAdapter>): Promise<Exec> => {
         const audioAdapters = adapters.filter(adapter => adapter.asPlayModeSignalsmith.isEmpty())
         if (audioAdapters.length === 0) {return EmptyExec}
-        return () => audioAdapters.forEach((adapter) => {
+        const tasks = await Promise.all(audioAdapters.map(async adapter => ({adapter, bpm: await readSampleBpm(adapter)})))
+        return () => tasks.forEach(({adapter, bpm}) => {
             const optPrev: Option<AudioPlayMode> = adapter.observableOptPlayMode.map(mode => mode)
             const boxGraph = adapter.box.graph
             const signalsmith = AudioSignalsmithBox.create(boxGraph, UUID.generate())
             adapter.box.playMode.refer(signalsmith)
-            adoptWarpMarkers(optPrev, signalsmith, boxGraph, adapter)
+            adoptWarpMarkers(optPrev, signalsmith, boxGraph, adapter, bpm)
             switchTimeBaseToMusical(adapter)
         })
     }
@@ -67,21 +70,23 @@ export namespace AudioContentModifier {
         if (audioAdapters.length === 0) {return EmptyExec}
         const handler = RuntimeNotifier.progress({headline: "Detecting Transients..."})
         const tasks = await Promise.all(audioAdapters.map(async adapter => {
+            const bpm = await readSampleBpm(adapter)
             if (adapter.file.transients.length() === 0) {
                 return {
                     adapter,
+                    bpm,
                     transients: await Workers.Transients.detect(await adapter.file.audioData)
                 }
             }
-            return {adapter}
+            return {adapter, bpm}
         }))
         handler.terminate()
-        return () => tasks.forEach(({adapter, transients}) => {
+        return () => tasks.forEach(({adapter, bpm, transients}) => {
             const optPrev: Option<AudioPlayMode> = adapter.observableOptPlayMode.map(mode => mode)
             const boxGraph = adapter.box.graph
             const timeStretch = AudioTimeStretchBox.create(boxGraph, UUID.generate())
             adapter.box.playMode.refer(timeStretch)
-            adoptWarpMarkers(optPrev, timeStretch, boxGraph, adapter)
+            adoptWarpMarkers(optPrev, timeStretch, boxGraph, adapter, bpm)
             if (isDefined(transients) && adapter.file.transients.length() === 0) {
                 const markersField = adapter.file.box.transientMarkers
                 transients.forEach(position => TransientMarkerBox.create(boxGraph, UUID.generate(), box => {
@@ -119,15 +124,27 @@ export namespace AudioContentModifier {
         return {ppqn: adapter.duration, seconds: adapter.box.duration.getValue()}
     }
 
+    const warpedExtent = (adapter: AudioContentBoxAdapter, bpm: number): {ppqn: number, seconds: number} => {
+        const {seconds} = sampleExtent(adapter)
+        const pulses = PPQN.secondsToPulses(seconds, bpm)
+        return {ppqn: pulses >= PPQN.SemiQuaver ? quantizeRound(pulses, PPQN.SemiQuaver) : pulses, seconds}
+    }
+
+    const readSampleBpm = async (adapter: AudioContentBoxAdapter): Promise<number> =>
+        (await Option.async(SampleStorage.get().loadMeta(adapter.file.uuid))).mapOr(meta => meta.bpm, 0)
+
     // Move the warp markers of the previous play-mode (if any) onto the new play-mode box, so switching between
     // Pitch / Grain / Signalsmith preserves the user's warp edits; delete the old box if nothing else points at
-    // it (else clone the markers). With no previous stretch (was NoWarp), seed default markers instead.
+    // it (else clone the markers). With no previous stretch (was NoWarp), seed default markers warped to the
+    // sample's own bpm as stored in its metadata; the project-tempo-relative extent is only a defensive
+    // fallback for callers that never wrote a meaningful bpm.
     const adoptWarpMarkers = (optPrev: Option<AudioPlayMode>,
                               newBox: AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox,
                               boxGraph: BoxGraph,
-                              adapter: AudioContentBoxAdapter): void => optPrev.match({
+                              adapter: AudioContentBoxAdapter,
+                              bpm: number): void => optPrev.match({
         none: () => {
-            const {ppqn, seconds} = sampleExtent(adapter)
+            const {ppqn, seconds} = bpm > 0 ? warpedExtent(adapter, bpm) : sampleExtent(adapter)
             AudioContentHelpers.addDefaultWarpMarkers(boxGraph, newBox, ppqn, seconds)
         },
         some: from => {
