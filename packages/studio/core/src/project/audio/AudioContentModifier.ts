@@ -46,8 +46,7 @@ export namespace AudioContentModifier {
             const boxGraph = adapter.box.graph
             const pitchStretch = AudioPitchStretchBox.create(boxGraph, UUID.generate())
             adapter.box.playMode.refer(pitchStretch)
-            adoptWarpMarkers(optPrev, pitchStretch, boxGraph, adapter, bpm)
-            switchTimeBaseToMusical(adapter)
+            switchTimeBaseToMusical(adapter, adoptWarpMarkers(optPrev, pitchStretch, boxGraph, adapter, bpm))
         })
     }
 
@@ -60,8 +59,7 @@ export namespace AudioContentModifier {
             const boxGraph = adapter.box.graph
             const signalsmith = AudioSignalsmithBox.create(boxGraph, UUID.generate())
             adapter.box.playMode.refer(signalsmith)
-            adoptWarpMarkers(optPrev, signalsmith, boxGraph, adapter, bpm)
-            switchTimeBaseToMusical(adapter)
+            switchTimeBaseToMusical(adapter, adoptWarpMarkers(optPrev, signalsmith, boxGraph, adapter, bpm))
         })
     }
 
@@ -86,7 +84,7 @@ export namespace AudioContentModifier {
             const boxGraph = adapter.box.graph
             const timeStretch = AudioTimeStretchBox.create(boxGraph, UUID.generate())
             adapter.box.playMode.refer(timeStretch)
-            adoptWarpMarkers(optPrev, timeStretch, boxGraph, adapter, bpm)
+            const optWarped = adoptWarpMarkers(optPrev, timeStretch, boxGraph, adapter, bpm)
             if (isDefined(transients) && adapter.file.transients.length() === 0) {
                 const markersField = adapter.file.box.transientMarkers
                 transients.forEach(position => TransientMarkerBox.create(boxGraph, UUID.generate(), box => {
@@ -94,7 +92,7 @@ export namespace AudioContentModifier {
                     box.position.setValue(position)
                 }))
             }
-            switchTimeBaseToMusical(adapter)
+            switchTimeBaseToMusical(adapter, optWarped)
         })
     }
 
@@ -137,15 +135,17 @@ export namespace AudioContentModifier {
     // Pitch / Grain / Signalsmith preserves the user's warp edits; delete the old box if nothing else points at
     // it (else clone the markers). With no previous stretch (was NoWarp), seed default markers warped to the
     // sample's own bpm as stored in its metadata; the project-tempo-relative extent is only a defensive
-    // fallback for callers that never wrote a meaningful bpm.
+    // fallback for callers that never wrote a meaningful bpm. Returns the bpm-warped marker extent when one
+    // was seeded, so the timebase switch can size the region from it instead of the project-tempo conversion.
     const adoptWarpMarkers = (optPrev: Option<AudioPlayMode>,
                               newBox: AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox,
                               boxGraph: BoxGraph,
                               adapter: AudioContentBoxAdapter,
-                              bpm: number): void => optPrev.match({
+                              bpm: number): Option<ppqn> => optPrev.match({
         none: () => {
             const {ppqn, seconds} = bpm > 0 ? warpedExtent(adapter, bpm) : sampleExtent(adapter)
             AudioContentHelpers.addDefaultWarpMarkers(boxGraph, newBox, ppqn, seconds)
+            return bpm > 0 ? Option.wrap(ppqn) : Option.None
         },
         some: from => {
             const to = newBox.warpMarkers
@@ -160,6 +160,7 @@ export namespace AudioContentModifier {
                 from.warpMarkers.asArray().forEach(({box: {owner}}) => owner.refer(to))
                 from.box.delete()
             }
+            return Option.None
         }
     })
 
@@ -175,16 +176,32 @@ export namespace AudioContentModifier {
         })
     }
 
-    const switchTimeBaseToMusical = (adapter: AudioContentBoxAdapter): void => {
+    const switchTimeBaseToMusical = (adapter: AudioContentBoxAdapter, optWarpedDuration: Option<ppqn>): void => {
         const {timeBase} = adapter
         if (timeBase === TimeBase.Musical) {return}
         const {box} = adapter
-        box.duration.setValue(adapter.duration)
-        if (isInstanceOf(adapter, AudioRegionBoxAdapter)) {
-            const {box: {loopDuration, loopOffset}} = adapter
-            loopOffset.setValue(adapter.loopOffset)
-            loopDuration.setValue(adapter.loopDuration)
-        }
+        optWarpedDuration.match({
+            none: () => {
+                box.duration.setValue(adapter.duration)
+                if (isInstanceOf(adapter, AudioRegionBoxAdapter)) {
+                    const {box: {loopDuration, loopOffset}} = adapter
+                    loopOffset.setValue(adapter.loopOffset)
+                    loopDuration.setValue(adapter.loopDuration)
+                }
+            },
+            some: warpedPpqn => {
+                if (isInstanceOf(adapter, AudioRegionBoxAdapter)) {
+                    const {box: {loopDuration, loopOffset}} = adapter
+                    const loopSeconds = loopDuration.getValue()
+                    const scale = loopSeconds > 0 ? warpedPpqn / loopSeconds : 0
+                    box.duration.setValue(box.duration.getValue() * scale)
+                    loopOffset.setValue(loopOffset.getValue() * scale)
+                    loopDuration.setValue(warpedPpqn)
+                } else {
+                    box.duration.setValue(warpedPpqn)
+                }
+            }
+        })
         box.timeBase.setValue(TimeBase.Musical)
     }
 }
