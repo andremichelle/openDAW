@@ -18,6 +18,7 @@ import {CubedDeviceBoxAdapter, CubedStep} from "@opendaw/studio-adapters"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {Colors} from "@opendaw/studio-enums"
+import {LiveStreamReceiver} from "@opendaw/lib-fusion"
 
 const className = Html.adoptStyleSheet(css, "CubedPatternGrid")
 
@@ -40,9 +41,10 @@ type Construct = {
     editing: Editing
     adapter: CubedDeviceBoxAdapter
     stepRange: DefaultObservableValue<int>
+    receiver: LiveStreamReceiver
 }
 
-export const PatternGrid = ({lifecycle, editing, adapter, stepRange}: Construct) => {
+export const PatternGrid = ({lifecycle, editing, adapter, stepRange, receiver}: Construct) => {
     const {patternIndex} = adapter.namedParameter
     const writeStep = (absIndex: int, mutate: (step: CubedStep) => void) => editing.modify(() => {
         const field = adapter.currentPattern().steps.getField(absIndex)
@@ -121,9 +123,16 @@ export const PatternGrid = ({lifecycle, editing, adapter, stepRange}: Construct)
             <div className="header">{label}</div>,
             ...Array.from({length: 16}, (_, column) => cell(base + column))
         ]
+        const playCells: ReadonlyArray<HTMLElement> = Array.from({length: 16}, () => <div className="play"/>)
+        inner.own(receiver.subscribeIntegers(adapter.address.append(0), array => {
+            const step = array[0]
+            playCells.forEach((cell, column) => cell.classList.toggle("on", base + column === step))
+        }))
         replaceChildren(element,
             <div className="corner"/>,
             ...Array.from({length: 16}, (_, column) => indexCell(column)),
+            <div className="corner"/>,
+            ...playCells,
             ...row("Note", noteCell),
             ...row("Mode", index => toggleCell(index, "active", Colors.blue)),
             ...row("Slide", index => toggleCell(index, "slide", Colors.orange)),

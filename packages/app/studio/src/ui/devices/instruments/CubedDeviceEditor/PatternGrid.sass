@@ -1,7 +1,7 @@
 component
   display: grid
   grid-template-columns: 4em repeat(16, 1fr)
-  grid-auto-rows: 1.75em
+  grid-template-rows: 1.75em 2px repeat(4, 1.75em)
   gap: 2px
   font-size: 9px
 
@@ -19,9 +19,16 @@ component
     &.beyond
       opacity: 0.1
 
-    &:nth-child(4n + 2):not(.beyond)
+    &:nth-child(4n + 3):not(.beyond)
       border-radius: 2px
       background-color: rgba(white, 0.04)
+
+  > .play
+    border-radius: 2px
+    background: rgba(white, 0.05)
+
+    &.on
+      background: var(--color-blue)
 
   > .cell
     display: flex

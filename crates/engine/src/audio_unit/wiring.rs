@@ -759,6 +759,10 @@ impl Engine {
                     let pattern = Rc::new(RefCell::new(crate::cubed_pattern::CubedPatternSource::new(
                         crate::cubed_pattern::GATE_FRACTION)));
                     crate::cubed_pattern::load_from_graph(&self.graph, instrument_uuid, &mut pattern.borrow_mut());
+                    // Live telemetry: the currently-playing step at the device address + key [0], for the
+                    // editor's playhead row. Distinct key from the instrument's bare-address peaks / note-bits.
+                    self.broadcasts.register(instrument_uuid, &[0], crate::broadcast::PACKAGE_INT_ARRAY,
+                                             &pattern.borrow().step_slot());
                     let subs = self.subscribe_cubed_pattern(instrument_uuid, &pattern);
                     unit.cubed_pattern_subs.extend(subs);
                     Rc::new(RefCell::new(crate::cubed_pattern::MergedNoteSource::new(sequencer, pattern)))

@@ -16,6 +16,7 @@
 
 use engine_env::block_flags::BlockFlags;
 use engine_env::event::Event;
+use engine_env::telemetry::{broadcast_slot, BroadcastSlot};
 use dsp::ppqn::SEMI_QUAVER;
 use math::floor;
 use value::retainer::EventSpanRetainer;
@@ -101,14 +102,16 @@ pub struct CubedPatternSource {
     gate_fraction: f64,
     enabled: bool,
     retainer: EventSpanRetainer<RetainedNote>,
-    next_id: u64
+    next_id: u64,
+    /// One-int32 telemetry slot: the currently-playing step (-1 when idle), for the editor's playhead row.
+    step_slot: BroadcastSlot
 }
 
 impl CubedPatternSource {
     pub fn new(gate_fraction: f64) -> Self {
         Self {patterns: [[Step {note: 0, gate: false, slide: false, accent: false}; MAX_STEPS]; PATTERN_COUNT],
               lengths: [16; PATTERN_COUNT], index: 0, gate_fraction, enabled: true,
-              retainer: EventSpanRetainer::new(), next_id: 1}
+              retainer: EventSpanRetainer::new(), next_id: 1, step_slot: broadcast_slot(1)}
     }
 
     /// Replaces the cached pattern. Called from the wiring layer on catch-up and whenever the box
@@ -146,6 +149,10 @@ impl CubedPatternSource {
     pub fn is_enabled(&self) -> bool {self.enabled}
 
     pub fn length(&self) -> usize {self.lengths[self.index]}
+
+    /// The int32 broadcast slot carrying the currently-playing step (-1 when idle). The wiring layer
+    /// registers it at the device address + key [0]; the editor's playhead row subscribes to it.
+    pub fn step_slot(&self) -> BroadcastSlot {self.step_slot.clone()}
 }
 
 impl engine_env::note_event_source::NoteEventSource for CubedPatternSource {
@@ -153,6 +160,11 @@ impl engine_env::note_event_source::NoteEventSource for CubedPatternSource {
         // Release held notes first, exactly like NoteSequencer: a stop or a loop wrap must not leave
         // the monophonic voice gated with no note left to release it.
         let read = flags.has(BlockFlags::TRANSPORTING | BlockFlags::PLAYING);
+        // Publish the currently-playing step (-1 when idle) so the editor's playhead row can light it.
+        let current_step: i32 = if read && self.enabled {
+            (floor(from / SEMI_QUAVER) as i64).rem_euclid(self.lengths[self.index] as i64) as i32
+        } else {-1};
+        self.step_slot.borrow_mut()[0] = f32::from_bits(current_step as u32);
         if !read || flags.discontinuous() {
             self.retainer.drain_all(|retained|
                 sink(Event::NoteComplete {id: retained.id, position: from, pitch: retained.pitch}));

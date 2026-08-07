@@ -104,7 +104,7 @@ export const CubedDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   <PatternControls lifecycle={lifecycle} editing={editing} adapter={adapter}
                                                    stepRange={stepRange}/>
                                   <PatternGrid lifecycle={lifecycle} editing={editing} adapter={adapter}
-                                               stepRange={stepRange}/>
+                                               stepRange={stepRange} receiver={project.liveStreamReceiver}/>
                               </div>
                           </div>
                       )}
