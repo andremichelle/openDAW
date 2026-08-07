@@ -78,6 +78,7 @@ import {ShadertoyState} from "@/ui/shadertoy/ShadertoyState"
 import {CodeEditorState} from "@/ui/code-editor/CodeEditorState"
 import {RoomAwareness} from "@/service/RoomAwareness"
 import {ChatService} from "@/chat/ChatService"
+import {TransportSyncService} from "@/service/transport-sync/TransportSyncService"
 
 /**
  * I am just piling stuff after stuff in here to boot the environment.
@@ -115,6 +116,7 @@ export class StudioService implements ProjectEnv {
     readonly samplePlayback: SamplePlayback
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
+    readonly transportSync = new TransportSyncService(this.engine)
     readonly presets = new PresetService(this)
 
     readonly #softwareKeyboardLifeCycle = new Terminator()
