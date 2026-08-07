@@ -347,6 +347,7 @@ mod time_stretch;
 mod tempo_map;
 mod script_device;
 use audio_unit::{AudioUnitBinding, Members};
+mod cubed_pattern;
 mod composite;
 mod effect_composite;
 

@@ -1,15 +1,12 @@
 import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
-import {CubedDeviceBox} from "@opendaw/studio-boxes"
+import {CubedDeviceBox, CubedPattern} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
-import {Pointers} from "@opendaw/studio-enums"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
-import {IndexedBoxAdapterCollection} from "../../IndexedBoxAdapterCollection"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
-import {CubedPatternBoxAdapter} from "./Cubed/CubedPatternBoxAdapter"
 
 export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
@@ -19,15 +16,12 @@ export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly #context: BoxAdaptersContext
     readonly #box: CubedDeviceBox
 
-    readonly #patterns: IndexedBoxAdapterCollection<CubedPatternBoxAdapter, Pointers.Pattern>
     readonly #parametric: ParameterAdapterSet
     readonly namedParameter // let typescript infer the type
 
     constructor(context: BoxAdaptersContext, box: CubedDeviceBox) {
         this.#context = context
         this.#box = box
-        this.#patterns = IndexedBoxAdapterCollection.create(
-            box.patterns, box => context.boxAdapters.adapterFor(box, CubedPatternBoxAdapter), Pointers.Pattern)
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
     }
@@ -41,7 +35,8 @@ export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
     get acceptsMidiEvents(): boolean {return true}
-    get patterns(): IndexedBoxAdapterCollection<CubedPatternBoxAdapter, Pointers.Pattern> {return this.#patterns}
+
+    currentPattern(): CubedPattern {return this.#box.patterns.getField(this.#box.patternIndex.getValue())}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters
@@ -56,7 +51,6 @@ export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     terminate(): void {
         this.#parametric.terminate()
-        this.#patterns.terminate()
     }
 
     #wrapParameters(box: CubedDeviceBox) {

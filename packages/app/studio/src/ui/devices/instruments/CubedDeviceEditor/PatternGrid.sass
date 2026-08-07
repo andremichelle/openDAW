@@ -1,0 +1,52 @@
+component
+  display: grid
+  grid-template-columns: 4em repeat(16, 1fr)
+  grid-auto-rows: 1.75em
+  gap: 2px
+  font-size: 9px
+
+  > .header
+    display: flex
+    align-items: center
+    opacity: 0.4
+
+  > .index
+    display: flex
+    align-items: center
+    justify-content: center
+    opacity: 0.4
+
+    &.beyond
+      opacity: 0.1
+
+  > .note
+    display: flex
+    align-items: center
+    justify-content: center
+    padding: 0.25em 0
+    background: rgba(black, 0.2)
+    border-radius: 3px
+    cursor: ns-resize
+    user-select: none
+    color: var(--color-dark)
+
+  > .toggle
+    display: flex
+    align-items: center
+    justify-content: center
+    padding: 0.25em 0
+    background: rgba(black, 0.2)
+    border-radius: 3px
+    cursor: pointer
+
+    > .square
+      width: 16px
+      height: 8px
+      border-radius: 1px
+      background: currentColor
+      filter: saturate(25%) opacity(25%)
+      box-shadow: 0 0 1px 0 black inset
+
+    &.on > .square
+      filter: saturate(100%) opacity(100%)
+      box-shadow: 0 0 1px 0 black inset, 0 0 4px 0 color-mix(in srgb, currentColor 50%, transparent)

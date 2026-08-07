@@ -540,6 +540,9 @@ impl ParamNode {
 /// chain subscriptions.
 pub(crate) struct AudioUnitBinding {
     pub(crate) unit: Uuid,
+    /// Monitors on a Cubed instrument's pattern fields. Held here so they live exactly as long as the
+    /// unit's wiring and are dropped with it; empty for every other instrument.
+    pub(crate) cubed_pattern_subs: Vec<SubscriptionId>,
     pub(crate) track_sets: SharedTrackSets,
     pub(crate) collections: CollectionCache,
     pub(crate) tracks: Vec<TrackBinding>,
@@ -1158,6 +1161,7 @@ impl Engine {
         let params_dirty = Rc::new(Cell::new(false));
         let wiring_dirty = Rc::new(Cell::new(false));
         AudioUnitBinding {
+            cubed_pattern_subs: Vec::new(),
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
             audio_track_sets: Rc::new(RefCell::new(Vec::new())), audio_tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub, solo_sub],

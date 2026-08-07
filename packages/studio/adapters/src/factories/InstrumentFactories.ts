@@ -3,7 +3,6 @@ import {
     AudioFileBox,
     BoxIO,
     CubedDeviceBox,
-    CubedPatternBox,
     NeonDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
@@ -150,19 +149,12 @@ export namespace InstrumentFactories {
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
                  name: string,
                  icon: IconSymbol,
-                 _attachment?: void): CubedDeviceBox => {
-            const deviceBox = CubedDeviceBox.create(boxGraph, UUID.generate(), box => {
+                 _attachment?: void): CubedDeviceBox =>
+            CubedDeviceBox.create(boxGraph, UUID.generate(), box => {
                 box.label.setValue(name)
                 box.icon.setValue(IconSymbol.toName(icon))
                 box.host.refer(host)
             })
-            CubedPatternBox.create(boxGraph, UUID.generate(), box => {
-                box.device.refer(deviceBox.patterns)
-                box.index.setValue(0)
-                box.length.setValue(16)
-            })
-            return deviceBox
-        }
     }
 
     export const Vaporisateur: InstrumentFactory<void, VaporisateurDeviceBox> = {

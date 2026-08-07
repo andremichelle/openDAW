@@ -4,6 +4,8 @@ component
   display: flex
   flex-direction: column
   @include mixins.Control
+  padding: 0 0 1em 0
+
   > .controls
     display: grid
     grid-template-columns: repeat(8, 3.75em)
@@ -20,5 +22,6 @@ component
   > .body
     display: flex
     flex-direction: column
-    border-radius: 0.25em
-    padding: 0.5em
+    justify-content: end
+    row-gap: 0.25em
+    height: stretch

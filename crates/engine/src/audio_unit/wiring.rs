@@ -746,6 +746,21 @@ impl Engine {
                 sequencer
             }
         };
+        // A Cubed instrument also has an INTERNAL pattern. It joins the unit's track notes as a peer
+        // source; the device's own NoteMerger resolves the two into its single voice by last-note
+        // priority, which is why nothing here has to know about accents or slides - they travel as
+        // ordinary velocity and note overlap.
+        let sequencer: SharedNoteEventSource = if self.graph.find_box(&instrument_uuid)
+            .map(|device_box| device_box.name == "CubedDeviceBox").unwrap_or(false) {
+            let pattern = Rc::new(RefCell::new(crate::cubed_pattern::CubedPatternSource::new(
+                crate::cubed_pattern::GATE_FRACTION)));
+            crate::cubed_pattern::load_from_graph(&self.graph, instrument_uuid, &mut pattern.borrow_mut());
+            let subs = self.subscribe_cubed_pattern(instrument_uuid, &pattern);
+            unit.cubed_pattern_subs.extend(subs);
+            Rc::new(RefCell::new(crate::cubed_pattern::MergedNoteSource::new(sequencer, pattern)))
+        } else {
+            sequencer
+        };
         // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip; the strip's output is
         // routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).
         let monitor = self.monitor_channels_of(&unit.unit);
@@ -782,6 +797,28 @@ impl Engine {
     /// in the chain wiring, its processor + params + DSP state left fully intact.
     pub(crate) fn device_enabled(&self, uuid: Uuid) -> bool {
         self.graph.field_value(&Address::of(uuid, vec![DEVICE_ENABLED_KEY])).and_then(|value| value.as_bool()).unwrap_or(true)
+    }
+
+    /// TARGETED monitors on a Cubed device's `pattern-index` and `patterns` fields.
+    ///
+    /// These re-read into the SHARED source rather than triggering a re-wire: rebuilding the note
+    /// source mid-play would drop the notes it has retained across blocks, heard as a stuck or
+    /// re-triggered note. Editing a step while the pattern runs must not do that.
+    pub(crate) fn subscribe_cubed_pattern(&mut self, uuid: Uuid,
+                                          pattern: &Rc<RefCell<crate::cubed_pattern::CubedPatternSource>>)
+                                          -> [SubscriptionId; 2] {
+        use crate::cubed_pattern::{load_from_graph, PATTERNS_KEY, PATTERN_INDEX_KEY};
+        let selected = pattern.clone();
+        let index_sub = self.graph.subscribe_vertex(
+            Propagation::This, Address::of(uuid, vec![PATTERN_INDEX_KEY]),
+            Box::new(move |graph, _update| load_from_graph(graph, uuid, &mut selected.borrow_mut())));
+        let edited = pattern.clone();
+        // Parent: a monitor fires for every PREFIX of a changed address, so one monitor at the
+        // array field catches a step edit at [30, pattern, 2, step] without 1024 subscriptions.
+        let steps_sub = self.graph.subscribe_vertex(
+            Propagation::Parent, Address::of(uuid, vec![PATTERNS_KEY]),
+            Box::new(move |graph, _update| load_from_graph(graph, uuid, &mut edited.borrow_mut())));
+        [index_sub, steps_sub]
     }
 
     /// A TARGETED `This` monitor on a device's `enabled` field: a toggle fires `rewire` (mark + enqueue the
