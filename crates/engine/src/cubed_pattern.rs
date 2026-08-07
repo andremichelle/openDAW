@@ -372,4 +372,85 @@ impl engine_env::note_event_source::NoteEventSource for MergedNoteSource {
         self.upstream.borrow_mut().process_notes(from, to, flags, sink);
         self.pattern.borrow_mut().process_notes(from, to, flags, sink);
     }
+
+    // Raw and audition notes - piano-roll clicks, the on-screen keyboard, live MIDI - are PUSHED
+    // into the source rather than pulled, and the trait's defaults are no-ops. Wrapping the unit's
+    // sequencer without forwarding these swallows every live note: the device plays its pattern but
+    // cannot be played. The pattern itself has no keyboard, so these belong to upstream alone.
+    fn push_raw_note_on(&mut self, pitch: u8, velocity: f32) {
+        self.upstream.borrow_mut().push_raw_note_on(pitch, velocity);
+    }
+
+    fn push_raw_note_off(&mut self, pitch: u8) {
+        self.upstream.borrow_mut().push_raw_note_off(pitch);
+    }
+
+    fn audition_note(&mut self, pitch: u8, duration: f64, velocity: f32) {
+        self.upstream.borrow_mut().audition_note(pitch, duration, velocity);
+    }
+}
+
+#[cfg(test)]
+mod merged_tests {
+    use super::*;
+    use engine_env::note_event_source::NoteEventSource;
+    use alloc::rc::Rc;
+    use core::cell::RefCell;
+
+    /// Stands in for the unit's NoteSequencer, recording what was pushed into it.
+    #[derive(Default)]
+    struct Recorder {raw_on: alloc::vec::Vec<(u8, f32)>, raw_off: alloc::vec::Vec<u8>, auditions: usize}
+
+    impl NoteEventSource for Recorder {
+        fn process_notes(&mut self, _from: f64, _to: f64, _flags: BlockFlags, _sink: &mut dyn FnMut(Event)) {}
+        fn push_raw_note_on(&mut self, pitch: u8, velocity: f32) {self.raw_on.push((pitch, velocity));}
+        fn push_raw_note_off(&mut self, pitch: u8) {self.raw_off.push(pitch);}
+        fn audition_note(&mut self, _pitch: u8, _duration: f64, _velocity: f32) {self.auditions += 1;}
+    }
+
+    /// Piano-roll clicks and the on-screen keyboard are PUSHED, not pulled, and the trait's defaults
+    /// are no-ops - so a wrapper that forgets to forward them silently makes the device unplayable
+    /// while its pattern still runs. That is exactly the bug this pins.
+    #[test]
+    fn live_notes_reach_the_upstream_sequencer_through_the_wrapper() {
+        let recorder = Rc::new(RefCell::new(Recorder::default()));
+        let mut merged = MergedNoteSource::new(
+            recorder.clone(), Rc::new(RefCell::new(CubedPatternSource::new(GATE_FRACTION))));
+        merged.push_raw_note_on(60, 0.8);
+        merged.push_raw_note_off(60);
+        merged.audition_note(64, 480.0, 1.0);
+        let seen = recorder.borrow();
+        assert_eq!(seen.raw_on, alloc::vec![(60, 0.8)]);
+        assert_eq!(seen.raw_off, alloc::vec![60]);
+        assert_eq!(seen.auditions, 1);
+    }
+
+    /// A wrapper stacked on a wrapper emits the pattern TWICE, and the duplicate note-on retriggers
+    /// the mono voice - every retrigger drains the accent cap, so accents die and never return. That
+    /// was a real regression: the KEPT source got re-wrapped on every re-wire, and adding or removing
+    /// an audio effect re-runs the wiring. Pin the shape - one wrap, one set of note-ons.
+    #[test]
+    fn double_wrapping_would_duplicate_every_note() {
+        fn starts(source: &mut dyn NoteEventSource) -> usize {
+            let mut count = 0;
+            source.process_notes(0.0, dsp::ppqn::SEMI_QUAVER * 2.0,
+                                 BlockFlags::create(true, false, true, false),
+                                 &mut |event| if matches!(event, Event::NoteStart {..}) {count += 1});
+            count
+        }
+        let make = || {
+            let mut pattern = CubedPatternSource::new(GATE_FRACTION);
+            pattern.set_pattern(&[Step {note: 36, gate: true, slide: false, accent: true}], 1);
+            Rc::new(RefCell::new(pattern))
+        };
+        let inner: Rc<RefCell<dyn NoteEventSource>> = Rc::new(RefCell::new(Recorder::default()));
+        let mut once = MergedNoteSource::new(inner.clone(), make());
+        let single = starts(&mut once);
+        assert_eq!(single, 2, "two step boundaries in the range");
+        let wrapped_once: Rc<RefCell<dyn NoteEventSource>> =
+            Rc::new(RefCell::new(MergedNoteSource::new(inner, make())));
+        let mut twice = MergedNoteSource::new(wrapped_once, make());
+        assert_eq!(starts(&mut twice), single * 2,
+                   "double wrapping doubles the notes - this is what killed the accents");
+    }
 }

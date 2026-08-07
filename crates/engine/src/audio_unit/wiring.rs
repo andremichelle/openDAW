@@ -743,23 +743,30 @@ impl Engine {
             _ => {
                 let sequencer = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: unit.track_sets.clone()}), self.clip_sequencer.clone())));
                 sequencer.borrow_mut().bind_truncate_preference(self.truncate_pref.clone());
-                sequencer
+                // A Cubed instrument also has an INTERNAL pattern, which joins the unit's track notes
+                // as a peer source; the device's NoteMerger resolves both into its single voice.
+                //
+                // Wrapping happens ONLY here, in the build-fresh branch. Doing it after the match
+                // would re-wrap the KEPT source on every re-wire - adding or removing an audio effect
+                // re-runs this - stacking a second pattern source that emits DUPLICATE note-ons.
+                // Each duplicate retriggers the voice, every retrigger drains the accent cap
+                // (accentRetain 0.009), and the accents die and never come back.
+                if self.graph.find_box(&instrument_uuid)
+                    .map(|device_box| device_box.name == "CubedDeviceBox").unwrap_or(false) {
+                    for sub in core::mem::take(&mut unit.cubed_pattern_subs) {
+                        self.graph.unsubscribe(sub); // monitors of the pattern we are replacing
+                    }
+                    let pattern = Rc::new(RefCell::new(crate::cubed_pattern::CubedPatternSource::new(
+                        crate::cubed_pattern::GATE_FRACTION)));
+                    crate::cubed_pattern::load_from_graph(&self.graph, instrument_uuid, &mut pattern.borrow_mut());
+                    let subs = self.subscribe_cubed_pattern(instrument_uuid, &pattern);
+                    unit.cubed_pattern_subs.extend(subs);
+                    Rc::new(RefCell::new(crate::cubed_pattern::MergedNoteSource::new(sequencer, pattern)))
+                        as SharedNoteEventSource
+                } else {
+                    sequencer
+                }
             }
-        };
-        // A Cubed instrument also has an INTERNAL pattern. It joins the unit's track notes as a peer
-        // source; the device's own NoteMerger resolves the two into its single voice by last-note
-        // priority, which is why nothing here has to know about accents or slides - they travel as
-        // ordinary velocity and note overlap.
-        let sequencer: SharedNoteEventSource = if self.graph.find_box(&instrument_uuid)
-            .map(|device_box| device_box.name == "CubedDeviceBox").unwrap_or(false) {
-            let pattern = Rc::new(RefCell::new(crate::cubed_pattern::CubedPatternSource::new(
-                crate::cubed_pattern::GATE_FRACTION)));
-            crate::cubed_pattern::load_from_graph(&self.graph, instrument_uuid, &mut pattern.borrow_mut());
-            let subs = self.subscribe_cubed_pattern(instrument_uuid, &pattern);
-            unit.cubed_pattern_subs.extend(subs);
-            Rc::new(RefCell::new(crate::cubed_pattern::MergedNoteSource::new(sequencer, pattern)))
-        } else {
-            sequencer
         };
         // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip; the strip's output is
         // routed to the unit's OUTPUT bus by `resolve_outputs` (not master here).

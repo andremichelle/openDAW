@@ -1,16 +1,3 @@
-//! The v3 TB-303 voice, ported from ar-303 `web-app/src/dsp/tb303-v3.js` at tag `final`.
-//!
-//! This is a TRANSCRIPTION, not a reimplementation. Float operation ORDER is preserved statement by
-//! statement: the werkstatt divergence was the same operations in a different order producing an
-//! audibly different result, and every constant here was fitted against the reference on top of the exact
-//! arithmetic below. If something looks redundant or improvable, it is load-bearing until the
-//! parity test says otherwise.
-//!
-//! Only the spread-ladder path is ported. `use_spread_ladder` is 1.0 in the frozen calibration, so
-//! the coupled-node `solve()` branch in the JS - and with it `fb_low_res_hz` / `fb_low_res_q`, which
-//! are referenced only inside it - is unreachable at `final`. Porting dead code that nothing can
-//! test would be a place for silent divergence to live.
-
 use crate::generated::Cal;
 use crate::tables::{read_cubic, MipTables, TABLE_SIZE};
 
@@ -318,16 +305,39 @@ impl Voice303 {
         let feedback = self.feedback.unwrap();
         let gain_linear = self.gain_linear.unwrap();
 
+        // Hoists, all EXACT: each recomputes whenever its input can change, so the arithmetic and
+        // its ORDER are untouched and the parity gate still holds. Worth doing because every one of
+        // these is a SOFTWARE transcendental on wasm - there is no hardware pow/tan/log2 - and at
+        // 48kHz they dominate the per-sample cost.
+        //
+        // Pitch only moves while sliding, so a non-gliding note pays pow+log2 once per block.
+        let mut cached_pitch: Option<(f64, f64)> = None;
+        // The cutoff only moves when the block's endpoints differ; a static filter then costs one
+        // exp+tan per block instead of one per sample.
+        let static_g = if ln_prev == ln_now {
+            Some(libm::tan(core::f64::consts::PI * (0.45 * self.sample_rate)
+                .min(libm::exp(ln_now)) / self.sample_rate))
+        } else {
+            None
+        };
         for i in 0..length {
             if self.sliding {
                 self.current_semitone += (self.target_semitone - self.current_semitone) * slide_alpha;
+                cached_pitch = None;
             }
-            let frequency = 440.0 * libm::pow(2.0, (self.current_semitone - 69.0 + tuning_semis) / 12.0);
-            let max_harmonic = (0.45 * self.sample_rate / frequency).max(1.0);
+            let (frequency, mip_target) = match cached_pitch {
+                Some(cached) => cached,
+                None => {
+                    let frequency = 440.0 * libm::pow(2.0, (self.current_semitone - 69.0 + tuning_semis) / 12.0);
+                    let max_harmonic = (0.45 * self.sample_rate / frequency).max(1.0);
+                    let mip_target = libm::log2(table_set.counts[0] as f64 / max_harmonic)
+                        .min((table_set.level_count - 1) as f64).max(0.0);
+                    cached_pitch = Some((frequency, mip_target));
+                    (frequency, mip_target)
+                }
+            };
             // slew the mip selection: two differently bandlimited tables do not agree at the same
             // phase, so switching them on a pitch jump steps the waveform
-            let mip_target = libm::log2(table_set.counts[0] as f64 / max_harmonic)
-                .min((table_set.level_count - 1) as f64).max(0.0);
             if self.mip_position.is_none() {self.mip_position = Some(mip_target);}
             let mut mip_position = self.mip_position.unwrap();
             mip_position += (mip_target - mip_position) * mip_slew;
@@ -400,8 +410,11 @@ impl Voice303 {
             // spread ladder: four one-pole sections at a geometric spread, solved for the
             // instantaneous feedback loop
             let blend = (i + 1) as f64 / length as f64;
-            let g = libm::tan(core::f64::consts::PI * (0.45 * self.sample_rate)
-                .min(libm::exp(ln_prev + (ln_now - ln_prev) * blend)) / self.sample_rate);
+            let g = match static_g {
+                Some(value) => value,
+                None => libm::tan(core::f64::consts::PI * (0.45 * self.sample_rate)
+                    .min(libm::exp(ln_prev + (ln_now - ln_prev) * blend)) / self.sample_rate)
+            };
             let k = k_prev + (feedback - k_prev) * blend;
             let r = cal.pole_spread_ratio;
             let g1 = g; let g2 = g * r; let g3 = g2 * r; let g4 = g3 * r;
