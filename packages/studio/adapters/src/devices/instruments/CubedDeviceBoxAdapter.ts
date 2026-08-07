@@ -1,4 +1,4 @@
-import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {int, Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {CubedDeviceBox, CubedPattern} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
@@ -7,6 +7,16 @@ import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
+import {CubedStep} from "./Cubed/CubedStep"
+
+const DefaultStep = CubedStep.pack({note: CubedStep.DefaultNote, active: false, slide: false, accent: false})
+const CMinor = [0, 2, 3, 5, 7, 8, 10]
+const randomStep = (): int => CubedStep.pack({
+    note: 36 + Math.floor(Math.random() * 3) * 12 + CMinor[Math.floor(Math.random() * CMinor.length)],
+    active: Math.random() < 0.6,
+    slide: Math.random() < 0.2,
+    accent: Math.random() < 0.3
+})
 
 export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
@@ -37,6 +47,24 @@ export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     get acceptsMidiEvents(): boolean {return true}
 
     currentPattern(): CubedPattern {return this.#box.patterns.getField(this.#box.patternIndex.getValue())}
+
+    clearCurrentPattern(): void {
+        this.currentPattern().steps.fields().forEach(field => field.setValue(DefaultStep))
+    }
+
+    randomizeCurrentPattern(): void {
+        const pattern = this.currentPattern()
+        const length = pattern.length.getValue()
+        pattern.steps.fields().forEach((field, index) => field.setValue(index < length ? randomStep() : DefaultStep))
+    }
+
+    rotateCurrentPattern(offset: int): void {
+        const pattern = this.currentPattern()
+        const length = pattern.length.getValue()
+        const fields = pattern.steps.fields().slice(0, length)
+        const values = fields.map(field => field.getValue())
+        fields.forEach((field, index) => field.setValue(values[(index + offset + length) % length]))
+    }
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters
