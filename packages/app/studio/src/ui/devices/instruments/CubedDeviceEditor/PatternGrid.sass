@@ -19,34 +19,35 @@ component
     &.beyond
       opacity: 0.1
 
-  > .note
+    &:nth-child(4n + 2):not(.beyond)
+      border-radius: 2px
+      background-color: rgba(white, 0.04)
+
+  > .cell
     display: flex
     align-items: center
     justify-content: center
     padding: 0.25em 0
-    background: rgba(black, 0.2)
+    background: rgba(black, 0.12)
     border-radius: 3px
+
+  > .note
     cursor: ns-resize
     user-select: none
-    color: var(--color-dark)
+    font-size: 8px
+    color: var(--color-green)
 
   > .toggle
-    display: flex
-    align-items: center
-    justify-content: center
-    padding: 0.25em 0
-    background: rgba(black, 0.2)
-    border-radius: 3px
     cursor: pointer
 
     > .square
-      width: 16px
-      height: 8px
-      border-radius: 1px
+      width: 6px
+      height: 6px
+      border-radius: 3px
       background: currentColor
       filter: saturate(25%) opacity(25%)
-      box-shadow: 0 0 1px 0 black inset
+      box-shadow: 0 0 1px 0.25px black inset
 
     &.on > .square
       filter: saturate(100%) opacity(100%)
-      box-shadow: 0 0 1px 0 black inset, 0 0 4px 0 color-mix(in srgb, currentColor 50%, transparent)
+      box-shadow: 0 0 1px 0.25px black inset, 0 0 3px 0 color-mix(in srgb, currentColor 25%, transparent)

@@ -79,7 +79,12 @@ export const PatternControls = ({lifecycle, editing, adapter, stepRange}: Constr
                 <label>Steps</label>
                 <RadioGroup lifecycle={lifecycle}
                             model={stepRange}
-                            elements={[16, 32, 48, 64].map(value => ({value, element: <span>{String(value)}</span>}))}/>
+                            appearance={{framed: true}}
+                            elements={[16, 32, 48, 64].map(value => ({
+                                value, element: (
+                                    <span style={{margin: "0 1px"}}>{String(value)}</span>
+                                )
+                            }))}/>
             </div>
         </div>
     )

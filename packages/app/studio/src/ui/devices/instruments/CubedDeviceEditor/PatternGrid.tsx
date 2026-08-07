@@ -1,5 +1,16 @@
 import css from "./PatternGrid.sass?inline"
-import {clamp, Color, DefaultObservableValue, Editing, EmptyExec, int, Lifecycle, Option, Point, Terminator} from "@opendaw/lib-std"
+import {
+    clamp,
+    Color,
+    DefaultObservableValue,
+    Editing,
+    EmptyExec,
+    int,
+    Lifecycle,
+    Option,
+    Point,
+    Terminator
+} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {MidiKeys} from "@opendaw/lib-dsp"
@@ -49,7 +60,7 @@ export const PatternGrid = ({lifecycle, editing, adapter, stepRange}: Construct)
         const onChange = (absIndex: int, observer: () => void) =>
             inner.own(pattern.steps.getField(absIndex).subscribe(observer))
         const noteCell = (absIndex: int): HTMLElement => {
-            const cell: HTMLElement = <div className="note"/>
+            const cell: HTMLElement = <div className="cell note"/>
             const render = () => cell.textContent = MidiKeys.toFullString(readStep(absIndex).note)
             onChange(absIndex, render)
             render()
@@ -87,7 +98,11 @@ export const PatternGrid = ({lifecycle, editing, adapter, stepRange}: Construct)
             return cell
         }
         const toggleCell = (absIndex: int, key: "active" | "slide" | "accent", color: Color): HTMLElement => {
-            const cell: HTMLElement = <div className="toggle" style={{color: color.toString()}}><div className="square"/></div>
+            const cell: HTMLElement = (
+                <div className="cell toggle" style={{color: color.toString()}}>
+                    <div className="square"/>
+                </div>
+            )
             const render = () => cell.classList.toggle("on", readStep(absIndex)[key])
             onChange(absIndex, render)
             render()
@@ -109,10 +124,10 @@ export const PatternGrid = ({lifecycle, editing, adapter, stepRange}: Construct)
         replaceChildren(element,
             <div className="corner"/>,
             ...Array.from({length: 16}, (_, column) => indexCell(column)),
-            ...row("Notes", noteCell),
+            ...row("Note", noteCell),
             ...row("Mode", index => toggleCell(index, "active", Colors.blue)),
-            ...row("Slides", index => toggleCell(index, "slide", Colors.orange)),
-            ...row("Accents", index => toggleCell(index, "accent", Colors.purple)))
+            ...row("Slide", index => toggleCell(index, "slide", Colors.orange)),
+            ...row("Accent", index => toggleCell(index, "accent", Colors.purple)))
     }
     lifecycle.ownAll(
         patternIndex.catchupAndSubscribe(rebuild),
