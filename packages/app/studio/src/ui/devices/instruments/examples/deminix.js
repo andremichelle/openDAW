@@ -21,7 +21,7 @@
 // @param tremolo   1   0   1  linear
 // @param vibrato   1   0   1  linear
 // @param fmod      1   0   1  linear
-// @group Sound
+// @group Sound green
 // @param attack    1   0   1  linear
 // @param release   1   0   1  linear
 // @param volume    1   0   1  linear
