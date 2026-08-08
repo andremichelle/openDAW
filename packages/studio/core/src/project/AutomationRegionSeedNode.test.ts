@@ -1,5 +1,6 @@
 import {afterEach, describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {Interpolation} from "@opendaw/lib-dsp"
 import {AudioUnitBoxAdapter, ProjectSkeleton, TrackBoxAdapter, TrackType, ValueRegionBoxAdapter} from "@opendaw/studio-adapters"
 import {TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
 import {StudioPreferences} from "../StudioPreferences"
@@ -19,11 +20,11 @@ const env = (): ProjectEnv => ({
     soundfontManager: undefined, sampleService: undefined, soundfontService: undefined
 }) as unknown as ProjectEnv
 
-const buildValueTrack = async () => {
+const buildValueTrack = async (target: "volume" | "mute" = "volume") => {
     const {Project} = await import("./Project")
     const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
     const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox}} = skeleton
-    const volume = primaryAudioUnitBox.volume
+    const volume = target === "volume" ? primaryAudioUnitBox.volume : primaryAudioUnitBox.mute
     boxGraph.beginTransaction()
     const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
         box.type.setValue(TrackType.Value)
@@ -49,12 +50,17 @@ const buildValueTrack = async () => {
             box.events.refer(collection.events)
         })
     })
-    const drawRegion = (position: number, duration: number): number => {
-        const box = project.editing.modify(() => project.api.createTrackRegion(trackBox, position, duration))
-            .unwrap("modify").unwrap("region")
-        return project.boxAdapters.adapterFor(box, ValueRegionBoxAdapter).incomingValue(-1)
+    const drawRegionBox = (position: number, duration: number): ValueRegionBox =>
+        project.editing.modify(() => project.api.createTrackRegion(trackBox, position, duration))
+            .unwrap("modify").unwrap("region") as ValueRegionBox
+    const drawRegion = (position: number, duration: number): number =>
+        project.boxAdapters.adapterFor(drawRegionBox(position, duration), ValueRegionBoxAdapter).incomingValue(-1)
+    const seedInterpolation = (position: number, duration: number): Interpolation => {
+        const adapter = project.boxAdapters.adapterFor(drawRegionBox(position, duration), ValueRegionBoxAdapter)
+        const [event] = adapter.events.unwrap("events").asArray()
+        return event.interpolation
     }
-    return {project, parameter, makeRamp, drawRegion}
+    return {project, parameter, makeRamp, drawRegion, seedInterpolation}
 }
 
 afterEach(() => StudioPreferences.settings.editing["overlapping-regions-behaviour"] = "clip")
@@ -75,5 +81,15 @@ describe("new automation region seeds an inherited node (#271)", () => {
         const {makeRamp, drawRegion} = await buildValueTrack()
         makeRamp(7680, 3840, 0.2, 0.8)
         expect(drawRegion(0, 3840)).toBeCloseTo(0.2)
+    })
+
+    it("a float parameter's seed interpolates linearly", async () => {
+        const {seedInterpolation} = await buildValueTrack("volume")
+        expect(seedInterpolation(0, 3840).type).toBe("linear")
+    })
+
+    it("a non-floating parameter's seed steps instead of ramping", async () => {
+        const {seedInterpolation} = await buildValueTrack("mute")
+        expect(seedInterpolation(0, 3840).type).toBe("none")
     })
 })

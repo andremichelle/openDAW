@@ -53,6 +53,7 @@ import {
     InstrumentFactory,
     InstrumentOptions,
     InstrumentProduct,
+    InterpolationFieldAdapter,
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
     ProjectQueries,
@@ -92,6 +93,11 @@ export type NoteRegionParams = {
     mute?: boolean
     name?: string
     hue?: number
+}
+
+export type AutomationSeed = {
+    value: unitValue
+    interpolation: InterpolationFieldAdapter.Plain
 }
 
 export type QuantiseNotesOptions = {
@@ -439,7 +445,7 @@ export class ProjectApi {
                     // region's held (outgoing) value, else the following region's incoming value, else the
                     // parameter's current dial value. Computed BEFORE creating the region so the scan sees only
                     // the existing regions.
-                    const seed = this.#automationSeedValue(trackBox, trackAdapter, startPosition)
+                    const seed = this.#automationSeed(trackBox, trackAdapter, startPosition)
                     const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
                     const region = ValueRegionBox.create(boxGraph, UUID.generate(), box => {
                         box.position.setValue(startPosition)
@@ -451,10 +457,11 @@ export class ProjectApi {
                         box.events.refer(events.owners)
                         box.regions.refer(trackBox.regions)
                     })
-                    seed.ifSome(value => ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                    seed.ifSome(({value, interpolation}) => ValueEventBox.create(boxGraph, UUID.generate(), box => {
                         box.position.setValue(0)
                         box.value.setValue(value)
                         box.events.refer(events.events)
+                        InterpolationFieldAdapter.write(box.interpolation, interpolation)
                     }))
                     return Option.wrap(region)
                 }
@@ -465,19 +472,24 @@ export class ProjectApi {
         return created
     }
 
-    // #271: the value a freshly drawn automation region should hold. Hold-from-left: the preceding region's
+    // #271: the node a freshly drawn automation region should hold. Hold-from-left: the preceding region's
     // outgoing (held) value wins; else the following region's incoming value; else the parameter's current dial
     // value. Returns None only when the track's target parameter cannot be resolved (a bug — seed no node then).
-    #automationSeedValue(trackBox: TrackBox, trackAdapter: TrackBoxAdapter, position: ppqn): Option<unitValue> {
+    #automationSeed(trackBox: TrackBox, trackAdapter: TrackBoxAdapter, position: ppqn): Option<AutomationSeed> {
         return trackBox.target.targetVertex
             .flatMap(vertex => this.#project.parameterFieldAdapters.opt(vertex.address))
             .map(parameter => {
                 const dial = parameter.getControlledUnitValue()
+                const interpolation = InterpolationFieldAdapter.map(parameter.type)
                 const preceding = trackAdapter.regions.collection.lowerEqual(position)
-                if (isDefined(preceding) && preceding.isValueRegion()) {return preceding.outgoingValue(dial)}
+                if (isDefined(preceding) && preceding.isValueRegion()) {
+                    return {value: preceding.outgoingValue(dial), interpolation}
+                }
                 const following = trackAdapter.regions.collection.greaterEqual(position)
-                if (isDefined(following) && following.isValueRegion()) {return following.incomingValue(dial)}
-                return dial
+                if (isDefined(following) && following.isValueRegion()) {
+                    return {value: following.incomingValue(dial), interpolation}
+                }
+                return {value: dial, interpolation}
             })
     }
 

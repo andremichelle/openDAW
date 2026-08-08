@@ -1,10 +1,15 @@
 import {Pointers} from "@opendaw/studio-enums"
-import {Int32Field} from "@opendaw/lib-box"
+import {Int32Field, PrimitiveType} from "@opendaw/lib-box"
 import {Interpolation} from "@opendaw/lib-dsp"
 import {ValueEventCurveBox} from "@opendaw/studio-boxes"
 import {assertInstanceOf, isDefined, panic, UUID} from "@opendaw/lib-std"
 
 export namespace InterpolationFieldAdapter {
+    export type Plain = typeof Interpolation.None | typeof Interpolation.Linear
+
+    export const map = (type: PrimitiveType): Plain =>
+        type === PrimitiveType.Int32 || type === PrimitiveType.Boolean ? Interpolation.None : Interpolation.Linear
+
     export const write = (field: Int32Field<Pointers.ValueInterpolation>, value: Interpolation): void => {
         if (value.type === "none") {
             field.disconnect()
