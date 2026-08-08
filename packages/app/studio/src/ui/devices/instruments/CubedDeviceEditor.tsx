@@ -11,6 +11,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {MenuItem} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {RadioGroup} from "@/ui/components/RadioGroup"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {Icon} from "@/ui/components/Icon"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {PatternControls} from "@/ui/devices/instruments/CubedDeviceEditor/PatternControls"
@@ -84,13 +85,18 @@ export const CubedDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                           <div className={className}>
                               <div className="controls">
                                   <div className="waveform">
-                                      <RadioGroup lifecycle={lifecycle}
-                                                  model={EditWrapper.forAutomatableParameter(editing, waveform)}
-                                                  appearance={{landscape: true, activeColor: Colors.orange}}
-                                                  elements={[
-                                                      {value: 0, element: <Icon symbol={IconSymbol.Sawtooth}/>},
-                                                      {value: 1, element: <Icon symbol={IconSymbol.Square}/>}
-                                                  ]}/>
+                                      <AutomationControl lifecycle={lifecycle} editing={editing}
+                                                         midiLearning={midiLearning}
+                                                         tracks={adapter.deviceHost().audioUnitBoxAdapter().tracks}
+                                                         parameter={waveform}>
+                                          <RadioGroup lifecycle={lifecycle}
+                                                      model={EditWrapper.forAutomatableParameter(editing, waveform)}
+                                                      appearance={{landscape: true, activeColor: Colors.orange}}
+                                                      elements={[
+                                                          {value: 0, element: <Icon symbol={IconSymbol.Sawtooth}/>},
+                                                          {value: 1, element: <Icon symbol={IconSymbol.Square}/>}
+                                                      ]}/>
+                                      </AutomationControl>
                                   </div>
                                   {knob(tuning, 0.5, {snap: {threshold: 0.5}})}
                                   {knob(cutoff)}
@@ -101,8 +107,8 @@ export const CubedDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   {knob(volume)}
                               </div>
                               <div className="body">
-                                  <PatternControls lifecycle={lifecycle} editing={editing} adapter={adapter}
-                                                   stepRange={stepRange}/>
+                                  <PatternControls lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                                                   adapter={adapter} stepRange={stepRange}/>
                                   <PatternGrid lifecycle={lifecycle} editing={editing} adapter={adapter}
                                                stepRange={stepRange} receiver={project.liveStreamReceiver}/>
                               </div>

@@ -8,15 +8,9 @@ import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {CubedStep} from "./Cubed/CubedStep"
+import {CubedRandomize, CubedRandomizeOptions} from "./Cubed/CubedRandomize"
 
 const DefaultStep = CubedStep.pack({note: CubedStep.DefaultNote, active: false, slide: false, accent: false})
-const CMinor = [0, 2, 3, 5, 7, 8, 10]
-const randomStep = (): int => CubedStep.pack({
-    note: 36 + Math.floor(Math.random() * 3) * 12 + CMinor[Math.floor(Math.random() * CMinor.length)],
-    active: Math.random() < 0.6,
-    slide: Math.random() < 0.2,
-    accent: Math.random() < 0.3
-})
 
 export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
@@ -52,10 +46,11 @@ export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.currentPattern().steps.fields().forEach(field => field.setValue(DefaultStep))
     }
 
-    randomizeCurrentPattern(): void {
+    randomizeCurrentPattern(options: CubedRandomizeOptions = CubedRandomize.Default): void {
         const pattern = this.currentPattern()
         const length = pattern.length.getValue()
-        pattern.steps.fields().forEach((field, index) => field.setValue(index < length ? randomStep() : DefaultStep))
+        const steps = CubedRandomize.steps(options, length)
+        pattern.steps.fields().forEach((field, index) => field.setValue(index < length ? steps[index] : DefaultStep))
     }
 
     rotateCurrentPattern(offset: int): void {
@@ -97,7 +92,8 @@ export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
             waveform: this.#parametric.createParameter(
                 box.waveform, ValueMapping.linearInteger(0, 1), StringMapping.indices("", ["Sawtooth", "Square"]), "Waveform", 0.5),
             patternIndex: this.#parametric.createParameter(
-                box.patternIndex, ValueMapping.linearInteger(0, 127), StringMapping.numeric({unit: ""}), "Pattern")
+                box.patternIndex, ValueMapping.linearInteger(0, box.patterns.fields().length - 1),
+                StringMapping.oneBasedIndex(), "Pattern")
         } as const
     }
 }

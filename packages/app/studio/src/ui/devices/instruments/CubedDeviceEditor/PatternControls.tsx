@@ -1,48 +1,60 @@
 import css from "./PatternControls.sass?inline"
-import {clamp, DefaultObservableValue, Editing, int, Lifecycle, StringMapping, Terminator} from "@opendaw/lib-std"
+import {clamp, DefaultObservableValue, Editing, int, Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
-import {CubedDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {CubedDeviceBoxAdapter, CubedRandomize, CubedRandomizeOptions} from "@opendaw/studio-adapters"
+import {MIDILearning} from "@opendaw/studio-core"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {Button} from "@/ui/components/Button"
+import {AutomationControl} from "@/ui/components/AutomationControl"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
+import {showRandomizeDialog} from "@/ui/devices/instruments/CubedDeviceEditor/RandomizeDialog"
 import {Colors} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "CubedPatternControls")
 
-// pattern-index is stored 0-based but shown 1-based
-const OneBasedIndex: StringMapping<number> = {
-    x: value => ({unit: "", value: String(value + 1)}),
-    y: text => {
-        const value = parseInt(text, 10)
-        return isNaN(value) ? {type: "unknown", value: text} : {type: "explicit", value: value - 1}
-    }
-}
-
 type Construct = {
     lifecycle: Lifecycle
     editing: Editing
+    midiLearning: MIDILearning
     adapter: CubedDeviceBoxAdapter
     stepRange: DefaultObservableValue<int>
 }
 
-export const PatternControls = ({lifecycle, editing, adapter, stepRange}: Construct) => {
+export const PatternControls = ({lifecycle, editing, midiLearning, adapter, stepRange}: Construct) => {
     const {patternIndex} = adapter.namedParameter
+    const randomizeOptions = lifecycle.own(
+        new DefaultObservableValue<CubedRandomizeOptions>(CubedRandomize.Default))
     const clearActivePattern = () => editing.modify(() => adapter.clearCurrentPattern())
-    const randomizeActivePattern = () => editing.modify(() => adapter.randomizeCurrentPattern())
+    const randomizeActivePattern = (options: CubedRandomizeOptions) =>
+        editing.modify(() => adapter.randomizeCurrentPattern(options))
     const rotateActivePattern = (offset: int) => editing.modify(() => adapter.rotateCurrentPattern(offset))
+    const onRandomClick = (event: MouseEvent) => {
+        if (event.shiftKey) {
+            showRandomizeDialog(randomizeOptions.getValue(), options => {
+                randomizeOptions.setValue(options)
+                randomizeActivePattern(options)
+            }, options => randomizeOptions.setValue(options))
+        } else {
+            randomizeActivePattern(randomizeOptions.getValue())
+        }
+    }
     return (
         <div className={className}>
             <div className="field">
                 <label>Pattern</label>
-                <NumberInput lifecycle={lifecycle} mapper={OneBasedIndex}
-                             guard={{guard: value => clamp(value, 0, adapter.box.patterns.fields().length - 1)}}
-                             model={EditWrapper.forValue(editing, adapter.box.patternIndex)}/>
+                <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
+                                   tracks={adapter.deviceHost().audioUnitBoxAdapter().tracks}
+                                   parameter={patternIndex} offset={2}>
+                    <NumberInput lifecycle={lifecycle} mapper={patternIndex.stringMapping}
+                                 guard={{guard: value => clamp(value, 0, adapter.box.patterns.fields().length - 1)}}
+                                 model={EditWrapper.forAutomatableParameter(editing, patternIndex)}/>
+                </AutomationControl>
             </div>
             <div className="field">
                 <Button lifecycle={lifecycle}
-                        onClick={randomizeActivePattern}
+                        onClick={onRandomClick}
                         appearance={{framed: true, color: Colors.orange}}>Random</Button>
                 <div className="group">
                     <Button lifecycle={lifecycle}
@@ -75,7 +87,6 @@ export const PatternControls = ({lifecycle, editing, adapter, stepRange}: Constr
                 <label>Steps</label>
                 <RadioGroup lifecycle={lifecycle}
                             model={stepRange}
-                            appearance={{framed: true}}
                             elements={[16, 32, 48, 64].map(value => ({
                                 value, element: (
                                     <span style={{margin: "0 1px"}}>{String(value)}</span>
