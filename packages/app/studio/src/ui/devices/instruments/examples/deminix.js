@@ -7,6 +7,7 @@
 // added Volume control to be able to prevent clipping 
 // @label Deminix
 // The UI is created column-wise but I like row-wise better
+// @group Matrix red
 // @param 1         5   1   9  int
 // @param 4         5   1   9  int
 // @param 7         5   1   9  int
@@ -16,9 +17,11 @@
 // @param 3         5   1   9  int
 // @param 6         5   1   9  int
 // @param 9         5   1   9  int
+// @group FX yellow
 // @param tremolo   1   0   1  linear
 // @param vibrato   1   0   1  linear
 // @param fmod      1   0   1  linear
+// @group Sound
 // @param attack    1   0   1  linear
 // @param release   1   0   1  linear
 // @param volume    1   0   1  linear
