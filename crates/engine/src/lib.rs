@@ -248,9 +248,6 @@ fn call_device_field_changed(field_changed_index: u32, _state_ptr: u32, id: u32,
     let _ = (field_changed_index, id, kind, bits, len);
 }
 
-#[cfg(all(not(target_family = "wasm"), test))]
-pub(crate) static FIELD_DELIVERIES: Shared<Vec<(u32, u32, u32, u32)>> = Shared::new(Vec::new());
-
 // Call a device's `sample_changed(state_ptr, id, handle, present)` export to deliver an observed sample (the
 // resolved handle, or `present == 0` when the pointer is unbound). Called only inside a transaction (the
 // pointer observer), never during `process`.
@@ -347,19 +344,9 @@ mod time_stretch;
 mod tempo_map;
 mod script_device;
 use audio_unit::{AudioUnitBinding, Members};
-mod cubed_pattern;
 mod composite;
 mod effect_composite;
 
-/// Serialises every test that touches the global `PULL` context. The production engine is single-threaded
-/// (only the audio thread runs engine code), so `PULL` is a plain `Shared` cell — but the test harness runs
-/// tests on parallel threads, where concurrent access is a data race (it segfaults). ONE lock for the crate:
-/// per-module mutexes would not serialise against each other.
-#[cfg(test)]
-pub(crate) fn pull_lock() -> std::sync::MutexGuard<'static, ()> {
-    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
-}
 mod param_automation;
 use param_automation::ParamHandle;
 mod sample;
@@ -372,12 +359,15 @@ const INPUT_CAPACITY: usize = 1 << 20; // initial input scratch (1 MiB); grows o
 /// A process-global cell for the single-threaded wasm module: an `UnsafeCell` asserted `Sync`, the
 /// same shape talc uses for its allocator. SAFETY rests on the engine being driven by one thread,
 /// with no overlapping `&mut` to the same cell.
+#[cfg(not(test))]
 struct Shared<T>(UnsafeCell<T>);
 
 // SAFETY: only the audio thread runs engine code, so there is never concurrent access (the shared
 // memory lets the main thread write sample data, but it never executes the engine).
+#[cfg(not(test))]
 unsafe impl<T> Sync for Shared<T> {}
 
+#[cfg(not(test))]
 impl<T> Shared<T> {
     const fn new(value: T) -> Self {
         Self(UnsafeCell::new(value))
@@ -391,10 +381,61 @@ impl<T> Shared<T> {
     }
 }
 
+/// The same cell under `cargo test`, backed by ONE INSTANCE PER THREAD.
+///
+/// The harness runs tests on parallel threads, which breaks the single-thread premise above: they raced on
+/// these cells and killed the whole run with a bare SIGSEGV / SIGTRAP and no failing test named. A test owns
+/// its own `Engine` anyway, so per-thread instances are what it already assumes it has. Each thread's value is
+/// leaked on first touch, so `get` can hand out a reference that outlives the `LocalKey` borrow.
+#[cfg(test)]
+struct Shared<T: 'static>(fn() -> *mut T);
+
+#[cfg(test)]
+unsafe impl<T> Sync for Shared<T> {}
+
+#[cfg(test)]
+impl<T: 'static> Shared<T> {
+    const fn per_thread(resolve: fn() -> *mut T) -> Self {
+        Self(resolve)
+    }
+
+    #[allow(clippy::mut_from_ref)]
+    unsafe fn get(&self) -> &mut T {
+        &mut *(self.0)()
+    }
+}
+
+/// Declares a `Shared` static: one process-global cell in a real build, one per thread under test. The
+/// initialiser is written once and used by both.
+macro_rules! shared_static {
+    ($(#[$meta:meta])* $vis:vis static $name:ident: $ty:ty = $init:expr;) => {
+        #[cfg(not(test))]
+        $(#[$meta])*
+        $vis static $name: $crate::Shared<$ty> = $crate::Shared::new($init);
+
+        #[cfg(test)]
+        $(#[$meta])*
+        $vis static $name: $crate::Shared<$ty> = $crate::Shared::per_thread(|| {
+            std::thread_local! {
+                static CELL: *mut $ty = alloc::boxed::Box::into_raw(alloc::boxed::Box::new($init));
+            }
+            CELL.with(|cell| *cell)
+        });
+    };
+}
+pub(crate) use shared_static;
+
+shared_static! {
+    #[cfg(all(not(target_family = "wasm"), test))]
+    pub(crate) static FIELD_DELIVERIES: Vec<(u32, u32, u32, u32)> = Vec::new();
+}
+
 // A debug counter of audio device-processor constructions (`PluginInstrument` + `PluginAudioEffect`). Exported
 // so a test can assert that a chain REORDER reuses processors (the count does not move) rather than rebuilding
 // them — a rebuilt device resets its DSP (e.g. a delay glides its offset from 0, pitching as if new).
-static DEVICE_BUILDS: Shared<u32> = Shared::new(0);
+shared_static! {
+    static DEVICE_BUILDS: u32 = 0;
+}
 
 pub(crate) fn note_device_build() {
     unsafe { *DEVICE_BUILDS.get() = DEVICE_BUILDS.get().wrapping_add(1); }
@@ -407,7 +448,9 @@ pub extern "C" fn device_build_count() -> u32 {
 
 // A debug counter of device parameter pushes (every `call_device_parameter_changed`). Exported so a test can
 // assert a chain REORDER does NOT re-push a survivor's parameters (which would glide e.g. the delay's offset).
-static PARAM_PUSHES: Shared<u32> = Shared::new(0);
+shared_static! {
+    static PARAM_PUSHES: u32 = 0;
+}
 
 #[no_mangle]
 pub extern "C" fn param_push_count() -> u32 {
@@ -417,7 +460,9 @@ pub extern "C" fn param_push_count() -> u32 {
 // A debug counter of device `terminate` calls (genuine instance death only — a chain-edit SURVIVOR is never
 // counted). Exported so a test can assert a removal terminates its device exactly once, and a reorder /
 // rewire of survivors terminates none.
-static TERMINATES: Shared<u32> = Shared::new(0);
+shared_static! {
+    static TERMINATES: u32 = 0;
+}
 
 #[no_mangle]
 pub extern "C" fn device_terminate_count() -> u32 {
@@ -427,60 +472,90 @@ pub extern "C" fn device_terminate_count() -> u32 {
 // The single engine instance + the four fixed I/O buffers JS reaches by pointer. The buffers are kept
 // out of `Engine` so their addresses are stable and the 1 MiB input never lands on the stack during
 // `Engine` construction.
-static ENGINE: Shared<Option<Engine>> = Shared::new(None);
+shared_static! {
+    static ENGINE: Option<Engine> = None;
+}
 // The incoming-transaction scratch the worklet writes update bytes into. A growable buffer (not a fixed
 // array): pre-allocated to INPUT_CAPACITY at `init`, grown by `input_reserve` for a transaction that
 // exceeds it (and kept at the high-water mark), so a huge transaction is never silently dropped and grows
 // happen rarely, not per transaction.
-static INPUT: Shared<Vec<u8>> = Shared::new(Vec::new());
-static CHECKSUM: Shared<[u8; 32]> = Shared::new([0; 32]);
-static OUTPUT: Shared<[f32; RENDER_QUANTUM * 2]> = Shared::new([0.0; RENDER_QUANTUM * 2]);
-static ENGINE_STATE: Shared<[u8; ENGINE_STATE_LEN]> = Shared::new([0; ENGINE_STATE_LEN]);
+shared_static! {
+    static INPUT: Vec<u8> = Vec::new();
+}
+shared_static! {
+    static CHECKSUM: [u8; 32] = [0; 32];
+}
+shared_static! {
+    static OUTPUT: [f32; RENDER_QUANTUM * 2] = [0.0; RENDER_QUANTUM * 2];
+}
+shared_static! {
+    static ENGINE_STATE: [u8; ENGINE_STATE_LEN] = [0; ENGINE_STATE_LEN];
+}
 // The pull context the `host_pull_events` export reads. It is set up by the audio node (PluginInstrument)
 // right before it calls its device's `process`, and cleared after. Held in its OWN cell (NOT `ENGINE`), so
 // the device's re-entrant `host_pull_events` call never aliases the `&mut Engine` the render path holds.
 // The node scopes its `PULL.get()` borrows so none is live across the device call (single-threaded).
-static PULL: Shared<PullContext> = Shared::new(PullContext::new());
+shared_static! {
+    static PULL: PullContext = PullContext::new();
+}
 // The bind recorder the `host_bind_parameter` export appends to: each parameter's field path. The engine
 // clears it, calls a device's `init` (which binds its params), then drains it and observes each. Held in its
 // OWN cell (NOT `ENGINE`), so the re-entrant `host_bind_parameter` call never aliases the `&mut Engine`.
-static BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+shared_static! {
+    static BIND: Vec<Vec<u16>> = Vec::new();
+}
 // The broadcast-bind recorder (`host_bind_broadcast`): (global slot id, field-key path, float count) per
 // record. The engine clears it, calls a device's `init`, then drains it in `bind_device` (creating +
 // registering the slots). Its OWN cell (NOT `ENGINE`), safe to append re-entrantly from `init`.
-static BROADCAST_BINDS: Shared<Vec<(u32, Vec<u16>, u32, u32)>> = Shared::new(Vec::new());
+shared_static! {
+    static BROADCAST_BINDS: Vec<(u32, Vec<u16>, u32, u32)> = Vec::new();
+}
 // The device LIVE-DATA broadcast registry: global slot id -> (write ptr, UI-subscribed). Read re-entrantly
 // by `host_broadcast_ptr` / `host_broadcast_active` from a device's `process` (never touches `ENGINE`);
 // `bind_device` fills the ptr, teardown zeroes it and returns the id to the free list (no unbounded growth
 // across chain edits).
-pub(crate) static DEVICE_BROADCASTS: Shared<Vec<(u32, bool)>> = Shared::new(Vec::new());
-pub(crate) static DEVICE_BROADCAST_FREE: Shared<Vec<u32>> = Shared::new(Vec::new());
+shared_static! {
+    pub(crate) static DEVICE_BROADCASTS: Vec<(u32, bool)> = Vec::new();
+}
+shared_static! {
+    pub(crate) static DEVICE_BROADCAST_FREE: Vec<u32> = Vec::new();
+}
 // The sample resource (Route F): decoded frames resident in shared memory, keyed by AudioFileBox uuid. Held
 // in its OWN cell (NOT `ENGINE`) so a device's re-entrant `host_resolve_sample` call during render never
 // aliases the `&mut Engine` the render path holds. Mutated only off-render (the load handshake + box
 // observer), read-only during render, so the single-threaded engine never overlaps a borrow.
-static SAMPLES: Shared<SampleResource> = Shared::new(SampleResource::new());
+shared_static! {
+    static SAMPLES: SampleResource = SampleResource::new();
+}
 // The project's TUNING REFERENCE in Hz (TS `EngineContext.baseFrequency`): `bind` catches up on + subscribes
 // to the synced `RootBox.baseFrequency` and records into this cell only. Its OWN cell (NOT `ENGINE`) so a
 // device's re-entrant `host_base_frequency` call during render (the Vaporisateur's note-on) never aliases
 // the `&mut Engine` the render path holds. Mirrors `SAMPLES`. 440 before bind / when no RootBox exists.
-static BASE_FREQUENCY: Shared<f32> = Shared::new(440.0);
+shared_static! {
+    static BASE_FREQUENCY: f32 = 440.0;
+}
 // The sample-observe recorder the `host_observe_sample` export appends to: each device's sample pointer-field
 // path (e.g. Nano's `file` at `[15]`). After `init`, the engine REACTIVELY tracks each pointer (catch-up +
 // subscribe), resolving its target to the AudioFileBox, requesting its frames, and delivering the handle (or
 // "unbound") to the device via `sample_changed`. Its OWN cell (NOT `ENGINE`) so the re-entrant
 // `host_observe_sample` call from `init` never aliases `&mut Engine`.
-static SAMPLE_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+shared_static! {
+    static SAMPLE_OBS: Vec<Vec<u16>> = Vec::new();
+}
 
 // The soundfont resource: the simplified soundfont blobs resident in shared memory, keyed by SoundfontFileBox
 // uuid. Its OWN cell (NOT `ENGINE`) so a device's re-entrant `host_resolve_soundfont` call during render never
 // aliases the `&mut Engine` the render path holds. Mirrors `SAMPLES`.
-static SOUNDFONTS: Shared<SoundfontResource> = Shared::new(SoundfontResource::new());
+shared_static! {
+    static SOUNDFONTS: SoundfontResource = SoundfontResource::new();
+}
 // The soundfont-observe recorder the `host_observe_soundfont` export appends to: each device's soundfont
 // pointer-field path (the Soundfont device's `file` at `[10]`). After `init` the engine reactively tracks the
 // pointer, resolving its target `SoundfontFileBox`, requesting its blob, and delivering the handle (or
 // "unbound") via `soundfont_changed`. Its OWN cell (NOT `ENGINE`). Mirrors `SAMPLE_OBS`.
-static SOUNDFONT_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+shared_static! {
+    static SOUNDFONT_OBS: Vec<Vec<u16>> = Vec::new();
+}
 
 // One recorded field observation: `path` is the device-box field-key path; `target_key` is 0 for a PLAIN
 // field (observed directly via `host_observe_field`) or, for `host_observe_target_string`, the string field
@@ -496,40 +571,54 @@ pub(crate) struct FieldObs {
 // string field the device tracks (the NeuralAmp's model JSON). After `init`, the engine `catchup_and_subscribe`s
 // each and delivers values through the device's `field_changed` export. Its own cell (NOT `ENGINE`) so the
 // re-entrant `host_observe_field` call from `init` never aliases `&mut Engine`.
-static FIELD_OBS: Shared<Vec<FieldObs>> = Shared::new(Vec::new());
+shared_static! {
+    static FIELD_OBS: Vec<FieldObs> = Vec::new();
+}
 
 // The sidechain-bind recorder the `host_bind_sidechain` export appends to: each audio effect's sidechain
 // pointer FIELD-KEY path (e.g. the Gate's `side-chain` at `[30]`), in declaration order. After `init` the
 // engine resolves each to a source's output and feeds it in as an input PORT (id 2, 3, ...). Its own cell (NOT
 // `ENGINE`) so the re-entrant `host_bind_sidechain` call from `init` never aliases `&mut Engine`.
-static SIDECHAIN_BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+shared_static! {
+    static SIDECHAIN_BIND: Vec<Vec<u16>> = Vec::new();
+}
 
 // The CURRENT effect's audio input PORTS (id, left_ptr, right_ptr), swapped in by `PluginAudioEffect::process`
 // for the device call so `host_resolve_input` resolves a port to its buffer: id `1` is the through-signal, ids
 // `2, 3, ...` the resolved sidechains. Its own cell (NOT `ENGINE`); read-only during render, never aliases the
 // graph, exactly like `host_resolve_sample` reading `SAMPLES`.
-static INPUTS: Shared<Vec<(u32, u32, u32)>> = Shared::new(Vec::new());
+shared_static! {
+    static INPUTS: Vec<(u32, u32, u32)> = Vec::new();
+}
 
 // The box uuid of the device whose `init` is currently running, so a SCRIPTABLE device's `init` can read its
 // own uuid via `host_self_uuid` (the engine knows it at bind; the device does not, since it only uses relative
 // field paths). The engine sets it right before `call_device_init`. Its own cell, set + read outside render.
-static CURRENT_DEVICE_UUID: Shared<[u8; 16]> = Shared::new([0; 16]);
+shared_static! {
+    static CURRENT_DEVICE_UUID: [u8; 16] = [0; 16];
+}
 // Regions the note sequencers must SKIP (TS `EngineCommands.ignoreNoteRegion` + `#ignoredRegions`): the
 // region currently being RECORDED INTO must not play back (it would re-trigger the notes being captured).
 // Cleared on stop / stopRecording. Read from the region iteration (its own cell, never `ENGINE`).
-pub(crate) static IGNORED_REGIONS: Shared<Vec<[u8; 16]>> = Shared::new(Vec::new());
+shared_static! {
+    pub(crate) static IGNORED_REGIONS: Vec<[u8; 16]> = Vec::new();
+}
 // EFFECTS-monitoring staging (its own cells, read re-entrantly by MonitorMix nodes during render): the
 // worklet writes the live input channels into MONITOR_INPUT before each render and reads each mapped
 // unit's strip output back from MONITOR_OUTPUT after it (forwarded on the worklet's second output).
-pub(crate) static MONITOR_INPUT: Shared<[f32; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]> =
-    Shared::new([0.0; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]);
-pub(crate) static MONITOR_OUTPUT: Shared<[f32; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]> =
-    Shared::new([0.0; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]);
+shared_static! {
+    pub(crate) static MONITOR_INPUT: [f32; monitor::MONITOR_CHANNELS * RENDER_QUANTUM] = [0.0; monitor::MONITOR_CHANNELS * RENDER_QUANTUM];
+}
+shared_static! {
+    pub(crate) static MONITOR_OUTPUT: [f32; monitor::MONITOR_CHANNELS * RENDER_QUANTUM] = [0.0; monitor::MONITOR_CHANNELS * RENDER_QUANTUM];
+}
 
 // The note-bits slot of the unit CURRENTLY reconciling (its instruments capture it at construction —
 // composite slots share their unit's slot). Set around `reconcile_one`'s chain work, cleared after.
-#[cfg(not(test))]
-static CURRENT_UNIT_NOTE_BITS: Shared<Option<engine_env::telemetry::BroadcastSlot>> = Shared::new(None);
+shared_static! {
+    #[cfg(not(test))]
+static CURRENT_UNIT_NOTE_BITS: Option<engine_env::telemetry::BroadcastSlot> = None;
+}
 #[cfg(test)]
 std::thread_local! {
     // Tests run on parallel threads; the production engine is single-threaded, so the Shared cell is only
@@ -2855,8 +2944,9 @@ mod heap {
 // panic is never anonymous (panic=abort + strip discard the message and the function names otherwise).
 // A fixed static, no alloc: the allocator may be the very thing that panicked.
 const PANIC_MESSAGE_CAPACITY: usize = 512;
-static PANIC_MESSAGE: Shared<([u8; PANIC_MESSAGE_CAPACITY], usize)> =
-    Shared::new(([0; PANIC_MESSAGE_CAPACITY], 0));
+shared_static! {
+    static PANIC_MESSAGE: ([u8; PANIC_MESSAGE_CAPACITY], usize) = ([0; PANIC_MESSAGE_CAPACITY], 0);
+}
 
 struct PanicWriter {
     buffer: &'static mut [u8],

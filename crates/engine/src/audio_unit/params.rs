@@ -5,27 +5,16 @@ use super::tracks::{TRACK_TARGET_KEY, TRACK_REGIONS_KEY, TRACK_CLIPS_KEY, TRACK_
 // work, the `CURRENT_DEVICE_UUID` pattern): a knob drag then only marks `params_dirty` (one value push at
 // the next reconcile) instead of `automation_dirty` (a full unsubscribe + re-observe of every parameter,
 // per drag tick, on the audio thread). Automation ATTACH / DETACH / region moves keep the heavy signal.
-#[cfg(not(test))]
-pub(crate) static PARAMS_SIGNAL: crate::Shared<Option<Rc<dyn Fn()>>> = crate::Shared::new(None);
-#[cfg(test)]
-std::thread_local! {
-    // Tests run on parallel threads; the production engine is single-threaded, so the Shared cell is only
-    // sound there. Per-thread isolation keeps the tests deterministic.
-    static PARAMS_SIGNAL: core::cell::RefCell<Option<Rc<dyn Fn()>>> = const { core::cell::RefCell::new(None) };
+crate::shared_static! {
+    pub(crate) static PARAMS_SIGNAL: Option<Rc<dyn Fn()>> = None;
 }
 
 pub(crate) fn set_params_signal(signal: Option<Rc<dyn Fn()>>) {
-    #[cfg(not(test))]
     unsafe { *PARAMS_SIGNAL.get() = signal; }
-    #[cfg(test)]
-    PARAMS_SIGNAL.with(|cell| *cell.borrow_mut() = signal);
 }
 
 pub(crate) fn current_params_signal() -> Option<Rc<dyn Fn()>> {
-    #[cfg(not(test))]
-    { unsafe { PARAMS_SIGNAL.get() }.clone() }
-    #[cfg(test)]
-    { PARAMS_SIGNAL.with(|cell| cell.borrow().clone()) }
+    unsafe { PARAMS_SIGNAL.get() }.clone()
 }
 
 pub(crate) fn params_invalidate(unit: &AudioUnitBinding) -> Rc<dyn Fn()> {
@@ -125,6 +114,11 @@ pub(crate) fn deliver_field_value(value: &FieldValue, field_changed_index: u32, 
         call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_BOOL, value as u32, 0);
     } else if let Some(value) = value.as_str() {
         call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_STRING, value.as_ptr() as u32, value.len() as u32);
+    } else if let FieldValue::Array(elements) = value {
+        // The graph holds an array as boxed elements, so it is flattened into one contiguous buffer that
+        // stays alive for the synchronous call - the same borrow contract as a string's bytes.
+        let flat: Vec<i32> = elements.iter().filter_map(FieldValue::as_int32).collect();
+        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_INT_ARRAY, flat.as_ptr() as u32, flat.len() as u32);
     }
 }
 
@@ -260,16 +254,12 @@ impl Engine {
         // because it silences OTHER strips. Observe its track here so it shares the strip's sub/collection cleanup
         // (the `bind_gain_pan_automation` above already `take`s and drops the previous pass's subs, solo included);
         // `observe_param` also registers the UI broadcast at the solo field address so the solo button reflects it.
-        *unit.strip_automation.solo.borrow_mut() = None;
-        let (solo_handle, solo_subs, solo_collections, _) = self.observe_param(unit.unit, &[UNIT_SOLO_KEY], 3, &invalidate);
-        unit.strip_param_subs.extend(solo_subs);
-        unit.strip_param_collections.extend(solo_collections);
-        if solo_handle.track.is_some() {
-            *unit.strip_automation.solo.borrow_mut() = Some(Rc::new(move |position: f64| {
-                let (value, _kind) = solo_handle.resolve(position);
-                value
-            }));
-        } else {
+        // The solo curve carries a 0..1 unit value thresholded at >= 0.5, and its field fallback is a bool
+        // stored as 0.0 / 1.0 — both read the same way, so the value passes through unmapped.
+        let (solo_handle, solo_resolver) = self.observe_field_automation(unit.unit, &[UNIT_SOLO_KEY], 3,
+            &mut unit.strip_param_subs, &mut unit.strip_param_collections, &invalidate, |value| value);
+        *unit.strip_automation.solo.borrow_mut() = solo_resolver;
+        if solo_handle.track.is_none() {
             // No solo curve (never attached, or JUST DETACHED): `resolve_automated_solo` writes the curve value into
             // the static solo cell, so on detach restore it from the FIELD and re-resolve `forced_silent` if it moved
             // (the field subscription only fires on a field EDIT, not on a track detach, so it would stay stale).
@@ -279,6 +269,30 @@ impl Engine {
                 self.solo_dirty.set(true);
             }
         }
+    }
+
+    /// Observe ONE box field's automation for a consumer the ENGINE owns - the strip's gains, its solo - and hand back its resolver plus the handle. A device parameter never comes through here:
+    /// `bind_device` binds those from the paths the device itself declared. `map` converts a curve's 0..1 to the
+    /// field's real value; the field fallback is already real, so `resolve`'s kind decides. Appends to `subs` /
+    /// `collections` (the caller drops the previous pass, since several fields may share one list).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn observe_field_automation(&mut self, box_uuid: Uuid, path: &[u16], id: u32,
+                                           subs: &mut Vec<SubscriptionId>, collections: &mut Vec<ValueCollection>,
+                                           invalidate: &Rc<dyn Fn()>, map: impl Fn(f32) -> f32 + 'static)
+                                           -> (ParamHandle, Option<StripValueSource>) {
+        let (handle, new_subs, new_collections, _) = self.observe_param(box_uuid, path, id, invalidate);
+        subs.extend(new_subs);
+        collections.extend(new_collections);
+        let resolver: Option<StripValueSource> = if handle.track.is_some() {
+            let handle = handle.clone();
+            Some(Rc::new(move |position: f64| {
+                let (value, kind) = handle.resolve(position);
+                if kind == abi::PARAM_KIND_UNIT {map(value)} else {value}
+            }))
+        } else {
+            None
+        };
+        (handle, resolver)
     }
 
     /// The shared gain (dB) + pan (+ optional mute) automation binder behind the strip AND the aux sends: drop the
@@ -301,38 +315,18 @@ impl Engine {
         for collection in core::mem::take(collections) {
             collection.terminate(&mut self.graph);
         }
-        let (gain_handle, gain_subs, gain_collections, _) = self.observe_param(box_uuid, &[gain_key], 0, invalidate);
-        let (pan_handle, pan_subs, pan_collections, _) = self.observe_param(box_uuid, &[pan_key], 1, invalidate);
-        subs.extend(gain_subs);
-        subs.extend(pan_subs);
-        collections.extend(gain_collections);
-        collections.extend(pan_collections);
-        // `resolve` hands back a UNIT value while the curve covers the position, else the FIELD's stored
-        // value with its own kind (already real dB / bipolar pan) — map only the unit case.
-        if gain_handle.track.is_some() {
-            *automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| {
-                let (value, kind) = gain_handle.resolve(position);
-                if kind == abi::PARAM_KIND_UNIT { gain_mapping.y(value) } else { value }
-            }));
-        }
-        if pan_handle.track.is_some() {
-            *automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| {
-                let (value, kind) = pan_handle.resolve(position);
-                if kind == abi::PARAM_KIND_UNIT { PAN.y(value) } else { value }
-            }));
-        }
+        let (_, gain_resolver) = self.observe_field_automation(box_uuid, &[gain_key], 0, subs, collections,
+            invalidate, move |value| gain_mapping.y(value));
+        let (_, pan_resolver) = self.observe_field_automation(box_uuid, &[pan_key], 1, subs, collections,
+            invalidate, |value| PAN.y(value));
+        *automation.volume.borrow_mut() = gain_resolver;
+        *automation.panning.borrow_mut() = pan_resolver;
         if let Some(mute_key) = mute_key {
-            let (mute_handle, mute_subs, mute_collections, _) = self.observe_param(box_uuid, &[mute_key], 2, invalidate);
-            subs.extend(mute_subs);
-            collections.extend(mute_collections);
             // The mute field stores a bool as 0.0/1.0, so the unit-curve value and the field-fallback value are BOTH
             // thresholded at >= 0.5 by the strip — hand back `resolve`'s raw value in either case.
-            if mute_handle.track.is_some() {
-                *automation.mute.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, _kind) = mute_handle.resolve(position);
-                    value
-                }));
-            }
+            let (_, mute_resolver) = self.observe_field_automation(box_uuid, &[mute_key], 2, subs, collections,
+                invalidate, |value| value);
+            *automation.mute.borrow_mut() = mute_resolver;
         }
     }
 
@@ -360,6 +354,7 @@ impl Engine {
             // reduction, read with `subscribeFloats`) must NOT collapse to a scalar FLOAT.
             let package_type = match package_type {
                 crate::broadcast::PACKAGE_INT_RING => crate::broadcast::PACKAGE_INT_RING,
+                crate::broadcast::PACKAGE_INT_ARRAY => crate::broadcast::PACKAGE_INT_ARRAY,
                 crate::broadcast::PACKAGE_FLOAT => crate::broadcast::PACKAGE_FLOAT,
                 _ => crate::broadcast::PACKAGE_FLOAT_ARRAY
             };
@@ -460,9 +455,21 @@ impl Engine {
                     Box::new(move |graph, _update| on_repoint(graph))));
                 pointer_subs.push(target_sub);
             } else {
-                let sub = self.graph.catchup_and_subscribe(Address::of(device_uuid, obs.path.clone()), move |value| {
+                // `Parent` (at or under the address), not `This`: an observed ARRAY (Cubed's packed steps) is
+                // edited one ELEMENT at a time, i.e. one level below the observed address, so an exact-address
+                // monitor would only ever see the catch-up. The whole field is re-read and delivered, which for
+                // a scalar is the value the update carried anyway.
+                let address = Address::of(device_uuid, obs.path.clone());
+                if let Some(value) = self.graph.field_value(&address) {
                     deliver_field_value(value, field_changed_index, state_ptr, id);
-                });
+                }
+                let observed = address.clone();
+                let sub = self.graph.subscribe_vertex(Propagation::Parent, address,
+                    Box::new(move |graph, _update| {
+                        if let Some(value) = graph.field_value(&observed) {
+                            deliver_field_value(value, field_changed_index, state_ptr, id);
+                        }
+                    }));
                 subs.push(sub);
             }
         }

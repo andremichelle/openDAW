@@ -18,6 +18,7 @@
 pub mod device;
 pub mod generated;
 pub mod merger;
+pub mod pattern;
 pub mod tables;
 pub mod voice;
 
@@ -95,6 +96,16 @@ pub unsafe fn ensure_tables() -> &'static Tables {
         fill_bank(&mut bank);
         bank
     })
+}
+
+/// Deliver an observed box field (the pattern arrays). Without this EXPORT the engine sees a device
+/// with no `field_changed` and the pattern data never arrives.
+#[no_mangle]
+pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, len: u32) {
+    unsafe {
+        abi::with_state(state_ptr, |state| <device::Device as abi::Instrument>::field_changed(
+            state, id, abi::FieldValue::from_wire(kind, bits, len)))
+    }
 }
 
 /// Apply a parameter value the host resolved (initial / edit / automation), by the id `init` got

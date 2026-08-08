@@ -25,7 +25,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
-use abi::{DEVICE_KIND_AUDIO_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, FIELD_KIND_BOOL, FIELD_KIND_FLOAT, FIELD_KIND_INT, FIELD_KIND_STRING, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
+use abi::{DEVICE_KIND_AUDIO_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, FIELD_KIND_BOOL, FIELD_KIND_FLOAT, FIELD_KIND_INT, FIELD_KIND_INT_ARRAY, FIELD_KIND_STRING, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
 use bindings::indexed_collection::IndexedCollection;
 use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
@@ -40,7 +40,7 @@ use engine_env::audio_input::AudioInput;
 use engine_env::audio_buffer::shared_audio_buffer;
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::aux_send::{AuxSendProcessor, SendParams};
-use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripParams};
+use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripParams, StripValueSource};
 use math::value_mapping::{Decibel, Linear, ValueMapping};
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
@@ -540,9 +540,6 @@ impl ParamNode {
 /// chain subscriptions.
 pub(crate) struct AudioUnitBinding {
     pub(crate) unit: Uuid,
-    /// Monitors on a Cubed instrument's pattern fields. Held here so they live exactly as long as the
-    /// unit's wiring and are dropped with it; empty for every other instrument.
-    pub(crate) cubed_pattern_subs: Vec<SubscriptionId>,
     pub(crate) track_sets: SharedTrackSets,
     pub(crate) collections: CollectionCache,
     pub(crate) tracks: Vec<TrackBinding>,
@@ -1161,7 +1158,6 @@ impl Engine {
         let params_dirty = Rc::new(Cell::new(false));
         let wiring_dirty = Rc::new(Cell::new(false));
         AudioUnitBinding {
-            cubed_pattern_subs: Vec::new(),
             unit: uuid, track_sets, collections: CollectionCache::default(), tracks: Vec::new(),
             audio_track_sets: Rc::new(RefCell::new(Vec::new())), audio_tracks: Vec::new(),
             track_changes, track_sub, strip_params, strip_subs: vec![volume_sub, panning_sub, mute_sub, solo_sub],

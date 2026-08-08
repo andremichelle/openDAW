@@ -743,33 +743,7 @@ impl Engine {
             _ => {
                 let sequencer = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: unit.track_sets.clone()}), self.clip_sequencer.clone())));
                 sequencer.borrow_mut().bind_truncate_preference(self.truncate_pref.clone());
-                // A Cubed instrument also has an INTERNAL pattern, which joins the unit's track notes
-                // as a peer source; the device's NoteMerger resolves both into its single voice.
-                //
-                // Wrapping happens ONLY here, in the build-fresh branch. Doing it after the match
-                // would re-wrap the KEPT source on every re-wire - adding or removing an audio effect
-                // re-runs this - stacking a second pattern source that emits DUPLICATE note-ons.
-                // Each duplicate retriggers the voice, every retrigger drains the accent cap
-                // (accentRetain 0.009), and the accents die and never come back.
-                if self.graph.find_box(&instrument_uuid)
-                    .map(|device_box| device_box.name == "CubedDeviceBox").unwrap_or(false) {
-                    for sub in core::mem::take(&mut unit.cubed_pattern_subs) {
-                        self.graph.unsubscribe(sub); // monitors of the pattern we are replacing
-                    }
-                    let pattern = Rc::new(RefCell::new(crate::cubed_pattern::CubedPatternSource::new(
-                        crate::cubed_pattern::GATE_FRACTION)));
-                    crate::cubed_pattern::load_from_graph(&self.graph, instrument_uuid, &mut pattern.borrow_mut());
-                    // Live telemetry: the currently-playing step at the device address + key [0], for the
-                    // editor's playhead row. Distinct key from the instrument's bare-address peaks / note-bits.
-                    self.broadcasts.register(instrument_uuid, &[0], crate::broadcast::PACKAGE_INT_ARRAY,
-                                             &pattern.borrow().step_slot());
-                    let subs = self.subscribe_cubed_pattern(instrument_uuid, &pattern);
-                    unit.cubed_pattern_subs.extend(subs);
-                    Rc::new(RefCell::new(crate::cubed_pattern::MergedNoteSource::new(sequencer, pattern)))
-                        as SharedNoteEventSource
-                } else {
-                    sequencer
-                }
+                sequencer
             }
         };
         // Edge-only re-wire: instrument -> fx0 -> ... (a leaf has no choke), then -> strip; the strip's output is
@@ -808,28 +782,6 @@ impl Engine {
     /// in the chain wiring, its processor + params + DSP state left fully intact.
     pub(crate) fn device_enabled(&self, uuid: Uuid) -> bool {
         self.graph.field_value(&Address::of(uuid, vec![DEVICE_ENABLED_KEY])).and_then(|value| value.as_bool()).unwrap_or(true)
-    }
-
-    /// TARGETED monitors on a Cubed device's `pattern-index` and `patterns` fields.
-    ///
-    /// These re-read into the SHARED source rather than triggering a re-wire: rebuilding the note
-    /// source mid-play would drop the notes it has retained across blocks, heard as a stuck or
-    /// re-triggered note. Editing a step while the pattern runs must not do that.
-    pub(crate) fn subscribe_cubed_pattern(&mut self, uuid: Uuid,
-                                          pattern: &Rc<RefCell<crate::cubed_pattern::CubedPatternSource>>)
-                                          -> [SubscriptionId; 2] {
-        use crate::cubed_pattern::{load_from_graph, PATTERNS_KEY, PATTERN_INDEX_KEY};
-        let selected = pattern.clone();
-        let index_sub = self.graph.subscribe_vertex(
-            Propagation::This, Address::of(uuid, vec![PATTERN_INDEX_KEY]),
-            Box::new(move |graph, _update| load_from_graph(graph, uuid, &mut selected.borrow_mut())));
-        let edited = pattern.clone();
-        // Parent: a monitor fires for every PREFIX of a changed address, so one monitor at the
-        // array field catches a step edit at [30, pattern, 2, step] without 1024 subscriptions.
-        let steps_sub = self.graph.subscribe_vertex(
-            Propagation::Parent, Address::of(uuid, vec![PATTERNS_KEY]),
-            Box::new(move |graph, _update| load_from_graph(graph, uuid, &mut edited.borrow_mut())));
-        [index_sub, steps_sub]
     }
 
     /// A TARGETED `This` monitor on a device's `enabled` field: a toggle fires `rewire` (mark + enqueue the

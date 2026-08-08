@@ -7,8 +7,9 @@
 //! ar-303 calibration removed.
 
 use crate::merger::VoiceCommand;
+use crate::pattern::{Pattern, PATTERN_COUNT};
 use crate::{ensure_tables, NoteMerger, Source, Tables, Voice303};
-use abi::{Block, EventRecord, ParamValue, EVENT_NOTE_ON};
+use abi::{Block, BlockFlags, EventRecord, ParamValue, EVENT_NOTE_ON};
 
 /// Parameter slots, in bind order. The id `bind_parameter` returns is stored in `state.ids[SLOT]`;
 /// `parameter_changed` finds the slot by matching the incoming id against that table.
@@ -25,7 +26,17 @@ mod param {
     pub const ACCENT: usize = 5;
     pub const VOLUME: usize = 6;
     pub const WAVEFORM: usize = 7;
-    pub const COUNT: usize = 8;
+    pub const PATTERN_INDEX: usize = 8;
+    pub const COUNT: usize = 9;
+}
+
+/// The pattern array on `CubedDeviceBox` (field 30) and, per pattern, its `length` (1) and packed
+/// `steps` (2). Observed per pattern rather than pulled: the device holds all 16, so selecting one
+/// is a selection, not a re-read.
+mod field {
+    pub const PATTERNS: u16 = 30;
+    pub const LENGTH: u16 = 1;
+    pub const STEPS: u16 = 2;
 }
 
 /// Rendered in chunks so the mono voice can be summed into both channels without a heap buffer.
@@ -34,8 +45,12 @@ const SCRATCH: usize = 128;
 pub struct State {
     pub voice: Voice303,
     pub merger: NoteMerger,
+    pub pattern: Pattern,
     tables: Option<&'static Tables>,
-    ids: [u32; param::COUNT]
+    ids: [u32; param::COUNT],
+    length_ids: [u32; PATTERN_COUNT],
+    steps_ids: [u32; PATTERN_COUNT],
+    step_broadcast: u32
 }
 
 impl State {
@@ -45,6 +60,7 @@ impl State {
     pub fn init_in_place(state: &mut Self, sample_rate: f32) {
         state.voice = Voice303::new(sample_rate as f64);
         state.merger = NoteMerger::new();
+        state.pattern = Pattern::new();
         // SAFETY: `init` is a boot hook, called outside `process`.
         state.tables = Some(unsafe {ensure_tables()});
     }
@@ -74,10 +90,51 @@ impl abi::Instrument for Device {
         state.ids[param::ACCENT] = abi::bind_parameter(&[15]);
         state.ids[param::VOLUME] = abi::bind_parameter(&[16]);
         state.ids[param::WAVEFORM] = abi::bind_parameter(&[17]);
+        state.ids[param::PATTERN_INDEX] = abi::bind_parameter(&[20]);
+        for pattern in 0..PATTERN_COUNT {
+            let key = pattern as u16;
+            state.length_ids[pattern] = abi::observe_field(&[field::PATTERNS, key, field::LENGTH]);
+            state.steps_ids[pattern] = abi::observe_field(&[field::PATTERNS, key, field::STEPS]);
+        }
+        state.step_broadcast = abi::bind_broadcast_int_array(&[0], 1);
+    }
+
+    fn field_changed(state: &mut State, id: u32, value: abi::FieldValue) {
+        if let Some(pattern) = state.length_ids.iter().position(|bound| *bound == id) {
+            if let abi::FieldValue::Int(length) = value {
+                state.pattern.set_length(pattern, length.max(1) as usize);
+            }
+        } else if let Some(pattern) = state.steps_ids.iter().position(|bound| *bound == id) {
+            if let abi::FieldValue::Ints(words) = value {
+                state.pattern.set_steps(pattern, words);
+            }
+        }
+    }
+
+    /// The pattern's own steps, joined with the pulled input notes by the SDK. A `Unit` value is an
+    /// AUTOMATION curve, which states its own timing and selects at once; an `Int` is the stored
+    /// field, i.e. a manual selection, which waits for the next bar line.
+    fn generate_events(state: &mut State, from: f64, to: f64, flags: BlockFlags,
+                       out: &mut [EventRecord]) -> usize {
+        let count = state.pattern.generate(from, to, flags, out);
+        let slot = abi::broadcast_ptr(state.step_broadcast);
+        if slot != 0 {
+            unsafe {*(slot as *mut i32) = state.pattern.step();}
+        }
+        count
     }
 
     fn parameter_changed(state: &mut State, id: u32, value: ParamValue) {
         let Some(slot) = state.ids.iter().position(|bound| *bound == id) else {return};
+        if slot == param::PATTERN_INDEX {
+            // TS `ValueMapping.linearInteger(0, patterns - 1)`.
+            const TOP: f32 = (PATTERN_COUNT - 1) as f32;
+            match value {
+                ParamValue::Unit(unit) => state.pattern.set_index(libm::roundf(unit * TOP).max(0.0) as usize),
+                other => state.pattern.request_index(real(other).max(0.0) as usize)
+            }
+            return;
+        }
         apply_slot(&mut state.voice.params, slot, value);
     }
 
@@ -118,6 +175,7 @@ impl abi::Instrument for Device {
         // would leave the voice gated with no note to release it.
         state.merger.reset();
         state.voice.note_off();
+        state.pattern.reset();
     }
 }
 
