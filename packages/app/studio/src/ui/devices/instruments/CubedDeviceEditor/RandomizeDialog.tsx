@@ -53,8 +53,8 @@ export const showRandomizeDialog = (options: CubedRandomizeOptions,
         rootFirst: rootFirst.getValue()
     })
     const dialog: HTMLDialogElement = (
-        <Dialog headline="Randomize Pattern"
-                icon={IconSymbol.Flask}
+        <Dialog headline="Randomizer"
+                icon={IconSymbol.Random}
                 cancelable={true}
                 buttons={[{
                     text: "Randomize",
