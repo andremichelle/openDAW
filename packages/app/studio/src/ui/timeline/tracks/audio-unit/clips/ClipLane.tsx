@@ -5,6 +5,7 @@ import {
     DefaultObservableValue,
     int,
     isDefined,
+    isNull,
     Lifecycle,
     MutableObservableValue,
     Nullable,
@@ -43,6 +44,18 @@ export const ClipLane = ({lifecycle, service, trackManager, adapter}: Construct)
         for (let index = cells.length; index < count; index++) {
             const terminator = lifecycle.spawn()
             const adapter = new DefaultObservableValue<Nullable<AnyClipBoxAdapter>>(null)
+            // A cell does not only show clips of THIS lane's track: `populatePlaceholder` borrows through
+            // `strategy.translateTrackIndex` while a move runs, and this lane hears removals of its own
+            // collection only. So the cell follows the box it actually displays — otherwise a deleted clip
+            // stays in the cell until the deferred rebuild, and the painter renders it one frame later
+            // against an adapter whose pointers are already gone (live error 1094).
+            const deletion = terminator.own(new Terminator())
+            terminator.own(adapter.catchupAndSubscribe(owner => {
+                deletion.terminate()
+                const displayed = owner.getValue()
+                if (isNull(displayed)) {return}
+                deletion.own(displayed.box.subscribeDeletion(() => adapter.setValue(null)))
+            }))
             const placeholder: HTMLElement = (
                 <ClipPlaceholder lifecycle={terminator}
                                  project={project}

@@ -1,5 +1,5 @@
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
-import {Arrays, int, isNotNull, Option} from "@opendaw/lib-std"
+import {int, Option} from "@opendaw/lib-std"
 import {ppqn, PPQN, RegionCollection} from "@opendaw/lib-dsp"
 import {
     AnyLoopableRegionBoxAdapter,
@@ -7,6 +7,7 @@ import {
     TrackBoxAdapter,
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
+import {RegionModifierSelection} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifierSelection.ts"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {Project, RegionModifyStrategy} from "@opendaw/studio-core"
 import {Dragging} from "@opendaw/lib-dom"
@@ -118,10 +119,12 @@ export class RegionContentStartModifier implements RegionModifier {
 
     approve(): void {
         if (this.#delta === 0) {return}
-        const adapters = this.#adapters.filter(({box}) => box.isAttached())
+        // Delete or Undo mid-drag orphans what this drag captured. Applying to the survivors would commit
+        // a partial edit nobody asked for, so the drag is abandoned instead.
+        if (!RegionModifierSelection.isIntact(this.#adapters)) {return this.cancel()}
+        const adapters = this.#adapters
         if (adapters.length === 0) {return}
-        const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = Arrays.removeDuplicates(adapters
-            .map(adapter => adapter.trackBoxAdapter.unwrapOrNull()).filter(isNotNull))
+        const modifiedTracks: ReadonlyArray<TrackBoxAdapter> = RegionModifierSelection.tracksOf(adapters)
         const regionSnapshot = (region: AnyRegionBoxAdapter) =>
             ({p: region.position, d: region.duration, s: region.isSelected})
         const trackSnapshots = modifiedTracks.map(track => ({
