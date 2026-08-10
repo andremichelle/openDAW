@@ -44,13 +44,17 @@ DEVICE_CRATES="device-autotune device-revamp device-pitch device-arpeggio device
 
 RUSTFLAGS="$SIMD" cargo rustc -p engine --release --target "$TARGET" -- \
   -C link-arg=--import-memory -C link-arg=--import-table $SHARED
+# stretch_wasm.wasm  the analysis module for the core WORKER (transient descriptors, tempo). Plain
+#                    standalone build: it owns its memory, imports nothing, and never runs on the
+#                    audio thread, so none of the linker gymnastics above apply.
+RUSTFLAGS="$SIMD" cargo build -p stretch-wasm --release --target "$TARGET"
 for crate in $DEVICE_CRATES; do
   RUSTFLAGS="$PIC_RUSTFLAGS" cargo "+$DEVICE_TOOLCHAIN" build -p "$crate" --release --target "$TARGET" -Zbuild-std=core
 done
 
 # Module basenames (crate '-' -> '_') plus the engine host.
 DEVICE_MODULES=$(echo "$DEVICE_CRATES" | tr '-' '_')
-MODULES="engine $DEVICE_MODULES"
+MODULES="engine stretch_wasm $DEVICE_MODULES"
 
 # Size-optimise each module with binaryen's wasm-opt (Homebrew: `brew install binaryen`, CI: apt binaryen).
 # GUARDED: if it is not installed the build still works, just larger. The devices are PIC side modules (a
@@ -74,6 +78,6 @@ fi
 # package publishes and what `loadEngineModules(wasmUrl)` fetches.
 DIST="$ROOT/packages/studio/core-wasm/dist"
 mkdir -p "$DIST/wasm/plugins"
-cp "$OUT/engine.wasm" "$DIST/wasm/"
+cp "$OUT/engine.wasm" "$OUT/stretch_wasm.wasm" "$DIST/wasm/"
 for module in $DEVICE_MODULES; do cp "$OUT/$module.wasm" "$DIST/wasm/plugins/"; done
-echo "built: engine.wasm + stock devices + werkstatt/apparat/spielwerk"
+echo "built: engine.wasm + stretch_wasm.wasm + stock devices + werkstatt/apparat/spielwerk"

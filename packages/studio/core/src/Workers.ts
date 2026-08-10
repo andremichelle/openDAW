@@ -1,7 +1,7 @@
 import {assert, FloatArray, int, Lazy, Option, Procedure} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import type {OpfsProtocol, SamplePeakProtocol} from "@opendaw/lib-fusion"
-import type {AudioData, TransientProtocol} from "@opendaw/lib-dsp"
+import type {AudioData, BpmProtocol, TransientProtocol} from "@opendaw/lib-dsp"
 
 export class Workers {
     static async install(url: string): Promise<void> {
@@ -58,6 +58,17 @@ export class Workers {
             .sender<TransientProtocol>(this.messenger.unwrap("Workers are not installed").channel("transients"),
                 router => new class implements TransientProtocol {
                     detect(audioData: AudioData): Promise<Array<number>> {return router.dispatchAndReturn(this.detect, audioData)}
+                })
+    }
+
+    @Lazy
+    static get Bpm(): BpmProtocol {
+        return Communicator
+            .sender<BpmProtocol>(this.messenger.unwrap("Workers are not installed").channel("bpm"),
+                router => new class implements BpmProtocol {
+                    detect(audioData: AudioData, moduleUrl: string): Promise<number> {
+                        return router.dispatchAndReturn(this.detect, audioData, moduleUrl)
+                    }
                 })
     }
 }

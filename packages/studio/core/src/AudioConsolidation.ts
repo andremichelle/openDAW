@@ -82,7 +82,11 @@ export namespace AudioConsolidation {
         const audioData = renderResult.value
         dialog.message = "Importing sample..."
         const importResult = await Promises.tryCatch(
-            sampleService.importFile({name: "flatten", arrayBuffer: WavFile.encodeFloats(audioData)}))
+            sampleService.importFile({
+                name: "flatten",
+                bpm: project.timelineBox.bpm.getValue(),
+                arrayBuffer: WavFile.encodeFloats(audioData)
+            }))
         if (importResult.status === "rejected") {
             dialog.terminate()
             console.warn(importResult.error)
