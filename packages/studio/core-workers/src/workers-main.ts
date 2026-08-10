@@ -1,6 +1,7 @@
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {OpfsWorker, SamplePeakWorker} from "@opendaw/lib-fusion"
-import {AudioData, TransientDetector, TransientProtocol} from "@opendaw/lib-dsp"
+import {AudioData, BpmProtocol, TransientDetector, TransientProtocol} from "@opendaw/lib-dsp"
+import {detectBpm} from "./bpm-detection"
 
 const messenger: Messenger = Messenger.for(self)
 
@@ -10,6 +11,12 @@ SamplePeakWorker.install(messenger)
 Communicator.executor(messenger.channel("transients"), new class implements TransientProtocol {
     async detect(audioData: AudioData): Promise<Array<number>> {
         return TransientDetector.detect(audioData)
+    }
+})
+
+Communicator.executor(messenger.channel("bpm"), new class implements BpmProtocol {
+    async detect(audioData: AudioData, moduleUrl: string): Promise<number> {
+        return detectBpm(audioData, moduleUrl)
     }
 })
 

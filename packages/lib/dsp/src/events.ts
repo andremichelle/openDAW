@@ -78,6 +78,7 @@ export namespace LoopableRegion {
     export const locateLoop = ({position, complete, loopOffset, loopDuration}: Region,
                                from: ppqn,
                                to: ppqn): Option<LoopCycle> => {
+        if (!(loopDuration > 0.0)) {return Option.None}
         const rawStart = position - loopOffset
         const rawEnd = rawStart + loopDuration
         if (rawStart >= to || rawEnd <= from) {return Option.None} // no overlap
@@ -101,6 +102,9 @@ export namespace LoopableRegion {
     export function* locateLoops({position, complete, loopOffset, loopDuration}: Region,
                                  from: ppqn,
                                  to: ppqn): IterableIterator<LoopCycle> {
+        // A degenerate loop duration (0, negative or NaN) would never advance rawStart towards seekMax,
+        // hanging the calling thread. The negated comparison is the NaN-rejecting form.
+        if (!(loopDuration > 0.0)) {return}
         const offset = position - loopOffset
         const seekMin = Math.max(position, from)
         const seekMax = Math.min(complete, to)

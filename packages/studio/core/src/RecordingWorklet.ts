@@ -12,7 +12,7 @@ import {
 } from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Peaks} from "@opendaw/lib-fusion"
-import {mergeChunkPlanes, RingBuffer, SampleLoader, SampleLoaderState} from "@opendaw/studio-adapters"
+import {mergeChunkPlanes, RingBuffer, SampleLoader, SampleLoaderState, SampleMetaData} from "@opendaw/studio-adapters"
 import {RenderQuantum} from "./RenderQuantum"
 import {PeaksWriter} from "./PeaksWriter"
 import {SampleService} from "./samples"
@@ -75,6 +75,9 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     setFillLength(value: int): void {this.#peakWriter.numFrames = value}
 
     get numberOfFrames(): int {return this.#output.length * RenderQuantum}
+    // A take in progress is not a stored sample yet, so it has no metadata to report. It acquires some when
+    // `#save` hands it to `SampleService.importRecording`, and from then on a `DefaultSampleLoader` serves it.
+    get meta(): Option<SampleMetaData> {return Option.None}
     get data(): Option<AudioData> {return this.#data}
     get peaks(): Option<Peaks> {return this.#peaks.isEmpty() ? Option.wrap(this.#peakWriter) : this.#peaks}
     get state(): SampleLoaderState {return this.#state}

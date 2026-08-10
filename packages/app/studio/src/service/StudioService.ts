@@ -65,7 +65,8 @@ import {
     SoundfontService,
     StudioPreferences,
     TemplateStorage,
-    TimelineRange
+    TimelineRange,
+    WasmBpmDetector
 } from "@opendaw/studio-core"
 import {ProjectDialogs} from "@/project/ProjectDialogs"
 import {PresetService} from "@/ui/browse/PresetService"
@@ -124,14 +125,13 @@ export class StudioService implements ProjectEnv {
     readonly #sampleService: SampleService
     readonly #soundfontService: SoundfontService
 
-    #shadertoyState: Option<ShadertoyState> = Option.None
     readonly #activeCodeEditor: MutableObservableOption<CodeEditorState> = new MutableObservableOption()
-
-    #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
     readonly #roomAwareness = new DefaultObservableValue<Nullable<RoomAwareness>>(null)
     readonly #trafficMeter = new DefaultObservableValue<Nullable<TrafficMeter>>(null)
     readonly #chatService = new MutableObservableOption<ChatService>()
 
+    #shadertoyState: Option<ShadertoyState> = Option.None
+    #factoryFooterLabel: Option<Provider<FooterLabel>> = Option.None
     regionModifierInProgress: boolean = false
 
     constructor(readonly audioContext: AudioContext,
@@ -143,7 +143,8 @@ export class StudioService implements ProjectEnv {
                 readonly chainedSoundfontProvider: ChainedSoundfontProvider,
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
-        this.#sampleService = new SampleService(audioContext)
+        this.#sampleService = new SampleService(audioContext,
+            new WasmBpmDetector(`${import.meta.env.BASE_URL}wasm-engine/wasm/stretch_wasm.wasm`))
         this.#sampleService.subscribe(([sample, _]) => this.#signals.notify({
             type: "import-sample",
             sample

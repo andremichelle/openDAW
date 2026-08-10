@@ -1,10 +1,10 @@
-import {Arrays, Class, isDefined, panic, Progress, tryCatch, UUID} from "@opendaw/lib-std"
+import {Arrays, Class, isDefined, Option, panic, Progress, tryCatch, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
-import {AudioData, estimateBpm} from "@opendaw/lib-dsp"
+import {AudioData} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {SamplePeaks} from "@opendaw/lib-fusion"
 import {AudioFileBox} from "@opendaw/studio-boxes"
-import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
+import {BpmDetector, Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {AssetService} from "../AssetService"
 import {FilePickerAcceptTypes} from "../FilePickerAcceptTypes"
 import {WavFile} from "@opendaw/lib-dsp"
@@ -18,7 +18,7 @@ export class SampleService extends AssetService<Sample, AudioData> {
     protected readonly boxType: Class<Box> = AudioFileBox
     protected readonly filePickerOptions: FilePickerOptions = FilePickerAcceptTypes.WavFiles
 
-    constructor(readonly audioContext: AudioContext) {super()}
+    constructor(readonly audioContext: AudioContext, readonly bpmDetector: BpmDetector) {super()}
 
     async importRecording(audioData: AudioData, bpm: number, name: string = "Recording"): Promise<Sample> {
         // A sample MUST have a positive length. A zero-frame take would become a duration-0 sample and, once
@@ -50,14 +50,24 @@ export class SampleService extends AssetService<Sample, AudioData> {
         }
         const duration = audioData.numberOfFrames / audioData.sampleRate
         const shifts = SamplePeaks.findBestFit(audioData.numberOfFrames)
+        // A caller-supplied bpm is authoritative (a recording knows the tempo it was captured at), so detection
+        // only runs when the tempo is genuinely unknown and only then claims a share of the progress.
+        const optGivenBpm = Option.wrap(bpm)
+        const [peakProgress, bpmProgress] = optGivenBpm.isEmpty()
+            ? Progress.split(progressHandler, 2)
+            : [progressHandler, Progress.Empty]
         const peaks = await Workers.Peak.generateAsync(
-            progressHandler,
+            peakProgress,
             shifts,
             audioData.frames,
             audioData.numberOfFrames,
             audioData.numberOfChannels) as ArrayBuffer
+        // `None` stores 0, the established "unknown" sentinel that keeps the material in seconds.
+        const optBpm = optGivenBpm.isEmpty()
+            ? await this.bpmDetector.detect(audioData, bpmProgress)
+            : optGivenBpm
         const meta: SampleMetaData = {
-            bpm: bpm ?? estimateBpm(duration),
+            bpm: optBpm.unwrapOrElse(0),
             name: name ?? "Unnnamed",
             duration,
             sample_rate: audioData.sampleRate,

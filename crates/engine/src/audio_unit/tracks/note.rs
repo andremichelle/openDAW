@@ -135,7 +135,11 @@ impl NoteContentSource for BoundNoteTracks {
 pub(crate) struct RegionBinding {
     pub(crate) region_uuid: Uuid,
     pub(crate) collection_uuid: Uuid,
-    pub(crate) edit_sub: SubscriptionId
+    pub(crate) edit_sub: SubscriptionId,
+    // The `events` pointer is resolved ONCE at build. CONSOLIDATING a mirrored region repoints it at a fresh
+    // collection, which no other monitor re-resolves — the region kept reading the OLD notes. This monitor
+    // watches the pointer itself and queues a rebuild, exactly like the audio side's `playmode_pointer_sub`.
+    pub(crate) events_sub: SubscriptionId
 }
 
 /// One bound launchable clip: its entry in the track's content, the note collection it references, and a
@@ -143,7 +147,10 @@ pub(crate) struct RegionBinding {
 pub(crate) struct ClipBinding {
     pub(crate) clip_uuid: Uuid,
     pub(crate) collection_uuid: Uuid,
-    pub(crate) edit_sub: SubscriptionId
+    pub(crate) edit_sub: SubscriptionId,
+    // See `RegionBinding::events_sub`: a COPIED clip is consolidated (its `events` repointed at a copy of the
+    // collection), so without this the copy plays the original clip's notes.
+    pub(crate) events_sub: SubscriptionId
 }
 
 /// A track BINDING: owns this track's sorted region collection (`content`, shared with the sequencer)
@@ -160,7 +167,10 @@ pub(crate) struct TrackBinding {
     pub(crate) clip_sub: SubscriptionId,
     // A TARGETED `This` monitor on the track's `enabled` field: toggling it re-derives the unit's active
     // note-track set (a disabled track's regions are excluded), exactly like a device `enabled` toggle.
-    pub(crate) enabled_sub: SubscriptionId
+    pub(crate) enabled_sub: SubscriptionId,
+    // The unit-wide dirty mark, kept so a per-region / per-clip `events` pointer monitor can queue a rebuild
+    // (via `region_changes` / `clip_changes`) exactly like the track's own membership observers do.
+    pub(crate) mark: DirtyMark
 }
 
 /// Build a track binding: its own sorted region collection (`content`), a subscription to the track's
@@ -194,7 +204,7 @@ pub(crate) fn build_track(graph: &mut BoxGraph, track_uuid: Uuid, mark: &DirtyMa
     let enabled_sub = graph.subscribe_vertex(Propagation::This, Address::of(track_uuid, vec![TRACK_ENABLED_KEY]),
         Box::new(move |_graph, _update| enabled_mark.mark()));
     TrackBinding {track_uuid, content, region_bindings: Vec::new(), region_changes, region_sub,
-        clip_bindings: Vec::new(), clip_changes, clip_sub, enabled_sub}
+        clip_bindings: Vec::new(), clip_changes, clip_sub, enabled_sub, mark: mark.clone()}
 }
 
 /// Tear down a track: unsubscribe its membership + edit observers, unregister its region collection from the
@@ -208,10 +218,12 @@ pub(crate) fn teardown_track(graph: &mut BoxGraph, track_sets: &SharedTrackSets,
     track_sets.borrow_mut().retain(|set| !Rc::ptr_eq(set, &track.content));
     for clip in track.clip_bindings {
         graph.unsubscribe(clip.edit_sub);
+        graph.unsubscribe(clip.events_sub);
         collections.release(graph, clip.collection_uuid);
     }
     for region in track.region_bindings {
         graph.unsubscribe(region.edit_sub);
+        graph.unsubscribe(region.events_sub);
         collections.release(graph, region.collection_uuid);
     }
 }
@@ -225,6 +237,7 @@ pub(crate) fn reconcile_regions(graph: &mut BoxGraph, collections: &mut Collecti
             let region = track.region_bindings.remove(index);
             track.content.borrow_mut().regions.retain(|bound| bound.region_uuid != region_uuid);
             graph.unsubscribe(region.edit_sub);
+            graph.unsubscribe(region.events_sub);
             collections.release(graph, region.collection_uuid);
         }
     }
@@ -232,7 +245,8 @@ pub(crate) fn reconcile_regions(graph: &mut BoxGraph, collections: &mut Collecti
         if track.region_bindings.iter().any(|region| region.region_uuid == region_uuid) {
             continue;
         }
-        if let Some(binding) = build_region(graph, &track.content, collections, region_uuid) {
+        if let Some(binding) = build_region(graph, &track.content, collections, region_uuid,
+                                            &track.region_changes, &track.mark) {
             track.region_bindings.push(binding);
         }
     }
@@ -248,15 +262,23 @@ pub(crate) fn reconcile_clips(graph: &mut BoxGraph, collections: &mut Collection
             let clip = track.clip_bindings.remove(index);
             track.content.borrow_mut().clips.retain(|bound| bound.clip_uuid != clip_uuid);
             graph.unsubscribe(clip.edit_sub);
+            graph.unsubscribe(clip.events_sub);
             collections.release(graph, clip.collection_uuid);
-            clip_sequencer.borrow_mut().forget(&clip_uuid);
+            // A REBUILD (the same uuid queued as removed AND added by the `events` pointer monitor) keeps its
+            // launch state: consolidating a playing clip must swap its notes, not stop it. A DELETED clip also
+            // repoints its `events` (to none) on the way out, so the box must still be there to count as one.
+            let rebuilt = changes.added.contains(&clip_uuid) && graph.find_box(&clip_uuid).is_some();
+            if !rebuilt {
+                clip_sequencer.borrow_mut().forget(&clip_uuid);
+            }
         }
     }
     for clip_uuid in changes.added {
         if track.clip_bindings.iter().any(|clip| clip.clip_uuid == clip_uuid) {
             continue;
         }
-        if let Some(binding) = build_clip(graph, &track.content, collections, clip_uuid) {
+        if let Some(binding) = build_clip(graph, &track.content, collections, clip_uuid,
+                                          &track.clip_changes, &track.mark) {
             track.clip_bindings.push(binding);
         }
     }
@@ -265,8 +287,9 @@ pub(crate) fn reconcile_clips(graph: &mut BoxGraph, collections: &mut Collection
 /// Read a clip's duration (key 10), `triggerMode.loop` (path [4, 1], default TRUE) and `mute` (key 11),
 /// ACQUIRE its note-event collection (`events` pointer key 2), and register it in the track content. A
 /// targeted `Parent` sub keeps duration / loop / mute fresh on edit. `None` if the clip has no collection.
-pub(crate) fn build_clip(graph: &mut BoxGraph, content: &SharedNoteTrack, collections: &mut CollectionCache, clip_uuid: Uuid) -> Option<ClipBinding> {
-    let collection_uuid = graph.target_of(&Address::of(clip_uuid, vec![2]))?.uuid;
+pub(crate) fn build_clip(graph: &mut BoxGraph, content: &SharedNoteTrack, collections: &mut CollectionCache,
+                         clip_uuid: Uuid, changes: &Rc<RefCell<Members>>, mark: &DirtyMark) -> Option<ClipBinding> {
+    let collection_uuid = graph.target_of(&Address::of(clip_uuid, vec![EVENTS_POINTER_KEY]))?.uuid;
     let collection = collections.acquire(graph, collection_uuid);
     let (duration, looped, mute) = read_clip_playback(graph, clip_uuid);
     content.borrow_mut().clips.push(BoundNoteClip {clip_uuid, duration, looped, mute, collection});
@@ -281,7 +304,26 @@ pub(crate) fn build_clip(graph: &mut BoxGraph, content: &SharedNoteTrack, collec
             }
         }
     }));
-    Some(ClipBinding {clip_uuid, collection_uuid, edit_sub})
+    let events_sub = observe_events_pointer(graph, clip_uuid, changes, mark);
+    Some(ClipBinding {clip_uuid, collection_uuid, edit_sub, events_sub})
+}
+
+// NoteClipBox / NoteRegionBox both carry their event collection at key 2 (WASM CONTRACT: mirror the TS schemas).
+pub(crate) const EVENTS_POINTER_KEY: u16 = 2;
+
+/// Watch a clip's / region's `events` pointer and queue THIS box for a rebuild when it moves. CONSOLIDATING a
+/// mirrored clip or region (TS `ClipBoxAdapter.consolidate`, what a clip COPY does) repoints it at a fresh copy
+/// of the collection, which no other monitor re-resolves: the reconcile releases the old cache ref and acquires
+/// the new one. Mirrors the audio side's `playmode_pointer_sub`.
+fn observe_events_pointer(graph: &mut BoxGraph, uuid: Uuid, changes: &Rc<RefCell<Members>>, mark: &DirtyMark) -> SubscriptionId {
+    let rebuild_changes = changes.clone();
+    let rebuild_mark = mark.clone();
+    graph.subscribe_vertex(Propagation::This, Address::of(uuid, vec![EVENTS_POINTER_KEY]), Box::new(move |_graph, _update| {
+        let mut members = rebuild_changes.borrow_mut();
+        members.removed.push(uuid);
+        members.added.push(uuid);
+        rebuild_mark.mark();
+    }))
 }
 
 // NoteClipBox / ValueClipBox / AudioClipBox all carry `mute` at key 11 (WASM CONTRACT: mirror the TS schemas).
@@ -297,9 +339,10 @@ pub(crate) fn read_clip_playback(graph: &BoxGraph, clip_uuid: Uuid) -> (f64, boo
 /// Read a region's loopable span, ACQUIRE its note-event collection (`events` pointer key 2) from the cache
 /// (observed once, shared by mirrored regions), and sorted-insert it into the track's region collection.
 /// `None` if the region has no collection.
-pub(crate) fn build_region(graph: &mut BoxGraph, content: &SharedNoteTrack, collections: &mut CollectionCache, region_uuid: Uuid) -> Option<RegionBinding> {
+pub(crate) fn build_region(graph: &mut BoxGraph, content: &SharedNoteTrack, collections: &mut CollectionCache,
+                           region_uuid: Uuid, changes: &Rc<RefCell<Members>>, mark: &DirtyMark) -> Option<RegionBinding> {
     let region = read_note_region(graph, region_uuid);
-    let collection_uuid = graph.target_of(&Address::of(region_uuid, vec![2]))?.uuid;
+    let collection_uuid = graph.target_of(&Address::of(region_uuid, vec![EVENTS_POINTER_KEY]))?.uuid;
     let collection = collections.acquire(graph, collection_uuid);
     content.borrow_mut().regions.add(BoundRegion {region_uuid, region, collection});
     // Targeted: a `Parent` sub on the region box re-reads THIS region's span and re-sorts the track's set
@@ -319,7 +362,8 @@ pub(crate) fn build_region(graph: &mut BoxGraph, content: &SharedNoteTrack, coll
             set.resort();
         }
     }));
-    Some(RegionBinding {region_uuid, collection_uuid, edit_sub})
+    let events_sub = observe_events_pointer(graph, region_uuid, changes, mark);
+    Some(RegionBinding {region_uuid, collection_uuid, edit_sub, events_sub})
 }
 
 // NoteRegionBox `mute` (WASM CONTRACT: mirror the TS NoteRegionBox schema — note regions carry mute at 15,

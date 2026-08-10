@@ -66,8 +66,14 @@ export const SampleView = ({lifecycle, service, sampleSelection, sample, playbac
                               const {status, value: meta} =
                                   await Promises.tryCatch(SampleDialogs.showEditSampleDialog(sample))
                               if (status === "resolved") {
+                                  const uuid = UUID.parse(meta.uuid)
                                   await SampleStorage.get()
-                                      .updateSampleMeta(UUID.parse(meta.uuid), Objects.exclude(meta, "uuid"))
+                                      .updateSampleMeta(uuid, Objects.exclude(meta, "uuid"))
+                                  // Storage is not the only holder: the sample manager caches the metadata it
+                                  // loaded with, and that copy is what the timeline reads when it warps a
+                                  // region. Without this the browser shows the new tempo while every consumer
+                                  // keeps using the old one.
+                                  service.sampleManager.invalidate(uuid)
                                   refresh()
                               }
                           }}/>
