@@ -5,7 +5,7 @@
 use super::*;
 
 use super::params::build_param_track;
-use super::tracks::CollectionCache;
+use super::tracks::{CollectionCache, EVENTS_POINTER_KEY};
 use engine_env::clip_sequencer::ClipSequencer;
 
 fn clip_rc() -> Rc<RefCell<ClipSequencer>> {
@@ -3255,4 +3255,146 @@ fn entry_pan_reaches_the_strip_live() {
         old: FieldValue::Float32(0.0), new: FieldValue::Float32(-1.0)
     }], &engine.registry).expect("pan hard left");
     assert_eq!(composite_of(&unit).entry_pan(ENTRY_A), Some(-1.0), "the pan reached the strip live");
+}
+
+// Issue #337: COPYING a clip in the launcher clones it MIRRORED (both share one collection) and then
+// CONSOLIDATES the moved clip — repointing its `events` at a fresh copy. The engine resolved that pointer
+// once at build, so the copy kept playing the ORIGINAL clip's notes until a reload.
+#[test]
+fn consolidating_a_copied_clip_rebinds_its_note_collection() {
+    const CLIP_A: Uuid = [50u8; 16];
+    const COLL_A: Uuid = [51u8; 16];
+    const NOTE_A: Uuid = [52u8; 16];
+    const CLIP_B: Uuid = [53u8; 16];
+    const COLL_B: Uuid = [54u8; 16];
+    const NOTE_B: Uuid = [55u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+        graph_box(TRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(1)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(CLIP_A, "NoteClipBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![super::TRACK_CLIPS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(COLL_A, vec![2])))),
+            (3, FieldValue::Int32(0)), (10, FieldValue::Int32(3840))
+        ]),
+        graph_box(COLL_A, "NoteEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(NOTE_A, "NoteEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(COLL_A, vec![1])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(240)),
+            (20, FieldValue::Int32(55)), (21, FieldValue::Float32(0.9)), (24, FieldValue::Float32(0.0))
+        ]),
+        // The copy: still MIRRORED (points at COLL_A), exactly what `clone(false)` produces.
+        graph_box(CLIP_B, "NoteClipBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![super::TRACK_CLIPS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(COLL_A, vec![2])))),
+            (3, FieldValue::Int32(1)), (10, FieldValue::Int32(3840))
+        ]),
+        // The consolidated collection (transposed), not yet referenced by any clip.
+        graph_box(COLL_B, "NoteEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(NOTE_B, "NoteEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(COLL_B, vec![1])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(240)),
+            (20, FieldValue::Int32(31)), (21, FieldValue::Float32(0.9)), (24, FieldValue::Float32(0.0))
+        ])
+    ]);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let sequencer = leaf_sequencer(&unit);
+    let flags = engine_env::block_flags::BlockFlags::create(true, false, true, false);
+    let mut events: Vec<engine_env::event::Event> = Vec::new();
+    // The copy is launched WHILE still mirrored: it plays the shared collection.
+    engine.schedule_clip_play(CLIP_B);
+    sequencer.borrow_mut().process_notes(3800.0, 3900.0, flags, &mut |event| events.push(event));
+    assert!(events.iter().any(|event| matches!(event, engine_env::event::Event::NoteStart {pitch: 55, ..})),
+        "the mirrored copy plays the shared notes: {events:?}");
+    engine.clip_sequencer.borrow_mut().take_changes(&mut |_uuid, _change| {});
+    // CONSOLIDATE (the second half of a clip copy): the clip repoints at its own collection.
+    engine.graph.transaction(&[
+        Update::Pointer {address: Address::of(CLIP_B, vec![EVENTS_POINTER_KEY]),
+            old: Some(Address::of(COLL_A, vec![2])), new: Some(Address::of(COLL_B, vec![2]))}
+    ], &engine.registry).expect("consolidate");
+    engine.reconcile_one(&mut unit);
+    events.clear();
+    sequencer.borrow_mut().process_notes(7660.0, 7700.0, flags, &mut |event| events.push(event));
+    assert!(events.iter().any(|event| matches!(event, engine_env::event::Event::NoteStart {pitch: 31, ..})),
+        "the consolidated clip plays ITS OWN notes: {events:?}");
+    assert!(!events.iter().any(|event| matches!(event, engine_env::event::Event::NoteStart {pitch: 55, ..})),
+        "the original collection is gone from this clip: {events:?}");
+    // The rebind keeps the launch state: consolidating a PLAYING clip swaps its notes, it does not stop it.
+    let mut stopped = 0;
+    engine.clip_sequencer.borrow_mut().take_changes(&mut |uuid, change| {
+        if uuid == &CLIP_B && change == engine_env::clip_sequencer::Change::Stopped {
+            stopped += 1;
+        }
+    });
+    assert_eq!(stopped, 0, "the playing clip was not stopped by its rebind");
+    // The old collection stays observed for CLIP_A, and the new one is observed once.
+    assert_eq!(unit.collections.entries.len(), 2, "one cache entry per referenced collection");
+}
+
+// The same repoint on a note REGION (TS `NoteRegionBoxAdapter.consolidate`, the region context menu).
+#[test]
+fn consolidating_a_mirrored_region_rebinds_its_note_collection() {
+    const REGION_A: Uuid = [60u8; 16];
+    const COLL_A: Uuid = [61u8; 16];
+    const NOTE_A: Uuid = [62u8; 16];
+    const COLL_B: Uuid = [63u8; 16];
+    const NOTE_B: Uuid = [64u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+        graph_box(TRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(1)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(REGION_A, "NoteRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(COLL_A, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(COLL_A, "NoteEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(NOTE_A, "NoteEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(COLL_A, vec![1])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(240)),
+            (20, FieldValue::Int32(55)), (21, FieldValue::Float32(0.9)), (24, FieldValue::Float32(0.0))
+        ]),
+        graph_box(COLL_B, "NoteEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(NOTE_B, "NoteEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(COLL_B, vec![1])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(240)),
+            (20, FieldValue::Int32(31)), (21, FieldValue::Float32(0.9)), (24, FieldValue::Float32(0.0))
+        ])
+    ]);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    engine.graph.transaction(&[
+        Update::Pointer {address: Address::of(REGION_A, vec![EVENTS_POINTER_KEY]),
+            old: Some(Address::of(COLL_A, vec![2])), new: Some(Address::of(COLL_B, vec![2]))}
+    ], &engine.registry).expect("consolidate");
+    engine.reconcile_one(&mut unit);
+    let sequencer = leaf_sequencer(&unit);
+    let flags = engine_env::block_flags::BlockFlags::create(true, false, true, false);
+    let mut events: Vec<engine_env::event::Event> = Vec::new();
+    sequencer.borrow_mut().process_notes(0.0, 40.0, flags, &mut |event| events.push(event));
+    assert!(events.iter().any(|event| matches!(event, engine_env::event::Event::NoteStart {pitch: 31, ..})),
+        "the consolidated region plays ITS OWN notes: {events:?}");
+    assert_eq!(unit.collections.entries.len(), 1, "the old collection observation was released");
 }
