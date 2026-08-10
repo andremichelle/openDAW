@@ -88,6 +88,7 @@ import {AudioContentHelpers} from "../project/audio/AudioContentHelpers"
 export namespace DawProjectImport {
     type AudioBusUnit = { audioBusBox: AudioBusBox, audioUnitBox: AudioUnitBox }
     type InstrumentUnit = { instrumentBox: InstrumentBox, audioUnitBox: AudioUnitBox }
+    type LoopWindow = { loopOffset: number, loopDuration: number } // in quarters
 
     const readTransport = ({tempo, timeSignature}: TransportSchema,
                            {bpm, signature: {nominator, denominator}}: TimelineBox) => {
@@ -377,18 +378,39 @@ export namespace DawProjectImport {
                 return Promise.all(clip.content?.map(createRegion) ?? [])
             }
 
+            // openDAW maps a global position to the content by mod(global - position + loopOffset, loopDuration),
+            // hence loopDuration is the length of the looped content window, anchored at content position zero.
+            // Without loop markers the clip must play its content window once, so the window has to reach up to
+            // playStart + duration. contentDuration keeps an already known content length (audio) from shrinking.
+            const readLoopWindow = (clip: ClipSchema, duration: number, contentDuration: number): LoopWindow => {
+                const loopOffset = clip.playStart ?? 0
+                const loopEnd = clip.loopEnd
+                if (isDefined(loopEnd)) {
+                    if (isDefined(clip.loopStart) && clip.loopStart > 0.0) {
+                        console.warn(`Clip '${clip.name}': loopStart (${clip.loopStart}) is not representable, `
+                            + `looping content from zero to ${loopEnd} instead`)
+                    }
+                    return {loopOffset, loopDuration: loopEnd}
+                }
+                return {loopOffset, loopDuration: Math.max(contentDuration, loopOffset + duration)}
+            }
+
             const readNoteRegionContent = (clip: ClipSchema, notes: NotesSchema, trackBox: TrackBox): void => {
+                const position = asDefined(clip.time, "Time not defined")
+                const duration = asDefined(clip.duration, "Duration not defined")
+                const {loopOffset, loopDuration} = readLoopWindow(clip, duration, 0.0)
+                const loopDurationInPulses = loopDuration * PPQN.Quarter
+                if (loopDurationInPulses < 1) {
+                    console.warn(`Skipping clip '${clip.name}': loop duration too small (${loopDurationInPulses} ppqn)`)
+                    return
+                }
                 const collectionBox = NoteEventCollectionBox.create(boxGraph, UUID.generate())
                 NoteRegionBox.create(boxGraph, UUID.generate(), box => {
-                    const position = asDefined(clip.time, "Time not defined")
-                    const duration = asDefined(clip.duration, "Duration not defined")
-                    const loopOffset = clip.playStart ?? 0
-                    const loopDuration = clip.loopEnd ?? duration - loopOffset
                     box.position.setValue(position * PPQN.Quarter)
                     box.duration.setValue(duration * PPQN.Quarter)
                     box.label.setValue(clip.name ?? "")
                     box.loopOffset.setValue(loopOffset * PPQN.Quarter)
-                    box.loopDuration.setValue(loopDuration * PPQN.Quarter)
+                    box.loopDuration.setValue(loopDurationInPulses)
                     box.mute.setValue(clip.enable === false)
                     box.hue.setValue(isUndefined(clip.color)
                         ? ColorCodes.forTrackType(trackBox.type.getValue())
@@ -427,22 +449,26 @@ export namespace DawProjectImport {
 
                 const position = asDefined(clip.time, "Time not defined")
                 const duration = asDefined(clip.duration, "Duration not defined")
-                const loopDuration = clip.loopEnd ?? warpDistance
+                const {loopOffset, loopDuration} = readLoopWindow(clip, duration, warpDistance)
                 const durationInPulses = duration * PPQN.Quarter
                 const loopDurationInPulses = loopDuration * PPQN.Quarter
-                if (loopDurationInPulses < 1) {
-                    console.warn(`Skipping clip '${clip.name}': loop duration too small (${loopDurationInPulses} ppqn)`)
+                // The warp markers map the entire file, hence they span the musical distance of the warps,
+                // which is independent of the loop window the clip plays from it.
+                const warpDistanceInPulses = warpDistance * PPQN.Quarter
+                if (loopDurationInPulses < 1 || warpDistanceInPulses < 1) {
+                    console.warn(`Skipping clip '${clip.name}': loop duration too small `
+                        + `(${loopDurationInPulses} ppqn, warps span ${warpDistanceInPulses} ppqn)`)
                     return
                 }
                 const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
                 const pitchStretch = AudioPitchStretchBox.create(boxGraph, UUID.generate())
                 AudioContentHelpers.addDefaultWarpMarkers(
-                    boxGraph, pitchStretch, loopDurationInPulses, audioFileBox.endInSeconds.getValue())
+                    boxGraph, pitchStretch, warpDistanceInPulses, audioFileBox.endInSeconds.getValue())
                 AudioRegionBox.create(boxGraph, UUID.generate(), box => {
                     box.position.setValue(position * PPQN.Quarter)
                     box.duration.setValue(durationInPulses)
                     box.label.setValue(clip.name ?? "")
-                    box.loopOffset.setValue(0.0)
+                    box.loopOffset.setValue(loopOffset * PPQN.Quarter)
                     box.loopDuration.setValue(loopDurationInPulses)
                     box.mute.setValue(clip.enable === false)
                     box.regions.refer(trackBox.regions)

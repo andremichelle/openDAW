@@ -27,6 +27,10 @@ how such a device is wired into openDAW's Rust→WASM engine architecture.
 - **Smooth** — damps the correction ratio for steady, S-curved note transitions
   without touching the sung vibrato.
 - **Shift** — manual transpose (−12…+12 st) composed after the snap.
+- **Near-zero onset note changes** — a sustained super-vibrato pitch move
+  re-seeds the note decision within ~11 ms (one frame, ~5 ms, at full-hard
+  Retune) instead of trailing the 120 ms pitch centre; attacks stay untouched,
+  so onsets land corrected without smearing consonants.
 - **Live tuner strip** — detected note, target note, and a cents needle streamed
   from the audio thread via the broadcast telemetry path (same mechanism as the
   peak meters).
@@ -284,6 +288,28 @@ boundaries sit at 50 cents, and the deadband would keep correcting toward the
 nearest note. Chromatic therefore always snaps to the nearest semitone; vibrato
 stability still comes from the 120 ms smoothed centre.
 
+### 5.5 Note-change re-seed (near-zero onset)
+
+The 120 ms centre is right for vibrato but wrong for note *changes*: on a fast
+run the target would trail the singer by up to ~120 ms. So a **sustained
+super-vibrato move re-seeds the centre**: when the folded instantaneous pitch
+stays more than `RESEED_SEMITONES = 0.7` st away from `m_slow` for
+`RESEED_FRAMES = 2` consecutive frames (~11 ms), `m_slow` jumps to the
+instantaneous pitch and the target re-decides immediately. The 0.7 st threshold
+sits beyond any vibrato excursion (so vibrato can never trigger it), and the
+~11 ms qualifier both rejects single-frame detector blips and stays inside the
+~20 ms window in which an onset cannot yet be heard as out of tune.
+
+At full-hard Retune (`hardness ≥ 0.95`) the onset path tightens further: the
+re-seed qualifier drops to a **single frame** (~5 ms note-change lock) and the
+voiced debounce drops from two frames to one — the classic retune-zero
+hard-tune, engaged from effectively the start of every note. Attacks and
+consonants remain untouched by design (correction is gated on voiced frames),
+which is what keeps zero-onset correction artifact-free: the aperiodic attack
+carries no perceived pitch to correct. The resulting correction *steps* are
+de-clicked by the smooth stage's 4 ms floor (§6.1), so a hard lock lands in
+~2 control frames rather than as a discontinuity in the shifter.
+
 ---
 
 ## 6. Stage 3 — Correction dynamics
@@ -305,10 +331,15 @@ correction  += (note_glide − correction) · smooth_α   // extra one-pole, τ 
   `TAU_SLOW = 0.5 s` at retune 0 (a slow, human portamento) down to
   `TAU_FAST = 0.002 s` at retune 1 (near-instant, the robotic hard-tune snap). The
   mapping is geometric: `τ = 0.5 · (0.002/0.5)^retune`.
-- **`smooth`** is an *extra* cascaded one-pole (`τ = smooth² · 0.300 s`) that rounds
-  note changes into an S-curve and damps detection jitter, so the shift ratio stays
-  steady (no audible speeding up/down). It damps the *correction*; it does **not**
-  remove sung vibrato.
+- **`smooth`** is an *extra* cascaded one-pole (`τ = max(smooth² · 0.300 s, 4 ms)`)
+  that rounds note changes into an S-curve and damps detection jitter, so the shift
+  ratio stays steady (no audible speeding up/down). It damps the *correction*; it
+  does **not** remove sung vibrato. The 4 ms floor is a **declick guard**: even at
+  smooth 0 a correction step (the one-frame note lock or a hard-mode engage) ramps
+  over ~2 control frames instead of stepping — a raw step renders as adjacent PSOLA
+  grains at discontinuous spacing, an audible click on the attack. The floor stays
+  inside the ~20 ms onset-perception window, so the zero-onset feel is unchanged,
+  and the vibrato-flatten path sits outside this filter entirely.
 
 ### 6.2 Flatten path — vibrato flattening (the hard-tune character)
 

@@ -3,8 +3,12 @@
 //! shared with the engine's SAB descriptor channel and the OPFS `markers.bin` cache. Runs in a
 //! worker's own instance/memory — never the audio thread.
 
+extern crate alloc;
+
+use alloc::vec::Vec;
 use stretch::spectral::SpectralStretcher;
-use stretch::{Analyzer, TransientDescriptor};
+use stretch::tempo;
+use stretch::{Analyzer, TempoConfig, TransientDescriptor};
 
 /// Allocate a buffer inside this module's memory (the worker copies PCM in, reads records out).
 #[no_mangle]
@@ -38,6 +42,25 @@ pub extern "C" fn analyze(
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr, count) };
     out.copy_from_slice(&analyzed.markers[..count]);
     count
+}
+
+/// Estimate the tempo of planar stereo PCM. Returns 0.0 when the material has no measurable pulse,
+/// which the host stores as `SampleMetaData.bpm = 0` and reads back as "unknown, leave it in seconds".
+/// One f32 out and no records: the answer is one number, so the ABI stays a return value.
+#[no_mangle]
+pub extern "C" fn detect_bpm(
+    left_ptr: *const f32,
+    right_ptr: *const f32,
+    num_frames: usize,
+    sample_rate: f32
+) -> f32 {
+    let left = unsafe { core::slice::from_raw_parts(left_ptr, num_frames) };
+    let right = unsafe { core::slice::from_raw_parts(right_ptr, num_frames) };
+    let mono: Vec<f32> = left.iter().zip(right.iter()).map(|(l, r)| (l + r) * 0.5).collect();
+    match tempo::detect(&mono, sample_rate, &TempoConfig::default()) {
+        Some(estimate) => estimate.bpm as f32,
+        None => 0.0
+    }
 }
 
 /// Record size in bytes (layout guard for the JS side).

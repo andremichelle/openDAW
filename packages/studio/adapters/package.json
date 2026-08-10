@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-adapters",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "license": "LGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@opendaw/lib-box": "^0.0.90",
-    "@opendaw/lib-dsp": "^0.0.88",
+    "@opendaw/lib-dsp": "^0.0.89",
     "@opendaw/lib-fusion": "^0.0.99",
     "@opendaw/lib-midi": "^0.0.70",
     "@opendaw/lib-runtime": "^0.0.83",

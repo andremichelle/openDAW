@@ -37,6 +37,12 @@ const TAU_FAST_SECONDS: f64 = 0.002; // retune = 1: near-instant note changes
 // note changes into an S-curve (smooth retune) and damps detection jitter. It does NOT touch the
 // vibrato-flatten path — that is applied after the filters, so flattening works at any smooth setting.
 const SMOOTH_MAX_TAU_SECONDS: f64 = 0.300; // smooth = 1: heavily damped, rock-steady note transitions
+// DECLICK floor on the smooth stage: even at smooth = 0 the correction ramps over ~4ms instead of
+// stepping. A raw step (the one-frame note lock / engage at hard retune) renders as adjacent PSOLA
+// grains at discontinuous spacing — an audible click on the attack. ~4ms reaches ~74% in one control
+// frame and ~93% in two, well inside the ~20ms window in which an onset cannot sound late, so the
+// zero-onset feel is unchanged. The vibrato-flatten path sits OUTSIDE this filter and is unaffected.
+const DECLICK_MIN_TAU_SECONDS: f64 = 0.004;
 // The vibrato-flatten term is applied OUTSIDE the retune/smooth one-poles (they would low-pass the ~5Hz
 // anti-vibrato modulation away), and DELAYED one frame so it lines up with the audio the shifter emits.
 // Empirically swept 0..4 on a 5.5Hz ±34c vibrato tone through core+PSOLA (see the ignored sweep test):
@@ -52,6 +58,17 @@ const DEVIATION_RING: usize = 8;
 const FLATTEN_MAX_DEVIATION: f64 = 1.5;
 const VOICED_DEBOUNCE: usize = 2; // consecutive voiced frames to engage
 const HANGOVER_FRAMES: usize = 8; // frames the target survives a momentary clarity loss (~85ms)
+// NOTE-CHANGE RE-SEED (near-zero onset): when the folded instantaneous pitch stays more than
+// RESEED_SEMITONES away from `m_slow` for RESEED_FRAMES consecutive frames, the centre JUMPS to the
+// instantaneous pitch instead of gliding through the 120ms one-pole — so the target re-decides ~11ms
+// after a genuine note move instead of trailing it by up to ~120ms. The threshold sits beyond any
+// vibrato excursion (±34c measured; ±50c worst case), so vibrato never triggers it, and the qualifier
+// window sits inside the ~20ms in which an onset cannot yet sound out of tune. At full-hard retune
+// (hardness >= HARD_ONSET_HARDNESS) the qualifier drops to a single frame and the voiced debounce to
+// one frame: the hard-tune mode locks a note change in ~5ms.
+const RESEED_SEMITONES: f64 = 0.7;
+const RESEED_FRAMES: usize = 2;
+const HARD_ONSET_HARDNESS: f64 = 0.95;
 const A4_HZ: f64 = 440.0;
 const MIDI_REF: f64 = 69.0;
 const SEARCH_SEMITONES: i32 = 7; // snap search radius; every mask has bit 0, so ±7 always hits
@@ -84,6 +101,7 @@ pub struct Autotune {
     shift: f64,
     m_slow: f64,
     prev_target: i32,
+    reseed_run: usize,
     voiced_run: usize,
     hangover: usize,
     engaged: bool,
@@ -187,6 +205,7 @@ impl Autotune {
         self.has_pending = false;
         self.m_slow = 0.0;
         self.prev_target = -1;
+        self.reseed_run = 0;
         self.voiced_run = 0;
         self.hangover = 0;
         self.engaged = false;
@@ -223,7 +242,8 @@ impl Autotune {
 
     /// The stabilised note decision for one detected pitch `m` (fractional MIDI). The target is snapped
     /// from a SMOOTHED pitch (`m_slow`, the sung centre) rather than the instantaneous pitch, so vibrato
-    /// crossing a scale-note boundary does not flip the target every cycle; `DEADBAND` hysteresis holds
+    /// crossing a scale-note boundary does not flip the target every cycle; a sustained super-vibrato move
+    /// RE-SEEDS the centre instead of gliding (near-zero onset on note changes); `DEADBAND` hysteresis holds
     /// the current note until the centre moves decisively toward a neighbour (skipped in chromatic, which
     /// always snaps to the nearest semitone), and the octave FOLD below pulls detector octave slips back
     /// to the current octave. Public so the golden fixture can drive it.
@@ -232,10 +252,26 @@ impl Autotune {
         // whole octaves back toward it. This corrects the detector's octave slips AND keeps all pitch
         // movement inside the current octave (a genuine octave leap is deliberately not followed).
         let mut folded = m;
+        let mut reseeded = false;
         if self.prev_target >= 0 {
             while folded - self.m_slow > 6.0 {folded -= 12.0;}
             while folded - self.m_slow < -6.0 {folded += 12.0;}
-            self.m_slow += (folded - self.m_slow) * self.note_alpha;
+            // Note-change re-seed: a sustained super-vibrato jump snaps the centre to the new pitch so
+            // the target re-decides now, not a 120ms glide later (see RESEED_SEMITONES).
+            if libm::fabs(folded - self.m_slow) > RESEED_SEMITONES {
+                self.reseed_run += 1;
+                let qualifier = if self.hardness >= HARD_ONSET_HARDNESS {1} else {RESEED_FRAMES};
+                if self.reseed_run >= qualifier {
+                    self.m_slow = folded;
+                    self.reseed_run = 0;
+                    reseeded = true;
+                } else {
+                    self.m_slow += (folded - self.m_slow) * self.note_alpha;
+                }
+            } else {
+                self.reseed_run = 0;
+                self.m_slow += (folded - self.m_slow) * self.note_alpha;
+            }
         } else {
             self.m_slow = folded;
         }
@@ -253,8 +289,10 @@ impl Autotune {
         };
         // On a note change, jump the vibrato reference with the note: `m_slow` otherwise catches up at
         // NOTE_TAU and the step reads as deviation, which the flatten would chase (the hard-retune
-        // settle defect). The intra-note offset is preserved; only the note delta is skipped.
-        if self.prev_target >= 0 && chosen != self.prev_target {
+        // settle defect). The intra-note offset is preserved; only the note delta is skipped. Skipped
+        // when the re-seed just fired: the centre already sits AT the sung pitch, and adding the note
+        // delta on top would overshoot it by a full interval (briefly re-targeting a wrong note).
+        if !reseeded && self.prev_target >= 0 && chosen != self.prev_target {
             self.m_slow += (chosen - self.prev_target) as f64;
         }
         self.prev_target = chosen;
@@ -359,7 +397,8 @@ impl Autotune {
         if voiced {
             self.voiced_run += 1;
             self.hangover = 0;
-            if !self.engaged && self.voiced_run >= VOICED_DEBOUNCE {
+            let debounce = if self.hardness >= HARD_ONSET_HARDNESS {1} else {VOICED_DEBOUNCE};
+            if !self.engaged && self.voiced_run >= debounce {
                 self.engaged = true;
                 self.prev_target = -1; // decide() re-seeds m_slow from the first engaged pitch
             }
@@ -393,12 +432,8 @@ impl Autotune {
         // ratio stays steady; finally clamp to keep the pitch inside the current octave.
         let retune_alpha = math::clamp(1.0 - libm::exp(-self.frame_seconds / self.retune_tau), 0.0, 1.0);
         self.note_glide += (self.note_target - self.note_glide) * retune_alpha;
-        let smooth_tau = self.smooth * self.smooth * SMOOTH_MAX_TAU_SECONDS;
-        let smooth_alpha = if smooth_tau > 0.0 {
-            math::clamp(1.0 - libm::exp(-self.frame_seconds / smooth_tau), 0.0, 1.0)
-        } else {
-            1.0
-        };
+        let smooth_tau = (self.smooth * self.smooth * SMOOTH_MAX_TAU_SECONDS).max(DECLICK_MIN_TAU_SECONDS);
+        let smooth_alpha = math::clamp(1.0 - libm::exp(-self.frame_seconds / smooth_tau), 0.0, 1.0);
         self.correction += (self.note_glide - self.correction) * smooth_alpha;
         self.correction = math::clamp(self.correction, -OCTAVE_CLAMP_SEMITONES, OCTAVE_CLAMP_SEMITONES);
         if self.note_target == 0.0 && libm::fabs(self.correction) < SMOOTHED_SNAP_EPSILON {
@@ -482,6 +517,115 @@ mod tests {
         tie.set_key(0);
         tie.set_scale(1);
         assert_eq!(tie.decide(61.0), 60, "exact tie breaks to the lower note");
+    }
+
+    #[test]
+    fn note_change_reseeds_the_centre_within_two_frames() {
+        // A real note move (> RESEED_SEMITONES from the centre) must re-target after RESEED_FRAMES
+        // frames (~11ms), not after the 120ms one-pole catches up. Frame 1 still holds (the qualifier
+        // rejects single-frame detector blips); frame 2 re-seeds and re-decides.
+        let mut core = make(48_000.0);
+        core.set_key(0);
+        core.set_scale(0);
+        for _ in 0..50 {core.decide(60.0);}
+        assert_eq!(core.decide(64.0), 60, "first frame of a move holds the old note");
+        assert_eq!(core.decide(64.0), 64, "second frame re-seeds the centre and re-targets");
+    }
+
+    #[test]
+    fn hard_retune_locks_a_note_change_in_one_frame() {
+        // At full-hard retune the qualifier drops to one frame: the very first frame of a note move
+        // re-seeds and re-targets (~5ms after the boundary) — the zero-onset hard-tune behavior.
+        let mut core = make(48_000.0);
+        core.set_key(0);
+        core.set_scale(0);
+        core.set_retune(1.0);
+        for _ in 0..50 {core.decide(60.0);}
+        assert_eq!(core.decide(64.0), 64, "hard retune re-targets on the first frame of a move");
+    }
+
+    #[test]
+    fn sub_threshold_moves_keep_the_smoothed_centre() {
+        // Drifts inside the vibrato-sized band (< RESEED_SEMITONES) must NOT re-seed: the centre still
+        // glides through the one-pole, so vibrato/embellishments cannot flip the target early.
+        let mut core = make(48_000.0);
+        core.set_key(0);
+        core.set_scale(0);
+        for _ in 0..50 {core.decide(60.0);}
+        let mut early = 60;
+        for _ in 0..5 {early = core.decide(60.65);}
+        assert_eq!(early, 60, "a sub-threshold move must not jump the centre");
+        let mut settled = 60;
+        for _ in 0..200 {settled = core.decide(60.65);}
+        assert_eq!(settled, 61, "the one-pole still tracks a sustained drift eventually");
+    }
+
+    #[test]
+    fn reseed_and_note_jump_do_not_double_compensate() {
+        // The re-seed sets the centre AT the sung pitch; the note-change centre jump must then be
+        // skipped, or the centre overshoots by a full interval and briefly re-targets a wrong note
+        // (60 -> 64 would excurse to 68 in chromatic). Across the whole transition only the old and
+        // the new note may ever appear.
+        let mut core = make(48_000.0);
+        core.set_key(0);
+        core.set_scale(0);
+        for _ in 0..50 {core.decide(60.0);}
+        for _ in 0..20 {
+            let target = core.decide(64.02);
+            assert!(target == 60 || target == 64, "transition visited a wrong note: {target}");
+        }
+        assert_eq!(core.decide(64.02), 64, "the transition settles on the sung note");
+    }
+
+    #[test]
+    fn smooth_zero_declicks_the_correction_step() {
+        // The declick floor: even at smooth 0 / retune 1 no single control frame may carry most of a
+        // correction step — a raw step renders as discontinuous PSOLA grain spacing (harsh attack).
+        // 233Hz (~58.03) in C major-pentatonic targets A(57): a ~1 st correction engages from zero.
+        let sample_rate = 48_000.0;
+        let mut core = make(sample_rate);
+        core.set_key(0);
+        core.set_scale(3);
+        core.set_retune(1.0);
+        core.set_smooth(0.0);
+        let frames = 24_000usize;
+        let samples: Vec<f32> = (0..frames)
+            .map(|index| 0.5 * libm::sinf(2.0 * PI * 233.0 * index as f32 / sample_rate))
+            .collect();
+        let mut previous = 0.0f32;
+        let mut max_delta = 0.0f32;
+        let mut offset = 0usize;
+        while offset < frames {
+            let end = core::cmp::min(offset + 128, frames);
+            core.feed(&samples, &samples, offset, end);
+            let now = core.current_semitones();
+            let delta = libm::fabsf(now - previous);
+            if delta > max_delta {max_delta = delta;}
+            previous = now;
+            offset = end;
+        }
+        let settled = libm::fabsf(core.current_semitones());
+        assert!(settled > 0.8, "sanity: a ~1 st correction engaged (got {settled})");
+        assert!(max_delta < 0.8 * settled,
+            "no single frame may step most of the correction (max {max_delta}, settled {settled})");
+    }
+
+    #[test]
+    fn hard_retune_engages_after_a_single_voiced_frame() {
+        // Hard mode halves the engage debounce: after exactly one detection frame the hard core is
+        // engaged while the default core still waits for its second frame. The first frame fires at
+        // decimated push 1024 (first HOP multiple past SPAN) = native sample 2048.
+        let sample_rate = 48_000.0;
+        let mut hard = make(sample_rate);
+        hard.set_retune(1.0);
+        let mut natural = make(sample_rate);
+        natural.set_retune(0.5);
+        feed_sine(&mut hard, 220.0, sample_rate, 2100);
+        feed_sine(&mut natural, 220.0, sample_rate, 2100);
+        assert!(hard.probe().2, "hard retune engages on the first voiced frame");
+        assert!(!natural.probe().2, "default debounce still waits for the second frame");
+        feed_sine(&mut natural, 220.0, sample_rate, 300);
+        assert!(natural.probe().2, "default engages on the second frame");
     }
 
     #[test]
