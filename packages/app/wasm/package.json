@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@opendaw/lib-dom": "^0.0.87",
-    "@opendaw/lib-dsp": "^0.0.88",
+    "@opendaw/lib-dsp": "^0.0.89",
     "@opendaw/lib-fusion": "^0.0.99",
     "@opendaw/lib-jsx": "^0.0.89",
     "@opendaw/lib-std": "^0.0.82",
@@ -32,7 +32,7 @@
   "devDependencies": {
     "@opendaw/lib-box": "^0.0.90",
     "@opendaw/lib-runtime": "^0.0.83",
-    "@opendaw/studio-adapters": "^0.1.6",
+    "@opendaw/studio-adapters": "^0.2.0",
     "@opendaw/studio-boxes": "^0.0.104",
     "sass": "^1.77.0",
     "vite": "^7.0.2",
