@@ -22,6 +22,7 @@ import {Icon} from "@/ui/components/Icon"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {SlotDragAndDrop} from "@/ui/devices/instruments/PlayfieldDeviceEditor/SlotDragAndDrop"
+import {ChopTrigger} from "@/ui/devices/instruments/PlayfieldDeviceEditor/ChopTrigger"
 import {NoteLabel} from "@/ui/devices/instruments/PlayfieldDeviceEditor/NoteLabel"
 import {DebugMenus} from "@/ui/menu/debug"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
@@ -192,7 +193,8 @@ export const BusySlot = ({
                 DebugMenus.debugBox(sample.box)
             )
         }),
-        sampleSelector.configureDrop(element),
+        sampleSelector.configureDrop(element, sample =>
+            ChopTrigger.forSample(service, adapter, sample, octave.getValue() * 12 + semitone)),
         {
             terminate: () => {
                 noteLifeTime.terminate()

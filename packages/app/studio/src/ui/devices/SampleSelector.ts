@@ -1,5 +1,5 @@
 import {AudioFileBox} from "@opendaw/studio-boxes"
-import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {isDefined, Option, Procedure, Terminable, UUID} from "@opendaw/lib-std"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Events, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
@@ -109,11 +109,12 @@ export class SampleSelector {
         return ContextMenu.subscribe(button, collector => collector.addItems(this.createRemoveMenuData()))
     }
 
-    configureDrop(dropZone: HTMLElement): Terminable {
+    configureDrop(dropZone: HTMLElement, onShiftDrop?: Procedure<Sample>): Terminable {
         return DragAndDrop.installTarget(dropZone, {
             drag: (_event: DragEvent, data: AnyDragData): boolean => data.type === "sample" || data.type === "file",
-            drop: async (_event: DragEvent, data: AnyDragData): Promise<void> => {
+            drop: async (event: DragEvent, data: AnyDragData): Promise<void> => {
                 if (!(data.type === "sample" || data.type === "file")) {return}
+                const shift = event.shiftKey
                 const dialog = Dialogs.processMonolog("Import Sample")
                 let sample: Sample
                 if (data.type === "sample") {
@@ -135,8 +136,12 @@ export class SampleSelector {
                     dialog.close()
                     return
                 }
-                this.newSample(sample)
                 dialog.close()
+                if (shift && isDefined(onShiftDrop)) {
+                    onShiftDrop(sample)
+                } else {
+                    this.newSample(sample)
+                }
             },
             enter: (allowDrop: boolean) => dropZone.classList.toggle("accept", allowDrop),
             leave: () => dropZone.classList.remove("accept")
