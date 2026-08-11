@@ -15,6 +15,9 @@ a strong focus on **education** and data-privacy.
 
 Subscribe to our [Newsletter](https://buttondown.com/opendaw) for regular updates.
 
+New to the codebase? [introduction.md](introduction.md) maps every component of this repository and how they depend on
+each other.
+
 <p align="center">
 <img src="https://raw.githubusercontent.com/andremichelle/openDAW/main/assets/studio-teaser.png"/>
 </p>
