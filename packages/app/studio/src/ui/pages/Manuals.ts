@@ -181,6 +181,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "Cubed",
+                        path: "/manuals/devices/instruments/cubed",
+                        icon: InstrumentFactories.Cubed.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "MIDIOutput",
                         path: "/manuals/devices/instruments/midioutput",
                         icon: InstrumentFactories.MIDIOutput.defaultIcon
