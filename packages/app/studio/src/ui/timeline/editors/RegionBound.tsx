@@ -7,6 +7,8 @@ import {LoopableRegion} from "@opendaw/lib-dsp"
 import {AnyRegionBoxAdapter, RegionAdapters, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {CaptureTarget, createRegionCapturing} from "@/ui/timeline/editors/RegionCapturingTarget.ts"
 import {installCursor} from "@/ui/hooks/cursor.ts"
+import {installAutoScroll} from "@/ui/AutoScroll.ts"
+import {Config} from "@/ui/timeline/Config.ts"
 import {Context2d, CssUtils, Dragging, Html} from "@opendaw/lib-dom"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
 import {RegionModifyContext} from "@/ui/timeline/editors/RegionModifyContext.ts"
@@ -121,6 +123,9 @@ export const RegionBound = ({lifecycle, service, range, snapping, modifyContext}
             requestUpdate()
         }),
         modifyContext.subscribeUpdate(requestUpdate),
+        installAutoScroll(canvas, (deltaX, _deltaY) => {
+            if (deltaX !== 0) {range.moveUnitBy(deltaX * range.unitsPerPixel * Config.AutoScrollHorizontalSpeed)}
+        }, {padding: Config.AutoScrollPadding}),
         Dragging.attach(canvas, (event: PointerEvent) => {
             const target: Nullable<CaptureTarget> = capturing.captureEvent(event)
             if (target === null) {return Option.None}

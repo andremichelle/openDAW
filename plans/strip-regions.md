@@ -54,6 +54,10 @@ The modifiers only write in `approve()`, so a drag has to be previewed through t
   never triggers auto-scroll.
 - `ClipReader` is untouched. Clips have no bounds and the strip ignores non-region boxes.
 
+The strip auto-scrolls horizontally like the editor bodies do (`installEditorAuxBody`) and like the tracks:
+`installAutoScroll` moving `range` by `Config.AutoScrollHorizontalSpeed` when the pointer leaves the canvas
+during a drag, so a bound can be dragged past the visible range.
+
 ## Selection is not cosmetic
 
 Every strip drag first does `regionSelection.deselectAll()` + `select(region)`. The overlap resolvers skip
