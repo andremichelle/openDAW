@@ -121,17 +121,23 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             if (target === null) {return}
             if (target.type === "region") {
                 timelineFocus.focusRegion(target.region)
-                target.region.trackBoxAdapter.ifSome(trackBoxAdapter => {
-                    if (!userEditingManager.audioUnit.isEditing(trackBoxAdapter.audioUnit.editing)) {
-                        userEditingManager.audioUnit.edit(trackBoxAdapter.audioUnit.editing)
-                    }
-                })
+                const optDeviceChain = target.region.trackBoxAdapter.map(({audioUnit}) => audioUnit.editing)
+                const switchDeviceChain = optDeviceChain
+                    .mapOr(vertex => !userEditingManager.audioUnit.isEditing(vertex), false)
                 // If the ContentEditor panel is open, clicking a region
                 // (whether already selected or not) brings it into
                 // edit-mode. No-op when that region is already the
                 // current edit target.
-                if (service.panelLayout.getByType(PanelType.ContentEditor).isVisible) {
-                    userEditingManager.timeline.editIfDifferent(target.region.box)
+                const switchRegion = service.panelLayout.getByType(PanelType.ContentEditor).isVisible
+                    && !userEditingManager.timeline.isEditing(target.region.box)
+                if (switchDeviceChain || switchRegion) {
+                    // Sealed into its own history entry: the edit pointers write unmarked, and a leftover
+                    // unmarked pending is folded into the NEXT marked modify, so an unsealed switch rides along
+                    // with whatever the user edits next and undoing that edit jumps region and device chain back.
+                    editing.modify(() => {
+                        if (switchDeviceChain) {userEditingManager.audioUnit.edit(optDeviceChain.unwrap("editing"))}
+                        if (switchRegion) {userEditingManager.timeline.edit(target.region.box)}
+                    })
                 }
             } else if (target.type === "track") {
                 timelineFocus.focusTrack(target.track.trackBoxAdapter)
