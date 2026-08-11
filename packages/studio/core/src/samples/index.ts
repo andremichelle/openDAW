@@ -1,3 +1,4 @@
+export * from "./AudioMaterialAnalyzer"
 export * from "./DefaultSampleLoader"
 export * from "./GlobalSampleLoaderManager"
 export * from "./SampleAPI"

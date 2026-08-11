@@ -1,4 +1,4 @@
-import {EmptyExec, isInstanceOf, RuntimeNotifier, Selection, Terminable} from "@opendaw/lib-std"
+import {EmptyExec, isInstanceOf, isNull, RuntimeNotifier, Selection, Terminable} from "@opendaw/lib-std"
 import {
     AudioConsolidation,
     AudioContentModifier,
@@ -16,13 +16,12 @@ import {RegionTransformer} from "@/ui/timeline/tracks/audio-unit/regions/RegionT
 import {NameValidator} from "@/ui/validator/name.ts"
 import {DebugMenus} from "@/ui/menu/debug"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
-import {BPMTools} from "@opendaw/lib-dsp"
 import {Browser} from "@opendaw/lib-dom"
-import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
 import {Promises} from "@opendaw/lib-runtime"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 import {TempoDetection} from "@/service/TempoDetection"
+import {AudioMaterialDialog} from "@/ui/analysis/AudioMaterialDialog"
 
 type Construct = {
     element: Element
@@ -181,25 +180,35 @@ export const installRegionContextMenu =
                     )
                 )),
                 MenuItem.default({
-                    label: "Calc Bpm",
-                    hidden: region.type !== "audio-region" || !Browser.isLocalHost()
-                }).setTriggerProcedure(() => {
-                    if (region.type === "audio-region") {
-                        region.file.data.ifSome(data => {
-                            const bpm = BPMTools.detect(data.frames[0], data.sampleRate)
-                            Dialogs.info({headline: "BPMTools", message: `${bpm.toFixed(3)} BPM`})
-                                .finally()
-                        })
-                    }
-                }),
-                MenuItem.default({
                     label: "Detect BPM (AI)...",
                     hidden: region.type !== "audio-region" || !Browser.isLocalHost()
                 }).setTriggerProcedure(() => {
                     if (region.type === "audio-region") {
                         region.file.data.ifSome(async data => {
                             const bpm = await TempoDetection.runOne(data.frames[0], data.sampleRate, region.label)
+                            // null is cancel or failure, both of which runOne has already reported.
+                            if (isNull(bpm)) {return}
                             await RuntimeNotifier.info({headline: region.label, message: `${bpm} bpm`})
+                        })
+                    }
+                }),
+                MenuItem.default({
+                    label: "Analyze Material...",
+                    hidden: region.type !== "audio-region" || !Browser.isLocalHost()
+                }).setTriggerProcedure(() => {
+                    if (region.type === "audio-region") {
+                        region.file.data.ifSome(async data => {
+                            const label = region.label.length === 0 ? "Audio" : region.label
+                            const updater = RuntimeNotifier.progress({headline: "Analyzing material", message: label})
+                            const {status, value, error} =
+                                await Promises.tryCatch(service.materialAnalyzer.analyze(data))
+                            updater.terminate()
+                            if (status === "rejected") {
+                                console.warn(error)
+                                RuntimeNotifier.notify({message: "Could not analyze material.", icon: "Warning"})
+                                return
+                            }
+                            await AudioMaterialDialog.show(label, value, element)
                         })
                     }
                 }),

@@ -7,3 +7,14 @@ export {OPENDAW_SDK_VERSION} from "./version"
 // `Workers` must be installed first, since that is where `WasmBpmDetector` runs the analysis.
 export {BpmDetector} from "@opendaw/studio-adapters"
 export {SampleService, WasmBpmDetector, Workers} from "@opendaw/studio-core"
+
+// Offline material analysis for imported audio: measured features (transient density, attack sharpness,
+// tonality, grid regularity) plus a heuristic `drumLoopProbability` over them. Built to pick a stretch
+// algorithm without asking the user, percussive material to `AudioTimeStretchBox`, sustained material to
+// `AudioSignalsmithBox`, but it decides nothing itself. Runs in the same worker and on the same wasm
+// module as `WasmBpmDetector`, so `Workers` must be installed first and the binary is compiled once.
+// `AudioMaterial` exposes the aggregation constants and the probability formula for hosts that would
+// rather weigh the raw features themselves.
+export {AudioMaterial} from "@opendaw/lib-dsp"
+export type {AudioMaterialFeatures, AudioMaterialSegment} from "@opendaw/lib-dsp"
+export {AudioMaterialAnalyzer} from "@opendaw/studio-core"

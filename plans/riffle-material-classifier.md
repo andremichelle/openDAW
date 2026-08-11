@@ -1,6 +1,6 @@
 # Audio material classifier for Riffle (pad vs drum loop)
 
-Status: DESIGN ONLY (approved scope 2026-08-05). Not implemented.
+Status: IMPLEMENTED 2026-08-11. Weights are hand-set from two measured samples, NOT fitted.
 
 ## Goal
 
@@ -33,6 +33,50 @@ drum-loop decision. Riffle may use our probability directly or compute their own
 
 The `stretch` analyzer crate is NOT a dependency of `crates/engine` (engine depends on `signalsmith`
 only). The analyzer is `stretch-wasm` exclusively, so exposing it to the SDK duplicates no engine code.
+
+## What was built
+
+- `packages/lib/dsp/src/audio-material.ts`: `AudioMaterialFeatures`, `AudioMaterialSegment`,
+  `AudioMaterialProtocol` and the pure `AudioMaterial` aggregation (unit-tested, no wasm).
+- `packages/studio/core-workers/src/material-analysis.ts`: decodes the descriptor records and
+  aggregates, in the core worker. `stretch-wasm.ts` now holds the single instance cache that both
+  bpm detection and material analysis share, so the binary compiles once per worker.
+- `packages/studio/core/src/samples/AudioMaterialAnalyzer.ts`: main-thread facade, mirrors
+  `WasmBpmDetector` (constructed with the module url, dispatches to `Workers.Material`).
+- `@opendaw/studio-sdk` re-exports `AudioMaterialAnalyzer`, `AudioMaterial` and the feature types.
+- Studio test surface: "Analyze Material..." in the audio-region context menu (localhost only, like
+  the sibling BPM entries), showing `AudioMaterialDialog`.
+
+The separate `@opendaw/stretch-wasm` package from the Packaging section was NOT created: since this
+plan was written, `@opendaw/studio-core-wasm` already builds and ships `dist/wasm/stretch_wasm.wasm`
+and the core worker already loads it for tempo detection. A second owner of the same binary would be
+the duplication the section set out to avoid. `packages/app/transient/src/detector.ts` still has its
+own copy of the loader and is still unmigrated.
+
+## Measured behavior (2026-08-11, two samples)
+
+| | BVKER Analog Full Drum Loop 02 | Skyence BuryMe Pad-Back 140 |
+|---|---|---|
+| onsets / density | 37, 8.09 /s | 60, 4.37 /s |
+| strength mean / median | 0.001 / 0.000 | 0.063 / 0.000 |
+| harmonicity mean / median | 0.599 / 0.653 | 0.997 / 0.998 |
+| pitched fraction | 18.9 % | 16.7 % |
+| beat regularity | 0.695 | 0.513 |
+| drumLoopProbability | 72.5 % | 12.2 % |
+
+Three of the plan's five terms do not survive contact with real material:
+
+- `strength` collapses to ~0 for BOTH classes. The analyzer derives it from onset exceedance over a
+  LOCAL median (`analyzer.rs`, `clamp01((exceedance - 1) / strength_knee)`), so in steady material
+  every onset barely clears its own neighborhood. Attack sharpness needs a different measure (crest
+  factor over a fixed window) before it can carry weight.
+- `pitchedFraction` does not separate (18.9 % vs 16.7 %): YIN returns period 0 for most segments of
+  sustained material too. It is now UNWEIGHTED in the probability and kept only as a feature.
+- Onset density is weak on its own: a moving pad fires 4.4 onsets per second.
+
+Harmonicity is the one term that separates cleanly, so it carries the weight (8.0 against 1.0-1.5 for
+the rest). `beatRegularity` additionally scales with how many intervals back it, because three onsets
+gave a pad a deceptively high grid score. All of this is still two data points, not a fit.
 
 ## Public API
 

@@ -44,6 +44,7 @@ import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters
 import {Address} from "@opendaw/lib-box"
 import {
     AudioContentFactory,
+    AudioMaterialAnalyzer,
     AudioWorklets,
     CloudAuthManager,
     DawProjectService,
@@ -92,6 +93,9 @@ range.showUnitInterval(0, PPQN.fromSignature(9, 1))
 
 const snapping = new Snapping(range)
 
+// The offline analyzer (transient descriptors, tempo, material features) the core worker instantiates once.
+const STRETCH_WASM_URL = `${import.meta.env.BASE_URL}wasm-engine/wasm/stretch_wasm.wasm`
+
 export class StudioService implements ProjectEnv {
     readonly layout = {
         screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default")
@@ -117,6 +121,7 @@ export class StudioService implements ProjectEnv {
     readonly recovery = new Recovery(() => this.#projectProfileService.getValue(), this)
     readonly engine = new EngineFacade()
     readonly presets = new PresetService(this)
+    readonly materialAnalyzer = new AudioMaterialAnalyzer(STRETCH_WASM_URL)
 
     readonly #softwareKeyboardLifeCycle = new Terminator()
     readonly #signals = new Notifier<StudioSignal>()
@@ -143,8 +148,7 @@ export class StudioService implements ProjectEnv {
                 readonly chainedSoundfontProvider: ChainedSoundfontProvider,
                 readonly cloudAuthManager: CloudAuthManager,
                 readonly buildInfo: BuildInfo) {
-        this.#sampleService = new SampleService(audioContext,
-            new WasmBpmDetector(`${import.meta.env.BASE_URL}wasm-engine/wasm/stretch_wasm.wasm`))
+        this.#sampleService = new SampleService(audioContext, new WasmBpmDetector(STRETCH_WASM_URL))
         this.#sampleService.subscribe(([sample, _]) => this.#signals.notify({
             type: "import-sample",
             sample
