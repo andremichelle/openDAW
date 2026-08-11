@@ -362,6 +362,7 @@ pub const FIELD_KIND_INT: u32 = 0;
 pub const FIELD_KIND_FLOAT: u32 = 1;
 pub const FIELD_KIND_BOOL: u32 = 2;
 pub const FIELD_KIND_STRING: u32 = 3;
+pub const FIELD_KIND_INT_ARRAY: u32 = 4;
 
 /// A PLAIN box-field value handed to a device's [`Instrument::field_changed`], ALREADY TYPED (the analog of
 /// [`ParamValue`] for observed fields, not parameters). Mirrors the box graph's field primitives one-to-one:
@@ -374,7 +375,8 @@ pub enum FieldValue<'a> {
     Int(i32),
     Float(f32),
     Bool(bool),
-    String(&'a str)
+    String(&'a str),
+    Ints(&'a [i32])
 }
 
 impl<'a> FieldValue<'a> {
@@ -395,6 +397,7 @@ impl<'a> FieldValue<'a> {
                 let bytes = slice::from_raw_parts(bits as *const u8, len as usize);
                 FieldValue::String(core::str::from_utf8(bytes).expect("field string is not valid UTF-8"))
             }
+            FIELD_KIND_INT_ARRAY => FieldValue::Ints(slice::from_raw_parts(bits as *const i32, len as usize)),
             _ => panic!("unknown field kind")
         }
     }
@@ -581,6 +584,16 @@ pub fn bind_broadcast_float(path: &[u16]) -> u32 {
     { unsafe { host_bind_broadcast(path.as_ptr() as u32, path.len() as u32, 1, 0) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = path; 0 }
+}
+
+/// Register an INT-ARRAY broadcast slot (TS `broadcastIntegers` read as a plain array, e.g. the Cubed
+/// editor's playing-step row): `len` i32s the UI reads with `subscribeIntegers`, overwritten in place each
+/// block. Use [`bind_broadcast_ints`] instead for the consume-on-read RING.
+pub fn bind_broadcast_int_array(path: &[u16], len: u32) -> u32 {
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_bind_broadcast(path.as_ptr() as u32, path.len() as u32, len, 3) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (path, len); 0 }
 }
 
 /// Register an INT-RING broadcast slot (TS `broadcastIntegers` consume-on-read, e.g. the Velocity device's
@@ -1081,6 +1094,16 @@ pub trait Instrument {
     fn process_audio(state: &mut Self::State, output: [&mut [f32]; 2], block: &Block);
     /// Apply one note event (on / off) at its sample offset.
     fn handle_event(state: &mut Self::State, event: &EventRecord);
+    /// Emit the device's OWN note events for the block's pulse range into `out`, returning how many were
+    /// written; an instrument with an internal sequencer (a step pattern, an arpeggio) writes its notes here.
+    /// They join the pulled input events, so they are offset-resolved, ordered and dispatched to
+    /// `handle_event` down the identical path - the device never places notes itself. Positions must lie in
+    /// `[from, to)`. Default: nothing (no internal source).
+    fn generate_events(state: &mut Self::State, from: f64, to: f64, flags: BlockFlags,
+                       out: &mut [EventRecord]) -> usize {
+        let _ = (state, from, to, flags, out);
+        0
+    }
     /// Reset the device's RUNTIME state to silence on a transport STOP: drop every active voice, clear
     /// envelopes / read heads / filter history, so the next playback starts clean. Keep the bindings (the param
     /// / sample / field ids and the resolved parameter values, the sample rate) — only the sounding state is
@@ -1194,6 +1217,7 @@ pub fn render_instrument<I: Instrument>(ports: Ports<I::State>) {
     // and dispatch. Then the once-per-quantum `finish`.
     for block in blocks {
         let mut count = pull_events(block.p0, block.p1, block.flags.0, event_scratch);
+        count += I::generate_events(state, block.p0, block.p1, block.flags, &mut event_scratch[count..]);
         let mut position = first_update_position(block.p0);
         while position < block.p1 && count < event_scratch.len() {
             event_scratch[count] = EventRecord {position, offset: 0, kind: EVENT_PARAM, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};

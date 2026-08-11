@@ -224,7 +224,6 @@ fn adding_an_effect_keeps_the_existing_processors() {
 
 #[test]
 fn a_chain_teardown_never_leaves_a_dead_or_skipped_meter_entry() {
-    let _guard = pull_lock();
     // The studio PeakMeter NaN crash: a wholesale chain teardown (freeze, composite/tape rebuild, an
     // instrument unwire) removes its processors, but the context's CACHED render queue still holds Rc
     // clones — so the torn-down meter slots look ALIVE through the reconcile's sweep AND block a
@@ -375,12 +374,6 @@ fn live_note_signal_reaches_the_leaf_sequencer() {
 }
 
 // ---- MIDI-output unit (engine-side instrument, TS MIDIOutputDeviceProcessor) ----
-// The MidiOut node pulls through the process-global `PULL` cell (single-threaded on wasm); tests that
-// drive `context.process` must not run concurrently, so they serialize on this lock.
-fn pull_lock() -> std::sync::MutexGuard<'static, ()> {
-    crate::pull_lock() // the ONE crate-wide lock (see `crate::pull_lock`)
-}
-
 const MIDI_DEV: Uuid = [30u8; 16];
 const MIDI_TARGET: Uuid = [31u8; 16];
 const MIDI_ROOT: Uuid = [32u8; 16];
@@ -421,7 +414,6 @@ fn note_bit(unit: &AudioUnitBinding, pitch: i32) -> bool {
 
 #[test]
 fn a_midi_output_unit_wires_emits_timed_midi_and_lights_its_note_bits() {
-    let _guard = pull_lock();
     let mut engine = engine_with_devices();
     engine.graph = midi_out_graph();
     engine.observe_midi_outputs(); // registers the MIDIOutputBox target (catch-up + sync)
@@ -468,7 +460,6 @@ fn a_midi_output_unit_wires_emits_timed_midi_and_lights_its_note_bits() {
 
 #[test]
 fn a_channel_edit_flushes_held_notes_and_a_value_edit_emits_a_cc() {
-    let _guard = pull_lock();
     let mut engine = engine_with_devices();
     engine.graph = midi_out_graph();
     engine.observe_midi_outputs();
@@ -2321,7 +2312,6 @@ fn update_positions_gate_on_transporting_blocks() {
     // free-running block whose pulse range keeps advancing at a non-song position) must yield NO update
     // positions, so automated parameters HOLD their last value and the UI broadcast stays still (BUG:
     // paused automation kept executing and animating the knobs).
-    let _guard = pull_lock();
     let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
         p0: 500.0, p1: 505.12, s0: 0, s1: 128, bpm: 120.0}];
     let playing = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(true, false, true, false),

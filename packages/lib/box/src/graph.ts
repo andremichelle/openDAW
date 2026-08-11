@@ -136,6 +136,8 @@ export class BoxGraph<BoxMap = any> {
 
     stageBox<B extends Box>(box: B, constructor?: Procedure<B>): B {
         this.#assertTransaction()
+        // Nested construction: the outer box is not staged yet, so pointers into it would refer to a vertex
+        // the graph does not have. Create the boxes in sequence and wire them after.
         assert(!this.#constructingBox, "Cannot construct box while other box is constructing")
         if (isDefined(constructor)) {
             this.#constructingBox = true

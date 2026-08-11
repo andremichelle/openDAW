@@ -39,6 +39,16 @@ export namespace StringMapping {
                 return index === -1 ? {type: "unknown", value: "💣"} : {type: "explicit", value: index}
             }
         }
+    export const oneBasedIndex = (unit: string = ""): StringMapping<int> =>
+        new class implements StringMapping<int> {
+            x(y: int): StringResult {
+                return {unit, value: String(y + 1)}
+            }
+            y(x: string): ParseResult<int> {
+                const value = parseInt(x.trim(), 10)
+                return isNaN(value) ? {type: "unknown", value: x.trim()} : {type: "explicit", value: value - 1}
+            }
+        }
     export const values = <T>(unit: string, values: ReadonlyArray<T>, strings: ReadonlyArray<string>): StringMapping<T> =>
         new class implements StringMapping<T> {
             x(y: T): StringResult {

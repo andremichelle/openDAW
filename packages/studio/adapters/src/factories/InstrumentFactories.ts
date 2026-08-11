@@ -2,6 +2,7 @@ import {
     ApparatDeviceBox,
     AudioFileBox,
     BoxIO,
+    CubedDeviceBox,
     NeonDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
@@ -137,6 +138,25 @@ export namespace InstrumentFactories {
             })
     }
 
+    export const Cubed: InstrumentFactory<void, CubedDeviceBox> = {
+        defaultName: "Cubed",
+        defaultIcon: IconSymbol.Cube,
+        briefDescription: "303-style Synth",
+        description: "Acid bassline synthesizer",
+        manualPage: "manuals/devices/instruments/cubed",
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): CubedDeviceBox =>
+            CubedDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                box.host.refer(host)
+            })
+    }
+
     export const Vaporisateur: InstrumentFactory<void, VaporisateurDeviceBox> = {
         defaultName: "Vaporisateur",
         defaultIcon: IconSymbol.Piano,
@@ -222,7 +242,7 @@ export namespace InstrumentFactories {
         })
     }
 
-    export const Named = {Apparat, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
+    export const Named = {Apparat, Cubed, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
     const useAudioFile = (boxGraph: BoxGraph, fileUUID: UUID.Bytes, name: string, duration: number) =>

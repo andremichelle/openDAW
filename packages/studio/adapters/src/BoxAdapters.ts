@@ -79,6 +79,7 @@ import {
     ValueEventBox,
     ValueEventCollectionBox,
     ValueRegionBox,
+    CubedDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     VocoderDeviceBox,
@@ -123,6 +124,7 @@ import {ArpeggioDeviceBoxAdapter} from "./devices/midi-effects/ArpeggioDeviceBox
 import {PitchDeviceBoxAdapter} from "./devices/midi-effects/PitchDeviceBoxAdapter"
 import {SpielwerkDeviceBoxAdapter} from "./devices/midi-effects/SpielwerkDeviceBoxAdapter"
 import {ApparatDeviceBoxAdapter} from "./devices/instruments/ApparatDeviceBoxAdapter"
+import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter"
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
 import {PlayfieldDeviceBoxAdapter} from "./devices/instruments/PlayfieldDeviceBoxAdapter"
@@ -225,6 +227,7 @@ export class BoxAdapters implements Terminable {
             visitTransientMarkerBox: (box: TransientMarkerBox) => new TransientMarkerBoxAdapter(box),
             visitWarpMarkerBox: (box: WarpMarkerBox) => new WarpMarkerBoxAdapter(this.#context, box),
             visitApparatDeviceBox: (box: ApparatDeviceBox) => new ApparatDeviceBoxAdapter(this.#context, box),
+            visitCubedDeviceBox: (box: CubedDeviceBox) => new CubedDeviceBoxAdapter(this.#context, box),
             visitAudioRegionBox: (box: AudioRegionBox) => new AudioRegionBoxAdapter(this.#context, box),
             visitAudioUnitBox: (box: AudioUnitBox) => new AudioUnitBoxAdapter(this.#context, box),
             visitAuxSendBox: (box: AuxSendBox): BoxAdapter => new AuxSendBoxAdapter(this.#context, box),
