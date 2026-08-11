@@ -10,9 +10,9 @@ export class AudioMaterialAnalyzer {
 
     constructor(moduleUrl: string) {this.#moduleUrl = moduleUrl}
 
-    // Rejects when the analysis module cannot be loaded. Unlike tempo detection there is no sane
+    // Rejects when the analysis module cannot be loaded. Unlike tempo detection, there is no sane
     // "unknown" to degrade to, so the caller decides what a failed analysis means.
-    analyze(audioData: Readonly<AudioData>): Promise<AudioMaterialFeatures> {
-        return Promise.resolve().then(() => Workers.Material.analyze(audioData, this.#moduleUrl))
+    async analyze(audioData: Readonly<AudioData>): Promise<AudioMaterialFeatures> {
+        return Workers.Material.analyze(audioData, this.#moduleUrl)
     }
 }
