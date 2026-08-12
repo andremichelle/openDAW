@@ -48,15 +48,15 @@ export class PitchDeviceBoxAdapter implements MidiEffectDeviceAdapter {
             octaves: this.#parametric.createParameter(
                 box.octaves,
                 ValueMapping.linearInteger(-7, 7),
-                StringMapping.numeric({unit: "oct", fractionDigits: 0}), "octaves"),
+                StringMapping.numeric({unit: "oct", fractionDigits: 0}), "Octaves"),
             semiTones: this.#parametric.createParameter(
                 box.semiTones,
                 ValueMapping.linearInteger(-36, 36),
-                StringMapping.numeric({unit: "st", fractionDigits: 0}), "semi-tones"),
+                StringMapping.numeric({unit: "st", fractionDigits: 0}), "Semi-Tones"),
             cent: this.#parametric.createParameter(
                 box.cents,
                 ValueMapping.linear(-50.0, 50.0),
-                StringMapping.numeric({unit: "cents", fractionDigits: 1}), "cents")
+                StringMapping.numeric({unit: "cents", fractionDigits: 1}), "Cents")
         } as const
     }
 }

@@ -59,7 +59,7 @@ export class ArpeggioDeviceBoxAdapter implements MidiEffectDeviceAdapter {
             modeIndex: this.#parametric.createParameter(
                 box.modeIndex,
                 ValueMapping.linearInteger(0, 2),
-                StringMapping.indices("", ["Up", "Down", "UpDown"]), "mode"),
+                StringMapping.indices("", ["Up", "Down", "UpDown"]), "Mode"),
             numOctaves: this.#parametric.createParameter(
                 box.numOctaves,
                 ValueMapping.linearInteger(1, 5),

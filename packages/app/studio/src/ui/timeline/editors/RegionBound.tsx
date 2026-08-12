@@ -18,6 +18,7 @@ import {RegionLoopDurationModifier} from "@/ui/timeline/tracks/audio-unit/region
 import {RegionMoveInTrackModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionMoveInTrackModifier.ts"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
 import {Cursor} from "@/ui/Cursors.ts"
+import {TimelineLabels} from "@/ui/timeline/TimelineLabels"
 
 const className = Html.adoptStyleSheet(css, "RegionBound")
 
@@ -76,7 +77,7 @@ export const RegionBound = ({lifecycle, service, range, snapping, modifyContext}
                 const x1 = Math.floor((range.unitToX(
                     offset + Math.min(complete - position, loopDuration)) - 1) * devicePixelRatio)
                 context.fillStyle = `hsl(${region.hue}, 60%, 60%)`
-                const {text} = Context2d.truncateText(context, region.label, x1 - x0)
+                const {text} = Context2d.truncateText(context, TimelineLabels.forRegion(region), x1 - x0)
                 context.fillText(text, x0, height * devicePixelRatio / 2.0 + 1)
             }
         }

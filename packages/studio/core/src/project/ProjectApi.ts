@@ -291,7 +291,7 @@ export class ProjectApi {
         const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
         return NoteClipBox.create(boxGraph, UUID.generate(), box => {
             box.index.setValue(clipIndex)
-            box.label.setValue(name ?? "Notes")
+            box.label.setValue(name ?? "")
             box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
             box.mute.setValue(false)
             box.duration.setValue(PPQN.Bar)
@@ -373,7 +373,7 @@ export class ProjectApi {
         const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
         return ValueClipBox.create(boxGraph, UUID.generate(), box => {
             box.index.setValue(clipIndex)
-            box.label.setValue(name ?? "Automation")
+            box.label.setValue(name ?? "")
             box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
             box.mute.setValue(false)
             box.duration.setValue(PPQN.Bar)
@@ -393,7 +393,7 @@ export class ProjectApi {
         const events = eventCollection ?? NoteEventCollectionBox.create(boxGraph, UUID.generate())
         return NoteRegionBox.create(boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
-            box.label.setValue(name ?? "Notes")
+            box.label.setValue(name ?? "")
             box.hue.setValue(hue ?? ColorCodes.forTrackType(trackBox.type.getValue()))
             box.mute.setValue(mute ?? false)
             box.duration.setValue(duration)
@@ -425,7 +425,7 @@ export class ProjectApi {
                     const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
                     return Option.wrap(NoteRegionBox.create(boxGraph, UUID.generate(), box => {
                         box.position.setValue(startPosition)
-                        box.label.setValue(name ?? "Notes")
+                        box.label.setValue(name ?? "")
                         box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
                         box.mute.setValue(false)
                         box.duration.setValue(duration)
@@ -443,7 +443,7 @@ export class ProjectApi {
                     const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
                     const region = ValueRegionBox.create(boxGraph, UUID.generate(), box => {
                         box.position.setValue(startPosition)
-                        box.label.setValue(name ?? "Automation")
+                        box.label.setValue(name ?? "")
                         box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
                         box.mute.setValue(false)
                         box.duration.setValue(duration)
