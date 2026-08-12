@@ -78,7 +78,6 @@ export namespace RecordAutomation {
             box.duration.setValue(PPQN.SemiQuaver)
             box.loopDuration.setValue(PPQN.SemiQuaver)
             box.hue.setValue(ColorCodes.forTrackType(TrackType.Value))
-            box.label.setValue(adapter.name)
             box.events.refer(collectionBox.owners)
             box.regions.refer(trackBox.regions)
         })

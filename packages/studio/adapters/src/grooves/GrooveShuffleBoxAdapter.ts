@@ -62,11 +62,11 @@ export class GrooveShuffleBoxAdapter implements GrooveAdapter {
                 box.duration,
                 ValueMapping.values(GrooveShuffleBoxAdapter.DurationPPQNs),
                 StringMapping.values("", GrooveShuffleBoxAdapter.DurationPPQNs, GrooveShuffleBoxAdapter.DurationStrings),
-                "duration"),
+                "Duration"),
             amount: this.#parametric.createParameter(
                 box.amount,
                 ValueMapping.unipolar(),
-                StringMapping.percent({fractionDigits: 0}), "amount")
+                StringMapping.percent({fractionDigits: 0}), "Amount")
         } as const
     }
 }

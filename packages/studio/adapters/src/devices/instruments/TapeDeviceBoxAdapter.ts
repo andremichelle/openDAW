@@ -57,19 +57,19 @@ export class TapeDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
             flutter: this.#parametric.createParameter(
                 box.flutter,
                 ValueMapping.unipolar(),
-                StringMapping.percent(), "flutter"),
+                StringMapping.percent(), "Flutter"),
             wow: this.#parametric.createParameter(
                 box.wow,
                 ValueMapping.unipolar(),
-                StringMapping.percent(), "wow"),
+                StringMapping.percent(), "Wow"),
             noise: this.#parametric.createParameter(
                 box.noise,
                 ValueMapping.unipolar(),
-                StringMapping.percent(), "noise"),
+                StringMapping.percent(), "Noise"),
             saturation: this.#parametric.createParameter(
                 box.saturation,
                 ValueMapping.unipolar(),
-                StringMapping.percent(), "saturation")
+                StringMapping.percent(), "Saturation")
         } as const
     }
 }

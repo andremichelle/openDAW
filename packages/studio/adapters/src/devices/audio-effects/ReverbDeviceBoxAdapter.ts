@@ -68,22 +68,22 @@ export class ReverbDeviceBoxAdapter implements AudioEffectDeviceAdapter {
                 box.damp,
                 ValueMapping.unipolar(),
                 StringMapping.numeric({unit: "%", fractionDigits: 0}),
-                "damping"),
+                "Damping"),
             filter: this.#parametric.createParameter(
                 box.filter,
                 ValueMapping.bipolar(),
                 StringMapping.numeric({unit: "%", fractionDigits: 0}),
-                "filter"),
+                "Filter"),
             dry: this.#parametric.createParameter(
                 box.dry,
                 ValueMapping.DefaultDecibel,
                 StringMapping.numeric({unit: "db", fractionDigits: 1}),
-                "dry"),
+                "Dry"),
             wet: this.#parametric.createParameter(
                 box.wet,
                 ValueMapping.DefaultDecibel,
                 StringMapping.numeric({unit: "db", fractionDigits: 1}),
-                "wet")
+                "Wet")
         } as const
     }
 }

@@ -1,4 +1,15 @@
-import {asInstanceOf, isDefined, Notifier, Nullable, Observable, Option, StringMapping, Terminable, ValueMapping} from "@opendaw/lib-std"
+import {
+    asInstanceOf,
+    isDefined,
+    Notifier,
+    Nullable,
+    Observable,
+    Option,
+    StringMapping,
+    Strings,
+    Terminable,
+    ValueMapping
+} from "@opendaw/lib-std"
 import {Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox} from "@opendaw/studio-boxes"
@@ -267,7 +278,9 @@ export namespace ScriptDeclaration {
                             valueMapping: ValueMapping.unipolar(),
                             stringMapping: StringMapping.percent({fractionDigits: 1})
                         }
-                    parametric.createParameter(paramBox.value, valueMapping, stringMapping, label,
+                    // Script authors write `@param` names in any case they like. The stored label stays verbatim
+                    // (ScriptCompiler keys parameter boxes by it), only the displayed name is normalised.
+                    parametric.createParameter(paramBox.value, valueMapping, stringMapping, Strings.capitalize(label),
                         undefined, paramBox.defaultValue.getValue())
                     if (isDefined(declaration)) {cachedDeclarations.set(label, declaration)}
                 }),
@@ -280,13 +293,13 @@ export namespace ScriptDeclaration {
             codeField.subscribe(() => {
                 const declarations = parseParams(codeField.getValue())
                 for (const adapter of parametric.parameters()) {
-                    const newDeclaration = declarations.find(decl => decl.label === adapter.name)
+                    const newDeclaration = declarations.find(decl => Strings.capitalize(decl.label) === adapter.name)
                     if (!isDefined(newDeclaration)) {continue}
-                    const oldDeclaration = cachedDeclarations.get(adapter.name)
+                    const oldDeclaration = cachedDeclarations.get(newDeclaration.label)
                     if (isDefined(oldDeclaration) && declarationEquals(oldDeclaration, newDeclaration)) {continue}
                     const {valueMapping, stringMapping} = resolveParamMappings(newDeclaration)
                     adapter.updateMappings(valueMapping, stringMapping)
-                    cachedDeclarations.set(adapter.name, newDeclaration)
+                    cachedDeclarations.set(newDeclaration.label, newDeclaration)
                 }
                 codeChangedNotifier.notify()
             }),

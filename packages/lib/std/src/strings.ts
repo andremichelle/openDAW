@@ -4,6 +4,10 @@ export namespace Strings {
     export const hyphenToCamelCase = (value: string) => value
         .replace(/-([a-z])/g, (g: string) => g[1].toUpperCase())
 
+    // Mirrors CSS `text-transform: capitalize`, so canvas text can match what the DOM renders.
+    export const capitalize = (value: string): string => value
+        .replace(/(^|\s)(\S)/g, (_: string, lead: string, char: string) => lead + char.toUpperCase())
+
     export const nonEmpty = (str: Maybe<string>): str is string => isDefined(str) && str.trim().length > 0
 
     export const fallback = (value: Maybe<string>, fallback: string): string => nonEmpty(value) ? value : fallback

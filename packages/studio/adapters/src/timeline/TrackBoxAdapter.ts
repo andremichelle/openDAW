@@ -218,6 +218,19 @@ export class TrackBoxAdapter implements BoxAdapter {
         return value
     }
 
+    get targetControlName(): Option<string> {
+        if (this.type !== TrackType.Value) {return Option.None}
+        return this.#box.target.targetVertex.flatMap(target => {
+            if (target.isField()) {
+                return this.#context.parameterFieldAdapters.opt(target.address).map(vertex => vertex.name)
+            } else if (target.isBox()) {
+                // I cannot think of a scenario where target is a box, but at least the UI shows the box's name
+                return Option.wrap(target.name)
+            }
+            return panic("Illegal State. Vertex is not a field nor box.")
+        })
+    }
+
     #catchupAndSubscribeTargetControlName(observer: Observer<Option<string>>): Subscription {
         const type = this.type
         switch (type) {
@@ -227,15 +240,7 @@ export class TrackBoxAdapter implements BoxAdapter {
                 return Terminable.Empty
             }
             case TrackType.Value: {
-                const target = this.#box.target.targetVertex.unwrap("target.target")
-                if (target.isField()) {
-                    observer(this.#context.parameterFieldAdapters.opt(target.address).map(vertex => vertex.name))
-                } else if (target.isBox()) {
-                    // I cannot think of a scenario where target is a box, but at least the UI shows the box's name
-                    observer(Option.wrap(target.name))
-                } else {
-                    return panic("Illegal State. Vertex is not a field nor box.")
-                }
+                observer(this.targetControlName)
                 return Terminable.Empty
             }
             case TrackType.Undefined: {

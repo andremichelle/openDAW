@@ -90,7 +90,7 @@ const QMapping = ValueMapping.exponential(0.01, 10.0)
 
 const createPass = (parametric: ParameterAdapterSet, pass: RevampPass, name: string): PassParameters => {
     return ({
-        enabled: parametric.createParameter(pass.enabled, ValueMapping.bool, StringMapping.bool, "enabled"),
+        enabled: parametric.createParameter(pass.enabled, ValueMapping.bool, StringMapping.bool, "Enabled"),
         frequency: parametric.createParameter(
             pass.frequency,
             FrequencyMapping,
@@ -110,7 +110,7 @@ const createPass = (parametric: ParameterAdapterSet, pass: RevampPass, name: str
 }
 
 const createShelf = (parametric: ParameterAdapterSet, shelf: RevampShelf, name: string): ShelfParameters => ({
-    enabled: parametric.createParameter(shelf.enabled, ValueMapping.bool, StringMapping.bool, "enabled"),
+    enabled: parametric.createParameter(shelf.enabled, ValueMapping.bool, StringMapping.bool, "Enabled"),
     frequency: parametric.createParameter(
         shelf.frequency,
         FrequencyMapping,
@@ -124,7 +124,7 @@ const createShelf = (parametric: ParameterAdapterSet, shelf: RevampShelf, name: 
 })
 
 const createBell = (parametric: ParameterAdapterSet, bell: RevampBell, name: string): BellParameters => ({
-    enabled: parametric.createParameter(bell.enabled, ValueMapping.bool, StringMapping.bool, "enabled"),
+    enabled: parametric.createParameter(bell.enabled, ValueMapping.bool, StringMapping.bool, "Enabled"),
     frequency: parametric.createParameter(
         bell.frequency,
         FrequencyMapping,

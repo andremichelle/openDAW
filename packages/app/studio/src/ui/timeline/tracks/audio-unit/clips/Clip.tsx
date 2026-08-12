@@ -15,6 +15,7 @@ import {ClipPlaybackButton} from "./ClipPlaybackButton"
 import {ppqn} from "@opendaw/lib-dsp"
 import {Events, Html} from "@opendaw/lib-dom"
 import {CanvasPainter, Project} from "@opendaw/studio-core"
+import {TimelineLabels} from "@/ui/timeline/TimelineLabels"
 
 const className = Html.adoptStyleSheet(css, "Clip")
 
@@ -53,7 +54,7 @@ export const Clip = ({lifecycle, project, adapter, gridColumn}: Construct) => {
     element.classList.toggle("selected", adapter.isSelected)
     element.classList.toggle("mirrored", adapter.isMirrowed)
     element.classList.toggle("muted", adapter.box.mute.getValue())
-    label.textContent = adapter.label.length === 0 ? "◻" : adapter.label
+    label.textContent = TimelineLabels.forClip(adapter)
     const timelineEditing = userEditingManager.timeline
     lifecycle.ownAll(
         state.catchupAndSubscribe(owner => {
@@ -73,7 +74,7 @@ export const Clip = ({lifecycle, project, adapter, gridColumn}: Construct) => {
         Events.subscribeDblDwn(element, () => timelineEditing.edit(adapter.box)),
         timelineEditing.catchupAndSubscribe(() => element.classList.toggle("edit-mode", timelineEditing.isEditing(adapter.box))),
         adapter.subscribeChange(() => {
-            label.textContent = adapter.label.length === 0 ? "◻" : adapter.label
+            label.textContent = TimelineLabels.forClip(adapter)
             element.style.setProperty("--hue", String(adapter.hue))
             element.classList.toggle("mirrored", adapter.isMirrowed)
             element.classList.toggle("muted", adapter.box.mute.getValue() || adapter.trackBoxAdapter.mapOr(track => !track.enabled.getValue(), false))

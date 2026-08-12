@@ -73,55 +73,55 @@ export class DelayDeviceBoxAdapter implements AudioEffectDeviceAdapter {
             preSyncTimeLeft: this.#parametric.createParameter(
                 box.preSyncTimeLeft,
                 ValueMapping.linearInteger(0, DelayDeviceBoxAdapter.Fractions.length - 1),
-                DelayDeviceBoxAdapter.FractionsStringMapping, "pre sync L"),
+                DelayDeviceBoxAdapter.FractionsStringMapping, "Pre Sync L"),
             preMillisTimeLeft: this.#parametric.createParameter(
                 box.preMillisTimeLeft,
                 ValueMapping.powerByCenter(100.0, 0.0, DelayDeviceBoxAdapter.MAX_MILLIS_TIME),
-                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "pre ms L"),
+                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "Pre MS L"),
             preSyncTimeRight: this.#parametric.createParameter(
                 box.preSyncTimeRight,
                 ValueMapping.linearInteger(0, DelayDeviceBoxAdapter.Fractions.length - 1),
-                DelayDeviceBoxAdapter.FractionsStringMapping, "pre sync R"),
+                DelayDeviceBoxAdapter.FractionsStringMapping, "Pre Sync R"),
             preMillisTimeRight: this.#parametric.createParameter(
                 box.preMillisTimeRight,
                 ValueMapping.powerByCenter(100.0, 0.0, DelayDeviceBoxAdapter.MAX_MILLIS_TIME),
-                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "pre ms R"),
+                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "Pre MS R"),
             delay: this.#parametric.createParameter(
                 box.delayMusical,
                 ValueMapping.linearInteger(0, DelayDeviceBoxAdapter.Fractions.length - 1),
-                DelayDeviceBoxAdapter.FractionsStringMapping, "delay"),
+                DelayDeviceBoxAdapter.FractionsStringMapping, "Delay"),
             millisTime: this.#parametric.createParameter(
                 box.delayMillis,
                 ValueMapping.powerByCenter(100.0, 0.0, DelayDeviceBoxAdapter.MAX_MILLIS_TIME),
-                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "ms"),
+                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "MS"),
             feedback: this.#parametric.createParameter(
                 box.feedback,
                 ValueMapping.unipolar(),
-                StringMapping.numeric({unit: "%", fractionDigits: 0}), "feedback"),
+                StringMapping.numeric({unit: "%", fractionDigits: 0}), "Feedback"),
             cross: this.#parametric.createParameter(
                 box.cross,
                 ValueMapping.unipolar(),
-                StringMapping.numeric({unit: "%", fractionDigits: 0}), "cross"),
+                StringMapping.numeric({unit: "%", fractionDigits: 0}), "Cross"),
             lfoSpeed: this.#parametric.createParameter(
                 box.lfoSpeed,
                 ValueMapping.exponential(DelayDeviceBoxAdapter.LFO_SPEED_MIN, DelayDeviceBoxAdapter.LFO_SPEED_MAX),
-                StringMapping.numeric({unit: "Hz", fractionDigits: 2}), "lfo speed"),
+                StringMapping.numeric({unit: "Hz", fractionDigits: 2}), "LFO Speed"),
             lfoDepth: this.#parametric.createParameter(
                 box.lfoDepth,
                 ValueMapping.power(4.0, 0.0, DelayDeviceBoxAdapter.LFO_DEPTH_MAX),
-                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "lfo depth"),
+                StringMapping.numeric({unit: "ms", fractionDigits: 1}), "LFO Depth"),
             filter: this.#parametric.createParameter(
                 box.filter,
                 ValueMapping.bipolar(),
-                StringMapping.numeric({unit: "%", fractionDigits: 0}), "filter", 0.5),
+                StringMapping.numeric({unit: "%", fractionDigits: 0}), "Filter", 0.5),
             dry: this.#parametric.createParameter(
                 box.dry,
                 ValueMapping.DefaultDecibel,
-                StringMapping.numeric({unit: "db", fractionDigits: 1}), "dry"),
+                StringMapping.numeric({unit: "db", fractionDigits: 1}), "Dry"),
             wet: this.#parametric.createParameter(
                 box.wet,
                 ValueMapping.DefaultDecibel,
-                StringMapping.numeric({unit: "db", fractionDigits: 1}), "wet")
+                StringMapping.numeric({unit: "db", fractionDigits: 1}), "Wet")
         } as const
     }
 }

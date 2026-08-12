@@ -130,19 +130,19 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
             volume: this.#parametric.createParameter(
                 box.volume,
                 AudioUnitBoxAdapter.VolumeMapper,
-                StringMapping.decible, "volume"),
+                StringMapping.decible, "Volume"),
             panning: this.#parametric.createParameter(
                 box.panning,
                 ValueMapping.bipolar(),
-                StringMapping.panning, "panning", 0.5),
+                StringMapping.panning, "Panning", 0.5),
             mute: this.#parametric.createParameter(
                 box.mute,
                 ValueMapping.bool,
-                StringMapping.bool, "mute"),
+                StringMapping.bool, "Mute"),
             solo: this.#parametric.createParameter(
                 box.solo,
                 ValueMapping.bool,
-                StringMapping.bool, "solo")
+                StringMapping.bool, "Solo")
         } as const
     }
 

@@ -62,7 +62,7 @@ export class StereoToolDeviceBoxAdapter implements AudioEffectDeviceAdapter {
             stereo: this.#parametric.createParameter(
                 box.stereo,
                 ValueMapping.bipolar(),
-                StringMapping.numeric({unit: "%", fractionDigits: 0}), "stereo", 0.5),
+                StringMapping.numeric({unit: "%", fractionDigits: 0}), "Stereo", 0.5),
             invertL: this.#parametric.createParameter(box.invertL, ValueMapping.bool, StringMapping.bool, "Invert Left"),
             invertR: this.#parametric.createParameter(box.invertR, ValueMapping.bool, StringMapping.bool, "Invert Right"),
             swap: this.#parametric.createParameter(box.swap, ValueMapping.bool, StringMapping.bool, "Swap")
