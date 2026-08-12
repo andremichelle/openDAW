@@ -12,9 +12,9 @@ export const CubedDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrumen
         constraints: {min: -1200, max: 1200, scaling: "linear"},
         unit: "ct"
     },
-    11: {type: "float32", name: "cutoff", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
-    12: {type: "float32", name: "resonance", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
-    13: {type: "float32", name: "env-mod", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
+    11: {type: "float32", name: "cutoff", pointerRules: ParameterPointerRules, value: 0.0, ...UnipolarConstraints},
+    12: {type: "float32", name: "resonance", pointerRules: ParameterPointerRules, value: 1.0, ...UnipolarConstraints},
+    13: {type: "float32", name: "env-mod", pointerRules: ParameterPointerRules, value: 1.0, ...UnipolarConstraints},
     14: {type: "float32", name: "decay", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
     15: {type: "float32", name: "accent", pointerRules: ParameterPointerRules, value: 1.0, ...UnipolarConstraints},
     16: {
