@@ -139,7 +139,7 @@ export namespace InstrumentFactories {
 
     export const Vaporisateur: InstrumentFactory<void, VaporisateurDeviceBox> = {
         defaultName: "Vaporisateur",
-        defaultIcon: IconSymbol.Piano,
+        defaultIcon: IconSymbol.Vaporisateur,
         briefDescription: "Subtractive Synth",
         description: "Classic subtractive synthesizer",
         manualPage: DeviceManualUrls.Vaporisateur,

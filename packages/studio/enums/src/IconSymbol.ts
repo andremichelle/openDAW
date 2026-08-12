@@ -174,6 +174,7 @@ export enum IconSymbol {
     Neon,
     Ring,
     Noise,
+    Vaporisateur,
 }
 
 export namespace IconSymbol {
