@@ -188,7 +188,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
             if (!navigator.onLine) {return}
             const {status, value: newBuildInfo} = await Promises.tryCatch(loadBuildInfo())
             if (status === "resolved" && newBuildInfo.uuid !== undefined && newBuildInfo.uuid !== buildInfo.uuid) {
-                document.body.prepend(UpdateMessage())
+                document.body.prepend(UpdateMessage({service}))
                 console.warn("A new version is online.")
                 clearInterval(checkUpdates)
             }
