@@ -138,15 +138,18 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                                 some: adapter => {
                                     selection.deselectAll()
                                     selection.select(adapter)
-                                    const clientRect = canvas.getBoundingClientRect()
+                                    // #309: anchor the move on the node that was just created, not on the raw
+                                    // cursor. ValueMoveModifier keeps (pointer - reference) as a grab offset, so
+                                    // handing it the unsnapped click would shift every snap boundary by the
+                                    // double-click's snap residual (a 10/90 split instead of 50/50).
                                     return modifyContext.startModifier(ValueMoveModifier.create({
                                         editing,
                                         element: canvas,
                                         context,
                                         selection,
                                         snapping,
-                                        pointerValue: valueAxis.axisToValue(event.clientY - clientRect.top),
-                                        pointerPulse: range.xToUnit(event.clientX - clientRect.left),
+                                        pointerValue: adapter.value,
+                                        pointerPulse: adapter.position + reader.offset,
                                         valueAxis,
                                         eventMapping,
                                         reference: adapter,
