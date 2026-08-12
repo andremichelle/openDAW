@@ -2,11 +2,11 @@ import trackCss from "./Track.sass?inline"
 import headerCss from "./headers/TrackHeader.sass?inline"
 import clipCss from "./clips/ClipLane.sass?inline"
 import regionCss from "./regions/RegionLane.sass?inline"
-import {Arrays, DefaultObservableValue, Lifecycle, Terminator, UUID} from "@opendaw/lib-std"
+import {Arrays, DefaultObservableValue, Lifecycle, Option, Terminator, UUID} from "@opendaw/lib-std"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {AudioBusBoxAdapter, AudioUnitBoxAdapter, ColorCodes, TrackType} from "@opendaw/studio-adapters"
+import {AudioBusBoxAdapter, AudioUnitBoxAdapter, ColorCodes, DeviceAccepts, TrackType} from "@opendaw/studio-adapters"
 import {TrackBox} from "@opendaw/studio-boxes"
 import {Colors, IconSymbol, TransientPlayMode} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -54,17 +54,27 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
                                               adapter={audioUnitBoxAdapter}/>
                 ))
             }}/>
-            {/* The only menu action is Delete, which the mandatory output can't offer — so no menu icon there. */}
-            {audioUnitBoxAdapter.isOutput ? <div/> : (
-                <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
-                    .addMenuItem(MenuItem.default({label: "Delete"})
+            <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => {
+                const optTrackType = audioUnitBoxAdapter.input.adapter()
+                    .flatMap(adapter => adapter.accepts === false
+                        ? Option.None
+                        : Option.wrap(DeviceAccepts.toTrackType(adapter.accepts)))
+                return parent.addMenuItem(
+                    MenuItem.default({
+                        label: optTrackType.mapOr(type => `New ${TrackType.toLabelString(type)} Track`, "New Track"),
+                        hidden: optTrackType.isEmpty()
+                    }).setTriggerProcedure(() => optTrackType.ifSome(type => project.editing.modify(() =>
+                        type === TrackType.Notes
+                            ? project.api.createNoteTrack(audioUnitBoxAdapter.box)
+                            : project.api.createAudioTrack(audioUnitBoxAdapter.box)))),
+                    MenuItem.default({label: "Delete", hidden: audioUnitBoxAdapter.isOutput})
                         .setTriggerProcedure(() => project.editing.modify(() =>
-                            project.api.deleteAudioUnit(audioUnitBoxAdapter.box)))))}
-                            style={{minWidth: "0", justifySelf: "end"}}
-                            appearance={{color: Colors.shadow, activeColor: Colors.cream}}>
-                    <Icon symbol={IconSymbol.Menu} style={{fontSize: "0.75em"}}/>
-                </MenuButton>
-            )}
+                            project.api.deleteAudioUnit(audioUnitBoxAdapter.box))))
+            })}
+                        style={{minWidth: "0", justifySelf: "end"}}
+                        appearance={{color: Colors.shadow, activeColor: Colors.cream}}>
+                <Icon symbol={IconSymbol.Menu} style={{fontSize: "0.75em"}}/>
+            </MenuButton>
         </div>
     )
     const regionArea: HTMLElement = <div className={Html.buildClassList(regionClassName, "deactive")}/>
