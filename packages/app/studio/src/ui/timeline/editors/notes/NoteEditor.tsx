@@ -1,6 +1,15 @@
 import css from "./NoteEditor.sass?inline"
 import {Html, ShortcutManager} from "@opendaw/lib-dom"
-import {DefaultObservableValue, int, isDefined, isInstanceOf, Lifecycle, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {
+    DefaultObservableValue,
+    int,
+    isDefined,
+    isInstanceOf,
+    Lifecycle,
+    Terminable,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {PitchEditor} from "@/ui/timeline/editors/notes/pitch/PitchEditor.tsx"
@@ -23,6 +32,7 @@ import {NotePropertyVelocity, PropertyAccessor} from "@/ui/timeline/editors/note
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {createPitchMenu} from "@/ui/timeline/editors/notes/pitch/PitchMenu.ts"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
+import {NoteDrawDefaults} from "@/ui/timeline/editors/notes/NoteDrawDefaults.ts"
 
 const className = Html.adoptStyleSheet(css, "NoteEditor")
 
@@ -127,8 +137,12 @@ export const NoteEditor =
         )
         lifecycle.ownAll(
             selection.catchupAndSubscribe({
-                onSelected: (adapter: NoteEventBoxAdapter) => adapter.onSelected(),
-                onDeselected: (adapter: NoteEventBoxAdapter) => adapter.onDeselected()
+                onSelected: (adapter: NoteEventBoxAdapter) => {
+                    adapter.onSelected()
+                    NoteDrawDefaults.remember(adapter)
+                },
+                onDeselected: (adapter: NoteEventBoxAdapter) =>
+                    adapter.onDeselected()
             }),
             viewMenu.attach(installNoteViewMenu(range, reader, pitchPositioner, reader.content.events)),
             editMenu.attach(createPitchMenu({
