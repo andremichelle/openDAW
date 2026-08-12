@@ -1,6 +1,6 @@
 import css from "./SlotEditor.sass?inline"
 import {Dragging, Html} from "@opendaw/lib-dom"
-import {asDefined, clamp, Lifecycle, Option} from "@opendaw/lib-std"
+import {asDefined, clamp, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon"
@@ -42,6 +42,7 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
     const waveformPainter = new CanvasPainter(waveformCanvas, painter =>
         SlotUtils.waveform(painter, adapter, adapter.indexField.getValue() % 12, true))
     const sampleSelector = new SampleSelector(service, SampleSelectStrategy.forPointerField(adapter.box.file))
+    const fileLifecycle = lifecycle.own(new Terminator())
     const createParameterInput = (parameter: AutomatableParameterFieldAdapter) => (
         <AutomationControl lifecycle={lifecycle}
                            editing={editing}
@@ -109,7 +110,12 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
             if (!pointer.isAttached()) {return}
             userEditingManager.audioUnit.edit(deviceAdapter.audioUnitBoxAdapter().box.editing)
         }),
-        adapter.box.file.subscribe(waveformPainter.requestUpdate),
+        adapter.box.file.catchupAndSubscribe(() => {
+            fileLifecycle.terminate()
+            adapter.file().ifSome(file => fileLifecycle.own(
+                file.getOrCreateLoader().subscribe(waveformPainter.requestUpdate)))
+            waveformPainter.requestUpdate()
+        }),
         sampleStart.subscribe(waveformPainter.requestUpdate),
         sampleEnd.subscribe(waveformPainter.requestUpdate),
         service.project.liveStreamReceiver.subscribeFloats(adapter.address, array => {
