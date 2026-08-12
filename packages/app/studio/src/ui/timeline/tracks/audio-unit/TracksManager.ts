@@ -398,7 +398,7 @@ export class TracksManager implements Terminable {
 
     // Header dedup + tree guides: a device GROUP is a run of lanes sharing unit, type and device name. The
     // first lane shows the device name, every lane always shows its own label, and the guide runs from the
-    // device name down to the group's last label ("group-end"). The type icon shows once per type-run.
+    // device name down to the group's last label ("group-end"). The unit icon shows once per unit-run.
     // A device GROUP: lanes sharing unit, track type and device name (consecutive in display order).
     #sameGroup(a: TrackContext, b: TrackContext): boolean {
         return a.audioUnitBoxAdapter === b.audioUnitBoxAdapter
@@ -431,10 +431,9 @@ export class TracksManager implements Terminable {
             context.unitHead.setValue(firstOfUnit && hasContent)
             const previous = index > 0 ? Option.wrap(tracks[index - 1]) : Option.None
             const next = index < tracks.length - 1 ? Option.wrap(tracks[index + 1]) : Option.None
-            const sameType = previous.mapOr(scope =>
-                scope.audioUnitBoxAdapter === context.audioUnitBoxAdapter
-                && scope.trackBoxAdapter.type === context.trackBoxAdapter.type, false)
-            context.element.classList.toggle("repeat-icon", sameType)
+            // The icon shows the UNIT, so it repeats on every further lane of the same unit, whatever its type.
+            context.element.classList.toggle("repeat-icon", previous
+                .mapOr(scope => scope.audioUnitBoxAdapter === context.audioUnitBoxAdapter, false))
             context.element.classList.toggle("repeat-device", previous.mapOr(scope => sameGroup(scope, context), false))
             context.element.classList.toggle("group-end", next.mapOr(scope => !sameGroup(context, scope), true))
             context.element.classList.toggle("no-guide",

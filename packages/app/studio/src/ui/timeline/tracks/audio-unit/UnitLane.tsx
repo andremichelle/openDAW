@@ -6,7 +6,7 @@ import {Arrays, DefaultObservableValue, Lifecycle, Option, Terminator, UUID} fro
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {AudioBusBoxAdapter, AudioUnitBoxAdapter, ColorCodes, DeviceAccepts, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {TrackBox} from "@opendaw/studio-boxes"
 import {Colors, IconSymbol, TransientPlayMode} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -17,6 +17,8 @@ import {DragAndDrop} from "@/ui/DragAndDrop"
 import {CollapseAutomationButton} from "@/ui/timeline/tracks/audio-unit/headers/CollapseAutomationButton.tsx"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-unit/TimelineDragAndDrop"
+import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts"
+import {TrackIcon} from "@/ui/timeline/tracks/audio-unit/headers/TrackIcon.tsx"
 
 const trackClassName = Html.adoptStyleSheet(trackCss, "Track")
 const headerClassName = Html.adoptStyleSheet(headerCss, "TrackHeader")
@@ -35,7 +37,9 @@ type Construct = {
 export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) => {
     const {project} = service
     const nameLabel: HTMLElement = <h5 className="device-name" style={{color: Colors.dark.toString()}}/>
-    const iconHost: HTMLElement = <div className="icon-container"/>
+    const iconHost: HTMLElement = (
+        <TrackIcon lifecycle={lifecycle} service={service} audioUnitBoxAdapter={audioUnitBoxAdapter}/>
+    )
     const header: HTMLElement = (
         <div className={Html.buildClassList(headerClassName, "is-primary")} tabindex={-1}>
             {iconHost}
@@ -54,23 +58,10 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
                                               adapter={audioUnitBoxAdapter}/>
                 ))
             }}/>
-            <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => {
-                const optTrackType = audioUnitBoxAdapter.input.adapter()
-                    .flatMap(adapter => adapter.accepts === false
-                        ? Option.None
-                        : Option.wrap(DeviceAccepts.toTrackType(adapter.accepts)))
-                return parent.addMenuItem(
-                    MenuItem.default({
-                        label: optTrackType.mapOr(type => `New ${TrackType.toLabelString(type)} Track`, "New Track"),
-                        hidden: optTrackType.isEmpty()
-                    }).setTriggerProcedure(() => optTrackType.ifSome(type => project.editing.modify(() =>
-                        type === TrackType.Notes
-                            ? project.api.createNoteTrack(audioUnitBoxAdapter.box)
-                            : project.api.createAudioTrack(audioUnitBoxAdapter.box)))),
-                    MenuItem.default({label: "Delete", hidden: audioUnitBoxAdapter.isOutput})
-                        .setTriggerProcedure(() => project.editing.modify(() =>
-                            project.api.deleteAudioUnit(audioUnitBoxAdapter.box))))
-            })}
+            {/* The same menu the track header mounts, minus the track-scoped entries (#309 follow-up): this lane
+                is the unit's only face while it has no notes/audio track, so it must offer the unit's actions. */}
+            <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(
+                installTrackHeaderMenu(service, audioUnitBoxAdapter, Option.None))}
                         style={{minWidth: "0", justifySelf: "end"}}
                         appearance={{color: Colors.shadow, activeColor: Colors.cream}}>
                 <Icon symbol={IconSymbol.Menu} style={{fontSize: "0.75em"}}/>
@@ -91,7 +82,6 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
     const acceptsAudio = () => audioUnitBoxAdapter.input.adapter()
         .mapOr(adapter => adapter.accepts === "audio", false)
     const audioUnitEditing = project.userEditingManager.audioUnit
-    const iconLifecycle = lifecycle.own(new Terminator())
     const clipCellsLifecycle = lifecycle.own(new Terminator())
     lifecycle.ownAll(
         // A sample dropped on an audio-accepting unit's synthetic lane creates the real audio track plus the
@@ -133,26 +123,6 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
         }),
         audioUnitBoxAdapter.input.catchupAndSubscribeLabelChange(option =>
             nameLabel.textContent = option.unwrapOrElse("")),
-        // The icon keeps the unit's color: an instrument its type color (green), a bus its OWN color field.
-        audioUnitBoxAdapter.input.catchupAndSubscribe(optAdapter => {
-            iconLifecycle.terminate()
-            optAdapter.match({
-                none: () => replaceChildren(iconHost, <Icon symbol={IconSymbol.AudioBus}/>),
-                some: inputAdapter => {
-                    const render = () => {
-                        const symbol = IconSymbol.fromName(inputAdapter.iconField.getValue())
-                        const color = inputAdapter instanceof AudioBusBoxAdapter
-                            ? inputAdapter.colorField.getValue()
-                            : ColorCodes.forAudioType(audioUnitBoxAdapter.type).toString()
-                        replaceChildren(iconHost, <Icon symbol={symbol} style={{color}}/>)
-                    }
-                    iconLifecycle.own(inputAdapter.iconField.catchupAndSubscribe(render))
-                    if (inputAdapter instanceof AudioBusBoxAdapter) {
-                        iconLifecycle.own(inputAdapter.colorField.subscribe(render))
-                    }
-                }
-            })
-        }),
         // The clip column mirrors the ClipLane's placeholder cells (no clips can exist on this lane).
         service.timeline.clips.visible.catchupAndSubscribe(visibleOwner => {
             clipCellsLifecycle.terminate()
