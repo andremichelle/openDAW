@@ -1,6 +1,7 @@
 import css from "./PitchEditor.sass?inline"
 import {
     byte,
+    isInstanceOf,
     isNotNull,
     isNull,
     Lifecycle,
@@ -38,9 +39,10 @@ import {NoteEventBox} from "@opendaw/studio-boxes"
 import {NoteCreateModifier} from "@/ui/timeline/editors/notes/NoteCreateModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {CssUtils, Dragging, Events, Html, ShortcutManager} from "@opendaw/lib-dom"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@opendaw/lib-dsp"
 import {Surface} from "@/ui/surface/Surface"
 import {NoteEditorShortcuts} from "@/ui/shortcuts/NoteEditorShortcuts"
+import {NoteDrawDefaults} from "@/ui/timeline/editors/notes/NoteDrawDefaults.ts"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 
 const className = Html.adoptStyleSheet(css, "PitchEditor")
@@ -90,16 +92,18 @@ export const PitchEditor = ({
         }
         pitchPainter(painter)
     }))
-    const auditionNote = (pitch: byte, duration: ppqn) => {
+    const auditionNote = (pitch: byte, duration: ppqn, velocity: unitValue) => {
         if (!StudioPreferences.settings.engine["note-audition-while-editing"]) {return}
         project.engine.noteSignal({
             type: "note-audition",
-            uuid: reader.trackBoxAdapter.unwrap("trackBoxAdapter").audioUnit.address.uuid, pitch, duration, velocity: 1.0
+            uuid: reader.trackBoxAdapter.unwrap("trackBoxAdapter").audioUnit.address.uuid, pitch, duration, velocity
         })
     }
     // before selection
     lifecycle.ownAll(
         installAutoScroll(canvas, (_deltaX, deltaY) => {
+            // A create drag reads the vertical distance as velocity and keeps the pitch it started on
+            if (modifyContext.modifier.mapOr(modifier => isInstanceOf(modifier, NoteCreateModifier), false)) {return}
             if (deltaY !== 0) {positioner.moveBy(deltaY * 0.05)}
         }, {padding: Config.AutoScrollPadding}),
         Dragging.attach(canvas, event => {
@@ -120,16 +124,18 @@ export const PitchEditor = ({
             if (target !== null) {return Option.None}
             const clientRect = canvas.getBoundingClientRect()
             const pitch = positioner.yToPitch(event.clientY - clientRect.top)
-            auditionNote(pitch, PPQN.SemiQuaver)
-            return modifyContext.startModifier(NoteCreateModifier.create({
+            const modifier = NoteCreateModifier.create({
                 editing,
                 element: canvas,
                 pointerPulse: range.xToUnit(event.clientX - clientRect.left) - reader.offset,
                 pointerPitch: pitch,
+                pointerClientY: event.clientY,
                 selection,
                 snapping,
                 reference: reader
-            }))
+            })
+            auditionNote(pitch, modifier.note.duration, modifier.note.velocity)
+            return modifyContext.startModifier(modifier)
         }, {permanentUpdates: true}))
     const selectionRectangle = (
         <SelectionRectangle lifecycle={lifecycle}
@@ -144,7 +150,7 @@ export const PitchEditor = ({
         if (adapters.length === 0) {return false}
         const first = adapters[0]
         editing.modify(() => adapters.forEach(procedure))
-        auditionNote(first.pitch, first.duration)
+        auditionNote(first.pitch, first.duration, first.velocity)
         return true
     }
     const updatePreview = (): void => {
@@ -154,9 +160,8 @@ export const PitchEditor = ({
             const rect = canvas.getBoundingClientRect()
             const pitch = positioner.yToPitch(point.y - rect.top)
             const position = snapping.xToUnitFloor(point.x - rect.left) - reader.offset
-            // TODO #58
-            const duration = snapping.value(position + reader.offset)
-            const velocity = 1.0
+            const duration = NoteDrawDefaults.durationOr(snapping.value(position + reader.offset))
+            const velocity = NoteDrawDefaults.velocity
             if (isNotNull(previewNote)) {
                 if (previewNote.pitch === pitch
                     && previewNote.position === position
@@ -216,24 +221,27 @@ export const PitchEditor = ({
                 const pulse = snapping.floor(range.xToUnit(clientX)) - reader.offset
                 const pitch = positioner.yToPitch(clientY)
                 const absolutePulse = reader.position + pulse
-                const duration = snapping.value(absolutePulse)
+                const duration = NoteDrawDefaults.durationOr(snapping.value(absolutePulse))
+                const velocity = NoteDrawDefaults.velocity
                 // Create AND select in one modify so the selection is captured in the same undo entry as the create
                 // (#208): a trailing select in its own mark=false modify would be a phantom second history step (two
                 // undos for one note). With the pre-flush removed, any leading SelectionRectangle deselect folds into
                 // this entry too, so the whole placement is a single undo step.
-                const boxOpt = editing.modify(() => {
+                const adapterOpt = editing.modify(() => {
                     const box = NoteEventBox.create(project.boxGraph, UUID.generate(), box => {
                         box.position.setValue(pulse)
                         box.pitch.setValue(pitch)
                         box.duration.setValue(duration)
+                        box.velocity.setValue(velocity)
                         box.events.refer(reader.content.box.events)
                     })
+                    const adapter = boxAdapters.adapterFor(box, NoteEventBoxAdapter)
                     selection.deselectAll()
-                    selection.select(boxAdapters.adapterFor(box, NoteEventBoxAdapter))
-                    return box
+                    selection.select(adapter)
+                    return adapter
                 })
-                if (boxOpt.nonEmpty()) {
-                    auditionNote(pitch, duration)
+                if (adapterOpt.nonEmpty()) {
+                    auditionNote(pitch, duration, velocity)
                 }
             } else if (target.type !== "loop-duration") {
                 editing.modify(() => target.event.box.delete())
@@ -245,8 +253,8 @@ export const PitchEditor = ({
             const clientRect = canvas.getBoundingClientRect()
             if (target.type === "note-position") {
                 const noteEventBoxAdapter = target.event
-                const {pitch, duration} = noteEventBoxAdapter
-                auditionNote(pitch, duration)
+                const {pitch, duration, velocity} = noteEventBoxAdapter
+                auditionNote(pitch, duration, velocity)
                 const modifier = NoteMoveModifier.create({
                     editing,
                     element: canvas,
@@ -257,12 +265,12 @@ export const PitchEditor = ({
                     snapping,
                     reference: noteEventBoxAdapter
                 })
-                modifier.subscribePitchChanged(pitch => auditionNote(pitch, duration))
+                modifier.subscribePitchChanged(pitch => auditionNote(pitch, duration, velocity))
                 return modifyContext.startModifier(modifier)
             } else if (target.type === "note-end") {
                 const noteEventBoxAdapter = target.event
-                const {pitch, duration} = noteEventBoxAdapter
-                auditionNote(pitch, duration)
+                const {pitch, duration, velocity} = noteEventBoxAdapter
+                auditionNote(pitch, duration, velocity)
                 return modifyContext.startModifier(NoteDurationModifier.create({
                     editing,
                     element: canvas,

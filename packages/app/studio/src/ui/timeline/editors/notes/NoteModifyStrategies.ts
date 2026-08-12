@@ -9,7 +9,6 @@ export type Line = [Point, Point]
 
 export interface NoteModifyStrategies {
     showOrigin(): boolean
-    showCreation(): Option<UINoteEvent>
     showPropertyLine(): Option<Line>
     readContentDuration(owner: NoteEventOwnerReader): ppqn
     selectedModifyStrategy(): NoteModifyStrategy
@@ -20,7 +19,6 @@ export namespace NoteModifyStrategies {
     export const Identity: NoteModifyStrategies = Object.freeze({
         showOrigin: (): boolean => false,
         showPropertyLine: (): Option<Line> => Option.None,
-        showCreation: (): Option<UINoteEvent> => Option.None,
         readContentDuration: (region: NoteEventOwnerReader): ppqn => region.contentDuration,
         selectedModifyStrategy: (): NoteModifyStrategy => NoteModifyStrategy.Identity,
         unselectedModifyStrategy: (): NoteModifyStrategy => NoteModifyStrategy.Identity

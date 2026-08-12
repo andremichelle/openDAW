@@ -6,7 +6,7 @@
 use core::cell::RefCell;
 use abi::{Block, EventRecord};
 use dsp::glide::Glide;
-use dsp::RENDER_QUANTUM;
+use dsp::{velocity_to_gain, RENDER_QUANTUM};
 use voicing::Voice;
 use crate::envelope::{Envelope, EnvelopeSpec};
 use crate::pd;
@@ -158,6 +158,7 @@ pub struct NeonVoice {
     dying: bool, // force-stopped: keep rendering through a short output fade instead of cutting
     fade: f32,
     note: f32,
+    velocity: f32,
     glide: Glide,
     lines: [LineVoice; 2],
     vib_phase: f32,
@@ -168,7 +169,7 @@ pub struct NeonVoice {
 
 impl Default for NeonVoice {
     fn default() -> Self {
-        Self {gate: false, dcw_amount0: 0.0, dca_gain0: 0.0, pending_release: false, dying: false, fade: 1.0, note: 0.0, glide: Glide::default(),
+        Self {gate: false, dcw_amount0: 0.0, dca_gain0: 0.0, pending_release: false, dying: false, fade: 1.0, note: 0.0, velocity: 1.0, glide: Glide::default(),
             lines: [LineVoice::default(); 2], vib_phase: 0.0, age_seconds: 0.0, rng: 0, sample_rate: 0.0}
     }
 }
@@ -228,6 +229,7 @@ impl NeonVoice {
         let vibrato = &shared.vibrato;
         // Measured: key follow tracks the OCTAVE-SHIFTED pitch (note 72 at octave 0 ≡ note 60 at +1).
         let kf_note = self.note + libm::log2f(shared.octave_multiplier) * 12.0;
+        let velocity_gain = velocity_to_gain(self.velocity);
         for index in 0..len {
             self.age_seconds += dt;
             let ramp = if vibrato.depth_cents <= 0.0 {0.0} else {
@@ -350,7 +352,7 @@ impl NeonVoice {
             } else {
                 outs[0]
             };
-            let sample = combined * 0.25 * self.fade;
+            let sample = combined * 0.25 * self.fade * velocity_gain;
             out_left[index] += sample;
             out_right[index] += sample;
             if self.dying {
@@ -373,6 +375,7 @@ impl Voice for NeonVoice {
         self.dying = false;
         self.fade = 1.0;
         self.note = event.pitch as f32;
+        self.velocity = event.velocity;
         self.sample_rate = shared.sample_rate;
         self.glide = Glide::default();
         self.glide.init(frequency as f64);

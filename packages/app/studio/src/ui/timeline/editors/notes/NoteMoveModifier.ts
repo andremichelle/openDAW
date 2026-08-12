@@ -19,7 +19,6 @@ import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {PitchPositioner} from "@/ui/timeline/editors/notes/pitch/PitchPositioner.ts"
 
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {UINoteEvent} from "@/ui/timeline/editors/notes/UINoteEvent.ts"
 import {Dragging} from "@opendaw/lib-dom"
 
 class SelectedModifyStrategy implements NoteModifyStrategy {
@@ -107,7 +106,6 @@ export class NoteMoveModifier implements NoteModifier {
     get deltaPosition(): ppqn {return this.#deltaPosition}
 
     showOrigin(): boolean {return this.#copy}
-    showCreation(): Option<UINoteEvent> {return Option.None}
     showPropertyLine(): Option<Line> {return Option.None}
     readContentDuration(region: NoteEventOwnerReader): number {return region.contentDuration}
     selectedModifyStrategy(): NoteModifyStrategy {return this.#selectedModifyStrategy}
