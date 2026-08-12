@@ -1,11 +1,11 @@
-import {ByteArrayInput, Class, DefaultObservableValue, isAbsent, ObservableValue, Option, tryCatch, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, Class, DefaultObservableValue, ObservableValue, Option, tryCatch, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Box, BoxGraph} from "@opendaw/lib-box"
-import {AudioFileBox, AudioUnitBox, BoxIO, SoundfontFileBox} from "@opendaw/studio-boxes"
-import {AudioUnitType} from "@opendaw/studio-enums"
-import {DeviceBoxUtils, InstrumentFactories, PresetHeader} from "@opendaw/studio-adapters"
+import {AudioFileBox, BoxIO, SoundfontFileBox} from "@opendaw/studio-boxes"
+import {PresetHeader} from "@opendaw/studio-adapters"
 import {Workers} from "../Workers"
 import {PresetMeta} from "./PresetMeta"
+import {PresetInspector} from "./PresetInspector"
 
 const FOLDER = "presets/user"
 const INDEX_PATH = `${FOLDER}/index.json`
@@ -23,32 +23,6 @@ const parseIndex = (bytes: Uint8Array): Option<ReadonlyArray<PresetMeta>> => {
 }
 
 const HEADER_SIZE = 8
-
-type RackInspection = {name: string, instrument: InstrumentFactories.Keys}
-
-const inspectRackBinary = (bytes: Uint8Array): Option<RackInspection> => {
-    if (bytes.byteLength < HEADER_SIZE) {return Option.None}
-    const headerBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + HEADER_SIZE)
-    const header = new ByteArrayInput(headerBuffer)
-    if (header.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {return Option.None}
-    if (header.readInt() !== PresetHeader.FORMAT_VERSION) {return Option.None}
-    const graph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
-    const decode = tryCatch(() => graph.fromArrayBuffer(
-        bytes.buffer.slice(bytes.byteOffset + HEADER_SIZE, bytes.byteOffset + bytes.byteLength), false))
-    if (decode.status === "failure") {return Option.None}
-    const audioUnit = graph.boxes()
-        .filter((box): box is AudioUnitBox => box instanceof AudioUnitBox)
-        .find(box => box.type.getValue() !== AudioUnitType.Output)
-    if (isAbsent(audioUnit)) {return Option.None}
-    const inputBox = audioUnit.input.pointerHub.incoming().at(0)?.box
-    if (isAbsent(inputBox)) {return Option.None}
-    const stripped = inputBox.name.replace(/DeviceBox$/, "")
-    if (!Object.hasOwn(InstrumentFactories.Named, stripped)) {return Option.None}
-    const instrument = stripped as InstrumentFactories.Keys
-    const labeled = DeviceBoxUtils.isInstrumentDeviceBox(inputBox) ? inputBox.label.getValue() : ""
-    const name = labeled.length > 0 ? labeled : InstrumentFactories.Named[instrument].defaultName
-    return Option.wrap({name, instrument})
-}
 
 export namespace PresetStorage {
     const cache = new DefaultObservableValue<ReadonlyArray<PresetMeta>>([])
@@ -139,14 +113,14 @@ export namespace PresetStorage {
             const read = await Promises.tryCatch(Workers.Opfs.read(fileFor(UUID.parse(entry.uuid))))
             if (read.status === "rejected") {continue}
             const bytes = read.value
-            if (bytes.byteLength < 8) {continue}
-            const headerBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + 8)
+            if (bytes.byteLength < HEADER_SIZE) {continue}
+            const headerBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + HEADER_SIZE)
             const header = new ByteArrayInput(headerBuffer)
             if (header.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {continue}
             if (header.readInt() !== PresetHeader.FORMAT_VERSION) {continue}
             const graph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
             const decoded = tryCatch(() => graph.fromArrayBuffer(
-                bytes.buffer.slice(bytes.byteOffset + 8, bytes.byteOffset + bytes.byteLength), false))
+                bytes.buffer.slice(bytes.byteOffset + HEADER_SIZE, bytes.byteOffset + bytes.byteLength), false))
             if (decoded.status === "failure") {continue}
             for (const box of graph.boxes() as Iterable<Box>) {
                 if (!(box instanceof type)) {continue}
@@ -172,21 +146,19 @@ export namespace PresetStorage {
                 console.warn(`PresetStorage.rebuildIndex: cannot read ${path}`, read.error)
                 continue
             }
-            const inspected = inspectRackBinary(read.value)
+            const inspected = PresetInspector.inspect(read.value)
             if (inspected.isEmpty()) {
-                console.warn(`PresetStorage.rebuildIndex: ${path} is not a recognised rack preset; skipping`)
+                console.warn(`PresetStorage.rebuildIndex: ${path} is not a recognised preset; skipping`)
                 continue
             }
-            const {name, instrument} = inspected.unwrap()
-            recovered.push({
-                category: "audio-unit",
+            const inspection = inspected.unwrap()
+            recovered.push(PresetInspector.toMeta(inspection, {
                 uuid: uuidStr,
-                name,
-                instrument,
+                name: inspection.name,
                 description: "",
                 created: 0,
                 modified: 0
-            })
+            }))
         }
         await writeAndCache(recovered)
         return recovered

@@ -30,4 +30,4 @@ tsconfig.tsbuildinfo
 # (scripts/download-inference-models.sh) populates the *.onnx files on demand.
 /assets.opendaw.studio/models/**/*.onnx
 /assets.opendaw.studio/models/**/*.onnx.partial
-presets/
+/presets/
