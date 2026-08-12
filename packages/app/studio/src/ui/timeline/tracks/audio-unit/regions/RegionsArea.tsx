@@ -28,6 +28,7 @@ import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
 import {ClipboardManager, ElementCapturing, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
+import {WheelScaling} from "@/ui/timeline/WheelScaling"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
 
@@ -245,9 +246,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             if (event.shiftKey) {
                 event.preventDefault()
                 event.stopPropagation()
-                const scale = event.deltaY * 0.01
-                const rect = element.getBoundingClientRect()
-                range.scaleBy(scale, range.xToValue(event.clientX - rect.left))
+                WheelScaling.apply(element, range, event)
             } else if (event.altKey) {
                 event.preventDefault()
                 event.stopPropagation()

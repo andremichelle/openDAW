@@ -39,7 +39,7 @@ export namespace PreferencesPageLabels {
             fields: {
                 "dragging-use-pointer-lock": "Use Pointer Lock at window edges [Chrome only]",
                 "modifying-controls-wheel": "Modify controls with mouse wheel",
-                "normalize-mouse-wheel": "Normalize mouse wheel speed"
+                "wheel-zoom-speed": "Wheel zoom speed (%)"
             }
         },
         "editing": {

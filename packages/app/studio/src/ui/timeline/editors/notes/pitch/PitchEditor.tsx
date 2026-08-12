@@ -203,6 +203,7 @@ export const PitchEditor = ({
         }),
         Html.watchResize(canvas, () => range.width = canvas.clientWidth),
         Events.subscribe(canvas, "wheel", (event: WheelEvent) => {
+            if (event.shiftKey) {return}
             event.preventDefault()
             positioner.scrollModel.moveBy(event.deltaY)
         }, {passive: false}),
