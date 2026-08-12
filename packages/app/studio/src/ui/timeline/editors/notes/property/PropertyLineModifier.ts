@@ -61,7 +61,6 @@ export class PropertyLineModifier implements NoteModifier, NoteModifyStrategy {
     get property(): PropertyAccessor {return this.#property}
 
     showOrigin(): boolean {return false}
-    showCreation(): Option<UINoteEvent> {return Option.None}
     showPropertyLine(): Option<Line> {return Option.wrap([this.#lineOrigin, this.#lineEnd])}
     readContentDuration(owner: NoteEventOwnerReader): number {return owner.contentDuration}
     selectedModifyStrategy(): NoteModifyStrategy {return this}

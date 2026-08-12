@@ -4,7 +4,6 @@ import {Line, NoteModifyStrategy} from "./NoteModifyStrategies"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {UINoteEvent} from "./UINoteEvent"
 import {Dragging} from "@opendaw/lib-dom"
 
 type Construct = Readonly<{
@@ -44,7 +43,6 @@ export class NoteContentDurationModifier implements NoteModifier {
     subscribeUpdate(observer: Observer<void>): Terminable {return this.#notifier.subscribe(observer)}
 
     showOrigin(): boolean {return false}
-    showCreation(): Option<UINoteEvent> {return Option.None}
     showPropertyLine(): Option<Line> {return Option.None}
     readContentDuration(region: NoteEventOwnerReader): number {
         return Math.max(region.loopDuration + this.#deltaLoopDuration,

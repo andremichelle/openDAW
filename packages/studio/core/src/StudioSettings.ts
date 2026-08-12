@@ -40,11 +40,11 @@ export const StudioSettingsSchema = z.object({
     "pointer": z.object({
         "dragging-use-pointer-lock": z.boolean(),
         "modifying-controls-wheel": z.boolean(),
-        "normalize-mouse-wheel": z.boolean()
+        "wheel-zoom-speed": z.number().catch(100)
     }).default({
         "dragging-use-pointer-lock": false,
         "modifying-controls-wheel": false,
-        "normalize-mouse-wheel": true
+        "wheel-zoom-speed": 100
     }),
     "editing": z.object({
         "overlapping-regions-behaviour": z.enum(OverlappingRegionsBehaviourOptions),
