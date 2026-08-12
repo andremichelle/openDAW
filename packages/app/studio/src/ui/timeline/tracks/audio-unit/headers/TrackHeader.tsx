@@ -1,13 +1,14 @@
 import css from "./TrackHeader.sass?inline"
-import {DefaultObservableValue, Errors, Lifecycle, panic, Terminator, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, Lifecycle, Option, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {EffectFactories, MenuItem} from "@opendaw/studio-core"
-import {AudioUnitBoxAdapter, ColorCodes, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
 import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts"
 import {CollapseAutomationButton} from "@/ui/timeline/tracks/audio-unit/headers/CollapseAutomationButton.tsx"
+import {TrackIcon} from "@/ui/timeline/tracks/audio-unit/headers/TrackIcon.tsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
@@ -44,13 +45,8 @@ export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, 
             }
         }))
     )
-    const color = ColorCodes.forAudioType(audioUnitBoxAdapter.type)
-    const lockIcon: HTMLElement = <Icon symbol={IconSymbol.Lock} className="lock-icon"/>
     const iconContainer: HTMLElement = (
-        <div className="icon-container">
-            <Icon symbol={TrackType.toIconSymbol(trackBoxAdapter.type)} style={{color: color.toString()}}/>
-            {lockIcon}
-        </div>
+        <TrackIcon lifecycle={lifecycle} service={service} audioUnitBoxAdapter={audioUnitBoxAdapter}/>
     )
     const labels: HTMLElement = (
         <div className="labels">
@@ -82,21 +78,16 @@ export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, 
                     })
             }}/>
             <MenuButton root={MenuItem.root()
-                .setRuntimeChildrenProcedure(installTrackHeaderMenu(service, audioUnitBoxAdapter, trackBoxAdapter))}
+                .setRuntimeChildrenProcedure(installTrackHeaderMenu(service, audioUnitBoxAdapter,
+                    Option.wrap(trackBoxAdapter)))}
                         style={{minWidth: "0", justifySelf: "end"}}
                         appearance={{color: Colors.shadow, activeColor: Colors.cream}}>
                 <Icon symbol={IconSymbol.Menu} style={{fontSize: "0.75em"}}/>
             </MenuButton>
         </div>
     )
-    const {audioUnitFreeze} = project
-    const updateFrozenState = () => {
-        const frozen = audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
-        lockIcon.style.display = frozen ? "" : "none"
-    }
-    updateFrozenState()
     const audioUnitEditing = project.userEditingManager.audioUnit
-    // The unit's head lane doubles as the unit reorder handle: dragging its type icon carries the same
+    // The unit's head lane doubles as the unit reorder handle: dragging its icon carries the same
     // payload as a mixer channel strip, so timeline and mixer drops interoperate.
     const dragLifecycle = lifecycle.own(new Terminator())
     lifecycle.ownAll(
@@ -117,9 +108,6 @@ export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, 
                 : {uuid: UUID.toString(trackBoxAdapter.uuid), type: "track"}, element),
         project.timelineFocus.track.catchupAndSubscribe(optTrack =>
             element.classList.toggle("focused", optTrack.mapOr(track => track === trackBoxAdapter, false))),
-        audioUnitFreeze.subscribe((uuid: UUID.Bytes) => {
-            if (UUID.equals(uuid, audioUnitBoxAdapter.uuid)) {updateFrozenState()}
-        }),
         Events.subscribeDblDwn(nameLabel, async event => {
             const {status, error, value} = await Promises.tryCatch(Surface.get(nameLabel)
                 .requestFloatingTextInput(event, trackBoxAdapter.targetName.unwrapOrElse("")))

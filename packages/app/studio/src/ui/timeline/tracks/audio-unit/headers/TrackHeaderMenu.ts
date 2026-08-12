@@ -1,7 +1,7 @@
 import {CaptureAudio, MenuItem, Project} from "@opendaw/studio-core"
 import {MonitoringDialog} from "@/ui/monitoring/MonitoringDialog"
 import {Browser} from "@opendaw/lib-dom"
-import {isInstanceOf, Option, Procedure, UUID} from "@opendaw/lib-std"
+import {isInstanceOf, Option, Procedure} from "@opendaw/lib-std"
 import {
     AudioUnitBoxAdapter,
     DeviceAccepts,
@@ -11,35 +11,41 @@ import {
 } from "@opendaw/studio-adapters"
 import {DebugMenus} from "@/ui/menu/debug"
 import {MidiImport} from "@/ui/timeline/MidiImport.ts"
-import {CaptureMidiBox, TrackBox} from "@opendaw/studio-boxes"
+import {CaptureMidiBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
+// The unit's menu. `optTrackBoxAdapter` is empty on the synthetic unit lane (a unit without a notes/audio
+// track), where only the track-scoped entries drop out — everything else acts on the unit and stays reachable.
 export const installTrackHeaderMenu = (service: StudioService,
                                        audioUnitBoxAdapter: AudioUnitBoxAdapter,
-                                       trackBoxAdapter: TrackBoxAdapter): Procedure<MenuItem> => parent => {
+                                       optTrackBoxAdapter: Option<TrackBoxAdapter>): Procedure<MenuItem> => parent => {
     const inputAdapter = audioUnitBoxAdapter.input.adapter()
     if (inputAdapter.isEmpty()) {return parent}
     const accepts: DeviceAccepts = inputAdapter.unwrap("Cannot unwrap input adapter").accepts
     const acceptMidi = audioUnitBoxAdapter.captureBox.mapOr(box => isInstanceOf(box, CaptureMidiBox), false)
-    const trackType = DeviceAccepts.toTrackType(accepts)
+    // An input that accepts neither (a Playfield slot) has no track type to offer.
+    const optTrackType = accepts === false ? Option.None : Option.wrap(DeviceAccepts.toTrackType(accepts))
     const {project} = service
     const {audioUnitFreeze, captureDevices, editing, userEditingManager, selection} = project
     const isFrozen = audioUnitFreeze.isFrozen(audioUnitBoxAdapter)
     return parent.addMenuItem(
-        MenuItem.default({label: "Enabled", checked: trackBoxAdapter.enabled.getValue()})
-            .setTriggerProcedure(() => editing.modify(() => trackBoxAdapter.enabled.toggle())),
-        MenuItem.default({label: `New ${TrackType.toLabelString(trackType)} Track`}).setTriggerProcedure(() => editing.modify(() => {
-            TrackBox.create(project.boxGraph, UUID.generate(), box => {
-                box.type.setValue(trackType)
-                box.tracks.refer(audioUnitBoxAdapter.box.tracks)
-                box.index.setValue(audioUnitBoxAdapter.tracks.values().length)
-                box.target.refer(audioUnitBoxAdapter.box)
-            })
-        })),
+        MenuItem.default({
+            label: "Enabled",
+            checked: optTrackBoxAdapter.mapOr(track => track.enabled.getValue(), false),
+            hidden: optTrackBoxAdapter.isEmpty()
+        }).setTriggerProcedure(() => optTrackBoxAdapter.ifSome(track =>
+            editing.modify(() => track.enabled.toggle()))),
+        MenuItem.default({
+            label: optTrackType.mapOr(type => `New ${TrackType.toLabelString(type)} Track`, "New Track"),
+            hidden: optTrackType.isEmpty()
+        }).setTriggerProcedure(() => optTrackType.ifSome(type => editing.modify(() =>
+            type === TrackType.Notes
+                ? project.api.createNoteTrack(audioUnitBoxAdapter.box)
+                : project.api.createAudioTrack(audioUnitBoxAdapter.box)))),
         MenuCapture.createItem(service, audioUnitBoxAdapter,
-            trackBoxAdapter, editing, captureDevices.get(audioUnitBoxAdapter.uuid)),
+            optTrackBoxAdapter, editing, captureDevices.get(audioUnitBoxAdapter.uuid)),
         MenuItem.default({
             label: "Monitoring",
             hidden: captureDevices.get(audioUnitBoxAdapter.uuid)
@@ -74,8 +80,8 @@ export const installTrackHeaderMenu = (service: StudioService,
             hidden: audioUnitBoxAdapter.isOutput
         }).setTriggerProcedure(() => {
             const copies = editing.modify(() => TransferAudioUnits
-                .transfer([trackBoxAdapter.audioUnit], project.skeleton, {
-                    insertIndex: trackBoxAdapter.audioUnit.index.getValue() + 1
+                .transfer([audioUnitBoxAdapter.box], project.skeleton, {
+                    insertIndex: audioUnitBoxAdapter.indexField.getValue() + 1
                 }), false).unwrap("copyUnit")
             Option.wrap(copies.at(0)).ifSome(copy => userEditingManager.audioUnit.edit(copy.editing))
         }),
@@ -96,21 +102,23 @@ export const installTrackHeaderMenu = (service: StudioService,
             editing.modify(() => {
                 const {boxGraph, skeleton} = newProject
                 boxGraph.beginTransaction()
-                TransferAudioUnits.transfer([trackBoxAdapter.audioUnit], skeleton)
+                TransferAudioUnits.transfer([audioUnitBoxAdapter.box], skeleton)
                 boxGraph.endTransaction()
             })
             service.projectProfileService.setProject(newProject, "NEW")
         }),
         MenuItem.default({
             label: "Select Clips",
-            selectable: !trackBoxAdapter.clips.collection.isEmpty() && !isFrozen
-        }).setTriggerProcedure(() => trackBoxAdapter.clips.collection.adapters()
-            .forEach(clip => selection.select(clip.box))),
+            selectable: optTrackBoxAdapter.mapOr(track => !track.clips.collection.isEmpty(), false) && !isFrozen,
+            hidden: optTrackBoxAdapter.isEmpty()
+        }).setTriggerProcedure(() => optTrackBoxAdapter.ifSome(track => track.clips.collection.adapters()
+            .forEach(clip => selection.select(clip.box)))),
         MenuItem.default({
             label: "Select Regions",
-            selectable: !trackBoxAdapter.regions.collection.isEmpty() && !isFrozen
-        }).setTriggerProcedure(() => trackBoxAdapter.regions.collection.asArray()
-            .forEach(region => selection.select(region.box))),
+            selectable: optTrackBoxAdapter.mapOr(track => !track.regions.collection.isEmpty(), false) && !isFrozen,
+            hidden: optTrackBoxAdapter.isEmpty()
+        }).setTriggerProcedure(() => optTrackBoxAdapter.ifSome(track => track.regions.collection.asArray()
+            .forEach(region => selection.select(region.box)))),
         MenuItem.default({
             label: "Compact Tracks",
             hidden: !Browser.isLocalHost(),
@@ -131,16 +139,16 @@ export const installTrackHeaderMenu = (service: StudioService,
         }).setTriggerProcedure(() => editing.modify(() =>
             project.api.deleteAudioUnit(audioUnitBoxAdapter.box))),
         MenuItem.default({
-            label: `Delete ${TrackType.toLabelString(trackBoxAdapter.type)} Track`,
+            label: optTrackBoxAdapter.mapOr(track => `Delete ${TrackType.toLabelString(track.type)} Track`, "Delete Track"),
             selectable: !audioUnitBoxAdapter.isOutput && !isFrozen,
-            hidden: audioUnitBoxAdapter.tracks.collection.size() === 1
-        }).setTriggerProcedure(() => editing.modify(() => {
+            hidden: optTrackBoxAdapter.isEmpty() || audioUnitBoxAdapter.tracks.collection.size() === 1
+        }).setTriggerProcedure(() => optTrackBoxAdapter.ifSome(track => editing.modify(() => {
             if (audioUnitBoxAdapter.tracks.collection.size() === 1) {
                 project.api.deleteAudioUnit(audioUnitBoxAdapter.box)
             } else {
-                audioUnitBoxAdapter.deleteTrack(trackBoxAdapter)
+                audioUnitBoxAdapter.deleteTrack(track)
             }
-        })),
+        }))),
         DebugMenus.debugBox(audioUnitBoxAdapter.box)
     )
 }
