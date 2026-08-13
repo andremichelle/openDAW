@@ -6,6 +6,7 @@ export namespace Files {
         if (isDefined(window.showSaveFilePicker)) {
             const {status, error, value: handle} = await Promises.tryCatch(window.showSaveFilePicker(options))
             if (status === "rejected") {
+                if (Errors.isAbort(error)) {return Promise.reject(error)}
                 if (Errors.isNotAllowed(error)) {
                     return saveBlobFallback(arrayBuffer, options)
                 }
