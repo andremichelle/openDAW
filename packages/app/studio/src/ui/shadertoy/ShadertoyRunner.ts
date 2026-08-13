@@ -51,7 +51,7 @@ export class ShadertoyRunner implements Terminable {
         uniform float iTime;
         uniform float iTimeDelta;
         uniform int iFrame;
-        uniform vec4 iPeaks; // leftPeak, leftRMS, rightPeak, rightRMS
+        uniform vec4 iPeaks; // leftPeak, rightPeak, leftRMS, rightRMS
         uniform vec3 iChannelResolution[1];
         uniform sampler2D iChannel0;
         uniform sampler2D iMidiCC;

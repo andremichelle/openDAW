@@ -43,6 +43,9 @@ import {createEngineMemory, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
 import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
+// TYPE-ONLY: the module computes its peak decay and RMS window from the `sampleRate` global when it is
+// EVALUATED, which only holds after `initialize` has set it. It is pulled in dynamically down there.
+import type {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
 
 type EngineState = {
     readonly engine: EngineExports
@@ -54,9 +57,11 @@ type EngineState = {
     readonly stems: int // 0 = mixdown (the master output); > 0 = read the stem staging
     readonly midi: WasmMidiDrain // TS offline renders emit MIDI too (the offline worker hosts the full EngineProcessor)
     // Master telemetry over "engine-live-data" (mirrors the realtime processor + the TS EngineProcessor), so a
-    // live-stream consumer of an offline render — the video export's shadertoy reads SPECTRUM/WAVEFORM — gets data.
+    // live-stream consumer of an offline render — the video export's shadertoy reads PEAKS/SPECTRUM/WAVEFORM —
+    // gets data.
     readonly broadcaster: LiveStreamBroadcaster
     readonly analyser: AudioAnalyser
+    readonly peaks: PeakBroadcaster
     readonly broadcasts: ReadonlyArray<Terminable>
     totalFrames: int
     running: boolean
@@ -64,8 +69,8 @@ type EngineState = {
 
 let state: Option<EngineState> = Option.None
 
-const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: Float32Array[], stems: number,
-                       midi: WasmMidiDrain, analyser: AudioAnalyser, broadcaster: LiveStreamBroadcaster): void => {
+const renderQuantum = (engineState: EngineState, out: Float32Array[]): void => {
+    const {engine, memory, stems, midi, analyser, peaks, broadcaster} = engineState
     const rendered = tryCatch(() => engine.render())
     if (rendered.status === "failure") {
         // A wasm trap is an anonymous RuntimeError; the panic handler left the real message in its buffer.
@@ -87,9 +92,11 @@ const renderQuantum = (engine: EngineExports, memory: WebAssembly.Memory, out: F
     if (out.length > 1) {
         out[1].set(new Float32Array(buffer, pointer + RenderQuantum * Float32Array.BYTES_PER_ELEMENT, RenderQuantum))
     }
-    // Feed the master analyser and flush the live stream every quantum, exactly like the realtime processor,
-    // so an offline live-stream consumer (the video export's shadertoy) receives SPECTRUM/WAVEFORM.
+    // Feed the master analyser + peak meter and flush the live stream every quantum, exactly like the realtime
+    // processor, so an offline live-stream consumer (the video export's shadertoy) receives PEAKS (`iPeaks`,
+    // zero without this and shaders scaling by it render black), SPECTRUM and WAVEFORM.
     analyser.process(out[0], out[1] ?? out[0], 0, RenderQuantum)
+    peaks.process(out[0], out[1] ?? out[0], 0, RenderQuantum)
     broadcaster.flush()
 }
 
@@ -196,12 +203,17 @@ Communicator.executor<OfflineEngineProtocol>(
             const midi = new WasmMidiDrain()
             // Master telemetry over the SAME "engine-live-data" channel the realtime processor + TS
             // EngineProcessor use, so a live-stream consumer of an offline render (the video export's
-            // shadertoy subscribes to SPECTRUM/WAVEFORM) receives data.
+            // shadertoy subscribes to PEAKS/SPECTRUM/WAVEFORM) receives data.
             const broadcaster = LiveStreamBroadcaster.create(messenger, "engine-live-data")
             const analyser = new AudioAnalyser()
+            // Imported HERE, not at the top: the class derives its peak decay and RMS window from the
+            // `sampleRate` global at module evaluation, which was only assigned above.
+            const {PeakBroadcaster} = await import("../../core-processors/src/PeakBroadcaster")
+            const peaks = new PeakBroadcaster(broadcaster, EngineAddresses.PEAKS)
             const spectrum = new Float32Array(analyser.numBins())
             const waveform = new Float32Array(analyser.numBins())
             const broadcasts: ReadonlyArray<Terminable> = [
+                peaks,
                 broadcaster.broadcastFloats(EngineAddresses.SPECTRUM, spectrum, (hasSubscribers) => {
                     if (!hasSubscribers) {return}
                     spectrum.set(analyser.bins())
@@ -249,7 +261,7 @@ Communicator.executor<OfflineEngineProtocol>(
             })
             enginePort.start()
             state = Option.wrap({
-                engine, memory, stateSender, pending, midi, broadcaster, analyser, broadcasts,
+                engine, memory, stateSender, pending, midi, broadcaster, analyser, peaks, broadcasts,
                 sampleRate: config.sampleRate,
                 // `stemPairs` already counts the metronome stem, so the channel count and the staging read
                 // below stay in step with what `set_stem_export` allocated.
@@ -266,17 +278,18 @@ Communicator.executor<OfflineEngineProtocol>(
             new Function(code)()
         },
         async step(numSamples: int): Promise<Float32Array[]> {
-            const {engine, memory, stateSender, pending} = state.unwrap("state.step")
+            const engineState = state.unwrap("state.step")
+            const {stateSender, pending} = engineState
             await Promise.all(pending) // resources may resolve lazily after loading was queried
             // The loop stays fully SYNCHRONOUS (like the TS offline worker's step): every resource resolved
             // above, and a per-second `setTimeout(0)` yield would cost more than the render itself (~4ms
             // clamped, ×60 — measured as 260ms of a 297ms empty render).
-            const {numberOfChannels, stems, midi, analyser, broadcaster} = state.unwrap("state.step")
+            const {numberOfChannels} = engineState
             const result: Float32Array[] = Arrays.create(() => new Float32Array(numSamples), numberOfChannels)
             const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
             let offset = 0 | 0
             while (offset < numSamples) {
-                renderQuantum(engine, memory, outputChannels, stems, midi, analyser, broadcaster)
+                renderQuantum(engineState, outputChannels)
                 const toCopy = Math.min(numSamples - offset, RenderQuantum)
                 for (let channel = 0; channel < numberOfChannels; channel++) {
                     result[channel].set(outputChannels[channel].subarray(0, toCopy), offset)
@@ -292,7 +305,7 @@ Communicator.executor<OfflineEngineProtocol>(
             const threshold = dbToGain(silenceThresholdDb ?? -72.0)
             const silenceFramesNeeded = Math.ceil((silenceDurationSeconds ?? 10) * engine.sampleRate)
             const maxFrames = isDefined(maxDurationSeconds) ? Math.ceil(maxDurationSeconds * engine.sampleRate) : Infinity
-            const {numberOfChannels, stems} = state.unwrap("state.render")
+            const {numberOfChannels} = state.unwrap("state.render")
             const chunks: Float32Array[][] = Arrays.create(() => [], numberOfChannels)
             let consecutiveSilentFrames = 0
             let hasHadAudio = false
@@ -301,7 +314,7 @@ Communicator.executor<OfflineEngineProtocol>(
             await Wait.timeSpan(TimeSpan.seconds(0))
             while (engine.running && engine.totalFrames < maxFrames) {
                 const outputChannels: Float32Array[] = Arrays.create(() => new Float32Array(RenderQuantum), numberOfChannels)
-                renderQuantum(engine.engine, engine.memory, outputChannels, stems, engine.midi, engine.analyser, engine.broadcaster)
+                renderQuantum(engine, outputChannels)
                 let maxSample = 0
                 for (const channel of outputChannels) {
                     for (const sample of channel) {
