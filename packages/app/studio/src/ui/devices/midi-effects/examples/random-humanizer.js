@@ -1,4 +1,5 @@
 // @label Random Humanizer
+// @no-pass
 // @param timing 10 0 50 linear
 // @param velRange 0.1 0 0.3 linear
 

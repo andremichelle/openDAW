@@ -3,8 +3,10 @@
 //! own upstream for `[from, to)` ONCE (matching the TS `SpielwerkDeviceProcessor`, which runs the generator once
 //! per range, not per update fragment) and hands the input events to the JS script bridge (`host_script_notes`),
 //! which runs the user generator plus ALL the stateful note tracking (validation, the future-note scheduler, the
-//! note-on/note-off correlation + retainer) and writes the resulting `EventRecord`s back. The bridge's tracking
-//! state persists across pulls JS-side; this crate keeps only the bridge handle.
+//! note-on/note-off correlation + retainer) and writes the resulting `EventRecord`s back. The bridge FORWARDS the
+//! pulled input verbatim and adds the generator's notes on top, unless the script declared `// @no-pass` (so a
+//! device without a working script is transparent, never a mute). The bridge's tracking state persists across
+//! pulls JS-side; this crate keeps only the bridge handle.
 //!
 //! Exports: `kind()` (midi effect), `state_size()`, `process_events(...)`, `init(...)`,
 //! `parameter_changed(...)`, `observe_param_collection_field() -> 11`.

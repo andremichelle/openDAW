@@ -1,4 +1,5 @@
 // @label Probability Gate
+// @no-pass
 // @param chance 0.5 0 1 linear
 
 class Processor {

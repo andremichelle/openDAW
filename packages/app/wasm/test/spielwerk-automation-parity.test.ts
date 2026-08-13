@@ -36,7 +36,8 @@ const APPARAT = `class Processor {
 }`
 
 // The script default shift (0) differs from the automated value, so the test fails unless the automation is applied.
-const SPIELWERK = `// @param shift 0 0 24 int
+const SPIELWERK = `// @no-pass
+// @param shift 0 0 24 int
 class Processor {
     shift = 0
     paramChanged(label, value) { if (label === "shift") this.shift = value }

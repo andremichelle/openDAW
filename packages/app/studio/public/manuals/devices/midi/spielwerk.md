@@ -151,7 +151,32 @@ If the next character is lowercase or the parameter name does not start with the
 
 ---
 
-## 4. Keyboard Shortcuts
+## 4. Note Flow
+
+By default _Spielwerk_ **passes every incoming note through unchanged**, and the notes your generator yields are **added on top**. A device with no script, an empty `process`, or a script that failed to compile is therefore transparent: it never swallows the notes of the track it sits on.
+
+Declare `// @no-pass` to suppress the incoming notes, so the device emits **only** what you yield:
+
+```javascript
+// @no-pass
+```
+
+Which one you want follows from what the processor does:
+
+| Processor | Directive |
+|---|---|
+| Transform (velocity, pitch, timing) | `// @no-pass`, otherwise the original note sounds alongside your version |
+| Filter (probability gate, range filter) | `// @no-pass`, otherwise the rejected notes still pass |
+| Replace (sequencer, arpeggiator) | `// @no-pass` |
+| Add (harmonizer, echo tail, ghost notes) | no directive, the original is kept for you |
+
+Most bundled examples declare `// @no-pass`, since they replace the incoming notes. The two that do not are worth reading: _303 Sequencer_ layers its pattern on top of whatever arrives, and _Echo / Note Delay_ yields only the repeats and lets the dry note pass.
+
+Passed-through notes keep their identity: position, duration, pitch, velocity, cent and their note-off arrive downstream exactly as they came in.
+
+---
+
+## 5. Keyboard Shortcuts
 
 | Shortcut            | Action                              |
 |---------------------|-------------------------------------|
@@ -160,7 +185,7 @@ If the next character is lowercase or the parameter name does not start with the
 
 ---
 
-## 5. Safety
+## 6. Safety
 
 The engine validates every note your code yields:
 
@@ -173,17 +198,19 @@ The engine validates every note your code yields:
 - **Scheduler overflow** — Maximum 128 future-scheduled notes. Exceeding this silences the processor.
 - **Runtime errors** — If `process()` throws, the processor is silenced.
 
-When silenced, all active notes are released and the device passes nothing until the next successful compile.
+When silenced, all notes the processor generated are released. The incoming notes keep flowing through the device until the next successful compile, so a broken script never mutes the track. A processor that declared `// @no-pass` stays silent instead, since suppressing the input is what its author asked for.
 
 ---
 
-## 6. API Reference
+## 7. API Reference
 
 Your code must define a `class Processor` with a generator method `process`. Optionally implement `paramChanged` to receive parameter updates and `reset` to clear state on transport jumps.
 
 ### Processor class
 
 ```javascript
+// @no-pass
+
 class Processor {
     * process(block, events) {
         for (const event of events) {
@@ -198,6 +225,8 @@ class Processor {
     }
 }
 ```
+
+Without the `// @no-pass` line this example would emit each note twice: once forwarded, once yielded. See section 4.
 
 ### Block properties
 
@@ -265,12 +294,12 @@ State is reset when the code is recompiled (a new instance is created).
 
 ---
 
-## 7. Examples
+## 8. Examples
 
-Select **Examples** in the code editor toolbar to load ready-made processors (Chord Generator, Velocity, Pitch, Random Humanizer, Probability Gate, Echo / Note Delay, Pitch Range Filter).
+Select **Examples** in the code editor toolbar to load ready-made processors (Chord Generator, Velocity, Pitch, Random Humanizer, Probability Gate, Echo / Note Delay, Pitch Range Filter, 303 Sequencer).
 
 ---
 
-## 8. AI Assistance
+## 9. AI Assistance
 
 Click **Start AI-Prompt** in the editor toolbar to copy a detailed starter prompt to your clipboard. Paste it into any AI assistant to get help writing Spielwerk processors. Once the AI generates code, copy it and click **From Clipboard** to load and compile it directly.

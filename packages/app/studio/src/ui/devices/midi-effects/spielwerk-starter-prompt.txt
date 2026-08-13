@@ -47,6 +47,18 @@ Position rules:
 You can yield zero notes (filter), the same event modified (transform), or multiple notes
 per input (generator). You can also yield notes not derived from any input.
 
+## Pass-through and @no-pass
+By default the device forwards every incoming note UNCHANGED, and the notes you yield are
+ADDED on top. A processor that yields nothing is therefore transparent.
+
+Add this comment to suppress the incoming notes, so only what you yield is emitted:
+
+// @no-pass
+
+Any processor that TRANSFORMS (velocity, pitch, timing), FILTERS, or REPLACES the incoming
+notes MUST declare @no-pass. Without it the original note sounds alongside your version.
+Leave it out only when your notes are meant to be added to the incoming ones.
+
 Most processors only care about note-on events. Filter with `if (event.gate)` and yield
 transformed copies. Note-off events are useful for stateful processors like arpeggiators
 that need to track which notes are currently held.
@@ -111,7 +123,8 @@ Implement reset() to clear state on transport jumps.
   NaN values, negative duration, or position in the past will silence the processor.
 - Maximum 128 notes per block. Exceeding this will silence the processor.
 - Maximum 128 scheduled (future) notes. Exceeding this will silence the processor.
-- If process() throws, the processor will be silenced.
+- If process() throws, the processor will be silenced. A silenced processor still forwards
+  the incoming notes, unless it declared @no-pass.
 - Do not use import/export/require. No access to DOM or fetch.
 - The code runs in an AudioWorklet thread. Only AudioWorklet-safe APIs are available
   (Math, typed arrays, basic JS). No setTimeout, no DOM.
@@ -119,6 +132,7 @@ Implement reset() to clear state on transport jumps.
 
 ## Template
 
+// @no-pass
 // @param amount 0.5
 
 class Processor {

@@ -111,7 +111,8 @@ const reconcileSamples = (deviceBox: ScriptCompiler.ScriptDeviceBox, declared: R
 }
 
 // Wrap the user script for registration into `globalThis.openDAW.<registry>[uuid]`. Beyond `{update, create}`
-// (consumed by the TS core-processors engine), the entry also carries the PARSED `@param` / `@sample`
+// (consumed by the TS core-processors engine), the entry also carries the `@no-pass` verdict (`pass`, read by
+// the Spielwerk bridge) plus the PARSED `@param` / `@sample`
 // declarations (with their declaration index, matching the `WerkstattParameterBox.index` the engine keys by):
 // the WASM script bridge needs them to map a param's raw automation value through the right `ValueMapping` and
 // to label each param / sample, since the worklet has no box graph to read those from. The TS engine ignores
@@ -135,7 +136,8 @@ const wrapScript = (config: ScriptCompiler.Config, uuid: string, update: number,
             return Processor
         })(),
         params: ${JSON.stringify(params)},
-        samples: ${JSON.stringify(samples)}
+        samples: ${JSON.stringify(samples)},
+        pass: ${ScriptDeclaration.parsePassThrough(userCode)}
     }
 `
 }

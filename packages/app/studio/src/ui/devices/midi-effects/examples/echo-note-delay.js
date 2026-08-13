@@ -19,7 +19,7 @@ class Processor {
         for (const event of events) {
             if (event.gate) {
                 const dur = Math.min(event.duration, this.duration)
-                for (let i = 0; i < this.repeats; i++) {
+                for (let i = 1; i < this.repeats; i++) {
                     yield {
                         position: event.position + i * this.delay,
                         duration: dur,

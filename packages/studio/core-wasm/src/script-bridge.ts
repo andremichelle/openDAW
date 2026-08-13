@@ -13,7 +13,7 @@
 
 import {isDefined, UUID, ValueMapping} from "@opendaw/lib-std"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
-import {runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
+import {copyEvents, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
 
 const RENDER_QUANTUM = 128
 // ~1 second of render calls (128-frame quanta at 48k) before a scriptless device is reported — long enough to
@@ -38,7 +38,7 @@ const MAX_AMPLITUDE = 1000.0 // ~60 dB; matches the TS processors' validateOutpu
 
 type ParamDecl = {label: string, index: number, mapping: string, min: number, max: number, unit: string}
 type SampleDecl = {label: string, index: number}
-type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArray<ParamDecl>, samples: ReadonlyArray<SampleDecl>}
+type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArray<ParamDecl>, samples: ReadonlyArray<SampleDecl>, pass: boolean}
 
 // The minimal engine surface the bridge needs to resolve a sample's resident frames during render.
 export interface ScriptEngine {
@@ -62,6 +62,9 @@ class Bridge {
     readonly sampleHandles = new Map<number, number>() // index -> resolved engine sample handle (-1 = no sample; 0 is valid)
     limiter: SimpleLimiter | null = null
     spielwerk: SpielwerkRuntime | null = null
+    // Spielwerk's `@no-pass` verdict for the CURRENTLY loaded script. `true` by default so a device whose script
+    // never loaded (or died) forwards its input instead of muting the chain.
+    pass = true
     // A scriptable device with no registered Processor renders silence. That is legitimate for a block or two
     // while the script loads async, but a device that stays scriptless is an anomaly the host must surface (not
     // swallow). Count the render calls that found no registry entry; warn ONCE past the grace window.
@@ -159,6 +162,8 @@ export class ScriptBridges {
             return null
         }
         if (registry !== undefined && registry.update !== bridge.currentUpdate) {
+            // Outside the try: a script that throws in its constructor still gets ITS declared note routing.
+            bridge.pass = registry.pass !== false
             try {
                 const proc = new registry.create()
                 bridge.paramMappings = new Map(registry.params.map(declaration => [declaration.index, {label: declaration.label, mapping: resolveMapping(declaration)}]))
@@ -276,13 +281,16 @@ export class ScriptBridges {
            from: number, to: number, bpm: number, flags: number, s0: number, s1: number): number {
         const bridge = this.#bridges.get(handle)
         if (bridge === undefined) {return 0}
+        // No live Processor (never loaded, or silenced): forward the input, so a scriptless / broken Spielwerk
+        // is transparent rather than a mute button. A `@no-pass` script keeps its silence, as its author asked.
+        const forward = (): number => bridge.pass ? copyEvents(this.#memory.buffer, inPtr, inCount, outPtr, outMax) : 0
         const proc = this.#ensureProc(bridge)
-        if (proc === null || bridge.spielwerk === null) {return 0}
+        if (proc === null || bridge.spielwerk === null) {return forward()}
         try {
-            return runSpielwerk(bridge.spielwerk, proc, this.#memory.buffer, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1)
+            return runSpielwerk(bridge.spielwerk, proc, this.#memory.buffer, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1, bridge.pass)
         } catch (error) {
             this.#silence(bridge, `Runtime error: ${error}`)
-            return 0
+            return forward()
         }
     }
 
