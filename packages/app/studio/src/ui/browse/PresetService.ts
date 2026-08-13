@@ -28,6 +28,7 @@ import {
     PresetBundle,
     PresetCategory,
     PresetEntry,
+    PresetInspector,
     PresetMeta,
     PresetStorage,
     Project,
@@ -737,11 +738,18 @@ export class PresetService {
     }
 
     async loadBundleFromDisk(): Promise<void> {
-        const opened = await Promises.tryCatch(Files.open({types: [FilePickerAcceptTypes.PresetBundleFileType]}))
+        const opened = await Promises.tryCatch(Files.open({
+            types: [FilePickerAcceptTypes.PresetBundleFileType, FilePickerAcceptTypes.PresetFileType]
+        }))
         if (opened.status === "rejected") {return}
         const file = opened.value.at(0)
         if (isAbsent(file)) {return}
-        const decoded = await Promises.tryCatch(PresetBundle.decode(await file.arrayBuffer()))
+        const arrayBuffer = await file.arrayBuffer()
+        if (PresetInspector.isPresetBinary(new Uint8Array(arrayBuffer))) {
+            await this.#importPresetBinary(file.name, arrayBuffer)
+            return
+        }
+        const decoded = await Promises.tryCatch(PresetBundle.decode(arrayBuffer))
         if (decoded.status === "rejected") {
             console.warn(decoded.error)
             RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
@@ -762,6 +770,32 @@ export class PresetService {
             }
         }
         await PresetStorage.save(meta, data)
+    }
+
+    // Legacy single-preset files (.odp) carry no metadata: category and device are recovered from the
+    // graph, the name comes from the file, and the entry always gets a fresh uuid (nothing to collide).
+    async #importPresetBinary(fileName: string, arrayBuffer: ArrayBuffer): Promise<void> {
+        const inspected = PresetInspector.inspect(new Uint8Array(arrayBuffer))
+        if (inspected.isEmpty()) {
+            RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
+            return
+        }
+        const inspection = inspected.unwrap()
+        const stripped = fileName.replace(/\.odp$/i, "")
+        const now = Date.now()
+        const common = {
+            uuid: UUID.toString(UUID.generate()),
+            name: stripped.length > 0 ? stripped : inspection.name,
+            description: "",
+            created: now,
+            modified: now,
+            hasTimeline: PresetDecoder.peekHasTimeline(arrayBuffer)
+        }
+        const probe = PresetInspector.toMeta(inspection, common)
+        await PresetStorage.save(PresetInspector.toMeta(inspection, {
+            ...common,
+            name: Strings.getUniqueName(this.#existingUserNamesFor(probe), common.name)
+        }), arrayBuffer)
     }
 
     #audioUnitBoxForInstrumentUuid(uuid: UUID.String): Nullable<AudioUnitBox> {
