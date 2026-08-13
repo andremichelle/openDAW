@@ -19,17 +19,23 @@ export const ResourceFolderItem = ({label, count, depth, expandKey, expandedKeys
     const empty = entries.length === 0
     const item: HTMLElement = <div className={Html.buildClassList(className, empty && "empty")}/>
     item.style.setProperty("--depth", String(depth))
+    // Stays a subgrid so the trailing cells land under Bpm and Sec. The label is a nested flex, which is what
+    // keeps triangle, icon, name and count together in the first column.
     const header: HTMLElement = (
         <div className="folder-header">
-            <span className="marker">
-                <Icon symbol={IconSymbol.ArrowRight} className="collapsed"/>
-                <Icon symbol={IconSymbol.ArrowDown} className="expanded"/>
+            <span className="label">
+                <span className="marker">
+                    <Icon symbol={IconSymbol.ArrowRight} className="collapsed"/>
+                    <Icon symbol={IconSymbol.ArrowDown} className="expanded"/>
+                </span>
+                <div className="icon">
+                    <Icon symbol={IconSymbol.Folder}/>
+                </div>
+                <span className="name">{label}</span>
+                <span className="brief">{count === 0 ? "" : `(${count})`}</span>
             </span>
-            <div className="icon">
-                <Icon symbol={IconSymbol.Folder}/>
-            </div>
-            <span className="name">{label}</span>
-            <span className="brief">{count === 0 ? "" : `(${count})`}</span>
+            <span className="right">-</span>
+            <span className="right">-</span>
         </div>
     )
     const list: HTMLElement = <div className="entry-list hidden"/>

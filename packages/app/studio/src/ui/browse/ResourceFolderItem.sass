@@ -3,22 +3,31 @@
 component
   @include mixins.library-item-outer
 
+  &.empty > div.folder-header span.marker
+    visibility: hidden
+
   &.empty > div.folder-header
     cursor: default
 
-    > span.marker
-      visibility: hidden
-
   > div.folder-header
     grid-column: 1 / -1
-    display: flex
+    display: grid
+    grid-template-columns: subgrid
     align-items: center
-    column-gap: 4px
     cursor: pointer
     color: var(--color-dark)
-    padding-left: calc(var(--depth, 0) * 0.75em)
 
-    > span.marker
+    > span.label
+      display: flex
+      align-items: center
+      column-gap: 4px
+      min-width: 0
+      padding-left: calc(var(--depth, 0) * 0.75em)
+
+    > span.right
+      text-align: right
+
+    span.marker
       display: flex
       align-items: center
       color: var(--color-shadow)
@@ -27,20 +36,23 @@ component
       > svg.expanded
         display: none
 
-    > div.icon
+    div.icon
       @include mixins.color-icon-tile(18px)
       background-color: transparent
       color: var(--color-shadow)
 
-    > span.name
+    span.name
       font-size: 1em
       white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
 
-    > span.brief
+    span.brief
       opacity: 0.5
       font-style: italic
+      white-space: nowrap
 
-  &.expanded > div.folder-header > span.marker
+  &.expanded > div.folder-header span.marker
     > svg.collapsed
       display: none
 
