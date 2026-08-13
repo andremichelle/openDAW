@@ -26,7 +26,10 @@ export const bindNativeScroll = (element: HTMLElement, model: ScrollModel, orien
             if (vertical) {element.scrollTop = model.position} else {element.scrollLeft = model.position}
         }),
         Events.subscribe(element, "scroll", refresh, {passive: true}),
-        Html.watchResize(element, refresh),
+        // Deferred for the same reason as in Scroller: reading and writing the model inside the observer
+        // resizes the thumb within the same layout pass. Scroll events stay synchronous, they are not part
+        // of that cycle.
+        Html.watchResize(element, () => AnimationFrame.once(refresh)),
         AnimationFrame.add(() => {
             const size = contentSize()
             if (size !== lastContentSize) {
@@ -63,9 +66,10 @@ export const installScrollbars = (element: HTMLElement): Terminable => {
             overlayStyle.height = `${clientHeight}px`
         }
         reposition()
+        const scheduleReposition = () => AnimationFrame.once(reposition)
         terminator.ownAll(
-            Html.watchResize(element, reposition),
-            Html.watchResize(layer, reposition),
+            Html.watchResize(element, scheduleReposition),
+            Html.watchResize(layer, scheduleReposition),
             {terminate: () => overlay.remove()})
     }
     // The host may be hidden (display: none) at connect time — e.g. overlays/dialogs — so it has no
