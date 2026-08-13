@@ -1,6 +1,6 @@
 # Sample Browser Folders
 
-> **Status:** Steps 1 and 2 are done and live. Soundfonts got the same treatment. The editor (step 3) is not started.
+> **Status:** Steps 1 to 3 are live. The editor runs at `admin.opendaw.studio` and publishes the sample index. Soundfonts have their index but no editor yet, and the editor cannot upload, edit metadata or delete.
 
 ## TL;DR
 
@@ -13,6 +13,8 @@ Scope of v1: openDAW cloud assets only. Local samples keep their flat list.
 Decided: order inside a folder is the authored array order, a sample has exactly one parent folder, the editor owns metadata as well as structure, new uploads always land in `Unsorted` and are filed by hand afterwards, and the published index is the only source of structure, so the studio never derives a folder.
 
 **What is live now.** Both index files are published and both browsers read only them. Samples show `openDAW > Loops / One Shots`, with One Shots split into 13 drum machines and Loops into packs. Soundfonts show a single `openDAW` folder with 7 entries. `list.php` and `list.json` have no caller left in the studio, they remain on the server for the editor.
+
+The editor is live at `admin.opendaw.studio`, private repo `andremichelle/admin.opendaw.studio`, deployed by a manual GitHub workflow. It curates folders and publishes the index. It cannot yet upload, edit metadata or delete, and it does not do soundfonts.
 
 ## Goal
 
@@ -230,13 +232,17 @@ Delete `packages/app/studio/src/ui/pages/SampleUploadPage.tsx` and its sass, and
 
 ---
 
-## Part 3: The editor
+## Part 3: The editor (built, folder curation only)
 
 ### Where it lives
 
-`github.com/andremichelle/admin.opendaw.studio`, private, cloned at `/Users/am/Repositories/andre.michelle/admin.opendaw.studio` and currently empty. It is a curation tool, not part of the product, so it stays out of the public repo and out of the studio bundle.
+`github.com/andremichelle/admin.opendaw.studio`, private, cloned at `/Users/am/Repositories/andre.michelle/admin.opendaw.studio`. It is a curation tool, not part of the product, so it stays out of the public repo and out of the studio bundle. Its own README carries the detail, this section records what the plan got right and what it got wrong.
 
-Deployment mirrors `deploy.yml` in this repo: a `workflow_dispatch` action that builds and pushes over SFTP with `SFTP_HOST`, `SFTP_PORT`, `SFTP_USERNAME`, `SFTP_PASSWORD` from GitHub secrets, targeting `admin.opendaw.studio`. Those secrets are for the deploy only, the app itself ships no credentials.
+Deployment mirrors `deploy.yml` in this repo: a `workflow_dispatch` action that builds, writes `dist/api/config.php` from the secrets, and uploads `dist/` over SFTP with `SFTP_HOST`, `SFTP_PORT`, `SFTP_USERNAME`, `SFTP_PASSWORD`. Those secrets are for the deploy, the app itself ships no credentials. The upload path is the repository variable `REMOTE_PATH`.
+
+**Deviation from the plan, and it matters.** The PHP does not live in this repo under `packages/server`. It lives in the admin repo's `public/api`, so it deploys with the app as one artifact and there is no second deploy to keep in step. Nothing in this repo needs to change for the editor to gain an endpoint.
+
+**The asset directory is discovered, not configured.** `../../assets.opendaw.studio` was a guess, and the first working deploy answered "No index published yet" because the subdomain mapping puts it somewhere else. `bootstrap.php` now tries the configured path and each plausible depth, taking the first that actually holds a `samples` directory, and names what it tried when none does. Do not replace this with a hardcoded path.
 
 ### Authentication
 
@@ -264,15 +270,25 @@ Vite plus TypeScript, depending on the published `@opendaw/lib-std`, `@opendaw/l
 
 Bpm comes from the same detector the studio uses. `@opendaw/studio-sdk` exports `WasmBpmDetector` and `Workers` for exactly this, the SDK's own module comment documents the seam. Install `Workers` first, construct the detector with the stretch wasm url, and a sample with no measurable pulse answers `None`, which is stored as bpm 0 and leaves the material unwarped. Analysis runs in the worker, so a long file does not block the editor. It also means the editor can show `AudioMaterialAnalyzer` results later if picking a stretch algorithm per sample ever becomes interesting.
 
-### What it does
+### What it does today
 
-Loads `list.php` and the current `index.json` in parallel on boot and reconciles them as described above.
+Loads the index, then folds in the database catalogue and reports what changed, as described above.
 
-Two pane layout, folder tree on the left, folder contents on the right. Multi select plus drag to move, since filing hundreds of samples one at a time is the actual bottleneck.
+Two pane layout, folder tree on the left with reveal-on-open, folder contents on the right mixing folders and samples with Bpm and Sec columns, breadcrumb, search across the whole catalogue, status bar.
 
-Create, rename, delete and reorder folders, and drag to reorder samples within a folder, because the index preserves authored order.
+Create, rename and delete folders. Deleting a folder that still holds samples offers to move them up one level rather than destroying them, and deleting an empty one just goes.
 
-Upload. Drop wav files anywhere in the editor and they land in `Unsorted`, with a metadata dialog for name and bpm before the request goes out. Filing them is a separate move, so an upload is never silently committed to a folder you did not think about. The file must be encoded with `WavFile.encodeFloats` first, exactly like `SampleUploadPage` does, because `OpenSampleAPI.load` decodes with `WavFile.decodeFloats` and a raw int16 wav from disk will not survive that round trip. Duration and sample rate come from decoding the file, bpm from `WasmBpmDetector` as described under Stack, editable in the dialog before the upload goes out.
+Move by dragging onto a tree row, a folder row or a breadcrumb crumb, or through `Move to` in the context menu, whose destination tree is built by `setRuntimeChildrenProcedure` when the submenu opens, so it is never a stale copy of the structure. A folder refuses to be dropped into itself or its own subtree.
+
+Multi select with shift and cmd, Finder keys (Enter renames, Delete removes, Space auditions, Escape clears, ⌘A, ⌘↑), and unlimited undo and redo over snapshots.
+
+Publish through Update Index, with Download JSON as the escape hatch that also covers dev, where there is no PHP at all.
+
+Sorting a folder by name is a menu action rather than the default, since the index preserves authored order.
+
+**Not built yet:** upload, metadata editing, delete of a sample, drag to reorder within a folder, and the soundfont catalogue. `AdminApi` already takes a `catalogue` parameter and the endpoints accept `?catalogue=soundfonts`, so soundfonts need an entry model and a header switch rather than a second app.
+
+Upload, when it lands. Drop wav files anywhere in the editor and they land in `Unsorted`, with a metadata dialog for name and bpm before the request goes out. Filing them is a separate move, so an upload is never silently committed to a folder you did not think about. The file must be encoded with `WavFile.encodeFloats` first, exactly like `SampleUploadPage` does, because `OpenSampleAPI.load` decodes with `WavFile.decodeFloats` and a raw int16 wav from disk will not survive that round trip. Duration and sample rate come from decoding the file, bpm from `WasmBpmDetector` as described under Stack, editable in the dialog before the upload goes out.
 
 ### Sample identity
 
@@ -316,15 +332,23 @@ The result does not parse against the `SampleIndex` zod schema.
 
 ### Endpoints
 
-Four server side pieces in `packages/server/api.opendaw.studio/samples/admin/`, all POST only, each including `require-admin.php` first as described under Authentication. The public `list.php` and `get.php` stay where they are and stay open.
+All of them in the admin repo's `public/api`, sharing `bootstrap.php`, which holds the config, the JSON helpers and `require_admin()`. `.htaccess` denies `bootstrap.php`, `config.php` and the token store, and hands the `Authorization` header through to CGI, without which every write would answer 401.
 
-`publish-index.php`, new. Validates the body, at minimum that it parses and that every uuid exists in the table. Writes a temp file and renames it onto `../../assets.opendaw.studio/samples/index.json`, so a reader never sees a half written file. Keeps the previous version as `index.<timestamp>.json` for one step rollback.
+Built and live:
 
-`update.php`, new. Updates name, bpm, sample_rate and duration for one uuid.
+`login.php`, `logout.php`, `session.php`. Bearer tokens as described above, stored server side as sha256 hashes with a 30 day expiry, expired ones swept on each login.
 
-`delete.php`, new. Deletes the row and unlinks `../../assets.opendaw.studio/samples/<uuid>`, in that order, so a failed unlink leaves an orphaned file rather than a row pointing at nothing.
+`read-index.php`, open like the file it serves, so the editor can load before anyone signs in.
 
-`upload.php`, existing, moves into the same directory and changes in two ways. It takes the uuid from the client instead of minting one, and it echoes back what it stored so the editor can place the sample without a reload. Its hardcoded key disappears with the move, since the session check replaces it.
+`list-samples.php`, admin only, reads the `samples` table for the boot-time reconcile.
+
+`publish-index.php`, admin only. Validates version, folder names (present, no slash), uuid format and duplicates, and refuses an empty index. Copies the current file to `index.<timestamp>.json`, then writes a temp file and renames it into place.
+
+Not built, because the editor cannot yet upload, edit metadata or delete:
+
+`update.php`, `delete.php`, and the `upload.php` rework that takes a client-supplied hash uuid and echoes back what it stored. When those land, they belong next to the others in the admin repo, not in `packages/server`.
+
+**Verified against a local PHP server before deploying**, since none of it can be exercised in dev: wrong password 401, publish without a token 401, duplicate uuid rejected, slash in a folder name rejected, unknown catalogue rejected, and a real 630 entry publish writing the file plus its timestamped backup. The deployed site was then probed directly: `config.php` and the token store 403, `session.php` 401, publish without a token 401.
 
 ---
 
@@ -340,12 +364,12 @@ See Part 2. The browser went from a flat list to `openDAW > Loops / One Shots` f
 
 The `list.php` fallback described in earlier drafts was built, used during the rollout, and then removed on purpose once both indices were live: two sources of truth for the same list is exactly what this plan set out to avoid, and the retry-on-error path covers a bad publish better than a silent degrade. The endpoints stay on the server for the editor.
 
-**3. Build the editor. Next.**
-Login and the four endpoints, then the tree UI, upload, metadata editing, delete, and the Update Index button. From here on the file is published from the tool instead of by hand, and real curation starts.
+**3. Build the editor. Done for folder curation.**
+Login, the reconcile, the tree UI and Update Index are live at `admin.opendaw.studio`. The file is published from the tool now instead of by hand, and curation can start.
 
-It has to cover soundfonts too, since they now have the same kind of index and no way to publish one. Their entry schema and leaf key differ, the tree editing is identical.
+**4. Finish the editor.** Upload with hash uuids and duplicate abort, metadata editing, delete, then soundfonts. Each is an endpoint in the admin repo plus UI, no change in this repo.
 
-**4. Remove `SampleUploadPage` and the `/upload` route** from the studio, once the editor's upload path has been used for real material.
+**5. Remove `SampleUploadPage` and the `/upload` route** from the studio, once the editor's upload path exists and has been used for real material. Blocked on step 4, since removing it today would leave no way to upload at all.
 
 ---
 
@@ -367,7 +391,9 @@ A stale CDN copy after publish is the most likely support complaint. `cache: "no
 An unreachable or malformed index shows the browser's error with retry, not an empty list and not a stale one. That is deliberate, but it does mean `publish-index.php` validating before it writes is now load bearing rather than a nicety.
 
 **Credentials.**
-Settled under Authentication: login form, bearer token, hashed admin list, no cookies and no secret in the bundle. Two traps to avoid. An `Origin` check is not access control, and an endpoint that forgets `require-admin.php` is open regardless of the login screen, so that include belongs in a review checklist.
+Built as described under Authentication: login form, bearer token, hashed admin list in the `ADMIN_USERS` secret, no cookies and no secret in the bundle. Two traps to avoid. An `Origin` check is not access control, and an endpoint that forgets `require_admin()` is open regardless of the login screen, so that include belongs in a review checklist.
+
+The database credentials reached the admin repo's secrets from `connect.php`, where they still sit in this public repo. That is a separate cleanup, and the admin tool does not make it any better or worse.
 
 The token sits in `localStorage`, which any script running on the admin page could read. Acceptable here because the page is ours and loads no third party code, but it is the reason the tool should never grow an embed, an analytics snippet or a CDN script.
 
@@ -389,4 +415,6 @@ Soundfonts already ship a static `list.json` with full metadata, so the same nes
 
 ## Open questions
 
-None blocking. The remaining judgement calls are editor layout details that are cheaper to decide while building than on paper.
+None blocking. What is left is step 4, upload and metadata editing and delete and soundfonts, all of it inside the admin repo.
+
+One thing to decide when upload lands: whether the editor also becomes the place to fix the bad names and missing tempos already in the catalogue, since filing a sample is exactly the moment you notice them.
