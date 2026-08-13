@@ -14,6 +14,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {ChopTrigger} from "@/ui/devices/instruments/PlayfieldDeviceEditor/ChopTrigger"
 import {StudioService} from "@/service/StudioService"
+import {WaveformIcon} from "@/ui/browse/WaveformIcon"
 
 const className = Html.adoptStyleSheet(css, "Sample")
 
@@ -56,8 +57,8 @@ export const SampleView = ({lifecycle, service, sampleSelection, sample, playbac
                      })
                  )}
                  ondblclick={() => playback.toggle(sample.uuid)}>
-                <span>{name}</span>
-                <span className="right">{bpm.toFixed(1)}</span>
+                <span className="name"><WaveformIcon/>{name}</span>
+                <span className="right">{bpm > 0 ? bpm.toFixed(1) : "-"}</span>
                 <span className="right">{duration.toFixed(1)}</span>
             </div>
             {location === AssetLocation.Local && (

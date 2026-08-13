@@ -176,13 +176,13 @@ export class ProjectProfileService {
                 approveText: "Save"
             }))
             if (approveStatus === "rejected" || !approved) {return}
-            const {status: saveStatus} = await Promises.tryCatch(Files.save(arrayBuffer, {
+            const {status: saveStatus, error: saveError} = await Promises.tryCatch(Files.save(arrayBuffer, {
                 suggestedName: `${profile.meta.name}.odb`,
                 types: [FilePickerAcceptTypes.ProjectBundleFileType],
                 startIn: "desktop"
             }))
-            if (saveStatus === "rejected" && !Errors.isAbort(error)) {
-                console.warn(error)
+            if (saveStatus === "rejected" && !Errors.isAbort(saveError)) {
+                console.warn(saveError)
                 RuntimeNotifier.notify({message: "Could not export project.", icon: "Warning"})
             }
         })

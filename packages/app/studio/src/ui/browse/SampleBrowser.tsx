@@ -12,9 +12,17 @@ import {SampleSelection} from "@/ui/browse/SampleSelection"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {ResourceBrowser} from "@/ui/browse/ResourceBrowser"
 import {Sample} from "@opendaw/studio-adapters"
+import {SampleIndex, SampleIndexFolder} from "@/opendaw-api/SampleIndex"
 import {ResourceBrowserConfig} from "@/ui/browse/ResourceBrowserConfig"
+import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 
 const className = Html.adoptStyleSheet(css, "Samples")
+
+const toResourceFolder = (folder: SampleIndexFolder): ResourceFolder<Sample> => ({
+    name: folder.name,
+    folders: folder.folders?.map(toResourceFolder) ?? [],
+    items: folder.samples?.map(SampleIndex.asSample) ?? []
+})
 
 type Construct = {
     lifecycle: Lifecycle
@@ -24,6 +32,7 @@ type Construct = {
 }
 
 const location = new DefaultObservableValue(AssetLocation.OpenDAW)
+const expandedKeys = new Set<string>()
 
 export const SampleBrowser = ({lifecycle, service, background, fontSize}: Construct) => {
     const linearVolume = service.samplePlayback.linearVolume
@@ -34,8 +43,14 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
             {label: "Bpm", align: "right"},
             {label: "Sec", align: "right"}
         ],
-        fetchOnline: () => OpenSampleAPI.get().all(),
+        // Structure comes from the published index and nowhere else.
+        fetchOnline: async () => ({
+            name: "",
+            folders: (await OpenSampleAPI.get().tree()).folders.map(toResourceFolder),
+            items: []
+        }),
         fetchLocal: () => SampleStorage.get().list(),
+        expandedKeys,
         renderEntry: ({lifecycle: entryLifecycle, service: entryService, selection, item, location: loc, refresh}) => (
             <SampleView
                 lifecycle={entryLifecycle}

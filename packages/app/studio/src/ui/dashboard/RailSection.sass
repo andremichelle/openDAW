@@ -7,14 +7,12 @@ component
   > .body
     display: flex
     flex-wrap: wrap
-    gap: 0.3em
 
     &.vertical
       flex-direction: column
       flex-wrap: nowrap
       row-gap: 0.4em
 
-  // a body row pairing a .link with a trailing .help button
   .entry
     display: flex
     align-items: center
@@ -56,6 +54,20 @@ component
     > svg
       width: 16px
       height: 16px
+
+  .provider
+    display: block
+    width: 100%
+    max-width: 7em
+    opacity: 0.8
+
+    &:hover
+      opacity: 1
+
+    > img
+      width: 100%
+      height: auto
+      display: block
 
   .sponsors
     width: 100%

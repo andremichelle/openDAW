@@ -11,9 +11,17 @@ import {HTMLSelection} from "@/ui/HTMLSelection"
 import {SoundfontSelection} from "@/ui/browse/SoundfontSelection"
 import {ResourceBrowser} from "@/ui/browse/ResourceBrowser"
 import {Soundfont} from "@opendaw/studio-adapters"
+import {SoundfontIndex, SoundfontIndexFolder} from "@/opendaw-api/SoundfontIndex"
 import {ResourceBrowserConfig} from "@/ui/browse/ResourceBrowserConfig"
+import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 
 const className = Html.adoptStyleSheet(css, "SoundfontBrowser")
+
+const toResourceFolder = (folder: SoundfontIndexFolder): ResourceFolder<Soundfont> => ({
+    name: folder.name,
+    folders: folder.folders?.map(toResourceFolder) ?? [],
+    items: folder.soundfonts?.map(SoundfontIndex.asSoundfont) ?? []
+})
 
 type Construct = {
     lifecycle: Lifecycle
@@ -23,6 +31,7 @@ type Construct = {
 }
 
 const location = new DefaultObservableValue(AssetLocation.OpenDAW)
+const expandedKeys = new Set<string>()
 
 export const SoundfontBrowser = ({lifecycle, service, background, fontSize}: Construct) => {
     const config: ResourceBrowserConfig<Soundfont> = {
@@ -31,7 +40,12 @@ export const SoundfontBrowser = ({lifecycle, service, background, fontSize}: Con
             {label: "Name"},
             {label: "Size", align: "right"}
         ],
-        fetchOnline: () => OpenSoundfontAPI.get().all(),
+        fetchOnline: async () => ({
+            name: "",
+            folders: (await OpenSoundfontAPI.get().tree()).folders.map(toResourceFolder),
+            items: []
+        }),
+        expandedKeys,
         fetchLocal: async () => {
             const openDAW = await OpenSoundfontAPI.get().all()
             const user = await SoundfontStorage.get().list()
