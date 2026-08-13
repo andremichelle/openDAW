@@ -13,6 +13,7 @@ const KIND_NOTE_ON = 0
 const KIND_NOTE_OFF = 1
 const MAX_NOTES_PER_BLOCK = 128
 const MAX_SCHEDULED_NOTES = 128
+const FLAG_DISCONTINUOUS = 1 << 1 // mirrors abi `BlockFlags::DISCONTINUOUS`: a loop wrap or a seek
 
 type ScheduledNote = {position: number, duration: number, pitch: number, velocity: number, cent: number}
 type RetainedNote = {id: number, position: number, duration: number, pitch: number, velocity: number, cent: number}
@@ -68,6 +69,14 @@ export const runSpielwerk = (runtime: SpielwerkRuntime, proc: any, memory: Array
     const emit = (kind: number, position: number, id: number, pitch: number, velocity: number, cent: number, duration: number): void => {
         if (outCount >= outMax) {throw new Error(`Note flood: exceeded ${outMax} output notes per range`)}
         writeRecord(out, outCount++, kind, position, id, pitch, velocity, cent, duration)
+    }
+
+    // A transport JUMP (loop wrap / seek) releases EVERYTHING held, at `from` — the contract the engine's own
+    // note source honours (`NoteSequencer::process_notes`). Without it a note whose span reaches past the loop
+    // end never sees its end position again and the downstream instrument holds that voice forever.
+    if ((flags & FLAG_DISCONTINUOUS) !== 0) {
+        for (const note of runtime.retained) {emit(KIND_NOTE_OFF, from, note.id, note.pitch, 0, 0, 0)}
+        runtime.reset()
     }
 
     // Release retained notes whose span completed within this range, emitting their note-off.
