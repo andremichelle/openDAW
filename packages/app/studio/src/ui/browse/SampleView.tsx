@@ -54,7 +54,7 @@ export const SampleView = ({lifecycle, service, sampleSelection, sample, playbac
                  )}
                  ondblclick={() => playback.toggle(sample.uuid)}>
                 <span>{name}</span>
-                <span className="right">{bpm.toFixed(1)}</span>
+                <span className="right">{bpm > 0 ? bpm.toFixed(1) : "-"}</span>
                 <span className="right">{duration.toFixed(1)}</span>
             </div>
             {location === AssetLocation.Local && (

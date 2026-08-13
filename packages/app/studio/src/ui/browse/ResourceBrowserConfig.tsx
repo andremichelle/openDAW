@@ -5,11 +5,13 @@ import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {StudioSignal} from "@/service/StudioSignal"
 import {ResourceHeader} from "@/ui/browse/ResourceHeader"
+import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 
 export type ResourceBrowserConfig<T> = {
     name: string
-    fetchOnline: () => Promise<ReadonlyArray<T>>
+    fetchOnline: () => Promise<ResourceFolder<T>>
     fetchLocal: () => Promise<ReadonlyArray<T>>
+    expandedKeys?: Set<string>
     renderEntry: (props: {
         lifecycle: Lifecycle
         service: StudioService

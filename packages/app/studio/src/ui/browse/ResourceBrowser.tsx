@@ -12,6 +12,8 @@ import {Icon} from "@/ui/components/Icon"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {HTMLSelection} from "@/ui/HTMLSelection"
 import {ResourceBrowserConfig} from "@/ui/browse/ResourceBrowserConfig"
+import {ResourceFolder} from "@/ui/browse/ResourceFolder"
+import {ResourceFolderItem} from "@/ui/browse/ResourceFolderItem"
 import {installScrollbars} from "@/ui/components/Scrollbars"
 
 type Construct<T> = {
@@ -38,6 +40,7 @@ export const ResourceBrowser = <T, >({
     )
     const selection = lifecycle.own(new HTMLSelection(entries))
     const resourceSelection = config.createSelection(service, selection)
+    const expandedKeys = config.expandedKeys ?? new Set<string>()
     const entriesLifeSpan = lifecycle.own(new Terminator())
     const reload = Inject.ref<HotspotUpdater>()
     const filter = new DefaultObservableValue("")
@@ -72,35 +75,51 @@ export const ResourceBrowser = <T, >({
                     entriesLifeSpan.terminate()
                     return (
                         <Await
-                            factory={async () => {
-                                switch (location.getValue()) {
-                                    case AssetLocation.OpenDAW:
-                                        return config.fetchOnline()
-                                    case AssetLocation.Local:
-                                        return config.fetchLocal()
-                                }
-                            }}
+                            factory={async (): Promise<ResourceFolder<T>> => location.getValue() === AssetLocation.Local
+                                ? {name: "", folders: [], items: await config.fetchLocal()}
+                                : config.fetchOnline()}
                             loading={() => (<div><ThreeDots/></div>)}
                             failure={({reason, retry}) => (
                                 <div className="error" onclick={retry}>
                                     {reason instanceof DOMException ? reason.name : String(reason)}
                                 </div>
                             )}
-                            success={(result) => {
+                            success={(root) => {
+                                const renderEntry = (item: T) => config.renderEntry({
+                                    lifecycle: entriesLifeSpan,
+                                    service,
+                                    selection: resourceSelection,
+                                    item,
+                                    location: location.getValue(),
+                                    refresh: () => reload.get().update()
+                                })
+                                const renderContent = (folder: ResourceFolder<T>, path: string, depth: number): Array<HTMLElement> => [
+                                    ...folder.folders.map(sub => {
+                                        const expandKey = `${path}/${sub.name}`
+                                        return ResourceFolderItem({
+                                            label: sub.name,
+                                            count: ResourceFolder.countItems(sub),
+                                            depth,
+                                            expandKey,
+                                            expandedKeys,
+                                            entries: renderContent(sub, expandKey, depth + 1)
+                                        })
+                                    }),
+                                    ...folder.items.map(renderEntry)
+                                ]
+                                // A query abandons the structure and searches the whole catalogue, which is what
+                                // the flat list did before folders existed.
+                                const renderSearch = (query: string): Array<HTMLElement> => ResourceFolder.flatten(root)
+                                    .filter(item => config.resolveEntryName(item).toLowerCase().includes(query))
+                                    .toSorted((a, b) => StringComparator(config.resolveEntryName(a).toLowerCase(), config.resolveEntryName(b).toLowerCase()))
+                                    .map(renderEntry)
                                 const update = () => {
                                     entriesLifeSpan.terminate()
                                     selection.clear()
-                                    replaceChildren(entries, result
-                                        .filter(item => config.resolveEntryName(item).toLowerCase().includes(filter.getValue().toLowerCase()))
-                                        .toSorted((a, b) => StringComparator(config.resolveEntryName(a).toLowerCase(), config.resolveEntryName(b).toLowerCase()))
-                                        .map(item => config.renderEntry({
-                                            lifecycle: entriesLifeSpan,
-                                            service,
-                                            selection: resourceSelection,
-                                            item,
-                                            location: location.getValue(),
-                                            refresh: () => reload.get().update()
-                                        })))
+                                    const query = filter.getValue().toLowerCase()
+                                    replaceChildren(entries, query.length === 0
+                                        ? renderContent(root, "", 0)
+                                        : renderSearch(query))
                                 }
                                 const debounceSetLocation = Runtime.debounce(() => {
                                     location.setValue(AssetLocation.Local)

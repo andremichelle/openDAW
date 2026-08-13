@@ -1,28 +1,32 @@
-import {asDefined, Lazy, Procedure, RuntimeNotifier, unitValue, UUID} from "@opendaw/lib-std"
+import {asDefined, Lazy, panic, Procedure, unitValue, UUID} from "@opendaw/lib-std"
 import {Soundfont, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {OpenDAWHeaders} from "./OpenDAWHeaders"
-import {network, Promises} from "@opendaw/lib-runtime"
-import {z} from "zod"
+import {SoundfontIndex} from "./SoundfontIndex"
+import {Promises} from "@opendaw/lib-runtime"
 
 export class OpenSoundfontAPI {
     static readonly ApiRoot = "https://api.opendaw.studio/soundfonts"
     static readonly FileRoot = "https://assets.opendaw.studio/soundfonts"
+    static readonly IndexFile = `${OpenSoundfontAPI.FileRoot}/index.json`
 
     @Lazy
     static get(): OpenSoundfontAPI {return new OpenSoundfontAPI()}
 
-    readonly #memoized: () => Promise<ReadonlyArray<Soundfont>> = Promises.memoizeAsync(() => network.defaultFetch(`${OpenSoundfontAPI.ApiRoot}/list.json`, OpenDAWHeaders)
-        .then(x => x.json())
-        .then(x => z.array(Soundfont).parse(x))
-        .catch(reason => {
-            console.warn(reason)
-            RuntimeNotifier.notify({message: "Could not connect to OpenSoundfont API.", icon: "Warning"})
-            return []
-        }))
+    // Revalidate rather than serve a cached tree: a publish must reach users on their next load, and the
+    // response is small enough that a conditional request costs nothing.
+    readonly #headers: RequestInit = {...OpenDAWHeaders, cache: "no-cache"}
+    // The published index is the catalogue. A failure rejects rather than degrading to something emptier,
+    // so the browser shows its retry instead of an empty list, and `memoizeAsync` drops the rejection.
+    readonly #memoized: () => Promise<SoundfontIndex> = Promises.memoizeAsync(() =>
+        fetch(OpenSoundfontAPI.IndexFile, this.#headers)
+            .then(response => response.ok ? response.json() : panic(`${response.status} ${response.statusText}`))
+            .then(json => SoundfontIndex.schema.parse(json)))
 
     private constructor() {}
 
-    async all(): Promise<ReadonlyArray<Soundfont>> {return this.#memoized()}
+    async tree(): Promise<SoundfontIndex> {return this.#memoized()}
+
+    async all(): Promise<ReadonlyArray<Soundfont>> {return SoundfontIndex.flatten(await this.#memoized())}
 
     async get(uuid: UUID.Bytes): Promise<Soundfont> {
         const uuidAsString = UUID.toString(uuid)

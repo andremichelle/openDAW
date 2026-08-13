@@ -1,18 +1,18 @@
 # Sample Browser Folders
 
-> **Status:** Plan. Not started.
+> **Status:** Steps 1 and 2 are done and live. Soundfonts got the same treatment. The editor (step 3) is not started.
 
 ## TL;DR
 
-Cloud samples get a nested folder tree delivered as a single static file, `assets.opendaw.studio/samples/index.json`, that carries the folder structure **and** the sample metadata inline. The studio fetches that one file instead of `list.php`, flattens it for everything that wants a linear list, and renders the tree in the sample browser.
+Cloud samples get a nested folder tree delivered as a single static file, `assets.opendaw.studio/samples/index.json`, that carries the folder structure **and** the sample metadata inline. The studio fetches that one file, flattens it for everything that wants a linear list, and renders the tree in the sample browser. Soundfonts work identically through `assets.opendaw.studio/soundfonts/index.json`.
 
 All curation moves into a separate app in a private repo. That app is the full sample administration tool: upload, edit metadata, remove, move between folders, and one button that updates the index the studio reads. The studio itself gets no folder editing.
 
-Scope of v1: openDAW cloud samples only. Local samples keep their flat list.
+Scope of v1: openDAW cloud assets only. Local samples keep their flat list.
 
-Rough cost: index format plus studio read path is small, roughly 300 to 400 LOC across 6 files. The editor plus its three new endpoints is the bulk of the work, roughly 4 to 5 days.
+Decided: order inside a folder is the authored array order, a sample has exactly one parent folder, the editor owns metadata as well as structure, new uploads always land in `Unsorted` and are filed by hand afterwards, and the published index is the only source of structure, so the studio never derives a folder.
 
-Decided so far: order inside a folder is the authored array order, a sample has exactly one parent folder, the editor owns metadata as well as structure.
+**What is live now.** Both index files are published and both browsers read only them. Samples show `openDAW > Loops / One Shots`, with One Shots split into 13 drum machines and Loops into packs. Soundfonts show a single `openDAW` folder with 7 entries. `list.php` and `list.json` have no caller left in the studio, they remain on the server for the editor.
 
 ## Goal
 
@@ -96,11 +96,29 @@ Order inside `folders` and `samples` is the array order and is authored in the e
 
 A sample appears exactly once in the tree. Single parent, so the tree flattens without dedupe surprises and folder counts mean what they say.
 
-Samples that exist in the database but have not been filed land in a folder named `Unsorted` that the editor writes explicitly. The studio treats it as an ordinary folder, so no special casing on the read side.
+`Unsorted` is a root level folder the editor writes explicitly, and it is where every sample starts. New uploads go there first, and so does anything that turns up in the database without a place in the tree. Filing is a separate, deliberate move afterwards. The studio treats it as an ordinary folder, so no special casing on the read side. It is written only when it holds something, so an empty one never shows up in the browser.
 
-`version` is a hard gate. If the studio reads a `version` it does not know, it falls back to `list.php` rather than guessing.
+`version` is a hard gate. A `version` the studio does not know fails validation, which surfaces as the browser's error-with-retry rather than as a guess.
 
 `updatedAt` is informational, useful for the editor to warn about concurrent edits and for a support answer to "did my publish go through".
+
+### Initial tree (done)
+
+The first index was generated, not curated, by a one-time script. One root folder `openDAW` with `Loops` for `bpm > 0` and `One Shots` for `bpm === 0`, the established "tempo unknown" that keeps material unwarped.
+
+Inside those two, the script clusters by shared name prefix, which is what produced the drum machines and the loop packs without any hardcoded list:
+
+Sort the names, then grow a cluster while the common prefix survives two tests, at least 3 characters and ending on a word boundary in both names. The boundary test is what keeps `Drum Loop` apart from `Drumulator` and `Linn 9000` apart from `LinnDrum`, since `Drum` and `Linn` split a word.
+
+A cluster becomes a folder at 3 or more members, and a folder only splits into subfolders when at least two subgroups qualify. One subgroup is not a split, it is a lone descriptor sitting next to its own siblings, which is what produced a meaningless `Bass > Loop` in the first run.
+
+Loops recurse one level deep (`Polarity > Fatso`, `BVKER > Chillwave`), one-shots stop at the machine.
+
+Result: 630 samples, `One Shots` fully covered by 909, DDD-1, DMX, DrumTraks, Drumulator, Linn 9000, LinnDrum, R-8, RX5, SDSV, TR-626, TR-707 and TR-808, `Loops` in about twenty packs with 11 names left loose because they share no prefix with three others.
+
+Soundfonts got a second script with no clustering at all: one `openDAW` folder holding all 7, sorted by name. Their names carry no shared structure worth inventing.
+
+Both scripts live in the session scratchpad and belong in `admin.opendaw.studio` when that repo starts. Nothing in the studio implements these rules, they exist only where the file is produced.
 
 ### Source of truth and staleness
 
@@ -108,45 +126,69 @@ The MySQL `samples` table stays the authority for **which samples exist and what
 
 The editor writes both. A metadata edit goes to the database immediately through the update endpoint, and the folder tree it holds in memory is refreshed from that same write. Update Index then serialises the whole current state to `index.json`. So the two can only disagree between an edit and the next index update, and the editor shows that as an unpublished-changes state.
 
-On boot the editor still reconciles against `list.php`, even though it becomes the only upload path, because the tree it published last is not proof of what the table holds now. New uuids land in `Unsorted`, uuids the database no longer knows are dropped, retained records take their metadata from the database. The summary line before publishing reads "N added, N changed, N removed".
+On boot the editor still reconciles against `list.php`, even though it becomes the only upload path, because the tree it published last is not proof of what the table holds now. New uuids land in `Unsorted` like every other upload, uuids the database no longer knows are dropped, retained records take their metadata from the database. The summary line before publishing reads "N added, N changed, N removed".
 
-### Schema in code
+### Schema in code (done)
 
-New file `packages/studio/adapters/src/sample/SampleIndex.ts`:
+`packages/app/studio/src/opendaw-api/SampleIndex.ts` and `SoundfontIndex.ts`.
 
-A recursive zod schema. `SampleFolder` needs `z.lazy` plus an explicit interface for the recursion, since zod cannot infer a self referential type. Exports:
+A recursive zod schema each. The folder type needs `z.lazy` plus an explicit type for the recursion, since zod cannot infer a self referential one. Each exports `schema`, `flatten` (depth first, `origin` injected) and `asSample` / `asSoundfont`. The leaf key is domain specific, `samples` and `soundfonts`, so the file reads as what it is.
 
-`SampleIndex` and `SampleFolder` types and schemas.
+They live in the studio app, not in `studio-adapters`. This is the file format of one deployment's asset host, not an SDK feature, and nothing outside the app has a reason to know it. The editor will validate against its own copy rather than pulling a package in.
 
-`SampleIndex.flatten(index): ReadonlyArray<Sample>`, depth first, `origin` injected, used by `all()`.
-
-`SampleIndex.fromFlat(samples): SampleIndex`, single `Unsorted` folder, used as the fallback so the browser has exactly one rendering path even when only `list.php` answered.
-
-Lives in `studio-adapters` next to `Sample`, so the editor can depend on the published package and validate against the same schema the studio uses.
+Neither file knows a single folder name. No `fromFlat`, no seeding rule, no labels: structure exists only in the published file.
 
 ---
 
-## Part 2: Studio changes
+## Part 2: Studio changes (done)
 
-### `OpenSampleAPI` (`packages/app/studio/src/opendaw-api/OpenSampleAPI.ts`)
+### `OpenSampleAPI` and `OpenSoundfontAPI`
 
-Add `static readonly IndexFile = `${OpenSampleAPI.FileRoot}/index.json``.
+`IndexFile` points at `${FileRoot}/index.json` on the assets host, fetched once per session through `Promises.memoizeAsync` with `cache: "no-cache"` so a publish reaches users on their next load instead of sitting in the HTTP cache.
 
-Add a memoized `#index(): Promise<SampleIndex>` using `Promises.memoizeAsync`, mirroring what `OpenSoundfontAPI` already does with its static `list.json`. Fetch with `cache: "no-cache"` so the browser revalidates against the ETag instead of serving a stale copy for an hour, and memoize per session so the tree is fetched once.
+There is no fallback. The published index is the catalogue, and a failure rejects. `ResourceBrowser` already renders a failure branch with retry on click, and `memoizeAsync` drops a rejected promise, so the retry actually refetches. That is a better failure than a silently empty or half-invented list, and it removed `Option<SampleIndex>`, the intermediate catalogue types and both `#list()` methods.
 
-Fallback chain, each step logged:
+`all()` is `flatten(await index)`, so the signature never changed and `boot.ts` (`FactoryCatalog.install`), `SampleSelection` (the online check in the delete guard) and the scripting API were untouched.
 
-1. `index.json` parses and `version` is known, use it.
-2. Anything fails, fetch `list.php` and wrap it via `SampleIndex.fromFlat`.
-3. That fails too, empty index, which is today's behaviour on error.
+`get(uuid)` resolves from the memoized index and only falls back to `get.php` on a miss, which saves one request per sample load. That fallback stays for samples uploaded since the last publish.
 
-`all()` becomes `SampleIndex.flatten(await this.#index())`. Signature unchanged, so `boot.ts:112` (`FactoryCatalog.install`), `SampleSelection.ts:73` (the online check in the delete guard) and the scripting API need no change.
+`tree()` returns the index for the browser. `load()`, `upload()` and `SamplePlayback` are untouched.
 
-`get(uuid)` resolves from the memoized index first and only falls back to `get.php` on a miss. That removes one request per sample load and matches `OpenSoundfontAPI.get`. The `get.php` fallback stays for samples uploaded after the last publish.
+**Gotcha worth remembering.** Both fetches originally used `network.defaultFetch`, which retries a throwing fetch 30 times at one second intervals. The assets host answers a CORS-less 404 for a missing index, so the fetch throws rather than returning a clean 404 and the browser hung on its spinner for half a minute. An index that may legitimately be absent must use a plain `fetch` with an explicit `response.ok` check.
 
-New `tree(): Promise<SampleIndex>` for the browser.
+### `ResourceBrowser` (`packages/app/studio/src/ui/browse/ResourceBrowser.tsx`)
 
-`load()`, `upload()` and `SamplePlayback` (which builds `FileRoot/<uuid>` directly) are untouched.
+The browser always renders a root `ResourceFolder<T>` (`{name, folders, items}`, new file `ResourceFolder.ts` with `flatten` and `countItems`), whose own name is never shown.
+
+`ResourceBrowserConfig<T>.fetchOnline` returns that root, since every online catalogue is now an index. `fetchLocal` still returns a flat array, which the browser wraps in a root with no folders, so both locations share one rendering path. Folders started as an optional `fetchOnlineTree?` alongside a flat `fetchOnline`, which became dead weight the moment both catalogues had an index, so the two collapsed into one. No `renderFolder` hook was needed either: the folder row is generic and both browsers share it.
+
+`expandedKeys?` is held module level by each browser, so expansion survives a reload of the entry list.
+
+An empty filter renders the tree recursively, a non-empty one flattens the whole root and keeps the previous filter plus `StringComparator` sort, so search behaves exactly as before.
+
+`HTMLSelection` did need a change, contrary to the plan's guess. It recognised entries by being a direct child of the container, so every row inside a folder would have been unselectable, taking delete and "Create Audio Track(s)" with it. It now matches `[data-selection]` and builds its shift-range from those in document order, skipping anything inside a collapsed (`.hidden`) folder. `SoundfontView` carries the same attribute, so both browsers benefit.
+
+### `ResourceFolderItem.tsx` (generic, not sample specific)
+
+Modelled on `CompoundItem`, minus all preset drag and drop. `ArrowRight` / `ArrowDown` icons swapped by CSS on the `expanded` class, folder icon, name, child count in brackets, `hidden` class on the body, key written into `expandedKeys`.
+
+Nesting shows as indent only, no tree guide lines. Depth is a `--depth` custom property on the row: the header pads itself from it, and the body publishes `--indent` for its entries. The entries stay a subgrid, so only the name moves while Bpm and Sec stay aligned with the header.
+
+Two layout consequences found in the browser, not on paper:
+
+The folder header must not inherit the item subgrid, otherwise its four children map onto Name / Bpm / Sec and the folder name lands in the Bpm column. It is a flex row spanning all columns instead.
+
+`SampleBrowser.sass` had `auto` tracks for Bpm and Sec. An `auto` track measures the rows currently in the grid, and collapsing a folder removes its rows, so the columns jumped on every toggle. They are fixed now, `1fr 3.5em 3em minmax(4px, auto)`.
+
+### Browsers
+
+`SampleBrowser` and `SoundfontBrowser` each map their index folders to `ResourceFolder` and keep a module level `expandedKeys` next to the existing `location` value.
+
+`SampleView` shows a dash instead of `0.0` when a sample has no tempo, matching the meaning of bpm 0.
+
+### Not affected
+
+`packages/app/wasm/src/sample-fetch.ts` fetches by uuid and never lists. `SampleStorage` and the local path stay flat.
 
 ### `ResourceBrowser` (`packages/app/studio/src/ui/browse/ResourceBrowser.tsx`)
 
@@ -192,9 +234,29 @@ Delete `packages/app/studio/src/ui/pages/SampleUploadPage.tsx` and its sass, and
 
 ### Where it lives
 
-A new private repo, for example `opendaw-sample-index`. It is a curation tool, not part of the product, and it holds publish credentials, so it stays out of the public repo and out of the studio bundle.
+`github.com/andremichelle/admin.opendaw.studio`, private, cloned at `/Users/am/Repositories/andre.michelle/admin.opendaw.studio` and currently empty. It is a curation tool, not part of the product, so it stays out of the public repo and out of the studio bundle.
 
-Note on the current state: the sample backend and its database credentials are already committed in the public repo (`packages/server/api.opendaw.studio/samples/connect.php`, and `upload.php` carries a hardcoded 8 character key). Any new write endpoint added for this feature must not follow that pattern. See risks below.
+Deployment mirrors `deploy.yml` in this repo: a `workflow_dispatch` action that builds and pushes over SFTP with `SFTP_HOST`, `SFTP_PORT`, `SFTP_USERNAME`, `SFTP_PASSWORD` from GitHub secrets, targeting `admin.opendaw.studio`. Those secrets are for the deploy only, the app itself ships no credentials.
+
+### Authentication
+
+A login form in the editor, a bearer token on every write, an admin list the server owns. No cookies, no session state to configure, no key in the bundle. The browser's password manager remembers the login itself.
+
+`admin/login.php` takes name and password, verifies with `password_verify` against hashed entries, and answers with a token, 32 random bytes hex encoded. Failed attempts answer 401 after a short sleep, so guessing is slow.
+
+The token is stored server side as a hash next to the admin it belongs to, with an expiry. The editor keeps the plain token in `localStorage` and sends it as `Authorization: Bearer <token>` on every write request. `connect.php` already lists `Authorization` in its allowed headers, so no CORS change is needed and nothing has to be sent with credentials.
+
+The admin list holds password hashes only, never plaintext. Either a small `admins` table next to `samples`, or a PHP file outside the webroot. A table is easier to extend and gives the tokens somewhere to live, a file is easier to deploy, either is fine for a handful of people.
+
+`admin/require-admin.php` is included first by every write endpoint, resolves the bearer token and answers 401 unless it is valid and unexpired. This is the part that actually protects anything. An endpoint that forgets the include is unprotected no matter what the login screen does.
+
+`admin/logout.php` deletes the token, which is the only way to revoke one, so it is worth having from the start rather than waiting for a laptop to go missing.
+
+An expired or revoked token means every write answers 401, and the editor drops back to the login view. That is also the boot check, no separate session endpoint needed.
+
+Keep that origin allowlist as a complement, not as the control. Restricting by `Origin` or `Referer` alone protects nothing, CORS only stops other sites' JavaScript from reading a response, it does not stop the request, and both headers are set by the caller. A one line `curl` with a forged `Origin` would otherwise reach `delete.php`.
+
+Note on the existing state, which this must not copy: `connect.php` has the database credentials in the public repo, and `upload.php` compares against a hardcoded 8 character key sitting in the same public repo. Moving it behind the session check retires that key.
 
 ### Stack
 
@@ -210,7 +272,7 @@ Two pane layout, folder tree on the left, folder contents on the right. Multi se
 
 Create, rename, delete and reorder folders, and drag to reorder samples within a folder, because the index preserves authored order.
 
-Upload. Drop wav files onto a folder and they are uploaded and filed there in one gesture, with a metadata dialog for name and bpm before the request goes out. The file must be encoded with `WavFile.encodeFloats` first, exactly like `SampleUploadPage` does, because `OpenSampleAPI.load` decodes with `WavFile.decodeFloats` and a raw int16 wav from disk will not survive that round trip. Duration and sample rate come from decoding the file, bpm from `WasmBpmDetector` as described under Stack, editable in the dialog before the upload goes out.
+Upload. Drop wav files anywhere in the editor and they land in `Unsorted`, with a metadata dialog for name and bpm before the request goes out. Filing them is a separate move, so an upload is never silently committed to a folder you did not think about. The file must be encoded with `WavFile.encodeFloats` first, exactly like `SampleUploadPage` does, because `OpenSampleAPI.load` decodes with `WavFile.decodeFloats` and a raw int16 wav from disk will not survive that round trip. Duration and sample rate come from decoding the file, bpm from `WasmBpmDetector` as described under Stack, editable in the dialog before the upload goes out.
 
 ### Sample identity
 
@@ -254,7 +316,7 @@ The result does not parse against the `SampleIndex` zod schema.
 
 ### Endpoints
 
-Four server side pieces in `packages/server/api.opendaw.studio/samples/`, all POST only, all authenticated against a secret held on the server and in the private repo's local config, never in the public repo.
+Four server side pieces in `packages/server/api.opendaw.studio/samples/admin/`, all POST only, each including `require-admin.php` first as described under Authentication. The public `list.php` and `get.php` stay where they are and stay open.
 
 `publish-index.php`, new. Validates the body, at minimum that it parses and that every uuid exists in the table. Writes a temp file and renames it onto `../../assets.opendaw.studio/samples/index.json`, so a reader never sees a half written file. Keeps the previous version as `index.<timestamp>.json` for one step rollback.
 
@@ -262,16 +324,28 @@ Four server side pieces in `packages/server/api.opendaw.studio/samples/`, all PO
 
 `delete.php`, new. Deletes the row and unlinks `../../assets.opendaw.studio/samples/<uuid>`, in that order, so a failed unlink leaves an orphaned file rather than a row pointing at nothing.
 
-`upload.php`, existing, needs two changes. It must return the generated uuid in the response, otherwise the editor cannot file a freshly uploaded sample without a full reload. And its hardcoded 8 character key moves to the same server side secret as the rest.
+`upload.php`, existing, moves into the same directory and changes in two ways. It takes the uuid from the client instead of minting one, and it echoes back what it stored so the editor can place the sample without a reload. Its hardcoded key disappears with the move, since the session check replaces it.
 
 ---
 
 ## Rollout
 
-1. Land the `SampleIndex` schema and the studio read path with the `list.php` fallback. Publish nothing yet. The studio still shows the flat list, now via the fallback, which verifies the fallback path in production before it is ever needed.
-2. Publish a first `index.json` generated from the database with everything under `Unsorted`. The browser now renders one folder containing every sample, which proves the tree path and the caching without any curation.
-3. Build the editor, curate, publish. This is where the visible change happens.
-4. Remove `SampleUploadPage` and the `/upload` route from the studio, once the editor's upload path has actually been used for real material.
+**1. Generate `index.json` and put it on the server. Done, for samples and soundfonts.**
+Two scripts, one per catalogue, described under Initial tree. They read `list.php` and `list.json`, validate every record, refuse on a duplicate uuid, and write the file for manual upload. No application code, nothing to deploy, revertible by deleting the file. Both are uploaded and serving.
+
+The scripts belong in `admin.opendaw.studio` as the seed of that repo, since the reduction they perform is what the editor will do on every publish. They currently sit in the session scratchpad.
+
+**2. Studio reads the file. Done.**
+See Part 2. The browser went from a flat list to `openDAW > Loops / One Shots` for samples and a single `openDAW` folder for soundfonts.
+
+The `list.php` fallback described in earlier drafts was built, used during the rollout, and then removed on purpose once both indices were live: two sources of truth for the same list is exactly what this plan set out to avoid, and the retry-on-error path covers a bad publish better than a silent degrade. The endpoints stay on the server for the editor.
+
+**3. Build the editor. Next.**
+Login and the four endpoints, then the tree UI, upload, metadata editing, delete, and the Update Index button. From here on the file is published from the tool instead of by hand, and real curation starts.
+
+It has to cover soundfonts too, since they now have the same kind of index and no way to publish one. Their entry schema and leaf key differ, the tree editing is identical.
+
+**4. Remove `SampleUploadPage` and the `/upload` route** from the studio, once the editor's upload path has been used for real material.
 
 ---
 
@@ -287,10 +361,15 @@ Metadata now lives in two places, the database and the published file. Accepted 
 A few thousand records at roughly 120 bytes each is a few hundred KB raw and well under 100 KB gzipped. Fine. If the catalogue ever reaches five figures, revisit, most likely by splitting per top level folder.
 
 **Caching.**
-A stale CDN copy after publish is the most likely support complaint. `cache: "no-cache"` on the fetch plus a short `max-age` on the file should cover it, but this needs an actual check against the real host headers after step 2.
+A stale CDN copy after publish is the most likely support complaint. `cache: "no-cache"` is set on both fetches. Republishing during this work reached the browser immediately, but that was a dev session with devtools habits, so it still deserves a check from a cold browser after a real publish.
+
+**No fallback means a bad publish is visible.**
+An unreachable or malformed index shows the browser's error with retry, not an empty list and not a stale one. That is deliberate, but it does mean `publish-index.php` validating before it writes is now load bearing rather than a nicety.
 
 **Credentials.**
-The write endpoint must not repeat the pattern of the committed database credentials and the hardcoded upload key. Secret outside the webroot, read from the environment or a file that is not in any repo. This is worth fixing for `upload.php` at the same time, tracked separately.
+Settled under Authentication: login form, bearer token, hashed admin list, no cookies and no secret in the bundle. Two traps to avoid. An `Origin` check is not access control, and an endpoint that forgets `require-admin.php` is open regardless of the login screen, so that include belongs in a review checklist.
+
+The token sits in `localStorage`, which any script running on the admin page could read. Acceptable here because the page is ours and loads no third party code, but it is the reason the tool should never grow an embed, an analytics snippet or a CDN script.
 
 **Removal is destructive by decision.**
 Remove is a hard delete, the database row and the wav file both go. Consequences to be aware of while using it:
@@ -310,5 +389,4 @@ Soundfonts already ship a static `list.json` with full metadata, so the same nes
 
 ## Open questions
 
-1. Does `Unsorted` sit at the top or the bottom, and does it disappear from the studio once empty? Defaulting to bottom and hidden when empty unless you say otherwise.
-2. Where does the secret for the write endpoints live, given `connect.php` and `upload.php` currently carry credentials in the public repo? This blocks the first publish, not the plan.
+None blocking. The remaining judgement calls are editor layout details that are cheaper to decide while building than on paper.
