@@ -12,13 +12,13 @@ export class OpenSoundfontAPI {
     @Lazy
     static get(): OpenSoundfontAPI {return new OpenSoundfontAPI()}
 
-    // Revalidate rather than serve a cached tree: a publish must reach users on their next load, and the
-    // response is small enough that a conditional request costs nothing.
+    // Same as the sample index: the query defeats caching outright, so a publish is visible on the next
+    // load without relying on the browser revalidating.
     readonly #headers: RequestInit = {...OpenDAWHeaders, cache: "no-cache"}
     // The published index is the catalogue. A failure rejects rather than degrading to something emptier,
     // so the browser shows its retry instead of an empty list, and `memoizeAsync` drops the rejection.
     readonly #memoized: () => Promise<SoundfontIndex> = Promises.memoizeAsync(() =>
-        fetch(OpenSoundfontAPI.IndexFile, this.#headers)
+        fetch(`${OpenSoundfontAPI.IndexFile}?v=${Date.now()}`, this.#headers)
             .then(response => response.ok ? response.json() : panic(`${response.status} ${response.statusText}`))
             .then(json => SoundfontIndex.schema.parse(json)))
 

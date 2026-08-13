@@ -30,13 +30,13 @@ export class OpenSampleAPI implements SampleAPI {
     @Lazy
     static get(): OpenSampleAPI {return new OpenSampleAPI()}
 
-    // Revalidate rather than serve a cached tree: a publish must reach users on their next load, and the
-    // response is small enough that a conditional request costs nothing.
+    // A publish must reach users on their next load, and nothing about that may depend on how a browser
+    // interprets caching: the query makes every load a distinct URL, `no-cache` covers the rest.
     readonly #headers: RequestInit = {...OpenDAWHeaders, cache: "no-cache"}
     // The published index is the catalogue. A failure rejects rather than degrading to something emptier,
     // so the browser shows its retry instead of an empty list, and `memoizeAsync` drops the rejection.
     readonly #memoized: () => Promise<SampleIndex> = Promises.memoizeAsync(() =>
-        fetch(OpenSampleAPI.IndexFile, this.#headers)
+        fetch(`${OpenSampleAPI.IndexFile}?v=${Date.now()}`, this.#headers)
             .then(response => response.ok ? response.json() : panic(`${response.status} ${response.statusText}`))
             .then(json => SampleIndex.schema.parse(json)))
 
