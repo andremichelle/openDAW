@@ -175,6 +175,7 @@ export enum IconSymbol {
     Ring,
     Noise,
     Vaporisateur,
+    FolderOpen,
 }
 
 export namespace IconSymbol {

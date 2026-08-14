@@ -34,7 +34,6 @@
     display: grid
     grid-template-columns: subgrid
     grid-column: 1 / -1
-    align-content: start
     overflow: hidden
     mask-image: linear-gradient(to bottom, black calc(100% - 8px), transparent)
 
@@ -67,11 +66,14 @@
     &.right
       text-align: right
 
+  // Fills the content area even when the list is short, so the empty space below the rows belongs to the
+  // list: that is what a drop or a right click there acts on.
   div.scrollable
     padding-top: 4px
     padding-bottom: 6px
     overflow: hidden scroll
     row-gap: 3px
+    align-content: start
 
   div.error
     padding-top: 4px

@@ -1,4 +1,4 @@
-import {asDefined, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Arrays, asDefined, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, Sample} from "@opendaw/studio-adapters"
 import {
@@ -14,7 +14,7 @@ import {StudioService} from "@/service/StudioService"
 import {Dialogs} from "../components/dialogs"
 import {ResourceSelection, truncateList} from "@/ui/browse/ResourceSelection"
 
-export class SampleSelection implements ResourceSelection {
+export class SampleSelection implements ResourceSelection<Sample> {
     readonly #service: StudioService
     readonly #selection: HTMLSelection
 
@@ -29,7 +29,7 @@ export class SampleSelection implements ResourceSelection {
         const {editing, boxGraph} = project
 
         editing.modify(() => {
-            const samples = this.#selected()
+            const samples = this.selected()
             samples.forEach(sample => {
                 const {uuid: uuidAsString, name, duration: durationInSeconds, bpm} = sample
                 const uuid = UUID.parse(uuidAsString)
@@ -62,9 +62,7 @@ export class SampleSelection implements ResourceSelection {
         })
     }
 
-    async deleteSelected() {return this.deleteSamples(...this.#selected())}
-
-    async deleteSamples(...samples: ReadonlyArray<Sample>) {
+    async deleteItems(samples: ReadonlyArray<Sample>): Promise<ReadonlyArray<Sample>> {
         const dialog = RuntimeNotifier.progress({headline: "Checking Sample Usages"})
         const [usedByProjects, usedByTemplates, usedByPresets, onlineList] = await Promise.all([
             ProjectStorage.listUsedAssets(AudioFileBox),
@@ -109,19 +107,20 @@ export class SampleSelection implements ResourceSelection {
                 deletable.push(sample)
             }
         }
-        if (deletable.length === 0) {return}
+        if (deletable.length === 0) {return Arrays.empty()}
         const approved = await Dialogs.approve({
             headline: "Remove Sample(s)?",
             message: "This cannot be undone!",
             approveText: "Remove"
         })
-        if (!approved) {return}
+        if (!approved) {return Arrays.empty()}
         for (const {uuid} of deletable) {
             await SampleStorage.get().deleteItem(UUID.parse(uuid))
         }
+        return deletable
     }
 
-    #selected(): ReadonlyArray<Sample> {
+    selected(): ReadonlyArray<Sample> {
         const selected = this.#selection.getSelected()
         return selected.map(element => JSON.parse(asDefined(element.getAttribute("data-selection"))) as Sample)
     }

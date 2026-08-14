@@ -17,6 +17,10 @@ component
     cursor: pointer
     color: var(--color-dark)
 
+    &.drag-over
+      color: var(--color-bright)
+      background-color: var(--color-shadow)
+
     > span.label
       display: flex
       align-items: center
@@ -41,6 +45,9 @@ component
       background-color: transparent
       color: var(--color-shadow)
 
+      > svg.expanded
+        display: none
+
     span.name
       font-size: 1em
       white-space: nowrap
@@ -52,7 +59,8 @@ component
       font-style: italic
       white-space: nowrap
 
-  &.expanded > div.folder-header span.marker
+  &.expanded > div.folder-header span.marker,
+  &.expanded > div.folder-header div.icon
     > svg.collapsed
       display: none
 

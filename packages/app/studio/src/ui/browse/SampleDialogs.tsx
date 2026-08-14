@@ -1,17 +1,29 @@
 import {Dialog} from "@/ui/components/Dialog"
-import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
+import {BpmDetector, Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {createElement} from "@opendaw/lib-jsx"
-import {Errors, isDefined, RuntimeNotifier} from "@opendaw/lib-std"
+import {Errors, isDefined, Option, Progress, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {bpm} from "@opendaw/lib-dsp"
+import {Promises} from "@opendaw/lib-runtime"
+import {SampleStorage} from "@opendaw/studio-core"
+import {TextButton} from "@/ui/components/TextButton"
 
 export namespace SampleDialogs {
     type NameAndBpm = { name: string, bpm: number }
 
+    // Sample libraries state whole tempos. A measurement of 139.9995 is a person's 140, and showing them the
+    // float only invites them to retype it.
+    const snap = (value: bpm): bpm => {
+        const rounded = Math.round(value)
+        return Math.abs(value - rounded) / value < 0.005 ? rounded : Math.round(value * 10) / 10
+    }
+
     const showNameAndBpmDialog = async (headline: string,
                                         approveText: string,
                                         initial: NameAndBpm,
-                                        note?: string): Promise<NameAndBpm> => {
+                                        note?: string,
+                                        analyse?: Provider<Promise<Option<bpm>>>): Promise<NameAndBpm> => {
         const {resolve, reject, promise} = Promise.withResolvers<NameAndBpm>()
         const inputName: HTMLInputElement = <input className="default"
                                                    type="text"
@@ -20,6 +32,41 @@ export namespace SampleDialogs {
         inputName.select()
         inputName.focus()
         const inputBpm: HTMLInputElement = <input className="default" type="number" value={String(initial.bpm)}/>
+        const detected: HTMLElement = <div style={{opacity: "0.6", padding: "0.25em 0"}}/>
+        // Half and double time are the one thing tempo detection cannot settle on its own, and only a
+        // listener can. So the correction is one click rather than a retype.
+        const scale = (factor: number) => {
+            const current = parseFloat(inputBpm.value)
+            if (!isFinite(current) || current <= 0) {return}
+            inputBpm.value = String(Math.round(current * factor * 10) / 10)
+            detected.textContent = `${inputBpm.value} bpm · ${factor > 1 ? "double" : "half"} of the detected tempo`
+        }
+        const runAnalysis = async (provider: Provider<Promise<Option<bpm>>>) => {
+            detected.textContent = "analysing…"
+            const {status, value, error} = await Promises.tryCatch(provider())
+            if (status === "rejected") {
+                detected.textContent = String(error)
+                return
+            }
+            // The measurement goes into the field, so saving without touching anything accepts it, and the
+            // number stays editable for the cases where it is wrong.
+            value.match<void>({
+                none: () => {detected.textContent = "no tempo found"},
+                some: measured => {
+                    const snapped = snap(measured)
+                    inputBpm.value = String(snapped)
+                    detected.textContent = `detected ${snapped} bpm`
+                }
+            })
+        }
+        const tempo: HTMLElement = (
+            <div style={{display: "flex", alignItems: "center", columnGap: "0.25em"}}>
+                {inputBpm}
+                {isDefined(analyse) && <TextButton onClick={() => runAnalysis(analyse)}>Analyse</TextButton>}
+                {isDefined(analyse) && <TextButton onClick={() => scale(0.5)}>÷2</TextButton>}
+                {isDefined(analyse) && <TextButton onClick={() => scale(2)}>×2</TextButton>}
+            </div>
+        )
         const approve = () => {
             const name = inputName.value
             if (name.trim().length < 3) {
@@ -51,7 +98,9 @@ export namespace SampleDialogs {
                     <div>Name:</div>
                     {inputName}
                     <div>Bpm:</div>
-                    {inputBpm}
+                    {tempo}
+                    <div/>
+                    {detected}
                 </div>
                 {isDefined(note) && <div style={{opacity: "0.6", paddingBottom: "1em"}}>{note}</div>}
             </Dialog>
@@ -69,11 +118,17 @@ export namespace SampleDialogs {
         return promise
     }
 
-    export const showEditSampleDialog = async (sample: Sample): Promise<Sample> => {
+    export const showEditSampleDialog = async (sample: Sample, detector: BpmDetector): Promise<Sample> => {
         if (sample.origin === "openDAW") {
             return Promise.reject("Cannot change sample from the cloud")
         }
-        const {name, bpm} = await showNameAndBpmDialog("Edit Sample", "Save", sample)
+        // The same measurement the import runs, on the audio as it is stored. Zero means unknown and is
+        // reported as such rather than dressed up as a tempo.
+        const analyse = async (): Promise<Option<bpm>> => {
+            const [audio] = await SampleStorage.get().load(UUID.parse(sample.uuid))
+            return detector.detect(audio, Progress.Empty)
+        }
+        const {name, bpm} = await showNameAndBpmDialog("Edit Sample", "Save", sample, undefined, analyse)
         sample.name = name
         sample.bpm = bpm
         return sample

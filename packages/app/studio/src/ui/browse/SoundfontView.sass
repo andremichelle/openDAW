@@ -8,12 +8,6 @@ component
   &.selected
     color: var(--color-gray)
 
-  > div.edit
-    display: flex
-    grid-row: 1
-    grid-column: -1
-    margin-right: 8px
-
   > div.meta
     display: grid
     grid-template-columns: subgrid
@@ -34,9 +28,3 @@ component
 
       &.right
         text-align: right
-
-  .delete-icon
-    cursor: pointer
-
-    &:hover
-      color: var(--color-red)

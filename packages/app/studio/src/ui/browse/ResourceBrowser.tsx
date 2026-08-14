@@ -1,9 +1,24 @@
-import {DefaultObservableValue, Lifecycle, RuntimeSignal, StringComparator, Terminator} from "@opendaw/lib-std"
+import {
+    Arrays,
+    DefaultObservableValue,
+    isDefined,
+    Lifecycle,
+    MutableObservableOption,
+    Option,
+    Optional,
+    Predicate,
+    Provider,
+    RuntimeSignal,
+    StringComparator,
+    Terminable,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
 import {Await, createElement, Hotspot, HotspotUpdater, Inject, replaceChildren} from "@opendaw/lib-jsx"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {Runtime} from "@opendaw/lib-runtime"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {ProjectSignals} from "@opendaw/studio-core"
+import {ContextMenu, ProjectSignals} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots.tsx"
 import {SearchInput} from "@/ui/components/SearchInput"
@@ -15,6 +30,10 @@ import {ResourceBrowserConfig} from "@/ui/browse/ResourceBrowserConfig"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 import {ResourceFolderItem} from "@/ui/browse/ResourceFolderItem"
 import {installScrollbars} from "@/ui/components/Scrollbars"
+import {LocalTree} from "@/ui/browse/LocalTree"
+import {ResourceMenus} from "@/ui/browse/ResourceMenus"
+import {DragAndDrop} from "@/ui/DragAndDrop"
+import {AnyDragData} from "@/ui/AnyDragData"
 
 type Construct<T> = {
     lifecycle: Lifecycle
@@ -25,6 +44,13 @@ type Construct<T> = {
     fontSize?: string
     location: DefaultObservableValue<AssetLocation>
 }
+
+// The online browser has no tree to edit, so everything that moves items is gated on this option rather
+// than on the location enum.
+type Loaded<T> = { root: ResourceFolder<T>, tree: Option<LocalTree<T>> }
+
+const dragUuid = (data: AnyDragData): Optional<UUID.String> =>
+    data.type === "sample" ? data.sample.uuid : data.type === "soundfont" ? data.soundfont.uuid : undefined
 
 export const ResourceBrowser = <T, >({
                                          lifecycle,
@@ -40,6 +66,26 @@ export const ResourceBrowser = <T, >({
     )
     const selection = lifecycle.own(new HTMLSelection(entries))
     const resourceSelection = config.createSelection(service, selection)
+    // The tree of the current load, kept here so the keyboard can reach it. Empty while online.
+    const loaded = new MutableObservableOption<LocalTree<T>>()
+    // Delete means "to the trash" for anything that still has a place, and "for good" for what is already in
+    // it, so the same key both discards and finishes the job.
+    const deleteSelection = async (): Promise<void> => {
+        const selected = resourceSelection.selected()
+        if (selected.length === 0) {return}
+        const uuidOf = config.resolveEntryUuid
+        return loaded.match({
+            none: async () => {await resourceSelection.deleteItems(selected)},
+            some: async local => {
+                const trashed = selected.filter(item => local.isTrashed(uuidOf(item)))
+                const remaining = selected.filter(item => !local.isTrashed(uuidOf(item)))
+                if (remaining.length > 0) {await local.trash(remaining.map(uuidOf))}
+                if (trashed.length > 0) {
+                    await local.forget((await resourceSelection.deleteItems(trashed)).map(uuidOf))
+                }
+            }
+        })
+    }
     const expandedKeys = config.expandedKeys ?? new Set<string>()
     const entriesLifeSpan = lifecycle.own(new Terminator())
     const reload = Inject.ref<HotspotUpdater>()
@@ -75,47 +121,116 @@ export const ResourceBrowser = <T, >({
                     entriesLifeSpan.terminate()
                     return (
                         <Await
-                            factory={async (): Promise<ResourceFolder<T>> => location.getValue() === AssetLocation.Local
-                                ? {name: "", folders: [], items: await config.fetchLocal()}
-                                : config.fetchOnline()}
+                            factory={async (): Promise<Loaded<T>> => {
+                                loaded.clear()
+                                if (location.getValue() !== AssetLocation.Local) {
+                                    return {root: await config.fetchOnline(), tree: Option.None}
+                                }
+                                const items = await config.fetchLocal()
+                                const fetchLocalTree = config.fetchLocalTree
+                                if (!isDefined(fetchLocalTree)) {
+                                    return {root: {name: "", folders: [], items}, tree: Option.None}
+                                }
+                                const tree = await fetchLocalTree()
+                                loaded.wrap(tree)
+                                return {root: tree.assemble(items, config.resolveEntryName), tree: Option.wrap(tree)}
+                            }}
                             loading={() => (<div><ThreeDots/></div>)}
                             failure={({reason, retry}) => (
                                 <div className="error" onclick={retry}>
                                     {reason instanceof DOMException ? reason.name : String(reason)}
                                 </div>
                             )}
-                            success={(root) => {
+                            success={({root, tree}) => {
+                                const refresh = () => reload.get().update()
+                                // What a drop moves: the whole selection when the dragged row belongs to it,
+                                // that one row otherwise, the same rule the context menu follows.
+                                const draggedUuids = (data: AnyDragData): ReadonlyArray<UUID.String> => {
+                                    const uuid = dragUuid(data)
+                                    if (!isDefined(uuid)) {return Arrays.empty()}
+                                    const selected = resourceSelection.selected().map(config.resolveEntryUuid)
+                                    return selected.includes(uuid) ? selected : [uuid]
+                                }
+                                const installDropTarget = (target: HTMLElement,
+                                                           path: Provider<string>,
+                                                           accepts: Predicate<DragEvent>): Terminable =>
+                                    DragAndDrop.installTarget(target, {
+                                        drag: (event, data) =>
+                                            data.type === config.dragType && accepts(event),
+                                        drop: (event, data) => {
+                                            event.stopPropagation()
+                                            target.classList.remove("drag-over")
+                                            tree.ifSome(async local => {
+                                                await local.move(draggedUuids(data), path())
+                                                refresh()
+                                            })
+                                        },
+                                        enter: allowDrop => {
+                                            if (allowDrop) {target.classList.add("drag-over")}
+                                        },
+                                        leave: () => target.classList.remove("drag-over")
+                                    })
                                 const renderEntry = (item: T) => config.renderEntry({
                                     lifecycle: entriesLifeSpan,
                                     service,
                                     selection: resourceSelection,
                                     item,
                                     location: location.getValue(),
-                                    refresh: () => reload.get().update()
+                                    tree,
+                                    refresh
                                 })
+                                // `path` is the folder path in the structure file, which doubles as the key
+                                // that remembers which folders are open.
                                 const renderContent = (folder: ResourceFolder<T>, path: string, depth: number): Array<HTMLElement> => [
                                     ...folder.folders.map(sub => {
-                                        const expandKey = `${path}/${sub.name}`
+                                        const subPath = LocalTree.path(path, sub.name)
                                         return ResourceFolderItem({
                                             label: sub.name,
                                             count: ResourceFolder.countItems(sub),
                                             depth,
-                                            expandKey,
+                                            expandKey: subPath,
                                             expandedKeys,
-                                            entries: renderContent(sub, expandKey, depth + 1)
+                                            entries: renderContent(sub, subPath, depth + 1),
+                                            install: tree.mapOr(local => (header: HTMLElement) =>
+                                                entriesLifeSpan.ownAll(
+                                                    // The trash is a rendered folder, not a stored one: it
+                                                    // takes no drops and has nothing to rename.
+                                                    subPath === LocalTree.TrashName
+                                                        ? Terminable.Empty
+                                                        : installDropTarget(header, () => subPath, () => true),
+                                                    ContextMenu.subscribe(header, collector => collector.addItems(
+                                                        ...(subPath === LocalTree.TrashName
+                                                            ? ResourceMenus.trashFolder(local, resourceSelection,
+                                                                sub.items, config.resolveEntryUuid, refresh)
+                                                            : ResourceMenus.folder(local, subPath,
+                                                                ResourceFolder.countItems(sub), refresh))))
+                                                ), undefined)
                                         })
                                     }),
                                     ...folder.items.map(renderEntry)
                                 ]
                                 // A query abandons the structure and searches the whole catalogue, which is what
-                                // the flat list did before folders existed.
+                                // the flat list did before folders existed. Trashed items stay out of it: they
+                                // are deleted as far as the rest of the browser is concerned.
                                 const renderSearch = (query: string): Array<HTMLElement> => ResourceFolder.flatten(root)
+                                    .filter(item => tree.mapOr(
+                                        local => !local.isTrashed(config.resolveEntryUuid(item)), true))
                                     .filter(item => config.resolveEntryName(item).toLowerCase().includes(query))
                                     .toSorted((a, b) => StringComparator(config.resolveEntryName(a).toLowerCase(), config.resolveEntryName(b).toLowerCase()))
                                     .map(renderEntry)
                                 const update = () => {
                                     entriesLifeSpan.terminate()
                                     selection.clear()
+                                    // The empty space below the rows is the root. Anything dropped on a row
+                                    // or a folder header belongs to that folder and is handled there. This
+                                    // has to be reinstalled here: `entriesLifeSpan` dies on every update.
+                                    tree.ifSome(local => entriesLifeSpan.ownAll(
+                                        installDropTarget(entries, () => "",
+                                            event => !(event.target instanceof Element)
+                                                || !isDefined(event.target.closest("[data-selection], .folder-header"))),
+                                        ContextMenu.subscribe(entries, collector =>
+                                            collector.addItems(...ResourceMenus.background(local, refresh)))
+                                    ))
                                     const query = filter.getValue().toLowerCase()
                                     replaceChildren(entries, query.length === 0
                                         ? renderContent(root, "", 0)
@@ -144,7 +259,7 @@ export const ResourceBrowser = <T, >({
         Events.subscribe(element, "keydown", async event => {
             if (Events.isTextInput(event.target)) {return}
             if (Keyboard.isDelete(event) && location.getValue() === AssetLocation.Local) {
-                await resourceSelection.deleteSelected()
+                await deleteSelection()
                 reload.get().update()
             }
         })

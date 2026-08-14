@@ -1,5 +1,5 @@
 import css from "./SampleBrowser.sass?inline"
-import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
+import {Arrays, DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {SampleStorage} from "@opendaw/studio-core"
@@ -15,6 +15,7 @@ import {Sample} from "@opendaw/studio-adapters"
 import {SampleIndex, SampleIndexFolder} from "@/opendaw-api/SampleIndex"
 import {ResourceBrowserConfig} from "@/ui/browse/ResourceBrowserConfig"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
+import {LocalTree} from "@/ui/browse/LocalTree"
 
 const className = Html.adoptStyleSheet(css, "Samples")
 
@@ -49,9 +50,21 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
             folders: (await OpenSampleAPI.get().tree()).folders.map(toResourceFolder),
             items: []
         }),
-        fetchLocal: () => SampleStorage.get().list(),
+        // A cloud sample that has been played once is cached in the same storage as an imported one. It is
+        // still a cloud sample: it belongs to the online tree, cannot be renamed, and must not turn up here
+        // as if the user had put it there. Same subtraction the soundfont browser does.
+        fetchLocal: async () => {
+            const openDAW = await OpenSampleAPI.get().all()
+            const local = await SampleStorage.get().list()
+            return Arrays.subtract(local, openDAW, ({uuid: a}, {uuid: b}) => a === b)
+        },
+        fetchLocalTree: () => LocalTree.load(SampleStorage.get().structure, (sample: Sample) => sample.uuid),
         expandedKeys,
-        renderEntry: ({lifecycle: entryLifecycle, service: entryService, selection, item, location: loc, refresh}) => (
+        dragType: "sample",
+        renderEntry: ({
+                          lifecycle: entryLifecycle, service: entryService, selection, item, location: loc, tree,
+                          refresh
+                      }) => (
             <SampleView
                 lifecycle={entryLifecycle}
                 service={entryService}
@@ -59,10 +72,12 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
                 playback={entryService.samplePlayback}
                 sample={item}
                 location={loc}
+                tree={tree}
                 refresh={refresh}
             />
         ),
         resolveEntryName: (sample: Sample) => sample.name,
+        resolveEntryUuid: (sample: Sample) => sample.uuid,
         createSelection: (svc: StudioService, htmlSelection: HTMLSelection) => new SampleSelection(svc, htmlSelection),
         importSignal: "import-sample",
         footer: ({lifecycle: footerLifecycle}) => (

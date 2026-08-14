@@ -1,5 +1,6 @@
 import css from "./ResourceFolderItem.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
+import {Procedure} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
@@ -13,9 +14,14 @@ type Construct = {
     expandKey: string
     expandedKeys: Set<string>
     entries: ReadonlyArray<HTMLElement>
+    // Called with the header once it exists. The local browser uses it to make the row a drop target, which
+    // is knowledge this component does not need to carry.
+    install?: Procedure<HTMLElement>
 }
 
-export const ResourceFolderItem = ({label, count, depth, expandKey, expandedKeys, entries}: Construct): HTMLElement => {
+export const ResourceFolderItem = ({
+                                       label, count, depth, expandKey, expandedKeys, entries, install
+                                   }: Construct): HTMLElement => {
     const empty = entries.length === 0
     const item: HTMLElement = <div className={Html.buildClassList(className, empty && "empty")}/>
     item.style.setProperty("--depth", String(depth))
@@ -29,7 +35,8 @@ export const ResourceFolderItem = ({label, count, depth, expandKey, expandedKeys
                     <Icon symbol={IconSymbol.ArrowDown} className="expanded"/>
                 </span>
                 <div className="icon">
-                    <Icon symbol={IconSymbol.Folder}/>
+                    <Icon symbol={IconSymbol.Folder} className="collapsed"/>
+                    <Icon symbol={IconSymbol.FolderOpen} className="expanded"/>
                 </div>
                 <span className="name">{label}</span>
                 <span className="brief">{count === 0 ? "" : `(${count})`}</span>
@@ -52,5 +59,6 @@ export const ResourceFolderItem = ({label, count, depth, expandKey, expandedKeys
         }
     }
     item.append(header, list)
+    install?.(header)
     return item
 }
