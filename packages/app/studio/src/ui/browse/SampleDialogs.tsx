@@ -1,13 +1,30 @@
+import css from "./SampleDialogs.sass?inline"
 import {Dialog} from "@/ui/components/Dialog"
 import {BpmDetector, Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {createElement} from "@opendaw/lib-jsx"
-import {Errors, isDefined, Option, Progress, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {
+    DefaultObservableValue,
+    Errors,
+    isDefined,
+    Option,
+    Progress,
+    Provider,
+    RuntimeNotifier,
+    StringMapping,
+    Terminator,
+    UUID
+} from "@opendaw/lib-std"
 import {bpm} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {SampleStorage} from "@opendaw/studio-core"
 import {TextButton} from "@/ui/components/TextButton"
+import {TextInput} from "@/ui/components/TextInput"
+import {NumberInput} from "@/ui/components/NumberInput"
+import {Html} from "@opendaw/lib-dom"
+
+const className = Html.adoptStyleSheet(css, "SampleDialog")
 
 export namespace SampleDialogs {
     type NameAndBpm = { name: string, bpm: number }
@@ -22,20 +39,25 @@ export namespace SampleDialogs {
                                         initial: NameAndBpm,
                                         note?: string,
                                         analyse?: Provider<Promise<Option<bpm>>>): Promise<NameAndBpm> => {
+        const lifecycle = new Terminator()
         const {resolve, reject, promise} = Promise.withResolvers<NameAndBpm>()
-        const inputName: HTMLInputElement = <input className="default"
-                                                   type="text"
-                                                   value={initial.name}
-                                                   placeholder="Enter a name"/>
-        inputName.select()
-        inputName.focus()
-        const inputBpm: HTMLInputElement = <input className="default" type="number" value={String(initial.bpm)}/>
-        const detected: HTMLElement = <div style={{opacity: "0.6", padding: "0.25em 0"}}/>
+        promise.finally(() => lifecycle.terminate())
+        const name = new DefaultObservableValue(initial.name)
+        const tempoValue = new DefaultObservableValue(initial.bpm)
+        const inputName = <TextInput lifecycle={lifecycle} model={name} maxChars={64}/>
+        const inputBpm = <NumberInput lifecycle={lifecycle}
+                                      model={tempoValue}
+                                      maxChars={6}
+                                      step={1}
+                                      mapper={StringMapping.numeric({fractionDigits: 1})}
+                                      guard={{guard: value => Math.max(0, value)}}/>
+        const detected: HTMLElement = <div className="detected"/>
         const scale = (factor: number) => {
-            const current = parseFloat(inputBpm.value)
-            if (!isFinite(current) || current <= 0) {return}
-            inputBpm.value = String(Math.round(current * factor * 10) / 10)
-            detected.textContent = `${inputBpm.value} bpm · ${factor > 1 ? "double" : "half"} of the detected tempo`
+            const current = tempoValue.getValue()
+            if (current <= 0) {return}
+            const scaled = Math.round(current * factor * 10) / 10
+            tempoValue.setValue(scaled)
+            detected.textContent = `${scaled} bpm · ${factor > 1 ? "double" : "half"} of the detected tempo`
         }
         const runAnalysis = async (provider: Provider<Promise<Option<bpm>>>) => {
             detected.textContent = "analysing…"
@@ -48,13 +70,13 @@ export namespace SampleDialogs {
                 none: () => {detected.textContent = "no tempo found"},
                 some: measured => {
                     const snapped = snap(measured)
-                    inputBpm.value = String(snapped)
+                    tempoValue.setValue(snapped)
                     detected.textContent = `detected ${snapped} bpm`
                 }
             })
         }
         const tempo: HTMLElement = (
-            <div style={{display: "flex", alignItems: "center", columnGap: "0.25em"}}>
+            <div className="tempo">
                 {inputBpm}
                 {isDefined(analyse) && <TextButton onClick={() => runAnalysis(analyse)}>Analyse</TextButton>}
                 {isDefined(analyse) && <TextButton onClick={() => scale(0.5)}>÷2</TextButton>}
@@ -62,17 +84,12 @@ export namespace SampleDialogs {
             </div>
         )
         const approve = () => {
-            const name = inputName.value
-            if (name.trim().length < 3) {
+            const trimmed = name.getValue().trim()
+            if (trimmed.length < 3) {
                 RuntimeNotifier.notify({message: "Name must be at least 3 letters long.", icon: "Info"})
                 return false
             }
-            const bpm = parseFloat(inputBpm.value)
-            if (isNaN(bpm) || bpm < 0) {
-                RuntimeNotifier.notify({message: "BPM must be zero (unknown) or a positive number.", icon: "Info"})
-                return false
-            }
-            resolve({name, bpm})
+            resolve({name: trimmed, bpm: tempoValue.getValue()})
             return true
         }
         const dialog: HTMLDialogElement = (
@@ -88,15 +105,15 @@ export namespace SampleDialogs {
                             }
                         }
                     }]}>
-                <div style={{padding: "1em 0", display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "1em"}}>
+                <div className={className}>
                     <div>Name:</div>
                     {inputName}
                     <div>Bpm:</div>
                     {tempo}
                     <div/>
                     {detected}
+                    {isDefined(note) && <div className="note">{note}</div>}
                 </div>
-                {isDefined(note) && <div style={{opacity: "0.6", paddingBottom: "1em"}}>{note}</div>}
             </Dialog>
         )
         dialog.oncancel = () => reject(Errors.AbortError)

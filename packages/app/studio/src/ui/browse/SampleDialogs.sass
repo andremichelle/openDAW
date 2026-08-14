@@ -1,0 +1,21 @@
+component
+  padding: 1em 0
+  display: grid
+  grid-template-columns: auto 1fr
+  column-gap: 1em
+  row-gap: 0.5em
+  align-items: center
+  min-width: 24em
+
+  > div.tempo
+    display: flex
+    align-items: center
+    column-gap: 0.25em
+
+  > div.detected
+    opacity: 0.6
+
+  > div.note
+    grid-column: 1 / -1
+    opacity: 0.6
+    padding-bottom: 1em

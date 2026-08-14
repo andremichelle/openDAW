@@ -1,20 +1,25 @@
+import css from "./FolderDialogs.sass?inline"
 import {Dialog} from "@/ui/components/Dialog"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {createElement} from "@opendaw/lib-jsx"
-import {Errors, RuntimeNotifier} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
+import {Html} from "@opendaw/lib-dom"
+import {TextInput} from "@/ui/components/TextInput"
+
+const className = Html.adoptStyleSheet(css, "FolderDialog")
 
 export namespace FolderDialogs {
     export const showNameDialog = async (headline: string,
                                          approveText: string,
                                          initial: string): Promise<string> => {
+        const lifecycle = new Terminator()
         const {resolve, reject, promise} = Promise.withResolvers<string>()
-        const input: HTMLInputElement = <input className="default"
-                                               type="text"
-                                               value={initial}
-                                               placeholder="Enter a name"/>
+        promise.finally(() => lifecycle.terminate())
+        const model = new DefaultObservableValue(initial)
+        const input = <TextInput lifecycle={lifecycle} model={model} maxChars={64}/>
         const approve = () => {
-            const name = input.value.trim()
+            const name = model.getValue().trim()
             if (name.length === 0) {
                 RuntimeNotifier.notify({message: "A folder needs a name.", icon: "Info"})
                 return false
@@ -37,7 +42,7 @@ export namespace FolderDialogs {
                             if (approve()) {handler.close()}
                         }
                     }]}>
-                <div style={{padding: "1em 0", display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "1em"}}>
+                <div className={className}>
                     <div>Name:</div>
                     {input}
                 </div>
@@ -49,7 +54,6 @@ export namespace FolderDialogs {
         }
         Surface.get().flyout.appendChild(dialog)
         dialog.showModal()
-        input.select()
         input.focus()
         return promise
     }
