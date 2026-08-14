@@ -44,8 +44,7 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
     }
 
     async updateSampleMeta(uuid: UUID.Bytes, meta: SampleMetaData): Promise<void> {
-        const path = `${this.folder}/${UUID.toString(uuid)}`
-        return Workers.Opfs.write(`${path}/meta.json`, new TextEncoder().encode(JSON.stringify(meta)))
+        return this.updateMeta(uuid, meta)
     }
 
     async loadMeta(uuid: UUID.Bytes): Promise<SampleMetaData> {

@@ -1,5 +1,6 @@
 import css from "./ResourceFolderItem.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
+import {Procedure} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
@@ -13,23 +14,21 @@ type Construct = {
     expandKey: string
     expandedKeys: Set<string>
     entries: ReadonlyArray<HTMLElement>
+    install: Procedure<HTMLElement>
 }
 
-export const ResourceFolderItem = ({label, count, depth, expandKey, expandedKeys, entries}: Construct): HTMLElement => {
+export const ResourceFolderItem = ({
+                                       label, count, depth, expandKey, expandedKeys, entries, install
+                                   }: Construct): HTMLElement => {
     const empty = entries.length === 0
     const item: HTMLElement = <div className={Html.buildClassList(className, empty && "empty")}/>
     item.style.setProperty("--depth", String(depth))
-    // Stays a subgrid so the trailing cells land under Bpm and Sec. The label is a nested flex, which is what
-    // keeps triangle, icon, name and count together in the first column.
     const header: HTMLElement = (
         <div className="folder-header">
             <span className="label">
-                <span className="marker">
-                    <Icon symbol={IconSymbol.ArrowRight} className="collapsed"/>
-                    <Icon symbol={IconSymbol.ArrowDown} className="expanded"/>
-                </span>
                 <div className="icon">
-                    <Icon symbol={IconSymbol.Folder}/>
+                    <Icon symbol={IconSymbol.Folder} className="collapsed"/>
+                    <Icon symbol={IconSymbol.FolderOpen} className="expanded"/>
                 </div>
                 <span className="name">{label}</span>
                 <span className="brief">{count === 0 ? "" : `(${count})`}</span>
@@ -52,5 +51,6 @@ export const ResourceFolderItem = ({label, count, depth, expandKey, expandedKeys
         }
     }
     item.append(header, list)
+    install(header)
     return item
 }

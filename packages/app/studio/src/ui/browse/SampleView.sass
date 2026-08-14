@@ -5,38 +5,17 @@ component
   color: var(--color-dark)
   align-items: center
 
-  &.selected
+  &:hover
     color: var(--color-gray)
 
-  > div.edit
-    display: flex
-    align-items: center
-    column-gap: 3px
-    grid-row: 1
-    grid-column: -1
-    margin-right: 8px
-
-    .edit-icon
-      cursor: pointer
-
-      &:hover
-        color: var(--color-bright)
-
-    .delete-icon
-      cursor: pointer
-
-      &:hover
-        color: var(--color-red)
+  &.selected
+    color: var(--color-white)
 
   > div.meta
     display: grid
     grid-template-columns: subgrid
     grid-column: span 3
-    padding-left: calc(3px + var(--indent, 0px))
-    border-left: 3px transparent solid
-
-    &:hover
-      border-left: 3px var(--color-blue) solid
+    padding-left: calc(6px + var(--indent, 0px))
 
     &:active
       cursor: grabbing

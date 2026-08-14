@@ -6,8 +6,6 @@ import {Icon} from "@/ui/components/Icon"
 
 const className = Html.adoptStyleSheet(css, "IntroTiles")
 
-// Each tile links to its own page; the legend shows that destination. Topics reuse an existing page where one
-// exists (Privacy -> /privacy), otherwise the manual under /manuals/<slug>.
 type Tile = {
     icon: IconSymbol
     title: string
