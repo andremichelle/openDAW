@@ -2,7 +2,7 @@ import css from "./SoundfontView.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
 import {Arrays, Exec, isDefined, Lifecycle, Option} from "@opendaw/lib-std"
 import {Soundfont} from "@opendaw/studio-adapters"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {Html} from "@opendaw/lib-dom"
 import {DragAndDrop} from "@/ui/DragAndDrop"
@@ -53,7 +53,8 @@ export const SoundfontView = ({
             collector.addItems(
                 MenuItem.header({
                     label: targets.length > 1 ? `${targets.length} soundfonts` : name,
-                    icon: IconSymbol.AudioFile
+                    icon: IconSymbol.AudioFile,
+                    color: Colors.blue
                 }),
                 MenuItem.default({label: "Create Soundfont Device", selectable: service.hasProfile})
                     .setTriggerProcedure(() => soundfontSelection.requestDevice()),

@@ -1,7 +1,7 @@
 import {Exec, Func, int, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {MenuItem, ResourceStructureFolder} from "@opendaw/studio-core"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {LocalTree} from "@/ui/browse/LocalTree"
 import {FolderDialogs} from "@/ui/browse/FolderDialogs"
 import {ResourceSelection} from "@/ui/browse/ResourceSelection"
@@ -25,7 +25,11 @@ export namespace ResourceMenus {
                              path: string,
                              folders: ReadonlyArray<ResourceStructureFolder>): void => {
             parent.addMenuItem(
-                MenuItem.header({label: path.length === 0 ? "Root" : path, icon: IconSymbol.FolderOpen}),
+                MenuItem.header({
+                    label: path.length === 0 ? "Root" : path,
+                    icon: IconSymbol.FolderOpen,
+                    color: Colors.orange
+                }),
                 MenuItem.default({label: "Drop Here", icon: IconSymbol.FolderOpen})
                     .setTriggerProcedure(() => move(path)),
                 MenuItem.default({label: "Create new Folder…", icon: IconSymbol.FolderAdd})
@@ -86,7 +90,7 @@ export namespace ResourceMenus {
                                    items: ReadonlyArray<T>,
                                    uuidOf: Func<T, UUID.String>,
                                    refresh: Exec): ReadonlyArray<MenuItem> => [
-        MenuItem.header({label: LocalTree.TrashName, icon: IconSymbol.Delete}),
+        MenuItem.header({label: LocalTree.TrashName, icon: IconSymbol.Delete, color: Colors.orange}),
         MenuItem.default({label: "Empty Trash…", icon: IconSymbol.Delete, selectable: items.length > 0})
             .setTriggerProcedure(() => deleteForever(tree, selection, items, uuidOf, refresh))
     ]
@@ -105,7 +109,7 @@ export namespace ResourceMenus {
                               refresh: Exec): ReadonlyArray<MenuItem> => {
         const name = LocalTree.nameOf(path)
         return [
-            MenuItem.header({label: name, icon: IconSymbol.Folder}),
+            MenuItem.header({label: name, icon: IconSymbol.Folder, color: Colors.orange}),
             MenuItem.default({label: "New Folder…", icon: IconSymbol.FolderAdd})
                 .setTriggerProcedure(() => createFolder(tree, path, refresh)),
             MenuItem.default({label: "Rename…", icon: IconSymbol.Pencil})

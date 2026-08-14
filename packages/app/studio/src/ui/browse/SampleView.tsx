@@ -3,7 +3,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {Arrays, Exec, Lifecycle, Objects, Option, UUID} from "@opendaw/lib-std"
 import {SamplePlayback} from "@/service/SamplePlayback"
 import {Sample} from "@opendaw/studio-adapters"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {SampleDialogs} from "@/ui/browse/SampleDialogs"
 import {ContextMenu, MenuItem, SampleStorage} from "@opendaw/studio-core"
@@ -57,7 +57,8 @@ export const SampleView = ({
                      collector.addItems(
                          MenuItem.header({
                              label: targets.length > 1 ? `${targets.length} samples` : name,
-                             icon: IconSymbol.AudioFile
+                             icon: IconSymbol.AudioFile,
+                             color: Colors.blue
                          }),
                          MenuItem.default({label: "Create Audio Track(s)", selectable: service.hasProfile})
                              .setTriggerProcedure(() => sampleSelection.requestDevice()),
