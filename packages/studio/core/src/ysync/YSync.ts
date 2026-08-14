@@ -3,6 +3,7 @@ import {
     asInstanceOf,
     assert,
     EmptyExec,
+    int,
     isInstanceOf,
     isUndefined,
     JSONValue,
@@ -71,9 +72,12 @@ export class YSync<T> implements Terminable {
             const fields = boxMap.get("fields") as Y.Map<unknown>
             boxGraph.createBox(name, uuid, box => YMapper.applyFromBoxMap(box, fields))
         })
-        // A room document can encode a state that violates a box-graph invariant (the live reconcile heals
-        // each peer's graph but leaves the doc as-is). Repair deterministically before validating, so a fresh
-        // joiner lands on the same graph every peer already holds instead of rejecting the whole snapshot.
+        // A room document can encode a state that violates a box-graph invariant. Repair deterministically
+        // before validating, so a fresh joiner lands on the same graph every peer already holds instead of
+        // rejecting the whole snapshot. The rebuild above only mirrors the document and must NOT be written
+        // back (that would republish every box map over the live room), but the repair must be, exactly as on
+        // the live path in #setupYjs.
+        sync.#publishFrom = Option.wrap(sync.#updates.length)
         deterministicReconcile(boxGraph)
         boxGraph.endTransaction()
         return sync
@@ -99,6 +103,7 @@ export class YSync<T> implements Terminable {
     readonly #pathPrefix: ReadonlyArray<string | number>
 
     #ignoreUpdates: boolean = false
+    #publishFrom: Option<int> = Option.None
 
     constructor({boxGraph, boxes, conflict}: Construct<T>) {
         this.#boxGraph = boxGraph
@@ -136,15 +141,21 @@ export class YSync<T> implements Terminable {
                 // forks the room, because each client reverts to its own different state — RE-APPLY the batch
                 // and repair the violation with a function that is deterministic in the converged document
                 // (see deterministicReconcile). Every client computes the same repair, so the graphs converge.
+                //
+                // The repair itself MUST be written back to the document (everything before `#publishFrom`
+                // mirrors the incoming batch and stays suppressed). Kept local-only, it silently breaks the
+                // 'graph equals document' invariant: the graph never re-derives an edge it dropped, so once the
+                // document's violation clears by other means (a later write wins the field by LWW) the healed
+                // peers hold a state no peer that never saw the violation, and no late joiner, can reproduce.
                 const reconciled = tryCatch(() => {
                     this.#boxGraph.beginTransaction()
                     this.#applyEvents(events)
+                    this.#publishFrom = Option.wrap(this.#updates.length)
                     deterministicReconcile(this.#boxGraph)
-                    this.#ignoreUpdates = true
                     this.#boxGraph.endTransaction()
-                    this.#ignoreUpdates = false
                 })
                 if (reconciled.status === "failure") {
+                    this.#publishFrom = Option.None
                     this.#ignoreUpdates = false
                     if (this.#boxGraph.inTransaction()) {
                         this.#boxGraph.abortTransaction()
@@ -235,8 +246,13 @@ export class YSync<T> implements Terminable {
     }
 
     #deleteBox(key: string): void {
-        const box = this.#boxGraph.findBox(UUID.parse(key))
-            .unwrap(`Box '${key}' does not exist.`)
+        const optBox = this.#boxGraph.findBox(UUID.parse(key))
+        if (optBox.isEmpty()) {
+            // Two peers can publish the same repair (a mandatory owner losing an exclusive target).
+            console.debug(`Box '${key}' has already been deleted.`)
+            return
+        }
+        const box = optBox.unwrap()
         box.outgoingEdges().forEach(([pointer]) => pointer.defer())
         box.incomingEdges().forEach(pointer => pointer.defer())
         this.#boxGraph.unstageBox(box)
@@ -275,8 +291,12 @@ export class YSync<T> implements Terminable {
                 onBeginTransaction: EmptyExec,
                 onEndTransaction: (rolledBack) => {
                     const pending = this.#updates.splice(0)
-                    if (this.#ignoreUpdates || rolledBack) {return}
-                    const optimized = optimizeUpdates(pending)
+                    const publishFrom = this.#publishFrom
+                    this.#publishFrom = Option.None
+                    if (rolledBack) {return}
+                    const publishing: ReadonlyArray<Update> = publishFrom
+                        .mapOr(index => pending.slice(index), this.#ignoreUpdates ? [] : pending)
+                    const optimized = optimizeUpdates(publishing)
                     if (optimized.length === 0) {return}
                     const result = tryCatch(() => this.#getDoc()
                         .transact(() => optimized.forEach(update => this.#applyUpdate(update)),

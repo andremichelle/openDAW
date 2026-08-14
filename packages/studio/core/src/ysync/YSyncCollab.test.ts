@@ -471,19 +471,28 @@ describe("YSync live collaboration", () => {
     })
 
     // Randomised multi-peer schedules. Exclusive attachments are kept APPEND-ONLY (a ref is never detached or
-    // retargeted away from an exclusive target) because the prototype suppresses its repair from the doc, so
-    // removing an exclusive survivor would diverge live peers from a fresh joiner. Within that regime the
-    // reconcile is a pure function of the converged doc, so every peer AND a late joiner must agree.
+    // retargeted away from an exclusive target), which bounds the scenario space but no longer hides anything:
+    // because the reconcile publishes its repair, every peer's graph stays a function of the converged doc, so
+    // every peer AND a late joiner must agree. Everything random here is derived from `seed` (schedule, uuids,
+    // Yjs client ids), so a reported seed replays the exact failure.
     it("fuzz: randomised concurrent schedules converge across peers and a late joiner", async () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
         const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
         try {
-            for (const seed of [1, 2, 5, 9, 13, 17, 23, 42, 99, 123, 777, 2024]) {
+            for (const seed of [1, 2, 5, 9, 13, 17, 23, 42, 99, 111, 122, 123, 132, 172, 777, 2024]) {
                 const rnd = mulberry32(seed)
                 const pick = <T>(items: ReadonlyArray<T>): T => items[Math.floor(rnd() * items.length)]
+                // Box uuids come from the seeded stream too: the reconcile breaks ties by address, so with
+                // random uuids a seed would replay the schedule but never the scenario.
+                const nextUuid = (): UUID.Bytes => {
+                    const bytes = new Uint8Array(UUID.length)
+                    for (let index = 0; index < UUID.length; index++) {bytes[index] = Math.floor(rnd() * 256)}
+                    return bytes
+                }
                 const peers: Array<Peer> = []
                 for (let index = 0; index < 4; index++) {
                     const doc = new Y.Doc()
+                    doc.clientID = index + 1 // Yjs breaks concurrent-write ties by client id: fix it, or replays drift
                     const boxes = doc.getMap("boxes")
                     const graph = new BoxGraph<any>(Option.wrap(factory as any))
                     peers.push({name: `P${index}`, doc, boxes, graph, sync: await YSync.populateRoom<any>({boxGraph: graph, boxes})})
@@ -496,9 +505,9 @@ describe("YSync live collaboration", () => {
                     }
                     panic(`seed ${seed}: no global convergence`)
                 }
-                const excl = [UUID.generate(), UUID.generate(), UUID.generate()]
-                const leaves = [UUID.generate(), UUID.generate()]
-                const refs = Array.from({length: 6}, () => UUID.generate())
+                const excl = [nextUuid(), nextUuid(), nextUuid()]
+                const leaves = [nextUuid(), nextUuid()]
+                const refs = Array.from({length: 6}, () => nextUuid())
                 edit(peers[0], graph => {
                     excl.forEach(id => ExclusiveBox.create(graph, id))
                     leaves.forEach(id => LeafBox.create(graph, id))
@@ -547,6 +556,7 @@ describe("YSync live collaboration", () => {
                 // A late joiner reconstructs from the document alone and must match the live room.
                 const joinGraph = new BoxGraph<any>(Option.wrap(factory as any))
                 const joinDoc = new Y.Doc()
+                joinDoc.clientID = 99
                 Y.applyUpdate(joinDoc, Y.encodeStateAsUpdate(peers[0].doc))
                 await YSync.joinRoom<any>({boxGraph: joinGraph, boxes: joinDoc.getMap("boxes")})
                 expect(checksumHex(joinGraph), `seed ${seed} joiner`).toBe(reference)
