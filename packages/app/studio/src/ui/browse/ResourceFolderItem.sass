@@ -3,9 +3,6 @@
 component
   @include mixins.library-item-outer
 
-  &.empty > div.folder-header span.marker
-    visibility: hidden
-
   &.empty > div.folder-header
     cursor: default
 
@@ -31,15 +28,6 @@ component
     > span.right
       text-align: right
 
-    span.marker
-      display: flex
-      align-items: center
-      color: var(--color-shadow)
-      margin-right: -4px
-
-      > svg.expanded
-        display: none
-
     div.icon
       @include mixins.color-icon-tile(16px)
       background-color: transparent
@@ -59,7 +47,6 @@ component
       font-style: italic
       white-space: nowrap
 
-  &.expanded > div.folder-header span.marker,
   &.expanded > div.folder-header div.icon
     > svg.collapsed
       display: none
