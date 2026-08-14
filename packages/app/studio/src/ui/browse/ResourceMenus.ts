@@ -9,8 +9,8 @@ import {Dialogs} from "@/ui/components/dialogs"
 
 export namespace ResourceMenus {
     // The destination tree is built when the submenu opens, not when the menu is created, so it always shows
-    // the current structure and never a stale copy of it. A folder that has children becomes a submenu, with
-    // an "Into" entry so the folder itself stays reachable.
+    // the current structure and never a stale copy of it. Every folder, the root included, opens into the
+    // same two actions plus its subfolders: picking a folder name navigates, it never moves by itself.
     export const moveTo = <T>(tree: LocalTree<T>,
                               uuids: ReadonlyArray<UUID.String>,
                               refresh: Exec): MenuItem => {
@@ -18,26 +18,32 @@ export namespace ResourceMenus {
             await tree.move(uuids, path)
             refresh()
         }
-        const populate = (parent: MenuItem, folders: ReadonlyArray<ResourceStructureFolder>, path: string): void =>
-            folders.forEach(folder => {
+        const moveIntoNewFolder = async (parentPath: string) => {
+            const {status, value: name} = await Promises.tryCatch(
+                FolderDialogs.showNameDialog("New Folder", "Create", "untitled folder"))
+            if (status === "rejected") {return}
+            // The created name is not always the one asked for, so the destination comes from the tree.
+            return move(LocalTree.path(parentPath, await tree.createFolder(parentPath, name)))
+        }
+        const destination = (parent: MenuItem,
+                             path: string,
+                             folders: ReadonlyArray<ResourceStructureFolder>): void => {
+            parent.addMenuItem(
+                MenuItem.default({label: "Drop Here", icon: IconSymbol.Folder})
+                    .setTriggerProcedure(() => move(path)),
+                MenuItem.default({label: "Create new Folder…", icon: IconSymbol.Add})
+                    .setTriggerProcedure(() => moveIntoNewFolder(path)))
+            folders.forEach((folder, index) => {
                 const folderPath = LocalTree.path(path, folder.name)
-                const item = MenuItem.default({label: folder.name, icon: IconSymbol.Folder})
-                    .setTriggerProcedure(() => move(folderPath))
-                const children = folder.folders ?? []
-                if (children.length > 0) {
-                    item.setRuntimeChildrenProcedure(sub => {
-                        sub.addMenuItem(MenuItem.default({label: `Into "${folder.name}"`})
-                            .setTriggerProcedure(() => move(folderPath)))
-                        populate(sub, children, folderPath)
-                    })
-                }
-                parent.addMenuItem(item)
+                parent.addMenuItem(MenuItem.default({
+                    label: folder.name,
+                    icon: IconSymbol.Folder,
+                    separatorBefore: index === 0
+                }).setRuntimeChildrenProcedure(sub => destination(sub, folderPath, folder.folders ?? [])))
             })
+        }
         return MenuItem.default({label: "Move to", icon: IconSymbol.Folder})
-            .setRuntimeChildrenProcedure(parent => {
-                parent.addMenuItem(MenuItem.default({label: "Root"}).setTriggerProcedure(() => move("")))
-                populate(parent, tree.folders, "")
-            })
+            .setRuntimeChildrenProcedure(parent => destination(parent, "", tree.folders))
     }
 
     // What a local row can do with itself. Trashing is free and asks nothing, because it takes nothing away:

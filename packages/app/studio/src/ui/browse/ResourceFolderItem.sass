@@ -15,15 +15,19 @@ component
     color: var(--color-dark)
 
     &.drag-over
-      color: var(--color-bright)
+      color: var(--color-white)
       background-color: var(--color-shadow)
+
+    &:hover
+      color: var(--color-gray)
 
     > span.label
       display: flex
       align-items: center
       column-gap: 4px
       min-width: 0
-      padding-left: calc(var(--depth, 0) * 0.75em)
+      // The same 6px the header and the entry rows start at, so icon, name and column label line up.
+      padding-left: calc(6px + var(--depth, 0) * 0.75em)
 
     > span.right
       text-align: right

@@ -201,11 +201,11 @@ export class LocalTree<T> {
         return this.#file.save(this.#structure)
     }
 
-    async createFolder(parentPath: string, name: string): Promise<void> {
-        return this.#write(parentPath, node => ({
-            ...node,
-            folders: [...node.folders, {name: this.uniqueName(parentPath, name)}]
-        }))
+    // Answers with the name it really got, which is not the one asked for when a sibling already had it.
+    async createFolder(parentPath: string, name: string): Promise<string> {
+        const unique = this.uniqueName(parentPath, name)
+        await this.#write(parentPath, node => ({...node, folders: [...node.folders, {name: unique}]}))
+        return unique
     }
 
     async renameFolder(path: string, name: string): Promise<void> {
