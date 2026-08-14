@@ -6,6 +6,7 @@ import {SampleStorage} from "../samples"
 import {FactoryCatalog} from "../FactoryCatalog"
 import {CloudHandler} from "./CloudHandler"
 import {CloudBackupStructure} from "./CloudBackupStructure"
+import {CloudBackupTombstones} from "./CloudBackupTombstones"
 import {Workers} from "../Workers"
 import {WavFile} from "@opendaw/lib-dsp"
 
@@ -49,13 +50,19 @@ export class CloudBackupSamples {
     }
 
     async #start(progress: Progress.Handler) {
-        const trashed = await SampleStorage.get().loadTrashedIds()
+        const storage = SampleStorage.get()
+        const tombstones = await CloudBackupTombstones.sync(this.#cloudHandler, CloudBackupSamples.RemotePath,
+            await storage.loadTrashedIds(), this.#log)
+        await storage.saveTrashedIds(tombstones)
         const [uploadProgress, trashProgress, downloadProgress] = Progress.splitWithWeights(progress, [0.45, 0.10, 0.45])
         await this.#upload(uploadProgress)
-        await this.#trash(trashed, trashProgress)
-        await this.#download(trashed, downloadProgress)
-        await CloudBackupStructure.sync(this.#cloudHandler, SampleStorage.get().structure,
-            CloudBackupSamples.RemotePath, this.#log)
+        await this.#trash(tombstones, trashProgress)
+        await this.#download(tombstones, downloadProgress)
+        // Deleted for good elsewhere, still sitting here: it goes to this device's trash, not to the bin.
+        await CloudBackupStructure.trashLocally(storage.structure, this.#sampleDomains.local
+            .map(({uuid}) => uuid)
+            .filter(uuid => tombstones.includes(uuid) && !this.#trashed.has(uuid)))
+        await CloudBackupStructure.sync(this.#cloudHandler, storage.structure, CloudBackupSamples.RemotePath, this.#log)
     }
 
     async #upload(progress: Progress.Handler) {

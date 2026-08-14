@@ -30,6 +30,38 @@ export namespace CloudBackupStructure {
             .encode(JSON.stringify({...published, folders: merged.folders})).buffer as ArrayBuffer)
     }
 
+    // What another device deleted for good lands in this device's trash, never straight in the bin: the
+    // destructive step stays with the person sitting here.
+    export const trashLocally = async (file: StructureFile, uuids: ReadonlyArray<UUID.String>): Promise<void> => {
+        if (uuids.length === 0) {return}
+        const local = (await file.load()).unwrapOrElse(StructureFile.Empty)
+        const known = new Set(local.trash.map(entry => entry.uuid))
+        const trashing = uuids.filter(uuid => !known.has(uuid))
+        if (trashing.length === 0) {return}
+        const entries = trashing.map(uuid => ({uuid, path: pathOf(local.folders, uuid, "")}))
+        const remove = new Set(trashing)
+        const strip = (folder: ResourceStructureFolder): ResourceStructureFolder => ({
+            ...folder,
+            folders: folder.folders?.map(strip),
+            uuids: folder.uuids?.filter(uuid => !remove.has(uuid))
+        })
+        return file.save({
+            ...local,
+            folders: local.folders.map(strip),
+            trash: [...local.trash, ...entries]
+        })
+    }
+
+    const pathOf = (folders: ReadonlyArray<ResourceStructureFolder>, uuid: UUID.String, path: string): string => {
+        for (const folder of folders) {
+            const folderPath = path.length === 0 ? folder.name : `${path}/${folder.name}`
+            if (folder.uuids?.includes(uuid) === true) {return folderPath}
+            const found = pathOf(folder.folders ?? Arrays.empty(), uuid, folderPath)
+            if (found.length > 0) {return found}
+        }
+        return ""
+    }
+
     const parse = (bytes: ArrayBuffer): Option<ResourceStructure> => {
         const result = tryCatch(() => JSON.parse(new TextDecoder().decode(bytes)) as ResourceStructure)
         return result.status === "success" ? Option.wrap(result.value) : Option.None

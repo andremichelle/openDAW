@@ -3,6 +3,7 @@ import {network, Promises} from "@opendaw/lib-runtime"
 import {Soundfont} from "@opendaw/studio-adapters"
 import {CloudHandler} from "./CloudHandler"
 import {CloudBackupStructure} from "./CloudBackupStructure"
+import {CloudBackupTombstones} from "./CloudBackupTombstones"
 import {SoundfontStorage} from "../soundfont"
 import {FactoryCatalog} from "../FactoryCatalog"
 
@@ -46,13 +47,19 @@ export class CloudBackupSoundfonts {
     }
 
     async #start(progress: Progress.Handler) {
-        const trashed = await SoundfontStorage.get().loadTrashedIds()
+        const storage = SoundfontStorage.get()
+        const tombstones = await CloudBackupTombstones.sync(this.#cloudHandler, CloudBackupSoundfonts.RemotePath,
+            await storage.loadTrashedIds(), this.#log)
+        await storage.saveTrashedIds(tombstones)
         const [uploadProgress, trashProgress, downloadProgress] = Progress.splitWithWeights(progress, [0.45, 0.10, 0.45])
         await this.#upload(uploadProgress)
-        await this.#trash(trashed, trashProgress)
-        await this.#download(trashed, downloadProgress)
-        await CloudBackupStructure.sync(this.#cloudHandler, SoundfontStorage.get().structure,
-            CloudBackupSoundfonts.RemotePath, this.#log)
+        await this.#trash(tombstones, trashProgress)
+        await this.#download(tombstones, downloadProgress)
+        // Deleted for good elsewhere, still sitting here: it goes to this device's trash, not to the bin.
+        await CloudBackupStructure.trashLocally(storage.structure, this.#soundfontDomains.local
+            .map(({uuid}) => uuid)
+            .filter(uuid => tombstones.includes(uuid) && !this.#trashed.has(uuid)))
+        await CloudBackupStructure.sync(this.#cloudHandler, storage.structure, CloudBackupSoundfonts.RemotePath, this.#log)
     }
 
     async #upload(progress: Progress.Handler) {
