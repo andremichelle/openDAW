@@ -148,20 +148,28 @@ export const ResourceBrowser = <T, >({
                                 const installDropTarget = (target: HTMLElement,
                                                            accepts: Predicate<ReadonlyArray<UUID.String>>,
                                                            apply: Func<ReadonlyArray<UUID.String>, Promise<void>>,
-                                                           within: Predicate<DragEvent> = () => true): Terminable =>
-                                    DragAndDrop.installTarget(target, {
-                                        drag: (event, data) => data.type === config.dragType
-                                            && within(event) && accepts(draggedUuids(data)),
-                                        drop: (event, data) => {
-                                            event.stopPropagation()
-                                            target.classList.remove("drag-over")
-                                            apply(draggedUuids(data)).then(refresh)
-                                        },
-                                        enter: allowDrop => {
-                                            if (allowDrop) {target.classList.add("drag-over")}
-                                        },
-                                        leave: () => target.classList.remove("drag-over")
-                                    })
+                                                           within: Predicate<DragEvent> = () => true): Terminable => {
+                                    const clear = () => target.classList.remove("drag-over")
+                                    return Terminable.many(
+                                        DragAndDrop.installTarget(target, {
+                                            drag: (event, data) => data.type === config.dragType
+                                                && within(event) && accepts(draggedUuids(data)),
+                                            drop: (event, data) => {
+                                                event.stopPropagation()
+                                                clear()
+                                                apply(draggedUuids(data)).then(refresh)
+                                            },
+                                            enter: allowDrop => {
+                                                if (allowDrop) {target.classList.add("drag-over")}
+                                            },
+                                            leave: clear
+                                        }),
+                                        // dragend fires on the source, so a cancelled drag never reaches
+                                        // `leave` and the highlight would stay behind.
+                                        Events.subscribe(window, "dragend", clear, {capture: true}),
+                                        Events.subscribe(window, "drop", clear, {capture: true})
+                                    )
+                                }
                                 const renderEntry = (item: T) => config.renderEntry({
                                     lifecycle: entriesLifeSpan,
                                     service,
