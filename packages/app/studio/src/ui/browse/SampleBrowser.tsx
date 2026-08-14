@@ -50,9 +50,6 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
             folders: (await OpenSampleAPI.get().tree()).folders.map(toResourceFolder),
             items: []
         }),
-        // A cloud sample that has been played once is cached in the same storage as an imported one. It is
-        // still a cloud sample: it belongs to the online tree, cannot be renamed, and must not turn up here
-        // as if the user had put it there. Same subtraction the soundfont browser does.
         fetchLocal: async () => {
             const openDAW = await OpenSampleAPI.get().all()
             const local = await SampleStorage.get().list()

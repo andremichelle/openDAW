@@ -14,8 +14,6 @@ type Construct = {
     expandKey: string
     expandedKeys: Set<string>
     entries: ReadonlyArray<HTMLElement>
-    // Called with the header once it exists. The local browser uses it to make the row a drop target, which
-    // is knowledge this component does not need to carry.
     install?: Procedure<HTMLElement>
 }
 
@@ -25,8 +23,6 @@ export const ResourceFolderItem = ({
     const empty = entries.length === 0
     const item: HTMLElement = <div className={Html.buildClassList(className, empty && "empty")}/>
     item.style.setProperty("--depth", String(depth))
-    // Stays a subgrid so the trailing cells land under Bpm and Sec. The label is a nested flex, which is what
-    // keeps icon, name and count together in the first column.
     const header: HTMLElement = (
         <div className="folder-header">
             <span className="label">

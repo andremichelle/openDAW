@@ -12,8 +12,6 @@ import {TextButton} from "@/ui/components/TextButton"
 export namespace SampleDialogs {
     type NameAndBpm = { name: string, bpm: number }
 
-    // Sample libraries state whole tempos. A measurement of 139.9995 is a person's 140, and showing them the
-    // float only invites them to retype it.
     const snap = (value: bpm): bpm => {
         const rounded = Math.round(value)
         return Math.abs(value - rounded) / value < 0.005 ? rounded : Math.round(value * 10) / 10
@@ -33,8 +31,6 @@ export namespace SampleDialogs {
         inputName.focus()
         const inputBpm: HTMLInputElement = <input className="default" type="number" value={String(initial.bpm)}/>
         const detected: HTMLElement = <div style={{opacity: "0.6", padding: "0.25em 0"}}/>
-        // Half and double time are the one thing tempo detection cannot settle on its own, and only a
-        // listener can. So the correction is one click rather than a retype.
         const scale = (factor: number) => {
             const current = parseFloat(inputBpm.value)
             if (!isFinite(current) || current <= 0) {return}
@@ -48,8 +44,6 @@ export namespace SampleDialogs {
                 detected.textContent = String(error)
                 return
             }
-            // The measurement goes into the field, so saving without touching anything accepts it, and the
-            // number stays editable for the cases where it is wrong.
             value.match<void>({
                 none: () => {detected.textContent = "no tempo found"},
                 some: measured => {
@@ -122,8 +116,6 @@ export namespace SampleDialogs {
         if (sample.origin === "openDAW") {
             return Promise.reject("Cannot change sample from the cloud")
         }
-        // The same measurement the import runs, on the audio as it is stored. Zero means unknown and is
-        // reported as such rather than dressed up as a tempo.
         const analyse = async (): Promise<Option<bpm>> => {
             const [audio] = await SampleStorage.get().load(UUID.parse(sample.uuid))
             return detector.detect(audio, Progress.Empty)

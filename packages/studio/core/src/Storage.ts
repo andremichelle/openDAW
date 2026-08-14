@@ -4,8 +4,6 @@ import {Promises} from "@opendaw/lib-runtime"
 import {StructureFile} from "./StructureFile"
 
 export abstract class Storage<ITEM extends { uuid: UUID.String } & META, META, NEW, PARTS> {
-    // How the locally stored items are grouped into folders. Optional by construction: the file may be
-    // missing and everything still lists.
     readonly structure: StructureFile
 
     protected constructor(readonly folder: string) {this.structure = new StructureFile(folder)}

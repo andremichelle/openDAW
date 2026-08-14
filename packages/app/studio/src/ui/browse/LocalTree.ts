@@ -2,9 +2,6 @@ import {Arrays, Func, int, isDefined, StringComparator, UUID} from "@opendaw/lib
 import {ResourceStructure, ResourceStructureFolder, StructureFile} from "@opendaw/studio-core"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 
-// The local counterpart of the published index: it turns the flat list of stored items plus the structure
-// file into the same `ResourceFolder` shape the online browser renders. Membership is all that is stored,
-// so order is alphabetical and a drop means "move into", never "insert at".
 export class LocalTree<T> {
     static readonly TrashName = "Trash"
 
@@ -38,8 +35,6 @@ export class LocalTree<T> {
     get folders(): ReadonlyArray<ResourceStructureFolder> {return this.#structure.folders}
     get uuidOf(): Func<T, UUID.String> {return this.#uuidOf}
 
-    // Anything the structure does not name lands in the root, which is what makes a fresh import appear
-    // without a write and a uuid whose files are gone disappear without a repair step.
     assemble(items: ReadonlyArray<T>, nameOf: Func<T, string>): ResourceFolder<T> {
         const byUuid = new Map<UUID.String, T>(items.map(item => [this.#uuidOf(item), item]))
         const claimed = new Set<UUID.String>()
@@ -67,7 +62,6 @@ export class LocalTree<T> {
         const trash = sort(this.#structure.trash
             .map(({uuid}) => byUuid.get(uuid))
             .filter(isDefined))
-        // Always last and always there, even when empty: a trash you cannot see is a trash nobody empties.
         return {
             name: "",
             folders: [...folders, {name: LocalTree.TrashName, folders: [], items: trash}],
@@ -79,12 +73,10 @@ export class LocalTree<T> {
         return this.#structure.trash.some(entry => entry.uuid === uuid)
     }
 
-    // Trashing keeps the files: only where an item sat is recorded, so putting it back is exact. The audio
-    // survives until someone deletes it for good, which is the whole point of having a trash.
     async trash(uuids: ReadonlyArray<UUID.String>): Promise<void> {
         const trashing = uuids.filter(uuid => !this.isTrashed(uuid))
         if (trashing.length === 0) {return}
-        const entries = trashing.map(uuid => ({uuid, path: this.#pathOf(uuid)}))
+        const entries = trashing.map(uuid => ({uuid, path: this.pathOf(uuid)}))
         const remove = new Set(trashing)
         const strip = (folder: ResourceStructureFolder): ResourceStructureFolder => ({
             ...folder,
@@ -99,8 +91,6 @@ export class LocalTree<T> {
         return this.#file.save(this.#structure)
     }
 
-    // Back to where it was trashed from, recreating folders that have gone in the meantime, because a restore
-    // that dumps everything at the root is not a restore.
     async restore(uuids: ReadonlyArray<UUID.String>): Promise<void> {
         const restoring = this.#structure.trash.filter(entry => uuids.includes(entry.uuid))
         if (restoring.length === 0) {return}
@@ -114,7 +104,6 @@ export class LocalTree<T> {
         }
     }
 
-    // Called once the files are really gone. Anything left over would be a uuid pointing at nothing.
     async forget(uuids: ReadonlyArray<UUID.String>): Promise<void> {
         if (uuids.length === 0) {return}
         const gone = new Set(uuids)
@@ -129,19 +118,6 @@ export class LocalTree<T> {
             trash: this.#structure.trash.filter(entry => !gone.has(entry.uuid))
         }
         return this.#file.save(this.#structure)
-    }
-
-    #pathOf(uuid: UUID.String): string {
-        const search = (folders: ReadonlyArray<ResourceStructureFolder>, path: string): string => {
-            for (const folder of folders) {
-                const folderPath = LocalTree.path(path, folder.name)
-                if (folder.uuids?.includes(uuid) === true) {return folderPath}
-                const found = search(folder.folders ?? Arrays.empty(), folderPath)
-                if (found.length > 0) {return found}
-            }
-            return ""
-        }
-        return search(this.#structure.folders, "")
     }
 
     #ensureFolder(path: string): void {
@@ -174,9 +150,20 @@ export class LocalTree<T> {
             })
     }
 
-    // Membership is the only thing stored, so a move is a removal from wherever the uuids sit plus an append
-    // at the destination. The root is addressed by the empty path and has no entry of its own: not being
-    // named anywhere IS being at the root.
+    pathOf(uuid: UUID.String): string {
+        const search = (folders: ReadonlyArray<ResourceStructureFolder>, path: string): string => {
+            for (const folder of folders) {
+                const folderPath = LocalTree.path(path, folder.name)
+                if (folder.uuids?.includes(uuid) === true) {return folderPath}
+                const found = search(folder.folders ?? Arrays.empty(), folderPath)
+                if (found.length > 0) {return found}
+            }
+            return ""
+        }
+        return search(this.#structure.folders, "")
+    }
+
+    // The root is the empty path and has no entry of its own: not being named anywhere IS being at the root.
     async move(uuids: ReadonlyArray<UUID.String>, path: string): Promise<void> {
         if (uuids.length === 0) {return}
         const moving = new Set(uuids)
@@ -196,12 +183,12 @@ export class LocalTree<T> {
         const stripped = this.#structure.folders.map(strip)
         this.#structure = {
             ...this.#structure,
-            folders: names.length === 0 ? stripped : insert(stripped, 0)
+            folders: names.length === 0 ? stripped : insert(stripped, 0),
+            trash: this.#structure.trash.filter(entry => !moving.has(entry.uuid))
         }
         return this.#file.save(this.#structure)
     }
 
-    // Answers with the name it really got, which is not the one asked for when a sibling already had it.
     async createFolder(parentPath: string, name: string): Promise<string> {
         const unique = this.uniqueName(parentPath, name)
         await this.#write(parentPath, node => ({...node, folders: [...node.folders, {name: unique}]}))
@@ -219,8 +206,6 @@ export class LocalTree<T> {
         }))
     }
 
-    // Contents survive a folder delete by moving up one level, the behaviour that never loses material by
-    // accident. At the root "one level up" means being named nowhere, which is exactly what the root is.
     async deleteFolder(path: string): Promise<void> {
         const parentPath = LocalTree.parentOf(path)
         const name = LocalTree.nameOf(path)
@@ -241,8 +226,6 @@ export class LocalTree<T> {
         })
     }
 
-    // A unique name among siblings, so two folders cannot collide and break the path that identifies them.
-    // At the root "Trash" is taken by the trash itself, which is a rendered folder and not a stored one.
     uniqueName(parentPath: string, candidate: string): string {
         const taken = new Set(this.#node(parentPath).folders.map(folder => folder.name.toLowerCase()))
         if (parentPath.length === 0) {taken.add(LocalTree.TrashName.toLowerCase())}
@@ -270,8 +253,6 @@ export class LocalTree<T> {
         return {folders, uuids}
     }
 
-    // Every structural edit is "replace the folder at this path", where the root is the empty path. Its uuid
-    // list is not stored: at the root, being unnamed IS being there.
     async #write(path: string, mutate: Func<LocalTree.Node, LocalTree.Node>): Promise<void> {
         const names = path.split("/").filter(name => name.length > 0)
         const descend = (folders: ReadonlyArray<ResourceStructureFolder>,

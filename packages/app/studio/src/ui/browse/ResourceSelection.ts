@@ -3,8 +3,6 @@ import {Provider} from "@opendaw/lib-std"
 export interface ResourceSelection<T> {
     requestDevice(): void
     selected(): ReadonlyArray<T>
-    // Deletes for good and answers with what really went: an item a project still depends on is refused, and
-    // the caller has to know that before it drops the item from the folder structure.
     deleteItems(items: ReadonlyArray<T>): Promise<ReadonlyArray<T>>
 }
 

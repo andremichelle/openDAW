@@ -13,12 +13,8 @@ export type ResourceBrowserConfig<T> = {
     name: string
     fetchOnline: () => Promise<ResourceFolder<T>>
     fetchLocal: () => Promise<ReadonlyArray<T>>
-    // Reads the folder structure that groups the local items. Loaded on every reload, so a change made in
-    // another tab shows up here. Without it the local list stays flat.
     fetchLocalTree?: () => Promise<LocalTree<T>>
     expandedKeys?: Set<string>
-    // Which drag payload this browser accepts when moving items between its folders. Two open browsers must
-    // not accept each other's rows.
     dragType: AnyDragData["type"]
     renderEntry: (props: {
         lifecycle: Lifecycle

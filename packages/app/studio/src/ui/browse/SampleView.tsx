@@ -35,9 +35,6 @@ export const SampleView = ({
                            }: Construct) => {
     const {name, duration, bpm} = sample
     const isLocal = location === AssetLocation.Local
-    // The local list already hides cached cloud samples, but one that was delisted from the published index
-    // still shows up here, and the dialog refuses it because its name and tempo were published. Say so in
-    // the menu instead of offering an entry that does nothing.
     const isEditable = isLocal && sample.origin !== "openDAW"
     const editSample = async () => {
         const {status, value: meta} = await Promises.tryCatch(

@@ -1,13 +1,13 @@
 import {
     Arrays,
     DefaultObservableValue,
+    Func,
     isDefined,
     Lifecycle,
     MutableObservableOption,
     Option,
     Optional,
     Predicate,
-    Provider,
     RuntimeSignal,
     StringComparator,
     Terminable,
@@ -45,8 +45,6 @@ type Construct<T> = {
     location: DefaultObservableValue<AssetLocation>
 }
 
-// The online browser has no tree to edit, so everything that moves items is gated on this option rather
-// than on the location enum.
 type Loaded<T> = { root: ResourceFolder<T>, tree: Option<LocalTree<T>> }
 
 const dragUuid = (data: AnyDragData): Optional<UUID.String> =>
@@ -66,10 +64,7 @@ export const ResourceBrowser = <T, >({
     )
     const selection = lifecycle.own(new HTMLSelection(entries))
     const resourceSelection = config.createSelection(service, selection)
-    // The tree of the current load, kept here so the keyboard can reach it. Empty while online.
     const loaded = new MutableObservableOption<LocalTree<T>>()
-    // Delete means "to the trash" for anything that still has a place, and "for good" for what is already in
-    // it, so the same key both discards and finishes the job.
     const deleteSelection = async (): Promise<void> => {
         const selected = resourceSelection.selected()
         if (selected.length === 0) {return}
@@ -143,8 +138,7 @@ export const ResourceBrowser = <T, >({
                             )}
                             success={({root, tree}) => {
                                 const refresh = () => reload.get().update()
-                                // What a drop moves: the whole selection when the dragged row belongs to it,
-                                // that one row otherwise, the same rule the context menu follows.
+                                // The whole selection when the dragged row belongs to it, that row otherwise.
                                 const draggedUuids = (data: AnyDragData): ReadonlyArray<UUID.String> => {
                                     const uuid = dragUuid(data)
                                     if (!isDefined(uuid)) {return Arrays.empty()}
@@ -152,18 +146,16 @@ export const ResourceBrowser = <T, >({
                                     return selected.includes(uuid) ? selected : [uuid]
                                 }
                                 const installDropTarget = (target: HTMLElement,
-                                                           path: Provider<string>,
-                                                           accepts: Predicate<DragEvent>): Terminable =>
+                                                           accepts: Predicate<ReadonlyArray<UUID.String>>,
+                                                           apply: Func<ReadonlyArray<UUID.String>, Promise<void>>,
+                                                           within: Predicate<DragEvent> = () => true): Terminable =>
                                     DragAndDrop.installTarget(target, {
-                                        drag: (event, data) =>
-                                            data.type === config.dragType && accepts(event),
+                                        drag: (event, data) => data.type === config.dragType
+                                            && within(event) && accepts(draggedUuids(data)),
                                         drop: (event, data) => {
                                             event.stopPropagation()
                                             target.classList.remove("drag-over")
-                                            tree.ifSome(async local => {
-                                                await local.move(draggedUuids(data), path())
-                                                refresh()
-                                            })
+                                            apply(draggedUuids(data)).then(refresh)
                                         },
                                         enter: allowDrop => {
                                             if (allowDrop) {target.classList.add("drag-over")}
@@ -179,8 +171,6 @@ export const ResourceBrowser = <T, >({
                                     tree,
                                     refresh
                                 })
-                                // `path` is the folder path in the structure file, which doubles as the key
-                                // that remembers which folders are open.
                                 const renderContent = (folder: ResourceFolder<T>, path: string, depth: number): Array<HTMLElement> => [
                                     ...folder.folders.map(sub => {
                                         const subPath = LocalTree.path(path, sub.name)
@@ -193,11 +183,14 @@ export const ResourceBrowser = <T, >({
                                             entries: renderContent(sub, subPath, depth + 1),
                                             install: tree.mapOr(local => (header: HTMLElement) =>
                                                 entriesLifeSpan.ownAll(
-                                                    // The trash is a rendered folder, not a stored one: it
-                                                    // takes no drops and has nothing to rename.
                                                     subPath === LocalTree.TrashName
-                                                        ? Terminable.Empty
-                                                        : installDropTarget(header, () => subPath, () => true),
+                                                        ? installDropTarget(header,
+                                                            uuids => uuids.some(uuid => !local.isTrashed(uuid)),
+                                                            uuids => local.trash(uuids))
+                                                        : installDropTarget(header,
+                                                            uuids => uuids.some(uuid => local.isTrashed(uuid)
+                                                                || local.pathOf(uuid) !== subPath),
+                                                            uuids => local.move(uuids, subPath)),
                                                     ContextMenu.subscribe(header, collector => collector.addItems(
                                                         ...(subPath === LocalTree.TrashName
                                                             ? ResourceMenus.trashFolder(local, resourceSelection,
@@ -209,9 +202,6 @@ export const ResourceBrowser = <T, >({
                                     }),
                                     ...folder.items.map(renderEntry)
                                 ]
-                                // A query abandons the structure and searches the whole catalogue, which is what
-                                // the flat list did before folders existed. Trashed items stay out of it: they
-                                // are deleted as far as the rest of the browser is concerned.
                                 const renderSearch = (query: string): Array<HTMLElement> => ResourceFolder.flatten(root)
                                     .filter(item => tree.mapOr(
                                         local => !local.isTrashed(config.resolveEntryUuid(item)), true))
@@ -221,11 +211,12 @@ export const ResourceBrowser = <T, >({
                                 const update = () => {
                                     entriesLifeSpan.terminate()
                                     selection.clear()
-                                    // The empty space below the rows is the root. Anything dropped on a row
-                                    // or a folder header belongs to that folder and is handled there. This
-                                    // has to be reinstalled here: `entriesLifeSpan` dies on every update.
+                                    // Reinstalled here because `entriesLifeSpan` dies on every update.
                                     tree.ifSome(local => entriesLifeSpan.ownAll(
-                                        installDropTarget(entries, () => "",
+                                        installDropTarget(entries,
+                                            uuids => uuids.some(uuid => local.isTrashed(uuid)
+                                                || local.pathOf(uuid).length > 0),
+                                            uuids => local.move(uuids, ""),
                                             event => !(event.target instanceof Element)
                                                 || !isDefined(event.target.closest("[data-selection], .folder-header"))),
                                         ContextMenu.subscribe(entries, collector =>

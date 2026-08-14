@@ -8,9 +8,6 @@ import {ResourceSelection} from "@/ui/browse/ResourceSelection"
 import {Dialogs} from "@/ui/components/dialogs"
 
 export namespace ResourceMenus {
-    // The destination tree is built when the submenu opens, not when the menu is created, so it always shows
-    // the current structure and never a stale copy of it. Every folder, the root included, opens into the
-    // same two actions plus its subfolders: picking a folder name navigates, it never moves by itself.
     export const moveTo = <T>(tree: LocalTree<T>,
                               uuids: ReadonlyArray<UUID.String>,
                               refresh: Exec): MenuItem => {
@@ -22,7 +19,6 @@ export namespace ResourceMenus {
             const {status, value: name} = await Promises.tryCatch(
                 FolderDialogs.showNameDialog("New Folder", "Create", "untitled folder"))
             if (status === "rejected") {return}
-            // The created name is not always the one asked for, so the destination comes from the tree.
             return move(LocalTree.path(parentPath, await tree.createFolder(parentPath, name)))
         }
         const destination = (parent: MenuItem,
@@ -46,8 +42,6 @@ export namespace ResourceMenus {
             .setRuntimeChildrenProcedure(parent => destination(parent, "", tree.folders))
     }
 
-    // What a local row can do with itself. Trashing is free and asks nothing, because it takes nothing away:
-    // the files stay until someone empties the trash, and that is the step that asks.
     export const itemActions = <T>(tree: LocalTree<T>,
                                    selection: ResourceSelection<T>,
                                    targets: ReadonlyArray<T>,
@@ -121,8 +115,6 @@ export namespace ResourceMenus {
                     await tree.renameFolder(path, renamed)
                     refresh()
                 }),
-            // Deleting a folder never deletes what is in it: an empty one goes without asking, a full one
-            // asks and then hands its contents to the level above.
             MenuItem.default({label: "Delete Folder", icon: IconSymbol.Delete, separatorBefore: true})
                 .setTriggerProcedure(async () => {
                     if (count > 0) {

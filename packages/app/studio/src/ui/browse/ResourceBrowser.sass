@@ -66,14 +66,17 @@
     &.right
       text-align: right
 
-  // Fills the content area even when the list is short, so the empty space below the rows belongs to the
-  // list: that is what a drop or a right click there acts on.
+  // Fills the content area even when the list is short, so a drop or a right click below the rows
+  // still lands on the list, which is what the root is.
   div.scrollable
     padding-top: 4px
     padding-bottom: 6px
     overflow: hidden scroll
     row-gap: 3px
     align-content: start
+
+    &.drag-over
+      box-shadow: inset 0 0 0 1px var(--color-shadow)
 
   div.error
     padding-top: 4px
