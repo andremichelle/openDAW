@@ -25,5 +25,16 @@ component
       white-space: nowrap
       text-overflow: ellipsis
 
+      &.name
+        display: flex
+        align-items: center
+        column-gap: 0.4em
+
+        > svg.file
+          flex: 0 0 auto
+          width: 1em
+          height: 1em
+          color: var(--color-shadow)
+
       &.right
         text-align: right

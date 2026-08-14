@@ -1,46 +1,44 @@
-import css from "./FolderDialogs.sass?inline"
+import css from "./SoundfontDialogs.sass?inline"
 import {Dialog} from "@/ui/components/Dialog"
+import {Soundfont} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
 import {createElement} from "@opendaw/lib-jsx"
-import {DefaultObservableValue, Errors, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, isInstanceOf, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
 import {Html} from "@opendaw/lib-dom"
 import {TextInput} from "@/ui/components/TextInput"
 
-const className = Html.adoptStyleSheet(css, "FolderDialog")
+const className = Html.adoptStyleSheet(css, "SoundfontDialog")
 
-export namespace FolderDialogs {
-    export const showNameDialog = async (headline: string,
-                                         approveText: string,
-                                         initial: string): Promise<string> => {
+export namespace SoundfontDialogs {
+    export const showEditSoundfontDialog = async (soundfont: Soundfont): Promise<Soundfont> => {
+        if (soundfont.origin === "openDAW") {
+            return Promise.reject("Cannot change soundfont from the cloud")
+        }
         const lifecycle = new Terminator()
-        const {resolve, reject, promise} = Promise.withResolvers<string>()
+        const {resolve, reject, promise} = Promise.withResolvers<Soundfont>()
         promise.finally(() => lifecycle.terminate())
-        const model = new DefaultObservableValue(initial)
-        const input = <TextInput lifecycle={lifecycle} model={model} maxChars={64}/>
+        const name = new DefaultObservableValue(soundfont.name)
         const approve = () => {
-            const name = model.getValue().trim()
-            if (name.length === 0) {
-                RuntimeNotifier.notify({message: "A folder needs a name.", icon: "Info"})
+            if (isInstanceOf(document.activeElement, HTMLElement)) {document.activeElement.blur()}
+            const trimmed = name.getValue().trim()
+            if (trimmed.length < 3) {
+                RuntimeNotifier.notify({message: "Name must be at least 3 letters long.", icon: "Info"})
                 return false
             }
-            if (name.includes("/")) {
-                RuntimeNotifier.notify({message: "A folder name cannot contain '/'.", icon: "Info"})
-                return false
-            }
-            resolve(name)
+            resolve({...soundfont, name: trimmed})
             return true
         }
         const dialog: HTMLDialogElement = (
-            <Dialog headline={headline}
-                    icon={IconSymbol.Folder}
+            <Dialog headline="Edit Soundfont"
+                    icon={IconSymbol.SoundFont}
                     cancelable={true}
                     onCancel={() => reject(Errors.AbortError)}
                     buttons={[{
                         text: "Cancel",
                         onClick: handler => handler.close()
                     }, {
-                        text: approveText,
+                        text: "Save",
                         primary: true,
                         onClick: handler => {
                             if (approve()) {handler.close()}
@@ -48,7 +46,7 @@ export namespace FolderDialogs {
                     }]}>
                 <div className={className}>
                     <div>Name:</div>
-                    {input}
+                    <TextInput lifecycle={lifecycle} model={name} maxChars={64}/>
                 </div>
             </Dialog>
         )
@@ -57,7 +55,6 @@ export namespace FolderDialogs {
         }
         Surface.get().flyout.appendChild(dialog)
         dialog.showModal()
-        input.focus()
         return promise
     }
 }

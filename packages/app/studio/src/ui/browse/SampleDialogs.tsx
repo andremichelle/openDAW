@@ -3,11 +3,12 @@ import {Dialog} from "@/ui/components/Dialog"
 import {BpmDetector, Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface"
-import {createElement} from "@opendaw/lib-jsx"
+import {createElement, Frag} from "@opendaw/lib-jsx"
 import {
     DefaultObservableValue,
     Errors,
     isDefined,
+    isInstanceOf,
     Option,
     Progress,
     Provider,
@@ -19,10 +20,11 @@ import {
 import {bpm} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {SampleStorage} from "@opendaw/studio-core"
-import {TextButton} from "@/ui/components/TextButton"
+import {Button} from "@/ui/components/Button"
 import {TextInput} from "@/ui/components/TextInput"
 import {NumberInput} from "@/ui/components/NumberInput"
 import {Html} from "@opendaw/lib-dom"
+import {FlexSpacer} from "@/ui/components/FlexSpacer"
 
 const className = Html.adoptStyleSheet(css, "SampleDialog")
 
@@ -51,39 +53,47 @@ export namespace SampleDialogs {
                                       step={1}
                                       mapper={StringMapping.numeric({fractionDigits: 1})}
                                       guard={{guard: value => Math.max(0, value)}}/>
-        const detected: HTMLElement = <div className="detected"/>
         const scale = (factor: number) => {
             const current = tempoValue.getValue()
             if (current <= 0) {return}
-            const scaled = Math.round(current * factor * 10) / 10
-            tempoValue.setValue(scaled)
-            detected.textContent = `${scaled} bpm · ${factor > 1 ? "double" : "half"} of the detected tempo`
+            tempoValue.setValue(Math.round(current * factor * 10) / 10)
         }
         const runAnalysis = async (provider: Provider<Promise<Option<bpm>>>) => {
-            detected.textContent = "analysing…"
             const {status, value, error} = await Promises.tryCatch(provider())
             if (status === "rejected") {
-                detected.textContent = String(error)
+                RuntimeNotifier.notify({message: String(error), icon: "Warning"})
                 return
             }
-            value.match<void>({
-                none: () => {detected.textContent = "no tempo found"},
-                some: measured => {
-                    const snapped = snap(measured)
-                    tempoValue.setValue(snapped)
-                    detected.textContent = `detected ${snapped} bpm`
-                }
-            })
+            tempoValue.setValue(value.mapOr(snap, 0))
         }
         const tempo: HTMLElement = (
             <div className="tempo">
                 {inputBpm}
-                {isDefined(analyse) && <TextButton onClick={() => runAnalysis(analyse)}>Analyse</TextButton>}
-                {isDefined(analyse) && <TextButton onClick={() => scale(0.5)}>÷2</TextButton>}
-                {isDefined(analyse) && <TextButton onClick={() => scale(2)}>×2</TextButton>}
+                {isDefined(analyse) && (
+                    <Frag>
+                        <FlexSpacer/>
+                        <Button lifecycle={lifecycle}
+                                onClick={() => runAnalysis(analyse)}
+                                appearance={{framed: true, cursor: "pointer", tooltip: "Measure the tempo"}}>
+                            Analyse
+                        </Button>
+                        <Button lifecycle={lifecycle}
+                                onClick={() => scale(0.5)}
+                                appearance={{framed: true, cursor: "pointer", tooltip: "Half time"}}>
+                            ÷2
+                        </Button>
+                        <Button lifecycle={lifecycle}
+                                onClick={() => scale(2)}
+                                appearance={{framed: true, cursor: "pointer", tooltip: "Double time"}}>
+                            ×2
+                        </Button>
+                    </Frag>
+                )}
             </div>
         )
         const approve = () => {
+            // NumberInput writes its model on focusout, and clicking a button label does not blur it.
+            if (isInstanceOf(document.activeElement, HTMLElement)) {document.activeElement.blur()}
             const trimmed = name.getValue().trim()
             if (trimmed.length < 3) {
                 RuntimeNotifier.notify({message: "Name must be at least 3 letters long.", icon: "Info"})
@@ -96,7 +106,11 @@ export namespace SampleDialogs {
             <Dialog headline={headline}
                     icon={IconSymbol.Waveform}
                     cancelable={true}
+                    onCancel={() => reject(Errors.AbortError)}
                     buttons={[{
+                        text: "Cancel",
+                        onClick: handler => handler.close()
+                    }, {
                         text: approveText,
                         primary: true,
                         onClick: handler => {
@@ -110,13 +124,10 @@ export namespace SampleDialogs {
                     {inputName}
                     <div>Bpm:</div>
                     {tempo}
-                    <div/>
-                    {detected}
                     {isDefined(note) && <div className="note">{note}</div>}
                 </div>
             </Dialog>
         )
-        dialog.oncancel = () => reject(Errors.AbortError)
         dialog.onkeydown = event => {
             if (event.code === "Enter") {
                 if (approve()) {

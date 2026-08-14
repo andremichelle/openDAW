@@ -188,7 +188,7 @@ export namespace InstrumentFactories {
             })
     }
 
-    export const Soundfont: InstrumentFactory<{ uuid: UUID.String, name: string }, SoundfontDeviceBox> = {
+    export const Soundfont: InstrumentFactory<SoundfontFileBox, SoundfontDeviceBox> = {
         defaultName: "Soundfont",
         defaultIcon: IconSymbol.SoundFont,
         briefDescription: "Soundfont Player",
@@ -198,11 +198,14 @@ export namespace InstrumentFactories {
         create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
                  name: string,
-                 icon: IconSymbol): SoundfontDeviceBox => SoundfontDeviceBox.create(boxGraph, UUID.generate(), box => {
-            box.label.setValue(name)
-            box.icon.setValue(IconSymbol.toName(icon))
-            box.host.refer(host)
-        })
+                 icon: IconSymbol,
+                 attachment?: SoundfontFileBox): SoundfontDeviceBox =>
+            SoundfontDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                if (isDefined(attachment)) {box.file.refer(attachment)}
+                box.host.refer(host)
+            })
     }
 
     export const Apparat: InstrumentFactory<void, ApparatDeviceBox> = {

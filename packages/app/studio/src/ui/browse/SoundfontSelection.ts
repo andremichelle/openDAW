@@ -24,9 +24,13 @@ export class SoundfontSelection implements ResourceSelection<Soundfont> {
             await this.#service.newProject()
             if (!this.#service.hasProfile) {return}
         }
-        const {uuid, name} = soundfont
-        const {api, editing} = this.#service.project
-        editing.modify(() => api.createInstrument(InstrumentFactories.Soundfont, {attachment: {uuid, name}}))
+        const {boxGraph, api, editing} = this.#service.project
+        const uuid = UUID.parse(soundfont.uuid)
+        editing.modify(() => {
+            const fileBox = boxGraph.findBox<SoundfontFileBox>(uuid).unwrapOrElse(() =>
+                SoundfontFileBox.create(boxGraph, uuid, box => box.fileName.setValue(soundfont.name)))
+            api.createInstrument(InstrumentFactories.Soundfont, {attachment: fileBox})
+        })
     }
 
     async deleteItems(soundfonts: ReadonlyArray<Soundfont>): Promise<ReadonlyArray<Soundfont>> {
