@@ -135,9 +135,4 @@ export namespace ResourceMenus {
                 })
         ]
     }
-
-    export const background = <T>(tree: LocalTree<T>, refresh: Exec): ReadonlyArray<MenuItem> => [
-        MenuItem.default({label: "New Folder in Root…", icon: IconSymbol.FolderAdd})
-            .setTriggerProcedure(() => createFolder(tree, "", refresh))
-    ]
 }

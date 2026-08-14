@@ -220,16 +220,12 @@ export const ResourceBrowser = <T, >({
                                     entriesLifeSpan.terminate()
                                     selection.clear()
                                     // Reinstalled here because `entriesLifeSpan` dies on every update.
-                                    tree.ifSome(local => entriesLifeSpan.ownAll(
-                                        installDropTarget(entries,
-                                            uuids => uuids.some(uuid => local.isTrashed(uuid)
-                                                || local.pathOf(uuid).length > 0),
-                                            uuids => local.move(uuids, ""),
-                                            event => !(event.target instanceof Element)
-                                                || !isDefined(event.target.closest("[data-selection], .folder-header"))),
-                                        ContextMenu.subscribe(entries, collector =>
-                                            collector.addItems(...ResourceMenus.background(local, refresh)))
-                                    ))
+                                    tree.ifSome(local => entriesLifeSpan.own(installDropTarget(entries,
+                                        uuids => uuids.some(uuid => local.isTrashed(uuid)
+                                            || local.pathOf(uuid).length > 0),
+                                        uuids => local.move(uuids, ""),
+                                        event => !(event.target instanceof Element)
+                                            || !isDefined(event.target.closest("[data-selection], .folder-header")))))
                                     const query = filter.getValue().toLowerCase()
                                     replaceChildren(entries, query.length === 0
                                         ? renderContent(root, "", 0)
