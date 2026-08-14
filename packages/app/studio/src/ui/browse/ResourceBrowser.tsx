@@ -210,10 +210,13 @@ export const ResourceBrowser = <T, >({
                                             expandKey: subPath,
                                             expandedKeys,
                                             entries: renderContent(sub, subPath, depth + 1),
-                                            install: tree.mapOr<Procedure<HTMLElement>>(
-                                                local => subPath === LocalTree.TrashName
+                                            // Not `mapOr`: a function fallback would be called as a provider.
+                                            install: tree.match<Procedure<HTMLElement>>({
+                                                none: () => EmptyProcedure,
+                                                some: local => subPath === LocalTree.TrashName
                                                     ? installTrash(local, sub)
-                                                    : installFolder(local, subPath), EmptyProcedure)
+                                                    : installFolder(local, subPath)
+                                            })
                                         })
                                     }),
                                     ...folder.items.map(renderEntry)
