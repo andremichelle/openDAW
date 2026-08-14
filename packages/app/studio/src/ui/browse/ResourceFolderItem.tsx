@@ -14,7 +14,7 @@ type Construct = {
     expandKey: string
     expandedKeys: Set<string>
     entries: ReadonlyArray<HTMLElement>
-    install?: Procedure<HTMLElement>
+    install: Procedure<HTMLElement>
 }
 
 export const ResourceFolderItem = ({
@@ -51,6 +51,6 @@ export const ResourceFolderItem = ({
         }
     }
     item.append(header, list)
-    install?.(header)
+    install(header)
     return item
 }

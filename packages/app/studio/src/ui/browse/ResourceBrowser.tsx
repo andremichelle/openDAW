@@ -1,6 +1,7 @@
 import {
     Arrays,
     DefaultObservableValue,
+    EmptyProcedure,
     Func,
     isDefined,
     Lifecycle,
@@ -8,6 +9,7 @@ import {
     Option,
     Optional,
     Predicate,
+    Procedure,
     RuntimeSignal,
     StringComparator,
     Terminable,
@@ -164,7 +166,7 @@ export const ResourceBrowser = <T, >({
                                             },
                                             leave: clear
                                         }),
-                                        // dragend fires on the source, so a cancelled drag never reaches
+                                        // dragend fires on the source, so a canceled drag never reaches
                                         // `leave` and the highlight would stay behind.
                                         Events.subscribe(window, "dragend", clear, {capture: true}),
                                         Events.subscribe(window, "drop", clear, {capture: true})
@@ -179,6 +181,25 @@ export const ResourceBrowser = <T, >({
                                     tree,
                                     refresh
                                 })
+                                const installTrash = (local: LocalTree<T>,
+                                                      folder: ResourceFolder<T>): Procedure<HTMLElement> =>
+                                    header => entriesLifeSpan.ownAll(
+                                        installDropTarget(header,
+                                            uuids => uuids.some(uuid => !local.isTrashed(uuid)),
+                                            uuids => local.trash(uuids)),
+                                        ContextMenu.subscribe(header, collector =>
+                                            collector.addItems(...ResourceMenus.trashFolder(
+                                                local, resourceSelection, folder.items, config.resolveEntryUuid, refresh)))
+                                    )
+                                const installFolder = (local: LocalTree<T>, path: string): Procedure<HTMLElement> =>
+                                    header => entriesLifeSpan.ownAll(
+                                        installDropTarget(header,
+                                            uuids => uuids.some(uuid => local.isTrashed(uuid)
+                                                || local.pathOf(uuid) !== path),
+                                            uuids => local.move(uuids, path)),
+                                        ContextMenu.subscribe(header, collector =>
+                                            collector.addItems(...ResourceMenus.folder(local, path, refresh)))
+                                    )
                                 const renderContent = (folder: ResourceFolder<T>, path: string, depth: number): Array<HTMLElement> => [
                                     ...folder.folders.map(sub => {
                                         const subPath = LocalTree.path(path, sub.name)
@@ -189,23 +210,10 @@ export const ResourceBrowser = <T, >({
                                             expandKey: subPath,
                                             expandedKeys,
                                             entries: renderContent(sub, subPath, depth + 1),
-                                            install: tree.mapOr(local => (header: HTMLElement) =>
-                                                entriesLifeSpan.ownAll(
-                                                    subPath === LocalTree.TrashName
-                                                        ? installDropTarget(header,
-                                                            uuids => uuids.some(uuid => !local.isTrashed(uuid)),
-                                                            uuids => local.trash(uuids))
-                                                        : installDropTarget(header,
-                                                            uuids => uuids.some(uuid => local.isTrashed(uuid)
-                                                                || local.pathOf(uuid) !== subPath),
-                                                            uuids => local.move(uuids, subPath)),
-                                                    ContextMenu.subscribe(header, collector => collector.addItems(
-                                                        ...(subPath === LocalTree.TrashName
-                                                            ? ResourceMenus.trashFolder(local, resourceSelection,
-                                                                sub.items, config.resolveEntryUuid, refresh)
-                                                            : ResourceMenus.folder(local, subPath,
-                                                                ResourceFolder.countItems(sub), refresh))))
-                                                ), undefined)
+                                            install: tree.mapOr<Procedure<HTMLElement>>(
+                                                local => subPath === LocalTree.TrashName
+                                                    ? installTrash(local, sub)
+                                                    : installFolder(local, subPath), EmptyProcedure)
                                         })
                                     }),
                                     ...folder.items.map(renderEntry)
@@ -219,7 +227,6 @@ export const ResourceBrowser = <T, >({
                                 const update = () => {
                                     entriesLifeSpan.terminate()
                                     selection.clear()
-                                    // Reinstalled here because `entriesLifeSpan` dies on every update.
                                     tree.ifSome(local => entriesLifeSpan.own(installDropTarget(entries,
                                         uuids => uuids.some(uuid => local.isTrashed(uuid)
                                             || local.pathOf(uuid).length > 0),

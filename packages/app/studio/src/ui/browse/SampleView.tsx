@@ -42,9 +42,6 @@ export const SampleView = ({
         if (status === "rejected") {return}
         const uuid = UUID.parse(meta.uuid)
         await SampleStorage.get().updateSampleMeta(uuid, Objects.exclude(meta, "uuid"))
-        // Storage is not the only holder: the sample manager caches the metadata it loaded with, and that
-        // copy is what the timeline reads when it warps a region. Without this the browser shows the new
-        // tempo while every consumer keeps using the old one.
         service.sampleManager.invalidate(uuid)
         refresh()
     }
@@ -62,15 +59,16 @@ export const SampleView = ({
                          }),
                          MenuItem.default({label: "Create Audio Track(s)", selectable: service.hasProfile})
                              .setTriggerProcedure(() => sampleSelection.requestDevice()),
-                         MenuItem.default({label: "Preview", icon: IconSymbol.Play})
-                             .setTriggerProcedure(() => playback.toggle(sample.uuid)),
-                         MenuItem.default({label: "Edit Name & Bpm…", icon: IconSymbol.Pencil, selectable: isEditable})
-                             .setTriggerProcedure(() => editSample()),
-                         MenuItem.default({label: "Copy UUID", icon: IconSymbol.Copy})
-                             .setTriggerProcedure(() => navigator.clipboard.writeText(sample.uuid)),
+                         MenuItem.default({
+                             label: "Edit Name & Bpm…",
+                             icon: IconSymbol.Pencil,
+                             selectable: isEditable,
+                             separatorBefore: true
+                         }).setTriggerProcedure(() => editSample()),
                          ...tree.mapOr(local => ResourceMenus.itemActions(
-                             local, sampleSelection, targets, ({uuid}) => uuid, refresh),
-                             Arrays.empty<MenuItem>()))
+                                 local, sampleSelection, targets, ({uuid}) => uuid, refresh),
+                             Arrays.empty<MenuItem>())
+                     )
                  })
              )}
              data-selection={JSON.stringify(sample)}

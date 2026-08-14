@@ -1,11 +1,10 @@
-import {Exec, Func, int, UUID} from "@opendaw/lib-std"
+import {Exec, Func, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {MenuItem, ResourceStructureFolder} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {LocalTree} from "@/ui/browse/LocalTree"
 import {FolderDialogs} from "@/ui/browse/FolderDialogs"
 import {ResourceSelection} from "@/ui/browse/ResourceSelection"
-import {Dialogs} from "@/ui/components/dialogs"
 
 export namespace ResourceMenus {
     export const moveTo = <T>(tree: LocalTree<T>,
@@ -103,10 +102,7 @@ export namespace ResourceMenus {
         refresh()
     }
 
-    export const folder = <T>(tree: LocalTree<T>,
-                              path: string,
-                              count: int,
-                              refresh: Exec): ReadonlyArray<MenuItem> => {
+    export const folder = <T>(tree: LocalTree<T>, path: string, refresh: Exec): ReadonlyArray<MenuItem> => {
         const name = LocalTree.nameOf(path)
         return [
             MenuItem.header({label: name, icon: IconSymbol.Folder, color: Colors.orange}),
@@ -120,17 +116,9 @@ export namespace ResourceMenus {
                     await tree.renameFolder(path, renamed)
                     refresh()
                 }),
-            MenuItem.default({label: "Delete Folder", icon: IconSymbol.Delete, separatorBefore: true})
+            MenuItem.default({label: "Move to Trash", icon: IconSymbol.Delete, separatorBefore: true})
                 .setTriggerProcedure(async () => {
-                    if (count > 0) {
-                        const approved = await Dialogs.approve({
-                            headline: "Delete Folder",
-                            message: `"${name}" still holds ${count} item(s).\n\nThey move up one level.`,
-                            approveText: "Move Up"
-                        })
-                        if (!approved) {return}
-                    }
-                    await tree.deleteFolder(path)
+                    await tree.trashFolder(path)
                     refresh()
                 })
         ]

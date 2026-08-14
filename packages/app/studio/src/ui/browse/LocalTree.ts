@@ -1,5 +1,5 @@
 import {Arrays, Func, int, isDefined, StringComparator, UUID} from "@opendaw/lib-std"
-import {ResourceStructure, ResourceStructureFolder, StructureFile} from "@opendaw/studio-core"
+import {ResourceStructure, ResourceStructureFolder, ResourceTrashEntry, StructureFile} from "@opendaw/studio-core"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 
 export class LocalTree<T> {
@@ -88,6 +88,26 @@ export class LocalTree<T> {
             folders: this.#structure.folders.map(strip),
             trash: [...this.#structure.trash, ...entries]
         }
+        return this.#file.save(this.#structure)
+    }
+
+    // The folder goes with everything under it, and each item remembers its own path, so putting one back
+    // recreates the folder it came from.
+    async trashFolder(path: string): Promise<void> {
+        const collect = (node: LocalTree.Node, at: string): ReadonlyArray<ResourceTrashEntry> => [
+            ...node.uuids.map(uuid => ({uuid, path: at})),
+            ...node.folders.flatMap(sub => collect({
+                folders: sub.folders ?? Arrays.empty(),
+                uuids: sub.uuids ?? Arrays.empty()
+            }, LocalTree.path(at, sub.name)))
+        ]
+        const entries = collect(this.#node(path), path).filter(({uuid}) => !this.isTrashed(uuid))
+        const name = LocalTree.nameOf(path)
+        await this.#write(LocalTree.parentOf(path), node => ({
+            ...node,
+            folders: node.folders.filter(folder => folder.name !== name)
+        }))
+        this.#structure = {...this.#structure, trash: [...this.#structure.trash, ...entries]}
         return this.#file.save(this.#structure)
     }
 
@@ -204,26 +224,6 @@ export class LocalTree<T> {
             ...node,
             folders: node.folders.map(folder => folder.name === current ? {...folder, name: unique} : folder)
         }))
-    }
-
-    async deleteFolder(path: string): Promise<void> {
-        const parentPath = LocalTree.parentOf(path)
-        const name = LocalTree.nameOf(path)
-        return this.#write(parentPath, node => {
-            const target = node.folders.find(folder => folder.name === name)
-            if (!isDefined(target)) {return node}
-            const remaining = node.folders.filter(folder => folder !== target)
-            const taken = new Set(remaining.map(folder => folder.name.toLowerCase()))
-            const promoted = (target.folders ?? []).map(folder => {
-                const unique = LocalTree.#unique(taken, folder.name)
-                taken.add(unique.toLowerCase())
-                return unique === folder.name ? folder : {...folder, name: unique}
-            })
-            return {
-                folders: [...remaining, ...promoted],
-                uuids: [...node.uuids, ...(target.uuids ?? [])]
-            }
-        })
     }
 
     uniqueName(parentPath: string, candidate: string): string {
