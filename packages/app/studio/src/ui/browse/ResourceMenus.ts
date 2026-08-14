@@ -25,9 +25,10 @@ export namespace ResourceMenus {
                              path: string,
                              folders: ReadonlyArray<ResourceStructureFolder>): void => {
             parent.addMenuItem(
-                MenuItem.default({label: "Drop Here", icon: IconSymbol.Folder})
+                MenuItem.header({label: path.length === 0 ? "Root" : path, icon: IconSymbol.FolderOpen}),
+                MenuItem.default({label: "Drop Here", icon: IconSymbol.FolderOpen})
                     .setTriggerProcedure(() => move(path)),
-                MenuItem.default({label: "Create new Folder…", icon: IconSymbol.Add})
+                MenuItem.default({label: "Create new Folder…", icon: IconSymbol.FolderAdd})
                     .setTriggerProcedure(() => moveIntoNewFolder(path)))
             folders.forEach((folder, index) => {
                 const folderPath = LocalTree.path(path, folder.name)
@@ -38,7 +39,7 @@ export namespace ResourceMenus {
                 }).setRuntimeChildrenProcedure(sub => destination(sub, folderPath, folder.folders ?? [])))
             })
         }
-        return MenuItem.default({label: "Move to", icon: IconSymbol.Folder})
+        return MenuItem.default({label: "Move to Root…", icon: IconSymbol.FolderOpen})
             .setRuntimeChildrenProcedure(parent => destination(parent, "", tree.folders))
     }
 
@@ -105,7 +106,7 @@ export namespace ResourceMenus {
         const name = LocalTree.nameOf(path)
         return [
             MenuItem.header({label: name, icon: IconSymbol.Folder}),
-            MenuItem.default({label: "New Folder…", icon: IconSymbol.Add})
+            MenuItem.default({label: "New Folder…", icon: IconSymbol.FolderAdd})
                 .setTriggerProcedure(() => createFolder(tree, path, refresh)),
             MenuItem.default({label: "Rename…", icon: IconSymbol.Pencil})
                 .setTriggerProcedure(async () => {
@@ -132,7 +133,7 @@ export namespace ResourceMenus {
     }
 
     export const background = <T>(tree: LocalTree<T>, refresh: Exec): ReadonlyArray<MenuItem> => [
-        MenuItem.default({label: "New Folder in Root…", icon: IconSymbol.Add})
+        MenuItem.default({label: "New Folder in Root…", icon: IconSymbol.FolderAdd})
             .setTriggerProcedure(() => createFolder(tree, "", refresh))
     ]
 }
