@@ -57,8 +57,8 @@ export const SampleView = ({
                              icon: IconSymbol.AudioFile,
                              color: Colors.blue
                          }),
-                         MenuItem.default({label: "Create Audio Track(s)", selectable: service.hasProfile})
-                             .setTriggerProcedure(() => sampleSelection.requestDevice()),
+                         MenuItem.default({label: "Create Audio Track(s)"})
+                             .setTriggerProcedure(() => sampleSelection.requestDevice(targets)),
                          MenuItem.default({
                              label: "Edit Name & Bpm…",
                              icon: IconSymbol.Pencil,

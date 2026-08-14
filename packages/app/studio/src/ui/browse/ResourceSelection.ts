@@ -1,7 +1,7 @@
 import {Provider} from "@opendaw/lib-std"
 
 export interface ResourceSelection<T> {
-    requestDevice(): void
+    requestDevice(items: ReadonlyArray<T>): Promise<void>
     selected(): ReadonlyArray<T>
     deleteItems(items: ReadonlyArray<T>): Promise<ReadonlyArray<T>>
 }

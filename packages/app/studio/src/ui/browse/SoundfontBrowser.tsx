@@ -55,10 +55,9 @@ export const SoundfontBrowser = ({lifecycle, service, background, fontSize}: Con
         fetchLocalTree: () =>
             LocalTree.load(SoundfontStorage.get().structure, (soundfont: Soundfont) => soundfont.uuid),
         dragType: "soundfont",
-        renderEntry: ({lifecycle: entryLifecycle, service: entryService, selection, item, tree, refresh}) => (
+        renderEntry: ({lifecycle: entryLifecycle, selection, item, tree, refresh}) => (
             <SoundfontView
                 lifecycle={entryLifecycle}
-                service={entryService}
                 soundfontSelection={selection as SoundfontSelection}
                 soundfont={item}
                 tree={tree}

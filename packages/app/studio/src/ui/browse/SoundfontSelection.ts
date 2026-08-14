@@ -17,13 +17,15 @@ export class SoundfontSelection implements ResourceSelection<Soundfont> {
         this.#selection = selection
     }
 
-    requestDevice(): void {
-        if (!this.#service.hasProfile) {return}
-        const project = this.#service.project
-        const [soundfont] = this.selected()
+    async requestDevice(soundfonts: ReadonlyArray<Soundfont>): Promise<void> {
+        const [soundfont] = soundfonts
         if (isAbsent(soundfont)) {return}
+        if (!this.#service.hasProfile) {
+            await this.#service.newProject()
+            if (!this.#service.hasProfile) {return}
+        }
         const {uuid, name} = soundfont
-        const {api, editing} = project
+        const {api, editing} = this.#service.project
         editing.modify(() => api.createInstrument(InstrumentFactories.Soundfont, {attachment: {uuid, name}}))
     }
 

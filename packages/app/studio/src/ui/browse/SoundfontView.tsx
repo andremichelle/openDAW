@@ -10,13 +10,11 @@ import {SoundfontSelection} from "@/ui/browse/SoundfontSelection"
 import {contextTargets} from "@/ui/browse/ResourceSelection"
 import {ResourceMenus} from "@/ui/browse/ResourceMenus"
 import {LocalTree} from "@/ui/browse/LocalTree"
-import {StudioService} from "@/service/StudioService"
 
 const className = Html.adoptStyleSheet(css, "Soundfont")
 
 type Construct = {
     lifecycle: Lifecycle
-    service: StudioService
     soundfontSelection: SoundfontSelection
     soundfont: Soundfont
     tree: Option<LocalTree<Soundfont>>
@@ -32,9 +30,7 @@ const formatBytes = (bytes: number, decimals = 1): string => {
     return `${value.toFixed(decimals)} ${sizes[i]}`
 }
 
-export const SoundfontView = ({
-                                  lifecycle, service, soundfontSelection, soundfont, tree, refresh
-                              }: Construct) => {
+export const SoundfontView = ({lifecycle, soundfontSelection, soundfont, tree, refresh}: Construct) => {
     const {name, size} = soundfont
     const element: HTMLElement = (
         <div className={className}
@@ -56,8 +52,8 @@ export const SoundfontView = ({
                     icon: IconSymbol.AudioFile,
                     color: Colors.blue
                 }),
-                MenuItem.default({label: "Create Soundfont Device", selectable: service.hasProfile})
-                    .setTriggerProcedure(() => soundfontSelection.requestDevice()),
+                MenuItem.default({label: "Create Soundfont Device"})
+                    .setTriggerProcedure(() => soundfontSelection.requestDevice(targets)),
                 MenuItem.default({label: "Copy UUID", icon: IconSymbol.Copy})
                     .setTriggerProcedure(() => navigator.clipboard.writeText(soundfont.uuid)),
                 ...tree.mapOr(local => ResourceMenus.itemActions(
