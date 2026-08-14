@@ -2,6 +2,7 @@ import {Arrays, Errors, panic, Procedure, Progress, RuntimeNotifier, UUID} from 
 import {network, Promises} from "@opendaw/lib-runtime"
 import {Soundfont} from "@opendaw/studio-adapters"
 import {CloudHandler} from "./CloudHandler"
+import {CloudBackupStructure} from "./CloudBackupStructure"
 import {SoundfontStorage} from "../soundfont"
 import {FactoryCatalog} from "../FactoryCatalog"
 
@@ -25,18 +26,22 @@ export class CloudBackupSoundfonts {
                 .then(json => JSON.parse(new TextDecoder().decode(json)))
                 .catch(reason => reason instanceof Errors.FileNotFound ? Arrays.empty() : panic(reason))
         ])
-        return new CloudBackupSoundfonts(cloudHandler, {stock, local, cloud}, log).#start(progress)
+        const trashed = CloudBackupStructure.trashedUuids(await SoundfontStorage.get().structure.load())
+        return new CloudBackupSoundfonts(cloudHandler, {stock, local, cloud}, trashed, log).#start(progress)
     }
 
     readonly #cloudHandler: CloudHandler
     readonly #soundfontDomains: SoundfontDomains
+    readonly #trashed: ReadonlySet<UUID.String>
     readonly #log: Procedure<string>
 
     private constructor(cloudHandler: CloudHandler,
                         soundfontDomains: SoundfontDomains,
+                        trashed: ReadonlySet<UUID.String>,
                         log: Procedure<string>) {
         this.#cloudHandler = cloudHandler
         this.#soundfontDomains = soundfontDomains
+        this.#trashed = trashed
         this.#log = log
     }
 
@@ -46,12 +51,15 @@ export class CloudBackupSoundfonts {
         await this.#upload(uploadProgress)
         await this.#trash(trashed, trashProgress)
         await this.#download(trashed, downloadProgress)
+        await CloudBackupStructure.sync(this.#cloudHandler, SoundfontStorage.get().structure,
+            CloudBackupSoundfonts.RemotePath, this.#log)
     }
 
     async #upload(progress: Progress.Handler) {
         const {stock, local, cloud} = this.#soundfontDomains
         const maybeUnsyncedSoundfonts = Arrays.subtract(local, stock, CloudBackupSoundfonts.areSoundfontsEqual)
         const unsyncedSoundfonts = Arrays.subtract(maybeUnsyncedSoundfonts, cloud, CloudBackupSoundfonts.areSoundfontsEqual)
+            .filter(({uuid}) => !this.#trashed.has(uuid))
         if (unsyncedSoundfonts.length === 0) {
             this.#log("No unsynced soundfonts found.")
             progress(1.0)

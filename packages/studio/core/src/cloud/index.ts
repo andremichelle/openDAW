@@ -1,5 +1,6 @@
 export * from "./CloudAuthManager"
 export * from "./CloudHandler"
 export * from "./CloudBackup"
+export * from "./CloudBackupStructure"
 export * from "./NextcloudHandler"
 export * from "./SharedFolderSync"
