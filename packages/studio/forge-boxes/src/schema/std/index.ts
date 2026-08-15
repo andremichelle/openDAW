@@ -13,6 +13,7 @@ import {NeuralAmpModelBox} from "./NeuralAmpModelBox"
 import {AudioBusBox, AudioUnitBox, AuxSendBox} from "./AudioUnitBox"
 import {CaptureAudioBox, CaptureMidiBox} from "./CaptureBox"
 import {GrooveShuffleBox} from "./GrooveBoxes"
+import {LfoModulatorBox, ModulationBox} from "./Modulators"
 import {AudioRegionBox} from "./timeline/AudioRegionBox"
 import {AudioClipBox} from "./timeline/AudioClipBox"
 import {NoteEventBox} from "./timeline/NoteEventBox"
@@ -45,5 +46,6 @@ export const Definitions = [
     AudioFileBox, SoundfontFileBox, NeuralAmpModelBox,
     AudioUnitBox, CaptureAudioBox, CaptureMidiBox,
     AudioBusBox, AuxSendBox,
-    GrooveShuffleBox
+    GrooveShuffleBox,
+    LfoModulatorBox, ModulationBox
 ]
