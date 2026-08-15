@@ -388,14 +388,17 @@ and a cycle check.
 
 Each phase ends green and audible or visible, per the incremental rule.
 
-Phase 1, the wire.
-`ParamValue::Modulated`, the new arm in `float_value` / `int_value` / `bool_value`, the `modulation`
-field on `ParamChange`, the fifth argument on `parameter_changed` through the 26 exported shims and
-the device templates, and the third return value from `ParamHandle::resolve` (always NaN for now).
-Fix the dozen direct `ParamValue` matches the compiler flags. Rebuild every device wasm. Behaviour is
-unchanged, since nothing produces a modulation yet, so the existing parity tests must stay green. An
-abi test covers the new arm per mapping type: `float_value(Modulated {base, kind, sum: 0.0}) ==
-float_value(base)` within tolerance, and a non-zero sum lands where the mapping says it should.
+Phase 1, the wire. DONE (`6b12f536b`).
+`ParamValue::Modulated` plus the new arm in `float_value` / `int_value` / `bool_value`, and
+`unit_value(value, mapping)` for devices that keep a parameter normalized and map it themselves. The
+`modulation` field on `ParamChange`, the fifth argument on `parameter_changed` through all 26 exported
+shims, the templates, the `DeviceExports` type in the linker and the script bridge (a scriptable
+device's mapping lives in its `@param` declaration, so the bridge is where its sum folds in).
+`ParamHandle::resolve` returns `(value, kind, modulation)`, always NaN, and both delivery paths diff
+over the pair through `changed` / `mark`, comparing the sum by BIT PATTERN since `NaN != NaN` would
+otherwise report a change on every push. Three direct `ParamValue` matches needed a real arm
+(`sync_index` in the Delay, `unit` and `real` in Cubed) and the Vaporisateur's `cutoff_unit` collapsed
+into `unit_value`. Verified: rust workspace green, wasm parity suite 214 passed.
 
 Phase 2, schema.
 `Pointers.ModulatorCollection`, `RootBox.modulators`, `ModulationBox`, `LfoModulatorBox`, forge, and
@@ -436,7 +439,15 @@ of the dozen sites gets checked by hand against the mapping it uses.
 
 A parameter whose consumption site has no mapping cannot be modulated. The UI should not offer an
 assignment for it, which means the device has to be able to say so. Simplest answer is a per-device
-list of unmodulatable parameter ids, worst case the assignment exists and does nothing.
+list of unmodulatable parameter ids, worst case the assignment exists and does nothing. Phase 1 found
+exactly one such device: Cubed's `real()` serves tuning, volume and waveform with the conversions
+inline at the call sites rather than as mappings, so those three ignore a sum today.
+
+Cubed's `real()` also has a PRE-EXISTING automation bug, unrelated to modulation and untouched here:
+it returns a `Unit` value as if it were already real, so automating tuning (`linear(-1200, 1200)`),
+volume (decibel) or waveform (`linearInteger(0, 1)`) moves the parameter by a 0..1 amount in its real
+unit. Giving those three real mapping consts fixes the automation bug and makes them modulatable in
+one move.
 
 The assignment lookup scans `ModulationBox` instances per bound parameter. Fine at project sizes we
 have, worth measuring before it grows.
