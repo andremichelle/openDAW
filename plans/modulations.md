@@ -429,9 +429,14 @@ and could shift the value by a float epsilon. And `modulation_dirty` re-pushes e
 modulator's own field moves, because the value cells are live for the render path but a stopped
 transport runs no update clock.
 
-Phase 4, minimal UI.
-The context menu entries and adapters only, no screen. At this point an LFO can be created and heard
-on a filter cutoff, and the knob moves.
+Phase 4, minimal UI. DONE (`a75042d57`).
+The parameter context menu's `Modulate` entry (New LFO, the project's modulators, a Remove per
+assignment), `LfoModulatorBoxAdapter` + `ModulationBoxAdapter` + the `modulators` collection on
+`RootBoxAdapter`, and a `Modulators` namespace holding create / assign in one place that `ProjectApi`
+delegates to. The menu reaches the project through the PARAMETER's own adapter context rather than a
+project threaded down through the twenty components between them, and `parameter.modulationTarget`
+keeps the pointer-variance cast in the adapter that owns the field. Verified by the create-path test
+in `ModulationSchema.test.ts`, studio core 250 passed, wasm parity 215 passed.
 
 Phase 5, the screen.
 Modulator list, inspector, assignment list, workspace entry, shortcut. Browser checkpoint per
