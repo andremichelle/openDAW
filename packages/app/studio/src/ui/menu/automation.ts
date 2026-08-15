@@ -1,7 +1,13 @@
 import {ContextMenu, MenuItem, MIDILearning} from "@opendaw/studio-core"
-import {AudioUnitTracks, AutomatableParameterFieldAdapter, TrackType} from "@opendaw/studio-adapters"
+import {
+    AudioUnitTracks,
+    AutomatableParameterFieldAdapter,
+    LfoModulatorBoxAdapter,
+    Modulators,
+    TrackType
+} from "@opendaw/studio-adapters"
 import {PrimitiveValues} from "@opendaw/lib-box"
-import {Editing} from "@opendaw/lib-std"
+import {Editing, UUID} from "@opendaw/lib-std"
 
 export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: Editing,
                                                                       midiDevices: MIDILearning,
@@ -22,6 +28,7 @@ export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: E
                 : MenuItem.default({label: "Remove Automation", hidden: disableAutomation})
                     .setTriggerProcedure(() => editing.modify(() =>
                         parameter.track.ifSome(track => tracks.delete(track)))),
+            modulationMenu(editing, parameter),
             MenuItem.default({
                 label: midiDevices.hasMidiConnection(field.address)
                     ? "Forget Midi"
@@ -36,4 +43,34 @@ export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: E
             MenuItem.default({label: "Reset Value", checked: field.getValue() === field.initValue})
                 .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
         )
+    })
+
+const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
+                                                   parameter: AutomatableParameterFieldAdapter<T>) =>
+    MenuItem.default({label: "Modulate"}).setRuntimeChildrenProcedure(parent => {
+        const context = parameter.context
+        const target = parameter.modulationTarget
+        const assigned = parameter.modulations
+        const assignedSources = new Set(assigned
+            .map(box => box.source.targetVertex.mapOr(vertex => UUID.toString(vertex.address.uuid), ""))
+            .filter(uuid => uuid.length > 0))
+        parent.addMenuItem(MenuItem.default({label: "New LFO"})
+            .setTriggerProcedure(() => editing.modify(() =>
+                Modulators.assign(context, Modulators.createLfo(context), target))))
+        context.rootBoxAdapter.modulators.adapters().forEach((modulator: LfoModulatorBoxAdapter) => {
+            const alreadyAssigned = assignedSources.has(UUID.toString(modulator.uuid))
+            parent.addMenuItem(MenuItem.default({
+                label: modulator.label,
+                checked: alreadyAssigned,
+                selectable: !alreadyAssigned,
+                separatorBefore: modulator.indexField.getValue() === 0
+            }).setTriggerProcedure(() => editing.modify(() => Modulators.assign(context, modulator.box, target))))
+        })
+        assigned.forEach((box, index) => {
+            const label = box.source.targetVertex
+                .map(vertex => context.boxAdapters.adapterFor(vertex.box, LfoModulatorBoxAdapter).label)
+                .unwrapOrElse("Modulator")
+            parent.addMenuItem(MenuItem.default({label: `Remove ${label}`, separatorBefore: index === 0})
+                .setTriggerProcedure(() => editing.modify(() => box.delete())))
+        })
     })

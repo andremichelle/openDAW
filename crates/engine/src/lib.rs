@@ -207,9 +207,9 @@ fn call_device_init(init_index: u32, state_ptr: u32, sample_rate: f32) {
 #[cfg(not(target_family = "wasm"))]
 fn call_device_init(_init_index: u32, _state_ptr: u32, _sample_rate: f32) {}
 
-// Call a device's `parameter_changed(state_ptr, id, kind, value, modulation)` export to push a resolved
-// parameter value plus its normalized modulation sum (NaN = none). The engine calls this at build / edit time
-// (never during the device's `process`, so it never aliases the state the render path borrows).
+// Call a device's `parameter_changed(state_ptr, id, kind, value, modulation)` export (NaN = no modulation).
+// Called at build / edit time, never during the device's `process`, so it never aliases the state the render
+// path borrows.
 #[cfg(target_family = "wasm")]
 #[inline]
 fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
@@ -535,12 +535,9 @@ shared_static! {
 shared_static! {
     static BASE_FREQUENCY: f32 = 440.0;
 }
-// The transport's SONG position at this quantum's start, published once per `render`. While the transport is
-// PAUSED the blocks carry the FREE-RUNNING pulse range (`Transport::render_paused`), which modulation follows
-// but automation must not: a curve read at a free-running position would sweep while the song stands still.
-// So `host_update_parameters` resolves the automation here and the modulation at the position it was called
-// with. Its OWN cell (NOT `ENGINE`), like `BASE_FREQUENCY`, so the re-entrant read during render never
-// aliases the `&mut Engine` the render path holds.
+// The transport's SONG position at this quantum's start. While PAUSED the blocks carry the FREE-RUNNING
+// range, which modulation follows but automation must not. Its OWN cell (NOT `ENGINE`), like
+// `BASE_FREQUENCY`, so the re-entrant read during render never aliases the `&mut Engine`.
 shared_static! {
     static SONG_POSITION: f64 = 0.0;
 }
@@ -809,11 +806,8 @@ fn quantum_transporting() -> bool {
     blocks.iter().all(|block| block.flags.transporting())
 }
 
-/// True when the CURRENT device has at least one MODULATED parameter. Modulation is a function of the
-/// free-running position rather than of the song, so it keeps running while the transport is paused and the
-/// update clock stays open for these devices — and only these, so an automation-only device's paused
-/// behaviour (hold, no fragmentation) is exactly what it was. Only ever evaluated on the paused branch (the
-/// `||` short-circuits while transporting), where a scan of a device's handful of parameters costs nothing.
+/// Modulation keeps running while the transport is paused, so the update clock stays open for these devices
+/// and only these. Evaluated on the paused branch only (the `||` short-circuits while transporting).
 fn modulation_armed(pull: &PullContext) -> bool {
     pull.params.iter().any(|param| param.modulation.is_some())
 }
@@ -1000,8 +994,7 @@ pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) 
     let pull = unsafe { PULL.get() };
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut ParamChange, max as usize) };
     let mut count = 0;
-    // While PAUSED the caller's `position` is free-running, so the automation is read at the frozen song
-    // position instead (a static curve there is exactly the value TS holds with its silent update clock).
+    // While PAUSED the caller's `position` is free-running; the automation reads the frozen song position.
     let automation_position = if quantum_transporting() {position} else {unsafe { *SONG_POSITION.get() }};
     for param in &pull.params {
         if param.track.is_none() && param.modulation.is_none() {
@@ -1257,12 +1250,9 @@ struct Engine {
     // `midi_out_take`, the device-id table, the scheduled transport messages, and the registered
     // `MIDIOutputBox` targets (see `sync_midi_targets`). Shared with the per-unit MidiOut nodes.
     midi_out: midi_output::SharedMidiOut,
-    // The project's modulator sources (`RootBox.modulators`), shared with every parameter that an assignment
-    // binds. Membership is recorded by the hub observer and realized by `sync_modulators`, like the MIDI-out
-    // targets. `modulation_dirty` is armed by a modulator's OWN field edit (rate, shape, phase, amount,
-    // enabled): the value cells are already live, but a STOPPED transport pushes nothing on its own, so the
-    // next reconcile re-pushes every unit's parameters.
     modulators: Rc<RefCell<modulation::ModulatorTable>>,
+    // Armed by a modulator's OWN field edit: the value cells are live for the render path, but a STOPPED
+    // transport runs no update clock, so the next reconcile re-pushes every unit's parameters.
     modulation_dirty: Rc<Cell<bool>>,
     sample_rate: f32,
     blocks: Vec<Block>,
@@ -1882,8 +1872,7 @@ impl Engine {
         // MIDI-output unit's initial CC push resolves its device through the registry (TS resolves it off
         // the complete graph at construction).
         self.observe_midi_outputs();
-        // The modulator states must exist BEFORE the units reconcile: `observe_param` resolves each
-        // assignment's source through this table while binding a device's parameters.
+        // Before the units reconcile: `observe_param` resolves each assignment's source through this table.
         self.observe_modulators();
         self.observe_audio_units();
         self.observe_audio_files();
@@ -1891,8 +1880,6 @@ impl Engine {
         0
     }
 
-    /// Track the `LfoModulatorBox`es connected to `RootBox.modulators`: the hub observer records joins /
-    /// leaves and `sync_modulators` realizes them, creating the live field cells each assignment reads.
     /// WASM CONTRACT: RootBox.modulators = field key 11 (boxes RootBox.ts).
     fn observe_modulators(&mut self) {
         const ROOT_MODULATORS_KEY: u16 = 11;
@@ -1909,10 +1896,6 @@ impl Engine {
         self.sync_modulators();
     }
 
-    /// Realize the recorded modulator joins / leaves: a joiner gets catch-up subscriptions on its shape (10),
-    /// rate (11), phase (12), amount (13) and enabled (4) fields feeding its live cells; a leaver's
-    /// subscriptions are dropped with its entry. Every one of those edits also arms `modulation_dirty`, so a
-    /// stopped transport still re-pushes the parameters this modulator drives.
     /// WASM CONTRACT: LfoModulatorBox field keys — enabled 4 (Boolean), shape 10 (Int32), rate 11 (Int32),
     /// phase 12 (Float32), amount 13 (Float32), per boxes LfoModulatorBox.ts.
     fn sync_modulators(&mut self) {
@@ -1921,8 +1904,6 @@ impl Engine {
             for sub in self.modulators.borrow_mut().remove(&uuid) {
                 self.graph.unsubscribe(sub);
             }
-            // A parameter still holding this source in its chain must drop it: the assignment box dies with
-            // its mandatory pointer, which re-binds the parameter, but the re-bind has to see the table first.
             self.modulation_dirty.set(true);
         }
         for uuid in added {
@@ -2306,9 +2287,7 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
         let input = core::slice::from_raw_parts(INPUT.get().as_ptr(), len);
         match engine.apply_updates(input) {
             Ok(()) => {
-                // Modulator membership first: a unit reconciling in the same transaction resolves its
-                // assignments through the table, so a joiner must already be in it.
-                engine.sync_modulators();
+                engine.sync_modulators(); // before the units: they resolve assignments through the table
                 engine.reconcile_units(); // apply any audio-unit membership change this transaction recorded
                 engine.sync_midi_targets(); // realize any MIDIOutputBox joins / leaves this transaction recorded
                 0

@@ -135,8 +135,8 @@ impl abi::Instrument for Device {
     fn parameter_changed(state: &mut State, id: u32, value: ParamValue) {
         let Some(slot) = state.ids.iter().position(|bound| *bound == id) else {return};
         if slot == param::PATTERN_INDEX {
-            // A value the TRANSPORT drives (automation, modulation) switches immediately; a plain edit is
-            // REQUESTED, so it lands on the next pattern boundary.
+            // A transport-driven value (automation, modulation) switches at once; a plain edit is REQUESTED,
+            // landing on the next pattern boundary.
             match value {
                 ParamValue::Unit(_) | ParamValue::Modulated {..} =>
                     state.pattern.set_index(int_value(value, &PATTERN_MAPPING).max(0) as usize),
@@ -213,9 +213,8 @@ pub fn apply_slot(par: &mut crate::Params, slot: usize, value: ParamValue) {
     }
 
 
-/// A `Unit` parameter: the uniform 0..1 automation value, used directly by the model's knobs. The storage
-/// value of these five is `unipolar()`, i.e. already the unit value, so every kind passes straight through and
-/// a modulation sum simply adds in that space.
+/// A `Unit` parameter: the uniform 0..1 automation value, used directly by the model's knobs. These five are
+/// `unipolar()`, so the storage value IS the unit value and every kind passes straight through.
 fn unit(value: ParamValue) -> f64 {
     match value {
         ParamValue::Unit(unit) => unit as f64,

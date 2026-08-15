@@ -238,17 +238,12 @@ pub(crate) fn note_signal_to_unit(unit: &AudioUnitBinding, signal: NoteSignal) {
     }
 }
 
-/// Fold a HOST-resolved parameter's `(value, kind, modulation)` into its real value with a mapping the ENGINE
-/// owns (the strip's dB / pan, an aux send's, a composite's gains). It is the very same `abi::float_value` a
-/// device calls, reached through the same wire encoding, so host-side and device-side modulation are one
-/// implementation rather than two that have to agree.
+/// The same `abi::float_value` a device calls, for the parameters the ENGINE maps itself.
 pub(crate) fn host_float<M: math::value_mapping::ValueMapping<f32>>(value: f32, kind: u32, modulation: f32,
                                                                    mapping: &M) -> f32 {
     abi::float_value(abi::ParamValue::from_wire(kind, value, modulation), mapping)
 }
 
-/// The BOOL counterpart of [`host_float`] (mute, solo), handed back as the 0.0 / 1.0 the consumers threshold
-/// at >= 0.5.
 pub(crate) fn host_bool(value: f32, kind: u32, modulation: f32) -> f32 {
     if abi::bool_value(abi::ParamValue::from_wire(kind, value, modulation)) {1.0} else {0.0}
 }
@@ -298,8 +293,6 @@ impl Engine {
         let (handle, new_subs, new_collections, _) = self.observe_param(box_uuid, path, id, invalidate);
         subs.extend(new_subs);
         collections.extend(new_collections);
-        // A MODULATED parameter needs the per-position resolver just as much as an automated one: without it
-        // the consumer would read the static cell and the modulation would never apply.
         let resolver: Option<StripValueSource> = if handle.track.is_some() || handle.modulation.is_some() {
             let handle = handle.clone();
             Some(Rc::new(move |position: f64, transporting: bool| {
@@ -616,14 +609,10 @@ impl Engine {
             }
         }
         collections.append(&mut track_collections);
-        // The assignments driving this parameter. Their DEPTH / ENABLED are live cells (a depth drag pushes a
-        // value, it never re-binds); only the assignment SET and each one's `source` pointer re-bind here.
         let modulation = self.bind_param_modulation(box_uuid, path, &mut subs, invalidate);
         // An automated parameter broadcasts its UNIT value at its FIELD ADDRESS while the track is attached
         // (TS `onStartAutomation`) — the knob animates in the UI. Registered under the box uuid + field-path
         // keys; the slot Rc lives in the handle, so a rebind/teardown drops it and the sweep unregisters.
-        // A MODULATED parameter needs the same slot (the UI adds the sum to the parameter's own unit value),
-        // so the slot exists when EITHER applies: `[0]` the automated unit value, `[1]` the modulation sum.
         let broadcast = if track.is_none() && modulation.is_none() {None} else {Some({
             // NO curve value at the transport position (an attach with no region / clip / events yet) publishes
             // NaN, NOT 0.0: the slot carries a UNIT value, so 0.0 is the MINIMUM of every mapping and pinned
@@ -660,7 +649,7 @@ impl Engine {
             }
         })};
         if modulation.is_some() {
-            armed = true; // a modulated parameter is clock-driven exactly like an automated one
+            armed = true;
         }
         let handle = ParamHandle {id, field, kind, track, modulation, last: Rc::new(core::cell::Cell::new(f32::NAN)),
             last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
@@ -668,17 +657,8 @@ impl Engine {
         (handle, subs, collections, armed)
     }
 
-    /// Bind every `ModulationBox` whose `target` names `(box_uuid, path)`: resolve its `source` pointer to the
-    /// modulator's live state and hand back the chain the render path sums. Like `build_param_track`, this
-    /// SCANS the boxes — a parameter address is a device-internal field path, not always a resolved graph
-    /// vertex, so an assignment's target edge is dangling and absent from `incoming`. Cost is O(assignments)
-    /// at bind time only.
-    ///
-    /// `depth` (3) and `enabled` (4) become live cells through catch-up subscriptions, so a depth drag pushes
-    /// a value without re-binding (the LIGHT params signal, like a plain field edit). The `source` pointer (1)
-    /// keeps the HEAVY invalidate: re-pointing an assignment changes the chain itself. The assignment box
-    /// appearing / disappearing is already covered by the parameter's own pointer-hub subscription, since the
-    /// `target` pointer attaches to this very field.
+    /// SCANS the `ModulationBox`es, like `build_param_track`: a parameter address is a device-internal field
+    /// path, so an assignment's target edge is dangling and absent from `incoming`.
     /// WASM CONTRACT: ModulationBox field keys — source 1, target 2, depth 3, enabled 4 (boxes ModulationBox.ts).
     fn bind_param_modulation(&mut self, box_uuid: Uuid, path: &[u16], subs: &mut Vec<SubscriptionId>,
                              invalidate: &Rc<dyn Fn()>) -> Option<ModulationChain> {
@@ -703,7 +683,7 @@ impl Engine {
                 Box::new(move |_graph, _update| source_invalidate())));
             let modulator = match source {
                 Some(state) => state,
-                None => continue // the assignment names no live modulator (mid-transaction); the re-bind follows
+                None => continue // no live modulator yet (mid-transaction); the re-bind follows
             };
             let depth = Rc::new(core::cell::Cell::new(0.0f32));
             let cell = depth.clone();

@@ -284,9 +284,8 @@ pub const PARAM_KIND_BOOL: u32 = 3;
 
 /// One resolved parameter change the host hands back from [`update_parameters`]: the parameter's `id` (the
 /// value [`bind_parameter`] returned), a `kind` tag (`PARAM_KIND_*`), the new `value` as a single f32, and the
-/// summed `modulation` in NORMALIZED space (NaN = the parameter has no modulation). The SDK decodes
-/// `(kind, value, modulation)` into a typed [`ParamValue`]. `#[repr(C)]` so the host writes it straight into
-/// the scratch; the two `u32`s precede the f32s and everything is 4-aligned with no padding.
+/// summed `modulation` in NORMALIZED space (NaN = none). `#[repr(C)]` so the host writes it straight into the
+/// scratch; the two `u32`s precede the f32s and everything is 4-aligned with no padding.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ParamChange {
@@ -307,19 +306,15 @@ pub enum ParamValue {
     Int(i32),
     Float(f32),
     Bool(bool),
-    /// A MODULATED parameter: the `base` exactly as it would have arrived (`kind` says how to read it, so it
-    /// is a unit automation value or a real field value) plus the summed modulation in NORMALIZED space. The
-    /// host cannot fold the two — the mapping lives here, in the device — so [`float_value`] / [`int_value`] /
-    /// [`bool_value`] resolve it with the mapping the call site already passes: normalize the base, add the
-    /// sum, clamp to `0..1`, map back. Device code never matches this variant, it goes through the helpers.
+    /// The `base` (`kind` says how to read it) plus the modulation in NORMALIZED space. Only the device knows
+    /// the mapping, so the resolvers below fold them; device code goes through those, never this variant.
     Modulated {base: f32, kind: u32, sum: f32}
 }
 
 impl ParamValue {
     /// Decode the wire `(kind, value, modulation)` into a typed value. The ONE numeric conversion of an
-    /// f32-carried real value to its primitive type lives here, once, so device code stays cast-free. A
-    /// non-NaN `modulation` yields [`ParamValue::Modulated`], carrying the base untouched. Panics on an unknown
-    /// kind: the engine and SDK are the only writers, so that can only be a contract drift, never live input.
+    /// f32-carried real value to its primitive type lives here, once, so device code stays cast-free. Panics
+    /// on an unknown kind: the engine and SDK are the only writers, so that can only be a contract drift.
     #[inline]
     pub fn from_wire(kind: u32, value: f32, modulation: f32) -> Self {
         if !modulation.is_nan() {
@@ -336,11 +331,9 @@ impl ParamValue {
 }
 
 
-/// Resolve a FLOAT parameter from its [`ParamValue`]: a uniform automation value mapped through `mapping`, a
-/// real `Float` field value used directly, or a `Modulated` base + sum folded in NORMALIZED space and mapped
-/// back. PANICS on an `Int` / `Bool` wire — a float parameter never carries those, so it can only be a
-/// contract drift; the value is never silently coerced. Shared by all plugins (the device just supplies its
-/// own `mapping`).
+/// Resolve a FLOAT parameter: a uniform automation value mapped through `mapping`, a real `Float` used
+/// directly, or a `Modulated` base + sum folded in NORMALIZED space and mapped back. PANICS on an `Int` /
+/// `Bool` wire — a float parameter never carries those, so it can only be a contract drift.
 #[inline]
 pub fn float_value<M: math::value_mapping::ValueMapping<f32>>(value: ParamValue, mapping: &M) -> f32 {
     match value {
@@ -355,8 +348,7 @@ pub fn float_value<M: math::value_mapping::ValueMapping<f32>>(value: ParamValue,
 }
 
 /// Resolve an INT parameter: a uniform automation value mapped through `mapping`, a real `Int` value, or a
-/// `Modulated` base + sum folded in NORMALIZED space (so a modulated stepped parameter steps through its
-/// values). PANICS on a `Float` / `Bool` wire.
+/// `Modulated` base + sum folded in NORMALIZED space. PANICS on a `Float` / `Bool` wire.
 #[inline]
 pub fn int_value<M: math::value_mapping::ValueMapping<i32>>(value: ParamValue, mapping: &M) -> i32 {
     match value {
@@ -370,10 +362,7 @@ pub fn int_value<M: math::value_mapping::ValueMapping<i32>>(value: ParamValue, m
     }
 }
 
-/// Resolve a parameter to its UNIT value (`0..1`) instead of its real value, for a device that keeps the
-/// parameter normalized and maps it itself later (the Vaporisateur's cutoff, TS `getUnitValue`). A real value
-/// is normalized through `mapping.x`, and a `Modulated` one gets the sum added in that space. Accepts every
-/// kind, since the caller wants one uniform number.
+/// The UNIT value (`0..1`) rather than the real one, for a device that maps it itself later (TS `getUnitValue`).
 #[inline]
 pub fn unit_value<M: math::value_mapping::ValueMapping<f32>>(value: ParamValue, mapping: &M) -> f32 {
     match value {
@@ -388,9 +377,9 @@ pub fn unit_value<M: math::value_mapping::ValueMapping<f32>>(value: ParamValue, 
     }
 }
 
-/// Resolve a BOOL parameter: a uniform automation value (true at / above the halfway point), a real `Bool`
-/// value, or a `Modulated` base + sum folded in NORMALIZED space and thresholded the same way (so a modulated
-/// toggle flips). PANICS on an `Int` / `Float` wire.
+/// Resolve a BOOL parameter: a uniform automation value (true at / above the halfway point), a real `Bool`,
+/// or a `Modulated` base + sum folded in NORMALIZED space and thresholded the same way. PANICS on an `Int` /
+/// `Float` wire.
 #[inline]
 pub fn bool_value(value: ParamValue) -> bool {
     match value {
@@ -789,10 +778,9 @@ pub fn script_release(handle: u32) {
     { let _ = handle; }
 }
 
-/// Forward a parameter change to the user `Processor` by declaration `index` + the raw `(kind, value)` plus the
-/// normalized `modulation` sum (NaN = none). A scriptable device's mapping lives in the script's `@param`
-/// declaration, i.e. on the JS side, so the bridge is the call site that folds the sum in — the same rule as
-/// [`float_value`], one layer further out. Native stub no-op.
+/// Forward a parameter change to the user `Processor` by declaration `index` + the raw `(kind, value)` plus
+/// the normalized `modulation` (NaN = none). A scriptable device's mapping lives in its `@param` declaration,
+/// on the JS side, so the bridge folds the sum there. Native stub no-op.
 #[inline]
 pub fn script_param(handle: u32, index: u32, value: ParamValue) {
     let (kind, bits, modulation) = match value {

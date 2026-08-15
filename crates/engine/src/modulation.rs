@@ -1,13 +1,4 @@
-//! Project-global modulator sources and the assignments that bind them to parameters (plans/modulations.md).
-//!
-//! A modulator is a PURE function of the transport position, so a locate, a loop wrap and an offline render
-//! all reproduce the same value with no state to reset and nothing to seed. Its fields are held in live cells
-//! fed by targeted subscriptions, so dragging an LFO's rate re-reads a number on the next tick rather than
-//! re-binding anything.
-//!
-//! The value never leaves normalized space here: a source yields `-1..1`, an assignment scales it by its
-//! signed `depth`, and the sums of all enabled assignments reach the device on the parameter wire, where
-//! `abi::float_value` folds them onto the base with the device's OWN mapping. The host stays mapping-agnostic.
+//! Project-global modulator sources and their assignments (plans/modulations.md).
 
 use alloc::rc::Rc;
 use alloc::vec::Vec;
@@ -22,20 +13,15 @@ pub(crate) const SHAPE_TRIANGLE: i32 = 1;
 pub(crate) const SHAPE_SAW: i32 = 2;
 pub(crate) const SHAPE_SQUARE: i32 = 3;
 
-// WASM CONTRACT: LfoModulatorBox.rate (field 11) indexes THIS table, mirrored by the adapter's `Rates`. One
-// cycle in pulses, ascending: 1/32, 1/16T, 1/16, 1/8T, 1/8, 1/4T, 1/4, 1/2, 1 bar, 2, 4, 8 bars. Index 8
-// (one bar) is the schema's default.
+// WASM CONTRACT: LfoModulatorBox.rate (field 11) indexes THIS table (one cycle in pulses), mirrored by
+// LfoModulatorBoxAdapter.Rates.
 pub(crate) const RATES: [f64; 12] = [120.0, 160.0, 240.0, 320.0, 480.0, 640.0, 960.0, 1920.0,
     3840.0, 7680.0, 15360.0, 30720.0];
 
-/// The pulses of one cycle for a rate index, clamped to the table (a value outside it can only be contract
-/// drift, and a modulator that stops moving is worse than one that runs at the nearest rate).
 fn cycle_pulses(rate: i32) -> f64 {
     RATES[(rate.max(0) as usize).min(RATES.len() - 1)]
 }
 
-/// One modulator's live fields, kept current by targeted subscriptions so the render path never reads the
-/// graph. Shared (`Rc`) by every assignment that names this modulator.
 pub(crate) struct ModulatorState {
     pub(crate) shape: Cell<i32>,
     pub(crate) rate: Cell<i32>,
@@ -50,9 +36,6 @@ impl ModulatorState {
             amount: Cell::new(1.0), enabled: Cell::new(true)}
     }
 
-    /// This source's `-1..1` value at `position` (pulses), scaled by its own `amount`. A disabled modulator
-    /// contributes nothing at all, which is not the same as contributing zero: the caller drops it from the
-    /// sum entirely, so the parameter takes its un-modulated path.
     pub(crate) fn value_at(&self, position: f64) -> f32 {
         let turn = position / cycle_pulses(self.rate.get()) + self.phase.get() as f64;
         let shape = match self.shape.get() {
@@ -65,14 +48,11 @@ impl ModulatorState {
     }
 }
 
-/// The fractional part of a turn, for any sign. No libm (the engine has none): truncate toward zero, then
-/// step down for a negative input, the same idiom as `first_update_position`.
 fn fract(turn: f64) -> f64 {
     let truncated = (turn as i64) as f64;
     turn - if truncated > turn {truncated - 1.0} else {truncated}
 }
 
-/// Rises through 0 at the cycle start like the sine: 0 -> +1 -> 0 -> -1 -> 0.
 fn triangle(turn: f64) -> f64 {
     let phase = fract(turn);
     if phase < 0.25 {
@@ -84,32 +64,24 @@ fn triangle(turn: f64) -> f64 {
     }
 }
 
-/// One rising ramp per cycle, from -1 at the cycle start to +1 at its end.
 fn saw(turn: f64) -> f64 {
     fract(turn) * 2.0 - 1.0
 }
 
-/// The first half of the cycle high, the second low.
 fn square(turn: f64) -> f64 {
     if fract(turn) < 0.5 {1.0} else {-1.0}
 }
 
-/// One assignment as the render path sees it: the source, plus this assignment's own live `depth` and
-/// `enabled` cells. Cheap to clone; a depth drag writes the cell and needs no re-bind.
 pub(crate) struct BoundModulation {
     pub(crate) modulator: Rc<ModulatorState>,
     pub(crate) depth: Rc<Cell<f32>>,
     pub(crate) enabled: Rc<Cell<bool>>
 }
 
-/// Every assignment driving ONE parameter. Rebuilt when the assignment SET changes (a `ModulationBox` added,
-/// removed or re-pointed), never for a value edit.
 pub(crate) type ModulationChain = Rc<[BoundModulation]>;
 
-/// The summed modulation for `chain` at `position`, or NaN when nothing contributes (no assignment, or every
-/// one disabled). NaN is the wire's "no modulation" sentinel, so a disabled assignment leaves the parameter
-/// on its exact un-modulated path rather than adding a zero — which would still round-trip through the
-/// device's mapping and could shift the value by a float epsilon.
+/// NaN, not 0.0, when nothing contributes: a zero sum would still send the parameter down the device's
+/// modulated path, where the mapping round-trip can shift it by a float epsilon.
 pub(crate) fn modulation_sum(chain: Option<&ModulationChain>, position: f64) -> f32 {
     let chain = match chain {
         Some(chain) => chain,
@@ -127,9 +99,6 @@ pub(crate) fn modulation_sum(chain: Option<&ModulationChain>, position: f64) -> 
     if contributes {sum} else {f32::NAN}
 }
 
-/// The engine's registry of live modulators, keyed by their `LfoModulatorBox` uuid. Membership is recorded by
-/// the `RootBox.modulators` hub observer (which holds only `&BoxGraph`) and realized by `sync_modulators`,
-/// the same two-step the MIDI-output targets use.
 pub(crate) struct ModulatorTable {
     entries: Vec<(Uuid, Rc<ModulatorState>, Vec<SubscriptionId>)>,
     pending_add: Vec<Uuid>,
@@ -161,7 +130,6 @@ impl ModulatorTable {
         self.entries.push((uuid, state, subs));
     }
 
-    /// Drop a modulator and hand back its subscriptions for the caller to unsubscribe (it holds `&mut graph`).
     pub(crate) fn remove(&mut self, uuid: &Uuid) -> Vec<SubscriptionId> {
         match self.entries.iter().position(|(bound, ..)| bound == uuid) {
             Some(index) => self.entries.remove(index).2,

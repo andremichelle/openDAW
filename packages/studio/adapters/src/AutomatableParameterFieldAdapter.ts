@@ -1,5 +1,6 @@
 import {
     assert,
+    asInstanceOf,
     clamp,
     ControlSource,
     ControlSourceListener,
@@ -20,9 +21,9 @@ import {
     ValueMapping
 } from "@opendaw/lib-std"
 import {ppqn} from "@opendaw/lib-dsp"
-import {Address, PointerField, PointerTypes, PrimitiveField, PrimitiveType, PrimitiveValues} from "@opendaw/lib-box"
+import {Address, Field, PointerField, PointerTypes, PrimitiveField, PrimitiveType, PrimitiveValues} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {BoxVisitor, TrackBox} from "@opendaw/studio-boxes"
+import {BoxVisitor, ModulationBox, TrackBox} from "@opendaw/studio-boxes"
 import {TrackBoxAdapter} from "./timeline/TrackBoxAdapter"
 import {AudioUnitTracks} from "./audio-unit/AudioUnitTracks"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
@@ -105,12 +106,9 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
         }
     }
 
-    // The engine broadcasts TWO floats at the parameter's field address while automation or modulation applies:
-    // [0] the automated unit value, [1] the summed modulation in normalized space. NaN is its "does not apply"
-    // sentinel in both slots — automation attached with no region / clip / events yet, or no enabled
-    // assignment — and the parameter then falls back to its own storage value (a real 0 would read as unit 0
-    // and pin the knob to its minimum). Bound while ANY external control source is attached, since a
-    // modulation applies with no automation track at all.
+    // The engine's two floats at the parameter's field address: [0] the automated unit value, [1] the
+    // modulation sum. NaN means "does not apply" in both, and the parameter falls back to its storage value
+    // (a real 0 would read as unit 0 and pin the knob to its minimum).
     #observeEngineValue(): void {
         if (!this.#context.isMainThread || this.#automationHandle.nonEmpty()) {return}
         this.#automationHandle = Option.wrap(this.#context.liveStreamReceiver
@@ -151,7 +149,17 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     get anchor(): unitValue {return this.#anchor}
     get type(): PrimitiveType {return this.#field.type}
     get address(): Address {return this.#field.address}
+    get context(): BoxAdaptersContext {return this.#context}
     get track(): Option<TrackBoxAdapter> {return this.#trackBoxAdapter}
+    /// Every parameter field accepts `Modulation` (`ParameterPointerRules`), but the adapter types it by the
+    /// automation pointer it was built for.
+    get modulationTarget(): Field<Pointers.Modulation> {
+        return this.#field as unknown as Field<Pointers.Modulation>
+    }
+    get modulations(): ReadonlyArray<ModulationBox> {
+        return this.#field.pointerHub.filter(Pointers.Modulation)
+            .map(pointer => asInstanceOf(pointer.box, ModulationBox))
+    }
 
     registerTracks(tracks: AudioUnitTracks): Terminable {
         return this.#context.parameterFieldAdapters.registerTracks(this.address, tracks)
@@ -204,9 +212,8 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     setUnitValue(value: unitValue): void {this.setValue(this.#valueMapping.y(value))}
     getUnitValue(): unitValue {return this.#valueMapping.x(this.getValue())}
     getControlledValue(): T {return this.#valueMapping.y(this.getControlledUnitValue())}
-    // base (the automated value, else the storage value) + the summed modulation, clamped — the modulation
-    // formula, on the UI side of it. The engine cannot compute this itself for an unautomated parameter: it
-    // holds the storage value in the parameter's real unit and the mapping lives here (and in the device).
+    // The engine cannot fold these itself: for an unautomated parameter it holds the storage value in the
+    // parameter's real unit, and the mapping lives here (and in the device).
     getControlledUnitValue(): unitValue {
         const base = this.#controlledValue ?? this.getUnitValue()
         return isNull(this.#modulationValue) ? base : clamp(base + this.#modulationValue, 0.0, 1.0)

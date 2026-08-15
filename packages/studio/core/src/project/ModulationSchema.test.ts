@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {Modulators, ProjectSkeleton} from "@opendaw/studio-adapters"
 import {LfoModulatorBox, ModulationBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import type {ProjectEnv} from "./ProjectEnv"
@@ -35,8 +35,8 @@ const createEnv = (): ProjectEnv => ({
     soundfontService: undefined
 }) as unknown as ProjectEnv
 
-// Phase 2 of plans/modulations.md: the boxes exist, they survive a `.od` round-trip, and the pointer rules
-// wire a modulator to a device parameter. Nothing evaluates them yet — that is phase 3.
+// The modulation boxes and the create path the parameter context menu drives: the schema survives a `.od`
+// round-trip, the pointer rules wire a modulator to a parameter, and one source can drive many parameters.
 describe("modulation schema", () => {
     it("an LFO and its assignment survive a project round-trip", async () => {
         const {Project} = await import("./Project")
@@ -127,6 +127,37 @@ describe("modulation schema", () => {
         expect(project.boxGraph.findBox(lfoUuid).isEmpty()).toBe(true)
         // Pointers.Modulation is accepted by every parameter field, so nothing is left dangling on the target.
         expect(project.primaryAudioUnitBox.volume.pointerHub.filter(Pointers.Modulation).length).toBe(0)
+        project.terminate()
+    })
+
+    // What the parameter context menu does: "Modulate > New LFO" on a device parameter, then a second
+    // assignment of the SAME source to another parameter (one modulator drives many).
+    it("the create path assigns a modulator to a parameter", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(createEnv(), ProjectSkeleton.empty({
+            createDefaultUser: true, createOutputMaximizer: false
+        }))
+        const parameter = project.parameterFieldAdapters.get(project.primaryAudioUnitBox.volume.address)
+        const panning = project.parameterFieldAdapters.get(project.primaryAudioUnitBox.panning.address)
+        project.editing.modify(() =>
+            Modulators.assign(parameter.context, Modulators.createLfo(parameter.context), parameter.modulationTarget))
+        expect(parameter.modulations.length).toBe(1)
+        const modulator = project.rootBoxAdapter.modulators.adapters()[0]
+        expect(modulator.label).toBe("LFO")
+        expect(modulator.assignments.length).toBe(1)
+        // The same source on a second parameter, each with its own depth.
+        project.editing.modify(() =>
+            Modulators.assign(parameter.context, modulator.box, panning.modulationTarget, -0.5))
+        expect(modulator.assignments.length).toBe(2)
+        expect(panning.modulations.length).toBe(1)
+        expect(modulator.assignments.map(assignment => assignment.depth).sort()).toEqual([-0.5, 0.25])
+        // A second LFO gets its own unique name, the way the menu lists them.
+        project.editing.modify(() => Modulators.createLfo(parameter.context))
+        expect(project.rootBoxAdapter.modulators.adapters().map(adapter => adapter.label)).toEqual(["LFO", "LFO 2"])
+        // Removing the assignment (the menu's "Remove LFO") leaves the modulator itself alone.
+        project.editing.modify(() => parameter.modulations[0].delete())
+        expect(parameter.modulations.length).toBe(0)
+        expect(modulator.assignments.length).toBe(1)
         project.terminate()
     })
 })

@@ -260,9 +260,8 @@ export class ScriptBridges {
     }
 
     // Map one raw (kind, value) through the param's @param mapping and hand it to the user proc. A no-op when the
-    // proc / mappings are not loaded yet — `#ensureProc` replays `rawParams` once they are. A scriptable device's
-    // mapping lives in the script's `@param` declaration, so this is the call site that folds a modulation sum
-    // (NaN = none) into the base: normalize, add, clamp, map back — the same rule as the Rust `float_value`.
+    // proc / mappings are not loaded yet — `#ensureProc` replays `rawParams` once they are. The script's mapping
+    // lives here, so this is where a modulation sum (NaN = none) folds in, like the Rust `float_value`.
     #applyParam(bridge: Bridge, index: number, kind: number, value: number, modulation: number): void {
         const entry = bridge.paramMappings.get(index)
         if (entry === undefined) {return}

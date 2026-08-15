@@ -271,15 +271,12 @@ impl DryWetMixProcessor {
         self.wet_gain.set(db_to_gain(wet_db), self.processing);
     }
 
-    // Evaluate the automated dry / wet curves at `position` (falling back to the static params), remembering
-    // the resolved values for the paused hold. `volume` carries dry, `panning` carries wet (the shared
-    // `StripAutomation` shape; a composite has no pan of its own).
+    // `volume` carries dry, `panning` carries wet (the shared `StripAutomation` shape; a composite has no
+    // pan of its own).
     fn retarget_at(&mut self, position: f64) {
         self.retarget_resolved(position, true);
     }
 
-    // Resolve each override at `position` (the closure holds its automation when not `transporting`, while any
-    // modulation keeps moving) and retarget; an unbound parameter uses its static field value.
     fn retarget_resolved(&mut self, position: f64, transporting: bool) {
         let dry_db = match self.automation.volume.borrow().as_ref() {
             Some(source) => source(position, transporting),
@@ -292,8 +289,7 @@ impl DryWetMixProcessor {
         self.retarget(dry_db, wet_db);
     }
 
-    // PAUSED (a non-transporting block): no update events, so an automated dry / wet HOLDS its last resolved
-    // value; the static side still applies.
+    // PAUSED: no update events, so the automation HOLDS.
     fn retarget_held(&mut self, position: f64) {
         self.retarget_resolved(position, false);
     }

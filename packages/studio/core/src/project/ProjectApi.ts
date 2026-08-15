@@ -27,6 +27,8 @@ import {
     AudioUnitBox,
     CaptureAudioBox,
     CaptureMidiBox,
+    LfoModulatorBox,
+    ModulationBox,
     NoteClipBox,
     NoteEventBox,
     NoteEventCollectionBox,
@@ -54,6 +56,7 @@ import {
     InstrumentOptions,
     InstrumentProduct,
     InterpolationFieldAdapter,
+    Modulators,
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
     ProjectQueries,
@@ -198,6 +201,12 @@ export class ProjectApi {
             if (field === targetField) {return}
             IndexedBox.collectIndexedBoxes(field).forEach((box, index) => box.index.setValue(index))
         })
+    }
+
+    createLfoModulator(label?: string): LfoModulatorBox {return Modulators.createLfo(this.#project, label)}
+
+    createModulation(modulator: LfoModulatorBox, target: Field<Pointers.Modulation>, depth?: unitValue): ModulationBox {
+        return Modulators.assign(this.#project, modulator, target, depth)
     }
 
     createNoteTrack(audioUnitBox: AudioUnitBox, insertIndex: int = Number.MAX_SAFE_INTEGER): TrackBox {

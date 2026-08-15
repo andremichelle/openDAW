@@ -59,8 +59,7 @@ export enum Pointers {
     CompositeCell,
     AudioEffectCompositeCell,
     Pattern,
-    // APPEND ONLY past this point: the values are ordinals, and inserting one renumbers every member after it,
-    // which every already-built package dist would then disagree with until it is rebuilt.
+    // APPEND ONLY: the values are ordinals, so inserting one renumbers every member after it.
     ModulatorCollection,
     ModulatorSource,
 }

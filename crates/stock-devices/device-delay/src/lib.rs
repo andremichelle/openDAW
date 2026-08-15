@@ -82,8 +82,7 @@ fn sync_index(value: ParamValue) -> i32 {
         ParamValue::Int(real) => real,
         ParamValue::Float(real) => real as i32,
         ParamValue::Bool(flag) => if flag {1} else {0},
-        // The field is a Float32 carrying an INDEX, so `int_value` cannot serve it; fold the sum the same way
-        // it would (normalize through the integer mapping, add, clamp, snap back).
+        // A Float32 field carrying an INDEX, so `int_value` cannot serve it.
         ParamValue::Modulated {base, kind, sum} => {
             let unit = if kind == abi::PARAM_KIND_UNIT {base} else {SYNC_MAPPING.x(base as i32)};
             SYNC_MAPPING.y(math::clamp_unit(unit + sum))

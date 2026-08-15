@@ -40,8 +40,7 @@ const CLOCK_RATE: f64 = 40.0;
 // `UpdateClock` feeds automated parameters with (`AbstractProcessor.updateParameters`).
 const UPDATE_CLOCK_RATE: f64 = 10.0;
 
-// A MIDI CC parameter is stored as a 0..1 unit value (`emit_cc` rounds `value * 127`), so folding a
-// modulation onto it is the identity mapping's `x` / `y`.
+// A CC parameter is a 0..1 unit value (`emit_cc` rounds `value * 127`).
 const UNIPOLAR: math::value_mapping::Linear = math::value_mapping::Linear::unipolar();
 
 // The queue is drained every quantum by the worklet; a host that never drains (a render without the MIDI
@@ -490,9 +489,8 @@ impl MidiOutProcessor {
                 }
             }
         }
-        // A MODULATED controller keeps moving while the transport is PAUSED (its value follows the
-        // free-running position, not the song), so it updates once per paused block; an automation-only one
-        // holds, exactly as before.
+        // A MODULATED controller keeps moving while PAUSED, so it updates once per paused block; an
+        // automation-only one holds.
         if !block.flags.transporting() {
             for cc in &self.cc {
                 if cc.handle.modulation.is_none() {
@@ -526,8 +524,6 @@ impl MidiOutProcessor {
                     continue;
                 }
                 let (value, kind, modulation) = cc.handle.resolve(position);
-                // A CC parameter IS a 0..1 unit value (`emit_cc` sends `value * 127`), so the modulation
-                // folds through the unipolar mapping — the same `abi::float_value` a device would use.
                 let value = crate::audio_unit::host_float(value, kind, modulation, &UNIPOLAR);
                 if value != cc.last.get() {
                     cc.last.set(value); // updated regardless of device / enabled (TS updateAutomation)

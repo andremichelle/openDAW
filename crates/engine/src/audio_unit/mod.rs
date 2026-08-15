@@ -689,9 +689,8 @@ impl Engine {
         if self.master.is_none() {
             return;
         }
-        // A modulator's own field moved (rate, shape, phase, amount, enabled), or one joined / left. The
-        // value cells are already live for the render path, but a STOPPED transport runs no update clock, so
-        // every unit re-pushes its parameters once here. Cheap: `refresh_params` still diffs per parameter.
+        // A modulator's own field moved: the cells are live for the render path, but a stopped transport
+        // runs no update clock, so every unit re-pushes once here (`refresh_params` still diffs per param).
         if self.modulation_dirty.replace(false) {
             for binding in &self.audio_units {
                 binding.params_dirty.set(true);

@@ -78,15 +78,11 @@ impl AuxSendProcessor {
         self.gain_right.set((1.0 + panning.min(0.0)) * gain, self.processing);
     }
 
-    // Evaluate the automated sendGain / sendPan curves at `position` (falling back to the static params) and
-    // retarget, remembering the resolved automated values for the paused hold. Called at each update-clock
-    // boundary, mirroring TS `AutomatableParameter` events.
+    // Called at each update-clock boundary, mirroring TS `AutomatableParameter` events.
     fn retarget_at(&mut self, position: f64) {
         self.retarget_resolved(position, true);
     }
 
-    // Resolve each override at `position` (the closure holds its automation when not `transporting`, while any
-    // modulation keeps moving) and retarget; an unbound parameter uses its static field value.
     fn retarget_resolved(&mut self, position: f64, transporting: bool) {
         let gain_db = match self.automation.volume.borrow().as_ref() {
             Some(source) => source(position, transporting),
@@ -99,8 +95,7 @@ impl AuxSendProcessor {
         self.retarget(gain_db, panning);
     }
 
-    // PAUSED (a non-transporting block): no update events (the TS `UpdateClock` gate), so an automated
-    // sendGain / sendPan HOLDS its last resolved value; the static side still applies.
+    // PAUSED: no update events (the TS `UpdateClock` gate), so the automation HOLDS.
     fn retarget_held(&mut self, position: f64) {
         self.retarget_resolved(position, false);
     }

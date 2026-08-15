@@ -46,16 +46,10 @@ impl Default for StripParams {
 }
 
 /// The strip's optional volume / panning / mute overrides: each closure maps `(pulse position, transporting)`
-/// to the strip-unit value (volume dB, panning -1..1, mute as a 0..1 unit value the strip thresholds at >= 0.5,
-/// the TS `ValueMapping.bool`) of the parameter's Value-track curve PLUS any modulation assigned to it. `None`
-/// means the parameter is neither automated nor modulated, so the strip uses the static `StripParams` value.
-/// Shared (`Rc`) between the strip node and the engine binding, which swaps the closures in when a track or an
-/// assignment attaches / detaches (like `StripParams` is swapped for static edits). The engine owns the curve
-/// and the modulators; the strip just calls the closure.
-///
-/// `transporting` is false on a PAUSED block, where the closure holds the AUTOMATION at its last resolved value
-/// (the TS `UpdateClock` emits no update events off-transport) while the MODULATION keeps following the
-/// free-running position — so an LFO still moves a fader with the transport stopped.
+/// to the strip-unit value (volume dB, panning -1..1, mute as a 0..1 unit value thresholded at >= 0.5, the TS
+/// `ValueMapping.bool`) of the parameter's curve PLUS any modulation. `None` means neither applies, so the
+/// strip uses the static `StripParams` value. On a PAUSED block (`transporting` false) the closure holds its
+/// AUTOMATION while the MODULATION keeps following the free-running position.
 pub type StripValueSource = Rc<dyn Fn(f64, bool) -> f32>;
 
 pub struct StripAutomation {
@@ -124,15 +118,11 @@ impl ChannelStripProcessor {
         self.mute_gain.set(if silent {0.0} else {1.0}, self.processing);
     }
 
-    // Evaluate the automated volume / panning / mute curves at `position` (falling back to the static params) and
-    // retarget, remembering the resolved automated values for the paused hold. Called at each update-clock
-    // boundary, mirroring TS `AutomatableParameter` events.
+    // Called at each update-clock boundary, mirroring TS `AutomatableParameter` events.
     fn retarget_at(&mut self, position: f64) {
         self.retarget_resolved(position, true);
     }
 
-    // Resolve each override at `position` (the closure holds its automation when not `transporting`) and
-    // retarget; an unbound parameter uses its static field value, exactly as before.
     fn retarget_resolved(&mut self, position: f64, transporting: bool) {
         let volume_db = match self.automation.volume.borrow().as_ref() {
             Some(source) => source(position, transporting),
@@ -149,11 +139,8 @@ impl ChannelStripProcessor {
         self.retarget(volume_db, panning, muted);
     }
 
-    // PAUSED (a non-transporting block): the update clock is silent (TS `UpdateClock` gates on
-    // `BlockFlag.transporting`), so an automated parameter HOLDS its last resolved value — never re-read at
-    // the free-running paused position — while the static side (an edit, mute) still applies like TS's
-    // `parameterChanged` -> `processAudio` path. Before any update event ever fired, the hold is the static
-    // field value (the TS `AutomatableParameter` initial `#value`).
+    // PAUSED: the update clock is silent (TS `UpdateClock` gates on `BlockFlag.transporting`), so the
+    // automation HOLDS while a modulation keeps moving.
     fn retarget_held(&mut self, position: f64) {
         self.retarget_resolved(position, false);
     }
