@@ -50,6 +50,7 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     #trackBoxAdapter: Option<TrackBoxAdapter> = Option.None
     #automationHandle: Option<Terminable> = Option.None
     #controlledValue: Nullable<unitValue> = null
+    #modulationValue: Nullable<unitValue> = null
     #midiControlled: boolean = false
 
     constructor(context: BoxAdaptersContext,
@@ -76,29 +77,10 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
                 pointer.box.accept<BoxVisitor>({
                     visitTrackBox: (box: TrackBox) => {
                         assert(this.#trackBoxAdapter.isEmpty(), "Already assigned")
-                        const adapter = this.#context.boxAdapters.adapterFor(box, TrackBoxAdapter)
-                        this.#trackBoxAdapter = Option.wrap(adapter)
-                        if (this.#context.isMainThread) {
-                            this.#automationHandle = Option.wrap(this.#context.liveStreamReceiver
-                                .subscribeFloat(this.#field.address, value => {
-                                    // NaN is the engine's "the curve yields NO value here" sentinel: automation
-                                    // is attached but has no region / clip / events yet. The parameter must then
-                                    // keep showing its STORAGE value (`getControlledUnitValue` falls back to
-                                    // `getUnitValue` while `#controlledValue` is null) — a real value of 0 would
-                                    // otherwise read as unit 0, pinning the knob to its minimum.
-                                    if (isNaN(value)) {
-                                        if (isNull(this.#controlledValue)) {return}
-                                        this.#controlledValue = null
-                                        this.#valueChangeNotifier.notify(this)
-                                        return
-                                    }
-                                    if (this.#controlledValue === value) {return}
-                                    this.#controlledValue = value
-                                    this.#valueChangeNotifier.notify(this)
-                                }))
-                        }
+                        this.#trackBoxAdapter = Option.wrap(this.#context.boxAdapters.adapterFor(box, TrackBoxAdapter))
                     }
                 })
+                this.#observeEngineValue()
             },
             onRemoved: (pointer: PointerField) => {
                 this.#controlSource.proxy.onControlSourceRemove(mapPointerToControlSource(pointer.pointerType))
@@ -106,14 +88,9 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
                     visitTrackBox: (box: TrackBox) => {
                         assert(this.#trackBoxAdapter.unwrapOrNull()?.address?.equals(box.address) === true, `Unknown ${box}`)
                         this.#trackBoxAdapter = Option.None
-                        if (this.#context.isMainThread) {
-                            this.#automationHandle.ifSome(handle => handle.terminate())
-                            this.#automationHandle = Option.None
-                            this.#controlledValue = null
-                            this.#valueChangeNotifier.notify(this)
-                        }
                     }
                 })
+                this.#releaseEngineValue()
             }
         }, ...ExternalControlTypes))
 
@@ -126,6 +103,34 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
                 "constraints" in field ? field["constraints"] : "no constraints",
                 valueMapping, field.address.fieldKeys.join(", "), field.box.name)*/
         }
+    }
+
+    // The engine broadcasts TWO floats at the parameter's field address while automation or modulation applies:
+    // [0] the automated unit value, [1] the summed modulation in normalized space. NaN is its "does not apply"
+    // sentinel in both slots — automation attached with no region / clip / events yet, or no enabled
+    // assignment — and the parameter then falls back to its own storage value (a real 0 would read as unit 0
+    // and pin the knob to its minimum). Bound while ANY external control source is attached, since a
+    // modulation applies with no automation track at all.
+    #observeEngineValue(): void {
+        if (!this.#context.isMainThread || this.#automationHandle.nonEmpty()) {return}
+        this.#automationHandle = Option.wrap(this.#context.liveStreamReceiver
+            .subscribeFloats(this.#field.address, values => {
+                const automated: Nullable<unitValue> = isNaN(values[0]) ? null : values[0]
+                const modulation: Nullable<unitValue> = isNaN(values[1]) ? null : values[1]
+                if (this.#controlledValue === automated && this.#modulationValue === modulation) {return}
+                this.#controlledValue = automated
+                this.#modulationValue = modulation
+                this.#valueChangeNotifier.notify(this)
+            }))
+    }
+
+    #releaseEngineValue(): void {
+        if (!this.#context.isMainThread || this.#field.pointerHub.filter(...ExternalControlTypes).length > 0) {return}
+        this.#automationHandle.ifSome(handle => handle.terminate())
+        this.#automationHandle = Option.None
+        this.#controlledValue = null
+        this.#modulationValue = null
+        this.#valueChangeNotifier.notify(this)
     }
 
     registerMidiControl(): Terminable {
@@ -199,7 +204,13 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     setUnitValue(value: unitValue): void {this.setValue(this.#valueMapping.y(value))}
     getUnitValue(): unitValue {return this.#valueMapping.x(this.getValue())}
     getControlledValue(): T {return this.#valueMapping.y(this.getControlledUnitValue())}
-    getControlledUnitValue(): unitValue {return this.#controlledValue ?? this.getUnitValue()}
+    // base (the automated value, else the storage value) + the summed modulation, clamped — the modulation
+    // formula, on the UI side of it. The engine cannot compute this itself for an unautomated parameter: it
+    // holds the storage value in the parameter's real unit and the mapping lives here (and in the device).
+    getControlledUnitValue(): unitValue {
+        const base = this.#controlledValue ?? this.getUnitValue()
+        return isNull(this.#modulationValue) ? base : clamp(base + this.#modulationValue, 0.0, 1.0)
+    }
     getControlledPrintValue(): Readonly<StringResult> {return this.#stringMapping.x(this.getControlledValue())}
     getPrintValue(): Readonly<StringResult> {return this.#stringMapping.x(this.getValue())}
     setPrintValue(text: string): void {

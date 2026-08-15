@@ -224,7 +224,7 @@ fn an_automated_dry_resolves_at_the_update_clock_inside_the_quantum() {
     params.wet_db.set(f32::NEG_INFINITY); // isolate dry: the output IS the dry gain applied to the input
     let automation = Rc::new(StripAutomation::new());
     // `volume` carries the dry curve: silent until the update-grid point at pulse 10, unity from there.
-    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64| {
+    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64, _transporting: bool| {
         if position < 10.0 {f32::NEG_INFINITY} else {0.0}
     }));
     let mut mix = mixer(params, automation, filled(1.0, 1.0), filled(0.0, 0.0));

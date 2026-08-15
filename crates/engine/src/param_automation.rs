@@ -13,6 +13,7 @@ use bindings::value_collection::ValueCurve;
 use boxgraph::address::Uuid;
 use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
 use value::region::{global_to_local, RegionCollection, Span};
+use crate::modulation::{modulation_sum, ModulationChain};
 
 /// A parameter's stable identifier: the field-key path to its box field (e.g. `[16, 10]` for
 /// `lowPass.frequency`). The same keys the box schema and the device use — never a packed encoding — so it
@@ -21,6 +22,9 @@ pub(crate) type FieldPath = Vec<u16>;
 
 /// TS `UpdateClockRate` — the window `TrackBoxAdapter.valueAt` hands to `clipSequencing.iterate`.
 const UPDATE_CLOCK_RATE: f64 = dsp::ppqn::UPDATE_CLOCK_RATE;
+
+/// `ParamHandle::held`'s "nothing resolved yet" kind, distinct from every `PARAM_KIND_*`.
+pub(crate) const HELD_NONE: u32 = u32::MAX;
 
 /// One bound device parameter (the engine's side of `bind_parameter`): the device-assigned `id`, the box
 /// field's current real value (`field`, observed so it stays live) and its primitive `kind` (`PARAM_KIND_INT`
@@ -33,10 +37,19 @@ pub(crate) struct ParamHandle {
     pub(crate) field: Rc<Cell<f32>>, // the box field's current real value (Hz, semitones, bool 0/1) as an f32
     pub(crate) kind: u32,            // the field's primitive type, used when the parameter is NOT automated
     pub(crate) track: Option<ParamCurve>,
+    // Every enabled assignment driving this parameter (`RootBox.modulators` -> `ModulationBox` -> here).
+    // `None` when the parameter has no assignment at all, which keeps it on its exact un-modulated path.
+    pub(crate) modulation: Option<ModulationChain>,
     pub(crate) last: Rc<Cell<f32>>,
     // The modulation sum last handed to the device, beside `last`. Compared by BIT PATTERN, since the "no
     // modulation" sentinel is NaN and `NaN != NaN` would otherwise report a change on every single push.
     pub(crate) last_modulation: Rc<Cell<f32>>,
+    // The AUTOMATION value last resolved while transporting, for the HOST-side consumers (the strip, the
+    // sends, a composite's gains). Unlike a device those resolve per block rather than on the update clock,
+    // so a paused transport must hand them a held automation value while the modulation keeps moving. `kind`
+    // is `HELD_NONE` until the first resolve, where the parameter's own storage value applies (the TS
+    // `AutomatableParameter` initial `#value`).
+    pub(crate) held: Rc<Cell<(f32, u32)>>,
     // The UI broadcast slot at the parameter's FIELD ADDRESS (TS `AutomatableParameter.onStartAutomation`:
     // `broadcastFloat(adapter.address, () => getUnitValue())`) — `Some` only while a track is attached;
     // `resolve` keeps `[0]` at the current unit value, the worklet mirrors it, the knob animates.
@@ -53,8 +66,53 @@ impl ParamHandle {
     /// `valueMapping.y(track.valueAt(position, getUnitValue()))`: the TS fallback is the mapped FIELD value,
     /// so a muted value clip / an empty curve resolves to the field's storage value, never a made-up 0.
     pub(crate) fn resolve(&self, position: f64) -> (f32, u32, f32) {
-        let (value, kind) = self.resolve_base(position);
-        (value, kind, f32::NAN)
+        self.resolve_split(position, position)
+    }
+
+    /// [`resolve`] with the two positions apart, for a PAUSED transport: the automation reads the FROZEN song
+    /// position (a static curve at a fixed position is exactly the "hold" TS gets from its silent update
+    /// clock), while the modulation keeps moving with the free-running position the render loop passes. While
+    /// transporting the two are the same number and this is plain `resolve`.
+    pub(crate) fn resolve_split(&self, automation_position: f64, modulation_position: f64) -> (f32, u32, f32) {
+        let (value, kind) = self.resolve_base(automation_position);
+        let modulation = modulation_sum(self.modulation.as_ref(), modulation_position);
+        self.publish(value, modulation);
+        (value, kind, modulation)
+    }
+
+    /// Mirror the resolved pair into the UI slot: `[0]` the AUTOMATED unit value (NaN when the curve does not
+    /// apply, so the knob keeps showing the parameter's own storage value), `[1]` the modulation sum. The UI
+    /// adds them, since only it (and the device) knows the mapping to normalize a storage value with.
+    fn publish(&self, value: f32, modulation: f32) {
+        if let Some(slot) = &self.broadcast {
+            let mut slot = slot.borrow_mut();
+            if slot.len() > 1 {
+                slot[1] = modulation;
+            }
+            if self.track.is_none() {
+                slot[0] = f32::NAN; // no automation applies; `resolve_base` only writes `[0]` when it does
+            }
+            let _ = value;
+        }
+    }
+
+    /// Resolve for a HOST-side consumer, which is called per BLOCK rather than on the update clock: while
+    /// transporting this is `resolve`, remembering the automation value; while PAUSED the automation is the
+    /// held value (the parameter's storage value until one was ever resolved) and only the modulation moves.
+    pub(crate) fn resolve_held(&self, position: f64, transporting: bool) -> (f32, u32, f32) {
+        let (value, kind) = if transporting {
+            let resolved = self.resolve_base(position);
+            self.held.set(resolved);
+            resolved
+        } else {
+            match self.held.get() {
+                (_, HELD_NONE) => (self.field.get(), self.kind),
+                held => held
+            }
+        };
+        let modulation = modulation_sum(self.modulation.as_ref(), position);
+        self.publish(value, modulation);
+        (value, kind, modulation)
     }
 
     /// Whether `(value, modulation)` differs from what this parameter last handed the device, the push / pull

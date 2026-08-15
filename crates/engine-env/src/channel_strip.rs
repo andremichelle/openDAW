@@ -45,13 +45,18 @@ impl Default for StripParams {
     }
 }
 
-/// The strip's optional volume / panning / mute AUTOMATION overrides: each closure maps a pulse position to the
-/// strip-unit value (volume dB, panning -1..1, mute as a 0..1 unit value the strip thresholds at >= 0.5, the TS
-/// `ValueMapping.bool`) of the parameter's Value-track curve. `None` means the parameter is not automated, so the
-/// strip uses the static `StripParams` value. Shared (`Rc`) between the strip node and the engine binding, which
-/// swaps the closures in when a Value track attaches / detaches (like `StripParams` is swapped for static edits).
-/// The engine owns the curve; the strip just calls the closure.
-pub type StripValueSource = Rc<dyn Fn(f64) -> f32>;
+/// The strip's optional volume / panning / mute overrides: each closure maps `(pulse position, transporting)`
+/// to the strip-unit value (volume dB, panning -1..1, mute as a 0..1 unit value the strip thresholds at >= 0.5,
+/// the TS `ValueMapping.bool`) of the parameter's Value-track curve PLUS any modulation assigned to it. `None`
+/// means the parameter is neither automated nor modulated, so the strip uses the static `StripParams` value.
+/// Shared (`Rc`) between the strip node and the engine binding, which swaps the closures in when a track or an
+/// assignment attaches / detaches (like `StripParams` is swapped for static edits). The engine owns the curve
+/// and the modulators; the strip just calls the closure.
+///
+/// `transporting` is false on a PAUSED block, where the closure holds the AUTOMATION at its last resolved value
+/// (the TS `UpdateClock` emits no update events off-transport) while the MODULATION keeps following the
+/// free-running position — so an LFO still moves a fader with the transport stopped.
+pub type StripValueSource = Rc<dyn Fn(f64, bool) -> f32>;
 
 pub struct StripAutomation {
     pub volume: RefCell<Option<StripValueSource>>,
@@ -87,11 +92,6 @@ pub struct ChannelStripProcessor {
     meter: crate::meter::Meter, // peaks/RMS of the strip output (a broadcast slot)
     sample_rate: f32,
     processing: bool, // false until the first chunk, so the first targets jump (no ramp from 0)
-    // The last AUTOMATED values resolved at an update boundary, HELD while the transport is paused (the TS
-    // `AutomatableParameter#value`, which only moves on update events — none arrive while not transporting).
-    held_volume_db: Option<f32>,
-    held_panning: Option<f32>,
-    held_mute: Option<bool>,
     events: EventBuffer // unused (the strip receives no events) but required by `Processor: EventReceiver`
 }
 
@@ -108,9 +108,6 @@ impl ChannelStripProcessor {
             meter: crate::meter::Meter::new(sample_rate),
             sample_rate,
             processing: false,
-            held_volume_db: None,
-            held_panning: None,
-            held_mute: None,
             events: EventBuffer::new()
         }
     }
@@ -131,28 +128,22 @@ impl ChannelStripProcessor {
     // retarget, remembering the resolved automated values for the paused hold. Called at each update-clock
     // boundary, mirroring TS `AutomatableParameter` events.
     fn retarget_at(&mut self, position: f64) {
+        self.retarget_resolved(position, true);
+    }
+
+    // Resolve each override at `position` (the closure holds its automation when not `transporting`) and
+    // retarget; an unbound parameter uses its static field value, exactly as before.
+    fn retarget_resolved(&mut self, position: f64, transporting: bool) {
         let volume_db = match self.automation.volume.borrow().as_ref() {
-            Some(source) => {
-                let value = source(position);
-                self.held_volume_db = Some(value);
-                value
-            }
+            Some(source) => source(position, transporting),
             None => self.params.volume_db.get()
         };
         let panning = match self.automation.panning.borrow().as_ref() {
-            Some(source) => {
-                let value = source(position);
-                self.held_panning = Some(value);
-                value
-            }
+            Some(source) => source(position, transporting),
             None => self.params.panning.get()
         };
         let muted = match self.automation.mute.borrow().as_ref() {
-            Some(source) => {
-                let value = source(position) >= 0.5; // TS `ValueMapping.bool.y`
-                self.held_mute = Some(value);
-                value
-            }
+            Some(source) => source(position, transporting) >= 0.5, // TS `ValueMapping.bool.y`
             None => self.params.mute.get()
         };
         self.retarget(volume_db, panning, muted);
@@ -163,20 +154,8 @@ impl ChannelStripProcessor {
     // the free-running paused position — while the static side (an edit, mute) still applies like TS's
     // `parameterChanged` -> `processAudio` path. Before any update event ever fired, the hold is the static
     // field value (the TS `AutomatableParameter` initial `#value`).
-    fn retarget_held(&mut self) {
-        let volume_db = match self.automation.volume.borrow().as_ref() {
-            Some(_) => self.held_volume_db.unwrap_or_else(|| self.params.volume_db.get()),
-            None => self.params.volume_db.get()
-        };
-        let panning = match self.automation.panning.borrow().as_ref() {
-            Some(_) => self.held_panning.unwrap_or_else(|| self.params.panning.get()),
-            None => self.params.panning.get()
-        };
-        let muted = match self.automation.mute.borrow().as_ref() {
-            Some(_) => self.held_mute.unwrap_or_else(|| self.params.mute.get()),
-            None => self.params.mute.get()
-        };
-        self.retarget(volume_db, panning, muted);
+    fn retarget_held(&mut self, position: f64) {
+        self.retarget_resolved(position, false);
     }
 
     // Apply the gains over `[from, to)`. Settled fast path (TS `isInterpolating` branch): scalar gains keep
@@ -269,7 +248,7 @@ impl Processor for ChannelStripProcessor {
             for block in info.blocks {
                 let (s0, s1) = (block.s0 as usize, block.s1 as usize);
                 if !block.flags.transporting() {
-                    self.retarget_held();
+                    self.retarget_held(block.p0);
                     self.apply(&source, &mut output, s0, s1);
                     continue;
                 }
@@ -322,13 +301,21 @@ mod tests {
     fn paused_blocks_hold_the_automated_gain_and_never_resolve_the_curve() {
         let params = Rc::new(StripParams::new());
         let automation = Rc::new(StripAutomation::new());
-        let calls = Rc::new(Cell::new(0u32));
-        let calls_probe = calls.clone();
-        // The curve: -20 dB early, +12 dB at the paused free-running position — a paused re-resolve would
-        // audibly JUMP the gain; the call counter proves the closure is never consulted while paused.
-        *automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| {
-            calls_probe.set(calls_probe.get() + 1);
-            if position < 100.0 {-20.0} else {12.0}
+        let resolved = Rc::new(Cell::new(0u32));
+        let held = Rc::new(Cell::new(0.0f32));
+        let (probe, cache) = (resolved.clone(), held.clone());
+        // The engine's contract: while transporting the source reads its curve and remembers the value; on a
+        // PAUSED block it is still called (a modulation would keep moving) but the AUTOMATION holds. The curve
+        // is -20 dB early and +12 dB at the paused free-running position, so a paused re-read would audibly
+        // jump the gain, and the counter proves the curve itself is never consulted while paused.
+        *automation.volume.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
+            if !transporting {
+                return cache.get();
+            }
+            probe.set(probe.get() + 1);
+            let value = if position < 100.0 {-20.0} else {12.0};
+            cache.set(value);
+            value
         }));
         let mut strip = ChannelStripProcessor::new(params, automation, SR);
         let input = shared_audio_buffer();
@@ -339,10 +326,10 @@ mod tests {
         }
         strip.set_audio_source(input);
         strip.process(&ProcessInfo {blocks: &[block(true, 0.0)]});
-        let transporting_calls = calls.get();
+        let transporting_calls = resolved.get();
         assert!(transporting_calls > 0, "a transporting block resolves the curve at the update clock");
         strip.process(&ProcessInfo {blocks: &[block(false, 500.0)]});
-        assert_eq!(calls.get(), transporting_calls, "a paused block must NOT resolve the automation curve");
+        assert_eq!(resolved.get(), transporting_calls, "a paused block must NOT resolve the automation curve");
         let output = strip.audio_output();
         let output = output.borrow();
         let expected = math::db_to_gain(-20.0);
@@ -353,6 +340,32 @@ mod tests {
     }
 
     #[test]
+    fn a_paused_block_still_follows_a_source_that_keeps_moving() {
+        // The other half of the contract: a MODULATED strip parameter keeps moving with the free-running
+        // position while the transport is stopped, so an LFO still rides the fader with playback paused.
+        let params = Rc::new(StripParams::new());
+        let automation = Rc::new(StripAutomation::new());
+        *automation.volume.borrow_mut() = Some(Rc::new(|position: f64, _transporting: bool| {
+            if position < 100.0 {-20.0} else {0.0}
+        }));
+        let mut strip = ChannelStripProcessor::new(params, automation, SR);
+        let input = shared_audio_buffer();
+        {
+            let mut buffer = input.borrow_mut();
+            buffer.left.fill(1.0);
+            buffer.right.fill(1.0);
+        }
+        strip.set_audio_source(input);
+        strip.process(&ProcessInfo {blocks: &[block(true, 0.0)]});
+        strip.process(&ProcessInfo {blocks: &[block(false, 500.0)]});
+        strip.process(&ProcessInfo {blocks: &[block(false, 500.0)]}); // past the de-click ramp
+        let output = strip.audio_output();
+        let output = output.borrow();
+        assert!((output.left[RENDER_QUANTUM - 1] - 1.0).abs() < 1.0e-3,
+            "the paused block followed the source to 0 dB, got {}", output.left[RENDER_QUANTUM - 1]);
+    }
+
+    #[test]
     fn an_automated_mute_curve_silences_the_strip_with_an_unmuted_static_field() {
         // #305: automating mute must actually mute. The static field is UNMUTED (StripParams::mute = false); only
         // the automation curve engages the mute (unit 1.0 >= 0.5, the TS `ValueMapping.bool` threshold). Before the
@@ -360,7 +373,7 @@ mod tests {
         let params = Rc::new(StripParams::new());
         assert!(!params.mute.get(), "the static field starts unmuted");
         let automation = Rc::new(StripAutomation::new());
-        *automation.mute.borrow_mut() = Some(Rc::new(|_position: f64| 1.0));
+        *automation.mute.borrow_mut() = Some(Rc::new(|_position: f64, _transporting: bool| 1.0));
         let mut strip = ChannelStripProcessor::new(params, automation, SR);
         let input = shared_audio_buffer();
         {
@@ -384,7 +397,7 @@ mod tests {
         // strip thresholds the unit value exactly like `ValueMapping.bool.y`, it does not treat "automated" as muted.
         let params = Rc::new(StripParams::new());
         let automation = Rc::new(StripAutomation::new());
-        *automation.mute.borrow_mut() = Some(Rc::new(|_position: f64| 0.0));
+        *automation.mute.borrow_mut() = Some(Rc::new(|_position: f64, _transporting: bool| 0.0));
         let mut strip = ChannelStripProcessor::new(params, automation, SR);
         let input = shared_audio_buffer();
         {

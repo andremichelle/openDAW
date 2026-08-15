@@ -238,6 +238,21 @@ pub(crate) fn note_signal_to_unit(unit: &AudioUnitBinding, signal: NoteSignal) {
     }
 }
 
+/// Fold a HOST-resolved parameter's `(value, kind, modulation)` into its real value with a mapping the ENGINE
+/// owns (the strip's dB / pan, an aux send's, a composite's gains). It is the very same `abi::float_value` a
+/// device calls, reached through the same wire encoding, so host-side and device-side modulation are one
+/// implementation rather than two that have to agree.
+pub(crate) fn host_float<M: math::value_mapping::ValueMapping<f32>>(value: f32, kind: u32, modulation: f32,
+                                                                   mapping: &M) -> f32 {
+    abi::float_value(abi::ParamValue::from_wire(kind, value, modulation), mapping)
+}
+
+/// The BOOL counterpart of [`host_float`] (mute, solo), handed back as the 0.0 / 1.0 the consumers threshold
+/// at >= 0.5.
+pub(crate) fn host_bool(value: f32, kind: u32, modulation: f32) -> f32 {
+    if abi::bool_value(abi::ParamValue::from_wire(kind, value, modulation)) {1.0} else {0.0}
+}
+
 impl Engine {
 
     /// Bind the channel strip's volume (12) + panning (13) to their AUTOMATION, so a Value track targeting those
@@ -257,7 +272,7 @@ impl Engine {
         // The solo curve carries a 0..1 unit value thresholded at >= 0.5, and its field fallback is a bool
         // stored as 0.0 / 1.0 — both read the same way, so the value passes through unmapped.
         let (solo_handle, solo_resolver) = self.observe_field_automation(unit.unit, &[UNIT_SOLO_KEY], 3,
-            &mut unit.strip_param_subs, &mut unit.strip_param_collections, &invalidate, |value| value);
+            &mut unit.strip_param_subs, &mut unit.strip_param_collections, &invalidate, host_bool);
         *unit.strip_automation.solo.borrow_mut() = solo_resolver;
         if solo_handle.track.is_none() {
             // No solo curve (never attached, or JUST DETACHED): `resolve_automated_solo` writes the curve value into
@@ -278,22 +293,25 @@ impl Engine {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn observe_field_automation(&mut self, box_uuid: Uuid, path: &[u16], id: u32,
                                            subs: &mut Vec<SubscriptionId>, collections: &mut Vec<ValueCollection>,
-                                           invalidate: &Rc<dyn Fn()>, map: impl Fn(f32) -> f32 + 'static)
+                                           invalidate: &Rc<dyn Fn()>, map: impl Fn(f32, u32, f32) -> f32 + 'static)
                                            -> (ParamHandle, Option<StripValueSource>) {
         let (handle, new_subs, new_collections, _) = self.observe_param(box_uuid, path, id, invalidate);
         subs.extend(new_subs);
         collections.extend(new_collections);
-        let resolver: Option<StripValueSource> = if handle.track.is_some() {
+        // A MODULATED parameter needs the per-position resolver just as much as an automated one: without it
+        // the consumer would read the static cell and the modulation would never apply.
+        let resolver: Option<StripValueSource> = if handle.track.is_some() || handle.modulation.is_some() {
             let handle = handle.clone();
-            Some(Rc::new(move |position: f64| {
-                let (value, kind, _modulation) = handle.resolve(position);
-                if kind == abi::PARAM_KIND_UNIT {map(value)} else {value}
+            Some(Rc::new(move |position: f64, transporting: bool| {
+                let (value, kind, modulation) = handle.resolve_held(position, transporting);
+                map(value, kind, modulation)
             }))
         } else {
             None
         };
         (handle, resolver)
     }
+
 
     /// The shared gain (dB) + pan (+ optional mute) automation binder behind the strip AND the aux sends: drop the
     /// previous observers + curve collections (a plain drop would LEAK their hub / event / curve observers),
@@ -316,16 +334,16 @@ impl Engine {
             collection.terminate(&mut self.graph);
         }
         let (_, gain_resolver) = self.observe_field_automation(box_uuid, &[gain_key], 0, subs, collections,
-            invalidate, move |value| gain_mapping.y(value));
+            invalidate, move |value, kind, modulation| host_float(value, kind, modulation, &gain_mapping));
         let (_, pan_resolver) = self.observe_field_automation(box_uuid, &[pan_key], 1, subs, collections,
-            invalidate, |value| PAN.y(value));
+            invalidate, |value, kind, modulation| host_float(value, kind, modulation, &PAN));
         *automation.volume.borrow_mut() = gain_resolver;
         *automation.panning.borrow_mut() = pan_resolver;
         if let Some(mute_key) = mute_key {
             // The mute field stores a bool as 0.0/1.0, so the unit-curve value and the field-fallback value are BOTH
             // thresholded at >= 0.5 by the strip — hand back `resolve`'s raw value in either case.
             let (_, mute_resolver) = self.observe_field_automation(box_uuid, &[mute_key], 2, subs, collections,
-                invalidate, |value| value);
+                invalidate, host_bool);
             *automation.mute.borrow_mut() = mute_resolver;
         }
     }
@@ -598,10 +616,15 @@ impl Engine {
             }
         }
         collections.append(&mut track_collections);
+        // The assignments driving this parameter. Their DEPTH / ENABLED are live cells (a depth drag pushes a
+        // value, it never re-binds); only the assignment SET and each one's `source` pointer re-bind here.
+        let modulation = self.bind_param_modulation(box_uuid, path, &mut subs, invalidate);
         // An automated parameter broadcasts its UNIT value at its FIELD ADDRESS while the track is attached
         // (TS `onStartAutomation`) — the knob animates in the UI. Registered under the box uuid + field-path
         // keys; the slot Rc lives in the handle, so a rebind/teardown drops it and the sweep unregisters.
-        let broadcast = track.as_ref().map(|curve| {
+        // A MODULATED parameter needs the same slot (the UI adds the sum to the parameter's own unit value),
+        // so the slot exists when EITHER applies: `[0]` the automated unit value, `[1]` the modulation sum.
+        let broadcast = if track.is_none() && modulation.is_none() {None} else {Some({
             // NO curve value at the transport position (an attach with no region / clip / events yet) publishes
             // NaN, NOT 0.0: the slot carries a UNIT value, so 0.0 is the MINIMUM of every mapping and pinned
             // each knob to min the moment automation was attached. `resolve` only writes this slot while the
@@ -609,27 +632,100 @@ impl Engine {
             // existing "no value yet" sentinel (see `ParamHandle::last`); the UI reads it as "keep showing the
             // parameter's own storage value" (AutomatableParameterFieldAdapter). Holding the last automated
             // value PAST a region end is unaffected: that path never writes the slot at all.
-            let value = curve.value_at(self.transport.position()).unwrap_or(f32::NAN);
+            let value = track.as_ref().and_then(|curve| curve.value_at(self.transport.position()))
+                .unwrap_or(f32::NAN);
+            let sum = crate::modulation::modulation_sum(modulation.as_ref(), self.transport.position());
             // REUSE the parameter's existing UI slot across a re-observe (an automation edit re-runs this); only a
             // fresh attach registers a new one. Creating a new slot each rebind would be dedup-skipped by
             // `register` (the outgoing slot is still alive), stranding the knob on a slot the sweep then drops.
             // Mirrors TS's persistent `onStartAutomation` broadcast.
-            match self.broadcasts.live_slot(box_uuid, path, crate::broadcast::PACKAGE_FLOAT) {
+            match self.broadcasts.live_slot(box_uuid, path, crate::broadcast::PACKAGE_FLOAT_ARRAY) {
                 Some(slot) => {
-                    slot.borrow_mut()[0] = value;
+                    let mut borrowed = slot.borrow_mut();
+                    borrowed[0] = value;
+                    borrowed[1] = sum;
+                    drop(borrowed);
                     slot
                 }
                 None => {
-                    let slot = engine_env::telemetry::broadcast_slot(1);
-                    slot.borrow_mut()[0] = value;
-                    self.broadcasts.register(box_uuid, path, crate::broadcast::PACKAGE_FLOAT, &slot);
+                    let slot = engine_env::telemetry::broadcast_slot(2);
+                    {
+                        let mut borrowed = slot.borrow_mut();
+                        borrowed[0] = value;
+                        borrowed[1] = sum;
+                    }
+                    self.broadcasts.register(box_uuid, path, crate::broadcast::PACKAGE_FLOAT_ARRAY, &slot);
                     slot
                 }
             }
-        });
-        let handle = ParamHandle {id, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN)),
-            last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)), broadcast};
+        })};
+        if modulation.is_some() {
+            armed = true; // a modulated parameter is clock-driven exactly like an automated one
+        }
+        let handle = ParamHandle {id, field, kind, track, modulation, last: Rc::new(core::cell::Cell::new(f32::NAN)),
+            last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
+            held: Rc::new(core::cell::Cell::new((f32::NAN, crate::param_automation::HELD_NONE))), broadcast};
         (handle, subs, collections, armed)
+    }
+
+    /// Bind every `ModulationBox` whose `target` names `(box_uuid, path)`: resolve its `source` pointer to the
+    /// modulator's live state and hand back the chain the render path sums. Like `build_param_track`, this
+    /// SCANS the boxes — a parameter address is a device-internal field path, not always a resolved graph
+    /// vertex, so an assignment's target edge is dangling and absent from `incoming`. Cost is O(assignments)
+    /// at bind time only.
+    ///
+    /// `depth` (3) and `enabled` (4) become live cells through catch-up subscriptions, so a depth drag pushes
+    /// a value without re-binding (the LIGHT params signal, like a plain field edit). The `source` pointer (1)
+    /// keeps the HEAVY invalidate: re-pointing an assignment changes the chain itself. The assignment box
+    /// appearing / disappearing is already covered by the parameter's own pointer-hub subscription, since the
+    /// `target` pointer attaches to this very field.
+    /// WASM CONTRACT: ModulationBox field keys — source 1, target 2, depth 3, enabled 4 (boxes ModulationBox.ts).
+    fn bind_param_modulation(&mut self, box_uuid: Uuid, path: &[u16], subs: &mut Vec<SubscriptionId>,
+                             invalidate: &Rc<dyn Fn()>) -> Option<ModulationChain> {
+        const SOURCE_KEY: u16 = 1;
+        const TARGET_KEY: u16 = 2;
+        const DEPTH_KEY: u16 = 3;
+        const ENABLED_KEY: u16 = 4;
+        if self.modulators.borrow().is_empty() {
+            return None;
+        }
+        let assignments: Vec<Uuid> = self.graph.find_all_by_name("ModulationBox").iter()
+            .map(|assignment| assignment.uuid)
+            .filter(|uuid| self.graph.target_of(&Address::of(*uuid, vec![TARGET_KEY]))
+                .is_some_and(|target| target.uuid == box_uuid && target.field_keys.as_slice() == path))
+            .collect();
+        let mut bound = Vec::new();
+        for uuid in assignments {
+            let source = self.graph.target_of(&Address::of(uuid, vec![SOURCE_KEY]))
+                .and_then(|address| self.modulators.borrow().resolve(&address.uuid));
+            let source_invalidate = invalidate.clone();
+            subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, vec![SOURCE_KEY]),
+                Box::new(move |_graph, _update| source_invalidate())));
+            let modulator = match source {
+                Some(state) => state,
+                None => continue // the assignment names no live modulator (mid-transaction); the re-bind follows
+            };
+            let depth = Rc::new(core::cell::Cell::new(0.0f32));
+            let cell = depth.clone();
+            let depth_invalidate = current_params_signal().unwrap_or_else(|| invalidate.clone());
+            subs.push(self.graph.catchup_and_subscribe(Address::of(uuid, vec![DEPTH_KEY]), move |value| {
+                if let Some(value) = value.as_float32() {
+                    cell.set(value);
+                    depth_invalidate();
+                }
+            }));
+            let enabled = Rc::new(core::cell::Cell::new(true));
+            let cell = enabled.clone();
+            let enabled_invalidate = current_params_signal().unwrap_or_else(|| invalidate.clone());
+            subs.push(self.graph.catchup_and_subscribe(Address::of(uuid, vec![ENABLED_KEY]), move |value| {
+                if let Some(value) = value.as_bool() {
+                    cell.set(value);
+                    enabled_invalidate();
+                }
+            }));
+            bound.push(BoundModulation {modulator, depth, enabled});
+        }
+        if bound.is_empty() {None} else {Some(Rc::from(bound))}
     }
 
     /// Push the initial parameter values of freshly built devices (JOINERS) to them. Survivors are NEVER passed

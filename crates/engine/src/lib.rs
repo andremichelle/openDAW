@@ -29,7 +29,7 @@ use bindings::value_collection::ValueCollection;
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 use boxgraph::address::{Address, Uuid};
 use boxgraph::boxes::Registry;
-use boxgraph::subscription::HubEvent;
+use boxgraph::subscription::{HubEvent, SubscriptionId};
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::{decode_forward, Update};
@@ -348,6 +348,7 @@ mod composite;
 mod effect_composite;
 
 mod param_automation;
+mod modulation;
 use param_automation::ParamHandle;
 mod sample;
 use sample::SampleResource;
@@ -533,6 +534,15 @@ shared_static! {
 // the `&mut Engine` the render path holds. Mirrors `SAMPLES`. 440 before bind / when no RootBox exists.
 shared_static! {
     static BASE_FREQUENCY: f32 = 440.0;
+}
+// The transport's SONG position at this quantum's start, published once per `render`. While the transport is
+// PAUSED the blocks carry the FREE-RUNNING pulse range (`Transport::render_paused`), which modulation follows
+// but automation must not: a curve read at a free-running position would sweep while the song stands still.
+// So `host_update_parameters` resolves the automation here and the modulation at the position it was called
+// with. Its OWN cell (NOT `ENGINE`), like `BASE_FREQUENCY`, so the re-entrant read during render never
+// aliases the `&mut Engine` the render path holds.
+shared_static! {
+    static SONG_POSITION: f64 = 0.0;
 }
 // The sample-observe recorder the `host_observe_sample` export appends to: each device's sample pointer-field
 // path (e.g. Nano's `file` at `[15]`). After `init`, the engine REACTIVELY tracks each pointer (catch-up +
@@ -799,6 +809,15 @@ fn quantum_transporting() -> bool {
     blocks.iter().all(|block| block.flags.transporting())
 }
 
+/// True when the CURRENT device has at least one MODULATED parameter. Modulation is a function of the
+/// free-running position rather than of the song, so it keeps running while the transport is paused and the
+/// update clock stays open for these devices — and only these, so an automation-only device's paused
+/// behaviour (hold, no fragmentation) is exactly what it was. Only ever evaluated on the paused branch (the
+/// `||` short-circuits while transporting), where a scan of a device's handful of parameters costs nothing.
+fn modulation_armed(pull: &PullContext) -> bool {
+    pull.params.iter().any(|param| param.modulation.is_some())
+}
+
 /// Host import a render template calls to SEED its fragment loop: the first update position at or AFTER `at`
 /// (INCLUSIVE), so a grid point exactly on a block's start fires (mirrors TS `Fragmentor`'s `ceil`). Returns
 /// `f64::INFINITY` when the CURRENT device has no automated parameter, or while the transport is NOT running
@@ -806,7 +825,7 @@ fn quantum_transporting() -> bool {
 #[no_mangle]
 pub extern "C" fn host_first_update_position(at: f64) -> f64 {
     let pull = unsafe { PULL.get() };
-    if !pull.clock_armed || !quantum_transporting() {
+    if !pull.clock_armed || !(quantum_transporting() || modulation_armed(pull)) {
         return f64::INFINITY;
     }
     first_update_position(at)
@@ -821,7 +840,7 @@ pub extern "C" fn host_first_update_position(at: f64) -> f64 {
 #[no_mangle]
 pub extern "C" fn host_next_update_position(after: f64) -> f64 {
     let pull = unsafe { PULL.get() };
-    if !pull.clock_armed || !quantum_transporting() {
+    if !pull.clock_armed || !(quantum_transporting() || modulation_armed(pull)) {
         return f64::INFINITY;
     }
     // The smallest grid multiple strictly greater than `after` (no libm: truncate toward zero, then step).
@@ -981,11 +1000,14 @@ pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) 
     let pull = unsafe { PULL.get() };
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut ParamChange, max as usize) };
     let mut count = 0;
+    // While PAUSED the caller's `position` is free-running, so the automation is read at the frozen song
+    // position instead (a static curve there is exactly the value TS holds with its silent update clock).
+    let automation_position = if quantum_transporting() {position} else {unsafe { *SONG_POSITION.get() }};
     for param in &pull.params {
-        if param.track.is_none() {
+        if param.track.is_none() && param.modulation.is_none() {
             continue; // static params are not clock-driven; their value is pushed at build / edit
         }
-        let (value, kind, modulation) = param.resolve(position);
+        let (value, kind, modulation) = param.resolve_split(automation_position, position);
         if param.changed(value, modulation) {
             param.mark(value, modulation);
             if count >= out.len() {
@@ -1235,6 +1257,13 @@ struct Engine {
     // `midi_out_take`, the device-id table, the scheduled transport messages, and the registered
     // `MIDIOutputBox` targets (see `sync_midi_targets`). Shared with the per-unit MidiOut nodes.
     midi_out: midi_output::SharedMidiOut,
+    // The project's modulator sources (`RootBox.modulators`), shared with every parameter that an assignment
+    // binds. Membership is recorded by the hub observer and realized by `sync_modulators`, like the MIDI-out
+    // targets. `modulation_dirty` is armed by a modulator's OWN field edit (rate, shape, phase, amount,
+    // enabled): the value cells are already live, but a STOPPED transport pushes nothing on its own, so the
+    // next reconcile re-pushes every unit's parameters.
+    modulators: Rc<RefCell<modulation::ModulatorTable>>,
+    modulation_dirty: Rc<Cell<bool>>,
     sample_rate: f32,
     blocks: Vec<Block>,
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
@@ -1286,6 +1315,8 @@ impl Engine {
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
             midi_out: midi_output::shared_midi_out(),
+            modulators: Rc::new(RefCell::new(modulation::ModulatorTable::new())),
+            modulation_dirty: Rc::new(Cell::new(false)),
             sample_rate,
             blocks: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM), // a quantum splits into a few blocks (tempo / loop); never realloc on the render path
             devices: Vec::new(),
@@ -1437,6 +1468,7 @@ impl Engine {
         if self.transport.is_playing() {
             self.resolve_automated_solo(self.transport.position());
         }
+        unsafe { *SONG_POSITION.get() = self.transport.position(); }
         let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
             metronome_pref, ..} = self;
@@ -1850,10 +1882,90 @@ impl Engine {
         // MIDI-output unit's initial CC push resolves its device through the registry (TS resolves it off
         // the complete graph at construction).
         self.observe_midi_outputs();
+        // The modulator states must exist BEFORE the units reconcile: `observe_param` resolves each
+        // assignment's source through this table while binding a device's parameters.
+        self.observe_modulators();
         self.observe_audio_units();
         self.observe_audio_files();
         self.observe_soundfont_files();
         0
+    }
+
+    /// Track the `LfoModulatorBox`es connected to `RootBox.modulators`: the hub observer records joins /
+    /// leaves and `sync_modulators` realizes them, creating the live field cells each assignment reads.
+    /// WASM CONTRACT: RootBox.modulators = field key 11 (boxes RootBox.ts).
+    fn observe_modulators(&mut self) {
+        const ROOT_MODULATORS_KEY: u16 = 11;
+        if let Some(root) = self.graph.find_by_name("RootBox") {
+            let recorder = self.modulators.clone();
+            self.graph.subscribe_pointer_hub(Address::of(root.uuid, vec![ROOT_MODULATORS_KEY]),
+                Box::new(move |_graph, event| {
+                    match event {
+                        HubEvent::Added(source) => recorder.borrow_mut().record_add(source.uuid),
+                        HubEvent::Removed(source) => recorder.borrow_mut().record_remove(source.uuid)
+                    }
+                }));
+        }
+        self.sync_modulators();
+    }
+
+    /// Realize the recorded modulator joins / leaves: a joiner gets catch-up subscriptions on its shape (10),
+    /// rate (11), phase (12), amount (13) and enabled (4) fields feeding its live cells; a leaver's
+    /// subscriptions are dropped with its entry. Every one of those edits also arms `modulation_dirty`, so a
+    /// stopped transport still re-pushes the parameters this modulator drives.
+    /// WASM CONTRACT: LfoModulatorBox field keys — enabled 4 (Boolean), shape 10 (Int32), rate 11 (Int32),
+    /// phase 12 (Float32), amount 13 (Float32), per boxes LfoModulatorBox.ts.
+    fn sync_modulators(&mut self) {
+        let (added, removed) = self.modulators.borrow_mut().take_pending();
+        for uuid in removed {
+            for sub in self.modulators.borrow_mut().remove(&uuid) {
+                self.graph.unsubscribe(sub);
+            }
+            // A parameter still holding this source in its chain must drop it: the assignment box dies with
+            // its mandatory pointer, which re-binds the parameter, but the re-bind has to see the table first.
+            self.modulation_dirty.set(true);
+        }
+        for uuid in added {
+            if self.modulators.borrow().resolve(&uuid).is_some() {
+                continue;
+            }
+            let state = Rc::new(modulation::ModulatorState::new());
+            let mut subs = Vec::new();
+            subs.push(self.observe_modulator_int(uuid, 10, {let state = state.clone(); move |value| state.shape.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 11, {let state = state.clone(); move |value| state.rate.set(value)}));
+            subs.push(self.observe_modulator_float(uuid, 12, {let state = state.clone(); move |value| state.phase.set(value)}));
+            subs.push(self.observe_modulator_float(uuid, 13, {let state = state.clone(); move |value| state.amount.set(value)}));
+            let enabled_state = state.clone();
+            let dirty = self.modulation_dirty.clone();
+            subs.push(self.graph.catchup_and_subscribe(Address::of(uuid, vec![4]), move |value| {
+                if let Some(enabled) = value.as_bool() {
+                    enabled_state.enabled.set(enabled);
+                    dirty.set(true);
+                }
+            }));
+            self.modulators.borrow_mut().add(uuid, state, subs);
+            self.modulation_dirty.set(true);
+        }
+    }
+
+    fn observe_modulator_int(&mut self, uuid: Uuid, key: u16, apply: impl Fn(i32) + 'static) -> SubscriptionId {
+        let dirty = self.modulation_dirty.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![key]), move |value| {
+            if let Some(value) = value.as_int32() {
+                apply(value);
+                dirty.set(true);
+            }
+        })
+    }
+
+    fn observe_modulator_float(&mut self, uuid: Uuid, key: u16, apply: impl Fn(f32) + 'static) -> SubscriptionId {
+        let dirty = self.modulation_dirty.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![key]), move |value| {
+            if let Some(value) = value.as_float32() {
+                apply(value);
+                dirty.set(true);
+            }
+        })
     }
 
     /// Track the `MIDIOutputBox`es connected to `RootBox.outputMidiDevices` (TS
@@ -2194,6 +2306,9 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
         let input = core::slice::from_raw_parts(INPUT.get().as_ptr(), len);
         match engine.apply_updates(input) {
             Ok(()) => {
+                // Modulator membership first: a unit reconciling in the same transaction resolves its
+                // assignments through the table, so a joiner must already be in it.
+                engine.sync_modulators();
                 engine.reconcile_units(); // apply any audio-unit membership change this transaction recorded
                 engine.sync_midi_targets(); // realize any MIDIOutputBox joins / leaves this transaction recorded
                 0
