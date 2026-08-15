@@ -207,8 +207,8 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 }
 
 #[no_mangle]
-pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
-    unsafe { abi::with_state(state_ptr, |state| <Maximizer as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <Maximizer as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value, modulation))) }
 }
 
 /// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.

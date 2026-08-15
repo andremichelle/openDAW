@@ -67,10 +67,10 @@ pub(crate) fn refresh_member(member: &Member, position: f64) {
 /// runtime edit / field change. Never during render.
 pub(crate) fn refresh_params(handles: &[ParamHandle], reg: DeviceReg, state_ptr: u32, position: f64) {
     for handle in handles {
-        let (value, kind) = handle.resolve(position);
-        if value != handle.last.get() {
-            handle.last.set(value);
-            call_device_parameter_changed(reg.parameter_changed_index, state_ptr, handle.id, kind, value);
+        let (value, kind, modulation) = handle.resolve(position);
+        if handle.changed(value, modulation) {
+            handle.mark(value, modulation);
+            call_device_parameter_changed(reg.parameter_changed_index, state_ptr, handle.id, kind, value, modulation);
         }
     }
 }
@@ -286,7 +286,7 @@ impl Engine {
         let resolver: Option<StripValueSource> = if handle.track.is_some() {
             let handle = handle.clone();
             Some(Rc::new(move |position: f64| {
-                let (value, kind) = handle.resolve(position);
+                let (value, kind, _modulation) = handle.resolve(position);
                 if kind == abi::PARAM_KIND_UNIT {map(value)} else {value}
             }))
         } else {
@@ -627,7 +627,8 @@ impl Engine {
                 }
             }
         });
-        let handle = ParamHandle {id, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN)), broadcast};
+        let handle = ParamHandle {id, field, kind, track, last: Rc::new(core::cell::Cell::new(f32::NAN)),
+            last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)), broadcast};
         (handle, subs, collections, armed)
     }
 
@@ -812,7 +813,8 @@ impl Engine {
         // handles line up by index). Fresh handles start at `last = NaN`, which would re-push EVERY parameter;
         // carrying `last` over means `refresh_params` only pushes the ones whose value actually changed — so a
         // parameter (or whole plugin) unaffected by this automation edit is never re-pushed (and never glides).
-        let previous_last: Vec<f32> = params.handles.iter().map(|handle| handle.last.get()).collect();
+        let previous_last: Vec<(f32, f32)> = params.handles.iter()
+            .map(|handle| (handle.last.get(), handle.last_modulation.get())).collect();
         for sub in core::mem::take(&mut params.field_subs) {
             self.graph.unsubscribe(sub);
         }
@@ -829,8 +831,8 @@ impl Engine {
             collections.append(&mut script_collections);
             armed |= script_armed;
         }
-        for (handle, last) in handles.iter().zip(previous_last) {
-            handle.last.set(last);
+        for (handle, (last, last_modulation)) in handles.iter().zip(previous_last) {
+            handle.mark(last, last_modulation);
         }
         params.sink.set_params(handles.clone(), armed);
         refresh_params(&handles, params.reg, params.state_ptr, position);

@@ -372,13 +372,13 @@ impl Engine {
         // with its own kind (already real dB) — map only the unit case, as the strip / sends do.
         if dry_handle.track.is_some() {
             *binding.dry_wet_automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| {
-                let (value, kind) = dry_handle.resolve(position);
+                let (value, kind, _modulation) = dry_handle.resolve(position);
                 if kind == abi::PARAM_KIND_UNIT { GAIN.y(value) } else { value }
             }));
         }
         if wet_handle.track.is_some() {
             *binding.dry_wet_automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| {
-                let (value, kind) = wet_handle.resolve(position);
+                let (value, kind, _modulation) = wet_handle.resolve(position);
                 if kind == abi::PARAM_KIND_UNIT { GAIN.y(value) } else { value }
             }));
         }
@@ -426,7 +426,7 @@ impl Engine {
             // AUTOMATION override is bound here.
             if handle.track.is_some() {
                 *entry.strip_automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, kind) = handle.resolve(position);
+                    let (value, kind, _modulation) = handle.resolve(position);
                     if kind == abi::PARAM_KIND_UNIT { GAIN.y(value) } else { value }
                 }));
             }
@@ -439,7 +439,7 @@ impl Engine {
             // AUTOMATION override is bound here, mapped bipolar like the strip's own pan.
             if handle.track.is_some() {
                 *entry.strip_automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, kind) = handle.resolve(position);
+                    let (value, kind, _modulation) = handle.resolve(position);
                     if kind == abi::PARAM_KIND_UNIT { PAN.y(value) } else { value }
                 }));
             }
@@ -452,7 +452,7 @@ impl Engine {
             // The mute field stores a bool as 0.0/1.0; the strip thresholds at >= 0.5 either way.
             if handle.track.is_some() {
                 *entry.strip_automation.mute.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, _kind) = handle.resolve(position);
+                    let (value, _kind, _modulation) = handle.resolve(position);
                     value
                 }));
             }

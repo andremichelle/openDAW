@@ -204,23 +204,29 @@ pub fn apply_slot(par: &mut crate::Params, slot: usize, value: ParamValue) {
     }
 
 
-/// A `Unit` parameter: the uniform 0..1 automation value, used directly by the model's knobs.
+/// A `Unit` parameter: the uniform 0..1 automation value, used directly by the model's knobs. The storage
+/// value of these five is `unipolar()`, i.e. already the unit value, so every kind passes straight through and
+/// a modulation sum simply adds in that space.
 fn unit(value: ParamValue) -> f64 {
     match value {
         ParamValue::Unit(unit) => unit as f64,
         ParamValue::Float(real) => real as f64,
         ParamValue::Int(real) => real as f64,
-        ParamValue::Bool(flag) => if flag {1.0} else {0.0}
+        ParamValue::Bool(flag) => if flag {1.0} else {0.0},
+        ParamValue::Modulated {base, sum, ..} => ((base + sum) as f64).clamp(0.0, 1.0)
     }
 }
 
-/// A parameter carrying an already-real value (dB, cents, an enum index).
+/// A parameter carrying an already-real value (dB, cents, an enum index). This site has no mapping to
+/// normalize with (the conversions live inline at the call sites below), so a modulation sum cannot be applied
+/// and the base is used unchanged — these three parameters are not modulatable until they carry mappings.
 fn real(value: ParamValue) -> f32 {
     match value {
         ParamValue::Float(real) => real,
         ParamValue::Int(real) => real as f32,
         ParamValue::Unit(unit) => unit,
-        ParamValue::Bool(flag) => if flag {1.0} else {0.0}
+        ParamValue::Bool(flag) => if flag {1.0} else {0.0},
+        ParamValue::Modulated {base, ..} => base
     }
 }
 

@@ -34,6 +34,9 @@ pub(crate) struct ParamHandle {
     pub(crate) kind: u32,            // the field's primitive type, used when the parameter is NOT automated
     pub(crate) track: Option<ParamCurve>,
     pub(crate) last: Rc<Cell<f32>>,
+    // The modulation sum last handed to the device, beside `last`. Compared by BIT PATTERN, since the "no
+    // modulation" sentinel is NaN and `NaN != NaN` would otherwise report a change on every single push.
+    pub(crate) last_modulation: Rc<Cell<f32>>,
     // The UI broadcast slot at the parameter's FIELD ADDRESS (TS `AutomatableParameter.onStartAutomation`:
     // `broadcastFloat(adapter.address, () => getUnitValue())`) — `Some` only while a track is attached;
     // `resolve` keeps `[0]` at the current unit value, the worklet mirrors it, the knob animates.
@@ -41,13 +44,33 @@ pub(crate) struct ParamHandle {
 }
 
 impl ParamHandle {
-    /// Resolve the parameter at `position`, returning `(value, kind)` for the wire: when a track is connected
-    /// AND its curve covers the position, the uniform `0..1` curve value tagged `PARAM_KIND_UNIT` (the device
-    /// maps it); else the box field's STORED value tagged with the field's primitive `kind` (the device uses
-    /// it directly). The host stays mapping-agnostic — the device owns the mapping. Mirrors TS
+    /// Resolve the parameter at `position`, returning `(value, kind, modulation)` for the wire: when a track is
+    /// connected AND its curve covers the position, the uniform `0..1` curve value tagged `PARAM_KIND_UNIT` (the
+    /// device maps it); else the box field's STORED value tagged with the field's primitive `kind` (the device
+    /// uses it directly). `modulation` is the summed modulation in NORMALIZED space, NaN when the parameter has
+    /// none. The host stays mapping-agnostic — the device owns the mapping, so it folds the base and the sum
+    /// together (`abi::float_value`), which is the only place both are known. Mirrors TS
     /// `valueMapping.y(track.valueAt(position, getUnitValue()))`: the TS fallback is the mapped FIELD value,
     /// so a muted value clip / an empty curve resolves to the field's storage value, never a made-up 0.
-    pub(crate) fn resolve(&self, position: f64) -> (f32, u32) {
+    pub(crate) fn resolve(&self, position: f64) -> (f32, u32, f32) {
+        let (value, kind) = self.resolve_base(position);
+        (value, kind, f32::NAN)
+    }
+
+    /// Whether `(value, modulation)` differs from what this parameter last handed the device, the push / pull
+    /// paths' change detection. The modulation compares by bit pattern so the NaN sentinel is stable.
+    pub(crate) fn changed(&self, value: f32, modulation: f32) -> bool {
+        value != self.last.get() || modulation.to_bits() != self.last_modulation.get().to_bits()
+    }
+
+    /// Record `(value, modulation)` as the pair handed to the device.
+    pub(crate) fn mark(&self, value: f32, modulation: f32) {
+        self.last.set(value);
+        self.last_modulation.set(modulation);
+    }
+
+    /// The un-modulated `(value, kind)`, i.e. everything [`resolve`] does apart from the modulation sum.
+    fn resolve_base(&self, position: f64) -> (f32, u32) {
         match self.track.as_ref().and_then(|curve| curve.value_at(position)) {
             Some(value) => {
                 if let Some(slot) = &self.broadcast {

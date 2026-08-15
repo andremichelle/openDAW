@@ -64,10 +64,10 @@ fn forward_param(state: &mut WerkstattState, id: u32, value: ParamValue) {
 }
 
 #[no_mangle]
-pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
+pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
     unsafe {
         abi::with_state::<WerkstattState>(state_ptr, |state| {
-            forward_param(state, id, ParamValue::from_wire(kind, value));
+            forward_param(state, id, ParamValue::from_wire(kind, value, modulation));
         })
     }
 }

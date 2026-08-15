@@ -207,21 +207,21 @@ fn call_device_init(init_index: u32, state_ptr: u32, sample_rate: f32) {
 #[cfg(not(target_family = "wasm"))]
 fn call_device_init(_init_index: u32, _state_ptr: u32, _sample_rate: f32) {}
 
-// Call a device's `parameter_changed(state_ptr, id, value)` export to push a resolved parameter value. The
-// engine calls this at build / edit time (never during the device's `process`, so it never aliases the
-// state the render path borrows).
+// Call a device's `parameter_changed(state_ptr, id, kind, value, modulation)` export to push a resolved
+// parameter value plus its normalized modulation sum (NaN = none). The engine calls this at build / edit time
+// (never during the device's `process`, so it never aliases the state the render path borrows).
 #[cfg(target_family = "wasm")]
 #[inline]
-fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, id: u32, kind: u32, value: f32) {
+fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
     if parameter_changed_index == 0 {
         return; // the device exports no `parameter_changed`; index 0 is the "none" sentinel
     }
     unsafe { *PARAM_PUSHES.get() = PARAM_PUSHES.get().wrapping_add(1); }
-    let parameter_changed: extern "C" fn(u32, u32, u32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
-    parameter_changed(state_ptr, id, kind, value);
+    let parameter_changed: extern "C" fn(u32, u32, u32, f32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
+    parameter_changed(state_ptr, id, kind, value, modulation);
 }
 #[cfg(not(target_family = "wasm"))]
-fn call_device_parameter_changed(_parameter_changed_index: u32, _state_ptr: u32, _id: u32, _kind: u32, _value: f32) {}
+fn call_device_parameter_changed(_parameter_changed_index: u32, _state_ptr: u32, _id: u32, _kind: u32, _value: f32, _modulation: f32) {}
 
 // Call a device's `field_changed(state_ptr, id, value)` export to deliver an observed plain field's value
 // (catch-up + edits). Called only inside a transaction (the `catchup_and_subscribe` callback), never during
@@ -985,13 +985,13 @@ pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) 
         if param.track.is_none() {
             continue; // static params are not clock-driven; their value is pushed at build / edit
         }
-        let (value, kind) = param.resolve(position);
-        if value != param.last.get() {
-            param.last.set(value);
+        let (value, kind, modulation) = param.resolve(position);
+        if param.changed(value, modulation) {
+            param.mark(value, modulation);
             if count >= out.len() {
                 break;
             }
-            out[count] = ParamChange {id: param.id, kind, value};
+            out[count] = ParamChange {id: param.id, kind, value, modulation};
             count += 1;
         }
     }

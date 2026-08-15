@@ -504,7 +504,7 @@ impl MidiOutProcessor {
                 if cc.handle.track.is_none() {
                     continue;
                 }
-                let (value, _) = cc.handle.resolve(position);
+                let (value, _, _) = cc.handle.resolve(position);
                 if value != cc.last.get() {
                     cc.last.set(value); // updated regardless of device / enabled (TS updateAutomation)
                     self.emit_cc(cc.controller.get(), value, relative_block_time);

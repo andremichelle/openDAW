@@ -160,8 +160,8 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 /// Apply a semitone value the host resolved (initial / edit / automation), by the id `init` got back. The
 /// `kind` tag tells the SDK how to type the f32 `value` into a `ParamValue` (uniform to map, or a real i32).
 #[no_mangle]
-pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
-    unsafe { abi::with_state(state_ptr, |state| <Transpose as MidiEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <Transpose as MidiEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value, modulation))) }
 }
 
 /// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.

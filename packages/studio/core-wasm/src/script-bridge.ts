@@ -11,7 +11,7 @@
 // call passes that handle. Buffers are byte offsets into the ONE shared memory; we re-derive `memory.buffer`
 // views EVERY call, since the SharedArrayBuffer can grow / detach (talc), never caching a typed-array view.
 
-import {isDefined, UUID, ValueMapping} from "@opendaw/lib-std"
+import {clamp, isDefined, UUID, ValueMapping} from "@opendaw/lib-std"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
 import {copyEvents, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
 
@@ -56,7 +56,7 @@ class Bridge {
     // index -> the raw (kind, value) the engine last delivered. Cached so a value pushed BEFORE the proc loads
     // (the engine pushes initial / automated params at bind, before the first render builds the mappings) is
     // replayed once the proc + mappings exist, and re-mapped through the NEW mapping on a hot-swap.
-    readonly rawParams = new Map<number, {kind: number, value: number}>()
+    readonly rawParams = new Map<number, {kind: number, value: number, modulation: number}>()
     // index -> label, for @sample slots (Apparat); the resolved sample handle is cached so a hot-swap re-delivers.
     sampleLabels = new Map<number, string>()
     readonly sampleHandles = new Map<number, number>() // index -> resolved engine sample handle (-1 = no sample; 0 is valid)
@@ -127,7 +127,8 @@ export class ScriptBridges {
             host_script_note_on: (handle, pitch, velocity, cent, id) => this.#noteOn(handle, pitch, velocity, cent, id),
             host_script_note_off: (handle, id) => this.#noteOff(handle, id),
             host_script_reset: (handle) => this.#reset(handle),
-            host_script_param: (handle, index, kind, value) => this.#param(handle, index, kind, value),
+            host_script_param: (handle, index, kind, value, modulation) =>
+                this.#param(handle, index, kind, value, modulation),
             host_script_sample: (handle, index, sampleHandle, present) => this.#sample(handle, index, sampleHandle, present),
             host_script_notes: (handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1) =>
                 this.#notes(handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1),
@@ -181,7 +182,7 @@ export class ScriptBridges {
                 bridge.silenced = false
                 // Re-apply the parameters + samples the engine pushed before this swap (re-mapping each raw value
                 // through the new script's @param mapping).
-                for (const [index, raw] of bridge.rawParams) {this.#applyParam(bridge, index, raw.kind, raw.value)}
+                for (const [index, raw] of bridge.rawParams) {this.#applyParam(bridge, index, raw.kind, raw.value, raw.modulation)}
                 for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
             } catch (error) {
                 this.#silence(bridge, `Failed to instantiate Processor: ${error}`)
@@ -251,20 +252,26 @@ export class ScriptBridges {
         bridge?.spielwerk?.reset()
     }
 
-    #param(handle: number, index: number, kind: number, value: number): void {
+    #param(handle: number, index: number, kind: number, value: number, modulation: number): void {
         const bridge = this.#bridges.get(handle)
         if (bridge === undefined) {return}
-        bridge.rawParams.set(index, {kind, value}) // cache for replay once the proc + mappings exist
-        this.#applyParam(bridge, index, kind, value)
+        bridge.rawParams.set(index, {kind, value, modulation}) // cache for replay once the proc + mappings exist
+        this.#applyParam(bridge, index, kind, value, modulation)
     }
 
     // Map one raw (kind, value) through the param's @param mapping and hand it to the user proc. A no-op when the
-    // proc / mappings are not loaded yet — `#ensureProc` replays `rawParams` once they are.
-    #applyParam(bridge: Bridge, index: number, kind: number, value: number): void {
+    // proc / mappings are not loaded yet — `#ensureProc` replays `rawParams` once they are. A scriptable device's
+    // mapping lives in the script's `@param` declaration, so this is the call site that folds a modulation sum
+    // (NaN = none) into the base: normalize, add, clamp, map back — the same rule as the Rust `float_value`.
+    #applyParam(bridge: Bridge, index: number, kind: number, value: number, modulation: number): void {
         const entry = bridge.paramMappings.get(index)
         if (entry === undefined) {return}
-        const mapped = kind === PARAM_KIND_UNIT ? entry.mapping.y(value) : value
-        bridge.proc?.paramChanged?.(entry.label, mapped)
+        if (isNaN(modulation)) {
+            bridge.proc?.paramChanged?.(entry.label, kind === PARAM_KIND_UNIT ? entry.mapping.y(value) : value)
+            return
+        }
+        const unit = kind === PARAM_KIND_UNIT ? value : entry.mapping.x(value)
+        bridge.proc?.paramChanged?.(entry.label, entry.mapping.y(clamp(unit + modulation, 0.0, 1.0)))
     }
 
     // The engine's sample handles are 0-based slot indices, so 0 is a VALID handle; `present` is the absence

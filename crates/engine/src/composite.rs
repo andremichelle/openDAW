@@ -622,7 +622,7 @@ impl Engine {
             // value with its own kind (already real dB) — map only the unit case.
             if handle.track.is_some() {
                 *strip.automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, kind) = handle.resolve(position);
+                    let (value, kind, _modulation) = handle.resolve(position);
                     if kind == abi::PARAM_KIND_UNIT { GAIN.y(value) } else { value }
                 }));
             }
@@ -633,7 +633,7 @@ impl Engine {
             strip.param_collections.extend(collections);
             if handle.track.is_some() {
                 *strip.automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, kind) = handle.resolve(position);
+                    let (value, kind, _modulation) = handle.resolve(position);
                     if kind == abi::PARAM_KIND_UNIT { PAN.y(value) } else { value }
                 }));
             }
