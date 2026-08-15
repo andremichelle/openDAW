@@ -214,8 +214,8 @@ uses to point at its target parameter.
 `ModulationBox`, the assignment.
 
 ```
-1: pointer  "modulators"  -> Pointers.ModulatorCollection, mandatory   (the source modulator's collection field)
-2: pointer  "target"      -> Pointers.Modulation, mandatory            (the parameter field)
+1: pointer  "source"      -> Pointers.ModulatorSource, mandatory   (the modulator's assignments hub)
+2: pointer  "target"      -> Pointers.Modulation, mandatory        (the parameter field)
 3: float32  "depth"       bipolar, value 0
 4: boolean  "enabled"     value true
 5: int32    "index"       index constraints
@@ -232,11 +232,13 @@ modulatable later at no extra cost.
 3: string   "label"
 4: boolean  "enabled"     value true
 5: int32    "index"
-10: int32   "shape"       values [Sine, Triangle, Saw, Square]  (v1 ships Sine only, the field is there)
-11: float32 "rate"        musical fraction index, same fractions table the Delay uses
+10: int32   "shape"       values [Sine, Triangle, Saw, Square], value 0
+11: int32   "rate"        index into the adapter's musical fraction table, 0..11, value 8 (one bar)
 12: float32 "phase"       unipolar, value 0
 13: float32 "amount"      unipolar, value 1        (a master depth over all of this LFO's assignments)
 ```
+
+All four shapes ship in phase 3, so the field never offers a shape the engine cannot render.
 
 Note the two pointer directions. The assignment points at its source modulator, and it points at its
 target parameter. Both are pointers on the assignment box, which keeps deletion of a modulator or a
@@ -400,9 +402,15 @@ otherwise report a change on every push. Three direct `ParamValue` matches neede
 (`sync_index` in the Delay, `unit` and `real` in Cubed) and the Vaporisateur's `cutoff_unit` collapsed
 into `unit_value`. Verified: rust workspace green, wasm parity suite 214 passed.
 
-Phase 2, schema.
-`Pointers.ModulatorCollection`, `RootBox.modulators`, `ModulationBox`, `LfoModulatorBox`, forge, and
-the regenerated Rust registry. Round-trip a project through `.od` and back.
+Phase 2, schema. DONE (`2dbee0146`).
+`Pointers.ModulatorCollection` and `Pointers.ModulatorSource`, `RootBox.modulators` (key 11),
+`LfoModulatorBox`, `ModulationBox`, forge, and the regenerated Rust registry. The pointer types are
+APPENDED to the enum, never inserted: the values are ordinals, so inserting one renumbers every member
+after it and every already-built package dist disagrees until rebuilt. Note also that the forge reads
+`@opendaw/studio-enums` through its BUILT dist, so the enums package has to be rebuilt before the forge
+run or the new pointer types generate as `Pointers.undefined`. Verified by
+`ModulationSchema.test.ts` (an LFO plus its assignment through `.od` and back, the parameter reporting
+a `modulated` control source, and the cascade delete), studio core 252 passed, wasm parity 214 passed.
 
 Phase 3, engine.
 `modulation.rs`, the `ModulatorTable`, the `ParamHandle` chain, the arming and clock changes, the
