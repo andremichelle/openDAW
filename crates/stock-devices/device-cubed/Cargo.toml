@@ -11,3 +11,4 @@ crate-type = ["cdylib", "lib"]
 libm = "0.2"
 abi = {path = "../../abi"}
 dsp = {path = "../../dsp"}
+math = {path = "../../math"}

@@ -269,6 +269,7 @@ dependencies = [
  "abi",
  "dsp",
  "libm",
+ "math",
 ]
 
 [[package]]
