@@ -412,11 +412,22 @@ run or the new pointer types generate as `Pointers.undefined`. Verified by
 `ModulationSchema.test.ts` (an LFO plus its assignment through `.od` and back, the parameter reporting
 a `modulated` control source, and the cascade delete), studio core 252 passed, wasm parity 214 passed.
 
-Phase 3, engine.
-`modulation.rs`, the `ModulatorTable`, the `ParamHandle` chain, the arming and clock changes, the
-paused-position split, and the two-float broadcast. Verified with a Rust test that a sine LFO on a
-known parameter produces the expected sequence over one bar, and one that a paused transport does not
-move the automation base.
+Phase 3, engine. DONE (`d66d0a753`).
+`modulation.rs` (four shapes over the rate table, the chain, `modulation_sum`), the `ModulatorTable`
+off the `RootBox.modulators` hub, the `ParamHandle` chain bound in `observe_param`, the arming and
+clock changes, the paused-position split, and the two-float broadcast. Host-side parameters (strip
+volume / pan / mute / solo, aux sends, composite gains, MIDI CC) fold through the SAME
+`abi::float_value` the devices use, so there is one implementation rather than two that have to
+agree; their value source now takes `(position, transporting)` and the paused hold moved out of the
+strip into the parameter handle. Verified: rust workspace green, a square LFO on a unit's volume
+wobbles the rendered audio while playing and keeps cycling while stopped
+(`modulation-strip-volume.test.ts`), wasm parity 214 passed.
+
+Two things phase 3 settled that the plan had left open. A disabled assignment resolves to NO
+modulation rather than a zero sum, since a zero would still round-trip through the device's mapping
+and could shift the value by a float epsilon. And `modulation_dirty` re-pushes every unit when a
+modulator's own field moves, because the value cells are live for the render path but a stopped
+transport runs no update clock.
 
 Phase 4, minimal UI.
 The context menu entries and adapters only, no screen. At this point an LFO can be created and heard
