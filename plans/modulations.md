@@ -440,14 +440,12 @@ of the dozen sites gets checked by hand against the mapping it uses.
 A parameter whose consumption site has no mapping cannot be modulated. The UI should not offer an
 assignment for it, which means the device has to be able to say so. Simplest answer is a per-device
 list of unmodulatable parameter ids, worst case the assignment exists and does nothing. Phase 1 found
-exactly one such device: Cubed's `real()` serves tuning, volume and waveform with the conversions
-inline at the call sites rather than as mappings, so those three ignore a sum today.
-
-Cubed's `real()` also has a PRE-EXISTING automation bug, unrelated to modulation and untouched here:
-it returns a `Unit` value as if it were already real, so automating tuning (`linear(-1200, 1200)`),
-volume (decibel) or waveform (`linearInteger(0, 1)`) moves the parameter by a 0..1 amount in its real
-unit. Giving those three real mapping consts fixes the automation bug and makes them modulatable in
-one move.
+exactly one such device, Cubed, and it was fixed in `0b08bb0ef` rather than exempted: its `real()`
+served tuning, volume and waveform with the conversions inline instead of as mappings, which also
+meant an automated value was read as if it were already real (an automated tuning moved by at most 1
+cent, an automated volume played at 0..1 dB). Those three now carry mapping consts mirroring
+`CubedDeviceBoxAdapter` and resolve through `float_value` / `int_value` like every other device. No
+stock device is exempt today, so the UI can offer an assignment on any parameter.
 
 The assignment lookup scans `ModulationBox` instances per bound parameter. Fine at project sizes we
 have, worth measuring before it grows.
