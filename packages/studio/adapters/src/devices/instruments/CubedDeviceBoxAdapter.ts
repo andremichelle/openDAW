@@ -1,4 +1,4 @@
-import {int, Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {clamp, int, Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
 import {CubedDeviceBox, CubedPattern} from "@opendaw/studio-boxes"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
@@ -8,6 +8,7 @@ import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 import {CubedStep} from "./Cubed/CubedStep"
+import {CubedPatternData} from "./Cubed/CubedPatternData"
 import {CubedRandomize, CubedRandomizeOptions} from "./Cubed/CubedRandomize"
 
 const DefaultStep = CubedStep.pack({note: CubedStep.DefaultNote, active: false, slide: false, accent: false})
@@ -41,6 +42,24 @@ export class CubedDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     get acceptsMidiEvents(): boolean {return true}
 
     currentPattern(): CubedPattern {return this.#box.patterns.getField(this.#box.patternIndex.getValue())}
+
+    readCurrentPattern(): CubedPatternData {
+        const pattern = this.currentPattern()
+        const length = pattern.length.getValue()
+        return {
+            length,
+            steps: pattern.steps.fields().slice(0, length).map(field => CubedStep.unpack(field.getValue()))
+        }
+    }
+
+    writeCurrentPattern({length, steps}: CubedPatternData): void {
+        const pattern = this.currentPattern()
+        const fields = pattern.steps.fields()
+        const used = Math.min(steps.length, fields.length)
+        fields.forEach((field, index) =>
+            field.setValue(index < used ? CubedStep.pack(steps[index]) : DefaultStep))
+        pattern.length.setValue(clamp(length, 1, fields.length))
+    }
 
     clearCurrentPattern(): void {
         this.currentPattern().steps.fields().forEach(field => field.setValue(DefaultStep))

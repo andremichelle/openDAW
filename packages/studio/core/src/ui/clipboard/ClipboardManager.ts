@@ -28,7 +28,7 @@ export namespace ClipboardManager {
 
     let fallbackEntry: Option<AnyEntry> = Option.None
 
-    const encode = (entry: AnyEntry): string => {
+    export const encode = (entry: AnyEntry): string => {
         const bytes = new Uint8Array(entry.data)
         let binary = ""
         for (let i = 0; i < bytes.length; i++) {binary += String.fromCharCode(bytes[i])}
@@ -54,7 +54,7 @@ export namespace ClipboardManager {
         RuntimeNotifier.notify({message: `${label} ${verb} to clipboard`, icon: IconSymbol.toName(icon)})
     }
 
-    const decode = (text: string): Option<AnyEntry> => {
+    export const decode = (text: string): Option<AnyEntry> => {
         const parts = text.split(":")
         if (parts.length < 4 || parts[0] !== CLIPBOARD_HEADER) {return Option.None}
         const version = parseInt(parts[1], 10)

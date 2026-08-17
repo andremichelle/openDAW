@@ -91,6 +91,8 @@ runs never breaks the running bar. Selecting the pattern that is already playing
 The parameter is automatable like any other. An automated change is a curve with its own timing, so it takes effect
 immediately rather than waiting for the bar.
 
+Right-click the field to copy or paste the pattern itself, see **6. Exchanging Patterns**.
+
 ### 2.2 Random
 
 Fills the current pattern with a generated line. Click for another variation using the current settings,
@@ -179,9 +181,50 @@ So a recorded or drawn line behaves like a pattern written in the grid, with no 
 
 ---
 
-## 6. Loading ABL Patterns
+## 6. Exchanging Patterns
 
-The device menu offers **Load ABL .pat…**: pattern files exported by AudioRealism Bass Line load straight into the
-**current** pattern, including note, gate, slide and accent per step, and set the pattern length to match. Steps beyond
-the file's length are cleared, so a short pattern loaded over a longer one leaves no tail behind. The other 15 patterns
-stay as they are.
+The pattern actions sit in two places. Right-click the **Pattern** field for the clipboard entries, or open the device
+menu and pick **Pattern** for those plus the ABL importer.
+
+All of them write into the **current** pattern and leave the other 15 alone, all of them replace the pattern as a whole
+rather than merging into it, and all of them undo in one step.
+
+### 6.1 Copy and Paste
+
+**Copy Pattern** puts the current pattern on the clipboard, **Paste Pattern** writes it back. Note, gate, slide, accent
+and the pattern length all travel together. It is the system clipboard, so a pattern moves between the 16 slots, between
+two _Cubed_ devices, and between two openDAW tabs.
+
+**Paste Pattern** stays available even when the clipboard holds nothing usable, because a browser only hands over the
+clipboard after the click. Nothing changes in that case and a short message says so.
+
+### 6.2 Pattern as JSON
+
+**Copy Pattern to JSON** puts the same pattern on the clipboard as readable text instead, and **Paste Pattern from
+JSON** reads it back:
+
+```json
+{
+  "type": "cubed-pattern",
+  "version": 1,
+  "length": 4,
+  "steps": [
+    {"note": "C2", "gate": true, "slide": false, "accent": true},
+    {"note": "D#2", "gate": true, "slide": true, "accent": false},
+    {"note": "C3", "gate": false, "slide": false, "accent": false},
+    {"note": "A#3", "gate": true, "slide": false, "accent": true}
+  ]
+}
+```
+
+That makes a pattern editable anywhere text goes. Paste it into a chat with an AI, ask for a variation, a transposition
+or a different rhythm, and paste the answer back.
+
+Reading is lenient. `note` takes a name or a MIDI number, a missing flag counts as false, `length` falls back to the
+number of steps listed, and anything past 64 steps is dropped. Text that does not read as a pattern is refused and the
+pattern stays as it was.
+
+### 6.3 Loading ABL Patterns
+
+**Load ABL .pat…** imports pattern files exported by AudioRealism Bass Line, including note, gate, slide and accent per
+step, and sets the pattern length to match the file.
