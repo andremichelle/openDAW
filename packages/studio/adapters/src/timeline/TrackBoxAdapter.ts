@@ -19,6 +19,7 @@ import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {TrackClips} from "./TrackClips"
 import {TrackRegions} from "./TrackRegions"
 import {AudioUnitBoxAdapter} from "../audio-unit/AudioUnitBoxAdapter"
+import {ParameterOwner} from "../ParameterOwner"
 import {TrackType} from "./TrackType"
 import {AnyClipBoxAdapter, AnyRegionBoxAdapter} from "../UnionAdapterTypes"
 import {ValueClipBoxAdapter} from "./clip/ValueClipBoxAdapter"
@@ -95,29 +96,7 @@ export class TrackBoxAdapter implements BoxAdapter {
     }
 
     get targetName(): Option<string> {
-        return this.#box.target.targetVertex.flatMap(targetVertex => {
-            const box = targetVertex.box
-            if (box instanceof AudioUnitBox) {
-                const adapter = this.#context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter)
-                return adapter.input.label
-            }
-            const optAdapter = this.#context.boxAdapters.optAdapter(box)
-            if (optAdapter.nonEmpty()) {
-                const adapter = optAdapter.unwrap()
-                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
-                    return Option.wrap(adapter.labelField.getValue())
-                }
-            }
-            const ownerAdapter = this.#resolveOwnerDeviceBox(box)
-                .flatMap(owner => this.#context.boxAdapters.optAdapter(owner))
-            if (ownerAdapter.nonEmpty()) {
-                const adapter = ownerAdapter.unwrap()
-                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
-                    return Option.wrap(adapter.labelField.getValue())
-                }
-            }
-            return Option.wrap(box.name)
-        })
+        return this.#box.target.targetVertex.flatMap(vertex => ParameterOwner.nameOf(this.#context, vertex))
     }
 
     #catchupAndSubscribeTargetName(observer: Observer<Option<string>>): Subscription {

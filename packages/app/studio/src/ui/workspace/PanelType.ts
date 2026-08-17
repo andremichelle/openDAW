@@ -6,6 +6,7 @@ export enum PanelType {
     BrowserPanel,
     Notepad,
     Mixer,
+    Modulation,
     ModularSystem,
     MidiFall,
     ProjectInfo,

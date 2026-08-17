@@ -6,6 +6,7 @@ import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../ParameterAdapterSet"
 import {AutomatableParameterFieldAdapter} from "../AutomatableParameterFieldAdapter"
 import {LfoModulatorBoxAdapter} from "./LfoModulatorBoxAdapter"
+import {ParameterOwner} from "../ParameterOwner"
 
 export class ModulationBoxAdapter implements BoxAdapter {
     readonly #terminator: Terminator = new Terminator()
@@ -40,6 +41,10 @@ export class ModulationBoxAdapter implements BoxAdapter {
     get target(): Option<AutomatableParameterFieldAdapter> {
         return this.#box.target.targetVertex
             .flatMap(vertex => this.#context.parameterFieldAdapters.opt(vertex.address))
+    }
+
+    get targetOwner(): Option<string> {
+        return this.#box.target.targetVertex.flatMap(vertex => ParameterOwner.nameOf(this.#context, vertex))
     }
 
     terminate(): void {this.#terminator.terminate()}
