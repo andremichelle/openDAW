@@ -8,9 +8,8 @@ import {LfoModulatorBoxAdapter, ModulationBoxAdapter} from "@opendaw/studio-adap
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Button} from "@/ui/components/Button.tsx"
-import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob.tsx"
-import {Column} from "@/ui/devices/Column.tsx"
-import {LKR} from "@/ui/devices/constants.ts"
+import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
+import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
 
 const className = Html.adoptStyleSheet(css, "ModulatorEditor")
@@ -45,17 +44,19 @@ export const ModulatorEditor = ({lifecycle, service, modulator}: Construct, cont
         Html.empty(targets)
         modulator.assignments.forEach((assignment: ModulationBoxAdapter) => targets.append(
             <div className="entry">
-                <div className="target">
-                    <span className="parameter">{assignment.target.mapOr(parameter => parameter.name, "Unknown")}</span>
-                    <span className="path">{assignment.targetOwner.unwrapOrElse("")}</span>
-                </div>
-                <Column ems={LKR}>
-                    <h5>Depth</h5>
-                    <ParameterLabelKnob lifecycle={targetsLifecycle}
-                                        editing={editing}
-                                        parameter={assignment.namedParameter.depth}
-                                        anchor={0.5}/>
-                </Column>
+                <span className="target">
+                    {assignment.targetOwner.unwrapOrElse("")}
+                    <span className="separator">&gt;</span>
+                    {assignment.target.mapOr(parameter => parameter.name, "Unknown")}
+                </span>
+                <RelativeUnitValueDragging lifecycle={targetsLifecycle}
+                                           editing={editing}
+                                           parameter={assignment.namedParameter.depth}
+                                           supressValueFlyout={true}>
+                    <ParameterLabel lifecycle={targetsLifecycle}
+                                    parameter={assignment.namedParameter.depth}
+                                    framed={true}/>
+                </RelativeUnitValueDragging>
                 <Button lifecycle={targetsLifecycle}
                         onClick={() => editing.modify(() => assignment.box.delete())}>
                     <Icon symbol={IconSymbol.Delete}/>
@@ -83,8 +84,10 @@ export const ModulatorEditor = ({lifecycle, service, modulator}: Construct, cont
                     <Icon symbol={IconSymbol.Delete}/>
                 </Button>
             </header>
-            <div className="body">{controls}</div>
-            {targets}
+            <div className="content">
+                <div className="body">{controls}</div>
+                {targets}
+            </div>
         </div>
     )
 }

@@ -465,6 +465,33 @@ adapters 165, wasm parity 215.
 Phase 6, further modulators.
 Step sequencer, random, macro, each one schema plus a `Modulator` variant plus an inspector.
 
+## Later: automating a modulator's own parameters
+
+Every parameter of a modulator (an LFO's shape, rate, phase and amount, and each assignment's depth)
+should be automatable. It is deliberately NOT in the phases above, because it is more than a schema
+edit.
+
+Where the track lives.
+A Value `TrackBox` hangs off an `AudioUnitBox.tracks`, and the timeline draws lanes per audio unit. A
+modulator is project-global and belongs to no unit, so there is no home for its lane yet. Either
+modulators get their own track collection (and the timeline a place to show it), or they are adopted
+by a unit, which contradicts them being global.
+
+How the engine reads it.
+A modulator's fields are live cells today, read straight off the box (`ModulatorTable`), which is what
+makes a rate drag free. Automation means resolving them at a POSITION instead, through the
+`ParamHandle` / `ParamCurve` machinery that currently only binds DEVICE parameters in `observe_param`.
+The host would resolve them itself, like the strip's gains, since it owns their mappings.
+
+When it is evaluated.
+`ModulatorState::value_at` is called from a parameter's chain during render, so an automated rate has
+to be resolved for that same position before the shape is computed. That is a second resolve inside
+the render path, and a modulator driving another modulator's parameter (already a rejected v1
+feature) would need a cycle check on top.
+
+The schema is the easy part: the LFO's own fields need `ParameterPointerRules` (the assignment's
+`depth` already has them).
+
 ## Open risks
 
 The update clock is about 192 Hz at 120 BPM, so an LFO above roughly 90 Hz aliases and a fast LFO on
