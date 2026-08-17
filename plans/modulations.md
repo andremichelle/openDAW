@@ -471,14 +471,36 @@ Every parameter of a modulator (an LFO's shape, rate, phase and amount, and each
 should be automatable, and its lanes belong IN THE TIMELINE, shown as a unit-like row once an
 automation exists, after the instrument units and before the busses.
 
-Decided: modulators keep their own track collection and the TIMELINE merges two row sources. They do
-NOT become audio units of a new type. That alternative reuses more (one index space already groups
-runs by type, `AudioUnitBox.tracks` already accepts the track, `AudioUnitTracks.create` already backs
-the context menu), but it puts a soundless thing into the audio-unit collection, and every audio-path
-consumer would then have to exclude it: wiring, routing, the solo walk, stem export, freeze, the
-mixer. A missed exclusion there is a silent audio bug, not a visible one.
+### Decided route
 
-What it costs, smallest first.
+Modulators keep their OWN track collection, and the timeline merges two row sources.
+
+### Rejected, with the reason
+
+Modulators become audio units of a new `AudioUnitType`.
+This reuses the most by far: audio units live in ONE index-ordered collection whose runs are already
+grouped by type (`AudioUnitBoxAdapter.indicesLimit` only lets a drag move within a run of the same
+type), so the placement between instruments and busses would come for free; `AudioUnitBox.tracks`
+already accepts the Value track, so no new collection; `AudioUnitTracks.create` already backs the
+"Create Automation" menu; rows, headers and drag-and-drop all work unchanged. There is even
+precedent for excluding a type, since the engine already special-cases `is_output_unit` on the same
+`type` field (`audio_unit/mod.rs:641`). It is still the wrong trade: it puts a soundless thing into
+the audio-unit collection, and every audio-path consumer then has to exclude it — wiring, routing,
+the solo walk, stem export, freeze, and the mixer. A missed exclusion there is a silent audio bug,
+not a visible one.
+
+A second `primary tracks` region.
+`ui/timeline/tracks/primary/` (tempo, signature, markers) is exactly the "lane region with its own
+headers, not tied to a unit" pattern, and it is the cheapest build. Rejected on placement: that
+region is pinned above the audio units, and the requirement is between the instruments and the
+busses.
+
+A lane inside the modulation screen instead of the timeline.
+Now that the value editor is known to be free-standing, a lane could live under each modulator
+editor, sharing the timeline range and snapping, which removes the placement problem entirely.
+Rejected: modulator automation has to be visible and editable next to the song's other automation.
+
+### What it costs, smallest first
 
 Schema, trivial. A `tracks` field on the modulator box (accepts `TrackCollection`), and
 `ParameterPointerRules` on the LFO's shape / rate / phase / amount. The assignment's `depth` already
@@ -494,8 +516,8 @@ track by `(box uuid, field path)` and does not care what the box is, and `observ
 plain boxes: the strip's volume / pan / mute / solo are `AudioUnitBox` fields going through it. So a
 modulator field binds through `observe_field_automation` exactly like a strip gain, and
 `ModulatorState` holds a resolver per field instead of a `Cell`, read at the position `value_at`
-already receives. Nothing is pushed (modulators are pull-only), and automation carries no cycle risk.
-Cost is one curve lookup per automated modulator field per tick.
+already receives. Nothing is pushed (modulators are pull-only), and automation carries no cycle risk,
+since a curve is not a modulator. Cost is one curve lookup per automated modulator field per tick.
 
 Timeline, the real work. `TracksManager` keys every row by audio-unit uuid and `AudioUnitsTimeline`
 iterates `rootBox.audioUnits`, so the row source has to merge the two collections at the boundary
@@ -503,14 +525,23 @@ between the instrument run and the bus run, listing only modulators that HAVE tr
 and `findInsertLocationVertical` both assume every row is a unit with an index in one space, so they
 need guards that refuse drops into the modulator run, and the track header needs a non-unit variant.
 
-The value editor itself is free. `ValueEditor` takes a `ValueEventOwnerReader` plus a `ValueContext`,
-`EventOwnerReader.trackBoxAdapter` is already `Option`, and the TEMPO track already drives a full
-editor with no unit and no track adapter (`TempoTrackBody`). The reader / context pair written for a
-modulator lane is the same one a step sequencer's lane would need.
+The value editor itself is free. `ValueEditor` takes a `ValueEventOwnerReader` plus a `ValueContext`
+and a mapping, with no audio-unit coupling; `EventOwnerReader.trackBoxAdapter` is already
+`Option<TrackBoxAdapter>`; and the TEMPO track already drives a full editor with no unit and no track
+adapter at all (`TempoTrackBody` with `TempoValueEventOwnerReader` / `TempoValueContext`). The reader
+/ context pair written for a modulator lane is the same one a step sequencer's lane would need.
 
 Creation from the UI. `attachParameterContextMenu` takes an `AudioUnitTracks` and calls `create` on
 it, and `registerTracks` ties a parameter to a unit's tracks. Both need to accept a modulator's track
 owner instead, so "Create Automation" appears on a modulator's knob.
+
+The mixer is untouched under this route, since it renders per audio unit and a modulator is not one.
+
+### Open question
+
+`AudioUnitType` has four values: `Instrument`, `Bus`, `Aux`, `Output`. "After the instruments and
+before the busses" is unambiguous only for two of them, so the merge point has to state where
+modulator rows sit relative to `Aux` (and the output unit, which the timeline already treats apart).
 
 ## Open risks
 
