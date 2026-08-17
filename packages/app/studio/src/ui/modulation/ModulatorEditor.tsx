@@ -1,15 +1,14 @@
 import css from "./ModulatorEditor.sass?inline"
-import {Errors, Lifecycle, ObservableValue, panic, Terminator} from "@opendaw/lib-std"
+import {Errors, Lifecycle, ObservableValue, panic} from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {LfoModulatorBoxAdapter, ModulationBoxAdapter} from "@opendaw/studio-adapters"
+import {LfoModulatorBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Button} from "@/ui/components/Button.tsx"
-import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
-import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
+import {TargetList} from "@/ui/modulation/TargetList.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
 
 const className = Html.adoptStyleSheet(css, "ModulatorEditor")
@@ -37,38 +36,6 @@ export const ModulatorEditor = ({lifecycle, service, modulator}: Construct, cont
             })
         )}/>
     )
-    const targets: HTMLElement = <div className="targets"/>
-    const targetsLifecycle = lifecycle.own(new Terminator())
-    const renderTargets = () => {
-        targetsLifecycle.terminate()
-        Html.empty(targets)
-        modulator.assignments.forEach((assignment: ModulationBoxAdapter) => targets.append(
-            <div className="entry">
-                <span className="target">
-                    {assignment.targetOwner.unwrapOrElse("")}
-                    <span className="separator">&gt;</span>
-                    {assignment.target.mapOr(parameter => parameter.name, "Unknown")}
-                </span>
-                <RelativeUnitValueDragging lifecycle={targetsLifecycle}
-                                           editing={editing}
-                                           parameter={assignment.namedParameter.depth}
-                                           supressValueFlyout={true}>
-                    <ParameterLabel lifecycle={targetsLifecycle}
-                                    parameter={assignment.namedParameter.depth}
-                                    framed={true}/>
-                </RelativeUnitValueDragging>
-                <Button lifecycle={targetsLifecycle}
-                        onClick={() => editing.modify(() => assignment.box.delete())}>
-                    <Icon symbol={IconSymbol.Delete}/>
-                </Button>
-            </div>
-        ))
-    }
-    lifecycle.own(modulator.box.assignments.pointerHub.catchupAndSubscribe({
-        onAdded: () => renderTargets(),
-        onRemoved: () => renderTargets()
-    }))
-    renderTargets()
     return (
         <div className={className}
              onInit={element => lifecycle.own(modulator.box.enabled
@@ -86,7 +53,7 @@ export const ModulatorEditor = ({lifecycle, service, modulator}: Construct, cont
             </header>
             <div className="content">
                 <div className="body">{controls}</div>
-                {targets}
+                <TargetList lifecycle={lifecycle} service={service} modulator={modulator}/>
             </div>
         </div>
     )

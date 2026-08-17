@@ -1,0 +1,58 @@
+component
+  flex: 0 0 auto
+  display: flex
+  flex-direction: column
+  width: 18em
+  background-color: rgba(0, 0, 0, 0.2)
+  border-radius: 2px
+  padding: 0.25em
+
+  > .title
+    flex: 0 0 auto
+    padding: 0 0.25em 0.25em 0.25em
+    font-size: 0.8em
+    letter-spacing: 0.08em
+    text-transform: uppercase
+    color: var(--color-gray)
+
+  > .entries
+    flex: 1 1 auto
+    min-height: 0
+    max-height: 6em
+    overflow-y: auto
+    display: flex
+    flex-direction: column
+    row-gap: 1px
+
+    > .entry
+      flex: 0 0 auto
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+      padding: 0 0.25em
+      border-radius: 2px
+
+      &:hover
+        background-color: rgba(255, 255, 255, 0.04)
+
+      > .target
+        flex: 1 1 auto
+        min-width: 0
+        display: flex
+        column-gap: 0.35em
+        overflow: hidden
+        text-overflow: ellipsis
+        white-space: nowrap
+        font-size: 0.8em
+        color: var(--color-bright)
+
+        > .separator
+          color: var(--color-dark)
+
+      label
+        font-size: 10px
+
+  > .empty
+    padding: 0 0.25em
+    font-size: 0.8em
+    color: var(--color-dark)
