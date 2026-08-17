@@ -4,7 +4,7 @@ import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {EffectFactories, MenuItem} from "@opendaw/studio-core"
-import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
 import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts"
 import {CollapseAutomationButton} from "@/ui/timeline/tracks/audio-unit/headers/CollapseAutomationButton.tsx"
@@ -45,9 +45,13 @@ export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, 
             }
         }))
     )
-    const iconContainer: HTMLElement = (
-        <TrackIcon lifecycle={lifecycle} service={service} audioUnitBoxAdapter={audioUnitBoxAdapter}/>
-    )
+    // A value lane never speaks for the unit (content lanes and the synthetic lane sort before it), so it marks
+    // the start of the unit's automation section instead: the automation glyph, deduped per value-lane run.
+    const iconContainer: HTMLElement = trackBoxAdapter.type === TrackType.Value
+        ? <div className="icon-container">
+            <Icon symbol={IconSymbol.Automation} className="automation-icon"/>
+        </div>
+        : <TrackIcon lifecycle={lifecycle} service={service} audioUnitBoxAdapter={audioUnitBoxAdapter}/>
     const labels: HTMLElement = (
         <div className="labels">
             {nameLabel}
