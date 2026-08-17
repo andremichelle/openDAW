@@ -57,7 +57,9 @@ component
     display: flex
     flex-direction: column
     row-gap: 1px
-    padding: 0 0.5em 0.5em 0.5em
+
+    &:not(:empty)
+      padding: 0 0.5em 0.5em 0.5em
 
     > .entry
       display: flex
@@ -85,10 +87,6 @@ component
           overflow: hidden
           text-overflow: ellipsis
           white-space: nowrap
-
-    > .empty
-      color: var(--color-dark)
-      padding: 0.125em 0.25em
 
   &.disabled
     > header > .toggle

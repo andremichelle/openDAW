@@ -43,12 +43,7 @@ export const ModulatorEditor = ({lifecycle, service, modulator}: Construct, cont
     const renderTargets = () => {
         targetsLifecycle.terminate()
         Html.empty(targets)
-        const assignments = modulator.assignments
-        if (assignments.length === 0) {
-            targets.append(<div className="empty">Right-click any control and choose Modulate</div>)
-            return
-        }
-        assignments.forEach((assignment: ModulationBoxAdapter) => targets.append(
+        modulator.assignments.forEach((assignment: ModulationBoxAdapter) => targets.append(
             <div className="entry">
                 <div className="target">
                     <span className="parameter">{assignment.target.mapOr(parameter => parameter.name, "Unknown")}</span>
