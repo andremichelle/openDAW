@@ -468,29 +468,49 @@ Step sequencer, random, macro, each one schema plus a `Modulator` variant plus a
 ## Later: automating a modulator's own parameters
 
 Every parameter of a modulator (an LFO's shape, rate, phase and amount, and each assignment's depth)
-should be automatable. It is deliberately NOT in the phases above, because it is more than a schema
-edit.
+should be automatable, and its lanes belong IN THE TIMELINE, shown as a unit-like row once an
+automation exists, after the instrument units and before the busses.
 
-Where the track lives.
-A Value `TrackBox` hangs off an `AudioUnitBox.tracks`, and the timeline draws lanes per audio unit. A
-modulator is project-global and belongs to no unit, so there is no home for its lane yet. Either
-modulators get their own track collection (and the timeline a place to show it), or they are adopted
-by a unit, which contradicts them being global.
+Decided: modulators keep their own track collection and the TIMELINE merges two row sources. They do
+NOT become audio units of a new type. That alternative reuses more (one index space already groups
+runs by type, `AudioUnitBox.tracks` already accepts the track, `AudioUnitTracks.create` already backs
+the context menu), but it puts a soundless thing into the audio-unit collection, and every audio-path
+consumer would then have to exclude it: wiring, routing, the solo walk, stem export, freeze, the
+mixer. A missed exclusion there is a silent audio bug, not a visible one.
 
-How the engine reads it.
-A modulator's fields are live cells today, read straight off the box (`ModulatorTable`), which is what
-makes a rate drag free. Automation means resolving them at a POSITION instead, through the
-`ParamHandle` / `ParamCurve` machinery that currently only binds DEVICE parameters in `observe_param`.
-The host would resolve them itself, like the strip's gains, since it owns their mappings.
+What it costs, smallest first.
 
-When it is evaluated.
-`ModulatorState::value_at` is called from a parameter's chain during render, so an automated rate has
-to be resolved for that same position before the shape is computed. That is a second resolve inside
-the render path, and a modulator driving another modulator's parameter (already a rejected v1
-feature) would need a cycle check on top.
+Schema, trivial. A `tracks` field on the modulator box (accepts `TrackCollection`), and
+`ParameterPointerRules` on the LFO's shape / rate / phase / amount. The assignment's `depth` already
+has them.
 
-The schema is the easy part: the LFO's own fields need `ParameterPointerRules` (the assignment's
-`depth` already has them).
+Adapters, small. The parameters are ALREADY `AutomatableParameterFieldAdapter`s registered in
+`parameterFieldAdapters` (they go through `ParameterAdapterSet.createParameter`), so only a tracks
+collection per modulator is missing. `AudioUnitTracks` is the template, and it is already generic
+apart from taking its collection from an `AudioUnitBoxAdapter`.
+
+Engine, small, because the parameter machinery is not device-specific. `build_param_track` finds a
+track by `(box uuid, field path)` and does not care what the box is, and `observe_param` already binds
+plain boxes: the strip's volume / pan / mute / solo are `AudioUnitBox` fields going through it. So a
+modulator field binds through `observe_field_automation` exactly like a strip gain, and
+`ModulatorState` holds a resolver per field instead of a `Cell`, read at the position `value_at`
+already receives. Nothing is pushed (modulators are pull-only), and automation carries no cycle risk.
+Cost is one curve lookup per automated modulator field per tick.
+
+Timeline, the real work. `TracksManager` keys every row by audio-unit uuid and `AudioUnitsTimeline`
+iterates `rootBox.audioUnits`, so the row source has to merge the two collections at the boundary
+between the instrument run and the bus run, listing only modulators that HAVE tracks. `indicesLimit`
+and `findInsertLocationVertical` both assume every row is a unit with an index in one space, so they
+need guards that refuse drops into the modulator run, and the track header needs a non-unit variant.
+
+The value editor itself is free. `ValueEditor` takes a `ValueEventOwnerReader` plus a `ValueContext`,
+`EventOwnerReader.trackBoxAdapter` is already `Option`, and the TEMPO track already drives a full
+editor with no unit and no track adapter (`TempoTrackBody`). The reader / context pair written for a
+modulator lane is the same one a step sequencer's lane would need.
+
+Creation from the UI. `attachParameterContextMenu` takes an `AudioUnitTracks` and calls `create` on
+it, and `registerTracks` ties a parameter to a unit's tracks. Both need to accept a modulator's track
+owner instead, so "Create Automation" appears on a modulator's knob.
 
 ## Open risks
 
