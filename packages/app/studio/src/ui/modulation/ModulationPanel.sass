@@ -4,6 +4,7 @@ component
   flex: 1 1 auto
   min-height: 0
   display: flex
+  column-gap: 1px
   @include colors.panel-background
   color: var(--color-bright)
   font-size: 0.75em
@@ -29,8 +30,7 @@ component
         flex: 1 1 auto
 
   > .modulators
-    flex: 0 0 14em
-    border-right: 1px solid rgba(255, 255, 255, 0.05)
+    flex: 0 0 12em
 
     > .list
       flex: 1 1 auto
@@ -51,9 +51,6 @@ component
 
         &:hover
           background-color: rgba(255, 255, 255, 0.04)
-
-        &.selected
-          background-color: rgba(255, 255, 255, 0.08)
           color: var(--color-bright)
 
         > .name
@@ -61,82 +58,26 @@ component
           overflow: hidden
           text-overflow: ellipsis
           white-space: nowrap
-
-        > .count
-          color: var(--color-dark)
+          cursor: text
 
       > .empty
         color: var(--color-dark)
         padding: 0.25em 0.5em
 
-  > .inspector
-    flex: 0 0 22em
-    border-right: 1px solid rgba(255, 255, 255, 0.05)
-
-    > .shape
-      flex: 0 0 auto
-      width: 100%
-      height: 6em
-      background-color: rgba(0, 0, 0, 0.2)
-      border-radius: 2px
-
-    > .knobs
-      flex: 0 0 auto
-      display: flex
-      column-gap: 1em
-      padding: 0.75em 0
-
-  > .assignments
+  > .editors
     flex: 1 1 auto
     min-width: 0
-
-    > .list
-      flex: 1 1 auto
-      min-height: 0
-      overflow-y: auto
-      display: flex
-      flex-direction: column
-      row-gap: 1px
-
-      > .entry
-        display: flex
-        align-items: center
-        column-gap: 0.75em
-        padding: 0.25em 0.5em
-        border-radius: 2px
-
-        &:hover
-          background-color: rgba(255, 255, 255, 0.04)
-
-        > .target
-          flex: 1 1 auto
-          min-width: 0
-          display: flex
-          flex-direction: column
-
-          > .parameter
-            color: var(--color-bright)
-            overflow: hidden
-            text-overflow: ellipsis
-            white-space: nowrap
-
-          > .path
-            color: var(--color-dark)
-            font-size: 0.9em
-            overflow: hidden
-            text-overflow: ellipsis
-            white-space: nowrap
-
-        > .depth
-          flex: 0 0 auto
-
-      > .empty
-        color: var(--color-dark)
-        padding: 0.25em 0.5em
-
-  .placeholder
+    align-items: start
+    min-height: 0
+    overflow-y: auto
     display: flex
-    flex: 1 1 auto
-    align-items: center
-    justify-content: center
-    color: var(--color-dark)
+    flex-direction: column
+    row-gap: 1px
+    padding: 0.5em 0.5em 0.5em 0
+
+    > .placeholder
+      display: flex
+      flex: 1 1 auto
+      align-items: center
+      justify-content: center
+      color: var(--color-dark)

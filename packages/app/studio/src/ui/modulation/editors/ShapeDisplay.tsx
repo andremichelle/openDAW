@@ -26,21 +26,21 @@ const shapeAt = (shape: LfoShape, turn: number): number => {
 export const ShapeDisplay = ({lifecycle, modulator}: Construct): HTMLElement => {
     const canvas: HTMLCanvasElement = (<canvas className="shape"/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
-        const {context, width, height} = painter
+        const {context, actualWidth: width, actualHeight: height, devicePixelRatio: ratio} = painter
         context.clearRect(0, 0, width, height)
         const shape: LfoShape = modulator.box.shape.getValue()
         const phase = modulator.box.phase.getValue()
         const amount = modulator.box.amount.getValue()
         const middle = height / 2
-        const scale = (height / 2 - 2 * devicePixelRatio) * amount
+        const scale = (height / 2 - 2 * ratio) * amount
         context.strokeStyle = "rgba(255, 255, 255, 0.15)"
-        context.lineWidth = devicePixelRatio
+        context.lineWidth = ratio
         context.beginPath()
         context.moveTo(0, middle)
         context.lineTo(width, middle)
         context.stroke()
         context.strokeStyle = "hsl(200, 83%, 60%)"
-        context.lineWidth = 1.5 * devicePixelRatio
+        context.lineWidth = 1.5 * ratio
         context.beginPath()
         const steps = Math.max(2, Math.floor(width))
         for (let step = 0; step <= steps; step++) {

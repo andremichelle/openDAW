@@ -1,15 +1,15 @@
 import css from "./ModulationPanel.sass?inline"
-import {Lifecycle, MutableObservableOption, Terminator, UUID} from "@opendaw/lib-std"
+import {Errors, Lifecycle, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
+import {Promises} from "@opendaw/lib-runtime"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {LfoModulatorBoxAdapter, Modulators} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Button} from "@/ui/components/Button.tsx"
-import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob.tsx"
-import {ShapeDisplay} from "@/ui/modulation/ShapeDisplay.tsx"
-import {AssignmentList} from "@/ui/modulation/AssignmentList.tsx"
+import {createModulatorEditor} from "@/ui/modulation/ModulatorEditorFactory.tsx"
+import {Surface} from "@/ui/surface/Surface.tsx"
 
 const className = Html.adoptStyleSheet(css, "ModulationPanel")
 
@@ -21,81 +21,56 @@ type Construct = {
 export const ModulationPanel = ({lifecycle, service}: Construct) => {
     const {project} = service
     const {editing, rootBoxAdapter} = project
-    const selected = new MutableObservableOption<LfoModulatorBoxAdapter>()
-    const list: HTMLElement = <div className="list"/>
-    const inspector: HTMLElement = <div className="column inspector"/>
-    const assignments: HTMLElement = <div className="column assignments"/>
-    const inspectorLifecycle = lifecycle.own(new Terminator())
-    const renderInspector = () => {
-        inspectorLifecycle.terminate()
-        Html.empty(inspector)
-        Html.empty(assignments)
-        if (selected.isEmpty()) {
-            inspector.append(<div className="placeholder">No modulator selected</div>)
-            return
-        }
-        const modulator = selected.unwrap()
-        const {shape, rate, phase, amount} = modulator.namedParameter
-        inspector.append(
-            <h5><span>{modulator.label}</span></h5>,
-            <ShapeDisplay lifecycle={inspectorLifecycle} modulator={modulator}/>,
-            <div className="knobs">
-                <ParameterLabelKnob lifecycle={inspectorLifecycle} editing={editing} parameter={shape}/>
-                <ParameterLabelKnob lifecycle={inspectorLifecycle} editing={editing} parameter={rate}/>
-                <ParameterLabelKnob lifecycle={inspectorLifecycle} editing={editing} parameter={phase}/>
-                <ParameterLabelKnob lifecycle={inspectorLifecycle} editing={editing} parameter={amount}/>
-            </div>
-        )
-        assignments.append(
-            <h5><span>Targets</span></h5>,
-            <AssignmentList lifecycle={inspectorLifecycle} service={service} modulator={modulator}/>
-        )
-    }
-    const select = (adapter: LfoModulatorBoxAdapter) => {
-        selected.wrap(adapter)
-        renderList()
-        renderInspector()
-    }
-    const listLifecycle = lifecycle.own(new Terminator())
-    const renderList = () => {
-        listLifecycle.terminate()
-        Html.empty(list)
+    const navigation: HTMLElement = <div className="list"/>
+    const editors: HTMLElement = <div className="editors"/>
+    const elements = new Map<string, HTMLElement>()
+    const contents = lifecycle.own(new Terminator())
+    const render = () => {
+        contents.terminate()
+        elements.clear()
+        Html.empty(navigation)
+        Html.empty(editors)
         const adapters = rootBoxAdapter.modulators.adapters()
         if (adapters.length === 0) {
-            list.append(<div className="empty">No modulators yet</div>)
+            navigation.append(<div className="empty">No modulators yet</div>)
+            editors.append(<div className="placeholder">
+                Add a modulator, or right-click any control and choose Modulate
+            </div>)
+            return
         }
-        adapters.forEach(adapter => {
-            const isSelected = selected.mapOr(current => UUID.equals(current.uuid, adapter.uuid), false)
-            const count: HTMLElement = <span className="count"/>
-            listLifecycle.own(adapter.box.assignments.pointerHub.catchupAndSubscribe({
-                onAdded: () => count.textContent = String(adapter.assignments.length),
-                onRemoved: () => count.textContent = String(adapter.assignments.length)
-            }))
-            count.textContent = String(adapter.assignments.length)
-            list.append(
-                <div classList={Html.buildClassList("entry", isSelected && "selected")}
-                     onclick={() => select(adapter)}>
+        adapters.forEach((adapter: LfoModulatorBoxAdapter) => {
+            const key = UUID.toString(adapter.uuid)
+            const name: HTMLElement = <span className="name"/>
+            const editor = createModulatorEditor(contents, service, adapter) as HTMLElement
+            elements.set(key, editor)
+            contents.ownAll(
+                adapter.box.label.catchupAndSubscribe(owner => name.textContent = owner.getValue()),
+                Events.subscribeDblDwn(name, async event => {
+                    const {status, error, value} = await Promises.tryCatch(
+                        Surface.get(name).requestFloatingTextInput(event, adapter.box.label.getValue()))
+                    if (status === "rejected") {
+                        if (!Errors.isAbort(error)) {return panic(error)}
+                    } else {
+                        editing.modify(() => adapter.box.label.setValue(value))
+                    }
+                })
+            )
+            navigation.append(
+                <div className="entry"
+                     onclick={() => elements.get(key)?.scrollIntoView({behavior: "smooth", block: "start"})}>
                     <Icon symbol={IconSymbol.Waveform}/>
-                    <span className="name">{adapter.label}</span>
-                    {count}
+                    {name}
                 </div>
             )
+            editors.append(editor)
         })
     }
     lifecycle.own(rootBoxAdapter.modulators.catchupAndSubscribe({
-        onAdd: (adapter: LfoModulatorBoxAdapter) => {
-            renderList()
-            if (selected.isEmpty()) {select(adapter)}
-        },
-        onRemove: (adapter: LfoModulatorBoxAdapter) => {
-            if (selected.mapOr(current => UUID.equals(current.uuid, adapter.uuid), false)) {selected.clear()}
-            renderList()
-            renderInspector()
-        },
-        onReorder: () => renderList()
+        onAdd: () => render(),
+        onRemove: () => render(),
+        onReorder: () => render()
     }))
-    renderList()
-    renderInspector()
+    render()
     return (
         <div className={className}>
             <div className="column modulators">
@@ -107,10 +82,9 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
                         <Icon symbol={IconSymbol.Add}/>
                     </Button>
                 </h5>
-                {list}
+                {navigation}
             </div>
-            {inspector}
-            {assignments}
+            {editors}
         </div>
     )
 }

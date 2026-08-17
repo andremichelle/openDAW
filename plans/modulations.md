@@ -333,19 +333,34 @@ with no change at all.
 
 New screen `modulation`, inserted after `mixer` in `DefaultWorkspace`
 (`packages/app/studio/src/ui/workspace/Default.ts`), plus a `PanelType.Modulation` entry, a
-`PanelFactory` case, and a shortcut in `StudioShortcutManager`. Layout mirrors the mixer screen.
+`PanelFactory` case, and a shortcut in `StudioShortcutManager`, over the shared devices panel.
 
-Left, the modulator list.
-The project's modulators, with add and remove, rename, enable toggle, and selection.
+The screen is structured like the DEVICES, not like a master-detail inspector.
 
-Centre, the selected modulator's inspector.
-Shape preview drawn from the same `value_at` maths the engine uses, plus rate, phase and amount.
+Every modulator has its own editor, and all of them are laid out in ONE scrolling list. The list on
+the left is navigation only: clicking an entry scrolls its editor into view. Nothing is hidden behind
+a selection.
 
-Right, the assignment list of the selected modulator.
-One row per target with the parameter's name and its device and unit path, a depth slider, an enable
-toggle, delete, and a click that reveals the target device in the device panel.
+Each modulator TYPE gets its own editor component with its own sass, in
+`packages/app/studio/src/ui/modulation/editors/`, dispatched by a `ModulatorEditorFactory` on the box
+type — the `DeviceEditorFactory` shape. A shared `ModulatorEditor` frame carries what every type has:
+the title, the enable toggle, delete, and the modulator's TARGET list. Only the controls in the middle
+differ per type, which is what makes the step sequencer and the macro fit later without touching the
+frame.
 
-Below, the shared devices panel, as on the mixer screen.
+Renaming works like a device's: double-click the title in the editor, or the entry in the navigation
+list, and answer the floating text input (`Surface.requestFloatingTextInput`, as
+`DeviceEditor`'s label does).
+
+Controls follow the device editors exactly: `Column` with the `LKR` row template, an `h5` name above,
+and `ParameterLabelKnob` (which is `display: contents`, so the knob and its value land in the column's
+own grid rows). A knob without that layout has no name and no readout, which is what the first pass
+got wrong. No `AutomationControl` wrapper: a modulator's own parameters are not automatable.
+
+Separators are 1px gaps in the panel background, never a bright rule.
+
+The shape display draws through the painter's `actualWidth` / `actualHeight` (device pixels), not
+`width` / `height` (CSS pixels), or it renders into a fraction of the canvas on any scaled display.
 
 New adapters in `packages/studio/adapters`, `ModulatorBoxAdapter` and `ModulationBoxAdapter`, plus a
 `modulators` collection on `RootBoxAdapter`. `AutomatableParameterFieldAdapter` gains a
