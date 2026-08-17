@@ -18,3 +18,15 @@ export {SampleService, WasmBpmDetector, Workers} from "@opendaw/studio-core"
 export {AudioMaterial} from "@opendaw/lib-dsp"
 export type {AudioMaterialFeatures, AudioMaterialSegment} from "@opendaw/lib-dsp"
 export {AudioMaterialAnalyzer} from "@opendaw/studio-core"
+
+// Slicing a sample across the keys of a Playfield. `ChopModel` holds the slice boundaries as unit values
+// and is pure math: generate them from detected transients (`Workers.Transients.detect`, seconds) or from
+// a tempo grid, then drag, split and remove them. `ChopMath.MAX_KEY` is the MIDI ceiling `slices(startKey)`
+// caps against, while the max-slices cap is applied at generation, not on read. Feed `slices(startKey)`
+// into `PlayfieldDeviceBoxAdapter.chop`, which replaces the slots in the target key range with one
+// `PlayfieldSampleBox` per slice, all sharing one `AudioFileBox`. Wrap that call in `editing.modify`.
+// The dialog around it stays in the studio, hosts bring their own UI.
+export {ChopMath, ChopModel, GridDivisions, PlayfieldDeviceBoxAdapter} from "@opendaw/studio-adapters"
+export type {
+    ChopMode, GridDivision, PlayfieldChopOptions, PlayfieldChopSlice
+} from "@opendaw/studio-adapters"

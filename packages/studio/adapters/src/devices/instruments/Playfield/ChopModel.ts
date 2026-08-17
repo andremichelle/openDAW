@@ -1,7 +1,5 @@
 import {clamp, int, unitValue} from "@opendaw/lib-std"
-import {PlayfieldChopSlice} from "@opendaw/studio-adapters"
-
-export const MAX_KEY = 128
+import {PlayfieldChopSlice} from "../PlayfieldDeviceBoxAdapter"
 
 export type ChopMode = "transients" | "grid"
 
@@ -9,6 +7,8 @@ export const GridDivisions = [1 / 4, 1 / 8, 1 / 16, 1 / 32] as const
 export type GridDivision = (typeof GridDivisions)[number]
 
 export namespace ChopMath {
+    export const MAX_KEY = 128
+
     export const fitBpmPow2 = (durationInSeconds: number): number => {
         if (durationInSeconds <= 0.0) {return 120}
         let bpm = 60 / durationInSeconds
@@ -77,7 +77,7 @@ export class ChopModel {
     }
 
     slices(startKey: int): ReadonlyArray<PlayfieldChopSlice> {
-        const count = Math.min(this.#boundaries.length - 1, MAX_KEY - startKey)
+        const count = Math.min(this.#boundaries.length - 1, ChopMath.MAX_KEY - startKey)
         const slices: Array<PlayfieldChopSlice> = []
         for (let index = 0; index < count; index++) {
             slices.push({start: this.#boundaries[index], end: this.#boundaries[index + 1]})
