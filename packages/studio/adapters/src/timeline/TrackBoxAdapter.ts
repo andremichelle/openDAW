@@ -240,8 +240,13 @@ export class TrackBoxAdapter implements BoxAdapter {
                 return Terminable.Empty
             }
             case TrackType.Value: {
-                observer(this.targetControlName)
-                return Terminable.Empty
+                const optAdapter = this.#box.target.targetVertex.flatMap(target =>
+                    target.isField() ? this.#context.parameterFieldAdapters.opt(target.address) : Option.None)
+                if (optAdapter.isEmpty()) {
+                    observer(this.targetControlName)
+                    return Terminable.Empty
+                }
+                return optAdapter.unwrap().catchupAndSubscribeName(name => observer(Option.wrap(name)))
             }
             case TrackType.Undefined: {
                 observer(Option.wrap(""))

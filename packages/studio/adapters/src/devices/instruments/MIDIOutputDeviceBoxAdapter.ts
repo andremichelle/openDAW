@@ -2,8 +2,12 @@ import {
     asInstanceOf,
     MutableObservableOption,
     ObservableOption,
+    ObservableValue,
+    Observer,
     Option,
     StringMapping,
+    Subscription,
+    Terminable,
     Terminator,
     UUID,
     ValueMapping
@@ -17,6 +21,24 @@ import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
+
+const parameterName = (box: MIDIOutputParameterBox): ObservableValue<string> =>
+    new class implements ObservableValue<string> {
+        getValue(): string {
+            const label = box.label.getValue().trim()
+            const controller = box.controller.getValue()
+            return label.length === 0 ? String(controller) : `${label} ${controller}`
+        }
+        subscribe(observer: Observer<ObservableValue<string>>): Subscription {
+            return Terminable.many(
+                box.label.subscribe(() => observer(this)),
+                box.controller.subscribe(() => observer(this)))
+        }
+        catchupAndSubscribe(observer: Observer<ObservableValue<string>>): Subscription {
+            observer(this)
+            return this.subscribe(observer)
+        }
+    }
 
 export class MIDIOutputDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly #terminator = new Terminator()
@@ -38,10 +60,12 @@ export class MIDIOutputDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
         this.#terminator.ownAll(
             box.parameters.pointerHub.catchupAndSubscribe({
-                onAdded: (({box}) => this.#parametric
-                    .createParameter(
-                        asInstanceOf(box, MIDIOutputParameterBox).value,
-                        ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 1}), "", 0.0)),
+                onAdded: (({box}) => {
+                    const parameterBox = asInstanceOf(box, MIDIOutputParameterBox)
+                    this.#parametric.createParameter(parameterBox.value,
+                        ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 1}),
+                        parameterName(parameterBox), 0.0)
+                }),
                 onRemoved: (({box}) => this.#parametric
                     .removeParameter(asInstanceOf(box, MIDIOutputParameterBox).value.address))
             }),
