@@ -438,9 +438,14 @@ project threaded down through the twenty components between them, and `parameter
 keeps the pointer-variance cast in the adapter that owns the field. Verified by the create-path test
 in `ModulationSchema.test.ts`, studio core 250 passed, wasm parity 215 passed.
 
-Phase 5, the screen.
-Modulator list, inspector, assignment list, workspace entry, shortcut. Browser checkpoint per
-sub-step.
+Phase 5, the screen. DONE (`1fb8ee66d`).
+The `modulation` screen after the mixer (shift+6), with the modulator list, the inspector (shape
+display plus the four knobs) and the target list over the shared devices panel. The shape display
+draws the engine's own four shapes, so it shows the signal the parameter receives.
+`TrackBoxAdapter.targetName` held the only logic that resolves what owns a parameter field, so it was
+extracted as `ParameterOwner.nameOf` and the target list names things the same way. Verified in the
+browser against the Acid project (see the commit message for what was exercised), studio core 250,
+adapters 165, wasm parity 215.
 
 Phase 6, further modulators.
 Step sequencer, random, macro, each one schema plus a `Modulator` variant plus an inspector.
