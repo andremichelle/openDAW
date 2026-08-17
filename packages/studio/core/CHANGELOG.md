@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.2](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.1...@opendaw/studio-core@0.2.2) (2026-08-17)
+
+### Bug Fixes
+
+- **timeline:** calibrate wheel zoom per device ([#73](https://github.com/andremichelle/openDAW/issues/73)) ([8876b67](https://github.com/andremichelle/openDAW/commit/8876b67fd128098b71db941c0a46450def1a9613))
+
 ## [0.2.1](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.1.6...@opendaw/studio-core@0.2.1) (2026-08-11)
 
 **Note:** Version bump only for package @opendaw/studio-core
