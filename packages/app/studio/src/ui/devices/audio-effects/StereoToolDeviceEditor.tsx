@@ -30,7 +30,7 @@ type Construct = {
 }
 
 export const StereoToolDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
-    const {volume, panning, stereo, invertL, invertR, swap} = adapter.namedParameter
+    const {volume, panning, stereo, invertL, invertR, swap, dcRemove} = adapter.namedParameter
     const {project} = service
     const {editing, midiLearning} = project
     const panningMixing = adapter.box.panningMixing
@@ -80,7 +80,8 @@ export const StereoToolDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                   {([
                                       {label: "L-", parameter: invertL, color: Colors.red, icon: IconSymbol.Invert},
                                       {label: "R-", parameter: invertR, color: Colors.red, icon: IconSymbol.Invert},
-                                      {label: "LR", parameter: swap, color: Colors.blue, icon: IconSymbol.Swap}
+                                      {label: "LR", parameter: swap, color: Colors.blue, icon: IconSymbol.Swap},
+                                      {label: "DC", parameter: dcRemove, color: Colors.blue, icon: IconSymbol.HighPass}
                                   ] as const).map(({label, parameter, color, icon}) => (
                                       <AutomationControl lifecycle={lifecycle}
                                                          editing={editing}

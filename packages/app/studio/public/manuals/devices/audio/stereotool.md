@@ -84,3 +84,7 @@ Inverts the phase of the right channel.
 ### 5.3 LR (Swap)
 
 Swaps left and right channels. Use to correct accidentally reversed stereo recordings or for creative mirroring effects.
+
+### 5.4 DC (Remove DC Offset)
+
+Applies a fixed 2 Hz high-pass filter to remove DC offset without changing the audible frequency range.

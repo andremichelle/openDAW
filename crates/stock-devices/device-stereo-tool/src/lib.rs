@@ -1,11 +1,12 @@
-//! The StereoTool AUDIO-EFFECT device, a faithful port of the TS `StereoToolDeviceProcessor`. It applies a
+//! The StereoTool AUDIO-EFFECT device. It applies a
 //! ramped 2x2 stereo mixing matrix built from volume (dB), panning, stereo width, per-channel invert, and a
-//! left/right swap, under a selectable pan law (linear / equal-power). The matrix is recomputed only when a
-//! parameter changes, then glides via `StereoMatrixRamp`.
+//! left/right swap, under a selectable pan law (linear / equal-power). An optional fixed 2 Hz high-pass removes
+//! DC after the matrix. The matrix is recomputed only when a parameter changes, then glides via
+//! `StereoMatrixRamp`.
 //!
 //! Parameters (`StereoToolDeviceBox`): volume `[10]` (decibel -72/0/12), panning `[11]` (bipolar), stereo `[12]`
-//! (bipolar), invert-l `[13]`, invert-r `[14]`, swap `[15]` (bools). The panning-mixing `[20]` is an INT field
-//! (0 = Linear, 1 = EqualPower; observed, not automatable). The device owns the mappings.
+//! (bipolar), invert-l `[13]`, invert-r `[14]`, swap `[15]`, dc-remove `[16]` (bools). The panning-mixing `[20]`
+//! is an INT field (0 = Linear, 1 = EqualPower; observed, not automatable). The device owns the mappings.
 //!
 //! Exports: `kind()` (audio effect), `state_size()`, `process(desc_ptr)`, `init(...)`, `parameter_changed(...)`,
 //! `field_changed(...)`.
@@ -15,6 +16,7 @@
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
 use abi::{bool_value, float_value, AudioEffect, Block, FieldValue, ParamValue, Ports};
+use dsp::biquad::{BiquadCoeff, BiquadMono, BiquadProcessor, BUTTERWORTH_Q};
 use dsp::db_to_gain;
 use dsp::panning::{Mixing, StereoParams};
 use dsp::ramp::StereoMatrixRamp;
@@ -32,6 +34,7 @@ const STEREO_FIELD: [u16; 1] = [12];
 const INVERT_L_FIELD: [u16; 1] = [13];
 const INVERT_R_FIELD: [u16; 1] = [14];
 const SWAP_FIELD: [u16; 1] = [15];
+const DC_REMOVE_FIELD: [u16; 1] = [16];
 const PANNING_MIXING_FIELD: [u16; 1] = [20];
 
 const VOLUME_MAPPING: Decibel = Decibel::new(-72.0, 0.0, 12.0);
@@ -39,6 +42,7 @@ const PANNING_MAPPING: Linear = Linear::bipolar();
 const STEREO_MAPPING: Linear = Linear::bipolar();
 
 const SMOOTH_SECONDS: f32 = 0.005; // the TS `Ramp.stereoMatrix` default glide time
+const DC_REMOVE_CUTOFF_HZ: f64 = 2.0;
 
 /// The effect's per-instance state (engine-allocated, zeroed): the ramped matrix (built in `init`), the current
 /// stereo params + pan law, a `needs_update` flag (recompute the matrix on the next block after any change), the
@@ -49,12 +53,16 @@ pub struct StereoToolState {
     mixing: Mixing,
     needs_update: bool,
     processed: bool,
+    dc_remove: bool,
+    dc_remove_coeff: BiquadCoeff,
+    dc_remove_filters: [BiquadMono; 2],
     volume_id: u32,
     panning_id: u32,
     stereo_id: u32,
     invert_l_id: u32,
     invert_r_id: u32,
     swap_id: u32,
+    dc_remove_id: u32,
     panning_mixing_field_id: u32
 }
 
@@ -70,12 +78,17 @@ impl AudioEffect for StereoTool {
         state.mixing = Mixing::Linear; // the box default (Mixing.Linear); field_changed refines it
         state.needs_update = true;
         state.processed = false;
+        state.dc_remove = false;
+        state.dc_remove_coeff = BiquadCoeff::new();
+        state.dc_remove_coeff.set_highpass_params(DC_REMOVE_CUTOFF_HZ / sample_rate as f64, BUTTERWORTH_Q);
+        state.dc_remove_filters = [BiquadMono::new(), BiquadMono::new()];
         state.volume_id = abi::bind_parameter(&VOLUME_FIELD);
         state.panning_id = abi::bind_parameter(&PANNING_FIELD);
         state.stereo_id = abi::bind_parameter(&STEREO_FIELD);
         state.invert_l_id = abi::bind_parameter(&INVERT_L_FIELD);
         state.invert_r_id = abi::bind_parameter(&INVERT_R_FIELD);
         state.swap_id = abi::bind_parameter(&SWAP_FIELD);
+        state.dc_remove_id = abi::bind_parameter(&DC_REMOVE_FIELD);
         state.panning_mixing_field_id = abi::observe_field(&PANNING_MIXING_FIELD);
     }
 
@@ -92,6 +105,14 @@ impl AudioEffect for StereoTool {
             state.params.invert_r = bool_value(value);
         } else if id == state.swap_id {
             state.params.swap = bool_value(value);
+        } else if id == state.dc_remove_id {
+            let enabled = bool_value(value);
+            if enabled != state.dc_remove {
+                state.dc_remove = enabled;
+                state.dc_remove_filters[0].reset();
+                state.dc_remove_filters[1].reset();
+            }
+            return;
         } else {
             return;
         }
@@ -100,6 +121,8 @@ impl AudioEffect for StereoTool {
 
     fn reset(state: &mut StereoToolState) {
         state.processed = false;
+        state.dc_remove_filters[0].reset();
+        state.dc_remove_filters[1].reset();
     }
 
     fn process_audio(state: &mut StereoToolState, output: [&mut [f32]; 2], block: &Block) {
@@ -111,6 +134,11 @@ impl AudioEffect for StereoTool {
             state.needs_update = false;
         }
         state.matrix.process_frames(in_left, in_right, out_left, out_right, block.s0 as usize, block.s1 as usize);
+        if state.dc_remove {
+            let [left_filter, right_filter] = &mut state.dc_remove_filters;
+            left_filter.process_in_place(&state.dc_remove_coeff, out_left, block.s0 as usize, block.s1 as usize);
+            right_filter.process_in_place(&state.dc_remove_coeff, out_right, block.s0 as usize, block.s1 as usize);
+        }
         state.processed = true;
     }
 }
@@ -149,7 +177,7 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         0 => float_value(value, &VOLUME_MAPPING),
         1 => float_value(value, &PANNING_MAPPING),
         2 => float_value(value, &STEREO_MAPPING),
-        3..=5 => if bool_value(value) {1.0} else {0.0},
+        3..=6 => if bool_value(value) {1.0} else {0.0},
         _ => f32::NAN
     }
 }
@@ -178,7 +206,9 @@ pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, l
 #[cfg(test)]
 mod tests {
     //! The StereoTool DSP driven directly (setting the private state). f32 audio, mirroring the TS math.
-    use super::{StereoTool, StereoToolState};
+    use super::{StereoTool, StereoToolState, DC_REMOVE_CUTOFF_HZ};
+    use abi::{AudioEffect, ParamValue};
+    use dsp::biquad::{BiquadCoeff, BiquadMono, BiquadProcessor, BUTTERWORTH_Q};
     use dsp::panning::Mixing;
     use dsp::ramp::StereoMatrixRamp;
 
@@ -189,6 +219,9 @@ mod tests {
         state.matrix = StereoMatrixRamp::stereo_matrix(SR, 0.005);
         state.mixing = Mixing::Linear;
         state.needs_update = true;
+        state.dc_remove_coeff = BiquadCoeff::new();
+        state.dc_remove_coeff.set_highpass_params(DC_REMOVE_CUTOFF_HZ / SR as f64, BUTTERWORTH_Q);
+        state.dc_remove_filters = [BiquadMono::new(), BiquadMono::new()];
         state
     }
 
@@ -200,6 +233,11 @@ mod tests {
             state.needs_update = false;
         }
         state.matrix.process_frames(in_left, in_right, &mut out_left, &mut out_right, 0, n);
+        if state.dc_remove {
+            let [left_filter, right_filter] = &mut state.dc_remove_filters;
+            left_filter.process_in_place(&state.dc_remove_coeff, &mut out_left, 0, n);
+            right_filter.process_in_place(&state.dc_remove_coeff, &mut out_right, 0, n);
+        }
         state.processed = true;
         (out_left, out_right)
     }
@@ -237,5 +275,41 @@ mod tests {
         state.params.invert_l = true;
         let (left, _right) = run(&mut state, &[0.4], &[0.0]);
         assert!((left[0] + 0.4).abs() < 1e-6, "left channel is inverted");
+    }
+
+    #[test]
+    fn dc_remove_rejects_a_constant_offset() {
+        let mut state = state();
+        state.params.gain = 1.0;
+        state.dc_remove = true;
+        let dc = vec![0.5; SR as usize * 3];
+        let (left, right) = run(&mut state, &dc, &dc);
+        assert!(left.last().unwrap().abs() < 1e-4, "left DC settles near zero");
+        assert!(right.last().unwrap().abs() < 1e-4, "right DC settles near zero");
+    }
+
+    #[test]
+    fn dc_remove_parameter_toggles_the_filter() {
+        let mut state = state();
+        state.dc_remove_id = 42;
+        <StereoTool as AudioEffect>::parameter_changed(&mut state, 42, ParamValue::Unit(1.0));
+        assert!(state.dc_remove);
+        <StereoTool as AudioEffect>::parameter_changed(&mut state, 42, ParamValue::Unit(0.0));
+        assert!(!state.dc_remove);
+    }
+
+    #[test]
+    fn dc_remove_preserves_audible_band_gain() {
+        let mut state = state();
+        state.params.gain = 1.0;
+        state.dc_remove = true;
+        let tone: Vec<f32> = (0..SR as usize)
+            .map(|sample| (core::f32::consts::TAU * 1_000.0 * sample as f32 / SR).sin())
+            .collect();
+        let (left, _) = run(&mut state, &tone, &tone);
+        let start = tone.len() / 2;
+        let rms = |values: &[f32]| (values.iter().map(|value| value * value).sum::<f32>() / values.len() as f32).sqrt();
+        let gain = rms(&left[start..]) / rms(&tone[start..]);
+        assert!((gain - 1.0).abs() < 1e-4, "1 kHz gain remains unity: {gain}");
     }
 }

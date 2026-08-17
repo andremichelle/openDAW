@@ -20,6 +20,7 @@ export const StereoToolDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudi
     13: {type: "boolean", name: "invert-l", pointerRules: ParameterPointerRules},
     14: {type: "boolean", name: "invert-r", pointerRules: ParameterPointerRules},
     15: {type: "boolean", name: "swap", pointerRules: ParameterPointerRules},
+    16: {type: "boolean", name: "dc-remove", pointerRules: ParameterPointerRules},
     20: {
         type: "int32", name: "panning-mixing",
         value: Mixing.Linear,
