@@ -22,16 +22,36 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
     get count(): int {return this.box.count.getValue()}
     get steps(): ReadonlyArray<Float32Field> {return this.box.steps.fields()}
 
-    patternAt(step: number): unitValue {
+    patternAt(step: number, ascending: boolean = true): unitValue {
         const count = Math.max(1, Math.min(this.count, StepsModulatorBoxAdapter.MaxSteps))
-        const index = Math.floor(step)
-        const current = this.steps[((index % count) + count) % count].getValue()
+        const index = StepsModulatorBoxAdapter.#wrap(Math.floor(step), count)
+        const current = this.steps[index].getValue()
         const smooth = this.box.smooth.getValue()
         if (smooth <= 0.0) {return current}
-        const previous = this.steps[(((index - 1) % count) + count) % count].getValue()
-        const ramp = Math.min(1.0, (step - index) / smooth)
+        const previous = this.steps[this.#predecessor(index, count, ascending)].getValue()
+        const ramp = Math.min(1.0, (step - Math.floor(step)) / smooth)
         return previous + (current - previous) * ramp * ramp * (3.0 - 2.0 * ramp)
     }
+
+    #predecessor(index: int, count: int, ascending: boolean): int {
+        const wrap = StepsModulatorBoxAdapter.#wrap
+        switch (this.box.direction.getValue() as StepsDirection) {
+            case StepsDirection.Backward:
+                return wrap(index + 1, count)
+            case StepsDirection.PingPong:
+                return ascending
+                    ? (index === 0 ? 0 : index - 1)
+                    : (index === count - 1 ? count - 1 : index + 1)
+            case StepsDirection.Alternate:
+                return ascending
+                    ? (index === 0 ? Math.min(1, count - 1) : index - 1)
+                    : (index === count - 1 ? Math.max(0, count - 2) : index + 1)
+            default:
+                return wrap(index - 1, count)
+        }
+    }
+
+    static #wrap(index: int, count: int): int {return ((index % count) + count) % count}
 
     clear(): void {this.#activeSteps().forEach(step => step.setValue(0.0))}
 

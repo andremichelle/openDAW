@@ -24,6 +24,7 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
     const canvas: HTMLCanvasElement = (<canvas/>)
     let playhead = 0.0
     let output = 0.0
+    let ascending = true
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const {context, actualWidth, actualHeight, devicePixelRatio} = painter
         context.clearRect(0, 0, actualWidth, actualHeight)
@@ -53,7 +54,7 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         context.stroke()
         context.beginPath()
         for (let x = 0; x <= actualWidth; x++) {
-            const y = valueToY(modulator.patternAt(x / stepWidth))
+            const y = valueToY(modulator.patternAt(x / stepWidth, ascending))
             if (x === 0) {context.moveTo(x, y)} else {context.lineTo(x, y)}
         }
         context.strokeStyle = "hsla(200, 83%, 60%, 0.5)"
@@ -111,6 +112,9 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         }),
         modulator.box.subscribe(Propagation.Children, painter.requestUpdate),
         receiver.subscribeFloats(modulator.address, ([position, value]) => {
+            const delta = position - playhead
+            const count = clamp(modulator.count, 1, StepsModulatorBoxAdapter.MaxSteps)
+            if (delta !== 0.0 && Math.abs(delta) < count * 0.5) {ascending = delta > 0.0}
             playhead = position
             output = value
             painter.requestUpdate()
