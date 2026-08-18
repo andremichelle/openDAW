@@ -19,7 +19,7 @@ use abi::{bool_value, float_value, AudioEffect, Block, FieldValue, ParamValue, P
 use dsp::biquad::{BiquadCoeff, BiquadMono, BiquadProcessor, BUTTERWORTH_Q};
 use dsp::db_to_gain;
 use dsp::panning::{Mixing, StereoParams};
-use dsp::ramp::StereoMatrixRamp;
+use dsp::ramp::{LinearRamp, StereoMatrixRamp};
 use math::value_mapping::{Decibel, Linear};
 
 #[cfg(target_family = "wasm")]
@@ -54,6 +54,7 @@ pub struct StereoToolState {
     needs_update: bool,
     processed: bool,
     dc_remove: bool,
+    dc_remove_mix: LinearRamp,
     dc_remove_coeff: BiquadCoeff,
     dc_remove_filters: [BiquadMono; 2],
     volume_id: u32,
@@ -79,6 +80,7 @@ impl AudioEffect for StereoTool {
         state.needs_update = true;
         state.processed = false;
         state.dc_remove = false;
+        state.dc_remove_mix = LinearRamp::linear(sample_rate, SMOOTH_SECONDS);
         state.dc_remove_coeff = BiquadCoeff::new();
         state.dc_remove_coeff.set_highpass_params(DC_REMOVE_CUTOFF_HZ / sample_rate as f64, BUTTERWORTH_Q);
         state.dc_remove_filters = [BiquadMono::new(), BiquadMono::new()];
@@ -109,8 +111,11 @@ impl AudioEffect for StereoTool {
             let enabled = bool_value(value);
             if enabled != state.dc_remove {
                 state.dc_remove = enabled;
-                state.dc_remove_filters[0].reset();
-                state.dc_remove_filters[1].reset();
+                if enabled && state.dc_remove_mix.get() == 0.0 {
+                    state.dc_remove_filters[0].reset();
+                    state.dc_remove_filters[1].reset();
+                }
+                state.dc_remove_mix.set(if enabled {1.0} else {0.0}, state.processed);
             }
             return;
         } else {
@@ -123,6 +128,7 @@ impl AudioEffect for StereoTool {
         state.processed = false;
         state.dc_remove_filters[0].reset();
         state.dc_remove_filters[1].reset();
+        state.dc_remove_mix.set(if state.dc_remove {1.0} else {0.0}, false);
     }
 
     fn process_audio(state: &mut StereoToolState, output: [&mut [f32]; 2], block: &Block) {
@@ -134,10 +140,21 @@ impl AudioEffect for StereoTool {
             state.needs_update = false;
         }
         state.matrix.process_frames(in_left, in_right, out_left, out_right, block.s0 as usize, block.s1 as usize);
-        if state.dc_remove {
+        if state.dc_remove || state.dc_remove_mix.is_interpolating() || state.dc_remove_mix.get() > 0.0 {
             let [left_filter, right_filter] = &mut state.dc_remove_filters;
-            left_filter.process_in_place(&state.dc_remove_coeff, out_left, block.s0 as usize, block.s1 as usize);
-            right_filter.process_in_place(&state.dc_remove_coeff, out_right, block.s0 as usize, block.s1 as usize);
+            for sample in block.s0 as usize..block.s1 as usize {
+                let dry_left = out_left[sample];
+                let dry_right = out_right[sample];
+                let wet_left = left_filter.process_frame(&state.dc_remove_coeff, dry_left as f64) as f32;
+                let wet_right = right_filter.process_frame(&state.dc_remove_coeff, dry_right as f64) as f32;
+                let wet = state.dc_remove_mix.move_and_get();
+                out_left[sample] = dry_left * (1.0 - wet) + wet_left * wet;
+                out_right[sample] = dry_right * (1.0 - wet) + wet_right * wet;
+            }
+            if !state.dc_remove && !state.dc_remove_mix.is_interpolating() {
+                left_filter.reset();
+                right_filter.reset();
+            }
         }
         state.processed = true;
     }
@@ -210,7 +227,7 @@ mod tests {
     use abi::{AudioEffect, ParamValue};
     use dsp::biquad::{BiquadCoeff, BiquadMono, BiquadProcessor, BUTTERWORTH_Q};
     use dsp::panning::Mixing;
-    use dsp::ramp::StereoMatrixRamp;
+    use dsp::ramp::{LinearRamp, StereoMatrixRamp};
 
     const SR: f32 = 48_000.0;
 
@@ -219,6 +236,7 @@ mod tests {
         state.matrix = StereoMatrixRamp::stereo_matrix(SR, 0.005);
         state.mixing = Mixing::Linear;
         state.needs_update = true;
+        state.dc_remove_mix = LinearRamp::linear(SR, 0.005);
         state.dc_remove_coeff = BiquadCoeff::new();
         state.dc_remove_coeff.set_highpass_params(DC_REMOVE_CUTOFF_HZ / SR as f64, BUTTERWORTH_Q);
         state.dc_remove_filters = [BiquadMono::new(), BiquadMono::new()];
@@ -233,10 +251,21 @@ mod tests {
             state.needs_update = false;
         }
         state.matrix.process_frames(in_left, in_right, &mut out_left, &mut out_right, 0, n);
-        if state.dc_remove {
+        if state.dc_remove || state.dc_remove_mix.is_interpolating() || state.dc_remove_mix.get() > 0.0 {
             let [left_filter, right_filter] = &mut state.dc_remove_filters;
-            left_filter.process_in_place(&state.dc_remove_coeff, &mut out_left, 0, n);
-            right_filter.process_in_place(&state.dc_remove_coeff, &mut out_right, 0, n);
+            for sample in 0..n {
+                let dry_left = out_left[sample];
+                let dry_right = out_right[sample];
+                let wet_left = left_filter.process_frame(&state.dc_remove_coeff, dry_left as f64) as f32;
+                let wet_right = right_filter.process_frame(&state.dc_remove_coeff, dry_right as f64) as f32;
+                let wet = state.dc_remove_mix.move_and_get();
+                out_left[sample] = dry_left * (1.0 - wet) + wet_left * wet;
+                out_right[sample] = dry_right * (1.0 - wet) + wet_right * wet;
+            }
+            if !state.dc_remove && !state.dc_remove_mix.is_interpolating() {
+                left_filter.reset();
+                right_filter.reset();
+            }
         }
         state.processed = true;
         (out_left, out_right)
@@ -282,6 +311,7 @@ mod tests {
         let mut state = state();
         state.params.gain = 1.0;
         state.dc_remove = true;
+        state.dc_remove_mix.set(1.0, false);
         let dc = vec![0.5; SR as usize * 3];
         let (left, right) = run(&mut state, &dc, &dc);
         assert!(left.last().unwrap().abs() < 1e-4, "left DC settles near zero");
@@ -296,6 +326,80 @@ mod tests {
         assert!(state.dc_remove);
         <StereoTool as AudioEffect>::parameter_changed(&mut state, 42, ParamValue::Unit(0.0));
         assert!(!state.dc_remove);
+    }
+
+    #[test]
+    fn disabling_dc_remove_crossfades_without_an_output_step() {
+        let mut state = state();
+        state.params.gain = 1.0;
+        state.dc_remove_id = 42;
+        <StereoTool as AudioEffect>::parameter_changed(&mut state, 42, ParamValue::Unit(1.0));
+        let dc = vec![0.5; SR as usize * 3];
+        let (settled, _) = run(&mut state, &dc, &dc);
+        let before_toggle = *settled.last().unwrap();
+
+        <StereoTool as AudioEffect>::parameter_changed(&mut state, 42, ParamValue::Unit(0.0));
+        let transition_input = vec![0.5; 512];
+        let (transition, _) = run(&mut state, &transition_input, &transition_input);
+
+        let mut previous = before_toggle;
+        let mut largest_step = 0.0f32;
+        for sample in transition {
+            largest_step = largest_step.max((sample - previous).abs());
+            previous = sample;
+        }
+        assert!(largest_step < 0.01, "DC bypass transition step is bounded: {largest_step}");
+        assert!((previous - 0.5).abs() < 1e-6, "bypass settles on the dry signal");
+    }
+
+    #[test]
+    fn re_enabling_dc_remove_uses_fresh_filter_history() {
+        let mut toggled = state();
+        toggled.params.gain = 1.0;
+        toggled.dc_remove_id = 42;
+        <StereoTool as AudioEffect>::parameter_changed(&mut toggled, 42, ParamValue::Unit(1.0));
+        let dc = vec![0.5; SR as usize];
+        let _ = run(&mut toggled, &dc, &dc);
+        <StereoTool as AudioEffect>::parameter_changed(&mut toggled, 42, ParamValue::Unit(0.0));
+        let transition = vec![0.5; 512];
+        let _ = run(&mut toggled, &transition, &transition);
+        <StereoTool as AudioEffect>::parameter_changed(&mut toggled, 42, ParamValue::Unit(1.0));
+
+        let mut fresh = state();
+        fresh.params.gain = 1.0;
+        fresh.dc_remove_id = 42;
+        let _ = run(&mut fresh, &[0.5], &[0.5]);
+        <StereoTool as AudioEffect>::parameter_changed(&mut fresh, 42, ParamValue::Unit(1.0));
+
+        let input = [0.5, -0.25, 0.75, 0.0];
+        let (toggled_left, toggled_right) = run(&mut toggled, &input, &input);
+        let (fresh_left, fresh_right) = run(&mut fresh, &input, &input);
+        for (toggled, fresh) in toggled_left.iter().chain(&toggled_right).zip(fresh_left.iter().chain(&fresh_right)) {
+            assert!((toggled - fresh).abs() < 1e-6, "re-enabled filter matches a fresh filter");
+        }
+    }
+
+    #[test]
+    fn reset_clears_dc_remove_filter_history() {
+        let mut reset_state = state();
+        reset_state.params.gain = 1.0;
+        reset_state.dc_remove = true;
+        reset_state.dc_remove_mix.set(1.0, false);
+        let dc = vec![0.5; SR as usize];
+        let _ = run(&mut reset_state, &dc, &dc);
+        <StereoTool as AudioEffect>::reset(&mut reset_state);
+
+        let mut fresh = state();
+        fresh.params.gain = 1.0;
+        fresh.dc_remove = true;
+        fresh.dc_remove_mix.set(1.0, false);
+        let input = [0.5, -0.25, 0.75, 0.0];
+        let (reset_left, reset_right) = run(&mut reset_state, &input, &input);
+        let (fresh_left, fresh_right) = run(&mut fresh, &input, &input);
+
+        for (reset, fresh) in reset_left.iter().chain(&reset_right).zip(fresh_left.iter().chain(&fresh_right)) {
+            assert!((reset - fresh).abs() < 1e-6, "reset filter matches a fresh filter");
+        }
     }
 
     #[test]
