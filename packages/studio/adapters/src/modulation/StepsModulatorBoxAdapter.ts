@@ -22,16 +22,17 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
     get count(): int {return this.box.count.getValue()}
     get steps(): ReadonlyArray<Float32Field> {return this.box.steps.fields()}
 
-    /// The value the engine reads at `step`, a continuous index into the sequence: the step under it, folded
-    /// through the direction, then glided towards its predecessor over the first `smooth` of its length.
-    /// WASM CONTRACT: mirrors `StepsState::value_at` (crates/engine/src/modulation.rs).
-    valueAt(step: number): unitValue {
+    /// The drawn pattern at `step`, a continuous index into the sequence: the step under it, glided towards
+    /// its NEIGHBOUR over the first `smooth` of its length. This is the picture, in step order, so the curve
+    /// always agrees with the bars. What the engine plays walks that picture through the direction, which is
+    /// why the playhead comes from the engine rather than being derived here.
+    patternAt(step: number): unitValue {
         const count = Math.max(1, Math.min(this.count, StepsModulatorBoxAdapter.MaxSteps))
         const index = Math.floor(step)
-        const previous = this.#stepAt(index - 1, count)
-        const current = this.#stepAt(index, count)
+        const current = this.steps[((index % count) + count) % count].getValue()
         const smooth = this.box.smooth.getValue()
         if (smooth <= 0.0) {return current}
+        const previous = this.steps[(((index - 1) % count) + count) % count].getValue()
         const ramp = Math.min(1.0, (step - index) / smooth)
         return previous + (current - previous) * ramp * ramp * (3.0 - 2.0 * ramp)
     }
@@ -52,43 +53,6 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
 
     #activeSteps(): ReadonlyArray<Float32Field> {
         return this.steps.slice(0, Math.max(1, Math.min(this.count, StepsModulatorBoxAdapter.MaxSteps)))
-    }
-
-    #stepAt(index: int, count: int): unitValue {
-        return this.steps[this.resolveIndex(index, count)].getValue()
-    }
-
-    /// WASM CONTRACT: mirrors `StepsState::resolve_index` (crates/engine/src/modulation.rs).
-    resolveIndex(index: int, count: int): int {
-        const cycle = Math.floor(index / count)
-        const local = index - cycle * count
-        const direction: StepsDirection = this.box.direction.getValue()
-        return direction === StepsDirection.Backward ? count - 1 - local
-            : direction === StepsDirection.PingPong ? (cycle % 2 === 0 ? local : count - 1 - local)
-                : direction === StepsDirection.Alternate ? StepsModulatorBoxAdapter.alternateIndex(index, count)
-                    : direction === StepsDirection.Random
-                        ? StepsModulatorBoxAdapter.randomIndex(cycle, local, count)
-                        : local
-    }
-
-    /// Ping-pong WITHOUT repeating the turning points: the period is `2 * count - 2`, so the first and last
-    /// step play once per round trip rather than twice.
-    /// WASM CONTRACT: mirrors `alternate_index` (crates/engine/src/modulation.rs).
-    static alternateIndex(index: int, count: int): int {
-        if (count < 3) {return ((index % count) + count) % count}
-        const period = count * 2 - 2
-        const local = ((index % period) + period) % period
-        return local < count ? local : period - local
-    }
-
-    /// A stable shuffle: the same (cycle, step) always lands on the same index, so the sequence stays a pure
-    /// function of the position and a locate replays it identically.
-    /// WASM CONTRACT: mirrors `random_index` (crates/engine/src/modulation.rs).
-    static randomIndex(cycle: int, step: int, count: int): int {
-        let hash = Math.imul(cycle, 0x9E3779B1) ^ Math.imul(step + 1, 0x85EBCA77)
-        hash = Math.imul(hash ^ (hash >>> 15), 0x2545F491)
-        hash = (hash ^ (hash >>> 13)) >>> 0
-        return hash % count
     }
 
     #wrapParameters(box: StepsModulatorBox) {

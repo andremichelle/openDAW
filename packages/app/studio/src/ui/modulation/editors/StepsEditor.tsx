@@ -40,12 +40,21 @@ export const StepsEditor = ({lifecycle, service, modulator}: Construct) => {
                 <StepsDisplay lifecycle={lifecycle} editing={editing}
                               receiver={liveStreamReceiver} modulator={modulator}/>
                 <div className="controls">
-                    <div className="steps">
-                        <div className="count">
-                            <h5>Steps</h5>
-                            <NumberInput lifecycle={lifecycle}
-                                         guard={{guard: value => clamp(value, 1, StepsModulatorBoxAdapter.MaxSteps)}}
-                                         model={EditWrapper.forValue(editing, modulator.box.count)}/>
+                    <div className="pattern">
+                        <div className="steps">
+                            <div className="count">
+                                <h5>Steps</h5>
+                                <NumberInput lifecycle={lifecycle}
+                                             guard={{guard: value => clamp(value, 1, StepsModulatorBoxAdapter.MaxSteps)}}
+                                             model={EditWrapper.forValue(editing, modulator.box.count)}/>
+                            </div>
+                            <RadioGroup lifecycle={lifecycle}
+                                        model={EditWrapper.forValue(editing, modulator.box.direction)}
+                                        elements={StepsDirections.map(({value, glyph}) => ({
+                                            value, tooltip: StepsModulatorBoxAdapter.DirectionStrings[value],
+                                            element: (<span>{glyph}</span>)
+                                        }))}
+                                        appearance={{framed: true, color: Colors.blue}}/>
                         </div>
                         <div className="buttons">
                             <Button lifecycle={lifecycle}
@@ -61,13 +70,6 @@ export const StepsEditor = ({lifecycle, service, modulator}: Construct) => {
                                     onClick={() => editing.modify(() => modulator.clear())}
                                     appearance={{framed: true, color: Colors.green}}>Clear</Button>
                         </div>
-                        <RadioGroup lifecycle={lifecycle}
-                                    model={EditWrapper.forValue(editing, modulator.box.direction)}
-                                    elements={StepsDirections.map(({value, glyph}) => ({
-                                        value, tooltip: StepsModulatorBoxAdapter.DirectionStrings[value],
-                                        element: (<span>{glyph}</span>)
-                                    }))}
-                                    appearance={{framed: true, color: Colors.blue}}/>
                     </div>
                     <div className="knobs">
                         <div className="section"/>

@@ -9,25 +9,32 @@ component
     justify-content: start
     align-items: start
 
-    > .steps
-      width: 7em
+    > .pattern
+      width: 10.5em
       display: grid
+      grid-auto-rows: min-content
       justify-items: center
-      row-gap: 2px
+      row-gap: 0.25em
 
-      > .count
+      > .steps, > .buttons
+        font-size: 0.625em
+
+      > .steps
         display: grid
         grid-auto-flow: column
         align-items: center
-        column-gap: 0.25em
+        column-gap: 0.5em
+
+        > .count
+          display: grid
+          grid-auto-flow: column
+          align-items: center
+          column-gap: 0.25em
 
       > .buttons
         display: grid
         grid-auto-flow: column
         column-gap: 0.25em
-
-      > .buttons, > *:last-child
-        font-size: 0.625em
 
     > .knobs
       position: relative

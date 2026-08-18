@@ -53,7 +53,7 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         // The curve the engine actually resolves, so smoothing is visible before it is heard.
         context.beginPath()
         for (let x = 0; x <= actualWidth; x++) {
-            const y = valueToY(modulator.valueAt(x / stepWidth))
+            const y = valueToY(modulator.patternAt(x / stepWidth))
             if (x === 0) {context.moveTo(x, y)} else {context.lineTo(x, y)}
         }
         context.strokeStyle = "hsla(200, 83%, 60%, 0.5)"
@@ -63,10 +63,9 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         context.lineTo(actualWidth, centerY)
         context.strokeStyle = "hsla(200, 83%, 60%, 0.25)"
         context.stroke()
-        const index = Math.min(count - 1, Math.floor(playhead))
+        // On the curve, not beside it: the same function the curve is drawn with, sampled at the playhead.
         context.beginPath()
-        context.arc((playhead + 0.5) * stepWidth, valueToY(modulator.steps[index].getValue()),
-            devicePixelRatio * 1.5, 0.0, TAU)
+        context.arc(playhead * stepWidth, valueToY(modulator.patternAt(playhead)), devicePixelRatio * 2.0, 0.0, TAU)
         context.fillStyle = "hsl(200, 83%, 75%)"
         context.fill()
     }))
