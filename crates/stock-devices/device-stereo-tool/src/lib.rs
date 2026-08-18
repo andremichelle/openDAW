@@ -111,7 +111,7 @@ impl AudioEffect for StereoTool {
             let enabled = bool_value(value);
             if enabled != state.dc_remove {
                 state.dc_remove = enabled;
-                if enabled && state.dc_remove_mix.get() == 0.0 {
+                if enabled {
                     state.dc_remove_filters[0].reset();
                     state.dc_remove_filters[1].reset();
                 }
@@ -361,15 +361,15 @@ mod tests {
         let dc = vec![0.5; SR as usize];
         let _ = run(&mut toggled, &dc, &dc);
         <StereoTool as AudioEffect>::parameter_changed(&mut toggled, 42, ParamValue::Unit(0.0));
-        let transition = vec![0.5; 512];
+        let transition = vec![0.5; 64];
         let _ = run(&mut toggled, &transition, &transition);
         <StereoTool as AudioEffect>::parameter_changed(&mut toggled, 42, ParamValue::Unit(1.0));
 
         let mut fresh = state();
         fresh.params.gain = 1.0;
         fresh.dc_remove_id = 42;
-        let _ = run(&mut fresh, &[0.5], &[0.5]);
-        <StereoTool as AudioEffect>::parameter_changed(&mut fresh, 42, ParamValue::Unit(1.0));
+        fresh.dc_remove = true;
+        fresh.dc_remove_mix = toggled.dc_remove_mix;
 
         let input = [0.5, -0.25, 0.75, 0.0];
         let (toggled_left, toggled_right) = run(&mut toggled, &input, &input);
@@ -407,6 +407,7 @@ mod tests {
         let mut state = state();
         state.params.gain = 1.0;
         state.dc_remove = true;
+        state.dc_remove_mix.set(1.0, false);
         let tone: Vec<f32> = (0..SR as usize)
             .map(|sample| (core::f32::consts::TAU * 1_000.0 * sample as f32 / SR).sin())
             .collect();
