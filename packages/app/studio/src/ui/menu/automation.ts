@@ -2,13 +2,12 @@ import {ContextMenu, MenuItem, MIDILearning} from "@opendaw/studio-core"
 import {
     AudioUnitTracks,
     AutomatableParameterFieldAdapter,
-    isModulatorBoxAdapter,
     ModulatorBoxAdapter,
     Modulators,
     TrackType
 } from "@opendaw/studio-adapters"
 import {PrimitiveValues} from "@opendaw/lib-box"
-import {Editing, UUID} from "@opendaw/lib-std"
+import {Editing, isDefined, UUID} from "@opendaw/lib-std"
 
 export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: Editing,
                                                                       midiDevices: MIDILearning,
@@ -51,33 +50,28 @@ const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
     MenuItem.default({label: "Modulate"}).setRuntimeChildrenProcedure(parent => {
         const context = parameter.context
         const target = parameter.modulationTarget
-        const assigned = parameter.modulations
-        const assignedSources = new Set(assigned
-            .map(box => box.source.targetVertex.mapOr(vertex => UUID.toString(vertex.address.uuid), ""))
-            .filter(uuid => uuid.length > 0))
-        parent.addMenuItem(MenuItem.default({label: "New LFO"})
-            .setTriggerProcedure(() => editing.modify(() =>
-                Modulators.assign(context, Modulators.createLfo(context), target))))
-        parent.addMenuItem(MenuItem.default({label: "New Steps"})
-            .setTriggerProcedure(() => editing.modify(() =>
-                Modulators.assign(context, Modulators.createSteps(context), target))))
-        parent.addMenuItem(MenuItem.default({label: "New Macro"})
-            .setTriggerProcedure(() => editing.modify(() =>
-                Modulators.assign(context, Modulators.createMacro(context), target))))
+        const assignments = new Map(parameter.modulations
+            .map(box => [box.source.targetVertex
+                .mapOr(vertex => UUID.toString(vertex.address.uuid), ""), box] as const)
+            .filter(([uuid]) => uuid.length > 0))
+        parent.addMenuItem(MenuItem.default({label: "New"}).setRuntimeChildrenProcedure(sub => sub.addMenuItem(
+            MenuItem.default({label: "LFO"})
+                .setTriggerProcedure(() => editing.modify(() =>
+                    Modulators.assign(context, Modulators.createLfo(context), target))),
+            MenuItem.default({label: "Steps"})
+                .setTriggerProcedure(() => editing.modify(() =>
+                    Modulators.assign(context, Modulators.createSteps(context), target))),
+            MenuItem.default({label: "Macro"})
+                .setTriggerProcedure(() => editing.modify(() =>
+                    Modulators.assign(context, Modulators.createMacro(context), target))))))
         context.rootBoxAdapter.modulators.adapters().forEach((modulator: ModulatorBoxAdapter) => {
-            const alreadyAssigned = assignedSources.has(UUID.toString(modulator.uuid))
+            const assignment = assignments.get(UUID.toString(modulator.uuid))
             parent.addMenuItem(MenuItem.default({
                 label: modulator.label,
-                checked: alreadyAssigned,
-                selectable: !alreadyAssigned,
+                checked: isDefined(assignment),
                 separatorBefore: modulator.indexField.getValue() === 0
-            }).setTriggerProcedure(() => editing.modify(() => Modulators.assign(context, modulator.box, target))))
-        })
-        assigned.forEach((box, index) => {
-            const label = box.source.targetVertex
-                .map(vertex => context.boxAdapters.adapterFor(vertex.box, isModulatorBoxAdapter).label)
-                .unwrapOrElse("Modulator")
-            parent.addMenuItem(MenuItem.default({label: `Remove ${label}`, separatorBefore: index === 0})
-                .setTriggerProcedure(() => editing.modify(() => box.delete())))
+            }).setTriggerProcedure(() => editing.modify(() => isDefined(assignment)
+                ? assignment.delete()
+                : Modulators.assign(context, modulator.box, target))))
         })
     })
