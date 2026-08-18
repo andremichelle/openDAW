@@ -170,9 +170,20 @@ fn random_index(cycle: i64, step: i64, count: i64) -> i64 {
     hash % count
 }
 
+pub(crate) struct MacroState {
+    pub(crate) value: Cell<f32>
+}
+
+impl MacroState {
+    pub(crate) fn new() -> Self {
+        Self {value: Cell::new(0.0)}
+    }
+}
+
 pub(crate) enum ModulatorKind {
     Lfo(LfoState),
-    Steps(StepsState)
+    Steps(StepsState),
+    Macro(MacroState)
 }
 
 pub(crate) struct ModulatorState {
@@ -193,10 +204,16 @@ impl ModulatorState {
             broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
     }
 
+    pub(crate) fn macro_knob() -> Self {
+        Self {enabled: Cell::new(true), kind: ModulatorKind::Macro(MacroState::new()),
+            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
+    }
+
     pub(crate) fn value_at(&self, position: f64, seconds: f64) -> f32 {
         match &self.kind {
             ModulatorKind::Lfo(lfo) => lfo.value_at(position, seconds),
-            ModulatorKind::Steps(steps) => steps.value_at(position, seconds)
+            ModulatorKind::Steps(steps) => steps.value_at(position, seconds),
+            ModulatorKind::Macro(knob) => knob.value.get()
         }
     }
 
@@ -207,7 +224,8 @@ impl ModulatorState {
         let Some(slot) = self.broadcast.borrow().clone() else {return};
         let phase = match &self.kind {
             ModulatorKind::Lfo(lfo) => fract(lfo.turn_at(position, seconds)) as f32,
-            ModulatorKind::Steps(steps) => steps.playhead_at(position, seconds)
+            ModulatorKind::Steps(steps) => steps.playhead_at(position, seconds),
+            ModulatorKind::Macro(_) => 0.0
         };
         let mut values = slot.borrow_mut();
         if values.len() > 1 {

@@ -61,6 +61,9 @@ const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
         parent.addMenuItem(MenuItem.default({label: "New Steps"})
             .setTriggerProcedure(() => editing.modify(() =>
                 Modulators.assign(context, Modulators.createSteps(context), target))))
+        parent.addMenuItem(MenuItem.default({label: "New Macro"})
+            .setTriggerProcedure(() => editing.modify(() =>
+                Modulators.assign(context, Modulators.createMacro(context), target))))
         context.rootBoxAdapter.modulators.adapters().forEach((modulator: ModulatorBoxAdapter) => {
             const alreadyAssigned = assignedSources.has(UUID.toString(modulator.uuid))
             parent.addMenuItem(MenuItem.default({

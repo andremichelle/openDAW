@@ -3487,6 +3487,44 @@ fn a_steps_modulator_walks_its_sequence_into_the_parameter() {
     assert!((sum_at(STEP * 2.0) + 0.25).abs() < 1.0e-6, "the edited step, got {}", sum_at(STEP * 2.0));
 }
 
+// The macro is a modulator without a clock: one stored value, the same sum at every position.
+#[test]
+fn a_macro_modulator_holds_its_value_at_every_position() {
+    const DEV: Uuid = [120u8; 16];
+    const ROOT: Uuid = [121u8; 16];
+    const MACRO: Uuid = [122u8; 16];
+    const ASSIGN: Uuid = [123u8; 16];
+    const PATH: u16 = 11;
+    const BAR: f64 = 3840.0;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(MACRO, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)),
+            (10, FieldValue::Float32(0.5))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MACRO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(0.5)), (4, FieldValue::Boolean(true))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let handle = &handles[0];
+    let sum_at = |position: f64| handle.resolve(position).2;
+    assert!((sum_at(0.0) - 0.25).abs() < 1.0e-6, "value 0.5 at depth 0.5, got {}", sum_at(0.0));
+    assert!((sum_at(BAR * 0.37) - 0.25).abs() < 1.0e-6, "and it never moves with the position");
+    // The unipolar resting point contributes nothing at all.
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(MACRO, vec![10]), old: FieldValue::Float32(0.5), new: FieldValue::Float32(0.0)
+    }], &engine.registry).expect("turn the macro down");
+    assert!(sum_at(0.0).abs() < 1.0e-6, "a macro at zero adds nothing, got {}", sum_at(0.0));
+}
+
 // The paused split: while the transport stands still the blocks carry a FREE-RUNNING position, which the
 // modulation follows while the automation stays frozen at the song position.
 #[test]

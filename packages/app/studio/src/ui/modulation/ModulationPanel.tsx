@@ -30,7 +30,9 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
                     MenuItem.default({label: "LFO"})
                         .setTriggerProcedure(() => editing.modify(() => Modulators.createLfo(project))),
                     MenuItem.default({label: "Steps"})
-                        .setTriggerProcedure(() => editing.modify(() => Modulators.createSteps(project)))))}
+                        .setTriggerProcedure(() => editing.modify(() => Modulators.createSteps(project))),
+                    MenuItem.default({label: "Macro"})
+                        .setTriggerProcedure(() => editing.modify(() => Modulators.createMacro(project)))))}
                             appearance={{}}>
                     <Icon symbol={IconSymbol.Add}/>
                 </MenuButton>

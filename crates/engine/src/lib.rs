@@ -1900,7 +1900,7 @@ impl Engine {
 
     /// WASM CONTRACT: modulator field keys — enabled 4. LfoModulatorBox: shape 10, rateSync 11,
     /// rateAbsolute 12, phase 13, amount 14. StepsModulatorBox: count 10, rateSync 11, rateAbsolute 12,
-    /// phase 13, amount 14, smooth 15, direction 16, steps 20 (array of 64).
+    /// phase 13, amount 14, smooth 15, direction 16, steps 20 (array of 64). MacroModulatorBox: value 10.
     fn sync_modulators(&mut self) {
         let (added, removed) = self.modulators.borrow_mut().take_pending();
         for uuid in removed {
@@ -1913,16 +1913,16 @@ impl Engine {
             if self.modulators.borrow().resolve(&uuid).is_some() {
                 continue;
             }
-            let steps_box = self.graph.find_box(&uuid).is_some_and(|graph_box| graph_box.name == "StepsModulatorBox");
-            let state = Rc::new(if steps_box {
-                modulation::ModulatorState::steps()
-            } else {
-                modulation::ModulatorState::lfo()
+            let name = self.graph.find_box(&uuid).map(|graph_box| graph_box.name.clone()).unwrap_or_default();
+            let state = Rc::new(match name.as_str() {
+                "StepsModulatorBox" => modulation::ModulatorState::steps(),
+                "MacroModulatorBox" => modulation::ModulatorState::macro_knob(),
+                _ => modulation::ModulatorState::lfo()
             });
-            let mut subs = if steps_box {
-                self.observe_steps_modulator(uuid, &state)
-            } else {
-                self.observe_lfo_modulator(uuid, &state)
+            let mut subs = match name.as_str() {
+                "StepsModulatorBox" => self.observe_steps_modulator(uuid, &state),
+                "MacroModulatorBox" => self.observe_macro_modulator(uuid, &state),
+                _ => self.observe_lfo_modulator(uuid, &state)
             };
             let enabled_state = state.clone();
             let dirty = self.modulation_dirty.clone();
@@ -1960,6 +1960,13 @@ impl Engine {
             self.observe_modulator_float(uuid, alloc::vec![13], lfo(state, |lfo, value| lfo.phase.set(value))),
             self.observe_modulator_float(uuid, alloc::vec![14], lfo(state, |lfo, value| lfo.amount.set(value)))
         ]
+    }
+
+    fn observe_macro_modulator(&mut self, uuid: Uuid, state: &Rc<modulation::ModulatorState>) -> Vec<SubscriptionId> {
+        let state = state.clone();
+        alloc::vec![self.observe_modulator_float(uuid, alloc::vec![10], move |value| {
+            if let modulation::ModulatorKind::Macro(knob) = &state.kind {knob.value.set(value)}
+        })]
     }
 
     fn observe_steps_modulator(&mut self, uuid: Uuid, state: &Rc<modulation::ModulatorState>) -> Vec<SubscriptionId> {

@@ -15,6 +15,7 @@ import {CaptureAudioBox, CaptureMidiBox} from "./CaptureBox"
 import {GrooveShuffleBox} from "./GrooveBoxes"
 import {LfoModulatorBox} from "./modulators/LfoModulatorBox"
 import {StepsModulatorBox} from "./modulators/StepsModulatorBox"
+import {MacroModulatorBox} from "./modulators/MacroModulatorBox"
 import {ModulationBox} from "./ModulationBox"
 import {AudioRegionBox} from "./timeline/AudioRegionBox"
 import {AudioClipBox} from "./timeline/AudioClipBox"
@@ -49,5 +50,5 @@ export const Definitions = [
     AudioUnitBox, CaptureAudioBox, CaptureMidiBox,
     AudioBusBox, AuxSendBox,
     GrooveShuffleBox,
-    LfoModulatorBox, StepsModulatorBox, ModulationBox
+    LfoModulatorBox, StepsModulatorBox, MacroModulatorBox, ModulationBox
 ]
