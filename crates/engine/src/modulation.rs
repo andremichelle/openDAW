@@ -113,7 +113,20 @@ impl StepsState {
         let count = self.count.get().clamp(1, MAX_STEPS as i32) as i64;
         let step = self.step_position(position, seconds, count);
         let index = floor(step);
-        self.resolve_index(index as i64, count) as f32 + (step - index) as f32
+        let resolved = self.resolve_index(index as i64, count) as f32;
+        // Inside a step the playhead travels the way the SEQUENCE is travelling, so a backward pass crosses
+        // its step right to left and stays continuous at the step boundary.
+        let fraction = (step - index) as f32;
+        resolved + if self.descending(index as i64, count) {1.0 - fraction} else {fraction}
+    }
+
+    fn descending(&self, index: i64, count: i64) -> bool {
+        match self.direction.get() {
+            DIRECTION_BACKWARD => true,
+            DIRECTION_PING_PONG => index.div_euclid(count).rem_euclid(2) == 1,
+            DIRECTION_ALTERNATE => count >= 3 && index.rem_euclid(count * 2 - 2) >= count - 1,
+            _ => false
+        }
     }
 
     fn value_at(&self, position: f64, seconds: f64) -> f32 {
@@ -471,8 +484,45 @@ mod tests {
         assert!((state.playhead_at(STEP * 4.25, 0.0) - 0.25).abs() < 1.0e-5, "and it wraps with the sequence");
         let backward = steps(&[0.0, 0.0, 0.0, 0.0]);
         backward.direction.set(DIRECTION_BACKWARD);
-        assert!((backward.playhead_at(0.0, 0.0) - 3.0).abs() < 1.0e-5, "backward starts on the last step");
-        assert!((backward.playhead_at(STEP, 0.0) - 2.0).abs() < 1.0e-5);
+        // The last step, entered from its RIGHT edge, since backward crosses it right to left.
+        assert!((backward.playhead_at(0.0, 0.0) - 4.0).abs() < 1.0e-5, "backward starts on the last step");
+        assert!((backward.playhead_at(STEP, 0.0) - 3.0).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn a_glide_always_comes_from_the_step_that_was_played_before() {
+        // Backward plays 3, 2, 1, 0, so the glide into step 2 starts at step 3's value, NOT at step 1's.
+        let backward = steps(&[0.0, 0.1, 0.2, 1.0]);
+        backward.direction.set(DIRECTION_BACKWARD);
+        backward.smooth.set(0.5);
+        assert_eq!(backward.value_at(STEP, 0.0), 1.0, "the glide leaves the step that just played");
+        assert!((backward.value_at(STEP * 1.5, 0.0) - 0.2).abs() < 1.0e-6, "and has arrived by the end of the glide");
+        let middle = backward.value_at(STEP * 1.25, 0.0);
+        assert!(middle > 0.2 && middle < 1.0, "falling from 1.0 to 0.2, got {middle}");
+        // Ping-pong at its turning point: the step plays twice, so the second pass glides from ITSELF.
+        let ping_pong = steps(&[0.0, 0.5, 1.0]);
+        ping_pong.direction.set(DIRECTION_PING_PONG);
+        ping_pong.smooth.set(0.5);
+        assert_eq!(ping_pong.value_at(STEP * 3.0, 0.0), 1.0, "the repeated turning point holds its value");
+    }
+
+    #[test]
+    fn the_playhead_crosses_a_step_the_way_the_sequence_travels() {
+        let forward = steps(&[0.0, 0.0, 0.0, 0.0]);
+        assert!(forward.playhead_at(0.0, 0.0) < forward.playhead_at(STEP * 0.5, 0.0), "forward runs left to right");
+        let backward = steps(&[0.0, 0.0, 0.0, 0.0]);
+        backward.direction.set(DIRECTION_BACKWARD);
+        // Step 3 is crossed right to left, and the next step picks up exactly where it left off.
+        assert!((backward.playhead_at(0.0, 0.0) - 4.0).abs() < 1.0e-5);
+        assert!((backward.playhead_at(STEP * 0.5, 0.0) - 3.5).abs() < 1.0e-5);
+        assert!((backward.playhead_at(STEP * 0.999, 0.0) - 3.0).abs() < 1.0e-2);
+        assert!((backward.playhead_at(STEP, 0.0) - 3.0).abs() < 1.0e-5, "no jump at the boundary");
+        assert!((backward.playhead_at(STEP * 1.5, 0.0) - 2.5).abs() < 1.0e-5);
+        // Ping-pong turns around with the cycle, alternate one step earlier.
+        let ping_pong = steps(&[0.0, 0.0, 0.0, 0.0]);
+        ping_pong.direction.set(DIRECTION_PING_PONG);
+        assert!(ping_pong.playhead_at(STEP * 0.5, 0.0) < ping_pong.playhead_at(STEP * 1.5, 0.0));
+        assert!(ping_pong.playhead_at(STEP * 4.5, 0.0) > ping_pong.playhead_at(STEP * 5.5, 0.0));
     }
 
     #[test]
