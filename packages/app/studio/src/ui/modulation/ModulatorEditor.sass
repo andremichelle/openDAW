@@ -2,13 +2,14 @@ component
   display: contents
 
   > .modulator
-    grid-column: 1
+    grid-column: 1 / -2
     grid-row: span 2
     display: grid
+    grid-template-columns: subgrid
     grid-template-rows: subgrid
-    padding: 0 0.25em
 
     > header
+      grid-column: 1 / -1
       padding-top: var(--editor-gap)
       display: grid
       grid-template-columns: 1fr auto auto
@@ -28,10 +29,11 @@ component
         text-overflow: ellipsis
 
     > .body
+      grid-column: 1 / -1
       display: grid
-      grid-auto-flow: column
+      grid-template-columns: subgrid
+      grid-auto-rows: min-content
       align-items: stretch
-      column-gap: 1px
       font-size: 16px
 
   h5

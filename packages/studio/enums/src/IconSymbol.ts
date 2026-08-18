@@ -178,6 +178,10 @@ export enum IconSymbol {
     FolderOpen,
     FolderAdd,
     Modulation,
+    Alternate,
+    PingPong,
+    Forward,
+    Backward,
 }
 
 export namespace IconSymbol {

@@ -894,6 +894,21 @@ export const IconLibrary = () => (
                 <path
                     d="M12.4142 5H21C21.5523 5 22 5.44772 22 6V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H10.4142L12.4142 5ZM11 12H8V14H11V17H13V14H16V12H13V9H11V12Z"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Forward)} viewBox="0 0 24 24" fill="currentColor"
+                    fill-rule="evenodd" clip-rule="evenodd">
+                <path d="M4 11h12V8l5 4-5 4v-3H4z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Backward)} viewBox="0 0 24 24" fill="currentColor"
+                    fill-rule="evenodd" clip-rule="evenodd">
+                <path d="M21 13H9v3l-5-4 5-4v3h12z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Alternate)} viewBox="0 0 24 24" fill="currentColor"
+                    fill-rule="evenodd" clip-rule="evenodd">
+                <path d="M6 18h12v-3l5 4-5 4v-3H6zM18 6H6v3L1 5l5-4v3h12z"/>
+            </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.PingPong)} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 4H21C21.5523 4 22 4.44772 22 5V12H20V6H6V9L1 5L6 1V4ZM18 20H3C2.44772 20 2 19.5523 2 19V12H4V18H18V15L23 19L18 23V20Z"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.Modulation)} viewBox="0 0 16 16" fill="none"
                     stroke="currentColor" stroke-width="1px">
                 <path d="M2 2h6v4h6M2 14l6-4v4l6-4"/>

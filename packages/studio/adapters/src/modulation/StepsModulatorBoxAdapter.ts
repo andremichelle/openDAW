@@ -8,6 +8,8 @@ import {ModulatorBoxAdapter} from "./ModulatorBoxAdapter"
 // WASM CONTRACT: mirrors the engine's `modulation::DIRECTION_*` (crates/engine/src/modulation.rs).
 export enum StepsDirection {Forward, Backward, PingPong, Alternate, Random}
 
+export type StepsPass = {ascending: boolean, from: int, to: int}
+
 export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulatorBox> {
     static readonly MaxSteps = 64
     static readonly DirectionStrings: ReadonlyArray<string> = ["Forward", "Backward", "Ping-Pong", "Alternate", "Random"]
@@ -22,22 +24,39 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
     get count(): int {return this.box.count.getValue()}
     get steps(): ReadonlyArray<Float32Field> {return this.box.steps.fields()}
 
-    patternAt(step: number, ascending: boolean = true): unitValue {
+    /// The passes the sequence makes over the pattern, each covering the steps `[from, to)` it reaches.
+    get passes(): ReadonlyArray<StepsPass> {
         const count = Math.max(1, Math.min(this.count, StepsModulatorBoxAdapter.MaxSteps))
-        const index = StepsModulatorBoxAdapter.#wrap(Math.floor(step), count)
+        switch (this.box.direction.getValue() as StepsDirection) {
+            case StepsDirection.Backward:
+                return [{ascending: false, from: 0, to: count}]
+            case StepsDirection.PingPong:
+                return [{ascending: true, from: 0, to: count}, {ascending: false, from: 0, to: count}]
+            case StepsDirection.Alternate:
+                return count < 3
+                    ? [{ascending: true, from: 0, to: count}]
+                    : [{ascending: true, from: 0, to: count - 1}, {ascending: false, from: 1, to: count}]
+            default:
+                return [{ascending: true, from: 0, to: count}]
+        }
+    }
+
+    patternAt(step: number, ascending: boolean): unitValue {
+        const count = Math.max(1, Math.min(this.count, StepsModulatorBoxAdapter.MaxSteps))
+        const index = ((Math.floor(step) % count) + count) % count
         const current = this.steps[index].getValue()
         const smooth = this.box.smooth.getValue()
         if (smooth <= 0.0) {return current}
+        const local = step - Math.floor(step)
+        const traversed = ascending ? local : 1.0 - local
         const previous = this.steps[this.#predecessor(index, count, ascending)].getValue()
-        const ramp = Math.min(1.0, (step - Math.floor(step)) / smooth)
+        const ramp = Math.min(1.0, traversed / smooth)
         return previous + (current - previous) * ramp * ramp * (3.0 - 2.0 * ramp)
     }
 
     #predecessor(index: int, count: int, ascending: boolean): int {
-        const wrap = StepsModulatorBoxAdapter.#wrap
+        const wrap = (value: int) => ((value % count) + count) % count
         switch (this.box.direction.getValue() as StepsDirection) {
-            case StepsDirection.Backward:
-                return wrap(index + 1, count)
             case StepsDirection.PingPong:
                 return ascending
                     ? (index === 0 ? 0 : index - 1)
@@ -47,11 +66,9 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
                     ? (index === 0 ? Math.min(1, count - 1) : index - 1)
                     : (index === count - 1 ? Math.max(0, count - 2) : index + 1)
             default:
-                return wrap(index - 1, count)
+                return ascending ? wrap(index - 1) : wrap(index + 1)
         }
     }
-
-    static #wrap(index: int, count: int): int {return ((index % count) + count) % count}
 
     clear(): void {this.#activeSteps().forEach(step => step.setValue(0.0))}
 

@@ -1,26 +1,19 @@
 component
-  display: grid
-  grid-auto-flow: column
-  justify-content: start
-  align-items: stretch
-  column-gap: 1px
+  display: contents
 
   > .knobs
+    grid-column: span 5
     position: relative
     display: grid
-    grid-auto-flow: column
-    column-gap: 1px
+    grid-template-columns: subgrid
 
     > .section
       grid-column: 2 / 4
       position: absolute
-      top: 5px
+      top: calc((100% - 3.25em) / 2)
       left: 1px
       right: 1px
-      height: 13px
+      height: 0.75em
       border-radius: 2px
       pointer-events: none
       background: color-mix(in srgb, var(--color-blue) 7%, transparent)
-
-    > *
-      min-width: 3.5em
