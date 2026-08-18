@@ -1,6 +1,7 @@
 import css from "./Resources.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, Lifecycle, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {ProjectBrowser} from "@/project/ProjectBrowser"
 import {TemplateBrowser} from "@/project/TemplateBrowser"
@@ -48,8 +49,15 @@ export const Resources = ({lifecycle, service}: Construct) => {
                                                 lifecycle={scopeLifeCycle}
                                                 select={async ([uuid, meta]) => {
                                                     const handler = Dialogs.processMonolog("Loading...")
-                                                    await service.projectProfileService.load(uuid, meta)
+                                                    const {status, error} = await Promises.tryCatch(
+                                                        service.projectProfileService.load(uuid, meta))
                                                     handler.close()
+                                                    if (status === "rejected") {
+                                                        console.warn(error)
+                                                        RuntimeNotifier.notify({
+                                                            message: "Could not load project.", icon: "Warning"
+                                                        })
+                                                    }
                                                 }}
                                                 empty={<div className="empty-cta"
                                                             onclick={() => scope.setValue(Scope.Demos)}>
@@ -63,8 +71,15 @@ export const Resources = ({lifecycle, service}: Construct) => {
                                                  lifecycle={scopeLifeCycle}
                                                  select={async ([uuid, meta]) => {
                                                      const handler = Dialogs.processMonolog("Loading...")
-                                                     await service.projectProfileService.openTemplate(uuid, meta)
+                                                     const {status, error} = await Promises.tryCatch(
+                                                         service.projectProfileService.openTemplate(uuid, meta))
                                                      handler.close()
+                                                     if (status === "rejected") {
+                                                         console.warn(error)
+                                                         RuntimeNotifier.notify({
+                                                             message: "Could not open template.", icon: "Warning"
+                                                         })
+                                                     }
                                                  }}/>
                             ))
                             break

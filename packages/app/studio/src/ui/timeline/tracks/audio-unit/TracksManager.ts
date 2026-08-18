@@ -273,8 +273,10 @@ export class TracksManager implements Terminable {
                             })
                             syntheticLifecycle.own({terminate: () => laneElement.remove()})
                             unitTracks.prepend(laneElement)
+                            this.#refreshHeaderDedup()
                         } else if (!wants && mounted) {
                             syntheticLifecycle.terminate()
+                            this.#refreshHeaderDedup()
                         }
                     }
                     audioUnitLifecycle.ownAll(
@@ -422,6 +424,11 @@ export class TracksManager implements Terminable {
     #refreshHeaderDedup(): void {
         const tracks = this.tracks()
         const sameGroup = (a: TrackContext, b: TrackContext): boolean => this.#sameGroup(a, b)
+        // A unit shown by its synthetic lane already carries the icon there, so every real lane below it
+        // repeats the unit and must hide it, the first one included.
+        const showsUnitLane = (context: TrackContext): boolean =>
+            Option.wrap(context.element.parentElement)
+                .mapOr(parent => isNotNull(parent.querySelector(":scope > .unit-lane")), false)
         tracks.forEach((context, index) => {
             // Head duties (channel controls, unit drag) live on the unit's FIRST DISPLAYED lane — always a
             // content track (they sort first); a unit without one delegates to its synthetic lane instead.
@@ -431,9 +438,15 @@ export class TracksManager implements Terminable {
             context.unitHead.setValue(firstOfUnit && hasContent)
             const previous = index > 0 ? Option.wrap(tracks[index - 1]) : Option.None
             const next = index < tracks.length - 1 ? Option.wrap(tracks[index + 1]) : Option.None
-            // The icon shows the UNIT, so it repeats on every further lane of the same unit, whatever its type.
-            context.element.classList.toggle("repeat-icon", previous
-                .mapOr(scope => scope.audioUnitBoxAdapter === context.audioUnitBoxAdapter, false))
+            // A content lane's icon shows the UNIT, so it repeats on every further lane of the same unit. A value
+            // lane carries the automation glyph instead, which repeats only within the unit's run of value lanes.
+            const sameUnit = (scope: TrackContext): boolean =>
+                scope.audioUnitBoxAdapter === context.audioUnitBoxAdapter
+            context.element.classList.toggle("repeat-icon",
+                context.trackBoxAdapter.type === TrackType.Value
+                    ? previous.mapOr(scope => sameUnit(scope)
+                        && scope.trackBoxAdapter.type === TrackType.Value, false)
+                    : showsUnitLane(context) || previous.mapOr(sameUnit, false))
             context.element.classList.toggle("repeat-device", previous.mapOr(scope => sameGroup(scope, context), false))
             context.element.classList.toggle("group-end", next.mapOr(scope => !sameGroup(context, scope), true))
             context.element.classList.toggle("no-guide",

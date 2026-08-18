@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.2.0](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.1.7...@opendaw/app-studio@0.2.0) (2026-08-17)
+
+### Bug Fixes
+
+- **automation:** snap drag-after-create around the cursor ([#309](https://github.com/andremichelle/openDAW/issues/309)) ([6dfa990](https://github.com/andremichelle/openDAW/commit/6dfa990bfdabf77a78aaaa187062e19953fc1db1))
+- **content-editor:** auto-scroll the region strip while dragging ([dd6eb7a](https://github.com/andremichelle/openDAW/commit/dd6eb7a5dbda13953e8658fcccb4cef10b343ee6))
+- **playfield:** reload waveform and label when a slot's sample changes ([#339](https://github.com/andremichelle/openDAW/issues/339)) ([4b566e3](https://github.com/andremichelle/openDAW/commit/4b566e3c507f377ce7ee39b04c711dfbae06146f))
+- **timeline:** calibrate wheel zoom per device ([#73](https://github.com/andremichelle/openDAW/issues/73)) ([8876b67](https://github.com/andremichelle/openDAW/commit/8876b67fd128098b71db941c0a46450def1a9613))
+- **timeline:** give the unit lane the full unit menu and the unit icon ([93af285](https://github.com/andremichelle/openDAW/commit/93af285a1fc0b64069ce97cd3376bf0cdb457619))
+- **timeline:** restore "New Track" on the synthetic unit lane menu ([0a36ac9](https://github.com/andremichelle/openDAW/commit/0a36ac9dcc13eabb3f741708f6c316f1f788aa5f))
+- **timeline:** restore "New Track" on the synthetic unit lane menu ([a5369f8](https://github.com/andremichelle/openDAW/commit/a5369f8b428fe55df060529a612d2b9d049d219b))
+
+### Features
+
+- **content-editor:** drag region bounds in the editor strip ([#298](https://github.com/andremichelle/openDAW/issues/298)) ([25f38c0](https://github.com/andremichelle/openDAW/commit/25f38c089ed3e4088eef0af15082f4f96faf6de3))
+- **icons:** give the Vaporisateur its own icon ([1dbad8e](https://github.com/andremichelle/openDAW/commit/1dbad8e6aa2c8835877300a39fc45af2ce272ffb))
+
 ## [0.1.7](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.1.6...@opendaw/app-studio@0.1.7) (2026-08-11)
 
 **Note:** Version bump only for package @opendaw/app-studio

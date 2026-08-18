@@ -1,5 +1,13 @@
 import {Address, PointerTypes, PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
-import {assert, SortedSet, StringMapping, Terminable, unitValue, ValueMapping} from "@opendaw/lib-std"
+import {
+    assert,
+    ObservableValue,
+    SortedSet,
+    StringMapping,
+    Terminable,
+    unitValue,
+    ValueMapping
+} from "@opendaw/lib-std"
 import {AutomatableParameterFieldAdapter} from "./AutomatableParameterFieldAdapter"
 
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
@@ -27,7 +35,7 @@ export class ParameterAdapterSet implements Terminable {
     createParameter<T extends PrimitiveValues>(field: PrimitiveField<T, PointerTypes>,
                                                valueMapping: ValueMapping<T>,
                                                stringMapping: StringMapping<T>,
-                                               name: string,
+                                               name: string | ObservableValue<string>,
                                                anchor?: unitValue,
                                                resetValue?: T): AutomatableParameterFieldAdapter<T> {
         const adapter = new AutomatableParameterFieldAdapter<T>(

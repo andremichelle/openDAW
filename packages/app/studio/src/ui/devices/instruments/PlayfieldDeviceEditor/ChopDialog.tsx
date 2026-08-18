@@ -8,7 +8,9 @@ import {
 import {AudioData, MidiKeys} from "@opendaw/lib-dsp"
 import {Peaks, PeaksPainter} from "@opendaw/lib-fusion"
 import {AudioFileBox} from "@opendaw/studio-boxes"
-import {PlayfieldChopSlice, PlayfieldDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    ChopMath, ChopMode, ChopModel, GridDivision, GridDivisions, PlayfieldChopSlice, PlayfieldDeviceBoxAdapter
+} from "@opendaw/studio-adapters"
 import {CanvasPainter, ElementCapturing, TimelineRange, Workers} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Button} from "@/ui/components/Button"
@@ -21,7 +23,6 @@ import {attachWheelScroll} from "@/ui/timeline/editors/WheelScroll"
 import {installCursor} from "@/ui/hooks/cursor"
 import {Cursor} from "@/ui/Cursors"
 import {StudioService} from "@/service/StudioService"
-import {ChopMath, ChopMode, ChopModel, GridDivision, GridDivisions, MAX_KEY} from "./ChopModel"
 
 const className = Html.adoptStyleSheet(css, "ChopDialog")
 
@@ -46,7 +47,7 @@ const openChopDialog = (
     const bpm = new DefaultObservableValue<number>(
         isDefined(bpmHint) && bpmHint > 0 ? bpmHint : ChopMath.fitBpmPow2(durationInSeconds))
     const division = new DefaultObservableValue<GridDivision>(1 / 16)
-    const startKeyValue = new DefaultObservableValue<int>(clamp(startKey, 0, MAX_KEY - 1))
+    const startKeyValue = new DefaultObservableValue<int>(clamp(startKey, 0, ChopMath.MAX_KEY - 1))
     const maxKeys = new DefaultObservableValue<int>(16)
     const phase = new DefaultObservableValue<"preslice" | "edit">("preslice")
     const transientSeconds: Array<number> = []
@@ -84,7 +85,7 @@ const openChopDialog = (
             <div className="row">
                 <label>Max-Keys</label>
                 <NumberInput lifecycle={lifecycle} model={maxKeys}
-                             guard={{guard: value => clamp(Math.round(value), 0, MAX_KEY - 1)}}/>
+                             guard={{guard: value => clamp(Math.round(value), 0, ChopMath.MAX_KEY - 1)}}/>
             </div>
         </div>
     )
@@ -185,7 +186,7 @@ const openChopDialog = (
     }
 
     const effectiveMaxSlices = (): int => {
-        const midiCap = MAX_KEY - startKeyValue.getValue()
+        const midiCap = ChopMath.MAX_KEY - startKeyValue.getValue()
         const requested = maxKeys.getValue()
         return requested === 0 ? midiCap : Math.min(requested, midiCap)
     }
@@ -293,7 +294,7 @@ const openChopDialog = (
                         <label>Start-Key</label>
                         <div className="key-field">
                             <NumberInput lifecycle={lifecycle} model={startKeyValue}
-                                         guard={{guard: value => clamp(Math.round(value), 0, MAX_KEY - 1)}}/>
+                                         guard={{guard: value => clamp(Math.round(value), 0, ChopMath.MAX_KEY - 1)}}/>
                             {noteLabel}
                         </div>
                     </div>

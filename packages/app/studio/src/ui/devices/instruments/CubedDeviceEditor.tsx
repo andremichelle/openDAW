@@ -1,14 +1,14 @@
 import css from "./CubedDeviceEditor.sass?inline"
-import {DefaultObservableValue, int, Lifecycle, tryCatch, ValueGuide} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, Lifecycle, ValueGuide} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {AblPattern, AutomatableParameterFieldAdapter, CubedDeviceBoxAdapter, CubedStep, DeviceHost} from "@opendaw/studio-adapters"
-import {Files, Html} from "@opendaw/lib-dom"
-import {Promises} from "@opendaw/lib-runtime"
+import {AutomatableParameterFieldAdapter, CubedDeviceBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
+import {Html} from "@opendaw/lib-dom"
 import {MenuItem} from "@opendaw/studio-core"
+import {CubedPatternActions} from "@/ui/devices/instruments/CubedDeviceEditor/CubedPatternActions"
 import {StudioService} from "@/service/StudioService"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {AutomationControl} from "@/ui/components/AutomationControl"
@@ -43,43 +43,17 @@ export const CubedDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             color: Colors.black
         })
     const stepRange = lifecycle.own(new DefaultObservableValue<int>(16))
-    // Loads an AudioRealism .pat into the CURRENT pattern, leaving the other 15 untouched. Steps
-    // beyond the file's length are cleared rather than left over, so a short pattern loaded over a
-    // long one does not keep playing the tail of what was there before.
-    const loadPattern = async () => {
-        const opened = await Promises.tryCatch(Files.open({
-            types: [{description: "AudioRealism ABL pattern", accept: {"text/plain": [".pat"]}}]
-        }))
-        if (opened.status === "rejected") {return}
-        const [file] = opened.value
-        const text = new TextDecoder().decode(new Uint8Array(await file.arrayBuffer()))
-        const parsed = tryCatch(() => AblPattern.parse(text))
-        if (parsed.status === "failure" || parsed.value.steps.length === 0) {
-            console.warn("Not a readable ABL pattern:", file.name)
-            return
-        }
-        const {steps, length} = parsed.value
-        editing.modify(() => {
-            const pattern = adapter.currentPattern()
-            const capacity = pattern.steps.fields().length
-            const used = Math.min(length, capacity)
-            for (let index = 0; index < capacity; index++) {
-                const step = index < used
-                    ? steps[index]
-                    : {note: CubedStep.DefaultNote, active: false, slide: false, accent: false}
-                pattern.steps.getField(index).setValue(CubedStep.pack(step))
-            }
-            pattern.length.setValue(Math.max(1, used))
-        })
-    }
+    const patternContext = {editing, adapter}
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
                       adapter={adapter}
                       populateMenu={parent => {
                           MenuItems.forAudioUnitInput(parent, service, deviceHost)
-                          parent.addMenuItem(MenuItem.default({label: "Load ABL .pat…", separatorBefore: true})
-                              .setTriggerProcedure(() => {loadPattern().catch(console.warn)}))
+                          parent.addMenuItem(MenuItem.default({label: "Pattern", separatorBefore: true})
+                              .setRuntimeChildrenProcedure(submenu => submenu.addMenuItem(
+                                  ...CubedPatternActions.clipboardItems(patternContext),
+                                  CubedPatternActions.loadAblItem(patternContext))))
                       }}
                       populateControls={() => (
                           <div className={className}>

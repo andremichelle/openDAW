@@ -1,8 +1,8 @@
-import {asDefined, Lazy, panic, Procedure, unitValue, UUID} from "@opendaw/lib-std"
+import {asDefined, Lazy, panic, Procedure, TimeSpan, unitValue, UUID} from "@opendaw/lib-std"
 import {Soundfont, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {OpenDAWHeaders} from "./OpenDAWHeaders"
 import {SoundfontIndex} from "./SoundfontIndex"
-import {Promises} from "@opendaw/lib-runtime"
+import {IntervalRetryOption, network, Promises} from "@opendaw/lib-runtime"
 
 export class OpenSoundfontAPI {
     static readonly ApiRoot = "https://api.opendaw.studio/soundfonts"
@@ -18,7 +18,8 @@ export class OpenSoundfontAPI {
     // The published index is the catalogue. A failure rejects rather than degrading to something emptier,
     // so the browser shows its retry instead of an empty list, and `memoizeAsync` drops the rejection.
     readonly #memoized: () => Promise<SoundfontIndex> = Promises.memoizeAsync(() =>
-        fetch(`${OpenSoundfontAPI.IndexFile}?v=${Date.now()}`, this.#headers)
+        Promises.retry(() => network.limitFetch(`${OpenSoundfontAPI.IndexFile}?v=${Date.now()}`, this.#headers),
+            new IntervalRetryOption(3, TimeSpan.seconds(1)))
             .then(response => response.ok ? response.json() : panic(`${response.status} ${response.statusText}`))
             .then(json => SoundfontIndex.schema.parse(json)))
 

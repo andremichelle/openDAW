@@ -45,7 +45,15 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
     abstract importFile(args: AssetService.ImportArgs): Promise<T>
 
     async replaceMissingFiles(boxGraph: BoxGraph, manager: { invalidate: (uuid: UUID.Bytes) => void }): Promise<void> {
-        const available = await this.collectAllFiles()
+        const {status, error, value: available} = await Promises.tryCatch(this.collectAllFiles())
+        if (status === "rejected") {
+            console.warn(`Could not collect ${this.namePlural}:`, error)
+            RuntimeNotifier.notify({
+                message: `Could not reach the ${this.namePlural} catalog. Missing files were not checked.`,
+                icon: "Warning"
+            })
+            return
+        }
         const boxes = boxGraph.boxes().filter(box => isInstanceOf(box, this.boxType))
         if (boxes.length === 0) {return}
         for (const box of boxes) {

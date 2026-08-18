@@ -8,6 +8,7 @@ import {
     Listeners,
     Notifier,
     Nullable,
+    ObservableValue,
     Observer,
     Option,
     panic,
@@ -37,7 +38,7 @@ const ExternalControlTypes = [
 export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> implements Parameter<T>, Terminable {
     readonly #context: BoxAdaptersContext
     readonly #field: PrimitiveField<T, Pointers.Automation>
-    readonly #name: string
+    readonly #name: ObservableValue<string>
     readonly #anchor: unitValue
     readonly #resetValue: Option<T>
 
@@ -58,14 +59,14 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
                 field: PrimitiveField<T, any>,
                 valueMapping: ValueMapping<T>,
                 stringMapping: StringMapping<T>,
-                name: string,
+                name: string | ObservableValue<string>,
                 anchor?: unitValue,
                 resetValue?: T) {
         this.#context = context
         this.#field = field
         this.#valueMapping = valueMapping
         this.#stringMapping = stringMapping
-        this.#name = name
+        this.#name = typeof name === "string" ? ObservableValue.seal(name) : name
         this.#anchor = anchor ?? 0.0
         this.#resetValue = Option.wrap(resetValue)
         this.#terminator.own(this.#context.parameterFieldAdapters.register(this))
@@ -145,7 +146,7 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     get field(): PrimitiveField<T, Pointers.Automation> {return this.#field}
     get valueMapping(): ValueMapping<T> {return this.#valueMapping}
     get stringMapping(): StringMapping<T> {return this.#stringMapping}
-    get name(): string {return this.#name}
+    get name(): string {return this.#name.getValue()}
     get anchor(): unitValue {return this.#anchor}
     get type(): PrimitiveType {return this.#field.type}
     get address(): Address {return this.#field.address}
@@ -159,6 +160,10 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     get modulations(): ReadonlyArray<ModulationBox> {
         return this.#field.pointerHub.filter(Pointers.Modulation)
             .map(pointer => asInstanceOf(pointer.box, ModulationBox))
+    }
+
+    catchupAndSubscribeName(observer: Observer<string>): Subscription {
+        return this.#name.catchupAndSubscribe(owner => observer(owner.getValue()))
     }
 
     registerTracks(tracks: AudioUnitTracks): Terminable {

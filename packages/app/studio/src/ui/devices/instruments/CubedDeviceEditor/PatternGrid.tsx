@@ -7,34 +7,19 @@ import {
     EmptyExec,
     int,
     Lifecycle,
-    Option,
     Point,
     Terminator
 } from "@opendaw/lib-std"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {MidiKeys} from "@opendaw/lib-dsp"
-import {CubedDeviceBoxAdapter, CubedStep} from "@opendaw/studio-adapters"
+import {CubedDeviceBoxAdapter, CubedPatternData, CubedStep} from "@opendaw/studio-adapters"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {Colors} from "@opendaw/studio-enums"
 import {LiveStreamReceiver} from "@opendaw/lib-fusion"
 
 const className = Html.adoptStyleSheet(css, "CubedPatternGrid")
-
-const parseNote = (text: string): Option<int> => {
-    const trimmed = text.trim()
-    if (/^\d+$/.test(trimmed)) {
-        const value = parseInt(trimmed, 10)
-        return value >= 0 && value <= 127 ? Option.wrap(value) : Option.None
-    }
-    const match = trimmed.match(/^([A-Ga-g])([#b]?)(-?\d+)$/)
-    if (match === null) {return Option.None}
-    const bases: Record<string, int> = {C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11}
-    const accidental = match[2] === "#" ? 1 : match[2] === "b" ? -1 : 0
-    const note = bases[match[1].toUpperCase()] + accidental + (parseInt(match[3], 10) + 2) * 12
-    return note >= 0 && note <= 127 ? Option.wrap(note) : Option.None
-}
 
 type Construct = {
     lifecycle: Lifecycle
@@ -93,7 +78,8 @@ export const PatternGrid = ({lifecycle, editing, adapter, stepRange, receiver}: 
                         value: MidiKeys.toFullString(readStep(absIndex).note)
                     }))
                     resolvers.promise.then(
-                        text => parseNote(text).ifSome(note => writeStep(absIndex, step => step.note = note)),
+                        text => CubedPatternData.parseNote(text)
+                            .ifSome(note => writeStep(absIndex, step => step.note = note)),
                         EmptyExec)
                 })
             )
