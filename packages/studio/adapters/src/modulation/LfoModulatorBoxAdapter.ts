@@ -7,20 +7,22 @@ import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../ParameterAdapterSet"
 import {ModulationBoxAdapter} from "./ModulationBoxAdapter"
 
-export enum LfoShape {Sine, Triangle, Saw, Square}
+export enum LfoShape {Sine, Triangle, SawUp, SawDown, Square}
 
 // WASM CONTRACT: `Rates` mirrors the engine's `modulation::RATES` (crates/engine/src/modulation.rs).
 export class LfoModulatorBoxAdapter implements BoxAdapter {
     static readonly Rates: ReadonlyArray<[int, int]> = [
-        [1, 32], [1, 24], [1, 16], [1, 12], [1, 8], [1, 6], [1, 4], [1, 2], [1, 1], [2, 1], [4, 1], [8, 1]
+        [8, 1], [4, 1], [2, 1], [1, 1], [1, 2], [1, 4], [1, 6], [1, 8], [1, 12], [1, 16], [1, 24], [1, 32]
     ]
+    static readonly MaxAbsoluteRate = 10.0
+    static readonly CenterAbsoluteRate = 1.0
     static readonly RatePPQNs: ReadonlyArray<ppqn> = LfoModulatorBoxAdapter.Rates
         .map(([nominator, denominator]) => PPQN.fromSignature(nominator, denominator))
     static readonly RateStrings: ReadonlyArray<string> = LfoModulatorBoxAdapter.Rates
         .map(([nominator, denominator]) => denominator === 1
             ? (nominator === 1 ? "1 bar" : `${nominator} bars`)
             : `${nominator}/${denominator}`)
-    static readonly ShapeStrings: ReadonlyArray<string> = ["Sine", "Triangle", "Saw", "Square"]
+    static readonly ShapeStrings: ReadonlyArray<string> = ["Sine", "Triangle", "Saw ↑", "Saw ↓", "Square"]
 
     readonly #terminator: Terminator = new Terminator()
     readonly #context: BoxAdaptersContext
@@ -54,9 +56,13 @@ export class LfoModulatorBoxAdapter implements BoxAdapter {
             shape: this.#parametric.createParameter(box.shape,
                 ValueMapping.linearInteger(0, LfoModulatorBoxAdapter.ShapeStrings.length - 1),
                 StringMapping.indices("", LfoModulatorBoxAdapter.ShapeStrings), "Shape"),
-            rate: this.#parametric.createParameter(box.rate,
+            rateSync: this.#parametric.createParameter(box.rateSync,
                 ValueMapping.linearInteger(0, LfoModulatorBoxAdapter.Rates.length - 1),
                 StringMapping.indices("", LfoModulatorBoxAdapter.RateStrings), "Rate"),
+            rateAbsolute: this.#parametric.createParameter(box.rateAbsolute,
+                ValueMapping.powerByCenter(LfoModulatorBoxAdapter.CenterAbsoluteRate,
+                    0.0, LfoModulatorBoxAdapter.MaxAbsoluteRate),
+                StringMapping.numeric({unit: "Hz", fractionDigits: 2}), "Free"),
             phase: this.#parametric.createParameter(box.phase,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Phase"),
             amount: this.#parametric.createParameter(box.amount,

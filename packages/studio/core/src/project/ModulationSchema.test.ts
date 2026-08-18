@@ -50,7 +50,8 @@ describe("modulation schema", () => {
             const lfo = LfoModulatorBox.create(project.boxGraph, lfoUuid, box => {
                 box.collection.refer(project.rootBox.modulators)
                 box.label.setValue("Wobble")
-                box.rate.setValue(6)
+                box.rateSync.setValue(6)
+                box.rateAbsolute.setValue(2.5)
                 box.phase.setValue(0.25)
             })
             ModulationBox.create(project.boxGraph, modulationUuid, box => {
@@ -62,7 +63,8 @@ describe("modulation schema", () => {
         const reloaded = await Project.load(createEnv(), project.toArrayBuffer() as ArrayBuffer)
         const lfo = reloaded.boxGraph.findBox<LfoModulatorBox>(lfoUuid).unwrap()
         expect(lfo.label.getValue()).toBe("Wobble")
-        expect(lfo.rate.getValue()).toBe(6)
+        expect(lfo.rateSync.getValue()).toBe(6)
+        expect(lfo.rateAbsolute.getValue()).toBeCloseTo(2.5)
         expect(lfo.phase.getValue()).toBeCloseTo(0.25)
         expect(lfo.enabled.getValue()).toBe(true)
         expect(lfo.amount.getValue()).toBeCloseTo(1.0)

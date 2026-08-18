@@ -28,6 +28,12 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
     const render = () => {
         rows.terminate()
         Html.empty(entries)
+        if (modulator.assignments.length === 0) {
+            entries.append(<div className="placeholder">
+                Right-click any device control and choose Modulate
+            </div>)
+            return
+        }
         modulator.assignments.forEach((assignment: ModulationBoxAdapter) => entries.append(
             <div className="entry"
                  onInit={element => rows.own(assignment.box.enabled

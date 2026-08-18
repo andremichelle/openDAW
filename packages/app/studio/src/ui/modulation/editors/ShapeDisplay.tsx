@@ -19,8 +19,10 @@ const shapeAt = (shape: LfoShape, turn: number): number => {
     switch (shape) {
         case LfoShape.Triangle:
             return phase < 0.25 ? phase * 4.0 : phase < 0.75 ? 2.0 - phase * 4.0 : phase * 4.0 - 4.0
-        case LfoShape.Saw:
+        case LfoShape.SawUp:
             return phase * 2.0 - 1.0
+        case LfoShape.SawDown:
+            return 1.0 - phase * 2.0
         case LfoShape.Square:
             return phase < 0.5 ? 1.0 : -1.0
         default:

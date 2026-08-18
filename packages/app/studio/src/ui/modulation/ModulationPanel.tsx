@@ -39,7 +39,7 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
         const adapters = rootBoxAdapter.modulators.adapters()
         if (adapters.length === 0) {
             element.append(<div className="placeholder">
-                Add a modulator, or right-click any control and choose Modulate
+                Add a modulator, or right-click any device control and choose Modulate
             </div>)
             return
         }

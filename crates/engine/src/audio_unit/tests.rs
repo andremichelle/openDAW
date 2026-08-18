@@ -3408,8 +3408,8 @@ fn a_modulated_parameter_carries_its_sum_and_follows_the_lfo() {
         graph_box(LFO, "LfoModulatorBox", &[
             (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
             (2, FieldValue::Hook), (4, FieldValue::Boolean(true)),
-            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(8)),
-            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(1.0))
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(3)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (14, FieldValue::Float32(1.0))
         ]),
         graph_box(ASSIGN, "ModulationBox", &[
             (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),
@@ -3460,8 +3460,8 @@ fn a_paused_transport_moves_the_modulation_but_not_the_automation() {
         graph_box(LFO, "LfoModulatorBox", &[
             (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
             (2, FieldValue::Hook), (4, FieldValue::Boolean(true)),
-            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(8)),
-            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(1.0))
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(3)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (14, FieldValue::Float32(1.0))
         ]),
         graph_box(ASSIGN, "ModulationBox", &[
             (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),

@@ -1459,6 +1459,7 @@ impl Engine {
             self.resolve_automated_solo(self.transport.position());
         }
         unsafe { *SONG_POSITION.get() = self.transport.position(); }
+        modulation::advance_seconds(RENDER_QUANTUM as f64 / self.sample_rate as f64);
         let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
             metronome_pref, ..} = self;
@@ -1896,8 +1897,9 @@ impl Engine {
         self.sync_modulators();
     }
 
-    /// WASM CONTRACT: LfoModulatorBox field keys — enabled 4 (Boolean), shape 10 (Int32), rate 11 (Int32),
-    /// phase 12 (Float32), amount 13 (Float32), per boxes LfoModulatorBox.ts.
+    /// WASM CONTRACT: LfoModulatorBox field keys — enabled 4 (Boolean), shape 10 (Int32), rateSync 11
+    /// (Int32), rateAbsolute 12 (Float32), phase 13 (Float32), amount 14 (Float32), per boxes
+    /// LfoModulatorBox.ts.
     fn sync_modulators(&mut self) {
         let (added, removed) = self.modulators.borrow_mut().take_pending();
         for uuid in removed {
@@ -1913,9 +1915,10 @@ impl Engine {
             let state = Rc::new(modulation::ModulatorState::new());
             let mut subs = Vec::new();
             subs.push(self.observe_modulator_int(uuid, 10, {let state = state.clone(); move |value| state.shape.set(value)}));
-            subs.push(self.observe_modulator_int(uuid, 11, {let state = state.clone(); move |value| state.rate.set(value)}));
-            subs.push(self.observe_modulator_float(uuid, 12, {let state = state.clone(); move |value| state.phase.set(value)}));
-            subs.push(self.observe_modulator_float(uuid, 13, {let state = state.clone(); move |value| state.amount.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 11, {let state = state.clone(); move |value| state.rate_sync.set(value)}));
+            subs.push(self.observe_modulator_float(uuid, 12, {let state = state.clone(); move |value| state.rate_absolute.set(value)}));
+            subs.push(self.observe_modulator_float(uuid, 13, {let state = state.clone(); move |value| state.phase.set(value)}));
+            subs.push(self.observe_modulator_float(uuid, 14, {let state = state.clone(); move |value| state.amount.set(value)}));
             let enabled_state = state.clone();
             let dirty = self.modulation_dirty.clone();
             subs.push(self.graph.catchup_and_subscribe(Address::of(uuid, vec![4]), move |value| {

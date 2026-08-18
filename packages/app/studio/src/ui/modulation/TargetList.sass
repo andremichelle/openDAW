@@ -3,11 +3,20 @@ $padding: 0.5em
 component
   grid-column: 2
   grid-row: span 2
+  position: relative
   display: grid
   grid-template-rows: subgrid
 
+  &::before
+    content: ""
+    grid-area: 2 / 1
+    border-radius: 3px
+    background-color: rgba(black, 0.08)
+
   > .entries
-    grid-row: 2
+    grid-area: 2 / 1
+    position: absolute
+    inset: 0
     display: grid
     grid-template-columns: 1fr auto auto auto
     grid-auto-rows: 1.5em
@@ -17,8 +26,13 @@ component
     padding: $padding var(--scroller-width) $padding 0.5em
     overflow-y: auto
     mask-image: linear-gradient(to bottom, transparent, black $padding, black calc(100% - #{$padding}), transparent)
-    border-radius: 3px
-    background-color: rgba(black, 0.08)
+
+    > .placeholder
+      grid-column: 1 / -1
+      display: grid
+      place-items: center
+      font-size: 0.8em
+      color: rgba(white, 0.2)
 
     > .entry
       display: contents
