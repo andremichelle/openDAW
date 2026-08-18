@@ -1,5 +1,5 @@
 import css from "./StepsDisplay.sass?inline"
-import {clamp, Editing, Errors, int, Lifecycle, Option, panic, unitValue} from "@opendaw/lib-std"
+import {clamp, Editing, Errors, int, Lifecycle, Option, panic, TAU, unitValue} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Dragging, Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
@@ -22,7 +22,7 @@ type Construct = {
 
 export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construct): HTMLElement => {
     const canvas: HTMLCanvasElement = (<canvas/>)
-    const playhead: HTMLElement = (<div className="playhead"/>)
+    let playhead = 0.0
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const {context, actualWidth, actualHeight, devicePixelRatio} = painter
         context.clearRect(0, 0, actualWidth, actualHeight)
@@ -63,6 +63,12 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         context.lineTo(actualWidth, centerY)
         context.strokeStyle = "hsla(200, 83%, 60%, 0.25)"
         context.stroke()
+        const index = Math.min(count - 1, Math.floor(playhead))
+        context.beginPath()
+        context.arc((playhead + 0.5) * stepWidth, valueToY(modulator.steps[index].getValue()),
+            devicePixelRatio * 1.5, 0.0, TAU)
+        context.fillStyle = "hsl(200, 83%, 75%)"
+        context.fill()
     }))
     const stepAt = (clientX: number): int => {
         const rect = canvas.getBoundingClientRect()
@@ -110,10 +116,9 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         // The engine publishes the step the sequence is on at the modulator's address, so the playhead shows
         // what is actually playing rather than a clock the UI would have to guess at while paused.
         receiver.subscribeFloat(modulator.address, position => {
-            const count = Math.max(1, Math.min(modulator.count, StepsModulatorBoxAdapter.MaxSteps))
-            playhead.style.left = `${(position / count) * 100.0}%`
-            playhead.style.width = `${100.0 / count}%`
+            playhead = position
+            painter.requestUpdate()
         })
     )
-    return <div className={className}>{canvas}{playhead}</div>
+    return <div className={className}>{canvas}</div>
 }

@@ -13,13 +13,20 @@ component
       width: 7em
       display: grid
       justify-items: center
-      row-gap: 1px
+      row-gap: 2px
+
+      > .count
+        display: grid
+        grid-auto-flow: column
+        align-items: center
+        column-gap: 0.25em
 
       > .buttons
         display: grid
         grid-auto-flow: column
         column-gap: 0.25em
-        padding-top: 0.25em
+
+      > .buttons, > *:last-child
         font-size: 0.625em
 
     > .knobs
