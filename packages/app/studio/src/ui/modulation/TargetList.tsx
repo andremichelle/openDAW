@@ -22,7 +22,7 @@ type Construct = {
 export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElement => {
     const {editing} = service.project
     const entries: HTMLElement = <div className="entries"
-                                       onConnect={host => lifecycle.own(installScrollbars(host))}/>
+                                       onConnect={host => lifecycle.own(installScrollbars(host, {autoHide: false}))}/>
     const element: HTMLElement = <div className={className}>{entries}</div>
     const rows = lifecycle.own(new Terminator())
     const render = () => {
