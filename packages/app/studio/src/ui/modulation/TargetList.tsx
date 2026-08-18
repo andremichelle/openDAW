@@ -1,7 +1,7 @@
 import css from "./TargetList.sass?inline"
-import {Lifecycle, Terminator} from "@opendaw/lib-std"
+import {Lifecycle, ObservableValue, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {LfoModulatorBoxAdapter, ModulationBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
@@ -26,7 +26,10 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
         rows.terminate()
         Html.empty(entries)
         modulator.assignments.forEach((assignment: ModulationBoxAdapter) => entries.append(
-            <div className="entry">
+            <div className="entry"
+                 onInit={element => rows.own(assignment.box.enabled
+                     .catchupAndSubscribe((owner: ObservableValue<boolean>) =>
+                         element.classList.toggle("disabled", !owner.getValue())))}>
                 <span className="target">
                     {assignment.targetOwner.unwrapOrElse("")}
                     <span className="separator">&gt;</span>
@@ -40,6 +43,9 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
                                     parameter={assignment.namedParameter.depth}
                                     framed={true}/>
                 </RelativeUnitValueDragging>
+                <Icon symbol={IconSymbol.Shutdown} className="toggle" onInit={element =>
+                    rows.own(Events.subscribe(element, "click", () =>
+                        editing.modify(() => assignment.box.enabled.toggle())))}/>
                 <Button lifecycle={rows} onClick={() => editing.modify(() => assignment.box.delete())}>
                     <Icon symbol={IconSymbol.Delete}/>
                 </Button>
