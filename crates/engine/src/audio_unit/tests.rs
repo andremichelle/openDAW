@@ -3438,6 +3438,55 @@ fn a_modulated_parameter_carries_its_sum_and_follows_the_lfo() {
     assert!(handle.resolve(0.0).2.is_nan(), "a disabled assignment reads as NO modulation");
 }
 
+// The steps modulator reaches a parameter the same way the LFO does, including its 64-slot step array.
+#[test]
+fn a_steps_modulator_walks_its_sequence_into_the_parameter() {
+    const DEV: Uuid = [110u8; 16];
+    const ROOT: Uuid = [111u8; 16];
+    const STEPS: Uuid = [112u8; 16];
+    const ASSIGN: Uuid = [113u8; 16];
+    const PATH: u16 = 11;
+    const STEP: f64 = 240.0; // one sixteenth, the default rate
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        // Four steps: +1, -1, 0, +0.5, hard-stepped (no smoothing) so every expectation is exact.
+        graph_box(STEPS, "StepsModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)),
+            (10, FieldValue::Int32(4)), (11, FieldValue::Int32(9)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (14, FieldValue::Float32(1.0)),
+            (15, FieldValue::Float32(0.0)), (16, FieldValue::Int32(0)),
+            (20, FieldValue::Array(alloc::vec![
+                FieldValue::Float32(1.0), FieldValue::Float32(-1.0),
+                FieldValue::Float32(0.0), FieldValue::Float32(0.5)
+            ]))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(STEPS, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(0.5)), (4, FieldValue::Boolean(true))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let handle = &handles[0];
+    let sum_at = |position: f64| handle.resolve(position).2;
+    assert!((sum_at(0.0) - 0.5).abs() < 1.0e-6, "step 0 at depth 0.5, got {}", sum_at(0.0));
+    assert!((sum_at(STEP) + 0.5).abs() < 1.0e-6, "step 1 is the low one, got {}", sum_at(STEP));
+    assert!(sum_at(STEP * 2.0).abs() < 1.0e-6, "step 2 is silent");
+    assert!((sum_at(STEP * 3.0) - 0.25).abs() < 1.0e-6, "step 3 is half of the depth");
+    assert!((sum_at(STEP * 4.0) - 0.5).abs() < 1.0e-6, "and the sequence wraps");
+    // An edited step reaches the engine through its array slot.
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(STEPS, vec![20, 2]), old: FieldValue::Float32(0.0), new: FieldValue::Float32(-0.5)
+    }], &engine.registry).expect("edit step 2");
+    engine.sync_modulators();
+    assert!((sum_at(STEP * 2.0) + 0.25).abs() < 1.0e-6, "the edited step, got {}", sum_at(STEP * 2.0));
+}
+
 // The paused split: while the transport stands still the blocks carry a FREE-RUNNING position, which the
 // modulation follows while the automation stays frozen at the song position.
 #[test]

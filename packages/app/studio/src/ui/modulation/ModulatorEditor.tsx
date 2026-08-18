@@ -4,7 +4,7 @@ import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {LfoModulatorBoxAdapter} from "@opendaw/studio-adapters"
+import {ModulatorBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Button} from "@/ui/components/Button.tsx"
@@ -16,7 +16,7 @@ const className = Html.adoptStyleSheet(css, "ModulatorEditor")
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
-    modulator: LfoModulatorBoxAdapter
+    modulator: ModulatorBoxAdapter
 }
 
 export const ModulatorEditor = ({lifecycle, service, modulator}: Construct, controls: JsxValue) => {

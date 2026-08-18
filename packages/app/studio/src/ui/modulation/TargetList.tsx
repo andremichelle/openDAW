@@ -3,7 +3,7 @@ import {Lifecycle, ObservableValue, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {LfoModulatorBoxAdapter, ModulationBoxAdapter} from "@opendaw/studio-adapters"
+import {ModulationBoxAdapter, ModulatorBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Button} from "@/ui/components/Button.tsx"
@@ -16,7 +16,7 @@ const className = Html.adoptStyleSheet(css, "TargetList")
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
-    modulator: LfoModulatorBoxAdapter
+    modulator: ModulatorBoxAdapter
 }
 
 export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElement => {

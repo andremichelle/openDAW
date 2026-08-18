@@ -38,23 +38,30 @@ fn cycle_pulses(rate: i32) -> f64 {
     RATES[(rate.max(0) as usize).min(RATES.len() - 1)]
 }
 
-pub(crate) struct ModulatorState {
+// WASM CONTRACT: StepsModulatorBox.direction (field 16), mirrored by StepsModulatorBoxAdapter's StepsDirection.
+pub(crate) const DIRECTION_FORWARD: i32 = 0;
+pub(crate) const DIRECTION_BACKWARD: i32 = 1;
+pub(crate) const DIRECTION_PING_PONG: i32 = 2;
+pub(crate) const DIRECTION_RANDOM: i32 = 3;
+
+pub(crate) const MAX_STEPS: usize = 64;
+
+pub(crate) struct LfoState {
     pub(crate) shape: Cell<i32>,
     pub(crate) rate_sync: Cell<i32>,
     pub(crate) rate_absolute: Cell<f32>,
     pub(crate) phase: Cell<f32>,
-    pub(crate) amount: Cell<f32>,
-    pub(crate) enabled: Cell<bool>
+    pub(crate) amount: Cell<f32>
 }
 
-impl ModulatorState {
+impl LfoState {
     pub(crate) fn new() -> Self {
         Self {shape: Cell::new(SHAPE_SINE), rate_sync: Cell::new(3), rate_absolute: Cell::new(0.0),
-            phase: Cell::new(0.0), amount: Cell::new(1.0), enabled: Cell::new(true)}
+            phase: Cell::new(0.0), amount: Cell::new(1.0)}
     }
 
     /// The two rates are ADDITIVE in frequency: the tempo-synced cycle plus `rate_absolute` Hz of wall clock.
-    pub(crate) fn value_at(&self, position: f64, seconds: f64) -> f32 {
+    fn value_at(&self, position: f64, seconds: f64) -> f32 {
         let turn = position / cycle_pulses(self.rate_sync.get())
             + seconds * self.rate_absolute.get() as f64
             + self.phase.get() as f64;
@@ -69,9 +76,101 @@ impl ModulatorState {
     }
 }
 
+pub(crate) struct StepsState {
+    pub(crate) count: Cell<i32>,
+    pub(crate) rate_sync: Cell<i32>,
+    pub(crate) rate_absolute: Cell<f32>,
+    pub(crate) phase: Cell<f32>,
+    pub(crate) amount: Cell<f32>,
+    pub(crate) smooth: Cell<f32>,
+    pub(crate) direction: Cell<i32>,
+    pub(crate) steps: [Cell<f32>; MAX_STEPS]
+}
+
+impl StepsState {
+    pub(crate) fn new() -> Self {
+        Self {count: Cell::new(16), rate_sync: Cell::new(9), rate_absolute: Cell::new(0.0),
+            phase: Cell::new(0.0), amount: Cell::new(1.0), smooth: Cell::new(0.0),
+            direction: Cell::new(DIRECTION_FORWARD), steps: core::array::from_fn(|_| Cell::new(0.0))}
+    }
+
+    /// The rate is the length of ONE step, so the sequence keeps its grid when the count changes. `smooth`
+    /// is the fraction of a step spent gliding from the previous step's value, so 0 steps hard.
+    fn value_at(&self, position: f64, seconds: f64) -> f32 {
+        let count = self.count.get().clamp(1, MAX_STEPS as i32) as i64;
+        let step = position / cycle_pulses(self.rate_sync.get())
+            + seconds * self.rate_absolute.get() as f64
+            + self.phase.get() as f64 * count as f64;
+        let index = floor(step);
+        let current = self.step_at(index as i64, count);
+        let smooth = self.smooth.get();
+        let value = if smooth <= 0.0 {
+            current
+        } else {
+            let previous = self.step_at(index as i64 - 1, count);
+            let ramp = (((step - index) / smooth as f64) as f32).min(1.0);
+            previous + (current - previous) * ramp * ramp * (3.0 - 2.0 * ramp)
+        };
+        value * self.amount.get()
+    }
+
+    fn step_at(&self, index: i64, count: i64) -> f32 {
+        let cycle = index.div_euclid(count);
+        let local = index.rem_euclid(count);
+        let resolved = match self.direction.get() {
+            DIRECTION_BACKWARD => count - 1 - local,
+            DIRECTION_PING_PONG => if cycle.rem_euclid(2) == 0 {local} else {count - 1 - local},
+            DIRECTION_RANDOM => random_index(cycle, local, count),
+            _ => local
+        };
+        self.steps[resolved as usize].get()
+    }
+}
+
+/// A stable shuffle: the same (cycle, step) always lands on the same index, so the sequence stays a pure
+/// function of the position and a locate replays it identically.
+/// WASM CONTRACT: mirrors `StepsModulatorBoxAdapter.randomIndex` (packages/studio/adapters).
+fn random_index(cycle: i64, step: i64, count: i64) -> i64 {
+    let mut hash = (cycle as i32).wrapping_mul(0x9E3779B1u32 as i32) ^ (step as i32 + 1).wrapping_mul(0x85EBCA77u32 as i32);
+    hash = (hash ^ ((hash as u32) >> 15) as i32).wrapping_mul(0x2545F491u32 as i32);
+    let hash = ((hash ^ ((hash as u32) >> 13) as i32) as u32) as i64;
+    hash % count
+}
+
+pub(crate) enum ModulatorKind {
+    Lfo(LfoState),
+    Steps(StepsState)
+}
+
+pub(crate) struct ModulatorState {
+    pub(crate) enabled: Cell<bool>,
+    pub(crate) kind: ModulatorKind
+}
+
+impl ModulatorState {
+    pub(crate) fn lfo() -> Self {
+        Self {enabled: Cell::new(true), kind: ModulatorKind::Lfo(LfoState::new())}
+    }
+
+    pub(crate) fn steps() -> Self {
+        Self {enabled: Cell::new(true), kind: ModulatorKind::Steps(StepsState::new())}
+    }
+
+    pub(crate) fn value_at(&self, position: f64, seconds: f64) -> f32 {
+        match &self.kind {
+            ModulatorKind::Lfo(lfo) => lfo.value_at(position, seconds),
+            ModulatorKind::Steps(steps) => steps.value_at(position, seconds)
+        }
+    }
+}
+
+fn floor(value: f64) -> f64 {
+    let truncated = (value as i64) as f64;
+    if truncated > value {truncated - 1.0} else {truncated}
+}
+
 fn fract(turn: f64) -> f64 {
-    let truncated = (turn as i64) as f64;
-    turn - if truncated > turn {truncated - 1.0} else {truncated}
+    turn - floor(turn)
 }
 
 fn triangle(turn: f64) -> f64 {
@@ -168,16 +267,27 @@ impl ModulatorTable {
 mod tests {
     use super::*;
 
-    fn lfo(shape: i32, rate: i32) -> ModulatorState {
-        let state = ModulatorState::new();
+    fn lfo(shape: i32, rate: i32) -> LfoState {
+        let state = LfoState::new();
         state.shape.set(shape);
         state.rate_sync.set(rate);
+        state
+    }
+
+    fn steps(values: &[f32]) -> StepsState {
+        let state = StepsState::new();
+        state.count.set(values.len() as i32);
+        for (index, value) in values.iter().enumerate() {
+            state.steps[index].set(*value);
+        }
         state
     }
 
     const BAR: f64 = 3840.0;
     const ONE_BAR: i32 = 3;
     const QUARTER: i32 = 5;
+    const SIXTEENTH: i32 = 9;
+    const STEP: f64 = 240.0; // one sixteenth in pulses
 
     #[test]
     fn a_sine_walks_its_cycle_from_the_position_alone() {
@@ -245,8 +355,70 @@ mod tests {
     }
 
     #[test]
+    fn a_step_holds_its_value_for_one_rate_unit_and_wraps() {
+        let state = steps(&[1.0, -0.5, 0.25, 0.0]);
+        state.rate_sync.set(SIXTEENTH);
+        assert_eq!(state.value_at(0.0, 0.0), 1.0);
+        assert_eq!(state.value_at(STEP * 0.99, 0.0), 1.0, "it holds to the very end of its step");
+        assert_eq!(state.value_at(STEP, 0.0), -0.5);
+        assert_eq!(state.value_at(STEP * 2.0, 0.0), 0.25);
+        assert_eq!(state.value_at(STEP * 4.0, 0.0), 1.0, "the sequence wraps after the count");
+        // Pure in the position, exactly like the LFO: a locate replays the same step.
+        assert_eq!(state.value_at(STEP * 400.0, 0.0), state.value_at(0.0, 0.0));
+        // Steps before zero wrap backwards rather than clamping.
+        assert_eq!(state.value_at(-STEP, 0.0), 0.0);
+    }
+
+    #[test]
+    fn the_direction_folds_the_step_order() {
+        let values = [1.0, 0.5, -0.5, -1.0];
+        let forward = steps(&values);
+        let backward = steps(&values);
+        backward.direction.set(DIRECTION_BACKWARD);
+        let ping_pong = steps(&values);
+        ping_pong.direction.set(DIRECTION_PING_PONG);
+        for index in 0..4 {
+            let position = STEP * index as f64;
+            assert_eq!(forward.value_at(position, 0.0), values[index]);
+            assert_eq!(backward.value_at(position, 0.0), values[3 - index]);
+            assert_eq!(ping_pong.value_at(position, 0.0), values[index], "the first pass runs forward");
+            assert_eq!(ping_pong.value_at(position + STEP * 4.0, 0.0), values[3 - index], "the second runs back");
+        }
+    }
+
+    #[test]
+    fn the_random_direction_is_stable_per_cycle() {
+        let state = steps(&[0.0, 0.25, 0.5, 0.75, 1.0, -0.25, -0.5, -1.0]);
+        state.direction.set(DIRECTION_RANDOM);
+        let cycle: Vec<f32> = (0..8).map(|index| state.value_at(STEP * index as f64, 0.0)).collect();
+        let replay: Vec<f32> = (0..8).map(|index| state.value_at(STEP * index as f64, 0.0)).collect();
+        assert_eq!(cycle, replay, "the same position always gives the same step");
+        let next: Vec<f32> = (8..16).map(|index| state.value_at(STEP * index as f64, 0.0)).collect();
+        assert_ne!(cycle, next, "a later cycle shuffles differently");
+        for index in 0..64 {
+            let resolved = random_index(index / 8, index % 8, 8);
+            assert!((0..8).contains(&resolved), "the shuffle stays inside the sequence: {resolved}");
+        }
+    }
+
+    #[test]
+    fn smoothing_glides_into_the_step_and_zero_leaves_it_hard() {
+        let hard = steps(&[0.0, 1.0]);
+        hard.rate_sync.set(SIXTEENTH);
+        assert_eq!(hard.value_at(STEP * 1.5, 0.0), 1.0, "no smoothing means the step is already there");
+        let glided = steps(&[0.0, 1.0]);
+        glided.rate_sync.set(SIXTEENTH);
+        glided.smooth.set(0.5);
+        assert_eq!(glided.value_at(STEP, 0.0), 0.0, "the glide starts at the previous step's value");
+        let half = glided.value_at(STEP * 1.25, 0.0);
+        assert!(half > 0.4 && half < 0.6, "halfway through the glide sits between the two, got {half}");
+        assert_eq!(glided.value_at(STEP * 1.5, 0.0), 1.0, "and it has arrived once the glide is over");
+        assert_eq!(glided.value_at(STEP * 1.9, 0.0), 1.0);
+    }
+
+    #[test]
     fn the_sum_is_nan_until_something_actually_contributes() {
-        let state = Rc::new(lfo(SHAPE_SQUARE, ONE_BAR)); // +1 over the first half of the cycle
+        let state = Rc::new(ModulatorState {enabled: Cell::new(true), kind: ModulatorKind::Lfo(lfo(SHAPE_SQUARE, ONE_BAR))});
         let bound = |depth: f32, enabled: bool| BoundModulation {
             modulator: state.clone(),
             depth: Rc::new(Cell::new(depth)),

@@ -2,7 +2,8 @@ import {ContextMenu, MenuItem, MIDILearning} from "@opendaw/studio-core"
 import {
     AudioUnitTracks,
     AutomatableParameterFieldAdapter,
-    LfoModulatorBoxAdapter,
+    isModulatorBoxAdapter,
+    ModulatorBoxAdapter,
     Modulators,
     TrackType
 } from "@opendaw/studio-adapters"
@@ -57,7 +58,10 @@ const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
         parent.addMenuItem(MenuItem.default({label: "New LFO"})
             .setTriggerProcedure(() => editing.modify(() =>
                 Modulators.assign(context, Modulators.createLfo(context), target))))
-        context.rootBoxAdapter.modulators.adapters().forEach((modulator: LfoModulatorBoxAdapter) => {
+        parent.addMenuItem(MenuItem.default({label: "New Steps"})
+            .setTriggerProcedure(() => editing.modify(() =>
+                Modulators.assign(context, Modulators.createSteps(context), target))))
+        context.rootBoxAdapter.modulators.adapters().forEach((modulator: ModulatorBoxAdapter) => {
             const alreadyAssigned = assignedSources.has(UUID.toString(modulator.uuid))
             parent.addMenuItem(MenuItem.default({
                 label: modulator.label,
@@ -68,7 +72,7 @@ const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
         })
         assigned.forEach((box, index) => {
             const label = box.source.targetVertex
-                .map(vertex => context.boxAdapters.adapterFor(vertex.box, LfoModulatorBoxAdapter).label)
+                .map(vertex => context.boxAdapters.adapterFor(vertex.box, isModulatorBoxAdapter).label)
                 .unwrapOrElse("Modulator")
             parent.addMenuItem(MenuItem.default({label: `Remove ${label}`, separatorBefore: index === 0})
                 .setTriggerProcedure(() => editing.modify(() => box.delete())))

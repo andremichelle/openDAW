@@ -3,10 +3,11 @@ import {Lifecycle, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {LfoModulatorBoxAdapter, Modulators} from "@opendaw/studio-adapters"
+import {ModulatorBoxAdapter, Modulators} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {Button} from "@/ui/components/Button.tsx"
+import {MenuButton} from "@/ui/components/MenuButton.tsx"
+import {MenuItem} from "@opendaw/studio-core"
 import {createModulatorEditor} from "@/ui/modulation/ModulatorEditorFactory.tsx"
 import {installScrollbars} from "@/ui/components/Scrollbars.tsx"
 
@@ -25,10 +26,14 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
         <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
             <h5 className="head modulators">
                 <span>Modulators</span>
-                <Button lifecycle={lifecycle}
-                        onClick={() => editing.modify(() => Modulators.createLfo(project))}>
+                <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                    MenuItem.default({label: "LFO"})
+                        .setTriggerProcedure(() => editing.modify(() => Modulators.createLfo(project))),
+                    MenuItem.default({label: "Steps"})
+                        .setTriggerProcedure(() => editing.modify(() => Modulators.createSteps(project)))))}
+                            appearance={{}}>
                     <Icon symbol={IconSymbol.Add}/>
-                </Button>
+                </MenuButton>
             </h5>
             <h5 className="head targets"><span>Targets</span></h5>
         </div>
@@ -43,7 +48,7 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
             </div>)
             return
         }
-        adapters.forEach((adapter: LfoModulatorBoxAdapter) =>
+        adapters.forEach((adapter: ModulatorBoxAdapter) =>
             element.append(createModulatorEditor(contents, service, adapter) as HTMLElement))
     }
     lifecycle.own(rootBoxAdapter.modulators.catchupAndSubscribe({

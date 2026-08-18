@@ -1,11 +1,11 @@
 import {Address} from "@opendaw/lib-box"
-import {LfoModulatorBox, ModulationBox} from "@opendaw/studio-boxes"
-import {asInstanceOf, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {ModulationBox} from "@opendaw/studio-boxes"
+import {Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {BoxAdapter} from "../BoxAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../ParameterAdapterSet"
 import {AutomatableParameterFieldAdapter} from "../AutomatableParameterFieldAdapter"
-import {LfoModulatorBoxAdapter} from "./LfoModulatorBoxAdapter"
+import {isModulatorBoxAdapter, ModulatorBoxAdapter} from "./ModulatorBoxAdapter"
 import {ParameterOwner} from "../ParameterOwner"
 
 export class ModulationBoxAdapter implements BoxAdapter {
@@ -31,10 +31,9 @@ export class ModulationBoxAdapter implements BoxAdapter {
     get enabled(): boolean {return this.#box.enabled.getValue()}
     get depth(): number {return this.#box.depth.getValue()}
 
-    get source(): LfoModulatorBoxAdapter {
+    get source(): ModulatorBoxAdapter {
         return this.#context.boxAdapters.adapterFor(
-            asInstanceOf(this.#box.source.targetVertex.unwrap("no modulator").box, LfoModulatorBox),
-            LfoModulatorBoxAdapter)
+            this.#box.source.targetVertex.unwrap("no modulator").box, isModulatorBoxAdapter)
     }
 
     /// `None` while the target field has no registered parameter adapter yet.

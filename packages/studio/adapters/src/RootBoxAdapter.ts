@@ -11,7 +11,7 @@ import {BoxAdaptersContext} from "./BoxAdaptersContext"
 import {BoxAdapter} from "./BoxAdapter"
 import {TimelineBoxAdapter} from "./timeline/TimelineBoxAdapter"
 import {GrooveShuffleBoxAdapter} from "./grooves/GrooveShuffleBoxAdapter"
-import {LfoModulatorBoxAdapter} from "./modulation/LfoModulatorBoxAdapter"
+import {isModulatorBoxAdapter, ModulatorBoxAdapter} from "./modulation/ModulatorBoxAdapter"
 import {PianoModeAdapter} from "./PianoModeAdapter"
 import {LabeledAudioOutput, LabeledAudioOutputsOwner} from "./LabeledAudioOutputsOwner"
 
@@ -21,7 +21,7 @@ export class RootBoxAdapter implements BoxAdapter, LabeledAudioOutputsOwner {
 
     readonly #audioUnits: IndexedBoxAdapterCollection<AudioUnitBoxAdapter, Pointers.AudioUnits>
     readonly #audioBusses: BoxAdapterCollection<AudioBusBoxAdapter>
-    readonly #modulators: IndexedBoxAdapterCollection<LfoModulatorBoxAdapter, Pointers.ModulatorCollection>
+    readonly #modulators: IndexedBoxAdapterCollection<ModulatorBoxAdapter, Pointers.ModulatorCollection>
     readonly #pianoMode: PianoModeAdapter
 
     constructor(context: BoxAdaptersContext, box: RootBox) {
@@ -35,7 +35,7 @@ export class RootBoxAdapter implements BoxAdapter, LabeledAudioOutputsOwner {
             this.#context.boxAdapters.adapterFor(box, AudioBusBoxAdapter), Pointers.AudioBusses)
 
         this.#modulators = IndexedBoxAdapterCollection.create(this.#box.modulators,
-            box => this.#context.boxAdapters.adapterFor(box, LfoModulatorBoxAdapter), Pointers.ModulatorCollection)
+            box => this.#context.boxAdapters.adapterFor(box, isModulatorBoxAdapter), Pointers.ModulatorCollection)
 
         this.#pianoMode = new PianoModeAdapter(this.#box.pianoMode)
     }
@@ -45,7 +45,7 @@ export class RootBoxAdapter implements BoxAdapter, LabeledAudioOutputsOwner {
     get box(): RootBox {return this.#box}
     get audioBusses(): BoxAdapterCollection<AudioBusBoxAdapter> {return this.#audioBusses}
     get audioUnits(): IndexedBoxAdapterCollection<AudioUnitBoxAdapter, Pointers.AudioUnits> {return this.#audioUnits}
-    get modulators(): IndexedBoxAdapterCollection<LfoModulatorBoxAdapter, Pointers.ModulatorCollection> {
+    get modulators(): IndexedBoxAdapterCollection<ModulatorBoxAdapter, Pointers.ModulatorCollection> {
         return this.#modulators
     }
     get clips(): ReadonlyArray<AnyClipBoxAdapter> {

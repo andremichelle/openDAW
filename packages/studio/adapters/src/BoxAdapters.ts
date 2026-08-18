@@ -35,6 +35,7 @@ import {
     GateDeviceBox,
     GrooveShuffleBox,
     LfoModulatorBox,
+    StepsModulatorBox,
     ModulationBox,
     MarkerBox,
     NeonDeviceBox,
@@ -141,6 +142,7 @@ import {BoxAdapter} from "./BoxAdapter"
 import {ZeitgeistDeviceBoxAdapter} from "./devices/midi-effects/ZeitgeistDeviceBoxAdapter"
 import {GrooveShuffleBoxAdapter} from "./grooves/GrooveShuffleBoxAdapter"
 import {LfoModulatorBoxAdapter} from "./modulation/LfoModulatorBoxAdapter"
+import {StepsModulatorBoxAdapter} from "./modulation/StepsModulatorBoxAdapter"
 import {ModulationBoxAdapter} from "./modulation/ModulationBoxAdapter"
 import {UnknownAudioEffectDeviceBoxAdapter} from "./devices/audio-effects/UnknownAudioEffectDeviceBoxAdapter"
 import {UnknownMidiEffectDeviceBoxAdapter} from "./devices/midi-effects/UnknownMidiEffectDeviceBoxAdapter"
@@ -247,6 +249,7 @@ export class BoxAdapters implements Terminable {
             visitFoldDeviceBox: (box: FoldDeviceBox) => new FoldDeviceBoxAdapter(this.#context, box),
             visitGrooveShuffleBox: (box: GrooveShuffleBox) => new GrooveShuffleBoxAdapter(this.#context, box),
             visitLfoModulatorBox: (box: LfoModulatorBox) => new LfoModulatorBoxAdapter(this.#context, box),
+            visitStepsModulatorBox: (box: StepsModulatorBox) => new StepsModulatorBoxAdapter(this.#context, box),
             visitModulationBox: (box: ModulationBox) => new ModulationBoxAdapter(this.#context, box),
             visitMarkerBox: (box: MarkerBox) => new MarkerBoxAdapter(this.#context, box),
             visitSignatureEventBox: (box: SignatureEventBox) => new SignatureEventBoxAdapter(this.#context, box),

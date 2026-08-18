@@ -379,8 +379,8 @@ LFO, sine, tempo synced, position derived.
 
 Reserved next, in the order they are worth doing.
 
-Step sequencer, N steps with per-step value, rate as a musical fraction, glide amount. Same
-position-derived evaluation as the LFO.
+Step sequencer, DONE. N steps with per-step value, rate as a musical fraction, glide amount. Same
+position-derived evaluation as the LFO. See phase 6.
 
 Random and sample-and-hold, stepped or smoothed noise on a rate grid, from a seeded hash of the step
 index so offline render reproduces it.
@@ -463,7 +463,40 @@ browser against the Acid project (see the commit message for what was exercised)
 adapters 165, wasm parity 215.
 
 Phase 6, further modulators.
-Step sequencer, random, macro, each one schema plus a `Modulator` variant plus an inspector.
+Step sequencer DONE. Random and macro still open, each one schema plus a `ModulatorKind` variant plus
+an editor.
+
+### The step sequencer
+
+The box is `StepsModulatorBox` under `schema/std/modulators`, built by the same `ModulatorFactory` as
+the LFO, so it shares collection, assignments, label, enabled and index. Its own fields are count 10,
+rateSync 11, rateAbsolute 12, phase 13, amount 14, smooth 15, direction 16, and a 64-slot float32
+array of step values at 20. The array is the reason the engine's modulator observers take a field
+PATH rather than a key: each slot is watched at `[20, index]`.
+
+The rate is the length of ONE step, not of the whole sequence, so changing the count keeps the grid
+and only changes how long the pattern takes to come around. Both rates work exactly as on the LFO and
+add in frequency.
+
+Step values are bipolar and drawn from a centre line, which is how Bitwig's Steps behaves: drawing
+only above the centre gives a unipolar sequence, so no polarity switch is needed. Clear resets every
+active step to the centre.
+
+`direction` folds the step order: forward, backward, ping-pong (the cycle index decides), and random.
+Random is a stable hash of (cycle, step), not a running RNG, so the sequence stays a pure function of
+the position and a locate replays it identically. `StepsModulatorBoxAdapter.randomIndex` mirrors
+`random_index` in the engine so the editor draws what the engine plays.
+
+`smooth` is the fraction of a step spent gliding from the previous step's value, on a smoothstep, so
+0 steps hard and 1 ramps across the whole step. It is a pure function of the position too, no filter
+state, which keeps the locate behaviour of the whole system intact.
+
+The editor is two rows tall, which the panel already supports since the body row is auto-sized: the
+step display spans the editor width, the knobs and the Random / rotate / Clear buttons sit under it.
+Painting a step is a drag over the display (alt clears to the centre), one gesture is one undo step,
+and a double-click on a step opens the floating input for a typed percentage. The display draws the
+bars, the centre line, and the curve the engine actually resolves, so smoothing is visible before it
+is heard.
 
 ## Later: automating a modulator's own parameters
 
