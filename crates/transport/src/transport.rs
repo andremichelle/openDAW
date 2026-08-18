@@ -89,6 +89,9 @@ impl Transport {
     }
 
     pub fn position(&self) -> f64 {self.position}
+    /// The pulse position the paused blocks free-run on: what modulation follows while the transport
+    /// stands still, and what the UI playhead of a modulator is drawn from.
+    pub fn free_running(&self) -> f64 {self.free_running}
     pub fn bpm(&self) -> f32 {self.bpm}
     pub fn sample_rate(&self) -> f32 {self.sample_rate}
     pub fn is_playing(&self) -> bool {self.playing}

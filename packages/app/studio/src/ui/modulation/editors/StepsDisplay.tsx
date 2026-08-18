@@ -5,6 +5,7 @@ import {Dragging, Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {Propagation} from "@opendaw/lib-box"
 import {CanvasPainter} from "@opendaw/studio-core"
+import {LiveStreamReceiver} from "@opendaw/lib-fusion"
 import {StepsModulatorBoxAdapter} from "@opendaw/studio-adapters"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint.ts"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
@@ -15,11 +16,13 @@ const className = Html.adoptStyleSheet(css, "StepsDisplay")
 type Construct = {
     lifecycle: Lifecycle
     editing: Editing
+    receiver: LiveStreamReceiver
     modulator: StepsModulatorBoxAdapter
 }
 
-export const StepsDisplay = ({lifecycle, editing, modulator}: Construct): HTMLElement => {
+export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construct): HTMLElement => {
     const canvas: HTMLCanvasElement = (<canvas/>)
+    const playhead: HTMLElement = (<div className="playhead"/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const {context, actualWidth, actualHeight, devicePixelRatio} = painter
         context.clearRect(0, 0, actualWidth, actualHeight)
@@ -103,7 +106,14 @@ export const StepsDisplay = ({lifecycle, editing, modulator}: Construct): HTMLEl
                 editing.modify(() => step.setValue(clamp(parsed / 100.0, -1.0, 1.0)))
             }
         }),
-        modulator.box.subscribe(Propagation.Children, painter.requestUpdate)
+        modulator.box.subscribe(Propagation.Children, painter.requestUpdate),
+        // The engine publishes the step the sequence is on at the modulator's address, so the playhead shows
+        // what is actually playing rather than a clock the UI would have to guess at while paused.
+        receiver.subscribeFloat(modulator.address, position => {
+            const count = Math.max(1, Math.min(modulator.count, StepsModulatorBoxAdapter.MaxSteps))
+            playhead.style.left = `${(position / count) * 100.0}%`
+            playhead.style.width = `${100.0 / count}%`
+        })
     )
-    return <div className={className}>{canvas}</div>
+    return <div className={className}>{canvas}{playhead}</div>
 }

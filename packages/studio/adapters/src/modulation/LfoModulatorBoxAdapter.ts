@@ -35,7 +35,7 @@ export class LfoModulatorBoxAdapter extends ModulatorBoxAdapter<LfoModulatorBox>
                 StringMapping.indices("", LfoModulatorBoxAdapter.ShapeStrings), "Shape"),
             rateSync: this.parametric.createParameter(box.rateSync,
                 ValueMapping.linearInteger(0, LfoModulatorBoxAdapter.Rates.length - 1),
-                StringMapping.indices("", LfoModulatorBoxAdapter.RateStrings), "Rate"),
+                StringMapping.indices("", LfoModulatorBoxAdapter.RateStrings), "Sync"),
             rateAbsolute: this.parametric.createParameter(box.rateAbsolute,
                 ValueMapping.powerByCenter(LfoModulatorBoxAdapter.CenterAbsoluteRate,
                     0.0, LfoModulatorBoxAdapter.MaxAbsoluteRate),

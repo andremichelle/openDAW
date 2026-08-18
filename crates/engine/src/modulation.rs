@@ -2,7 +2,7 @@
 
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 use boxgraph::address::Uuid;
 use boxgraph::subscription::SubscriptionId;
 use dsp::fast_math::fast_sin_tau;
@@ -42,7 +42,8 @@ fn cycle_pulses(rate: i32) -> f64 {
 pub(crate) const DIRECTION_FORWARD: i32 = 0;
 pub(crate) const DIRECTION_BACKWARD: i32 = 1;
 pub(crate) const DIRECTION_PING_PONG: i32 = 2;
-pub(crate) const DIRECTION_RANDOM: i32 = 3;
+pub(crate) const DIRECTION_ALTERNATE: i32 = 3;
+pub(crate) const DIRECTION_RANDOM: i32 = 4;
 
 pub(crate) const MAX_STEPS: usize = 64;
 
@@ -61,10 +62,14 @@ impl LfoState {
     }
 
     /// The two rates are ADDITIVE in frequency: the tempo-synced cycle plus `rate_absolute` Hz of wall clock.
-    fn value_at(&self, position: f64, seconds: f64) -> f32 {
-        let turn = position / cycle_pulses(self.rate_sync.get())
+    fn turn_at(&self, position: f64, seconds: f64) -> f64 {
+        position / cycle_pulses(self.rate_sync.get())
             + seconds * self.rate_absolute.get() as f64
-            + self.phase.get() as f64;
+            + self.phase.get() as f64
+    }
+
+    fn value_at(&self, position: f64, seconds: f64) -> f32 {
+        let turn = self.turn_at(position, seconds);
         let shape = match self.shape.get() {
             SHAPE_TRIANGLE => triangle(turn),
             SHAPE_SAW_UP => saw_up(turn),
@@ -96,11 +101,24 @@ impl StepsState {
 
     /// The rate is the length of ONE step, so the sequence keeps its grid when the count changes. `smooth`
     /// is the fraction of a step spent gliding from the previous step's value, so 0 steps hard.
+    fn step_position(&self, position: f64, seconds: f64, count: i64) -> f64 {
+        position / cycle_pulses(self.rate_sync.get())
+            + seconds * self.rate_absolute.get() as f64
+            + self.phase.get() as f64 * count as f64
+    }
+
+    /// Where the UI draws the playhead: the step the sequence is ON right now, folded through the
+    /// direction, plus how far into it the position sits, so it lands over the step that is sounding.
+    fn playhead_at(&self, position: f64, seconds: f64) -> f32 {
+        let count = self.count.get().clamp(1, MAX_STEPS as i32) as i64;
+        let step = self.step_position(position, seconds, count);
+        let index = floor(step);
+        self.resolve_index(index as i64, count) as f32 + (step - index) as f32
+    }
+
     fn value_at(&self, position: f64, seconds: f64) -> f32 {
         let count = self.count.get().clamp(1, MAX_STEPS as i32) as i64;
-        let step = position / cycle_pulses(self.rate_sync.get())
-            + seconds * self.rate_absolute.get() as f64
-            + self.phase.get() as f64 * count as f64;
+        let step = self.step_position(position, seconds, count);
         let index = floor(step);
         let current = self.step_at(index as i64, count);
         let smooth = self.smooth.get();
@@ -115,16 +133,32 @@ impl StepsState {
     }
 
     fn step_at(&self, index: i64, count: i64) -> f32 {
+        self.steps[self.resolve_index(index, count) as usize].get()
+    }
+
+    fn resolve_index(&self, index: i64, count: i64) -> i64 {
         let cycle = index.div_euclid(count);
         let local = index.rem_euclid(count);
-        let resolved = match self.direction.get() {
+        match self.direction.get() {
             DIRECTION_BACKWARD => count - 1 - local,
             DIRECTION_PING_PONG => if cycle.rem_euclid(2) == 0 {local} else {count - 1 - local},
             DIRECTION_RANDOM => random_index(cycle, local, count),
+            DIRECTION_ALTERNATE => alternate_index(index, count),
             _ => local
-        };
-        self.steps[resolved as usize].get()
+        }
     }
+}
+
+/// Ping-pong WITHOUT repeating the turning points: the period is `2 * count - 2`, so the first and last
+/// step play once per round trip rather than twice. Below three steps there is nothing to fold.
+/// WASM CONTRACT: mirrors `StepsModulatorBoxAdapter.alternateIndex` (packages/studio/adapters).
+fn alternate_index(index: i64, count: i64) -> i64 {
+    if count < 3 {
+        return index.rem_euclid(count);
+    }
+    let period = count * 2 - 2;
+    let local = index.rem_euclid(period);
+    if local < count {local} else {period - local}
 }
 
 /// A stable shuffle: the same (cycle, step) always lands on the same index, so the sequence stays a pure
@@ -144,22 +178,38 @@ pub(crate) enum ModulatorKind {
 
 pub(crate) struct ModulatorState {
     pub(crate) enabled: Cell<bool>,
-    pub(crate) kind: ModulatorKind
+    pub(crate) kind: ModulatorKind,
+    // The UI playhead: one float at the MODULATOR's box address, published once per quantum. An LFO writes
+    // its turn (0..1), a sequence its running step index, so the editor draws the position it is playing
+    // rather than guessing one from a clock it does not share.
+    pub(crate) broadcast: RefCell<Option<engine_env::telemetry::BroadcastSlot>>
 }
 
 impl ModulatorState {
     pub(crate) fn lfo() -> Self {
-        Self {enabled: Cell::new(true), kind: ModulatorKind::Lfo(LfoState::new())}
+        Self {enabled: Cell::new(true), kind: ModulatorKind::Lfo(LfoState::new()), broadcast: RefCell::new(None)}
     }
 
     pub(crate) fn steps() -> Self {
-        Self {enabled: Cell::new(true), kind: ModulatorKind::Steps(StepsState::new())}
+        Self {enabled: Cell::new(true), kind: ModulatorKind::Steps(StepsState::new()), broadcast: RefCell::new(None)}
     }
 
     pub(crate) fn value_at(&self, position: f64, seconds: f64) -> f32 {
         match &self.kind {
             ModulatorKind::Lfo(lfo) => lfo.value_at(position, seconds),
             ModulatorKind::Steps(steps) => steps.value_at(position, seconds)
+        }
+    }
+
+    pub(crate) fn publish_phase(&self, position: f64, seconds: f64) {
+        let Some(slot) = self.broadcast.borrow().clone() else {return};
+        let phase = match &self.kind {
+            ModulatorKind::Lfo(lfo) => fract(lfo.turn_at(position, seconds)) as f32,
+            ModulatorKind::Steps(steps) => steps.playhead_at(position, seconds)
+        };
+        let mut values = slot.borrow_mut();
+        if !values.is_empty() {
+            values[0] = phase;
         }
     }
 }
@@ -260,6 +310,12 @@ impl ModulatorTable {
 
     pub(crate) fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    pub(crate) fn publish_phases(&self, position: f64, seconds: f64) {
+        for (_, state, _) in self.entries.iter() {
+            state.publish_phase(position, seconds);
+        }
     }
 }
 
@@ -387,6 +443,39 @@ mod tests {
     }
 
     #[test]
+    fn alternate_turns_around_without_repeating_the_ends() {
+        let values = [0.0, 0.25, 0.5, 1.0];
+        let state = steps(&values);
+        state.direction.set(DIRECTION_ALTERNATE);
+        // Four steps fold into a six-step round trip: 0 1 2 3 2 1, then around again.
+        let played: Vec<f32> = (0..12).map(|index| state.value_at(STEP * index as f64, 0.0)).collect();
+        assert_eq!(played, alloc::vec![0.0, 0.25, 0.5, 1.0, 0.5, 0.25, 0.0, 0.25, 0.5, 1.0, 0.5, 0.25]);
+        // Ping-pong plays the turning points twice, which is exactly what alternate avoids.
+        let ping_pong = steps(&values);
+        ping_pong.direction.set(DIRECTION_PING_PONG);
+        assert_eq!(ping_pong.value_at(STEP * 3.0, 0.0), ping_pong.value_at(STEP * 4.0, 0.0));
+        assert_ne!(state.value_at(STEP * 3.0, 0.0), state.value_at(STEP * 4.0, 0.0));
+        // Two steps have no turning point to fold.
+        let pair = steps(&[1.0, -1.0]);
+        pair.direction.set(DIRECTION_ALTERNATE);
+        assert_eq!(pair.value_at(0.0, 0.0), 1.0);
+        assert_eq!(pair.value_at(STEP, 0.0), -1.0);
+        assert_eq!(pair.value_at(STEP * 2.0, 0.0), 1.0);
+    }
+
+    #[test]
+    fn the_playhead_follows_the_step_the_sequence_is_on() {
+        let state = steps(&[0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(state.playhead_at(0.0, 0.0), 0.0);
+        assert!((state.playhead_at(STEP * 1.5, 0.0) - 1.5).abs() < 1.0e-5, "half way through step 1");
+        assert!((state.playhead_at(STEP * 4.25, 0.0) - 0.25).abs() < 1.0e-5, "and it wraps with the sequence");
+        let backward = steps(&[0.0, 0.0, 0.0, 0.0]);
+        backward.direction.set(DIRECTION_BACKWARD);
+        assert!((backward.playhead_at(0.0, 0.0) - 3.0).abs() < 1.0e-5, "backward starts on the last step");
+        assert!((backward.playhead_at(STEP, 0.0) - 2.0).abs() < 1.0e-5);
+    }
+
+    #[test]
     fn the_random_direction_is_stable_per_cycle() {
         let state = steps(&[0.0, 0.25, 0.5, 0.75, 1.0, -0.25, -0.5, -1.0]);
         state.direction.set(DIRECTION_RANDOM);
@@ -418,7 +507,8 @@ mod tests {
 
     #[test]
     fn the_sum_is_nan_until_something_actually_contributes() {
-        let state = Rc::new(ModulatorState {enabled: Cell::new(true), kind: ModulatorKind::Lfo(lfo(SHAPE_SQUARE, ONE_BAR))});
+        let state = Rc::new(ModulatorState {enabled: Cell::new(true),
+            kind: ModulatorKind::Lfo(lfo(SHAPE_SQUARE, ONE_BAR)), broadcast: RefCell::new(None)});
         let bound = |depth: f32, enabled: bool| BoundModulation {
             modulator: state.clone(),
             depth: Rc::new(Cell::new(depth)),

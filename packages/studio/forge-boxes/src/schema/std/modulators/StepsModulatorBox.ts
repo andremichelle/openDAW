@@ -21,7 +21,7 @@ export const StepsModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createMod
     15: {type: "float32", name: "smooth", value: 0.0, ...UnipolarConstraints},
     16: {
         type: "int32", name: "direction", value: 0,
-        constraints: {values: [0, 1, 2, 3]}, unit: "" // StepsDirection
+        constraints: {values: [0, 1, 2, 3, 4]}, unit: "" // StepsDirection
     },
     20: {
         type: "array", name: "steps", length: 64,

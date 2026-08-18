@@ -1460,6 +1460,9 @@ impl Engine {
         }
         unsafe { *SONG_POSITION.get() = self.transport.position(); }
         modulation::advance_seconds(RENDER_QUANTUM as f64 / self.sample_rate as f64);
+        // The modulator playheads: one publish per quantum at the FREE-RUNNING position, the same clock the
+        // modulation itself reads, so a paused editor still shows the sequence walking.
+        self.modulators.borrow().publish_phases(self.transport.free_running(), modulation::seconds());
         let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
             metronome_pref, ..} = self;
@@ -1933,6 +1936,9 @@ impl Engine {
                     dirty.set(true);
                 }
             }));
+            let slot = engine_env::telemetry::broadcast_slot(1);
+            self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT, &slot);
+            *state.broadcast.borrow_mut() = Some(slot);
             self.modulators.borrow_mut().add(uuid, state, subs);
             self.modulation_dirty.set(true);
         }

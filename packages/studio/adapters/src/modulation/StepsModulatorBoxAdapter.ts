@@ -6,11 +6,11 @@ import {LfoModulatorBoxAdapter} from "./LfoModulatorBoxAdapter"
 import {ModulatorBoxAdapter} from "./ModulatorBoxAdapter"
 
 // WASM CONTRACT: mirrors the engine's `modulation::DIRECTION_*` (crates/engine/src/modulation.rs).
-export enum StepsDirection {Forward, Backward, PingPong, Random}
+export enum StepsDirection {Forward, Backward, PingPong, Alternate, Random}
 
 export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulatorBox> {
     static readonly MaxSteps = 64
-    static readonly DirectionStrings: ReadonlyArray<string> = ["Forward", "Backward", "Ping-Pong", "Random"]
+    static readonly DirectionStrings: ReadonlyArray<string> = ["Forward", "Backward", "Ping-Pong", "Alternate", "Random"]
 
     readonly namedParameter
 
@@ -55,14 +55,30 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
     }
 
     #stepAt(index: int, count: int): unitValue {
+        return this.steps[this.resolveIndex(index, count)].getValue()
+    }
+
+    /// WASM CONTRACT: mirrors `StepsState::resolve_index` (crates/engine/src/modulation.rs).
+    resolveIndex(index: int, count: int): int {
         const cycle = Math.floor(index / count)
         const local = index - cycle * count
         const direction: StepsDirection = this.box.direction.getValue()
-        const resolved = direction === StepsDirection.Backward ? count - 1 - local
+        return direction === StepsDirection.Backward ? count - 1 - local
             : direction === StepsDirection.PingPong ? (cycle % 2 === 0 ? local : count - 1 - local)
-                : direction === StepsDirection.Random ? StepsModulatorBoxAdapter.randomIndex(cycle, local, count)
-                    : local
-        return this.steps[resolved].getValue()
+                : direction === StepsDirection.Alternate ? StepsModulatorBoxAdapter.alternateIndex(index, count)
+                    : direction === StepsDirection.Random
+                        ? StepsModulatorBoxAdapter.randomIndex(cycle, local, count)
+                        : local
+    }
+
+    /// Ping-pong WITHOUT repeating the turning points: the period is `2 * count - 2`, so the first and last
+    /// step play once per round trip rather than twice.
+    /// WASM CONTRACT: mirrors `alternate_index` (crates/engine/src/modulation.rs).
+    static alternateIndex(index: int, count: int): int {
+        if (count < 3) {return ((index % count) + count) % count}
+        const period = count * 2 - 2
+        const local = ((index % period) + period) % period
+        return local < count ? local : period - local
     }
 
     /// A stable shuffle: the same (cycle, step) always lands on the same index, so the sequence stays a pure
