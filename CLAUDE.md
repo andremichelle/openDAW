@@ -29,4 +29,5 @@
 ## Workflow
 
 - **Analyze bugs and propose fixes, but wait for approval before editing code.**
+- **Never commit.** Only run `git commit` when explicitly asked, for that commit. Finished, tested and verified work is ready to be committed, it is not permission to commit it.
 - **Never use `Write` to rewrite existing files** — always use `Edit` (small diffs).
