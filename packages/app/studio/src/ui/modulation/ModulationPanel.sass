@@ -1,15 +1,15 @@
 @use "@/colors"
 
 component
-  --editor-width: 26rem
-  --targets-width: 20rem
+  --editor-width: 30rem
+  --target-width: 14rem
   flex: 1 1 auto
   min-height: 0
   overflow-y: auto
   display: grid
-  grid-template-columns: var(--editor-width) var(--targets-width)
+  grid-template-columns: var(--editor-width) var(--target-width) auto auto auto 1fr
   align-content: start
-  column-gap: 1px
+  column-gap: 0.5em
   row-gap: 1px
   padding: 0 0.5em 0.5em 0.5em
   @include colors.panel-background
@@ -32,6 +32,12 @@ component
     letter-spacing: 0.05em
     font-size: 0.9em
     @include colors.panel-background
+
+    &.modulators
+      grid-column: 1
+
+    &.targets
+      grid-column: 2 / -1
 
   > .placeholder
     grid-column: 1 / -1

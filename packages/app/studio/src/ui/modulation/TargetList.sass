@@ -1,37 +1,48 @@
 component
+  grid-column: 2 / -1
+  grid-row: span 2
   display: grid
-  grid-template-columns: 1fr auto auto auto
-  align-content: start
-  align-items: center
-  gap: 1px 0.5em
-  padding: 0.25em
+  grid-template-columns: subgrid
+  grid-template-rows: subgrid
+  padding: 0.25em 0
+  border-top: 1px var(--color-blue) solid
+  background: linear-gradient(to bottom, var(--color-blue) -500%, transparent 20%)
 
-  > .entry
-    display: contents
+  > .entries
+    grid-column: 1 / -1
+    grid-row: 2
+    display: grid
+    grid-template-columns: subgrid
+    align-content: start
+    align-items: center
+    row-gap: 1px
 
-    > .target
-      display: grid
-      grid-auto-flow: column
-      justify-content: start
-      column-gap: 0.35em
-      overflow: hidden
-      white-space: nowrap
-      font-size: 0.8em
-      color: var(--color-bright)
+    > .entry
+      display: contents
 
-      > .separator
-        color: var(--color-dark)
+      > .target
+        display: grid
+        grid-auto-flow: column
+        justify-content: start
+        column-gap: 0.35em
+        overflow: hidden
+        white-space: nowrap
+        font-size: 0.8em
+        color: var(--color-bright)
 
-    label
-      font-size: 10px
+        > .separator
+          color: var(--color-dark)
 
-    > .toggle
-      cursor: pointer
-      color: var(--color-gray)
-
-    &.disabled
-      > *
-        opacity: 0.4
+      label
+        font-size: 10px
 
       > .toggle
-        color: var(--color-dark)
+        cursor: pointer
+        color: var(--color-gray)
+
+      &.disabled
+        > *
+          opacity: 0.4
+
+        > .toggle
+          color: var(--color-dark)

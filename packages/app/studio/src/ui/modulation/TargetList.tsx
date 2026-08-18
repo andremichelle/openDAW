@@ -20,7 +20,8 @@ type Construct = {
 
 export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElement => {
     const {editing} = service.project
-    const entries: HTMLElement = <div className={className}/>
+    const entries: HTMLElement = <div className="entries"/>
+    const element: HTMLElement = <div className={className}>{entries}</div>
     const rows = lifecycle.own(new Terminator())
     const render = () => {
         rows.terminate()
@@ -57,5 +58,5 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
         onRemoved: () => render()
     }))
     render()
-    return entries
+    return element
 }

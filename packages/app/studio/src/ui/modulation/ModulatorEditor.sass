@@ -2,16 +2,18 @@ component
   display: contents
 
   > .modulator
+    grid-column: 1
+    grid-row: span 2
     display: grid
-    grid-template-rows: auto auto
+    grid-template-rows: subgrid
     align-content: start
-    row-gap: 0.25em
     padding: 0.25em
+    border-top: 1px var(--color-yellow) solid
+    background: linear-gradient(to bottom, var(--color-yellow) -500%, transparent 20%)
 
     > header
       display: grid
-      grid-auto-flow: column
-      justify-content: start
+      grid-template-columns: auto 1fr auto auto
       align-items: center
       column-gap: 0.5em
 
@@ -24,12 +26,20 @@ component
 
       > h1
         margin: 0
-        max-width: 12em
         font-size: 1em
         font-weight: normal
         white-space: nowrap
         overflow: hidden
         text-overflow: ellipsis
+
+    > .body
+      display: grid
+      grid-auto-flow: column
+      justify-content: start
+      align-items: stretch
+      column-gap: 1px
+      padding-top: 0.25em
+      font-size: 16px
 
   h5
     width: fit-content
@@ -41,17 +51,10 @@ component
     white-space: nowrap
     color: var(--color-cream)
 
-  .body
-    display: grid
-    grid-auto-flow: column
-    justify-content: start
-    align-items: stretch
-    column-gap: 1px
-    font-size: 16px
-
   &.disabled
-    > .modulator > header > .toggle
-      color: var(--color-dark)
+    > .modulator
+      > header > .toggle
+        color: var(--color-dark)
 
-    > .modulator > .body, > :nth-child(2)
-      opacity: 0.4
+      > .body
+        opacity: 0.4

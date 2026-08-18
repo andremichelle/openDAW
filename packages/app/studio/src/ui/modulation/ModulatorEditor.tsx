@@ -44,15 +44,15 @@ export const ModulatorEditor = ({lifecycle, service, modulator}: Construct, cont
             <div className="modulator">
                 <header>
                     <Icon symbol={IconSymbol.Waveform} className="icon"/>
+                    {title}
                     <Icon symbol={IconSymbol.Shutdown} className="toggle" onInit={element =>
                         lifecycle.own(Events.subscribe(element, "click", () =>
                             editing.modify(() => modulator.box.enabled.toggle())))}/>
-                    {title}
                     <Button lifecycle={lifecycle} onClick={() => editing.modify(() => modulator.box.delete())}>
                         <Icon symbol={IconSymbol.Delete}/>
                     </Button>
                 </header>
-                {controls}
+                <div className="body">{controls}</div>
             </div>
             <TargetList lifecycle={lifecycle} service={service} modulator={modulator}/>
         </div>
