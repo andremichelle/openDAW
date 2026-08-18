@@ -1,6 +1,7 @@
 import {Lifecycle, TAU} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {CanvasPainter} from "@opendaw/studio-core"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint.ts"
 import {LfoModulatorBoxAdapter, LfoShape} from "@opendaw/studio-adapters"
 
 type Construct = {
@@ -26,29 +27,36 @@ const shapeAt = (shape: LfoShape, turn: number): number => {
 export const ShapeDisplay = ({lifecycle, modulator}: Construct): HTMLElement => {
     const canvas: HTMLCanvasElement = (<canvas className="shape"/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
-        const {context, actualWidth: width, actualHeight: height, devicePixelRatio: ratio} = painter
-        context.clearRect(0, 0, width, height)
+        const {context, actualWidth, actualHeight, devicePixelRatio} = painter
+        context.clearRect(0, 0, actualWidth, actualHeight)
         const shape: LfoShape = modulator.box.shape.getValue()
         const phase = modulator.box.phase.getValue()
         const amount = modulator.box.amount.getValue()
-        const middle = height / 2
-        const scale = (height / 2 - 2 * ratio) * amount
-        context.strokeStyle = "rgba(255, 255, 255, 0.15)"
-        context.lineWidth = ratio
-        context.beginPath()
-        context.moveTo(0, middle)
-        context.lineTo(width, middle)
-        context.stroke()
-        context.strokeStyle = "hsl(200, 83%, 60%)"
-        context.lineWidth = 1.5 * ratio
-        context.beginPath()
-        const steps = Math.max(2, Math.floor(width))
-        for (let step = 0; step <= steps; step++) {
-            const turn = step / steps
-            const x = turn * width
-            const y = middle - shapeAt(shape, turn + phase) * scale
-            if (step === 0) {context.moveTo(x, y)} else {context.lineTo(x, y)}
+        const padding = devicePixelRatio * 2
+        const top = padding
+        const bottom = actualHeight - padding
+        const valueToY = (value: number) => bottom + (top - bottom) * (0.5 * (value * amount + 1.0))
+        const centerY = valueToY(0.0)
+        context.lineWidth = devicePixelRatio
+        const path = new Path2D()
+        path.moveTo(0, valueToY(shapeAt(shape, phase)))
+        for (let x = 1; x <= actualWidth; x++) {
+            path.lineTo(x, valueToY(shapeAt(shape, x / actualWidth + phase)))
         }
+        context.strokeStyle = DisplayPaint.strokeStyle(0.75)
+        context.stroke(path)
+        path.lineTo(actualWidth, centerY)
+        path.lineTo(0, centerY)
+        const gradient = context.createLinearGradient(0, top, 0, bottom)
+        gradient.addColorStop(0.0, DisplayPaint.strokeStyle(0.2))
+        gradient.addColorStop(0.5, DisplayPaint.strokeStyle(0.0))
+        gradient.addColorStop(1.0, DisplayPaint.strokeStyle(0.2))
+        context.fillStyle = gradient
+        context.fill(path)
+        context.beginPath()
+        context.moveTo(0, centerY)
+        context.lineTo(actualWidth, centerY)
+        context.strokeStyle = "hsla(200, 83%, 60%, 0.25)"
         context.stroke()
     }))
     lifecycle.ownAll(

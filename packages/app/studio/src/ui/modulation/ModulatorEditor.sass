@@ -1,43 +1,35 @@
-@use "@/colors"
-
 component
-  flex: 0 0 auto
-  display: flex
-  flex-direction: column
-  background-color: rgba(255, 255, 255, 0.02)
-  border-radius: 3px
+  display: contents
 
-  > header
-    flex: 0 0 auto
-    display: flex
-    align-items: center
-    column-gap: 0.5em
-    padding: 0.25em 0.5em
+  > .modulator
+    display: grid
+    grid-template-rows: auto auto
+    align-content: start
+    row-gap: 0.25em
+    padding: 0.25em
 
-    > .icon
-      flex: 0 0 auto
-      color: var(--color-gray)
+    > header
+      display: grid
+      grid-auto-flow: column
+      justify-content: start
+      align-items: center
+      column-gap: 0.5em
 
-    > .toggle
-      flex: 0 0 auto
-      cursor: pointer
-      color: var(--color-gray)
+      > .icon
+        color: var(--color-gray)
 
-    > h1
-      flex: 1 1 auto
-      margin: 0
-      font-size: 1em
-      font-weight: normal
-      white-space: nowrap
-      overflow: hidden
-      text-overflow: ellipsis
+      > .toggle
+        cursor: pointer
+        color: var(--color-gray)
 
-  > .content
-    flex: 0 0 auto
-    display: flex
-    align-items: stretch
-    column-gap: 0.5em
-    padding: 0 0.5em 0.5em 0.5em
+      > h1
+        margin: 0
+        max-width: 12em
+        font-size: 1em
+        font-weight: normal
+        white-space: nowrap
+        overflow: hidden
+        text-overflow: ellipsis
 
   h5
     width: fit-content
@@ -50,15 +42,16 @@ component
     color: var(--color-cream)
 
   .body
-    flex: 0 0 auto
-    display: flex
+    display: grid
+    grid-auto-flow: column
+    justify-content: start
     align-items: stretch
     column-gap: 1px
     font-size: 16px
 
   &.disabled
-    > header > .toggle
+    > .modulator > header > .toggle
       color: var(--color-dark)
 
-    > .content
+    > .modulator > .body, > :nth-child(2)
       opacity: 0.4

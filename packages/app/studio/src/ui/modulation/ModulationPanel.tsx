@@ -19,20 +19,31 @@ type Construct = {
 export const ModulationPanel = ({lifecycle, service}: Construct) => {
     const {project} = service
     const {editing, rootBoxAdapter} = project
-    const editors: HTMLElement = <div className="editors"/>
     const contents = lifecycle.own(new Terminator())
+    const element: HTMLElement = (
+        <div className={className}>
+            <h5 className="head modulators">
+                <span>Modulators</span>
+                <Button lifecycle={lifecycle}
+                        onClick={() => editing.modify(() => Modulators.createLfo(project))}>
+                    <Icon symbol={IconSymbol.Add}/>
+                </Button>
+            </h5>
+            <h5 className="head targets"><span>Targets</span></h5>
+        </div>
+    )
     const render = () => {
         contents.terminate()
-        Html.empty(editors)
+        while (element.childElementCount > 2) {element.lastElementChild?.remove()}
         const adapters = rootBoxAdapter.modulators.adapters()
         if (adapters.length === 0) {
-            editors.append(<div className="placeholder">
+            element.append(<div className="placeholder">
                 Add a modulator, or right-click any control and choose Modulate
             </div>)
             return
         }
         adapters.forEach((adapter: LfoModulatorBoxAdapter) =>
-            editors.append(createModulatorEditor(contents, service, adapter) as HTMLElement))
+            element.append(createModulatorEditor(contents, service, adapter) as HTMLElement))
     }
     lifecycle.own(rootBoxAdapter.modulators.catchupAndSubscribe({
         onAdd: () => render(),
@@ -40,17 +51,5 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
         onReorder: () => render()
     }))
     render()
-    return (
-        <div className={className}>
-            <h5>
-                <span>Modulators</span>
-                <span className="spacer"/>
-                <Button lifecycle={lifecycle}
-                        onClick={() => editing.modify(() => Modulators.createLfo(project))}>
-                    <Icon symbol={IconSymbol.Add}/>
-                </Button>
-            </h5>
-            {editors}
-        </div>
-    )
+    return element
 }

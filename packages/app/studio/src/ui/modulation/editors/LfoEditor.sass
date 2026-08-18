@@ -1,18 +1,19 @@
 component
-  display: flex
+  display: grid
+  grid-auto-flow: column
+  justify-content: start
   align-items: stretch
   column-gap: 1px
 
   > .shape
-    flex: 0 0 auto
     width: 14em
     height: 4em
-    background-color: rgba(0, 0, 0, 0.25)
-    border-radius: 2px
+    border-radius: 3px
+    box-shadow: 0 0 4px 0 hsla(200, 83%, 60%, 0.04) inset, 0 0 1px 0 hsla(200, 83%, 60%, 0.04) inset
 
   > .knobs
-    flex: 0 0 auto
-    display: flex
+    display: grid
+    grid-auto-flow: column
     column-gap: 1px
 
     > *

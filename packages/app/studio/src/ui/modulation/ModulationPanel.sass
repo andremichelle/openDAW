@@ -1,42 +1,41 @@
 @use "@/colors"
 
 component
+  --editor-width: 26rem
+  --targets-width: 20rem
   flex: 1 1 auto
   min-height: 0
-  display: flex
-  flex-direction: column
-  padding: 0.5em
+  overflow-y: auto
+  display: grid
+  grid-template-columns: var(--editor-width) var(--targets-width)
+  align-content: start
+  column-gap: 1px
+  row-gap: 1px
+  padding: 0 0.5em 0.5em 0.5em
   @include colors.panel-background
   color: var(--color-bright)
   font-size: 0.75em
 
-  > h5
-    flex: 0 0 auto
-    margin: 0 0 0.5em 0
-    display: flex
+  > .head
+    position: sticky
+    top: 0
+    z-index: 1
+    margin: 0
+    display: grid
+    grid-auto-flow: column
+    justify-content: start
     align-items: center
     column-gap: 0.5em
+    padding: 0.5em 0.25em
     color: var(--color-gray)
     text-transform: uppercase
     letter-spacing: 0.05em
     font-size: 0.9em
+    @include colors.panel-background
 
-    > .spacer
-      flex: 1 1 auto
-
-  > .editors
-    flex: 1 1 auto
-    min-height: 0
-    overflow-y: auto
-    display: flex
-    flex-direction: column
-    align-items: start
-    row-gap: 1px
-
-    > .placeholder
-      display: flex
-      flex: 1 1 auto
-      align-self: stretch
-      align-items: center
-      justify-content: center
-      color: var(--color-dark)
+  > .placeholder
+    grid-column: 1 / -1
+    display: grid
+    place-items: center
+    padding: 2em 0
+    color: var(--color-dark)
