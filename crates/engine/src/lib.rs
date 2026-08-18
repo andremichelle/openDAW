@@ -1251,6 +1251,10 @@ struct Engine {
     // `MIDIOutputBox` targets (see `sync_midi_targets`). Shared with the per-unit MidiOut nodes.
     midi_out: midi_output::SharedMidiOut,
     modulators: Rc<RefCell<modulation::ModulatorTable>>,
+    // The free-running modulation clock: it integrates while the pulse flow stays continuous and re-anchors
+    // to the position's wall-clock seconds on a start, stop or jump.
+    modulation_free: f64,
+    modulation_playing: bool,
     // Armed by a modulator's OWN field edit: the value cells are live for the render path, but a STOPPED
     // transport runs no update clock, so the next reconcile re-pushes every unit's parameters.
     modulation_dirty: Rc<Cell<bool>>,
@@ -1306,6 +1310,8 @@ impl Engine {
             broadcasts: broadcast::Broadcasts::default(),
             midi_out: midi_output::shared_midi_out(),
             modulators: Rc::new(RefCell::new(modulation::ModulatorTable::new())),
+            modulation_free: f64::NAN,
+            modulation_playing: false,
             modulation_dirty: Rc::new(Cell::new(false)),
             sample_rate,
             blocks: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM), // a quantum splits into a few blocks (tempo / loop); never realloc on the render path
@@ -1459,8 +1465,7 @@ impl Engine {
             self.resolve_automated_solo(self.transport.position());
         }
         unsafe { *SONG_POSITION.get() = self.transport.position(); }
-        modulation::advance_seconds(RENDER_QUANTUM as f64 / self.sample_rate as f64);
-        self.modulators.borrow().publish_phases(self.transport.free_running(), modulation::seconds());
+        self.advance_modulation();
         let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
             metronome_pref, ..} = self;
@@ -1901,6 +1906,26 @@ impl Engine {
     /// WASM CONTRACT: modulator field keys — enabled 4. LfoModulatorBox: shape 10, rateSync 11,
     /// rateAbsolute 12, phase 13, amount 14. StepsModulatorBox: count 10, rateSync 11, rateAbsolute 12,
     /// phase 13, amount 14, smooth 15, direction 16, steps 20 (array of 64). MacroModulatorBox: value 10.
+    fn advance_modulation(&mut self) {
+        let free_running = self.transport.free_running();
+        let playing = self.transport.is_playing();
+        let quantum_pulses =
+            dsp::ppqn::samples_to_pulses(RENDER_QUANTUM as f64, self.transport.bpm(), self.sample_rate);
+        let continuous = playing == self.modulation_playing
+            && (free_running - self.modulation_free).abs() <= quantum_pulses * 0.5;
+        let anchor = if continuous {None} else {Some(self.tempo_map.borrow().ppqn_to_seconds(free_running))};
+        {
+            let modulators = self.modulators.borrow();
+            match anchor {
+                Some(seconds) => modulators.anchor_free(seconds),
+                None => modulators.advance_free(RENDER_QUANTUM as f64 / self.sample_rate as f64)
+            }
+            modulators.publish_phases(free_running);
+        }
+        self.modulation_free = free_running + quantum_pulses;
+        self.modulation_playing = playing;
+    }
+
     fn sync_modulators(&mut self) {
         let (added, removed) = self.modulators.borrow_mut().take_pending();
         for uuid in removed {

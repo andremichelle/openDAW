@@ -9,8 +9,8 @@ export const StepsModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createMod
         constraints: {min: 1, max: 64}, unit: ""
     },
     11: {
-        type: "int32", name: "rateSync", value: 9, // one step per LfoModulatorBoxAdapter.Rates entry, 1/16
-        constraints: {min: 0, max: 11}, unit: ""
+        type: "int32", name: "rateSync", value: 10, // one step per LfoModulatorBoxAdapter.RatePPQNs entry, 1/16
+        constraints: {min: 0, max: 12}, unit: ""
     },
     12: {
         type: "float32", name: "rateAbsolute", value: 0.0,

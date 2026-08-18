@@ -9,8 +9,8 @@ export const LfoModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createModul
         constraints: {values: [0, 1, 2, 3, 4]}, unit: "" // LfoShape
     },
     11: {
-        type: "int32", name: "rateSync", value: 3, // LfoModulatorBoxAdapter.Rates, one bar
-        constraints: {min: 0, max: 11}, unit: ""
+        type: "int32", name: "rateSync", value: 4, // LfoModulatorBoxAdapter.RatePPQNs, one bar
+        constraints: {min: 0, max: 12}, unit: ""
     },
     12: {
         type: "float32", name: "rateAbsolute", value: 0.0,

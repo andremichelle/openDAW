@@ -92,7 +92,7 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
                 ValueMapping.linearInteger(1, StepsModulatorBoxAdapter.MaxSteps),
                 StringMapping.numeric({unit: ""}), "Steps"),
             rateSync: this.parametric.createParameter(box.rateSync,
-                ValueMapping.linearInteger(0, LfoModulatorBoxAdapter.Rates.length - 1),
+                ValueMapping.linearInteger(0, LfoModulatorBoxAdapter.RateStrings.length - 1),
                 StringMapping.indices("", LfoModulatorBoxAdapter.RateStrings), "Sync"),
             rateAbsolute: this.parametric.createParameter(box.rateAbsolute,
                 ValueMapping.powerByCenter(LfoModulatorBoxAdapter.CenterAbsoluteRate,
