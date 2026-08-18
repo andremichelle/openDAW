@@ -1,3 +1,5 @@
+$padding: 0.5em
+
 component
   grid-column: 2
   grid-row: span 2
@@ -12,9 +14,9 @@ component
     align-content: safe center
     align-items: center
     column-gap: 0.5em
-    height: var(--body-height)
-    padding: 0.25em var(--scroller-width) 0.25em 0.5em
+    padding: $padding var(--scroller-width) $padding 0.5em
     overflow-y: auto
+    mask-image: linear-gradient(to bottom, transparent, black $padding, black calc(100% - #{$padding}), transparent)
     border-radius: 3px
     background-color: rgba(black, 0.08)
 

@@ -6,17 +6,14 @@ component
     grid-row: span 2
     display: grid
     grid-template-rows: subgrid
-    align-content: start
     padding: 0 0.25em
 
     > header
+      padding-top: var(--editor-gap)
       display: grid
-      grid-template-columns: auto 1fr auto auto
+      grid-template-columns: 1fr auto auto
       align-items: center
       column-gap: 0.5em
-
-      > .icon
-        color: var(--color-gray)
 
       > .toggle
         cursor: pointer
@@ -36,7 +33,6 @@ component
       justify-content: start
       align-items: stretch
       column-gap: 1px
-      padding-top: 0.25em
       font-size: 16px
 
   h5

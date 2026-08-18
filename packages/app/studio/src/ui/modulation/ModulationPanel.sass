@@ -3,19 +3,19 @@
 component
   --editor-width: 30rem
   --targets-width: 24rem
-  --body-height: 4.5rem
   --scroller-width: 0.5rem
+  --editor-gap: 1em
   flex: 1 1 auto
   min-height: 0
   overflow-y: auto
   display: grid
   grid-template-columns: var(--editor-width) var(--targets-width)
   grid-template-rows: min-content
-  grid-auto-rows: min-content minmax(var(--body-height), auto)
+  grid-auto-rows: min-content auto
   align-content: start
   justify-content: start
   column-gap: 1em
-  row-gap: 1em
+  row-gap: 0
   padding: 0 0.5em 0.5em 0.5em
   @include colors.panel-background
   color: var(--color-bright)
@@ -41,12 +41,12 @@ component
     &.modulators
       grid-column: 1
       border-top: 1px var(--color-blue) solid
-      background-image: linear-gradient(to bottom, var(--color-blue) -500%, transparent 30%)
+      background-image: linear-gradient(to bottom, var(--color-blue) -1000%, transparent 100%)
 
     &.targets
       grid-column: 2
       border-top: 1px var(--color-green) solid
-      background-image: linear-gradient(to bottom, var(--color-green) -500%, transparent 30%)
+      background-image: linear-gradient(to bottom, var(--color-green) -1000%, transparent 100%)
 
   > .placeholder
     grid-column: 1 / -1

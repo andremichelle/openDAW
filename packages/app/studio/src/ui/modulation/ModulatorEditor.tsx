@@ -43,7 +43,6 @@ export const ModulatorEditor = ({lifecycle, service, modulator}: Construct, cont
                      element.classList.toggle("disabled", !owner.getValue())))}>
             <div className="modulator">
                 <header>
-                    <Icon symbol={IconSymbol.Modulation} className="icon"/>
                     {title}
                     <Icon symbol={IconSymbol.Shutdown} className="toggle" onInit={element =>
                         lifecycle.own(Events.subscribe(element, "click", () =>
