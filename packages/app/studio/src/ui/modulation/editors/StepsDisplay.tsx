@@ -23,6 +23,7 @@ type Construct = {
 export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construct): HTMLElement => {
     const canvas: HTMLCanvasElement = (<canvas/>)
     let playhead = 0.0
+    let output = 0.0
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const {context, actualWidth, actualHeight, devicePixelRatio} = painter
         context.clearRect(0, 0, actualWidth, actualHeight)
@@ -63,9 +64,10 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         context.lineTo(actualWidth, centerY)
         context.strokeStyle = "hsla(200, 83%, 60%, 0.25)"
         context.stroke()
-        // On the curve, not beside it: the same function the curve is drawn with, sampled at the playhead.
+        // The engine's own output, not a redraw of it: with a direction that walks the pattern out of step
+        // order, or an amount below full, the dot sits where the modulation actually is.
         context.beginPath()
-        context.arc(playhead * stepWidth, valueToY(modulator.patternAt(playhead)), devicePixelRatio * 2.0, 0.0, TAU)
+        context.arc(playhead * stepWidth, valueToY(output), devicePixelRatio * 2.0, 0.0, TAU)
         context.fillStyle = "hsl(200, 83%, 75%)"
         context.fill()
     }))
@@ -114,8 +116,9 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         modulator.box.subscribe(Propagation.Children, painter.requestUpdate),
         // The engine publishes the step the sequence is on at the modulator's address, so the playhead shows
         // what is actually playing rather than a clock the UI would have to guess at while paused.
-        receiver.subscribeFloat(modulator.address, position => {
+        receiver.subscribeFloats(modulator.address, ([position, value]) => {
             playhead = position
+            output = value
             painter.requestUpdate()
         })
     )

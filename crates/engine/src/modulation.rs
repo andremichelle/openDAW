@@ -192,19 +192,24 @@ pub(crate) enum ModulatorKind {
 pub(crate) struct ModulatorState {
     pub(crate) enabled: Cell<bool>,
     pub(crate) kind: ModulatorKind,
-    // The UI playhead: one float at the MODULATOR's box address, published once per quantum. An LFO writes
-    // its turn (0..1), a sequence its running step index, so the editor draws the position it is playing
-    // rather than guessing one from a clock it does not share.
-    pub(crate) broadcast: RefCell<Option<engine_env::telemetry::BroadcastSlot>>
+    // The UI playhead at the MODULATOR's box address: [0] where it is, [1] what it outputs. An LFO writes its
+    // turn (0..1), a sequence its running step index, so the editor draws the position it is playing rather
+    // than guessing one from a clock it does not share. Everything else about modulation is PULLED by the
+    // device that needs it; this is the one push, so it is gated on the UI's subscription and costs nothing
+    // while no editor is open.
+    pub(crate) broadcast: RefCell<Option<engine_env::telemetry::BroadcastSlot>>,
+    pub(crate) broadcast_active: Rc<Cell<bool>>
 }
 
 impl ModulatorState {
     pub(crate) fn lfo() -> Self {
-        Self {enabled: Cell::new(true), kind: ModulatorKind::Lfo(LfoState::new()), broadcast: RefCell::new(None)}
+        Self {enabled: Cell::new(true), kind: ModulatorKind::Lfo(LfoState::new()),
+            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
     }
 
     pub(crate) fn steps() -> Self {
-        Self {enabled: Cell::new(true), kind: ModulatorKind::Steps(StepsState::new()), broadcast: RefCell::new(None)}
+        Self {enabled: Cell::new(true), kind: ModulatorKind::Steps(StepsState::new()),
+            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
     }
 
     pub(crate) fn value_at(&self, position: f64, seconds: f64) -> f32 {
@@ -215,14 +220,18 @@ impl ModulatorState {
     }
 
     pub(crate) fn publish_phase(&self, position: f64, seconds: f64) {
+        if !self.broadcast_active.get() {
+            return;
+        }
         let Some(slot) = self.broadcast.borrow().clone() else {return};
         let phase = match &self.kind {
             ModulatorKind::Lfo(lfo) => fract(lfo.turn_at(position, seconds)) as f32,
             ModulatorKind::Steps(steps) => steps.playhead_at(position, seconds)
         };
         let mut values = slot.borrow_mut();
-        if !values.is_empty() {
+        if values.len() > 1 {
             values[0] = phase;
+            values[1] = self.value_at(position, seconds);
         }
     }
 }
@@ -507,6 +516,18 @@ mod tests {
     }
 
     #[test]
+    fn the_playhead_stays_silent_until_the_ui_subscribes() {
+        let state = ModulatorState::steps();
+        let slot = engine_env::telemetry::broadcast_slot(2);
+        *state.broadcast.borrow_mut() = Some(slot.clone());
+        state.publish_phase(240.0, 0.0);
+        assert_eq!(slot.borrow()[0], 0.0, "nothing is written while no editor is listening");
+        state.broadcast_active.set(true);
+        state.publish_phase(240.0, 0.0);
+        assert_eq!(slot.borrow()[0], 1.0, "and the position appears once one is");
+    }
+
+    #[test]
     fn the_playhead_crosses_a_step_the_way_the_sequence_travels() {
         let forward = steps(&[0.0, 0.0, 0.0, 0.0]);
         assert!(forward.playhead_at(0.0, 0.0) < forward.playhead_at(STEP * 0.5, 0.0), "forward runs left to right");
@@ -558,7 +579,8 @@ mod tests {
     #[test]
     fn the_sum_is_nan_until_something_actually_contributes() {
         let state = Rc::new(ModulatorState {enabled: Cell::new(true),
-            kind: ModulatorKind::Lfo(lfo(SHAPE_SQUARE, ONE_BAR)), broadcast: RefCell::new(None)});
+            kind: ModulatorKind::Lfo(lfo(SHAPE_SQUARE, ONE_BAR)),
+            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))});
         let bound = |depth: f32, enabled: bool| BoundModulation {
             modulator: state.clone(),
             depth: Rc::new(Cell::new(depth)),

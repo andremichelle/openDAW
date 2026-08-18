@@ -1936,8 +1936,10 @@ impl Engine {
                     dirty.set(true);
                 }
             }));
-            let slot = engine_env::telemetry::broadcast_slot(1);
-            self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT, &slot);
+            let slot = engine_env::telemetry::broadcast_slot(2);
+            self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &slot);
+            self.broadcasts.attach_producer_active(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY,
+                state.broadcast_active.clone());
             *state.broadcast.borrow_mut() = Some(slot);
             self.modulators.borrow_mut().add(uuid, state, subs);
             self.modulation_dirty.set(true);
