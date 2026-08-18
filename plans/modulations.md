@@ -607,3 +607,70 @@ have, worth measuring before it grows.
 
 `.od` and `.odsl` files written after phase 2 will not open in older builds. That is normal for an
 additive schema change, but it is worth confirming before the first commit that lands the boxes.
+
+## Polarity, unipolar against bipolar
+
+Raised while the macro landed: the macro started unipolar and had to become bipolar, which is the
+same question every source has. A per-modulator switch answers it for the macro, but the answer
+should be one mechanism for the whole catalogue rather than a control that only the macro carries.
+
+### The proposal
+
+Every modulator keeps emitting a raw signal in -1..1. Polarity is a shared field on the modulator,
+so it comes from `ModulatorFactory` alongside `enabled` and `index` and every kind gets it for free,
+and it folds the raw signal exactly once, in `ModulatorState::value_at`:
+
+Bipolar, the value passes through.
+
+Unipolar, `raw * 0.5 + 0.5`, so the source only ever pushes the target away from its base in one
+direction, and the direction is chosen by the sign of the assignment's depth.
+
+Nothing about storage changes. The macro still stores -1..1, and unipolar simply means its resting
+point is the bottom of the fader rather than its middle. The LFO and the step sequencer are already
+native -1..1, so they need no per-kind work either.
+
+### What each layer does
+
+Box schema, one new key on the shared modulator fields, an int32 with two values, defaulting to
+bipolar. It is a WASM CONTRACT key like the rest.
+
+Engine, one `Cell<i32>` on `ModulatorState`, observed like `enabled`, applied in `value_at` and in
+the value half of `publish_phase` so the display dot agrees with what the parameter receives.
+
+Adapters, the polarity decides the value mapping and the print mapping of the macro's own control,
+-100..100% against 0..100%.
+
+UI, a two-state control in the modulator header, next to the enable toggle, so it reads the same on
+every editor. The macro's fader fills from the centre when bipolar and from the left when unipolar,
+which is the geometry the current editor already computes from `--fill-start` and `--fill-size`.
+
+### Why not per assignment
+
+The alternative is a mode on `ModulationBox`, so one LFO could drive one target bipolar and another
+unipolar. It is strictly more expressive and it is what a mode field at the box's next free key would
+cost, but it moves a decision that belongs to the source into every row of the target list, and the
+signed depth already covers the common case of wanting the opposite direction. Per-modulator first.
+If a real project wants both polarities from one source, the answer is a second modulator, and only
+if that becomes a habit is the per-assignment mode worth its column.
+
+### Open question
+
+Whether unipolar should offset (`raw * 0.5 + 0.5`) or rectify (`abs(raw)`). Offset is what a unipolar
+LFO means in most hosts and is the proposal here. Rectify is a different shape, a frequency doubler,
+and if it is ever wanted it belongs in the shape list, not in the polarity switch.
+
+## Creating a modulator from a parameter
+
+Today `Modulate > New > LFO` on a device control creates the modulator, assigns it and leaves the
+user where they were, so the only evidence is a ring around the knob. The modulator is on the
+modulation panel, which may not even be the visible screen.
+
+What it should do instead: create, assign, switch to the modulation panel, and scroll the new
+modulator into view, so the controls that were just made are under the cursor. The scroll is the
+part with substance, since the panel builds its editors from `rootBoxAdapter.modulators` and a fresh
+row exists only after the collection notifies, so the request has to survive one render pass. The
+smallest shape is a pending-uuid the panel consumes in `render`, cleared once it has scrolled.
+
+Two details to settle when it is built. Whether the switch is unconditional or only happens when the
+panel is already visible somewhere in the workspace, and whether the target list of the new modulator
+should flash the row it just gained, which is the same mechanism the reverse direction needs.

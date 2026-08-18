@@ -3518,11 +3518,14 @@ fn a_macro_modulator_holds_its_value_at_every_position() {
     let sum_at = |position: f64| handle.resolve(position).2;
     assert!((sum_at(0.0) - 0.25).abs() < 1.0e-6, "value 0.5 at depth 0.5, got {}", sum_at(0.0));
     assert!((sum_at(BAR * 0.37) - 0.25).abs() < 1.0e-6, "and it never moves with the position");
-    // The unipolar resting point contributes nothing at all.
     engine.graph.transaction(&[Update::Primitive {
-        address: Address::of(MACRO, vec![10]), old: FieldValue::Float32(0.5), new: FieldValue::Float32(0.0)
+        address: Address::of(MACRO, vec![10]), old: FieldValue::Float32(0.5), new: FieldValue::Float32(-1.0)
     }], &engine.registry).expect("turn the macro down");
-    assert!(sum_at(0.0).abs() < 1.0e-6, "a macro at zero adds nothing, got {}", sum_at(0.0));
+    assert!((sum_at(0.0) + 0.5).abs() < 1.0e-6, "it reaches the negative half too, got {}", sum_at(0.0));
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(MACRO, vec![10]), old: FieldValue::Float32(-1.0), new: FieldValue::Float32(0.0)
+    }], &engine.registry).expect("centre the macro");
+    assert!(sum_at(0.0).abs() < 1.0e-6, "a macro at rest adds nothing, got {}", sum_at(0.0));
 }
 
 // The paused split: while the transport stands still the blocks carry a FREE-RUNNING position, which the

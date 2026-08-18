@@ -14,7 +14,7 @@ export class MacroModulatorBoxAdapter extends ModulatorBoxAdapter<MacroModulator
     #wrapParameters(box: MacroModulatorBox) {
         return {
             value: this.parametric.createParameter(box.value,
-                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Value")
+                ValueMapping.bipolar(), StringMapping.percent({fractionDigits: 0}), "Value")
         } as const
     }
 }

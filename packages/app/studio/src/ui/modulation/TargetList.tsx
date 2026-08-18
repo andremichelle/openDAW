@@ -20,7 +20,7 @@ type Construct = {
 }
 
 export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElement => {
-    const {editing} = service.project
+    const {editing, userEditingManager} = service.project
     const entries: HTMLElement = <div className="entries"
                                        onConnect={host => lifecycle.own(installScrollbars(host, {autoHide: false}))}/>
     const element: HTMLElement = <div className={className}>{entries}</div>
@@ -40,7 +40,11 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
                      .catchupAndSubscribe((owner: ObservableValue<boolean>) =>
                          element.classList.toggle("disabled", !owner.getValue())))}>
                 <span className="target">
-                    <span className="owner">{assignment.targetOwner.unwrapOrElse("")}</span>
+                    <span className="owner" onInit={element => rows.own(Events.subscribe(element, "click", () =>
+                        assignment.targetAudioUnit.ifSome(unit =>
+                            userEditingManager.audioUnit.edit(unit.box.editing))))}>
+                        {assignment.targetOwner.unwrapOrElse("")}
+                    </span>
                     <span className="parameter">
                         {assignment.target.mapOr(parameter => parameter.name, "Unknown")}
                     </span>

@@ -7,7 +7,8 @@ component
     align-items: center
 
     .slider
-      --value: 0
+      --fill-start: 0.5
+      --fill-size: 0
       position: relative
       height: 2.1875em
       border-radius: 6px
@@ -19,8 +20,8 @@ component
         position: absolute
         top: 4px
         bottom: 4px
-        left: 4px
-        width: calc((100% - 8px) * var(--value))
+        left: calc(4px + (100% - 8px) * var(--fill-start))
+        width: calc((100% - 8px) * var(--fill-size))
         border-radius: 3px
         background: linear-gradient(to right, hsla(200, 83%, 60%, 0.15), hsla(200, 83%, 60%, 0.45))
         box-shadow: 0 0 4px 0 hsla(200, 83%, 60%, 0.04) inset

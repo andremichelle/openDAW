@@ -5,6 +5,7 @@ import {BoxAdapter} from "../BoxAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../ParameterAdapterSet"
 import {AutomatableParameterFieldAdapter} from "../AutomatableParameterFieldAdapter"
+import {AudioUnitBoxAdapter} from "../audio-unit/AudioUnitBoxAdapter"
 import {isModulatorBoxAdapter, ModulatorBoxAdapter} from "./ModulatorBoxAdapter"
 import {ParameterOwner} from "../ParameterOwner"
 
@@ -40,6 +41,10 @@ export class ModulationBoxAdapter implements BoxAdapter {
     get target(): Option<AutomatableParameterFieldAdapter> {
         return this.#box.target.targetVertex
             .flatMap(vertex => this.#context.parameterFieldAdapters.opt(vertex.address))
+    }
+
+    get targetAudioUnit(): Option<AudioUnitBoxAdapter> {
+        return this.#box.target.targetVertex.flatMap(vertex => ParameterOwner.audioUnitOf(this.#context, vertex))
     }
 
     get targetOwner(): Option<string> {

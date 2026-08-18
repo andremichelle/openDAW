@@ -4,6 +4,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 import {AudioUnitBoxAdapter} from "./audio-unit/AudioUnitBoxAdapter"
+import {Devices} from "./DeviceAdapter"
 
 export namespace ParameterOwner {
     /// A scriptable device's dynamic parameter lives in its own child box, so the walk falls back to the
@@ -18,6 +19,22 @@ export namespace ParameterOwner {
         const owner = resolveOwnerDeviceBox(box).flatMap(owner => labelOf(context, owner))
         return owner.nonEmpty() ? owner : Option.wrap(box.name)
     }
+
+    export const audioUnitOf = (context: BoxAdaptersContext, vertex: Vertex): Option<AudioUnitBoxAdapter> => {
+        const box = vertex.box
+        if (box instanceof AudioUnitBox) {
+            return Option.wrap(context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter))
+        }
+        const own = unitOf(context, box)
+        if (own.nonEmpty()) {return own}
+        return resolveOwnerDeviceBox(box).flatMap(owner => unitOf(context, owner))
+    }
+
+    const unitOf = (context: BoxAdaptersContext, box: Box): Option<AudioUnitBoxAdapter> =>
+        context.boxAdapters.optAdapter(box)
+            .flatMap(adapter => Devices.isAny(adapter)
+                ? Option.wrap(adapter.audioUnitBoxAdapter())
+                : Option.None)
 
     const labelOf = (context: BoxAdaptersContext, box: Box): Option<string> =>
         context.boxAdapters.optAdapter(box).flatMap(adapter =>

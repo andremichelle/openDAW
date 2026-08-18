@@ -26,7 +26,9 @@ export const MacroEditor = ({lifecycle, service, modulator}: Construct) => {
     const slider: HTMLElement = (
         <div className="slider" onInit={element => lifecycle.ownAll(
             value.catchupAndSubscribe((owner: Parameter) => {
-                element.style.setProperty("--value", owner.getControlledUnitValue().toString())
+                const controlled = owner.getControlledUnitValue()
+                element.style.setProperty("--fill-start", Math.min(controlled, 0.5).toString())
+                element.style.setProperty("--fill-size", Math.abs(controlled - 0.5).toString())
                 const {value, unit} = owner.getPrintValue()
                 print.textContent = `${value}${unit}`
             }),
