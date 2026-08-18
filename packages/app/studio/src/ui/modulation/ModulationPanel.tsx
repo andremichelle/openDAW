@@ -8,6 +8,7 @@ import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {createModulatorEditor} from "@/ui/modulation/ModulatorEditorFactory.tsx"
+import {installScrollbars} from "@/ui/components/Scrollbars.tsx"
 
 const className = Html.adoptStyleSheet(css, "ModulationPanel")
 
@@ -21,7 +22,7 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
     const {editing, rootBoxAdapter} = project
     const contents = lifecycle.own(new Terminator())
     const element: HTMLElement = (
-        <div className={className}>
+        <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
             <h5 className="head modulators">
                 <span>Modulators</span>
                 <Button lifecycle={lifecycle}

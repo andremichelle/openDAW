@@ -161,7 +161,7 @@ export const DefaultWorkspace = Object.freeze({
     },*/
     "modulation": {
         name: "Modulation",
-        icon: IconSymbol.Waveform,
+        icon: IconSymbol.Modulation,
         content: {
             type: "layout",
             orientation: "horizontal",
@@ -174,7 +174,7 @@ export const DefaultWorkspace = Object.freeze({
                         PanelState.create({
                             type: "panel",
                             name: "Modulation",
-                            icon: IconSymbol.Waveform,
+                            icon: IconSymbol.Modulation,
                             panelType: PanelType.Modulation,
                             notMinimizable: true,
                             constrains: {type: "flex", minSize: 0, flex: 1}

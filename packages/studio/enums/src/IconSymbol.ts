@@ -177,6 +177,7 @@ export enum IconSymbol {
     Vaporisateur,
     FolderOpen,
     FolderAdd,
+    Modulation,
 }
 
 export namespace IconSymbol {

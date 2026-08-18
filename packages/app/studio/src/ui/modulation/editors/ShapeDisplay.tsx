@@ -1,8 +1,12 @@
+import css from "./ShapeDisplay.sass?inline"
 import {Lifecycle, TAU} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
+import {Html} from "@opendaw/lib-dom"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint.ts"
 import {LfoModulatorBoxAdapter, LfoShape} from "@opendaw/studio-adapters"
+
+const className = Html.adoptStyleSheet(css, "ShapeDisplay")
 
 type Construct = {
     lifecycle: Lifecycle
@@ -25,7 +29,7 @@ const shapeAt = (shape: LfoShape, turn: number): number => {
 }
 
 export const ShapeDisplay = ({lifecycle, modulator}: Construct): HTMLElement => {
-    const canvas: HTMLCanvasElement = (<canvas className="shape"/>)
+    const canvas: HTMLCanvasElement = (<canvas/>)
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const {context, actualWidth, actualHeight, devicePixelRatio} = painter
         context.clearRect(0, 0, actualWidth, actualHeight)
@@ -64,5 +68,5 @@ export const ShapeDisplay = ({lifecycle, modulator}: Construct): HTMLElement => 
         modulator.box.phase.subscribe(painter.requestUpdate),
         modulator.box.amount.subscribe(painter.requestUpdate)
     )
-    return canvas
+    return <div className={className}>{canvas}</div>
 }

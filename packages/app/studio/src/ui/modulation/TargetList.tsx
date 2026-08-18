@@ -9,6 +9,7 @@ import {Icon} from "@/ui/components/Icon.tsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
+import {installScrollbars} from "@/ui/components/Scrollbars.tsx"
 
 const className = Html.adoptStyleSheet(css, "TargetList")
 
@@ -20,7 +21,8 @@ type Construct = {
 
 export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElement => {
     const {editing} = service.project
-    const entries: HTMLElement = <div className="entries"/>
+    const entries: HTMLElement = <div className="entries"
+                                       onConnect={host => lifecycle.own(installScrollbars(host))}/>
     const element: HTMLElement = <div className={className}>{entries}</div>
     const rows = lifecycle.own(new Terminator())
     const render = () => {
@@ -32,9 +34,10 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
                      .catchupAndSubscribe((owner: ObservableValue<boolean>) =>
                          element.classList.toggle("disabled", !owner.getValue())))}>
                 <span className="target">
-                    {assignment.targetOwner.unwrapOrElse("")}
-                    <span className="separator">&gt;</span>
-                    {assignment.target.mapOr(parameter => parameter.name, "Unknown")}
+                    <span className="owner">{assignment.targetOwner.unwrapOrElse("")}</span>
+                    <span className="parameter">
+                        {assignment.target.mapOr(parameter => parameter.name, "Unknown")}
+                    </span>
                 </span>
                 <RelativeUnitValueDragging lifecycle={rows}
                                            editing={editing}

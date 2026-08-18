@@ -894,6 +894,10 @@ export const IconLibrary = () => (
                 <path
                     d="M12.4142 5H21C21.5523 5 22 5.44772 22 6V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H10.4142L12.4142 5ZM11 12H8V14H11V17H13V14H16V12H13V9H11V12Z"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.Modulation)} viewBox="0 0 16 16" fill="none"
+                    stroke="currentColor" stroke-width="1px">
+                <path d="M2 2h6v4h6M2 14l6-4v4l6-4"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.ArrowRight)} viewBox="0 0 24 24" fill="currentColor">
                 <path d="M16 12L10 18V6L16 12Z"/>
             </symbol>
