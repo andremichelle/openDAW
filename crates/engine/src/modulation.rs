@@ -19,9 +19,6 @@ pub(crate) const SHAPE_SQUARE: i32 = 4;
 pub(crate) const RATES: [f64; 12] = [30720.0, 15360.0, 7680.0, 3840.0, 1920.0, 960.0, 640.0, 480.0,
     320.0, 240.0, 160.0, 120.0];
 
-// The free-running wall clock the absolute rate integrates over, advanced once per quantum by the engine.
-// Its OWN cell (NOT `ENGINE`), like `SONG_POSITION`: the re-entrant read during render must not alias the
-// `&mut Engine` the render path holds.
 crate::shared_static! {
     static SECONDS: f64 = 0.0;
 }
@@ -61,7 +58,6 @@ impl LfoState {
             phase: Cell::new(0.0), amount: Cell::new(1.0)}
     }
 
-    /// The two rates are ADDITIVE in frequency: the tempo-synced cycle plus `rate_absolute` Hz of wall clock.
     fn turn_at(&self, position: f64, seconds: f64) -> f64 {
         position / cycle_pulses(self.rate_sync.get())
             + seconds * self.rate_absolute.get() as f64
@@ -99,23 +95,17 @@ impl StepsState {
             direction: Cell::new(DIRECTION_FORWARD), steps: core::array::from_fn(|_| Cell::new(0.0))}
     }
 
-    /// The rate is the length of ONE step, so the sequence keeps its grid when the count changes. `smooth`
-    /// is the fraction of a step spent gliding from the previous step's value, so 0 steps hard.
     fn step_position(&self, position: f64, seconds: f64, count: i64) -> f64 {
         position / cycle_pulses(self.rate_sync.get())
             + seconds * self.rate_absolute.get() as f64
             + self.phase.get() as f64 * count as f64
     }
 
-    /// Where the UI draws the playhead: the step the sequence is ON right now, folded through the
-    /// direction, plus how far into it the position sits, so it lands over the step that is sounding.
     fn playhead_at(&self, position: f64, seconds: f64) -> f32 {
         let count = self.count.get().clamp(1, MAX_STEPS as i32) as i64;
         let step = self.step_position(position, seconds, count);
         let index = floor(step);
         let resolved = self.resolve_index(index as i64, count) as f32;
-        // Inside a step the playhead travels the way the SEQUENCE is travelling, so a backward pass crosses
-        // its step right to left and stays continuous at the step boundary.
         let fraction = (step - index) as f32;
         resolved + if self.descending(index as i64, count) {1.0 - fraction} else {fraction}
     }
@@ -162,8 +152,6 @@ impl StepsState {
     }
 }
 
-/// Ping-pong WITHOUT repeating the turning points: the period is `2 * count - 2`, so the first and last
-/// step play once per round trip rather than twice. Below three steps there is nothing to fold.
 /// WASM CONTRACT: mirrors `StepsModulatorBoxAdapter.alternateIndex` (packages/studio/adapters).
 fn alternate_index(index: i64, count: i64) -> i64 {
     if count < 3 {
@@ -174,8 +162,6 @@ fn alternate_index(index: i64, count: i64) -> i64 {
     if local < count {local} else {period - local}
 }
 
-/// A stable shuffle: the same (cycle, step) always lands on the same index, so the sequence stays a pure
-/// function of the position and a locate replays it identically.
 /// WASM CONTRACT: mirrors `StepsModulatorBoxAdapter.randomIndex` (packages/studio/adapters).
 fn random_index(cycle: i64, step: i64, count: i64) -> i64 {
     let mut hash = (cycle as i32).wrapping_mul(0x9E3779B1u32 as i32) ^ (step as i32 + 1).wrapping_mul(0x85EBCA77u32 as i32);
@@ -192,11 +178,6 @@ pub(crate) enum ModulatorKind {
 pub(crate) struct ModulatorState {
     pub(crate) enabled: Cell<bool>,
     pub(crate) kind: ModulatorKind,
-    // The UI playhead at the MODULATOR's box address: [0] where it is, [1] what it outputs. An LFO writes its
-    // turn (0..1), a sequence its running step index, so the editor draws the position it is playing rather
-    // than guessing one from a clock it does not share. Everything else about modulation is PULLED by the
-    // device that needs it; this is the one push, so it is gated on the UI's subscription and costs nothing
-    // while no editor is open.
     pub(crate) broadcast: RefCell<Option<engine_env::telemetry::BroadcastSlot>>,
     pub(crate) broadcast_active: Rc<Cell<bool>>
 }

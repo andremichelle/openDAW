@@ -51,7 +51,6 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
             context.lineTo((index + 1) * stepWidth - gap, y)
         }
         context.stroke()
-        // The curve the engine actually resolves, so smoothing is visible before it is heard.
         context.beginPath()
         for (let x = 0; x <= actualWidth; x++) {
             const y = valueToY(modulator.patternAt(x / stepWidth))
@@ -64,8 +63,6 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         context.lineTo(actualWidth, centerY)
         context.strokeStyle = "hsla(200, 83%, 60%, 0.25)"
         context.stroke()
-        // The engine's own output, not a redraw of it: with a direction that walks the pattern out of step
-        // order, or an amount below full, the dot sits where the modulation actually is.
         context.beginPath()
         context.arc(playhead * stepWidth, valueToY(output), devicePixelRatio * 2.0, 0.0, TAU)
         context.fillStyle = "hsl(200, 83%, 75%)"
@@ -80,7 +77,6 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         const rect = canvas.getBoundingClientRect()
         return clamp(1.0 - (clientY - rect.top) / rect.height * 2.0, -1.0, 1.0)
     }
-    // One gesture is one undo step: `mark` opens it, the moves modify without marking, `mark` closes it.
     const paint = (event: Dragging.Event) => editing.modify(() =>
         modulator.steps[stepAt(event.clientX)].setValue(event.altKey ? 0.0 : valueAt(event.clientY)), false)
     lifecycle.ownAll(
@@ -114,8 +110,6 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
             }
         }),
         modulator.box.subscribe(Propagation.Children, painter.requestUpdate),
-        // The engine publishes the step the sequence is on at the modulator's address, so the playhead shows
-        // what is actually playing rather than a clock the UI would have to guess at while paused.
         receiver.subscribeFloats(modulator.address, ([position, value]) => {
             playhead = position
             output = value

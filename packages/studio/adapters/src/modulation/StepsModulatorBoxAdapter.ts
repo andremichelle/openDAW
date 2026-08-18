@@ -22,10 +22,6 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
     get count(): int {return this.box.count.getValue()}
     get steps(): ReadonlyArray<Float32Field> {return this.box.steps.fields()}
 
-    /// The drawn pattern at `step`, a continuous index into the sequence: the step under it, glided towards
-    /// its NEIGHBOUR over the first `smooth` of its length. This is the picture, in step order, so the curve
-    /// always agrees with the bars. What the engine plays walks that picture through the direction, which is
-    /// why the playhead comes from the engine rather than being derived here.
     patternAt(step: number): unitValue {
         const count = Math.max(1, Math.min(this.count, StepsModulatorBoxAdapter.MaxSteps))
         const index = Math.floor(step)
@@ -37,8 +33,6 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
         return previous + (current - previous) * ramp * ramp * (3.0 - 2.0 * ramp)
     }
 
-    /// Every mutation below runs inside an `editing.modify` and touches only the ACTIVE steps, so shortening
-    /// the sequence and growing it again brings the old tail back.
     clear(): void {this.#activeSteps().forEach(step => step.setValue(0.0))}
 
     randomize(): void {this.#activeSteps().forEach(step => step.setValue(Math.random() * 2.0 - 1.0))}
@@ -62,7 +56,7 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
                 StringMapping.numeric({unit: ""}), "Steps"),
             rateSync: this.parametric.createParameter(box.rateSync,
                 ValueMapping.linearInteger(0, LfoModulatorBoxAdapter.Rates.length - 1),
-                StringMapping.indices("", LfoModulatorBoxAdapter.RateStrings), "Rate"),
+                StringMapping.indices("", LfoModulatorBoxAdapter.RateStrings), "Sync"),
             rateAbsolute: this.parametric.createParameter(box.rateAbsolute,
                 ValueMapping.powerByCenter(LfoModulatorBoxAdapter.CenterAbsoluteRate,
                     0.0, LfoModulatorBoxAdapter.MaxAbsoluteRate),

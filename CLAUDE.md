@@ -2,7 +2,7 @@
 
 ## Coding Style
 
-- **Minimize comments.** Code should be self-explanatory. Only add comments when the logic is truly non-obvious.
+- **WRITE NO COMMENTS.** Production code gets zero comments, including doc comments on public functions and one-line notes on design decisions. The only exemptions are `// WASM CONTRACT:` markers and test files. Anything worth saying goes in the commit message or the plan document.
 - **No blank lines inside methods.** Keep method bodies compact without empty line separators.
 - **Keep destructuring compact.** Group multiple destructured properties on the same line rather than one per line. Break into multiple lines only when a single line would exceed ~120 characters.
 - **Never use single-letter abbreviations in lambdas.** Use descriptive names like `entry`, `text`, `value`, `event`, etc.

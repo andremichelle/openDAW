@@ -1460,8 +1460,6 @@ impl Engine {
         }
         unsafe { *SONG_POSITION.get() = self.transport.position(); }
         modulation::advance_seconds(RENDER_QUANTUM as f64 / self.sample_rate as f64);
-        // The modulator playheads: one publish per quantum at the FREE-RUNNING position, the same clock the
-        // modulation itself reads, so a paused editor still shows the sequence walking.
         self.modulators.borrow().publish_phases(self.transport.free_running(), modulation::seconds());
         let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
@@ -1900,11 +1898,9 @@ impl Engine {
         self.sync_modulators();
     }
 
-    /// WASM CONTRACT: modulator field keys — enabled 4 (Boolean) on both. LfoModulatorBox: shape 10 (Int32),
-    /// rateSync 11 (Int32), rateAbsolute 12 (Float32), phase 13 (Float32), amount 14 (Float32).
-    /// StepsModulatorBox: count 10 (Int32), rateSync 11 (Int32), rateAbsolute 12 (Float32), phase 13
-    /// (Float32), amount 14 (Float32), smooth 15 (Float32), direction 16 (Int32), steps 20 (Array of 64
-    /// Float32). Per boxes LfoModulatorBox.ts / StepsModulatorBox.ts.
+    /// WASM CONTRACT: modulator field keys — enabled 4. LfoModulatorBox: shape 10, rateSync 11,
+    /// rateAbsolute 12, phase 13, amount 14. StepsModulatorBox: count 10, rateSync 11, rateAbsolute 12,
+    /// phase 13, amount 14, smooth 15, direction 16, steps 20 (array of 64).
     fn sync_modulators(&mut self) {
         let (added, removed) = self.modulators.borrow_mut().take_pending();
         for uuid in removed {
