@@ -674,3 +674,53 @@ smallest shape is a pending-uuid the panel consumes in `render`, cleared once it
 Two details to settle when it is built. Whether the switch is unconditional or only happens when the
 panel is already visible somewhere in the workspace, and whether the target list of the new modulator
 should flash the row it just gained, which is the same mechanism the reverse direction needs.
+
+## Replacing a modulator, keeping its targets
+
+Changing your mind about the source should not cost the routing. A modulator that drives eight
+parameters at eight depths is mostly the assignments, and rebuilding them by hand is the reason
+people leave the wrong source in place.
+
+Replace turns one modulator into another kind in situ: create the new box, move every incoming
+`ModulationBox` from the old source field to the new one, keep each depth and enabled flag as it is,
+take over the label and the index, delete the old box. The assignments never see it, since a
+`ModulationBox` addresses its source through a pointer, so the whole operation is one pointer rewrite
+per row inside a single `editing.modify`, which makes it one undo step.
+
+Where it lives: the modulator header's context menu, "Replace with", listing the same kinds the ⊕
+menu offers, the current kind checked. What does not survive is the old kind's own parameters, which
+have no meaning in the new one, so a replaced LFO's rate is the new modulator's default rather than a
+translation. Only what both kinds share carries over: label, index, enabled, and the targets.
+
+## A shaping exponent on the LFO
+
+A sine that spends more time near the extremes, or near the middle, without adding shapes to the
+list. One parameter, applied to the LFO's output: `shaped = output ^ value`.
+
+The output is bipolar, so the exponent has to be sign preserving, `sign(output) * abs(output) ^ value`,
+otherwise a fractional exponent on a negative half is not a number at all. At 1 it is the identity,
+which is the resting point.
+
+The control is a `powerByCenter` mapping around 1, so the knob travels an equal distance either way,
+say 1/8 at the low end and 8 at the high end. Below 1 the shape swells towards its extremes, above 1
+it flattens towards the middle and sharpens the peaks.
+
+It belongs to the LFO alone, not the shared modulator fields. The step sequencer already has a
+per-step value, so an exponent on top of it shapes nothing the user cannot draw, and on the macro it
+would only bend a value the user is setting directly. If a second kind ever wants it, it moves to a
+shared field then, not before.
+
+## Duplicating a modulator
+
+The counterpart of replace: same kind, same parameter values, no targets. The use is one LFO tuned
+the way you like it and a second one just like it on a different set of parameters, or a step
+sequence you want to vary without losing the original.
+
+Copy every field except the collection pointer, place it after the source in the index order, give it
+a unique label the way `Modulators.createLfo` already does through `Strings.getUniqueName`, and leave
+the assignments behind. It sits in the same header menu as replace.
+
+The open question is whether the targets should be an option, a duplicate that also clones every
+assignment at the same depths. Useful when the two sources should start identical and drift apart,
+confusing when the user expected an empty one, so the safe default is without, and the variant is a
+second entry rather than a modifier key.
