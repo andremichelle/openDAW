@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
-import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {Modulators, ProjectSkeleton} from "@opendaw/studio-adapters"
-import {LfoModulatorBox, ModulationBox} from "@opendaw/studio-boxes"
+import {LfoModulatorBox, MIDIControllerBox, ModulationBox, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import type {ProjectEnv} from "./ProjectEnv"
 
@@ -160,6 +160,27 @@ describe("modulation schema", () => {
         project.editing.modify(() => parameter.modulations[0].delete())
         expect(parameter.modulations.length).toBe(0)
         expect(modulator.assignments.length).toBe(1)
+        project.terminate()
+    })
+
+    it("a modulator's own parameter takes a midi controller", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(createEnv(), ProjectSkeleton.empty({
+            createDefaultUser: true, createOutputMaximizer: false
+        }))
+        const lfo = project.editing.modify(() => Modulators.createLfo(project)).unwrap("no lfo")
+        const {midiControllers} = asInstanceOf(project.rootBox.users.pointerHub.incoming()[0].box, UserInterfaceBox)
+        const controller = project.editing.modify(() =>
+            MIDIControllerBox.create(project.boxGraph, UUID.generate(), box => {
+                box.controllers.refer(midiControllers)
+                box.parameter.refer(lfo.amount)
+                box.controlId.setValue(74)
+            })).unwrap("no controller")
+        expect(controller.parameter.targetAddress.unwrap("target").equals(lfo.amount.address)).toBe(true)
+        // MIDI learn resolves the parameter through the registry, so the adapter has to be there already.
+        const parameter = project.parameterFieldAdapters.get(lfo.amount.address)
+        project.editing.modify(() => parameter.setUnitValue(0.25))
+        expect(lfo.amount.getValue()).toBeCloseTo(0.25, 6)
         project.terminate()
     })
 })

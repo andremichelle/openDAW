@@ -9,6 +9,7 @@ import {Icon} from "@/ui/components/Icon.tsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
+import {attachModulatorParameterContextMenu} from "@/ui/menu/automation.ts"
 import {installScrollbars} from "@/ui/components/Scrollbars.tsx"
 
 const className = Html.adoptStyleSheet(css, "TargetList")
@@ -20,7 +21,7 @@ type Construct = {
 }
 
 export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElement => {
-    const {editing, userEditingManager} = service.project
+    const {editing, midiLearning, userEditingManager} = service.project
     const entries: HTMLElement = <div className="entries"
                                        onConnect={host => lifecycle.own(installScrollbars(host, {autoHide: false}))}/>
     const element: HTMLElement = <div className={className}>{entries}</div>
@@ -34,8 +35,11 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
             </div>)
             return
         }
-        modulator.assignments.forEach((assignment: ModulationBoxAdapter) => entries.append(
-            <div className="entry"
+        modulator.assignments.forEach((assignment: ModulationBoxAdapter) => {
+            const {depth} = assignment.namedParameter
+            const depthLabel: HTMLElement = (<ParameterLabel lifecycle={rows} parameter={depth} framed={true}/>)
+            rows.own(attachModulatorParameterContextMenu(editing, midiLearning, depth, depthLabel))
+            entries.append(<div className="entry"
                  onInit={element => rows.own(assignment.box.enabled
                      .catchupAndSubscribe((owner: ObservableValue<boolean>) =>
                          element.classList.toggle("disabled", !owner.getValue())))}>
@@ -51,11 +55,9 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
                 </span>
                 <RelativeUnitValueDragging lifecycle={rows}
                                            editing={editing}
-                                           parameter={assignment.namedParameter.depth}
+                                           parameter={depth}
                                            supressValueFlyout={true}>
-                    <ParameterLabel lifecycle={rows}
-                                    parameter={assignment.namedParameter.depth}
-                                    framed={true}/>
+                    {depthLabel}
                 </RelativeUnitValueDragging>
                 <Icon symbol={IconSymbol.Shutdown} className="toggle" onInit={element =>
                     rows.own(Events.subscribe(element, "click", () =>
@@ -63,8 +65,8 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
                 <Button lifecycle={rows} onClick={() => editing.modify(() => assignment.box.delete())}>
                     <Icon symbol={IconSymbol.Delete}/>
                 </Button>
-            </div>
-        ))
+            </div>)
+        })
     }
     lifecycle.own(modulator.box.assignments.pointerHub.catchupAndSubscribe({
         onAdded: () => render(),

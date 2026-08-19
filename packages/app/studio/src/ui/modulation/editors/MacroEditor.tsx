@@ -6,6 +6,7 @@ import {MacroModulatorBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {ModulatorEditor} from "@/ui/modulation/ModulatorEditor.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
+import {attachModulatorParameterContextMenu} from "@/ui/menu/automation.ts"
 
 const className = Html.adoptStyleSheet(css, "MacroEditor")
 
@@ -19,7 +20,7 @@ type Construct = {
 }
 
 export const MacroEditor = ({lifecycle, service, modulator}: Construct) => {
-    const {editing} = service.project
+    const {editing, midiLearning} = service.project
     const {value} = modulator.namedParameter
     const options = {horizontal: true, ratio: 1.0, trackLength: 128}
     const print: HTMLElement = (<div className="print"/>)
@@ -33,6 +34,7 @@ export const MacroEditor = ({lifecycle, service, modulator}: Construct) => {
                 print.textContent = `${value}${unit}`
             }),
             Html.watchResize(element, () => options.trackLength = element.clientWidth - INSET * 2),
+            attachModulatorParameterContextMenu(editing, midiLearning, value, element),
             Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
                 const {left, width} = element.getBoundingClientRect()
                 const track = width - INSET * 2

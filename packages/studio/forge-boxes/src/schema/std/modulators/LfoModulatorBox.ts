@@ -1,22 +1,22 @@
 import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
-import {BipolarConstraints, UnipolarConstraints} from "../Defaults"
+import {BipolarConstraints, MidiControlPointerRules, UnipolarConstraints} from "../Defaults"
 import {ModulatorFactory} from "./ModulatorFactory"
 
 export const LfoModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createModulator("LfoModulatorBox", {
     10: {
-        type: "int32", name: "shape", value: 0,
+        type: "int32", name: "shape", pointerRules: MidiControlPointerRules, value: 0,
         constraints: {values: [0, 1, 2, 3, 4]}, unit: "" // LfoShape
     },
     11: {
-        type: "int32", name: "rateSync", value: 4, // LfoModulatorBoxAdapter.RatePPQNs, one bar
+        type: "int32", name: "rateSync", pointerRules: MidiControlPointerRules, value: 4, // LfoModulatorBoxAdapter.RatePPQNs, one bar
         constraints: {min: 0, max: 12}, unit: ""
     },
     12: {
-        type: "float32", name: "rateAbsolute", value: 0.0,
+        type: "float32", name: "rateAbsolute", pointerRules: MidiControlPointerRules, value: 0.0,
         constraints: {min: 0.0, max: 20.0, scaling: "linear"}, unit: "Hz"
     },
-    13: {type: "float32", name: "phase", value: 0.0, ...UnipolarConstraints},
-    14: {type: "float32", name: "amount", value: 1.0, ...UnipolarConstraints},
-    15: {type: "float32", name: "exponent", value: 0.0, ...BipolarConstraints}
+    13: {type: "float32", name: "phase", pointerRules: MidiControlPointerRules, value: 0.0, ...UnipolarConstraints},
+    14: {type: "float32", name: "amount", pointerRules: MidiControlPointerRules, value: 1.0, ...UnipolarConstraints},
+    15: {type: "float32", name: "exponent", pointerRules: MidiControlPointerRules, value: 0.0, ...BipolarConstraints}
 })

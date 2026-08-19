@@ -7,13 +7,11 @@ import {StepsDirection, StepsModulatorBoxAdapter} from "@opendaw/studio-adapters
 import {StudioService} from "@/service/StudioService.ts"
 import {ModulatorEditor} from "@/ui/modulation/ModulatorEditor.tsx"
 import {StepsDisplay} from "@/ui/modulation/editors/StepsDisplay.tsx"
-import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob.tsx"
-import {Column} from "@/ui/devices/Column.tsx"
+import {ModulatorKnob} from "@/ui/modulation/ModulatorKnob.tsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {NumberInput} from "@/ui/components/NumberInput.tsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
-import {LKR} from "@/ui/devices/constants.ts"
 import {Icon} from "@/ui/components/Icon"
 
 const className = Html.adoptStyleSheet(css, "StepsEditor")
@@ -77,10 +75,7 @@ export const StepsEditor = ({lifecycle, service, modulator}: Construct) => {
                 <div className="knobs">
                     <div className="section"/>
                     {[rateSync, rateAbsolute, smooth, phase, amount].map(parameter => (
-                        <Column ems={LKR}>
-                            <h5>{parameter.name}</h5>
-                            <ParameterLabelKnob lifecycle={lifecycle} editing={editing} parameter={parameter}/>
-                        </Column>
+                        <ModulatorKnob lifecycle={lifecycle} service={service} parameter={parameter}/>
                     ))}
                 </div>
             </div>

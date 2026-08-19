@@ -6,9 +6,7 @@ import {LfoModulatorBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {ModulatorEditor} from "@/ui/modulation/ModulatorEditor.tsx"
 import {ShapeDisplay} from "@/ui/modulation/editors/ShapeDisplay.tsx"
-import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob.tsx"
-import {Column} from "@/ui/devices/Column.tsx"
-import {LKR} from "@/ui/devices/constants.ts"
+import {ModulatorKnob} from "@/ui/modulation/ModulatorKnob.tsx"
 
 const className = Html.adoptStyleSheet(css, "LfoEditor")
 
@@ -19,7 +17,6 @@ type Construct = {
 }
 
 export const LfoEditor = ({lifecycle, service, modulator}: Construct) => {
-    const {editing} = service.project
     const {shape, rateSync, rateAbsolute, phase, amount, exponent} = modulator.namedParameter
     return (
         <ModulatorEditor lifecycle={lifecycle} service={service} modulator={modulator}>
@@ -28,11 +25,8 @@ export const LfoEditor = ({lifecycle, service, modulator}: Construct) => {
                 <div className="knobs">
                     <div className="section"/>
                     {[shape, rateSync, rateAbsolute, exponent, phase, amount].map(parameter => (
-                        <Column ems={LKR}>
-                            <h5>{parameter.name}</h5>
-                            <ParameterLabelKnob lifecycle={lifecycle} editing={editing} parameter={parameter}
-                                                anchor={parameter === exponent ? 0.5 : 0.0}/>
-                        </Column>
+                        <ModulatorKnob lifecycle={lifecycle} service={service} parameter={parameter}
+                                       anchor={parameter === exponent ? 0.5 : 0.0}/>
                     ))}
                 </div>
             </div>

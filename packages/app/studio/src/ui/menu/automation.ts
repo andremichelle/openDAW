@@ -46,6 +46,29 @@ export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: E
         )
     })
 
+/// A modulator's own parameters take MIDI only: automation and modulation of them do not exist yet.
+export const attachModulatorParameterContextMenu = <T extends PrimitiveValues>(
+    editing: Editing,
+    midiDevices: MIDILearning,
+    parameter: AutomatableParameterFieldAdapter<T>,
+    element: Element) =>
+    ContextMenu.subscribe(element, collector => {
+        const field = parameter.field
+        collector.addItems(
+            MenuItem.default({
+                label: midiDevices.hasMidiConnection(field.address) ? "Forget Midi" : "Learn Midi Control..."
+            }).setTriggerProcedure(() => {
+                if (midiDevices.hasMidiConnection(field.address)) {
+                    midiDevices.forgetMidiConnection(field.address)
+                } else {
+                    midiDevices.learnMIDIControls(field).then()
+                }
+            }),
+            MenuItem.default({label: "Reset Value", checked: field.getValue() === field.initValue})
+                .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
+        )
+    })
+
 const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
                                                    parameter: AutomatableParameterFieldAdapter<T>) =>
     MenuItem.default({label: "Modulate"}).setRuntimeChildrenProcedure(parent => {
