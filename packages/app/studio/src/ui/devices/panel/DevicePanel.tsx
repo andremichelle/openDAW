@@ -2,8 +2,11 @@ import css from "./DevicePanel.sass?inline"
 import {
     asDefined,
     isAbsent,
+    isInstanceOf,
+    isNotNull,
     Lifecycle,
     MutableObservableOption,
+    Nullable,
     ObservableOption,
     Option,
     Terminable,
@@ -100,6 +103,12 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
     const chainLifecycle = lifecycle.own(new Terminator())
     const mounts = UUID.newSet<DeviceMount>(({uuid}) => uuid)
     const updateDom = lifecycle.own(deferNextFrame(() => {
+        // Emptying the containers detaches the focused device header, and the browser drops focus to <body>. The
+        // panel's Ctrl+D context is focus-scoped, so without restoring it the next press falls through to the
+        // global shortcut and duplicates the whole audio unit instead of the selected effect.
+        const activeElement = document.activeElement
+        const previouslyFocused: Nullable<HTMLElement> = isInstanceOf(activeElement, HTMLElement)
+            && element.contains(activeElement) ? activeElement : null
         Html.empty(midiEffectsContainer)
         Html.empty(instrumentContainer)
         Html.empty(audioEffectsContainer)
@@ -152,6 +161,13 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
                           compact={true}/>
         ))
         updateScroller()
+        if (isNotNull(previouslyFocused)) {
+            // A surviving mount keeps its element, so the same header can take the focus back. A device that is
+            // gone (cut, replaced) hands it to whatever is selected now.
+            Option.wrap(previouslyFocused.isConnected
+                ? previouslyFocused
+                : containers.querySelector<HTMLElement>("header.selected")).ifSome(target => target.focus())
+        }
     }))
 
     const subscribeChain = ({midiEffects, instrument, audioEffects, host}: {
