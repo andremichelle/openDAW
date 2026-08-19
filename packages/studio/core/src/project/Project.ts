@@ -6,6 +6,7 @@ import {
     isAbsent,
     isDefined,
     isInstanceOf,
+    Notifier,
     Observer,
     Option,
     panic,
@@ -93,6 +94,8 @@ export type ProjectCreateOptions = {
     noDefaultUser?: boolean
 }
 
+export type MIDIOutMessage = { readonly deviceId: string, readonly data: Uint8Array }
+
 // Main Entry Point for a Project
 export class Project implements BoxAdaptersContext, Terminable, TerminableOwner {
     static new(env: ProjectEnv, options?: ProjectCreateOptions): Project {
@@ -125,6 +128,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         return project
     }
 
+    readonly #midiOutNotifier = new Notifier<MIDIOutMessage>()
     readonly #terminator = new Terminator()
     readonly #sampleRegistrations: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, terminable: Terminable }>
     readonly #userCreatedSamples: SortedSet<UUID.Bytes, UUID.Bytes> = UUID.newSet(uuid => uuid)
@@ -432,11 +436,15 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         }
     }
 
+    /// What THIS project's engine sent out, before it reaches the (globally shared) device. An internal sink
+    /// like the shadertoy port must listen here: a second engine (a video export renders its own copy of the
+    /// project) writes to the same device id, and its values would otherwise land in this project's sink.
+    subscribeMIDIOut(observer: Observer<MIDIOutMessage>): Subscription {
+        return this.#midiOutNotifier.subscribe(observer)
+    }
+
     receivedMIDIFromEngine(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void {
-        const debug = false
-        if (debug) {
-            console.debug("receivedMIDIFromEngine", MidiData.debug(data), relativeTimeInMs)
-        }
+        this.#midiOutNotifier.notify({deviceId: midiDeviceId, data})
         const timestamp = performance.now() + relativeTimeInMs
         MidiDevices.findOutputDeviceById(midiDeviceId).ifSome(midiOutputDevice => {
             try {

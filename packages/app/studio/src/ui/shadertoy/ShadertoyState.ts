@@ -114,11 +114,14 @@ export class ShadertoyState implements Terminable {
         const {engine: {position, sampleRate}, liveStreamReceiver} = project
         return Terminable.many(
             AnimationFrame.add(() => this.setPPQN(position.getValue())),
-            ShadertoyMIDIOutput.subscribe(message => MidiData.accept(message, {
-                controller: (id: byte, value: unitValue) => this.#onMidiCC(id, value),
-                noteOn: (note: byte, velocity: byte) => this.#onMidiNoteOn(note, velocity),
-                noteOff: (note: byte) => this.#onMidiNoteOff(note)
-            })),
+            project.subscribeMIDIOut(({deviceId, data}) => {
+                if (deviceId !== ShadertoyMIDIOutput.Default.id) {return}
+                MidiData.accept(data, {
+                    controller: (id: byte, value: unitValue) => this.#onMidiCC(id, value),
+                    noteOn: (note: byte, velocity: byte) => this.#onMidiNoteOn(note, velocity),
+                    noteOff: (note: byte) => this.#onMidiNoteOff(note)
+                })
+            }),
             liveStreamReceiver.subscribeFloats(EngineAddresses.PEAKS, (peaks) => this.#setPeaks(peaks)),
             liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, spectrum => this.#setSpectrum(spectrum, sampleRate)),
             liveStreamReceiver.subscribeFloats(EngineAddresses.WAVEFORM, waveform => this.#setWaveform(waveform))
