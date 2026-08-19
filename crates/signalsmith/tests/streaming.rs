@@ -1,7 +1,6 @@
 //! The streaming zero-alloc processor (the real-time engine path): pulled in 128-sample blocks,
 //! it must stretch cleanly and track native. Also exercises variable time_factor (warp change).
 use signalsmith::SignalsmithStretch as Port;
-use signalsmith_stretch::Stretch as Native;
 
 fn sine(freq: f64, rate: f64, n: usize) -> Vec<f32> {
     (0..n).map(|i| (0.5*(2.0*std::f64::consts::PI*freq*i as f64/rate).sin()) as f32).collect()

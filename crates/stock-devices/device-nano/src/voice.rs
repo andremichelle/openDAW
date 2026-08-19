@@ -115,9 +115,9 @@ mod tests {
 
     #[test]
     fn pitch_60_reads_at_the_native_rate() {
-        let mut voice = started(60);
+        let voice = started(60);
         assert!((voice.process_speed() - 1.0).abs() < 1.0e-6, "pitch 60 maps to rate 1.0");
-        let mut octave = started(72);
+        let octave = started(72);
         assert!((octave.process_speed() - 2.0).abs() < 1.0e-6, "an octave up doubles the rate");
     }
 

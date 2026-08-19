@@ -178,7 +178,7 @@ pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, l
 #[cfg(test)]
 mod tests {
     //! The StereoTool DSP driven directly (setting the private state). f32 audio, mirroring the TS math.
-    use super::{StereoTool, StereoToolState};
+    use super::StereoToolState;
     use dsp::panning::Mixing;
     use dsp::ramp::StereoMatrixRamp;
 

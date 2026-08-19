@@ -24,7 +24,9 @@ use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cell::{Cell, RefCell, UnsafeCell};
+use core::cell::{Cell, RefCell};
+#[cfg(not(test))]
+use core::cell::UnsafeCell;
 use bindings::value_collection::ValueCollection;
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 use boxgraph::address::{Address, Uuid};
@@ -3139,11 +3141,13 @@ shared_static! {
     static PANIC_MESSAGE: ([u8; PANIC_MESSAGE_CAPACITY], usize) = ([0; PANIC_MESSAGE_CAPACITY], 0);
 }
 
+#[cfg(not(test))]
 struct PanicWriter {
     buffer: &'static mut [u8],
     written: usize
 }
 
+#[cfg(not(test))]
 impl core::fmt::Write for PanicWriter {
     fn write_str(&mut self, text: &str) -> core::fmt::Result {
         let bytes = text.as_bytes();
