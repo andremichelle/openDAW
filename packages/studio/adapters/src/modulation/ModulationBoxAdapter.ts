@@ -24,6 +24,18 @@ export class ModulationBoxAdapter implements BoxAdapter {
             depth: this.#parametric.createParameter(box.depth, ValueMapping.bipolar(),
                 StringMapping.percent({fractionDigits: 0}), "Depth", 0.5)
         } as const
+        // The depth's automation lane lives on the modulator that drives it, so it shows up in that group.
+        const registration = this.#terminator.own(new Terminator())
+        this.#terminator.own(box.source.catchupAndSubscribe(() => {
+            registration.terminate()
+            box.source.targetVertex
+                .flatMap(vertex => this.#context.boxAdapters.optAdapter(vertex.box))
+                .ifSome(adapter => {
+                    if (isModulatorBoxAdapter(adapter)) {
+                        registration.own(this.namedParameter.depth.registerTracks(adapter.tracks))
+                    }
+                })
+        }))
     }
 
     get box(): ModulationBox {return this.#box}

@@ -609,7 +609,7 @@ impl Engine {
             }
         }
         collections.append(&mut track_collections);
-        let modulation = self.bind_param_modulation(box_uuid, path, &mut subs, invalidate);
+        let modulation = self.bind_param_modulation(box_uuid, path, &mut subs, &mut collections, invalidate);
         // An automated parameter broadcasts its UNIT value at its FIELD ADDRESS while the track is attached
         // (TS `onStartAutomation`) — the knob animates in the UI. Registered under the box uuid + field-path
         // keys; the slot Rc lives in the handle, so a rebind/teardown drops it and the sweep unregisters.
@@ -661,6 +661,7 @@ impl Engine {
     /// path, so an assignment's target edge is dangling and absent from `incoming`.
     /// WASM CONTRACT: ModulationBox field keys — source 1, target 2, depth 3, enabled 4 (boxes ModulationBox.ts).
     fn bind_param_modulation(&mut self, box_uuid: Uuid, path: &[u16], subs: &mut Vec<SubscriptionId>,
+                             collections: &mut Vec<ValueCollection>,
                              invalidate: &Rc<dyn Fn()>) -> Option<ModulationChain> {
         const SOURCE_KEY: u16 = 1;
         const TARGET_KEY: u16 = 2;
@@ -685,15 +686,13 @@ impl Engine {
                 Some(state) => state,
                 None => continue // no live modulator yet (mid-transaction); the re-bind follows
             };
-            let depth = Rc::new(core::cell::Cell::new(0.0f32));
-            let cell = depth.clone();
-            let depth_invalidate = current_params_signal().unwrap_or_else(|| invalidate.clone());
-            subs.push(self.graph.catchup_and_subscribe(Address::of(uuid, vec![DEPTH_KEY]), move |value| {
-                if let Some(value) = value.as_float32() {
-                    cell.set(value);
-                    depth_invalidate();
-                }
-            }));
+            // The depth binds like any other parameter, so a Value track targeting it drives the assignment.
+            let (depth_handle, mut depth_subs, mut depth_collections, _armed) =
+                self.observe_param(uuid, &[DEPTH_KEY], 0, invalidate);
+            subs.append(&mut depth_subs);
+            collections.append(&mut depth_collections);
+            let depth = depth_handle.field.clone();
+            let depth_handle = if depth_handle.track.is_some() {Some(depth_handle)} else {None};
             let enabled = Rc::new(core::cell::Cell::new(true));
             let cell = enabled.clone();
             let enabled_invalidate = current_params_signal().unwrap_or_else(|| invalidate.clone());
@@ -703,7 +702,7 @@ impl Engine {
                     enabled_invalidate();
                 }
             }));
-            bound.push(BoundModulation {modulator, depth, enabled});
+            bound.push(BoundModulation {modulator, depth, depth_handle, enabled});
         }
         if bound.is_empty() {None} else {Some(Rc::from(bound))}
     }

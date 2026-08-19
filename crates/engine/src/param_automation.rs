@@ -58,7 +58,8 @@ impl ParamHandle {
     /// from its silent update clock) while the modulation follows the free-running position.
     pub(crate) fn resolve_split(&self, automation_position: f64, modulation_position: f64) -> (f32, u32, f32) {
         let (value, kind) = self.resolve_base(automation_position);
-        let modulation = modulation_sum(self.modulation.as_ref(), modulation_position);
+        let modulation = crate::modulation::modulation_sum_split(self.modulation.as_ref(),
+            automation_position, modulation_position);
         self.publish(modulation);
         (value, kind, modulation)
     }

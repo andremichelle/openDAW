@@ -1,9 +1,10 @@
 import {Box, StringField, Vertex} from "@opendaw/lib-box"
 import {Option} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
-import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, ModulationBox} from "@opendaw/studio-boxes"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 import {AudioUnitBoxAdapter} from "./audio-unit/AudioUnitBoxAdapter"
+import {ModulationBoxAdapter} from "./modulation/ModulationBoxAdapter"
 import {Devices} from "./DeviceAdapter"
 
 export namespace ParameterOwner {
@@ -13,6 +14,11 @@ export namespace ParameterOwner {
         const box = vertex.box
         if (box instanceof AudioUnitBox) {
             return context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter).input.label
+        }
+        if (box instanceof ModulationBox) {
+            const adapter = context.boxAdapters.adapterFor(box, ModulationBoxAdapter)
+            return Option.wrap(`${adapter.source.label} \u2192 ${adapter.targetOwner.unwrapOrElse("")} ${
+                adapter.target.mapOr(parameter => parameter.name, "")}`.trim())
         }
         const own = labelOf(context, box)
         if (own.nonEmpty()) {return own}

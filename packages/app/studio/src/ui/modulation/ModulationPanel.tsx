@@ -10,6 +10,7 @@ import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {MenuItem} from "@opendaw/studio-core"
 import {createModulatorEditor} from "@/ui/modulation/ModulatorEditorFactory.tsx"
 import {installScrollbars} from "@/ui/components/Scrollbars.tsx"
+import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
 
 const className = Html.adoptStyleSheet(css, "ModulationPanel")
@@ -26,6 +27,9 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
     const scroller: HTMLElement = (
         <div className="scroller" onConnect={host => {
             revealRequested()
+            // Dragging a modulator past the edge scrolls the list, so a target below the fold is reachable.
+            lifecycle.own(installAutoScroll(host, (_deltaX, deltaY) => host.scrollTop += deltaY,
+                {padding: [24, 0, 24, 0]}))
             return lifecycle.own(installScrollbars(host))
         }}>
             <h5 className="head modulators">

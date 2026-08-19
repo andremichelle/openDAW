@@ -384,7 +384,23 @@ fn square(turn: f64) -> f64 {
 pub(crate) struct BoundModulation {
     pub(crate) modulator: Rc<ModulatorState>,
     pub(crate) depth: Rc<Cell<f32>>,
+    /// The assignment's own automation: `Some` while a curve targets its depth, resolved at the SONG
+    /// position like every other automated parameter while the shape follows the free-running one.
+    pub(crate) depth_handle: Option<crate::param_automation::ParamHandle>,
     pub(crate) enabled: Rc<Cell<bool>>
+}
+
+impl BoundModulation {
+    fn depth_at(&self, automation_position: f64) -> f32 {
+        match &self.depth_handle {
+            Some(handle) => {
+                let (value, kind, modulation) = handle.resolve(automation_position);
+                crate::audio_unit::params::host_float(value, kind, modulation,
+                    &math::value_mapping::Linear::bipolar())
+            }
+            None => self.depth.get()
+        }
+    }
 }
 
 pub(crate) type ModulationChain = Rc<[BoundModulation]>;
@@ -392,6 +408,11 @@ pub(crate) type ModulationChain = Rc<[BoundModulation]>;
 /// NaN, not 0.0, when nothing contributes: a zero sum would still send the parameter down the device's
 /// modulated path, where the mapping round-trip can shift it by a float epsilon.
 pub(crate) fn modulation_sum(chain: Option<&ModulationChain>, position: f64) -> f32 {
+    modulation_sum_split(chain, position, position)
+}
+
+pub(crate) fn modulation_sum_split(chain: Option<&ModulationChain>, automation_position: f64,
+                                   position: f64) -> f32 {
     let chain = match chain {
         Some(chain) => chain,
         None => return f32::NAN
@@ -402,7 +423,7 @@ pub(crate) fn modulation_sum(chain: Option<&ModulationChain>, position: f64) -> 
         if !bound.enabled.get() || !bound.modulator.enabled.get() {
             continue;
         }
-        sum += bound.depth.get() * bound.modulator.value_at(position);
+        sum += bound.depth_at(automation_position) * bound.modulator.value_at(position);
         contributes = true;
     }
     if contributes {sum} else {f32::NAN}
@@ -857,6 +878,7 @@ mod tests {
         let bound = |depth: f32, enabled: bool| BoundModulation {
             modulator: state.clone(),
             depth: Rc::new(Cell::new(depth)),
+            depth_handle: None,
             enabled: Rc::new(Cell::new(enabled))
         };
         assert!(modulation_sum(None, 0.0).is_nan(), "no chain at all");

@@ -10,6 +10,7 @@ import {Button} from "@/ui/components/Button.tsx"
 import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {attachModulatorParameterContextMenu} from "@/ui/menu/automation.ts"
+import {installControlSourceIndicator} from "@/ui/components/AutomationControl.tsx"
 import {installScrollbars} from "@/ui/components/Scrollbars.tsx"
 
 const className = Html.adoptStyleSheet(css, "TargetList")
@@ -39,6 +40,8 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
             const {depth} = assignment.namedParameter
             const depthLabel: HTMLElement = (<ParameterLabel lifecycle={rows} parameter={depth} framed={true}/>)
             rows.own(attachModulatorParameterContextMenu(editing, midiLearning, depth, depthLabel))
+            // The label clips its own overflow, so the ring hangs off the scrolling container instead.
+            installControlSourceIndicator(rows, depth, entries, depthLabel, 2)
             entries.append(<div className="entry"
                  onInit={element => rows.own(assignment.box.enabled
                      .catchupAndSubscribe((owner: ObservableValue<boolean>) =>

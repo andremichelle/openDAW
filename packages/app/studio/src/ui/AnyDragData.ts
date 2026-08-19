@@ -57,5 +57,9 @@ export type DragPreset = {
     device: Nullable<InstrumentFactories.Keys>
 } & DragCopyHint
 
+// One modulator dragged to reorder it in the modulation panel's list.
+export type DragModulator = { type: "modulator", uuid: UUID.String, index: int } & DragCopyHint
+
 export type AnyDragData =
-    DragSample | DragFile | DragDevice | DragChannelStrip | DragTrack | DragSoundfont | DragPreset | DragCompositeEntry
+    DragSample | DragFile | DragDevice | DragChannelStrip | DragTrack | DragSoundfont | DragPreset
+    | DragCompositeEntry | DragModulator

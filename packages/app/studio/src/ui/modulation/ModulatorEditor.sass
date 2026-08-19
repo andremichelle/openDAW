@@ -5,11 +5,27 @@ component
     padding-top: 0
 
   > .modulator
+    position: relative
     grid-column: 1 / -2
     grid-row: span 2
     display: grid
     grid-template-columns: subgrid
     grid-template-rows: subgrid
+
+    &.insert-before::after, &.insert-after::after
+      content: ""
+      position: absolute
+      left: 0
+      right: 0
+      height: 2px
+      background-color: var(--color-blue)
+      pointer-events: none
+
+    &.insert-before::after
+      top: calc(var(--editor-spacing) / 2)
+
+    &.insert-after::after
+      bottom: 0
 
     > header
       grid-column: 1 / -1

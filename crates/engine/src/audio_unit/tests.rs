@@ -3556,6 +3556,71 @@ fn an_automated_modulator_parameter_follows_its_curve() {
     assert!((sum_at(0.0) - 0.75).abs() < 1.0e-6, "a paused transport holds the automated amount");
 }
 
+// An assignment's DEPTH is a parameter like any other: a Value track on it drives how much of the
+// modulator reaches the target.
+#[test]
+fn an_automated_assignment_depth_scales_the_modulation() {
+    const DEV: Uuid = [150u8; 16];
+    const ROOT: Uuid = [151u8; 16];
+    const LFO: Uuid = [152u8; 16];
+    const ASSIGN: Uuid = [153u8; 16];
+    const VTRACK: Uuid = [154u8; 16];
+    const VREGION: Uuid = [155u8; 16];
+    const VCOLL: Uuid = [156u8; 16];
+    const VEVENT: Uuid = [157u8; 16];
+    const PATH: u16 = 11;
+    const DEPTH_KEY: u16 = 3;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(LFO, "LfoModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (6, FieldValue::Hook),
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(4)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (14, FieldValue::Float32(1.0)),
+            (15, FieldValue::Float32(0.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ]),
+        // The lane targets the ASSIGNMENT's depth, and its curve holds 0.25 (bipolar: -0.5).
+        graph_box(VTRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![6])))),
+            (2, FieldValue::Pointer(Some(Address::of(ASSIGN, vec![DEPTH_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(VREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(VEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+        ])
+    ]);
+    engine.transport.play();
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let sum_at = |position: f64| handles[0].resolve(position).2;
+    // The square's high half at an automated depth of -0.5 (unit 0.25 through the bipolar mapping).
+    assert!((sum_at(0.0) + 0.5).abs() < 1.0e-6, "the curve sets the depth, got {}", sum_at(0.0));
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(VEVENT, vec![13]), old: FieldValue::Float32(0.25), new: FieldValue::Float32(1.0)
+    }], &engine.registry).expect("edit the curve");
+    engine.sync_modulators();
+    assert!((sum_at(0.0) - 1.0).abs() < 1.0e-6, "and an edited curve reaches it, got {}", sum_at(0.0));
+}
+
 // A modulator driving ANOTHER modulator's parameter: the same binding carries the assignment, and the
 // per-quantum refresh is what keeps it from recursing.
 #[test]
