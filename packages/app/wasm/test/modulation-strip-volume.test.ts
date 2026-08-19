@@ -19,8 +19,8 @@ const DC = `class Processor {
     }
 }`
 
-const SQUARE = 3 // LfoModulatorBox.shape
-const ONE_BAR = 8 // LfoModulatorBox.rate index
+const SQUARE = 4 // LfoModulatorBox.shape
+const ONE_BAR = 4 // LfoModulatorBox.rateSync index ("Off" leads the table)
 
 describe("modulated strip volume", () => {
     it("an LFO on the unit volume wobbles the output, playing and stopped", async () => {
@@ -66,7 +66,7 @@ describe("modulated strip volume", () => {
             box.collection.refer(rootBox.modulators)
             box.label.setValue("Wobble")
             box.shape.setValue(SQUARE)
-            box.rate.setValue(ONE_BAR)
+            box.rateSync.setValue(ONE_BAR)
         })
         ModulationBox.create(source, UUID.generate(), box => {
             box.source.refer(lfo.assignments)

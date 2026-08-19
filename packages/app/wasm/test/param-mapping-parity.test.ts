@@ -9,12 +9,13 @@ import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
 import {isDefined, Option, Optional, panic, Terminable, UUID} from "@opendaw/lib-std"
-import {Address, BoxGraph, Constraints, Float32Field, PrimitiveType} from "@opendaw/lib-box"
+import {Address, BooleanField, BoxGraph, Constraints, Float32Field, Int32Field, PrimitiveType} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
     DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
     PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
-    TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox
+    TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox,
+    ApparatDeviceBox, CubedDeviceBox, GrooveShuffleBox, SoundfontDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox, ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {
     ArpeggioDeviceBoxAdapter, AutotuneDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
@@ -36,9 +37,16 @@ const fieldPath = (address: Address): string => Array.from(address.fieldKeys).jo
 const alignUp = (value: number, alignment: number): number => Math.ceil(value / alignment) * alignment
 
 type WasmParameter = {id: number, path: string}
-type WasmDevice = {parameters: ReadonlyArray<WasmParameter>, map: (id: number, unit: number) => number}
+type WasmDevice = {
+    parameters: ReadonlyArray<WasmParameter>
+    map: (id: number, unit: number) => number
+    // Push a raw wire `(kind, value, modulation)` at a parameter, exactly as the engine's update clock does.
+    push: (id: number, kind: number, value: number, modulation: number) => void
+}
 
-const loadWasmDevice = (file: string): WasmDevice => {
+// `map_parameter` is a test-only export the parity devices carry; the scriptable ones and the preset
+// samplers have no static mapping table, so the wire sweep loads them without it.
+const loadWasmDevice = (file: string, requireMapping: boolean = true): WasmDevice => {
     const module = new WebAssembly.Module(readFileSync(path.join(PLUGINS, file)))
     const {memorySize, tableSize} = parseDylink(module)
     const memory = new WebAssembly.Memory({initial: 256})
@@ -73,8 +81,14 @@ const loadWasmDevice = (file: string): WasmDevice => {
     const havePages = memory.buffer.byteLength / PAGE
     if (needed / PAGE > havePages) {memory.grow(needed / PAGE - havePages)}
     exports.init?.(statePtr, SAMPLE_RATE)
-    expect(typeof exports.map_parameter, `${file} misses the map_parameter export`).toBe("function")
-    return {parameters, map: (id, unit) => exports.map_parameter(id, unit)}
+    if (requireMapping) {
+        expect(typeof exports.map_parameter, `${file} misses the map_parameter export`).toBe("function")
+    }
+    return {
+        parameters,
+        map: (id, unit) => exports.map_parameter(id, unit),
+        push: (id, kind, value, modulation) => exports.parameter_changed?.(statePtr, id, kind, value, modulation)
+    }
 }
 
 // The boxes under test, hosted in a minimal skeleton: one unit carries every audio/midi effect, instruments
@@ -125,8 +139,18 @@ const buildBoxes = () => {
         box.file.refer(file)
         box.index.setValue(60)
     })
+    const groove = GrooveShuffleBox.create(boxGraph, UUID.generate(), box => {box.label.setValue("Shuffle"); box.duration.setValue(480)})
+    const zeitgeist = ZeitgeistDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.groove.refer(groove); box.index.setValue(3)})
+    const werkstatt = WerkstattDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(15)})
+    const spielwerk = SpielwerkDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(4)})
+    const apparatUnit = createUnit(6)
+    const apparat = ApparatDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(apparatUnit.input))
+    const cubedUnit = createUnit(7)
+    const cubed = CubedDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(cubedUnit.input))
+    const soundfontUnit = createUnit(8)
+    const soundfont = SoundfontDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(soundfontUnit.input))
     boxGraph.endTransaction()
-    return {boxGraph, compressor, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
+    return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, soundfont, compressor, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
         stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, velocity, vaporisateur, neon, nano, playfieldSample}
 }
 
@@ -338,4 +362,114 @@ describe("vocoder band-count", () => {
         expect(bandCount.constraints).toEqual({values: [8, 12, 16]})
         expect(bandCount.initValue).toBe(16)
     })
+})
+
+// EVERY parameter must survive EVERY wire the engine can send it. `ParamHandle::resolve_split` produces
+// exactly two kinds — PARAM_KIND_UNIT while an automation curve covers the position, else the field's own
+// primitive kind — each with or without a modulation sum (NaN = none). A device that resolves a parameter by
+// matching `ParamValue` itself can miss the `Modulated` arm, and since the devices are built with
+// `-Cpanic=immediate-abort` that panic reaches the studio as a bare "RuntimeError: unreachable" (Tidal's
+// rate, #1). Modulation is UNCLAMPED on the wire, so the sweep drives it past both ends.
+const PARAM_KIND_UNIT = 0
+const PARAM_KIND_INT = 1
+const PARAM_KIND_FLOAT = 2
+const PARAM_KIND_BOOL = 3
+const MODULATIONS = [NaN, -1.5, -0.25, 0.0, 0.25, 1.5]
+
+const wireKind = (type: PrimitiveType): number => {
+    if (type === PrimitiveType.Int32) {return PARAM_KIND_INT}
+    if (type === PrimitiveType.Boolean) {return PARAM_KIND_BOOL}
+    return PARAM_KIND_FLOAT
+}
+
+describe("every parameter accepts every wire the engine sends", () => {
+    for (const {name, file, createAdapter} of CASES) {
+        it(name, () => {
+            const wasm = loadWasmDevice(file)
+            const tsByPath = new Map(collectTsParameters(createAdapter)
+                .map(parameter => [parameter.path, parameter]))
+            for (const {id, path: keyPath} of wasm.parameters) {
+                const ts = tsByPath.get(keyPath)
+                if (!isDefined(ts)) {continue}
+                const label = `${name} [${keyPath}] '${ts.adapter.name}'`
+                for (const unit of GRID) {
+                    const stored = ts.adapter.valueMapping.y(unit)
+                    const real = typeof stored === "boolean" ? (stored ? 1.0 : 0.0) : stored as number
+                    for (const modulation of MODULATIONS) {
+                        // The automation wire (a covering curve): the 0..1 value tagged UNIT.
+                        expect(() => wasm.push(id, PARAM_KIND_UNIT, unit, modulation),
+                            `${label} unit=${unit} modulation=${modulation}`).not.toThrow()
+                        // The storage wire: the field's REAL value with its own primitive kind.
+                        expect(() => wasm.push(id, wireKind(ts.adapter.type), real, modulation),
+                            `${label} stored=${real} modulation=${modulation}`).not.toThrow()
+                    }
+                }
+            }
+        })
+    }
+})
+
+// The device modules with no TS-adapter parity case above. Cubed binds its (composite slot) parameters at
+// init and gets the same wire sweep, with each parameter's primitive kind read off the box schema at the
+// field path the device bound. The rest bind nothing to sweep: Zeitgeist and Soundfont take FIELD
+// observations, not parameters (the studio offers neither automation nor modulation on them), and the
+// scriptable three bind whatever their script header declares, forwarding every wire — `Modulated` included
+// — straight to the script bridge (`abi::script_param`).
+const EXTRA_CASES: ReadonlyArray<{name: string, file: string, uuid: UUID.Bytes}> = [
+    {name: "cubed", file: "device_cubed.wasm", uuid: boxes.cubed.address.uuid}
+]
+
+const PARAMETERLESS = [
+    {name: "zeitgeist", file: "device_zeitgeist.wasm"},
+    {name: "soundfont", file: "device_soundfont.wasm"},
+    {name: "werkstatt", file: "device_werkstatt.wasm"},
+    {name: "apparat", file: "device_apparat.wasm"},
+    {name: "spielwerk", file: "device_spielwerk.wasm"}
+]
+
+const schemaWire = (uuid: UUID.Bytes, keyPath: string): Optional<{kind: number, values: ReadonlyArray<number>}> => {
+    const keys = keyPath.split(",").map(key => parseInt(key))
+    const vertex = boxes.boxGraph.findVertex(Address.compose(uuid, ...keys)).unwrapOrUndefined()
+    if (vertex instanceof Float32Field) {
+        const range = floatRange(vertex.constraints)
+        return {kind: PARAM_KIND_FLOAT, values: isDefined(range)
+            ? [range.min, vertex.initValue, range.max] : [vertex.initValue]}
+    }
+    if (vertex instanceof Int32Field) {
+        const constraints = vertex.constraints
+        const values = typeof constraints === "object" && "min" in constraints
+            ? [constraints.min, constraints.max]
+            : typeof constraints === "object" && "values" in constraints ? Array.from(constraints.values) : []
+        return {kind: PARAM_KIND_INT, values: [vertex.initValue, ...values]}
+    }
+    if (vertex instanceof BooleanField) {return {kind: PARAM_KIND_BOOL, values: [0.0, 1.0]}}
+    return undefined
+}
+
+describe("every parameter accepts every wire the engine sends (no adapter case)", () => {
+    for (const {name, file, uuid} of EXTRA_CASES) {
+        it(name, () => {
+            const wasm = loadWasmDevice(file, false)
+            expect(wasm.parameters.length, `${name}: binds no parameter at all`).toBeGreaterThan(0)
+            for (const {id, path: keyPath} of wasm.parameters) {
+                const wire = schemaWire(uuid, keyPath)
+                expect(wire, `${name} [${keyPath}]: no primitive field at that path`).toBeDefined()
+                if (!isDefined(wire)) {continue}
+                for (const modulation of MODULATIONS) {
+                    for (const unit of GRID) {
+                        expect(() => wasm.push(id, PARAM_KIND_UNIT, unit, modulation),
+                            `${name} [${keyPath}] unit=${unit} modulation=${modulation}`).not.toThrow()
+                    }
+                    for (const value of wire.values) {
+                        expect(() => wasm.push(id, wire.kind, value, modulation),
+                            `${name} [${keyPath}] stored=${value} modulation=${modulation}`).not.toThrow()
+                    }
+                }
+            }
+        })
+    }
+    for (const {name, file} of PARAMETERLESS) {
+        it(`${name} binds no parameter of its own`, () =>
+            expect(loadWasmDevice(file, false).parameters).toEqual([]))
+    }
 })
