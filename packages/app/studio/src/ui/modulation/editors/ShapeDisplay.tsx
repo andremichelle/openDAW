@@ -38,7 +38,7 @@ export const ShapeDisplay = ({lifecycle, modulator}: Construct): HTMLElement => 
         const shape: LfoShape = modulator.box.shape.getValue()
         const phase = modulator.box.phase.getValue()
         const amount = modulator.box.amount.getValue()
-        const exponent = modulator.box.exponent.getValue()
+        const exponent = Math.pow(LfoModulatorBoxAdapter.ExponentRange, modulator.box.exponent.getValue())
         const shaped = (value: number) => Math.sign(value) * Math.pow(Math.abs(value), exponent)
         const padding = devicePixelRatio * 2
         const top = padding

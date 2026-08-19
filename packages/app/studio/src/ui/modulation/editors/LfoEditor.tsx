@@ -30,7 +30,8 @@ export const LfoEditor = ({lifecycle, service, modulator}: Construct) => {
                     {[shape, rateSync, rateAbsolute, exponent, phase, amount].map(parameter => (
                         <Column ems={LKR}>
                             <h5>{parameter.name}</h5>
-                            <ParameterLabelKnob lifecycle={lifecycle} editing={editing} parameter={parameter}/>
+                            <ParameterLabelKnob lifecycle={lifecycle} editing={editing} parameter={parameter}
+                                                anchor={parameter === exponent ? 0.5 : 0.0}/>
                         </Column>
                     ))}
                 </div>

@@ -37,6 +37,9 @@ pub(crate) const DIRECTION_RANDOM: i32 = 4;
 
 pub(crate) const MAX_STEPS: usize = 64;
 
+// WASM CONTRACT: mirrors `LfoModulatorBoxAdapter.ExponentRange`.
+const EXPONENT_RANGE: f64 = 8.0;
+
 pub(crate) struct LfoState {
     pub(crate) shape: Cell<i32>,
     pub(crate) rate_sync: Cell<i32>,
@@ -50,7 +53,7 @@ pub(crate) struct LfoState {
 impl LfoState {
     pub(crate) fn new() -> Self {
         Self {shape: Cell::new(SHAPE_SINE), rate_sync: Cell::new(4), rate_absolute: Cell::new(0.0),
-            phase: Cell::new(0.0), amount: Cell::new(1.0), exponent: Cell::new(1.0),
+            phase: Cell::new(0.0), amount: Cell::new(1.0), exponent: Cell::new(0.0),
             free_turns: Cell::new(0.0)}
     }
 
@@ -339,12 +342,14 @@ impl ModulatorState {
     }
 }
 
-/// The exponent bends the shape without changing its sign, so a negative half stays a number.
-fn shaped(value: f32, exponent: f32) -> f32 {
-    if exponent == 1.0 {
+/// The control is bipolar and reaches the exponent through `EXPONENT_RANGE^control`, so its centre is the
+/// identity. It bends the shape without changing its sign, so a negative half stays a number.
+fn shaped(value: f32, control: f32) -> f32 {
+    if control == 0.0 {
         return value;
     }
-    let magnitude = math::pow(value.abs() as f64, exponent as f64) as f32;
+    let exponent = math::pow(EXPONENT_RANGE, control as f64);
+    let magnitude = math::pow(value.abs() as f64, exponent) as f32;
     if value < 0.0 {-magnitude} else {magnitude}
 }
 
@@ -527,13 +532,13 @@ mod tests {
     fn the_exponent_bends_the_shape_without_flipping_its_sign() {
         let state = lfo(SHAPE_SAW_UP, ONE_BAR);
         let plain = state.value_at(BAR * 0.9);
-        state.exponent.set(2.0);
+        state.exponent.set(1.0 / 3.0); // 8^(1/3) = 2
         let bent = state.value_at(BAR * 0.9);
         assert!(bent > 0.0 && bent < plain, "a positive half flattens towards the middle, got {bent}");
         assert!((state.value_at(BAR * 0.1) + 0.64).abs() < 1.0e-5,
             "and a negative half bends by the same amount, got {}", state.value_at(BAR * 0.1));
-        state.exponent.set(1.0);
-        assert_eq!(state.value_at(BAR * 0.9), plain, "one is the identity");
+        state.exponent.set(0.0);
+        assert_eq!(state.value_at(BAR * 0.9), plain, "the centre is the identity");
     }
 
     #[test]
