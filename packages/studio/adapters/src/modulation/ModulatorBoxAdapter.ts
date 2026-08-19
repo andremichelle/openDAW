@@ -1,4 +1,4 @@
-import {Address, Int32Field} from "@opendaw/lib-box"
+import {Address, Box, Int32Field} from "@opendaw/lib-box"
 import {LfoModulatorBox, MacroModulatorBox, ModulationBox, StepsModulatorBox} from "@opendaw/studio-boxes"
 import {asInstanceOf, AssertType, isInstanceOf, Terminator, UUID} from "@opendaw/lib-std"
 import {IndexedBoxAdapter} from "../IndexedBoxAdapterCollection"
@@ -7,6 +7,8 @@ import {ParameterAdapterSet} from "../ParameterAdapterSet"
 import {ModulationBoxAdapter} from "./ModulationBoxAdapter"
 
 export type ModulatorBox = LfoModulatorBox | StepsModulatorBox | MacroModulatorBox
+
+export const isModulatorBox = (box: Box): box is ModulatorBox => box.tags.type === "modulator"
 
 export abstract class ModulatorBoxAdapter<BOX extends ModulatorBox = ModulatorBox> implements IndexedBoxAdapter {
     protected readonly terminator: Terminator = new Terminator()
