@@ -232,11 +232,6 @@ impl AudioRegionPlayer {
     pub(crate) fn meter_slot(&self) -> engine_env::telemetry::BroadcastSlot {
         self.meter.slot()
     }
-
-    #[cfg(test)]
-    pub(crate) fn pooled_sequencers(&self) -> usize {
-        self.sequencer_pool.len()
-    }
 }
 
 impl EventReceiver for AudioRegionPlayer {

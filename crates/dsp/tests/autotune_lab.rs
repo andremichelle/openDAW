@@ -151,11 +151,11 @@ fn measure() {
 
 fn goertzel(samples: &[f32], hz: f64) -> f64 {
     let coeff = 2.0 * libm::cos(core::f64::consts::TAU * hz / SR as f64);
-    let (mut s0, mut s1, mut s2) = (0.0f64, 0.0f64, 0.0f64);
+    let (mut s1, mut s2) = (0.0f64, 0.0f64);
     for &sample in samples {
-        s0 = sample as f64 + coeff * s1 - s2;
+        let next = sample as f64 + coeff * s1 - s2;
         s2 = s1;
-        s1 = s0;
+        s1 = next;
     }
     libm::sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2) / samples.len() as f64
 }

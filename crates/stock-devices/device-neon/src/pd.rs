@@ -107,6 +107,7 @@ pub fn render(wave: i32, x: f32, w: f32, edge: f32) -> f32 {
         WAVE_SAW_PULSE => bent(x, w, edge, m_saw_pulse),
         WAVE_RES_SAW => resonant(x, w, window_saw),
         WAVE_RES_TRIANGLE => resonant(x, w, window_triangle),
+        WAVE_RES_TRAPEZOID => resonant(x, w, window_trapezoid),
         _ => resonant(x, w, window_trapezoid)
     }
 }

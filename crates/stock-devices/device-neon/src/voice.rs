@@ -11,7 +11,6 @@ use voicing::Voice;
 use crate::envelope::{Envelope, EnvelopeSpec};
 use crate::pd;
 
-pub const MOD_NONE: i32 = 0;
 pub const MOD_RING: i32 = 1;
 pub const MOD_NOISE: i32 = 2;
 

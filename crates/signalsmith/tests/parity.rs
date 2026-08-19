@@ -34,21 +34,6 @@ fn spectral_diff(a: &[f32], b: &[f32]) -> f64 {
     sum / wsum.max(1e-9)
 }
 fn rms(x: &[f32]) -> f64 { (x.iter().map(|v| (*v as f64).powi(2)).sum::<f64>()/x.len().max(1) as f64).sqrt() }
-// out-of-band energy (everything not near f0) as a purity proxy on a pure-sine stretch
-fn dirtiness_db(x: &[f32], rate: f64, f0: f64) -> f64 {
-    let n = 8192.min(x.len()); let s = x.len()/2 - n/2;
-    let (mut cre, mut cim, mut total) = (0.0f64,0.0f64,0.0f64);
-    for i in 0..n {
-        let w = 0.5-0.5*(2.0*std::f64::consts::PI*i as f64/n as f64).cos();
-        let v = x[s+i] as f64 * w;
-        let a = 2.0*std::f64::consts::PI*f0*(s+i) as f64/rate;
-        cre += v*a.cos(); cim += v*a.sin(); total += v*v;
-    }
-    let carrier = (cre*cre+cim*cim).sqrt()*2.0/n as f64;
-    let carrier_pow = carrier*carrier*n as f64/2.0;
-    let dirt = (total - carrier_pow).max(0.0);
-    10.0*(dirt/total.max(1e-12)).log10()
-}
 
 fn chord(rate: f64, n: usize) -> Vec<f32> {
     (0..n).map(|i| {
