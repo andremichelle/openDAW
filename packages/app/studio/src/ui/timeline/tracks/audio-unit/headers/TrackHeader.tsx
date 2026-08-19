@@ -18,7 +18,7 @@ import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 
-const className = Html.adoptStyleSheet(css, "TrackHeader")
+export const trackHeaderClassName = Html.adoptStyleSheet(css, "TrackHeader")
 
 type Construct = {
     lifecycle: Lifecycle
@@ -59,7 +59,7 @@ export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, 
         </div>
     )
     const element: HTMLElement = (
-        <div className={Html.buildClassList(className, "is-primary")} tabindex={-1}>
+        <div className={Html.buildClassList(trackHeaderClassName, "is-primary")} tabindex={-1}>
             {iconContainer}
             <CollapseAutomationButton lifecycle={lifecycle} service={service}
                                       audioUnitBoxAdapter={audioUnitBoxAdapter} head={unitHead}/>

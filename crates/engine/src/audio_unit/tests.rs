@@ -3487,6 +3487,127 @@ fn a_steps_modulator_walks_its_sequence_into_the_parameter() {
     assert!((sum_at(STEP * 2.0) + 0.25).abs() < 1.0e-6, "the edited step, got {}", sum_at(STEP * 2.0));
 }
 
+// A modulator's own parameter is bound like a device's, so a Value track targeting it drives the shape.
+// Here the LFO's amount (key 14, unipolar) is automated: the curve scales what reaches the parameter.
+#[test]
+fn an_automated_modulator_parameter_follows_its_curve() {
+    const DEV: Uuid = [130u8; 16];
+    const ROOT: Uuid = [131u8; 16];
+    const LFO: Uuid = [132u8; 16];
+    const ASSIGN: Uuid = [133u8; 16];
+    const VTRACK: Uuid = [134u8; 16];
+    const VREGION: Uuid = [135u8; 16];
+    const VCOLL: Uuid = [136u8; 16];
+    const VEVENT: Uuid = [137u8; 16];
+    const PATH: u16 = 11;
+    const AMOUNT_KEY: u16 = 14;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(LFO, "LfoModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (6, FieldValue::Hook),
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(4)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (14, FieldValue::Float32(1.0)),
+            (15, FieldValue::Float32(0.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ]),
+        // The lane hangs off the MODULATOR's own tracks field (key 6), and targets its amount.
+        graph_box(VTRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![6])))),
+            (2, FieldValue::Pointer(Some(Address::of(LFO, vec![AMOUNT_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(VREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(VEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+        ])
+    ]);
+    engine.transport.play();
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let sum_at = |position: f64| handles[0].resolve(position).2;
+    // The square's high half at depth 1.0 would be +1.0; the curve holds the amount at 0.25.
+    assert!((sum_at(0.0) - 0.25).abs() < 1.0e-6, "the automated amount scales the shape, got {}", sum_at(0.0));
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(VEVENT, vec![13]), old: FieldValue::Float32(0.25), new: FieldValue::Float32(0.75)
+    }], &engine.registry).expect("edit the curve");
+    engine.sync_modulators();
+    assert!((sum_at(0.0) - 0.75).abs() < 1.0e-6, "and an edited curve reaches it, got {}", sum_at(0.0));
+    // Paused, the automation HOLDS while the shape keeps running (the two clocks stay apart).
+    engine.transport.stop(false);
+    engine.sync_modulators();
+    assert!((sum_at(0.0) - 0.75).abs() < 1.0e-6, "a paused transport holds the automated amount");
+}
+
+// A modulator driving ANOTHER modulator's parameter: the same binding carries the assignment, and the
+// per-quantum refresh is what keeps it from recursing.
+#[test]
+fn a_modulator_can_drive_another_modulators_parameter() {
+    const DEV: Uuid = [140u8; 16];
+    const ROOT: Uuid = [141u8; 16];
+    const SHAPER: Uuid = [142u8; 16]; // the macro that drives the LFO's amount
+    const LFO: Uuid = [143u8; 16];
+    const TO_LFO: Uuid = [144u8; 16];
+    const TO_DEVICE: Uuid = [145u8; 16];
+    const PATH: u16 = 11;
+    const AMOUNT_KEY: u16 = 14;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(SHAPER, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (6, FieldValue::Hook),
+            (10, FieldValue::Float32(-0.5))
+        ]),
+        graph_box(LFO, "LfoModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (6, FieldValue::Hook),
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(4)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (14, FieldValue::Float32(1.0)),
+            (15, FieldValue::Float32(0.0))
+        ]),
+        // macro -> LFO.amount at depth 1.0: a stored -0.5 pulls the unipolar amount down to 0.5.
+        graph_box(TO_LFO, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(SHAPER, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(LFO, vec![AMOUNT_KEY])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ]),
+        graph_box(TO_DEVICE, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let sum_at = |position: f64| handles[0].resolve(position).2;
+    assert!((sum_at(0.0) - 0.5).abs() < 1.0e-6, "the macro scales the LFO's amount, got {}", sum_at(0.0));
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(SHAPER, vec![10]), old: FieldValue::Float32(-0.5), new: FieldValue::Float32(0.0)
+    }], &engine.registry).expect("centre the macro");
+    engine.sync_modulators();
+    assert!((sum_at(0.0) - 1.0).abs() < 1.0e-6, "and letting it go restores the full amount, got {}", sum_at(0.0));
+}
+
 // The macro is a modulator without a clock: one stored value, the same sum at every position.
 #[test]
 fn a_macro_modulator_holds_its_value_at_every_position() {
@@ -3521,10 +3642,12 @@ fn a_macro_modulator_holds_its_value_at_every_position() {
     engine.graph.transaction(&[Update::Primitive {
         address: Address::of(MACRO, vec![10]), old: FieldValue::Float32(0.5), new: FieldValue::Float32(-1.0)
     }], &engine.registry).expect("turn the macro down");
+    engine.sync_modulators();
     assert!((sum_at(0.0) + 0.5).abs() < 1.0e-6, "it reaches the negative half too, got {}", sum_at(0.0));
     engine.graph.transaction(&[Update::Primitive {
         address: Address::of(MACRO, vec![10]), old: FieldValue::Float32(-1.0), new: FieldValue::Float32(0.0)
     }], &engine.registry).expect("centre the macro");
+    engine.sync_modulators();
     assert!(sum_at(0.0).abs() < 1.0e-6, "a macro at rest adds nothing, got {}", sum_at(0.0));
 }
 

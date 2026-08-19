@@ -6,6 +6,7 @@ import {MacroModulatorBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {ModulatorEditor} from "@/ui/modulation/ModulatorEditor.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
+import {installControlSourceIndicator} from "@/ui/components/AutomationControl.tsx"
 import {attachModulatorParameterContextMenu} from "@/ui/menu/automation.ts"
 
 const className = Html.adoptStyleSheet(css, "MacroEditor")
@@ -47,16 +48,18 @@ export const MacroEditor = ({lifecycle, service, modulator}: Construct) => {
             {print}
         </div>
     )
+    const macro: HTMLElement = (
+        <div className="macro">
+            <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={value}
+                                       supressValueFlyout={true} options={options}>
+                {slider}
+            </RelativeUnitValueDragging>
+        </div>
+    )
+    installControlSourceIndicator(lifecycle, value, macro, slider)
     return (
         <ModulatorEditor lifecycle={lifecycle} service={service} modulator={modulator}>
-            <div className={className}>
-                <div className="macro">
-                    <RelativeUnitValueDragging lifecycle={lifecycle} editing={editing} parameter={value}
-                                               supressValueFlyout={true} options={options}>
-                        {slider}
-                    </RelativeUnitValueDragging>
-                </div>
-            </div>
+            <div className={className}>{macro}</div>
         </ModulatorEditor>
     )
 }

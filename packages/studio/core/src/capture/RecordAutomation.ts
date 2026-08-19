@@ -46,14 +46,9 @@ export namespace RecordAutomation {
         }
         const tracks = tracksOpt.unwrap()
         const existing = tracks.controls(adapter.field)
-        if (existing.nonEmpty()) {return Option.wrap(existing.unwrap())}
-        const trackBox = TrackBox.create(project.boxGraph, UUID.generate(), box => {
-            box.index.setValue(tracks.collection.getMinFreeIndex())
-            box.type.setValue(TrackType.Value)
-            box.tracks.refer(tracks.audioUnitBox.tracks)
-            box.target.refer(adapter.field)
-        })
-        return Option.wrap(project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter))
+        if (existing.nonEmpty()) {return existing}
+        tracks.create(TrackType.Value, adapter.field)
+        return tracks.controls(adapter.field)
     }
 
     const createRegion = (

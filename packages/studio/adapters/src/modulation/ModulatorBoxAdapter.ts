@@ -1,4 +1,4 @@
-import {Address, Box, Int32Field} from "@opendaw/lib-box"
+import {Address, Box, Int32Field, StringField} from "@opendaw/lib-box"
 import {
     LfoModulatorBox,
     MacroModulatorBox,
@@ -37,6 +37,7 @@ export abstract class ModulatorBoxAdapter<BOX extends ModulatorBox = ModulatorBo
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get label(): string {return this.#box.label.getValue()}
+    get labelField(): StringField {return this.#box.label}
     get enabled(): boolean {return this.#box.enabled.getValue()}
     get indexField(): Int32Field {return this.#box.index}
 

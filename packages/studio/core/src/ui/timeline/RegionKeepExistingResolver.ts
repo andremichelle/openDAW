@@ -134,7 +134,9 @@ export class RegionKeepExistingResolver {
                                    complete: ppqn,
                                    projectApi: ProjectApi,
                                    boxAdapters: BoxAdapters): TrackBoxAdapter {
-        const audioUnit = sourceTrack.audioUnit
+        const optAudioUnit = sourceTrack.optAudioUnit
+        if (optAudioUnit.isEmpty()) {return sourceTrack} // a modulator's lane: no unit, no track below
+        const audioUnit = optAudioUnit.unwrap()
         const trackType = sourceTrack.type
 
         // Get all tracks of same type in this audio unit, sorted by index

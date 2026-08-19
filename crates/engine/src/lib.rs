@@ -1924,6 +1924,7 @@ impl Engine {
                 Some(seconds) => modulators.anchor_free(seconds),
                 None => modulators.advance_free(RENDER_QUANTUM as f64 / self.sample_rate as f64)
             }
+            modulators.refresh_params(self.transport.position(), free_running);
             modulators.publish_phases(free_running);
         }
         self.modulation_free = free_running + quantum_pulses;
@@ -1931,11 +1932,22 @@ impl Engine {
     }
 
     fn sync_modulators(&mut self) {
-        let (added, removed) = self.modulators.borrow_mut().take_pending();
+        let (added, removed, rebind) = self.modulators.borrow_mut().take_pending();
         for uuid in removed {
-            for sub in self.modulators.borrow_mut().remove(&uuid) {
-                self.graph.unsubscribe(sub);
-            }
+            let (subs, collections) = self.modulators.borrow_mut().remove(&uuid);
+            self.release_modulator_bindings(subs, collections);
+            self.modulation_dirty.set(true);
+        }
+        for uuid in rebind {
+            let state = match self.modulators.borrow().resolve(&uuid) {
+                Some(state) => state,
+                None => continue
+            };
+            let (subs, collections) = self.modulators.borrow_mut().detach(&uuid);
+            self.release_modulator_bindings(subs, collections);
+            let name = self.graph.find_box(&uuid).map(|graph_box| graph_box.name.clone()).unwrap_or_default();
+            let (subs, params, collections) = self.bind_modulator(uuid, &name, &state);
+            self.modulators.borrow_mut().attach(&uuid, subs, params, collections);
             self.modulation_dirty.set(true);
         }
         for uuid in added {
@@ -1949,12 +1961,7 @@ impl Engine {
                 "RandomModulatorBox" => modulation::ModulatorState::random(),
                 _ => modulation::ModulatorState::lfo()
             });
-            let mut subs = match name.as_str() {
-                "StepsModulatorBox" => self.observe_steps_modulator(uuid, &state),
-                "MacroModulatorBox" => self.observe_macro_modulator(uuid, &state),
-                "RandomModulatorBox" => self.observe_random_modulator(uuid, &state),
-                _ => self.observe_lfo_modulator(uuid, &state)
-            };
+            let (mut subs, params, collections) = self.bind_modulator(uuid, &name, &state);
             let enabled_state = state.clone();
             let dirty = self.modulation_dirty.clone();
             subs.push(self.graph.catchup_and_subscribe(Address::of(uuid, vec![4]), move |value| {
@@ -1968,100 +1975,135 @@ impl Engine {
             self.broadcasts.attach_producer_active(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY,
                 state.broadcast_active.clone());
             *state.broadcast.borrow_mut() = Some(slot);
-            self.modulators.borrow_mut().add(uuid, state, subs);
+            self.modulators.borrow_mut().add(uuid, state, subs, params, collections);
             self.modulation_dirty.set(true);
         }
+        // A field edit reaches the state through the handles, so it lands with the transaction rather than
+        // waiting for the next quantum's refresh.
+        self.modulators.borrow().refresh_params(self.transport.position(), self.transport.free_running());
     }
 
-    fn observe_lfo_modulator(&mut self, uuid: Uuid, state: &Rc<modulation::ModulatorState>) -> Vec<SubscriptionId> {
-        let lfo = |state: &Rc<modulation::ModulatorState>, apply: fn(&modulation::LfoState, f32)| {
-            let state = state.clone();
-            move |value: f32| if let modulation::ModulatorKind::Lfo(lfo) = &state.kind {apply(lfo, value)}
-        };
-        alloc::vec![
-            self.observe_modulator_int(uuid, 10, {
-                let state = state.clone();
-                move |value| if let modulation::ModulatorKind::Lfo(lfo) = &state.kind {lfo.shape.set(value)}
-            }),
-            self.observe_modulator_int(uuid, 11, {
-                let state = state.clone();
-                move |value| if let modulation::ModulatorKind::Lfo(lfo) = &state.kind {lfo.rate_sync.set(value)}
-            }),
-            self.observe_modulator_float(uuid, alloc::vec![12], lfo(state, |lfo, value| lfo.rate_absolute.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![13], lfo(state, |lfo, value| lfo.phase.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![14], lfo(state, |lfo, value| lfo.amount.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![15], lfo(state, |lfo, value| lfo.exponent.set(value)))
-        ]
-    }
-
-    fn observe_macro_modulator(&mut self, uuid: Uuid, state: &Rc<modulation::ModulatorState>) -> Vec<SubscriptionId> {
-        let state = state.clone();
-        alloc::vec![self.observe_modulator_float(uuid, alloc::vec![10], move |value| {
-            if let modulation::ModulatorKind::Macro(knob) = &state.kind {knob.value.set(value)}
-        })]
-    }
-
-    fn observe_random_modulator(&mut self, uuid: Uuid, state: &Rc<modulation::ModulatorState>) -> Vec<SubscriptionId> {
-        let random = |state: &Rc<modulation::ModulatorState>, apply: fn(&modulation::RandomState, f32)| {
-            let state = state.clone();
-            move |value: f32| if let modulation::ModulatorKind::Random(random) = &state.kind {apply(random, value)}
-        };
-        let integer = |state: &Rc<modulation::ModulatorState>, apply: fn(&modulation::RandomState, i32)| {
-            let state = state.clone();
-            move |value: i32| if let modulation::ModulatorKind::Random(random) = &state.kind {apply(random, value)}
-        };
-        alloc::vec![
-            self.observe_modulator_int(uuid, 10, integer(state, |random, value| random.loop_length.set(value))),
-            self.observe_modulator_int(uuid, 11, integer(state, |random, value| random.rate_sync.set(value))),
-            self.observe_modulator_int(uuid, 16, integer(state, |random, value| random.seed.set(value))),
-            self.observe_modulator_int(uuid, 17, integer(state, |random, value| random.levels.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![12], random(state, |random, value| random.rate_absolute.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![13], random(state, |random, value| random.phase.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![14], random(state, |random, value| random.amount.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![15], random(state, |random, value| random.smooth.set(value)))
-        ]
-    }
-
-    fn observe_steps_modulator(&mut self, uuid: Uuid, state: &Rc<modulation::ModulatorState>) -> Vec<SubscriptionId> {
-        let steps = |state: &Rc<modulation::ModulatorState>, apply: fn(&modulation::StepsState, f32)| {
-            let state = state.clone();
-            move |value: f32| if let modulation::ModulatorKind::Steps(steps) = &state.kind {apply(steps, value)}
-        };
-        let mut subs = alloc::vec![
-            self.observe_modulator_int(uuid, 10, {
-                let state = state.clone();
-                move |value| if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.count.set(value)}
-            }),
-            self.observe_modulator_int(uuid, 11, {
-                let state = state.clone();
-                move |value| if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.rate_sync.set(value)}
-            }),
-            self.observe_modulator_int(uuid, 16, {
-                let state = state.clone();
-                move |value| if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.direction.set(value)}
-            }),
-            self.observe_modulator_float(uuid, alloc::vec![12], steps(state, |steps, value| steps.rate_absolute.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![13], steps(state, |steps, value| steps.phase.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![14], steps(state, |steps, value| steps.amount.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![15], steps(state, |steps, value| steps.smooth.set(value)))
-        ];
-        for index in 0..modulation::MAX_STEPS {
-            let state = state.clone();
-            subs.push(self.observe_modulator_float(uuid, alloc::vec![20, index as u16], move |value| {
-                if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.steps[index].set(value)}
-            }));
+    fn release_modulator_bindings(&mut self, subs: Vec<SubscriptionId>,
+                                  collections: Vec<bindings::value_collection::ValueCollection>) {
+        for sub in subs {
+            self.graph.unsubscribe(sub);
         }
-        subs
+        for collection in collections {
+            collection.terminate(&mut self.graph);
+        }
     }
 
-    fn observe_modulator_int(&mut self, uuid: Uuid, key: u16, apply: impl Fn(i32) + 'static) -> SubscriptionId {
-        let dirty = self.modulation_dirty.clone();
-        self.graph.catchup_and_subscribe(Address::of(uuid, vec![key]), move |value| {
-            if let Some(value) = value.as_int32() {
-                apply(value);
+    /// A modulator's own parameters, bound like a device's: key, the mapping an automation curve folds
+    /// through, and where the resolved value lands.
+    /// WASM CONTRACT: mirrors `createParameter` in the modulator adapters (packages/studio/adapters).
+    fn modulator_params(name: &str) -> Vec<(u16, modulation::ParamMapping, fn(&modulation::ModulatorKind, f32))> {
+        use math::value_mapping::{Linear, LinearInteger, Power};
+        use modulation::ModulatorKind;
+        use modulation::ParamMapping::{Float, Integer, Power as PowerMapping};
+        let rate_sync = Integer(LinearInteger {min: 0, max: modulation::RATES.len() as i32 - 1});
+        let rate_absolute = PowerMapping(Power::by_center(1.0, 0.0, 10.0));
+        let unipolar = Float(Linear::unipolar());
+        let bipolar = Float(Linear::bipolar());
+        match name {
+            "StepsModulatorBox" => alloc::vec![
+                (10u16, Integer(LinearInteger {min: 1, max: modulation::MAX_STEPS as i32}),
+                    (|kind, value| if let ModulatorKind::Steps(steps) = kind {steps.count.set(value as i32)})
+                        as fn(&ModulatorKind, f32)),
+                (11, rate_sync,
+                    |kind, value| if let ModulatorKind::Steps(steps) = kind {steps.rate_sync.set(value as i32)}),
+                (12, rate_absolute,
+                    |kind, value| if let ModulatorKind::Steps(steps) = kind {steps.rate_absolute.set(value)}),
+                (13, unipolar,
+                    |kind, value| if let ModulatorKind::Steps(steps) = kind {steps.phase.set(value)}),
+                (14, unipolar,
+                    |kind, value| if let ModulatorKind::Steps(steps) = kind {steps.amount.set(value)}),
+                (15, unipolar,
+                    |kind, value| if let ModulatorKind::Steps(steps) = kind {steps.smooth.set(value)}),
+                (16, Integer(LinearInteger {min: 0, max: 4}),
+                    |kind, value| if let ModulatorKind::Steps(steps) = kind {steps.direction.set(value as i32)})
+            ],
+            "MacroModulatorBox" => alloc::vec![
+                (10u16, bipolar,
+                    (|kind, value| if let ModulatorKind::Macro(knob) = kind {knob.value.set(value)})
+                        as fn(&ModulatorKind, f32))
+            ],
+            "RandomModulatorBox" => alloc::vec![
+                (10u16, Integer(LinearInteger {min: 0, max: modulation::MAX_STEPS as i32}),
+                    (|kind, value| if let ModulatorKind::Random(random) = kind {
+                        random.loop_length.set(value as i32)
+                    }) as fn(&ModulatorKind, f32)),
+                (11, rate_sync,
+                    |kind, value| if let ModulatorKind::Random(random) = kind {random.rate_sync.set(value as i32)}),
+                (12, rate_absolute,
+                    |kind, value| if let ModulatorKind::Random(random) = kind {random.rate_absolute.set(value)}),
+                (13, unipolar,
+                    |kind, value| if let ModulatorKind::Random(random) = kind {random.phase.set(value)}),
+                (14, unipolar,
+                    |kind, value| if let ModulatorKind::Random(random) = kind {random.amount.set(value)}),
+                (15, unipolar,
+                    |kind, value| if let ModulatorKind::Random(random) = kind {random.smooth.set(value)}),
+                (16, Integer(LinearInteger {min: 0, max: 999999}),
+                    |kind, value| if let ModulatorKind::Random(random) = kind {random.seed.set(value as i32)}),
+                (17, Integer(LinearInteger {min: 0, max: 32}),
+                    |kind, value| if let ModulatorKind::Random(random) = kind {random.levels.set(value as i32)})
+            ],
+            _ => alloc::vec![
+                (10u16, Integer(LinearInteger {min: 0, max: 4}),
+                    (|kind, value| if let ModulatorKind::Lfo(lfo) = kind {lfo.shape.set(value as i32)})
+                        as fn(&ModulatorKind, f32)),
+                (11, rate_sync,
+                    |kind, value| if let ModulatorKind::Lfo(lfo) = kind {lfo.rate_sync.set(value as i32)}),
+                (12, rate_absolute,
+                    |kind, value| if let ModulatorKind::Lfo(lfo) = kind {lfo.rate_absolute.set(value)}),
+                (13, unipolar,
+                    |kind, value| if let ModulatorKind::Lfo(lfo) = kind {lfo.phase.set(value)}),
+                (14, unipolar,
+                    |kind, value| if let ModulatorKind::Lfo(lfo) = kind {lfo.amount.set(value)}),
+                (15, bipolar,
+                    |kind, value| if let ModulatorKind::Lfo(lfo) = kind {lfo.exponent.set(value)})
+            ]
+        }
+    }
+
+    /// Bind one modulator: every own parameter through the SAME `observe_param` a device's field uses, so
+    /// automation, an assignment from another modulator and the knob's broadcast all come with it. The step
+    /// array is not a parameter, so it keeps its plain observers.
+    fn bind_modulator(&mut self, uuid: Uuid, name: &str, state: &Rc<modulation::ModulatorState>)
+                      -> (Vec<SubscriptionId>, Vec<modulation::BoundParam>,
+                          Vec<bindings::value_collection::ValueCollection>) {
+        let invalidate: Rc<dyn Fn()> = {
+            let modulators = self.modulators.clone();
+            let dirty = self.modulation_dirty.clone();
+            Rc::new(move || {
+                modulators.borrow_mut().record_rebind(uuid);
                 dirty.set(true);
+            })
+        };
+        let mut subs = Vec::new();
+        let mut collections = Vec::new();
+        let mut params = Vec::new();
+        for (index, (key, mapping, apply)) in Self::modulator_params(name).into_iter().enumerate() {
+            let (handle, mut param_subs, mut param_collections, _armed) =
+                self.observe_param(uuid, &[key], index as u32, &invalidate);
+            subs.append(&mut param_subs);
+            collections.append(&mut param_collections);
+            params.push(modulation::BoundParam {handle, mapping, apply});
+        }
+        // Bind is a catch-up: the cells hold the stored (or already automated) values before the first quantum.
+        let position = self.transport.position();
+        let free_running = self.transport.free_running();
+        for param in params.iter() {
+            param.refresh(state, position, free_running);
+        }
+        if name == "StepsModulatorBox" {
+            for index in 0..modulation::MAX_STEPS {
+                let state = state.clone();
+                subs.push(self.observe_modulator_float(uuid, alloc::vec![20, index as u16], move |value| {
+                    if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.steps[index].set(value)}
+                }));
             }
-        })
+        }
+        (subs, params, collections)
     }
 
     fn observe_modulator_float(&mut self, uuid: Uuid, path: Vec<u16>, apply: impl Fn(f32) + 'static) -> SubscriptionId {

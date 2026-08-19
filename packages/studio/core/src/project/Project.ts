@@ -314,7 +314,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         if (armed.length === 0) {return}
         const focusedTrack = this.timelineFocus.track
         const target = focusedTrack
-            .map(track => track.audioUnit.address.uuid)
+            .flatMap(track => track.optAudioUnit)
+            .map(unit => unit.address.uuid)
             .flatMap(uuid => Option.wrap(armed.find(
                 capture => UUID.equals(capture.audioUnitBox.address.uuid, uuid))))
             .unwrapOrElse(armed[0])
@@ -328,8 +329,9 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         const regionDuration = notes.reduce(
             (max, note) => Math.max(max, (note.position - firstPosition) + note.duration), 0)
         const targetUuid = target.audioUnitBox.address.uuid
-        const focusedMatch = focusedTrack.nonEmpty()
-            && UUID.equals(focusedTrack.unwrap().audioUnit.address.uuid, targetUuid)
+        const focusedMatch = focusedTrack
+            .flatMap(track => track.optAudioUnit)
+            .mapOr(unit => UUID.equals(unit.address.uuid, targetUuid), false)
         if (focusedMatch) {
             const track = focusedTrack.unwrap()
             this.#commitCapturedNotes(track, regionPosition, regionDuration, firstPosition, notes)

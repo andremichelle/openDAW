@@ -136,8 +136,9 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
             if (target === null || target.type !== "clip") {return}
             const {trackBoxAdapter} = target.track
             project.timelineFocus.focusTrack(trackBoxAdapter)
-            const deviceChain = trackBoxAdapter.audioUnit.editing
-            const switchDeviceChain = !userEditingManager.audioUnit.isEditing(deviceChain)
+            const deviceChain = trackBoxAdapter.optAudioUnit.map(unit => unit.editing)
+            const switchDeviceChain = deviceChain.mapOr(chain =>
+                !userEditingManager.audioUnit.isEditing(chain), false)
             // If the ContentEditor panel is open, clicking a clip (whether
             // already selected or not) brings it into edit-mode. No-op
             // when that clip is already the current edit target.
@@ -148,7 +149,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                 // pending is folded into the NEXT marked modify, so an unsealed switch rides along with whatever
                 // the user edits next and undoing that edit jumps clip and device chain back.
                 editing.modify(() => {
-                    if (switchDeviceChain) {userEditingManager.audioUnit.edit(deviceChain)}
+                    if (switchDeviceChain) {userEditingManager.audioUnit.edit(deviceChain.unwrap("chain"))}
                     if (switchClip) {userEditingManager.timeline.edit(target.clip.box)}
                 })
             }

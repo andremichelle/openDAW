@@ -91,7 +91,9 @@ export class RegionPushExistingResolver {
         if (trackType === TrackType.Value) {return undefined}
         const minPosition = Math.min(...regionsToPlace.map(region => region.position))
         const maxComplete = Math.max(...regionsToPlace.map(region => region.complete))
-        const audioUnit = sourceTrack.audioUnit
+        const optAudioUnit = sourceTrack.optAudioUnit
+        if (optAudioUnit.isEmpty()) {return undefined} // a modulator's lane: no unit, no track below
+        const audioUnit = optAudioUnit.unwrap()
         // Get all tracks of same type in this audio unit, sorted by index
         const siblingTracks = audioUnit.tracks.pointerHub.incoming()
             .map(vertex => vertex.box as TrackBox)

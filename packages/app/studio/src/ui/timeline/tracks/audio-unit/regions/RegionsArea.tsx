@@ -97,7 +97,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         ClipboardManager.install(element, clipboardHandler),
         shortcuts.register(RegionsShortcuts["select-all"].shortcut, () => {
             regionSelection.select(...manager.tracks()
-                .filter(track => !audioUnitFreeze.isFrozen(track.audioUnitBoxAdapter))
+                .filter(track => !track.audioUnitBoxAdapter.mapOr(unit => audioUnitFreeze.isFrozen(unit), false))
                 .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))
         }),
         shortcuts.register(RegionsShortcuts["deselect-all"].shortcut, () => regionSelection.deselectAll()),
@@ -122,7 +122,9 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             if (target === null) {return}
             if (target.type === "region") {
                 timelineFocus.focusRegion(target.region)
-                const optDeviceChain = target.region.trackBoxAdapter.map(({audioUnit}) => audioUnit.editing)
+                const optDeviceChain = target.region.trackBoxAdapter
+                    .flatMap(track => track.optAudioUnit)
+                    .map(unit => unit.editing)
                 const switchDeviceChain = optDeviceChain
                     .mapOr(vertex => !userEditingManager.audioUnit.isEditing(vertex), false)
                 // If the ContentEditor panel is open, clicking a region
@@ -153,7 +155,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     service.panelLayout.showIfAvailable(PanelType.ContentEditor)
                 })
             } else if (target.type === "track") {
-                if (audioUnitFreeze.isFrozen(target.track.audioUnitBoxAdapter)) {return}
+                if (target.track.audioUnitBoxAdapter.mapOr(unit => audioUnitFreeze.isFrozen(unit), false)) {return}
                 const {trackBoxAdapter} = target.track
                 const x = event.clientX - element.getBoundingClientRect().left
                 let {position, complete} = snapping.xToBarInterval(x)

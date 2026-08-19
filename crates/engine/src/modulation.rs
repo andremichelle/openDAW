@@ -408,15 +408,66 @@ pub(crate) fn modulation_sum(chain: Option<&ModulationChain>, position: f64) -> 
     if contributes {sum} else {f32::NAN}
 }
 
+/// How an automated modulator field turns back into its own unit: an automation curve delivers a `0..1`
+/// value, so folding it needs the parameter's mapping.
+/// WASM CONTRACT: the mappings mirror the `createParameter` calls in the modulator adapters
+/// (packages/studio/adapters/src/modulation).
+#[derive(Clone, Copy)]
+pub(crate) enum ParamMapping {
+    Float(math::value_mapping::Linear),
+    Power(math::value_mapping::Power),
+    Integer(math::value_mapping::LinearInteger)
+}
+
+/// One of a modulator's own parameters, bound the way a device's is: the handle carries the stored value,
+/// the automation curve and the modulation chain, and `apply` writes the folded result into the state cell
+/// the shape reads. Nothing recurses: the refresh pass runs once per quantum and `value_at` only reads
+/// cells, so a modulator driving another modulator's parameter settles within a quantum rather than
+/// re-entering.
+pub(crate) struct BoundParam {
+    pub(crate) handle: crate::param_automation::ParamHandle,
+    pub(crate) mapping: ParamMapping,
+    pub(crate) apply: fn(&ModulatorKind, f32)
+}
+
+impl BoundParam {
+    /// The automation reads the SONG position, which stands still while paused, so a static curve there is
+    /// the hold. The modulation reads the free-running one, so a modulator driving this parameter keeps
+    /// moving with the transport stopped.
+    pub(crate) fn refresh(&self, state: &ModulatorState, automation_position: f64, modulation_position: f64) {
+        let (value, kind, modulation) =
+            self.handle.resolve_split(automation_position, modulation_position);
+        let folded = match &self.mapping {
+            ParamMapping::Float(mapping) =>
+                crate::audio_unit::params::host_float(value, kind, modulation, mapping),
+            ParamMapping::Power(mapping) =>
+                crate::audio_unit::params::host_float(value, kind, modulation, mapping),
+            ParamMapping::Integer(mapping) =>
+                abi::int_value(abi::ParamValue::from_wire(kind, value, modulation), mapping) as f32
+        };
+        (self.apply)(&state.kind, folded);
+    }
+}
+
+pub(crate) struct ModulatorEntry {
+    uuid: Uuid,
+    state: Rc<ModulatorState>,
+    subs: Vec<SubscriptionId>,
+    params: Vec<BoundParam>,
+    collections: Vec<bindings::value_collection::ValueCollection>
+}
+
 pub(crate) struct ModulatorTable {
-    entries: Vec<(Uuid, Rc<ModulatorState>, Vec<SubscriptionId>)>,
+    entries: Vec<ModulatorEntry>,
     pending_add: Vec<Uuid>,
-    pending_remove: Vec<Uuid>
+    pending_remove: Vec<Uuid>,
+    pending_rebind: Vec<Uuid>
 }
 
 impl ModulatorTable {
     pub(crate) fn new() -> Self {
-        Self {entries: Vec::new(), pending_add: Vec::new(), pending_remove: Vec::new()}
+        Self {entries: Vec::new(), pending_add: Vec::new(), pending_remove: Vec::new(),
+            pending_rebind: Vec::new()}
     }
 
     pub(crate) fn record_add(&mut self, uuid: Uuid) {
@@ -427,22 +478,67 @@ impl ModulatorTable {
         self.pending_remove.push(uuid);
     }
 
-    pub(crate) fn take_pending(&mut self) -> (Vec<Uuid>, Vec<Uuid>) {
-        (core::mem::take(&mut self.pending_add), core::mem::take(&mut self.pending_remove))
+    /// An automation or assignment edit on a modulator's own parameter: the modulator binds again, keeping
+    /// its state, so the shape does not glitch while the handles are replaced.
+    pub(crate) fn record_rebind(&mut self, uuid: Uuid) {
+        if !self.pending_rebind.contains(&uuid) {
+            self.pending_rebind.push(uuid);
+        }
+    }
+
+    pub(crate) fn take_pending(&mut self) -> (Vec<Uuid>, Vec<Uuid>, Vec<Uuid>) {
+        (core::mem::take(&mut self.pending_add), core::mem::take(&mut self.pending_remove),
+            core::mem::take(&mut self.pending_rebind))
     }
 
     pub(crate) fn resolve(&self, uuid: &Uuid) -> Option<Rc<ModulatorState>> {
-        self.entries.iter().find(|(bound, ..)| bound == uuid).map(|(_, state, _)| state.clone())
+        self.entries.iter().find(|entry| &entry.uuid == uuid).map(|entry| entry.state.clone())
     }
 
-    pub(crate) fn add(&mut self, uuid: Uuid, state: Rc<ModulatorState>, subs: Vec<SubscriptionId>) {
-        self.entries.push((uuid, state, subs));
+    pub(crate) fn add(&mut self, uuid: Uuid, state: Rc<ModulatorState>, subs: Vec<SubscriptionId>,
+                      params: Vec<BoundParam>, collections: Vec<bindings::value_collection::ValueCollection>) {
+        self.entries.push(ModulatorEntry {uuid, state, subs, params, collections});
     }
 
-    pub(crate) fn remove(&mut self, uuid: &Uuid) -> Vec<SubscriptionId> {
-        match self.entries.iter().position(|(bound, ..)| bound == uuid) {
-            Some(index) => self.entries.remove(index).2,
-            None => Vec::new()
+    pub(crate) fn remove(&mut self, uuid: &Uuid)
+                         -> (Vec<SubscriptionId>, Vec<bindings::value_collection::ValueCollection>) {
+        match self.entries.iter().position(|entry| &entry.uuid == uuid) {
+            Some(index) => {
+                let entry = self.entries.remove(index);
+                (entry.subs, entry.collections)
+            }
+            None => (Vec::new(), Vec::new())
+        }
+    }
+
+    /// Drop what a modulator was bound to, keeping its state and its place in the table.
+    pub(crate) fn detach(&mut self, uuid: &Uuid)
+                         -> (Vec<SubscriptionId>, Vec<bindings::value_collection::ValueCollection>) {
+        match self.entries.iter_mut().find(|entry| &entry.uuid == uuid) {
+            Some(entry) => {
+                entry.params.clear();
+                (core::mem::take(&mut entry.subs), core::mem::take(&mut entry.collections))
+            }
+            None => (Vec::new(), Vec::new())
+        }
+    }
+
+    pub(crate) fn attach(&mut self, uuid: &Uuid, subs: Vec<SubscriptionId>, params: Vec<BoundParam>,
+                         collections: Vec<bindings::value_collection::ValueCollection>) {
+        if let Some(entry) = self.entries.iter_mut().find(|entry| &entry.uuid == uuid) {
+            entry.subs = subs;
+            entry.params = params;
+            entry.collections = collections;
+        }
+    }
+
+    /// Resolve every modulator's own parameters for this quantum: the automation reads the SONG position and
+    /// holds while paused, the modulation the free-running one.
+    pub(crate) fn refresh_params(&self, automation_position: f64, modulation_position: f64) {
+        for entry in self.entries.iter() {
+            for param in entry.params.iter() {
+                param.refresh(&entry.state, automation_position, modulation_position);
+            }
         }
     }
 
@@ -451,20 +547,20 @@ impl ModulatorTable {
     }
 
     pub(crate) fn publish_phases(&self, position: f64) {
-        for (_, state, _) in self.entries.iter() {
-            state.publish_phase(position);
+        for entry in self.entries.iter() {
+            entry.state.publish_phase(position);
         }
     }
 
     pub(crate) fn advance_free(&self, delta_seconds: f64) {
-        for (_, state, _) in self.entries.iter() {
-            state.advance_free(delta_seconds);
+        for entry in self.entries.iter() {
+            entry.state.advance_free(delta_seconds);
         }
     }
 
     pub(crate) fn anchor_free(&self, seconds: f64) {
-        for (_, state, _) in self.entries.iter() {
-            state.anchor_free(seconds);
+        for entry in self.entries.iter() {
+            entry.state.anchor_free(seconds);
         }
     }
 }

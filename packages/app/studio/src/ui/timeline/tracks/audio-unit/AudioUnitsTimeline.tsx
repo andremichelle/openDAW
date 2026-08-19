@@ -6,9 +6,15 @@ import {Scroller} from "@/ui/components/Scroller.tsx"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {TrackFactory, TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {Track} from "./Track"
+import {ModulatorTrack} from "./ModulatorTrack"
 import {RegionsArea} from "./regions/RegionsArea.tsx"
 import {ClipsArea} from "./clips/ClipsArea.tsx"
-import {AudioUnitBoxAdapter, InstrumentFactories, TrackBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    AudioUnitBoxAdapter,
+    InstrumentFactories,
+    ModulatorBoxAdapter,
+    TrackBoxAdapter
+} from "@opendaw/studio-adapters"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {ExtraSpace} from "./Constants.ts"
 import {HeadersArea} from "@/ui/timeline/tracks/audio-unit/headers/HeadersArea"
@@ -69,6 +75,15 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                    audioUnitBoxAdapter={audioUnitBoxAdapter}
                    trackBoxAdapter={trackBoxAdapter}
                    unitHead={unitHead}/>
+        ),
+        createModulator: (manager: TracksManager,
+                          lifecycle: Lifecycle,
+                          _modulator: ModulatorBoxAdapter,
+                          trackBoxAdapter: TrackBoxAdapter): HTMLElement => (
+            <ModulatorTrack lifecycle={lifecycle}
+                            service={service}
+                            trackManager={manager}
+                            trackBoxAdapter={trackBoxAdapter}/>
         )
     }
     const manager: TracksManager = lifecycle.own(new TracksManager(service, scrollContainer, factory))

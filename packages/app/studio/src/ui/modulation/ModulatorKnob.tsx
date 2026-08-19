@@ -5,6 +5,7 @@ import {StudioService} from "@/service/StudioService.ts"
 import {Column} from "@/ui/devices/Column.tsx"
 import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob.tsx"
 import {attachModulatorParameterContextMenu} from "@/ui/menu/automation.ts"
+import {installControlSourceIndicator} from "@/ui/components/AutomationControl.tsx"
 import {LKR} from "@/ui/devices/constants.ts"
 
 type Construct = {
@@ -22,6 +23,7 @@ export const ModulatorKnob = ({lifecycle, service, parameter, anchor}: Construct
             <ParameterLabelKnob lifecycle={lifecycle} editing={editing} parameter={parameter} anchor={anchor}/>
         </Column>
     )
+    installControlSourceIndicator(lifecycle, parameter, column, column)
     lifecycle.own(attachModulatorParameterContextMenu(editing, midiLearning, parameter, column))
     return column
 }

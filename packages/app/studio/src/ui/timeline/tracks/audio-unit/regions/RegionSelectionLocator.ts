@@ -19,7 +19,9 @@ export const createRegionLocator = (manager: TracksManager,
         // no TrackContext covers (a synthetic unit lane). Grabbing that track's region there stops a marquee
         // from ever starting on a synthetic lane. Nothing is selectable in the gap.
         if (v >= component.position + component.size) {return Iterables.empty()}
-        if (audioUnitFreeze.isFrozen(component.audioUnitBoxAdapter)) {return Iterables.empty()}
+        if (component.audioUnitBoxAdapter.mapOr(unit => audioUnitFreeze.isFrozen(unit), false)) {
+            return Iterables.empty()
+        }
         const threshold = range.unitsPerPixel * PointerRadiusDistance
         const collection = component.trackBoxAdapter.regions.collection
         const before = collection.lowerEqual(u)
@@ -43,7 +45,7 @@ export const createRegionLocator = (manager: TracksManager,
             // The start track can sit entirely above the drag (its band ends before `v0` — a synthetic gap):
             // its rows are outside the rectangle, so skip it.
             if (component.position + component.size <= v0) {continue}
-            if (audioUnitFreeze.isFrozen(component.audioUnitBoxAdapter)) {continue}
+            if (component.audioUnitBoxAdapter.mapOr(unit => audioUnitFreeze.isFrozen(unit), false)) {continue}
             regions.push(...component.trackBoxAdapter.regions.collection.iterateRange(u0, u1))
         }
         return regions

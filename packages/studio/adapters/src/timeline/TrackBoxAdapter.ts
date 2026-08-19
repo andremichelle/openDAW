@@ -132,7 +132,13 @@ export class TrackBoxAdapter implements BoxAdapter {
     terminate() {this.#terminator.terminate()}
 
     get audioUnit(): AudioUnitBox {
-        return asInstanceOf(this.#box.tracks.targetVertex.unwrap("track has no audioUnit").box, AudioUnitBox)
+        return this.optAudioUnit.unwrap("track has no audioUnit")
+    }
+
+    /// `None` for a lane a modulator owns: its parameters' automation lives outside the audio units.
+    get optAudioUnit(): Option<AudioUnitBox> {
+        return this.#box.tracks.targetVertex
+            .flatMap(vertex => vertex.box instanceof AudioUnitBox ? Option.wrap(vertex.box) : Option.None)
     }
 
     get target(): PointerField<Pointers.Automation> {return this.#box.target}
