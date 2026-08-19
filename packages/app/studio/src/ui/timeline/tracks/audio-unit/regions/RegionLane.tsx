@@ -1,4 +1,3 @@
-import css from "./RegionLane.sass?inline"
 import {Html} from "@opendaw/lib-dom"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
@@ -6,8 +5,9 @@ import {RegionRenderer} from "@/ui/timeline/tracks/audio-unit/regions/RegionRend
 import {TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {CanvasPainter, TimelineRange} from "@opendaw/studio-core"
+import {RegionLaneClassName} from "@/ui/timeline/tracks/audio-unit/TrackStyles.ts"
 
-const className = Html.adoptStyleSheet(css, "RegionLane")
+const className = RegionLaneClassName
 
 type Construct = {
     lifecycle: Lifecycle

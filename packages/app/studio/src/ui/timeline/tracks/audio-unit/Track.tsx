@@ -1,15 +1,12 @@
-import css from "./Track.sass?inline"
 import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
-import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService.ts"
 import {createElement} from "@opendaw/lib-jsx"
-import {TrackHeader} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeader.tsx"
+import {AudioUnitTrackHeader} from "@/ui/timeline/tracks/audio-unit/headers/AudioUnitTrackHeader.tsx"
+import {TrackClassName} from "@/ui/timeline/tracks/audio-unit/TrackStyles.ts"
 import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {ClipLane} from "@/ui/timeline/tracks/audio-unit/clips/ClipLane.tsx"
 import {RegionLane} from "@/ui/timeline/tracks/audio-unit/regions/RegionLane.tsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-
-export const trackClassName = Html.adoptStyleSheet(css, "Track")
 
 type Construct = {
     lifecycle: Lifecycle
@@ -22,8 +19,8 @@ type Construct = {
 
 export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, trackBoxAdapter, unitHead}: Construct) => {
     const element: HTMLElement = (
-        <div className={trackClassName}>
-            <TrackHeader lifecycle={lifecycle}
+        <div className={TrackClassName}>
+            <AudioUnitTrackHeader lifecycle={lifecycle}
                          service={service}
                          trackManager={trackManager}
                          audioUnitBoxAdapter={audioUnitBoxAdapter}

@@ -1,18 +1,16 @@
-import trackCss from "./Track.sass?inline"
-import headerCss from "./headers/TrackHeader.sass?inline"
-import clipCss from "./clips/ClipLane.sass?inline"
-import regionCss from "./regions/RegionLane.sass?inline"
 import {Arrays, Lifecycle, MutableObservableValue, Terminator} from "@opendaw/lib-std"
 import {Events, Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon.tsx"
+import {
+    ClipLaneClassName,
+    RegionLaneClassName,
+    TrackClassName,
+    TrackHeaderClassName
+} from "@/ui/timeline/tracks/audio-unit/TrackStyles.ts"
 import {StudioService} from "@/service/StudioService.ts"
 
-const trackClassName = Html.adoptStyleSheet(trackCss, "Track")
-const headerClassName = Html.adoptStyleSheet(headerCss, "TrackHeader")
-const clipClassName = Html.adoptStyleSheet(clipCss, "ClipLane")
-const regionClassName = Html.adoptStyleSheet(regionCss, "RegionLane")
 
 type Construct = {
     lifecycle: Lifecycle
@@ -25,7 +23,7 @@ type Construct = {
 export const ModulatorsLane = ({lifecycle, service, collapsed}: Construct) => {
     const collapse: HTMLElement = <Icon symbol={IconSymbol.Dropdown} className="collapse-automation visible"/>
     const header: HTMLElement = (
-        <div className={Html.buildClassList(headerClassName, "is-primary")} tabindex={-1}>
+        <div className={Html.buildClassList(TrackHeaderClassName, "is-primary")} tabindex={-1}>
             <div className="icon-container">
                 <Icon symbol={IconSymbol.Modulation} style={{color: "var(--color)"}}/>
             </div>
@@ -38,12 +36,12 @@ export const ModulatorsLane = ({lifecycle, service, collapsed}: Construct) => {
             <div/>
         </div>
     )
-    const clipArea: HTMLElement = <div className={Html.buildClassList(clipClassName, "deactive")}/>
+    const clipArea: HTMLElement = <div className={Html.buildClassList(ClipLaneClassName, "deactive")}/>
     const element: HTMLElement = (
-        <div className={Html.buildClassList(trackClassName, "unit-lane")} tabindex={-1}>
+        <div className={Html.buildClassList(TrackClassName, "unit-lane")} tabindex={-1}>
             {header}
             {clipArea}
-            <div className={Html.buildClassList(regionClassName, "deactive")}/>
+            <div className={Html.buildClassList(RegionLaneClassName, "deactive")}/>
         </div>
     )
     element.style.setProperty("--guide-display", "none")

@@ -7,7 +7,7 @@ import {TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Surface} from "@/ui/surface/Surface"
-import {trackHeaderClassName} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeader.tsx"
+import {TrackHeaderClassName} from "@/ui/timeline/tracks/audio-unit/TrackStyles.ts"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -22,7 +22,7 @@ export const ModulatorTrackHeader = ({lifecycle, service, trackBoxAdapter}: Cons
     const nameLabel: HTMLElement = <h5 className="device-name" style={{color: Colors.dark.toString()}}/>
     const controlLabel: HTMLElement = <h5 className="control-label" style={{color: Colors.shadow.toString()}}/>
     const element: HTMLElement = (
-        <div className={Html.buildClassList(trackHeaderClassName, "is-primary")} tabindex={-1}>
+        <div className={Html.buildClassList(TrackHeaderClassName, "is-primary")} tabindex={-1}>
             <div className="icon-container">
                 <Icon symbol={IconSymbol.Automation} className="automation-icon"/>
             </div>

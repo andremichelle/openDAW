@@ -1,7 +1,3 @@
-import trackCss from "./Track.sass?inline"
-import headerCss from "./headers/TrackHeader.sass?inline"
-import clipCss from "./clips/ClipLane.sass?inline"
-import regionCss from "./regions/RegionLane.sass?inline"
 import {Arrays, DefaultObservableValue, Lifecycle, Option, Terminator, UUID} from "@opendaw/lib-std"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
@@ -10,6 +6,12 @@ import {AudioUnitBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {TrackBox} from "@opendaw/studio-boxes"
 import {Colors, IconSymbol, TransientPlayMode} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon.tsx"
+import {
+    ClipLaneClassName,
+    RegionLaneClassName,
+    TrackClassName,
+    TrackHeaderClassName
+} from "@/ui/timeline/tracks/audio-unit/TrackStyles.ts"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {AudioContentFactory, MenuItem} from "@opendaw/studio-core"
 import {AudioUnitChannelControls} from "@/ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx"
@@ -20,10 +22,6 @@ import {TimelineDragAndDrop} from "@/ui/timeline/tracks/audio-unit/TimelineDragA
 import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts"
 import {TrackIcon} from "@/ui/timeline/tracks/audio-unit/headers/TrackIcon.tsx"
 
-const trackClassName = Html.adoptStyleSheet(trackCss, "Track")
-const headerClassName = Html.adoptStyleSheet(headerCss, "TrackHeader")
-const clipClassName = Html.adoptStyleSheet(clipCss, "ClipLane")
-const regionClassName = Html.adoptStyleSheet(regionCss, "RegionLane")
 
 type Construct = {
     lifecycle: Lifecycle
@@ -41,7 +39,7 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
         <TrackIcon lifecycle={lifecycle} service={service} audioUnitBoxAdapter={audioUnitBoxAdapter}/>
     )
     const header: HTMLElement = (
-        <div className={Html.buildClassList(headerClassName, "is-primary")} tabindex={-1}>
+        <div className={Html.buildClassList(TrackHeaderClassName, "is-primary")} tabindex={-1}>
             {iconHost}
             <CollapseAutomationButton lifecycle={lifecycle} service={service}
                                       audioUnitBoxAdapter={audioUnitBoxAdapter}
@@ -68,10 +66,10 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
             </MenuButton>
         </div>
     )
-    const regionArea: HTMLElement = <div className={Html.buildClassList(regionClassName, "deactive")}/>
-    const clipArea: HTMLElement = <div className={Html.buildClassList(clipClassName, "deactive")}/>
+    const regionArea: HTMLElement = <div className={Html.buildClassList(RegionLaneClassName, "deactive")}/>
+    const clipArea: HTMLElement = <div className={Html.buildClassList(ClipLaneClassName, "deactive")}/>
     const element: HTMLElement = (
-        <div className={Html.buildClassList(trackClassName, "unit-lane")} tabindex={-1}>
+        <div className={Html.buildClassList(TrackClassName, "unit-lane")} tabindex={-1}>
             {header}
             {clipArea}
             {regionArea}

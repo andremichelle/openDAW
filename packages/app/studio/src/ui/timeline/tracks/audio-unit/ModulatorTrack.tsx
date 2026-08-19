@@ -6,7 +6,7 @@ import {ModulatorTrackHeader} from "@/ui/timeline/tracks/audio-unit/headers/Modu
 import {ClipLane} from "@/ui/timeline/tracks/audio-unit/clips/ClipLane.tsx"
 import {RegionLane} from "@/ui/timeline/tracks/audio-unit/regions/RegionLane.tsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-import {trackClassName} from "@/ui/timeline/tracks/audio-unit/Track.tsx"
+import {TrackClassName} from "@/ui/timeline/tracks/audio-unit/TrackStyles.ts"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -17,7 +17,7 @@ type Construct = {
 
 export const ModulatorTrack = ({lifecycle, service, trackManager, trackBoxAdapter}: Construct) => {
     const element: HTMLElement = (
-        <div className={trackClassName}>
+        <div className={TrackClassName}>
             <ModulatorTrackHeader lifecycle={lifecycle} service={service} trackBoxAdapter={trackBoxAdapter}/>
             <ClipLane lifecycle={lifecycle}
                       service={service}
