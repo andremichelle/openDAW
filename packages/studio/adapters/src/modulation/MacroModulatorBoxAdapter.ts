@@ -9,6 +9,7 @@ export class MacroModulatorBoxAdapter extends ModulatorBoxAdapter<MacroModulator
     constructor(context: BoxAdaptersContext, box: MacroModulatorBox) {
         super(context, box)
         this.namedParameter = this.#wrapParameters(box)
+        this.registerParameterTracks()
     }
 
     #wrapParameters(box: MacroModulatorBox) {

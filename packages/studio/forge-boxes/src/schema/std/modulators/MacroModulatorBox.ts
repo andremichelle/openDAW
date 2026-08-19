@@ -1,8 +1,8 @@
 import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
-import {BipolarConstraints, MidiControlPointerRules} from "../Defaults"
+import {BipolarConstraints, ModulatorParameterPointerRules} from "../Defaults"
 import {ModulatorFactory} from "./ModulatorFactory"
 
 export const MacroModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createModulator("MacroModulatorBox", {
-    10: {type: "float32", name: "value", pointerRules: MidiControlPointerRules, value: 0.0, ...BipolarConstraints}
+    10: {type: "float32", name: "value", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...BipolarConstraints}
 })

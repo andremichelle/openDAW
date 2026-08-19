@@ -26,7 +26,7 @@ import {Address, Field, PointerField, PointerTypes, PrimitiveField, PrimitiveTyp
 import {Pointers} from "@opendaw/studio-enums"
 import {BoxVisitor, ModulationBox, TrackBox} from "@opendaw/studio-boxes"
 import {TrackBoxAdapter} from "./timeline/TrackBoxAdapter"
-import {AudioUnitTracks} from "./audio-unit/AudioUnitTracks"
+import {ParameterTracks} from "./timeline/ParameterTracks"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 
 const ExternalControlTypes = [
@@ -166,7 +166,7 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
         return this.#name.catchupAndSubscribe(owner => observer(owner.getValue()))
     }
 
-    registerTracks(tracks: AudioUnitTracks): Terminable {
+    registerTracks(tracks: ParameterTracks): Terminable {
         return this.#context.parameterFieldAdapters.registerTracks(this.address, tracks)
     }
     touchStart(): void {

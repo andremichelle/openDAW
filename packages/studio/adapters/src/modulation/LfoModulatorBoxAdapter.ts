@@ -27,6 +27,7 @@ export class LfoModulatorBoxAdapter extends ModulatorBoxAdapter<LfoModulatorBox>
     constructor(context: BoxAdaptersContext, box: LfoModulatorBox) {
         super(context, box)
         this.namedParameter = this.#wrapParameters(box)
+        this.registerParameterTracks()
     }
 
     #wrapParameters(box: LfoModulatorBox) {

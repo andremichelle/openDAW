@@ -15,6 +15,7 @@ export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulat
     constructor(context: BoxAdaptersContext, box: RandomModulatorBox) {
         super(context, box)
         this.namedParameter = this.#wrapParameters(box)
+        this.registerParameterTracks()
     }
 
     get loop(): int {return this.box.loop.getValue()}

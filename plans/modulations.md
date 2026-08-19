@@ -572,11 +572,33 @@ owner instead, so "Create Automation" appears on a modulator's knob.
 
 The mixer is untouched under this route, since it renders per audio unit and a modulator is not one.
 
-### Open question
+### Placement, settled
 
-`AudioUnitType` has four values: `Instrument`, `Bus`, `Aux`, `Output`. "After the instruments and
-before the busses" is unambiguous only for two of them, so the merge point has to state where
-modulator rows sit relative to `Aux` (and the output unit, which the timeline already treats apart).
+Modulator rows go AFTER every audio unit, not between the instruments and the busses. That was the
+expensive half of the timeline work: a merge point inside the audio-unit run means the row source has
+to splice two collections at a boundary, and `indicesLimit` / `findInsertLocationVertical` both assume
+every row is a unit with an index in one space. Appended, the merge is a concatenation at the end, a
+drop into the modulator run is one tail check, and the question of where `Aux` and the output unit sit
+relative to them disappears.
+
+### Where it stands
+
+The model layer is DONE. `ModulatorFactory` carries a `tracks` field (key 6), a modulator owns a
+`FieldParameterTracks` (the collection behind `AudioUnitTracks`, extracted so both own lanes the same
+way), its parameters register that owner in `parameterFieldAdapters`, and deleting the modulator takes
+its lanes with it.
+
+The engine is next. `observe_param` binds any `(box uuid, field path)` already, including the pointer
+hub and region / clip / enabled monitors that fire `invalidate`, so a modulator field binds like a
+strip gain. Three things it needs: a rebind path, since modulators are observed once when added and
+have no re-observe step (the invalidate should record the uuid and `sync_modulators` should drop and
+re-bind that one modulator, keeping the same state so no value glitches); the automation resolved at
+the SONG position rather than the free-running one, so an automated rate freezes with the rest of the
+automation while the shape keeps cycling; and a Rust mirror of each parameter's value mapping, since
+an automated field arrives as a unit value (`Linear`, `LinearInteger` and `Power::by_center` already
+exist in `crates/math`).
+
+The timeline is last, and now cheap: one row group appended after the audio units.
 
 ## Open risks
 

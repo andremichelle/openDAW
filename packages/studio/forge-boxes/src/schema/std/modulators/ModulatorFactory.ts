@@ -9,7 +9,12 @@ const ModulatorAttributes = {
     3: {type: "string", name: "label"},
     4: {type: "boolean", name: "enabled", value: true},
     5: {type: "int32", name: "index", ...IndexConstraints},
-    ...reserveMany(6, 7, 8, 9)
+    6: {
+        type: "field",
+        name: "tracks",
+        pointerRules: {accepts: [Pointers.TrackCollection], mandatory: false}
+    },
+    ...reserveMany(7, 8, 9)
 } as const satisfies FieldRecord<Pointers>
 
 export namespace ModulatorFactory {

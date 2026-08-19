@@ -19,6 +19,7 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
     constructor(context: BoxAdaptersContext, box: StepsModulatorBox) {
         super(context, box)
         this.namedParameter = this.#wrapParameters(box)
+        this.registerParameterTracks()
     }
 
     get count(): int {return this.box.count.getValue()}

@@ -10,6 +10,7 @@ import {asInstanceOf, AssertType, isInstanceOf, Terminator, UUID} from "@opendaw
 import {IndexedBoxAdapter} from "../IndexedBoxAdapterCollection"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../ParameterAdapterSet"
+import {FieldParameterTracks} from "../timeline/ParameterTracks"
 import {ModulationBoxAdapter} from "./ModulationBoxAdapter"
 
 export type ModulatorBox = LfoModulatorBox | StepsModulatorBox | MacroModulatorBox | RandomModulatorBox
@@ -20,6 +21,7 @@ export abstract class ModulatorBoxAdapter<BOX extends ModulatorBox = ModulatorBo
     protected readonly terminator: Terminator = new Terminator()
     protected readonly context: BoxAdaptersContext
     protected readonly parametric: ParameterAdapterSet
+    readonly tracks: FieldParameterTracks
 
     readonly #box: BOX
 
@@ -27,6 +29,8 @@ export abstract class ModulatorBoxAdapter<BOX extends ModulatorBox = ModulatorBo
         this.context = context
         this.#box = box
         this.parametric = this.terminator.own(new ParameterAdapterSet(context))
+        this.tracks = this.terminator.own(
+            new FieldParameterTracks(box.graph, box.tracks, context.boxAdapters))
     }
 
     get box(): BOX {return this.#box}
@@ -39,6 +43,13 @@ export abstract class ModulatorBoxAdapter<BOX extends ModulatorBox = ModulatorBo
     get assignments(): ReadonlyArray<ModulationBoxAdapter> {
         return this.#box.assignments.pointerHub.incoming()
             .map(({box}) => this.context.boxAdapters.adapterFor(asInstanceOf(box, ModulationBox), ModulationBoxAdapter))
+    }
+
+    /// The subclass creates its parameters, then hands them their lane owner: automation of a modulator's
+    /// parameter lives on the modulator, not on an audio unit.
+    protected registerParameterTracks(): void {
+        this.parametric.parameters().forEach(parameter =>
+            this.terminator.own(parameter.registerTracks(this.tracks)))
     }
 
     terminate(): void {this.terminator.terminate()}

@@ -1,7 +1,7 @@
 import {Notifier, Observer, Option, SortedSet, Subscription, Terminable, unitValue} from "@opendaw/lib-std"
 import {Address} from "@opendaw/lib-box"
 import {AutomatableParameterFieldAdapter} from "./AutomatableParameterFieldAdapter"
-import {AudioUnitTracks} from "./audio-unit/AudioUnitTracks"
+import {ParameterTracks} from "./timeline/ParameterTracks"
 
 export type AutomationMode = "read" | "touch" | "latch"
 
@@ -13,7 +13,7 @@ export type ParameterWriteEvent = {
 export class ParameterFieldAdapters {
     readonly #set: SortedSet<Address, AutomatableParameterFieldAdapter>
     readonly #writeNotifier: Notifier<ParameterWriteEvent>
-    readonly #tracksMap: Map<string, AudioUnitTracks>
+    readonly #tracksMap: Map<string, ParameterTracks>
     readonly #touchedSet: Set<string>
     readonly #touchEndNotifier: Notifier<Address>
     readonly #modeMap: Map<string, AutomationMode>
@@ -35,13 +35,13 @@ export class ParameterFieldAdapters {
     get(address: Address): AutomatableParameterFieldAdapter {return this.#set.get(address, "parameter field adapter")}
     opt(address: Address): Option<AutomatableParameterFieldAdapter> {return this.#set.opt(address)}
 
-    registerTracks(address: Address, tracks: AudioUnitTracks): Terminable {
+    registerTracks(address: Address, tracks: ParameterTracks): Terminable {
         const key = address.toString()
         this.#tracksMap.set(key, tracks)
         return {terminate: () => this.#tracksMap.delete(key)}
     }
 
-    getTracks(address: Address): Option<AudioUnitTracks> {
+    getTracks(address: Address): Option<ParameterTracks> {
         return Option.wrap(this.#tracksMap.get(address.toString()))
     }
 

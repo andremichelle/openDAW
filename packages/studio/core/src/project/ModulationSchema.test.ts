@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
 import {asInstanceOf, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {Modulators, ProjectSkeleton} from "@opendaw/studio-adapters"
+import {LfoModulatorBoxAdapter, Modulators, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {LfoModulatorBox, MIDIControllerBox, ModulationBox, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import type {ProjectEnv} from "./ProjectEnv"
@@ -160,6 +160,27 @@ describe("modulation schema", () => {
         project.editing.modify(() => parameter.modulations[0].delete())
         expect(parameter.modulations.length).toBe(0)
         expect(modulator.assignments.length).toBe(1)
+        project.terminate()
+    })
+
+    it("a modulator owns the automation lanes of its own parameters", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(createEnv(), ProjectSkeleton.empty({
+            createDefaultUser: true, createOutputMaximizer: false
+        }))
+        const lfo = project.editing.modify(() => Modulators.createLfo(project)).unwrap("no lfo")
+        const modulator = project.rootBoxAdapter.modulators.adapters()[0]
+        const {amount} = project.boxAdapters.adapterFor(lfo, LfoModulatorBoxAdapter).namedParameter
+        expect(modulator.tracks.values().length).toBe(0)
+        project.editing.modify(() => modulator.tracks.create(TrackType.Value, amount.field))
+        const track = modulator.tracks.controls(amount.field).unwrap("no track")
+        expect(track.type).toBe(TrackType.Value)
+        expect(modulator.tracks.values().length).toBe(1)
+        // The parameter finds the lane through the registry, which is what the context menu asks.
+        expect(project.parameterFieldAdapters.getTracks(amount.address).unwrap("no owner")).toBe(modulator.tracks)
+        // Deleting the modulator takes its lanes with it.
+        project.editing.modify(() => lfo.delete())
+        expect(project.boxGraph.findBox(track.uuid).isEmpty()).toBe(true)
         project.terminate()
     })
 
