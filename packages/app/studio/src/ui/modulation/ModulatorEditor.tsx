@@ -4,10 +4,13 @@ import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {IconSymbol} from "@opendaw/studio-enums"
-import {ModulatorBoxAdapter} from "@opendaw/studio-adapters"
+import {ModulatorBoxAdapter, Modulators} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Button} from "@/ui/components/Button.tsx"
+import {MenuButton} from "@/ui/components/MenuButton.tsx"
+import {MenuItem} from "@opendaw/studio-core"
+import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
 import {TargetList} from "@/ui/modulation/TargetList.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
 
@@ -20,7 +23,8 @@ type Construct = {
 }
 
 export const ModulatorEditor = ({lifecycle, service, modulator}: Construct, controls: JsxValue) => {
-    const {editing} = service.project
+    const {project} = service
+    const {editing} = project
     const labelField = modulator.box.label
     const title: HTMLElement = (
         <h1 onInit={element => lifecycle.ownAll(
@@ -44,6 +48,20 @@ export const ModulatorEditor = ({lifecycle, service, modulator}: Construct, cont
             <div className="modulator">
                 <header>
                     {title}
+                    <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                        MenuItem.default({label: "Replace with"}).setRuntimeChildrenProcedure(sub =>
+                            sub.addMenuItem(...Modulators.Kinds.map(kind => MenuItem.default({
+                                label: kind.label,
+                                checked: kind.boxName === modulator.box.name,
+                                selectable: kind.boxName !== modulator.box.name
+                            }).setTriggerProcedure(() => editing.modify(() =>
+                                Modulators.replace(project, modulator.box, kind)))))),
+                        MenuItem.default({label: "Duplicate"}).setTriggerProcedure(() =>
+                            editing.modify(() => Modulators.duplicate(project, modulator.box))
+                                .ifSome(box => ModulatorReveal.request(box.address.uuid)))))}
+                                appearance={{}}>
+                        <Icon symbol={IconSymbol.Menu}/>
+                    </MenuButton>
                     <Icon symbol={IconSymbol.Shutdown} className="toggle" onInit={element =>
                         lifecycle.own(Events.subscribe(element, "click", () =>
                             editing.modify(() => modulator.box.enabled.toggle())))}/>

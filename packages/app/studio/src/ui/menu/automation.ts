@@ -7,6 +7,7 @@ import {
     TrackType
 } from "@opendaw/studio-adapters"
 import {PrimitiveValues} from "@opendaw/lib-box"
+import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
 import {Editing, isDefined, UUID} from "@opendaw/lib-std"
 
 export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: Editing,
@@ -54,16 +55,16 @@ const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
             .map(box => [box.source.targetVertex
                 .mapOr(vertex => UUID.toString(vertex.address.uuid), ""), box] as const)
             .filter(([uuid]) => uuid.length > 0))
-        parent.addMenuItem(MenuItem.default({label: "New"}).setRuntimeChildrenProcedure(sub => sub.addMenuItem(
-            MenuItem.default({label: "LFO"})
-                .setTriggerProcedure(() => editing.modify(() =>
-                    Modulators.assign(context, Modulators.createLfo(context), target))),
-            MenuItem.default({label: "Steps"})
-                .setTriggerProcedure(() => editing.modify(() =>
-                    Modulators.assign(context, Modulators.createSteps(context), target))),
-            MenuItem.default({label: "Macro"})
-                .setTriggerProcedure(() => editing.modify(() =>
-                    Modulators.assign(context, Modulators.createMacro(context), target))))))
+        parent.addMenuItem(MenuItem.default({label: "New"}).setRuntimeChildrenProcedure(sub =>
+            sub.addMenuItem(...Modulators.Kinds.map(kind => MenuItem.default({label: kind.label})
+                .setTriggerProcedure(() => {
+                    const modulator = editing.modify(() => {
+                        const modulator = kind.create(context)
+                        Modulators.assign(context, modulator, target)
+                        return modulator
+                    })
+                    modulator.ifSome(box => ModulatorReveal.request(box.address.uuid))
+                })))))
         context.rootBoxAdapter.modulators.adapters().forEach((modulator: ModulatorBoxAdapter) => {
             const assignment = assignments.get(UUID.toString(modulator.uuid))
             parent.addMenuItem(MenuItem.default({

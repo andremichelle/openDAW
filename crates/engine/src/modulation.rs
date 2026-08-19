@@ -43,13 +43,15 @@ pub(crate) struct LfoState {
     pub(crate) rate_absolute: Cell<f32>,
     pub(crate) phase: Cell<f32>,
     pub(crate) amount: Cell<f32>,
+    pub(crate) exponent: Cell<f32>,
     free_turns: Cell<f64>
 }
 
 impl LfoState {
     pub(crate) fn new() -> Self {
         Self {shape: Cell::new(SHAPE_SINE), rate_sync: Cell::new(4), rate_absolute: Cell::new(0.0),
-            phase: Cell::new(0.0), amount: Cell::new(1.0), free_turns: Cell::new(0.0)}
+            phase: Cell::new(0.0), amount: Cell::new(1.0), exponent: Cell::new(1.0),
+            free_turns: Cell::new(0.0)}
     }
 
     fn turn_at(&self, position: f64) -> f64 {
@@ -67,7 +69,7 @@ impl LfoState {
             SHAPE_SQUARE => square(turn),
             _ => fast_sin_tau(turn)
         };
-        shape as f32 * self.amount.get()
+        shaped(shape as f32, self.exponent.get()) * self.amount.get()
     }
 }
 
@@ -158,12 +160,87 @@ fn alternate_index(index: i64, count: i64) -> i64 {
     if local < count {local} else {period - local}
 }
 
+/// WASM CONTRACT: mirrors `RandomModulatorBoxAdapter.draw` (packages/studio/adapters).
+pub(crate) fn hash_bipolar(seed: i32, index: i64) -> f32 {
+    let mut hash = seed.wrapping_mul(0x9E3779B1u32 as i32) ^ (index as i32).wrapping_mul(0x85EBCA77u32 as i32);
+    hash = (hash ^ ((hash as u32) >> 15) as i32).wrapping_mul(0x2545F491u32 as i32);
+    hash ^= ((hash as u32) >> 13) as i32;
+    ((hash as u32) as f64 / 4294967295.0) as f32 * 2.0 - 1.0
+}
+
+/// WASM CONTRACT: mirrors `RandomModulatorBoxAdapter.quantize` (packages/studio/adapters).
+fn quantize(value: f32, levels: i32) -> f32 {
+    if levels < 2 {
+        return value;
+    }
+    let steps = (levels - 1) as f32;
+    (((value + 1.0) * 0.5 * steps + 0.5) as i32).clamp(0, levels - 1) as f32 / steps * 2.0 - 1.0
+}
+
 /// WASM CONTRACT: mirrors `StepsModulatorBoxAdapter.randomIndex` (packages/studio/adapters).
 fn random_index(cycle: i64, step: i64, count: i64) -> i64 {
     let mut hash = (cycle as i32).wrapping_mul(0x9E3779B1u32 as i32) ^ (step as i32 + 1).wrapping_mul(0x85EBCA77u32 as i32);
     hash = (hash ^ ((hash as u32) >> 15) as i32).wrapping_mul(0x2545F491u32 as i32);
     let hash = ((hash ^ ((hash as u32) >> 13) as i32) as u32) as i64;
     hash % count
+}
+
+pub(crate) struct RandomState {
+    pub(crate) loop_length: Cell<i32>,
+    pub(crate) rate_sync: Cell<i32>,
+    pub(crate) rate_absolute: Cell<f32>,
+    pub(crate) phase: Cell<f32>,
+    pub(crate) amount: Cell<f32>,
+    pub(crate) smooth: Cell<f32>,
+    pub(crate) seed: Cell<i32>,
+    pub(crate) levels: Cell<i32>,
+    free_turns: Cell<f64>
+}
+
+impl RandomState {
+    pub(crate) fn new() -> Self {
+        Self {loop_length: Cell::new(0), rate_sync: Cell::new(10), rate_absolute: Cell::new(0.0),
+            phase: Cell::new(0.0), amount: Cell::new(1.0), smooth: Cell::new(0.0), seed: Cell::new(1),
+            levels: Cell::new(0), free_turns: Cell::new(0.0)}
+    }
+
+    fn step_position(&self, position: f64) -> f64 {
+        sync_turns(self.rate_sync.get(), position)
+            + self.free_turns.get()
+            + self.phase.get() as f64
+    }
+
+    fn playhead_at(&self, position: f64) -> f32 {
+        let step = self.step_position(position);
+        let index = floor(step);
+        (self.local_index(index as i64) as f64 + (step - index)) as f32
+    }
+
+    fn value_at(&self, position: f64) -> f32 {
+        let step = self.step_position(position);
+        let index = floor(step);
+        let current = self.draw(index as i64);
+        let smooth = self.smooth.get();
+        let value = if smooth <= 0.0 {
+            current
+        } else {
+            let previous = self.draw(index as i64 - 1);
+            let ramp = (((step - index) / smooth as f64) as f32).min(1.0);
+            previous + (current - previous) * ramp * ramp * (3.0 - 2.0 * ramp)
+        };
+        value * self.amount.get()
+    }
+
+    /// The step the sequence actually draws: with a loop length it revisits the same few draws, which
+    /// turns the noise into a repeating pattern.
+    fn local_index(&self, index: i64) -> i64 {
+        let length = self.loop_length.get() as i64;
+        if length > 0 {index.rem_euclid(length)} else {index}
+    }
+
+    pub(crate) fn draw(&self, index: i64) -> f32 {
+        quantize(hash_bipolar(self.seed.get(), self.local_index(index)), self.levels.get())
+    }
 }
 
 pub(crate) struct MacroState {
@@ -179,7 +256,8 @@ impl MacroState {
 pub(crate) enum ModulatorKind {
     Lfo(LfoState),
     Steps(StepsState),
-    Macro(MacroState)
+    Macro(MacroState),
+    Random(RandomState)
 }
 
 pub(crate) struct ModulatorState {
@@ -205,11 +283,17 @@ impl ModulatorState {
             broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
     }
 
+    pub(crate) fn random() -> Self {
+        Self {enabled: Cell::new(true), kind: ModulatorKind::Random(RandomState::new()),
+            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
+    }
+
     pub(crate) fn value_at(&self, position: f64) -> f32 {
         match &self.kind {
             ModulatorKind::Lfo(lfo) => lfo.value_at(position),
             ModulatorKind::Steps(steps) => steps.value_at(position),
-            ModulatorKind::Macro(knob) => knob.value.get()
+            ModulatorKind::Macro(knob) => knob.value.get(),
+            ModulatorKind::Random(random) => random.value_at(position)
         }
     }
 
@@ -221,6 +305,8 @@ impl ModulatorState {
                 lfo.free_turns.set(lfo.free_turns.get() + delta_seconds * lfo.rate_absolute.get() as f64),
             ModulatorKind::Steps(steps) =>
                 steps.free_turns.set(steps.free_turns.get() + delta_seconds * steps.rate_absolute.get() as f64),
+            ModulatorKind::Random(random) =>
+                random.free_turns.set(random.free_turns.get() + delta_seconds * random.rate_absolute.get() as f64),
             ModulatorKind::Macro(_) => {}
         }
     }
@@ -229,6 +315,7 @@ impl ModulatorState {
         match &self.kind {
             ModulatorKind::Lfo(lfo) => lfo.free_turns.set(seconds * lfo.rate_absolute.get() as f64),
             ModulatorKind::Steps(steps) => steps.free_turns.set(seconds * steps.rate_absolute.get() as f64),
+            ModulatorKind::Random(random) => random.free_turns.set(seconds * random.rate_absolute.get() as f64),
             ModulatorKind::Macro(_) => {}
         }
     }
@@ -241,6 +328,7 @@ impl ModulatorState {
         let phase = match &self.kind {
             ModulatorKind::Lfo(lfo) => fract(lfo.turn_at(position)) as f32,
             ModulatorKind::Steps(steps) => steps.playhead_at(position),
+            ModulatorKind::Random(random) => random.playhead_at(position),
             ModulatorKind::Macro(_) => 0.0
         };
         let mut values = slot.borrow_mut();
@@ -249,6 +337,15 @@ impl ModulatorState {
             values[1] = self.value_at(position);
         }
     }
+}
+
+/// The exponent bends the shape without changing its sign, so a negative half stays a number.
+fn shaped(value: f32, exponent: f32) -> f32 {
+    if exponent == 1.0 {
+        return value;
+    }
+    let magnitude = math::pow(value.abs() as f64, exponent as f64) as f32;
+    if value < 0.0 {-magnitude} else {magnitude}
 }
 
 fn floor(value: f64) -> f64 {
@@ -427,6 +524,19 @@ mod tests {
     }
 
     #[test]
+    fn the_exponent_bends_the_shape_without_flipping_its_sign() {
+        let state = lfo(SHAPE_SAW_UP, ONE_BAR);
+        let plain = state.value_at(BAR * 0.9);
+        state.exponent.set(2.0);
+        let bent = state.value_at(BAR * 0.9);
+        assert!(bent > 0.0 && bent < plain, "a positive half flattens towards the middle, got {bent}");
+        assert!((state.value_at(BAR * 0.1) + 0.64).abs() < 1.0e-5,
+            "and a negative half bends by the same amount, got {}", state.value_at(BAR * 0.1));
+        state.exponent.set(1.0);
+        assert_eq!(state.value_at(BAR * 0.9), plain, "one is the identity");
+    }
+
+    #[test]
     fn phase_and_amount_shift_and_scale() {
         let shifted = lfo(SHAPE_SINE, ONE_BAR);
         shifted.phase.set(0.25);
@@ -464,6 +574,34 @@ mod tests {
         assert!((state.value_at(0.0) - 1.0).abs() < 1.0e-6, "a stop, resume or jump re-anchors to that time");
         let synced = lfo(SHAPE_SINE, ONE_BAR);
         assert_eq!(synced.rate_absolute.get(), 0.0, "the default leaves the LFO purely tempo-synced");
+    }
+
+    #[test]
+    fn a_random_draw_is_reproducible_loops_and_quantizes() {
+        let state = RandomState::new();
+        state.rate_sync.set(SIXTEENTH);
+        let first = state.value_at(0.0);
+        assert_eq!(state.value_at(STEP * 0.5), first, "it holds for the whole step");
+        assert_eq!(state.value_at(STEP * 4000.0), state.value_at(STEP * 4000.0), "and it is pure");
+        assert!(state.value_at(STEP) != first, "the next step draws again");
+        state.seed.set(7);
+        assert!(state.value_at(0.0) != first, "the seed picks a different sequence");
+        let seeded = state.value_at(0.0);
+        state.loop_length.set(4);
+        assert_eq!(state.value_at(STEP * 4.0), state.value_at(0.0), "a loop of four repeats every four steps");
+        assert!(state.value_at(STEP * 2.0) != state.value_at(0.0), "but not within them");
+        state.loop_length.set(0);
+        assert_eq!(state.value_at(0.0), seeded, "and dropping the loop restores the endless sequence");
+        state.levels.set(2);
+        for step in 0..32 {
+            let value = state.value_at(STEP * step as f64);
+            assert!(value == -1.0 || value == 1.0, "two levels is a coin flip, got {value}");
+        }
+        state.levels.set(3);
+        for step in 0..32 {
+            let value = state.value_at(STEP * step as f64);
+            assert!(value == -1.0 || value == 0.0 || value == 1.0, "three levels adds the centre, got {value}");
+        }
     }
 
     #[test]

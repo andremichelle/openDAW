@@ -28,6 +28,7 @@ import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {createPanelFactory} from "@/ui/workspace/PanelFactory.tsx"
 import {SpotlightDataSupplier} from "@/ui/spotlight/SpotlightDataSupplier.ts"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
+import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {BuildInfo} from "@/BuildInfo.ts"
@@ -159,6 +160,8 @@ export class StudioService implements ProjectEnv {
             soundfont
         }))
         this.samplePlayback = new SamplePlayback()
+        ModulatorReveal.requested.subscribe(option =>
+            option.ifSome(() => {if (this.hasProfile) {this.switchScreen("modulation")}}))
         this.#projectProfileService = new ProjectProfileService({
             env: this,
             sampleService: this.#sampleService, sampleManager: this.sampleManager,

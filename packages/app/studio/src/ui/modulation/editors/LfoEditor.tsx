@@ -20,14 +20,14 @@ type Construct = {
 
 export const LfoEditor = ({lifecycle, service, modulator}: Construct) => {
     const {editing} = service.project
-    const {shape, rateSync, rateAbsolute, phase, amount} = modulator.namedParameter
+    const {shape, rateSync, rateAbsolute, phase, amount, exponent} = modulator.namedParameter
     return (
         <ModulatorEditor lifecycle={lifecycle} service={service} modulator={modulator}>
             <div className={className}>
                 <ShapeDisplay lifecycle={lifecycle} modulator={modulator}/>
                 <div className="knobs">
                     <div className="section"/>
-                    {[shape, rateSync, rateAbsolute, phase, amount].map(parameter => (
+                    {[shape, rateSync, rateAbsolute, exponent, phase, amount].map(parameter => (
                         <Column ems={LKR}>
                             <h5>{parameter.name}</h5>
                             <ParameterLabelKnob lifecycle={lifecycle} editing={editing} parameter={parameter}/>

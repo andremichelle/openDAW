@@ -1,6 +1,9 @@
 component
   display: contents
 
+  &:first-of-type > .modulator > header
+    padding-top: 0
+
   > .modulator
     grid-column: 1 / -2
     grid-row: span 2
@@ -10,9 +13,9 @@ component
 
     > header
       grid-column: 1 / -1
-      padding-top: var(--editor-gap)
+      padding-top: var(--editor-spacing)
       display: grid
-      grid-template-columns: 1fr auto auto
+      grid-template-columns: 1fr auto auto auto
       align-items: center
       column-gap: 0.5em
 
@@ -22,11 +25,11 @@ component
 
       > h1
         margin: 0
-        font-size: 1em
-        font-weight: normal
+        font-size: 11px
         white-space: nowrap
         overflow: hidden
         text-overflow: ellipsis
+        padding: 0 0 0 0.25em
 
     > .body
       grid-column: 1 / -1

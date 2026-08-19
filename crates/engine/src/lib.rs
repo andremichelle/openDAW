@@ -1906,8 +1906,10 @@ impl Engine {
     }
 
     /// WASM CONTRACT: modulator field keys — enabled 4. LfoModulatorBox: shape 10, rateSync 11,
-    /// rateAbsolute 12, phase 13, amount 14. StepsModulatorBox: count 10, rateSync 11, rateAbsolute 12,
+    /// rateAbsolute 12, phase 13, amount 14, exponent 15. StepsModulatorBox: count 10, rateSync 11, rateAbsolute 12,
     /// phase 13, amount 14, smooth 15, direction 16, steps 20 (array of 64). MacroModulatorBox: value 10.
+    /// RandomModulatorBox: loop 10, rateSync 11, rateAbsolute 12, phase 13, amount 14, smooth 15, seed 16,
+    /// levels 17.
     fn advance_modulation(&mut self) {
         let free_running = self.transport.free_running();
         let playing = self.transport.is_playing();
@@ -1944,11 +1946,13 @@ impl Engine {
             let state = Rc::new(match name.as_str() {
                 "StepsModulatorBox" => modulation::ModulatorState::steps(),
                 "MacroModulatorBox" => modulation::ModulatorState::macro_knob(),
+                "RandomModulatorBox" => modulation::ModulatorState::random(),
                 _ => modulation::ModulatorState::lfo()
             });
             let mut subs = match name.as_str() {
                 "StepsModulatorBox" => self.observe_steps_modulator(uuid, &state),
                 "MacroModulatorBox" => self.observe_macro_modulator(uuid, &state),
+                "RandomModulatorBox" => self.observe_random_modulator(uuid, &state),
                 _ => self.observe_lfo_modulator(uuid, &state)
             };
             let enabled_state = state.clone();
@@ -1985,7 +1989,8 @@ impl Engine {
             }),
             self.observe_modulator_float(uuid, alloc::vec![12], lfo(state, |lfo, value| lfo.rate_absolute.set(value))),
             self.observe_modulator_float(uuid, alloc::vec![13], lfo(state, |lfo, value| lfo.phase.set(value))),
-            self.observe_modulator_float(uuid, alloc::vec![14], lfo(state, |lfo, value| lfo.amount.set(value)))
+            self.observe_modulator_float(uuid, alloc::vec![14], lfo(state, |lfo, value| lfo.amount.set(value))),
+            self.observe_modulator_float(uuid, alloc::vec![15], lfo(state, |lfo, value| lfo.exponent.set(value)))
         ]
     }
 
@@ -1994,6 +1999,27 @@ impl Engine {
         alloc::vec![self.observe_modulator_float(uuid, alloc::vec![10], move |value| {
             if let modulation::ModulatorKind::Macro(knob) = &state.kind {knob.value.set(value)}
         })]
+    }
+
+    fn observe_random_modulator(&mut self, uuid: Uuid, state: &Rc<modulation::ModulatorState>) -> Vec<SubscriptionId> {
+        let random = |state: &Rc<modulation::ModulatorState>, apply: fn(&modulation::RandomState, f32)| {
+            let state = state.clone();
+            move |value: f32| if let modulation::ModulatorKind::Random(random) = &state.kind {apply(random, value)}
+        };
+        let integer = |state: &Rc<modulation::ModulatorState>, apply: fn(&modulation::RandomState, i32)| {
+            let state = state.clone();
+            move |value: i32| if let modulation::ModulatorKind::Random(random) = &state.kind {apply(random, value)}
+        };
+        alloc::vec![
+            self.observe_modulator_int(uuid, 10, integer(state, |random, value| random.loop_length.set(value))),
+            self.observe_modulator_int(uuid, 11, integer(state, |random, value| random.rate_sync.set(value))),
+            self.observe_modulator_int(uuid, 16, integer(state, |random, value| random.seed.set(value))),
+            self.observe_modulator_int(uuid, 17, integer(state, |random, value| random.levels.set(value))),
+            self.observe_modulator_float(uuid, alloc::vec![12], random(state, |random, value| random.rate_absolute.set(value))),
+            self.observe_modulator_float(uuid, alloc::vec![13], random(state, |random, value| random.phase.set(value))),
+            self.observe_modulator_float(uuid, alloc::vec![14], random(state, |random, value| random.amount.set(value))),
+            self.observe_modulator_float(uuid, alloc::vec![15], random(state, |random, value| random.smooth.set(value)))
+        ]
     }
 
     fn observe_steps_modulator(&mut self, uuid: Uuid, state: &Rc<modulation::ModulatorState>) -> Vec<SubscriptionId> {

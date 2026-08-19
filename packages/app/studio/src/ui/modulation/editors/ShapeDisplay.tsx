@@ -38,6 +38,8 @@ export const ShapeDisplay = ({lifecycle, modulator}: Construct): HTMLElement => 
         const shape: LfoShape = modulator.box.shape.getValue()
         const phase = modulator.box.phase.getValue()
         const amount = modulator.box.amount.getValue()
+        const exponent = modulator.box.exponent.getValue()
+        const shaped = (value: number) => Math.sign(value) * Math.pow(Math.abs(value), exponent)
         const padding = devicePixelRatio * 2
         const top = padding
         const bottom = actualHeight - padding
@@ -45,9 +47,9 @@ export const ShapeDisplay = ({lifecycle, modulator}: Construct): HTMLElement => 
         const centerY = valueToY(0.0)
         context.lineWidth = devicePixelRatio
         const path = new Path2D()
-        path.moveTo(0, valueToY(shapeAt(shape, phase)))
+        path.moveTo(0, valueToY(shaped(shapeAt(shape, phase))))
         for (let x = 1; x <= actualWidth; x++) {
-            path.lineTo(x, valueToY(shapeAt(shape, x / actualWidth + phase)))
+            path.lineTo(x, valueToY(shaped(shapeAt(shape, x / actualWidth + phase))))
         }
         context.strokeStyle = DisplayPaint.strokeStyle(0.75)
         context.stroke(path)
@@ -68,7 +70,8 @@ export const ShapeDisplay = ({lifecycle, modulator}: Construct): HTMLElement => 
     lifecycle.ownAll(
         modulator.box.shape.subscribe(painter.requestUpdate),
         modulator.box.phase.subscribe(painter.requestUpdate),
-        modulator.box.amount.subscribe(painter.requestUpdate)
+        modulator.box.amount.subscribe(painter.requestUpdate),
+        modulator.box.exponent.subscribe(painter.requestUpdate)
     )
     return <div className={className}>{canvas}</div>
 }

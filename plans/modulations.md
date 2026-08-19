@@ -382,8 +382,10 @@ Reserved next, in the order they are worth doing.
 Step sequencer, DONE. N steps with per-step value, rate as a musical fraction, glide amount. Same
 position-derived evaluation as the LFO. See phase 6.
 
-Random and sample-and-hold, stepped or smoothed noise on a rate grid, from a seeded hash of the step
-index so offline render reproduces it.
+Random, stepped or smoothed noise on a rate grid, from a seeded hash of the step index so offline
+render reproduces it. It takes no input, which is what makes it buildable now. Sample and hold in the
+real sense, holding ANOTHER modulator's output, is a different thing and belongs to the routing
+machinery below, not here.
 
 Macro, a plain user-controlled value with no time base, which also becomes the natural target for
 MIDI learn and for hardware controllers.
@@ -398,8 +400,8 @@ Sidechain and note trigger envelopes, need note or transport events rather than 
 Per-voice sources, envelope, velocity, key tracking, aftertouch, need per-voice parameter resolution,
 which is a much larger ABI change and is explicitly out of scope.
 
-Curve or shaper modulator, remaps another modulator's output, needs modulator-to-modulator routing
-and a cycle check.
+Curve or shaper modulator, and with it sample and hold, remap or hold another modulator's output.
+Both need modulator-to-modulator routing and a cycle check, so they arrive together or not at all.
 
 ## Phases
 

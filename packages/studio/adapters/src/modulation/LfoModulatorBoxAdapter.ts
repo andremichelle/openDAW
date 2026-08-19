@@ -12,6 +12,7 @@ export class LfoModulatorBoxAdapter extends ModulatorBoxAdapter<LfoModulatorBox>
         [8, 1], [4, 1], [2, 1], [1, 1], [1, 2], [1, 4], [1, 6], [1, 8], [1, 12], [1, 16], [1, 24], [1, 32]
     ]
     static readonly MaxAbsoluteRate = 10.0
+    static readonly MaxExponent = 8.0
     static readonly CenterAbsoluteRate = 1.0
     static readonly RatePPQNs: ReadonlyArray<ppqn> = [0, ...LfoModulatorBoxAdapter.Rates
         .map(([nominator, denominator]) => PPQN.fromSignature(nominator, denominator))]
@@ -43,7 +44,11 @@ export class LfoModulatorBoxAdapter extends ModulatorBoxAdapter<LfoModulatorBox>
             phase: this.parametric.createParameter(box.phase,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Phase"),
             amount: this.parametric.createParameter(box.amount,
-                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Amount")
+                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Amount"),
+            exponent: this.parametric.createParameter(box.exponent,
+                ValueMapping.powerByCenter(1.0, 1.0 / LfoModulatorBoxAdapter.MaxExponent,
+                    LfoModulatorBoxAdapter.MaxExponent),
+                StringMapping.numeric({unit: "", fractionDigits: 2}), "Pow")
         } as const
     }
 }
