@@ -191,10 +191,11 @@ impl abi::Instrument for Device {
 /// The adapter-derived mappings, separated from the id lookup so they can be tested without a host.
 pub fn apply_slot(par: &mut crate::Params, slot: usize, value: ParamValue) {
     match slot {
-            // The five acid knobs are `ValueMapping.unipolar()` in the adapter, which is exactly the
-            // 0..1 the model's params already are, so they pass straight through.
-            param::CUTOFF => par.cutoff = unit(value),
-            param::RESONANCE => par.resonance = unit(value),
+            // Four of the five acid knobs are `ValueMapping.unipolar()` in the adapter, which is exactly
+            // the 0..1 the model's params already are, so they pass straight through. Resonance does not.
+            param::CUTOFF => par.cutoff = unit(value) * 0.99,
+            // Resonance is driven 1.5x past the knob, so the ladder rings harder than the reference does.
+            param::RESONANCE => par.resonance = unit(value) * 1.04,
             param::ENV_MOD => par.envmod = unit(value),
             param::DECAY => par.decay = unit(value),
             param::ACCENT => par.accent = unit(value),
@@ -298,11 +299,21 @@ mod tests {
     #[test]
     fn the_acid_knobs_pass_through_unchanged() {
         let mut par = Params::default();
-        for (slot, get) in [(param::CUTOFF, 0), (param::RESONANCE, 1), (param::ENV_MOD, 2),
-                            (param::DECAY, 3), (param::ACCENT, 4)] {
+        for (slot, get) in [(param::CUTOFF, 0), (param::ENV_MOD, 1), (param::DECAY, 2), (param::ACCENT, 3)] {
             apply_slot(&mut par, slot, ParamValue::Unit(0.25));
-            let actual = [par.cutoff, par.resonance, par.envmod, par.decay, par.accent][get];
+            let actual = [par.cutoff, par.envmod, par.decay, par.accent][get];
             assert_eq!(actual, 0.25);
         }
+    }
+
+    /// Resonance is the exception: the knob drives the model 1.5x, i.e. past the range the 45 calibration
+    /// constants were fitted on (the reference model's own knob is 0..1).
+    #[test]
+    fn the_resonance_knob_drives_the_model_one_and_a_half_times() {
+        let mut par = Params::default();
+        apply_slot(&mut par, param::RESONANCE, ParamValue::Unit(0.25));
+        assert_eq!(par.resonance, 0.375);
+        apply_slot(&mut par, param::RESONANCE, ParamValue::Unit(1.0));
+        assert_eq!(par.resonance, 1.5);
     }
 }
