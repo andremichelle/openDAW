@@ -47,6 +47,7 @@ export const RandomEditor = ({lifecycle, service, modulator}: Construct) => {
                         <div className="field">
                             <h5>Seed</h5>
                             <NumberInput lifecycle={lifecycle}
+                                         maxChars={6}
                                          guard={{guard: value => clamp(value, 0, RandomModulatorBoxAdapter.MaxSeed)}}
                                          model={EditWrapper.forValue(editing, modulator.box.seed)}/>
                         </div>
