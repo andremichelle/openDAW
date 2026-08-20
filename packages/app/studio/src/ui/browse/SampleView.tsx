@@ -11,7 +11,7 @@ import {SampleSelection} from "@/ui/browse/SampleSelection"
 import {contextTargets} from "@/ui/browse/ResourceSelection"
 import {ResourceMenus} from "@/ui/browse/ResourceMenus"
 import {LocalTree} from "@/ui/browse/LocalTree"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {ChopTrigger} from "@/ui/devices/instruments/PlayfieldDeviceEditor/ChopTrigger"
@@ -78,13 +78,13 @@ export const SampleView = ({
              ondragstart={() => playback.eject()}
              draggable>
             <div className="meta"
-                 onInit={element => lifecycle.own(
+                 onInit={element => lifecycle.ownAll(
                      playback.subscribe(sample.uuid, event => {
                          element.classList.remove("buffering", "playing", "error")
                          element.classList.add(event.type)
-                     })
-                 )}
-                 ondblclick={() => playback.toggle(sample.uuid)}>
+                     }),
+                     Events.subscribeDblDwn(element, () => playback.toggle(sample.uuid))
+                 )}>
                 <span className="name"><WaveformIcon/>{name}</span>
                 <span className="right">{bpm > 0 ? bpm.toFixed(1) : "-"}</span>
                 <span className="right">{duration.toFixed(1)}</span>

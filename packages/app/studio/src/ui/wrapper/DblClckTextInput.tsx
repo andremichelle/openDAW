@@ -1,6 +1,7 @@
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {assertInstanceOf, isDefined, Option, Point, PrintValue, Provider} from "@opendaw/lib-std"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
+import {Events} from "@opendaw/lib-dom"
 
 type Construct = {
     resolversFactory: Provider<PromiseWithResolvers<string>>
@@ -16,7 +17,7 @@ export const DblClckTextInput = ({
                                      numeric
                                  }: Construct, [element]: ReadonlyArray<JsxValue>) => {
     assertInstanceOf(element, Element)
-    element.ondblclick = () => {
+    Events.subscribeDblDwn(element, () => {
         const rect = element.getBoundingClientRect()
         const option = Option.from(provider)
         if (option.isEmpty()) {return}
@@ -29,6 +30,6 @@ export const DblClckTextInput = ({
                                numeric={numeric}
                                resolvers={resolversFactory()}/>
         )
-    }
+    })
     return element
 }
