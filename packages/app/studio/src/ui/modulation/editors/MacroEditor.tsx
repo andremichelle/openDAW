@@ -8,6 +8,7 @@ import {ModulatorEditor} from "@/ui/modulation/ModulatorEditor.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {installControlSourceIndicator} from "@/ui/components/AutomationControl.tsx"
 import {attachModulatorParameterContextMenu} from "@/ui/menu/automation.ts"
+import {ValueRange} from "@/ui/modulation/ValueRange.tsx"
 
 const className = Html.adoptStyleSheet(css, "MacroEditor")
 
@@ -28,9 +29,10 @@ export const MacroEditor = ({lifecycle, service, modulator}: Construct) => {
     const slider: HTMLElement = (
         <div className="slider" onInit={element => lifecycle.ownAll(
             value.catchupAndSubscribe((owner: Parameter) => {
+                const rest = modulator.box.bipolar.getValue() ? 0.5 : 0.0
                 const controlled = owner.getControlledUnitValue()
-                element.style.setProperty("--fill-start", Math.min(controlled, 0.5).toString())
-                element.style.setProperty("--fill-size", Math.abs(controlled - 0.5).toString())
+                element.style.setProperty("--fill-start", Math.min(controlled, rest).toString())
+                element.style.setProperty("--fill-size", Math.abs(controlled - rest).toString())
                 const {value, unit} = owner.getPrintValue()
                 print.textContent = `${value}${unit}`
             }),
@@ -59,7 +61,10 @@ export const MacroEditor = ({lifecycle, service, modulator}: Construct) => {
     installControlSourceIndicator(lifecycle, value, macro, slider)
     return (
         <ModulatorEditor lifecycle={lifecycle} service={service} modulator={modulator}>
-            <div className={className}>{macro}</div>
+            <div className={className}>
+                {macro}
+                <ValueRange lifecycle={lifecycle} service={service} modulator={modulator}/>
+            </div>
         </ModulatorEditor>
     )
 }

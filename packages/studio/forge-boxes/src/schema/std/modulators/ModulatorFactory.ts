@@ -1,7 +1,7 @@
 import {BoxSchema, FieldRecord, mergeFields, reserveMany} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
 import {Objects} from "@opendaw/lib-std"
-import {IndexConstraints} from "../Defaults"
+import {IndexConstraints, ModulatorParameterPointerRules, UnipolarConstraints} from "../Defaults"
 
 const ModulatorAttributes = {
     1: {type: "pointer", name: "collection", pointerType: Pointers.ModulatorCollection, mandatory: true},
@@ -14,7 +14,12 @@ const ModulatorAttributes = {
         name: "tracks",
         pointerRules: {accepts: [Pointers.TrackCollection], mandatory: false}
     },
-    ...reserveMany(7, 8, 9)
+    7: {type: "boolean", name: "bipolar", value: true},
+    8: {
+        type: "float32", name: "amount", pointerRules: ModulatorParameterPointerRules, value: 1.0,
+        ...UnipolarConstraints
+    },
+    ...reserveMany(9)
 } as const satisfies FieldRecord<Pointers>
 
 export namespace ModulatorFactory {

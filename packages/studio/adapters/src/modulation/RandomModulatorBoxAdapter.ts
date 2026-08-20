@@ -67,8 +67,6 @@ export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulat
                 StringMapping.numeric({unit: "Hz", fractionDigits: 2}), "Free"),
             phase: this.parametric.createParameter(box.phase,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Phase"),
-            amount: this.parametric.createParameter(box.amount,
-                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Amount"),
             smooth: this.parametric.createParameter(box.smooth,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Smooth"),
             levels: this.parametric.createParameter(box.levels,

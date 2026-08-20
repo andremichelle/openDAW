@@ -182,6 +182,7 @@ export enum IconSymbol {
     PingPong,
     Forward,
     Backward,
+    Bipolar,
 }
 
 export namespace IconSymbol {

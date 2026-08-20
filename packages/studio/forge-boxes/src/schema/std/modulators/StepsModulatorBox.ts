@@ -1,6 +1,6 @@
 import {BoxSchema} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
-import {BipolarConstraints, ModulatorParameterPointerRules, UnipolarConstraints} from "../Defaults"
+import {ModulatorParameterPointerRules, UnipolarConstraints} from "../Defaults"
 import {ModulatorFactory} from "./ModulatorFactory"
 
 export const StepsModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createModulator("StepsModulatorBox", {
@@ -17,7 +17,6 @@ export const StepsModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createMod
         constraints: {min: 0.0, max: 20.0, scaling: "linear"}, unit: "Hz"
     },
     13: {type: "float32", name: "phase", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...UnipolarConstraints},
-    14: {type: "float32", name: "amount", pointerRules: ModulatorParameterPointerRules, value: 1.0, ...UnipolarConstraints},
     15: {type: "float32", name: "smooth", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...UnipolarConstraints},
     16: {
         type: "int32", name: "direction", pointerRules: ModulatorParameterPointerRules, value: 0,
@@ -25,6 +24,6 @@ export const StepsModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createMod
     },
     20: {
         type: "array", name: "steps", length: 64,
-        element: {type: "float32", value: 0.0, ...BipolarConstraints}
+        element: {type: "float32", value: 0.5, ...UnipolarConstraints}
     }
 })

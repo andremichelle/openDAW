@@ -31,20 +31,18 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         const padding = devicePixelRatio * 2
         const top = padding
         const bottom = actualHeight - padding
-        const centerY = (top + bottom) / 2
-        const valueToY = (value: unitValue) => centerY - value * (bottom - top) / 2
+        const bipolar = modulator.box.bipolar.getValue()
+        const baseY = bipolar ? (top + bottom) / 2 : bottom
+        const valueToY = (value: unitValue) => bottom - value * (bottom - top)
+        const outputToY = (value: number) => baseY - value * (bottom - top) / (bipolar ? 2 : 1)
         const stepWidth = actualWidth / count
         const gap = Math.min(devicePixelRatio, stepWidth * 0.1)
-        const gradient = context.createLinearGradient(0, top, 0, bottom)
-        gradient.addColorStop(0.0, DisplayPaint.strokeStyle(0.2))
-        gradient.addColorStop(0.5, DisplayPaint.strokeStyle(0.0))
-        gradient.addColorStop(1.0, DisplayPaint.strokeStyle(0.2))
-        context.fillStyle = gradient
+        context.fillStyle = DisplayPaint.baselineGradient(context, top, bottom, bipolar)
         for (let index = 0; index < count; index++) {
             const value = modulator.steps[index].getValue()
             const x = index * stepWidth
             const y = valueToY(value)
-            context.fillRect(x + gap, Math.min(y, centerY), stepWidth - gap * 2, Math.max(1, Math.abs(y - centerY)))
+            context.fillRect(x + gap, Math.min(y, baseY), stepWidth - gap * 2, Math.max(1, Math.abs(y - baseY)))
         }
         context.lineWidth = devicePixelRatio
         context.strokeStyle = DisplayPaint.strokeStyle(1.0)
@@ -69,12 +67,12 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         })
         context.setLineDash(Arrays.empty())
         context.beginPath()
-        context.moveTo(0, centerY)
-        context.lineTo(actualWidth, centerY)
+        context.moveTo(0, baseY)
+        context.lineTo(actualWidth, baseY)
         context.strokeStyle = "hsl(200, 83%, 60%, 0.1)"
         context.stroke()
         context.beginPath()
-        context.arc(playhead * stepWidth, valueToY(output), devicePixelRatio * 2.0, 0.0, TAU)
+        context.arc(playhead * stepWidth, outputToY(output), devicePixelRatio * 2.0, 0.0, TAU)
         context.fillStyle = "hsl(200, 83%, 75%)"
         context.fill()
     }))
@@ -85,10 +83,11 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
     }
     const valueAt = (clientY: number): unitValue => {
         const rect = canvas.getBoundingClientRect()
-        return clamp(1.0 - (clientY - rect.top) / rect.height * 2.0, -1.0, 1.0)
+        return clamp(1.0 - (clientY - rect.top) / rect.height, 0.0, 1.0)
     }
     const paint = (event: Dragging.Event) => editing.modify(() =>
-        modulator.steps[stepAt(event.clientX)].setValue(event.altKey ? 0.0 : valueAt(event.clientY)), false)
+        modulator.steps[stepAt(event.clientX)]
+            .setValue(event.altKey ? modulator.neutral : valueAt(event.clientY)), false)
     lifecycle.ownAll(
         Dragging.attach(canvas, (event: PointerEvent) => {
             editing.mark()
@@ -104,7 +103,7 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
             const resolvers = Promise.withResolvers<string>()
             Surface.get(canvas).flyout.appendChild(
                 <FloatingTextInput position={{x: event.clientX, y: event.clientY}}
-                                   value={(step.getValue() * 100.0).toFixed(0)}
+                                   value={(modulator.emitted(step.getValue()) * 100.0).toFixed(0)}
                                    unit="%"
                                    numeric
                                    resolvers={resolvers}/>
@@ -116,7 +115,7 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
             }
             const parsed = parseFloat(value)
             if (Number.isFinite(parsed)) {
-                editing.modify(() => step.setValue(clamp(parsed / 100.0, -1.0, 1.0)))
+                editing.modify(() => step.setValue(clamp(modulator.stored(parsed / 100.0), 0.0, 1.0)))
             }
         }),
         modulator.box.subscribe(Propagation.Children, painter.requestUpdate),

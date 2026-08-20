@@ -49,10 +49,14 @@ export namespace Modulators {
         const label = modulator.label.getValue()
         const index = modulator.index.getValue()
         const enabled = modulator.enabled.getValue()
+        const bipolar = modulator.bipolar.getValue()
+        const amount = modulator.amount.getValue()
         modulator.delete()
         replacement.label.setValue(label)
         replacement.index.setValue(index)
         replacement.enabled.setValue(enabled)
+        replacement.bipolar.setValue(bipolar)
+        replacement.amount.setValue(amount)
         return replacement
     }
 

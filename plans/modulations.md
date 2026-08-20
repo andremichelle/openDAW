@@ -638,35 +638,39 @@ Raised while the macro landed: the macro started unipolar and had to become bipo
 same question every source has. A per-modulator switch answers it for the macro, but the answer
 should be one mechanism for the whole catalogue rather than a control that only the macro carries.
 
-### The proposal
+### What was built
 
-Every modulator keeps emitting a raw signal in -1..1. Polarity is a shared field on the modulator,
-so it comes from `ModulatorFactory` alongside `enabled` and `index` and every kind gets it for free,
-and it folds the raw signal exactly once, in `ModulatorState::value_at`:
+Storage went unipolar, which is also how Bitwig models it: their curve space is `0..1` and the
+bipolar toggle "maintains the curve's shape but rescales it, so that the minimum value is -1 and the
+middle value is now 0". Every kind renders `-1..1` internally, the polarity folds that once in
+`ModulatorState::value_at` (`raw * 0.5 + 0.5` while unipolar), and the amount scales what comes out
+of the fold, so an amount of zero is silence in both polarities rather than a stuck half offset.
 
-Bipolar, the value passes through.
+What a drawn source STORES is the draw space the editor paints, unipolar `0..1` with `0.5` as the
+centre line: a step reads as `stored * 2 - 1` while bipolar and as `stored` while not, and the macro
+value the same. So flipping the polarity keeps the picture and changes what it means, and the neutral
+value follows it, `0.5` while bipolar and `0.0` while not (Clear, alt-drag and a fresh modulator all
+use it).
 
-Unipolar, `raw * 0.5 + 0.5`, so the source only ever pushes the target away from its base in one
-direction, and the direction is chosen by the sign of the assignment's depth.
+Box schema, two new keys on the shared `ModulatorFactory` fields, `bipolar` (boolean, true) at 7 and
+`amount` moved there from each kind's key 14 at 8, so the macro gains an amount it never had. WASM
+CONTRACT keys like the rest.
 
-Nothing about storage changes. The macro still stores -1..1, and unipolar simply means its resting
-point is the bottom of the fader rather than its middle. The LFO and the step sequencer are already
-native -1..1, so they need no per-kind work either.
+Engine, `bipolar` and `amount` on `ModulatorState` rather than per kind, both observed inside
+`bind_modulator`. That placement is load-bearing: a rebind drops every subscription the entry holds
+and re-registers only what `bind_modulator` returns, so a flag observed at the call site went deaf
+after the first value edit. That was already true of `enabled`, which is why the enable toggle
+stopped working after a modulator was touched (`the_shared_flags_keep_reaching_the_engine_after_a_rebind`).
 
-### What each layer does
+Adapters, the polarity decides the PRINT mapping only, never the value mapping, so an automation
+curve on a modulator's own parameter means the same thing in both polarities. `notifyPrinting` on
+`AutomatableParameterFieldAdapter` re-reads every printed value when the flag flips.
 
-Box schema, one new key on the shared modulator fields, an int32 with two values, defaulting to
-bipolar. It is a WASM CONTRACT key like the rest.
-
-Engine, one `Cell<i32>` on `ModulatorState`, observed like `enabled`, applied in `value_at` and in
-the value half of `publish_phase` so the display dot agrees with what the parameter receives.
-
-Adapters, the polarity decides the value mapping and the print mapping of the macro's own control,
--100..100% against 0..100%.
-
-UI, a two-state control in the modulator header, next to the enable toggle, so it reads the same on
-every editor. The macro's fader fills from the centre when bipolar and from the left when unipolar,
-which is the geometry the current editor already computes from `--fill-start` and `--fill-size`.
+UI, a `ValueRange` component replacing the amount knob in every editor: the label "Range", the amount
+as a draggable `ParameterLabel`, and the `±` checkbox under it. It prints `±50%` while bipolar and
+`+50%` while not. Every display draws from the centre line while bipolar and off the bottom while
+not, and the macro's fader fills from the centre or from the left, which is the geometry the editor
+already computed from `--fill-start` and `--fill-size`.
 
 ### Why not per assignment
 
@@ -677,11 +681,16 @@ signed depth already covers the common case of wanting the opposite direction. P
 If a real project wants both polarities from one source, the answer is a second modulator, and only
 if that becomes a habit is the per-assignment mode worth its column.
 
-### Open question
+Bitwig does have one thing per connection that this does not: a transfer function (Linear, Positives,
+Negatives, Absolute, Toward Zero, Exponential, Logarithmic). Positives and Negatives are a per target
+polarity, so if per assignment ever comes back, that is the shape it should take, a transfer function
+rather than a boolean.
 
-Whether unipolar should offset (`raw * 0.5 + 0.5`) or rectify (`abs(raw)`). Offset is what a unipolar
-LFO means in most hosts and is the proposal here. Rectify is a different shape, a frequency doubler,
-and if it is ever wanted it belongs in the shape list, not in the polarity switch.
+### Settled
+
+Unipolar offsets (`raw * 0.5 + 0.5`), it does not rectify (`abs(raw)`). Rectify is a different shape,
+a frequency doubler, and if it is ever wanted it belongs in the shape list, not in the polarity
+switch.
 
 ## Creating a modulator from a parameter
 

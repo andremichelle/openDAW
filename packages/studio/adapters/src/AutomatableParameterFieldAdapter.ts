@@ -192,6 +192,8 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
         return this.getValue()
     }
 
+    notifyPrinting(): void {this.#valueChangeNotifier.notify(this)}
+
     subscribe(observer: Observer<AutomatableParameterFieldAdapter<T>>): Subscription {
         return this.#valueChangeNotifier.subscribe(observer)
     }

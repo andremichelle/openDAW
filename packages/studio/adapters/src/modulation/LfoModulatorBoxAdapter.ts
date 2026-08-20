@@ -44,8 +44,6 @@ export class LfoModulatorBoxAdapter extends ModulatorBoxAdapter<LfoModulatorBox>
                 StringMapping.numeric({unit: "Hz", fractionDigits: 2}), "Free"),
             phase: this.parametric.createParameter(box.phase,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Phase"),
-            amount: this.parametric.createParameter(box.amount,
-                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Amount"),
             exponent: this.parametric.createParameter(box.exponent,
                 ValueMapping.bipolar(), StringMapping.percent({fractionDigits: 0}), "Pow")
         } as const

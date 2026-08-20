@@ -1,7 +1,7 @@
 import {MacroModulatorBox} from "@opendaw/studio-boxes"
-import {StringMapping, ValueMapping} from "@opendaw/lib-std"
+import {ValueMapping} from "@opendaw/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
-import {ModulatorBoxAdapter} from "./ModulatorBoxAdapter"
+import {ModulatorBoxAdapter, polarityStringMapping} from "./ModulatorBoxAdapter"
 
 export class MacroModulatorBoxAdapter extends ModulatorBoxAdapter<MacroModulatorBox> {
     readonly namedParameter
@@ -15,7 +15,7 @@ export class MacroModulatorBoxAdapter extends ModulatorBoxAdapter<MacroModulator
     #wrapParameters(box: MacroModulatorBox) {
         return {
             value: this.parametric.createParameter(box.value,
-                ValueMapping.bipolar(), StringMapping.percent({fractionDigits: 0}), "Value")
+                ValueMapping.unipolar(), polarityStringMapping(box.bipolar), "Value")
         } as const
     }
 }

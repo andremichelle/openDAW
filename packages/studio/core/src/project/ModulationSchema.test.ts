@@ -1,6 +1,13 @@
 import {describe, expect, it} from "vitest"
 import {asInstanceOf, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {LfoModulatorBoxAdapter, Modulators, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
+import {
+    LfoModulatorBoxAdapter,
+    MacroModulatorBoxAdapter,
+    Modulators,
+    ProjectSkeleton,
+    StepsModulatorBoxAdapter,
+    TrackType
+} from "@opendaw/studio-adapters"
 import {LfoModulatorBox, MIDIControllerBox, ModulationBox, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import type {ProjectEnv} from "./ProjectEnv"
@@ -53,6 +60,8 @@ describe("modulation schema", () => {
                 box.rateSync.setValue(6)
                 box.rateAbsolute.setValue(2.5)
                 box.phase.setValue(0.25)
+                box.bipolar.setValue(false)
+                box.amount.setValue(0.75)
             })
             ModulationBox.create(project.boxGraph, modulationUuid, box => {
                 box.source.refer(lfo.assignments)
@@ -67,7 +76,8 @@ describe("modulation schema", () => {
         expect(lfo.rateAbsolute.getValue()).toBeCloseTo(2.5)
         expect(lfo.phase.getValue()).toBeCloseTo(0.25)
         expect(lfo.enabled.getValue()).toBe(true)
-        expect(lfo.amount.getValue()).toBeCloseTo(1.0)
+        expect(lfo.bipolar.getValue()).toBe(false)
+        expect(lfo.amount.getValue()).toBeCloseTo(0.75)
         const modulation = reloaded.boxGraph.findBox<ModulationBox>(modulationUuid).unwrap()
         expect(modulation.depth.getValue()).toBeCloseTo(-0.5)
         expect(modulation.enabled.getValue()).toBe(true)
@@ -170,7 +180,7 @@ describe("modulation schema", () => {
         }))
         const lfo = project.editing.modify(() => Modulators.createLfo(project)).unwrap("no lfo")
         const modulator = project.rootBoxAdapter.modulators.adapters()[0]
-        const {amount} = project.boxAdapters.adapterFor(lfo, LfoModulatorBoxAdapter).namedParameter
+        const {amount} = project.boxAdapters.adapterFor(lfo, LfoModulatorBoxAdapter)
         expect(modulator.tracks.values().length).toBe(0)
         project.editing.modify(() => modulator.tracks.create(TrackType.Value, amount.field))
         const track = modulator.tracks.controls(amount.field).unwrap("no track")
@@ -202,6 +212,62 @@ describe("modulation schema", () => {
         const parameter = project.parameterFieldAdapters.get(lfo.amount.address)
         project.editing.modify(() => parameter.setUnitValue(0.25))
         expect(lfo.amount.getValue()).toBeCloseTo(0.25, 6)
+        project.terminate()
+    })
+
+    it("the polarity decides how a modulator prints what it emits", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(createEnv(), ProjectSkeleton.empty({
+            createDefaultUser: true, createOutputMaximizer: false
+        }))
+        const box = project.editing.modify(() => Modulators.createMacro(project)).unwrap("no macro")
+        const modulator = project.boxAdapters.adapterFor(box, MacroModulatorBoxAdapter)
+        const printed = () => {
+            const {value, unit} = modulator.namedParameter.value.getPrintValue()
+            return `${value}${unit}`
+        }
+        const range = () => {
+            const {value, unit} = modulator.amount.getPrintValue()
+            return `${value}${unit}`
+        }
+        // A fresh modulator is bipolar and rests in the middle of its stored range, emitting nothing.
+        expect(box.bipolar.getValue()).toBe(true)
+        expect(box.value.getValue()).toBeCloseTo(0.5)
+        expect(printed()).toBe("0%")
+        expect(range()).toBe("±100%")
+        project.editing.modify(() => box.value.setValue(0.0))
+        expect(printed()).toBe("-100%")
+        // The very same stored value reads off the bottom once the source only pushes one way.
+        project.editing.modify(() => box.bipolar.setValue(false))
+        expect(printed()).toBe("0%")
+        expect(range()).toBe("+100%")
+        project.editing.modify(() => box.value.setValue(0.5))
+        expect(printed()).toBe("50%")
+        project.terminate()
+    })
+
+    it("a step pattern keeps its picture and changes what it means", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(createEnv(), ProjectSkeleton.empty({
+            createDefaultUser: true, createOutputMaximizer: false
+        }))
+        const box = project.editing.modify(() => Modulators.createSteps(project)).unwrap("no steps")
+        const modulator = project.boxAdapters.adapterFor(box, StepsModulatorBoxAdapter)
+        // A fresh pattern sits on the centre line, which is silence while bipolar.
+        expect(modulator.steps[0].getValue()).toBeCloseTo(0.5)
+        expect(modulator.emitted(0.5)).toBeCloseTo(0.0)
+        expect(modulator.emitted(1.0)).toBeCloseTo(1.0)
+        expect(modulator.emitted(0.0)).toBeCloseTo(-1.0)
+        expect(modulator.neutral).toBeCloseTo(0.5)
+        project.editing.modify(() => box.bipolar.setValue(false))
+        // The drawn value is untouched, it now means half way up rather than nothing.
+        expect(modulator.steps[0].getValue()).toBeCloseTo(0.5)
+        expect(modulator.emitted(0.5)).toBeCloseTo(0.5)
+        expect(modulator.emitted(0.0)).toBeCloseTo(0.0)
+        expect(modulator.neutral).toBeCloseTo(0.0)
+        expect(modulator.stored(modulator.emitted(0.375))).toBeCloseTo(0.375)
+        project.editing.modify(() => modulator.clear())
+        expect(modulator.steps[0].getValue()).toBeCloseTo(0.0)
         project.terminate()
     })
 })

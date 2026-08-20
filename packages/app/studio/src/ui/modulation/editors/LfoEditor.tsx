@@ -7,6 +7,7 @@ import {StudioService} from "@/service/StudioService.ts"
 import {ModulatorEditor} from "@/ui/modulation/ModulatorEditor.tsx"
 import {ShapeDisplay} from "@/ui/modulation/editors/ShapeDisplay.tsx"
 import {ModulatorKnob} from "@/ui/modulation/ModulatorKnob.tsx"
+import {ValueRange} from "@/ui/modulation/ValueRange.tsx"
 
 const className = Html.adoptStyleSheet(css, "LfoEditor")
 
@@ -18,17 +19,18 @@ type Construct = {
 
 export const LfoEditor = ({lifecycle, service, modulator}: Construct) => {
     const {liveStreamReceiver} = service.project
-    const {shape, rateSync, rateAbsolute, phase, amount, exponent} = modulator.namedParameter
+    const {shape, rateSync, rateAbsolute, phase, exponent} = modulator.namedParameter
     return (
         <ModulatorEditor lifecycle={lifecycle} service={service} modulator={modulator}>
             <div className={className}>
                 <ShapeDisplay lifecycle={lifecycle} receiver={liveStreamReceiver} modulator={modulator}/>
                 <div className="knobs">
                     <div className="section"/>
-                    {[shape, rateSync, rateAbsolute, exponent, phase, amount].map(parameter => (
+                    {[shape, rateSync, rateAbsolute, exponent, phase].map(parameter => (
                         <ModulatorKnob lifecycle={lifecycle} service={service} parameter={parameter}
                                        anchor={parameter === exponent ? 0.5 : 0.0}/>
                     ))}
+                    <ValueRange lifecycle={lifecycle} service={service} modulator={modulator}/>
                 </div>
             </div>
         </ModulatorEditor>

@@ -1,4 +1,4 @@
-import {Address, Box, Int32Field, StringField} from "@opendaw/lib-box"
+import {Address, BooleanField, Box, Int32Field, StringField} from "@opendaw/lib-box"
 import {
     LfoModulatorBox,
     MacroModulatorBox,
@@ -6,12 +6,45 @@ import {
     RandomModulatorBox,
     StepsModulatorBox
 } from "@opendaw/studio-boxes"
-import {asInstanceOf, AssertType, isInstanceOf, Terminator, UUID} from "@opendaw/lib-std"
+import {
+    asInstanceOf,
+    AssertType,
+    isInstanceOf,
+    ParseResult,
+    StringMapping,
+    StringResult,
+    Terminator,
+    unitValue,
+    UUID,
+    ValueMapping
+} from "@opendaw/lib-std"
 import {IndexedBoxAdapter} from "../IndexedBoxAdapterCollection"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../ParameterAdapterSet"
+import {AutomatableParameterFieldAdapter} from "../AutomatableParameterFieldAdapter"
 import {FieldParameterTracks} from "../timeline/ParameterTracks"
 import {ModulationBoxAdapter} from "./ModulationBoxAdapter"
+
+const percent = (value: number): string => (value * 100.0).toFixed(0)
+
+export const rangeStringMapping = (bipolar: BooleanField): StringMapping<unitValue> => ({
+    x: (value: unitValue): StringResult =>
+        ({value: `${bipolar.getValue() ? "±" : "+"}${percent(value)}`, unit: "%"}),
+    y: (text: string): ParseResult<unitValue> => {
+        const value = parseFloat(text.replace("±", "").replace("+", "").trim())
+        return isNaN(value) ? {type: "unknown", value: text.trim()} : {type: "explicit", value: value / 100.0}
+    }
+})
+
+export const polarityStringMapping = (bipolar: BooleanField): StringMapping<unitValue> => ({
+    x: (value: unitValue): StringResult =>
+        ({value: percent(bipolar.getValue() ? value * 2.0 - 1.0 : value), unit: "%"}),
+    y: (text: string): ParseResult<unitValue> => {
+        const value = parseFloat(text.replace("%", "").trim())
+        if (isNaN(value)) {return {type: "unknown", value: text.trim()}}
+        return {type: "explicit", value: bipolar.getValue() ? value / 200.0 + 0.5 : value / 100.0}
+    }
+})
 
 export type ModulatorBox = LfoModulatorBox | StepsModulatorBox | MacroModulatorBox | RandomModulatorBox
 
@@ -22,6 +55,7 @@ export abstract class ModulatorBoxAdapter<BOX extends ModulatorBox = ModulatorBo
     protected readonly context: BoxAdaptersContext
     protected readonly parametric: ParameterAdapterSet
     readonly tracks: FieldParameterTracks
+    readonly amount: AutomatableParameterFieldAdapter<unitValue>
 
     readonly #box: BOX
 
@@ -31,6 +65,8 @@ export abstract class ModulatorBoxAdapter<BOX extends ModulatorBox = ModulatorBo
         this.parametric = this.terminator.own(new ParameterAdapterSet(context))
         this.tracks = this.terminator.own(
             new FieldParameterTracks(box.graph, box.tracks, context.boxAdapters))
+        this.amount = this.parametric.createParameter(box.amount,
+            ValueMapping.unipolar(), rangeStringMapping(box.bipolar), "Range")
     }
 
     get box(): BOX {return this.#box}
@@ -40,6 +76,7 @@ export abstract class ModulatorBoxAdapter<BOX extends ModulatorBox = ModulatorBo
     get labelField(): StringField {return this.#box.label}
     get enabled(): boolean {return this.#box.enabled.getValue()}
     get indexField(): Int32Field {return this.#box.index}
+    get bipolarField(): BooleanField {return this.#box.bipolar}
 
     get assignments(): ReadonlyArray<ModulationBoxAdapter> {
         return this.#box.assignments.pointerHub.incoming()
@@ -49,8 +86,10 @@ export abstract class ModulatorBoxAdapter<BOX extends ModulatorBox = ModulatorBo
     /// The subclass creates its parameters, then hands them their lane owner: automation of a modulator's
     /// parameter lives on the modulator, not on an audio unit.
     protected registerParameterTracks(): void {
-        this.parametric.parameters().forEach(parameter =>
-            this.terminator.own(parameter.registerTracks(this.tracks)))
+        const parameters = this.parametric.parameters()
+        parameters.forEach(parameter => this.terminator.own(parameter.registerTracks(this.tracks)))
+        this.terminator.own(this.#box.bipolar.subscribe(() =>
+            parameters.forEach(parameter => parameter.notifyPrinting())))
     }
 
     terminate(): void {this.terminator.terminate()}

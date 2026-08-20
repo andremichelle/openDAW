@@ -49,8 +49,12 @@ export const ShapeDisplay = ({lifecycle, receiver, modulator}: Construct): HTMLE
         const padding = devicePixelRatio * 2
         const top = padding
         const bottom = actualHeight - padding
-        const valueToY = (value: number) => bottom + (top - bottom) * (0.5 * (value * amount + 1.0))
-        const centerY = valueToY(0.0)
+        const bipolar = modulator.box.bipolar.getValue()
+        const emitted = (value: number) => (bipolar ? value : value * 0.5 + 0.5) * amount
+        const valueToY = (value: number) => bottom + (top - bottom) * (bipolar
+            ? 0.5 * (emitted(value) + 1.0)
+            : emitted(value))
+        const centerY = bipolar ? valueToY(0.0) : bottom
         context.lineWidth = devicePixelRatio
         const path = new Path2D()
         path.moveTo(0, valueToY(shaped(shapeAt(shape, phase))))
@@ -61,11 +65,7 @@ export const ShapeDisplay = ({lifecycle, receiver, modulator}: Construct): HTMLE
         context.stroke(path)
         path.lineTo(actualWidth, centerY)
         path.lineTo(0, centerY)
-        const gradient = context.createLinearGradient(0, top, 0, bottom)
-        gradient.addColorStop(0.0, DisplayPaint.strokeStyle(0.2))
-        gradient.addColorStop(0.5, DisplayPaint.strokeStyle(0.0))
-        gradient.addColorStop(1.0, DisplayPaint.strokeStyle(0.2))
-        context.fillStyle = gradient
+        context.fillStyle = DisplayPaint.baselineGradient(context, top, bottom, bipolar)
         context.fill(path)
         context.beginPath()
         context.moveTo(0, centerY)
@@ -74,7 +74,8 @@ export const ShapeDisplay = ({lifecycle, receiver, modulator}: Construct): HTMLE
         context.stroke()
         const turn = playhead - phase - Math.floor(playhead - phase)
         context.beginPath()
-        context.arc(turn * actualWidth, bottom + (top - bottom) * (0.5 * (output + 1.0)),
+        context.arc(turn * actualWidth,
+            bottom + (top - bottom) * (bipolar ? 0.5 * (output + 1.0) : output),
             devicePixelRatio * 2.0, 0.0, TAU)
         context.fillStyle = "hsl(200, 83%, 75%)"
         context.fill()
@@ -83,6 +84,7 @@ export const ShapeDisplay = ({lifecycle, receiver, modulator}: Construct): HTMLE
         modulator.box.shape.subscribe(painter.requestUpdate),
         modulator.box.phase.subscribe(painter.requestUpdate),
         modulator.box.amount.subscribe(painter.requestUpdate),
+        modulator.box.bipolar.subscribe(painter.requestUpdate),
         modulator.box.exponent.subscribe(painter.requestUpdate),
         receiver.subscribeFloats(modulator.address, ([position, value]) => {
             playhead = position

@@ -71,9 +71,18 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
         }
     }
 
-    clear(): void {this.#activeSteps().forEach(step => step.setValue(0.0))}
+    get neutral(): unitValue {return this.box.bipolar.getValue() ? 0.5 : 0.0}
 
-    randomize(): void {this.#activeSteps().forEach(step => step.setValue(Math.random() * 2.0 - 1.0))}
+    emitted(stored: unitValue): number {return this.box.bipolar.getValue() ? stored * 2.0 - 1.0 : stored}
+
+    stored(emitted: number): unitValue {return this.box.bipolar.getValue() ? emitted * 0.5 + 0.5 : emitted}
+
+    clear(): void {
+        const neutral = this.neutral
+        this.#activeSteps().forEach(step => step.setValue(neutral))
+    }
+
+    randomize(): void {this.#activeSteps().forEach(step => step.setValue(Math.random()))}
 
     rotate(offset: int): void {
         const active = this.#activeSteps()
@@ -101,8 +110,6 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
                 StringMapping.numeric({unit: "Hz", fractionDigits: 2}), "Free"),
             phase: this.parametric.createParameter(box.phase,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Phase"),
-            amount: this.parametric.createParameter(box.amount,
-                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Amount"),
             smooth: this.parametric.createParameter(box.smooth,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Smooth"),
             direction: this.parametric.createParameter(box.direction,

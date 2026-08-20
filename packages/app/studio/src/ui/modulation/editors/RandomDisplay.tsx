@@ -1,5 +1,5 @@
 import css from "./StepsDisplay.sass?inline"
-import {clamp, int, Lifecycle, TAU, unitValue} from "@opendaw/lib-std"
+import {clamp, int, Lifecycle, TAU} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {Propagation} from "@opendaw/lib-box"
@@ -31,20 +31,20 @@ export const RandomDisplay = ({lifecycle, receiver, modulator}: Construct): HTML
         const padding = devicePixelRatio * 2
         const top = padding
         const bottom = actualHeight - padding
-        const centerY = (top + bottom) / 2
-        const valueToY = (value: unitValue) => centerY - value * (bottom - top) / 2
+        const bipolar = modulator.box.bipolar.getValue()
+        const baseY = bipolar ? (top + bottom) / 2 : bottom
+        const emitted = (value: number) => bipolar ? value : value * 0.5 + 0.5
+        const valueToY = (value: number) =>
+            baseY - emitted(value) * (bottom - top) / (bipolar ? 2 : 1)
+        const outputToY = (value: number) => baseY - value * (bottom - top) / (bipolar ? 2 : 1)
         const stepWidth = actualWidth / count
         const gap = Math.min(devicePixelRatio, stepWidth * 0.1)
-        const gradient = context.createLinearGradient(0, top, 0, bottom)
-        gradient.addColorStop(0.0, DisplayPaint.strokeStyle(0.2))
-        gradient.addColorStop(0.5, DisplayPaint.strokeStyle(0.0))
-        gradient.addColorStop(1.0, DisplayPaint.strokeStyle(0.2))
-        context.fillStyle = gradient
+        context.fillStyle = DisplayPaint.baselineGradient(context, top, bottom, bipolar)
         for (let index = 0; index < count; index++) {
             const value = modulator.draw(page + index)
             const x = index * stepWidth
             const y = valueToY(value)
-            context.fillRect(x + gap, Math.min(y, centerY), stepWidth - gap * 2, Math.max(1, Math.abs(y - centerY)))
+            context.fillRect(x + gap, Math.min(y, baseY), stepWidth - gap * 2, Math.max(1, Math.abs(y - baseY)))
         }
         context.lineWidth = devicePixelRatio
         context.strokeStyle = DisplayPaint.strokeStyle(1.0)
@@ -63,12 +63,12 @@ export const RandomDisplay = ({lifecycle, receiver, modulator}: Construct): HTML
         context.strokeStyle = "rgba(255, 255, 255, 0.3)"
         context.stroke()
         context.beginPath()
-        context.moveTo(0, centerY)
-        context.lineTo(actualWidth, centerY)
+        context.moveTo(0, baseY)
+        context.lineTo(actualWidth, baseY)
         context.strokeStyle = "hsl(200, 83%, 60%, 0.1)"
         context.stroke()
         context.beginPath()
-        context.arc((playhead - page) * stepWidth, valueToY(output), devicePixelRatio * 2.0, 0.0, TAU)
+        context.arc((playhead - page) * stepWidth, outputToY(output), devicePixelRatio * 2.0, 0.0, TAU)
         context.fillStyle = "hsl(200, 83%, 75%)"
         context.fill()
     }))

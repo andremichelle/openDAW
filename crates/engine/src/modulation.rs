@@ -45,7 +45,6 @@ pub(crate) struct LfoState {
     pub(crate) rate_sync: Cell<i32>,
     pub(crate) rate_absolute: Cell<f32>,
     pub(crate) phase: Cell<f32>,
-    pub(crate) amount: Cell<f32>,
     pub(crate) exponent: Cell<f32>,
     free_turns: Cell<f64>
 }
@@ -53,7 +52,7 @@ pub(crate) struct LfoState {
 impl LfoState {
     pub(crate) fn new() -> Self {
         Self {shape: Cell::new(SHAPE_SINE), rate_sync: Cell::new(4), rate_absolute: Cell::new(0.0),
-            phase: Cell::new(0.0), amount: Cell::new(1.0), exponent: Cell::new(0.0),
+            phase: Cell::new(0.0), exponent: Cell::new(0.0),
             free_turns: Cell::new(0.0)}
     }
 
@@ -72,7 +71,7 @@ impl LfoState {
             SHAPE_SQUARE => square(turn),
             _ => fast_sin_tau(turn)
         };
-        shaped(shape as f32, self.exponent.get()) * self.amount.get()
+        shaped(shape as f32, self.exponent.get())
     }
 }
 
@@ -81,7 +80,6 @@ pub(crate) struct StepsState {
     pub(crate) rate_sync: Cell<i32>,
     pub(crate) rate_absolute: Cell<f32>,
     pub(crate) phase: Cell<f32>,
-    pub(crate) amount: Cell<f32>,
     pub(crate) smooth: Cell<f32>,
     pub(crate) direction: Cell<i32>,
     pub(crate) steps: [Cell<f32>; MAX_STEPS],
@@ -91,8 +89,8 @@ pub(crate) struct StepsState {
 impl StepsState {
     pub(crate) fn new() -> Self {
         Self {count: Cell::new(16), rate_sync: Cell::new(10), rate_absolute: Cell::new(0.0),
-            phase: Cell::new(0.0), amount: Cell::new(1.0), smooth: Cell::new(0.0),
-            direction: Cell::new(DIRECTION_FORWARD), steps: core::array::from_fn(|_| Cell::new(0.0)),
+            phase: Cell::new(0.0), smooth: Cell::new(0.0),
+            direction: Cell::new(DIRECTION_FORWARD), steps: core::array::from_fn(|_| Cell::new(0.5)),
             free_turns: Cell::new(0.0)}
     }
 
@@ -133,7 +131,7 @@ impl StepsState {
             let ramp = (((step - index) / smooth as f64) as f32).min(1.0);
             previous + (current - previous) * ramp * ramp * (3.0 - 2.0 * ramp)
         };
-        value * self.amount.get()
+        value * 2.0 - 1.0
     }
 
     fn step_at(&self, index: i64, count: i64) -> f32 {
@@ -193,7 +191,6 @@ pub(crate) struct RandomState {
     pub(crate) rate_sync: Cell<i32>,
     pub(crate) rate_absolute: Cell<f32>,
     pub(crate) phase: Cell<f32>,
-    pub(crate) amount: Cell<f32>,
     pub(crate) smooth: Cell<f32>,
     pub(crate) seed: Cell<i32>,
     pub(crate) levels: Cell<i32>,
@@ -203,7 +200,7 @@ pub(crate) struct RandomState {
 impl RandomState {
     pub(crate) fn new() -> Self {
         Self {loop_length: Cell::new(0), rate_sync: Cell::new(10), rate_absolute: Cell::new(0.0),
-            phase: Cell::new(0.0), amount: Cell::new(1.0), smooth: Cell::new(0.0), seed: Cell::new(1),
+            phase: Cell::new(0.0), smooth: Cell::new(0.0), seed: Cell::new(1),
             levels: Cell::new(0), free_turns: Cell::new(0.0)}
     }
 
@@ -231,7 +228,7 @@ impl RandomState {
             let ramp = (((step - index) / smooth as f64) as f32).min(1.0);
             previous + (current - previous) * ramp * ramp * (3.0 - 2.0 * ramp)
         };
-        value * self.amount.get()
+        value
     }
 
     /// The step the sequence actually draws: with a loop length it revisits the same few draws, which
@@ -252,7 +249,7 @@ pub(crate) struct MacroState {
 
 impl MacroState {
     pub(crate) fn new() -> Self {
-        Self {value: Cell::new(0.0)}
+        Self {value: Cell::new(0.5)}
     }
 }
 
@@ -265,39 +262,37 @@ pub(crate) enum ModulatorKind {
 
 pub(crate) struct ModulatorState {
     pub(crate) enabled: Cell<bool>,
+    /// WASM CONTRACT: shared modulator fields — bipolar 7, amount 8 (ModulatorFactory.ts).
+    pub(crate) bipolar: Cell<bool>,
+    pub(crate) amount: Cell<f32>,
     pub(crate) kind: ModulatorKind,
     pub(crate) broadcast: RefCell<Option<engine_env::telemetry::BroadcastSlot>>,
     pub(crate) broadcast_active: Rc<Cell<bool>>
 }
 
 impl ModulatorState {
-    pub(crate) fn lfo() -> Self {
-        Self {enabled: Cell::new(true), kind: ModulatorKind::Lfo(LfoState::new()),
+    fn of(kind: ModulatorKind) -> Self {
+        Self {enabled: Cell::new(true), bipolar: Cell::new(true), amount: Cell::new(1.0), kind,
             broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
     }
 
-    pub(crate) fn steps() -> Self {
-        Self {enabled: Cell::new(true), kind: ModulatorKind::Steps(StepsState::new()),
-            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
-    }
+    pub(crate) fn lfo() -> Self {Self::of(ModulatorKind::Lfo(LfoState::new()))}
 
-    pub(crate) fn macro_knob() -> Self {
-        Self {enabled: Cell::new(true), kind: ModulatorKind::Macro(MacroState::new()),
-            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
-    }
+    pub(crate) fn steps() -> Self {Self::of(ModulatorKind::Steps(StepsState::new()))}
 
-    pub(crate) fn random() -> Self {
-        Self {enabled: Cell::new(true), kind: ModulatorKind::Random(RandomState::new()),
-            broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))}
-    }
+    pub(crate) fn macro_knob() -> Self {Self::of(ModulatorKind::Macro(MacroState::new()))}
+
+    pub(crate) fn random() -> Self {Self::of(ModulatorKind::Random(RandomState::new()))}
 
     pub(crate) fn value_at(&self, position: f64) -> f32 {
-        match &self.kind {
+        let raw = match &self.kind {
             ModulatorKind::Lfo(lfo) => lfo.value_at(position),
             ModulatorKind::Steps(steps) => steps.value_at(position),
-            ModulatorKind::Macro(knob) => knob.value.get(),
+            ModulatorKind::Macro(knob) => knob.value.get() * 2.0 - 1.0,
             ModulatorKind::Random(random) => random.value_at(position)
-        }
+        };
+        let folded = if self.bipolar.get() {raw} else {raw * 0.5 + 0.5};
+        folded * self.amount.get()
     }
 
     /// The free rate integrates rather than reading a clock, so changing it bends the phase onwards
@@ -448,7 +443,7 @@ pub(crate) enum ParamMapping {
 pub(crate) struct BoundParam {
     pub(crate) handle: crate::param_automation::ParamHandle,
     pub(crate) mapping: ParamMapping,
-    pub(crate) apply: fn(&ModulatorKind, f32)
+    pub(crate) apply: fn(&ModulatorState, f32)
 }
 
 impl BoundParam {
@@ -466,7 +461,7 @@ impl BoundParam {
             ParamMapping::Integer(mapping) =>
                 abi::int_value(abi::ParamValue::from_wire(kind, value, modulation), mapping) as f32
         };
-        (self.apply)(&state.kind, folded);
+        (self.apply)(state, folded);
     }
 }
 
@@ -597,11 +592,12 @@ mod tests {
         state
     }
 
+    /// The tests speak in the values a step EMITS, the state stores the unipolar draw space.
     fn steps(values: &[f32]) -> StepsState {
         let state = StepsState::new();
         state.count.set(values.len() as i32);
         for (index, value) in values.iter().enumerate() {
-            state.steps[index].set(*value);
+            state.steps[index].set(value * 0.5 + 0.5);
         }
         state
     }
@@ -659,13 +655,65 @@ mod tests {
     }
 
     #[test]
-    fn phase_and_amount_shift_and_scale() {
+    fn the_phase_shifts_the_shape() {
         let shifted = lfo(SHAPE_SINE, ONE_BAR);
         shifted.phase.set(0.25);
         assert!((shifted.value_at(0.0) - 1.0).abs() < 1.0e-6, "a quarter-turn phase starts at the peak");
-        let scaled = lfo(SHAPE_SINE, ONE_BAR);
-        scaled.amount.set(0.5);
-        assert!((scaled.value_at(BAR * 0.25) - 0.5).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn the_polarity_folds_the_shape_and_the_amount_scales_what_comes_out() {
+        let state = ModulatorState::lfo();
+        let ModulatorKind::Lfo(shape) = &state.kind else {panic!("an LFO")};
+        shape.shape.set(SHAPE_SINE);
+        shape.rate_sync.set(ONE_BAR);
+        assert!((state.value_at(BAR * 0.25) - 1.0).abs() < 1.0e-6, "bipolar reaches the top");
+        assert!((state.value_at(BAR * 0.75) + 1.0).abs() < 1.0e-6, "and the bottom");
+        state.amount.set(0.5);
+        assert!((state.value_at(BAR * 0.25) - 0.5).abs() < 1.0e-6, "the amount scales the emitted value");
+        state.amount.set(1.0);
+        state.bipolar.set(false);
+        assert!((state.value_at(BAR * 0.25) - 1.0).abs() < 1.0e-6, "unipolar keeps the peak");
+        assert!(state.value_at(BAR * 0.75).abs() < 1.0e-6, "and rests the trough on zero");
+        for step in 0..64 {
+            let value = state.value_at(BAR * step as f64 / 64.0);
+            assert!((0.0..=1.0).contains(&value), "a unipolar source never pushes down, got {value}");
+        }
+        state.amount.set(0.0);
+        for step in 0..64 {
+            assert_eq!(state.value_at(BAR * step as f64 / 64.0), 0.0,
+                "no amount is silence, not a stuck offset");
+        }
+    }
+
+    #[test]
+    fn the_macro_rests_in_the_middle_while_bipolar_and_at_the_bottom_while_not() {
+        let state = ModulatorState::macro_knob();
+        assert_eq!(state.value_at(0.0), 0.0, "the stored centre emits nothing");
+        let ModulatorKind::Macro(knob) = &state.kind else {panic!("a macro")};
+        knob.value.set(1.0);
+        assert_eq!(state.value_at(0.0), 1.0);
+        knob.value.set(0.0);
+        assert_eq!(state.value_at(0.0), -1.0);
+        state.bipolar.set(false);
+        assert_eq!(state.value_at(0.0), 0.0, "the bottom of the fader emits nothing while unipolar");
+        knob.value.set(0.5);
+        assert_eq!(state.value_at(0.0), 0.5, "and the middle is half of the way up");
+    }
+
+    #[test]
+    fn a_unipolar_step_pattern_reads_off_the_bottom() {
+        let state = ModulatorState::steps();
+        let ModulatorKind::Steps(pattern) = &state.kind else {panic!("a sequence")};
+        pattern.count.set(2);
+        pattern.rate_sync.set(SIXTEENTH);
+        pattern.steps[0].set(0.0);
+        pattern.steps[1].set(1.0);
+        assert_eq!(state.value_at(0.0), -1.0, "bipolar reads the draw space from its centre");
+        assert_eq!(state.value_at(STEP), 1.0);
+        state.bipolar.set(false);
+        assert_eq!(state.value_at(0.0), 0.0, "unipolar reads the very same pattern off the bottom");
+        assert_eq!(state.value_at(STEP), 1.0);
     }
 
     #[test]
@@ -872,8 +920,8 @@ mod tests {
 
     #[test]
     fn the_sum_is_nan_until_something_actually_contributes() {
-        let state = Rc::new(ModulatorState {enabled: Cell::new(true),
-            kind: ModulatorKind::Lfo(lfo(SHAPE_SQUARE, ONE_BAR)),
+        let state = Rc::new(ModulatorState {enabled: Cell::new(true), bipolar: Cell::new(true),
+            amount: Cell::new(1.0), kind: ModulatorKind::Lfo(lfo(SHAPE_SQUARE, ONE_BAR)),
             broadcast: RefCell::new(None), broadcast_active: Rc::new(Cell::new(false))});
         let bound = |depth: f32, enabled: bool| BoundModulation {
             modulator: state.clone(),

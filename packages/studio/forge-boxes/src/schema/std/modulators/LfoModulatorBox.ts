@@ -17,6 +17,5 @@ export const LfoModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createModul
         constraints: {min: 0.0, max: 20.0, scaling: "linear"}, unit: "Hz"
     },
     13: {type: "float32", name: "phase", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...UnipolarConstraints},
-    14: {type: "float32", name: "amount", pointerRules: ModulatorParameterPointerRules, value: 1.0, ...UnipolarConstraints},
     15: {type: "float32", name: "exponent", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...BipolarConstraints}
 })

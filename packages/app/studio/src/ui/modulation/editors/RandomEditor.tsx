@@ -8,6 +8,7 @@ import {StudioService} from "@/service/StudioService.ts"
 import {ModulatorEditor} from "@/ui/modulation/ModulatorEditor.tsx"
 import {RandomDisplay} from "@/ui/modulation/editors/RandomDisplay.tsx"
 import {ModulatorKnob} from "@/ui/modulation/ModulatorKnob.tsx"
+import {ValueRange} from "@/ui/modulation/ValueRange.tsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {NumberInput} from "@/ui/components/NumberInput.tsx"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
@@ -22,7 +23,7 @@ type Construct = {
 
 export const RandomEditor = ({lifecycle, service, modulator}: Construct) => {
     const {editing, liveStreamReceiver} = service.project
-    const {rateSync, rateAbsolute, smooth, phase, amount} = modulator.namedParameter
+    const {rateSync, rateAbsolute, smooth, phase} = modulator.namedParameter
     return (
         <ModulatorEditor lifecycle={lifecycle} service={service} modulator={modulator}>
             <div className={className}>
@@ -56,9 +57,10 @@ export const RandomEditor = ({lifecycle, service, modulator}: Construct) => {
                 </div>
                 <div className="knobs">
                     <div className="section"/>
-                    {[rateSync, rateAbsolute, smooth, phase, amount].map(parameter => (
+                    {[rateSync, rateAbsolute, smooth, phase].map(parameter => (
                         <ModulatorKnob lifecycle={lifecycle} service={service} parameter={parameter}/>
                     ))}
+                    <ValueRange lifecycle={lifecycle} service={service} modulator={modulator}/>
                 </div>
             </div>
         </ModulatorEditor>
