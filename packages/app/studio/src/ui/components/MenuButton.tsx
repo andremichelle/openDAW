@@ -30,17 +30,28 @@ type Construct = {
 export const MenuButton =
     ({root, onInit, style, appearance, horizontal, stretch, pointer, groupId}: Construct, children: JsxValue) => {
         let current: Option<Menu> = Option.None
+        let touchDown = false
         const button: HTMLButtonElement = (
             <button onInit={onInit}
                     className={Html.buildClassList(className,
                         appearance?.framed && "framed", appearance?.tinyTriangle && "tiny-triangle",
                         stretch && "stretch", pointer && "pointer")}
                     onpointerdown={(event: PointerEvent) => {
+                        touchDown = event.pointerType === "touch"
+                        if (touchDown) {return} // iOS focuses on the compat mousedown after release, blurring the menu away
                         if (event.ctrlKey || !root.hasChildren) {return}
                         event.stopPropagation()
                         toggle()
                     }}
-                    onpointerenter={() => {
+                    onclick={(event: MouseEvent) => {
+                        if (!touchDown) {return}
+                        touchDown = false
+                        if (!root.hasChildren) {return}
+                        event.stopPropagation()
+                        toggle()
+                    }}
+                    onpointerenter={(event: PointerEvent) => {
+                        if (event.pointerType === "touch") {return}
                         const focus = button.ownerDocument.activeElement
                         if (focus instanceof HTMLElement
                             && focus.getAttribute("data-menu-group-id") === groupId) {

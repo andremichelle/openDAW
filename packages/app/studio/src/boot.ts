@@ -42,6 +42,7 @@ import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
+import {TouchContextMenu} from "@/ui/TouchContextMenu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
 
 if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
@@ -136,15 +137,17 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     }
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
-        config: (surface: Surface) => surface.own(ContextMenu.install(surface.owner, (menuItem, {clientX, clientY}) => {
-            Html.unfocus(surface.owner)
-            const offset = 2
-            const x: number = clientX - offset
-            const y: number = clientY
-            const menu = Menu.create(menuItem)
-            menu.moveTo(x, y)
-            menu.attach(Surface.get(surface.owner).flyout)
-        }))
+        config: (surface: Surface) => surface.ownAll(
+            ContextMenu.install(surface.owner, (menuItem, {clientX, clientY}) => {
+                Html.unfocus(surface.owner)
+                const offset = 2
+                const x: number = clientX - offset
+                const y: number = clientY
+                const menu = Menu.create(menuItem)
+                menu.moveTo(x, y)
+                menu.attach(Surface.get(surface.owner).flyout)
+            }),
+            TouchContextMenu.install(surface.owner))
     }, errorHandler)
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
     document.querySelector("#preloader")?.remove()
