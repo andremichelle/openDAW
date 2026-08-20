@@ -3,6 +3,7 @@ import {Lifecycle, TAU} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {CanvasPainter} from "@opendaw/studio-core"
+import {LiveStreamReceiver} from "@opendaw/lib-fusion"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint.ts"
 import {LfoModulatorBoxAdapter, LfoShape} from "@opendaw/studio-adapters"
 
@@ -10,6 +11,7 @@ const className = Html.adoptStyleSheet(css, "ShapeDisplay")
 
 type Construct = {
     lifecycle: Lifecycle
+    receiver: LiveStreamReceiver
     modulator: LfoModulatorBoxAdapter
 }
 
@@ -30,8 +32,12 @@ const shapeAt = (shape: LfoShape, turn: number): number => {
     }
 }
 
-export const ShapeDisplay = ({lifecycle, modulator}: Construct): HTMLElement => {
+export const ShapeDisplay = ({lifecycle, receiver, modulator}: Construct): HTMLElement => {
     const canvas: HTMLCanvasElement = (<canvas/>)
+    // The engine's `[phase, value]` for this modulator: the phase already carries the phase parameter, the
+    // value is the final output (shaped and scaled by amount), so the dot needs its own mapping.
+    let playhead = 0.0
+    let output = 0.0
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const {context, actualWidth, actualHeight, devicePixelRatio} = painter
         context.clearRect(0, 0, actualWidth, actualHeight)
@@ -66,12 +72,23 @@ export const ShapeDisplay = ({lifecycle, modulator}: Construct): HTMLElement => 
         context.lineTo(actualWidth, centerY)
         context.strokeStyle = "hsla(200, 83%, 60%, 0.25)"
         context.stroke()
+        const turn = playhead - phase - Math.floor(playhead - phase)
+        context.beginPath()
+        context.arc(turn * actualWidth, bottom + (top - bottom) * (0.5 * (output + 1.0)),
+            devicePixelRatio * 2.0, 0.0, TAU)
+        context.fillStyle = "hsl(200, 83%, 75%)"
+        context.fill()
     }))
     lifecycle.ownAll(
         modulator.box.shape.subscribe(painter.requestUpdate),
         modulator.box.phase.subscribe(painter.requestUpdate),
         modulator.box.amount.subscribe(painter.requestUpdate),
-        modulator.box.exponent.subscribe(painter.requestUpdate)
+        modulator.box.exponent.subscribe(painter.requestUpdate),
+        receiver.subscribeFloats(modulator.address, ([position, value]) => {
+            playhead = position
+            output = value
+            painter.requestUpdate()
+        })
     )
     return <div className={className}>{canvas}</div>
 }

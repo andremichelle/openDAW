@@ -11,7 +11,6 @@ import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {attachModulatorParameterContextMenu} from "@/ui/menu/automation.ts"
 import {installControlSourceIndicator} from "@/ui/components/AutomationControl.tsx"
-import {installScrollbars} from "@/ui/components/Scrollbars.tsx"
 
 const className = Html.adoptStyleSheet(css, "TargetList")
 
@@ -23,8 +22,7 @@ type Construct = {
 
 export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElement => {
     const {editing, midiLearning, userEditingManager} = service.project
-    const entries: HTMLElement = <div className="entries"
-                                       onConnect={host => lifecycle.own(installScrollbars(host, {autoHide: false}))}/>
+    const entries: HTMLElement = <div className="entries"/>
     const element: HTMLElement = <div className={className}>{entries}</div>
     const rows = lifecycle.own(new Terminator())
     const render = () => {
@@ -40,18 +38,19 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
             const {depth} = assignment.namedParameter
             const depthLabel: HTMLElement = (<ParameterLabel lifecycle={rows} parameter={depth} framed={true}/>)
             rows.own(attachModulatorParameterContextMenu(editing, midiLearning, depth, depthLabel))
-            // The label clips its own overflow, so the ring hangs off the scrolling container instead.
+            // The label clips its own overflow, so the ring hangs off the entries container instead.
             installControlSourceIndicator(rows, depth, entries, depthLabel, 2)
             entries.append(<div className="entry"
                  onInit={element => rows.own(assignment.box.enabled
                      .catchupAndSubscribe((owner: ObservableValue<boolean>) =>
                          element.classList.toggle("disabled", !owner.getValue())))}>
                 <span className="target">
-                    <span className="owner" onInit={element => rows.own(Events.subscribe(element, "click", () =>
-                        assignment.targetAudioUnit.ifSome(unit =>
-                            userEditingManager.audioUnit.edit(unit.box.editing))))}>
-                        {assignment.targetOwner.unwrapOrElse("")}
-                    </span>
+                    <span className="owner" onInit={element => rows.ownAll(
+                        // The owner is the device's label, which the user can rename at any time.
+                        assignment.catchupAndSubscribeTargetOwner(name => element.textContent = name),
+                        Events.subscribe(element, "click", () =>
+                            assignment.targetAudioUnit.ifSome(unit =>
+                                userEditingManager.audioUnit.edit(unit.box.editing))))}/>
                     <span className="parameter">
                         {assignment.target.mapOr(parameter => parameter.name, "Unknown")}
                     </span>

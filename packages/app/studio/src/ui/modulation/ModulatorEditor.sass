@@ -2,7 +2,7 @@ component
   display: contents
 
   &:first-of-type > .modulator > header
-    padding-top: 0
+    margin-top: var(--head-spacing)
 
   > .modulator
     position: relative
@@ -25,27 +25,34 @@ component
       top: calc(var(--editor-spacing) / 2)
 
     &.insert-after::after
-      bottom: 0
+      bottom: calc(var(--editor-spacing) / -2)
 
     > header
       grid-column: 1 / -1
-      padding-top: var(--editor-spacing)
+      margin-top: var(--editor-spacing)
       display: grid
-      grid-template-columns: 1fr auto auto auto
+      grid-template-columns: auto 1fr auto
       align-items: center
-      column-gap: 0.5em
+      column-gap: 0.25em
+      padding: 0.25em 0 0.25em 0.25em
+      border-radius: 3px
+      outline: none
+      cursor: pointer
+      color: var(--color-cream)
+
+      &.selected
+        background-color: rgba(white, 0.04)
 
       > .toggle
         cursor: pointer
-        color: var(--color-gray)
 
       > h1
         margin: 0
+        padding: 0
         font-size: 11px
         white-space: nowrap
         overflow: hidden
         text-overflow: ellipsis
-        padding: 0 0 0 0.25em
 
     > .body
       grid-column: 1 / -1

@@ -1,6 +1,6 @@
 import {Address} from "@opendaw/lib-box"
 import {ModulationBox} from "@opendaw/studio-boxes"
-import {Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Observer, Option, StringMapping, Subscription, Terminable, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {BoxAdapter} from "../BoxAdapter"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ParameterAdapterSet} from "../ParameterAdapterSet"
@@ -61,6 +61,16 @@ export class ModulationBoxAdapter implements BoxAdapter {
 
     get targetOwner(): Option<string> {
         return this.#box.target.targetVertex.flatMap(vertex => ParameterOwner.nameOf(this.#context, vertex))
+    }
+
+    /// The owner's name, kept current: renaming the device the target belongs to notifies again.
+    catchupAndSubscribeTargetOwner(observer: Observer<string>): Subscription {
+        const vertex = this.#box.target.targetVertex
+        if (vertex.isEmpty()) {
+            observer("")
+            return Terminable.Empty
+        }
+        return ParameterOwner.catchupAndSubscribeName(this.#context, vertex.unwrap(), observer)
     }
 
     terminate(): void {this.#terminator.terminate()}

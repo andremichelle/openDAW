@@ -1,13 +1,14 @@
 import css from "./ModulationPanel.sass?inline"
-import {isInstanceOf, Lifecycle, Terminator, UUID} from "@opendaw/lib-std"
+import {isAbsent, isInstanceOf, Lifecycle, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ModulatorBoxAdapter, Modulators} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {MenuItem} from "@opendaw/studio-core"
+import {ClipboardManager, MenuItem, ModulatorsClipboard} from "@opendaw/studio-core"
+import {ModulatorClipboardContext} from "@/ui/modulation/ModulatorClipboardContext.ts"
 import {createModulatorEditor} from "@/ui/modulation/ModulatorEditorFactory.tsx"
 import {installScrollbars} from "@/ui/components/Scrollbars.tsx"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
@@ -44,7 +45,29 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
             <h5 className="head targets"><span>Targets</span></h5>
         </div>
     )
-    const element: HTMLElement = <div className={className}>{scroller}</div>
+    const {modulatorSelection} = project
+    const element: HTMLElement = (
+        <div className={className} tabIndex={0} onInit={element => lifecycle.ownAll(
+            // ONE clipboard for the whole list (a modulator has no per-editor host the way a device has a
+            // chain), so copy and paste keep working wherever the focus sits inside the panel.
+            ClipboardManager.install(element,
+                ModulatorsClipboard.createHandler(ModulatorClipboardContext.of(project))),
+            // A click on anything but an editor drops the selection, the way the device panel does it.
+            Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
+                const target = event.target
+                if (target instanceof Element && isAbsent(target.closest("[data-modulator]"))) {
+                    modulatorSelection.deselectAll()
+                }
+            }),
+            Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
+                if (!Keyboard.isDelete(event) || modulatorSelection.isEmpty()) {return}
+                if (Events.isTextInput(document.activeElement)) {return}
+                event.preventDefault()
+                const doomed = modulatorSelection.selected().map(adapter => adapter.box)
+                modulatorSelection.deselectAll()
+                editing.modify(() => Modulators.deleteAll(project, doomed))
+            }))}>{scroller}</div>
+    )
     const editors = UUID.newSet<{uuid: UUID.Bytes, element: HTMLElement}>(entry => entry.uuid)
     /// The editor's own element is `display: contents`, so the scroll must target the row that has a box.
     const revealRequested = () => ModulatorReveal.requested.ifSome(uuid => editors.opt(uuid)
@@ -55,6 +78,9 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
             ModulatorReveal.requested.clear()
         }))
     const render = () => {
+        // A re-render throws away the focused header, and focus would fall back to the document body,
+        // out of reach of the panel's own Delete shortcut. Hand it to the panel instead.
+        const hadFocus = element.contains(document.activeElement)
         contents.terminate()
         editors.clear()
         while (scroller.childElementCount > 2) {scroller.lastElementChild?.remove()}
@@ -66,10 +92,11 @@ export const ModulationPanel = ({lifecycle, service}: Construct) => {
             return
         }
         adapters.forEach((adapter: ModulatorBoxAdapter) => {
-            const element = createModulatorEditor(contents, service, adapter) as HTMLElement
-            editors.add({uuid: adapter.uuid, element})
-            scroller.append(element)
+            const editor = createModulatorEditor(contents, service, adapter) as HTMLElement
+            editors.add({uuid: adapter.uuid, element: editor})
+            scroller.append(editor)
         })
+        if (hadFocus) {element.focus()}
         revealRequested()
     }
     lifecycle.ownAll(

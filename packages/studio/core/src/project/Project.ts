@@ -51,7 +51,10 @@ import {
     Devices,
     FilteredRemoteSelection,
     FilteredSelection,
+    isModulatorBox,
+    isModulatorBoxAdapter,
     isVertexOfBox,
+    ModulatorBoxAdapter,
     ParameterFieldAdapters,
     ProcessorOptions,
     ProjectMandatoryBoxes,
@@ -147,6 +150,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly editing: Editing
     readonly selection: VertexSelection
     readonly deviceSelection: FilteredSelection<DeviceBoxAdapter>
+    readonly modulatorSelection: FilteredSelection<ModulatorBoxAdapter>
     readonly regionSelection: FilteredSelection<AnyRegionBoxAdapter>
     readonly remoteSelections: RemoteSelections
     readonly remoteDeviceSelection: FilteredRemoteSelection<DeviceBoxAdapter>
@@ -197,6 +201,13 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             {
                 fx: (adapter: DeviceBoxAdapter) => adapter.box,
                 fy: vertex => this.boxAdapters.adapterFor(vertex.box, Devices.isAny)
+            }
+        ))
+        this.modulatorSelection = this.#terminator.own(this.selection.createFilteredSelection(
+            isVertexOfBox(isModulatorBox),
+            {
+                fx: (adapter: ModulatorBoxAdapter) => adapter.box,
+                fy: vertex => this.boxAdapters.adapterFor(vertex.box, isModulatorBoxAdapter)
             }
         ))
         this.regionSelection = this.#terminator.own(this.selection.createFilteredSelection(

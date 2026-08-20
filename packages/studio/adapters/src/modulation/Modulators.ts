@@ -57,15 +57,58 @@ export namespace Modulators {
     }
 
     /// Same kind and settings, no targets. The copy reads the original's own bytes, so every kind is covered.
-    export const duplicate = (context: BoxAdaptersContext, modulator: ModulatorBox): ModulatorBox => {
+    export const duplicate = (context: BoxAdaptersContext, modulator: ModulatorBox): ModulatorBox =>
+        duplicateAll(context, [modulator])[0]
+
+    /// Several at once, appended in their list order, each with its own unique name. A box created in THIS
+    /// transaction is not in the collection yet (its edges resolve on commit), so index and name are counted
+    /// forward here rather than re-read per copy.
+    export const duplicateAll = (context: BoxAdaptersContext,
+                                 modulators: ReadonlyArray<ModulatorBox>): ReadonlyArray<ModulatorBox> => {
         const existing = context.rootBoxAdapter.modulators.adapters()
-        const input = new ByteArrayInput(modulator.toArrayBuffer())
-        const copy = asModulatorBox(context.boxGraph.createBox(modulator.name as keyof BoxIO.TypeMap,
-            UUID.generate(), box => box.read(input)))
-        copy.index.setValue(existing.length)
-        copy.label.setValue(Strings.getUniqueName(existing.map(adapter => adapter.label), modulator.label.getValue()))
-        return copy
+        const taken = existing.map(adapter => adapter.label)
+        return modulators.slice()
+            .sort((a, b) => a.index.getValue() - b.index.getValue())
+            .map((modulator, offset) => {
+                const input = new ByteArrayInput(modulator.toArrayBuffer())
+                const copy = asModulatorBox(context.boxGraph.createBox(modulator.name as keyof BoxIO.TypeMap,
+                    UUID.generate(), box => box.read(input)))
+                const label = Strings.getUniqueName(taken, modulator.label.getValue())
+                taken.push(label)
+                copy.index.setValue(existing.length + offset)
+                copy.label.setValue(label)
+                return copy
+            })
     }
+
+    /// Delete a whole selection and close the gaps it leaves, so the remaining indices stay 0..n-1.
+    export const deleteAll = (context: BoxAdaptersContext, modulators: ReadonlyArray<ModulatorBox>): void => {
+        const doomed = new Set<ModulatorBox>(modulators)
+        const remaining = context.rootBoxAdapter.modulators.adapters()
+            .filter(adapter => !doomed.has(adapter.box))
+        doomed.forEach(modulator => modulator.delete())
+        reindex(remaining.map(adapter => adapter.box))
+    }
+
+    /// Move a set to `target`'s place, keeping the moved ones in their own order. Dropping onto a member of
+    /// the set itself is a no-op, so a drag that ends where it started changes nothing.
+    export const move = (context: BoxAdaptersContext,
+                         modulators: ReadonlyArray<ModulatorBox>,
+                         target: ModulatorBox): void => {
+        const moved = new Set<ModulatorBox>(modulators)
+        if (moved.has(target) || moved.size === 0) {return}
+        const ordered = context.rootBoxAdapter.modulators.adapters().map(adapter => adapter.box)
+        const stationary = ordered.filter(box => !moved.has(box))
+        const insertAt = stationary.indexOf(target)
+        if (insertAt < 0) {return}
+        const dragged = ordered.filter(box => moved.has(box))
+        const before = ordered.indexOf(dragged[0]) < ordered.indexOf(target)
+        stationary.splice(before ? insertAt + 1 : insertAt, 0, ...dragged)
+        reindex(stationary)
+    }
+
+    const reindex = (modulators: ReadonlyArray<ModulatorBox>): void =>
+        modulators.forEach((modulator, index) => modulator.index.setValue(index))
 
     const asModulatorBox = (box: Box): ModulatorBox => box.accept<BoxVisitor<ModulatorBox>>({
         visitLfoModulatorBox: (box: LfoModulatorBox) => box,

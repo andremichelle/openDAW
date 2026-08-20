@@ -1,5 +1,3 @@
-$padding: 0.5em
-
 component
   grid-column: -2 / -1
   grid-row: span 2
@@ -11,22 +9,16 @@ component
   &::before
     content: ""
     grid-area: 2 / 1
-    border-radius: 3px
-    background-color: rgba(black, 0.08)
 
   > .entries
     grid-area: 2 / 1
-    position: absolute
-    inset: 0
     display: grid
     grid-template-columns: 1fr auto auto auto
     grid-auto-rows: 1.5em
-    align-content: safe center
+    align-content: start
     align-items: center
     column-gap: 0.5em
-    padding: $padding var(--scroller-width) $padding 0.5em
-    overflow-y: auto
-    mask-image: linear-gradient(to bottom, transparent, black $padding, black calc(100% - #{$padding}), transparent)
+    padding: 0.25em
 
     > .placeholder
       grid-column: 1 / -1
@@ -38,15 +30,22 @@ component
     > .entry
       display: contents
 
+      // Both halves shrink when the row is too narrow, so a long device name never squeezes the parameter
+      // name out of the row: each keeps a few characters and an ellipsis.
       > .target
         display: grid
-        grid-auto-flow: column
+        grid-template-columns: minmax(0, max-content) minmax(0, max-content)
         justify-content: start
         column-gap: 0.35em
         overflow: hidden
         white-space: nowrap
         font-size: 0.8em
         color: var(--color-bright)
+
+        > .owner, > .parameter
+          min-width: 0
+          overflow: hidden
+          text-overflow: ellipsis
 
         > .owner
           cursor: pointer

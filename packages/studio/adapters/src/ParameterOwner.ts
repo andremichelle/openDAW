@@ -1,5 +1,5 @@
 import {Box, StringField, Vertex} from "@opendaw/lib-box"
-import {Option} from "@opendaw/lib-std"
+import {Observer, Option, Subscription, Terminable} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioUnitBox, ModulationBox} from "@opendaw/studio-boxes"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
@@ -26,6 +26,27 @@ export namespace ParameterOwner {
         return owner.nonEmpty() ? owner : Option.wrap(box.name)
     }
 
+    /// The same name as `nameOf`, but following the rename: a view stays in sync when the device (or the
+    /// audio unit's instrument) is relabelled.
+    export const catchupAndSubscribeName = (context: BoxAdaptersContext,
+                                            vertex: Vertex,
+                                            observer: Observer<string>): Subscription => {
+        const box = vertex.box
+        if (box instanceof AudioUnitBox) {
+            return context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter).input
+                .catchupAndSubscribeLabelChange(label => observer(label.unwrapOrElse("")))
+        }
+        const own = labelFieldOf(context, box)
+        const field = own.nonEmpty()
+            ? own
+            : resolveOwnerDeviceBox(box).flatMap(owner => labelFieldOf(context, owner))
+        if (field.isEmpty()) {
+            observer(nameOf(context, vertex).unwrapOrElse(box.name))
+            return Terminable.Empty
+        }
+        return field.unwrap().catchupAndSubscribe(field => observer(field.getValue()))
+    }
+
     export const audioUnitOf = (context: BoxAdaptersContext, vertex: Vertex): Option<AudioUnitBoxAdapter> => {
         const box = vertex.box
         if (box instanceof AudioUnitBox) {
@@ -43,9 +64,12 @@ export namespace ParameterOwner {
                 : Option.None)
 
     const labelOf = (context: BoxAdaptersContext, box: Box): Option<string> =>
+        labelFieldOf(context, box).map(field => field.getValue())
+
+    const labelFieldOf = (context: BoxAdaptersContext, box: Box): Option<StringField> =>
         context.boxAdapters.optAdapter(box).flatMap(adapter =>
             "labelField" in adapter && adapter.labelField instanceof StringField
-                ? Option.wrap(adapter.labelField.getValue())
+                ? Option.wrap(adapter.labelField)
                 : Option.None)
 
     const resolveOwnerDeviceBox = (box: Box): Option<Box> => {
