@@ -69,7 +69,7 @@ export const PatternGrid = ({lifecycle, editing, adapter, stepRange, receiver}: 
                         up.terminate()
                     })
                 }),
-                Events.subscribe(cell, "dblclick", () => {
+                Events.subscribeDblDwn(cell, () => {
                     const resolvers = Promise.withResolvers<string>()
                     const surface = Surface.get(cell)
                     surface.flyout.appendChild(FloatingTextInput({

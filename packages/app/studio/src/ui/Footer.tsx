@@ -33,7 +33,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                         onInit={({component, value}) => {
                             const profileLifecycle = lifecycle.own(new Terminator())
                             lifecycle.ownAll(
-                                Events.subscribe(component, "dblclick", event => {
+                                Events.subscribeDblDwn(component, event => {
                                     const optProfile = projectProfileService.getValue()
                                     if (optProfile.isEmpty()) {return}
                                     const profile = optProfile.unwrap()

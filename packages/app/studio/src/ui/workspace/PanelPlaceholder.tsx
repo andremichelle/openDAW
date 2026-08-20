@@ -133,7 +133,7 @@ export const PanelPlaceholder =
             }
         }))
         appendChildren(element, <Frag>{header}{container}</Frag>)
-        lifecycle.own(Events.subscribe(header, "dblclick", () => handler.toggleMinimize()))
+        lifecycle.own(Events.subscribeDblDwn(header, () => handler.toggleMinimize()))
         lifecycle.own(ContextMenu.subscribe(header, collector => collector.addItems(
             MenuItem.default({
                 label: "Popout into new browser window",
