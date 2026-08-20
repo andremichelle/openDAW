@@ -248,6 +248,11 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
                     engine.ignore_note_region()
                 }),
+                suspendAutomation: (uuid: UUID.Bytes): void => this.#guarded(() => {
+                    const pointer = engine.input_reserve(16)
+                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    engine.suspend_automation()
+                }),
                 scheduleClipPlay: (clipIds: ReadonlyArray<UUID.Bytes>): void => this.#guarded(() => clipIds.forEach(uuid => {
                     const pointer = engine.input_reserve(16)
                     new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)

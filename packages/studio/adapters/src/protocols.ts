@@ -20,6 +20,8 @@ export interface EngineCommands extends Terminable {
     noteSignal(signal: NoteSignal): void
     /** @internal */
     ignoreNoteRegion(uuid: UUID.Bytes): void
+    /** @internal */
+    suspendAutomation(uuid: UUID.Bytes): void
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void
     /** @internal */

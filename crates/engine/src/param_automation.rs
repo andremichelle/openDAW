@@ -72,7 +72,7 @@ impl ParamHandle {
             if slot.len() > 1 {
                 slot[1] = modulation;
             }
-            if self.track.is_none() {
+            if self.track.is_none() || self.suspended() {
                 slot[0] = f32::NAN;
             }
         }
@@ -107,7 +107,16 @@ impl ParamHandle {
         self.last_modulation.set(modulation);
     }
 
+    /// Under manual control (issue #347) the curve is bypassed WHOLE — no region lookup, no clip section —
+    /// and the parameter reads its own field, which is what the hand (or the CC) is setting.
+    fn suspended(&self) -> bool {
+        self.track.as_ref().is_some_and(|curve| curve.is_suspended())
+    }
+
     fn resolve_base(&self, position: f64) -> (f32, u32) {
+        if self.suspended() {
+            return (self.field.get(), self.kind);
+        }
         match self.track.as_ref().and_then(|curve| curve.value_at(position)) {
             Some(value) => {
                 if let Some(slot) = &self.broadcast {
@@ -230,6 +239,12 @@ impl ParamCurve {
     pub(crate) fn new(track: Uuid, regions: RegionCollection<ValueBoundRegion>,
                       clips: Vec<BoundValueClip>, sequencer: Rc<RefCell<ClipSequencer>>) -> Self {
         Self(Rc::new(RefCell::new(CurveState {track, regions, clips, sequencer})))
+    }
+
+    /// Whether this lane is under manual control right now (issue #347).
+    pub(crate) fn is_suspended(&self) -> bool {
+        let track = self.0.borrow().track;
+        unsafe { crate::SUSPENDED_AUTOMATION.get() }.contains(&track)
     }
 
     /// The parameter's unit value (0..1) at `position`, mirroring TS `TrackBoxAdapter.valueAt` INCLUDING the

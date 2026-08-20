@@ -123,6 +123,9 @@ export class EngineFacade implements Engine {
     ignoreNoteRegion(uuid: UUID.Bytes): void {
         this.#worklet.unwrap("No worklet to ignoreNoteRegion").ignoreNoteRegion(uuid)
     }
+    suspendAutomation(uuid: UUID.Bytes): void {
+        this.#worklet.unwrap("No worklet to suspendAutomation").suspendAutomation(uuid)
+    }
     noteSignal(signal: NoteSignal): void {
         this.#worklet.unwrap("No worklet to noteOn").noteSignal(signal)
     }

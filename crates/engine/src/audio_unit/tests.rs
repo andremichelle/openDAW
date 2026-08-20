@@ -1844,6 +1844,126 @@ fn build_param_track_resolves_the_full_field_path_at_any_depth() {
 }
 
 #[test]
+fn a_suspended_lane_reads_the_parameter_field_and_the_curve_returns_after_the_transport_stops() {
+    // #347: a hand on the knob (or a CC) bypasses that parameter's automation WHOLE for as long as the
+    // transport runs, so the manual value is heard at once instead of fighting the curve. Cleared on
+    // pause / stop / stopRecording, so the next PLAY reads the curve again.
+    let path = [5u16];
+    let mut graph = deep_automation_graph(&path);
+    let (curve, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
+    let handle = crate::param_automation::ParamHandle {
+        id: 0,
+        field: Rc::new(core::cell::Cell::new(0.2)),
+        kind: abi::PARAM_KIND_FLOAT,
+        track: curve,
+        modulation: None,
+        last: Rc::new(core::cell::Cell::new(f32::NAN)),
+        last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
+        held: Rc::new(core::cell::Cell::new((f32::NAN, crate::param_automation::HELD_NONE))),
+        broadcast: None
+    };
+    assert_eq!(handle.resolve(0.0).0, 0.7, "the curve rules while no hand is on the parameter");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.push(TRACK);
+    let (value, kind, _) = handle.resolve(0.0);
+    assert_eq!(value, 0.2, "the suspended lane reads the parameter's own field");
+    assert_eq!(kind, abi::PARAM_KIND_FLOAT, "and reports the field's kind, not a unit value");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
+    assert_eq!(handle.resolve(0.0).0, 0.7, "and the curve is back on the next run");
+}
+
+// A suspended lane bypasses the CURVE only. Modulation is summed beside it and must keep moving, else a hand
+// on an automated + modulated parameter would freeze its modulators too.
+#[test]
+fn a_suspended_lane_still_receives_its_modulation() {
+    use crate::modulation::{BoundModulation, MacroState, ModulationChain, ModulatorKind, ModulatorState};
+    let path = [5u16];
+    let mut graph = deep_automation_graph(&path);
+    let (curve, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
+    let state = Rc::new(ModulatorState {
+        enabled: core::cell::Cell::new(true), bipolar: core::cell::Cell::new(false),
+        amount: core::cell::Cell::new(1.0), kind: ModulatorKind::Macro(MacroState::new()),
+        broadcast: RefCell::new(None), broadcast_active: Rc::new(core::cell::Cell::new(false))
+    });
+    let chain: ModulationChain = Rc::from(alloc::vec![BoundModulation {
+        modulator: state, depth: Rc::new(core::cell::Cell::new(0.5)),
+        depth_handle: None, enabled: Rc::new(core::cell::Cell::new(true))
+    }]);
+    let handle = crate::param_automation::ParamHandle {
+        id: 0, field: Rc::new(core::cell::Cell::new(0.2)), kind: abi::PARAM_KIND_FLOAT, track: curve,
+        modulation: Some(chain), last: Rc::new(core::cell::Cell::new(f32::NAN)),
+        last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
+        held: Rc::new(core::cell::Cell::new((f32::NAN, crate::param_automation::HELD_NONE))),
+        broadcast: None
+    };
+    let (_, _, playing) = handle.resolve(0.0);
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.push(TRACK);
+    let (value, _, suspended) = handle.resolve(0.0);
+    assert_eq!(value, 0.2, "the curve is bypassed");
+    assert!(!suspended.is_nan(), "the modulation still contributes");
+    assert_eq!(suspended, playing, "and contributes exactly as much as before");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
+}
+
+// The UI reads `[0]` of the broadcast slot as the automated value, NaN meaning "no curve applies, show the
+// storage value". A suspended lane must publish NaN, else the knob would sit at a frozen automated value while
+// the sound follows the hand.
+#[test]
+fn a_suspended_lane_publishes_no_automated_value_to_the_ui() {
+    let path = [5u16];
+    let mut graph = deep_automation_graph(&path);
+    let (curve, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
+    let slot = engine_env::telemetry::broadcast_slot(2);
+    let handle = crate::param_automation::ParamHandle {
+        id: 0, field: Rc::new(core::cell::Cell::new(0.2)), kind: abi::PARAM_KIND_FLOAT, track: curve,
+        modulation: None, last: Rc::new(core::cell::Cell::new(f32::NAN)),
+        last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
+        held: Rc::new(core::cell::Cell::new((f32::NAN, crate::param_automation::HELD_NONE))),
+        broadcast: Some(slot.clone())
+    };
+    handle.resolve(0.0);
+    assert_eq!(slot.borrow()[0], 0.7, "the curve's value reaches the knob while the curve rules");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.push(TRACK);
+    handle.resolve(0.0);
+    assert!(slot.borrow()[0].is_nan(), "a suspended lane sends the knob back to its storage value");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
+    handle.resolve(0.0);
+    assert_eq!(slot.borrow()[0], 0.7, "and the automated value returns with the curve");
+}
+
+// The parameter binding is rebuilt on every automation edit, which is constant while recording. The
+// suspension is keyed by lane uuid in its own cell precisely so a rebind cannot drop it.
+#[test]
+fn a_rebound_parameter_stays_under_manual_control() {
+    let path = [5u16];
+    let mut graph = deep_automation_graph(&path);
+    let (curve, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.push(TRACK);
+    assert!(curve.expect("curve").is_suspended());
+    let (rebound, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
+    assert!(rebound.expect("rebound curve").is_suspended(), "the fresh binding is still under the hand");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
+}
+
+// The suspension must never outlive the run that created it. These are the same three exits that clear the
+// ignored note regions, and a fourth exit added without clearing would strand a parameter under manual control.
+#[test]
+fn every_transport_exit_drops_the_manual_control() {
+    let mut engine = engine_with_devices();
+    let suspend = || unsafe { crate::SUSPENDED_AUTOMATION.get() }.push(TRACK);
+    let suspended = || !unsafe { crate::SUSPENDED_AUTOMATION.get() }.is_empty();
+    suspend();
+    engine.pause();
+    assert!(!suspended(), "pause drops it");
+    suspend();
+    engine.stop();
+    assert!(!suspended(), "stop drops it");
+    suspend();
+    engine.is_recording = true;
+    engine.stop_recording();
+    assert!(!suspended(), "ending a recording drops it");
+}
+
+#[test]
 fn build_param_track_resolves_only_the_targeting_track_among_unrelated_ones() {
     // Two automation chains on ONE device at DIFFERENT parameter paths. The targeted (incoming-pointer)
     // lookup must resolve each parameter to its OWN track and ONLY that track's value regions — never the

@@ -27,6 +27,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {BoxVisitor, ModulationBox, TrackBox} from "@opendaw/studio-boxes"
 import {TrackBoxAdapter} from "./timeline/TrackBoxAdapter"
 import {ParameterTracks} from "./timeline/ParameterTracks"
+import {ParameterOwner} from "./ParameterOwner"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 
 const ExternalControlTypes = [
@@ -169,11 +170,14 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     registerTracks(tracks: ParameterTracks): Terminable {
         return this.#context.parameterFieldAdapters.registerTracks(this.address, tracks)
     }
-    touchStart(): void {
-        this.#context.parameterFieldAdapters.touchStart(this.address)
-        this.#context.parameterFieldAdapters.notifyWrite(this, this.getUnitValue())
+
+    /// Where this parameter's automation lanes live. A modulator registers itself as the owner, everything else
+    /// falls back to the audio unit the parameter belongs to, so a lane resolves with no editor mounted.
+    optTracks(): Option<ParameterTracks> {
+        const registered = this.#context.parameterFieldAdapters.getTracks(this.address)
+        if (registered.nonEmpty()) {return registered}
+        return ParameterOwner.audioUnitOf(this.#context, this.#field).map(adapter => adapter.tracks)
     }
-    touchEnd(): void {this.#context.parameterFieldAdapters.touchEnd(this.address)}
 
     updateMappings(valueMapping: ValueMapping<T>, stringMapping: StringMapping<T>): void {
         this.#valueMapping = valueMapping

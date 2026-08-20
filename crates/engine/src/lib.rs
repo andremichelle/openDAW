@@ -612,6 +612,13 @@ shared_static! {
 shared_static! {
     pub(crate) static IGNORED_REGIONS: Vec<[u8; 16]> = Vec::new();
 }
+// Automation lanes under MANUAL control (TS `EngineCommands.suspendAutomation`, issue #347): turning a knob or
+// sending a CC bypasses that parameter's curve for as long as the transport runs, so the hand wins over the
+// automation instead of fighting it. The lane is 1:1 with the parameter. Modulation keeps applying. Cleared on
+// pause / stop / stopRecording, so the next PLAY reads the curve again.
+shared_static! {
+    pub(crate) static SUSPENDED_AUTOMATION: Vec<[u8; 16]> = Vec::new();
+}
 // EFFECTS-monitoring staging (its own cells, read re-entrantly by MonitorMix nodes during render): the
 // worklet writes the live input channels into MONITOR_INPUT before each render and reads each mapped
 // unit's strip output back from MONITOR_OUTPUT after it (forwarded on the worklet's second output).
@@ -1637,6 +1644,7 @@ impl Engine {
         self.apply_metronome();
         self.transport.stop(false);
         unsafe { IGNORED_REGIONS.get() }.clear();
+        unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         self.schedule_midi_transport(midi_output::stop_message()); // TS `#stopRecording` schedules Stop
     }
 
@@ -1647,6 +1655,7 @@ impl Engine {
         self.is_counting_in = false;
         self.apply_metronome();
         unsafe { IGNORED_REGIONS.get() }.clear();
+        unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         // TS `#stop` schedules ONE MidiData.Stop per stop command; the worklet's stop command always runs
         // `pause()` (a hard reset calls `stop()` after it, which deliberately schedules nothing more).
         self.schedule_midi_transport(midi_output::stop_message());
@@ -1661,6 +1670,7 @@ impl Engine {
         self.is_counting_in = false;
         self.apply_metronome();
         unsafe { IGNORED_REGIONS.get() }.clear();
+        unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         self.transport.stop(true);
         self.transport.reset_marker_state(); // TS `#reset` -> `renderer.reset()` forgets the active marker (silently)
         self.clip_sequencer.borrow_mut().reset();
@@ -2685,6 +2695,19 @@ pub extern "C" fn ignore_note_region() {
     let ignored = unsafe { IGNORED_REGIONS.get() };
     if !ignored.contains(&uuid) {
         ignored.push(uuid);
+    }
+}
+
+/// Put an automation lane under MANUAL control (TS `EngineCommands.suspendAutomation`, issue #347): its
+/// parameter reads its own field value until the transport stops, so a knob or a CC is heard at once instead
+/// of fighting the curve. The 16-byte lane uuid is written into the input scratch first.
+#[no_mangle]
+pub extern "C" fn suspend_automation() {
+    let mut uuid = [0u8; 16];
+    uuid.copy_from_slice(unsafe { core::slice::from_raw_parts(INPUT.get().as_ptr(), 16) });
+    let suspended = unsafe { SUSPENDED_AUTOMATION.get() };
+    if !suspended.contains(&uuid) {
+        suspended.push(uuid);
     }
 }
 

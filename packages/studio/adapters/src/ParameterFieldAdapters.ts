@@ -14,16 +14,12 @@ export class ParameterFieldAdapters {
     readonly #set: SortedSet<Address, AutomatableParameterFieldAdapter>
     readonly #writeNotifier: Notifier<ParameterWriteEvent>
     readonly #tracksMap: Map<string, ParameterTracks>
-    readonly #touchedSet: Set<string>
-    readonly #touchEndNotifier: Notifier<Address>
     readonly #modeMap: Map<string, AutomationMode>
 
     constructor() {
         this.#set = Address.newSet<AutomatableParameterFieldAdapter>(adapter => adapter.field.address)
         this.#writeNotifier = new Notifier<ParameterWriteEvent>()
         this.#tracksMap = new Map()
-        this.#touchedSet = new Set()
-        this.#touchEndNotifier = new Notifier<Address>()
         this.#modeMap = new Map()
     }
 
@@ -47,14 +43,6 @@ export class ParameterFieldAdapters {
 
     setMode(address: Address, mode: AutomationMode): void {this.#modeMap.set(address.toString(), mode)}
     getMode(address: Address): AutomationMode {return this.#modeMap.get(address.toString()) ?? "read"}
-
-    touchStart(address: Address): void {this.#touchedSet.add(address.toString())}
-    touchEnd(address: Address): void {
-        const key = address.toString()
-        if (this.#touchedSet.delete(key)) {this.#touchEndNotifier.notify(address)}
-    }
-    isTouched(address: Address): boolean {return this.#touchedSet.has(address.toString())}
-    subscribeTouchEnd(observer: Observer<Address>): Subscription {return this.#touchEndNotifier.subscribe(observer)}
 
     subscribeWrites(observer: Observer<ParameterWriteEvent>): Subscription {
         return this.#writeNotifier.subscribe(observer)

@@ -32,23 +32,23 @@ export namespace RecordAutomation {
 
     type RecorderContext = {
         project: Project
-        parameterFieldAdapters: ParameterFieldAdapters
     }
 
     const findOrCreateTrack = (
-        {project, parameterFieldAdapters}: RecorderContext,
+        {project}: RecorderContext,
         adapter: AutomatableParameterFieldAdapter
     ): Option<TrackBoxAdapter> => {
-        const tracksOpt = parameterFieldAdapters.getTracks(adapter.address)
+        const tracksOpt = adapter.optTracks()
         if (tracksOpt.isEmpty()) {
-            console.warn(`Cannot record automation: no tracks registered for '${adapter.name}' (${adapter.address})`)
+            console.warn(`Cannot record automation: no lane owner for '${adapter.name}' (${adapter.address})`)
             return Option.None
         }
         const tracks = tracksOpt.unwrap()
         const existing = tracks.controls(adapter.field)
         if (existing.nonEmpty()) {return existing}
-        tracks.create(TrackType.Value, adapter.field)
-        return tracks.controls(adapter.field)
+        // The new lane only joins its collection on commit, so take the adapter straight from the box.
+        return Option.wrap(project.boxAdapters
+            .adapterFor(tracks.create(TrackType.Value, adapter.field), TrackBoxAdapter))
     }
 
     const createRegion = (
@@ -257,13 +257,14 @@ export namespace RecordAutomation {
 
     export const start = (project: Project): Terminable => {
         const {editing, engine, parameterFieldAdapters, timelineBox} = project
-        const ctx: RecorderContext = {project, parameterFieldAdapters}
+        const ctx: RecorderContext = {project}
         const activeRecordings: SortedSet<Address, RecordingState> =
             Address.newSet<RecordingState>(state => state.adapter.address)
         let lastPosition: ppqn = engine.position.getValue()
+        // Latch: any write while recording opens the take, and only the transport (or a loop wrap) ever closes
+        // it. The producer stays out of it, so a knob, a MIDI controller and a checkbox all record alike.
         const handleWrite = ({adapter, previousUnitValue}: ParameterWriteEvent): void => {
             if (!engine.isRecording.getValue()) {return}
-            if (!parameterFieldAdapters.isTouched(adapter.address)) {return}
             const position = engine.position.getValue()
             const value = adapter.getUnitValue()
             const existingState = activeRecordings.opt(adapter.address)
@@ -280,14 +281,6 @@ export namespace RecordAutomation {
             } else {
                 editing.modify(() => handleWriteUpdate(project, existingState.unwrap(), position, value), false)
             }
-        }
-        const handleTouchEnd = (address: Address): void => {
-            const stateOpt = activeRecordings.opt(address)
-            if (stateOpt.isEmpty()) {return}
-            editing.modify(() => {
-                finalizeState(project, stateOpt.unwrap(), engine.position.getValue())
-                activeRecordings.removeByKey(address)
-            })
         }
         const handlePosition = (): void => {
             if (!engine.isRecording.getValue()) {return}
@@ -314,7 +307,6 @@ export namespace RecordAutomation {
         return Terminable.many(
             parameterFieldAdapters.subscribeWrites(handleWrite),
             engine.position.subscribe(handlePosition),
-            parameterFieldAdapters.subscribeTouchEnd(handleTouchEnd),
             Terminable.create(handleTermination))
     }
 

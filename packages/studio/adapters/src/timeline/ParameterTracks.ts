@@ -10,7 +10,7 @@ import {TrackType} from "./TrackType"
 /// What a parameter needs from whatever owns its automation lanes. An audio unit is one owner, a modulator
 /// is another, and neither is visible to the parameter itself.
 export interface ParameterTracks extends Terminable {
-    create(type: TrackType, target: Vertex<Pointers.Automation | Pointers>, index?: int): void
+    create(type: TrackType, target: Vertex<Pointers.Automation | Pointers>, index?: int): TrackBox
     controls(target: Vertex<Pointers.Automation | Pointers>): Option<TrackBoxAdapter>
     delete(adapter: TrackBoxAdapter): void
     values(): ReadonlyArray<TrackBoxAdapter>
@@ -44,8 +44,8 @@ export class FieldParameterTracks implements ParameterTracks {
         })
     }
 
-    create(type: TrackType, target: Vertex<Pointers.Automation | Pointers>, index?: int): void {
-        TrackBox.create(this.#graph, UUID.generate(), box => {
+    create(type: TrackType, target: Vertex<Pointers.Automation | Pointers>, index?: int): TrackBox {
+        return TrackBox.create(this.#graph, UUID.generate(), box => {
             box.index.setValue(index ?? this.#collection.getMinFreeIndex())
             box.type.setValue(type)
             box.tracks.refer(this.#field)

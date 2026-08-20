@@ -3,7 +3,7 @@ import {asDefined, ControlSource, Editing, Lifecycle, Terminable} from "@opendaw
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
 import {AudioUnitTracks, AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
-import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
+import {AnimationFrame, Html} from "@opendaw/lib-dom"
 import {MIDILearning} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "AutomationControl")
@@ -100,18 +100,6 @@ export const AutomationControl = (
     const element: HTMLElement = (<div className={className}>{children}</div>)
     const target = asDefined(element.firstElementChild, "firstElementChild not defined")
     installControlSourceIndicator(lifecycle, parameter, element, target, indicatorOffset)
-    lifecycle.ownAll(
-        attachParameterContextMenu(editing, midiLearning, tracks, parameter, target, disableAutomation),
-        parameter.registerTracks(tracks),
-        ...(disableAutomation === true ? [] : [
-            Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-                if (event.buttons !== 1) {return}
-                console.debug("touchStart")
-                parameter.touchStart()
-            }, {capture: true}),
-            Events.subscribe(element, "pointerup", () => parameter.touchEnd(), {capture: true}),
-            Events.subscribe(element, "pointercancel", () => parameter.touchEnd(), {capture: true})
-        ])
-    )
+    lifecycle.own(attachParameterContextMenu(editing, midiLearning, tracks, parameter, target, disableAutomation))
     return element
 }

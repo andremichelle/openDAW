@@ -136,6 +136,7 @@ export class OfflineEngineRenderer {
                 panic(): void { dispatcher.dispatchAndForget(this.panic) }
                 noteSignal(signal: NoteSignal): void { dispatcher.dispatchAndForget(this.noteSignal, signal) }
                 ignoreNoteRegion(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.ignoreNoteRegion, uuid) }
+                suspendAutomation(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.suspendAutomation, uuid) }
                 scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void { dispatcher.dispatchAndForget(this.scheduleClipPlay, clipIds) }
                 scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void { dispatcher.dispatchAndForget(this.scheduleClipStop, trackIds) }
                 setupMIDI(port: MessagePort, buffer: SharedArrayBuffer): void { dispatcher.dispatchAndForget(this.setupMIDI, port, buffer) }

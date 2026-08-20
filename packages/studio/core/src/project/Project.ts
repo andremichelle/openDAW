@@ -90,6 +90,7 @@ import {StudioPreferences} from "../StudioPreferences"
 import {RegionOverlapResolver, TimelineFocus} from "../ui"
 import {SampleStorage} from "../samples"
 import {AudioUnitFreeze} from "../AudioUnitFreeze"
+import {AutomationSuspension} from "./AutomationSuspension"
 
 export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }
 
@@ -240,6 +241,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
         this.audioUnitFreeze = this.#terminator.own(new AudioUnitFreeze(this))
+        this.#terminator.own(AutomationSuspension.start(this))
 
         console.debug(`Project was created on ${this.rootBoxAdapter.created.toString()}`)
 
