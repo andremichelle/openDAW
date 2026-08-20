@@ -179,8 +179,7 @@ describe("modulator actions", () => {
             const cutoff = project.parameterFieldAdapters.get(device.cutoff.address)
             project.editing.modify(() => Modulators.assign(project, boxes[0], cutoff.modulationTarget))
             const assignment = project.boxAdapters
-                .adapterFor(project.boxGraph.findBox(boxes[0].address.uuid).unwrap("no modulator")
-                    .assignments.pointerHub.incoming()[0].box, ModulationBoxAdapter)
+                .adapterFor(boxes[0].assignments.pointerHub.incoming()[0].box, ModulationBoxAdapter)
             const seen: Array<string> = []
             const subscription = assignment.catchupAndSubscribeTargetOwner(name => seen.push(name))
             expect(seen).toEqual(["Vaporisateur"])

@@ -17,7 +17,7 @@ component
     grid-auto-rows: 1.5em
     align-content: start
     align-items: center
-    column-gap: 0.5em
+    column-gap: 1px
     padding: 0.25em
 
     > .placeholder
@@ -30,8 +30,6 @@ component
     > .entry
       display: contents
 
-      // Both halves shrink when the row is too narrow, so a long device name never squeezes the parameter
-      // name out of the row: each keeps a few characters and an ellipsis.
       > .target
         display: grid
         grid-template-columns: minmax(0, max-content) minmax(0, max-content)
@@ -40,7 +38,7 @@ component
         overflow: hidden
         white-space: nowrap
         font-size: 0.8em
-        color: var(--color-bright)
+        color: var(--color-dark)
 
         > .owner, > .parameter
           min-width: 0
@@ -54,7 +52,7 @@ component
             color: var(--color-blue)
 
         > .parameter
-          color: var(--color-dark)
+          color: var(--color-shadow)
 
       label
         font-size: 10px

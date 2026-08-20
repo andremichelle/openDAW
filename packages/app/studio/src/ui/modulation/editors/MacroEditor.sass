@@ -11,7 +11,7 @@ component
       --fill-size: 0
       position: relative
       height: 2.1875em
-      border-radius: 6px
+      border-radius: 3px
       outline: 0.5px solid hsla(200, 40%, 70%, 0.08)
       outline-offset: -1px
       overflow: hidden
@@ -22,9 +22,9 @@ component
         bottom: 4px
         left: calc(4px + (100% - 8px) * var(--fill-start))
         width: calc((100% - 8px) * var(--fill-size))
-        border-radius: 3px
-        background: linear-gradient(to right, hsla(200, 83%, 60%, 0.15), hsla(200, 83%, 60%, 0.45))
-        box-shadow: 0 0 4px 0 hsla(200, 83%, 60%, 0.04) inset
+        border-radius: 1px
+        background-color: var(--color-blue)
+        opacity: 0.5
 
       > .track
         position: absolute
@@ -32,8 +32,8 @@ component
         bottom: 4px
         left: 4px
         right: 4px
-        border-radius: 3px
-        background: hsla(200, 83%, 60%, 0.04)
+        border-radius: 1px
+        background-color: rgba(white, 0.04)
 
       > .print
         position: absolute
@@ -42,6 +42,6 @@ component
         place-items: center
         font-size: 0.75em
         letter-spacing: 0.05em
-        color: var(--color-bright)
-        opacity: 0.5
+        color: white
+        opacity: 0.6
         pointer-events: none

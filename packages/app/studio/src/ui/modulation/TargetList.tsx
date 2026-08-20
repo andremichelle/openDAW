@@ -38,7 +38,6 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
             const {depth} = assignment.namedParameter
             const depthLabel: HTMLElement = (<ParameterLabel lifecycle={rows} parameter={depth} framed={true}/>)
             rows.own(attachModulatorParameterContextMenu(editing, midiLearning, depth, depthLabel))
-            // The label clips its own overflow, so the ring hangs off the entries container instead.
             installControlSourceIndicator(rows, depth, entries, depthLabel, 2)
             entries.append(<div className="entry"
                  onInit={element => rows.own(assignment.box.enabled
@@ -46,7 +45,6 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
                          element.classList.toggle("disabled", !owner.getValue())))}>
                 <span className="target">
                     <span className="owner" onInit={element => rows.ownAll(
-                        // The owner is the device's label, which the user can rename at any time.
                         assignment.catchupAndSubscribeTargetOwner(name => element.textContent = name),
                         Events.subscribe(element, "click", () =>
                             assignment.targetAudioUnit.ifSome(unit =>
