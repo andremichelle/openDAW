@@ -193,9 +193,9 @@ pub fn apply_slot(par: &mut crate::Params, slot: usize, value: ParamValue) {
     match slot {
             // Four of the five acid knobs are `ValueMapping.unipolar()` in the adapter, which is exactly
             // the 0..1 the model's params already are, so they pass straight through. Resonance does not.
-            param::CUTOFF => par.cutoff = unit(value) * 0.99,
+            param::CUTOFF => par.cutoff = unit(value)/*  * 0.99 */,
             // Resonance is driven 1.5x past the knob, so the ladder rings harder than the reference does.
-            param::RESONANCE => par.resonance = unit(value) * 1.04,
+            param::RESONANCE => par.resonance = unit(value)/*  * 1.04 */,
             param::ENV_MOD => par.envmod = unit(value),
             param::DECAY => par.decay = unit(value),
             param::ACCENT => par.accent = unit(value),
