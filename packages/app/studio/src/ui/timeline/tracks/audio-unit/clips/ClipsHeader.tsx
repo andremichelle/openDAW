@@ -6,6 +6,7 @@ import {Icon} from "@/ui/components/Icon.tsx"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {deferNextFrame, Dragging, Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
+import {clampClipCount} from "@/ui/timeline/tracks/audio-unit/clips/constants.ts"
 
 const className = Html.adoptStyleSheet(css, "ClipsHeader")
 
@@ -28,6 +29,11 @@ export const ClipsHeader = ({lifecycle, service}: Construct) => {
     const {engine, rootBoxAdapter} = project
     const clips = timeline.clips
     const cells: Array<Cell> = []
+    const minimumClipCount = () => rootBoxAdapter.audioUnits.adapters()
+        .reduce((unitCount, unit) => unit.tracks.values()
+            .reduce((trackCount, track) => track.clips.collection.adapters()
+                .reduce((clipCount, clip) => Math.max(clipCount, clip.indexField.getValue() + 1), trackCount),
+            unitCount), 1)
     const {request: requestRebuild} = deferNextFrame(() => {
         const count = clips.count.getValue()
         for (let index = cells.length; index < count; index++) {
@@ -92,15 +98,24 @@ export const ClipsHeader = ({lifecycle, service}: Construct) => {
             }
         }),
         Dragging.attach(resizer, ({clientX: beginPosition}) => {
-            const beginValue = clips.count.getValue()
+            const beginCount = clips.count.getValue()
+            const beginVisible = clips.visible.getValue()
+            const minimumCount = minimumClipCount()
             const cellSize = parseInt(window.getComputedStyle(element).getPropertyValue("--clips-width")) + 1 // gaps
             return Option.wrap({
                 update: ({clientX: newPosition}) => {
-                    const newValue = Math.max(0, beginValue + Math.round((newPosition - beginPosition) / cellSize))
-                    clips.count.setValue(Math.max(1, newValue))
-                    clips.visible.setValue(newValue > 0)
+                    const newValue = Math.max(0, beginCount + Math.round((newPosition - beginPosition) / cellSize))
+                    if (newValue === 0) {
+                        clips.visible.setValue(false)
+                        return
+                    }
+                    clips.count.setValue(clampClipCount(newValue, minimumCount))
+                    clips.visible.setValue(true)
                 },
-                cancel: () => {}
+                cancel: () => {
+                    clips.count.setValue(beginCount)
+                    clips.visible.setValue(beginVisible)
+                }
             } satisfies Dragging.Process)
         })
     )
