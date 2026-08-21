@@ -98,12 +98,13 @@ export const ClipsHeader = ({lifecycle, service}: Construct) => {
             }
         }),
         Dragging.attach(resizer, ({clientX: beginPosition}) => {
-            const beginValue = clips.count.getValue()
+            const beginCount = clips.count.getValue()
+            const beginVisible = clips.visible.getValue()
             const minimumCount = minimumClipCount()
             const cellSize = parseInt(window.getComputedStyle(element).getPropertyValue("--clips-width")) + 1 // gaps
             return Option.wrap({
                 update: ({clientX: newPosition}) => {
-                    const newValue = Math.max(0, beginValue + Math.round((newPosition - beginPosition) / cellSize))
+                    const newValue = Math.max(0, beginCount + Math.round((newPosition - beginPosition) / cellSize))
                     if (newValue === 0) {
                         clips.visible.setValue(false)
                         return
@@ -111,7 +112,10 @@ export const ClipsHeader = ({lifecycle, service}: Construct) => {
                     clips.count.setValue(clampClipCount(newValue, minimumCount))
                     clips.visible.setValue(true)
                 },
-                cancel: () => {}
+                cancel: () => {
+                    clips.count.setValue(beginCount)
+                    clips.visible.setValue(beginVisible)
+                }
             } satisfies Dragging.Process)
         })
     )
