@@ -15,7 +15,11 @@ const IgnoredErrors = [
     "getDictionariesByLanguageId",
     "Script error."
 ]
-const BrowserInternalPatterns = ["feature named", "window.__firefox__"]
+// Errors thrown by the browser itself, never by page code. "Permission denied to access <x>" is Gecko's
+// cross-compartment security wrapper: we have no iframes and never await a cross-origin window, so the
+// awaited object was handed to us from outside the page (extension content script / hardening shim).
+const BrowserInternalPatterns = ["feature named", "window.__firefox__",
+    "Permission denied to access property", "Permission denied to access object"]
 const MonacoPatterns = ["monaco-editor", "vs/base/common/errors", "editor.main", "editor.worker"]
 // A lazily-loaded chunk could not be fetched (transient network / CDN / deploy hiccup), not a logic bug.
 // Cross-browser variants: Chrome/Edge, Firefox, Safari.
@@ -39,6 +43,7 @@ export class ErrorHandler {
     #errorThrown: boolean = false
     #rejectionReported: boolean = false
     #chunkLoadDialogOpen: boolean = false
+    #browserInternalNotified: boolean = false
 
     constructor(buildInfo: BuildInfo, recover: Provider<Option<Provider<Promise<void>>>>) {
         this.#buildInfo = buildInfo
@@ -99,6 +104,18 @@ export class ErrorHandler {
         }).finally(() => {this.#chunkLoadDialogOpen = false})
     }
 
+    // The browser (or something injected into the page) threw, not openDAW, so the session continues. Tell the
+    // user once per session: a shimmed API can throw on every call, and stacking dialogs would be worse.
+    #notifyBrowserInternal(message: string): void {
+        console.warn(`Browser internal error ignored: ${message}`)
+        if (this.#browserInternalNotified || !Surface.isAvailable()) {return}
+        this.#browserInternalNotified = true
+        Dialogs.info({
+            headline: "Warning",
+            message: "Your browser or one of its extensions blocked an operation openDAW relies on. Consider disabling extensions or strict privacy settings for a more stable experience."
+        }).then(EmptyExec)
+    }
+
     #tryIgnore(event: Event): boolean {
         if (event instanceof ErrorEvent && IgnoredErrors.includes(event.message)) {
             console.warn(event.message)
@@ -109,6 +126,15 @@ export class ErrorHandler {
             && ThirdPartyAppPatterns.some(pattern => event.message.includes(pattern))) {
             console.warn(`Third-party app error ignored: ${event.message}`)
             event.preventDefault()
+            return true
+        }
+        // Such an error carries no stack, so neither #looksLikeExtension nor #extractForeignOrigin can flag it
+        // as foreign and it would reach the fatal path (#1105/#1106).
+        if (event instanceof ErrorEvent
+            && BrowserInternalPatterns.some(pattern => event.message.includes(pattern)
+                || (event.error instanceof Error && event.error.message.includes(pattern)))) {
+            event.preventDefault()
+            this.#notifyBrowserInternal(event.message)
             return true
         }
         // Handle Monaco editor errors from error events
@@ -210,10 +236,10 @@ export class ErrorHandler {
             return true
         }
         // Handle browser-internal errors (e.g., DuckDuckGo feature detection)
-        if (reason instanceof Error
-            && BrowserInternalPatterns.some(pattern => reason.message.includes(pattern))) {
-            console.debug(`Browser internal error: ${reason.message}`)
+        if (isDefined(reasonMessage)
+            && BrowserInternalPatterns.some(pattern => reasonMessage.includes(pattern))) {
             event.preventDefault()
+            this.#notifyBrowserInternal(reasonMessage)
             return true
         }
         return false
