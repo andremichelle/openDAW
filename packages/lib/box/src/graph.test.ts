@@ -1,10 +1,10 @@
-import {Maybe, safeExecute, UUID} from "@opendaw/lib-std"
+import {Maybe, Option, safeExecute, UUID} from "@opendaw/lib-std"
 import {Field} from "./field"
 import {NoPointers, VertexVisitor} from "./vertex"
 import {Box, BoxConstruct, ResourceType} from "./box"
 import {PointerField} from "./pointer"
 import {BoxGraph} from "./graph"
-import {describe, expect, it} from "vitest"
+import {describe, expect, it, vi} from "vitest"
 
 enum PointerType {
     Node = "Node",
@@ -689,6 +689,75 @@ describe("dependenciesOf", () => {
         const {boxes} = graph.dependenciesOf(A)
         expect([...boxes]).toContain(B)
         expect([...boxes]).toContain(C)
+    })
+})
+
+// A Yjs merge converges the document but not the graph's referential invariants: a peer deleting a box while
+// another concurrently points at it leaves an edge naming a uuid no box occupies. The write API cannot
+// produce that state on purpose — refer() demands a live vertex, and unstageBox refuses a box that still has
+// incoming edges — so these stage the target, unstage it while it is still edge-free, then assign the raw
+// address through the public targetAddress setter, which is the shape deserialization delivers.
+describe("dependenciesOf with dangling pointers", () => {
+    const withDanglingRef = (graph: BoxGraph): NodeBox => {
+        const box = NodeBox.create(graph, UUID.generate())
+        const gone = NodeBox.create(graph, UUID.generate())
+        graph.unstageBox(gone)
+        box.ref.targetAddress = Option.wrap(gone.address)
+        return box
+    }
+
+    it("does not throw on a dangling non-mandatory pointer, and still records it", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const box = withDanglingRef(graph)
+        graph.endTransaction()
+
+        const {boxes, pointers} = graph.dependenciesOf(box)
+        expect(pointers).toContain(box.ref)
+        expect([...boxes]).toEqual([])
+    })
+
+    it("does not follow a dangling mandatory pointer", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const parent = ParentBox.create(graph, UUID.generate())
+        const child = ChildBox.create(graph, UUID.generate())
+        graph.unstageBox(parent)
+        child.owner.targetAddress = Option.wrap(parent.hook.address)
+        graph.endTransaction()
+
+        const {boxes, pointers} = graph.dependenciesOf(child)
+        expect(pointers).toContain(child.owner)
+        expect([...boxes]).toEqual([])
+    })
+
+    // The regression that pins the pointer being recorded BEFORE the target is resolved: Box.delete only
+    // defers pointers dependenciesOf handed back, and unstage rejects a box that still owns a live edge.
+    it("deletes a box whose outgoing pointer dangles", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const box = withDanglingRef(graph)
+        graph.endTransaction()
+
+        graph.beginTransaction()
+        box.delete()
+        graph.endTransaction()
+
+        expect(graph.findBox(box.address.uuid).isEmpty()).toBe(true)
+    })
+
+    it("warns once per dangling pointer instead of panicking", () => {
+        const graph = new BoxGraph()
+        graph.beginTransaction()
+        const box = withDanglingRef(graph)
+        graph.endTransaction()
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+
+        graph.dependenciesOf(box)
+
+        expect(warn).toHaveBeenCalledTimes(1)
+        expect(warn.mock.calls[0][0]).toContain("dangling")
+        warn.mockRestore()
     })
 })
 
