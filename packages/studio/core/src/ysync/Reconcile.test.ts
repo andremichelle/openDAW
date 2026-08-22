@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest"
-import {BoxGraph} from "@opendaw/lib-box"
-import {isDefined, UUID} from "@opendaw/lib-std"
-import {BoxIO, BoxVisitor, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {Address, BoxGraph} from "@opendaw/lib-box"
+import {isDefined, Option, UUID} from "@opendaw/lib-std"
+import {BoxIO, BoxVisitor, SelectionBox, ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {deterministicReconcile} from "./Reconcile"
 
 // Live error 1047: a collaborative merge produced two ValueEventBoxes at the same (position, index), which the
@@ -75,5 +75,48 @@ describe("deterministicReconcile: duplicate value events (1047)", () => {
         addEvent(boxGraph, collection, 15360, 0)
         expect(reconcile(boxGraph)).toBe(true)
         expect(keys(collection)).toEqual([{position: 15360, index: 0}, {position: 15360, index: 1}])
+    })
+})
+
+// The `target` role from the field reports: a peer deleted the selected box while another peer still held a
+// SelectionBox aimed at it. The merged document keeps the pointer, naming a uuid no box occupies.
+describe("deterministicReconcile: dangling pointers", () => {
+    const danglingSelection = (boxGraph: BoxGraph<BoxIO.TypeMap>): SelectionBox => {
+        const box = SelectionBox.create(boxGraph, UUID.generate())
+        box.selectable.targetAddress = Option.wrap(Address.compose(UUID.generate()))
+        box.selection.targetAddress = Option.wrap(Address.compose(UUID.generate()))
+        return box
+    }
+
+    it("drops a SelectionBox whose pointers no longer resolve", () => {
+        const boxGraph = new BoxGraph<BoxIO.TypeMap>()
+        boxGraph.beginTransaction()
+        const box = danglingSelection(boxGraph)
+        boxGraph.endTransaction()
+
+        expect(reconcile(boxGraph)).toBe(true)
+        expect(boxGraph.findBox(box.address.uuid).isEmpty()).toBe(true)
+    })
+
+    it("reaches a fixpoint: every dangling owner goes in one pass", () => {
+        const boxGraph = new BoxGraph<BoxIO.TypeMap>()
+        boxGraph.beginTransaction()
+        const first = danglingSelection(boxGraph)
+        const second = danglingSelection(boxGraph)
+        boxGraph.endTransaction()
+
+        expect(reconcile(boxGraph)).toBe(true)
+        expect(boxGraph.findBox(first.address.uuid).isEmpty()).toBe(true)
+        expect(boxGraph.findBox(second.address.uuid).isEmpty()).toBe(true)
+    })
+
+    it("is idempotent: a healed graph needs no further repair", () => {
+        const boxGraph = new BoxGraph<BoxIO.TypeMap>()
+        boxGraph.beginTransaction()
+        danglingSelection(boxGraph)
+        boxGraph.endTransaction()
+
+        reconcile(boxGraph)
+        expect(reconcile(boxGraph)).toBe(false)
     })
 })
