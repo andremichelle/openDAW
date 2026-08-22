@@ -29,6 +29,7 @@ import {
     migrateAudioRegionOverlaps,
     migrateAudioUnitBox,
     migrateCaptureTrackMismatch,
+    migrateDanglingPointers,
     migrateDefaultLabels,
     migrateDelayDeviceBox,
     migrateMIDIOutputDeviceBox,
@@ -76,6 +77,10 @@ export class ProjectMigration {
             })
             return promise
         }
+        // Clear edges naming boxes the document no longer holds before anything walks them. findOrphans is
+        // dangling-safe, but the orphan.delete() below is not the only consumer: every later pass reaches
+        // Box.delete eventually, and a project loaded outside a room never sees deterministicReconcile.
+        migrateDanglingPointers(boxGraph)
         const orphans = boxGraph.findOrphans(rootBox)
         if (orphans.length > 0) {
             console.debug("Migrate remove orphaned boxes: ", orphans.length)

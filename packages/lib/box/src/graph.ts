@@ -425,15 +425,22 @@ export class BoxGraph<BoxMap = any> {
             box.outgoingEdges()
                 .filter(([pointer]) => !pointers.has(pointer))
                 .forEach(([source, targetAddress]: [PointerField, Address]) => {
-                    const targetVertex = this.findVertex(targetAddress)
-                        .unwrap(`Could not find target of ${source.toString()}`)
+                    // A concurrent merge can leave an edge naming a box the document no longer holds. Record
+                    // the pointer regardless so Box.delete defers it (unstage rejects a box with live edges),
+                    // and skip the walk instead of panicking. Repairing it is deterministicReconcile's job.
                     pointers.add(source)
-                    if (targetVertex.pointerRules.mandatory &&
-                        (alwaysFollowMandatory || targetVertex.pointerHub.incoming()
-                            .filter(p => p.targetAddress.mapOr(address => address.equals(targetAddress), false))
-                            .every(pointer => pointers.has(pointer)))) {
-                        return trace(targetVertex.box)
-                    }
+                    this.findVertex(targetAddress).match({
+                        none: () => console.warn(
+                            `[BoxGraph] skipping dangling ${source.toString()} -> ${targetAddress.toString()}`),
+                        some: targetVertex => {
+                            if (targetVertex.pointerRules.mandatory &&
+                                (alwaysFollowMandatory || targetVertex.pointerHub.incoming()
+                                    .filter(p => p.targetAddress.mapOr(address => address.equals(targetAddress), false))
+                                    .every(pointer => pointers.has(pointer)))) {
+                                trace(targetVertex.box)
+                            }
+                        }
+                    })
                 })
             box.incomingEdges()
                 .forEach(pointer => {

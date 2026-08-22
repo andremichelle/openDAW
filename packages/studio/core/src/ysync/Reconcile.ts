@@ -1,6 +1,7 @@
 import {BoxGraph, PointerField} from "@opendaw/lib-box"
 import {UUID} from "@opendaw/lib-std"
 import {ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {danglingPointersOf, repairDanglingPointer} from "../project/migration/MigrateDanglingPointers"
 
 // Deterministic, constraint-aware reconciliation of a box graph.
 //
@@ -14,8 +15,8 @@ import {ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 // graph. The only inputs allowed are data present on every client — box uuids and field addresses — never
 // wall-clock time or message arrival order. Repairs run to a fixpoint (one repair can expose another).
 //
-// PROTOTYPE SCOPE: exclusive-target overflow (the case the collab tests show diverging). Dangling pointers
-// and mandatory-missing are cheap to add on the same skeleton; each just needs its own deterministic rule.
+// SCOPE: exclusive-target overflow (the case the collab tests show diverging), dangling pointers, and
+// duplicate value events. Mandatory-missing is cheap to add on the same skeleton; it just needs its own rule.
 
 const byUuid = (a: {address: {uuid: UUID.Bytes}}, b: {address: {uuid: UUID.Bytes}}): number =>
     UUID.toString(a.address.uuid).localeCompare(UUID.toString(b.address.uuid))
@@ -88,6 +89,16 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
                     repairedAny = true
                     break // graph mutated: restart the scan from a fresh, ordered snapshot
                 }
+            }
+            // --- Dangling pointer: the edge names a uuid the converged document no longer holds. Repair the
+            // lowest-addressed one; the fixpoint loop picks up the rest. Shared with the load-path migration
+            // so a graph healed here and one loaded fresh converge. ---
+            const dangling = danglingPointersOf(boxGraph, box).slice().sort(byAddress)
+            if (dangling.length > 0) {
+                repairDanglingPointer(dangling[0])
+                changed = true
+                repairedAny = true
+                break // graph mutated: restart the scan from a fresh, ordered snapshot
             }
             // --- Duplicate value events: collapse the collection onto (position, index) uniqueness. ---
             if (box instanceof ValueEventCollectionBox) {
