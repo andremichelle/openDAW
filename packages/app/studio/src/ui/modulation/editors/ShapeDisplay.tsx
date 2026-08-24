@@ -43,14 +43,13 @@ export const ShapeDisplay = ({lifecycle, receiver, modulator}: Construct): HTMLE
         context.clearRect(0, 0, actualWidth, actualHeight)
         const shape: LfoShape = modulator.box.shape.getValue()
         const phase = modulator.box.phase.getValue()
-        const amount = modulator.box.amount.getValue()
         const exponent = Math.pow(LfoModulatorBoxAdapter.ExponentRange, modulator.box.exponent.getValue())
         const shaped = (value: number) => Math.sign(value) * Math.pow(Math.abs(value), exponent)
         const padding = devicePixelRatio * 2
         const top = padding
         const bottom = actualHeight - padding
         const bipolar = modulator.box.bipolar.getValue()
-        const emitted = (value: number) => (bipolar ? value : value * 0.5 + 0.5) * amount
+        const emitted = (value: number) => bipolar ? value : value * 0.5 + 0.5
         const valueToY = (value: number) => bottom + (top - bottom) * (bipolar
             ? 0.5 * (emitted(value) + 1.0)
             : emitted(value))
@@ -83,7 +82,6 @@ export const ShapeDisplay = ({lifecycle, receiver, modulator}: Construct): HTMLE
     lifecycle.ownAll(
         modulator.box.shape.subscribe(painter.requestUpdate),
         modulator.box.phase.subscribe(painter.requestUpdate),
-        modulator.box.amount.subscribe(painter.requestUpdate),
         modulator.box.bipolar.subscribe(painter.requestUpdate),
         modulator.box.exponent.subscribe(painter.requestUpdate),
         receiver.subscribeFloats(modulator.address, ([position, value]) => {

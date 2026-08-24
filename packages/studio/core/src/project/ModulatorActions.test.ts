@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
-import {ModulationBoxAdapter, ModulatorBox, Modulators} from "@opendaw/studio-adapters"
+import {ModulationBoxAdapter, ModulatorBox, ModulatorBoxAdapter, Modulators, TrackType} from "@opendaw/studio-adapters"
 import {AudioUnitBox, CaptureMidiBox, VaporisateurDeviceBox} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "./ProjectEnv"
 
@@ -94,6 +94,30 @@ describe("modulator actions", () => {
             project.editing.undo()
             expect(labels(project)).toEqual(["A", "B", "C", "D"])
             expect(indices(project)).toEqual([0, 1, 2, 3])
+            project.terminate()
+        })
+    })
+
+    describe("replace", () => {
+        it("keeps the assignments and their depth automation, dropping the old kind's own lanes", async () => {
+            const {project, boxes} = await create()
+            const source = boxes[0]
+            const volume = project.parameterFieldAdapters.get(project.primaryAudioUnitBox.volume.address)
+            const assignment = project.editing.modify(() =>
+                Modulators.assign(project, source, volume.modulationTarget)).unwrap("no assignment")
+            const depth = project.boxAdapters.adapterFor(assignment, ModulationBoxAdapter).namedParameter.depth
+            const sourceAdapter = project.boxAdapters.adapterFor(source, ModulatorBoxAdapter)
+            project.editing.modify(() => {
+                sourceAdapter.tracks.create(TrackType.Value, depth.field)
+                sourceAdapter.tracks.create(TrackType.Value, sourceAdapter.amount.field)
+            })
+            expect(sourceAdapter.tracks.values().length).toBe(2)
+            const replacement = project.editing.modify(() =>
+                Modulators.replace(project, source, Modulators.Kinds[1])).unwrap("no replacement")
+            expect(volume.modulations.length).toBe(1)
+            const lanes = project.boxAdapters.adapterFor(replacement, ModulatorBoxAdapter).tracks
+            expect(lanes.values().length).toBe(1)
+            expect(lanes.controls(depth.field).nonEmpty()).toBe(true)
             project.terminate()
         })
     })

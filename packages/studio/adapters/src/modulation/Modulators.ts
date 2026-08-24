@@ -6,11 +6,12 @@ import {
     ModulationBox,
     RandomModulatorBox,
     RootBox,
-    StepsModulatorBox
+    StepsModulatorBox,
+    TrackBox
 } from "@opendaw/studio-boxes"
 import {Box, Field, PointerField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {ByteArrayInput, Func, panic, Strings, unitValue, UUID} from "@opendaw/lib-std"
+import {ByteArrayInput, Func, isInstanceOf, panic, Strings, unitValue, UUID} from "@opendaw/lib-std"
 import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {ModulatorBox} from "./ModulatorBoxAdapter"
 
@@ -46,6 +47,15 @@ export namespace Modulators {
         const replacement = kind.create(context)
         modulator.assignments.pointerHub.incoming().slice()
             .forEach((pointer: PointerField) => pointer.refer(replacement.assignments))
+        // An assignment's depth lane is parented to its SOURCE, so it would die with the old box while the
+        // assignment it belongs to survives. The old kind's own parameter lanes have no meaning in the new
+        // kind and are left to the cascade.
+        modulator.tracks.pointerHub.incoming().slice()
+            .map((pointer: PointerField) => pointer.box)
+            .filter((box: Box) => isInstanceOf(box, TrackBox))
+            .filter((track: TrackBox) => track.target.targetVertex
+                .mapOr(vertex => isInstanceOf(vertex.box, ModulationBox), false))
+            .forEach((track: TrackBox) => track.tracks.refer(replacement.tracks))
         const label = modulator.label.getValue()
         const index = modulator.index.getValue()
         const enabled = modulator.enabled.getValue()
