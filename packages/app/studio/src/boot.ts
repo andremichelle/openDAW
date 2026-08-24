@@ -15,6 +15,7 @@ import {BuildInfo} from "./BuildInfo"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {replaceChildren} from "@opendaw/lib-jsx"
 import {
+    AudioContexts,
     AudioWorklets,
     BufferUnderrunDetector,
     CloudAuthManager,
@@ -104,9 +105,13 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         return
     }
     if (context.state === "suspended") {
-        window.addEventListener("click",
-            async () => await context.resume().then(() =>
-                console.debug(`AudioContext resumed (${context.state})`)), {capture: true, once: true})
+        // Not `once`: a rejected resume (device busy, output unavailable) must stay retryable on the next click.
+        const resumeOnClick = async () => {
+            if (!await AudioContexts.resume(context)) {return}
+            console.debug(`AudioContext resumed (${context.state})`)
+            window.removeEventListener("click", resumeOnClick, {capture: true})
+        }
+        window.addEventListener("click", resumeOnClick, {capture: true})
     }
     const audioDevices = await AudioOutputDevice.create(context)
     FactoryCatalog.install({

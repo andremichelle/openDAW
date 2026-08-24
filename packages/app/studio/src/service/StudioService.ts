@@ -44,6 +44,7 @@ import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters
 import {Address} from "@opendaw/lib-box"
 import {
     AudioContentFactory,
+    AudioContexts,
     AudioMaterialAnalyzer,
     AudioWorklets,
     CloudAuthManager,
@@ -271,7 +272,7 @@ export class StudioService implements ProjectEnv {
                     console.warn(error)
                     RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                 }
-                this.audioContext.resume().then()
+                AudioContexts.resume(this.audioContext).then()
             })
     }
 
@@ -299,7 +300,7 @@ export class StudioService implements ProjectEnv {
                     console.warn(error)
                     RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
                 }
-                this.audioContext.resume().then(EmptyExec, EmptyExec)
+                AudioContexts.resume(this.audioContext).then()
             })
     }
 

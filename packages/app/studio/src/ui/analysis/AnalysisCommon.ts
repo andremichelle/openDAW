@@ -6,6 +6,9 @@ export const UNIT_COLOR_DIM = "hsl(197, 10%, 55%)" // matches --color-shadow
 export const clearBg = ({context, actualWidth, actualHeight}: CanvasPainter): void =>
     context.clearRect(0, 0, actualWidth, actualHeight)
 
+export const insetRadius = (width: number, height: number, inset: number): number =>
+    Math.max(0.0, Math.min(width, height) * 0.5 - inset)
+
 export const unitLabel = (context: CanvasRenderingContext2D, text: string, x: number, y: number,
                           align: CanvasTextAlign, baseline: CanvasTextBaseline,
                           color: string = UNIT_COLOR): void => {

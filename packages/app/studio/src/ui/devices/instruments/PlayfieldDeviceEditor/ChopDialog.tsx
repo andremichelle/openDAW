@@ -11,7 +11,7 @@ import {AudioFileBox} from "@opendaw/studio-boxes"
 import {
     ChopMath, ChopMode, ChopModel, GridDivision, GridDivisions, PlayfieldChopSlice, PlayfieldDeviceBoxAdapter
 } from "@opendaw/studio-adapters"
-import {CanvasPainter, ElementCapturing, TimelineRange, Workers} from "@opendaw/studio-core"
+import {AudioContexts, CanvasPainter, ElementCapturing, TimelineRange, Workers} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Button} from "@/ui/components/Button"
 import {Dialog} from "@/ui/components/Dialog"
@@ -174,7 +174,7 @@ const openChopDialog = (
     const activeSource = new MutableObservableOption<AudioBufferSourceNode>()
     const playSlice = (slice: PlayfieldChopSlice) => {
         activeSource.clear(source => source.stop())
-        if (audioContext.state === "suspended") {audioContext.resume()}
+        if (audioContext.state === "suspended") {AudioContexts.resume(audioContext).then()}
         const source = audioContext.createBufferSource()
         source.buffer = audioBuffer
         source.connect(audioContext.destination)

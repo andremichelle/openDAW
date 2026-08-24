@@ -6,14 +6,14 @@ import {StudioService} from "@/service/StudioService"
 import {card, radio} from "./AnalysisControls.tsx"
 import {AnalysisSettings} from "./AnalysisSettings.ts"
 import {observeProject} from "./AnalysisSource.ts"
-import {clearBg} from "./AnalysisCommon.ts"
+import {clearBg, insetRadius} from "./AnalysisCommon.ts"
 
 const drawGonio = (painter: CanvasPainter, pairs: Float32Array, mode: string): void => {
     clearBg(painter)
     const {context, actualWidth: w, actualHeight: h} = painter
     const cx = w / 2
     const cy = h / 2
-    const radius = Math.min(w, h) * 0.5 - 1.0
+    const radius = insetRadius(w, h, 1.0)
     context.strokeStyle = "rgba(255,255,255,0.1)"
     context.beginPath()
     context.arc(cx, cy, radius, 0.0, TAU)

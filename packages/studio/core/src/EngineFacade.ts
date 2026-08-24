@@ -19,6 +19,7 @@ import {
     NoteSignal,
     PreferencesFacade
 } from "@opendaw/studio-adapters"
+import {AudioContexts} from "./AudioContexts"
 import {Engine} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
 import {Project} from "./project"
@@ -75,7 +76,7 @@ export class EngineFacade implements Engine {
         this.#worklet.ifSome(worklet => {
             const context = worklet.context as AudioContext
             if (context.state === "suspended") {
-                context.resume().then(() => worklet.play())
+                AudioContexts.resume(context).then(resumed => {if (resumed) {worklet.play()}})
             } else {
                 worklet.play()
             }
