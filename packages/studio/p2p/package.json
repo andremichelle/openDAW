@@ -31,5 +31,6 @@
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",
     "@opendaw/typescript-config": "^0.0.32"
-  }
+  },
+  "gitHead": "8350421e29d38c9f31e88def06e1f2e6d174acff"
 }
