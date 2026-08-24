@@ -1859,7 +1859,6 @@ fn a_suspended_lane_reads_the_parameter_field_and_the_curve_returns_after_the_tr
         modulation: None,
         last: Rc::new(core::cell::Cell::new(f32::NAN)),
         last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
-        held: Rc::new(core::cell::Cell::new((f32::NAN, crate::param_automation::HELD_NONE))),
         broadcast: None
     };
     assert_eq!(handle.resolve(0.0).0, 0.7, "the curve rules while no hand is on the parameter");
@@ -1892,7 +1891,6 @@ fn a_suspended_lane_still_receives_its_modulation() {
         id: 0, field: Rc::new(core::cell::Cell::new(0.2)), kind: abi::PARAM_KIND_FLOAT, track: curve,
         modulation: Some(chain), last: Rc::new(core::cell::Cell::new(f32::NAN)),
         last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
-        held: Rc::new(core::cell::Cell::new((f32::NAN, crate::param_automation::HELD_NONE))),
         broadcast: None
     };
     let (_, _, playing) = handle.resolve(0.0);
@@ -1917,7 +1915,6 @@ fn a_suspended_lane_publishes_no_automated_value_to_the_ui() {
         id: 0, field: Rc::new(core::cell::Cell::new(0.2)), kind: abi::PARAM_KIND_FLOAT, track: curve,
         modulation: None, last: Rc::new(core::cell::Cell::new(f32::NAN)),
         last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
-        held: Rc::new(core::cell::Cell::new((f32::NAN, crate::param_automation::HELD_NONE))),
         broadcast: Some(slot.clone())
     };
     handle.resolve(0.0);
@@ -3740,6 +3737,109 @@ fn an_automated_assignment_depth_scales_the_modulation() {
     }], &engine.registry).expect("edit the curve");
     engine.sync_modulators();
     assert!((sum_at(0.0) - 1.0).abs() < 1.0e-6, "and an edited curve reaches it, got {}", sum_at(0.0));
+}
+
+// The host-side path (strip, sends, composite gains, MIDI CC) resolves per BLOCK, and while paused a block
+// carries the FREE-RUNNING pulse. Both curves here, the parameter's own and the assignment's depth, must
+// read the song position instead, so they hold while paused and follow a locate. The macro is constant at
+// every position, so the modulation contributes nothing that moves.
+#[test]
+fn a_paused_host_parameter_reads_every_curve_at_the_song_position() {
+    const DEV: Uuid = [160u8; 16];
+    const ROOT: Uuid = [161u8; 16];
+    const MACRO: Uuid = [162u8; 16];
+    const ASSIGN: Uuid = [163u8; 16];
+    const VTRACK: Uuid = [164u8; 16];
+    const VREGION: Uuid = [165u8; 16];
+    const VCOLL: Uuid = [166u8; 16];
+    const VEVENT: Uuid = [167u8; 16];
+    const VEVENT2: Uuid = [168u8; 16];
+    const BTRACK: Uuid = [169u8; 16];
+    const BREGION: Uuid = [170u8; 16];
+    const BCOLL: Uuid = [171u8; 16];
+    const BEVENT: Uuid = [172u8; 16];
+    const BEVENT2: Uuid = [173u8; 16];
+    const PATH: u16 = 11;
+    const DEPTH_KEY: u16 = 3;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(MACRO, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (6, FieldValue::Hook), (8, FieldValue::Float32(1.0)), (10, FieldValue::Float32(1.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MACRO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ]),
+        // The depth's lane steps from 0.75 (bipolar 0.5) to 1.0 (bipolar 1.0) half a bar in.
+        graph_box(VTRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MACRO, vec![6])))),
+            (2, FieldValue::Pointer(Some(Address::of(ASSIGN, vec![DEPTH_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(VREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(VEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.75))
+        ]),
+        graph_box(VEVENT2, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(1920)), (13, FieldValue::Float32(1.0))
+        ]),
+        // The parameter's OWN lane, stepping 0.25 -> 0.75 at the same half bar.
+        graph_box(BTRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MACRO, vec![6])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(BREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(BTRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(BCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(BCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(BEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(BCOLL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+        ]),
+        graph_box(BEVENT2, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(BCOLL, vec![1])))),
+            (10, FieldValue::Int32(1920)), (13, FieldValue::Float32(0.75))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let handle = &handles[0];
+    unsafe { *crate::SONG_POSITION.get() = 960.0; }
+    let (base_before, _, depth_before) = handle.resolve_held(960.0, false);
+    let (base_after, _, depth_after) = handle.resolve_held(2880.0, false);
+    assert!((base_before - base_after).abs() < 1.0e-6,
+        "the free-running block must not advance the parameter's curve, got {base_before} then {base_after}");
+    assert!((depth_before - depth_after).abs() < 1.0e-6,
+        "nor the depth curve, got {depth_before} then {depth_after}");
+    // And it is the SONG position that is read, so a locate while paused reaches both.
+    unsafe { *crate::SONG_POSITION.get() = 2880.0; }
+    let (base_moved, _, depth_moved) = handle.resolve_held(960.0, false);
+    assert!((depth_moved - depth_before).abs() > 1.0e-6, "locating re-reads the depth, got {depth_moved}");
+    assert!((base_moved - base_before).abs() > 1.0e-6, "and the parameter's own curve, got {base_moved}");
 }
 
 // A modulator driving ANOTHER modulator's parameter: the same binding carries the assignment, and the

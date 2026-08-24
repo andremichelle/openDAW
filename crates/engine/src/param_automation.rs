@@ -13,7 +13,7 @@ use bindings::value_collection::ValueCurve;
 use boxgraph::address::Uuid;
 use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
 use value::region::{global_to_local, RegionCollection, Span};
-use crate::modulation::{modulation_sum, ModulationChain};
+use crate::modulation::{modulation_sum_split, ModulationChain};
 
 /// A parameter's stable identifier: the field-key path to its box field (e.g. `[16, 10]` for
 /// `lowPass.frequency`). The same keys the box schema and the device use — never a packed encoding — so it
@@ -22,8 +22,6 @@ pub(crate) type FieldPath = Vec<u16>;
 
 /// TS `UpdateClockRate` — the window `TrackBoxAdapter.valueAt` hands to `clipSequencing.iterate`.
 const UPDATE_CLOCK_RATE: f64 = dsp::ppqn::UPDATE_CLOCK_RATE;
-
-pub(crate) const HELD_NONE: u32 = u32::MAX;
 
 /// One bound device parameter (the engine's side of `bind_parameter`): the device-assigned `id`, the box
 /// field's current real value (`field`, observed so it stays live) and its primitive `kind` (`PARAM_KIND_INT`
@@ -39,7 +37,6 @@ pub(crate) struct ParamHandle {
     pub(crate) modulation: Option<ModulationChain>,
     pub(crate) last: Rc<Cell<f32>>,
     pub(crate) last_modulation: Rc<Cell<f32>>,
-    pub(crate) held: Rc<Cell<(f32, u32)>>,
     // The UI broadcast slot at the parameter's FIELD ADDRESS (TS `AutomatableParameter.onStartAutomation`:
     // `broadcastFloat(adapter.address, () => getUnitValue())`) — `Some` only while a track is attached;
     // `resolve` keeps `[0]` at the current unit value, the worklet mirrors it, the knob animates.
@@ -58,7 +55,7 @@ impl ParamHandle {
     /// from its silent update clock) while the modulation follows the free-running position.
     pub(crate) fn resolve_split(&self, automation_position: f64, modulation_position: f64) -> (f32, u32, f32) {
         let (value, kind) = self.resolve_base(automation_position);
-        let modulation = crate::modulation::modulation_sum_split(self.modulation.as_ref(),
+        let modulation = modulation_sum_split(self.modulation.as_ref(),
             automation_position, modulation_position);
         self.publish(modulation);
         (value, kind, modulation)
@@ -78,22 +75,12 @@ impl ParamHandle {
         }
     }
 
-    /// For a HOST-side consumer, called per BLOCK rather than on the update clock: while PAUSED the
-    /// automation is the last resolved value (the storage value until one was) and only the modulation moves.
+    /// For a HOST-side consumer, called per BLOCK rather than on the update clock. Same split as
+    /// `resolve_split`: while PAUSED the block carries the free-running pulse, which the modulation follows
+    /// while every curve reads the song position instead.
     pub(crate) fn resolve_held(&self, position: f64, transporting: bool) -> (f32, u32, f32) {
-        let (value, kind) = if transporting {
-            let resolved = self.resolve_base(position);
-            self.held.set(resolved);
-            resolved
-        } else {
-            match self.held.get() {
-                (_, HELD_NONE) => (self.field.get(), self.kind),
-                held => held
-            }
-        };
-        let modulation = modulation_sum(self.modulation.as_ref(), position);
-        self.publish(modulation);
-        (value, kind, modulation)
+        let automation_position = if transporting {position} else {crate::song_position()};
+        self.resolve_split(automation_position, position)
     }
 
     /// The modulation compares by BIT PATTERN: its "none" sentinel is NaN, and `NaN != NaN` would report a

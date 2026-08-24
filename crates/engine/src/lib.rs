@@ -806,6 +806,11 @@ pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventR
 /// free-running block, whose pulse range keeps advancing at a position that is NOT the song position) yields
 /// no update positions: automated parameters HOLD their last resolved value and the UI broadcasts stay still.
 /// A quantum is uniformly playing or paused, so the per-block TS gate collapses to this per-quantum check.
+/// The transport's song position at this quantum's start: where every automation curve reads while paused.
+pub(crate) fn song_position() -> f64 {
+    unsafe { *SONG_POSITION.get() }
+}
+
 fn quantum_transporting() -> bool {
     let pull = unsafe { PULL.get() };
     if pull.blocks.is_null() {
@@ -1004,7 +1009,7 @@ pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) 
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut ParamChange, max as usize) };
     let mut count = 0;
     // While PAUSED the caller's `position` is free-running; the automation reads the frozen song position.
-    let automation_position = if quantum_transporting() {position} else {unsafe { *SONG_POSITION.get() }};
+    let automation_position = if quantum_transporting() {position} else {song_position()};
     for param in &pull.params {
         if param.track.is_none() && param.modulation.is_none() {
             continue; // static params are not clock-driven; their value is pushed at build / edit

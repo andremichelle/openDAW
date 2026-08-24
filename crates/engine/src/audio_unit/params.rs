@@ -653,7 +653,7 @@ impl Engine {
         }
         let handle = ParamHandle {id, field, kind, track, modulation, last: Rc::new(core::cell::Cell::new(f32::NAN)),
             last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
-            held: Rc::new(core::cell::Cell::new((f32::NAN, crate::param_automation::HELD_NONE))), broadcast};
+            broadcast};
         (handle, subs, collections, armed)
     }
 
