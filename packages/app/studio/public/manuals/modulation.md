@@ -39,11 +39,27 @@ Each editor carries the list of parameters it drives, on its right. Every row ha
 - a **depth**, dragged like any other control, signed so a negative depth inverts the modulator
 - an **enable** toggle for that one assignment
 
-A depth is itself a parameter, so it can be automated, MIDI-learned, and driven by another modulator.
+The depth is itself a parameter, so right-clicking it offers the same menu a device control does: **Create
+Automation**, **Learn Midi Control** and **Modulate**. It lights up with the same ring, so a depth that is
+being driven is visible at a glance.
 
 ---
 
-## 3. Range and Polarity
+## 3. Modulating a Depth
+
+Because a depth takes **Modulate**, one modulator can set how far another reaches. An LFO on a filter with its
+depth driven by a slow second LFO opens and closes the amount of movement over time, rather than the filter
+itself.
+
+The assignment shows up in the driving modulator's target list like any other row, named after the whole
+chain, so `LFO → Vaporisateur Cutoff` tells you it is the depth of that assignment being moved, not the cutoff.
+
+Depth is the only modulator-side parameter that takes modulation. A modulator's own controls take automation
+and MIDI, but not another modulator.
+
+---
+
+## 4. Range and Polarity
 
 Every modulator ends in **Range**, which scales everything it sends. The **±** button under it switches the
 polarity.
@@ -58,7 +74,7 @@ A Range of zero is silence in both polarities.
 
 ---
 
-## 4. Rate
+## 5. Rate
 
 The timed kinds all share the same pair of rate controls, and they add together.
 
@@ -73,7 +89,7 @@ modulator drifts across repeats instead of repeating with them.
 
 ---
 
-## 5. LFO
+## 6. LFO
 
 ![LFO](modulator-lfo.webp)
 
@@ -85,7 +101,7 @@ so both halves bend by the same amount.
 
 ---
 
-## 6. Steps
+## 7. Steps
 
 ![Steps](modulator-steps.webp)
 
@@ -104,7 +120,7 @@ position. The display cannot draw a per-cycle order, so it shows a forward pass.
 
 ---
 
-## 7. Random
+## 8. Random
 
 ![Random](modulator-random.webp)
 
@@ -117,7 +133,7 @@ the same sequence and an offline render matches what you heard. **Reseed** picks
 
 ---
 
-## 8. Macro
+## 9. Macro
 
 ![Macro](modulator-macro.webp)
 
@@ -126,22 +142,26 @@ want several parameters under a single hand, and it is the natural target for MI
 
 ---
 
-## 9. Modulator Automation
+## 10. Modulator Automation
 
-A modulator's own controls are parameters too. Right-click one and choose **Create Automation** to give it a
-lane, and the lane appears in the timeline in its own group, after every audio unit.
+A modulator's own controls are parameters too, and so is every depth in its target list. Right-click one and
+choose **Create Automation** to give it a lane, and the lane appears in the timeline in its own group, after
+every audio unit. A depth's lane belongs to the modulator that drives it, so it sits with that modulator's own
+lanes and moves with it when the modulator is replaced.
 
 The controls that shape a pattern rather than ride a curve are ordinary fields and carry no lane: the Steps
 count and mode, and the Random loop, seed and levels.
 
 ---
 
-## 10. The Header Menu
+## 11. The Header Menu
 
 The **⋮** on each editor:
 
 - **Replace with** turns the modulator into another kind in place. The targets, their depths and their depth
   automation all survive. The old kind's own settings do not
 - **Duplicate** makes a copy with the same settings and no targets
-- **Copy** / **Paste** move modulators between projects
 - **Delete** removes the modulator and every assignment on it
+
+Duplicate and Delete act on the whole selection, not just the editor you opened the menu on. Modulators can be
+selected together, copied and pasted with the usual shortcuts, and dragged by their title to reorder them.
