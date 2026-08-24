@@ -125,10 +125,9 @@ describe("modulator parameter automation", () => {
         const parameters: ReadonlyArray<readonly [typeof lfo | typeof steps | typeof random | typeof macro,
             ReadonlyArray<Field>]> = [
             [lfo, [lfo.shape, lfo.rateSync, lfo.rateAbsolute, lfo.phase, lfo.amount, lfo.exponent]],
-            [steps, [steps.count, steps.rateSync, steps.rateAbsolute, steps.phase, steps.amount, steps.smooth,
-                steps.direction]],
-            [random, [random.loop, random.rateSync, random.rateAbsolute, random.phase, random.amount,
-                random.smooth, random.seed, random.levels]],
+            // count / direction / loop / seed / levels are plain fields, not parameters.
+            [steps, [steps.rateSync, steps.rateAbsolute, steps.phase, steps.amount, steps.smooth]],
+            [random, [random.rateSync, random.rateAbsolute, random.phase, random.amount, random.smooth]],
             [macro, [macro.value]]
         ]
         parameters.forEach(([modulator, fields]) => {

@@ -3541,10 +3541,13 @@ fn a_modulated_parameter_carries_its_sum_and_follows_the_lfo() {
     let handle = &handles[0];
     // No automation track, so the base stays the field's STORED value with its own kind: the device folds
     // the sum on with its own mapping, the host never normalizes anything.
+    let modulators = engine.modulators.clone();
+    modulators.borrow().anchor(0.0, 0.0);
     let (value, kind, sum) = handle.resolve(0.0);
     assert_eq!(kind, abi::PARAM_KIND_FLOAT, "the base is still the stored value, untouched");
     assert_eq!(value, 0.0);
     assert!((sum - 0.25).abs() < 1.0e-6, "depth 0.25 over the square's high half, got {sum}");
+    modulators.borrow().anchor(0.0, BAR * 0.75);
     let (_, _, sum) = handle.resolve(BAR * 0.75);
     assert!((sum + 0.25).abs() < 1.0e-6, "and -0.25 over its low half, got {sum}");
     // Disabling the assignment must restore the EXACT un-modulated path, not a zero sum: a zero would still
@@ -3552,6 +3555,7 @@ fn a_modulated_parameter_carries_its_sum_and_follows_the_lfo() {
     engine.graph.transaction(&[Update::Primitive {
         address: Address::of(ASSIGN, vec![4]), old: FieldValue::Boolean(true), new: FieldValue::Boolean(false)
     }], &engine.registry).expect("disable the assignment");
+    modulators.borrow().anchor(0.0, 0.0);
     assert!(handle.resolve(0.0).2.is_nan(), "a disabled assignment reads as NO modulation");
 }
 
@@ -3591,7 +3595,8 @@ fn a_steps_modulator_walks_its_sequence_into_the_parameter() {
     let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
     let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
     let handle = &handles[0];
-    let sum_at = |position: f64| handle.resolve(position).2;
+    let modulators = engine.modulators.clone();
+    let sum_at = |position: f64| {modulators.borrow().anchor(0.0, position); handle.resolve(position).2};
     assert!((sum_at(0.0) - 0.5).abs() < 1.0e-6, "step 0 at depth 0.5, got {}", sum_at(0.0));
     assert!((sum_at(STEP) + 0.5).abs() < 1.0e-6, "step 1 is the low one, got {}", sum_at(STEP));
     assert!(sum_at(STEP * 2.0).abs() < 1.0e-6, "step 2 is silent");
@@ -3660,7 +3665,8 @@ fn an_automated_modulator_parameter_follows_its_curve() {
     engine.observe_modulators();
     let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
     let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
-    let sum_at = |position: f64| handles[0].resolve(position).2;
+    let modulators = engine.modulators.clone();
+    let sum_at = |position: f64| {modulators.borrow().anchor(0.0, position); handles[0].resolve(position).2};
     // The square's high half at depth 1.0 would be +1.0; the curve holds the amount at 0.25.
     assert!((sum_at(0.0) - 0.25).abs() < 1.0e-6, "the automated amount scales the shape, got {}", sum_at(0.0));
     engine.graph.transaction(&[Update::Primitive {
@@ -3729,7 +3735,8 @@ fn an_automated_assignment_depth_scales_the_modulation() {
     engine.observe_modulators();
     let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
     let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
-    let sum_at = |position: f64| handles[0].resolve(position).2;
+    let modulators = engine.modulators.clone();
+    let sum_at = |position: f64| {modulators.borrow().anchor(0.0, position); handles[0].resolve(position).2};
     // The square's high half at an automated depth of -0.5 (unit 0.25 through the bipolar mapping).
     assert!((sum_at(0.0) + 0.5).abs() < 1.0e-6, "the curve sets the depth, got {}", sum_at(0.0));
     engine.graph.transaction(&[Update::Primitive {
@@ -3742,6 +3749,56 @@ fn an_automated_assignment_depth_scales_the_modulation() {
 // The host-side path (strip, sends, composite gains, MIDI CC) resolves per BLOCK, and while paused a block
 // carries the FREE-RUNNING pulse. Both curves here, the parameter's own and the assignment's depth, must
 // read the song position instead, so they hold while paused and follow a locate. The macro is constant at
+#[test]
+fn a_modulator_can_drive_an_assignment_depth() {
+    const DEV: Uuid = [180u8; 16];
+    const ROOT: Uuid = [181u8; 16];
+    const CARRIER: Uuid = [182u8; 16];
+    const DEPTH_SOURCE: Uuid = [183u8; 16];
+    const ASSIGN: Uuid = [184u8; 16];
+    const DEPTH_ASSIGN: Uuid = [185u8; 16];
+    const PATH: u16 = 11;
+    const DEPTH_KEY: u16 = 3;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        // The carrier is a macro at full swing, so the sum IS the depth the chain resolves.
+        graph_box(CARRIER, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (6, FieldValue::Hook), (8, FieldValue::Float32(1.0)), (10, FieldValue::Float32(1.0))
+        ]),
+        graph_box(DEPTH_SOURCE, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (6, FieldValue::Hook), (8, FieldValue::Float32(1.0)), (10, FieldValue::Float32(1.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(CARRIER, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(0.0)), (4, FieldValue::Boolean(true))
+        ]),
+        // Its depth sits at 0, which is unit 0.5 on a bipolar field, so +0.25 lands the depth on 0.5.
+        graph_box(DEPTH_ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(DEPTH_SOURCE, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(ASSIGN, vec![DEPTH_KEY])))),
+            (3, FieldValue::Float32(0.25)), (4, FieldValue::Boolean(true))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let sum = handles[0].resolve(0.0).2;
+    assert!((sum - 0.5).abs() < 1.0e-6, "the depth is driven to 0.5 and the carrier passes it, got {sum}");
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(DEPTH_ASSIGN, vec![3]), old: FieldValue::Float32(0.25), new: FieldValue::Float32(0.0)
+    }], &engine.registry).expect("close the depth modulation");
+    engine.sync_modulators();
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    assert!(handles[0].resolve(0.0).2.abs() < 1.0e-6, "and closing it takes the reach back to nothing");
+}
+
 // every position, so the modulation contributes nothing that moves.
 #[test]
 fn a_paused_host_parameter_reads_every_curve_at_the_song_position() {
@@ -3885,7 +3942,8 @@ fn a_modulator_can_drive_another_modulators_parameter() {
     engine.observe_modulators();
     let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
     let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
-    let sum_at = |position: f64| handles[0].resolve(position).2;
+    let modulators = engine.modulators.clone();
+    let sum_at = |position: f64| {modulators.borrow().anchor(0.0, position); handles[0].resolve(position).2};
     assert!((sum_at(0.0) - 0.5).abs() < 1.0e-6, "the macro scales the LFO's amount, got {}", sum_at(0.0));
     engine.graph.transaction(&[Update::Primitive {
         address: Address::of(SHAPER, vec![10]), old: FieldValue::Float32(0.25), new: FieldValue::Float32(0.5)
@@ -3922,7 +3980,8 @@ fn a_macro_modulator_holds_its_value_at_every_position() {
     let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
     let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
     let handle = &handles[0];
-    let sum_at = |position: f64| handle.resolve(position).2;
+    let modulators = engine.modulators.clone();
+    let sum_at = |position: f64| {modulators.borrow().anchor(0.0, position); handle.resolve(position).2};
     assert!((sum_at(0.0) - 0.25).abs() < 1.0e-6, "emitting 0.5 at depth 0.5, got {}", sum_at(0.0));
     assert!((sum_at(BAR * 0.37) - 0.25).abs() < 1.0e-6, "and it never moves with the position");
     engine.graph.transaction(&[Update::Primitive {
@@ -4039,13 +4098,16 @@ fn a_paused_transport_moves_the_modulation_but_not_the_automation() {
     let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
     let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
     let handle = &handles[0];
-    // Song frozen at the bar start, the free-running position walking into the square's LOW half.
+    // Song frozen at the bar start, the modulator turning on into the square's LOW half.
+    let modulators = engine.modulators.clone();
+    modulators.borrow().anchor(0.0, 0.0);
     let (frozen, kind, first) = handle.resolve_split(0.0, 0.0);
     assert_eq!(kind, abi::PARAM_KIND_UNIT, "the automation covers the position");
+    modulators.borrow().advance(0.0, BAR * 0.75);
     let (held, _, second) = handle.resolve_split(0.0, BAR * 0.75);
     assert_eq!(held, frozen, "the automation HOLDS at the frozen song position while paused");
     assert!((first - 0.5).abs() < 1.0e-6, "the modulation was high, got {first}");
-    assert!((second + 0.5).abs() < 1.0e-6, "and follows the free-running position, got {second}");
+    assert!((second + 0.5).abs() < 1.0e-6, "and keeps turning while paused, got {second}");
     // Playing, both positions advance together and the ramp moves with them.
     let (playing, ..) = handle.resolve_split(BAR * 0.5, BAR * 0.5);
     assert!(playing > frozen, "the automation ramp advances once the song position moves");

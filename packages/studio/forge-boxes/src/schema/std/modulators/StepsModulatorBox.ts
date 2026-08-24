@@ -5,7 +5,7 @@ import {ModulatorFactory} from "./ModulatorFactory"
 
 export const StepsModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createModulator("StepsModulatorBox", {
     10: {
-        type: "int32", name: "count", pointerRules: ModulatorParameterPointerRules, value: 16,
+        type: "int32", name: "count", value: 16,
         constraints: {min: 1, max: 64}, unit: ""
     },
     11: {
@@ -19,7 +19,7 @@ export const StepsModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createMod
     13: {type: "float32", name: "phase", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...UnipolarConstraints},
     15: {type: "float32", name: "smooth", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...UnipolarConstraints},
     16: {
-        type: "int32", name: "direction", pointerRules: ModulatorParameterPointerRules, value: 0,
+        type: "int32", name: "direction", value: 0,
         constraints: {values: [0, 1, 2, 3, 4]}, unit: "" // StepsDirection
     },
     20: {

@@ -46,24 +46,22 @@ pub(crate) struct LfoState {
     pub(crate) rate_absolute: Cell<f32>,
     pub(crate) phase: Cell<f32>,
     pub(crate) exponent: Cell<f32>,
-    free_turns: Cell<f64>
+    turns: Cell<f64>
 }
 
 impl LfoState {
     pub(crate) fn new() -> Self {
         Self {shape: Cell::new(SHAPE_SINE), rate_sync: Cell::new(4), rate_absolute: Cell::new(0.0),
             phase: Cell::new(0.0), exponent: Cell::new(0.0),
-            free_turns: Cell::new(0.0)}
+            turns: Cell::new(0.0)}
     }
 
-    fn turn_at(&self, position: f64) -> f64 {
-        sync_turns(self.rate_sync.get(), position)
-            + self.free_turns.get()
-            + self.phase.get() as f64
+    fn turn_at(&self) -> f64 {
+        self.turns.get() + self.phase.get() as f64
     }
 
-    fn value_at(&self, position: f64) -> f32 {
-        let turn = self.turn_at(position);
+    fn value_at(&self) -> f32 {
+        let turn = self.turn_at();
         let shape = match self.shape.get() {
             SHAPE_TRIANGLE => triangle(turn),
             SHAPE_SAW_UP => saw_up(turn),
@@ -83,7 +81,7 @@ pub(crate) struct StepsState {
     pub(crate) smooth: Cell<f32>,
     pub(crate) direction: Cell<i32>,
     pub(crate) steps: [Cell<f32>; MAX_STEPS],
-    free_turns: Cell<f64>
+    turns: Cell<f64>
 }
 
 impl StepsState {
@@ -91,18 +89,16 @@ impl StepsState {
         Self {count: Cell::new(16), rate_sync: Cell::new(10), rate_absolute: Cell::new(0.0),
             phase: Cell::new(0.0), smooth: Cell::new(0.0),
             direction: Cell::new(DIRECTION_FORWARD), steps: core::array::from_fn(|_| Cell::new(0.5)),
-            free_turns: Cell::new(0.0)}
+            turns: Cell::new(0.0)}
     }
 
-    fn step_position(&self, position: f64, count: i64) -> f64 {
-        sync_turns(self.rate_sync.get(), position)
-            + self.free_turns.get()
-            + self.phase.get() as f64 * count as f64
+    fn step_position(&self, count: i64) -> f64 {
+        self.turns.get() + self.phase.get() as f64 * count as f64
     }
 
-    fn playhead_at(&self, position: f64) -> f32 {
+    fn playhead_at(&self) -> f32 {
         let count = self.count.get().clamp(1, MAX_STEPS as i32) as i64;
-        let step = self.step_position(position, count);
+        let step = self.step_position(count);
         let index = floor(step);
         let resolved = self.resolve_index(index as i64, count) as f32;
         let fraction = (step - index) as f32;
@@ -118,9 +114,9 @@ impl StepsState {
         }
     }
 
-    fn value_at(&self, position: f64) -> f32 {
+    fn value_at(&self) -> f32 {
         let count = self.count.get().clamp(1, MAX_STEPS as i32) as i64;
-        let step = self.step_position(position, count);
+        let step = self.step_position(count);
         let index = floor(step);
         let current = self.step_at(index as i64, count);
         let smooth = self.smooth.get();
@@ -193,30 +189,28 @@ pub(crate) struct RandomState {
     pub(crate) smooth: Cell<f32>,
     pub(crate) seed: Cell<i32>,
     pub(crate) levels: Cell<i32>,
-    free_turns: Cell<f64>
+    turns: Cell<f64>
 }
 
 impl RandomState {
     pub(crate) fn new() -> Self {
         Self {loop_length: Cell::new(0), rate_sync: Cell::new(10), rate_absolute: Cell::new(0.0),
             phase: Cell::new(0.0), smooth: Cell::new(0.0), seed: Cell::new(1),
-            levels: Cell::new(0), free_turns: Cell::new(0.0)}
+            levels: Cell::new(0), turns: Cell::new(0.0)}
     }
 
-    fn step_position(&self, position: f64) -> f64 {
-        sync_turns(self.rate_sync.get(), position)
-            + self.free_turns.get()
-            + self.phase.get() as f64
+    fn step_position(&self) -> f64 {
+        self.turns.get() + self.phase.get() as f64
     }
 
-    fn playhead_at(&self, position: f64) -> f32 {
-        let step = self.step_position(position);
+    fn playhead_at(&self) -> f32 {
+        let step = self.step_position();
         let index = floor(step);
         (self.local_index(index as i64) as f64 + (step - index)) as f32
     }
 
-    fn value_at(&self, position: f64) -> f32 {
-        let step = self.step_position(position);
+    fn value_at(&self) -> f32 {
+        let step = self.step_position();
         let index = floor(step);
         let current = self.draw(index as i64);
         let smooth = self.smooth.get();
@@ -283,55 +277,62 @@ impl ModulatorState {
 
     pub(crate) fn random() -> Self {Self::of(ModulatorKind::Random(RandomState::new()))}
 
-    pub(crate) fn value_at(&self, position: f64) -> f32 {
+    pub(crate) fn value_at(&self) -> f32 {
         let raw = match &self.kind {
-            ModulatorKind::Lfo(lfo) => lfo.value_at(position),
-            ModulatorKind::Steps(steps) => steps.value_at(position),
+            ModulatorKind::Lfo(lfo) => lfo.value_at(),
+            ModulatorKind::Steps(steps) => steps.value_at(),
             ModulatorKind::Macro(knob) => knob.value.get() * 2.0 - 1.0,
-            ModulatorKind::Random(random) => random.value_at(position)
+            ModulatorKind::Random(random) => random.value_at()
         };
         let folded = if self.bipolar.get() {raw} else {raw * 0.5 + 0.5};
         folded * self.amount.get()
     }
 
-    /// The free rate integrates rather than reading a clock, so changing it bends the phase onwards
-    /// instead of moving it.
-    pub(crate) fn advance_free(&self, delta_seconds: f64) {
+    /// Both rates integrate rather than reading a clock, so changing either bends the phase onwards instead
+    /// of moving it. They add in frequency.
+    pub(crate) fn advance(&self, delta_seconds: f64, delta_pulses: f64) {
+        let turned = |rate_sync: i32, rate_absolute: f32| {
+            let pulses = cycle_pulses(rate_sync);
+            delta_seconds * rate_absolute as f64 + if pulses <= 0.0 {0.0} else {delta_pulses / pulses}
+        };
         match &self.kind {
             ModulatorKind::Lfo(lfo) =>
-                lfo.free_turns.set(lfo.free_turns.get() + delta_seconds * lfo.rate_absolute.get() as f64),
+                lfo.turns.set(lfo.turns.get() + turned(lfo.rate_sync.get(), lfo.rate_absolute.get())),
             ModulatorKind::Steps(steps) =>
-                steps.free_turns.set(steps.free_turns.get() + delta_seconds * steps.rate_absolute.get() as f64),
+                steps.turns.set(steps.turns.get() + turned(steps.rate_sync.get(), steps.rate_absolute.get())),
             ModulatorKind::Random(random) =>
-                random.free_turns.set(random.free_turns.get() + delta_seconds * random.rate_absolute.get() as f64),
+                random.turns.set(random.turns.get() + turned(random.rate_sync.get(), random.rate_absolute.get())),
             ModulatorKind::Macro(_) => {}
         }
     }
 
-    pub(crate) fn anchor_free(&self, seconds: f64) {
+    /// A pause, a resume, a locate and a loop jump all land the phase back on the position they arrived at.
+    pub(crate) fn anchor(&self, seconds: f64, position: f64) {
+        let turned = |rate_sync: i32, rate_absolute: f32|
+            seconds * rate_absolute as f64 + sync_turns(rate_sync, position);
         match &self.kind {
-            ModulatorKind::Lfo(lfo) => lfo.free_turns.set(seconds * lfo.rate_absolute.get() as f64),
-            ModulatorKind::Steps(steps) => steps.free_turns.set(seconds * steps.rate_absolute.get() as f64),
-            ModulatorKind::Random(random) => random.free_turns.set(seconds * random.rate_absolute.get() as f64),
+            ModulatorKind::Lfo(lfo) => lfo.turns.set(turned(lfo.rate_sync.get(), lfo.rate_absolute.get())),
+            ModulatorKind::Steps(steps) => steps.turns.set(turned(steps.rate_sync.get(), steps.rate_absolute.get())),
+            ModulatorKind::Random(random) => random.turns.set(turned(random.rate_sync.get(), random.rate_absolute.get())),
             ModulatorKind::Macro(_) => {}
         }
     }
 
-    pub(crate) fn publish_phase(&self, position: f64) {
+    pub(crate) fn publish_phase(&self) {
         if !self.broadcast_active.get() {
             return;
         }
         let Some(slot) = self.broadcast.borrow().clone() else {return};
         let phase = match &self.kind {
-            ModulatorKind::Lfo(lfo) => fract(lfo.turn_at(position)) as f32,
-            ModulatorKind::Steps(steps) => steps.playhead_at(position),
-            ModulatorKind::Random(random) => random.playhead_at(position),
+            ModulatorKind::Lfo(lfo) => fract(lfo.turn_at()) as f32,
+            ModulatorKind::Steps(steps) => steps.playhead_at(),
+            ModulatorKind::Random(random) => random.playhead_at(),
             ModulatorKind::Macro(_) => 0.0
         };
         let mut values = slot.borrow_mut();
         if values.len() > 1 {
             values[0] = phase;
-            values[1] = self.value_at(position);
+            values[1] = self.value_at();
         }
     }
 }
@@ -385,10 +386,10 @@ pub(crate) struct BoundModulation {
 }
 
 impl BoundModulation {
-    fn depth_at(&self, automation_position: f64) -> f32 {
+    fn depth_at(&self, automation_position: f64, modulation_position: f64) -> f32 {
         match &self.depth_handle {
             Some(handle) => {
-                let (value, kind, modulation) = handle.resolve(automation_position);
+                let (value, kind, modulation) = handle.resolve_split(automation_position, modulation_position);
                 crate::audio_unit::params::host_float(value, kind, modulation,
                     &math::value_mapping::Linear::bipolar())
             }
@@ -417,7 +418,7 @@ pub(crate) fn modulation_sum_split(chain: Option<&ModulationChain>, automation_p
         if !bound.enabled.get() || !bound.modulator.enabled.get() {
             continue;
         }
-        sum += bound.depth_at(automation_position) * bound.modulator.value_at(position);
+        sum += bound.depth_at(automation_position, position) * bound.modulator.value_at();
         contributes = true;
     }
     if contributes {sum} else {f32::NAN}
@@ -561,23 +562,55 @@ impl ModulatorTable {
         self.entries.is_empty()
     }
 
-    pub(crate) fn publish_phases(&self, position: f64) {
+    pub(crate) fn publish_phases(&self) {
         for entry in self.entries.iter() {
-            entry.state.publish_phase(position);
+            entry.state.publish_phase();
         }
     }
 
-    pub(crate) fn advance_free(&self, delta_seconds: f64) {
+    pub(crate) fn advance(&self, delta_seconds: f64, delta_pulses: f64) {
         for entry in self.entries.iter() {
-            entry.state.advance_free(delta_seconds);
+            entry.state.advance(delta_seconds, delta_pulses);
         }
     }
 
-    pub(crate) fn anchor_free(&self, seconds: f64) {
+    pub(crate) fn anchor(&self, seconds: f64, position: f64) {
         for entry in self.entries.iter() {
-            entry.state.anchor_free(seconds);
+            entry.state.anchor(seconds, position);
         }
     }
+}
+
+#[cfg(test)]
+impl LfoState {
+    fn seek(&self, position: f64) {self.turns.set(sync_turns(self.rate_sync.get(), position))}
+    fn value_at_position(&self, position: f64) -> f32 {self.seek(position); self.value_at()}
+}
+
+#[cfg(test)]
+impl StepsState {
+    fn seek(&self, position: f64) {self.turns.set(sync_turns(self.rate_sync.get(), position))}
+    fn value_at_position(&self, position: f64) -> f32 {self.seek(position); self.value_at()}
+    fn playhead_at_position(&self, position: f64) -> f32 {self.seek(position); self.playhead_at()}
+}
+
+#[cfg(test)]
+impl RandomState {
+    fn seek(&self, position: f64) {self.turns.set(sync_turns(self.rate_sync.get(), position))}
+    fn value_at_position(&self, position: f64) -> f32 {self.seek(position); self.value_at()}
+}
+
+#[cfg(test)]
+impl ModulatorState {
+    fn seek(&self, position: f64) {
+        match &self.kind {
+            ModulatorKind::Lfo(lfo) => lfo.seek(position),
+            ModulatorKind::Steps(steps) => steps.seek(position),
+            ModulatorKind::Random(random) => random.seek(position),
+            ModulatorKind::Macro(_) => {}
+        }
+    }
+    fn value_at_position(&self, position: f64) -> f32 {self.seek(position); self.value_at()}
 }
 
 #[cfg(test)]
@@ -610,12 +643,12 @@ mod tests {
     #[test]
     fn a_sine_walks_its_cycle_from_the_position_alone() {
         let state = lfo(SHAPE_SINE, ONE_BAR);
-        assert!(state.value_at(0.0).abs() < 1.0e-6);
-        assert!((state.value_at(BAR * 0.25) - 1.0).abs() < 1.0e-6);
-        assert!(state.value_at(BAR * 0.5).abs() < 1.0e-6);
-        assert!((state.value_at(BAR * 0.75) + 1.0).abs() < 1.0e-6);
+        assert!(state.value_at_position(0.0).abs() < 1.0e-6);
+        assert!((state.value_at_position(BAR * 0.25) - 1.0).abs() < 1.0e-6);
+        assert!(state.value_at_position(BAR * 0.5).abs() < 1.0e-6);
+        assert!((state.value_at_position(BAR * 0.75) + 1.0).abs() < 1.0e-6);
         // Pure in the position: the value at bar 17 equals the value at bar 1, so a locate needs no seeding.
-        assert!((state.value_at(BAR * 17.25) - state.value_at(BAR * 0.25)).abs() < 1.0e-6);
+        assert!((state.value_at_position(BAR * 17.25) - state.value_at_position(BAR * 0.25)).abs() < 1.0e-6);
     }
 
     #[test]
@@ -623,41 +656,41 @@ mod tests {
         for shape in [SHAPE_SINE, SHAPE_TRIANGLE, SHAPE_SAW_UP, SHAPE_SAW_DOWN, SHAPE_SQUARE] {
             let state = lfo(shape, ONE_BAR);
             for step in 0..64 {
-                let value = state.value_at(BAR * step as f64 / 64.0);
+                let value = state.value_at_position(BAR * step as f64 / 64.0);
                 assert!((-1.0..=1.0).contains(&value), "shape {shape} left the unit range: {value}");
             }
         }
-        assert!((lfo(SHAPE_TRIANGLE, ONE_BAR).value_at(BAR * 0.25) - 1.0).abs() < 1.0e-6);
-        assert!((lfo(SHAPE_SAW_UP, ONE_BAR).value_at(0.0) + 1.0).abs() < 1.0e-6);
-        assert!((lfo(SHAPE_SAW_DOWN, ONE_BAR).value_at(0.0) - 1.0).abs() < 1.0e-6);
+        assert!((lfo(SHAPE_TRIANGLE, ONE_BAR).value_at_position(BAR * 0.25) - 1.0).abs() < 1.0e-6);
+        assert!((lfo(SHAPE_SAW_UP, ONE_BAR).value_at_position(0.0) + 1.0).abs() < 1.0e-6);
+        assert!((lfo(SHAPE_SAW_DOWN, ONE_BAR).value_at_position(0.0) - 1.0).abs() < 1.0e-6);
         for step in 0..64 {
             let position = BAR * step as f64 / 64.0;
-            let up = lfo(SHAPE_SAW_UP, ONE_BAR).value_at(position);
-            let down = lfo(SHAPE_SAW_DOWN, ONE_BAR).value_at(position);
+            let up = lfo(SHAPE_SAW_UP, ONE_BAR).value_at_position(position);
+            let down = lfo(SHAPE_SAW_DOWN, ONE_BAR).value_at_position(position);
             assert!((up + down).abs() < 1.0e-6, "the two saws mirror each other at {position}");
         }
-        assert_eq!(lfo(SHAPE_SQUARE, ONE_BAR).value_at(BAR * 0.25), 1.0);
-        assert_eq!(lfo(SHAPE_SQUARE, ONE_BAR).value_at(BAR * 0.75), -1.0);
+        assert_eq!(lfo(SHAPE_SQUARE, ONE_BAR).value_at_position(BAR * 0.25), 1.0);
+        assert_eq!(lfo(SHAPE_SQUARE, ONE_BAR).value_at_position(BAR * 0.75), -1.0);
     }
 
     #[test]
     fn the_exponent_bends_the_shape_without_flipping_its_sign() {
         let state = lfo(SHAPE_SAW_UP, ONE_BAR);
-        let plain = state.value_at(BAR * 0.9);
+        let plain = state.value_at_position(BAR * 0.9);
         state.exponent.set(1.0 / 3.0); // 8^(1/3) = 2
-        let bent = state.value_at(BAR * 0.9);
+        let bent = state.value_at_position(BAR * 0.9);
         assert!(bent > 0.0 && bent < plain, "a positive half flattens towards the middle, got {bent}");
-        assert!((state.value_at(BAR * 0.1) + 0.64).abs() < 1.0e-5,
-            "and a negative half bends by the same amount, got {}", state.value_at(BAR * 0.1));
+        assert!((state.value_at_position(BAR * 0.1) + 0.64).abs() < 1.0e-5,
+            "and a negative half bends by the same amount, got {}", state.value_at_position(BAR * 0.1));
         state.exponent.set(0.0);
-        assert_eq!(state.value_at(BAR * 0.9), plain, "the centre is the identity");
+        assert_eq!(state.value_at_position(BAR * 0.9), plain, "the centre is the identity");
     }
 
     #[test]
     fn the_phase_shifts_the_shape() {
         let shifted = lfo(SHAPE_SINE, ONE_BAR);
         shifted.phase.set(0.25);
-        assert!((shifted.value_at(0.0) - 1.0).abs() < 1.0e-6, "a quarter-turn phase starts at the peak");
+        assert!((shifted.value_at_position(0.0) - 1.0).abs() < 1.0e-6, "a quarter-turn phase starts at the peak");
     }
 
     #[test]
@@ -666,21 +699,21 @@ mod tests {
         let ModulatorKind::Lfo(shape) = &state.kind else {panic!("an LFO")};
         shape.shape.set(SHAPE_SINE);
         shape.rate_sync.set(ONE_BAR);
-        assert!((state.value_at(BAR * 0.25) - 1.0).abs() < 1.0e-6, "bipolar reaches the top");
-        assert!((state.value_at(BAR * 0.75) + 1.0).abs() < 1.0e-6, "and the bottom");
+        assert!((state.value_at_position(BAR * 0.25) - 1.0).abs() < 1.0e-6, "bipolar reaches the top");
+        assert!((state.value_at_position(BAR * 0.75) + 1.0).abs() < 1.0e-6, "and the bottom");
         state.amount.set(0.5);
-        assert!((state.value_at(BAR * 0.25) - 0.5).abs() < 1.0e-6, "the amount scales the emitted value");
+        assert!((state.value_at_position(BAR * 0.25) - 0.5).abs() < 1.0e-6, "the amount scales the emitted value");
         state.amount.set(1.0);
         state.bipolar.set(false);
-        assert!((state.value_at(BAR * 0.25) - 1.0).abs() < 1.0e-6, "unipolar keeps the peak");
-        assert!(state.value_at(BAR * 0.75).abs() < 1.0e-6, "and rests the trough on zero");
+        assert!((state.value_at_position(BAR * 0.25) - 1.0).abs() < 1.0e-6, "unipolar keeps the peak");
+        assert!(state.value_at_position(BAR * 0.75).abs() < 1.0e-6, "and rests the trough on zero");
         for step in 0..64 {
-            let value = state.value_at(BAR * step as f64 / 64.0);
+            let value = state.value_at_position(BAR * step as f64 / 64.0);
             assert!((0.0..=1.0).contains(&value), "a unipolar source never pushes down, got {value}");
         }
         state.amount.set(0.0);
         for step in 0..64 {
-            assert_eq!(state.value_at(BAR * step as f64 / 64.0), 0.0,
+            assert_eq!(state.value_at_position(BAR * step as f64 / 64.0), 0.0,
                 "no amount is silence, not a stuck offset");
         }
     }
@@ -688,16 +721,16 @@ mod tests {
     #[test]
     fn the_macro_rests_in_the_middle_while_bipolar_and_at_the_bottom_while_not() {
         let state = ModulatorState::macro_knob();
-        assert_eq!(state.value_at(0.0), 0.0, "the stored centre emits nothing");
+        assert_eq!(state.value_at_position(0.0), 0.0, "the stored centre emits nothing");
         let ModulatorKind::Macro(knob) = &state.kind else {panic!("a macro")};
         knob.value.set(1.0);
-        assert_eq!(state.value_at(0.0), 1.0);
+        assert_eq!(state.value_at_position(0.0), 1.0);
         knob.value.set(0.0);
-        assert_eq!(state.value_at(0.0), -1.0);
+        assert_eq!(state.value_at_position(0.0), -1.0);
         state.bipolar.set(false);
-        assert_eq!(state.value_at(0.0), 0.0, "the bottom of the fader emits nothing while unipolar");
+        assert_eq!(state.value_at_position(0.0), 0.0, "the bottom of the fader emits nothing while unipolar");
         knob.value.set(0.5);
-        assert_eq!(state.value_at(0.0), 0.5, "and the middle is half of the way up");
+        assert_eq!(state.value_at_position(0.0), 0.5, "and the middle is half of the way up");
     }
 
     #[test]
@@ -708,23 +741,39 @@ mod tests {
         pattern.rate_sync.set(SIXTEENTH);
         pattern.steps[0].set(0.0);
         pattern.steps[1].set(1.0);
-        assert_eq!(state.value_at(0.0), -1.0, "bipolar reads the draw space from its centre");
-        assert_eq!(state.value_at(STEP), 1.0);
+        assert_eq!(state.value_at_position(0.0), -1.0, "bipolar reads the draw space from its centre");
+        assert_eq!(state.value_at_position(STEP), 1.0);
         state.bipolar.set(false);
-        assert_eq!(state.value_at(0.0), 0.0, "unipolar reads the very same pattern off the bottom");
-        assert_eq!(state.value_at(STEP), 1.0);
+        assert_eq!(state.value_at_position(0.0), 0.0, "unipolar reads the very same pattern off the bottom");
+        assert_eq!(state.value_at_position(STEP), 1.0);
     }
 
     #[test]
     fn the_rate_index_selects_the_cycle_length() {
         let quarter = lfo(SHAPE_SINE, QUARTER); // 1/4 = 960 pulses
-        assert!((quarter.value_at(240.0) - 1.0).abs() < 1.0e-6, "a quarter of 960 pulses is the peak");
+        assert!((quarter.value_at_position(240.0) - 1.0).abs() < 1.0e-6, "a quarter of 960 pulses is the peak");
         assert_eq!(cycle_pulses(-3), RATES[0], "an out-of-range index clamps into the table");
         assert_eq!(cycle_pulses(99), RATES[RATES.len() - 1]);
         assert!(RATES[RATES.len() - 1] < RATES[1], "the highest index is the fastest cycle");
         let free = lfo(SHAPE_SINE, 0);
-        assert_eq!(free.value_at(BAR * 0.25), free.value_at(BAR * 7.3),
+        assert_eq!(free.value_at_position(BAR * 0.25), free.value_at_position(BAR * 7.3),
             "the first entry stops the synced motion, leaving only the free rate");
+    }
+
+    #[test]
+    fn the_synced_rate_free_runs_and_re_anchors_like_the_free_one() {
+        let state = ModulatorState::lfo();
+        let ModulatorKind::Lfo(lfo) = &state.kind else {panic!("an LFO")};
+        lfo.rate_sync.set(ONE_BAR);
+        state.anchor(0.0, 0.0);
+        assert!(state.value_at().abs() < 1.0e-6, "the anchor lands the phase on the bar start");
+        state.advance(0.0, BAR * 0.25);
+        assert!((state.value_at() - 1.0).abs() < 1.0e-6, "a quarter bar of pulses is a quarter turn");
+        // A loop jump back to the bar start does NOT rewind the phase: only an anchor does.
+        state.advance(0.0, BAR * 0.25);
+        assert!(state.value_at().abs() < 1.0e-6, "it keeps turning past the bar it started in");
+        state.anchor(0.0, BAR * 0.25);
+        assert!((state.value_at() - 1.0).abs() < 1.0e-6, "and a pause, resume, locate or loop jump re-anchors");
     }
 
     #[test]
@@ -733,14 +782,14 @@ mod tests {
         let ModulatorKind::Lfo(free) = &state.kind else {panic!("an LFO")};
         free.rate_sync.set(0);
         free.rate_absolute.set(1.0); // one turn per second
-        state.advance_free(0.25);
-        assert!((state.value_at(BAR * 3.0) - 1.0).abs() < 1.0e-6, "a quarter turn, wherever the transport stands");
+        state.advance(0.25, 0.0);
+        assert!((state.value_at() - 1.0).abs() < 1.0e-6, "a quarter turn, wherever the transport stands");
         free.rate_absolute.set(2.0);
-        assert!((state.value_at(0.0) - 1.0).abs() < 1.0e-6, "a rate change bends the phase, it does not move it");
-        state.advance_free(0.25);
-        assert!((state.value_at(0.0) + 1.0).abs() < 1.0e-6, "and it turns twice as fast from there");
-        state.anchor_free(0.125);
-        assert!((state.value_at(0.0) - 1.0).abs() < 1.0e-6, "a stop, resume or jump re-anchors to that time");
+        assert!((state.value_at() - 1.0).abs() < 1.0e-6, "a rate change bends the phase, it does not move it");
+        state.advance(0.25, 0.0);
+        assert!((state.value_at() + 1.0).abs() < 1.0e-6, "and it turns twice as fast from there");
+        state.anchor(0.125, 0.0);
+        assert!((state.value_at() - 1.0).abs() < 1.0e-6, "a stop, resume or jump re-anchors to that time");
         let synced = lfo(SHAPE_SINE, ONE_BAR);
         assert_eq!(synced.rate_absolute.get(), 0.0, "the default leaves the LFO purely tempo-synced");
     }
@@ -749,26 +798,26 @@ mod tests {
     fn a_random_draw_is_reproducible_loops_and_quantizes() {
         let state = RandomState::new();
         state.rate_sync.set(SIXTEENTH);
-        let first = state.value_at(0.0);
-        assert_eq!(state.value_at(STEP * 0.5), first, "it holds for the whole step");
-        assert_eq!(state.value_at(STEP * 4000.0), state.value_at(STEP * 4000.0), "and it is pure");
-        assert!(state.value_at(STEP) != first, "the next step draws again");
+        let first = state.value_at_position(0.0);
+        assert_eq!(state.value_at_position(STEP * 0.5), first, "it holds for the whole step");
+        assert_eq!(state.value_at_position(STEP * 4000.0), state.value_at_position(STEP * 4000.0), "and it is pure");
+        assert!(state.value_at_position(STEP) != first, "the next step draws again");
         state.seed.set(7);
-        assert!(state.value_at(0.0) != first, "the seed picks a different sequence");
-        let seeded = state.value_at(0.0);
+        assert!(state.value_at_position(0.0) != first, "the seed picks a different sequence");
+        let seeded = state.value_at_position(0.0);
         state.loop_length.set(4);
-        assert_eq!(state.value_at(STEP * 4.0), state.value_at(0.0), "a loop of four repeats every four steps");
-        assert!(state.value_at(STEP * 2.0) != state.value_at(0.0), "but not within them");
+        assert_eq!(state.value_at_position(STEP * 4.0), state.value_at_position(0.0), "a loop of four repeats every four steps");
+        assert!(state.value_at_position(STEP * 2.0) != state.value_at_position(0.0), "but not within them");
         state.loop_length.set(0);
-        assert_eq!(state.value_at(0.0), seeded, "and dropping the loop restores the endless sequence");
+        assert_eq!(state.value_at_position(0.0), seeded, "and dropping the loop restores the endless sequence");
         state.levels.set(2);
         for step in 0..32 {
-            let value = state.value_at(STEP * step as f64);
+            let value = state.value_at_position(STEP * step as f64);
             assert!(value == -1.0 || value == 1.0, "two levels is a coin flip, got {value}");
         }
         state.levels.set(3);
         for step in 0..32 {
-            let value = state.value_at(STEP * step as f64);
+            let value = state.value_at_position(STEP * step as f64);
             assert!(value == -1.0 || value == 0.0 || value == 1.0, "three levels adds the centre, got {value}");
         }
     }
@@ -777,15 +826,15 @@ mod tests {
     fn a_step_holds_its_value_for_one_rate_unit_and_wraps() {
         let state = steps(&[1.0, -0.5, 0.25, 0.0]);
         state.rate_sync.set(SIXTEENTH);
-        assert_eq!(state.value_at(0.0), 1.0);
-        assert_eq!(state.value_at(STEP * 0.99), 1.0, "it holds to the very end of its step");
-        assert_eq!(state.value_at(STEP), -0.5);
-        assert_eq!(state.value_at(STEP * 2.0), 0.25);
-        assert_eq!(state.value_at(STEP * 4.0), 1.0, "the sequence wraps after the count");
+        assert_eq!(state.value_at_position(0.0), 1.0);
+        assert_eq!(state.value_at_position(STEP * 0.99), 1.0, "it holds to the very end of its step");
+        assert_eq!(state.value_at_position(STEP), -0.5);
+        assert_eq!(state.value_at_position(STEP * 2.0), 0.25);
+        assert_eq!(state.value_at_position(STEP * 4.0), 1.0, "the sequence wraps after the count");
         // Pure in the position, exactly like the LFO: a locate replays the same step.
-        assert_eq!(state.value_at(STEP * 400.0), state.value_at(0.0));
+        assert_eq!(state.value_at_position(STEP * 400.0), state.value_at_position(0.0));
         // Steps before zero wrap backwards rather than clamping.
-        assert_eq!(state.value_at(-STEP), 0.0);
+        assert_eq!(state.value_at_position(-STEP), 0.0);
     }
 
     #[test]
@@ -798,10 +847,10 @@ mod tests {
         ping_pong.direction.set(DIRECTION_PING_PONG);
         for index in 0..4 {
             let position = STEP * index as f64;
-            assert_eq!(forward.value_at(position), values[index]);
-            assert_eq!(backward.value_at(position), values[3 - index]);
-            assert_eq!(ping_pong.value_at(position), values[index], "the first pass runs forward");
-            assert_eq!(ping_pong.value_at(position + STEP * 4.0), values[3 - index], "the second runs back");
+            assert_eq!(forward.value_at_position(position), values[index]);
+            assert_eq!(backward.value_at_position(position), values[3 - index]);
+            assert_eq!(ping_pong.value_at_position(position), values[index], "the first pass runs forward");
+            assert_eq!(ping_pong.value_at_position(position + STEP * 4.0), values[3 - index], "the second runs back");
         }
     }
 
@@ -811,32 +860,32 @@ mod tests {
         let state = steps(&values);
         state.direction.set(DIRECTION_ALTERNATE);
         // Four steps fold into a six-step round trip: 0 1 2 3 2 1, then around again.
-        let played: Vec<f32> = (0..12).map(|index| state.value_at(STEP * index as f64)).collect();
+        let played: Vec<f32> = (0..12).map(|index| state.value_at_position(STEP * index as f64)).collect();
         assert_eq!(played, alloc::vec![0.0, 0.25, 0.5, 1.0, 0.5, 0.25, 0.0, 0.25, 0.5, 1.0, 0.5, 0.25]);
         // Ping-pong plays the turning points twice, which is exactly what alternate avoids.
         let ping_pong = steps(&values);
         ping_pong.direction.set(DIRECTION_PING_PONG);
-        assert_eq!(ping_pong.value_at(STEP * 3.0), ping_pong.value_at(STEP * 4.0));
-        assert_ne!(state.value_at(STEP * 3.0), state.value_at(STEP * 4.0));
+        assert_eq!(ping_pong.value_at_position(STEP * 3.0), ping_pong.value_at_position(STEP * 4.0));
+        assert_ne!(state.value_at_position(STEP * 3.0), state.value_at_position(STEP * 4.0));
         // Two steps have no turning point to fold.
         let pair = steps(&[1.0, -1.0]);
         pair.direction.set(DIRECTION_ALTERNATE);
-        assert_eq!(pair.value_at(0.0), 1.0);
-        assert_eq!(pair.value_at(STEP), -1.0);
-        assert_eq!(pair.value_at(STEP * 2.0), 1.0);
+        assert_eq!(pair.value_at_position(0.0), 1.0);
+        assert_eq!(pair.value_at_position(STEP), -1.0);
+        assert_eq!(pair.value_at_position(STEP * 2.0), 1.0);
     }
 
     #[test]
     fn the_playhead_follows_the_step_the_sequence_is_on() {
         let state = steps(&[0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(state.playhead_at(0.0), 0.0);
-        assert!((state.playhead_at(STEP * 1.5) - 1.5).abs() < 1.0e-5, "half way through step 1");
-        assert!((state.playhead_at(STEP * 4.25) - 0.25).abs() < 1.0e-5, "and it wraps with the sequence");
+        assert_eq!(state.playhead_at_position(0.0), 0.0);
+        assert!((state.playhead_at_position(STEP * 1.5) - 1.5).abs() < 1.0e-5, "half way through step 1");
+        assert!((state.playhead_at_position(STEP * 4.25) - 0.25).abs() < 1.0e-5, "and it wraps with the sequence");
         let backward = steps(&[0.0, 0.0, 0.0, 0.0]);
         backward.direction.set(DIRECTION_BACKWARD);
         // The last step, entered from its RIGHT edge, since backward crosses it right to left.
-        assert!((backward.playhead_at(0.0) - 4.0).abs() < 1.0e-5, "backward starts on the last step");
-        assert!((backward.playhead_at(STEP) - 3.0).abs() < 1.0e-5);
+        assert!((backward.playhead_at_position(0.0) - 4.0).abs() < 1.0e-5, "backward starts on the last step");
+        assert!((backward.playhead_at_position(STEP) - 3.0).abs() < 1.0e-5);
     }
 
     #[test]
@@ -845,15 +894,15 @@ mod tests {
         let backward = steps(&[0.0, 0.1, 0.2, 1.0]);
         backward.direction.set(DIRECTION_BACKWARD);
         backward.smooth.set(0.5);
-        assert_eq!(backward.value_at(STEP), 1.0, "the glide leaves the step that just played");
-        assert!((backward.value_at(STEP * 1.5) - 0.2).abs() < 1.0e-6, "and has arrived by the end of the glide");
-        let middle = backward.value_at(STEP * 1.25);
+        assert_eq!(backward.value_at_position(STEP), 1.0, "the glide leaves the step that just played");
+        assert!((backward.value_at_position(STEP * 1.5) - 0.2).abs() < 1.0e-6, "and has arrived by the end of the glide");
+        let middle = backward.value_at_position(STEP * 1.25);
         assert!(middle > 0.2 && middle < 1.0, "falling from 1.0 to 0.2, got {middle}");
         // Ping-pong at its turning point: the step plays twice, so the second pass glides from ITSELF.
         let ping_pong = steps(&[0.0, 0.5, 1.0]);
         ping_pong.direction.set(DIRECTION_PING_PONG);
         ping_pong.smooth.set(0.5);
-        assert_eq!(ping_pong.value_at(STEP * 3.0), 1.0, "the repeated turning point holds its value");
+        assert_eq!(ping_pong.value_at_position(STEP * 3.0), 1.0, "the repeated turning point holds its value");
     }
 
     #[test]
@@ -861,40 +910,42 @@ mod tests {
         let state = ModulatorState::steps();
         let slot = engine_env::telemetry::broadcast_slot(2);
         *state.broadcast.borrow_mut() = Some(slot.clone());
-        state.publish_phase(240.0);
+        state.seek(240.0);
+        state.publish_phase();
         assert_eq!(slot.borrow()[0], 0.0, "nothing is written while no editor is listening");
         state.broadcast_active.set(true);
-        state.publish_phase(240.0);
+        state.seek(240.0);
+        state.publish_phase();
         assert_eq!(slot.borrow()[0], 1.0, "and the position appears once one is");
     }
 
     #[test]
     fn the_playhead_crosses_a_step_the_way_the_sequence_travels() {
         let forward = steps(&[0.0, 0.0, 0.0, 0.0]);
-        assert!(forward.playhead_at(0.0) < forward.playhead_at(STEP * 0.5), "forward runs left to right");
+        assert!(forward.playhead_at_position(0.0) < forward.playhead_at_position(STEP * 0.5), "forward runs left to right");
         let backward = steps(&[0.0, 0.0, 0.0, 0.0]);
         backward.direction.set(DIRECTION_BACKWARD);
         // Step 3 is crossed right to left, and the next step picks up exactly where it left off.
-        assert!((backward.playhead_at(0.0) - 4.0).abs() < 1.0e-5);
-        assert!((backward.playhead_at(STEP * 0.5) - 3.5).abs() < 1.0e-5);
-        assert!((backward.playhead_at(STEP * 0.999) - 3.0).abs() < 1.0e-2);
-        assert!((backward.playhead_at(STEP) - 3.0).abs() < 1.0e-5, "no jump at the boundary");
-        assert!((backward.playhead_at(STEP * 1.5) - 2.5).abs() < 1.0e-5);
+        assert!((backward.playhead_at_position(0.0) - 4.0).abs() < 1.0e-5);
+        assert!((backward.playhead_at_position(STEP * 0.5) - 3.5).abs() < 1.0e-5);
+        assert!((backward.playhead_at_position(STEP * 0.999) - 3.0).abs() < 1.0e-2);
+        assert!((backward.playhead_at_position(STEP) - 3.0).abs() < 1.0e-5, "no jump at the boundary");
+        assert!((backward.playhead_at_position(STEP * 1.5) - 2.5).abs() < 1.0e-5);
         // Ping-pong turns around with the cycle, alternate one step earlier.
         let ping_pong = steps(&[0.0, 0.0, 0.0, 0.0]);
         ping_pong.direction.set(DIRECTION_PING_PONG);
-        assert!(ping_pong.playhead_at(STEP * 0.5) < ping_pong.playhead_at(STEP * 1.5));
-        assert!(ping_pong.playhead_at(STEP * 4.5) > ping_pong.playhead_at(STEP * 5.5));
+        assert!(ping_pong.playhead_at_position(STEP * 0.5) < ping_pong.playhead_at_position(STEP * 1.5));
+        assert!(ping_pong.playhead_at_position(STEP * 4.5) > ping_pong.playhead_at_position(STEP * 5.5));
     }
 
     #[test]
     fn the_random_direction_is_stable_per_cycle() {
         let state = steps(&[0.0, 0.25, 0.5, 0.75, 1.0, -0.25, -0.5, -1.0]);
         state.direction.set(DIRECTION_RANDOM);
-        let cycle: Vec<f32> = (0..8).map(|index| state.value_at(STEP * index as f64)).collect();
-        let replay: Vec<f32> = (0..8).map(|index| state.value_at(STEP * index as f64)).collect();
+        let cycle: Vec<f32> = (0..8).map(|index| state.value_at_position(STEP * index as f64)).collect();
+        let replay: Vec<f32> = (0..8).map(|index| state.value_at_position(STEP * index as f64)).collect();
         assert_eq!(cycle, replay, "the same position always gives the same step");
-        let next: Vec<f32> = (8..16).map(|index| state.value_at(STEP * index as f64)).collect();
+        let next: Vec<f32> = (8..16).map(|index| state.value_at_position(STEP * index as f64)).collect();
         assert_ne!(cycle, next, "a later cycle shuffles differently");
         for index in 0..64 {
             let resolved = random_index(index / 8, index % 8, 8);
@@ -906,15 +957,15 @@ mod tests {
     fn smoothing_glides_into_the_step_and_zero_leaves_it_hard() {
         let hard = steps(&[0.0, 1.0]);
         hard.rate_sync.set(SIXTEENTH);
-        assert_eq!(hard.value_at(STEP * 1.5), 1.0, "no smoothing means the step is already there");
+        assert_eq!(hard.value_at_position(STEP * 1.5), 1.0, "no smoothing means the step is already there");
         let glided = steps(&[0.0, 1.0]);
         glided.rate_sync.set(SIXTEENTH);
         glided.smooth.set(0.5);
-        assert_eq!(glided.value_at(STEP), 0.0, "the glide starts at the previous step's value");
-        let half = glided.value_at(STEP * 1.25);
+        assert_eq!(glided.value_at_position(STEP), 0.0, "the glide starts at the previous step's value");
+        let half = glided.value_at_position(STEP * 1.25);
         assert!(half > 0.4 && half < 0.6, "halfway through the glide sits between the two, got {half}");
-        assert_eq!(glided.value_at(STEP * 1.5), 1.0, "and it has arrived once the glide is over");
-        assert_eq!(glided.value_at(STEP * 1.9), 1.0);
+        assert_eq!(glided.value_at_position(STEP * 1.5), 1.0, "and it has arrived once the glide is over");
+        assert_eq!(glided.value_at_position(STEP * 1.9), 1.0);
     }
 
     #[test]

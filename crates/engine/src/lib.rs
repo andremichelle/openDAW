@@ -1268,6 +1268,7 @@ struct Engine {
     // The free-running modulation clock: it integrates while the pulse flow stays continuous and re-anchors
     // to the position's wall-clock seconds on a start, stop or jump.
     modulation_free: f64,
+    modulation_position: f64,
     modulation_playing: bool,
     // Armed by a modulator's OWN field edit: the value cells are live for the render path, but a STOPPED
     // transport runs no update clock, so the next reconcile re-pushes every unit's parameters.
@@ -1325,6 +1326,7 @@ impl Engine {
             midi_out: midi_output::shared_midi_out(),
             modulators: Rc::new(RefCell::new(modulation::ModulatorTable::new())),
             modulation_free: f64::NAN,
+            modulation_position: f64::NAN,
             modulation_playing: false,
             modulation_dirty: Rc::new(Cell::new(false)),
             sample_rate,
@@ -1930,19 +1932,24 @@ impl Engine {
         let playing = self.transport.is_playing();
         let quantum_pulses =
             dsp::ppqn::samples_to_pulses(RENDER_QUANTUM as f64, self.transport.bpm(), self.sample_rate);
+        let position = self.transport.position();
+        // A pause or resume flips `playing`, a locate jumps the free-running pulse, and a loop jump moves
+        // only the song position, so the phase re-anchors on all four.
         let continuous = playing == self.modulation_playing
-            && (free_running - self.modulation_free).abs() <= quantum_pulses * 0.5;
-        let anchor = if continuous {None} else {Some(self.tempo_map.borrow().ppqn_to_seconds(free_running))};
+            && (free_running - self.modulation_free).abs() <= quantum_pulses * 0.5
+            && (position - self.modulation_position).abs() <= quantum_pulses * 0.5;
         {
             let modulators = self.modulators.borrow();
-            match anchor {
-                Some(seconds) => modulators.anchor_free(seconds),
-                None => modulators.advance_free(RENDER_QUANTUM as f64 / self.sample_rate as f64)
+            if continuous {
+                modulators.advance(RENDER_QUANTUM as f64 / self.sample_rate as f64, quantum_pulses);
+            } else {
+                modulators.anchor(self.tempo_map.borrow().ppqn_to_seconds(free_running), position);
             }
-            modulators.refresh_params(self.transport.position(), free_running);
-            modulators.publish_phases(free_running);
+            modulators.refresh_params(position, free_running);
+            modulators.publish_phases();
         }
         self.modulation_free = free_running + quantum_pulses;
+        self.modulation_position = position + if playing {quantum_pulses} else {0.0};
         self.modulation_playing = playing;
     }
 
@@ -2017,20 +2024,16 @@ impl Engine {
         ];
         params.append(&mut match name {
             "StepsModulatorBox" => alloc::vec![
-                (10u16, Integer(LinearInteger {min: 1, max: modulation::MAX_STEPS as i32}),
+                (11u16, rate_sync,
                     (|state: &ModulatorState, value| if let ModulatorKind::Steps(steps) = &state.kind {
-                        steps.count.set(value as i32)
+                        steps.rate_sync.set(value as i32)
                     }) as fn(&ModulatorState, f32)),
-                (11, rate_sync,
-                    |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.rate_sync.set(value as i32)}),
                 (12, rate_absolute,
                     |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.rate_absolute.set(value)}),
                 (13, unipolar,
                     |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.phase.set(value)}),
                 (15, unipolar,
-                    |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.smooth.set(value)}),
-                (16, Integer(LinearInteger {min: 0, max: 4}),
-                    |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.direction.set(value as i32)})
+                    |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.smooth.set(value)})
             ],
             "MacroModulatorBox" => alloc::vec![
                 (10u16, unipolar,
@@ -2039,22 +2042,16 @@ impl Engine {
                     }) as fn(&ModulatorState, f32))
             ],
             "RandomModulatorBox" => alloc::vec![
-                (10u16, Integer(LinearInteger {min: 0, max: modulation::MAX_STEPS as i32}),
+                (11u16, rate_sync,
                     (|state: &ModulatorState, value| if let ModulatorKind::Random(random) = &state.kind {
-                        random.loop_length.set(value as i32)
+                        random.rate_sync.set(value as i32)
                     }) as fn(&ModulatorState, f32)),
-                (11, rate_sync,
-                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.rate_sync.set(value as i32)}),
                 (12, rate_absolute,
                     |state, value| if let ModulatorKind::Random(random) = &state.kind {random.rate_absolute.set(value)}),
                 (13, unipolar,
                     |state, value| if let ModulatorKind::Random(random) = &state.kind {random.phase.set(value)}),
                 (15, unipolar,
-                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.smooth.set(value)}),
-                (16, Integer(LinearInteger {min: 0, max: 999999}),
-                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.seed.set(value as i32)}),
-                (17, Integer(LinearInteger {min: 0, max: 32}),
-                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.levels.set(value as i32)})
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.smooth.set(value)})
             ],
             _ => alloc::vec![
                 (10u16, Integer(LinearInteger {min: 0, max: 4}),
@@ -2108,12 +2105,24 @@ impl Engine {
             param.refresh(state, position, free_running);
         }
         if name == "StepsModulatorBox" {
+            subs.push(self.observe_modulator_int(uuid, 10, state, |state, value|
+                if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.count.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 16, state, |state, value|
+                if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.direction.set(value)}));
             for index in 0..modulation::MAX_STEPS {
                 let state = state.clone();
                 subs.push(self.observe_modulator_float(uuid, alloc::vec![20, index as u16], move |value| {
                     if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.steps[index].set(value)}
                 }));
             }
+        }
+        if name == "RandomModulatorBox" {
+            subs.push(self.observe_modulator_int(uuid, 10, state, |state, value|
+                if let modulation::ModulatorKind::Random(random) = &state.kind {random.loop_length.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 16, state, |state, value|
+                if let modulation::ModulatorKind::Random(random) = &state.kind {random.seed.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 17, state, |state, value|
+                if let modulation::ModulatorKind::Random(random) = &state.kind {random.levels.set(value)}));
         }
         (subs, params, collections)
     }
@@ -2135,6 +2144,18 @@ impl Engine {
         self.graph.catchup_and_subscribe(Address::of(uuid, path), move |value| {
             if let Some(value) = value.as_float32() {
                 apply(value);
+                dirty.set(true);
+            }
+        })
+    }
+
+    fn observe_modulator_int(&mut self, uuid: Uuid, key: u16, state: &Rc<modulation::ModulatorState>,
+                             apply: fn(&modulation::ModulatorState, i32)) -> SubscriptionId {
+        let state = state.clone();
+        let dirty = self.modulation_dirty.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![key]), move |value| {
+            if let Some(value) = value.as_int32() {
+                apply(&state, value);
                 dirty.set(true);
             }
         })

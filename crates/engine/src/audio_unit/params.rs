@@ -692,7 +692,11 @@ impl Engine {
             subs.append(&mut depth_subs);
             collections.append(&mut depth_collections);
             let depth = depth_handle.field.clone();
-            let depth_handle = if depth_handle.track.is_some() {Some(depth_handle)} else {None};
+            let depth_handle = if depth_handle.track.is_some() || depth_handle.modulation.is_some() {
+                Some(depth_handle)
+            } else {
+                None
+            };
             let enabled = Rc::new(core::cell::Cell::new(true));
             let cell = enabled.clone();
             let enabled_invalidate = current_params_signal().unwrap_or_else(|| invalidate.clone());

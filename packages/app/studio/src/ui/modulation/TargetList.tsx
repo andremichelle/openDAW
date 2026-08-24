@@ -9,7 +9,7 @@ import {Icon} from "@/ui/components/Icon.tsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {ParameterLabel} from "@/ui/components/ParameterLabel.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
-import {attachModulatorParameterContextMenu} from "@/ui/menu/automation.ts"
+import {attachAssignmentDepthContextMenu} from "@/ui/menu/automation.ts"
 import {installControlSourceIndicator} from "@/ui/components/AutomationControl.tsx"
 
 const className = Html.adoptStyleSheet(css, "TargetList")
@@ -37,7 +37,7 @@ export const TargetList = ({lifecycle, service, modulator}: Construct): HTMLElem
         modulator.assignments.forEach((assignment: ModulationBoxAdapter) => {
             const {depth} = assignment.namedParameter
             const depthLabel: HTMLElement = (<ParameterLabel lifecycle={rows} parameter={depth} framed={true}/>)
-            rows.own(attachModulatorParameterContextMenu(editing, midiLearning, depth, depthLabel))
+            rows.own(attachAssignmentDepthContextMenu(editing, midiLearning, depth, depthLabel))
             installControlSourceIndicator(rows, depth, entries, depthLabel, 2)
             entries.append(<div className="entry"
                  onInit={element => rows.own(assignment.box.enabled

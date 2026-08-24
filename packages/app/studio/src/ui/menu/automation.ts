@@ -46,38 +46,52 @@ export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: E
         )
     })
 
-/// A modulator's own parameters take MIDI only: automation and modulation of them do not exist yet.
+/// The lane owner is the modulator itself, registered when its parameters were created.
+const modulatorParameterItems = <T extends PrimitiveValues>(editing: Editing,
+                                                            midiDevices: MIDILearning,
+                                                            parameter: AutomatableParameterFieldAdapter<T>) => {
+    const field = parameter.field
+    const owner = parameter.context.parameterFieldAdapters.getTracks(field.address)
+    const automation = owner.flatMap(tracks => tracks.controls(field))
+    return [
+        automation.isEmpty()
+            ? MenuItem.default({label: "Create Automation", selectable: owner.nonEmpty()})
+                .setTriggerProcedure(() => editing.modify(() =>
+                    owner.ifSome(tracks => tracks.create(TrackType.Value, field))))
+            : MenuItem.default({label: "Remove Automation"})
+                .setTriggerProcedure(() => editing.modify(() =>
+                    automation.ifSome(track => owner.unwrap("no lane owner").delete(track)))),
+        MenuItem.default({
+            label: midiDevices.hasMidiConnection(field.address) ? "Forget Midi" : "Learn Midi Control..."
+        }).setTriggerProcedure(() => {
+            if (midiDevices.hasMidiConnection(field.address)) {
+                midiDevices.forgetMidiConnection(field.address)
+            } else {
+                midiDevices.learnMIDIControls(field).then()
+            }
+        }),
+        MenuItem.default({label: "Reset Value", checked: field.getValue() === field.initValue})
+            .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
+    ]
+}
+
 export const attachModulatorParameterContextMenu = <T extends PrimitiveValues>(
     editing: Editing,
     midiDevices: MIDILearning,
     parameter: AutomatableParameterFieldAdapter<T>,
     element: Element) =>
-    ContextMenu.subscribe(element, collector => {
-        const field = parameter.field
-        // The lane owner is the modulator itself, registered when its parameters were created.
-        const owner = parameter.context.parameterFieldAdapters.getTracks(field.address)
-        const automation = owner.flatMap(tracks => tracks.controls(field))
-        collector.addItems(
-            automation.isEmpty()
-                ? MenuItem.default({label: "Create Automation", selectable: owner.nonEmpty()})
-                    .setTriggerProcedure(() => editing.modify(() =>
-                        owner.ifSome(tracks => tracks.create(TrackType.Value, field))))
-                : MenuItem.default({label: "Remove Automation"})
-                    .setTriggerProcedure(() => editing.modify(() =>
-                        automation.ifSome(track => owner.unwrap("no lane owner").delete(track)))),
-            MenuItem.default({
-                label: midiDevices.hasMidiConnection(field.address) ? "Forget Midi" : "Learn Midi Control..."
-            }).setTriggerProcedure(() => {
-                if (midiDevices.hasMidiConnection(field.address)) {
-                    midiDevices.forgetMidiConnection(field.address)
-                } else {
-                    midiDevices.learnMIDIControls(field).then()
-                }
-            }),
-            MenuItem.default({label: "Reset Value", checked: field.getValue() === field.initValue})
-                .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
-        )
-    })
+    ContextMenu.subscribe(element, collector =>
+        collector.addItems(...modulatorParameterItems(editing, midiDevices, parameter)))
+
+export const attachAssignmentDepthContextMenu = <T extends PrimitiveValues>(
+    editing: Editing,
+    midiDevices: MIDILearning,
+    parameter: AutomatableParameterFieldAdapter<T>,
+    element: Element) =>
+    ContextMenu.subscribe(element, collector => collector.addItems(
+        ...modulatorParameterItems(editing, midiDevices, parameter),
+        modulationMenu(editing, parameter)
+    ))
 
 const modulationMenu = <T extends PrimitiveValues>(editing: Editing,
                                                    parameter: AutomatableParameterFieldAdapter<T>) =>

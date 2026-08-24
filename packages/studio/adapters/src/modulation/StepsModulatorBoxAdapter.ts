@@ -99,9 +99,6 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
 
     #wrapParameters(box: StepsModulatorBox) {
         return {
-            count: this.parametric.createParameter(box.count,
-                ValueMapping.linearInteger(1, StepsModulatorBoxAdapter.MaxSteps),
-                StringMapping.numeric({unit: ""}), "Steps"),
             rateSync: this.parametric.createParameter(box.rateSync,
                 ValueMapping.linearInteger(0, LfoModulatorBoxAdapter.RateStrings.length - 1),
                 StringMapping.indices("", LfoModulatorBoxAdapter.RateStrings), "Sync"),
@@ -112,10 +109,7 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
             phase: this.parametric.createParameter(box.phase,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Phase"),
             smooth: this.parametric.createParameter(box.smooth,
-                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Smooth"),
-            direction: this.parametric.createParameter(box.direction,
-                ValueMapping.linearInteger(0, StepsModulatorBoxAdapter.DirectionStrings.length - 1),
-                StringMapping.indices("", StepsModulatorBoxAdapter.DirectionStrings), "Mode")
+                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Smooth")
         } as const
     }
 }

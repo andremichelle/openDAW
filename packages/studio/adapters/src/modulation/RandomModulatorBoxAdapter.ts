@@ -55,9 +55,6 @@ export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulat
 
     #wrapParameters(box: RandomModulatorBox) {
         return {
-            loop: this.parametric.createParameter(box.loop,
-                ValueMapping.linearInteger(0, RandomModulatorBoxAdapter.MaxLoop),
-                StringMapping.numeric({unit: ""}), "Loop"),
             rateSync: this.parametric.createParameter(box.rateSync,
                 ValueMapping.linearInteger(0, LfoModulatorBoxAdapter.RateStrings.length - 1),
                 StringMapping.indices("", LfoModulatorBoxAdapter.RateStrings), "Sync"),
@@ -68,10 +65,7 @@ export class RandomModulatorBoxAdapter extends ModulatorBoxAdapter<RandomModulat
             phase: this.parametric.createParameter(box.phase,
                 ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Phase"),
             smooth: this.parametric.createParameter(box.smooth,
-                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Smooth"),
-            levels: this.parametric.createParameter(box.levels,
-                ValueMapping.linearInteger(0, RandomModulatorBoxAdapter.MaxLevels),
-                StringMapping.numeric({unit: ""}), "Levels")
+                ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Smooth")
         } as const
     }
 }

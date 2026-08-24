@@ -8,7 +8,7 @@
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
-import {isDefined, Option, Optional, panic, Terminable, UUID} from "@opendaw/lib-std"
+import {Arrays, isDefined, Option, Optional, panic, Terminable, UUID} from "@opendaw/lib-std"
 import {Address, BooleanField, BoxGraph, Constraints, Float32Field, Int32Field, PrimitiveType} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
@@ -346,19 +346,16 @@ type ModulatorCase = {
     name: string
     kind: number
     createAdapter: (context: BoxAdaptersContext) => {terminate(): void}
-    // Field keys the engine binds that the TS adapter does not wrap as a parameter.
-    rustOnly: ReadonlyArray<number>
 }
 
 const MODULATOR_CASES: ReadonlyArray<ModulatorCase> = [
-    {name: "lfo-modulator", kind: 0, rustOnly: [],
+    {name: "lfo-modulator", kind: 0,
         createAdapter: context => new LfoModulatorBoxAdapter(context, boxes.lfoModulator)},
-    {name: "steps-modulator", kind: 1, rustOnly: [],
+    {name: "steps-modulator", kind: 1,
         createAdapter: context => new StepsModulatorBoxAdapter(context, boxes.stepsModulator)},
-    {name: "macro-modulator", kind: 2, rustOnly: [],
+    {name: "macro-modulator", kind: 2,
         createAdapter: context => new MacroModulatorBoxAdapter(context, boxes.macroModulator)},
-    // `seed` (16) has no adapter parameter, so it carries neither an automation lane nor MIDI learn.
-    {name: "random-modulator", kind: 3, rustOnly: [16],
+    {name: "random-modulator", kind: 3,
         createAdapter: context => new RandomModulatorBoxAdapter(context, boxes.randomModulator)}
 ]
 
@@ -381,8 +378,10 @@ const loadEngine = (): (kind: number, key: number, unit: number) => number => {
     return exports.map_modulator_parameter
 }
 
+const MODULATOR_KEY_SPACE = 32
+
 describe("modulator param mapping parity (engine wasm vs TS BoxAdapter)", () => {
-    for (const {name, kind, createAdapter, rustOnly} of MODULATOR_CASES) {
+    for (const {name, kind, createAdapter} of MODULATOR_CASES) {
         it(name, () => {
             const map = loadEngine()
             const tsParameters = collectTsParameters(createAdapter)
@@ -396,9 +395,11 @@ describe("modulator param mapping parity (engine wasm vs TS BoxAdapter)", () => 
                         `${name} [${keyPath}] '${adapter.name}' @ ${unit}`)
                 }
             }
+            // An engine-only key would carry no automation lane and no MIDI learn.
             const tsKeys = new Set(tsParameters.map(parameter => Number(parameter.path)))
-            const unwrapped = rustOnly.filter(key => tsKeys.has(key))
-            expect(unwrapped, `${name}: rustOnly keys the adapter now wraps, drop them from the list`).toEqual([])
+            const engineOnly = Arrays.create(index => index, MODULATOR_KEY_SPACE)
+                .filter(key => !tsKeys.has(key) && !Number.isNaN(map(kind, key, 0.5)))
+            expect(engineOnly, `${name}: engine-bound field keys without a TS adapter parameter`).toEqual([])
         })
     }
 })
