@@ -110,6 +110,12 @@ export class GraphEdges {
         }
     }
 
+    // Every mandatory pointer in the graph is registered here, so this is the authoritative answer to
+    // "who is missing a required target" without walking (possibly nested) fields box by box.
+    unsatisfiedMandatoryPointers(): ReadonlyArray<PointerField> {
+        return this.#requiresTarget.values().filter(pointer => pointer.isEmpty())
+    }
+
     clearAffected(): void {this.#affected.clear()}
 
     tryValidateAffected(): Option<Error> {

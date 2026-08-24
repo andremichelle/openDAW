@@ -18,6 +18,7 @@ import {
 } from "@opendaw/lib-std"
 import {
     ArrayField,
+    Box,
     BoxGraph,
     Field,
     ObjectField,
@@ -126,7 +127,7 @@ export class YSync<T> implements Terminable {
             // First attempt: apply the remote batch verbatim.
             this.#boxGraph.beginTransaction()
             const result = tryCatch(() => {
-                this.#applyEvents(events)
+                this.#assertResolvable(this.#applyEvents(events))
                 this.#ignoreUpdates = true
                 this.#boxGraph.endTransaction()
                 this.#ignoreUpdates = false
@@ -181,7 +182,8 @@ export class YSync<T> implements Terminable {
     // Replay one remote Yjs event batch into the (already open) box-graph transaction. Idempotent enough to
     // run twice: the first attempt applies verbatim; on a constraint failure the reconcile path aborts and
     // replays through here before repairing.
-    #applyEvents(events: Array<Y.YEvent<any>>): void {
+    #applyEvents(events: Array<Y.YEvent<any>>): ReadonlyArray<Box> {
+        const touched: Array<Box> = []
         for (const event of events) {
             const path = this.#normalizePath(event.path)
             const keys = event.changes.keys
@@ -191,30 +193,50 @@ export class YSync<T> implements Terminable {
                 }
                 if (change.action === "add") {
                     assert(path.length === 0, "'Add' cannot have a path")
-                    this.#createBox(key)
+                    touched.push(this.#createBox(key))
                 } else if (change.action === "update") {
                     if (path.length === 0) {continue}
                     assert(path.length >= 2, "Invalid path: must have at least 2 elements (uuid, 'fields').")
-                    this.#updateValue(path, key)
+                    touched.push(this.#updateValue(path, key))
                 } else if (change.action === "delete") {
                     assert(path.length === 0, "'Delete' cannot have a path")
                     this.#deleteBox(key)
                 }
             }
         }
+        return touched
     }
 
-    #createBox(key: string): void {
+    // A batch can leave an edge naming a uuid no box occupies: the box map came back carrying its original
+    // pointer values (an undo replay in the host app does exactly this), or a peer deleted the target
+    // concurrently. Nothing downstream catches it, because endTransaction validates address PRESENCE, not
+    // resolvability, so it commits here and surfaces much later as a panic in dependenciesOf. Throw instead,
+    // which drops us into the reconcile path below and repairs it deterministically. Checked after the whole
+    // batch: a box created early may legitimately point at one created later in the same batch.
+    #assertResolvable(touched: ReadonlyArray<Box>): void {
+        for (const box of touched) {
+            if (!box.isAttached()) {continue}
+            for (const [pointer, targetAddress] of box.outgoingEdges()) {
+                if (this.#boxGraph.findVertex(targetAddress).isEmpty()) {
+                    return panic(`Pointer ${pointer.toString()} targets ${targetAddress.toString()} (no such vertex).`)
+                }
+            }
+        }
+    }
+
+    #createBox(key: string): Box {
         const map = this.#boxes.get(key) as Y.Map<unknown>
         const name = map.get("name") as keyof T
         const fields = map.get("fields") as Y.Map<unknown>
         const uuid = UUID.parse(key)
         const optBox = this.#boxGraph.findBox(UUID.parse(key))
         if (optBox.isEmpty()) {
-            this.#boxGraph.createBox(name, uuid, box => YMapper.applyFromBoxMap(box, fields))
+            return this.#boxGraph.createBox(name, uuid, box => YMapper.applyFromBoxMap(box, fields))
         } else {
             console.debug(`Box '${key}' has already been created. Performing 'Upsert'.`)
-            YMapper.applyFromBoxMap(optBox.unwrap(), fields)
+            const box = optBox.unwrap()
+            YMapper.applyFromBoxMap(box, fields)
+            return box
         }
     }
 
@@ -227,7 +249,7 @@ export class YSync<T> implements Terminable {
         return path.slice(prefix.length)
     }
 
-    #updateValue(path: ReadonlyArray<string | number>, key: string): void {
+    #updateValue(path: ReadonlyArray<string | number>, key: string): Box {
         const address = YMapper.pathToAddress(path, key)
         const vertex = this.#boxGraph.findVertex(address)
             .unwrap(`Vertex at '${address.toString()}' does not exist.`)
@@ -243,6 +265,7 @@ export class YSync<T> implements Terminable {
             visitPointerField: (field: PointerField) => field.fromJSON(targetMap.get(key) as JSONValue),
             visitPrimitiveField: (field: PrimitiveField) => field.fromJSON(targetMap.get(key) as JSONValue)
         })
+        return vertex.box
     }
 
     #deleteBox(key: string): void {
