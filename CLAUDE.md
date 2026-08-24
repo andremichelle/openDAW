@@ -2,7 +2,7 @@
 
 ## Coding Style
 
-- **Minimize comments.** Code should be self-explanatory. Only add comments when the logic is truly non-obvious.
+- **Absolutely minimal comments.** A comment is rare and it is ONE short line. Never a 4-5 line block, never narration of what the code is doing, never a design rationale (that belongs in the commit message). Only comment when it is absolutely necessary, meaning the reader needs a fact the code cannot show. Tests may be commented freely.
 - **No blank lines inside methods.** Keep method bodies compact without empty line separators.
 - **Keep destructuring compact.** Group multiple destructured properties on the same line rather than one per line. Break into multiple lines only when a single line would exceed ~120 characters.
 - **Never use single-letter abbreviations in lambdas.** Use descriptive names like `entry`, `text`, `value`, `event`, etc.
@@ -29,4 +29,5 @@
 ## Workflow
 
 - **Analyze bugs and propose fixes, but wait for approval before editing code.**
+- **Never commit.** Only run `git commit` when explicitly asked, for that commit. Finished, tested and verified work is ready to be committed, it is not permission to commit it.
 - **Never use `Write` to rewrite existing files** — always use `Edit` (small diffs).

@@ -1,18 +1,21 @@
 import {describe, expect, it, beforeEach} from "vitest"
 import {isDefined, isInstanceOf, Option, UUID} from "@opendaw/lib-std"
-import {Box, BoxEditing, BoxGraph, Field, type Vertex} from "@opendaw/lib-box"
+import {Address, Box, BoxEditing, BoxGraph, Field, PointerField, type Vertex} from "@opendaw/lib-box"
 import {
     ApparatDeviceBox,
     AudioFileBox,
     AudioUnitBox,
     CompressorDeviceBox,
+    CrusherDeviceBox,
     MIDIOutputBox,
     MIDIOutputDeviceBox,
+    ModulationBox,
     NoteEventCollectionBox,
     NoteRegionBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
     RootBox,
+    StepsModulatorBox,
     TapeDeviceBox,
     TrackBox,
     VaporisateurDeviceBox,
@@ -22,7 +25,7 @@ import {
     WerkstattSampleBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
-import {DeviceBoxUtils, ProjectSkeleton, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
+import {DeviceBoxUtils, isModulatorBox, ProjectSkeleton, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {AudioEffectCompositeBox, AudioEffectCompositeCellBox, StereoToolDeviceBox, UserInterfaceBox} from "@opendaw/studio-boxes"
 import {ClipboardUtils} from "../ClipboardUtils"
 import {DevicesClipboard} from "./DevicesClipboardHandler"
@@ -297,7 +300,7 @@ describe("DevicesClipboardHandler", () => {
 
     const makePasteMapper = (targetAudioUnit: AudioUnitBox, replaceInstrument: boolean,
                              hasInstrument: boolean = true) => ({
-        mapPointer: (pointer: {pointerType: unknown}) => {
+        mapPointer: (pointer: PointerField, address: Option<Address>) => {
             if (pointer.pointerType === Pointers.InstrumentHost && replaceInstrument) {
                 return Option.wrap(targetAudioUnit.input.address)
             }
@@ -313,9 +316,11 @@ describe("DevicesClipboardHandler", () => {
             if (pointer.pointerType === Pointers.Automation && replaceInstrument) {
                 return Option.wrap(targetAudioUnit.address)
             }
-            return Option.None
+            return DevicesClipboard.mapModulationPointer(pointer, address, targetAudioUnit.graph)
         },
+        keepUuid: isModulatorBox,
         excludeBox: (box: Box) => {
+            if (DevicesClipboard.excludeExistingModulator(box, targetAudioUnit.graph)) {return true}
             if (replaceInstrument) {return false}
             if (DeviceBoxUtils.isInstrumentDeviceBox(box)) {return true}
             // Mirrors DevicesClipboardHandler paste: when an instrument is bundled but not replaced, drop the
@@ -1386,7 +1391,7 @@ describe("DevicesClipboardHandler", () => {
                 ClipboardUtils.deserializeBoxes(data, target.boxGraph, {
                     ...makePasteMapper(targetAU, true),
                     mapPointer: (pointer, address) => {
-                        const base = makePasteMapper(targetAU, true).mapPointer(pointer)
+                        const base = makePasteMapper(targetAU, true).mapPointer(pointer, address)
                         if (base.nonEmpty()) {return base}
                         if (pointer.pointerType === Pointers.MIDIDevice) {
                             return Option.wrap(target.mandatoryBoxes.rootBox.outputMidiDevices.address)
@@ -1520,6 +1525,462 @@ describe("DevicesClipboardHandler", () => {
             editing.undo()
             expect(entry.audioEffects.pointerHub.incoming().length, "the pasted device is removed").toBe(1)
             expect(inBranch(ui, entry), "and you stay in the branch").toBe(true)
+        })
+    })
+    // ─────────────────────────────────────────────────────────
+    // Modulated devices
+    // ─────────────────────────────────────────────────────────
+
+    describe("modulated devices", () => {
+        const addCrusher = (skeleton: ProjectSkeleton, audioUnit: AudioUnitBox,
+                            label: string, index: number = 0): CrusherDeviceBox => {
+            const {boxGraph} = skeleton
+            let effect!: CrusherDeviceBox
+            boxGraph.beginTransaction()
+            effect = CrusherDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(label)
+                box.host.refer(audioUnit.audioEffects)
+                box.index.setValue(index)
+            })
+            boxGraph.endTransaction()
+            return effect
+        }
+        const addModulator = (skeleton: ProjectSkeleton, label: string, index: number = 0): StepsModulatorBox => {
+            const {boxGraph, mandatoryBoxes: {rootBox}} = skeleton
+            let modulator!: StepsModulatorBox
+            boxGraph.beginTransaction()
+            modulator = StepsModulatorBox.create(boxGraph, UUID.generate(), box => {
+                box.collection.refer(rootBox.modulators)
+                box.label.setValue(label)
+                box.index.setValue(index)
+            })
+            boxGraph.endTransaction()
+            return modulator
+        }
+        const assign = (skeleton: ProjectSkeleton, modulator: StepsModulatorBox,
+                        target: Vertex, depth: number = 0.25): ModulationBox => {
+            const {boxGraph} = skeleton
+            let modulation!: ModulationBox
+            boxGraph.beginTransaction()
+            modulation = ModulationBox.create(boxGraph, UUID.generate(), box => {
+                box.source.refer(modulator.assignments)
+                box.target.refer(target)
+                box.depth.setValue(depth)
+                box.index.setValue(modulator.assignments.pointerHub.incoming().length)
+            })
+            boxGraph.endTransaction()
+            return modulation
+        }
+        const modulatorsOf = (skeleton: ProjectSkeleton): ReadonlyArray<Box> =>
+            skeleton.mandatoryBoxes.rootBox.modulators.pointerHub.incoming().map(({box}) => box)
+        const modulationsOf = (skeleton: ProjectSkeleton): ReadonlyArray<ModulationBox> =>
+            skeleton.boxGraph.boxes().filter(box => isInstanceOf(box, ModulationBox)) as ModulationBox[]
+        const pastedEffectsOf = (audioUnit: AudioUnitBox): ReadonlyArray<CrusherDeviceBox> =>
+            audioUnit.audioEffects.pointerHub.incoming()
+                .map(({box}) => box)
+                .filter(box => isInstanceOf(box, CrusherDeviceBox)) as CrusherDeviceBox[]
+        const bundleOf = (skeleton: ProjectSkeleton, device: Box): ArrayBufferLike =>
+            ClipboardUtils.serializeBoxes([device, ...collectDeviceDependencies(device, skeleton.boxGraph)])
+        const pasteInto = (skeleton: ProjectSkeleton, audioUnit: AudioUnitBox, data: ArrayBufferLike): void => {
+            new BoxEditing(skeleton.boxGraph).modify(() =>
+                ClipboardUtils.deserializeBoxes(data, skeleton.boxGraph, makePasteMapper(audioUnit, false, false)))
+        }
+
+        describe("copy bundles the modulator", () => {
+            it("collects the ModulationBox of a modulated parameter", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                const modulation = assign(source, modulator, crusher.crush)
+                const deps = collectDeviceDependencies(crusher, source.boxGraph)
+                expect(deps).toContain(modulation)
+            })
+            it("collects the modulator the assignment points at", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const deps = collectDeviceDependencies(crusher, source.boxGraph)
+                expect(deps).toContain(modulator)
+            })
+            it("collects both modulators when two drive the same device", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const first = addModulator(source, "Steps A", 0)
+                const second = addModulator(source, "Steps B", 1)
+                assign(source, first, crusher.crush)
+                assign(source, second, crusher.bits)
+                const deps = collectDeviceDependencies(crusher, source.boxGraph)
+                expect(deps).toContain(first)
+                expect(deps).toContain(second)
+            })
+            it("collects one modulator once when it drives two parameters", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                assign(source, modulator, crusher.bits)
+                const deps = collectDeviceDependencies(crusher, source.boxGraph)
+                expect(deps.filter(box => box === modulator).length).toBe(1)
+            })
+            it("does not collect the RootBox the modulator hangs off", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const deps = collectDeviceDependencies(crusher, source.boxGraph)
+                expect(deps.some(box => isInstanceOf(box, RootBox))).toBe(false)
+            })
+            it("collects no modulator for an unmodulated device", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                addModulator(source, "Steps")
+                const deps = collectDeviceDependencies(crusher, source.boxGraph)
+                expect(deps.some(box => isInstanceOf(box, StepsModulatorBox))).toBe(false)
+                expect(deps.some(box => isInstanceOf(box, ModulationBox))).toBe(false)
+            })
+            it("does not collect a modulator that drives a different device", () => {
+                const audioUnit = createAudioUnit(source)
+                const copied = addCrusher(source, audioUnit, "Copied", 0)
+                const other = addCrusher(source, audioUnit, "Other", 1)
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, other.crush)
+                const deps = collectDeviceDependencies(copied, source.boxGraph)
+                expect(deps).not.toContain(modulator)
+            })
+            it("does not collect the same modulator's assignments to OTHER devices", () => {
+                const audioUnit = createAudioUnit(source)
+                const copied = addCrusher(source, audioUnit, "Copied", 0)
+                const other = addCrusher(source, audioUnit, "Other", 1)
+                const modulator = addModulator(source, "Steps")
+                const mine = assign(source, modulator, copied.crush)
+                const foreign = assign(source, modulator, other.crush)
+                const deps = collectDeviceDependencies(copied, source.boxGraph)
+                expect(deps).toContain(modulator)
+                expect(deps).toContain(mine)
+                expect(deps).not.toContain(foreign)
+            })
+            it("collects the modulator of an effect nested in a composite cell", () => {
+                const audioUnit = createAudioUnit(source)
+                const {composite, nested} = addComposite(source, audioUnit)
+                const modulator = addModulator(source, "Steps")
+                const modulation = assign(source, modulator, nested.volume)
+                const deps = collectDeviceDependencies(composite, source.boxGraph)
+                expect(deps).toContain(modulation)
+                expect(deps).toContain(modulator)
+            })
+        })
+
+        describe("duplicate inside the same project", () => {
+            it("does not throw", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                expect(() => pasteInto(source, audioUnit, data)).not.toThrow()
+            })
+            it("adds no second modulator", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                pasteInto(source, audioUnit, data)
+                expect(modulatorsOf(source).length).toBe(1)
+                expect(modulatorsOf(source)[0]).toBe(modulator)
+            })
+            it("points the duplicate's assignment at the SAME modulator", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                pasteInto(source, audioUnit, data)
+                const modulations = modulationsOf(source)
+                expect(modulations.length).toBe(2)
+                modulations.forEach(modulation =>
+                    expect(modulation.source.targetVertex.unwrap("source").box).toBe(modulator))
+            })
+            it("targets the duplicate's OWN parameter, not the original's", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                pasteInto(source, audioUnit, data)
+                const duplicate = pastedEffectsOf(audioUnit).find(box => box !== crusher)
+                expect(isDefined(duplicate)).toBe(true)
+                const targets = modulationsOf(source)
+                    .map(modulation => modulation.target.targetVertex.unwrap("target"))
+                expect(targets.some(vertex => vertex === crusher.crush)).toBe(true)
+                expect(targets.some(vertex => vertex === duplicate!.crush)).toBe(true)
+            })
+            it("keeps depth and enabled through the duplicate", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                const modulation = assign(source, modulator, crusher.crush, 0.75)
+                source.boxGraph.beginTransaction()
+                modulation.enabled.setValue(false)
+                source.boxGraph.endTransaction()
+                const data = bundleOf(source, crusher)
+                pasteInto(source, audioUnit, data)
+                const pasted = modulationsOf(source).find(box => box !== modulation)
+                expect(isDefined(pasted)).toBe(true)
+                expect(pasted!.depth.getValue()).toBeCloseTo(0.75)
+                expect(pasted!.enabled.getValue()).toBe(false)
+            })
+            it("keeps both assignments when one modulator drives two parameters", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                assign(source, modulator, crusher.bits)
+                const data = bundleOf(source, crusher)
+                pasteInto(source, audioUnit, data)
+                expect(modulationsOf(source).length).toBe(4)
+                expect(modulatorsOf(source).length).toBe(1)
+                const duplicate = pastedEffectsOf(audioUnit).find(box => box !== crusher)
+                expect(duplicate!.crush.pointerHub.incoming().length).toBe(1)
+                expect(duplicate!.bits.pointerHub.incoming().length).toBe(1)
+            })
+            it("keeps both assignments when two modulators drive one device", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const first = addModulator(source, "Steps A", 0)
+                const second = addModulator(source, "Steps B", 1)
+                assign(source, first, crusher.crush)
+                assign(source, second, crusher.bits)
+                const data = bundleOf(source, crusher)
+                pasteInto(source, audioUnit, data)
+                expect(modulatorsOf(source).length).toBe(2)
+                const duplicate = pastedEffectsOf(audioUnit).find(box => box !== crusher)
+                const sources = modulationsOf(source)
+                    .filter(modulation => modulation.target.targetVertex
+                        .mapOr(vertex => vertex.box === duplicate, false))
+                    .map(modulation => modulation.source.targetVertex.unwrap("source").box)
+                expect(sources.length).toBe(2)
+                expect(sources).toContain(first)
+                expect(sources).toContain(second)
+            })
+        })
+
+        describe("paste into another project", () => {
+            it("does not throw", () => {
+                const sourceAU = createAudioUnit(source)
+                const crusher = addCrusher(source, sourceAU, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                const targetAU = createAudioUnit(target)
+                expect(() => pasteInto(target, targetAU, data)).not.toThrow()
+            })
+            it("creates a modulator copy", () => {
+                const sourceAU = createAudioUnit(source)
+                const crusher = addCrusher(source, sourceAU, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                const targetAU = createAudioUnit(target)
+                pasteInto(target, targetAU, data)
+                expect(modulatorsOf(target).length).toBe(1)
+                expect(modulatorsOf(target)[0]).not.toBe(modulator)
+            })
+            it("attaches the copy to the TARGET project's root", () => {
+                const sourceAU = createAudioUnit(source)
+                const crusher = addCrusher(source, sourceAU, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                const targetAU = createAudioUnit(target)
+                pasteInto(target, targetAU, data)
+                const copy = modulatorsOf(target)[0] as StepsModulatorBox
+                expect(copy.collection.targetVertex.unwrap("collection"))
+                    .toBe(target.mandatoryBoxes.rootBox.modulators)
+                expect(modulatorsOf(source).length).toBe(1)
+            })
+            it("points the pasted assignment at the copy, not at the source modulator", () => {
+                const sourceAU = createAudioUnit(source)
+                const crusher = addCrusher(source, sourceAU, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                const targetAU = createAudioUnit(target)
+                pasteInto(target, targetAU, data)
+                const copy = modulatorsOf(target)[0]
+                const modulations = modulationsOf(target)
+                expect(modulations.length).toBe(1)
+                expect(modulations[0].source.targetVertex.unwrap("source").box).toBe(copy)
+                expect(copy).not.toBe(modulator)
+                // The copy keeps the modulator's identity so a repeated paste finds it instead of adding another.
+                expect(UUID.toString(copy.address.uuid)).toBe(UUID.toString(modulator.address.uuid))
+            })
+            it("carries the modulator's own state", () => {
+                const sourceAU = createAudioUnit(source)
+                const crusher = addCrusher(source, sourceAU, "Crusher")
+                const modulator = addModulator(source, "Rumble", 3)
+                source.boxGraph.beginTransaction()
+                modulator.count.setValue(7)
+                source.boxGraph.endTransaction()
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                const targetAU = createAudioUnit(target)
+                pasteInto(target, targetAU, data)
+                const copy = modulatorsOf(target)[0] as StepsModulatorBox
+                expect(copy.label.getValue()).toBe("Rumble")
+                expect(copy.count.getValue()).toBe(7)
+            })
+            it("drives the pasted device, not the source device", () => {
+                const sourceAU = createAudioUnit(source)
+                const crusher = addCrusher(source, sourceAU, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                const targetAU = createAudioUnit(target)
+                pasteInto(target, targetAU, data)
+                const pastedDevice = pastedEffectsOf(targetAU)[0]
+                expect(modulationsOf(target)[0].target.targetVertex.unwrap("target")).toBe(pastedDevice.crush)
+                expect(crusher.crush.pointerHub.incoming().length).toBe(1)
+            })
+            it("a second paste reuses the modulator the first one created", () => {
+                const sourceAU = createAudioUnit(source)
+                const crusher = addCrusher(source, sourceAU, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                const targetAU = createAudioUnit(target)
+                pasteInto(target, targetAU, data)
+                const copy = modulatorsOf(target)[0]
+                pasteInto(target, targetAU, data)
+                expect(modulatorsOf(target).length).toBe(1)
+                expect(modulatorsOf(target)[0]).toBe(copy)
+                const modulations = modulationsOf(target)
+                expect(modulations.length).toBe(2)
+                modulations.forEach(modulation =>
+                    expect(modulation.source.targetVertex.unwrap("source").box).toBe(copy))
+            })
+        })
+
+        describe("shared modulators and undo", () => {
+            it("pastes into another project when the modulator also drives a device left behind", () => {
+                const sourceAU = createAudioUnit(source)
+                const copied = addCrusher(source, sourceAU, "Copied", 0)
+                const other = addCrusher(source, sourceAU, "Other", 1)
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, copied.crush)
+                assign(source, modulator, other.crush)
+                const data = bundleOf(source, copied)
+                const targetAU = createAudioUnit(target)
+                expect(() => pasteInto(target, targetAU, data)).not.toThrow()
+                expect(modulatorsOf(target).length).toBe(1)
+                expect(modulationsOf(target).length).toBe(1)
+                expect(modulationsOf(source).length).toBe(2)
+            })
+            it("keeps one modulator when two devices of one project are pasted into another", () => {
+                const sourceAU = createAudioUnit(source)
+                const first = addCrusher(source, sourceAU, "First", 0)
+                const second = addCrusher(source, sourceAU, "Second", 1)
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, first.crush)
+                assign(source, modulator, second.crush)
+                const targetAU = createAudioUnit(target)
+                pasteInto(target, targetAU, bundleOf(source, first))
+                pasteInto(target, targetAU, bundleOf(source, second))
+                expect(modulatorsOf(target).length).toBe(1)
+                expect(modulationsOf(target).length).toBe(2)
+                const copy = modulatorsOf(target)[0]
+                modulationsOf(target).forEach(modulation =>
+                    expect(modulation.source.targetVertex.unwrap("source").box).toBe(copy))
+            })
+            it("undoing a duplicate removes the assignment and keeps the modulator", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                const editing = new BoxEditing(source.boxGraph)
+                editing.modify(() => ClipboardUtils.deserializeBoxes(data, source.boxGraph,
+                    makePasteMapper(audioUnit, false, false)))
+                expect(modulationsOf(source).length).toBe(2)
+                editing.undo()
+                expect(modulationsOf(source).length).toBe(1)
+                expect(modulatorsOf(source).length).toBe(1)
+                expect(modulatorsOf(source)[0]).toBe(modulator)
+                expect(crusher.crush.pointerHub.incoming().length).toBe(1)
+            })
+            it("undoing a cross-project paste removes the modulator copy too", () => {
+                const sourceAU = createAudioUnit(source)
+                const crusher = addCrusher(source, sourceAU, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                assign(source, modulator, crusher.crush)
+                const data = bundleOf(source, crusher)
+                const targetAU = createAudioUnit(target)
+                const editing = new BoxEditing(target.boxGraph)
+                editing.modify(() => ClipboardUtils.deserializeBoxes(data, target.boxGraph,
+                    makePasteMapper(targetAU, false, false)))
+                expect(modulatorsOf(target).length).toBe(1)
+                editing.undo()
+                expect(modulatorsOf(target).length).toBe(0)
+                expect(modulationsOf(target).length).toBe(0)
+            })
+            it("duplicating an unmodulated device leaves the modulator list alone", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                const data = bundleOf(source, crusher)
+                pasteInto(source, audioUnit, data)
+                expect(modulatorsOf(source).length).toBe(1)
+                expect(modulatorsOf(source)[0]).toBe(modulator)
+                expect(modulationsOf(source).length).toBe(0)
+            })
+        })
+
+        describe("paste helpers", () => {
+            it("excludes a modulator the target graph already has", () => {
+                const modulator = addModulator(source, "Steps")
+                expect(DevicesClipboard.excludeExistingModulator(modulator, source.boxGraph)).toBe(true)
+            })
+            it("keeps a modulator the target graph does not have", () => {
+                const modulator = addModulator(source, "Steps")
+                expect(DevicesClipboard.excludeExistingModulator(modulator, target.boxGraph)).toBe(false)
+            })
+            it("never excludes a non-modulator box", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                expect(DevicesClipboard.excludeExistingModulator(crusher, source.boxGraph)).toBe(false)
+            })
+            it("keeps a resolvable source address", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                const modulation = assign(source, modulator, crusher.crush)
+                const mapped = DevicesClipboard.mapModulationPointer(
+                    modulation.source, Option.wrap(modulator.assignments.address), source.boxGraph)
+                expect(mapped.unwrap("mapped").equals(modulator.assignments.address)).toBe(true)
+            })
+            it("drops a source address that does not resolve in the target graph", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                const modulator = addModulator(source, "Steps")
+                const modulation = assign(source, modulator, crusher.crush)
+                const mapped = DevicesClipboard.mapModulationPointer(
+                    modulation.source, Option.wrap(modulator.assignments.address), target.boxGraph)
+                expect(mapped.isEmpty()).toBe(true)
+            })
+            it("maps a collection pointer to the target project's root", () => {
+                const modulator = addModulator(source, "Steps")
+                const mapped = DevicesClipboard.mapModulationPointer(
+                    modulator.collection, Option.wrap(source.mandatoryBoxes.rootBox.modulators.address),
+                    target.boxGraph)
+                expect(mapped.unwrap("mapped").equals(target.mandatoryBoxes.rootBox.modulators.address)).toBe(true)
+            })
+            it("answers nothing for an unrelated pointer type", () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit, "Crusher")
+                expect(DevicesClipboard.mapModulationPointer(
+                    crusher.host, Option.wrap(audioUnit.audioEffects.address), source.boxGraph).isEmpty()).toBe(true)
+            })
         })
     })
 })

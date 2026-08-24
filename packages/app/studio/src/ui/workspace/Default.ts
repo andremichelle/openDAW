@@ -159,6 +159,34 @@ export const DefaultWorkspace = Object.freeze({
             constrains: {type: "flex", minSize: 20, flex: 1}
         }
     },*/
+    "modulation": {
+        name: "Modulation",
+        icon: IconSymbol.Modulation,
+        content: {
+            type: "layout",
+            orientation: "horizontal",
+            contents: [
+                BrowserPanel,
+                {
+                    type: "layout",
+                    orientation: "vertical",
+                    contents: [
+                        PanelState.create({
+                            type: "panel",
+                            name: "Modulation",
+                            icon: IconSymbol.Modulation,
+                            panelType: PanelType.Modulation,
+                            notMinimizable: true,
+                            constrains: {type: "flex", minSize: 0, flex: 1}
+                        }),
+                        DevicesPanel
+                    ],
+                    constrains: {type: "flex", minSize: 0, flex: 1}
+                }
+            ],
+            constrains: {type: "flex", minSize: 20, flex: 1}
+        }
+    },
     "piano": {
         name: "Piano Tutorial Mode",
         icon: IconSymbol.Piano,

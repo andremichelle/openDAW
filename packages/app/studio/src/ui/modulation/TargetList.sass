@@ -1,0 +1,69 @@
+component
+  grid-column: -2 / -1
+  grid-row: span 2
+  padding-left: var(--editor-gap)
+  position: relative
+  display: grid
+  grid-template-rows: subgrid
+
+  &::before
+    content: ""
+    grid-area: 2 / 1
+
+  > .entries
+    grid-area: 2 / 1
+    display: grid
+    grid-template-columns: 1fr auto auto auto
+    grid-auto-rows: 1.5em
+    align-content: start
+    align-items: center
+    column-gap: 1px
+    padding: 0.25em
+
+    > .placeholder
+      grid-column: 1 / -1
+      display: grid
+      place-items: center
+      font-size: 0.8em
+      color: rgba(white, 0.2)
+
+    > .entry
+      display: contents
+
+      > .target
+        display: grid
+        grid-template-columns: minmax(0, max-content) minmax(0, max-content)
+        justify-content: start
+        column-gap: 0.35em
+        overflow: hidden
+        white-space: nowrap
+        font-size: 0.8em
+        color: var(--color-dark)
+
+        > .owner, > .parameter
+          min-width: 0
+          overflow: hidden
+          text-overflow: ellipsis
+
+        > .owner
+          cursor: pointer
+
+          &:hover
+            color: var(--color-blue)
+
+        > .parameter
+          color: var(--color-shadow)
+
+      label
+        font-size: 10px
+
+      > .toggle
+        cursor: pointer
+        color: var(--color-gray)
+
+      &.disabled
+        > *, label
+          opacity: 0.4
+
+        > .toggle
+          color: var(--color-dark)

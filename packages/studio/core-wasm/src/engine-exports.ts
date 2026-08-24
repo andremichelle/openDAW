@@ -61,6 +61,7 @@ export type EngineExports = {
     prepare_recording_state: (countIn: number, countInBars: number) => void
     stop_recording: () => void
     ignore_note_region: () => void
+    suspend_automation: () => void
     // EFFECTS monitoring (TS EngineCommands.updateMonitoringMap): `set_monitoring_map` reads `count`
     // records of [unit uuid 16][left ch i32 LE][right ch i32 LE] (right -1 = mono) from the input scratch;
     // the worklet stages live input channels at `monitor_input_ptr` (8 x 128 f32, channel-planar) BEFORE

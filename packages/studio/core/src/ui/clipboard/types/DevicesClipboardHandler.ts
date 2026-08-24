@@ -12,9 +12,9 @@ import {
     RuntimeNotifier,
     UUID
 } from "@opendaw/lib-std"
-import {Address, Box, BoxGraph} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph, PointerField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {NoteEventCollectionBox, RootBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {ModulationBox, NoteEventCollectionBox, RootBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {
     AudioEffectDeviceAdapter,
     BoxAdapters,
@@ -25,6 +25,7 @@ import {
     EffectDeviceBox,
     FilteredSelection,
     InstrumentDeviceBoxAdapter,
+    isModulatorBox,
     MidiEffectDeviceAdapter,
     UnionBoxTypes
 } from "@opendaw/studio-adapters"
@@ -105,6 +106,12 @@ export namespace DevicesClipboard {
         }
         return deviceBoxes.flatMap(box => {
             const owned = collectOwned(box)
+            // A ModulationBox's `source` leaves the owned subtree: the modulator's `assignments` field is not
+            // mandatory, so the dependency walk stops before the modulator. Take the modulator box ALONE (never as
+            // a walk root: `dependenciesOf` follows incoming mandatory edges, which would drag in that modulator's
+            // assignments to OTHER devices), otherwise a paste into another project has nothing to point at.
+            const modulators = owned.flatMap(candidate => isInstanceOf(candidate, ModulationBox)
+                ? candidate.source.targetVertex.mapOr(vertex => [vertex.box], []) : [])
             const roots = [box, ...owned]
             const mandatoryDeps = roots.flatMap(root => Array.from(boxGraph.dependenciesOf(root, {
                 alwaysFollowMandatory: true,
@@ -116,8 +123,32 @@ export namespace DevicesClipboard {
                 alwaysFollowMandatory: true,
                 excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
             }).boxes).filter(dep => dep.resource === "preserved"))
-            return [...owned, ...mandatoryDeps, ...preserved]
+            return [...owned, ...modulators, ...mandatoryDeps, ...preserved]
         })
+    }
+
+    export const findRootBox = (boxGraph: BoxGraph): Option<RootBox> =>
+        Option.wrap(boxGraph.boxes().find(box => isInstanceOf(box, RootBox)) as Optional<RootBox>)
+
+    // The bundle carries the modulator so a paste into ANOTHER project gets a copy. Pasting into the project the
+    // copy came from must not add a second one: the existing modulator is dropped from the paste here, and
+    // `mapModulationPointer` then keeps the assignment pointing at it.
+    export const excludeExistingModulator = (box: Box, boxGraph: BoxGraph): boolean =>
+        isModulatorBox(box) && boxGraph.findBox(box.address.uuid).nonEmpty()
+
+    // Only reached for a pointer the uuid remap did not answer, i.e. a target outside the pasted set. A `source`
+    // whose modulator is already in this graph keeps its address (same project). A `collection` belongs to a
+    // modulator copy that just landed in another project and has to join THAT project's root.
+    export const mapModulationPointer = (pointer: PointerField,
+                                         address: Option<Address>,
+                                         boxGraph: BoxGraph): Option<Address> => {
+        if (pointer.pointerType === Pointers.ModulatorSource) {
+            return address.flatMap(target => boxGraph.findVertex(target).map(() => target))
+        }
+        if (pointer.pointerType === Pointers.ModulatorCollection) {
+            return findRootBox(boxGraph).map(rootBox => rootBox.modulators.address)
+        }
+        return Option.None
     }
 
     // Place the freshly pasted effects into the destination chain at the insert index. ONLY top-level effects
@@ -333,15 +364,13 @@ export namespace DevicesClipboard {
                                     return Option.wrap(host.audioUnitBoxAdapter().address)
                                 }
                                 if (pointer.pointerType === Pointers.MIDIDevice) {
-                                    const rootBox: Optional<RootBox> = boxGraph.boxes()
-                                        .find(box => isInstanceOf(box, RootBox)) as Optional<RootBox>
-                                    if (isDefined(rootBox)) {
-                                        return Option.wrap(rootBox.outputMidiDevices.address)
-                                    }
+                                    return findRootBox(boxGraph).map(rootBox => rootBox.outputMidiDevices.address)
                                 }
-                                return Option.None
+                                return mapModulationPointer(pointer, address, boxGraph)
                             },
+                            keepUuid: isModulatorBox,
                             excludeBox: box => {
+                                if (excludeExistingModulator(box, boxGraph)) {return true}
                                 // A ONE-SIDED host (a composite entry) takes only ONE chain kind. An effect of the
                                 // other kind has nowhere to attach: `mapPointer` finds no host field, so its
                                 // mandatory `host` would dangle and reject the whole transaction (as the timeline

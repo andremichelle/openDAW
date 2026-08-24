@@ -1697,7 +1697,7 @@ fn an_automated_parameter_broadcasts_its_unit_value_at_its_field_address() {
     // current unit value (TS `onStartAutomation` -> `broadcastFloat(adapter.address, getUnitValue)`).
     let volume_entry = (0..engine.broadcasts.len()).find(|index| {
         let entry = engine.broadcasts.entry(*index).expect("entry");
-        entry.uuid == UNIT && entry.keys == vec![UNIT_VOLUME_KEY] && entry.package_type == crate::broadcast::PACKAGE_FLOAT
+        entry.uuid == UNIT && entry.keys == vec![UNIT_VOLUME_KEY] && entry.package_type == crate::broadcast::PACKAGE_FLOAT_ARRAY
     });
     assert!(volume_entry.is_some(), "the automated volume broadcasts at its field address");
     // Detach the automation track: the rebind drops the slot; the sweep unregisters the entry.
@@ -1763,7 +1763,7 @@ fn a_device_param_automation_rebind_keeps_its_ui_broadcast_alive() {
     };
     let entry_ptr = |engine: &Engine| (0..engine.broadcasts.len()).find_map(|index| {
         let entry = engine.broadcasts.entry(index).expect("entry");
-        (entry.uuid == DEV && entry.keys == vec![PATH] && entry.package_type == crate::broadcast::PACKAGE_FLOAT && entry.alive())
+        (entry.uuid == DEV && entry.keys == vec![PATH] && entry.package_type == crate::broadcast::PACKAGE_FLOAT_ARRAY && entry.alive())
             .then_some(entry.ptr)
     });
     assert!(entry_ptr(&engine).is_some(), "initial bind registers a live broadcast at the param address");
@@ -1841,6 +1841,123 @@ fn build_param_track_resolves_the_full_field_path_at_any_depth() {
     // A different path on the same device has no track.
     let (none, _, _, _) = build_param_track(&mut graph, DEVICE, &[16, 5, 11], &clip_rc());
     assert!(none.is_none(), "an unbound path has no automation track");
+}
+
+#[test]
+fn a_suspended_lane_reads_the_parameter_field_and_the_curve_returns_after_the_transport_stops() {
+    // #347: a hand on the knob (or a CC) bypasses that parameter's automation WHOLE for as long as the
+    // transport runs, so the manual value is heard at once instead of fighting the curve. Cleared on
+    // pause / stop / stopRecording, so the next PLAY reads the curve again.
+    let path = [5u16];
+    let mut graph = deep_automation_graph(&path);
+    let (curve, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
+    let handle = crate::param_automation::ParamHandle {
+        id: 0,
+        field: Rc::new(core::cell::Cell::new(0.2)),
+        kind: abi::PARAM_KIND_FLOAT,
+        track: curve,
+        modulation: None,
+        last: Rc::new(core::cell::Cell::new(f32::NAN)),
+        last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
+        broadcast: None
+    };
+    assert_eq!(handle.resolve(0.0).0, 0.7, "the curve rules while no hand is on the parameter");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.push(TRACK);
+    let (value, kind, _) = handle.resolve(0.0);
+    assert_eq!(value, 0.2, "the suspended lane reads the parameter's own field");
+    assert_eq!(kind, abi::PARAM_KIND_FLOAT, "and reports the field's kind, not a unit value");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
+    assert_eq!(handle.resolve(0.0).0, 0.7, "and the curve is back on the next run");
+}
+
+// A suspended lane bypasses the CURVE only. Modulation is summed beside it and must keep moving, else a hand
+// on an automated + modulated parameter would freeze its modulators too.
+#[test]
+fn a_suspended_lane_still_receives_its_modulation() {
+    use crate::modulation::{BoundModulation, MacroState, ModulationChain, ModulatorKind, ModulatorState};
+    let path = [5u16];
+    let mut graph = deep_automation_graph(&path);
+    let (curve, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
+    let state = Rc::new(ModulatorState {
+        enabled: core::cell::Cell::new(true), bipolar: core::cell::Cell::new(false),
+        amount: core::cell::Cell::new(1.0), kind: ModulatorKind::Macro(MacroState::new()),
+        broadcast: RefCell::new(None), broadcast_active: Rc::new(core::cell::Cell::new(false))
+    });
+    let chain: ModulationChain = Rc::from(alloc::vec![BoundModulation {
+        modulator: state, depth: Rc::new(core::cell::Cell::new(0.5)),
+        depth_handle: None, enabled: Rc::new(core::cell::Cell::new(true))
+    }]);
+    let handle = crate::param_automation::ParamHandle {
+        id: 0, field: Rc::new(core::cell::Cell::new(0.2)), kind: abi::PARAM_KIND_FLOAT, track: curve,
+        modulation: Some(chain), last: Rc::new(core::cell::Cell::new(f32::NAN)),
+        last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
+        broadcast: None
+    };
+    let (_, _, playing) = handle.resolve(0.0);
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.push(TRACK);
+    let (value, _, suspended) = handle.resolve(0.0);
+    assert_eq!(value, 0.2, "the curve is bypassed");
+    assert!(!suspended.is_nan(), "the modulation still contributes");
+    assert_eq!(suspended, playing, "and contributes exactly as much as before");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
+}
+
+// The UI reads `[0]` of the broadcast slot as the automated value, NaN meaning "no curve applies, show the
+// storage value". A suspended lane must publish NaN, else the knob would sit at a frozen automated value while
+// the sound follows the hand.
+#[test]
+fn a_suspended_lane_publishes_no_automated_value_to_the_ui() {
+    let path = [5u16];
+    let mut graph = deep_automation_graph(&path);
+    let (curve, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
+    let slot = engine_env::telemetry::broadcast_slot(2);
+    let handle = crate::param_automation::ParamHandle {
+        id: 0, field: Rc::new(core::cell::Cell::new(0.2)), kind: abi::PARAM_KIND_FLOAT, track: curve,
+        modulation: None, last: Rc::new(core::cell::Cell::new(f32::NAN)),
+        last_modulation: Rc::new(core::cell::Cell::new(f32::NAN)),
+        broadcast: Some(slot.clone())
+    };
+    handle.resolve(0.0);
+    assert_eq!(slot.borrow()[0], 0.7, "the curve's value reaches the knob while the curve rules");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.push(TRACK);
+    handle.resolve(0.0);
+    assert!(slot.borrow()[0].is_nan(), "a suspended lane sends the knob back to its storage value");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
+    handle.resolve(0.0);
+    assert_eq!(slot.borrow()[0], 0.7, "and the automated value returns with the curve");
+}
+
+// The parameter binding is rebuilt on every automation edit, which is constant while recording. The
+// suspension is keyed by lane uuid in its own cell precisely so a rebind cannot drop it.
+#[test]
+fn a_rebound_parameter_stays_under_manual_control() {
+    let path = [5u16];
+    let mut graph = deep_automation_graph(&path);
+    let (curve, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.push(TRACK);
+    assert!(curve.expect("curve").is_suspended());
+    let (rebound, _, _, _) = build_param_track(&mut graph, DEVICE, &path, &clip_rc());
+    assert!(rebound.expect("rebound curve").is_suspended(), "the fresh binding is still under the hand");
+    unsafe { crate::SUSPENDED_AUTOMATION.get() }.clear();
+}
+
+// The suspension must never outlive the run that created it. These are the same three exits that clear the
+// ignored note regions, and a fourth exit added without clearing would strand a parameter under manual control.
+#[test]
+fn every_transport_exit_drops_the_manual_control() {
+    let mut engine = engine_with_devices();
+    let suspend = || unsafe { crate::SUSPENDED_AUTOMATION.get() }.push(TRACK);
+    let suspended = || !unsafe { crate::SUSPENDED_AUTOMATION.get() }.is_empty();
+    suspend();
+    engine.pause();
+    assert!(!suspended(), "pause drops it");
+    suspend();
+    engine.stop();
+    assert!(!suspended(), "stop drops it");
+    suspend();
+    engine.is_recording = true;
+    engine.stop_recording();
+    assert!(!suspended(), "ending a recording drops it");
 }
 
 #[test]
@@ -2300,7 +2417,7 @@ fn a_value_track_on_the_mute_field_installs_the_strip_mute_automation() {
     let muted_at_zero = {
         let mute_source = unit.strip_automation.mute.borrow();
         let mute_source = mute_source.as_ref().expect("a mute value track installs the strip mute automation source");
-        mute_source(0.0) >= 0.5
+        mute_source(0.0, true) >= 0.5
     };
     assert!(muted_at_zero, "the mute curve (event 1.0) resolves to muted at position 0");
     engine.teardown_unit(unit);
@@ -3202,7 +3319,7 @@ fn attaching_automation_with_no_events_does_not_move_the_control() {
     engine.graph = wet_automation_graph_without_events();
     let mut unit = engine.build_unit(UNIT);
     engine.reconcile_one(&mut unit);
-    let published = engine.broadcasts.live_slot(COMP, &[WET_KEY], crate::broadcast::PACKAGE_FLOAT)
+    let published = engine.broadcasts.live_slot(COMP, &[WET_KEY], crate::broadcast::PACKAGE_FLOAT_ARRAY)
         .expect("an automated parameter registers its UI slot, so a later curve value can animate the knob");
     let value = published.borrow()[0];
     assert!(value.is_nan(), "no curve value -> publish NaN ('keep your storage value'), NOT 0.0 (= knob min)");
@@ -3387,4 +3504,611 @@ fn consolidating_a_mirrored_region_rebinds_its_note_collection() {
     assert!(events.iter().any(|event| matches!(event, engine_env::event::Event::NoteStart {pitch: 31, ..})),
         "the consolidated region plays ITS OWN notes: {events:?}");
     assert_eq!(unit.collections.entries.len(), 1, "the old collection observation was released");
+}
+
+// A project-global LFO drives a device parameter: the engine sums the assignment in NORMALIZED space and
+// hands the device the sum beside the base, since only the device knows the parameter's mapping.
+#[test]
+fn a_modulated_parameter_carries_its_sum_and_follows_the_lfo() {
+    const DEV: Uuid = [90u8; 16];
+    const ROOT: Uuid = [91u8; 16];
+    const LFO: Uuid = [92u8; 16];
+    const ASSIGN: Uuid = [93u8; 16];
+    const PATH: u16 = 11;
+    const BAR: f64 = 3840.0;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        // A square LFO at one bar: +1 over the first half of the cycle, -1 over the second, so the expected
+        // sum is exact rather than an approximation of a curve.
+        graph_box(LFO, "LfoModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(4)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (8, FieldValue::Float32(1.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(0.25)), (4, FieldValue::Boolean(true))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, _subs, _collections, armed) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    assert!(armed, "a modulated parameter arms the update clock exactly like an automated one");
+    let handle = &handles[0];
+    // No automation track, so the base stays the field's STORED value with its own kind: the device folds
+    // the sum on with its own mapping, the host never normalizes anything.
+    let modulators = engine.modulators.clone();
+    modulators.borrow().anchor(0.0, 0.0);
+    let (value, kind, sum) = handle.resolve(0.0);
+    assert_eq!(kind, abi::PARAM_KIND_FLOAT, "the base is still the stored value, untouched");
+    assert_eq!(value, 0.0);
+    assert!((sum - 0.25).abs() < 1.0e-6, "depth 0.25 over the square's high half, got {sum}");
+    modulators.borrow().anchor(0.0, BAR * 0.75);
+    let (_, _, sum) = handle.resolve(BAR * 0.75);
+    assert!((sum + 0.25).abs() < 1.0e-6, "and -0.25 over its low half, got {sum}");
+    // Disabling the assignment must restore the EXACT un-modulated path, not a zero sum: a zero would still
+    // round-trip through the device's mapping and could shift the value by a float epsilon.
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(ASSIGN, vec![4]), old: FieldValue::Boolean(true), new: FieldValue::Boolean(false)
+    }], &engine.registry).expect("disable the assignment");
+    modulators.borrow().anchor(0.0, 0.0);
+    assert!(handle.resolve(0.0).2.is_nan(), "a disabled assignment reads as NO modulation");
+}
+
+// The steps modulator reaches a parameter the same way the LFO does, including its 64-slot step array.
+#[test]
+fn a_steps_modulator_walks_its_sequence_into_the_parameter() {
+    const DEV: Uuid = [110u8; 16];
+    const ROOT: Uuid = [111u8; 16];
+    const STEPS: Uuid = [112u8; 16];
+    const ASSIGN: Uuid = [113u8; 16];
+    const PATH: u16 = 11;
+    const STEP: f64 = 240.0; // one sixteenth, the default rate
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        // Four steps emitting +1, -1, 0, +0.5, hard-stepped (no smoothing) so every expectation is exact.
+        // The array holds the unipolar DRAW space, so an emitted value `v` is stored as `v * 0.5 + 0.5`.
+        graph_box(STEPS, "StepsModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (10, FieldValue::Int32(4)), (11, FieldValue::Int32(10)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (8, FieldValue::Float32(1.0)),
+            (15, FieldValue::Float32(0.0)), (16, FieldValue::Int32(0)),
+            (20, FieldValue::Array(alloc::vec![
+                FieldValue::Float32(1.0), FieldValue::Float32(0.0),
+                FieldValue::Float32(0.5), FieldValue::Float32(0.75)
+            ]))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(STEPS, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(0.5)), (4, FieldValue::Boolean(true))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let handle = &handles[0];
+    let modulators = engine.modulators.clone();
+    let sum_at = |position: f64| {modulators.borrow().anchor(0.0, position); handle.resolve(position).2};
+    assert!((sum_at(0.0) - 0.5).abs() < 1.0e-6, "step 0 at depth 0.5, got {}", sum_at(0.0));
+    assert!((sum_at(STEP) + 0.5).abs() < 1.0e-6, "step 1 is the low one, got {}", sum_at(STEP));
+    assert!(sum_at(STEP * 2.0).abs() < 1.0e-6, "step 2 is silent");
+    assert!((sum_at(STEP * 3.0) - 0.25).abs() < 1.0e-6, "step 3 is half of the depth");
+    assert!((sum_at(STEP * 4.0) - 0.5).abs() < 1.0e-6, "and the sequence wraps");
+    // An edited step reaches the engine through its array slot.
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(STEPS, vec![20, 2]), old: FieldValue::Float32(0.5), new: FieldValue::Float32(0.25)
+    }], &engine.registry).expect("edit step 2");
+    engine.sync_modulators();
+    assert!((sum_at(STEP * 2.0) + 0.25).abs() < 1.0e-6, "the edited step, got {}", sum_at(STEP * 2.0));
+}
+
+// A modulator's own parameter is bound like a device's, so a Value track targeting it drives the shape.
+// Here the LFO's amount (key 14, unipolar) is automated: the curve scales what reaches the parameter.
+#[test]
+fn an_automated_modulator_parameter_follows_its_curve() {
+    const DEV: Uuid = [130u8; 16];
+    const ROOT: Uuid = [131u8; 16];
+    const LFO: Uuid = [132u8; 16];
+    const ASSIGN: Uuid = [133u8; 16];
+    const VTRACK: Uuid = [134u8; 16];
+    const VREGION: Uuid = [135u8; 16];
+    const VCOLL: Uuid = [136u8; 16];
+    const VEVENT: Uuid = [137u8; 16];
+    const PATH: u16 = 11;
+    const AMOUNT_KEY: u16 = 8;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(LFO, "LfoModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)), (6, FieldValue::Hook),
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(4)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (8, FieldValue::Float32(1.0)),
+            (15, FieldValue::Float32(0.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ]),
+        // The lane hangs off the MODULATOR's own tracks field (key 6), and targets its amount.
+        graph_box(VTRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![6])))),
+            (2, FieldValue::Pointer(Some(Address::of(LFO, vec![AMOUNT_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(VREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(VEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+        ])
+    ]);
+    engine.transport.play();
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let modulators = engine.modulators.clone();
+    let sum_at = |position: f64| {modulators.borrow().anchor(0.0, position); handles[0].resolve(position).2};
+    // The square's high half at depth 1.0 would be +1.0; the curve holds the amount at 0.25.
+    assert!((sum_at(0.0) - 0.25).abs() < 1.0e-6, "the automated amount scales the shape, got {}", sum_at(0.0));
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(VEVENT, vec![13]), old: FieldValue::Float32(0.25), new: FieldValue::Float32(0.75)
+    }], &engine.registry).expect("edit the curve");
+    engine.sync_modulators();
+    assert!((sum_at(0.0) - 0.75).abs() < 1.0e-6, "and an edited curve reaches it, got {}", sum_at(0.0));
+    // Paused, the automation HOLDS while the shape keeps running (the two clocks stay apart).
+    engine.transport.stop(false);
+    engine.sync_modulators();
+    assert!((sum_at(0.0) - 0.75).abs() < 1.0e-6, "a paused transport holds the automated amount");
+}
+
+// An assignment's DEPTH is a parameter like any other: a Value track on it drives how much of the
+// modulator reaches the target.
+#[test]
+fn an_automated_assignment_depth_scales_the_modulation() {
+    const DEV: Uuid = [150u8; 16];
+    const ROOT: Uuid = [151u8; 16];
+    const LFO: Uuid = [152u8; 16];
+    const ASSIGN: Uuid = [153u8; 16];
+    const VTRACK: Uuid = [154u8; 16];
+    const VREGION: Uuid = [155u8; 16];
+    const VCOLL: Uuid = [156u8; 16];
+    const VEVENT: Uuid = [157u8; 16];
+    const PATH: u16 = 11;
+    const DEPTH_KEY: u16 = 3;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(LFO, "LfoModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)), (6, FieldValue::Hook),
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(4)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (8, FieldValue::Float32(1.0)),
+            (15, FieldValue::Float32(0.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ]),
+        // The lane targets the ASSIGNMENT's depth, and its curve holds 0.25 (bipolar: -0.5).
+        graph_box(VTRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![6])))),
+            (2, FieldValue::Pointer(Some(Address::of(ASSIGN, vec![DEPTH_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(VREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(VEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+        ])
+    ]);
+    engine.transport.play();
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let modulators = engine.modulators.clone();
+    let sum_at = |position: f64| {modulators.borrow().anchor(0.0, position); handles[0].resolve(position).2};
+    // The square's high half at an automated depth of -0.5 (unit 0.25 through the bipolar mapping).
+    assert!((sum_at(0.0) + 0.5).abs() < 1.0e-6, "the curve sets the depth, got {}", sum_at(0.0));
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(VEVENT, vec![13]), old: FieldValue::Float32(0.25), new: FieldValue::Float32(1.0)
+    }], &engine.registry).expect("edit the curve");
+    engine.sync_modulators();
+    assert!((sum_at(0.0) - 1.0).abs() < 1.0e-6, "and an edited curve reaches it, got {}", sum_at(0.0));
+}
+
+// The host-side path (strip, sends, composite gains, MIDI CC) resolves per BLOCK, and while paused a block
+// carries the FREE-RUNNING pulse. Both curves here, the parameter's own and the assignment's depth, must
+// read the song position instead, so they hold while paused and follow a locate. The macro is constant at
+#[test]
+fn a_modulator_can_drive_an_assignment_depth() {
+    const DEV: Uuid = [180u8; 16];
+    const ROOT: Uuid = [181u8; 16];
+    const CARRIER: Uuid = [182u8; 16];
+    const DEPTH_SOURCE: Uuid = [183u8; 16];
+    const ASSIGN: Uuid = [184u8; 16];
+    const DEPTH_ASSIGN: Uuid = [185u8; 16];
+    const PATH: u16 = 11;
+    const DEPTH_KEY: u16 = 3;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        // The carrier is a macro at full swing, so the sum IS the depth the chain resolves.
+        graph_box(CARRIER, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (6, FieldValue::Hook), (8, FieldValue::Float32(1.0)), (10, FieldValue::Float32(1.0))
+        ]),
+        graph_box(DEPTH_SOURCE, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (6, FieldValue::Hook), (8, FieldValue::Float32(1.0)), (10, FieldValue::Float32(1.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(CARRIER, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(0.0)), (4, FieldValue::Boolean(true))
+        ]),
+        // Its depth sits at 0, which is unit 0.5 on a bipolar field, so +0.25 lands the depth on 0.5.
+        graph_box(DEPTH_ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(DEPTH_SOURCE, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(ASSIGN, vec![DEPTH_KEY])))),
+            (3, FieldValue::Float32(0.25)), (4, FieldValue::Boolean(true))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let sum = handles[0].resolve(0.0).2;
+    assert!((sum - 0.5).abs() < 1.0e-6, "the depth is driven to 0.5 and the carrier passes it, got {sum}");
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(DEPTH_ASSIGN, vec![3]), old: FieldValue::Float32(0.25), new: FieldValue::Float32(0.0)
+    }], &engine.registry).expect("close the depth modulation");
+    engine.sync_modulators();
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    assert!(handles[0].resolve(0.0).2.abs() < 1.0e-6, "and closing it takes the reach back to nothing");
+}
+
+// every position, so the modulation contributes nothing that moves.
+#[test]
+fn a_paused_host_parameter_reads_every_curve_at_the_song_position() {
+    const DEV: Uuid = [160u8; 16];
+    const ROOT: Uuid = [161u8; 16];
+    const MACRO: Uuid = [162u8; 16];
+    const ASSIGN: Uuid = [163u8; 16];
+    const VTRACK: Uuid = [164u8; 16];
+    const VREGION: Uuid = [165u8; 16];
+    const VCOLL: Uuid = [166u8; 16];
+    const VEVENT: Uuid = [167u8; 16];
+    const VEVENT2: Uuid = [168u8; 16];
+    const BTRACK: Uuid = [169u8; 16];
+    const BREGION: Uuid = [170u8; 16];
+    const BCOLL: Uuid = [171u8; 16];
+    const BEVENT: Uuid = [172u8; 16];
+    const BEVENT2: Uuid = [173u8; 16];
+    const PATH: u16 = 11;
+    const DEPTH_KEY: u16 = 3;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(MACRO, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (6, FieldValue::Hook), (8, FieldValue::Float32(1.0)), (10, FieldValue::Float32(1.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MACRO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ]),
+        // The depth's lane steps from 0.75 (bipolar 0.5) to 1.0 (bipolar 1.0) half a bar in.
+        graph_box(VTRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MACRO, vec![6])))),
+            (2, FieldValue::Pointer(Some(Address::of(ASSIGN, vec![DEPTH_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(VREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(VEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.75))
+        ]),
+        graph_box(VEVENT2, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(1920)), (13, FieldValue::Float32(1.0))
+        ]),
+        // The parameter's OWN lane, stepping 0.25 -> 0.75 at the same half bar.
+        graph_box(BTRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MACRO, vec![6])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(BREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(BTRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(BCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(BCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(BEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(BCOLL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+        ]),
+        graph_box(BEVENT2, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(BCOLL, vec![1])))),
+            (10, FieldValue::Int32(1920)), (13, FieldValue::Float32(0.75))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let handle = &handles[0];
+    unsafe { *crate::SONG_POSITION.get() = 960.0; }
+    let (base_before, _, depth_before) = handle.resolve_held(960.0, false);
+    let (base_after, _, depth_after) = handle.resolve_held(2880.0, false);
+    assert!((base_before - base_after).abs() < 1.0e-6,
+        "the free-running block must not advance the parameter's curve, got {base_before} then {base_after}");
+    assert!((depth_before - depth_after).abs() < 1.0e-6,
+        "nor the depth curve, got {depth_before} then {depth_after}");
+    // And it is the SONG position that is read, so a locate while paused reaches both.
+    unsafe { *crate::SONG_POSITION.get() = 2880.0; }
+    let (base_moved, _, depth_moved) = handle.resolve_held(960.0, false);
+    assert!((depth_moved - depth_before).abs() > 1.0e-6, "locating re-reads the depth, got {depth_moved}");
+    assert!((base_moved - base_before).abs() > 1.0e-6, "and the parameter's own curve, got {base_moved}");
+}
+
+// A modulator driving ANOTHER modulator's parameter: the same binding carries the assignment, and the
+// per-quantum refresh is what keeps it from recursing.
+#[test]
+fn a_modulator_can_drive_another_modulators_parameter() {
+    const DEV: Uuid = [140u8; 16];
+    const ROOT: Uuid = [141u8; 16];
+    const SHAPER: Uuid = [142u8; 16]; // the macro that drives the LFO's amount
+    const LFO: Uuid = [143u8; 16];
+    const TO_LFO: Uuid = [144u8; 16];
+    const TO_DEVICE: Uuid = [145u8; 16];
+    const PATH: u16 = 11;
+    const AMOUNT_KEY: u16 = 8;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(SHAPER, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)), (6, FieldValue::Hook),
+            (8, FieldValue::Float32(1.0)), (10, FieldValue::Float32(0.25))
+        ]),
+        graph_box(LFO, "LfoModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)), (6, FieldValue::Hook),
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(4)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (8, FieldValue::Float32(1.0)),
+            (15, FieldValue::Float32(0.0))
+        ]),
+        // macro -> LFO.amount at depth 1.0: emitting -0.5 (the fader a quarter up) pulls the amount to 0.5.
+        graph_box(TO_LFO, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(SHAPER, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(LFO, vec![AMOUNT_KEY])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ]),
+        graph_box(TO_DEVICE, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let modulators = engine.modulators.clone();
+    let sum_at = |position: f64| {modulators.borrow().anchor(0.0, position); handles[0].resolve(position).2};
+    assert!((sum_at(0.0) - 0.5).abs() < 1.0e-6, "the macro scales the LFO's amount, got {}", sum_at(0.0));
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(SHAPER, vec![10]), old: FieldValue::Float32(0.25), new: FieldValue::Float32(0.5)
+    }], &engine.registry).expect("centre the macro");
+    engine.sync_modulators();
+    assert!((sum_at(0.0) - 1.0).abs() < 1.0e-6, "and letting it go restores the full amount, got {}", sum_at(0.0));
+}
+
+// The macro is a modulator without a clock: one stored value, the same sum at every position.
+#[test]
+fn a_macro_modulator_holds_its_value_at_every_position() {
+    const DEV: Uuid = [120u8; 16];
+    const ROOT: Uuid = [121u8; 16];
+    const MACRO: Uuid = [122u8; 16];
+    const ASSIGN: Uuid = [123u8; 16];
+    const PATH: u16 = 11;
+    const BAR: f64 = 3840.0;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(MACRO, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (8, FieldValue::Float32(1.0)), (10, FieldValue::Float32(0.75))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MACRO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(0.5)), (4, FieldValue::Boolean(true))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let handle = &handles[0];
+    let modulators = engine.modulators.clone();
+    let sum_at = |position: f64| {modulators.borrow().anchor(0.0, position); handle.resolve(position).2};
+    assert!((sum_at(0.0) - 0.25).abs() < 1.0e-6, "emitting 0.5 at depth 0.5, got {}", sum_at(0.0));
+    assert!((sum_at(BAR * 0.37) - 0.25).abs() < 1.0e-6, "and it never moves with the position");
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(MACRO, vec![10]), old: FieldValue::Float32(0.75), new: FieldValue::Float32(0.0)
+    }], &engine.registry).expect("turn the macro down");
+    engine.sync_modulators();
+    assert!((sum_at(0.0) + 0.5).abs() < 1.0e-6, "it reaches the negative half too, got {}", sum_at(0.0));
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(MACRO, vec![10]), old: FieldValue::Float32(0.0), new: FieldValue::Float32(0.5)
+    }], &engine.registry).expect("centre the macro");
+    engine.sync_modulators();
+    assert!(sum_at(0.0).abs() < 1.0e-6, "a macro at rest adds nothing, got {}", sum_at(0.0));
+}
+
+// The shared flags survive a rebind. A value edit re-binds the modulator, and a rebind drops every
+// subscription the entry holds, so a flag observed anywhere but inside `bind_modulator` went deaf after the
+// first edit: the polarity switch and the enable toggle both stopped reaching the engine.
+#[test]
+fn the_shared_flags_keep_reaching_the_engine_after_a_rebind() {
+    const DEV: Uuid = [150u8; 16];
+    const ROOT: Uuid = [151u8; 16];
+    const MACRO: Uuid = [152u8; 16];
+    const ASSIGN: Uuid = [153u8; 16];
+    const PATH: u16 = 11;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(MACRO, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (8, FieldValue::Float32(1.0)), (10, FieldValue::Float32(1.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MACRO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let sum_at = || handles[0].resolve(0.0).2;
+    assert!((sum_at() - 1.0).abs() < 1.0e-6, "the fader at the top emits its maximum, got {}", sum_at());
+    // A value edit, which is what re-binds the modulator.
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(MACRO, vec![10]), old: FieldValue::Float32(1.0), new: FieldValue::Float32(0.0)
+    }], &engine.registry).expect("pull the fader down");
+    engine.sync_modulators();
+    assert!((sum_at() + 1.0).abs() < 1.0e-6, "the bottom is the negative maximum while bipolar");
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(MACRO, vec![7]), old: FieldValue::Boolean(true), new: FieldValue::Boolean(false)
+    }], &engine.registry).expect("go unipolar");
+    engine.sync_modulators();
+    assert!(sum_at().abs() < 1.0e-6, "unipolar reads the same fader off the bottom, got {}", sum_at());
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(MACRO, vec![4]), old: FieldValue::Boolean(true), new: FieldValue::Boolean(false)
+    }], &engine.registry).expect("disable the modulator");
+    engine.sync_modulators();
+    assert!(sum_at().is_nan(), "and disabling it still reads as NO modulation, got {}", sum_at());
+}
+
+// The paused split: while the transport stands still the blocks carry a FREE-RUNNING position, which the
+// modulation follows while the automation stays frozen at the song position.
+#[test]
+fn a_paused_transport_moves_the_modulation_but_not_the_automation() {
+    const DEV: Uuid = [94u8; 16];
+    const ROOT: Uuid = [95u8; 16];
+    const LFO: Uuid = [96u8; 16];
+    const ASSIGN: Uuid = [97u8; 16];
+    const TRACK: Uuid = [98u8; 16];
+    const REGION: Uuid = [99u8; 16];
+    const COL: Uuid = [100u8; 16];
+    const EVENT_A: Uuid = [101u8; 16];
+    const EVENT_B: Uuid = [102u8; 16];
+    const PATH: u16 = 11;
+    const BAR: f64 = 3840.0;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(LFO, "LfoModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(4)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (8, FieldValue::Float32(1.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(0.5)), (4, FieldValue::Boolean(true))
+        ]),
+        // A ramp over the bar, so reading it at a moving position would be obvious.
+        graph_box(TRACK, "TrackBox", &[
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))), (3, FieldValue::Hook)
+        ]),
+        graph_box(REGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![3])))),
+            (2, FieldValue::Pointer(Some(Address::of(COL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(COL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(EVENT_A, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(COL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.0))
+        ]),
+        graph_box(EVENT_B, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(COL, vec![1])))),
+            (10, FieldValue::Int32(3840)), (13, FieldValue::Float32(1.0))
+        ])
+    ]);
+    engine.observe_modulators();
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let handle = &handles[0];
+    // Song frozen at the bar start, the modulator turning on into the square's LOW half.
+    let modulators = engine.modulators.clone();
+    modulators.borrow().anchor(0.0, 0.0);
+    let (frozen, kind, first) = handle.resolve_split(0.0, 0.0);
+    assert_eq!(kind, abi::PARAM_KIND_UNIT, "the automation covers the position");
+    modulators.borrow().advance(0.0, BAR * 0.75);
+    let (held, _, second) = handle.resolve_split(0.0, BAR * 0.75);
+    assert_eq!(held, frozen, "the automation HOLDS at the frozen song position while paused");
+    assert!((first - 0.5).abs() < 1.0e-6, "the modulation was high, got {first}");
+    assert!((second + 0.5).abs() < 1.0e-6, "and keeps turning while paused, got {second}");
+    // Playing, both positions advance together and the ramp moves with them.
+    let (playing, ..) = handle.resolve_split(BAR * 0.5, BAR * 0.5);
+    assert!(playing > frozen, "the automation ramp advances once the song position moves");
 }

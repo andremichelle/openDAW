@@ -1,4 +1,3 @@
-import css from "./ClipLane.sass?inline"
 import {
     Arrays,
     assert,
@@ -18,9 +17,10 @@ import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipPlaceholder} from "@/ui/timeline/tracks/audio-unit/clips/ClipPlaceholder.tsx"
 import {ClipModifyStrategies, ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
 import {StudioService} from "@/service/StudioService.ts"
-import {deferNextFrame, Html} from "@opendaw/lib-dom"
+import {deferNextFrame} from "@opendaw/lib-dom"
+import {ClipLaneClassName} from "@/ui/timeline/tracks/audio-unit/TrackStyles.ts"
 
-const className = Html.adoptStyleSheet(css, "ClipLane")
+const className = ClipLaneClassName
 
 type Cell = {
     readonly terminator: Terminator

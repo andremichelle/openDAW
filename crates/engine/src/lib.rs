@@ -31,7 +31,7 @@ use bindings::value_collection::ValueCollection;
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 use boxgraph::address::{Address, Uuid};
 use boxgraph::boxes::Registry;
-use boxgraph::subscription::HubEvent;
+use boxgraph::subscription::{HubEvent, SubscriptionId};
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::{decode_forward, Update};
@@ -209,21 +209,21 @@ fn call_device_init(init_index: u32, state_ptr: u32, sample_rate: f32) {
 #[cfg(not(target_family = "wasm"))]
 fn call_device_init(_init_index: u32, _state_ptr: u32, _sample_rate: f32) {}
 
-// Call a device's `parameter_changed(state_ptr, id, value)` export to push a resolved parameter value. The
-// engine calls this at build / edit time (never during the device's `process`, so it never aliases the
-// state the render path borrows).
+// Call a device's `parameter_changed(state_ptr, id, kind, value, modulation)` export (NaN = no modulation).
+// Called at build / edit time, never during the device's `process`, so it never aliases the state the render
+// path borrows.
 #[cfg(target_family = "wasm")]
 #[inline]
-fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, id: u32, kind: u32, value: f32) {
+fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
     if parameter_changed_index == 0 {
         return; // the device exports no `parameter_changed`; index 0 is the "none" sentinel
     }
     unsafe { *PARAM_PUSHES.get() = PARAM_PUSHES.get().wrapping_add(1); }
-    let parameter_changed: extern "C" fn(u32, u32, u32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
-    parameter_changed(state_ptr, id, kind, value);
+    let parameter_changed: extern "C" fn(u32, u32, u32, f32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
+    parameter_changed(state_ptr, id, kind, value, modulation);
 }
 #[cfg(not(target_family = "wasm"))]
-fn call_device_parameter_changed(_parameter_changed_index: u32, _state_ptr: u32, _id: u32, _kind: u32, _value: f32) {}
+fn call_device_parameter_changed(_parameter_changed_index: u32, _state_ptr: u32, _id: u32, _kind: u32, _value: f32, _modulation: f32) {}
 
 // Call a device's `field_changed(state_ptr, id, value)` export to deliver an observed plain field's value
 // (catch-up + edits). Called only inside a transaction (the `catchup_and_subscribe` callback), never during
@@ -350,6 +350,7 @@ mod composite;
 mod effect_composite;
 
 mod param_automation;
+mod modulation;
 use param_automation::ParamHandle;
 mod sample;
 use sample::SampleResource;
@@ -536,6 +537,12 @@ shared_static! {
 shared_static! {
     static BASE_FREQUENCY: f32 = 440.0;
 }
+// The transport's SONG position at this quantum's start. While PAUSED the blocks carry the FREE-RUNNING
+// range, which modulation follows but automation must not. Its OWN cell (NOT `ENGINE`), like
+// `BASE_FREQUENCY`, so the re-entrant read during render never aliases the `&mut Engine`.
+shared_static! {
+    static SONG_POSITION: f64 = 0.0;
+}
 // The sample-observe recorder the `host_observe_sample` export appends to: each device's sample pointer-field
 // path (e.g. Nano's `file` at `[15]`). After `init`, the engine REACTIVELY tracks each pointer (catch-up +
 // subscribe), resolving its target to the AudioFileBox, requesting its frames, and delivering the handle (or
@@ -604,6 +611,13 @@ shared_static! {
 // Cleared on stop / stopRecording. Read from the region iteration (its own cell, never `ENGINE`).
 shared_static! {
     pub(crate) static IGNORED_REGIONS: Vec<[u8; 16]> = Vec::new();
+}
+// Automation lanes under MANUAL control (TS `EngineCommands.suspendAutomation`, issue #347): turning a knob or
+// sending a CC bypasses that parameter's curve for as long as the transport runs, so the hand wins over the
+// automation instead of fighting it. The lane is 1:1 with the parameter. Modulation keeps applying. Cleared on
+// pause / stop / stopRecording, so the next PLAY reads the curve again.
+shared_static! {
+    pub(crate) static SUSPENDED_AUTOMATION: Vec<[u8; 16]> = Vec::new();
 }
 // EFFECTS-monitoring staging (its own cells, read re-entrantly by MonitorMix nodes during render): the
 // worklet writes the live input channels into MONITOR_INPUT before each render and reads each mapped
@@ -792,6 +806,11 @@ pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventR
 /// free-running block, whose pulse range keeps advancing at a position that is NOT the song position) yields
 /// no update positions: automated parameters HOLD their last resolved value and the UI broadcasts stay still.
 /// A quantum is uniformly playing or paused, so the per-block TS gate collapses to this per-quantum check.
+/// The transport's song position at this quantum's start: where every automation curve reads while paused.
+pub(crate) fn song_position() -> f64 {
+    unsafe { *SONG_POSITION.get() }
+}
+
 fn quantum_transporting() -> bool {
     let pull = unsafe { PULL.get() };
     if pull.blocks.is_null() {
@@ -801,6 +820,12 @@ fn quantum_transporting() -> bool {
     blocks.iter().all(|block| block.flags.transporting())
 }
 
+/// Modulation keeps running while the transport is paused, so the update clock stays open for these devices
+/// and only these. Evaluated on the paused branch only (the `||` short-circuits while transporting).
+fn modulation_armed(pull: &PullContext) -> bool {
+    pull.params.iter().any(|param| param.modulation.is_some())
+}
+
 /// Host import a render template calls to SEED its fragment loop: the first update position at or AFTER `at`
 /// (INCLUSIVE), so a grid point exactly on a block's start fires (mirrors TS `Fragmentor`'s `ceil`). Returns
 /// `f64::INFINITY` when the CURRENT device has no automated parameter, or while the transport is NOT running
@@ -808,7 +833,7 @@ fn quantum_transporting() -> bool {
 #[no_mangle]
 pub extern "C" fn host_first_update_position(at: f64) -> f64 {
     let pull = unsafe { PULL.get() };
-    if !pull.clock_armed || !quantum_transporting() {
+    if !pull.clock_armed || !(quantum_transporting() || modulation_armed(pull)) {
         return f64::INFINITY;
     }
     first_update_position(at)
@@ -823,7 +848,7 @@ pub extern "C" fn host_first_update_position(at: f64) -> f64 {
 #[no_mangle]
 pub extern "C" fn host_next_update_position(after: f64) -> f64 {
     let pull = unsafe { PULL.get() };
-    if !pull.clock_armed || !quantum_transporting() {
+    if !pull.clock_armed || !(quantum_transporting() || modulation_armed(pull)) {
         return f64::INFINITY;
     }
     // The smallest grid multiple strictly greater than `after` (no libm: truncate toward zero, then step).
@@ -983,17 +1008,19 @@ pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) 
     let pull = unsafe { PULL.get() };
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut ParamChange, max as usize) };
     let mut count = 0;
+    // While PAUSED the caller's `position` is free-running; the automation reads the frozen song position.
+    let automation_position = if quantum_transporting() {position} else {song_position()};
     for param in &pull.params {
-        if param.track.is_none() {
+        if param.track.is_none() && param.modulation.is_none() {
             continue; // static params are not clock-driven; their value is pushed at build / edit
         }
-        let (value, kind) = param.resolve(position);
-        if value != param.last.get() {
-            param.last.set(value);
+        let (value, kind, modulation) = param.resolve_split(automation_position, position);
+        if param.changed(value, modulation) {
+            param.mark(value, modulation);
             if count >= out.len() {
                 break;
             }
-            out[count] = ParamChange {id: param.id, kind, value};
+            out[count] = ParamChange {id: param.id, kind, value, modulation};
             count += 1;
         }
     }
@@ -1237,6 +1264,15 @@ struct Engine {
     // `midi_out_take`, the device-id table, the scheduled transport messages, and the registered
     // `MIDIOutputBox` targets (see `sync_midi_targets`). Shared with the per-unit MidiOut nodes.
     midi_out: midi_output::SharedMidiOut,
+    modulators: Rc<RefCell<modulation::ModulatorTable>>,
+    // The free-running modulation clock: it integrates while the pulse flow stays continuous and re-anchors
+    // to the position's wall-clock seconds on a start, stop or jump.
+    modulation_free: f64,
+    modulation_position: f64,
+    modulation_playing: bool,
+    // Armed by a modulator's OWN field edit: the value cells are live for the render path, but a STOPPED
+    // transport runs no update clock, so the next reconcile re-pushes every unit's parameters.
+    modulation_dirty: Rc<Cell<bool>>,
     sample_rate: f32,
     blocks: Vec<Block>,
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
@@ -1288,6 +1324,11 @@ impl Engine {
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
             midi_out: midi_output::shared_midi_out(),
+            modulators: Rc::new(RefCell::new(modulation::ModulatorTable::new())),
+            modulation_free: f64::NAN,
+            modulation_position: f64::NAN,
+            modulation_playing: false,
+            modulation_dirty: Rc::new(Cell::new(false)),
             sample_rate,
             blocks: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM), // a quantum splits into a few blocks (tempo / loop); never realloc on the render path
             devices: Vec::new(),
@@ -1439,6 +1480,8 @@ impl Engine {
         if self.transport.is_playing() {
             self.resolve_automated_solo(self.transport.position());
         }
+        unsafe { *SONG_POSITION.get() = self.transport.position(); }
+        self.advance_modulation();
         let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
             metronome_pref, ..} = self;
@@ -1608,6 +1651,7 @@ impl Engine {
         self.apply_metronome();
         self.transport.stop(false);
         unsafe { IGNORED_REGIONS.get() }.clear();
+        unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         self.schedule_midi_transport(midi_output::stop_message()); // TS `#stopRecording` schedules Stop
     }
 
@@ -1618,6 +1662,7 @@ impl Engine {
         self.is_counting_in = false;
         self.apply_metronome();
         unsafe { IGNORED_REGIONS.get() }.clear();
+        unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         // TS `#stop` schedules ONE MidiData.Stop per stop command; the worklet's stop command always runs
         // `pause()` (a hard reset calls `stop()` after it, which deliberately schedules nothing more).
         self.schedule_midi_transport(midi_output::stop_message());
@@ -1632,6 +1677,7 @@ impl Engine {
         self.is_counting_in = false;
         self.apply_metronome();
         unsafe { IGNORED_REGIONS.get() }.clear();
+        unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         self.transport.stop(true);
         self.transport.reset_marker_state(); // TS `#reset` -> `renderer.reset()` forgets the active marker (silently)
         self.clip_sequencer.borrow_mut().reset();
@@ -1852,10 +1898,267 @@ impl Engine {
         // MIDI-output unit's initial CC push resolves its device through the registry (TS resolves it off
         // the complete graph at construction).
         self.observe_midi_outputs();
+        // Before the units reconcile: `observe_param` resolves each assignment's source through this table.
+        self.observe_modulators();
         self.observe_audio_units();
         self.observe_audio_files();
         self.observe_soundfont_files();
         0
+    }
+
+    /// WASM CONTRACT: RootBox.modulators = field key 11 (boxes RootBox.ts).
+    fn observe_modulators(&mut self) {
+        const ROOT_MODULATORS_KEY: u16 = 11;
+        if let Some(root) = self.graph.find_by_name("RootBox") {
+            let recorder = self.modulators.clone();
+            self.graph.subscribe_pointer_hub(Address::of(root.uuid, vec![ROOT_MODULATORS_KEY]),
+                Box::new(move |_graph, event| {
+                    match event {
+                        HubEvent::Added(source) => recorder.borrow_mut().record_add(source.uuid),
+                        HubEvent::Removed(source) => recorder.borrow_mut().record_remove(source.uuid)
+                    }
+                }));
+        }
+        self.sync_modulators();
+    }
+
+    /// WASM CONTRACT: modulator field keys — enabled 4, bipolar 7, amount 8 (shared by every kind).
+    /// LfoModulatorBox: shape 10, rateSync 11, rateAbsolute 12, phase 13, exponent 15. StepsModulatorBox:
+    /// count 10, rateSync 11, rateAbsolute 12, phase 13, smooth 15, direction 16, steps 20 (array of 64).
+    /// MacroModulatorBox: value 10. RandomModulatorBox: loop 10, rateSync 11, rateAbsolute 12, phase 13,
+    /// smooth 15, seed 16, levels 17.
+    fn advance_modulation(&mut self) {
+        let free_running = self.transport.free_running();
+        let playing = self.transport.is_playing();
+        let quantum_pulses =
+            dsp::ppqn::samples_to_pulses(RENDER_QUANTUM as f64, self.transport.bpm(), self.sample_rate);
+        let position = self.transport.position();
+        // A pause or resume flips `playing`, a locate jumps the free-running pulse, and a loop jump moves
+        // only the song position, so the phase re-anchors on all four.
+        let continuous = playing == self.modulation_playing
+            && (free_running - self.modulation_free).abs() <= quantum_pulses * 0.5
+            && (position - self.modulation_position).abs() <= quantum_pulses * 0.5;
+        {
+            let modulators = self.modulators.borrow();
+            if continuous {
+                modulators.advance(RENDER_QUANTUM as f64 / self.sample_rate as f64, quantum_pulses);
+            } else {
+                modulators.anchor(self.tempo_map.borrow().ppqn_to_seconds(free_running), position);
+            }
+            modulators.refresh_params(position, free_running);
+            modulators.publish_phases();
+        }
+        self.modulation_free = free_running + quantum_pulses;
+        self.modulation_position = position + if playing {quantum_pulses} else {0.0};
+        self.modulation_playing = playing;
+    }
+
+    fn sync_modulators(&mut self) {
+        let (added, removed, rebind) = self.modulators.borrow_mut().take_pending();
+        for uuid in removed {
+            let (subs, collections) = self.modulators.borrow_mut().remove(&uuid);
+            self.release_modulator_bindings(subs, collections);
+            self.modulation_dirty.set(true);
+        }
+        for uuid in rebind {
+            let state = match self.modulators.borrow().resolve(&uuid) {
+                Some(state) => state,
+                None => continue
+            };
+            let (subs, collections) = self.modulators.borrow_mut().detach(&uuid);
+            self.release_modulator_bindings(subs, collections);
+            let name = self.graph.find_box(&uuid).map(|graph_box| graph_box.name.clone()).unwrap_or_default();
+            let (subs, params, collections) = self.bind_modulator(uuid, &name, &state);
+            self.modulators.borrow_mut().attach(&uuid, subs, params, collections);
+            self.modulation_dirty.set(true);
+        }
+        for uuid in added {
+            if self.modulators.borrow().resolve(&uuid).is_some() {
+                continue;
+            }
+            let name = self.graph.find_box(&uuid).map(|graph_box| graph_box.name.clone()).unwrap_or_default();
+            let state = Rc::new(match name.as_str() {
+                "StepsModulatorBox" => modulation::ModulatorState::steps(),
+                "MacroModulatorBox" => modulation::ModulatorState::macro_knob(),
+                "RandomModulatorBox" => modulation::ModulatorState::random(),
+                _ => modulation::ModulatorState::lfo()
+            });
+            let (subs, params, collections) = self.bind_modulator(uuid, &name, &state);
+            let slot = engine_env::telemetry::broadcast_slot(2);
+            self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &slot);
+            self.broadcasts.attach_producer_active(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY,
+                state.broadcast_active.clone());
+            *state.broadcast.borrow_mut() = Some(slot);
+            self.modulators.borrow_mut().add(uuid, state, subs, params, collections);
+            self.modulation_dirty.set(true);
+        }
+        // A field edit reaches the state through the handles, so it lands with the transaction rather than
+        // waiting for the next quantum's refresh.
+        self.modulators.borrow().refresh_params(self.transport.position(), self.transport.free_running());
+    }
+
+    fn release_modulator_bindings(&mut self, subs: Vec<SubscriptionId>,
+                                  collections: Vec<bindings::value_collection::ValueCollection>) {
+        for sub in subs {
+            self.graph.unsubscribe(sub);
+        }
+        for collection in collections {
+            collection.terminate(&mut self.graph);
+        }
+    }
+
+    /// A modulator's own parameters, bound like a device's: key, the mapping an automation curve folds
+    /// through, and where the resolved value lands.
+    /// WASM CONTRACT: mirrors `createParameter` in the modulator adapters (packages/studio/adapters).
+    fn modulator_params(name: &str) -> Vec<(u16, modulation::ParamMapping, fn(&modulation::ModulatorState, f32))> {
+        use math::value_mapping::{Linear, LinearInteger, Power};
+        use modulation::{ModulatorKind, ModulatorState};
+        use modulation::ParamMapping::{Float, Integer, Power as PowerMapping};
+        let rate_sync = Integer(LinearInteger {min: 0, max: modulation::RATES.len() as i32 - 1});
+        let rate_absolute = PowerMapping(Power::by_center(1.0, 0.0, 10.0));
+        let unipolar = Float(Linear::unipolar());
+        let bipolar = Float(Linear::bipolar());
+        let mut params: Vec<(u16, modulation::ParamMapping, fn(&ModulatorState, f32))> = alloc::vec![
+            (8u16, unipolar, (|state: &ModulatorState, value| state.amount.set(value))
+                as fn(&ModulatorState, f32))
+        ];
+        params.append(&mut match name {
+            "StepsModulatorBox" => alloc::vec![
+                (11u16, rate_sync,
+                    (|state: &ModulatorState, value| if let ModulatorKind::Steps(steps) = &state.kind {
+                        steps.rate_sync.set(value as i32)
+                    }) as fn(&ModulatorState, f32)),
+                (12, rate_absolute,
+                    |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.rate_absolute.set(value)}),
+                (13, unipolar,
+                    |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.phase.set(value)}),
+                (15, unipolar,
+                    |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.smooth.set(value)})
+            ],
+            "MacroModulatorBox" => alloc::vec![
+                (10u16, unipolar,
+                    (|state: &ModulatorState, value| if let ModulatorKind::Macro(knob) = &state.kind {
+                        knob.value.set(value)
+                    }) as fn(&ModulatorState, f32))
+            ],
+            "RandomModulatorBox" => alloc::vec![
+                (11u16, rate_sync,
+                    (|state: &ModulatorState, value| if let ModulatorKind::Random(random) = &state.kind {
+                        random.rate_sync.set(value as i32)
+                    }) as fn(&ModulatorState, f32)),
+                (12, rate_absolute,
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.rate_absolute.set(value)}),
+                (13, unipolar,
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.phase.set(value)}),
+                (15, unipolar,
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.smooth.set(value)})
+            ],
+            _ => alloc::vec![
+                (10u16, Integer(LinearInteger {min: 0, max: 4}),
+                    (|state: &ModulatorState, value| if let ModulatorKind::Lfo(lfo) = &state.kind {
+                        lfo.shape.set(value as i32)
+                    }) as fn(&ModulatorState, f32)),
+                (11, rate_sync,
+                    |state, value| if let ModulatorKind::Lfo(lfo) = &state.kind {lfo.rate_sync.set(value as i32)}),
+                (12, rate_absolute,
+                    |state, value| if let ModulatorKind::Lfo(lfo) = &state.kind {lfo.rate_absolute.set(value)}),
+                (13, unipolar,
+                    |state, value| if let ModulatorKind::Lfo(lfo) = &state.kind {lfo.phase.set(value)}),
+                (15, bipolar,
+                    |state, value| if let ModulatorKind::Lfo(lfo) = &state.kind {lfo.exponent.set(value)})
+            ]
+        });
+        params
+    }
+
+    /// Bind one modulator: every own parameter through the SAME `observe_param` a device's field uses, so
+    /// automation, an assignment from another modulator and the knob's broadcast all come with it. The step
+    /// array is not a parameter, so it keeps its plain observers.
+    /// WASM CONTRACT: enabled 4, bipolar 7 (ModulatorFactory.ts).
+    fn bind_modulator(&mut self, uuid: Uuid, name: &str, state: &Rc<modulation::ModulatorState>)
+                      -> (Vec<SubscriptionId>, Vec<modulation::BoundParam>,
+                          Vec<bindings::value_collection::ValueCollection>) {
+        let invalidate: Rc<dyn Fn()> = {
+            let modulators = self.modulators.clone();
+            let dirty = self.modulation_dirty.clone();
+            Rc::new(move || {
+                modulators.borrow_mut().record_rebind(uuid);
+                dirty.set(true);
+            })
+        };
+        let mut subs = Vec::new();
+        let mut collections = Vec::new();
+        let mut params = Vec::new();
+        subs.push(self.observe_modulator_flag(uuid, 4, state, |state, value| state.enabled.set(value)));
+        subs.push(self.observe_modulator_flag(uuid, 7, state, |state, value| state.bipolar.set(value)));
+        for (index, (key, mapping, apply)) in Self::modulator_params(name).into_iter().enumerate() {
+            let (handle, mut param_subs, mut param_collections, _armed) =
+                self.observe_param(uuid, &[key], index as u32, &invalidate);
+            subs.append(&mut param_subs);
+            collections.append(&mut param_collections);
+            params.push(modulation::BoundParam {handle, mapping, apply});
+        }
+        // Bind is a catch-up: the cells hold the stored (or already automated) values before the first quantum.
+        let position = self.transport.position();
+        let free_running = self.transport.free_running();
+        for param in params.iter() {
+            param.refresh(state, position, free_running);
+        }
+        if name == "StepsModulatorBox" {
+            subs.push(self.observe_modulator_int(uuid, 10, state, |state, value|
+                if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.count.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 16, state, |state, value|
+                if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.direction.set(value)}));
+            for index in 0..modulation::MAX_STEPS {
+                let state = state.clone();
+                subs.push(self.observe_modulator_float(uuid, alloc::vec![20, index as u16], move |value| {
+                    if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.steps[index].set(value)}
+                }));
+            }
+        }
+        if name == "RandomModulatorBox" {
+            subs.push(self.observe_modulator_int(uuid, 10, state, |state, value|
+                if let modulation::ModulatorKind::Random(random) = &state.kind {random.loop_length.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 16, state, |state, value|
+                if let modulation::ModulatorKind::Random(random) = &state.kind {random.seed.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 17, state, |state, value|
+                if let modulation::ModulatorKind::Random(random) = &state.kind {random.levels.set(value)}));
+        }
+        (subs, params, collections)
+    }
+
+    fn observe_modulator_flag(&mut self, uuid: Uuid, key: u16, state: &Rc<modulation::ModulatorState>,
+                              apply: fn(&modulation::ModulatorState, bool)) -> SubscriptionId {
+        let state = state.clone();
+        let dirty = self.modulation_dirty.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![key]), move |value| {
+            if let Some(flag) = value.as_bool() {
+                apply(&state, flag);
+                dirty.set(true);
+            }
+        })
+    }
+
+    fn observe_modulator_float(&mut self, uuid: Uuid, path: Vec<u16>, apply: impl Fn(f32) + 'static) -> SubscriptionId {
+        let dirty = self.modulation_dirty.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, path), move |value| {
+            if let Some(value) = value.as_float32() {
+                apply(value);
+                dirty.set(true);
+            }
+        })
+    }
+
+    fn observe_modulator_int(&mut self, uuid: Uuid, key: u16, state: &Rc<modulation::ModulatorState>,
+                             apply: fn(&modulation::ModulatorState, i32)) -> SubscriptionId {
+        let state = state.clone();
+        let dirty = self.modulation_dirty.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![key]), move |value| {
+            if let Some(value) = value.as_int32() {
+                apply(&state, value);
+                dirty.set(true);
+            }
+        })
     }
 
     /// Track the `MIDIOutputBox`es connected to `RootBox.outputMidiDevices` (TS
@@ -2196,6 +2499,7 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
         let input = core::slice::from_raw_parts(INPUT.get().as_ptr(), len);
         match engine.apply_updates(input) {
             Ok(()) => {
+                engine.sync_modulators(); // before the units: they resolve assignments through the table
                 engine.reconcile_units(); // apply any audio-unit membership change this transaction recorded
                 engine.sync_midi_targets(); // realize any MIDIOutputBox joins / leaves this transaction recorded
                 0
@@ -2417,6 +2721,19 @@ pub extern "C" fn ignore_note_region() {
     let ignored = unsafe { IGNORED_REGIONS.get() };
     if !ignored.contains(&uuid) {
         ignored.push(uuid);
+    }
+}
+
+/// Put an automation lane under MANUAL control (TS `EngineCommands.suspendAutomation`, issue #347): its
+/// parameter reads its own field value until the transport stops, so a knob or a CC is heard at once instead
+/// of fighting the curve. The 16-byte lane uuid is written into the input scratch first.
+#[no_mangle]
+pub extern "C" fn suspend_automation() {
+    let mut uuid = [0u8; 16];
+    uuid.copy_from_slice(unsafe { core::slice::from_raw_parts(INPUT.get().as_ptr(), 16) });
+    let suspended = unsafe { SUSPENDED_AUTOMATION.get() };
+    if !suspended.contains(&uuid) {
+        suspended.push(uuid);
     }
 }
 
@@ -2985,6 +3302,25 @@ pub extern "C" fn host_panic(msg_ptr: u32, msg_len: u32) {
     let count = (msg_len as usize).min(PANIC_MESSAGE_CAPACITY);
     unsafe { core::ptr::copy_nonoverlapping(msg_ptr as *const u8, buffer.as_mut_ptr(), count); }
     *written = count;
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, the modulator's `map_parameter`.
+#[no_mangle]
+pub extern "C" fn map_modulator_parameter(kind: u32, key: u32, unit: f32) -> f32 {
+    let name = match kind {
+        1 => "StepsModulatorBox",
+        2 => "MacroModulatorBox",
+        3 => "RandomModulatorBox",
+        _ => "LfoModulatorBox"
+    };
+    let value = abi::ParamValue::Unit(unit);
+    Engine::modulator_params(name).iter()
+        .find(|(field_key, _, _)| *field_key as u32 == key)
+        .map_or(f32::NAN, |(_, mapping, _)| match mapping {
+            modulation::ParamMapping::Float(mapping) => abi::float_value(value, mapping),
+            modulation::ParamMapping::Power(mapping) => abi::float_value(value, mapping),
+            modulation::ParamMapping::Integer(mapping) => abi::int_value(value, mapping) as f32
+        })
 }
 
 #[cfg(not(test))]

@@ -57,5 +57,15 @@ export type DragPreset = {
     device: Nullable<InstrumentFactories.Keys>
 } & DragCopyHint
 
+// The dragged modulators, reordering them in the modulation panel's list: the whole selection when the one
+// under the pointer belongs to it, else that one alone. `index` is the dragged one's own place, which tells
+// a drop target which side of itself to mark.
+export type DragModulator = {
+    type: "modulator"
+    uuids: ReadonlyArray<UUID.String>
+    index: int
+} & DragCopyHint
+
 export type AnyDragData =
-    DragSample | DragFile | DragDevice | DragChannelStrip | DragTrack | DragSoundfont | DragPreset | DragCompositeEntry
+    DragSample | DragFile | DragDevice | DragChannelStrip | DragTrack | DragSoundfont | DragPreset
+    | DragCompositeEntry | DragModulator

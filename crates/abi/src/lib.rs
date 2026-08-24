@@ -189,7 +189,7 @@ extern "C" {
     fn host_script_note_on(handle: u32, pitch: u32, velocity: f32, cent: f32, id: u32);
     fn host_script_note_off(handle: u32, id: u32);
     fn host_script_reset(handle: u32);
-    fn host_script_param(handle: u32, index: u32, kind: u32, value: f32);
+    fn host_script_param(handle: u32, index: u32, kind: u32, value: f32, modulation: f32);
     fn host_script_sample(handle: u32, index: u32, sample_handle: u32, present: u32);
     fn host_script_notes(handle: u32, in_ptr: u32, in_count: u32, out_ptr: u32, out_max: u32,
                          from: f64, to: f64, bpm: f32, flags: u32, s0: u32, s1: u32) -> u32;
@@ -283,36 +283,43 @@ pub const PARAM_KIND_FLOAT: u32 = 2;
 pub const PARAM_KIND_BOOL: u32 = 3;
 
 /// One resolved parameter change the host hands back from [`update_parameters`]: the parameter's `id` (the
-/// value [`bind_parameter`] returned), a `kind` tag (`PARAM_KIND_*`), and the new `value` as a single f32. The
-/// SDK decodes `(kind, value)` into a typed [`ParamValue`]. `#[repr(C)]` so the host writes it straight into
-/// the scratch; the two `u32`s precede the f32 and everything is 4-aligned with no padding.
+/// value [`bind_parameter`] returned), a `kind` tag (`PARAM_KIND_*`), the new `value` as a single f32, and the
+/// summed `modulation` in NORMALIZED space (NaN = none). `#[repr(C)]` so the host writes it straight into the
+/// scratch; the two `u32`s precede the f32s and everything is 4-aligned with no padding.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ParamChange {
     pub id: u32,
     pub kind: u32,
-    pub value: f32
+    pub value: f32,
+    pub modulation: f32
 }
 
 /// A parameter value handed to a device's `parameter_changed`, ALREADY TYPED so device code never casts or
 /// reads a raw tag. The analog of lib-std's typed `ValueMapping<Y>` outputs: `Unit` is the uniform `0..1`
 /// automation value the device maps with its OWN mapping; `Int` / `Float` / `Bool` are a box field's
 /// already-real value (a UI edit / un-automated default) to use directly. The SDK builds this from a
-/// [`ParamChange`]'s wire `(kind, value)` via [`ParamValue::from_wire`].
+/// [`ParamChange`]'s wire `(kind, value, modulation)` via [`ParamValue::from_wire`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ParamValue {
     Unit(f32),
     Int(i32),
     Float(f32),
-    Bool(bool)
+    Bool(bool),
+    /// The `base` (`kind` says how to read it) plus the modulation in NORMALIZED space. Only the device knows
+    /// the mapping, so the resolvers below fold them; device code goes through those, never this variant.
+    Modulated {base: f32, kind: u32, sum: f32}
 }
 
 impl ParamValue {
-    /// Decode the wire `(kind, value)` into a typed value. The ONE numeric conversion of an f32-carried real
-    /// value to its primitive type lives here, once, so device code stays cast-free. Panics on an unknown
-    /// kind: the engine and SDK are the only writers, so that can only be a contract drift, never live input.
+    /// Decode the wire `(kind, value, modulation)` into a typed value. The ONE numeric conversion of an
+    /// f32-carried real value to its primitive type lives here, once, so device code stays cast-free. Panics
+    /// on an unknown kind: the engine and SDK are the only writers, so that can only be a contract drift.
     #[inline]
-    pub fn from_wire(kind: u32, value: f32) -> Self {
+    pub fn from_wire(kind: u32, value: f32, modulation: f32) -> Self {
+        if !modulation.is_nan() {
+            return ParamValue::Modulated {base: value, kind, sum: modulation};
+        }
         match kind {
             PARAM_KIND_UNIT => ParamValue::Unit(value),
             PARAM_KIND_INT => ParamValue::Int(value as i32),
@@ -323,37 +330,65 @@ impl ParamValue {
     }
 }
 
-/// Resolve a FLOAT parameter from its [`ParamValue`]: a uniform automation value mapped through `mapping`, or
-/// a real `Float` field value used directly. PANICS on an `Int` / `Bool` wire — a float parameter never
-/// carries those, so it can only be a contract drift; the value is never silently coerced. Shared by all
-/// plugins (the device just supplies its own `mapping`).
+
+/// Resolve a FLOAT parameter: a uniform automation value mapped through `mapping`, a real `Float` used
+/// directly, or a `Modulated` base + sum folded in NORMALIZED space and mapped back. PANICS on an `Int` /
+/// `Bool` wire — a float parameter never carries those, so it can only be a contract drift.
 #[inline]
 pub fn float_value<M: math::value_mapping::ValueMapping<f32>>(value: ParamValue, mapping: &M) -> f32 {
     match value {
         ParamValue::Unit(unit) => mapping.y(unit),
         ParamValue::Float(real) => real,
+        ParamValue::Modulated {base, kind, sum} => {
+            let unit = if kind == PARAM_KIND_UNIT { base } else { mapping.x(base) };
+            mapping.y(math::clamp_unit(unit + sum))
+        }
         ParamValue::Int(_) | ParamValue::Bool(_) => panic!("expected a float parameter")
     }
 }
 
-/// Resolve an INT parameter: a uniform automation value mapped through `mapping`, or a real `Int` value.
-/// PANICS on a `Float` / `Bool` wire.
+/// Resolve an INT parameter: a uniform automation value mapped through `mapping`, a real `Int` value, or a
+/// `Modulated` base + sum folded in NORMALIZED space. PANICS on a `Float` / `Bool` wire.
 #[inline]
 pub fn int_value<M: math::value_mapping::ValueMapping<i32>>(value: ParamValue, mapping: &M) -> i32 {
     match value {
         ParamValue::Unit(unit) => mapping.y(unit),
         ParamValue::Int(real) => real,
+        ParamValue::Modulated {base, kind, sum} => {
+            let unit = if kind == PARAM_KIND_UNIT { base } else { mapping.x(base as i32) };
+            mapping.y(math::clamp_unit(unit + sum))
+        }
         ParamValue::Float(_) | ParamValue::Bool(_) => panic!("expected an int parameter")
     }
 }
 
-/// Resolve a BOOL parameter: a uniform automation value (true at / above the halfway point), or a real `Bool`
-/// value. PANICS on an `Int` / `Float` wire.
+/// The UNIT value (`0..1`) rather than the real one, for a device that maps it itself later (TS `getUnitValue`).
+#[inline]
+pub fn unit_value<M: math::value_mapping::ValueMapping<f32>>(value: ParamValue, mapping: &M) -> f32 {
+    match value {
+        ParamValue::Unit(unit) => unit,
+        ParamValue::Float(real) => mapping.x(real),
+        ParamValue::Int(real) => mapping.x(real as f32),
+        ParamValue::Bool(flag) => if flag {1.0} else {0.0},
+        ParamValue::Modulated {base, kind, sum} => {
+            let unit = if kind == PARAM_KIND_UNIT { base } else { mapping.x(base) };
+            math::clamp_unit(unit + sum)
+        }
+    }
+}
+
+/// Resolve a BOOL parameter: a uniform automation value (true at / above the halfway point), a real `Bool`,
+/// or a `Modulated` base + sum folded in NORMALIZED space and thresholded the same way. PANICS on an `Int` /
+/// `Float` wire.
 #[inline]
 pub fn bool_value(value: ParamValue) -> bool {
     match value {
         ParamValue::Unit(unit) => unit >= 0.5,
         ParamValue::Bool(flag) => flag,
+        ParamValue::Modulated {base, kind, sum} => {
+            let unit = if kind == PARAM_KIND_UNIT { base } else if base != 0.0 { 1.0 } else { 0.0 };
+            math::clamp_unit(unit + sum) >= 0.5
+        }
         ParamValue::Int(_) | ParamValue::Float(_) => panic!("expected a bool parameter")
     }
 }
@@ -743,20 +778,22 @@ pub fn script_release(handle: u32) {
     { let _ = handle; }
 }
 
-/// Forward a parameter change to the user `Processor` by declaration `index` + the raw `(kind, value)` (the
-/// bridge maps `UNIT` via the script's `@param` mapping, uses `FLOAT`/`INT`/`BOOL` directly). Native stub no-op.
+/// Forward a parameter change to the user `Processor` by declaration `index` + the raw `(kind, value)` plus
+/// the normalized `modulation` (NaN = none). A scriptable device's mapping lives in its `@param` declaration,
+/// on the JS side, so the bridge folds the sum there. Native stub no-op.
 #[inline]
 pub fn script_param(handle: u32, index: u32, value: ParamValue) {
-    let (kind, bits) = match value {
-        ParamValue::Unit(unit) => (PARAM_KIND_UNIT, unit),
-        ParamValue::Int(int) => (PARAM_KIND_INT, int as f32),
-        ParamValue::Float(float) => (PARAM_KIND_FLOAT, float),
-        ParamValue::Bool(flag) => (PARAM_KIND_BOOL, if flag { 1.0 } else { 0.0 })
+    let (kind, bits, modulation) = match value {
+        ParamValue::Unit(unit) => (PARAM_KIND_UNIT, unit, f32::NAN),
+        ParamValue::Int(int) => (PARAM_KIND_INT, int as f32, f32::NAN),
+        ParamValue::Float(float) => (PARAM_KIND_FLOAT, float, f32::NAN),
+        ParamValue::Bool(flag) => (PARAM_KIND_BOOL, if flag { 1.0 } else { 0.0 }, f32::NAN),
+        ParamValue::Modulated {base, kind, sum} => (kind, base, sum)
     };
     #[cfg(target_family = "wasm")]
-    { unsafe { host_script_param(handle, index, kind, bits) } }
+    { unsafe { host_script_param(handle, index, kind, bits, modulation) } }
     #[cfg(not(target_family = "wasm"))]
-    { let _ = (handle, index, kind, bits); }
+    { let _ = (handle, index, kind, bits, modulation); }
 }
 
 /// Deliver a sample slot's resolved handle (or unbind) to the user `Processor` by declaration `index` (Apparat).
@@ -907,10 +944,10 @@ const MAX_PARAM_CHANGES: usize = 32;
 /// update position exactly as the templates do.
 #[inline]
 pub fn apply_param_changes<S>(state: &mut S, position: f64, apply: fn(&mut S, u32, ParamValue)) {
-    let mut changes = [ParamChange {id: 0, kind: 0, value: 0.0}; MAX_PARAM_CHANGES];
+    let mut changes = [ParamChange {id: 0, kind: 0, value: 0.0, modulation: f32::NAN}; MAX_PARAM_CHANGES];
     let count = update_parameters(position, &mut changes);
     for change in &changes[..count] {
-        apply(state, change.id, ParamValue::from_wire(change.kind, change.value));
+        apply(state, change.id, ParamValue::from_wire(change.kind, change.value, change.modulation));
     }
 }
 
@@ -1484,5 +1521,71 @@ mod tests {
         assert!(state.chunks[0].flags & BlockFlags::DISCONTINUOUS != 0, "the first chunk keeps the one-shot flag");
         assert!(state.chunks[1].flags & BlockFlags::DISCONTINUOUS == 0, "later chunks have it cleared");
         assert!(state.chunks[1].flags & BlockFlags::TRANSPORTING != 0, "state flags persist");
+    }
+}
+
+#[cfg(test)]
+mod modulation_tests {
+    //! The `Modulated` arms of the typed resolvers: the base is normalized through the call site's OWN mapping,
+    //! the sum is added in that space, the result is clamped and mapped back. A zero sum must reproduce the
+    //! un-modulated value exactly, since that is what keeps an assigned-but-idle modulator inaudible.
+    use super::{bool_value, float_value, int_value, unit_value, ParamValue, PARAM_KIND_FLOAT, PARAM_KIND_INT,
+                PARAM_KIND_UNIT, PARAM_KIND_BOOL};
+    use math::value_mapping::{Decibel, Exponential, Linear, LinearInteger, ValueMapping};
+
+    const LINEAR: Linear = Linear {min: 20.0, max: 20000.0};
+    const EXPONENTIAL: Exponential = Exponential {min: 20.0, max: 20000.0};
+    const STEPS: LinearInteger = LinearInteger {min: 1, max: 16};
+
+    fn round_trips<M: ValueMapping<f32>>(real: f32, mapping: &M) {
+        let plain = float_value(ParamValue::Float(real), mapping);
+        let modulated = float_value(ParamValue::Modulated {base: real, kind: PARAM_KIND_FLOAT, sum: 0.0}, mapping);
+        assert!((plain - modulated).abs() <= plain.abs() * 1.0e-5, "a zero sum must round-trip: {plain} vs {modulated}");
+    }
+
+    #[test]
+    fn a_zero_sum_reproduces_the_unmodulated_value() {
+        round_trips(1000.0, &LINEAR);
+        round_trips(1000.0, &EXPONENTIAL);
+        round_trips(-6.0, &Decibel::default_volume());
+        assert_eq!(int_value(ParamValue::Int(7), &STEPS),
+                   int_value(ParamValue::Modulated {base: 7.0, kind: PARAM_KIND_INT, sum: 0.0}, &STEPS));
+        assert_eq!(bool_value(ParamValue::Bool(true)),
+                   bool_value(ParamValue::Modulated {base: 1.0, kind: PARAM_KIND_BOOL, sum: 0.0}));
+    }
+
+    #[test]
+    fn the_sum_lands_where_the_mapping_says() {
+        // A stored 20 Hz is unit 0 on both mappings, so +0.5 must land on each mapping's own midpoint.
+        let linear = float_value(ParamValue::Modulated {base: 20.0, kind: PARAM_KIND_FLOAT, sum: 0.5}, &LINEAR);
+        assert!((linear - LINEAR.y(0.5)).abs() < 1.0e-3, "linear midpoint, got {linear}");
+        let exponential = float_value(ParamValue::Modulated {base: 20.0, kind: PARAM_KIND_FLOAT, sum: 0.5}, &EXPONENTIAL);
+        assert!((exponential - EXPONENTIAL.y(0.5)).abs() < 1.0e-1, "exponential midpoint, got {exponential}");
+        // An AUTOMATED base arrives already normalized, so no `x` is applied to it.
+        let automated = float_value(ParamValue::Modulated {base: 0.25, kind: PARAM_KIND_UNIT, sum: 0.25}, &LINEAR);
+        assert!((automated - LINEAR.y(0.5)).abs() < 1.0e-3, "unit base adds directly, got {automated}");
+    }
+
+    #[test]
+    fn the_sum_clamps_to_the_unit_interval() {
+        assert_eq!(float_value(ParamValue::Modulated {base: 0.9, kind: PARAM_KIND_UNIT, sum: 5.0}, &LINEAR), LINEAR.max);
+        assert_eq!(float_value(ParamValue::Modulated {base: 0.1, kind: PARAM_KIND_UNIT, sum: -5.0}, &LINEAR), LINEAR.min);
+        assert_eq!(int_value(ParamValue::Modulated {base: 0.0, kind: PARAM_KIND_UNIT, sum: 9.0}, &STEPS), STEPS.max);
+    }
+
+    #[test]
+    fn a_stepped_parameter_steps_and_a_toggle_flips() {
+        let up = int_value(ParamValue::Modulated {base: 1.0, kind: PARAM_KIND_INT, sum: 1.0 / 15.0}, &STEPS);
+        assert_eq!(up, 2, "one step of a 1..16 range is 1/15 of the unit interval");
+        assert!(bool_value(ParamValue::Modulated {base: 0.0, kind: PARAM_KIND_BOOL, sum: 0.6}), "a modulated toggle flips on");
+        assert!(!bool_value(ParamValue::Modulated {base: 1.0, kind: PARAM_KIND_BOOL, sum: -0.6}), "and back off");
+    }
+
+    #[test]
+    fn unit_value_resolves_every_kind_to_the_unit_interval() {
+        assert_eq!(unit_value(ParamValue::Unit(0.25), &LINEAR), 0.25);
+        assert_eq!(unit_value(ParamValue::Float(LINEAR.y(0.75)), &LINEAR), 0.75);
+        let modulated = unit_value(ParamValue::Modulated {base: LINEAR.y(0.25), kind: PARAM_KIND_FLOAT, sum: 0.5}, &LINEAR);
+        assert!((modulated - 0.75).abs() < 1.0e-5, "normalize, add, clamp; got {modulated}");
     }
 }

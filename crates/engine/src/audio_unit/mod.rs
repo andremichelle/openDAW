@@ -41,7 +41,7 @@ use engine_env::audio_buffer::shared_audio_buffer;
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::aux_send::{AuxSendProcessor, SendParams};
 use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripParams, StripValueSource};
-use math::value_mapping::{Decibel, Linear, ValueMapping};
+use math::value_mapping::{Decibel, Linear};
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_region::NoteRegion;
@@ -52,6 +52,7 @@ use value::event::EventCollection;
 use value::note::NoteEvent;
 use value::region::{RegionCollection, Span};
 use crate::param_automation::{BoundValueClip, FieldPath, ParamCurve, ParamHandle, ParamSink, ValueBoundRegion};
+use crate::modulation::{BoundModulation, ModulationChain};
 use crate::plugin_audio_effect::PluginAudioEffect;
 use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
@@ -73,7 +74,7 @@ mod tests;
 pub(crate) use tracks::{AudioRegion, SignalsmithConfig, BoundAudioClip, BoundNoteTracks, SharedAudioTrackSets, SharedTrackSets,
     TrackBinding, AudioTrackBinding, CollectionCache, reconcile_tracks, teardown_track, teardown_audio_track};
 pub(crate) use params::{resolve_and_deliver_sample, NoteSignal, set_params_signal,
-    params_invalidate, automation_invalidate};
+    params_invalidate, automation_invalidate, host_float, host_bool};
 pub(crate) use wiring::tape_region_counts;
 // Re-exported ONLY for the sibling test module's `super::` (whitebox) paths; not used by the non-test build.
 #[cfg(test)]
@@ -688,6 +689,14 @@ impl Engine {
         if self.master.is_none() {
             return;
         }
+        // A modulator's own field moved: the cells are live for the render path, but a stopped transport
+        // runs no update clock, so every unit re-pushes once here (`refresh_params` still diffs per param).
+        if self.modulation_dirty.replace(false) {
+            for binding in &self.audio_units {
+                binding.params_dirty.set(true);
+                binding.mark.mark();
+            }
+        }
         let changes = core::mem::take(&mut *self.unit_changes.borrow_mut());
         // A membership change is structural: a unit appearing / disappearing can resolve or strand a sidechain
         // pointing at it, so the resolve pass must run even if no unit was otherwise enqueued.
@@ -823,7 +832,7 @@ impl Engine {
         let mut changed = false;
         for unit in &self.audio_units {
             let soloed = match unit.strip_automation.solo.borrow().as_ref() {
-                Some(source) => source(position) >= 0.5, // TS `ValueMapping.bool.y`
+                Some(source) => source(position, true) >= 0.5, // TS `ValueMapping.bool.y`
                 None => continue
             };
             if unit.strip_params.solo.get() != soloed {

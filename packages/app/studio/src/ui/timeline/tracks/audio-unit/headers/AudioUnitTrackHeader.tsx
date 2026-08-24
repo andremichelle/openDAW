@@ -1,4 +1,3 @@
-import css from "./TrackHeader.sass?inline"
 import {DefaultObservableValue, Errors, Lifecycle, Option, panic, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -10,6 +9,7 @@ import {installTrackHeaderMenu} from "@/ui/timeline/tracks/audio-unit/headers/Tr
 import {CollapseAutomationButton} from "@/ui/timeline/tracks/audio-unit/headers/CollapseAutomationButton.tsx"
 import {TrackIcon} from "@/ui/timeline/tracks/audio-unit/headers/TrackIcon.tsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
+import {TrackHeaderClassName} from "@/ui/timeline/tracks/audio-unit/TrackStyles.ts"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {Surface} from "@/ui/surface/Surface"
@@ -17,8 +17,6 @@ import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
-
-const className = Html.adoptStyleSheet(css, "TrackHeader")
 
 type Construct = {
     lifecycle: Lifecycle
@@ -29,7 +27,7 @@ type Construct = {
     unitHead: DefaultObservableValue<boolean>
 }
 
-export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, audioUnitBoxAdapter, unitHead}: Construct) => {
+export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, audioUnitBoxAdapter, unitHead}: Construct) => {
     const nameLabel: HTMLElement = <h5 className="device-name" style={{color: Colors.dark.toString()}}/>
     const controlLabel: HTMLElement = <h5 className="control-label" style={{color: Colors.shadow.toString()}}/>
     const {project} = service
@@ -59,7 +57,7 @@ export const TrackHeader = ({lifecycle, service, trackManager, trackBoxAdapter, 
         </div>
     )
     const element: HTMLElement = (
-        <div className={Html.buildClassList(className, "is-primary")} tabindex={-1}>
+        <div className={Html.buildClassList(TrackHeaderClassName, "is-primary")} tabindex={-1}>
             {iconContainer}
             <CollapseAutomationButton lifecycle={lifecycle} service={service}
                                       audioUnitBoxAdapter={audioUnitBoxAdapter} head={unitHead}/>

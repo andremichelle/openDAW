@@ -33,7 +33,8 @@ export class Recording {
         captures.forEach(capture => armedUUIDs.add(capture.audioUnitBox.address.uuid))
         project.regionSelection.deselect(...project.regionSelection.selected()
             .filter(region => region.trackBoxAdapter
-                .mapOr(track => armedUUIDs.hasKey(track.audioUnit.address.uuid), () => false)))
+                .mapOr(track => track.optAudioUnit
+                    .mapOr(unit => armedUUIDs.hasKey(unit.address.uuid), false), () => false)))
         engine.prepareRecordingState(countIn)
         const {isRecording, isCountingIn} = engine
         const stop = (): void => {

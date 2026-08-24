@@ -1,5 +1,4 @@
 import {
-    asInstanceOf,
     DefaultObservableValue,
     int,
     isInstanceOf,
@@ -19,11 +18,13 @@ import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {TrackClips} from "./TrackClips"
 import {TrackRegions} from "./TrackRegions"
 import {AudioUnitBoxAdapter} from "../audio-unit/AudioUnitBoxAdapter"
+import {ParameterOwner} from "../ParameterOwner"
+import {isModulatorBoxAdapter} from "../modulation/ModulatorBoxAdapter"
 import {TrackType} from "./TrackType"
 import {AnyClipBoxAdapter, AnyRegionBoxAdapter} from "../UnionAdapterTypes"
 import {ValueClipBoxAdapter} from "./clip/ValueClipBoxAdapter"
 import {ValueRegionBoxAdapter} from "./region/ValueRegionBoxAdapter"
-import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, ModulationBox, TrackBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 
 export class TrackBoxAdapter implements BoxAdapter {
@@ -95,36 +96,24 @@ export class TrackBoxAdapter implements BoxAdapter {
     }
 
     get targetName(): Option<string> {
-        return this.#box.target.targetVertex.flatMap(targetVertex => {
-            const box = targetVertex.box
-            if (box instanceof AudioUnitBox) {
-                const adapter = this.#context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter)
-                return adapter.input.label
-            }
-            const optAdapter = this.#context.boxAdapters.optAdapter(box)
-            if (optAdapter.nonEmpty()) {
-                const adapter = optAdapter.unwrap()
-                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
-                    return Option.wrap(adapter.labelField.getValue())
-                }
-            }
-            const ownerAdapter = this.#resolveOwnerDeviceBox(box)
-                .flatMap(owner => this.#context.boxAdapters.optAdapter(owner))
-            if (ownerAdapter.nonEmpty()) {
-                const adapter = ownerAdapter.unwrap()
-                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
-                    return Option.wrap(adapter.labelField.getValue())
-                }
-            }
-            return Option.wrap(box.name)
-        })
+        return this.#box.target.targetVertex.flatMap(vertex => ParameterOwner.nameOf(this.#context, vertex))
     }
 
     #catchupAndSubscribeTargetName(observer: Observer<Option<string>>): Subscription {
         const targetVertex = this.#box.target.targetVertex
         if (targetVertex.nonEmpty()) {
             const box = targetVertex.unwrap().box
-            if (box instanceof AudioUnitBox) {
+            if (isInstanceOf(box, ModulationBox)) {
+                const vertex = targetVertex.unwrap()
+                const update = () => observer(ParameterOwner.nameOf(this.#context, vertex))
+                update()
+                return box.source.targetVertex
+                    .flatMap(source => this.#context.boxAdapters.optAdapter(source.box))
+                    .mapOr(adapter => isModulatorBoxAdapter(adapter)
+                        ? adapter.labelField.subscribe(update)
+                        : Terminable.Empty, Terminable.Empty)
+            }
+            if (isInstanceOf(box, AudioUnitBox)) {
                 const adapter = this.#context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter)
                 return adapter.input.catchupAndSubscribeLabelChange(option => observer(option))
             }
@@ -153,11 +142,15 @@ export class TrackBoxAdapter implements BoxAdapter {
     terminate() {this.#terminator.terminate()}
 
     get audioUnit(): AudioUnitBox {
-        return asInstanceOf(this.#box.tracks.targetVertex.unwrap("track has no audioUnit").box, AudioUnitBox)
+        return this.optAudioUnit.unwrap("track has no audioUnit")
+    }
+
+    get optAudioUnit(): Option<AudioUnitBox> {
+        return this.#box.tracks.targetVertex
+            .flatMap(vertex => vertex.box instanceof AudioUnitBox ? Option.wrap(vertex.box) : Option.None)
     }
 
     get target(): PointerField<Pointers.Automation> {return this.#box.target}
-
     get clips(): TrackClips {return this.#clips}
     get regions(): TrackRegions {return this.#regions}
     get enabled(): BooleanField {return this.#box.enabled}

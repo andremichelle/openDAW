@@ -35,6 +35,7 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Latency", path: "/manuals/latency"},
             {type: "page", label: "Live Rooms", path: "/manuals/live-rooms"},
             {type: "page", label: "Mixer", path: "/manuals/mixer"},
+            {type: "page", label: "Modulation", path: "/manuals/modulation"},
             {type: "page", label: "Nextcloud", path: "/manuals/nextcloud"},
             {type: "page", label: "Open Source", path: "/manuals/open-source"},
             {type: "page", label: "Permissions", path: "/manuals/permissions"},

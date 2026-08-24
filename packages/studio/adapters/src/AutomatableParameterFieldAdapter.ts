@@ -1,5 +1,6 @@
 import {
     assert,
+    asInstanceOf,
     clamp,
     ControlSource,
     ControlSourceListener,
@@ -21,11 +22,12 @@ import {
     ValueMapping
 } from "@opendaw/lib-std"
 import {ppqn} from "@opendaw/lib-dsp"
-import {Address, PointerField, PointerTypes, PrimitiveField, PrimitiveType, PrimitiveValues} from "@opendaw/lib-box"
+import {Address, Field, PointerField, PointerTypes, PrimitiveField, PrimitiveType, PrimitiveValues} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {BoxVisitor, TrackBox} from "@opendaw/studio-boxes"
+import {BoxVisitor, ModulationBox, TrackBox} from "@opendaw/studio-boxes"
 import {TrackBoxAdapter} from "./timeline/TrackBoxAdapter"
-import {AudioUnitTracks} from "./audio-unit/AudioUnitTracks"
+import {ParameterTracks} from "./timeline/ParameterTracks"
+import {ParameterOwner} from "./ParameterOwner"
 import {BoxAdaptersContext} from "./BoxAdaptersContext"
 
 const ExternalControlTypes = [
@@ -51,6 +53,7 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     #trackBoxAdapter: Option<TrackBoxAdapter> = Option.None
     #automationHandle: Option<Terminable> = Option.None
     #controlledValue: Nullable<unitValue> = null
+    #modulationValue: Nullable<unitValue> = null
     #midiControlled: boolean = false
 
     constructor(context: BoxAdaptersContext,
@@ -77,29 +80,10 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
                 pointer.box.accept<BoxVisitor>({
                     visitTrackBox: (box: TrackBox) => {
                         assert(this.#trackBoxAdapter.isEmpty(), "Already assigned")
-                        const adapter = this.#context.boxAdapters.adapterFor(box, TrackBoxAdapter)
-                        this.#trackBoxAdapter = Option.wrap(adapter)
-                        if (this.#context.isMainThread) {
-                            this.#automationHandle = Option.wrap(this.#context.liveStreamReceiver
-                                .subscribeFloat(this.#field.address, value => {
-                                    // NaN is the engine's "the curve yields NO value here" sentinel: automation
-                                    // is attached but has no region / clip / events yet. The parameter must then
-                                    // keep showing its STORAGE value (`getControlledUnitValue` falls back to
-                                    // `getUnitValue` while `#controlledValue` is null) — a real value of 0 would
-                                    // otherwise read as unit 0, pinning the knob to its minimum.
-                                    if (isNaN(value)) {
-                                        if (isNull(this.#controlledValue)) {return}
-                                        this.#controlledValue = null
-                                        this.#valueChangeNotifier.notify(this)
-                                        return
-                                    }
-                                    if (this.#controlledValue === value) {return}
-                                    this.#controlledValue = value
-                                    this.#valueChangeNotifier.notify(this)
-                                }))
-                        }
+                        this.#trackBoxAdapter = Option.wrap(this.#context.boxAdapters.adapterFor(box, TrackBoxAdapter))
                     }
                 })
+                this.#observeEngineValue()
             },
             onRemoved: (pointer: PointerField) => {
                 this.#controlSource.proxy.onControlSourceRemove(mapPointerToControlSource(pointer.pointerType))
@@ -107,14 +91,9 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
                     visitTrackBox: (box: TrackBox) => {
                         assert(this.#trackBoxAdapter.unwrapOrNull()?.address?.equals(box.address) === true, `Unknown ${box}`)
                         this.#trackBoxAdapter = Option.None
-                        if (this.#context.isMainThread) {
-                            this.#automationHandle.ifSome(handle => handle.terminate())
-                            this.#automationHandle = Option.None
-                            this.#controlledValue = null
-                            this.#valueChangeNotifier.notify(this)
-                        }
                     }
                 })
+                this.#releaseEngineValue()
             }
         }, ...ExternalControlTypes))
 
@@ -127,6 +106,31 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
                 "constraints" in field ? field["constraints"] : "no constraints",
                 valueMapping, field.address.fieldKeys.join(", "), field.box.name)*/
         }
+    }
+
+    // The engine's two floats at the parameter's field address: [0] the automated unit value, [1] the
+    // modulation sum. NaN means "does not apply" in both, and the parameter falls back to its storage value
+    // (a real 0 would read as unit 0 and pin the knob to its minimum).
+    #observeEngineValue(): void {
+        if (!this.#context.isMainThread || this.#automationHandle.nonEmpty()) {return}
+        this.#automationHandle = Option.wrap(this.#context.liveStreamReceiver
+            .subscribeFloats(this.#field.address, values => {
+                const automated: Nullable<unitValue> = isNaN(values[0]) ? null : values[0]
+                const modulation: Nullable<unitValue> = isNaN(values[1]) ? null : values[1]
+                if (this.#controlledValue === automated && this.#modulationValue === modulation) {return}
+                this.#controlledValue = automated
+                this.#modulationValue = modulation
+                this.#valueChangeNotifier.notify(this)
+            }))
+    }
+
+    #releaseEngineValue(): void {
+        if (!this.#context.isMainThread || this.#field.pointerHub.filter(...ExternalControlTypes).length > 0) {return}
+        this.#automationHandle.ifSome(handle => handle.terminate())
+        this.#automationHandle = Option.None
+        this.#controlledValue = null
+        this.#modulationValue = null
+        this.#valueChangeNotifier.notify(this)
     }
 
     registerMidiControl(): Terminable {
@@ -147,20 +151,33 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     get anchor(): unitValue {return this.#anchor}
     get type(): PrimitiveType {return this.#field.type}
     get address(): Address {return this.#field.address}
+    get context(): BoxAdaptersContext {return this.#context}
     get track(): Option<TrackBoxAdapter> {return this.#trackBoxAdapter}
+    /// Every parameter field accepts `Modulation` (`ParameterPointerRules`), but the adapter types it by the
+    /// automation pointer it was built for.
+    get modulationTarget(): Field<Pointers.Modulation> {
+        return this.#field as unknown as Field<Pointers.Modulation>
+    }
+    get modulations(): ReadonlyArray<ModulationBox> {
+        return this.#field.pointerHub.filter(Pointers.Modulation)
+            .map(pointer => asInstanceOf(pointer.box, ModulationBox))
+    }
 
     catchupAndSubscribeName(observer: Observer<string>): Subscription {
         return this.#name.catchupAndSubscribe(owner => observer(owner.getValue()))
     }
 
-    registerTracks(tracks: AudioUnitTracks): Terminable {
+    registerTracks(tracks: ParameterTracks): Terminable {
         return this.#context.parameterFieldAdapters.registerTracks(this.address, tracks)
     }
-    touchStart(): void {
-        this.#context.parameterFieldAdapters.touchStart(this.address)
-        this.#context.parameterFieldAdapters.notifyWrite(this, this.getUnitValue())
+
+    /// Where this parameter's automation lanes live. A modulator registers itself as the owner, everything else
+    /// falls back to the audio unit the parameter belongs to, so a lane resolves with no editor mounted.
+    optTracks(): Option<ParameterTracks> {
+        const registered = this.#context.parameterFieldAdapters.getTracks(this.address)
+        if (registered.nonEmpty()) {return registered}
+        return ParameterOwner.audioUnitOf(this.#context, this.#field).map(adapter => adapter.tracks)
     }
-    touchEnd(): void {this.#context.parameterFieldAdapters.touchEnd(this.address)}
 
     updateMappings(valueMapping: ValueMapping<T>, stringMapping: StringMapping<T>): void {
         this.#valueMapping = valueMapping
@@ -178,6 +195,8 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
         }
         return this.getValue()
     }
+
+    notifyPrinting(): void {this.#valueChangeNotifier.notify(this)}
 
     subscribe(observer: Observer<AutomatableParameterFieldAdapter<T>>): Subscription {
         return this.#valueChangeNotifier.subscribe(observer)
@@ -204,7 +223,12 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     setUnitValue(value: unitValue): void {this.setValue(this.#valueMapping.y(value))}
     getUnitValue(): unitValue {return this.#valueMapping.x(this.getValue())}
     getControlledValue(): T {return this.#valueMapping.y(this.getControlledUnitValue())}
-    getControlledUnitValue(): unitValue {return this.#controlledValue ?? this.getUnitValue()}
+    // The engine cannot fold these itself: for an unautomated parameter it holds the storage value in the
+    // parameter's real unit, and the mapping lives here (and in the device).
+    getControlledUnitValue(): unitValue {
+        const base = this.#controlledValue ?? this.getUnitValue()
+        return isNull(this.#modulationValue) ? base : clamp(base + this.#modulationValue, 0.0, 1.0)
+    }
     getControlledPrintValue(): Readonly<StringResult> {return this.#stringMapping.x(this.getControlledValue())}
     getPrintValue(): Readonly<StringResult> {return this.#stringMapping.x(this.getValue())}
     setPrintValue(text: string): void {

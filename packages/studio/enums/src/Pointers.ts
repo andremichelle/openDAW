@@ -59,4 +59,7 @@ export enum Pointers {
     CompositeCell,
     AudioEffectCompositeCell,
     Pattern,
+    // APPEND ONLY: the values are ordinals, so inserting one renumbers every member after it.
+    ModulatorCollection,
+    ModulatorSource,
 }

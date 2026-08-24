@@ -177,6 +177,12 @@ export enum IconSymbol {
     Vaporisateur,
     FolderOpen,
     FolderAdd,
+    Modulation,
+    Alternate,
+    PingPong,
+    Forward,
+    Backward,
+    Bipolar,
 }
 
 export namespace IconSymbol {

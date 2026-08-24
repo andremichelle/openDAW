@@ -39,6 +39,7 @@ export namespace BoxGraphCopy {
                                                               mapPointer: SpecialDecoder["map"]
                                                               modifyBox?: Procedure<T>
                                                               excludeBox?: Predicate<Box>
+                                                              keepUuid?: Predicate<Box>
                                                           }): ReadonlyArray<T> => {
         const input = new ByteArrayInput(data)
         input.skip(input.readInt())
@@ -67,8 +68,10 @@ export namespace BoxGraphCopy {
         console.debug("Box graph paste:", [...typeCounts.entries()].map(([type, count]) => `${type}: ${count}`).join(", "))
         const uuidMap = UUID.newSet<UUIDMapper>(({source}) => source)
         sourceBoxes.forEach(box => {
-            const isExternal = box.resource === "preserved"
-            uuidMap.add({source: box.address.uuid, target: isExternal ? box.address.uuid : UUID.generate()})
+            // Keeping the uuid keeps the identity: the next paste of the same buffer finds this box instead of
+            // making a second one.
+            const keepsIdentity = box.resource === "preserved" || options.keepUuid?.(box) === true
+            uuidMap.add({source: box.address.uuid, target: keepsIdentity ? box.address.uuid : UUID.generate()})
         })
         skippedExternalUuids.forEach(uuid => uuidMap.add({source: uuid, target: uuid}))
         const result: Array<T> = []

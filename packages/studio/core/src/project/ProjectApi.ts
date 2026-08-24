@@ -61,6 +61,7 @@ import {
     TrackType
 } from "@opendaw/studio-adapters"
 import {Project} from "./Project"
+import {ProjectModulation} from "./ProjectModulation"
 import {EffectFactory} from "../EffectFactory"
 import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
@@ -108,9 +109,14 @@ export type QuantiseNotesOptions = {
 
 // noinspection JSUnusedGlobalSymbols
 export class ProjectApi {
+    readonly modulation: ProjectModulation
+
     readonly #project: Project
 
-    constructor(project: Project) {this.#project = project}
+    constructor(project: Project) {
+        this.#project = project
+        this.modulation = new ProjectModulation(project)
+    }
 
     setBpm(value: number): void {
         if (isNaN(value)) {return}
@@ -178,10 +184,6 @@ export class ProjectApi {
         return factory.create(this.#project, field, IndexedBox.insertOrder(field, insertIndex))
     }
 
-    // MOVE existing effect boxes into `targetField` at `insertIndex`: re-home each box's `host` pointer (so it
-    // leaves its current chain) and reindex both the source chains and the target chain contiguously. Direction-
-    // agnostic — the source may be the parent chain, another composite branch, or `targetField` itself (a plain
-    // same-chain reorder). The caller guards against a cycle (moving a composite into its own subtree).
     moveEffects(targetField: Field<EffectPointerType>, boxes: ReadonlyArray<EffectBox>, insertIndex: int): void {
         if (boxes.length === 0) {return}
         const movedSet = new Set<Box>(boxes)
@@ -306,13 +308,8 @@ export class ProjectApi {
         })
     }
 
-    // The copy is created DIRECTLY at its final position and overlap behavior (clip / push-existing /
-    // keep-existing) is evaluated exactly once, at that final range. An explicit `position` wins over both
-    // defaults; without one the copy lands after the region (`region.complete`). Never resolve against a
-    // transient placement: an abutting neighbor must not be trimmed / pushed for a collision that only
-    // exists because the caller repositions the copy one statement later.
     duplicateRegion<R extends AnyRegionBoxAdapter>(region: R,
-                                                  options?: { findFreeSpace?: boolean, position?: ppqn }): Option<R> {
+                                                   options?: { findFreeSpace?: boolean, position?: ppqn }): Option<R> {
         if (region.trackBoxAdapter.isEmpty()) {return Option.None}
         const track = region.trackBoxAdapter.unwrap()
         const explicitPosition = options?.position

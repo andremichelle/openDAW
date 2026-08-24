@@ -132,7 +132,8 @@ export const RegionBound = ({lifecycle, service, range, snapping, modifyContext}
             if (target === null) {return Option.None}
             const {region} = target
             const frozen = region.trackBoxAdapter
-                .mapOr(track => project.audioUnitFreeze.isFrozenUuid(track.audioUnit.address.uuid), true)
+                .mapOr(track => track.optAudioUnit
+                    .mapOr(unit => project.audioUnitFreeze.isFrozenUuid(unit.address.uuid), false), true)
             if (frozen) {return Option.None}
             const clientRect = canvas.getBoundingClientRect()
             const pointerPulse = range.xToUnit(event.clientX - clientRect.left)

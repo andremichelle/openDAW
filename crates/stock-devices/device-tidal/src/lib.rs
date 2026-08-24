@@ -55,6 +55,21 @@ const RATE_FRACTIONS: [(i32, i32); 17] = [
 ];
 const SMOOTH_TIME_SECONDS: f64 = 0.003; // the TS gain smoother's time constant
 
+/// Resolve the rate-fraction index (a `linearInteger` on a Float32 field, so `int_value` cannot serve it):
+/// the automation value snapped, the modulated one folded on, else the real index.
+fn rate_index(value: ParamValue) -> i32 {
+    match value {
+        ParamValue::Unit(unit) => RATE_MAPPING.y(unit),
+        ParamValue::Int(real) => real,
+        ParamValue::Float(real) => real as i32,
+        ParamValue::Bool(flag) => if flag {1} else {0},
+        ParamValue::Modulated {base, kind, sum} => {
+            let unit = if kind == abi::PARAM_KIND_UNIT {base} else {RATE_MAPPING.x(base as i32)};
+            RATE_MAPPING.y(math::clamp_unit(unit + sum))
+        }
+    }
+}
+
 /// The effect's per-instance state, interpreted from the engine-allocated (zeroed) block: the shaped LFO, a
 /// one-pole gain smoother per channel, the current parameter values (`depth` / `slope` / `symmetry` reshape
 /// the LFO, so `needs_update` marks them stale), the device's sample rate, and the parameter ids `init` got
@@ -116,11 +131,7 @@ impl AudioEffect for Tidal {
         } else if id == state.channel_offset_degrees_id {
             state.channel_offset_degrees = float_value(value, &CHANNEL_OFFSET_MAPPING);
         } else if id == state.rate_index_id {
-            state.rate_index = match value {
-                ParamValue::Unit(unit) => RATE_MAPPING.y(unit),
-                ParamValue::Float(real) => real as i32,
-                _ => panic!("tidal rate expects a unit or float value")
-            };
+            state.rate_index = rate_index(value);
         }
     }
 
@@ -204,8 +215,8 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 /// Apply a parameter value the host resolved (initial / edit / automation), by the id `init` got back. The
 /// `kind` tag tells the SDK how to type the f32 `value` into a `ParamValue`.
 #[no_mangle]
-pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
-    unsafe { abi::with_state(state_ptr, |state| <Tidal as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <Tidal as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value, modulation))) }
 }
 
 /// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.
@@ -228,7 +239,9 @@ mod tests {
     //! The Tidal modulation (driven via the ABI's `AudioEffect`): a DC input is shaped by the LFO gain, so
     //! the output traces the LFO; a per-channel offset moves left and right apart (auto-pan). In-crate so it
     //! can set the private state.
-    use super::{Tidal, TidalState};
+    use super::{rate_index, Tidal, TidalState, RATE_FRACTIONS, RATE_MAPPING};
+    use abi::{ParamValue, PARAM_KIND_FLOAT, PARAM_KIND_UNIT};
+    use math::value_mapping::ValueMapping;
 
     const SR: f32 = 48_000.0;
 
@@ -284,5 +297,23 @@ mod tests {
         Tidal::dsp(&mut state, &input, &input, &mut left, &mut right, 0, frames, 0.0, 120.0);
         // The gain is a constant 1.0, smoothed from 0, so it converges to the input; the tail is unchanged.
         assert!((left[frames - 1] - 0.7).abs() < 1.0e-3, "full pass-through once the smoother settles");
+    }
+
+    #[test]
+    fn the_rate_index_takes_every_wire_the_engine_sends() {
+        let last = RATE_FRACTIONS.len() as i32 - 1;
+        assert_eq!(rate_index(ParamValue::Unit(0.0)), 0);
+        assert_eq!(rate_index(ParamValue::Unit(1.0)), last);
+        assert_eq!(rate_index(ParamValue::Float(4.0)), 4);
+        assert_eq!(rate_index(ParamValue::Int(4)), 4);
+        // A modulated STORAGE value folds in normalized space, around the stored index.
+        let base = RATE_MAPPING.x(4);
+        assert_eq!(rate_index(ParamValue::Modulated {base: 4.0, kind: PARAM_KIND_FLOAT, sum: 0.0}), 4);
+        assert!(rate_index(ParamValue::Modulated {base: 4.0, kind: PARAM_KIND_FLOAT, sum: 0.25}) > 4);
+        assert_eq!(rate_index(ParamValue::Modulated {base: 4.0, kind: PARAM_KIND_FLOAT, sum: 5.0}), last,
+                   "an over-driven sum clamps at the fastest fraction");
+        assert_eq!(rate_index(ParamValue::Modulated {base: 4.0, kind: PARAM_KIND_FLOAT, sum: -5.0}), 0);
+        // A modulated AUTOMATION value: the base is already normalized.
+        assert_eq!(rate_index(ParamValue::Modulated {base, kind: PARAM_KIND_UNIT, sum: 0.0}), 4);
     }
 }

@@ -254,6 +254,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 updateMonitoringMap: (_map: ReadonlyArray<MonitoringMapEntry>): void => {},
                 noteSignal: (_signal: NoteSignal): void => {},
                 ignoreNoteRegion: (_uuid: UUID.Bytes): void => {},
+                suspendAutomation: (_uuid: UUID.Bytes): void => {},
                 scheduleClipPlay: (_clipIds: ReadonlyArray<UUID.Bytes>): void => {},
                 scheduleClipStop: (_trackIds: ReadonlyArray<UUID.Bytes>): void => {},
                 setupMIDI: (port: MessagePort, buffer: SharedArrayBuffer): void => midi.connect(port, buffer),

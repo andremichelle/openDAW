@@ -244,8 +244,6 @@ pub struct DryWetMixProcessor {
     wet_gain: LinearRamp,
     sample_rate: f32,
     processing: bool, // false until the first chunk, so the first targets jump (no ramp from 0)
-    held_dry_db: Option<f32>,
-    held_wet_db: Option<f32>,
     events: EventBuffer
 }
 
@@ -263,8 +261,6 @@ impl DryWetMixProcessor {
             wet_gain: LinearRamp::linear(sample_rate),
             sample_rate,
             processing: false,
-            held_dry_db: None,
-            held_wet_db: None,
             events: EventBuffer::new()
         }
     }
@@ -275,41 +271,27 @@ impl DryWetMixProcessor {
         self.wet_gain.set(db_to_gain(wet_db), self.processing);
     }
 
-    // Evaluate the automated dry / wet curves at `position` (falling back to the static params), remembering
-    // the resolved values for the paused hold. `volume` carries dry, `panning` carries wet (the shared
-    // `StripAutomation` shape; a composite has no pan of its own).
+    // `volume` carries dry, `panning` carries wet (the shared `StripAutomation` shape; a composite has no
+    // pan of its own).
     fn retarget_at(&mut self, position: f64) {
+        self.retarget_resolved(position, true);
+    }
+
+    fn retarget_resolved(&mut self, position: f64, transporting: bool) {
         let dry_db = match self.automation.volume.borrow().as_ref() {
-            Some(source) => {
-                let value = source(position);
-                self.held_dry_db = Some(value);
-                value
-            }
+            Some(source) => source(position, transporting),
             None => self.params.dry_db.get()
         };
         let wet_db = match self.automation.panning.borrow().as_ref() {
-            Some(source) => {
-                let value = source(position);
-                self.held_wet_db = Some(value);
-                value
-            }
+            Some(source) => source(position, transporting),
             None => self.params.wet_db.get()
         };
         self.retarget(dry_db, wet_db);
     }
 
-    // PAUSED (a non-transporting block): no update events, so an automated dry / wet HOLDS its last resolved
-    // value; the static side still applies.
-    fn retarget_held(&mut self) {
-        let dry_db = match self.automation.volume.borrow().as_ref() {
-            Some(_) => self.held_dry_db.unwrap_or_else(|| self.params.dry_db.get()),
-            None => self.params.dry_db.get()
-        };
-        let wet_db = match self.automation.panning.borrow().as_ref() {
-            Some(_) => self.held_wet_db.unwrap_or_else(|| self.params.wet_db.get()),
-            None => self.params.wet_db.get()
-        };
-        self.retarget(dry_db, wet_db);
+    // PAUSED: no update events, so the automation HOLDS.
+    fn retarget_held(&mut self, position: f64) {
+        self.retarget_resolved(position, false);
     }
 
     // Mix `[from, to)`: settled fast path (auto-vectorizable) vs the per-sample de-click ramps.
@@ -400,7 +382,7 @@ impl Processor for DryWetMixProcessor {
         for block in info.blocks {
             let (s0, s1) = (block.s0 as usize, block.s1 as usize);
             if !block.flags.transporting() {
-                self.retarget_held();
+                self.retarget_held(block.p0);
                 self.apply(&dry, &wet, &mut output, s0, s1);
                 continue;
             }

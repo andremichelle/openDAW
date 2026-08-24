@@ -213,8 +213,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 }),
                 setFrozenAudio: (uuid: UUID.Bytes, audioData: Nullable<AudioData>): void => this.#guarded(() => {
                     if (audioData === null) {
-                        const pointer = engine.input_reserve(16)
-                        new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                        this.#writeUuid(uuid)
                         engine.clear_frozen_audio()
                         return
                     }
@@ -226,8 +225,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                         new Float32Array(this.#memory.buffer, pcm + channel * numberOfFrames * 4, numberOfFrames)
                             .set(frames[channel])
                     }
-                    const pointer = engine.input_reserve(16)
-                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    this.#writeUuid(uuid)
                     engine.set_frozen_audio(numberOfFrames, channels, sampleRate)
                 }),
                 updateMonitoringMap: (map: ReadonlyArray<MonitoringMapEntry>): void => this.#guarded(() => {
@@ -244,18 +242,19 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 }),
                 noteSignal: (signal: NoteSignal): void => this.#guarded(() => this.#noteSignal(signal)),
                 ignoreNoteRegion: (uuid: UUID.Bytes): void => this.#guarded(() => {
-                    const pointer = engine.input_reserve(16)
-                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    this.#writeUuid(uuid)
                     engine.ignore_note_region()
                 }),
+                suspendAutomation: (uuid: UUID.Bytes): void => this.#guarded(() => {
+                    this.#writeUuid(uuid)
+                    engine.suspend_automation()
+                }),
                 scheduleClipPlay: (clipIds: ReadonlyArray<UUID.Bytes>): void => this.#guarded(() => clipIds.forEach(uuid => {
-                    const pointer = engine.input_reserve(16)
-                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    this.#writeUuid(uuid)
                     engine.schedule_clip_play()
                 })),
                 scheduleClipStop: (trackIds: ReadonlyArray<UUID.Bytes>): void => this.#guarded(() => trackIds.forEach(uuid => {
-                    const pointer = engine.input_reserve(16)
-                    new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+                    this.#writeUuid(uuid)
                     engine.schedule_clip_stop()
                 })),
                 // The TS EngineProcessor contract: the main thread's MIDIReceiver hands over its port +
@@ -417,11 +416,13 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         }
     }
 
-    // Route a live note signal (on-screen keys / pads / MIDI input) to the engine: the target
-    // AudioUnitBox uuid goes into the input scratch, then the matching export fires.
-    #noteSignal(signal: NoteSignal): void {
+    #writeUuid(uuid: UUID.Bytes): void {
         const pointer = this.#engine.input_reserve(16)
-        new Uint8Array(this.#memory.buffer, pointer, 16).set(signal.uuid)
+        new Uint8Array(this.#memory.buffer, pointer, 16).set(uuid)
+    }
+
+    #noteSignal(signal: NoteSignal): void {
+        this.#writeUuid(signal.uuid)
         if (NoteSignal.isOn(signal)) {
             this.#engine.note_signal_on(signal.pitch, signal.velocity)
         } else if (NoteSignal.isOff(signal)) {

@@ -6,6 +6,7 @@ import {
     isAbsent,
     isDefined,
     isInstanceOf,
+    Notifier,
     Observer,
     Option,
     panic,
@@ -50,7 +51,10 @@ import {
     Devices,
     FilteredRemoteSelection,
     FilteredSelection,
+    isModulatorBox,
+    isModulatorBoxAdapter,
     isVertexOfBox,
+    ModulatorBoxAdapter,
     ParameterFieldAdapters,
     ProcessorOptions,
     ProjectMandatoryBoxes,
@@ -86,12 +90,15 @@ import {StudioPreferences} from "../StudioPreferences"
 import {RegionOverlapResolver, TimelineFocus} from "../ui"
 import {SampleStorage} from "../samples"
 import {AudioUnitFreeze} from "../AudioUnitFreeze"
+import {AutomationSuspension} from "./AutomationSuspension"
 
 export type RestartWorklet = { unload: Func<unknown, Promise<unknown>>, load: Procedure<EngineWorklet> }
 
 export type ProjectCreateOptions = {
     noDefaultUser?: boolean
 }
+
+export type MIDIOutMessage = { readonly deviceId: string, readonly data: Uint8Array }
 
 // Main Entry Point for a Project
 export class Project implements BoxAdaptersContext, Terminable, TerminableOwner {
@@ -125,6 +132,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         return project
     }
 
+    readonly #midiOutNotifier = new Notifier<MIDIOutMessage>()
     readonly #terminator = new Terminator()
     readonly #sampleRegistrations: SortedSet<UUID.Bytes, { uuid: UUID.Bytes, terminable: Terminable }>
     readonly #userCreatedSamples: SortedSet<UUID.Bytes, UUID.Bytes> = UUID.newSet(uuid => uuid)
@@ -143,6 +151,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     readonly editing: Editing
     readonly selection: VertexSelection
     readonly deviceSelection: FilteredSelection<DeviceBoxAdapter>
+    readonly modulatorSelection: FilteredSelection<ModulatorBoxAdapter>
     readonly regionSelection: FilteredSelection<AnyRegionBoxAdapter>
     readonly remoteSelections: RemoteSelections
     readonly remoteDeviceSelection: FilteredRemoteSelection<DeviceBoxAdapter>
@@ -195,6 +204,13 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
                 fy: vertex => this.boxAdapters.adapterFor(vertex.box, Devices.isAny)
             }
         ))
+        this.modulatorSelection = this.#terminator.own(this.selection.createFilteredSelection(
+            isVertexOfBox(isModulatorBox),
+            {
+                fx: (adapter: ModulatorBoxAdapter) => adapter.box,
+                fy: vertex => this.boxAdapters.adapterFor(vertex.box, isModulatorBoxAdapter)
+            }
+        ))
         this.regionSelection = this.#terminator.own(this.selection.createFilteredSelection(
             isVertexOfBox(UnionBoxTypes.isRegionBox),
             {
@@ -225,6 +241,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
         this.audioUnitFreeze = this.#terminator.own(new AudioUnitFreeze(this))
+        this.#terminator.own(AutomationSuspension.start(this))
 
         console.debug(`Project was created on ${this.rootBoxAdapter.created.toString()}`)
 
@@ -314,7 +331,8 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         if (armed.length === 0) {return}
         const focusedTrack = this.timelineFocus.track
         const target = focusedTrack
-            .map(track => track.audioUnit.address.uuid)
+            .flatMap(track => track.optAudioUnit)
+            .map(unit => unit.address.uuid)
             .flatMap(uuid => Option.wrap(armed.find(
                 capture => UUID.equals(capture.audioUnitBox.address.uuid, uuid))))
             .unwrapOrElse(armed[0])
@@ -328,8 +346,9 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         const regionDuration = notes.reduce(
             (max, note) => Math.max(max, (note.position - firstPosition) + note.duration), 0)
         const targetUuid = target.audioUnitBox.address.uuid
-        const focusedMatch = focusedTrack.nonEmpty()
-            && UUID.equals(focusedTrack.unwrap().audioUnit.address.uuid, targetUuid)
+        const focusedMatch = focusedTrack
+            .flatMap(track => track.optAudioUnit)
+            .mapOr(unit => UUID.equals(unit.address.uuid, targetUuid), false)
         if (focusedMatch) {
             const track = focusedTrack.unwrap()
             this.#commitCapturedNotes(track, regionPosition, regionDuration, firstPosition, notes)
@@ -430,11 +449,15 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         }
     }
 
+    /// What THIS project's engine sent out, before it reaches the (globally shared) device. An internal sink
+    /// like the shadertoy port must listen here: a second engine (a video export renders its own copy of the
+    /// project) writes to the same device id, and its values would otherwise land in this project's sink.
+    subscribeMIDIOut(observer: Observer<MIDIOutMessage>): Subscription {
+        return this.#midiOutNotifier.subscribe(observer)
+    }
+
     receivedMIDIFromEngine(midiDeviceId: string, data: Uint8Array, relativeTimeInMs: number): void {
-        const debug = false
-        if (debug) {
-            console.debug("receivedMIDIFromEngine", MidiData.debug(data), relativeTimeInMs)
-        }
+        this.#midiOutNotifier.notify({deviceId: midiDeviceId, data})
         const timestamp = performance.now() + relativeTimeInMs
         MidiDevices.findOutputDeviceById(midiDeviceId).ifSome(midiOutputDevice => {
             try {

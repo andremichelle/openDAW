@@ -112,10 +112,10 @@ pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, l
 /// back. Without this EXPORT the engine sees a device with no `parameter_changed` and silently
 /// delivers nothing - the device sounds, but every knob is inert.
 #[no_mangle]
-pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
+pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
     unsafe {
         abi::with_state(state_ptr, |state| <device::Device as abi::Instrument>::parameter_changed(
-            state, id, abi::ParamValue::from_wire(kind, value)))
+            state, id, abi::ParamValue::from_wire(kind, value, modulation)))
     }
 }
 

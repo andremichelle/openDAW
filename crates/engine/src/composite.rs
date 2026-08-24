@@ -34,7 +34,8 @@ use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripPar
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_sequencer::NoteSequencer;
-use math::value_mapping::{Decibel, Linear, ValueMapping};
+use math::value_mapping::{Decibel, Linear};
+use crate::audio_unit::host_float;
 use crate::audio_unit::{BoundNoteTracks, BuiltCluster, DeviceParams, Member, SharedTrackSets, SidechainBinding, SlotCluster};
 use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::{CompositeSpec, DeviceReg, Engine, PullLink, EFFECT_INDEX_KEY};
@@ -621,9 +622,9 @@ impl Engine {
             // `resolve` hands back a UNIT value while the curve covers the position, else the FIELD's stored
             // value with its own kind (already real dB) — map only the unit case.
             if handle.track.is_some() {
-                *strip.automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, kind) = handle.resolve(position);
-                    if kind == abi::PARAM_KIND_UNIT { GAIN.y(value) } else { value }
+                *strip.automation.volume.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
+                    let (value, kind, modulation) = handle.resolve_held(position, transporting);
+                    host_float(value, kind, modulation, &GAIN)
                 }));
             }
         }
@@ -632,9 +633,9 @@ impl Engine {
             strip.param_subs.extend(subs);
             strip.param_collections.extend(collections);
             if handle.track.is_some() {
-                *strip.automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, kind) = handle.resolve(position);
-                    if kind == abi::PARAM_KIND_UNIT { PAN.y(value) } else { value }
+                *strip.automation.panning.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
+                    let (value, kind, modulation) = handle.resolve_held(position, transporting);
+                    host_float(value, kind, modulation, &PAN)
                 }));
             }
         }

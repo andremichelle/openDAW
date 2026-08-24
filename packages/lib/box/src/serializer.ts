@@ -24,10 +24,10 @@ export namespace Serializer {
         const numFields = input.readShort()
         for (let i = 0; i < numFields; i++) {
             const key: FieldKey = input.readShort()
-            if (isUndefined(fields[key])) {continue}
             const byteLength = input.readInt()
             const bytes = new Int8Array(byteLength)
             input.readBytes(bytes)
+            if (isUndefined(fields[key])) {continue}
             const {status, error} = tryCatch(() => fields[key]?.read(new ByteArrayInput(bytes.buffer)))
             if (status === "failure") {
                 console.warn(fields, error)

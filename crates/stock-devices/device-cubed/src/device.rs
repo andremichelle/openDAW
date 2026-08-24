@@ -9,7 +9,15 @@
 use crate::merger::VoiceCommand;
 use crate::pattern::{Pattern, PATTERN_COUNT};
 use crate::{ensure_tables, NoteMerger, Source, Tables, Voice303};
-use abi::{Block, BlockFlags, EventRecord, ParamValue, EVENT_NOTE_ON};
+use abi::{float_value, int_value, Block, BlockFlags, EventRecord, ParamValue, EVENT_NOTE_ON};
+use math::value_mapping::{Decibel, Linear, LinearInteger};
+
+// This device's value mappings, mirroring `CubedDeviceBoxAdapter`'s `createParameter` calls. The five acid
+// knobs are `unipolar()`, i.e. the storage value IS the unit value, so they need no mapping (see `unit`).
+const TUNING_MAPPING: Linear = Linear {min: -1200.0, max: 1200.0};
+const VOLUME_MAPPING: Decibel = Decibel::default_volume();
+const WAVEFORM_MAPPING: LinearInteger = LinearInteger {min: 0, max: 1};
+const PATTERN_MAPPING: LinearInteger = LinearInteger {min: 0, max: PATTERN_COUNT as i32 - 1};
 
 /// Parameter slots, in bind order. The id `bind_parameter` returns is stored in `state.ids[SLOT]`;
 /// `parameter_changed` finds the slot by matching the incoming id against that table.
@@ -127,11 +135,12 @@ impl abi::Instrument for Device {
     fn parameter_changed(state: &mut State, id: u32, value: ParamValue) {
         let Some(slot) = state.ids.iter().position(|bound| *bound == id) else {return};
         if slot == param::PATTERN_INDEX {
-            // TS `ValueMapping.linearInteger(0, patterns - 1)`.
-            const TOP: f32 = (PATTERN_COUNT - 1) as f32;
+            // A transport-driven value (automation, modulation) switches at once; a plain edit is REQUESTED,
+            // landing on the next pattern boundary.
             match value {
-                ParamValue::Unit(unit) => state.pattern.set_index(libm::roundf(unit * TOP).max(0.0) as usize),
-                other => state.pattern.request_index(real(other).max(0.0) as usize)
+                ParamValue::Unit(_) | ParamValue::Modulated {..} =>
+                    state.pattern.set_index(int_value(value, &PATTERN_MAPPING).max(0) as usize),
+                _ => state.pattern.request_index(int_value(value, &PATTERN_MAPPING).max(0) as usize)
             }
             return;
         }
@@ -193,36 +202,29 @@ pub fn apply_slot(par: &mut crate::Params, slot: usize, value: ParamValue) {
             // converts with `(tuning - 0.5) * 24` semitones, i.e. +/-1200 cents across the range, so
             // the inverse is cents / 2400 + 0.5. Doing this here keeps the voice a verbatim
             // transcription: no unit conversion is allowed to leak into the calibrated code.
-            param::TUNING => par.tuning = (real(value) as f64 / 2400.0 + 0.5).clamp(0.0, 1.0),
+            param::TUNING => par.tuning = (float_value(value, &TUNING_MAPPING) as f64 / 2400.0 + 0.5).clamp(0.0, 1.0),
             // `ValueMapping.DefaultDecibel` delivers real dB; the model's `volume` is a linear gain.
-            param::VOLUME => par.volume = libm::pow(10.0, real(value) as f64 / 20.0),
+            param::VOLUME => par.volume = libm::pow(10.0, float_value(value, &VOLUME_MAPPING) as f64 / 20.0),
             // `ValueMapping.linearInteger(0, 1)`: 0 = Sawtooth, 1 = Square. The model selects on
             // `waveform < 0.5`.
-            param::WAVEFORM => par.waveform = real(value) as f64,
+            param::WAVEFORM => par.waveform = int_value(value, &WAVEFORM_MAPPING) as f64,
             _ => {}
         }
     }
 
 
-/// A `Unit` parameter: the uniform 0..1 automation value, used directly by the model's knobs.
+/// A `Unit` parameter: the uniform 0..1 automation value, used directly by the model's knobs. These five are
+/// `unipolar()`, so the storage value IS the unit value and every kind passes straight through.
 fn unit(value: ParamValue) -> f64 {
     match value {
         ParamValue::Unit(unit) => unit as f64,
         ParamValue::Float(real) => real as f64,
         ParamValue::Int(real) => real as f64,
-        ParamValue::Bool(flag) => if flag {1.0} else {0.0}
+        ParamValue::Bool(flag) => if flag {1.0} else {0.0},
+        ParamValue::Modulated {base, sum, ..} => ((base + sum) as f64).clamp(0.0, 1.0)
     }
 }
 
-/// A parameter carrying an already-real value (dB, cents, an enum index).
-fn real(value: ParamValue) -> f32 {
-    match value {
-        ParamValue::Float(real) => real,
-        ParamValue::Int(real) => real as f32,
-        ParamValue::Unit(unit) => unit,
-        ParamValue::Bool(flag) => if flag {1.0} else {0.0}
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -260,6 +262,37 @@ mod tests {
         assert!(par.waveform < 0.5, "0 = Sawtooth");
         apply_slot(&mut par, param::WAVEFORM, ParamValue::Int(1));
         assert!(par.waveform >= 0.5, "1 = Square");
+    }
+
+    /// An AUTOMATED value arrives as `Unit`, so it must go through the adapter's mapping. Before this was
+    /// wired, `Unit` was read as if it were already real: an automated tuning moved by at most 1 cent, an
+    /// automated volume played at 0..1 dB instead of its dB range.
+    #[test]
+    fn an_automated_value_goes_through_the_mapping() {
+        let mut par = Params::default();
+        apply_slot(&mut par, param::TUNING, ParamValue::Unit(1.0));
+        assert!(((par.tuning - 0.5) * 24.0 - 12.0).abs() < 1e-9, "unit 1 is +1200 ct = +12 semitones");
+        apply_slot(&mut par, param::TUNING, ParamValue::Unit(0.5));
+        assert_eq!(par.tuning, 0.5, "unit 0.5 is 0 ct");
+        apply_slot(&mut par, param::VOLUME, ParamValue::Unit(1.0));
+        assert!((par.volume - 1.0).abs() < 1e-9, "unit 1 is 0 dB = unity gain");
+        apply_slot(&mut par, param::VOLUME, ParamValue::Unit(0.5));
+        assert!((par.volume - 0.251188).abs() < 1e-5, "unit 0.5 is the mapping's -12 dB midpoint");
+        apply_slot(&mut par, param::WAVEFORM, ParamValue::Unit(1.0));
+        assert!(par.waveform >= 0.5, "unit 1 is Square");
+    }
+
+    /// The modulated path folds in unit space and maps back, so a sum of 0 must land exactly where the plain
+    /// value does, and a real sum must move the parameter across its true range.
+    #[test]
+    fn a_modulated_value_folds_before_the_mapping() {
+        let mut par = Params::default();
+        apply_slot(&mut par, param::TUNING, ParamValue::Modulated {base: 0.0, kind: abi::PARAM_KIND_FLOAT, sum: 0.0});
+        assert_eq!(par.tuning, 0.5, "a zero sum leaves 0 ct alone");
+        apply_slot(&mut par, param::TUNING, ParamValue::Modulated {base: 0.0, kind: abi::PARAM_KIND_FLOAT, sum: 0.5});
+        assert!(((par.tuning - 0.5) * 24.0 - 12.0).abs() < 1e-9, "+0.5 of the range is +12 semitones");
+        apply_slot(&mut par, param::VOLUME, ParamValue::Modulated {base: 0.0, kind: abi::PARAM_KIND_FLOAT, sum: -1.0});
+        assert!(par.volume < 1e-3, "the sum clamps to the mapping's floor");
     }
 
     #[test]

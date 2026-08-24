@@ -181,6 +181,7 @@ export namespace StudioShortcutManager {
             gc.register(gs["workspace-screen-dashboard"].shortcut, () => service.switchScreen("dashboard")),
             gc.register(gs["workspace-screen-default"].shortcut, () => service.runIfProject(() => service.switchScreen("default"))),
             gc.register(gs["workspace-screen-mixer"].shortcut, () => service.runIfProject(() => service.switchScreen("mixer"))),
+            gc.register(gs["workspace-screen-modulation"].shortcut, () => service.runIfProject(() => service.switchScreen("modulation"))),
             gc.register(gs["workspace-screen-piano"].shortcut, () => service.runIfProject(() => service.switchScreen("piano"))),
             gc.register(gs["workspace-screen-project"].shortcut, () => service.runIfProject(() => service.switchScreen("project"))),
             gc.register(gs["workspace-screen-shadertoy"].shortcut, () => service.runIfProject(() => service.switchScreen("shadertoy"))),

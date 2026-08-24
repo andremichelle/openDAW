@@ -24,7 +24,7 @@ use core::panic::PanicInfo;
 use abi::{float_value, int_value, Block, EventRecord, Instrument, ParamValue, Ports, EVENT_NOTE_ON};
 use dsp::osc::ClassicWaveform;
 use dsp::{midi_to_hz_base, ppqn};
-use math::value_mapping::{Decibel, Exponential, Linear, LinearInteger, Values, ValueMapping};
+use math::value_mapping::{Decibel, Exponential, Linear, LinearInteger, Values};
 use math::db_to_gain;
 use voicing::{VoiceUnison, Voicing, VoicingMode};
 
@@ -99,12 +99,7 @@ mod param {
 /// Resolve the cutoff as a UNIT value (0..1): the automation value directly, or a real Hz mapped back to the
 /// unit interval (the filter maps it to Hz itself, so the device keeps the cutoff normalised — TS `getUnitValue`).
 fn cutoff_unit(value: ParamValue) -> f32 {
-    match value {
-        ParamValue::Unit(unit) => unit,
-        ParamValue::Float(real) => CUTOFF_MAPPING.x(real),
-        ParamValue::Int(real) => CUTOFF_MAPPING.x(real as f32),
-        ParamValue::Bool(flag) => if flag {1.0} else {0.0}
-    }
+    abi::unit_value(value, &CUTOFF_MAPPING)
 }
 
 /// The device's per-instance state, interpreted from the engine-allocated (zeroed) block: the voicing
@@ -303,8 +298,8 @@ pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
 /// Apply a parameter value the host resolved (initial / edit / automation), by the id `init` got back. The
 /// `kind` tag tells the SDK how to type the f32 `value` into a `ParamValue`.
 #[no_mangle]
-pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
-    unsafe { abi::with_state(state_ptr, |state| <Vaporisateur as Instrument>::parameter_changed(state, id, ParamValue::from_wire(kind, value))) }
+pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
+    unsafe { abi::with_state(state_ptr, |state| <Vaporisateur as Instrument>::parameter_changed(state, id, ParamValue::from_wire(kind, value, modulation))) }
 }
 
 /// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order (the `param` slots).

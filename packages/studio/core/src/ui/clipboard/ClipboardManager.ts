@@ -38,6 +38,7 @@ export namespace ClipboardManager {
     const labelForType = (type: string): { one: string, many: string } => {
         switch (type) {
             case "devices": return {one: "Device", many: "Devices"}
+            case "modulators": return {one: "Modulator", many: "Modulators"}
             case "regions": return {one: "Region", many: "Regions"}
             case "notes": return {one: "Note", many: "Notes"}
             case "values": return {one: "Automation point", many: "Automation points"}

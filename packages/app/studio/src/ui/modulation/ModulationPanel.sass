@@ -1,0 +1,78 @@
+@use "@/colors"
+
+$fade: 0.5em
+
+component
+  --column-width: 3.5rem
+  --editor-columns: 8
+  --targets-width: 16rem
+  --scroller-width: 0.5rem
+  --editor-gap: 1em
+  --editor-spacing: 2.5em
+  --head-spacing: 1.5em
+  flex: 1 1 auto
+  min-height: 0
+  display: grid
+  @include colors.panel-background
+  color: var(--color-bright)
+  font-size: 0.75em
+  outline: none
+
+  > .scroller
+    overflow-y: auto
+    display: grid
+    grid-template-columns: repeat(var(--editor-columns), var(--column-width)) var(--targets-width)
+    grid-template-rows: min-content
+    grid-auto-rows: min-content auto
+    align-content: start
+    justify-content: start
+    column-gap: 0
+    row-gap: 0
+    padding: 0 0.5em var(--editor-gap) 0
+    mask-image: linear-gradient(to bottom, black calc(100% - #{$fade}), transparent)
+
+    > .head
+      position: sticky
+      top: 0
+      z-index: 1
+      margin: 0
+      display: grid
+      grid-auto-flow: column
+      justify-content: start
+      align-items: center
+      column-gap: 1em
+      padding: 0.5em 0.25em
+      text-transform: uppercase
+      letter-spacing: 0.05em
+      font-size: 0.9em
+      @include colors.panel-background
+
+      &::after
+        content: ""
+        position: absolute
+        top: 100%
+        left: 0
+        right: 0
+        height: $fade
+        pointer-events: none
+        background: linear-gradient(to bottom, var(--color-panel-background), transparent)
+
+      &.modulators
+        grid-column: 1 / -2
+        color: var(--color-cream)
+        border-top: 1px var(--color-cream) solid
+        background-image: linear-gradient(to bottom, var(--color-cream) -2000%, transparent 100%)
+
+      &.targets
+        grid-column: -2 / -1
+        color: var(--color-blue)
+        margin-left: var(--editor-gap)
+        border-top: 1px var(--color-blue) solid
+        background-image: linear-gradient(to bottom, var(--color-blue) -2000%, transparent 100%)
+
+    > .placeholder
+      grid-column: 1 / -1
+      display: grid
+      place-items: center
+      padding: 4em 0
+      color: rgba(white, 0.2)

@@ -38,7 +38,8 @@ use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripPar
 use engine_env::composite_mix::{DistributorMode, DistributorProcessor, DryWetMixProcessor, DryWetParams};
 use engine_env::engine_context::NodeId;
 use bindings::value_collection::ValueCollection;
-use math::value_mapping::{Decibel, ValueMapping};
+use math::value_mapping::Decibel;
+use crate::audio_unit::{host_float, host_bool};
 use crate::audio_unit::{DeviceParams, Member, ProcHandle, SidechainBinding};
 use crate::{Distributor, EffectCompositeSpec, Engine, EFFECT_INDEX_KEY};
 
@@ -371,15 +372,15 @@ impl Engine {
         // `resolve` hands back a UNIT value while the curve covers the position, else the FIELD's stored value
         // with its own kind (already real dB) — map only the unit case, as the strip / sends do.
         if dry_handle.track.is_some() {
-            *binding.dry_wet_automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| {
-                let (value, kind) = dry_handle.resolve(position);
-                if kind == abi::PARAM_KIND_UNIT { GAIN.y(value) } else { value }
+            *binding.dry_wet_automation.volume.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
+                let (value, kind, modulation) = dry_handle.resolve_held(position, transporting);
+                host_float(value, kind, modulation, &GAIN)
             }));
         }
         if wet_handle.track.is_some() {
-            *binding.dry_wet_automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| {
-                let (value, kind) = wet_handle.resolve(position);
-                if kind == abi::PARAM_KIND_UNIT { GAIN.y(value) } else { value }
+            *binding.dry_wet_automation.panning.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
+                let (value, kind, modulation) = wet_handle.resolve_held(position, transporting);
+                host_float(value, kind, modulation, &GAIN)
             }));
         }
     }
@@ -425,9 +426,9 @@ impl Engine {
             // The STATIC gain is kept live by its own field subscription (see `build_one_entry`); only the
             // AUTOMATION override is bound here.
             if handle.track.is_some() {
-                *entry.strip_automation.volume.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, kind) = handle.resolve(position);
-                    if kind == abi::PARAM_KIND_UNIT { GAIN.y(value) } else { value }
+                *entry.strip_automation.volume.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
+                    let (value, kind, modulation) = handle.resolve_held(position, transporting);
+                    host_float(value, kind, modulation, &GAIN)
                 }));
             }
         }
@@ -438,9 +439,9 @@ impl Engine {
             // The STATIC pan is kept live by its own field subscription (see `build_one_entry`); only the
             // AUTOMATION override is bound here, mapped bipolar like the strip's own pan.
             if handle.track.is_some() {
-                *entry.strip_automation.panning.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, kind) = handle.resolve(position);
-                    if kind == abi::PARAM_KIND_UNIT { PAN.y(value) } else { value }
+                *entry.strip_automation.panning.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
+                    let (value, kind, modulation) = handle.resolve_held(position, transporting);
+                    host_float(value, kind, modulation, &PAN)
                 }));
             }
         }
@@ -451,9 +452,9 @@ impl Engine {
             entry.strip_params.mute.set(handle.field.get() >= 0.5);
             // The mute field stores a bool as 0.0/1.0; the strip thresholds at >= 0.5 either way.
             if handle.track.is_some() {
-                *entry.strip_automation.mute.borrow_mut() = Some(Rc::new(move |position: f64| {
-                    let (value, _kind) = handle.resolve(position);
-                    value
+                *entry.strip_automation.mute.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
+                    let (value, kind, modulation) = handle.resolve_held(position, transporting);
+                    host_bool(value, kind, modulation)
                 }));
             }
         }

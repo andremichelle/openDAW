@@ -1,0 +1,19 @@
+component
+  display: contents
+
+  > .knobs
+    grid-column: span 6
+    position: relative
+    display: grid
+    grid-template-columns: subgrid
+
+    > .section
+      grid-column: 2 / 4
+      position: absolute
+      top: calc((100% - 3.25em) / 2)
+      left: 1px
+      right: 1px
+      height: 0.75em
+      border-radius: 2px
+      pointer-events: none
+      background: color-mix(in srgb, var(--color-blue) 7%, transparent)

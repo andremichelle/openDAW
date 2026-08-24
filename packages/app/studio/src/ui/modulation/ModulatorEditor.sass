@@ -1,0 +1,81 @@
+component
+  display: contents
+
+  &:first-of-type > .modulator > header
+    margin-top: var(--head-spacing)
+
+  > .modulator
+    position: relative
+    grid-column: 1 / -2
+    grid-row: span 2
+    display: grid
+    grid-template-columns: subgrid
+    grid-template-rows: subgrid
+
+    &.insert-before::after, &.insert-after::after
+      content: ""
+      position: absolute
+      left: 0
+      right: 0
+      height: 2px
+      background-color: var(--color-blue)
+      pointer-events: none
+
+    &.insert-before::after
+      top: calc(var(--editor-spacing) / 2)
+
+    &.insert-after::after
+      bottom: calc(var(--editor-spacing) / -2)
+
+    > header
+      grid-column: 1 / -1
+      margin-top: var(--editor-spacing)
+      display: grid
+      grid-template-columns: auto 1fr auto
+      align-items: center
+      column-gap: 0.25em
+      padding: 0.25em 0 0.25em 0.25em
+      border-radius: 3px
+      outline: none
+      cursor: pointer
+      color: var(--color-cream)
+
+      &.selected
+        background-color: rgba(white, 0.04)
+
+      > .toggle
+        cursor: pointer
+
+      > h1
+        margin: 0
+        padding: 0
+        font-size: 11px
+        white-space: nowrap
+        overflow: hidden
+        text-overflow: ellipsis
+
+    > .body
+      grid-column: 1 / -1
+      display: grid
+      grid-template-columns: subgrid
+      grid-auto-rows: min-content
+      align-items: stretch
+      font-size: 16px
+
+  h5
+    width: fit-content
+    height: 1.5em
+    line-height: 1.5em
+    font-size: 0.5em
+    text-transform: capitalize
+    letter-spacing: 0.08em
+    white-space: nowrap
+    color: var(--color-cream)
+
+  &.disabled
+    > .modulator
+      > header > .toggle
+        color: var(--color-dark)
+
+      > .body
+        opacity: 0.4
