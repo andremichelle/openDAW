@@ -14,8 +14,8 @@ import {ValueEventBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 // graph. The only inputs allowed are data present on every client — box uuids and field addresses — never
 // wall-clock time or message arrival order. Repairs run to a fixpoint (one repair can expose another).
 //
-// PROTOTYPE SCOPE: exclusive-target overflow (the case the collab tests show diverging). Dangling pointers
-// and mandatory-missing are cheap to add on the same skeleton; each just needs its own deterministic rule.
+// SCOPE: unresolvable pointers, unsatisfied mandatory pointers, exclusive-target overflow (the case the
+// collab tests show diverging), and duplicate value events.
 
 const byUuid = (a: {address: {uuid: UUID.Bytes}}, b: {address: {uuid: UUID.Bytes}}): number =>
     UUID.toString(a.address.uuid).localeCompare(UUID.toString(b.address.uuid))
@@ -67,6 +67,23 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
     let changed = true
     while (changed) {
         changed = false
+        // --- Unresolvable pointer: the edge names a uuid the converged document no longer holds. Clearing it
+        // IS the whole repair, and it clears every one at once, so the result does not depend on order. The
+        // rule below then decides who cannot survive without a target. Same two steps the load path takes. ---
+        if (boxGraph.clearUnresolvablePointers() > 0) {
+            changed = true
+            repairedAny = true
+            continue
+        }
+        // --- Unsatisfied mandatory pointer: its owner cannot exist. Drop the lowest-addressed one; the
+        // fixpoint loop picks up whatever that exposes. ---
+        const unsatisfied = boxGraph.edges().unsatisfiedMandatoryPointers().slice().sort(byAddress)
+        if (unsatisfied.length > 0) {
+            unsatisfied[0].box.delete()
+            changed = true
+            repairedAny = true
+            continue
+        }
         // Stable, client-independent iteration order.
         const boxes = boxGraph.boxes().slice().sort(byUuid)
         for (const box of boxes) {
@@ -75,15 +92,9 @@ export const deterministicReconcile = (boxGraph: BoxGraph): boolean => {
             if (box.pointerRules.exclusive) {
                 const incoming = box.incomingEdges().slice().sort(byAddress)
                 if (incoming.length > 1) {
-                    for (let index = 1; index < incoming.length; index++) {
-                        const pointer: PointerField = incoming[index]
-                        // A mandatory pointer may not dangle, so dropping the edge means dropping its owner.
-                        if (pointer.mandatory) {
-                            pointer.box.delete()
-                        } else {
-                            pointer.defer()
-                        }
-                    }
+                    // Just clear the edge. If the pointer was mandatory its owner is now unsatisfied, and
+                    // the rule above deletes it on the next round.
+                    for (let index = 1; index < incoming.length; index++) {incoming[index].defer()}
                     changed = true
                     repairedAny = true
                     break // graph mutated: restart the scan from a fresh, ordered snapshot
