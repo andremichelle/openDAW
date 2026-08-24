@@ -215,5 +215,33 @@ describe("modulator actions", () => {
             expect(seen).toEqual(["Vaporisateur", "Lead"])
             project.terminate()
         })
+
+        it("name a modulated depth after the chain it moves, and reach the device at its end", async () => {
+            const {project, boxes} = await create()
+            const device = project.editing.modify(() => {
+                const capture = CaptureMidiBox.create(project.boxGraph, UUID.generate())
+                const unit = AudioUnitBox.create(project.boxGraph, UUID.generate(), box => {
+                    box.collection.refer(project.rootBox.audioUnits)
+                    box.output.refer(project.primaryAudioBusBox.input)
+                    box.capture.refer(capture)
+                    box.index.setValue(1)
+                })
+                return VaporisateurDeviceBox.create(project.boxGraph, UUID.generate(), box => {
+                    box.host.refer(unit.input)
+                    box.label.setValue("Vaporisateur")
+                })
+            }).unwrap("no device")
+            const cutoff = project.parameterFieldAdapters.get(device.cutoff.address)
+            const driven = project.editing.modify(() =>
+                Modulators.assign(project, boxes[0], cutoff.modulationTarget)).unwrap("no assignment")
+            const depth = project.boxAdapters.adapterFor(driven, ModulationBoxAdapter).namedParameter.depth
+            const onDepth = project.editing.modify(() =>
+                Modulators.assign(project, boxes[1], depth.modulationTarget)).unwrap("no depth assignment")
+            const adapter = project.boxAdapters.adapterFor(onDepth, ModulationBoxAdapter)
+            expect(adapter.targetOwner.unwrapOrElse("")).toBe("A \u2192 Vaporisateur Flt. Cutoff")
+            expect(adapter.target.mapOr(parameter => parameter.name, "")).toBe("Depth")
+            expect(adapter.targetAudioUnit.nonEmpty()).toBe(true)
+            project.terminate()
+        })
     })
 })

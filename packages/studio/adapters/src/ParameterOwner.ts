@@ -52,6 +52,10 @@ export namespace ParameterOwner {
         if (box instanceof AudioUnitBox) {
             return Option.wrap(context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter))
         }
+        // A modulated DEPTH owns no device of its own, so the walk follows the assignment to what it drives.
+        if (box instanceof ModulationBox) {
+            return box.target.targetVertex.flatMap(target => audioUnitOf(context, target))
+        }
         const own = unitOf(context, box)
         if (own.nonEmpty()) {return own}
         return resolveOwnerDeviceBox(box).flatMap(owner => unitOf(context, owner))
