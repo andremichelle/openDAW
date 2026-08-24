@@ -21,11 +21,13 @@ type Construct = {
 
 export const Dashboard = ({lifecycle, service}: Construct) => (
     <div className={className}>
-        <header className="hero">
-            <h1>openDAW</h1>
-            <div className="tagline">Create Music Online</div>
-        </header>
-        <ActionButtons lifecycle={lifecycle} service={service}/>
+        <div className="intro">
+            <header className="hero">
+                <h1>openDAW</h1>
+                <div className="tagline">Create Music Online</div>
+            </header>
+            <ActionButtons lifecycle={lifecycle} service={service}/>
+        </div>
         <div className="main">
             <div className="panel">
                 <Resources lifecycle={lifecycle} service={service}/>
