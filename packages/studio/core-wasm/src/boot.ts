@@ -10,7 +10,7 @@ import {ScriptBridges, ScriptEngine} from "./script-bridge"
 import {NamBridges} from "./nam-bridge"
 import {simplifySoundfont} from "./soundfont-simplify"
 
-const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~42)
+const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~343)
 
 export type WasmEngineModules = {
     engineModule: WebAssembly.Module

@@ -3278,6 +3278,25 @@ pub extern "C" fn host_panic(msg_ptr: u32, msg_len: u32) {
     *written = count;
 }
 
+/// Parity probe: the REAL value stored for a UNIT automation value, the modulator's `map_parameter`.
+#[no_mangle]
+pub extern "C" fn map_modulator_parameter(kind: u32, key: u32, unit: f32) -> f32 {
+    let name = match kind {
+        1 => "StepsModulatorBox",
+        2 => "MacroModulatorBox",
+        3 => "RandomModulatorBox",
+        _ => "LfoModulatorBox"
+    };
+    let value = abi::ParamValue::Unit(unit);
+    Engine::modulator_params(name).iter()
+        .find(|(field_key, _, _)| *field_key as u32 == key)
+        .map_or(f32::NAN, |(_, mapping, _)| match mapping {
+            modulation::ParamMapping::Float(mapping) => abi::float_value(value, mapping),
+            modulation::ParamMapping::Power(mapping) => abi::float_value(value, mapping),
+            modulation::ParamMapping::Integer(mapping) => abi::int_value(value, mapping) as f32
+        })
+}
+
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {

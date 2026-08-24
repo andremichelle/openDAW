@@ -15,7 +15,8 @@ import {
     DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
     PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
     TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox,
-    ApparatDeviceBox, CubedDeviceBox, GrooveShuffleBox, SoundfontDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox, ZeitgeistDeviceBox
+    ApparatDeviceBox, CubedDeviceBox, GrooveShuffleBox, SoundfontDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox, ZeitgeistDeviceBox,
+    LfoModulatorBox, MacroModulatorBox, RandomModulatorBox, StepsModulatorBox
 } from "@opendaw/studio-boxes"
 import {
     ArpeggioDeviceBoxAdapter, AutotuneDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
@@ -24,7 +25,8 @@ import {
     ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
     RevampDeviceBoxAdapter, ReverbDeviceBoxAdapter, SampleLoader, SampleLoaderManager, StereoToolDeviceBoxAdapter,
     TidalDeviceBoxAdapter, VaporisateurDeviceBoxAdapter, VelocityDeviceBoxAdapter, VocoderDeviceBoxAdapter,
-    WaveshaperDeviceBoxAdapter
+    WaveshaperDeviceBoxAdapter, LfoModulatorBoxAdapter, MacroModulatorBoxAdapter, RandomModulatorBoxAdapter,
+    StepsModulatorBoxAdapter
 } from "@opendaw/studio-adapters"
 import {DEVICE_STACK_SIZE, DeviceExports, parseDylink} from "../../../studio/core-wasm/src/device-linker"
 
@@ -149,9 +151,14 @@ const buildBoxes = () => {
     const cubed = CubedDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(cubedUnit.input))
     const soundfontUnit = createUnit(8)
     const soundfont = SoundfontDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(soundfontUnit.input))
+    const lfoModulator = LfoModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(0)})
+    const stepsModulator = StepsModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(1)})
+    const macroModulator = MacroModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(2)})
+    const randomModulator = RandomModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(3)})
     boxGraph.endTransaction()
     return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, soundfont, compressor, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
-        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, velocity, vaporisateur, neon, nano, playfieldSample}
+        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, velocity, vaporisateur, neon, nano, playfieldSample,
+        lfoModulator, stepsModulator, macroModulator, randomModulator}
 }
 
 const boxes = buildBoxes()
@@ -334,8 +341,70 @@ const floatRange = (constraints: Constraints.Float32): Optional<{min: number, ma
     return {min: constraints.min, max: constraints.max}
 }
 
+// A modulator is not a plugin, so the probe is `engine.wasm`'s `map_modulator_parameter`, not a device's.
+type ModulatorCase = {
+    name: string
+    kind: number
+    createAdapter: (context: BoxAdaptersContext) => {terminate(): void}
+    // Field keys the engine binds that the TS adapter does not wrap as a parameter.
+    rustOnly: ReadonlyArray<number>
+}
+
+const MODULATOR_CASES: ReadonlyArray<ModulatorCase> = [
+    {name: "lfo-modulator", kind: 0, rustOnly: [],
+        createAdapter: context => new LfoModulatorBoxAdapter(context, boxes.lfoModulator)},
+    {name: "steps-modulator", kind: 1, rustOnly: [],
+        createAdapter: context => new StepsModulatorBoxAdapter(context, boxes.stepsModulator)},
+    {name: "macro-modulator", kind: 2, rustOnly: [],
+        createAdapter: context => new MacroModulatorBoxAdapter(context, boxes.macroModulator)},
+    // `seed` (16) has no adapter parameter, so it carries neither an automation lane nor MIDI learn.
+    {name: "random-modulator", kind: 3, rustOnly: [16],
+        createAdapter: context => new RandomModulatorBoxAdapter(context, boxes.randomModulator)}
+]
+
+const ENGINE = path.resolve(__dirname, "../public/wasm/engine.wasm")
+// The shared table the engine imports, same reserve `core-wasm/src/boot.ts` boots it with.
+const ENGINE_TABLE_RESERVE = 512
+
+const loadEngine = (): (kind: number, key: number, unit: number) => number => {
+    const module = new WebAssembly.Module(readFileSync(ENGINE))
+    const memory = new WebAssembly.Memory({initial: 256})
+    const table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
+    const exports = new WebAssembly.Instance(module, {
+        env: {memory, __indirect_function_table: table, host_perf_now: () => 0}
+    }).exports as unknown as {
+        __wasm_call_ctors?: () => void
+        map_modulator_parameter: (kind: number, key: number, unit: number) => number
+    }
+    exports.__wasm_call_ctors?.()
+    expect(typeof exports.map_modulator_parameter, "engine.wasm misses map_modulator_parameter").toBe("function")
+    return exports.map_modulator_parameter
+}
+
+describe("modulator param mapping parity (engine wasm vs TS BoxAdapter)", () => {
+    for (const {name, kind, createAdapter, rustOnly} of MODULATOR_CASES) {
+        it(name, () => {
+            const map = loadEngine()
+            const tsParameters = collectTsParameters(createAdapter)
+            expect(tsParameters.length, `${name}: wraps at least one parameter`).toBeGreaterThan(0)
+            for (const {path: keyPath, adapter} of tsParameters) {
+                const key = Number(keyPath)
+                const rust = map(kind, key, 0.5)
+                expect(Number.isNaN(rust), `${name} [${keyPath}] '${adapter.name}' is not bound by the engine`).toBe(false)
+                for (const unit of GRID) {
+                    expectValue(map(kind, key, unit), adapter.valueMapping.y(unit), adapter.type,
+                        `${name} [${keyPath}] '${adapter.name}' @ ${unit}`)
+                }
+            }
+            const tsKeys = new Set(tsParameters.map(parameter => Number(parameter.path)))
+            const unwrapped = rustOnly.filter(key => tsKeys.has(key))
+            expect(unwrapped, `${name}: rustOnly keys the adapter now wraps, drop them from the list`).toEqual([])
+        })
+    }
+})
+
 describe("box constraints vs TS BoxAdapter value mappings", () => {
-    for (const {name, createAdapter} of CASES) {
+    for (const {name, createAdapter} of [...CASES, ...MODULATOR_CASES]) {
         it(name, () => {
             const mismatches = collectTsParameters(createAdapter).flatMap(({path, adapter}) => {
                 const field = adapter.field

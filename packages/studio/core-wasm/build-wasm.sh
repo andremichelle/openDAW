@@ -66,8 +66,8 @@ if command -v wasm-opt >/dev/null 2>&1; then
   for module in $MODULES; do
     wasm-opt -Oz --enable-bulk-memory --enable-mutable-globals --enable-simd \
       --enable-sign-ext --enable-nontrapping-float-to-int --enable-multivalue --enable-reference-types \
-      "$OUT/$module.wasm" -o "$OUT/$module.wasm.opt"
-    mv "$OUT/$module.wasm.opt" "$OUT/$module.wasm"
+      "$OUT/$module.wasm" -o "$OUT/$module.wasm.opt.$$"
+    mv "$OUT/$module.wasm.opt.$$" "$OUT/$module.wasm"
   done
   echo "wasm-opt: optimised $MODULES"
 else

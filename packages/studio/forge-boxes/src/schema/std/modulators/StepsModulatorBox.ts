@@ -14,7 +14,7 @@ export const StepsModulatorBox: BoxSchema<Pointers> = ModulatorFactory.createMod
     },
     12: {
         type: "float32", name: "rateAbsolute", pointerRules: ModulatorParameterPointerRules, value: 0.0,
-        constraints: {min: 0.0, max: 20.0, scaling: "linear"}, unit: "Hz"
+        constraints: {min: 0.0, max: 10.0, scaling: "linear"}, unit: "Hz"
     },
     13: {type: "float32", name: "phase", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...UnipolarConstraints},
     15: {type: "float32", name: "smooth", pointerRules: ModulatorParameterPointerRules, value: 0.0, ...UnipolarConstraints},

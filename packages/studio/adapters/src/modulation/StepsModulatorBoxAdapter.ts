@@ -37,6 +37,7 @@ export class StepsModulatorBoxAdapter extends ModulatorBoxAdapter<StepsModulator
                 return count < 3
                     ? [{ascending: true, from: 0, to: count}]
                     : [{ascending: true, from: 0, to: count - 1}, {ascending: false, from: 1, to: count}]
+            // Random reorders per cycle, so there is no one pass to draw: the display shows a forward one.
             default:
                 return [{ascending: true, from: 0, to: count}]
         }

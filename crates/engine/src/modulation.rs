@@ -151,7 +151,7 @@ impl StepsState {
     }
 }
 
-/// WASM CONTRACT: mirrors `StepsModulatorBoxAdapter.alternateIndex` (packages/studio/adapters).
+/// WASM CONTRACT: the Alternate fold the editor draws from `StepsModulatorBoxAdapter.passes`.
 fn alternate_index(index: i64, count: i64) -> i64 {
     if count < 3 {
         return index.rem_euclid(count);
@@ -178,7 +178,6 @@ fn quantize(value: f32, levels: i32) -> f32 {
     (((value + 1.0) * 0.5 * steps + 0.5) as i32).clamp(0, levels - 1) as f32 / steps * 2.0 - 1.0
 }
 
-/// WASM CONTRACT: mirrors `StepsModulatorBoxAdapter.randomIndex` (packages/studio/adapters).
 fn random_index(cycle: i64, step: i64, count: i64) -> i64 {
     let mut hash = (cycle as i32).wrapping_mul(0x9E3779B1u32 as i32) ^ (step as i32 + 1).wrapping_mul(0x85EBCA77u32 as i32);
     hash = (hash ^ ((hash as u32) >> 15) as i32).wrapping_mul(0x2545F491u32 as i32);
