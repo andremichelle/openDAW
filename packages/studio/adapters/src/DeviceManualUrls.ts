@@ -13,6 +13,7 @@ export namespace DeviceManualUrls {
     export const Autotune = "manuals/devices/audio/autotune"
     export const StereoTool = "manuals/devices/audio/stereotool"
     export const Delay = "manuals/devices/audio/delay"
+    export const Convolver = "manuals/devices/audio/convolver"
     export const DattorroReverb = "manuals/devices/audio/dattorro-reverb"
     export const Maximizer = "manuals/devices/audio/maximizer"
     export const Compressor = "manuals/devices/audio/compressor"

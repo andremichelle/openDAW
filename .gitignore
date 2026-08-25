@@ -31,3 +31,4 @@ tsconfig.tsbuildinfo
 /assets.opendaw.studio/models/**/*.onnx
 /assets.opendaw.studio/models/**/*.onnx.partial
 /presets/
+/announcements/temp.txt

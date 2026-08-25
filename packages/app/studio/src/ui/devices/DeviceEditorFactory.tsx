@@ -10,6 +10,7 @@ import {
     BoxVisitor,
     CompressorDeviceBox,
     CrusherDeviceBox,
+    ConvolverDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
@@ -54,6 +55,7 @@ import {
     StereoCompositeBoxAdapter,
     CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter,
+    ConvolverDeviceBoxAdapter,
     DattorroReverbDeviceBoxAdapter,
     DelayDeviceBoxAdapter,
     DeviceHost,
@@ -115,6 +117,7 @@ import {FoldDeviceEditor} from "@/ui/devices/audio-effects/FoldDeviceEditor"
 import {MIDIOutputDeviceEditor} from "@/ui/devices/instruments/MIDIOutputDeviceEditor"
 import {VelocityDeviceEditor} from "@/ui/devices/midi-effects/VelocityDeviceEditor"
 import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
+import {ConvolverDeviceEditor} from "@/ui/devices/audio-effects/ConvolverDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
 import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"
 import {VocoderDeviceEditor} from "@/ui/devices/audio-effects/VocoderDeviceEditor"
@@ -285,6 +288,12 @@ export namespace DeviceEditorFactory {
                                    service={service}
                                    adapter={service.project.boxAdapters.adapterFor(box, DelayDeviceBoxAdapter)}
                                    deviceHost={deviceHost}/>
+            ),
+            visitConvolverDeviceBox: (box: ConvolverDeviceBox) => (
+                <ConvolverDeviceEditor lifecycle={lifecycle}
+                                       service={service}
+                                       adapter={service.project.boxAdapters.adapterFor(box, ConvolverDeviceBoxAdapter)}
+                                       deviceHost={deviceHost}/>
             ),
             visitDattorroReverbDeviceBox: (box: DattorroReverbDeviceBox) => (
                 <DattorroReverbDeviceEditor lifecycle={lifecycle}

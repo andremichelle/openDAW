@@ -6,6 +6,7 @@ import {
     AudioEffectCompositeCellBox,
     AutotuneDeviceBox,
     CompressorDeviceBox,
+    ConvolverDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
@@ -179,6 +180,23 @@ export namespace EffectFactories {
                 box.index.setValue(index)
                 box.host.refer(hostField)
                 box.version.setValue(1)
+            })
+    }
+
+    export const Convolver: EffectFactory = {
+        defaultName: "Convolver",
+        defaultIcon: IconSymbol.Convolver,
+        briefDescription: "Convolution Reverb",
+        description: "Convolution effect: convolves the signal with an impulse-response sample (spaces, springs, cabinets)",
+        manualPage: DeviceManualUrls.Convolver,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): ConvolverDeviceBox =>
+            ConvolverDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Convolver")
+                box.index.setValue(index)
+                box.host.refer(hostField)
             })
     }
 
@@ -562,6 +580,7 @@ export namespace EffectFactories {
         FrequencySplit,       // Frequency Split
         Autotune,
         Compressor,
+        Convolver,
         Crusher,
         DattorroReverb,  // Dattorro Reverb
         Delay,

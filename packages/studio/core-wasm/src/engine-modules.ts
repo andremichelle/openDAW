@@ -96,6 +96,7 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_compressor.wasm", boxType: "CompressorDeviceBox"}, // audio effect (sidechain)
     {url: "/wasm/plugins/device_reverb.wasm", boxType: "ReverbDeviceBox"},     // audio effect
     {url: "/wasm/plugins/device_dattorro_reverb.wasm", boxType: "DattorroReverbDeviceBox"}, // audio effect
+    {url: "/wasm/plugins/device_convolver.wasm", boxType: "ConvolverDeviceBox"}, // audio effect
     {url: "/wasm/plugins/device_soundfont.wasm", boxType: "SoundfontDeviceBox"}, // instrument (preset sampler)
     {url: "/wasm/plugins/device_cubed.wasm", boxType: "CubedDeviceBox"},   // instrument (303-style bassline)
     {url: "/wasm/plugins/device_vocoder.wasm", boxType: "VocoderDeviceBox"},   // audio effect (channel vocoder + sidechain)

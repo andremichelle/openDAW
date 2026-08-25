@@ -42,6 +42,7 @@ import {AudioEffectCompositeBox} from "./audio-effects/AudioEffectCompositeBox"
 import {AudioEffectCompositeCellBox} from "./audio-effects/AudioEffectCompositeCellBox"
 import {StereoCompositeBox} from "./audio-effects/StereoCompositeBox"
 import {FrequencySplitBox} from "./audio-effects/FrequencySplitBox"
+import {ConvolverDeviceBox} from "./audio-effects/ConvolverDeviceBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -56,6 +57,7 @@ export const DeviceDefinitions = [
     AutotuneDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
+    ConvolverDeviceBox,
     VelocityDeviceBox,
     FoldDeviceBox,
     TidalDeviceBox,
