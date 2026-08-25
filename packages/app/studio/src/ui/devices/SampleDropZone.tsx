@@ -1,5 +1,5 @@
 import css from "./SampleDropZone.sass?inline"
-import {asInstanceOf, Lifecycle} from "@opendaw/lib-std"
+import {asInstanceOf, Lifecycle, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {PointerField} from "@opendaw/lib-box"
@@ -24,11 +24,23 @@ export const SampleDropZone = ({lifecycle, service, file}: Construct): HTMLEleme
         </div>
     )
     const sampleSelector = new SampleSelector(service, SampleSelectStrategy.forDeviceFile(file))
+    let loaderSubscription: Terminable = Terminable.Empty
     lifecycle.ownAll(
-        file.catchupAndSubscribe(pointer => pointer.targetVertex.match({
-            none: () => element.removeAttribute("sample"),
-            some: ({box}) => element.setAttribute("sample", asInstanceOf(box, AudioFileBox).fileName.getValue())
-        })),
+        Terminable.create(() => loaderSubscription.terminate()),
+        file.catchupAndSubscribe(pointer => {
+            loaderSubscription.terminate()
+            loaderSubscription = Terminable.Empty
+            element.classList.remove("error")
+            pointer.targetVertex.match({
+                none: () => element.removeAttribute("sample"),
+                some: ({box}) => {
+                    const fileBox = asInstanceOf(box, AudioFileBox)
+                    element.setAttribute("sample", fileBox.fileName.getValue())
+                    loaderSubscription = service.project.sampleManager.getOrCreate(fileBox.address.uuid)
+                        .subscribe(state => element.classList.toggle("error", state.type === "error"))
+                }
+            })
+        }),
         sampleSelector.configureBrowseClick(element),
         sampleSelector.configureContextMenu(element),
         sampleSelector.configureDrop(element)

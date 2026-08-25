@@ -8,6 +8,13 @@ A zero-latency convolution effect that convolves the signal with any impulse-res
 
 ---
 
+> ⚠️ **CPU note**: Convolution is one of the most demanding effects in the studio — the Convolver
+> uses roughly **4× the CPU of the Dattorro Reverb**, and each instance also reserves a sizeable
+> block of memory. Use it deliberately: prefer one Convolver on a send/bus over many inserts, and
+> reach for the algorithmic reverbs where a specific real space is not required.
+
+---
+
 ## 0. Overview
 
 _Convolver_ multiplies your signal with the acoustic fingerprint of an impulse response (IR). Drop any sample onto the device and it becomes the room, spring, cabinet or texture your sound plays through. The convolution runs with zero latency, so it works on live input and inside feedback-sensitive routings without any delay compensation.
@@ -42,17 +49,17 @@ Swapping the IR is glitch-free: the new response is prepared in the background a
 
 ### 2.1 Pre-Delay
 
-Delays the wet (convolved) signal. Range: 1 ms to 500 ms.
+Delays the wet (convolved) signal. Range: 0 ms to 500 ms (50 ms at knob center).
 
 Separates the dry signal from the onset of the response for clarity and depth, exactly like the pre-delay of an algorithmic reverb.
 
 ### 2.2 Wet
 
-Level of the convolved signal. Range: -72 dB to 0 dB.
+Level of the convolved signal. Range: -∞ dB to 0 dB.
 
 ### 2.3 Dry
 
-Level of the original signal. Range: -72 dB to 0 dB.
+Level of the original signal. Range: -∞ dB to 0 dB.
 
 ---
 

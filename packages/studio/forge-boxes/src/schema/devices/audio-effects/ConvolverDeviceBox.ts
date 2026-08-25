@@ -7,7 +7,7 @@ export const ConvolverDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudio
     10: {type: "pointer", name: "file", pointerType: Pointers.AudioFile, mandatory: false},
     11: {
         type: "float32", name: "wet", pointerRules: ParameterPointerRules,
-        value: -6.0, constraints: "decibel", unit: "dB"
+        value: -3.0, constraints: "decibel", unit: "dB"
     },
     12: {
         type: "float32", name: "dry", pointerRules: ParameterPointerRules,
