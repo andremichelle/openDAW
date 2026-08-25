@@ -117,6 +117,25 @@ IR, `convolver-bench.test.ts`): mean 37 us (1.4% budget), p99 230 us, worst real
 Decision: canonical 3-level layout shipped (head FIR 0..128 direct, eager B=128 for 128..2048,
 slack B=1024 for 2048..16384, slack B=8192 for 16384..385024, MAC spread + staged IFFT).
 
+## Browser checkpoint (2026-08-25)
+
+Verified in the running studio (dev server, Chrome): the Convolver appears in the Audio Effects
+browser + add-effect menu, the editor renders (IR drop zone, Pre-Delay/Wet/Dry knobs, NRM/REV),
+a sample drags onto the drop zone and binds (label shows the file), no console errors, no engine
+reboot. GROUND TRUTH by offline mixdown export (WAV intercepted in-page and analyzed numerically):
+
+- convolver ENABLED, no IR: peak -9.57 dB — identical to the dry chain (pass-through correct),
+  and it matches the live strip meter reading (-9.7 dB) during realtime playback
+- convolver ENABLED, TR-808 Cymbal IR (normalize on, wet -3 dB): peak -9.59 dB, RMS shifted
+  -24.4 -> -26.1 dB, and the bounce auto-extended ~0.5 s for the convolution tail
+
+OBSERVATION for later: right after the device is first inserted, the unit strip's peak label
+showed -inf during playback in two separate sessions, recovering after any later chain rebuild —
+while the exported audio and a later live meter read fine. Suspect: a transient meter/broadcast
+rebind hiccup around the wasm memory growth that the ~7 MB device state triggers (would equally
+affect any future large-state device). The audio path itself was proven unaffected. Not chased
+to root cause yet.
+
 ## Multithreading verdict
 
 The engine's linear memory is deliberately non-shared (relocatable on grow, #1030), so worker
