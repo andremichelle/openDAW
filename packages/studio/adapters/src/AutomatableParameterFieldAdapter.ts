@@ -232,7 +232,8 @@ export class AutomatableParameterFieldAdapter<T extends PrimitiveValues = any> i
     getControlledPrintValue(): Readonly<StringResult> {return this.#stringMapping.x(this.getControlledValue())}
     getPrintValue(): Readonly<StringResult> {return this.#stringMapping.x(this.getValue())}
     setPrintValue(text: string): void {
-        const result = this.#stringMapping.y(text)
+        // bare numbers mean the unit the label currently displays ("10" while showing "ms" = 10 ms)
+        const result = this.#stringMapping.y(StringMapping.withDisplayUnit(text, this.getPrintValue().unit))
         if (result.type === "unitValue") {
             this.setUnitValue(clamp(result.value, 0.0, 1.0))
         } else if (result.type === "explicit") {

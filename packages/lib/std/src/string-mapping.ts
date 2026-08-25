@@ -23,6 +23,13 @@ export namespace StringMapping {
         unitPrefix?: boolean
         bipolar?: boolean
     }
+    // Adorn BARE numeric input with the unit the label currently displays, so "10" typed while the
+    // label shows "ms" parses as 10 ms (a trailing dot counts as bare: "10." -> "10ms"). Input that
+    // carries its own unit or is not a number passes through untouched.
+    export const withDisplayUnit = (text: string, displayUnit: string): string => {
+        const numeric = text.trim().replace(/\.$/, "")
+        return /\d$/.test(numeric) ? `${numeric}${displayUnit}` : text
+    }
     export const percent =
         ({bipolar, fractionDigits}: NumericOptions = {}): StringMapping<number> =>
             new Numeric("%", fractionDigits, false, bipolar)

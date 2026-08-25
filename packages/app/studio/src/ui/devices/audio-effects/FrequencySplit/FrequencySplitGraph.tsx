@@ -1,5 +1,5 @@
 import css from "./FrequencySplitGraph.sass?inline"
-import {asDefined, clamp, Editing, EmptyExec, Lifecycle, Strings, Terminable, Terminator} from "@opendaw/lib-std"
+import {asDefined, clamp, Editing, EmptyExec, Lifecycle, Terminable, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {FrequencySplitBoxAdapter} from "@opendaw/studio-adapters"
@@ -124,10 +124,8 @@ const installValueEditor = (line: HTMLElement,
         const printValue = parameter.getPrintValue()
         const resolvers = Promise.withResolvers<string>()
         resolvers.promise.then(value => {
-            const numeric = value.trim().replace(/\.$/, "")
-            const withUnit = Strings.endsWithDigit(numeric) ? `${numeric}${printValue.unit}` : value
             editing.modify(() => {
-                parameter.setPrintValue(withUnit)
+                parameter.setPrintValue(value)
                 parameter.setUnitValue(clamp(parameter.getUnitValue(), low, high))
             })
             editing.mark()

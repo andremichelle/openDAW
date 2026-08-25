@@ -7,7 +7,6 @@ import {
     Option,
     panic,
     Parameter,
-    Strings,
     Terminable,
     Terminator,
     unitValue,
@@ -52,9 +51,7 @@ export const RelativeUnitValueDragging = ({
             const printValue = parameter.getPrintValue()
             const resolvers = Promise.withResolvers<string>()
             resolvers.promise.then(value => {
-                const numeric = value.trim().replace(/\.$/, "")
-                const withUnit = Strings.endsWithDigit(numeric) ? `${numeric}${printValue.unit}` : value
-                editing.modify(() => parameter.setPrintValue(withUnit))
+                editing.modify(() => parameter.setPrintValue(value))
                 editing.mark()
             }, EmptyExec)
             Surface.get(element).flyout.appendChild(
