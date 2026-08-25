@@ -5,7 +5,7 @@ export const Colors = {
     blue: new Color(189, 100, 65),
     green: new Color(150, 77, 69),
     yellow: new Color(60, 100, 84),
-    cream: new Color(65, 20, 83),
+    cream: new Color(65, 37, 83),
     orange: new Color(31, 100, 73),
     red: new Color(354, 100, 65),
     purple: new Color(314, 100, 78),
