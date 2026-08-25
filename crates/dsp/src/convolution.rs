@@ -177,7 +177,7 @@ impl<const FFT: usize, const BINS: usize, const TABLE: usize, const SPEC: usize>
 /// `acc += x * h` (complex, split arrays). The hot loop: independent lanes, no shuffles, no
 /// reductions — LLVM autovectorizes it to SIMD128 (wasm) / NEON (native).
 #[inline]
-fn spectral_mac(acc_re: &mut [f32], acc_im: &mut [f32], x_re: &[f32], x_im: &[f32], h_re: &[f32], h_im: &[f32]) {
+pub fn spectral_mac(acc_re: &mut [f32], acc_im: &mut [f32], x_re: &[f32], x_im: &[f32], h_re: &[f32], h_im: &[f32]) {
     let n = acc_re.len().min(acc_im.len()).min(x_re.len()).min(x_im.len()).min(h_re.len()).min(h_im.len());
     for index in 0..n {
         let xr = x_re[index];
