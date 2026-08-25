@@ -1,4 +1,5 @@
 import css from "./ConvolverDeviceEditor.sass?inline"
+import {ConvolverImpulseResponseMenu} from "./ConvolverImpulseResponseMenu"
 import {asInstanceOf, Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -65,7 +66,10 @@ export const ConvolverDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
                       adapter={adapter}
-                      populateMenu={parent => MenuItems.forEffectDevice(parent, service, deviceHost, adapter)}
+                      populateMenu={parent => {
+                          MenuItems.forEffectDevice(parent, service, deviceHost, adapter)
+                          ConvolverImpulseResponseMenu.populate(parent, service, adapter.box.file)
+                      }}
                       populateControls={() => (
                           <div className={className}>
                               <SampleDropZone lifecycle={lifecycle} service={service} file={adapter.box.file}/>

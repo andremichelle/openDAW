@@ -6,6 +6,9 @@ Writing style (all channels)
 • No dashes (em or en dashes). Use commas or periods instead.
 • No semicolons. Split into two sentences, or use a comma.
 • Plain language. No marketing speak (for example, avoid "The point:").
+• No long text. Handle every subject brief and to the point.
+• No technical details unless the prompt asks for them.
+• Always include the education angle, unless the prompt says otherwise.
 
 Per channel
 • Discord: supports markdown. Big headline uses "# " and starts with "Update: ", in Title Case
@@ -28,6 +31,15 @@ Feature framing (Nextcloud)
 • Samples and soundfonts are deduplicated, stored once and reused.
 • openDAW is free and open.
 • This is not a beta. Do not call it a beta.
+
+Feature framing (Convolver)
+• A convolution reverb. It uses impulse responses, recordings of real rooms. Do not say "drop any
+  sample on it", that is inaccurate and sounds like marketing.
+• Do not present convolution in the browser as new. The Web Audio API has had a ConvolverNode for
+  years.
+• Education angle: students record an impulse response of their own room and use it as a reverb.
+• The free IR collection is CC BY, credit OpenAIR (University of York) and Adventure Kid.
+• Skip trivia like the Hamilton Mausoleum Guinness record. Nobody posting on LinkedIn needs it.
 
 Feature framing (Neon)
 • A phase distortion synthesizer in the spirit of the Casio CZ series (1984). Say "in the spirit of",
