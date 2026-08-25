@@ -129,12 +129,30 @@ reboot. GROUND TRUTH by offline mixdown export (WAV intercepted in-page and anal
 - convolver ENABLED, TR-808 Cymbal IR (normalize on, wet -3 dB): peak -9.59 dB, RMS shifted
   -24.4 -> -26.1 dB, and the bounce auto-extended ~0.5 s for the convolution tail
 
-OBSERVATION for later: right after the device is first inserted, the unit strip's peak label
-showed -inf during playback in two separate sessions, recovering after any later chain rebuild —
-while the exported audio and a later live meter read fine. Suspect: a transient meter/broadcast
-rebind hiccup around the wasm memory growth that the ~7 MB device state triggers (would equally
-affect any future large-state device). The audio path itself was proven unaffected. Not chased
-to root cause yet.
+The "-inf strip meter after insert" observation was chased to root cause (2026-08-25, second
+session) and the convolver is fully exonerated:
+
+- Headless repro of the worklet's #syncBroadcasts loop against the real engine
+  (test/convolver-meter-live.test.ts): a mid-play convolver insert grows the wasm memory once,
+  bumps the broadcast generation, the loop resubscribes, and the UNIT-strip FLOAT_ARRAY slot keeps
+  reporting correct peaks. Engine + worklet broadcast path: healthy.
+- In the live studio, subscribing to the unit address directly on the main-thread
+  LiveStreamReceiver and pumping `receiver.dispatch()` manually: ~30 callbacks/s with correct
+  peaks (0.317 vs 0.314 baseline) THROUGH a freshly inserted, enabled convolver — and the strip
+  peak label immediately updated to the real value.
+- ROOT CAUSE: `LiveStreamReceiver.connect` drives dispatch exclusively via `AnimationFrame`
+  (lib-dom frames.ts), i.e. `requestAnimationFrame`, with no fallback. In a hidden/occluded
+  Chrome window (`document.visibilityState === "hidden"` — the automation sessions ran unfocused)
+  Chrome suspends rAF entirely: measured 0 rAF ticks/s while audio kept rendering. Every
+  meter/telemetry label freezes at its last value. Actions that rebuild the devices panel
+  (inserting a device, reselecting the track) recreate the peak label at its initial -inf, which
+  then never updates. The non--inf readings between (-25.8/-51.6/-9.7) were single sparse
+  dispatches sampling the engine-side DECAYING peak at random moments, hence the inconsistent
+  magnitudes. The correlation with the convolver was coincidence: it was the action that rebuilt
+  the panel inside the starved windows.
+- No engine or device defect. If meters-under-hidden-windows ever matter (remote/live-room
+  scenarios), the fix would be a timer fallback for the receiver's dispatch when rAF is
+  throttled — noted as a product decision, not applied.
 
 ## Multithreading verdict
 
