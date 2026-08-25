@@ -190,11 +190,11 @@ pub fn spectral_mac(acc_re: &mut [f32], acc_im: &mut [f32], x_re: &[f32], x_im: 
 }
 
 // Canonical device layout: head 0..128 direct, 128..2048 @ b=128 (eager), 2048..16384 @ b=1024,
-// 16384..385024 @ b=8192 — validated by the crate's tests, sized by the bench in tests/.
-pub const MAX_IR_FRAMES: usize = 385024;
+// 16384..770048 @ b=8192 — validated by the crate's tests, sized by the bench in tests/.
+pub const MAX_IR_FRAMES: usize = 770048;
 const L1_PARTS: usize = 15;
 const L2_PARTS: usize = 14;
-const L3_PARTS: usize = 45;
+const L3_PARTS: usize = 92;
 const L1_BINS: usize = 132;
 const L2_BINS: usize = 1028;
 const L3_BINS: usize = 8196;
@@ -251,6 +251,7 @@ pub struct Convolver {
     write: usize,
     pos: usize,
     quantum: usize,
+    stagger: usize,
     predelay_pos: usize,
     pub predelay_samples: usize,
     pub wet_gain: f32,
@@ -269,7 +270,16 @@ impl Convolver {
         self.dry_gain = 1.0;
         self.ir_gain = 1.0;
         self.predelay_samples = 0;
+        self.stagger = 0;
         self.clear_runtime();
+    }
+
+    /// Offset this instance's partition-period phase so the heavy L3 FFT quanta of multiple
+    /// instances do not align and stack their spikes. Any offset is correct (the rings start
+    /// silent, so a mid-period start convolves leading silence).
+    pub fn set_stagger(&mut self, offset: usize) {
+        self.stagger = offset % (8192 / BLOCK);
+        self.quantum = self.stagger;
     }
 
     /// Start loading a new IR (`stereo` = distinct right channel; mono duplicates left).
@@ -370,7 +380,7 @@ impl Convolver {
         self.l3.clear_runtime();
         self.write = 0;
         self.pos = 0;
-        self.quantum = 0;
+        self.quantum = self.stagger;
         self.predelay_pos = 0;
     }
 

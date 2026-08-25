@@ -1,5 +1,5 @@
 // WASM speed check for the Convolver ("tests to see what is the fastest", wasm side): times
-// engine.render() per 128-frame quantum with an 8 s stereo-noise IR loaded — the worst case the
+// engine.render() per 128-frame quantum with a 16 s stereo-noise IR loaded — the worst case the
 // device allows — and asserts the WORST quantum stays well inside the 48 kHz budget (2666 us).
 // Node runs the same SIMD128 wasm as the worklet, so these numbers transfer.
 import {describe, expect, it} from "vitest"
@@ -16,7 +16,7 @@ const project = (): BoxGraph =>
     buildEffectProject(0.3, (source, unit) => {
         const file = AudioFileBox.create(source, UUID.generate(), fileBox => {
             fileBox.startInSeconds.setValue(0.0)
-            fileBox.endInSeconds.setValue(8.0)
+            fileBox.endInSeconds.setValue(16.0)
             fileBox.fileName.setValue("bench-ir")
         })
         return ConvolverDeviceBox.create(source, UUID.generate(), box => {
@@ -30,11 +30,11 @@ const project = (): BoxGraph =>
     })
 
 describe("convolver wasm speed", () => {
-    it("an 8 s IR renders every quantum well inside the audio budget", async () => {
+    it("a 16 s IR renders every quantum well inside the audio budget", async () => {
         const {engine, memory} = await loadFullEngine()
         const sync = connectSyncToEngine(engine, memory, project())
         await sync.settle(); engine.bind(); await sync.settle()
-        const frames = 48000 * 8
+        const frames = 48000 * 16
         for (; ;) {
             const requestPtr = engine.input_reserve(16)
             const handle = engine.sample_take_request(requestPtr)
@@ -63,7 +63,7 @@ describe("convolver wasm speed", () => {
         const mean = times.reduce((sum, value) => sum + value, 0) / quanta
         const p99 = times[Math.floor(quanta * 0.99)]
         const worst = times[quanta - 1]
-        console.info(`convolver wasm, 8 s stereo IR: mean ${mean.toFixed(1)} us, p99 ${p99.toFixed(1)} us, worst ${worst.toFixed(1)} us` +
+        console.info(`convolver wasm, 16 s stereo IR: mean ${mean.toFixed(1)} us, p99 ${p99.toFixed(1)} us, worst ${worst.toFixed(1)} us` +
             ` (budget ${BUDGET_US.toFixed(0)} us; mean ${(mean / BUDGET_US * 100).toFixed(1)}%, worst ${(worst / BUDGET_US * 100).toFixed(1)}%)`)
         console.info(`top 10: ${times.slice(-10).map(value => value.toFixed(0)).join(" ")}`)
         expect(p99).toBeLessThan(BUDGET_US * 0.5) // the tail above p99 is node jitter, not the DSP

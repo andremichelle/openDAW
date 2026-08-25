@@ -158,6 +158,21 @@ session) and the convolver is fully exonerated:
   scenarios), the fix would be a timer fallback for the receiver's dispatch when rAF is
   throttled — noted as a product decision, not applied.
 
+## 16 s cap + spike staggering (2026-08-25)
+
+`MAX_IR_FRAMES` raised 385024 -> 770048 (16.04 s at 48 kHz), `L3_PARTS` 45 -> 92. Measured
+before committing: wasm mean 44 us/quantum (1.7% budget, vs 1.5% at 8 s), p99 245 us, worst
+356 us — the worst quantum is IR-length-independent (the 16k FFT). State grows to 26 MB per
+instance (from 13.6 MB), allocated at insert. The cap recovers Hamilton Mausoleum (15 s),
+York Minster (10 s) and Elveden Marble Hall for the cloud IR set; R1 (20.3 s) and Terry's (23 s)
+remain out.
+
+Spike decorrelation: every instance now starts its partition-period phase from a per-instance
+stagger (derived from the state address in the device's `init`), so the heavy L3 FFT/IFFT quanta
+of multiple convolvers no longer align and stack. Any phase is correct (the rings start silent);
+`staggered_period_phase_matches_reference` proves bit-level equivalence against the direct oracle
+at four offsets.
+
 ## Multithreading verdict
 
 The engine's linear memory is deliberately non-shared (relocatable on grow, #1030), so worker

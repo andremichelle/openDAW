@@ -307,6 +307,24 @@ fn oversize_ir_truncates_at_cap() {
 }
 
 #[test]
+fn staggered_period_phase_matches_reference() {
+    // spike decorrelation: an offset start phase must not change the convolution result
+    for stagger in [1usize, 17, 37, 63] {
+        let mut rng = Rng(41 + stagger as u64);
+        let (ir_l, ir_r, taps) = sparse_ir(&mut rng, 60000, 120);
+        let length = 128 * 800;
+        let input = noise(&mut rng, length);
+        let expected = reference(&taps, &input, length);
+        let mut convolver = boxed_convolver();
+        convolver.dry_gain = 0.0;
+        full_load(&mut convolver, &ir_l, &ir_r, true, false, false);
+        convolver.set_stagger(stagger);
+        let actual = run_convolver(&mut convolver, &input, length);
+        assert_close(&actual, &expected, 2e-3, &format!("stagger {stagger}"));
+    }
+}
+
+#[test]
 fn resampled_ir_matches_decimated_reference() {
     let mut rng = Rng(37);
     // a 2x-rate IR with taps only at EVEN indices: linear interp at ratio 2.0 lands exactly on them

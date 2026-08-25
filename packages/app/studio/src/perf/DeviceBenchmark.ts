@@ -51,10 +51,10 @@ const audioEffects: ReadonlyArray<DeviceSpec> = [
         })
     },
     {
-        // worst case by design: the full 8 s dense-noise IR loads all three partition levels
+        // worst case by design: the full 16 s dense-noise IR loads all three partition levels
         name: "Convolver",
         addToUnit: (boxGraph, unit) => {
-            const irFileBox = AudioFileBox.create(boxGraph, irUuid, box => box.endInSeconds.setValue(8))
+            const irFileBox = AudioFileBox.create(boxGraph, irUuid, box => box.endInSeconds.setValue(16))
             ConvolverDeviceBox.create(boxGraph, UUID.generate(), box => {
                 box.host.refer(unit.audioEffects)
                 box.index.setValue(0)
@@ -299,10 +299,10 @@ const createInstrumentSkeleton = (instrument: InstrumentSpec): ProjectSkeleton =
     return skeleton
 }
 
-// the Convolver's impulse response: dense decaying stereo noise, deterministic, full 8 s (every
+// the Convolver's impulse response: dense decaying stereo noise, deterministic, full 16 s (every
 // partition level populated — the honest worst-case load)
 const createIrData = (): AudioData => {
-    const durationFrames = SAMPLE_RATE * 8
+    const durationFrames = SAMPLE_RATE * 16
     const data = AudioData.create(SAMPLE_RATE, durationFrames, 2)
     const [left, right] = data.frames
     for (let i = 0; i < durationFrames; i++) {
@@ -323,7 +323,7 @@ const injectOne = (service: StudioService, uuid: UUID.Bytes, data: AudioData, na
 
 const injectSample = (service: StudioService, sampleData: AudioData): void => {
     injectOne(service, sampleUuid, sampleData, "perf-sine", 10)
-    injectOne(service, irUuid, createIrData(), "perf-ir", 8)
+    injectOne(service, irUuid, createIrData(), "perf-ir", 16)
 }
 
 type RenderResult = { elapsed: number, audio: Float32Array[], peak: number }

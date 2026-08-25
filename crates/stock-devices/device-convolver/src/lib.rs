@@ -163,7 +163,13 @@ pub extern "C" fn process(desc_ptr: u32) {
 
 #[no_mangle]
 pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
-    unsafe { abi::with_state(state_ptr, |state| <ConvolverDevice as AudioEffect>::init(state, sample_rate)) }
+    unsafe {
+        abi::with_state(state_ptr, |state: &mut ConvolverState| {
+            <ConvolverDevice as AudioEffect>::init(state, sample_rate);
+            // per-instance period phase from the state address: heavy FFT quanta never align across instances
+            state.convolver.set_stagger((state_ptr >> 6) as usize);
+        })
+    }
 }
 
 #[no_mangle]

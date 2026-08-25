@@ -12,7 +12,7 @@ A zero-latency convolution effect that convolves the signal with any impulse-res
 
 _Convolver_ multiplies your signal with the acoustic fingerprint of an impulse response (IR). Drop any sample onto the device and it becomes the room, spring, cabinet or texture your sound plays through. The convolution runs with zero latency, so it works on live input and inside feedback-sensitive routings without any delay compensation.
 
-Any sample can act as an IR, up to 8 seconds at 48 kHz (longer samples are truncated). Mono IRs are applied to both channels, stereo IRs convolve each channel with its own side. Samples at a different sample rate are resampled to the engine rate automatically.
+Any sample can act as an IR, up to 16 seconds at 48 kHz (longer samples are truncated). Mono IRs are applied to both channels, stereo IRs convolve each channel with its own side. Samples at a different sample rate are resampled to the engine rate automatically.
 
 Example uses:
 
@@ -74,5 +74,5 @@ Plays the impulse response backwards. The tail turns into a swell that builds up
 
 - Direct FIR for the first 128 samples: zero latency, no delay compensation needed
 - FFT-partitioned tail in three stages (128 / 1024 / 8192 samples), with the large partitions pipelined across their period so the CPU load stays flat, without spikes
-- SIMD-accelerated spectral processing; the cost is nearly independent of the IR length (a full 8-second stereo IR costs about 1-2% of the audio budget)
+- SIMD-accelerated spectral processing; the cost is nearly independent of the IR length (a full 16-second stereo IR costs about 1-2% of the audio budget)
 - IRs are transformed in the background, spread over the render quanta: loading or swapping an IR never interrupts playback
