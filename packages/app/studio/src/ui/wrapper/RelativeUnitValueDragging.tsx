@@ -52,7 +52,8 @@ export const RelativeUnitValueDragging = ({
             const printValue = parameter.getPrintValue()
             const resolvers = Promise.withResolvers<string>()
             resolvers.promise.then(value => {
-                const withUnit = Strings.endsWithDigit(value) ? `${value}${printValue.unit}` : value
+                const numeric = value.trim().replace(/\.$/, "")
+                const withUnit = Strings.endsWithDigit(numeric) ? `${numeric}${printValue.unit}` : value
                 editing.modify(() => parameter.setPrintValue(withUnit))
                 editing.mark()
             }, EmptyExec)

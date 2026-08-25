@@ -9,6 +9,13 @@ describe("Extract Prefix", () => {
         expect(StringMapping.numeric({unit: "Hz"}).y("4kHz")).toEqual({type: "explicit", value: 4_000})
         expect(StringMapping.numeric({unit: "Hz"}).y("4mHz")).toEqual({type: "explicit", value: 0.004})
         expect(StringMapping.numeric({unit: "Hz"}).y("4MHz")).toEqual({type: "explicit", value: 4_000_000})
+        // decimals must not eat the metric prefix ("10.0ms" once parsed as 10 seconds)
+        expect(StringMapping.numeric({unit: "s"}).y("10ms")).toEqual({type: "explicit", value: 0.01})
+        expect(StringMapping.numeric({unit: "s"}).y("10.0ms")).toEqual({type: "explicit", value: 0.01})
+        expect(StringMapping.numeric({unit: "s"}).y("10.ms")).toEqual({type: "explicit", value: 0.01})
+        expect(StringMapping.numeric({unit: "s"}).y("0.5s")).toEqual({type: "explicit", value: 0.5})
+        expect(StringMapping.numeric({unit: "Hz"}).y("1.5kHz")).toEqual({type: "explicit", value: 1_500})
+        expect(StringMapping.numeric().y("10.0")).toEqual({type: "explicit", value: 10})
         expect(StringMapping.numeric({unit: "Hz", unitPrefix: true}).x(1)).toEqual({value: "1", unit: "Hz"})
         expect(StringMapping.numeric({unit: "Hz", unitPrefix: true}).x(1000)).toEqual({value: "1", unit: "kHz"})
         expect(StringMapping.numeric({unit: "Hz", unitPrefix: true, fractionDigits: 1}).x(1500)).toEqual({

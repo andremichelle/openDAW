@@ -130,8 +130,10 @@ export namespace StringMapping {
                         : clamp(float / 100.0, 0.0, 1.0)
                 }
             } else {
-                const match: Nullable<RegExpExecArray> = /(\d+)(\D+)/.exec(value)
-                const last = match?.at(2)?.at(0)
+                // skip the FULL numeric literal (decimals included), then the first non-space char
+                // is the metric-prefix candidate ("10.0m" -> "m", never the decimal point)
+                const match: Nullable<RegExpExecArray> = /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)\s*(\D)/.exec(value)
+                const last = match?.at(1)
                 if (isDefined(last)) {
                     const index: int = prefixes.indexOf(last)
                     if (index > -1) {
