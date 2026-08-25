@@ -98,6 +98,10 @@ const GAIN: Decibel = Decibel::default_volume();
 /// The pan mapping a child's `panning` automation curve resolves through: bipolar, matching the strip's own pan.
 const PAN: Linear = Linear::bipolar();
 
+fn map_gain(value: f32, kind: u32, modulation: f32) -> f32 {host_float(value, kind, modulation, &GAIN)}
+
+fn map_pan(value: f32, kind: u32, modulation: f32) -> f32 {host_float(value, kind, modulation, &PAN)}
+
 /// A child's OWN channel strip (declared via `spec.child_volume_key` / `child_pan_key`): a
 /// `ChannelStripProcessor` between the child's output (post its own fx chain) and the composite sum, exactly
 /// like an effect-composite entry's strip. Static drags land in the `params` cells; automation overrides are
@@ -603,7 +607,7 @@ impl Engine {
         SlotStrip {strip, strip_id, params, automation, output, source_node, field_subs, param_subs: Vec::new(), param_collections: Vec::new()}
     }
 
-    /// Bind ONE child strip's volume / pan AUTOMATION (the static cells are kept live by the strip's own field
+    /// Bind ONE child strip's volume / pan AUTOMATION + MODULATION (the static cells are kept live by the strip's own field
     /// monitors). The previous observers + curve collections are dropped first — a plain drop would leak their
     /// hub / event / curve observers.
     fn bind_slot_strip_params(&mut self, child_uuid: Uuid, strip: &mut SlotStrip, spec: &CompositeSpec, invalidate: &Rc<dyn Fn()>) {
@@ -616,28 +620,16 @@ impl Engine {
             collection.terminate(&mut self.graph);
         }
         if spec.child_volume_key != 0 {
-            let (handle, subs, collections, _) = self.observe_param(child_uuid, &[spec.child_volume_key], 0, invalidate);
-            strip.param_subs.extend(subs);
-            strip.param_collections.extend(collections);
             // `resolve` hands back a UNIT value while the curve covers the position, else the FIELD's stored
             // value with its own kind (already real dB) — map only the unit case.
-            if handle.track.is_some() {
-                *strip.automation.volume.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
-                    let (value, kind, modulation) = handle.resolve_held(position, transporting);
-                    host_float(value, kind, modulation, &GAIN)
-                }));
-            }
+            let (_, resolver) = self.observe_field_automation(child_uuid, &[spec.child_volume_key], 0,
+                &mut strip.param_subs, &mut strip.param_collections, invalidate, map_gain);
+            *strip.automation.volume.borrow_mut() = resolver;
         }
         if spec.child_pan_key != 0 {
-            let (handle, subs, collections, _) = self.observe_param(child_uuid, &[spec.child_pan_key], 1, invalidate);
-            strip.param_subs.extend(subs);
-            strip.param_collections.extend(collections);
-            if handle.track.is_some() {
-                *strip.automation.panning.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
-                    let (value, kind, modulation) = handle.resolve_held(position, transporting);
-                    host_float(value, kind, modulation, &PAN)
-                }));
-            }
+            let (_, resolver) = self.observe_field_automation(child_uuid, &[spec.child_pan_key], 1,
+                &mut strip.param_subs, &mut strip.param_collections, invalidate, map_pan);
+            *strip.automation.panning.borrow_mut() = resolver;
         }
     }
 

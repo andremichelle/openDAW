@@ -3364,6 +3364,97 @@ fn entry_pan_reaches_the_strip_live() {
     assert_eq!(composite_of(&unit).entry_pan(ENTRY_A), Some(-1.0), "the pan reached the strip live");
 }
 
+const MOD_ROOT: Uuid = [40u8; 16];
+const MOD_MACRO: Uuid = [41u8; 16];
+const MOD_ASSIGN: Uuid = [42u8; 16];
+
+// A composite whose entry A gain is MODULATED by a macro at depth 0.5 — what assigning a modulator to a
+// stereo-split channel's gain produces. No automation track anywhere; `assigned` false leaves the
+// assignment's target dangling, for the LIVE attach.
+fn modulated_entry_gain_graph(assigned: bool) -> BoxGraph {
+    BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))
+        ]),
+        graph_box(COMP, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))),
+            (EFFECT_INDEX_KEY, FieldValue::Int32(0)),
+            (DEVICE_ENABLED_KEY, FieldValue::Boolean(true)),
+            (ENTRIES_FIELD, FieldValue::Hook), (INPUT_TAP_FIELD, FieldValue::Hook),
+            (DRY_KEY, FieldValue::Float32(f32::NEG_INFINITY)), (WET_KEY, FieldValue::Float32(0.0))
+        ]),
+        entry_box(ENTRY_A, 0, "L"),
+        entry_box(ENTRY_B, 1, "R"),
+        graph_box(MOD_ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        // A macro at the BOTTOM of its travel: bipolar, so it emits -1 at every position.
+        graph_box(MOD_MACRO, "MacroModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MOD_ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)),
+            (8, FieldValue::Float32(1.0)), (10, FieldValue::Float32(0.0))
+        ]),
+        graph_box(MOD_ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(MOD_MACRO, vec![2])))),
+            (2, FieldValue::Pointer(assigned.then(|| Address::of(ENTRY_A, vec![ENTRY_GAIN_KEY])))),
+            (3, FieldValue::Float32(0.5)), (4, FieldValue::Boolean(true))
+        ])
+    ])
+}
+
+// An entry's gain is bound OUTSIDE the device ABI (a composite is not a plugin), and its strip override was
+// installed only when an automation TRACK existed — so a modulator assigned to it drove nothing: the DSP kept
+// the static gain and the UI slot kept the sum it was seeded with. The strip's own resolve must carry the
+// modulation exactly as the device path does.
+#[test]
+fn a_modulated_entry_gain_reaches_the_strip_and_the_ui() {
+    let mut engine = engine_with_composite();
+    engine.graph = modulated_entry_gain_graph(true);
+    engine.observe_modulators();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(composite_of(&unit).entry_gain_db(ENTRY_A), Some(0.0), "the stored gain stays at unity");
+    // 0 dB is the TOP of the mapping, so a macro at the bottom pulls the entry down by half the travel.
+    let gain = composite_of(&unit).entry_gain_at(ENTRY_A, 0.0, true).expect("entry A");
+    assert!((gain + 12.0).abs() < 1.0e-3, "depth 0.5 below unity is the mapping's mid, got {gain}");
+    assert_eq!(composite_of(&unit).entry_gain_at(ENTRY_B, 0.0, true), Some(0.0),
+        "and only the assigned entry moves");
+    // Moving the macro must move the gain AND the sum the knob's ring reads.
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(MOD_MACRO, vec![10]), old: FieldValue::Float32(0.0), new: FieldValue::Float32(0.25)
+    }], &engine.registry).expect("raise the macro");
+    engine.sync_modulators();
+    let gain = composite_of(&unit).entry_gain_at(ENTRY_A, 0.0, true).expect("entry A");
+    assert!((gain + 4.5).abs() < 1.0e-3, "a quarter of the travel below unity, got {gain}");
+    let published = engine.broadcasts.live_slot(ENTRY_A, &[ENTRY_GAIN_KEY], crate::broadcast::PACKAGE_FLOAT_ARRAY)
+        .expect("a modulated parameter registers its UI slot");
+    let sum = published.borrow()[1];
+    assert!((sum + 0.25).abs() < 1.0e-6, "the UI reads the CURRENT sum, not the one it was seeded with, got {sum}");
+}
+
+// Assigning the modulator is a LIVE edit, not a reload: the assignment's target lands on the entry's gain
+// field, whose pointer hub re-observes the entry's parameters.
+#[test]
+fn assigning_a_modulator_to_an_entry_gain_needs_no_reload() {
+    let mut engine = engine_with_composite();
+    engine.graph = modulated_entry_gain_graph(false);
+    engine.observe_modulators();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(composite_of(&unit).entry_gain_at(ENTRY_A, 0.0, true), Some(0.0),
+        "the strip reads the stored gain while nothing is assigned");
+    engine.graph.transaction(&[Update::Pointer {
+        address: Address::of(MOD_ASSIGN, vec![2]),
+        old: None,
+        new: Some(Address::of(ENTRY_A, vec![ENTRY_GAIN_KEY]))
+    }], &engine.registry).expect("assign the modulator to the entry gain");
+    engine.reconcile_one(&mut unit);
+    let gain = composite_of(&unit).entry_gain_at(ENTRY_A, 0.0, true).expect("entry A");
+    assert!((gain + 12.0).abs() < 1.0e-3, "the assignment reached the strip with no reload, got {gain}");
+}
+
 // Issue #337: COPYING a clip in the launcher clones it MIRRORED (both share one collection) and then
 // CONSOLIDATES the moved clip — repointing its `events` at a fresh copy. The engine resolved that pointer
 // once at build, so the copy kept playing the ORIGINAL clip's notes until a reload.

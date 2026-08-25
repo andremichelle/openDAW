@@ -52,6 +52,10 @@ const GAIN: Decibel = Decibel::default_volume();
 /// own pan (the entry adapter creates `pan` with `ValueMapping.bipolar`).
 const PAN: math::value_mapping::Linear = math::value_mapping::Linear::bipolar();
 
+fn map_gain(value: f32, kind: u32, modulation: f32) -> f32 {host_float(value, kind, modulation, &GAIN)}
+
+fn map_pan(value: f32, kind: u32, modulation: f32) -> f32 {host_float(value, kind, modulation, &PAN)}
+
 /// One persistent ENTRY of an effect composite: its own fx chain (pooled + reconciled like any chain, so a
 /// survivor keeps its DSP state) feeding its gain / mute / solo strip into the composite's wet sum.
 pub(crate) struct CompositeEntry {
@@ -176,6 +180,17 @@ impl EffectCompositeBinding {
     pub(crate) fn entry_gain_db(&self, uuid: Uuid) -> Option<f32> {
         self.members.iter().find(|entry| entry.uuid == uuid)
             .map(|entry| entry.strip_params.volume_db.get())
+    }
+
+    /// The gain the entry's strip RESOLVES for a block, by the strip's own rule: its override when one is
+    /// installed (automation / modulation), else the static cell.
+    #[cfg(test)]
+    pub(crate) fn entry_gain_at(&self, uuid: Uuid, position: f64, transporting: bool) -> Option<f32> {
+        self.members.iter().find(|entry| entry.uuid == uuid)
+            .map(|entry| match entry.strip_automation.volume.borrow().as_ref() {
+                Some(source) => source(position, transporting),
+                None => entry.strip_params.volume_db.get()
+            })
     }
 
     /// The pan an entry's STRIP actually reads each block.
@@ -348,7 +363,8 @@ impl Engine {
     /// Bind the composite's `dry` (12) + `wet` (13) to their static fields AND their automation, so a Value
     /// track targeting them drives the mix over the transport. Mirrors `bind_gain_pan_automation`, but a
     /// composite has no pan: the shared `StripAutomation` carries dry in `volume` and wet in `panning`.
-    /// Re-observed on an automation change; a field with no track leaves its override `None` (static rules).
+    /// Re-observed on an automation change; a field with neither a track nor a modulation leaves its override
+    /// `None` (static rules).
     fn bind_dry_wet(&mut self, binding: &mut EffectCompositeBinding, invalidate: &Rc<dyn Fn()>) {
         *binding.dry_wet_automation.volume.borrow_mut() = None;
         *binding.dry_wet_automation.panning.borrow_mut() = None;
@@ -362,27 +378,16 @@ impl Engine {
             return; // a midi composite has no dry / wet
         }
         let uuid = binding.composite_uuid;
-        let (dry_handle, dry_subs, dry_collections, _) = self.observe_param(uuid, &[binding.spec.dry_key], 0, invalidate);
-        let (wet_handle, wet_subs, wet_collections, _) = self.observe_param(uuid, &[binding.spec.wet_key], 1, invalidate);
-        binding.dry_wet_subs.extend(dry_subs);
-        binding.dry_wet_subs.extend(wet_subs);
-        binding.dry_wet_collections.extend(dry_collections);
-        binding.dry_wet_collections.extend(wet_collections);
-        // The STATIC values are kept live by `subscribe_dry_wet`; only the AUTOMATION overrides are bound here.
-        // `resolve` hands back a UNIT value while the curve covers the position, else the FIELD's stored value
-        // with its own kind (already real dB) — map only the unit case, as the strip / sends do.
-        if dry_handle.track.is_some() {
-            *binding.dry_wet_automation.volume.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
-                let (value, kind, modulation) = dry_handle.resolve_held(position, transporting);
-                host_float(value, kind, modulation, &GAIN)
-            }));
-        }
-        if wet_handle.track.is_some() {
-            *binding.dry_wet_automation.panning.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
-                let (value, kind, modulation) = wet_handle.resolve_held(position, transporting);
-                host_float(value, kind, modulation, &GAIN)
-            }));
-        }
+        let (dry_key, wet_key) = (binding.spec.dry_key, binding.spec.wet_key);
+        // The STATIC values are kept live by `subscribe_dry_wet`; only the AUTOMATION / MODULATION overrides
+        // are bound here. `resolve` hands back a UNIT value while the curve covers the position, else the
+        // FIELD's stored value with its own kind (already real dB) — map only the unit case, as the strip does.
+        let (_, dry_resolver) = self.observe_field_automation(uuid, &[dry_key], 0, &mut binding.dry_wet_subs,
+            &mut binding.dry_wet_collections, invalidate, map_gain);
+        let (_, wet_resolver) = self.observe_field_automation(uuid, &[wet_key], 1, &mut binding.dry_wet_subs,
+            &mut binding.dry_wet_collections, invalidate, map_gain);
+        *binding.dry_wet_automation.volume.borrow_mut() = dry_resolver;
+        *binding.dry_wet_automation.panning.borrow_mut() = wet_resolver;
     }
 
     /// Re-observe a composite's OWN automation after a REAL automation change (a Value track attached /
@@ -404,7 +409,7 @@ impl Engine {
         binding.members = members;
     }
 
-    /// Bind ONE entry's gain (40) + mute (41) + solo (42), static and automated. The strip reads them exactly
+    /// Bind ONE entry's gain (40) + mute (41) + solo (42), static, automated and modulated. The strip reads them exactly
     /// as a unit's channel strip reads its own: gain -> `volume`, mute -> `mute`. Solo is NOT read by the strip
     /// (it silences OTHER entries); the reconcile resolves it across siblings into `forced_silent`.
     fn bind_entry_params(&mut self, entry: &mut CompositeEntry, spec: &EffectCompositeSpec,
@@ -420,43 +425,23 @@ impl Engine {
             collection.terminate(&mut self.graph);
         }
         if spec.gain_key != 0 {
-            let (handle, subs, collections, _) = self.observe_param(entry.uuid, &[spec.gain_key], 0, invalidate);
-            entry.param_subs.extend(subs);
-            entry.param_collections.extend(collections);
             // The STATIC gain is kept live by its own field subscription (see `build_one_entry`); only the
-            // AUTOMATION override is bound here.
-            if handle.track.is_some() {
-                *entry.strip_automation.volume.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
-                    let (value, kind, modulation) = handle.resolve_held(position, transporting);
-                    host_float(value, kind, modulation, &GAIN)
-                }));
-            }
+            // AUTOMATION / MODULATION override is bound here.
+            let (_, resolver) = self.observe_field_automation(entry.uuid, &[spec.gain_key], 0,
+                &mut entry.param_subs, &mut entry.param_collections, invalidate, map_gain);
+            *entry.strip_automation.volume.borrow_mut() = resolver;
         }
         if spec.pan_key != 0 {
-            let (handle, subs, collections, _) = self.observe_param(entry.uuid, &[spec.pan_key], 3, invalidate);
-            entry.param_subs.extend(subs);
-            entry.param_collections.extend(collections);
-            // The STATIC pan is kept live by its own field subscription (see `build_one_entry`); only the
-            // AUTOMATION override is bound here, mapped bipolar like the strip's own pan.
-            if handle.track.is_some() {
-                *entry.strip_automation.panning.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
-                    let (value, kind, modulation) = handle.resolve_held(position, transporting);
-                    host_float(value, kind, modulation, &PAN)
-                }));
-            }
+            let (_, resolver) = self.observe_field_automation(entry.uuid, &[spec.pan_key], 3,
+                &mut entry.param_subs, &mut entry.param_collections, invalidate, map_pan);
+            *entry.strip_automation.panning.borrow_mut() = resolver;
         }
         if spec.mute_key != 0 {
-            let (handle, subs, collections, _) = self.observe_param(entry.uuid, &[spec.mute_key], 1, invalidate);
-            entry.param_subs.extend(subs);
-            entry.param_collections.extend(collections);
-            entry.strip_params.mute.set(handle.field.get() >= 0.5);
             // The mute field stores a bool as 0.0/1.0; the strip thresholds at >= 0.5 either way.
-            if handle.track.is_some() {
-                *entry.strip_automation.mute.borrow_mut() = Some(Rc::new(move |position: f64, transporting: bool| {
-                    let (value, kind, modulation) = handle.resolve_held(position, transporting);
-                    host_bool(value, kind, modulation)
-                }));
-            }
+            let (handle, resolver) = self.observe_field_automation(entry.uuid, &[spec.mute_key], 1,
+                &mut entry.param_subs, &mut entry.param_collections, invalidate, host_bool);
+            entry.strip_params.mute.set(handle.field.get() >= 0.5);
+            *entry.strip_automation.mute.borrow_mut() = resolver;
         }
         if spec.solo_key != 0 {
             // Observed so an edit enqueues the unit (the reconcile re-resolves every sibling's silent state);
