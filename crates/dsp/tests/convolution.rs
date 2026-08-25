@@ -90,7 +90,7 @@ fn assert_close(actual: &[Vec<f32>; 2], expected: &[Vec<f32>; 2], tolerance: f32
 }
 
 fn full_load(convolver: &mut Convolver, ir_l: &[f32], ir_r: &[f32], stereo: bool, normalize: bool, reverse: bool) {
-    convolver.begin_load(ir_l, ir_r, stereo, normalize, reverse);
+    convolver.begin_load(ir_l, ir_r, stereo, normalize, reverse, 1.0);
     while convolver.load_step(ir_l, ir_r, 64) {}
 }
 
@@ -240,7 +240,7 @@ fn progressive_load_converges_and_stays_finite() {
     let expected = reference(&taps, &input, length);
     let mut convolver = boxed_convolver();
     convolver.dry_gain = 0.0;
-    convolver.begin_load(&ir_l, &ir_r, true, false, false);
+    convolver.begin_load(&ir_l, &ir_r, true, false, false, 1.0);
     let mut actual = [vec![0.0f32; length], vec![0.0f32; length]];
     let mut cursor = 0;
     while cursor < length {
@@ -304,6 +304,33 @@ fn oversize_ir_truncates_at_cap() {
         let diff = max_abs_diff(&actual[channel], &input[channel]);
         assert!(diff < 1e-3, "truncated ir must reduce to the unit tap, diff {diff}");
     }
+}
+
+#[test]
+fn resampled_ir_matches_decimated_reference() {
+    let mut rng = Rng(37);
+    // a 2x-rate IR with taps only at EVEN indices: linear interp at ratio 2.0 lands exactly on them
+    let frames_src = 10000;
+    let mut ir = vec![0.0f32; frames_src];
+    let mut taps = Vec::new();
+    for _ in 0..50 {
+        let delay = (((rng.next_f32() * 0.5 + 0.5) * ((frames_src / 2) - 1) as f32) as usize).min(frames_src / 2 - 1);
+        let gain = rng.next_f32();
+        ir[delay * 2] = gain;
+        taps.push((delay, gain, gain));
+    }
+    taps.sort_unstable_by_key(|&(delay, _, _)| delay);
+    taps.dedup_by_key(|&mut (delay, _, _)| delay);
+    let taps: Vec<(usize, f32, f32)> = taps.iter().map(|&(d, _, _)| (d, ir[d * 2], ir[d * 2])).collect();
+    let length = 128 * 120;
+    let input = noise(&mut rng, length);
+    let expected = reference(&taps, &input, length);
+    let mut convolver = boxed_convolver();
+    convolver.dry_gain = 0.0;
+    convolver.begin_load(&ir, &[], false, false, false, 2.0);
+    while convolver.load_step(&ir, &[], 64) {}
+    let actual = run_convolver(&mut convolver, &input, length);
+    assert_close(&actual, &expected, 2e-3, "resampled");
 }
 
 #[test]

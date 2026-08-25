@@ -32,6 +32,8 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.device-compressor]
 opt-level = 3
+[profile.release.package.device-convolver]
+opt-level = 3
 [profile.release.package.device-crusher]
 opt-level = 3
 [profile.release.package.device-dattorro-reverb]

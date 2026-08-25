@@ -37,7 +37,7 @@ fn bench_canonical(ir_frames: usize) {
     let mut convolver = boxed_zeroed::<Convolver>();
     convolver.init();
     convolver.dry_gain = 0.0;
-    convolver.begin_load(&ir_l, &ir_r, true, false, false);
+    convolver.begin_load(&ir_l, &ir_r, true, false, false, 1.0);
     while convolver.load_step(&ir_l, &ir_r, 64) {}
     let input: Vec<f32> = (0..BLOCK).map(|_| rng.next_f32()).collect();
     let mut out_l = vec![0.0f32; BLOCK];

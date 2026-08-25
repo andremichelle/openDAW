@@ -212,9 +212,25 @@ struct Loader {
     frames: usize,
     stereo: bool,
     reverse: bool,
+    ratio: f32,
     cursor: usize,
     total: usize,
     active: bool
+}
+
+// Linear-interpolating read at `index * ratio` (IR resampled to the engine rate at load time).
+#[inline]
+fn read_resampled(source: &[f32], index: usize, ratio: f32) -> f32 {
+    if ratio == 1.0 {
+        return if index < source.len() { source[index] } else { 0.0 };
+    }
+    let position = index as f64 * ratio as f64;
+    let base = position as usize;
+    if base + 1 >= source.len() {
+        return if base < source.len() { source[base] } else { 0.0 };
+    }
+    let fraction = (position - base as f64) as f32;
+    source[base] + fraction * (source[base + 1] - source[base])
 }
 
 /// The full convolver: stereo in, stereo IR (channel-wise), zero latency, wet predelay + wet/dry.
@@ -248,7 +264,7 @@ impl Convolver {
         self.l1.init(128, 128, true);
         self.l2.init(1024, 2048, false);
         self.l3.init(8192, 16384, false);
-        self.loader = Loader {frames: 0, stereo: false, reverse: false, cursor: 0, total: 0, active: false};
+        self.loader = Loader {frames: 0, stereo: false, reverse: false, ratio: 1.0, cursor: 0, total: 0, active: false};
         self.wet_gain = 1.0;
         self.dry_gain = 1.0;
         self.ir_gain = 1.0;
@@ -257,10 +273,12 @@ impl Convolver {
     }
 
     /// Start loading a new IR (`stereo` = distinct right channel; mono duplicates left).
-    /// `normalize` scales the wet path to unity IR energy. The transform runs via `load_step`.
-    pub fn begin_load(&mut self, ir_left: &[f32], ir_right: &[f32], stereo: bool, normalize: bool, reverse: bool) {
-        let frames = if stereo { ir_left.len().min(ir_right.len()) } else { ir_left.len() }.min(MAX_IR_FRAMES);
-        self.loader = Loader {frames, stereo, reverse, cursor: 0, total: 0, active: frames > 0};
+    /// `normalize` scales the wet path to unity IR energy; `ratio` = IR rate / engine rate (the
+    /// IR is linear-resampled at load time). The transform runs via `load_step`.
+    pub fn begin_load(&mut self, ir_left: &[f32], ir_right: &[f32], stereo: bool, normalize: bool, reverse: bool, ratio: f32) {
+        let source_frames = if stereo { ir_left.len().min(ir_right.len()) } else { ir_left.len() };
+        let frames = ((source_frames as f64 / ratio.max(1e-3) as f64) as usize).min(MAX_IR_FRAMES);
+        self.loader = Loader {frames, stereo, reverse, ratio, cursor: 0, total: 0, active: frames > 0};
         self.head_taps = [[0.0; HEAD]; 2];
         self.l1.begin_ir(frames);
         self.l2.begin_ir(frames);
@@ -269,17 +287,17 @@ impl Convolver {
         self.ir_gain = if normalize && frames > 0 {
             let mut energy = 0.0f64;
             for index in 0..frames {
-                let left = ir_left[index] as f64;
-                let right = if stereo { ir_right[index] as f64 } else { left };
+                let left = read_resampled(ir_left, index, ratio) as f64;
+                let right = if stereo { read_resampled(ir_right, index, ratio) as f64 } else { left };
                 energy += 0.5 * (left * left + right * right);
             }
             if energy > 1e-12 { (1.0 / libm::sqrt(energy)) as f32 } else { 1.0 }
         } else { 1.0 };
-        let Loader {frames, stereo, reverse, ..} = self.loader;
+        let Loader {frames, stereo, reverse, ratio, ..} = self.loader;
         let read = |channel: usize, index: usize| -> f32 {
             if index >= frames { return 0.0 }
             let source = if reverse { frames - 1 - index } else { index };
-            if channel == 1 && stereo { ir_right[source] } else { ir_left[source] }
+            read_resampled(if channel == 1 && stereo { ir_right } else { ir_left }, source, ratio)
         };
         for channel in 0..2 {
             for index in 0..HEAD {
@@ -295,11 +313,11 @@ impl Convolver {
         if !self.loader.active {
             return false;
         }
-        let Loader {frames, stereo, reverse, ..} = self.loader;
+        let Loader {frames, stereo, reverse, ratio, ..} = self.loader;
         let read = move |channel: usize, index: usize| -> f32 {
             if index >= frames { return 0.0 }
             let source = if reverse { frames - 1 - index } else { index };
-            if channel == 1 && stereo { ir_right[source] } else { ir_left[source] }
+            read_resampled(if channel == 1 && stereo { ir_right } else { ir_left }, source, ratio)
         };
         let mut work = (budget * 16384) as isize;
         while work > 0 && self.loader.cursor < self.loader.total {
