@@ -29,10 +29,10 @@ const synth = (gain: number) => `class Processor {
 
 // Build a project: unit + Apparat sine (peak `gain`) + a note; `addEffect(source, unit)` attaches the effect on
 // `unit.audioEffects`. Seeds the Apparat script into the registry (as engine-host would). Returns the box graph.
-export const buildEffectProject = (gain: number, addEffect: (source: BoxGraph, unit: AudioUnitBox) => Box): BoxGraph => {
+export const buildEffectProject = (gain: number, addEffect: (source: BoxGraph, unit: AudioUnitBox) => Box,
+                                   code: string = synth(gain)): BoxGraph => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
-    const code = synth(gain)
     let apparatUuid = ""
     source.beginTransaction()
     const unit = AudioUnitBox.create(source, UUID.generate(), box => {

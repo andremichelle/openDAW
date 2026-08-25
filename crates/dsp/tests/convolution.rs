@@ -204,6 +204,7 @@ fn dry_wet_and_predelay() {
     convolver.dry_gain = 0.25;
     convolver.wet_gain = 0.5;
     convolver.predelay_samples = 300;
+    convolver.clear_runtime(); // transport start snaps the pre-delay glide to its target
     full_load(&mut convolver, &ir, &[], false, false, false);
     let actual = run_convolver(&mut convolver, &input, length);
     for channel in 0..2 {
@@ -215,19 +216,102 @@ fn dry_wet_and_predelay() {
     }
 }
 
+const MAKEUP: f64 = 1.4125375; // +3 dB
+
+// Peak normalization: MAKEUP / sqrt(max 8-bin mean |H|^2) over both channels on the convolver's 16384-point grid.
+fn peak_gain(taps: &[(usize, f32, f32)]) -> f32 {
+    let mut power = [vec![0.0f64; 8193], vec![0.0f64; 8193]];
+    for bin in 0..=8192usize {
+        let (mut l_re, mut l_im, mut r_re, mut r_im) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+        for &(delay, left, right) in taps {
+            let angle = -2.0 * std::f64::consts::PI * (bin * delay) as f64 / 16384.0;
+            let (sin, cos) = angle.sin_cos();
+            l_re += left as f64 * cos;
+            l_im += left as f64 * sin;
+            r_re += right as f64 * cos;
+            r_im += right as f64 * sin;
+        }
+        power[0][bin] = l_re * l_re + l_im * l_im;
+        power[1][bin] = r_re * r_re + r_im * r_im;
+    }
+    let mut peak = 0.0f64;
+    for channel in 0..2 {
+        for bin in 0..=8192usize {
+            let lo = bin.saturating_sub(7);
+            let mean = power[channel][lo..=bin].iter().sum::<f64>() / (bin + 1 - lo) as f64;
+            peak = peak.max(mean);
+        }
+    }
+    (MAKEUP / peak.sqrt()) as f32
+}
+
 #[test]
-fn normalize_scales_to_unit_energy() {
+fn normalize_scales_the_peak_response_to_unity() {
     let mut rng = Rng(17);
-    let ir = vec![2.0f32; 400]; // energy = 400 * 4 -> gain 1/40
+    let ir = vec![2.0f32; 400]; // |H| peaks at DC: 800 -> gain MAKEUP / 800
     let length = 128 * 30;
     let input = noise(&mut rng, length);
     let mut convolver = boxed_convolver();
     convolver.dry_gain = 0.0;
     full_load(&mut convolver, &ir, &[], false, true, false);
     let actual = run_convolver(&mut convolver, &input, length);
-    let taps: Vec<(usize, f32, f32)> = (0..400).map(|d| (d, 2.0 / 40.0, 2.0 / 40.0)).collect();
+    let tap = (2.0 * MAKEUP / 800.0) as f32;
+    let taps: Vec<(usize, f32, f32)> = (0..400).map(|d| (d, tap, tap)).collect();
     let expected = reference(&taps, &input, length);
     assert_close(&actual, &expected, 2e-3, "normalize");
+}
+
+#[test]
+fn normalize_bounds_a_narrow_resonance() {
+    // a ringing IR (decaying sine on a grid bin, ~3 bins wide): the 8-bin band mean lets it sit at most ~4 dB
+    // above the input, never more
+    let bin = 100.0f32;
+    let frequency = bin / 16384.0;
+    let ir: Vec<f32> = (0..20000).map(|index| (index as f32 * frequency * std::f32::consts::TAU).sin() * 0.9995f32.powi(index as i32)).collect();
+    let length = 128 * 400;
+    let sine: Vec<f32> = (0..length).map(|index| (index as f32 * frequency * std::f32::consts::TAU).sin()).collect();
+    let input = [sine.clone(), sine];
+    let mut convolver = boxed_convolver();
+    convolver.dry_gain = 0.0;
+    full_load(&mut convolver, &ir, &[], false, true, false);
+    let actual = run_convolver(&mut convolver, &input, length);
+    let settled = &actual[0][length - 8192..];
+    let peak = settled.iter().fold(0.0f32, |a, &v| a.max(v.abs()));
+    assert!(peak <= 1.6 * MAKEUP as f32, "resonance peak {peak} more than 4 dB + makeup above the input");
+    assert!(peak >= 0.95 * MAKEUP as f32, "resonance peak {peak} below the makeup level");
+}
+
+#[test]
+fn normalize_lifts_a_quiet_ir_to_unity_peak() {
+    let mut rng = Rng(19);
+    let ir = vec![1e-5f32; 500]; // |H| peak 5e-3 -> gain MAKEUP * 200
+    let length = 128 * 30;
+    let input = noise(&mut rng, length);
+    let mut convolver = boxed_convolver();
+    convolver.dry_gain = 0.0;
+    full_load(&mut convolver, &ir, &[], false, true, false);
+    let actual = run_convolver(&mut convolver, &input, length);
+    let tap = (2e-3 * MAKEUP) as f32;
+    let taps: Vec<(usize, f32, f32)> = (0..500).map(|d| (d, tap, tap)).collect();
+    let expected = reference(&taps, &input, length);
+    assert_close(&actual, &expected, 2e-3, "normalize quiet");
+}
+
+#[test]
+fn normalize_peak_covers_the_l3_partitions() {
+    // sparse taps far into the IR: the peak must include the L3 partition spectra (with their sign alternation)
+    let mut rng = Rng(20);
+    let (ir_l, ir_r, taps) = sparse_ir(&mut rng, 120000, 120);
+    let length = 128 * 1200;
+    let input = noise(&mut rng, length);
+    let mut convolver = boxed_convolver();
+    convolver.dry_gain = 0.0;
+    full_load(&mut convolver, &ir_l, &ir_r, true, true, false);
+    let actual = run_convolver(&mut convolver, &input, length);
+    let gain = peak_gain(&taps);
+    let scaled: Vec<(usize, f32, f32)> = taps.iter().map(|&(delay, left, right)| (delay, left * gain, right * gain)).collect();
+    let expected = reference(&scaled, &input, length);
+    assert_close(&actual, &expected, 2e-3, "normalize l3 peak");
 }
 
 #[test]
@@ -367,4 +451,173 @@ fn unload_goes_dry_only() {
     for channel in 0..2 {
         assert!(max_abs_diff(&actual[channel], &input[channel]) < 1e-6, "unloaded must be dry pass-through");
     }
+}
+
+// Swapping the IR of a LOADED convolver: the old tail must keep sounding while the new IR loads
+// partition by partition (no level hole), and once loaded + flushed the output must equal the new
+// IR's reference over the WHOLE input stream (the input history survived the swap, incl. repack).
+fn ir_swap_case(frames_a: usize, frames_b: usize, normalize: bool, seed: u64) {
+    let mut rng = Rng(seed);
+    let (a_l, a_r, _) = sparse_ir(&mut rng, frames_a, 150);
+    let (b_l, b_r, taps_b) = sparse_ir(&mut rng, frames_b, 150);
+    let pre = 128 * 300;
+    let post = 128 * 700;
+    let input = noise(&mut rng, pre + post);
+    let mut convolver = boxed_convolver();
+    convolver.dry_gain = 0.0;
+    full_load(&mut convolver, &a_l, &a_r, true, normalize, false);
+    let mut actual = [vec![0.0f32; pre + post], vec![0.0f32; pre + post]];
+    let mut rms = Vec::new();
+    let mut cursor = 0;
+    while cursor < pre + post {
+        let end = cursor + BLOCK;
+        if cursor == pre {
+            convolver.begin_load(&b_l, &b_r, true, normalize, false, 1.0);
+        }
+        if cursor >= pre {
+            convolver.load_step(&b_l, &b_r, 2);
+        }
+        let (head, tail) = actual.split_at_mut(1);
+        convolver.process(&input[0][cursor..end], &input[1][cursor..end], &mut head[0][cursor..end], &mut tail[0][cursor..end], 0, end - cursor);
+        let energy: f32 = actual[0][cursor..end].iter().chain(&actual[1][cursor..end]).map(|value| value * value).sum();
+        rms.push((energy / (2 * BLOCK) as f32).sqrt());
+        cursor = end;
+    }
+    assert!(!convolver.loading(), "load must finish within the run");
+    let before = rms[pre / BLOCK - 32..pre / BLOCK].iter().sum::<f32>() / 32.0;
+    let floor = rms[pre / BLOCK..pre / BLOCK + 64].iter().cloned().fold(f32::MAX, f32::min);
+    assert!(floor > before * 0.5, "swap {frames_a}->{frames_b} normalize={normalize}: tail hole, rms floor {floor} vs {before} before");
+    let gain = if normalize { peak_gain(&taps_b) } else { 1.0 };
+    let scaled: Vec<(usize, f32, f32)> = taps_b.iter().map(|&(delay, left, right)| (delay, left * gain, right * gain)).collect();
+    let expected = reference(&scaled, &input, pre + post);
+    let settled = pre + 128 * 400;
+    for channel in 0..2 {
+        assert!(actual[channel].iter().all(|value| value.is_finite()), "swap ch{channel} finite");
+        let diff = max_abs_diff(&actual[channel][settled..], &expected[channel][settled..]);
+        let peak = expected[channel][settled..].iter().fold(0.0f32, |a, &v| a.max(v.abs())).max(1e-6);
+        assert!(diff <= 2e-3 * peak, "swap {frames_a}->{frames_b} normalize={normalize} ch{channel}: settled diff {diff} (peak {peak})");
+    }
+}
+
+#[test]
+fn ir_swap_same_partition_count() {
+    ir_swap_case(60000, 61000, false, 31);
+}
+
+#[test]
+fn ir_swap_grows_partitions() {
+    ir_swap_case(60000, 200000, false, 37);
+}
+
+#[test]
+fn ir_swap_shrinks_partitions() {
+    ir_swap_case(200000, 30000, false, 41);
+}
+
+#[test]
+fn ir_swap_shrinks_below_l3() {
+    ir_swap_case(200000, 10000, false, 43);
+}
+
+#[test]
+fn ir_swap_normalized_glides_to_exact_gain() {
+    ir_swap_case(60000, 200000, true, 47);
+}
+
+// Swap from a quiet IR (high normalize gain) to a hot one: the hot IR must never play at the old gain.
+#[test]
+fn ir_swap_never_bursts_when_the_new_ir_is_hotter() {
+    let mut rng = Rng(53);
+    let quiet = vec![1e-4f32; 500];
+    let hot = vec![2.0f32; 400];
+    let pre = 128 * 100;
+    let post = 128 * 100;
+    let input = noise(&mut rng, pre + post);
+    let mut convolver = boxed_convolver();
+    convolver.dry_gain = 0.0;
+    full_load(&mut convolver, &quiet, &[], false, true, false);
+    let mut actual = [vec![0.0f32; pre + post], vec![0.0f32; pre + post]];
+    let mut cursor = 0;
+    while cursor < pre + post {
+        let end = cursor + BLOCK;
+        if cursor == pre {
+            convolver.begin_load(&hot, &[], false, true, false, 1.0);
+        }
+        if cursor >= pre {
+            convolver.load_step(&hot, &[], 2);
+        }
+        let (head, tail) = actual.split_at_mut(1);
+        convolver.process(&input[0][cursor..end], &input[1][cursor..end], &mut head[0][cursor..end], &mut tail[0][cursor..end], 0, end - cursor);
+        cursor = end;
+    }
+    // the normalized boxcar's worst case: sum |h| * gain = 800 * MAKEUP / 800
+    let bound = MAKEUP as f32 * 1.05;
+    let peak = actual[0][pre..].iter().fold(0.0f32, |a, &v| a.max(v.abs()));
+    assert!(peak <= bound, "swap burst: peak {peak} after the swap (bound {bound})");
+}
+
+// Swap from a hot long IR to a quiet long one: the old partitions still sounding must not be lifted by the
+// new gain before they are replaced.
+#[test]
+fn ir_swap_holds_the_gain_while_old_partitions_sound() {
+    let mut rng = Rng(59);
+    let (hot_l, hot_r, _) = sparse_ir(&mut rng, 200000, 150);
+    let quiet_l: Vec<f32> = hot_l.iter().map(|value| value * 1e-3).collect();
+    let quiet_r: Vec<f32> = hot_r.iter().map(|value| value * 1e-3).collect();
+    let pre = 128 * 400;
+    let post = 128 * 400; // covers the pipeline hold and the rise to the new gain
+    let input = noise(&mut rng, pre + post);
+    let mut convolver = boxed_convolver();
+    convolver.dry_gain = 0.0;
+    full_load(&mut convolver, &hot_l, &hot_r, true, true, false);
+    let mut actual = [vec![0.0f32; pre + post], vec![0.0f32; pre + post]];
+    let mut cursor = 0;
+    while cursor < pre + post {
+        let end = cursor + BLOCK;
+        if cursor == pre {
+            convolver.begin_load(&quiet_l, &quiet_r, true, true, false, 1.0);
+        }
+        if cursor >= pre {
+            convolver.load_step(&quiet_l, &quiet_r, 2);
+        }
+        let (head, tail) = actual.split_at_mut(1);
+        convolver.process(&input[0][cursor..end], &input[1][cursor..end], &mut head[0][cursor..end], &mut tail[0][cursor..end], 0, end - cursor);
+        cursor = end;
+    }
+    let before = actual[0][pre - 128 * 100..pre].iter().fold(0.0f32, |a, &v| a.max(v.abs()));
+    let after = actual[0][pre..].iter().fold(0.0f32, |a, &v| a.max(v.abs()));
+    assert!(after <= before * 1.5, "swap lifted the old tail: peak {after} after vs {before} before");
+}
+
+// Automating the pre-delay: steps must glide with a fractional read, no discontinuity in the wet output.
+#[test]
+fn predelay_automation_does_not_click() {
+    let ir = {
+        let mut ir = vec![0.0f32; 200];
+        ir[0] = 1.0;
+        ir
+    };
+    let length = 128 * 200;
+    let frequency = 220.0 / 48000.0;
+    let sine: Vec<f32> = (0..length).map(|index| (index as f32 * frequency * std::f32::consts::TAU).sin()).collect();
+    let input = [sine.clone(), sine];
+    let mut convolver = boxed_convolver();
+    convolver.dry_gain = 0.0;
+    full_load(&mut convolver, &ir, &[], false, false, false);
+    let mut actual = [vec![0.0f32; length], vec![0.0f32; length]];
+    let steps = [0usize, 960, 0, 4800, 24000, 100, 0];
+    let mut cursor = 0;
+    while cursor < length {
+        let end = cursor + BLOCK;
+        let quantum = cursor / BLOCK;
+        if quantum % 25 == 0 {
+            convolver.predelay_samples = steps[(quantum / 25) % steps.len()];
+        }
+        let (head, tail) = actual.split_at_mut(1);
+        convolver.process(&input[0][cursor..end], &input[1][cursor..end], &mut head[0][cursor..end], &mut tail[0][cursor..end], 0, end - cursor);
+        cursor = end;
+    }
+    // a 220 Hz sine steps at most 2*pi*220/48000 ~ 0.029 per sample; glide pitch-shifts it, never jumps it
+    let max_step = actual[0].windows(2).map(|pair| (pair[1] - pair[0]).abs()).fold(0.0f32, f32::max);
+    assert!(max_step < 0.08, "pre-delay automation click: max sample step {max_step}");
 }

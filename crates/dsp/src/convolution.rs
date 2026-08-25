@@ -71,12 +71,41 @@ impl<const FFT: usize, const BINS: usize, const TABLE: usize, const SPEC: usize>
     }
 
     /// Configure for a new IR of `frames` total frames; partitions cover `d0 ..` in `b` chunks.
-    /// Clears the runtime (slot indexing depends on the partition count).
+    /// A loaded level keeps its input history and old spectra (repacked on a partition-count change)
+    /// so the tail keeps sounding while `load_partition` replaces the IR; only an EMPTY level clears.
     pub fn begin_ir(&mut self, frames: usize) {
         let span = frames.saturating_sub(self.d0);
-        self.parts = span.div_ceil(self.b).min(self.max_parts());
-        self.ready = 0;
-        self.clear_runtime();
+        let parts = span.div_ceil(self.b).min(self.max_parts());
+        if parts == 0 || self.parts == 0 {
+            self.parts = parts;
+            self.ready = 0;
+            self.clear_runtime();
+            return;
+        }
+        if parts != self.parts {
+            self.repack(parts);
+        }
+        self.parts = parts;
+        self.ready = parts;
+    }
+
+    // FDL ring rotated to age order (slot 0 = newest), channel 1 moved to its new base, grown slots zeroed.
+    fn repack(&mut self, parts: usize) {
+        let old = self.parts;
+        let keep = old.min(parts) * BINS;
+        for channel in 0..2 {
+            let base = channel * old * BINS;
+            self.fdl_re[base..base + old * BINS].rotate_left(self.slot * BINS);
+            self.fdl_im[base..base + old * BINS].rotate_left(self.slot * BINS);
+        }
+        self.slot = 0;
+        for buffer in [&mut self.fdl_re, &mut self.fdl_im, &mut self.ir_re, &mut self.ir_im] {
+            buffer.copy_within(old * BINS..old * BINS + keep, parts * BINS);
+            if parts > old {
+                buffer[old * BINS..parts * BINS].fill(0.0);
+                buffer[parts * BINS + old * BINS..2 * parts * BINS].fill(0.0);
+            }
+        }
     }
 
     /// Transform partition `part` from the IR reader `read(channel, index) -> f32`. Runs off the
@@ -97,6 +126,17 @@ impl<const FFT: usize, const BINS: usize, const TABLE: usize, const SPEC: usize>
             self.tables.forward(&fft_in[..2 * b], re, im, sc_re, sc_im);
         }
         self.ready = self.ready.max(part + 1);
+    }
+
+    /// The loaded spectrum (`b + 1` bins) of partition `part`, split re/im.
+    pub fn spectrum(&self, channel: usize, part: usize) -> (&[f32], &[f32]) {
+        let base = channel * self.parts * BINS + part * BINS;
+        (&self.ir_re[base..base + self.b + 1], &self.ir_im[base..base + self.b + 1])
+    }
+
+    /// Forward FFT of `input` (`2b` samples) with this level's tables.
+    pub fn transform(&self, input: &[f32], re: &mut [f32], im: &mut [f32], sc_re: &mut [f32], sc_im: &mut [f32]) {
+        self.tables.forward(input, re, im, sc_re, sc_im);
     }
 
     /// Add this level's contribution for the UPCOMING quantum (period step `step`) into `tail`.
@@ -212,11 +252,28 @@ struct Loader {
     frames: usize,
     stereo: bool,
     reverse: bool,
+    normalize: bool,
     ratio: f32,
     cursor: usize,
     total: usize,
+    head_done: bool,
+    settle: bool,
+    previous_gain: f32,
     active: bool
 }
+
+// normalize gain: drops snap (a hotter IR must never play at the old gain), rises wait until the L3
+// pipeline has flushed the old IR (2 periods + 1) and then glide over ~40 ms
+const GAIN_RISE: f32 = 0.0005;
+const GAIN_HOLD_QUANTA: usize = 2 * (8192 / BLOCK) + 1;
+// pre-delay changes crossfade between the old and the new tap over 10 ms (no read-head jump, no pitch zip)
+const PREDELAY_FADE_STEP: f32 = 1.0 / 480.0;
+// the full-IR spectrum for normalize lives on the L3 grid: 16384-point bins, 8193 of them
+const SPEC_FFT: usize = 16384;
+const SPEC_BINS: usize = SPEC_FFT / 2 + 1;
+const NORMALIZE_BAND: usize = 8;
+// +3 dB over the band peak: calibrated on the 48 cloud IRs (pink-noise wet level median -6 dB, IQR 3 dB)
+const NORMALIZE_MAKEUP: f64 = 1.4125375;
 
 // Linear-interpolating read at `index * ratio` (IR resampled to the engine rate at load time).
 #[inline]
@@ -247,16 +304,26 @@ pub struct Convolver {
     fft_in: [f32; 16384],
     sc_re: [f32; 8192],
     sc_im: [f32; 8192],
+    spec_re: [[f32; L3_BINS]; 2],
+    spec_im: [[f32; L3_BINS]; 2],
     loader: Loader,
     write: usize,
     pos: usize,
     quantum: usize,
     stagger: usize,
     predelay_pos: usize,
+    predelay_current: usize,
+    predelay_next: usize,
+    predelay_fade: f32,
     pub predelay_samples: usize,
     pub wet_gain: f32,
     pub dry_gain: f32,
-    ir_gain: f32
+    ir_gain: f32,
+    ir_gain_target: f32,
+    gain_pending: f32,
+    gain_hold_until: usize,
+    gain_pending_active: bool,
+    loaded: bool
 }
 
 impl Convolver {
@@ -265,11 +332,16 @@ impl Convolver {
         self.l1.init(128, 128, true);
         self.l2.init(1024, 2048, false);
         self.l3.init(8192, 16384, false);
-        self.loader = Loader {frames: 0, stereo: false, reverse: false, ratio: 1.0, cursor: 0, total: 0, active: false};
+        self.loader = Loader {frames: 0, stereo: false, reverse: false, normalize: false, ratio: 1.0, cursor: 0, total: 0, head_done: false, settle: false, previous_gain: 1.0, active: false};
         self.wet_gain = 1.0;
         self.dry_gain = 1.0;
         self.ir_gain = 1.0;
+        self.ir_gain_target = 1.0;
+        self.loaded = false;
         self.predelay_samples = 0;
+        self.gain_pending = 1.0;
+        self.gain_hold_until = 0;
+        self.gain_pending_active = false;
         self.stagger = 0;
         self.clear_runtime();
     }
@@ -283,27 +355,21 @@ impl Convolver {
     }
 
     /// Start loading a new IR (`stereo` = distinct right channel; mono duplicates left).
-    /// `normalize` scales the wet path to unity IR energy; `ratio` = IR rate / engine rate (the
-    /// IR is linear-resampled at load time). The transform runs via `load_step`.
+    /// `normalize` scales the wet path so the IR's peak |H(f)| is 0 dB (the wet signal is never
+    /// louder than the input at any frequency); `ratio` = IR rate / engine rate (the IR is
+    /// linear-resampled at load time). The transform runs via `load_step`, which also accumulates
+    /// the IR spectrum and re-targets the gain to the portion loaded so far.
     pub fn begin_load(&mut self, ir_left: &[f32], ir_right: &[f32], stereo: bool, normalize: bool, reverse: bool, ratio: f32) {
         let source_frames = if stereo { ir_left.len().min(ir_right.len()) } else { ir_left.len() };
         let frames = ((source_frames as f64 / ratio.max(1e-3) as f64) as usize).min(MAX_IR_FRAMES);
-        self.loader = Loader {frames, stereo, reverse, ratio, cursor: 0, total: 0, active: frames > 0};
+        let settle = !self.loaded;
+        let previous_gain = self.ir_gain_target;
+        self.loader = Loader {frames, stereo, reverse, normalize, ratio, cursor: 0, total: 0, head_done: false, settle, previous_gain, active: frames > 0};
         self.head_taps = [[0.0; HEAD]; 2];
         self.l1.begin_ir(frames);
         self.l2.begin_ir(frames);
         self.l3.begin_ir(frames);
         self.loader.total = self.l1.parts() + self.l2.parts() + self.l3.parts();
-        self.ir_gain = if normalize && frames > 0 {
-            let mut energy = 0.0f64;
-            for index in 0..frames {
-                let left = read_resampled(ir_left, index, ratio) as f64;
-                let right = if stereo { read_resampled(ir_right, index, ratio) as f64 } else { left };
-                energy += 0.5 * (left * left + right * right);
-            }
-            if energy > 1e-12 { (1.0 / libm::sqrt(energy)) as f32 } else { 1.0 }
-        } else { 1.0 };
-        let Loader {frames, stereo, reverse, ratio, ..} = self.loader;
         let read = |channel: usize, index: usize| -> f32 {
             if index >= frames { return 0.0 }
             let source = if reverse { frames - 1 - index } else { index };
@@ -312,6 +378,55 @@ impl Convolver {
         for channel in 0..2 {
             for index in 0..HEAD {
                 self.head_taps[channel][index] = read(channel, index);
+            }
+            self.spec_re[channel].fill(0.0);
+            self.spec_im[channel].fill(0.0);
+        }
+        self.gain_pending_active = false;
+        if settle {
+            self.ir_gain = if normalize { 0.0 } else { 1.0 };
+            self.ir_gain_target = self.ir_gain;
+        } else if !normalize {
+            self.retarget_gain(1.0);
+        }
+        self.loaded = frames > 0;
+    }
+
+    // 1 / peak of the NORMALIZE_BAND-bin mean power over the accumulated spectrum (both channels): a dense
+    // tail's random spectral peaks average out, a real resonance stays bounded; a silent IR keeps unity
+    fn peak_gain(&self) -> f32 {
+        let mut peak = 0.0f64;
+        for channel in 0..2 {
+            let (re, im) = (&self.spec_re[channel], &self.spec_im[channel]);
+            let power = |bin: usize| (re[bin] * re[bin] + im[bin] * im[bin]) as f64;
+            let mut sum = 0.0f64;
+            for bin in 0..SPEC_BINS {
+                sum += power(bin);
+                if bin >= NORMALIZE_BAND {
+                    sum -= power(bin - NORMALIZE_BAND);
+                }
+                peak = peak.max(sum / (bin + 1).min(NORMALIZE_BAND) as f64);
+            }
+        }
+        if peak > 1e-24 { (NORMALIZE_MAKEUP / libm::sqrt(peak)) as f32 } else { 1.0 }
+    }
+
+    // L3 partition `part` sits at offset 16384 + 8192 * part: on the 16384 grid its phase factor is (-1)^(bin * part)
+    fn accumulate_l3_spectrum(&mut self, part: usize) {
+        for channel in 0..2 {
+            let (re, im) = self.l3.spectrum(channel, part);
+            let (acc_re, acc_im) = (&mut self.spec_re[channel], &mut self.spec_im[channel]);
+            if part % 2 == 0 {
+                for bin in 0..SPEC_BINS {
+                    acc_re[bin] += re[bin];
+                    acc_im[bin] += im[bin];
+                }
+            } else {
+                for bin in 0..SPEC_BINS {
+                    let sign = if bin % 2 == 0 { 1.0 } else { -1.0 };
+                    acc_re[bin] += sign * re[bin];
+                    acc_im[bin] += sign * im[bin];
+                }
             }
         }
     }
@@ -330,6 +445,16 @@ impl Convolver {
             read_resampled(if channel == 1 && stereo { ir_right } else { ir_left }, source, ratio)
         };
         let mut work = (budget * 16384) as isize;
+        if self.loader.normalize && !self.loader.head_done {
+            for channel in 0..2 {
+                for index in 0..SPEC_FFT {
+                    self.fft_in[index] = read(channel, index);
+                }
+                self.l3.transform(&self.fft_in, &mut self.spec_re[channel], &mut self.spec_im[channel], &mut self.sc_re, &mut self.sc_im);
+            }
+            self.loader.head_done = true;
+            work -= 16384;
+        }
         while work > 0 && self.loader.cursor < self.loader.total {
             let part = self.loader.cursor;
             let (l1, l2) = (self.l1.parts(), self.l2.parts());
@@ -341,11 +466,26 @@ impl Convolver {
                 work -= 2048;
             } else {
                 self.l3.load_partition(part - l1 - l2, &read, &mut self.fft_in, &mut self.sc_re, &mut self.sc_im);
+                if self.loader.normalize {
+                    self.accumulate_l3_spectrum(part - l1 - l2);
+                }
                 work -= 16384;
             }
             self.loader.cursor += 1;
         }
-        if self.loader.cursor >= self.loader.total {
+        let done = self.loader.cursor >= self.loader.total;
+        if self.loader.normalize {
+            // while old partitions still sound, neither they nor the new ones may exceed their own gain
+            let gain = self.peak_gain();
+            if self.loader.settle {
+                self.ir_gain = gain;
+                self.ir_gain_target = gain;
+                self.loader.settle = false;
+            } else {
+                self.retarget_gain(if done { gain } else { gain.min(self.loader.previous_gain) });
+            }
+        }
+        if done {
             self.loader.active = false;
         }
         self.loader.active
@@ -363,6 +503,9 @@ impl Convolver {
         self.l2.begin_ir(0);
         self.l3.begin_ir(0);
         self.ir_gain = 1.0;
+        self.ir_gain_target = 1.0;
+        self.gain_pending_active = false;
+        self.loaded = false;
         self.clear_runtime();
     }
 
@@ -382,6 +525,21 @@ impl Convolver {
         self.pos = 0;
         self.quantum = self.stagger;
         self.predelay_pos = 0;
+        self.predelay_current = self.predelay_samples.min(PREDELAY_CAP - 1);
+        self.predelay_next = self.predelay_current;
+        self.predelay_fade = 1.0;
+    }
+
+    // A rise waits until the old IR has drained from the L3 pipeline, a drop applies at once.
+    fn retarget_gain(&mut self, gain: f32) {
+        if gain > self.ir_gain_target {
+            self.gain_pending = gain;
+            self.gain_hold_until = self.quantum + GAIN_HOLD_QUANTA;
+            self.gain_pending_active = true;
+        } else {
+            self.ir_gain_target = gain;
+            self.gain_pending_active = false;
+        }
     }
 
     /// Process `[s0, s1)` of the quantum buffers (the `FreeVerb::process` calling convention).
@@ -403,19 +561,31 @@ impl Convolver {
                 wet[channel] = acc + self.tail[channel][pos];
             }
             self.write += 1;
+            if self.ir_gain_target < self.ir_gain {
+                self.ir_gain = self.ir_gain_target;
+            } else {
+                self.ir_gain += (self.ir_gain_target - self.ir_gain) * GAIN_RISE;
+            }
+            if self.predelay_fade < 1.0 {
+                self.predelay_fade += PREDELAY_FADE_STEP;
+                if self.predelay_fade >= 1.0 {
+                    self.predelay_current = self.predelay_next;
+                }
+            } else if self.predelay_samples.min(PREDELAY_CAP - 1) != self.predelay_current {
+                self.predelay_next = self.predelay_samples.min(PREDELAY_CAP - 1);
+                self.predelay_fade = 0.0;
+            }
+            let fade = self.predelay_fade.min(1.0);
+            let read_current = (self.predelay_pos + PREDELAY_CAP - self.predelay_current) % PREDELAY_CAP;
+            let read_next = (self.predelay_pos + PREDELAY_CAP - self.predelay_next) % PREDELAY_CAP;
             for channel in 0..2 {
-                let delayed = if self.predelay_samples == 0 { wet[channel] } else {
-                    let read = (self.predelay_pos + PREDELAY_CAP - self.predelay_samples.min(PREDELAY_CAP - 1)) % PREDELAY_CAP;
-                    let value = self.predelay_ring[channel][read];
-                    self.predelay_ring[channel][self.predelay_pos] = wet[channel];
-                    value
-                };
+                let ring = &mut self.predelay_ring[channel];
+                ring[self.predelay_pos] = wet[channel];
+                let delayed = if fade < 1.0 { ring[read_current] * (1.0 - fade) + ring[read_next] * fade } else { ring[read_current] };
                 let out = self.dry_gain * dry[channel] + self.wet_gain * self.ir_gain * delayed;
                 if channel == 0 { out_left[index] = out } else { out_right[index] = out }
             }
-            if self.predelay_samples != 0 {
-                self.predelay_pos = (self.predelay_pos + 1) % PREDELAY_CAP;
-            }
+            self.predelay_pos = (self.predelay_pos + 1) % PREDELAY_CAP;
             self.pos += 1;
             if self.pos == BLOCK {
                 self.on_block_boundary();
@@ -434,6 +604,10 @@ impl Convolver {
     fn on_block_boundary(&mut self) {
         self.pos = 0;
         self.quantum += 1;
+        if self.gain_pending_active && self.quantum >= self.gain_hold_until {
+            self.ir_gain_target = self.gain_pending;
+            self.gain_pending_active = false;
+        }
         for channel in 0..2 {
             self.head_hist[channel].copy_within(BLOCK..2 * BLOCK, 0);
             self.tail[channel].fill(0.0);
