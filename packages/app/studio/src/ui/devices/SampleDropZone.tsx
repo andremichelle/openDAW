@@ -1,10 +1,11 @@
 import css from "./SampleDropZone.sass?inline"
-import {asInstanceOf, Lifecycle, Terminable} from "@opendaw/lib-std"
+import {asInstanceOf, Lifecycle, Provider, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {PointerField} from "@opendaw/lib-box"
 import {IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {AudioFileBox} from "@opendaw/studio-boxes"
+import {ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {Icon} from "@/ui/components/Icon"
 import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {StudioService} from "@/service/StudioService"
@@ -15,9 +16,10 @@ type Construct = {
     lifecycle: Lifecycle
     service: StudioService
     file: PointerField<Pointers.AudioFile>
+    menuItems?: Provider<ReadonlyArray<MenuItem>>
 }
 
-export const SampleDropZone = ({lifecycle, service, file}: Construct): HTMLElement => {
+export const SampleDropZone = ({lifecycle, service, file, menuItems}: Construct): HTMLElement => {
     const element: HTMLElement = (
         <div className={className}>
             <Icon symbol={IconSymbol.Waveform}/>
@@ -42,7 +44,8 @@ export const SampleDropZone = ({lifecycle, service, file}: Construct): HTMLEleme
             })
         }),
         sampleSelector.configureBrowseClick(element),
-        sampleSelector.configureContextMenu(element),
+        ContextMenu.subscribe(element, collector =>
+            collector.addItems(sampleSelector.createRemoveMenuData(), ...menuItems?.() ?? [])),
         sampleSelector.configureDrop(element)
     )
     return element

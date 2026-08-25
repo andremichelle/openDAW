@@ -23,10 +23,10 @@ export namespace ConvolverImpulseResponseMenu {
             }, () => cache.failed = true)
     }
 
-    export const populate = (parent: MenuItem, service: StudioService,
-                             file: PointerField<Pointers.AudioFile>): void => {
+    export const create = (service: StudioService, file: PointerField<Pointers.AudioFile>,
+                           options?: { separatorBefore?: boolean }): MenuItem => {
         resolve()
-        parent.addMenuItem(MenuItem.default({label: "Impulse Responses", separatorBefore: true})
+        return MenuItem.default({label: "Impulse Responses", separatorBefore: options?.separatorBefore})
             .setRuntimeChildrenProcedure(submenu => {
                 const folder = cache.folder
                 if (folder === null) {
@@ -35,7 +35,12 @@ export namespace ConvolverImpulseResponseMenu {
                     return
                 }
                 populateFolder(submenu, folder, service, file)
-            }))
+            })
+    }
+
+    export const populate = (parent: MenuItem, service: StudioService,
+                             file: PointerField<Pointers.AudioFile>): void => {
+        parent.addMenuItem(create(service, file, {separatorBefore: true}))
     }
 
     const populateFolder = (parent: MenuItem, folder: SampleIndexFolder, service: StudioService,

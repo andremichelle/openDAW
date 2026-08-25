@@ -39,9 +39,9 @@ The circular drop zone holds the IR sample.
 - **Click** the zone to browse for a sample
 - **Right-click** for further options
 
-The name of the loaded sample appears below the zone. Without a sample the device passes the dry signal only.
+The name of the loaded sample appears below the zone. Without a sample the device passes the dry signal only. If the referenced sample cannot be loaded (missing or failed download), the zone turns orange and the device stays dry.
 
-Swapping the IR is glitch-free: the new response is prepared in the background and blends in within a few dozen milliseconds, without interrupting the audio.
+The device menu (⋮) has an **Impulse Responses** entry listing the free, openly licensed collection from the openDAW cloud. The same list appears when right-clicking the drop zone. Pick one to load it, the currently loaded response is marked with a check.
 
 ---
 
@@ -65,11 +65,11 @@ Level of the original signal. Range: -∞ dB to 0 dB.
 
 ## 3. Options
 
-### 3.1 NRM (Normalize)
+### 3.1 Norm (Normalize)
 
 Scales the response to unit energy, so the wet level stays comparable when switching between quiet and loud IR samples. Enabled by default. Disable it to use the sample's raw gain, for example when an IR was calibrated deliberately.
 
-### 3.2 REV (Reverse)
+### 3.2 Rev (Reverse)
 
 Plays the impulse response backwards. The tail turns into a swell that builds up towards the sound, the classic reverse-reverb effect. The reversed response is delayed by the IR length, since the loudest part of most IRs sits at their start.
 
@@ -82,4 +82,4 @@ Plays the impulse response backwards. The tail turns into a swell that builds up
 - Direct FIR for the first 128 samples: zero latency, no delay compensation needed
 - FFT-partitioned tail in three stages (128 / 1024 / 8192 samples), with the large partitions pipelined across their period so the CPU load stays flat, without spikes
 - SIMD-accelerated spectral processing; the cost is nearly independent of the IR length (a full 16-second stereo IR costs about 1-2% of the audio budget)
-- IRs are transformed in the background, spread over the render quanta: loading or swapping an IR never interrupts playback
+- Loading or swapping an IR can currently cause a short glitch while the response is prepared

@@ -72,7 +72,8 @@ export const ConvolverDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                       }}
                       populateControls={() => (
                           <div className={className}>
-                              <SampleDropZone lifecycle={lifecycle} service={service} file={adapter.box.file}/>
+                              <SampleDropZone lifecycle={lifecycle} service={service} file={adapter.box.file}
+                                              menuItems={() => [ConvolverImpulseResponseMenu.create(service, adapter.box.file)]}/>
                               {info}
                               <div className="toggles">
                                   {([
