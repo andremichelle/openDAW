@@ -39,6 +39,39 @@ Feature framing (Neon)
   perfect", avoid absolute claims.
 • Manual: https://opendaw.studio/manuals/devices/instruments/neon
 
+Feature framing (Cubed)
+• A monophonic acid bass synthesizer in the spirit of the silver box. Say "in the spirit of", do not
+  name the manufacturer and do not claim to be their product.
+• The sound comes from the sequencer, not the knobs. Accent placement and slides are the story.
+• The accent circuit recharges like the hardware, so an accent after a rest hits harder than one in
+  a dense run.
+• No education angle. Cubed is an acid machine and it is fun, that is the whole pitch. This includes
+  the newsletter, which drops the schools framing for this one.
+• History, get it right: the box started acid house and walked into techno. It did not "shape
+  electronic dance music", EDM was not even a phrase back then.
+• Voice: we are openDAW, not a teacher. Talk to people who want to make a noise tonight. Never
+  explain the panel or narrate what a control does.
+• Cubed is a clone. Never present its limits as our design decision ("we made it small on purpose").
+  The panel is short because the original was a practice bass for guitarists, sold badly, was
+  discontinued after a couple of years, and ended up cheap in second-hand shops where people used it
+  wrong. That is the story worth telling.
+• Manual: https://opendaw.studio/manuals/devices/instruments/cubed
+
+Feature framing (Modulators)
+• Assigned by right-clicking any control: device knob, mixer fader, send, MIDI CC.
+• Four kinds: LFO, Steps, Random, Macro. One source drives many parameters, each with its own depth.
+• Modulation is added on top of automation, it does not replace it.
+• Timed kinds keep running while the transport is stopped and re-align to the song position on
+  pause, resume, locate and loop jumps.
+• Random is seeded, so renders match what was heard. Say reproducible, not "deterministic".
+• A depth is a parameter too, so a modulator can drive another modulator's depth.
+• The pitch is what modulation DOES: organic movement that never quite repeats, or tight predictable
+  movement locked to the tempo. It injects life into any kind of music, not only electronic. Never
+  call it "a core idea that is hard to explain".
+• Education angle: students experiment with different kinds of movement to shape their sounds. No
+  UI mechanics (no "right-click"), no Macro fader, no instructions to teachers.
+• Manual: https://opendaw.studio/manuals/modulation
+
 Still open (see the questions at the bottom of nextcloud.txt)
 • Release status and whether to call for pilot schools.
 • Discord channel name for the post.
