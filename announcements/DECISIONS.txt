@@ -5,17 +5,27 @@ Notes to remember how the user wants announcements written. Keep this updated.
 Writing style (all channels)
 • No dashes (em or en dashes). Use commas or periods instead.
 • No semicolons. Split into two sentences, or use a comma.
+• No exclamation marks, not even in headlines.
 • Plain language. No marketing speak (for example, avoid "The point:").
+• Opening paragraph states what the thing is and what it does, in plain words. No hype openers
+  like "a proper convolution reverb" or "your track sits right in it", also not on Discord.
 • No long text. Handle every subject brief and to the point.
 • No technical details unless the prompt asks for them.
-• Always include the education angle, unless the prompt says otherwise.
+• Always include the education angle, unless the prompt says otherwise. Exception: Discord never
+  gets the education angle unless the prompt asks for it.
 
 Per channel
 • Discord: supports markdown. Big headline uses "# " and starts with "Update: ", in Title Case
   (keep brand casing like openDAW and Nextcloud). Links use markdown masked links [label](url).
   The tone is familiar, we talk to our community like friends. No business speech, no endless
-  feature lists, no spec sheets. Short flowing paragraphs that tell what is fun about the thing.
-  Use "### " sublines sparingly, only when a post really needs structure. No emoji.
+  feature lists, no spec sheets.
+  Structure, taken from the Project Templates post: headline, then ONE line that says what the
+  thing is, then "### " sublines in Title Case, each followed by one or two plain sentences, then a
+  blank line and "Enjoy :heart:". No other emoji. Lines are not wrapped.
+• Never say a feature or collection is "free" or "shipped". openDAW is free, that is understood.
+• Do not repeat a fact in two paragraphs.
+• Complete sentences only, everywhere. No fragments like "A convolution reverb." or a bare link
+  under a subline.
 • LinkedIn: professional. Hashtags at the end.
 • Newsletter: focus on the schools angle. No greeting line (no "Hi ..."). No beta or pilot note.
 
@@ -40,6 +50,10 @@ Feature framing (Convolver)
 • Education angle: students record an impulse response of their own room and use it as a reverb.
 • The free IR collection is CC BY, credit OpenAIR (University of York) and Adventure Kid.
 • Skip trivia like the Hamilton Mausoleum Guinness record. Nobody posting on LinkedIn needs it.
+• Mention that convolution is CPU intensive and suggest using it as a send effect on an audio bus.
+• Technical detail, when asked: non-uniform partitioned convolution (Gardner), first 128 samples
+  direct FIR for zero latency, FFT partitions 128/1024/8192, big-partition work spread across
+  render blocks, complex multiply-accumulate on WebAssembly SIMD128 (crates/dsp/src/convolution.rs).
 
 Feature framing (Neon)
 • A phase distortion synthesizer in the spirit of the Casio CZ series (1984). Say "in the spirit of",
