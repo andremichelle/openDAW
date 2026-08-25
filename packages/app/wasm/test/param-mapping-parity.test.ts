@@ -11,7 +11,7 @@ import {readFileSync} from "node:fs"
 import {Arrays, isDefined, Option, Optional, panic, Terminable, UUID} from "@opendaw/lib-std"
 import {Address, BooleanField, BoxGraph, Constraints, Float32Field, Int32Field, PrimitiveType} from "@opendaw/lib-box"
 import {
-    ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
+    ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, ConvolverDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
     DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
     PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
     TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox,
@@ -20,7 +20,7 @@ import {
 } from "@opendaw/studio-boxes"
 import {
     ArpeggioDeviceBoxAdapter, AutotuneDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
-    CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
+    ConvolverDeviceBoxAdapter, CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
     GateDeviceBoxAdapter, NeonDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
     ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
     RevampDeviceBoxAdapter, ReverbDeviceBoxAdapter, SampleLoader, SampleLoaderManager, StereoToolDeviceBoxAdapter,
@@ -108,6 +108,7 @@ const buildBoxes = () => {
     const compressor = CompressorDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(0)})
     const crusher = CrusherDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(1)})
     const dattorro = DattorroReverbDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(2)})
+    const convolver = ConvolverDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(16)})
     const delay = DelayDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(3)})
     const fold = FoldDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(4)})
     const gate = GateDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(5)})
@@ -156,7 +157,7 @@ const buildBoxes = () => {
     const macroModulator = MacroModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(2)})
     const randomModulator = RandomModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(3)})
     boxGraph.endTransaction()
-    return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, soundfont, compressor, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
+    return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, soundfont, compressor, convolver, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
         stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, velocity, vaporisateur, neon, nano, playfieldSample,
         lfoModulator, stepsModulator, macroModulator, randomModulator}
 }
@@ -235,6 +236,8 @@ const CASES: ReadonlyArray<DeviceCase> = [
         createAdapter: context => new AutotuneDeviceBoxAdapter(context, boxes.autotune), tsOnly: []},
     {name: "compressor", file: "device_compressor.wasm",
         createAdapter: context => new CompressorDeviceBoxAdapter(context, boxes.compressor), tsOnly: []},
+    {name: "convolver", file: "device_convolver.wasm",
+        createAdapter: context => new ConvolverDeviceBoxAdapter(context, boxes.convolver), tsOnly: []},
     {name: "crusher", file: "device_crusher.wasm",
         createAdapter: context => new CrusherDeviceBoxAdapter(context, boxes.crusher), tsOnly: []},
     {name: "dattorro-reverb", file: "device_dattorro_reverb.wasm",

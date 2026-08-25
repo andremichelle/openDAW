@@ -84,14 +84,42 @@ The device wires whatever wins.
 - [x] `packages/studio/core-wasm/src/engine-modules.ts`
 - [x] studio UI editor (minimal: IR drop/pick + wet/dry/predelay/normalize/reverse)
 - [x] `packages/app/wasm/test/convolver-device.test.ts` (parity + behaviour)
-- [ ] full `build-wasm.sh` + typecheck + test run green
+- [x] `packages/app/wasm/test/convolver-bench.test.ts` (wasm speed gate)
+- [x] param-mapping-parity entry + regenerated `test-files/all-boxes.od`
+- [x] full `build-wasm.sh` + typecheck + full test run green (cargo workspace + 87 vitest files)
+- [ ] DeviceBenchmark entry: skipped — that harness cannot feed an IR sample, so it would only
+      measure the dry pass-through; the dedicated wasm bench above is the real number
 
 ## Results
 
-Native (Apple Silicon, `--release`, per 128-frame quantum, stereo, means over steady state):
+Native (Apple Silicon, `cargo test --release --test convolution_bench -- --ignored --nocapture`,
+per 128-frame quantum, stereo, budget @48 kHz = 2666 us):
 
-| IR      | uniform B=128 | uniform B=512 | 128+8192 | 128+1024+8192 |
-|---------|--------------:|--------------:|---------:|--------------:|
-| (filled in by bench run) |
+| layout                              | ir frames | mean       | worst        |
+|-------------------------------------|----------:|-----------:|-------------:|
+| canonical 128 / 128+1024+8192       |     4800  |  24 us  0.9% |  107 us  4.0% |
+| canonical 128 / 128+1024+8192       |   384000  |  27 us  1.0% |  186 us  7.0% |
+| uniform B=128 (textbook FDL)        |    24000  |  14 us  0.5% |   31 us  1.1% |
+| uniform B=128 (textbook FDL)        |   384000  | 193 us  7.2% |  234 us  8.8% |
+| two-level 128 + 8192                |   384000  |  18 us  0.7% |  160 us  6.0% |
 
-Decision: (filled in after benches)
+The canonical non-uniform layout is FLAT in IR length (the tail cost is spread across the period);
+the textbook uniform FDL grows linearly and is already 5x more expensive at 8 s mean. The worst
+quanta (~7%) are the two L3 16k-FFT steps — spread further only if it ever matters.
+
+spectral_mac kernel: padding the bin count to a multiple of 4 buys the SIMD lanes
+(1025 bins 4.6 Gcmul/s -> 1028 bins 6.7 Gcmul/s); the layout pads all spectra accordingly.
+
+WASM (node 48 kHz, same SIMD128 modules the worklet runs, full engine render, 8 s stereo noise
+IR, `convolver-bench.test.ts`): mean 37 us (1.4% budget), p99 230 us, worst real quantum
+~250-290 us (~10% budget, the L3 FFT/IFFT quanta). Zero latency, no PDC needed.
+
+Decision: canonical 3-level layout shipped (head FIR 0..128 direct, eager B=128 for 128..2048,
+slack B=1024 for 2048..16384, slack B=8192 for 16384..385024, MAC spread + staged IFFT).
+
+## Multithreading verdict
+
+The engine's linear memory is deliberately non-shared (relocatable on grow, #1030), so worker
+threads cannot see the heap: in-engine multithreading is off the table without re-architecting
+memory. At 1.4% mean / 10% worst budget for the maximum IR there is no need — SIMD + the
+non-uniform schedule already leave ~99% of the render budget free.

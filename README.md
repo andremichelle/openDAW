@@ -104,6 +104,7 @@ skyboundzoo, JHINZ, Mark Dammer, fork-kun, Martin Eigel
 * Arpeggio (plays the notes of a chord one after another)
 * Autotune (real-time monophonic pitch correction)
 * Cheap Reverb (FreeVerb variation)
+* Convolver (zero-latency partitioned convolution with impulse-response samples)
 * Crusher (degenerates audio signal)
 * Dattorro Reverb (dense algorithmic reverb based on Dattorro's design)
 * Delay (stereo delay with cross and filter options)

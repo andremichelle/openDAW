@@ -185,6 +185,7 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
     match id {
         0 | 1 => float_value(value, &GAIN_MAPPING),
         2 => float_value(value, &PRE_DELAY_MAPPING),
+        3 | 4 => if abi::bool_value(value) {1.0} else {0.0},
         _ => f32::NAN
     }
 }
