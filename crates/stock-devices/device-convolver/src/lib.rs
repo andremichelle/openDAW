@@ -5,20 +5,21 @@
 //! frames each block (`resolve_sample`), resampled to the engine rate at load time. The transform
 //! is TIME-DISTRIBUTED (a budget of partitions per block), so an IR swap never spikes the render.
 //!
-//! Parameters: wet `[11]` / dry `[12]` (decibel), pre-delay `[13]` (exp 0.001..0.5 s), normalize
-//! `[14]` (unity IR energy), reverse `[15]` (both retransform the IR).
+//! Parameters: wet `[11]` / dry `[12]` (decibel), pre-delay `[13]` (pow-by-center 0..0.5 s). Normalize
+//! `[14]` and reverse `[15]` are PLAIN FIELDS (observed, deliberately not automatable) that
+//! retransform the IR.
 //!
 //! Exports: `kind()`, `state_size()`, `process(desc_ptr)`, `init(...)`, `parameter_changed(...)`,
-//! `sample_changed(...)`, `reset(...)`, `map_parameter(...)`.
+//! `field_changed(...)`, `sample_changed(...)`, `reset(...)`, `map_parameter(...)`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{float_value, AudioEffect, Block, ParamValue, Ports};
+use abi::{float_value, AudioEffect, Block, FieldValue, ParamValue, Ports};
 use dsp::convolution::Convolver;
 use dsp::db_to_gain;
-use math::value_mapping::{Decibel, Exponential};
+use math::value_mapping::{Decibel, Power};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
@@ -34,7 +35,10 @@ const NORMALIZE_FIELD: [u16; 1] = [14];
 const REVERSE_FIELD: [u16; 1] = [15];
 
 const GAIN_MAPPING: Decibel = Decibel::default_volume();
-const PRE_DELAY_MAPPING: Exponential = Exponential {min: 0.001, max: 0.500};
+// TS `ValueMapping.powerByCenter(0.050, 0.0, 0.500)`: reaches a true 0 ms, 50 ms at knob center
+fn pre_delay_mapping() -> Power {
+    Power::by_center(0.050, 0.0, 0.500)
+}
 
 // per-block IR transform budget in 8192-partition units (a full 8 s IR loads in ~24 blocks)
 const LOAD_BUDGET: usize = 2;
@@ -87,6 +91,17 @@ impl ConvolverDevice {
             }
         }
     }
+
+    fn field_changed(state: &mut ConvolverState, id: u32, value: FieldValue) {
+        let FieldValue::Bool(flag) = value else { return };
+        if id == state.normalize_id && flag != state.normalize {
+            state.normalize = flag;
+            state.reload = state.sample.is_some();
+        } else if id == state.reverse_id && flag != state.reverse {
+            state.reverse = flag;
+            state.reload = state.sample.is_some();
+        }
+    }
 }
 
 impl AudioEffect for ConvolverDevice {
@@ -102,8 +117,8 @@ impl AudioEffect for ConvolverDevice {
         state.wet_id = abi::bind_parameter(&WET_FIELD);
         state.dry_id = abi::bind_parameter(&DRY_FIELD);
         state.pre_delay_id = abi::bind_parameter(&PRE_DELAY_FIELD);
-        state.normalize_id = abi::bind_parameter(&NORMALIZE_FIELD);
-        state.reverse_id = abi::bind_parameter(&REVERSE_FIELD);
+        state.normalize_id = abi::observe_field(&NORMALIZE_FIELD);
+        state.reverse_id = abi::observe_field(&REVERSE_FIELD);
         state.sample_id = abi::observe_sample(&FILE_POINTER);
     }
 
@@ -113,20 +128,8 @@ impl AudioEffect for ConvolverDevice {
         } else if id == state.dry_id {
             state.convolver.dry_gain = db_to_gain(float_value(value, &GAIN_MAPPING));
         } else if id == state.pre_delay_id {
-            let seconds = float_value(value, &PRE_DELAY_MAPPING);
+            let seconds = float_value(value, &pre_delay_mapping());
             state.convolver.predelay_samples = libm::ceilf(seconds * state.sample_rate) as usize;
-        } else if id == state.normalize_id {
-            let normalize = abi::bool_value(value);
-            if normalize != state.normalize {
-                state.normalize = normalize;
-                state.reload = state.sample.is_some();
-            }
-        } else if id == state.reverse_id {
-            let reverse = abi::bool_value(value);
-            if reverse != state.reverse {
-                state.reverse = reverse;
-                state.reload = state.sample.is_some();
-            }
         }
     }
 
@@ -177,6 +180,13 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
     unsafe { abi::with_state(state_ptr, |state| <ConvolverDevice as AudioEffect>::parameter_changed(state, id, ParamValue::from_wire(kind, value, modulation))) }
 }
 
+/// Apply an observed normalize/reverse FIELD value, by the id `observe_field` returned.
+#[no_mangle]
+pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, len: u32) {
+    let value = unsafe { FieldValue::from_wire(kind, bits, len) };
+    unsafe { abi::with_state(state_ptr, |state| ConvolverDevice::field_changed(state, id, value)) }
+}
+
 /// Apply an observed `file` pointer change (the IR sample), by the id `observe_sample` returned.
 #[no_mangle]
 pub extern "C" fn sample_changed(state_ptr: u32, id: u32, handle: u32, present: u32) {
@@ -190,8 +200,7 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
     let value = ParamValue::Unit(unit);
     match id {
         0 | 1 => float_value(value, &GAIN_MAPPING),
-        2 => float_value(value, &PRE_DELAY_MAPPING),
-        3 | 4 => if abi::bool_value(value) {1.0} else {0.0},
+        2 => float_value(value, &pre_delay_mapping()),
         _ => f32::NAN
     }
 }

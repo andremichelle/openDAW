@@ -42,6 +42,8 @@ type DeviceSpec = {
     readonly addToUnit: (boxGraph: BoxGraph, audioUnitBox: AudioUnitBox) => void
 }
 
+const impulseResponses = [0.05, 0.5, 2, 8].map(seconds => ({seconds, uuid: UUID.generate()}))
+
 const audioEffects: ReadonlyArray<DeviceSpec> = [
     {
         name: "Compressor",
@@ -50,18 +52,17 @@ const audioEffects: ReadonlyArray<DeviceSpec> = [
             box.index.setValue(0)
         })
     },
-    {
-        // worst case by design: the full 16 s dense-noise IR loads all three partition levels
-        name: "Convolver",
+    ...impulseResponses.map(({seconds, uuid}): DeviceSpec => ({
+        name: `Convolver ${seconds}s`,
         addToUnit: (boxGraph, unit) => {
-            const irFileBox = AudioFileBox.create(boxGraph, irUuid, box => box.endInSeconds.setValue(16))
+            const irFileBox = AudioFileBox.create(boxGraph, uuid, box => box.endInSeconds.setValue(seconds))
             ConvolverDeviceBox.create(boxGraph, UUID.generate(), box => {
                 box.host.refer(unit.audioEffects)
                 box.index.setValue(0)
                 box.file.refer(irFileBox)
             })
         }
-    },
+    })),
     {
         name: "Crusher",
         addToUnit: (boxGraph, unit) => CrusherDeviceBox.create(boxGraph, UUID.generate(), box => {
@@ -149,7 +150,6 @@ const audioEffects: ReadonlyArray<DeviceSpec> = [
 ]
 
 const sampleUuid = UUID.generate()
-const irUuid = UUID.generate()
 
 const createSampleData = (): AudioData => {
     const durationFrames = SAMPLE_RATE * 10
@@ -299,10 +299,9 @@ const createInstrumentSkeleton = (instrument: InstrumentSpec): ProjectSkeleton =
     return skeleton
 }
 
-// the Convolver's impulse response: dense decaying stereo noise, deterministic, full 16 s (every
-// partition level populated — the honest worst-case load)
-const createIrData = (): AudioData => {
-    const durationFrames = SAMPLE_RATE * 16
+// dense decaying stereo noise, deterministic, so every partition level up to `seconds` is populated
+const createIrData = (seconds: number): AudioData => {
+    const durationFrames = SAMPLE_RATE * seconds
     const data = AudioData.create(SAMPLE_RATE, durationFrames, 2)
     const [left, right] = data.frames
     for (let i = 0; i < durationFrames; i++) {
@@ -323,7 +322,8 @@ const injectOne = (service: StudioService, uuid: UUID.Bytes, data: AudioData, na
 
 const injectSample = (service: StudioService, sampleData: AudioData): void => {
     injectOne(service, sampleUuid, sampleData, "perf-sine", 10)
-    injectOne(service, irUuid, createIrData(), "perf-ir", 16)
+    impulseResponses.forEach(({seconds, uuid}) =>
+        injectOne(service, uuid, createIrData(seconds), `perf-ir-${seconds}s`, seconds))
 }
 
 type RenderResult = { elapsed: number, audio: Float32Array[], peak: number }

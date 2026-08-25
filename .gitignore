@@ -32,3 +32,4 @@ tsconfig.tsbuildinfo
 /assets.opendaw.studio/models/**/*.onnx.partial
 /presets/
 /announcements/temp.txt
+/tmp/

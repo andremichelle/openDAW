@@ -87,10 +87,14 @@ The device wires whatever wins.
 - [x] `packages/app/wasm/test/convolver-bench.test.ts` (wasm speed gate)
 - [x] param-mapping-parity entry + regenerated `test-files/all-boxes.od`
 - [x] full `build-wasm.sh` + typecheck + full test run green (cargo workspace + 87 vitest files)
-- [x] DeviceBenchmark entry (/performance): the harness DOES support sample injection (the same
-      loader path the Tape sine uses) — the entry feeds an 8 s dense decaying-noise IR, the honest
-      worst case. Verified live: 709 ms marginal over 60 s = ~31.5 us/quantum (~1.2% budget),
-      matching the node wasm bench (37 us), non-silent, heaviest effect in the list as expected
+- [x] DeviceBenchmark entries (/performance): the harness DOES support sample injection (the same
+      loader path the Tape sine uses) — four entries feed dense decaying-noise IRs of 0.05 s
+      (guitar-cab case), 0.5 s, 2 s and 8 s. Verified live (marginal over 60 s): 0.05 s = 499 ms,
+      0.5 s = 649 ms, 2 s = 666 ms, 8 s = 787 ms. Nearly flat in IR length above 0.5 s: the
+      per-quantum forward FFTs of all three levels are paid whenever the level has at least one
+      partition (0.5 s already reaches L3), only the per-partition MAC grows with the tail. The
+      0.05 s cab IR is the one qualitatively cheaper case: it never reaches L3 (nor most of L2),
+      so the whole 16k FFT cadence is skipped (~150 ms of the marginal)
 - [x] manual page `manuals/devices/audio/convolver.md` + Manuals nav entry
       (`convolver.webp` screenshot to be supplied)
 

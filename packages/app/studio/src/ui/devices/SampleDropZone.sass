@@ -1,0 +1,36 @@
+component
+  border-radius: 50%
+  color: var(--color-shadow)
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  outline: 1px dashed rgba(white, 0.1)
+  outline-offset: -4px
+  margin: 8px
+  position: relative
+  cursor: pointer
+  pointer-events: all
+
+  > svg
+    width: 24px
+    height: 24px
+    pointer-events: none
+
+  &[sample]
+    color: var(--color-blue)
+
+    &:after
+      content: attr(sample)
+      font-size: 0.5em
+      white-space: nowrap
+      text-overflow: ellipsis
+      overflow: hidden
+      position: absolute
+      bottom: -5px
+      width: 100%
+      text-align: center
+
+  &.accept
+    color: var(--color-black)
+    background-color: var(--color-blue)

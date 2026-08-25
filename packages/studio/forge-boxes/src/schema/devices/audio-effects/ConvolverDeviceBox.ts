@@ -7,7 +7,7 @@ export const ConvolverDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudio
     10: {type: "pointer", name: "file", pointerType: Pointers.AudioFile, mandatory: false},
     11: {
         type: "float32", name: "wet", pointerRules: ParameterPointerRules,
-        value: -3.0, constraints: "decibel", unit: "dB"
+        value: -6.0, constraints: "decibel", unit: "dB"
     },
     12: {
         type: "float32", name: "dry", pointerRules: ParameterPointerRules,
@@ -15,8 +15,8 @@ export const ConvolverDeviceBox: BoxSchema<Pointers> = DeviceFactory.createAudio
     },
     13: {
         type: "float32", name: "pre-delay", pointerRules: ParameterPointerRules,
-        value: 0.0, constraints: {min: 0.001, max: 0.500, scaling: "exponential"}, unit: "s"
+        value: 0.0, constraints: {min: 0.0, max: 0.500, scaling: "linear"}, unit: "s"
     },
-    14: {type: "boolean", name: "normalize", pointerRules: ParameterPointerRules, value: true},
-    15: {type: "boolean", name: "reverse", pointerRules: ParameterPointerRules}
+    14: {type: "boolean", name: "normalize", value: true},
+    15: {type: "boolean", name: "reverse"}
 })

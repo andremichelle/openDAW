@@ -10,6 +10,9 @@ import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 
 export class ConvolverDeviceBoxAdapter implements AudioEffectDeviceAdapter {
+    // WASM CONTRACT: mirrors `MAX_IR_FRAMES` (crates/dsp/src/convolution.rs), engine-rate frames after resampling.
+    static readonly MAX_IR_FRAMES = 770048
+
     readonly type = "audio-effect"
     readonly accepts = "audio"
     readonly manualUrl = DeviceManualUrls.Convolver
@@ -64,12 +67,8 @@ export class ConvolverDeviceBoxAdapter implements AudioEffectDeviceAdapter {
                 StringMapping.decible, "Dry"),
             preDelay: this.#parametric.createParameter(
                 box.preDelay,
-                ValueMapping.exponential(0.001, 0.500),
-                StringMapping.numeric({unit: "s", fractionDigits: 1, unitPrefix: true}), "Pre-Delay"),
-            normalize: this.#parametric.createParameter(
-                box.normalize, ValueMapping.bool, StringMapping.bool, "Normalize"),
-            reverse: this.#parametric.createParameter(
-                box.reverse, ValueMapping.bool, StringMapping.bool, "Reverse")
+                ValueMapping.powerByCenter(0.050, 0.0, 0.500),
+                StringMapping.numeric({unit: "s", fractionDigits: 1, unitPrefix: true}), "Pre-Delay")
         } as const
     }
 }
