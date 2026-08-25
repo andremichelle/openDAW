@@ -68,6 +68,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "Convolver",
+                        path: "/manuals/devices/audio/convolver",
+                        icon: EffectFactories.Convolver.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "Crusher",
                         path: "/manuals/devices/audio/crusher",
                         icon: EffectFactories.Crusher.defaultIcon

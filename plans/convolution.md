@@ -87,8 +87,12 @@ The device wires whatever wins.
 - [x] `packages/app/wasm/test/convolver-bench.test.ts` (wasm speed gate)
 - [x] param-mapping-parity entry + regenerated `test-files/all-boxes.od`
 - [x] full `build-wasm.sh` + typecheck + full test run green (cargo workspace + 87 vitest files)
-- [ ] DeviceBenchmark entry: skipped — that harness cannot feed an IR sample, so it would only
-      measure the dry pass-through; the dedicated wasm bench above is the real number
+- [x] DeviceBenchmark entry (/performance): the harness DOES support sample injection (the same
+      loader path the Tape sine uses) — the entry feeds an 8 s dense decaying-noise IR, the honest
+      worst case. Verified live: 709 ms marginal over 60 s = ~31.5 us/quantum (~1.2% budget),
+      matching the node wasm bench (37 us), non-silent, heaviest effect in the list as expected
+- [x] manual page `manuals/devices/audio/convolver.md` + Manuals nav entry
+      (`convolver.webp` screenshot to be supplied)
 
 ## Results
 

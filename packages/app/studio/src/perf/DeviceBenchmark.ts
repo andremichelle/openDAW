@@ -6,6 +6,7 @@ import {
     AudioRegionBox,
     AudioUnitBox,
     CompressorDeviceBox,
+    ConvolverDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
@@ -48,6 +49,18 @@ const audioEffects: ReadonlyArray<DeviceSpec> = [
             box.host.refer(unit.audioEffects)
             box.index.setValue(0)
         })
+    },
+    {
+        // worst case by design: the full 8 s dense-noise IR loads all three partition levels
+        name: "Convolver",
+        addToUnit: (boxGraph, unit) => {
+            const irFileBox = AudioFileBox.create(boxGraph, irUuid, box => box.endInSeconds.setValue(8))
+            ConvolverDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.host.refer(unit.audioEffects)
+                box.index.setValue(0)
+                box.file.refer(irFileBox)
+            })
+        }
     },
     {
         name: "Crusher",
@@ -136,6 +149,7 @@ const audioEffects: ReadonlyArray<DeviceSpec> = [
 ]
 
 const sampleUuid = UUID.generate()
+const irUuid = UUID.generate()
 
 const createSampleData = (): AudioData => {
     const durationFrames = SAMPLE_RATE * 10
@@ -285,14 +299,31 @@ const createInstrumentSkeleton = (instrument: InstrumentSpec): ProjectSkeleton =
     return skeleton
 }
 
-const injectSample = (service: StudioService, sampleData: AudioData): void => {
-    service.sampleManager.remove(sampleUuid)
-    const loader = new DefaultSampleLoader(sampleUuid)
+// the Convolver's impulse response: dense decaying stereo noise, deterministic, full 8 s (every
+// partition level populated — the honest worst-case load)
+const createIrData = (): AudioData => {
+    const durationFrames = SAMPLE_RATE * 8
+    const data = AudioData.create(SAMPLE_RATE, durationFrames, 2)
+    const [left, right] = data.frames
+    for (let i = 0; i < durationFrames; i++) {
+        const decay = Math.exp(-4 * i / durationFrames)
+        left[i] = ((Math.sin(i * 12.9898) * 43758.5453) % 1) * decay * 0.25
+        right[i] = ((Math.sin(i * 78.233) * 12543.2571) % 1) * decay * 0.25
+    }
+    return data
+}
+
+const injectOne = (service: StudioService, uuid: UUID.Bytes, data: AudioData, name: string, duration: number): void => {
+    service.sampleManager.remove(uuid)
+    const loader = new DefaultSampleLoader(uuid)
     const emptyPeaks: Peaks = {stages: [], data: [], numFrames: 0, numChannels: 0, nearest: () => null}
-    loader.setLoaded(sampleData, emptyPeaks, {
-        name: "perf-sine", duration: 10, sample_rate: SAMPLE_RATE, bpm: 120, origin: "openDAW"
-    })
+    loader.setLoaded(data, emptyPeaks, {name, duration, sample_rate: SAMPLE_RATE, bpm: 120, origin: "openDAW"})
     service.sampleManager.record(loader)
+}
+
+const injectSample = (service: StudioService, sampleData: AudioData): void => {
+    injectOne(service, sampleUuid, sampleData, "perf-sine", 10)
+    injectOne(service, irUuid, createIrData(), "perf-ir", 8)
 }
 
 type RenderResult = { elapsed: number, audio: Float32Array[], peak: number }
