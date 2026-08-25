@@ -87,7 +87,7 @@ export const SampleView = ({
                  )}>
                 <span className="name"><WaveformIcon/>{name}</span>
                 <span className="right">{bpm > 0 ? bpm.toFixed(1) : "-"}</span>
-                <span className="right">{duration < 1.0 ? `${Math.round(duration * 1000)}ms` : duration.toFixed(1)}</span>
+                <span className="right">{duration < 0.1 ? "< 0.1" : duration.toFixed(1)}</span>
             </div>
         </div>
     )
