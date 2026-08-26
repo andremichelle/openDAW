@@ -8,6 +8,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
+signalsmith = {path = "../signalsmith"}
 boxgraph = {path = "../boxgraph"}
 studio-boxes = {path = "../studio-boxes"}
 engine-env = {path = "../engine-env"}

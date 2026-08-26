@@ -3,6 +3,32 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.1.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-enums@0.0.84...@opendaw/studio-enums@0.1.0) (2026-08-17)
+
+### Features
+
+- **icons:** give the Vaporisateur its own icon ([1dbad8e](https://github.com/andremichelle/openDAW/commit/1dbad8e6aa2c8835877300a39fc45af2ce272ffb))
+
+## [0.0.84](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-enums@0.0.83...@opendaw/studio-enums@0.0.84) (2026-08-03)
+
+**Note:** Version bump only for package @opendaw/studio-enums
+
+## [0.0.83](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-enums@0.0.82...@opendaw/studio-enums@0.0.83) (2026-07-22)
+
+**Note:** Version bump only for package @opendaw/studio-enums
+
+## [0.0.82](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-enums@0.0.81...@opendaw/studio-enums@0.0.82) (2026-07-16)
+
+**Note:** Version bump only for package @opendaw/studio-enums
+
+## [0.0.81](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-enums@0.0.80...@opendaw/studio-enums@0.0.81) (2026-07-15)
+
+**Note:** Version bump only for package @opendaw/studio-enums
+
+## [0.0.80](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-enums@0.0.79...@opendaw/studio-enums@0.0.80) (2026-07-14)
+
+**Note:** Version bump only for package @opendaw/studio-enums
+
 ## [0.0.79](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-enums@0.0.78...@opendaw/studio-enums@0.0.79) (2026-07-07)
 
 **Note:** Version bump only for package @opendaw/studio-enums

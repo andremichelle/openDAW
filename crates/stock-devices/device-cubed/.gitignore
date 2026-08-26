@@ -1,0 +1,2 @@
+tests/fixtures/*.f32
+tests/fixtures/manifest.json

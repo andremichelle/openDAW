@@ -3,6 +3,50 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.107](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.106...@opendaw/studio-boxes@0.0.107) (2026-08-24)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
+## [0.0.106](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.105...@opendaw/studio-boxes@0.0.106) (2026-08-17)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
+## [0.0.105](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.104...@opendaw/studio-boxes@0.0.105) (2026-08-11)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
+## [0.0.104](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.103...@opendaw/studio-boxes@0.0.104) (2026-08-05)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
+## [0.0.103](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.102...@opendaw/studio-boxes@0.0.103) (2026-08-03)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
+## [0.0.102](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.101...@opendaw/studio-boxes@0.0.102) (2026-07-29)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
+## [0.0.101](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.100...@opendaw/studio-boxes@0.0.101) (2026-07-23)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
+## [0.0.100](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.99...@opendaw/studio-boxes@0.0.100) (2026-07-22)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
+## [0.0.99](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.98...@opendaw/studio-boxes@0.0.99) (2026-07-16)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
+## [0.0.98](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.97...@opendaw/studio-boxes@0.0.98) (2026-07-15)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
+## [0.0.97](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.96...@opendaw/studio-boxes@0.0.97) (2026-07-14)
+
+**Note:** Version bump only for package @opendaw/studio-boxes
+
 ## [0.0.96](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-boxes@0.0.95...@opendaw/studio-boxes@0.0.96) (2026-07-07)
 
 **Note:** Version bump only for package @opendaw/studio-boxes

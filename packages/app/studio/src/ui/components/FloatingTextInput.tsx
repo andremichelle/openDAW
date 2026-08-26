@@ -1,5 +1,5 @@
 import css from "./FloatingTextInput.sass?inline"
-import {isDefined, Point} from "@opendaw/lib-std"
+import {Errors, isDefined, Point} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 
@@ -30,7 +30,7 @@ export const FloatingTextInput = ({resolvers, position, value, unit, numeric}: C
         }
         inputField.onblur = () => {
             remove()
-            reject("cancel")
+            reject(Errors.AbortError)
         }
         inputField.onkeydown = (event: KeyboardEvent) => {
             if (event.key.toLowerCase() === "enter") {

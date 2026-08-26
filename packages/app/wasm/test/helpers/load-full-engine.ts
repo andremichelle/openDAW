@@ -8,8 +8,8 @@ import {createRequire} from "node:module"
 import {UUID} from "@opendaw/lib-std"
 import {ScriptBridges, ScriptEngine} from "../../../../studio/core-wasm/src/script-bridge"
 import {NamBridges} from "../../../../studio/core-wasm/src/nam-bridge"
-import {linkDevice, registerComposite} from "../../../../studio/core-wasm/src/device-linker"
-import {COMPOSITES, DEVICES as DEVICE_URLS} from "../../../../studio/core-wasm/src/engine-modules"
+import {linkDevice, registerComposite, registerEffectComposite} from "../../../../studio/core-wasm/src/device-linker"
+import {COMPOSITES, EFFECT_COMPOSITES, DEVICES as DEVICE_URLS} from "../../../../studio/core-wasm/src/engine-modules"
 
 const PUBLIC = path.resolve(__dirname, "../../public")
 
@@ -33,7 +33,7 @@ export type FullEngine = {
 
 export const loadFullEngine = async (sampleRate = 48000,
                                      onScriptMessage: (uuid: string, message: string) => void = () => {}): Promise<FullEngine> => {
-    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engineModule = await WebAssembly.compile(readFileSync(path.join(PUBLIC, "wasm", "engine.wasm")))
     const engine = new WebAssembly.Instance(engineModule, {env: {
@@ -61,6 +61,9 @@ export const loadFullEngine = async (sampleRate = 48000,
     }
     for (const composite of COMPOSITES) {
         registerComposite(engine, memory, composite)
+    }
+    for (const composite of EFFECT_COMPOSITES) {
+        registerEffectComposite(engine, memory, composite)
     }
     const drainSamples = (): number => {
         let satisfied = 0

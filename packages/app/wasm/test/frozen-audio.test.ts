@@ -58,7 +58,8 @@ describe("frozen audio", () => {
             let peak = 0, sample = 0
             for (let quantum = 0; quantum < quanta; quantum++) {
                 engine.render()
-                const output = new Float32Array(memory.buffer, engine.output_ptr(), len)
+                const enginePtr = engine.output_ptr()
+                const output = new Float32Array(memory.buffer, enginePtr, len)
                 for (const value of output) {peak = Math.max(peak, Math.abs(value))}
                 sample = output[0]
             }

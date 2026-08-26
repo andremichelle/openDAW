@@ -1,0 +1,36 @@
+component
+  display: flex
+  flex-direction: column
+  padding: 0.5em 0.25em
+  min-width: 15em
+  position: relative
+  border-radius: 3px
+
+  // With no branches the whole body is one drop zone (see installAppendTarget gated to empty): stretch to the
+  // full editor-row height (the dry/wet knobs are taller) and let the empty scroll fill it, so the ENTIRE area
+  // accepts a drop, not just the top.
+  &.empty
+    align-self: stretch
+
+  &.drop-target
+    outline: 0.5px dashed var(--color-blue)
+    outline-offset: -0.5px
+    background-color: rgba(255, 255, 255, 0.06)
+
+  .scroll
+    display: flex
+    flex-direction: column
+    gap: 0.125em
+    max-height: 9rem
+    overflow: hidden auto
+    width: max-content
+    min-width: 100%
+    padding-right: 8px // clear the 8px overlay scrollbar
+    mask-image: linear-gradient(to bottom, black calc(100% - 1.5em * var(--fade-bottom, 0)), transparent)
+    -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1.5em * var(--fade-bottom, 0)), transparent)
+
+  // The footer (Add Effect button) is the only non-scroll child; center it below the list.
+  > :not(.scroll)
+    flex: 0 0 auto
+    align-self: center
+    margin-top: calc(0.25em + 2px)

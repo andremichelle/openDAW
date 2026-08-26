@@ -11,9 +11,18 @@ import {HTMLSelection} from "@/ui/HTMLSelection"
 import {SoundfontSelection} from "@/ui/browse/SoundfontSelection"
 import {ResourceBrowser} from "@/ui/browse/ResourceBrowser"
 import {Soundfont} from "@opendaw/studio-adapters"
+import {SoundfontIndex, SoundfontIndexFolder} from "@/opendaw-api/SoundfontIndex"
 import {ResourceBrowserConfig} from "@/ui/browse/ResourceBrowserConfig"
+import {ResourceFolder} from "@/ui/browse/ResourceFolder"
+import {LocalTree} from "@/ui/browse/LocalTree"
 
 const className = Html.adoptStyleSheet(css, "SoundfontBrowser")
+
+const toResourceFolder = (folder: SoundfontIndexFolder): ResourceFolder<Soundfont> => ({
+    name: folder.name,
+    folders: folder.folders?.map(toResourceFolder) ?? [],
+    items: folder.soundfonts?.map(SoundfontIndex.asSoundfont) ?? []
+})
 
 type Construct = {
     lifecycle: Lifecycle
@@ -23,6 +32,7 @@ type Construct = {
 }
 
 const location = new DefaultObservableValue(AssetLocation.OpenDAW)
+const expandedKeys = new Set<string>()
 
 export const SoundfontBrowser = ({lifecycle, service, background, fontSize}: Construct) => {
     const config: ResourceBrowserConfig<Soundfont> = {
@@ -31,23 +41,32 @@ export const SoundfontBrowser = ({lifecycle, service, background, fontSize}: Con
             {label: "Name"},
             {label: "Size", align: "right"}
         ],
-        fetchOnline: () => OpenSoundfontAPI.get().all(),
+        fetchOnline: async () => ({
+            name: "",
+            folders: (await OpenSoundfontAPI.get().tree()).folders.map(toResourceFolder),
+            items: []
+        }),
+        expandedKeys,
         fetchLocal: async () => {
             const openDAW = await OpenSoundfontAPI.get().all()
             const user = await SoundfontStorage.get().list()
             return Arrays.subtract(user, openDAW, ({uuid: a}, {uuid: b}) => a === b)
         },
-        renderEntry: ({lifecycle: entryLifecycle, service: entryService, selection, item, location: loc, refresh}) => (
+        fetchLocalTree: () =>
+            LocalTree.load(SoundfontStorage.get().structure, (soundfont: Soundfont) => soundfont.uuid),
+        dragType: "soundfont",
+        renderEntry: ({lifecycle: entryLifecycle, service: entryService, selection, item, tree, refresh}) => (
             <SoundfontView
                 lifecycle={entryLifecycle}
                 service={entryService}
                 soundfontSelection={selection as SoundfontSelection}
                 soundfont={item}
-                location={loc}
+                tree={tree}
                 refresh={refresh}
             />
         ),
         resolveEntryName: (soundfont: Soundfont) => soundfont.name,
+        resolveEntryUuid: (soundfont: Soundfont) => soundfont.uuid,
         createSelection: (svc: StudioService, htmlSelection: HTMLSelection) => new SoundfontSelection(svc, htmlSelection),
         importSignal: "import-soundfont"
     }

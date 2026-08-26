@@ -1,7 +1,13 @@
 import {assert, FloatArray, int, Lazy, Option, Procedure} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import type {OpfsProtocol, SamplePeakProtocol} from "@opendaw/lib-fusion"
-import type {AudioData, TransientProtocol} from "@opendaw/lib-dsp"
+import type {
+    AudioData,
+    AudioMaterialFeatures,
+    AudioMaterialProtocol,
+    BpmProtocol,
+    TransientProtocol
+} from "@opendaw/lib-dsp"
 
 export class Workers {
     static async install(url: string): Promise<void> {
@@ -48,6 +54,7 @@ export class Workers {
                     exists(path: string): Promise<boolean> {return router.dispatchAndReturn(this.exists, path)}
                     delete(path: string): Promise<void> {return router.dispatchAndReturn(this.delete, path)}
                     list(path: string): Promise<ReadonlyArray<OpfsProtocol.Entry>> {return router.dispatchAndReturn(this.list, path)}
+                    isAvailable(): Promise<boolean> {return router.dispatchAndReturn(this.isAvailable)}
                 })
     }
 
@@ -57,6 +64,28 @@ export class Workers {
             .sender<TransientProtocol>(this.messenger.unwrap("Workers are not installed").channel("transients"),
                 router => new class implements TransientProtocol {
                     detect(audioData: AudioData): Promise<Array<number>> {return router.dispatchAndReturn(this.detect, audioData)}
+                })
+    }
+
+    @Lazy
+    static get Material(): AudioMaterialProtocol {
+        return Communicator
+            .sender<AudioMaterialProtocol>(this.messenger.unwrap("Workers are not installed").channel("material"),
+                router => new class implements AudioMaterialProtocol {
+                    analyze(audioData: AudioData, moduleUrl: string): Promise<AudioMaterialFeatures> {
+                        return router.dispatchAndReturn(this.analyze, audioData, moduleUrl)
+                    }
+                })
+    }
+
+    @Lazy
+    static get Bpm(): BpmProtocol {
+        return Communicator
+            .sender<BpmProtocol>(this.messenger.unwrap("Workers are not installed").channel("bpm"),
+                router => new class implements BpmProtocol {
+                    detect(audioData: AudioData, moduleUrl: string): Promise<number> {
+                        return router.dispatchAndReturn(this.detect, audioData, moduleUrl)
+                    }
                 })
     }
 }

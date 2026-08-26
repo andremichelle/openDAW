@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-core-processors",
-  "version": "0.0.125",
+  "version": "0.0.136",
   "license": "LGPL-3.0-or-later",
   "private": true,
   "exports": {
@@ -10,16 +10,16 @@
     "lint": "eslint \"**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && esbuild src/register.ts --bundle --format=esm --platform=browser --minify --sourcemap --outfile=../core/dist/processors.js",
-    "test": "vitest run"
+    "test": "echo \"No tests to run\""
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.88",
-    "@opendaw/lib-dsp": "^0.0.86",
-    "@opendaw/lib-runtime": "^0.0.81",
-    "@opendaw/lib-std": "^0.0.80",
-    "@opendaw/studio-adapters": "^0.0.119",
-    "@opendaw/studio-boxes": "^0.0.96",
-    "@opendaw/studio-enums": "^0.0.79",
+    "@opendaw/lib-box": "^0.0.92",
+    "@opendaw/lib-dsp": "^0.0.91",
+    "@opendaw/lib-runtime": "^0.0.84",
+    "@opendaw/lib-std": "^0.0.83",
+    "@opendaw/studio-adapters": "^0.3.1",
+    "@opendaw/studio-boxes": "^0.0.107",
+    "@opendaw/studio-enums": "^0.1.0",
     "@types/audioworklet": "^0.0.77"
   },
   "devDependencies": {

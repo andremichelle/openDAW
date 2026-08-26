@@ -46,7 +46,8 @@ export const App = (service: StudioService) => {
                     </div>
                 )}
                 routes={[
-                    {path: "/", factory: WorkspacePage},
+                    {path: "/", factory: WorkspacePage, reuse: true},
+                    {path: "/create", factory: WorkspacePage, reuse: true},
                     {path: "/manuals/*", factory: ManualPage},
                     {path: "/preferences", factory: PreferencesPage},
                     {path: "/imprint", factory: ImprintPage},

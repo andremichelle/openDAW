@@ -3,9 +3,14 @@ import {
     ApparatDeviceBox,
     ArpeggioDeviceBox,
     AudioBusBox,
+    AudioEffectCompositeBox,
+    AutotuneDeviceBox,
+    FrequencySplitBox,
+    StereoCompositeBox,
     BoxVisitor,
     CompressorDeviceBox,
     CrusherDeviceBox,
+    ConvolverDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
@@ -28,6 +33,8 @@ import {
     TidalDeviceBox,
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
+    NeonDeviceBox,
+    CubedDeviceBox,
     VaporisateurDeviceBox,
     VelocityDeviceBox,
     VocoderDeviceBox,
@@ -36,12 +43,20 @@ import {
     ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {ArpeggioDeviceEditor} from "@/ui/devices/midi-effects/ArpeggioDeviceEditor.tsx"
+import {AudioEffectCompositeDeviceEditor} from "@/ui/devices/audio-effects/AudioEffectCompositeDeviceEditor"
+import {FrequencySplitDeviceEditor} from "@/ui/devices/audio-effects/FrequencySplit/FrequencySplitDeviceEditor"
+import {EffectFactories as CoreEffectFactories} from "@opendaw/studio-core"
 import {
     ApparatDeviceBoxAdapter,
     ArpeggioDeviceBoxAdapter,
     AudioBusBoxAdapter,
+    AudioEffectCompositeBoxAdapter,
+    AutotuneDeviceBoxAdapter,
+    FrequencySplitBoxAdapter,
+    StereoCompositeBoxAdapter,
     CompressorDeviceBoxAdapter,
     CrusherDeviceBoxAdapter,
+    ConvolverDeviceBoxAdapter,
     DattorroReverbDeviceBoxAdapter,
     DelayDeviceBoxAdapter,
     DeviceHost,
@@ -65,6 +80,8 @@ import {
     TidalDeviceBoxAdapter,
     UnknownAudioEffectDeviceBoxAdapter,
     UnknownMidiEffectDeviceBoxAdapter,
+    NeonDeviceBoxAdapter,
+    CubedDeviceBoxAdapter,
     VaporisateurDeviceBoxAdapter,
     VelocityDeviceBoxAdapter,
     VocoderDeviceBoxAdapter,
@@ -81,6 +98,8 @@ import {Box} from "@opendaw/lib-box"
 import {PitchDeviceEditor} from "./midi-effects/PitchDeviceEditor"
 import {TapeDeviceEditor} from "@/ui/devices/instruments/TapeDeviceEditor.tsx"
 import {VaporisateurDeviceEditor} from "@/ui/devices/instruments/VaporisateurDeviceEditor.tsx"
+import {CubedDeviceEditor} from "@/ui/devices/instruments/CubedDeviceEditor.tsx"
+import {NeonDeviceEditor} from "@/ui/devices/instruments/NeonDeviceEditor.tsx"
 import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
 import {ApparatDeviceEditor} from "./instruments/ApparatDeviceEditor"
 import {NanoDeviceEditor} from "./instruments/NanoDeviceEditor"
@@ -95,11 +114,13 @@ import {SoundfontDeviceEditor} from "@/ui/devices/instruments/SoundfontDeviceEdi
 import {MaximizerDeviceEditor} from "@/ui/devices/audio-effects/MaximizerDeviceEditor"
 import {CompressorDeviceEditor} from "@/ui/devices/audio-effects/CompressorDeviceEditor"
 import {GateDeviceEditor} from "@/ui/devices/audio-effects/GateDeviceEditor"
+import {AutotuneDeviceEditor} from "@/ui/devices/audio-effects/AutotuneDeviceEditor"
 import {CrusherDeviceEditor} from "@/ui/devices/audio-effects/CrusherDeviceEditor"
 import {FoldDeviceEditor} from "@/ui/devices/audio-effects/FoldDeviceEditor"
 import {MIDIOutputDeviceEditor} from "@/ui/devices/instruments/MIDIOutputDeviceEditor"
 import {VelocityDeviceEditor} from "@/ui/devices/midi-effects/VelocityDeviceEditor"
 import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
+import {ConvolverDeviceEditor} from "@/ui/devices/audio-effects/ConvolverDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
 import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"
 import {VocoderDeviceEditor} from "@/ui/devices/audio-effects/VocoderDeviceEditor"
@@ -166,11 +187,23 @@ export namespace DeviceEditorFactory {
                                   adapter={service.project.boxAdapters.adapterFor(box, TapeDeviceBoxAdapter)}
                                   deviceHost={deviceHost}/>
             ),
+            visitCubedDeviceBox: (box: CubedDeviceBox): JsxValue => (
+                <CubedDeviceEditor lifecycle={lifecycle}
+                                   service={service}
+                                   adapter={service.project.boxAdapters.adapterFor(box, CubedDeviceBoxAdapter)}
+                                   deviceHost={deviceHost}/>
+            ),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox): JsxValue => (
                 <VaporisateurDeviceEditor lifecycle={lifecycle}
                                           service={service}
                                           adapter={service.project.boxAdapters.adapterFor(box, VaporisateurDeviceBoxAdapter)}
                                           deviceHost={deviceHost}/>
+            ),
+            visitNeonDeviceBox: (box: NeonDeviceBox): JsxValue => (
+                <NeonDeviceEditor lifecycle={lifecycle}
+                                     service={service}
+                                     adapter={service.project.boxAdapters.adapterFor(box, NeonDeviceBoxAdapter)}
+                                     deviceHost={deviceHost}/>
             ),
             visitMIDIOutputDeviceBox: (box: MIDIOutputDeviceBox): JsxValue => (
                 <MIDIOutputDeviceEditor lifecycle={lifecycle}
@@ -224,6 +257,29 @@ export namespace DeviceEditorFactory {
                                                .adapterFor(box, UnknownAudioEffectDeviceBoxAdapter)}
                                            deviceHost={deviceHost}/>
             ),
+            visitAudioEffectCompositeBox: (box: AudioEffectCompositeBox) => (
+                <AudioEffectCompositeDeviceEditor lifecycle={lifecycle}
+                                                  service={service}
+                                                  adapter={service.project.boxAdapters
+                                                      .adapterFor(box, AudioEffectCompositeBoxAdapter)}
+                                                  deviceHost={deviceHost}
+                                                  icon={CoreEffectFactories.AudioNamed.AudioEffectComposite.defaultIcon}/>
+            ),
+            visitStereoCompositeBox: (box: StereoCompositeBox) => (
+                <AudioEffectCompositeDeviceEditor lifecycle={lifecycle}
+                                                  service={service}
+                                                  adapter={service.project.boxAdapters
+                                                      .adapterFor(box, StereoCompositeBoxAdapter)}
+                                                  deviceHost={deviceHost}
+                                                  icon={CoreEffectFactories.AudioNamed.StereoComposite.defaultIcon}/>
+            ),
+            visitFrequencySplitBox: (box: FrequencySplitBox) => (
+                <FrequencySplitDeviceEditor lifecycle={lifecycle}
+                                            service={service}
+                                            adapter={service.project.boxAdapters
+                                                .adapterFor(box, FrequencySplitBoxAdapter)}
+                                            deviceHost={deviceHost}/>
+            ),
             visitStereoToolDeviceBox: (box: StereoToolDeviceBox) => (
                 <StereoToolDeviceEditor lifecycle={lifecycle}
                                         service={service}
@@ -242,6 +298,12 @@ export namespace DeviceEditorFactory {
                                    adapter={service.project.boxAdapters.adapterFor(box, DelayDeviceBoxAdapter)}
                                    deviceHost={deviceHost}/>
             ),
+            visitConvolverDeviceBox: (box: ConvolverDeviceBox) => (
+                <ConvolverDeviceEditor lifecycle={lifecycle}
+                                       service={service}
+                                       adapter={service.project.boxAdapters.adapterFor(box, ConvolverDeviceBoxAdapter)}
+                                       deviceHost={deviceHost}/>
+            ),
             visitDattorroReverbDeviceBox: (box: DattorroReverbDeviceBox) => (
                 <DattorroReverbDeviceEditor lifecycle={lifecycle}
                                             service={service}
@@ -253,6 +315,12 @@ export namespace DeviceEditorFactory {
                                    service={service}
                                    adapter={service.project.boxAdapters.adapterFor(box, TidalDeviceBoxAdapter)}
                                    deviceHost={deviceHost}/>
+            ),
+            visitAutotuneDeviceBox: (box: AutotuneDeviceBox) => (
+                <AutotuneDeviceEditor lifecycle={lifecycle}
+                                      service={service}
+                                      adapter={service.project.boxAdapters.adapterFor(box, AutotuneDeviceBoxAdapter)}
+                                      deviceHost={deviceHost}/>
             ),
             visitCrusherDeviceBox: (box: CrusherDeviceBox) => (
                 <CrusherDeviceEditor lifecycle={lifecycle}

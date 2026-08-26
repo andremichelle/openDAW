@@ -65,7 +65,7 @@ export const showNamModelDialog = (model: NamModel): void => {
                         <StatRow label="Type" value={model.architecture}/>
                         <StatRow label="Generation" value={generation}/>
                         <StatRow label="Version" value={model.version}/>
-                        <StatRow label="Layers" value={model.config.layers?.length}/>
+                        <StatRow label="Layers" value={model.config?.layers?.length}/>
                         <StatRow label="Weights" value={stats?.count.toLocaleString()}/>
                     </div>
                 </div>

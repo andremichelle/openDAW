@@ -1,6 +1,6 @@
 import css from "./SlotEditor.sass?inline"
 import {Dragging, Html} from "@opendaw/lib-dom"
-import {asDefined, clamp, Lifecycle, Option} from "@opendaw/lib-std"
+import {asDefined, clamp, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon"
@@ -33,7 +33,7 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
     const deviceAdapter = adapter.device()
     const {
         sampleStart, sampleEnd, attack, release,
-        pitch, mute, solo, gate, polyphone, exclude
+        pitch, mute, solo, gate, polyphone, exclude, volume, panning
     } = adapter.namedParameter
     const labelNote: HTMLElement = (<div className="note-label"/>)
     const waveformCanvas: HTMLCanvasElement = (<canvas/>)
@@ -42,22 +42,33 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
     const waveformPainter = new CanvasPainter(waveformCanvas, painter =>
         SlotUtils.waveform(painter, adapter, adapter.indexField.getValue() % 12, true))
     const sampleSelector = new SampleSelector(service, SampleSelectStrategy.forPointerField(adapter.box.file))
+    const fileLifecycle = lifecycle.own(new Terminator())
+    const createParameterInput = (parameter: AutomatableParameterFieldAdapter) => (
+        <AutomationControl lifecycle={lifecycle}
+                           editing={editing}
+                           midiLearning={midiLearning}
+                           tracks={deviceAdapter.deviceHost().audioUnitBoxAdapter().tracks}
+                           parameter={parameter}>
+            <RelativeUnitValueDragging lifecycle={lifecycle}
+                                       editing={editing}
+                                       parameter={parameter}>
+                <ParameterLabel lifecycle={lifecycle}
+                                parameter={parameter}
+                                framed/>
+            </RelativeUnitValueDragging>
+        </AutomationControl>
+    )
     const createParameterLabel = (parameter: AutomatableParameterFieldAdapter) => (
         <div className="parameter-label">
             <div className="label">{parameter.name}</div>
-            <AutomationControl lifecycle={lifecycle}
-                               editing={editing}
-                               midiLearning={midiLearning}
-                               tracks={deviceAdapter.deviceHost().audioUnitBoxAdapter().tracks}
-                               parameter={parameter}>
-                <RelativeUnitValueDragging lifecycle={lifecycle}
-                                           editing={editing}
-                                           parameter={parameter}>
-                    <ParameterLabel lifecycle={lifecycle}
-                                    parameter={parameter}
-                                    framed/>
-                </RelativeUnitValueDragging>
-            </AutomationControl>
+            {createParameterInput(parameter)}
+        </div>
+    )
+    const createParameterStack = (heading: string, upper: AutomatableParameterFieldAdapter, lower: AutomatableParameterFieldAdapter) => (
+        <div className="parameter-stack">
+            <div className="label">{heading}</div>
+            {createParameterInput(upper)}
+            {createParameterInput(lower)}
         </div>
     )
     lifecycle.ownAll(
@@ -99,7 +110,12 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
             if (!pointer.isAttached()) {return}
             userEditingManager.audioUnit.edit(deviceAdapter.audioUnitBoxAdapter().box.editing)
         }),
-        adapter.box.file.subscribe(waveformPainter.requestUpdate),
+        adapter.box.file.catchupAndSubscribe(() => {
+            fileLifecycle.terminate()
+            adapter.file().ifSome(file => fileLifecycle.own(
+                file.getOrCreateLoader().subscribe(waveformPainter.requestUpdate)))
+            waveformPainter.requestUpdate()
+        }),
         sampleStart.subscribe(waveformPainter.requestUpdate),
         sampleEnd.subscribe(waveformPainter.requestUpdate),
         service.project.liveStreamReceiver.subscribeFloats(adapter.address, array => {
@@ -189,10 +205,9 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
                                 ]}
                     />
                 </div>
-                {createParameterLabel(sampleStart)}
-                {createParameterLabel(sampleEnd)}
-                {createParameterLabel(attack)}
-                {createParameterLabel(release)}
+                {createParameterStack("Waveform", sampleStart, sampleEnd)}
+                {createParameterStack("Envelope", attack, release)}
+                {createParameterStack("Mix", volume, panning)}
                 {createParameterLabel(pitch)}
             </div>
         </div>

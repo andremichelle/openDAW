@@ -11,7 +11,7 @@ export const PrivacyPage: PageFactory<StudioService> = ({lifecycle}: PageContext
     <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
         <h1>Privacy Policy</h1>
         <p style={{color: Colors.blue.toString()}}>openDAW respects your privacy. This application does not collect
-            personal data, create user accounts, or track visitors.</p>
+            personal data, or create user accounts.</p>
         <h3>Local storage</h3>
         <p>Your projects and samples are stored on your own device (local file system or browser storage). No
             personal information is sent to our servers.</p>

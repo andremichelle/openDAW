@@ -98,7 +98,6 @@ export class PropertyNodeModifier implements NoteModifier {
     get deltaProperty(): ppqn {return this.#deltaProperty}
 
     showOrigin(): boolean {return false}
-    showCreation(): Option<UINoteEvent> {return Option.None}
     showPropertyLine(): Option<Line> {return Option.None}
     readContentDuration(region: NoteEventOwnerReader): number {return region.contentDuration}
     selectedModifyStrategy(): NoteModifyStrategy {return this.#selectedModifyStrategy}

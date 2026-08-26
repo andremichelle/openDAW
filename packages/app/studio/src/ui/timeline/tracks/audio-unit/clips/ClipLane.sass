@@ -12,3 +12,7 @@ component
     position: absolute
     border-radius: 2px
     @include colors.panel-background
+
+  // The synthetic unit lane's clip cells: no clips can exist, striped like the deactive region lane.
+  &.deactive > div > div.placeholder
+    @include colors.panel-background-stripes-dark

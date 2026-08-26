@@ -2,6 +2,8 @@ import {
     ApparatDeviceBox,
     AudioFileBox,
     BoxIO,
+    CubedDeviceBox,
+    NeonDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,
@@ -121,9 +123,63 @@ export namespace InstrumentFactories {
         }
     }
 
+    export const Neon: InstrumentFactory<void, NeonDeviceBox> = {
+        defaultName: "Neon",
+        defaultIcon: IconSymbol.Neon,
+        briefDescription: "CZ-style Synth",
+        description: "CZ-style phase distortion synthesizer",
+        manualPage: DeviceManualUrls.Neon,
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): NeonDeviceBox =>
+            NeonDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                // The init tone: line 1 saw, DCW fully open, organ-style DCA (full until note-off, short
+                // release stage). Envelope array order: line1 pitch/DCW/DCA, line2 pitch/DCW/DCA.
+                for (const line of [0, 1]) {
+                    const dcw = box.envelopes.fields()[line * 3 + 1]
+                    dcw.rate1.setInitValue(99)
+                    dcw.level1.setInitValue(99)
+                    dcw.sustain.setInitValue(1)
+                    dcw.end.setInitValue(2)
+                    dcw.rate2.setInitValue(99)
+                    const dca = box.envelopes.fields()[line * 3 + 2]
+                    dca.rate1.setInitValue(99)
+                    dca.level1.setInitValue(99)
+                    dca.sustain.setInitValue(1)
+                    dca.end.setInitValue(2)
+                    dca.rate2.setInitValue(70)
+                }
+                box.host.refer(host)
+            })
+    }
+
+    export const Cubed: InstrumentFactory<void, CubedDeviceBox> = {
+        defaultName: "Cubed",
+        defaultIcon: IconSymbol.Cube,
+        briefDescription: "303-style Synth",
+        description: "Acid bassline synthesizer",
+        manualPage: "manuals/devices/instruments/cubed",
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): CubedDeviceBox =>
+            CubedDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                box.host.refer(host)
+            })
+    }
+
     export const Vaporisateur: InstrumentFactory<void, VaporisateurDeviceBox> = {
         defaultName: "Vaporisateur",
-        defaultIcon: IconSymbol.Piano,
+        defaultIcon: IconSymbol.Vaporisateur,
         briefDescription: "Subtractive Synth",
         description: "Classic subtractive synthesizer",
         manualPage: DeviceManualUrls.Vaporisateur,
@@ -172,7 +228,7 @@ export namespace InstrumentFactories {
             })
     }
 
-    export const Soundfont: InstrumentFactory<{ uuid: UUID.String, name: string }, SoundfontDeviceBox> = {
+    export const Soundfont: InstrumentFactory<SoundfontFileBox, SoundfontDeviceBox> = {
         defaultName: "Soundfont",
         defaultIcon: IconSymbol.SoundFont,
         briefDescription: "Soundfont Player",
@@ -182,11 +238,14 @@ export namespace InstrumentFactories {
         create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
                  host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
                  name: string,
-                 icon: IconSymbol): SoundfontDeviceBox => SoundfontDeviceBox.create(boxGraph, UUID.generate(), box => {
-            box.label.setValue(name)
-            box.icon.setValue(IconSymbol.toName(icon))
-            box.host.refer(host)
-        })
+                 icon: IconSymbol,
+                 attachment?: SoundfontFileBox): SoundfontDeviceBox =>
+            SoundfontDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                if (isDefined(attachment)) {box.file.refer(attachment)}
+                box.host.refer(host)
+            })
     }
 
     export const Apparat: InstrumentFactory<void, ApparatDeviceBox> = {
@@ -206,7 +265,7 @@ export namespace InstrumentFactories {
         })
     }
 
-    export const Named = {Apparat, MIDIOutput, Nano, Playfield, ReSoul, Soundfont, Tape, Vaporisateur}
+    export const Named = {Apparat, Cubed, Neon, MIDIOutput, Nano, Playfield, ReSoul, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
     const useAudioFile = (boxGraph: BoxGraph, fileUUID: UUID.Bytes, name: string, duration: number) =>

@@ -57,11 +57,11 @@ export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
             volume: this.#parametric.createParameter(
                 box.volume,
                 ValueMapping.DefaultDecibel,
-                StringMapping.numeric({unit: "db", fractionDigits: 1}), "volume"),
+                StringMapping.numeric({unit: "db", fractionDigits: 1}), "Volume"),
             release: this.#parametric.createParameter(
                 box.release,
                 ValueMapping.exponential(0.001, 8.0),
-                StringMapping.numeric({unit: "s", fractionDigits: 3}), "release")
+                StringMapping.numeric({unit: "s", fractionDigits: 3}), "Release")
         } as const
     }
 }

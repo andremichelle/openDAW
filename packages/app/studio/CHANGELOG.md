@@ -3,6 +3,75 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.1](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.2.0...@opendaw/app-studio@0.2.1) (2026-08-24)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+# [0.2.0](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.1.7...@opendaw/app-studio@0.2.0) (2026-08-17)
+
+### Bug Fixes
+
+- **automation:** snap drag-after-create around the cursor ([#309](https://github.com/andremichelle/openDAW/issues/309)) ([6dfa990](https://github.com/andremichelle/openDAW/commit/6dfa990bfdabf77a78aaaa187062e19953fc1db1))
+- **content-editor:** auto-scroll the region strip while dragging ([dd6eb7a](https://github.com/andremichelle/openDAW/commit/dd6eb7a5dbda13953e8658fcccb4cef10b343ee6))
+- **playfield:** reload waveform and label when a slot's sample changes ([#339](https://github.com/andremichelle/openDAW/issues/339)) ([4b566e3](https://github.com/andremichelle/openDAW/commit/4b566e3c507f377ce7ee39b04c711dfbae06146f))
+- **timeline:** calibrate wheel zoom per device ([#73](https://github.com/andremichelle/openDAW/issues/73)) ([8876b67](https://github.com/andremichelle/openDAW/commit/8876b67fd128098b71db941c0a46450def1a9613))
+- **timeline:** give the unit lane the full unit menu and the unit icon ([93af285](https://github.com/andremichelle/openDAW/commit/93af285a1fc0b64069ce97cd3376bf0cdb457619))
+- **timeline:** restore "New Track" on the synthetic unit lane menu ([0a36ac9](https://github.com/andremichelle/openDAW/commit/0a36ac9dcc13eabb3f741708f6c316f1f788aa5f))
+- **timeline:** restore "New Track" on the synthetic unit lane menu ([a5369f8](https://github.com/andremichelle/openDAW/commit/a5369f8b428fe55df060529a612d2b9d049d219b))
+
+### Features
+
+- **content-editor:** drag region bounds in the editor strip ([#298](https://github.com/andremichelle/openDAW/issues/298)) ([25f38c0](https://github.com/andremichelle/openDAW/commit/25f38c089ed3e4088eef0af15082f4f96faf6de3))
+- **icons:** give the Vaporisateur its own icon ([1dbad8e](https://github.com/andremichelle/openDAW/commit/1dbad8e6aa2c8835877300a39fc45af2ce272ffb))
+
+## [0.1.7](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.1.6...@opendaw/app-studio@0.1.7) (2026-08-11)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.1.6](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.1.5...@opendaw/app-studio@0.1.6) (2026-08-05)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.1.5](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.1.4...@opendaw/app-studio@0.1.5) (2026-08-03)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.1.4](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.1.3...@opendaw/app-studio@0.1.4) (2026-07-29)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.1.3](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.1.2...@opendaw/app-studio@0.1.3) (2026-07-23)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.1.2](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.1.1...@opendaw/app-studio@0.1.2) (2026-07-22)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+## [0.1.1](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.1.0...@opendaw/app-studio@0.1.1) (2026-07-16)
+
+**Note:** Version bump only for package @opendaw/app-studio
+
+# [0.1.0](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.156...@opendaw/app-studio@0.1.0) (2026-07-15)
+
+### Features
+
+- **stats:** add a raw "Daily Visitors" graph alongside daily-unique ([ead34e0](https://github.com/andremichelle/openDAW/commit/ead34e0cad283224b990bd2e84c9b096b4745195))
+- **studio:** cents input drives Signalsmith transpose ([a496cdb](https://github.com/andremichelle/openDAW/commit/a496cdb37e56eccef2931ea9bfd50ce1e86d26f5))
+- **studio:** editable transient markers ([#114](https://github.com/andremichelle/openDAW/issues/114)) ([bef368d](https://github.com/andremichelle/openDAW/commit/bef368d0b53b0f33bba9299315d570222aa4b35f))
+- **studio:** Signalsmith play-mode in the audio region/clip editor ([ce7d211](https://github.com/andremichelle/openDAW/commit/ce7d211653db3f0478b80795fd2e8d7c5a4ded80))
+- **studio:** use the Signalsmith icon for its play-mode in the audio editor ([b433de0](https://github.com/andremichelle/openDAW/commit/b433de0de59c301e7348acc38d1a3b96664485e8))
+
+## [0.0.156](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.155...@opendaw/app-studio@0.0.156) (2026-07-14)
+
+### Bug Fixes
+
+- **studio:** dropdown menus work inside modal dialogs; Monitoring uses DropDown ([7a519e4](https://github.com/andremichelle/openDAW/commit/7a519e48f5f2484765821bdc000695affa2fea39))
+
+### Performance Improvements
+
+- drop the silent Soundfont device fixture ([06ae0cf](https://github.com/andremichelle/openDAW/commit/06ae0cfa38539b1338227a0815042185186ede1e))
+
 ## [0.0.155](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.0.154...@opendaw/app-studio@0.0.155) (2026-07-07)
 
 ### Bug Fixes

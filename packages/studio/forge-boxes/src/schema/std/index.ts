@@ -13,6 +13,11 @@ import {NeuralAmpModelBox} from "./NeuralAmpModelBox"
 import {AudioBusBox, AudioUnitBox, AuxSendBox} from "./AudioUnitBox"
 import {CaptureAudioBox, CaptureMidiBox} from "./CaptureBox"
 import {GrooveShuffleBox} from "./GrooveBoxes"
+import {LfoModulatorBox} from "./modulators/LfoModulatorBox"
+import {StepsModulatorBox} from "./modulators/StepsModulatorBox"
+import {MacroModulatorBox} from "./modulators/MacroModulatorBox"
+import {RandomModulatorBox} from "./modulators/RandomModulatorBox"
+import {ModulationBox} from "./ModulationBox"
 import {AudioRegionBox} from "./timeline/AudioRegionBox"
 import {AudioClipBox} from "./timeline/AudioClipBox"
 import {NoteEventBox} from "./timeline/NoteEventBox"
@@ -28,6 +33,7 @@ import {TransientMarkerBox} from "./TransientMarkerBox"
 import {WarpMarkerBox} from "./WarpMarkerBox"
 import {AudioPitchStretchBox} from "./timeline/AudioPitchStretchBox"
 import {AudioTimeStretchBox} from "./timeline/AudioTimeStretchBox"
+import {AudioSignalsmithBox} from "./timeline/AudioSignalsmithBox"
 import {MetaDataBox} from "./MetaDataBox"
 import {ProjectMetaBox} from "./ProjectMetaBox"
 import {MIDIControllerBox} from "./MIDIControllerBox"
@@ -39,10 +45,11 @@ export const Definitions = [
     TimelineBox, TrackBox,
     NoteEventBox, NoteEventRepeatBox, NoteEventCollectionBox, NoteRegionBox, NoteClipBox,
     ValueEventBox, ValueEventCollectionBox, ValueEventCurveBox, ValueRegionBox, ValueClipBox, SignatureEventBox,
-    AudioRegionBox, AudioClipBox, AudioPitchStretchBox, AudioTimeStretchBox, TransientMarkerBox, WarpMarkerBox,
+    AudioRegionBox, AudioClipBox, AudioPitchStretchBox, AudioTimeStretchBox, AudioSignalsmithBox, TransientMarkerBox, WarpMarkerBox,
     MarkerBox,
     AudioFileBox, SoundfontFileBox, NeuralAmpModelBox,
     AudioUnitBox, CaptureAudioBox, CaptureMidiBox,
     AudioBusBox, AuxSendBox,
-    GrooveShuffleBox
+    GrooveShuffleBox,
+    LfoModulatorBox, StepsModulatorBox, MacroModulatorBox, RandomModulatorBox, ModulationBox
 ]

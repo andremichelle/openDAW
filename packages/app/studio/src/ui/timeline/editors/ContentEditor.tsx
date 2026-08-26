@@ -46,6 +46,7 @@ import {Colors, Pointers} from "@opendaw/studio-enums"
 import {ParameterValueEditing} from "@/ui/timeline/editors/value/ParameterValueEditing.ts"
 import {Browser, deferNextFrame, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
+import {RegionModifyContext} from "@/ui/timeline/editors/RegionModifyContext.ts"
 
 const className = Html.adoptStyleSheet(css, "ContentEditor")
 
@@ -58,6 +59,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
     const range = new TimelineRange({padding: 12})
     range.minimum = PPQN.SemiQuaver * 2
     const snapping = new Snapping(range)
+    const modifyContext = lifecycle.own(new RegionModifyContext())
     const runtime = lifecycle.own(new Terminator())
     const editingSubject = service.project.userEditingManager.timeline
     const contentEditor = <div className="editor"/>
@@ -106,7 +108,11 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                     </div>
                 </div>
                 <div className="time-axis">
-                    <RegionBound lifecycle={lifecycle} service={service} range={range}/>
+                    <RegionBound lifecycle={lifecycle}
+                                 service={service}
+                                 range={range}
+                                 snapping={snapping}
+                                 modifyContext={modifyContext}/>
                     <TimeAxis lifecycle={lifecycle}
                               service={service}
                               snapping={snapping}
@@ -180,7 +186,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 },
                 visitNoteRegionBox: (box: NoteRegionBox): Element => {
                     const adapter = boxAdapters.adapterFor(box, NoteRegionBoxAdapter)
-                    const reader = RegionReader.forNoteRegionBoxAdapter(adapter, timelineBoxAdapter)
+                    const reader = RegionReader.forNoteRegionBoxAdapter(adapter, timelineBoxAdapter, modifyContext)
                     owner = Option.wrap(reader)
                     return createNoteEditor(reader)
                 },
@@ -192,7 +198,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 },
                 visitValueRegionBox: (box: ValueRegionBox): Element => {
                     const adapter = boxAdapters.adapterFor(box, ValueRegionBoxAdapter)
-                    const reader = RegionReader.forValueRegionBoxAdapter(adapter, timelineBoxAdapter)
+                    const reader = RegionReader.forValueRegionBoxAdapter(adapter, timelineBoxAdapter, modifyContext)
                     owner = Option.wrap(reader)
                     return createValueEditor(reader, box.regions)
                 },
@@ -204,7 +210,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 },
                 visitAudioRegionBox: (box: AudioRegionBox): Element => {
                     const adapter = boxAdapters.adapterFor(box, AudioRegionBoxAdapter)
-                    const reader = RegionReader.forAudioRegionBoxAdapter(adapter, timelineBoxAdapter)
+                    const reader = RegionReader.forAudioRegionBoxAdapter(adapter, timelineBoxAdapter, modifyContext)
                     owner = Option.wrap(reader)
                     return createAudioEditor(reader)
                 }
@@ -263,7 +269,9 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
                 engine.setPosition(Math.max(0, snapping.ceil(pos) - snapping.value(pos)))
             }
         }, {allowRepeat: true}),
-        shortcuts.register(ContentEditorShortcuts["zoom-to-loop-duration"].shortcut, zoomToLoopDuration)
+        shortcuts.register(ContentEditorShortcuts["zoom-to-loop-duration"].shortcut, zoomToLoopDuration),
+        shortcuts.register(ContentEditorShortcuts["snapping-finer"].shortcut, () => snapping.stepFiner(), {allowRepeat: true}),
+        shortcuts.register(ContentEditorShortcuts["snapping-coarser"].shortcut, () => snapping.stepCoarser(), {allowRepeat: true})
     )
     return element
 }

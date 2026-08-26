@@ -118,8 +118,10 @@ export const AudioUnitChannelControls = ({lifecycle, service, adapter}: Construc
                     {volumeControl}
                     {panningControl}
                 </div>
-                <div className="channel-isolation">
+                <div className={Html.buildClassList("channel-isolation", adapter.isOutput && "solo-hidden")}>
                     {muteControl}
+                    {/* The output is the master: it can't be soloed (mirrors the mixer strip). The control
+                        stays for layout, hidden via `solo-hidden`, so the mute keeps its position. */}
                     {soloControl}
                 </div>
                 <div className="channel-capture">

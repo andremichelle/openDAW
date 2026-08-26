@@ -116,6 +116,7 @@ export default defineConfig(({command}) => {
                         const file = resolve(sourceDir, name)
                         if (!isWasmEngineAsset(name) || !existsSync(file)) {return next()}
                         res.setHeader("Content-Type", "application/wasm")
+                        res.setHeader("Cache-Control", "no-store") // a Rust rebuild must never be shadowed by a cached wasm
                         res.end(readFileSync(file))
                     })
                 },

@@ -27,6 +27,27 @@ export namespace TransientMarkerUtils {
         return left.position + t * (right.position - left.position)
     }
 
+    // Inverse of `secondsToUnits`: a local timeline unit (ppqn) -> file seconds, via the warp-marker mapping.
+    // Used to place/move a transient from a pointer x (the caller adds the region's waveformOffset).
+    export const unitsToSeconds = (localUnit: ppqn,
+                                   warpMarkers: EventCollection<WarpMarkerBoxAdapter>): number => {
+        const markers = warpMarkers.asArray()
+        if (markers.length < 2) {return 0.0}
+        const first = markers[0]
+        const second = markers[1]
+        const secondLast = markers[markers.length - 2]
+        const last = markers[markers.length - 1]
+        const firstRate = (second.position - first.position) / (second.seconds - first.seconds)
+        const lastRate = (last.position - secondLast.position) / (last.seconds - secondLast.seconds)
+        if (localUnit < first.position) {return first.seconds + (localUnit - first.position) / firstRate}
+        if (localUnit >= last.position) {return last.seconds + (localUnit - last.position) / lastRate}
+        const index = Math.min(markers.length - 2, Math.max(0, warpMarkers.floorLastIndex(localUnit)))
+        const left = markers[index]
+        const right = markers[index + 1]
+        const t = (localUnit - left.position) / (right.position - left.position)
+        return left.seconds + t * (right.seconds - left.seconds)
+    }
+
     export const createCapturing = (element: Element,
                                     range: TimelineRange,
                                     reader: AudioEventOwnerReader,

@@ -40,6 +40,9 @@ const CLOCK_RATE: f64 = 40.0;
 // `UpdateClock` feeds automated parameters with (`AbstractProcessor.updateParameters`).
 const UPDATE_CLOCK_RATE: f64 = 10.0;
 
+// A CC parameter is a 0..1 unit value (`emit_cc` rounds `value * 127`).
+const UNIPOLAR: math::value_mapping::Linear = math::value_mapping::Linear::unipolar();
+
 // The queue is drained every quantum by the worklet; a host that never drains (a render without the MIDI
 // channel attached) must not grow the engine heap unbounded, so the queue drops beyond this (like the TS
 // `MIDISender` ring returning `false` when full).
@@ -478,7 +481,7 @@ impl MidiOutProcessor {
         // A PLAIN (un-automated) parameter mirrors the TS field subscription -> `parameterChanged(parameter)`
         // (default relativeBlockTime 0): the diff surfaces at the next block start, emitted at time 0.
         for cc in &self.cc {
-            if cc.handle.track.is_none() {
+            if cc.handle.track.is_none() && cc.handle.modulation.is_none() {
                 let value = cc.handle.field.get();
                 if value != cc.last.get() {
                     cc.last.set(value);
@@ -486,10 +489,26 @@ impl MidiOutProcessor {
                 }
             }
         }
+        // A MODULATED controller keeps moving while PAUSED, so it updates once per paused block; an
+        // automation-only one holds.
+        if !block.flags.transporting() {
+            for cc in &self.cc {
+                if cc.handle.modulation.is_none() {
+                    continue;
+                }
+                let (value, kind, modulation) = cc.handle.resolve_held(block.p0, false);
+                let value = crate::audio_unit::host_float(value, kind, modulation, &UNIPOLAR);
+                if value != cc.last.get() {
+                    cc.last.set(value);
+                    self.emit_cc(cc.controller.get(), value, 0.0);
+                }
+            }
+            return;
+        }
         // AUTOMATED parameters update on the update-clock grid over TRANSPORTING blocks (TS `UpdateClock`
         // gating + `AbstractProcessor.updateParameters`), diffing the resolved value like
         // `AutomatableParameter.updateAutomation`.
-        if !block.flags.transporting() || !self.cc.iter().any(|cc| cc.handle.track.is_some()) {
+        if !self.cc.iter().any(|cc| cc.handle.track.is_some() || cc.handle.modulation.is_some()) {
             return;
         }
         let block_offset_seconds = block.s0 as f64 / self.sample_rate as f64;
@@ -501,10 +520,11 @@ impl MidiOutProcessor {
             }
             let relative_block_time = block_offset_seconds + dsp::ppqn::pulses_to_seconds(position - block.p0, block.bpm);
             for cc in &self.cc {
-                if cc.handle.track.is_none() {
+                if cc.handle.track.is_none() && cc.handle.modulation.is_none() {
                     continue;
                 }
-                let (value, _) = cc.handle.resolve(position);
+                let (value, kind, modulation) = cc.handle.resolve(position);
+                let value = crate::audio_unit::host_float(value, kind, modulation, &UNIPOLAR);
                 if value != cc.last.get() {
                     cc.last.set(value); // updated regardless of device / enabled (TS updateAutomation)
                     self.emit_cc(cc.controller.get(), value, relative_block_time);

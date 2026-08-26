@@ -1,15 +1,12 @@
-import css from "./Track.sass?inline"
-import {Lifecycle} from "@opendaw/lib-std"
-import {Html} from "@opendaw/lib-dom"
+import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
 import {createElement} from "@opendaw/lib-jsx"
-import {TrackHeader} from "@/ui/timeline/tracks/audio-unit/headers/TrackHeader.tsx"
+import {AudioUnitTrackHeader} from "@/ui/timeline/tracks/audio-unit/headers/AudioUnitTrackHeader.tsx"
+import {TrackClassName} from "@/ui/timeline/tracks/audio-unit/TrackStyles.ts"
 import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {ClipLane} from "@/ui/timeline/tracks/audio-unit/clips/ClipLane.tsx"
 import {RegionLane} from "@/ui/timeline/tracks/audio-unit/regions/RegionLane.tsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
-
-const className = Html.adoptStyleSheet(css, "Track")
 
 type Construct = {
     lifecycle: Lifecycle
@@ -17,15 +14,18 @@ type Construct = {
     trackManager: TracksManager
     audioUnitBoxAdapter: AudioUnitBoxAdapter
     trackBoxAdapter: TrackBoxAdapter
+    unitHead: DefaultObservableValue<boolean>
 }
 
-export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, trackBoxAdapter}: Construct) => {
+export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, trackBoxAdapter, unitHead}: Construct) => {
     const element: HTMLElement = (
-        <div className={className}>
-            <TrackHeader lifecycle={lifecycle}
+        <div className={TrackClassName}>
+            <AudioUnitTrackHeader lifecycle={lifecycle}
                          service={service}
+                         trackManager={trackManager}
                          audioUnitBoxAdapter={audioUnitBoxAdapter}
-                         trackBoxAdapter={trackBoxAdapter}/>
+                         trackBoxAdapter={trackBoxAdapter}
+                         unitHead={unitHead}/>
             <ClipLane lifecycle={lifecycle}
                       service={service}
                       adapter={trackBoxAdapter}
@@ -36,10 +36,7 @@ export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, tr
                         range={service.timeline.range}/>
         </div>
     )
-    const {indexField, box: {enabled}} = trackBoxAdapter
-    lifecycle.ownAll(
-        indexField.catchupAndSubscribe(owner => element.style.gridRow = String(owner.getValue() + 1)),
-        enabled.catchupAndSubscribe(owner => element.classList.toggle("mute", !owner.getValue()))
-    )
+    const {box: {enabled}} = trackBoxAdapter
+    lifecycle.own(enabled.catchupAndSubscribe(owner => element.classList.toggle("mute", !owner.getValue())))
     return element
 }

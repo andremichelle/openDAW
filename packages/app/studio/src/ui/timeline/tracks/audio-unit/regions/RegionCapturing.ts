@@ -36,7 +36,10 @@ export namespace RegionCapturing {
                     .rightMostMapped(tracks, y, NumberComparator, component => component.position)
                 if (trackIndex < 0 || trackIndex >= tracks.length) {return null}
                 const track = tracks[trackIndex]
-                if (audioUnitFreeze.isFrozen(track.audioUnitBoxAdapter)) {
+                // A y outside the resolved lane's own bounds sits in a band no TrackContext covers (the
+                // synthetic unit lane): capture nothing there.
+                if (y >= track.position + track.size) {return null}
+                if (track.audioUnitBoxAdapter.mapOr(unit => audioUnitFreeze.isFrozen(unit), false)) {
                     return {type: "track", track}
                 }
                 const position = Math.floor(range.xToUnit(x))

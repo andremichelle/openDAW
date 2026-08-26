@@ -16,7 +16,7 @@ import {
 import {Promises} from "@opendaw/lib-runtime"
 import {Files} from "@opendaw/lib-dom"
 import {Box, IndexedBox} from "@opendaw/lib-box"
-import {DeviceBoxAdapter, DeviceBoxUtils, Devices, EffectDeviceBoxAdapter, InstrumentFactories, PresetDecoder, PresetEncoder, PresetHeader} from "@opendaw/studio-adapters"
+import {DeviceBoxAdapter, DeviceBoxUtils, DeviceHost, Devices, EffectDeviceBoxAdapter, InstrumentFactories, PresetDecoder, PresetEncoder, PresetHeader} from "@opendaw/studio-adapters"
 import {
     AudioEffectChainPresetMeta,
     AudioEffectPresetMeta,
@@ -28,6 +28,7 @@ import {
     PresetBundle,
     PresetCategory,
     PresetEntry,
+    PresetInspector,
     PresetMeta,
     PresetStorage,
     Project,
@@ -210,15 +211,27 @@ export class PresetService {
             if (!Devices.isEffect(adapter)) {return}
             const effect = adapter as EffectDeviceBoxAdapter
             const insertIndex = effect.indexField.getValue()
+            const accepts = entry.category === "midi-effect" ? "midi" : "audio"
             const chainKind = entry.category === "midi-effect"
                 ? PresetHeader.ChainKind.Midi
                 : PresetHeader.ChainKind.Audio
+            // The effect's OWN host chain, which is the composite branch cell for a nested effect — NOT the audio
+            // unit. Targeting the unit would re-home the replacement onto the parent chain and rip it out (#report).
+            const targetField = DeviceHost.chainFieldOf(effect.deviceHost(), accepts)
+            if (targetField.isEmpty()) {
+                RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
+                return
+            }
             this.project.editing.modify(() => {
-                Devices.deleteEffectDevices([effect])
-                const attempt = PresetDecoder.insertEffectChain(bytes, audioUnitBox, insertIndex, chainKind)
+                // Insert first, delete the replaced effect only on success. insertEffectChain validates before
+                // mutating, so a corrupt preset returns a failure without touching the graph; deleting first would
+                // commit the delete (modify only rolls back on a throw) and leave a detached effect behind (#1015).
+                const attempt = PresetDecoder.insertEffectChain(bytes, targetField.unwrap(`${accepts} chain`), insertIndex, chainKind)
                 if (attempt.isFailure()) {
                     RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
+                    return
                 }
+                Devices.deleteEffectDevices([effect])
             })
             this.project.loadScriptDevices()
         } else {
@@ -262,18 +275,17 @@ export class PresetService {
         }
         audioUnitOption.ifSome(vertex => {
             const deviceHost = this.project.boxAdapters.adapterFor(vertex.box, Devices.isHost)
-            if (kind === "midi-effect" && deviceHost.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
+            const accepts = kind === "audio-effect" ? "audio" : kind === "midi-effect" ? "midi" : panic(`Unknown ${kind}`)
+            if (!DeviceHost.takesEffect(deviceHost, accepts)) {
                 RuntimeNotifier.notify({
-                    message: "The selected audio unit does not have a midi input.",
+                    message: accepts === "midi"
+                        ? "The selected target does not accept midi effects."
+                        : "The selected target does not accept audio effects.",
                     icon: "Info"
                 })
                 return
             }
-            const field = kind === "audio-effect"
-                ? deviceHost.audioEffects.field()
-                : kind === "midi-effect"
-                    ? deviceHost.midiEffects.field()
-                    : panic(`Unknown ${kind}`)
+            const field = DeviceHost.chainFieldOf(deviceHost, accepts).unwrap(`${accepts} chain`)
             this.project.editing.modify(() => factory.create(this.project, field, field.pointerHub.incoming().length))
         })
     }
@@ -726,11 +738,18 @@ export class PresetService {
     }
 
     async loadBundleFromDisk(): Promise<void> {
-        const opened = await Promises.tryCatch(Files.open({types: [FilePickerAcceptTypes.PresetBundleFileType]}))
+        const opened = await Promises.tryCatch(Files.open({
+            types: [FilePickerAcceptTypes.PresetBundleFileType, FilePickerAcceptTypes.PresetFileType]
+        }))
         if (opened.status === "rejected") {return}
         const file = opened.value.at(0)
         if (isAbsent(file)) {return}
-        const decoded = await Promises.tryCatch(PresetBundle.decode(await file.arrayBuffer()))
+        const arrayBuffer = await file.arrayBuffer()
+        if (PresetInspector.isPresetBinary(new Uint8Array(arrayBuffer))) {
+            await this.#importPresetBinary(file.name, arrayBuffer)
+            return
+        }
+        const decoded = await Promises.tryCatch(PresetBundle.decode(arrayBuffer))
         if (decoded.status === "rejected") {
             console.warn(decoded.error)
             RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
@@ -751,6 +770,32 @@ export class PresetService {
             }
         }
         await PresetStorage.save(meta, data)
+    }
+
+    // Legacy single-preset files (.odp) carry no metadata: category and device are recovered from the
+    // graph, the name comes from the file, and the entry always gets a fresh uuid (nothing to collide).
+    async #importPresetBinary(fileName: string, arrayBuffer: ArrayBuffer): Promise<void> {
+        const inspected = PresetInspector.inspect(new Uint8Array(arrayBuffer))
+        if (inspected.isEmpty()) {
+            RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
+            return
+        }
+        const inspection = inspected.unwrap()
+        const stripped = fileName.replace(/\.odp$/i, "")
+        const now = Date.now()
+        const common = {
+            uuid: UUID.toString(UUID.generate()),
+            name: stripped.length > 0 ? stripped : inspection.name,
+            description: "",
+            created: now,
+            modified: now,
+            hasTimeline: PresetDecoder.peekHasTimeline(arrayBuffer)
+        }
+        const probe = PresetInspector.toMeta(inspection, common)
+        await PresetStorage.save(PresetInspector.toMeta(inspection, {
+            ...common,
+            name: Strings.getUniqueName(this.#existingUserNamesFor(probe), common.name)
+        }), arrayBuffer)
     }
 
     #audioUnitBoxForInstrumentUuid(uuid: UUID.String): Nullable<AudioUnitBox> {
@@ -796,16 +841,22 @@ export class PresetService {
             }
             const host = this.project.boxAdapters.adapterFor(editing.unwrap().box, Devices.isHost)
             const isMidi = entry.category === "midi-effect" || entry.category === "midi-effect-chain"
-            if (isMidi && host.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
-                RuntimeNotifier.notify({message: "The selected audio unit does not accept MIDI.", icon: "Info"})
+            const accepts = isMidi ? "midi" : "audio"
+            if (!DeviceHost.takesEffect(host, accepts)) {
+                RuntimeNotifier.notify({
+                    message: isMidi
+                        ? "The selected target does not accept MIDI."
+                        : "The selected target does not accept audio effects.",
+                    icon: "Info"
+                })
                 return
             }
-            const field = isMidi ? host.midiEffects.field() : host.audioEffects.field()
+            const field = DeviceHost.chainFieldOf(host, accepts).unwrap(`${accepts} chain`)
             const insertIndex = field.pointerHub.incoming().length
             const chainKind = isMidi ? PresetHeader.ChainKind.Midi : PresetHeader.ChainKind.Audio
             this.project.editing.modify(() => {
                 const attempt = PresetDecoder.insertEffectChain(
-                    loaded.value, host.audioUnitBoxAdapter().box, insertIndex, chainKind)
+                    loaded.value, field, insertIndex, chainKind)
                 if (attempt.isFailure()) {
                     RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }

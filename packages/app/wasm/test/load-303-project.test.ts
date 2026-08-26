@@ -21,7 +21,7 @@ const SCRIPT_CONFIGS: Record<string, ScriptCompiler.Config> = {
 
 describe("load 303 project", () => {
     it("registers its scripted devices and renders audible output", async () => {
-        const arrayBuffer = readFileSync(OD).buffer as ArrayBuffer
+        const arrayBuffer = new Uint8Array(readFileSync(OD)).buffer as ArrayBuffer
         const {boxGraph} = ProjectSkeleton.decode(arrayBuffer)
 
         let scriptedDevices = 0
@@ -52,7 +52,8 @@ describe("load 303 project", () => {
         let peak = 0
         for (let q = 0; q < QUANTA; q++) {
             engine.render()
-            const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+            const enginePtr = engine.output_ptr()
+            const out = new Float32Array(memory.buffer, enginePtr, len)
             for (let i = 0; i < len; i++) {peak = Math.max(peak, Math.abs(out[i]))}
         }
         expect(peak, "the scripted project produced audio").toBeGreaterThan(0.01)

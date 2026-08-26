@@ -25,12 +25,14 @@ export const createRegionCapturing = (canvas: Element,
             return {type: "region-position", region}
         }
         if (UnionAdapterTypes.isLoopableRegion(region)) {
+            // The bounds win over the loop handle: they coincide as long as the region does not loop, and the
+            // strip is too flat to separate them the way the tracks do (label row versus content row).
             if (x - x0 < PointerRadiusDistance * 2) {
                 return {type: "region-start", region}
-            } else if (Math.abs(x - range.unitToX(region.offset + region.loopDuration)) <= PointerRadiusDistance) {
-                return {type: "loop-duration", region}
             } else if (x1 - x < PointerRadiusDistance * 2) {
                 return {type: "region-complete", region}
+            } else if (Math.abs(x - range.unitToX(region.offset + region.loopDuration)) <= PointerRadiusDistance) {
+                return {type: "loop-duration", region}
             }
         }
         return {type: "region-position", region}

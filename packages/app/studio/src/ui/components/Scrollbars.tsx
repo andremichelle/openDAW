@@ -26,7 +26,10 @@ export const bindNativeScroll = (element: HTMLElement, model: ScrollModel, orien
             if (vertical) {element.scrollTop = model.position} else {element.scrollLeft = model.position}
         }),
         Events.subscribe(element, "scroll", refresh, {passive: true}),
-        Html.watchResize(element, refresh),
+        // Deferred for the same reason as in Scroller: reading and writing the model inside the observer
+        // resizes the thumb within the same layout pass. Scroll events stay synchronous, they are not part
+        // of that cycle.
+        Html.watchResize(element, () => AnimationFrame.once(refresh)),
         AnimationFrame.add(() => {
             const size = contentSize()
             if (size !== lastContentSize) {
@@ -36,7 +39,10 @@ export const bindNativeScroll = (element: HTMLElement, model: ScrollModel, orien
         }))
 }
 
-export const installScrollbars = (element: HTMLElement): Terminable => {
+type Options = { autoHide?: boolean }
+
+export const installScrollbars = (element: HTMLElement, options?: Options): Terminable => {
+    const autoHide = options?.autoHide ?? true
     const terminator = new Terminator()
     const mount = (layer: HTMLElement) => {
         const style = getComputedStyle(element)
@@ -49,7 +55,8 @@ export const installScrollbars = (element: HTMLElement): Terminable => {
         if (isScrollableOverflow(style.overflowX)) {orientations.push(Orientation.horizontal)}
         orientations.forEach(orientation => {
             const model = terminator.own(new ScrollModel())
-            const bar: HTMLElement = <Scroller lifecycle={terminator} model={model} orientation={orientation} floating autoHide/>
+            const bar: HTMLElement = <Scroller lifecycle={terminator} model={model} orientation={orientation} floating
+                                               autoHide={autoHide}/>
             bar.style.pointerEvents = "auto"
             overlay.appendChild(bar)
             terminator.own(bindNativeScroll(element, model, orientation))
@@ -57,15 +64,19 @@ export const installScrollbars = (element: HTMLElement): Terminable => {
         layer.appendChild(overlay)
         const reposition = () => {
             const {offsetLeft, offsetTop, clientWidth, clientHeight} = element
+            const {paddingTop, paddingBottom} = getComputedStyle(element)
+            const top = parseFloat(paddingTop)
+            const bottom = parseFloat(paddingBottom)
             overlayStyle.left = `${offsetLeft}px`
-            overlayStyle.top = `${offsetTop}px`
+            overlayStyle.top = `${offsetTop + top}px`
             overlayStyle.width = `${clientWidth}px`
-            overlayStyle.height = `${clientHeight}px`
+            overlayStyle.height = `${clientHeight - top - bottom}px`
         }
         reposition()
+        const scheduleReposition = () => AnimationFrame.once(reposition)
         terminator.ownAll(
-            Html.watchResize(element, reposition),
-            Html.watchResize(layer, reposition),
+            Html.watchResize(element, scheduleReposition),
+            Html.watchResize(layer, scheduleReposition),
             {terminate: () => overlay.remove()})
     }
     // The host may be hidden (display: none) at connect time — e.g. overlays/dialogs — so it has no

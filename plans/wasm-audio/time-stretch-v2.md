@@ -1,5 +1,10 @@
 # Time-stretch v2: content-adaptive granular, with a phase vocoder as a later mode
 
+> **Superseded (2026-07-15).** The active plan is [`plans/enhance-stretcher.md`](../enhance-stretcher.md), which
+> takes a *detector-first* direction (better transient positions through the unchanged pipe) instead of the
+> adaptive playback sketched here. The adaptive `Stretcher` was built and reverted (`9770d9d9`); Signalsmith
+> shipped as a separate play-mode. This doc is kept for its analysis (detector/descriptor design, corpus, metrics).
+
 Goal: a better time-stretcher in openDAW. Keep the granular architecture (we mirror Ableton's Beats-style
 transient grains) but make the grains **content-adaptive**: a new transient detector that emits per-segment
 descriptors, and a runtime that auto-adjusts fades and loops from those descriptors so drums keep tight

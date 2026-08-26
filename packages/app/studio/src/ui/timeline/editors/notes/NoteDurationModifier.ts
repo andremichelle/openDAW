@@ -5,7 +5,6 @@ import {NoteEventBoxAdapter} from "@opendaw/studio-adapters"
 import {EventCollection, NoteEvent, ppqn} from "@opendaw/lib-dsp"
 import {NoteModifier} from "@/ui/timeline/editors/notes/NoteModifier.ts"
 import {NoteEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {UINoteEvent} from "./UINoteEvent"
 import {Dragging} from "@opendaw/lib-dom"
 
 class SelectedModifyStrategy implements NoteModifyStrategy {
@@ -81,7 +80,6 @@ export class NoteDurationModifier implements NoteModifier {
     get selection(): Selection<NoteEventBoxAdapter> {return this.#selection}
 
     showOrigin(): boolean {return false}
-    showCreation(): Option<UINoteEvent> {return Option.None}
     showPropertyLine(): Option<Line> {return Option.None}
     readContentDuration(region: NoteEventOwnerReader): number {return region.contentDuration}
     selectedModifyStrategy(): NoteModifyStrategy {return this.#selectedModifyStrategy}

@@ -126,9 +126,9 @@ export const GlobalShortcutsFactory = ShortcutValidator.validate({
         shortcut: Shortcut.of(Key.Digit5, {shift}),
         description: "Go to shader visualizer"
     },
-    "workspace-screen-meter": {
+    "workspace-screen-modulation": {
         shortcut: Shortcut.of(Key.Digit6, {shift}),
-        description: "Go to meter view"
+        description: "Go to modulation view"
     },
     "workspace-screen-tap": {
         shortcut: Shortcut.of(Key.Digit7, {shift}),

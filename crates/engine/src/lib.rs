@@ -24,12 +24,14 @@ use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cell::{Cell, RefCell, UnsafeCell};
+use core::cell::{Cell, RefCell};
+#[cfg(not(test))]
+use core::cell::UnsafeCell;
 use bindings::value_collection::ValueCollection;
 use crate::tempo_map::{SharedTempoMap, TempoMap};
 use boxgraph::address::{Address, Uuid};
 use boxgraph::boxes::Registry;
-use boxgraph::subscription::HubEvent;
+use boxgraph::subscription::{HubEvent, SubscriptionId};
 use boxgraph::bytes::ByteReader;
 use boxgraph::graph::BoxGraph;
 use boxgraph::updates::{decode_forward, Update};
@@ -111,7 +113,60 @@ pub(crate) struct CompositeSpec {
     // a child is SILENT (its note STARTS dropped, releases still pass) when muted, or when any sibling is
     // soloed and it is not. Playfield's slot keys are 40 / 41.
     pub(crate) child_mute_key: u16,
-    pub(crate) child_solo_key: u16
+    pub(crate) child_solo_key: u16,
+    // A child's volume (dB) / panning Float32Fields (0 = the composite has no per-child strip). A declared
+    // strip runs a `ChannelStripProcessor` between the child's output and the sum. Playfield's slot keys
+    // are 50 / 51.
+    pub(crate) child_volume_key: u16,
+    pub(crate) child_pan_key: u16
+}
+
+/// How an effect composite hands its INPUT to its entries. `Broadcast` gives every entry the same signal (the
+/// plain parallel stack); `Stereo` splits per channel (entry 0 = left, entry 1 = right). Further splits
+/// (frequency, mid/side, tonal) become further variants — the rest of the composite is unchanged.
+// WASM CONTRACT: mirrors `EffectCompositeSpec["distributor"]` in core-wasm/src/engine-modules.ts.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Distributor {
+    Broadcast = 0,
+    Stereo = 1,
+    Frequency = 2
+}
+
+impl Distributor {
+    fn from_u32(value: u32) -> Self {
+        match value {
+            1 => Self::Stereo,
+            2 => Self::Frequency,
+            _ => Self::Broadcast
+        }
+    }
+}
+
+/// An EFFECT composite box type: an audio or midi EFFECT that, instead of being a single leaf DSP, hosts a
+/// collection of ENTRIES, each its own effect chain, run in PARALLEL and mixed back together. Registered as
+/// data exactly like `CompositeSpec`, so the engine hardcodes no box name or field key.
+///
+/// Audio (`kind == DEVICE_KIND_AUDIO_EFFECT`): the input is distributed to every entry, each entry's chain
+/// output passes its own gain / mute / solo strip into the wet sum, and the composite emits
+/// `dry * input + wet * wetSum`. Note (`DEVICE_KIND_MIDI_EFFECT`): the incoming note stream is teed to every
+/// entry and their events merged; `gain_key` / `dry_key` / `wet_key` / `input_tap_field` are 0.
+#[derive(Clone)]
+pub(crate) struct EffectCompositeSpec {
+    box_type: String,
+    pub(crate) kind: u8,                     // DEVICE_KIND_AUDIO_EFFECT | DEVICE_KIND_MIDI_EFFECT
+    pub(crate) distributor: Distributor,
+    pub(crate) entries_field: u16,           // the composite's entry collection (host field)
+    pub(crate) index_key: u16,               // the entry box's own `index` (UI + sum / merge order)
+    pub(crate) chain_field: u16,             // the entry box's fx-host collection (audio or midi, per `kind`)
+    pub(crate) label_key: u16,               // the entry box's `label`
+    pub(crate) gain_key: u16,                // the entry's gain (dB); 0 for a midi composite (no gain)
+    pub(crate) pan_key: u16,                 // the entry's pan (bipolar); 0 = none (its strip stays centred)
+    pub(crate) mute_key: u16,                // the entry's mute (automatable; an entry has no `enabled`)
+    pub(crate) solo_key: u16,                // the entry's solo (resolved across siblings, like the mixer's)
+    pub(crate) dry_key: u16,                 // the composite's dry gain (dB); 0 for a midi composite
+    pub(crate) wet_key: u16,                 // the composite's wet gain (dB); 0 for a midi composite
+    pub(crate) input_tap_field: u16,         // the vertex a nested sidechain taps for the composite's INPUT; 0 = none
+    pub(crate) crossover_keys: [u16; 3]      // the Frequency distributor's interior crossover fields; all 0 otherwise
 }
 
 // Call a device's `process` through the shared function table: a wasm function pointer IS a table index,
@@ -154,21 +209,21 @@ fn call_device_init(init_index: u32, state_ptr: u32, sample_rate: f32) {
 #[cfg(not(target_family = "wasm"))]
 fn call_device_init(_init_index: u32, _state_ptr: u32, _sample_rate: f32) {}
 
-// Call a device's `parameter_changed(state_ptr, id, value)` export to push a resolved parameter value. The
-// engine calls this at build / edit time (never during the device's `process`, so it never aliases the
-// state the render path borrows).
+// Call a device's `parameter_changed(state_ptr, id, kind, value, modulation)` export (NaN = no modulation).
+// Called at build / edit time, never during the device's `process`, so it never aliases the state the render
+// path borrows.
 #[cfg(target_family = "wasm")]
 #[inline]
-fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, id: u32, kind: u32, value: f32) {
+fn call_device_parameter_changed(parameter_changed_index: u32, state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
     if parameter_changed_index == 0 {
         return; // the device exports no `parameter_changed`; index 0 is the "none" sentinel
     }
     unsafe { *PARAM_PUSHES.get() = PARAM_PUSHES.get().wrapping_add(1); }
-    let parameter_changed: extern "C" fn(u32, u32, u32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
-    parameter_changed(state_ptr, id, kind, value);
+    let parameter_changed: extern "C" fn(u32, u32, u32, f32, f32) = unsafe { core::mem::transmute(parameter_changed_index as usize) };
+    parameter_changed(state_ptr, id, kind, value, modulation);
 }
 #[cfg(not(target_family = "wasm"))]
-fn call_device_parameter_changed(_parameter_changed_index: u32, _state_ptr: u32, _id: u32, _kind: u32, _value: f32) {}
+fn call_device_parameter_changed(_parameter_changed_index: u32, _state_ptr: u32, _id: u32, _kind: u32, _value: f32, _modulation: f32) {}
 
 // Call a device's `field_changed(state_ptr, id, value)` export to deliver an observed plain field's value
 // (catch-up + edits). Called only inside a transaction (the `catchup_and_subscribe` callback), never during
@@ -194,9 +249,6 @@ fn call_device_field_changed(field_changed_index: u32, _state_ptr: u32, id: u32,
     #[cfg(not(test))]
     let _ = (field_changed_index, id, kind, bits, len);
 }
-
-#[cfg(all(not(target_family = "wasm"), test))]
-pub(crate) static FIELD_DELIVERIES: Shared<Vec<(u32, u32, u32, u32)>> = Shared::new(Vec::new());
 
 // Call a device's `sample_changed(state_ptr, id, handle, present)` export to deliver an observed sample (the
 // resolved handle, or `present == 0` when the pointer is unbound). Called only inside a transaction (the
@@ -295,7 +347,10 @@ mod tempo_map;
 mod script_device;
 use audio_unit::{AudioUnitBinding, Members};
 mod composite;
+mod effect_composite;
+
 mod param_automation;
+mod modulation;
 use param_automation::ParamHandle;
 mod sample;
 use sample::SampleResource;
@@ -307,12 +362,15 @@ const INPUT_CAPACITY: usize = 1 << 20; // initial input scratch (1 MiB); grows o
 /// A process-global cell for the single-threaded wasm module: an `UnsafeCell` asserted `Sync`, the
 /// same shape talc uses for its allocator. SAFETY rests on the engine being driven by one thread,
 /// with no overlapping `&mut` to the same cell.
+#[cfg(not(test))]
 struct Shared<T>(UnsafeCell<T>);
 
 // SAFETY: only the audio thread runs engine code, so there is never concurrent access (the shared
 // memory lets the main thread write sample data, but it never executes the engine).
+#[cfg(not(test))]
 unsafe impl<T> Sync for Shared<T> {}
 
+#[cfg(not(test))]
 impl<T> Shared<T> {
     const fn new(value: T) -> Self {
         Self(UnsafeCell::new(value))
@@ -326,10 +384,61 @@ impl<T> Shared<T> {
     }
 }
 
+/// The same cell under `cargo test`, backed by ONE INSTANCE PER THREAD.
+///
+/// The harness runs tests on parallel threads, which breaks the single-thread premise above: they raced on
+/// these cells and killed the whole run with a bare SIGSEGV / SIGTRAP and no failing test named. A test owns
+/// its own `Engine` anyway, so per-thread instances are what it already assumes it has. Each thread's value is
+/// leaked on first touch, so `get` can hand out a reference that outlives the `LocalKey` borrow.
+#[cfg(test)]
+struct Shared<T: 'static>(fn() -> *mut T);
+
+#[cfg(test)]
+unsafe impl<T> Sync for Shared<T> {}
+
+#[cfg(test)]
+impl<T: 'static> Shared<T> {
+    const fn per_thread(resolve: fn() -> *mut T) -> Self {
+        Self(resolve)
+    }
+
+    #[allow(clippy::mut_from_ref)]
+    unsafe fn get(&self) -> &mut T {
+        &mut *(self.0)()
+    }
+}
+
+/// Declares a `Shared` static: one process-global cell in a real build, one per thread under test. The
+/// initialiser is written once and used by both.
+macro_rules! shared_static {
+    ($(#[$meta:meta])* $vis:vis static $name:ident: $ty:ty = $init:expr;) => {
+        #[cfg(not(test))]
+        $(#[$meta])*
+        $vis static $name: $crate::Shared<$ty> = $crate::Shared::new($init);
+
+        #[cfg(test)]
+        $(#[$meta])*
+        $vis static $name: $crate::Shared<$ty> = $crate::Shared::per_thread(|| {
+            std::thread_local! {
+                static CELL: *mut $ty = alloc::boxed::Box::into_raw(alloc::boxed::Box::new($init));
+            }
+            CELL.with(|cell| *cell)
+        });
+    };
+}
+pub(crate) use shared_static;
+
+shared_static! {
+    #[cfg(all(not(target_family = "wasm"), test))]
+    pub(crate) static FIELD_DELIVERIES: Vec<(u32, u32, u32, u32)> = Vec::new();
+}
+
 // A debug counter of audio device-processor constructions (`PluginInstrument` + `PluginAudioEffect`). Exported
 // so a test can assert that a chain REORDER reuses processors (the count does not move) rather than rebuilding
 // them — a rebuilt device resets its DSP (e.g. a delay glides its offset from 0, pitching as if new).
-static DEVICE_BUILDS: Shared<u32> = Shared::new(0);
+shared_static! {
+    static DEVICE_BUILDS: u32 = 0;
+}
 
 pub(crate) fn note_device_build() {
     unsafe { *DEVICE_BUILDS.get() = DEVICE_BUILDS.get().wrapping_add(1); }
@@ -342,7 +451,9 @@ pub extern "C" fn device_build_count() -> u32 {
 
 // A debug counter of device parameter pushes (every `call_device_parameter_changed`). Exported so a test can
 // assert a chain REORDER does NOT re-push a survivor's parameters (which would glide e.g. the delay's offset).
-static PARAM_PUSHES: Shared<u32> = Shared::new(0);
+shared_static! {
+    static PARAM_PUSHES: u32 = 0;
+}
 
 #[no_mangle]
 pub extern "C" fn param_push_count() -> u32 {
@@ -352,7 +463,9 @@ pub extern "C" fn param_push_count() -> u32 {
 // A debug counter of device `terminate` calls (genuine instance death only — a chain-edit SURVIVOR is never
 // counted). Exported so a test can assert a removal terminates its device exactly once, and a reorder /
 // rewire of survivors terminates none.
-static TERMINATES: Shared<u32> = Shared::new(0);
+shared_static! {
+    static TERMINATES: u32 = 0;
+}
 
 #[no_mangle]
 pub extern "C" fn device_terminate_count() -> u32 {
@@ -362,60 +475,96 @@ pub extern "C" fn device_terminate_count() -> u32 {
 // The single engine instance + the four fixed I/O buffers JS reaches by pointer. The buffers are kept
 // out of `Engine` so their addresses are stable and the 1 MiB input never lands on the stack during
 // `Engine` construction.
-static ENGINE: Shared<Option<Engine>> = Shared::new(None);
+shared_static! {
+    static ENGINE: Option<Engine> = None;
+}
 // The incoming-transaction scratch the worklet writes update bytes into. A growable buffer (not a fixed
 // array): pre-allocated to INPUT_CAPACITY at `init`, grown by `input_reserve` for a transaction that
 // exceeds it (and kept at the high-water mark), so a huge transaction is never silently dropped and grows
 // happen rarely, not per transaction.
-static INPUT: Shared<Vec<u8>> = Shared::new(Vec::new());
-static CHECKSUM: Shared<[u8; 32]> = Shared::new([0; 32]);
-static OUTPUT: Shared<[f32; RENDER_QUANTUM * 2]> = Shared::new([0.0; RENDER_QUANTUM * 2]);
-static ENGINE_STATE: Shared<[u8; ENGINE_STATE_LEN]> = Shared::new([0; ENGINE_STATE_LEN]);
+shared_static! {
+    static INPUT: Vec<u8> = Vec::new();
+}
+shared_static! {
+    static CHECKSUM: [u8; 32] = [0; 32];
+}
+shared_static! {
+    static OUTPUT: [f32; RENDER_QUANTUM * 2] = [0.0; RENDER_QUANTUM * 2];
+}
+shared_static! {
+    static ENGINE_STATE: [u8; ENGINE_STATE_LEN] = [0; ENGINE_STATE_LEN];
+}
 // The pull context the `host_pull_events` export reads. It is set up by the audio node (PluginInstrument)
 // right before it calls its device's `process`, and cleared after. Held in its OWN cell (NOT `ENGINE`), so
 // the device's re-entrant `host_pull_events` call never aliases the `&mut Engine` the render path holds.
 // The node scopes its `PULL.get()` borrows so none is live across the device call (single-threaded).
-static PULL: Shared<PullContext> = Shared::new(PullContext::new());
+shared_static! {
+    static PULL: PullContext = PullContext::new();
+}
 // The bind recorder the `host_bind_parameter` export appends to: each parameter's field path. The engine
 // clears it, calls a device's `init` (which binds its params), then drains it and observes each. Held in its
 // OWN cell (NOT `ENGINE`), so the re-entrant `host_bind_parameter` call never aliases the `&mut Engine`.
-static BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+shared_static! {
+    static BIND: Vec<Vec<u16>> = Vec::new();
+}
 // The broadcast-bind recorder (`host_bind_broadcast`): (global slot id, field-key path, float count) per
 // record. The engine clears it, calls a device's `init`, then drains it in `bind_device` (creating +
 // registering the slots). Its OWN cell (NOT `ENGINE`), safe to append re-entrantly from `init`.
-static BROADCAST_BINDS: Shared<Vec<(u32, Vec<u16>, u32, u32)>> = Shared::new(Vec::new());
+shared_static! {
+    static BROADCAST_BINDS: Vec<(u32, Vec<u16>, u32, u32)> = Vec::new();
+}
 // The device LIVE-DATA broadcast registry: global slot id -> (write ptr, UI-subscribed). Read re-entrantly
 // by `host_broadcast_ptr` / `host_broadcast_active` from a device's `process` (never touches `ENGINE`);
 // `bind_device` fills the ptr, teardown zeroes it and returns the id to the free list (no unbounded growth
 // across chain edits).
-pub(crate) static DEVICE_BROADCASTS: Shared<Vec<(u32, bool)>> = Shared::new(Vec::new());
-pub(crate) static DEVICE_BROADCAST_FREE: Shared<Vec<u32>> = Shared::new(Vec::new());
+shared_static! {
+    pub(crate) static DEVICE_BROADCASTS: Vec<(u32, bool)> = Vec::new();
+}
+shared_static! {
+    pub(crate) static DEVICE_BROADCAST_FREE: Vec<u32> = Vec::new();
+}
 // The sample resource (Route F): decoded frames resident in shared memory, keyed by AudioFileBox uuid. Held
 // in its OWN cell (NOT `ENGINE`) so a device's re-entrant `host_resolve_sample` call during render never
 // aliases the `&mut Engine` the render path holds. Mutated only off-render (the load handshake + box
 // observer), read-only during render, so the single-threaded engine never overlaps a borrow.
-static SAMPLES: Shared<SampleResource> = Shared::new(SampleResource::new());
+shared_static! {
+    static SAMPLES: SampleResource = SampleResource::new();
+}
 // The project's TUNING REFERENCE in Hz (TS `EngineContext.baseFrequency`): `bind` catches up on + subscribes
 // to the synced `RootBox.baseFrequency` and records into this cell only. Its OWN cell (NOT `ENGINE`) so a
 // device's re-entrant `host_base_frequency` call during render (the Vaporisateur's note-on) never aliases
 // the `&mut Engine` the render path holds. Mirrors `SAMPLES`. 440 before bind / when no RootBox exists.
-static BASE_FREQUENCY: Shared<f32> = Shared::new(440.0);
+shared_static! {
+    static BASE_FREQUENCY: f32 = 440.0;
+}
+// The transport's SONG position at this quantum's start. While PAUSED the blocks carry the FREE-RUNNING
+// range, which modulation follows but automation must not. Its OWN cell (NOT `ENGINE`), like
+// `BASE_FREQUENCY`, so the re-entrant read during render never aliases the `&mut Engine`.
+shared_static! {
+    static SONG_POSITION: f64 = 0.0;
+}
 // The sample-observe recorder the `host_observe_sample` export appends to: each device's sample pointer-field
 // path (e.g. Nano's `file` at `[15]`). After `init`, the engine REACTIVELY tracks each pointer (catch-up +
 // subscribe), resolving its target to the AudioFileBox, requesting its frames, and delivering the handle (or
 // "unbound") to the device via `sample_changed`. Its OWN cell (NOT `ENGINE`) so the re-entrant
 // `host_observe_sample` call from `init` never aliases `&mut Engine`.
-static SAMPLE_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+shared_static! {
+    static SAMPLE_OBS: Vec<Vec<u16>> = Vec::new();
+}
 
 // The soundfont resource: the simplified soundfont blobs resident in shared memory, keyed by SoundfontFileBox
 // uuid. Its OWN cell (NOT `ENGINE`) so a device's re-entrant `host_resolve_soundfont` call during render never
 // aliases the `&mut Engine` the render path holds. Mirrors `SAMPLES`.
-static SOUNDFONTS: Shared<SoundfontResource> = Shared::new(SoundfontResource::new());
+shared_static! {
+    static SOUNDFONTS: SoundfontResource = SoundfontResource::new();
+}
 // The soundfont-observe recorder the `host_observe_soundfont` export appends to: each device's soundfont
 // pointer-field path (the Soundfont device's `file` at `[10]`). After `init` the engine reactively tracks the
 // pointer, resolving its target `SoundfontFileBox`, requesting its blob, and delivering the handle (or
 // "unbound") via `soundfont_changed`. Its OWN cell (NOT `ENGINE`). Mirrors `SAMPLE_OBS`.
-static SOUNDFONT_OBS: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+shared_static! {
+    static SOUNDFONT_OBS: Vec<Vec<u16>> = Vec::new();
+}
 
 // One recorded field observation: `path` is the device-box field-key path; `target_key` is 0 for a PLAIN
 // field (observed directly via `host_observe_field`) or, for `host_observe_target_string`, the string field
@@ -431,46 +580,82 @@ pub(crate) struct FieldObs {
 // string field the device tracks (the NeuralAmp's model JSON). After `init`, the engine `catchup_and_subscribe`s
 // each and delivers values through the device's `field_changed` export. Its own cell (NOT `ENGINE`) so the
 // re-entrant `host_observe_field` call from `init` never aliases `&mut Engine`.
-static FIELD_OBS: Shared<Vec<FieldObs>> = Shared::new(Vec::new());
+shared_static! {
+    static FIELD_OBS: Vec<FieldObs> = Vec::new();
+}
 
 // The sidechain-bind recorder the `host_bind_sidechain` export appends to: each audio effect's sidechain
 // pointer FIELD-KEY path (e.g. the Gate's `side-chain` at `[30]`), in declaration order. After `init` the
 // engine resolves each to a source's output and feeds it in as an input PORT (id 2, 3, ...). Its own cell (NOT
 // `ENGINE`) so the re-entrant `host_bind_sidechain` call from `init` never aliases `&mut Engine`.
-static SIDECHAIN_BIND: Shared<Vec<Vec<u16>>> = Shared::new(Vec::new());
+shared_static! {
+    static SIDECHAIN_BIND: Vec<Vec<u16>> = Vec::new();
+}
 
 // The CURRENT effect's audio input PORTS (id, left_ptr, right_ptr), swapped in by `PluginAudioEffect::process`
 // for the device call so `host_resolve_input` resolves a port to its buffer: id `1` is the through-signal, ids
 // `2, 3, ...` the resolved sidechains. Its own cell (NOT `ENGINE`); read-only during render, never aliases the
 // graph, exactly like `host_resolve_sample` reading `SAMPLES`.
-static INPUTS: Shared<Vec<(u32, u32, u32)>> = Shared::new(Vec::new());
+shared_static! {
+    static INPUTS: Vec<(u32, u32, u32)> = Vec::new();
+}
 
 // The box uuid of the device whose `init` is currently running, so a SCRIPTABLE device's `init` can read its
 // own uuid via `host_self_uuid` (the engine knows it at bind; the device does not, since it only uses relative
 // field paths). The engine sets it right before `call_device_init`. Its own cell, set + read outside render.
-static CURRENT_DEVICE_UUID: Shared<[u8; 16]> = Shared::new([0; 16]);
+shared_static! {
+    static CURRENT_DEVICE_UUID: [u8; 16] = [0; 16];
+}
 // Regions the note sequencers must SKIP (TS `EngineCommands.ignoreNoteRegion` + `#ignoredRegions`): the
 // region currently being RECORDED INTO must not play back (it would re-trigger the notes being captured).
 // Cleared on stop / stopRecording. Read from the region iteration (its own cell, never `ENGINE`).
-pub(crate) static IGNORED_REGIONS: Shared<Vec<[u8; 16]>> = Shared::new(Vec::new());
+shared_static! {
+    pub(crate) static IGNORED_REGIONS: Vec<[u8; 16]> = Vec::new();
+}
+// Automation lanes under MANUAL control (TS `EngineCommands.suspendAutomation`, issue #347): turning a knob or
+// sending a CC bypasses that parameter's curve for as long as the transport runs, so the hand wins over the
+// automation instead of fighting it. The lane is 1:1 with the parameter. Modulation keeps applying. Cleared on
+// pause / stop / stopRecording, so the next PLAY reads the curve again.
+shared_static! {
+    pub(crate) static SUSPENDED_AUTOMATION: Vec<[u8; 16]> = Vec::new();
+}
 // EFFECTS-monitoring staging (its own cells, read re-entrantly by MonitorMix nodes during render): the
 // worklet writes the live input channels into MONITOR_INPUT before each render and reads each mapped
 // unit's strip output back from MONITOR_OUTPUT after it (forwarded on the worklet's second output).
-pub(crate) static MONITOR_INPUT: Shared<[f32; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]> =
-    Shared::new([0.0; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]);
-pub(crate) static MONITOR_OUTPUT: Shared<[f32; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]> =
-    Shared::new([0.0; monitor::MONITOR_CHANNELS * RENDER_QUANTUM]);
+shared_static! {
+    pub(crate) static MONITOR_INPUT: [f32; monitor::MONITOR_CHANNELS * RENDER_QUANTUM] = [0.0; monitor::MONITOR_CHANNELS * RENDER_QUANTUM];
+}
+shared_static! {
+    pub(crate) static MONITOR_OUTPUT: [f32; monitor::MONITOR_CHANNELS * RENDER_QUANTUM] = [0.0; monitor::MONITOR_CHANNELS * RENDER_QUANTUM];
+}
 
 // The note-bits slot of the unit CURRENTLY reconciling (its instruments capture it at construction —
 // composite slots share their unit's slot). Set around `reconcile_one`'s chain work, cleared after.
-static CURRENT_UNIT_NOTE_BITS: Shared<Option<engine_env::telemetry::BroadcastSlot>> = Shared::new(None);
+shared_static! {
+    #[cfg(not(test))]
+static CURRENT_UNIT_NOTE_BITS: Option<engine_env::telemetry::BroadcastSlot> = None;
+}
+#[cfg(test)]
+std::thread_local! {
+    // Tests run on parallel threads; the production engine is single-threaded, so the Shared cell is only
+    // sound there. Per-thread isolation keeps the tests deterministic (the PARAMS_SIGNAL pattern): the
+    // slot holds an Rc, and racing its non-atomic refcount across test threads corrupts it.
+    static CURRENT_UNIT_NOTE_BITS: core::cell::RefCell<Option<engine_env::telemetry::BroadcastSlot>> =
+        const { core::cell::RefCell::new(None) };
+}
 
 pub(crate) fn current_unit_note_bits() -> Option<engine_env::telemetry::BroadcastSlot> {
-    unsafe { CURRENT_UNIT_NOTE_BITS.get() }.clone()
+    #[cfg(not(test))]
+    { unsafe { CURRENT_UNIT_NOTE_BITS.get() }.clone() }
+    #[cfg(test)]
+    { CURRENT_UNIT_NOTE_BITS.with(|cell| cell.borrow().clone()) }
 }
 
 pub(crate) fn set_current_unit_note_bits(slot: Option<engine_env::telemetry::BroadcastSlot>) {
-    *unsafe { CURRENT_UNIT_NOTE_BITS.get() } = slot;
+    #[cfg(not(test))]
+    unsafe { *CURRENT_UNIT_NOTE_BITS.get() = slot; }
+    #[cfg(test)]
+    CURRENT_UNIT_NOTE_BITS.with(|cell| *cell.borrow_mut() = slot);
 }
 
 /// One link in a unit's event PULL CHAIN (the `NoteEventSource` chain, sequencer -> fx -> ... -> the
@@ -621,6 +806,11 @@ pub(crate) fn pull_events_into(from: f64, to: f64, flags: u32, out: &mut [EventR
 /// free-running block, whose pulse range keeps advancing at a position that is NOT the song position) yields
 /// no update positions: automated parameters HOLD their last resolved value and the UI broadcasts stay still.
 /// A quantum is uniformly playing or paused, so the per-block TS gate collapses to this per-quantum check.
+/// The transport's song position at this quantum's start: where every automation curve reads while paused.
+pub(crate) fn song_position() -> f64 {
+    unsafe { *SONG_POSITION.get() }
+}
+
 fn quantum_transporting() -> bool {
     let pull = unsafe { PULL.get() };
     if pull.blocks.is_null() {
@@ -630,6 +820,12 @@ fn quantum_transporting() -> bool {
     blocks.iter().all(|block| block.flags.transporting())
 }
 
+/// Modulation keeps running while the transport is paused, so the update clock stays open for these devices
+/// and only these. Evaluated on the paused branch only (the `||` short-circuits while transporting).
+fn modulation_armed(pull: &PullContext) -> bool {
+    pull.params.iter().any(|param| param.modulation.is_some())
+}
+
 /// Host import a render template calls to SEED its fragment loop: the first update position at or AFTER `at`
 /// (INCLUSIVE), so a grid point exactly on a block's start fires (mirrors TS `Fragmentor`'s `ceil`). Returns
 /// `f64::INFINITY` when the CURRENT device has no automated parameter, or while the transport is NOT running
@@ -637,7 +833,7 @@ fn quantum_transporting() -> bool {
 #[no_mangle]
 pub extern "C" fn host_first_update_position(at: f64) -> f64 {
     let pull = unsafe { PULL.get() };
-    if !pull.clock_armed || !quantum_transporting() {
+    if !pull.clock_armed || !(quantum_transporting() || modulation_armed(pull)) {
         return f64::INFINITY;
     }
     first_update_position(at)
@@ -652,7 +848,7 @@ pub extern "C" fn host_first_update_position(at: f64) -> f64 {
 #[no_mangle]
 pub extern "C" fn host_next_update_position(after: f64) -> f64 {
     let pull = unsafe { PULL.get() };
-    if !pull.clock_armed || !quantum_transporting() {
+    if !pull.clock_armed || !(quantum_transporting() || modulation_armed(pull)) {
         return f64::INFINITY;
     }
     // The smallest grid multiple strictly greater than `after` (no libm: truncate toward zero, then step).
@@ -812,17 +1008,19 @@ pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) 
     let pull = unsafe { PULL.get() };
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut ParamChange, max as usize) };
     let mut count = 0;
+    // While PAUSED the caller's `position` is free-running; the automation reads the frozen song position.
+    let automation_position = if quantum_transporting() {position} else {song_position()};
     for param in &pull.params {
-        if param.track.is_none() {
+        if param.track.is_none() && param.modulation.is_none() {
             continue; // static params are not clock-driven; their value is pushed at build / edit
         }
-        let (value, kind) = param.resolve(position);
-        if value != param.last.get() {
-            param.last.set(value);
+        let (value, kind, modulation) = param.resolve_split(automation_position, position);
+        if param.changed(value, modulation) {
+            param.mark(value, modulation);
             if count >= out.len() {
                 break;
             }
-            out[count] = ParamChange {id: param.id, kind, value};
+            out[count] = ParamChange {id: param.id, kind, value, modulation};
             count += 1;
         }
     }
@@ -1010,6 +1208,14 @@ struct Engine {
     // into `stem_staging` after every render (stem i -> planar channels 2i / 2i+1).
     stem_exports: Vec<StemEntry>,
     stem_staging: Vec<f32>,
+    // The metronome renders HERE rather than straight into `output`, so its signal can be routed twice: it is
+    // always mixed into `output` (the live engine's and the mixdown's behaviour, unchanged), and when
+    // `metronome_stem` is set it is ALSO copied into the stem staging as the LAST pair
+    // (TS `exportConfiguration.metronome.stem`). A fixed array: no allocation on the render path.
+    metronome_staging: [f32; RENDER_QUANTUM * 2],
+    // Append the metronome as an additional stem, after every unit stem. Set together with `stem_exports`,
+    // which sizes `stem_staging` to include this extra pair.
+    metronome_stem: bool,
     // FROZEN units (TS `setFrozenAudio`): pre-rendered PCM per unit — the chain wiring swaps the
     // instrument + fx for a `FrozenPlayback` while an entry exists. `frozen_pending` holds the buffer the
     // worklet fills between `frozen_allocate` and `set_frozen_audio`.
@@ -1058,11 +1264,21 @@ struct Engine {
     // `midi_out_take`, the device-id table, the scheduled transport messages, and the registered
     // `MIDIOutputBox` targets (see `sync_midi_targets`). Shared with the per-unit MidiOut nodes.
     midi_out: midi_output::SharedMidiOut,
+    modulators: Rc<RefCell<modulation::ModulatorTable>>,
+    // The free-running modulation clock: it integrates while the pulse flow stays continuous and re-anchors
+    // to the position's wall-clock seconds on a start, stop or jump.
+    modulation_free: f64,
+    modulation_position: f64,
+    modulation_playing: bool,
+    // Armed by a modulator's OWN field edit: the value cells are live for the render path, but a STOPPED
+    // transport runs no update clock, so the next reconcile re-pushes every unit's parameters.
+    modulation_dirty: Rc<Cell<bool>>,
     sample_rate: f32,
     blocks: Vec<Block>,
     devices: Vec<DeviceReg>,           // loaded device plugins, in load order (the host registers them)
     device_box_types: Vec<(String, usize)>, // box-type name -> index into `devices`: the ONLY device glue.
     composites: Vec<CompositeSpec>,    // registered composite box types (host of a child collection); data, not code
+    effect_composites: Vec<EffectCompositeSpec>, // registered EFFECT composite box types (parallel fx entries)
     device_allocs: Vec<Box<[u8]>>,     // talc-owned regions handed to devices (data + stacks); kept alive
     controls: Rc<Controls>
 }
@@ -1085,6 +1301,8 @@ impl Engine {
             monitoring_map: Vec::new(),
             stem_exports: Vec::new(),
             stem_staging: Vec::new(),
+            metronome_staging: [0.0; RENDER_QUANTUM * 2],
+            metronome_stem: false,
             frozen_audio: Vec::new(),
             frozen_pending: Vec::new(),
             tempo: None,
@@ -1106,11 +1324,17 @@ impl Engine {
             bus_registry: BTreeMap::new(),
             broadcasts: broadcast::Broadcasts::default(),
             midi_out: midi_output::shared_midi_out(),
+            modulators: Rc::new(RefCell::new(modulation::ModulatorTable::new())),
+            modulation_free: f64::NAN,
+            modulation_position: f64::NAN,
+            modulation_playing: false,
+            modulation_dirty: Rc::new(Cell::new(false)),
             sample_rate,
             blocks: Vec::with_capacity(MAX_BLOCKS_PER_QUANTUM), // a quantum splits into a few blocks (tempo / loop); never realloc on the render path
             devices: Vec::new(),
             device_box_types: Vec::new(),
             composites: Vec::new(),
+            effect_composites: Vec::new(),
             device_allocs: Vec::new(),
             controls: Rc::new(Controls::new())
         }
@@ -1157,15 +1381,34 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // one positional field key per composite facet, matching the loader
     fn register_composite(&mut self, box_type: String, children_field: u16, index_key: u16, exclude_key: u16,
                           cell_instrument_field: u16, cell_midi_field: u16, cell_audio_field: u16, child_enabled_key: u16,
-                          child_mute_key: u16, child_solo_key: u16) {
+                          child_mute_key: u16, child_solo_key: u16, child_volume_key: u16, child_pan_key: u16) {
         self.composites.push(CompositeSpec {box_type, children_field, index_key, exclude_key,
-            cell_instrument_field, cell_midi_field, cell_audio_field, child_enabled_key, child_mute_key, child_solo_key});
+            cell_instrument_field, cell_midi_field, cell_audio_field, child_enabled_key, child_mute_key, child_solo_key,
+            child_volume_key, child_pan_key});
     }
 
     /// The composite spec for a box TYPE, if it is a registered composite host (else `None`, a leaf device).
     /// Cloned so a caller can use it while it also holds `&mut self` to build the children.
     pub(crate) fn composite_for_type(&self, box_type: &str) -> Option<CompositeSpec> {
         self.composites.iter().find(|spec| spec.box_type == box_type).cloned()
+    }
+
+    /// Register an EFFECT composite box type (parallel fx / note entries). The sibling of `register_composite`:
+    /// the whole glue is this one record, so a new split container is a registration, not engine code.
+    #[allow(clippy::too_many_arguments)] // one positional field key per facet, matching the loader
+    fn register_effect_composite(&mut self, box_type: String, kind: u8, distributor: Distributor, entries_field: u16,
+                                 index_key: u16, chain_field: u16, label_key: u16, gain_key: u16, pan_key: u16,
+                                 mute_key: u16, solo_key: u16, dry_key: u16, wet_key: u16, input_tap_field: u16,
+                                 crossover_keys: [u16; 3]) {
+        self.effect_composites.push(EffectCompositeSpec {box_type, kind, distributor, entries_field, index_key,
+            chain_field, label_key, gain_key, pan_key, mute_key, solo_key, dry_key, wet_key, input_tap_field,
+            crossover_keys});
+    }
+
+    /// The effect-composite spec for a box TYPE, if it is a registered parallel composite (else `None`, a leaf
+    /// effect). Cloned so a caller can use it while it also holds `&mut self` to build the entries.
+    pub(crate) fn effect_composite_for_type(&self, box_type: &str) -> Option<EffectCompositeSpec> {
+        self.effect_composites.iter().find(|spec| spec.box_type == box_type).cloned()
     }
 
     /// Apply one forward-only transaction, returning the resulting checksum (or `Err` on a
@@ -1237,8 +1480,14 @@ impl Engine {
         if self.transport.is_playing() {
             self.resolve_automated_solo(self.transport.position());
         }
-        let Engine {transport, metronome, context, output_bus, blocks, tempo, tempo_map: _, controls, signature,
-            marker_track, marker_changes, midi_out, is_recording, is_counting_in, metronome_pref, ..} = self;
+        unsafe { *SONG_POSITION.get() = self.transport.position(); }
+        self.advance_modulation();
+        let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
+            controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
+            metronome_pref, ..} = self;
+        // `Metronome::process` mixes ADDITIVELY, so its buffer starts cleared every quantum, exactly like
+        // `output` above.
+        metronome_staging.fill(0.0);
         // The signature events the metronome walks: the live signature track once bound, else a single
         // storage-signature entry from the controls (the pre-bind fallback).
         let signature_events = signature.as_ref().map(|track| track.events());
@@ -1263,7 +1512,9 @@ impl Engine {
             let active = events.as_deref().filter(|collection| !collection.is_empty());
             // collect this quantum's blocks (converting transport flags) and run the metronome per block
             transport.render_quantum(active, marker_slice, markers_enabled, |block| {
-                let (left, right) = output.split_at_mut(RENDER_QUANTUM);
+                // into the metronome's OWN buffer, not `output`: it is mixed into the output below and may
+                // additionally be copied out as its own stem.
+                let (left, right) = metronome_staging.split_at_mut(RENDER_QUANTUM);
                 metronome.process(block, signature_slice, &mut left[block.s0..block.s1], &mut right[block.s0..block.s1]);
                 blocks.push(Block {
                     index: blocks.len() as u32,
@@ -1326,6 +1577,12 @@ impl Engine {
         // messages and emit the 24-ppq Clock ticks over the transporting blocks, gated by the registered
         // MIDIOutputBoxes. Off-graph like the metronome.
         midi_output::process_transport_clock(midi_out, blocks.as_slice(), sample_rate);
+        // The metronome into the main mix. Identical to when it wrote into `output` directly (both mixes are
+        // additive into a cleared buffer), and it stays unconditional: a stems render never reads `output`
+        // (the worker takes the stem staging and returns early), so there is nothing to gate it on.
+        for index in 0..RENDER_QUANTUM * 2 {
+            output[index] += metronome_staging[index];
+        }
         // drive the processor graph over the quantum's blocks (advancing or static), then mix the output bus in
         context.process(&ProcessInfo {blocks: blocks.as_slice()});
         if let Some(buffer) = output_bus.as_ref() {
@@ -1394,6 +1651,7 @@ impl Engine {
         self.apply_metronome();
         self.transport.stop(false);
         unsafe { IGNORED_REGIONS.get() }.clear();
+        unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         self.schedule_midi_transport(midi_output::stop_message()); // TS `#stopRecording` schedules Stop
     }
 
@@ -1404,6 +1662,7 @@ impl Engine {
         self.is_counting_in = false;
         self.apply_metronome();
         unsafe { IGNORED_REGIONS.get() }.clear();
+        unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         // TS `#stop` schedules ONE MidiData.Stop per stop command; the worklet's stop command always runs
         // `pause()` (a hard reset calls `stop()` after it, which deliberately schedules nothing more).
         self.schedule_midi_transport(midi_output::stop_message());
@@ -1418,6 +1677,7 @@ impl Engine {
         self.is_counting_in = false;
         self.apply_metronome();
         unsafe { IGNORED_REGIONS.get() }.clear();
+        unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         self.transport.stop(true);
         self.transport.reset_marker_state(); // TS `#reset` -> `renderer.reset()` forgets the active marker (silently)
         self.clip_sequencer.borrow_mut().reset();
@@ -1638,10 +1898,267 @@ impl Engine {
         // MIDI-output unit's initial CC push resolves its device through the registry (TS resolves it off
         // the complete graph at construction).
         self.observe_midi_outputs();
+        // Before the units reconcile: `observe_param` resolves each assignment's source through this table.
+        self.observe_modulators();
         self.observe_audio_units();
         self.observe_audio_files();
         self.observe_soundfont_files();
         0
+    }
+
+    /// WASM CONTRACT: RootBox.modulators = field key 11 (boxes RootBox.ts).
+    fn observe_modulators(&mut self) {
+        const ROOT_MODULATORS_KEY: u16 = 11;
+        if let Some(root) = self.graph.find_by_name("RootBox") {
+            let recorder = self.modulators.clone();
+            self.graph.subscribe_pointer_hub(Address::of(root.uuid, vec![ROOT_MODULATORS_KEY]),
+                Box::new(move |_graph, event| {
+                    match event {
+                        HubEvent::Added(source) => recorder.borrow_mut().record_add(source.uuid),
+                        HubEvent::Removed(source) => recorder.borrow_mut().record_remove(source.uuid)
+                    }
+                }));
+        }
+        self.sync_modulators();
+    }
+
+    /// WASM CONTRACT: modulator field keys — enabled 4, bipolar 7, amount 8 (shared by every kind).
+    /// LfoModulatorBox: shape 10, rateSync 11, rateAbsolute 12, phase 13, exponent 15. StepsModulatorBox:
+    /// count 10, rateSync 11, rateAbsolute 12, phase 13, smooth 15, direction 16, steps 20 (array of 64).
+    /// MacroModulatorBox: value 10. RandomModulatorBox: loop 10, rateSync 11, rateAbsolute 12, phase 13,
+    /// smooth 15, seed 16, levels 17.
+    fn advance_modulation(&mut self) {
+        let free_running = self.transport.free_running();
+        let playing = self.transport.is_playing();
+        let quantum_pulses =
+            dsp::ppqn::samples_to_pulses(RENDER_QUANTUM as f64, self.transport.bpm(), self.sample_rate);
+        let position = self.transport.position();
+        // A pause or resume flips `playing`, a locate jumps the free-running pulse, and a loop jump moves
+        // only the song position, so the phase re-anchors on all four.
+        let continuous = playing == self.modulation_playing
+            && (free_running - self.modulation_free).abs() <= quantum_pulses * 0.5
+            && (position - self.modulation_position).abs() <= quantum_pulses * 0.5;
+        {
+            let modulators = self.modulators.borrow();
+            if continuous {
+                modulators.advance(RENDER_QUANTUM as f64 / self.sample_rate as f64, quantum_pulses);
+            } else {
+                modulators.anchor(self.tempo_map.borrow().ppqn_to_seconds(free_running), position);
+            }
+            modulators.refresh_params(position, free_running);
+            modulators.publish_phases();
+        }
+        self.modulation_free = free_running + quantum_pulses;
+        self.modulation_position = position + if playing {quantum_pulses} else {0.0};
+        self.modulation_playing = playing;
+    }
+
+    fn sync_modulators(&mut self) {
+        let (added, removed, rebind) = self.modulators.borrow_mut().take_pending();
+        for uuid in removed {
+            let (subs, collections) = self.modulators.borrow_mut().remove(&uuid);
+            self.release_modulator_bindings(subs, collections);
+            self.modulation_dirty.set(true);
+        }
+        for uuid in rebind {
+            let state = match self.modulators.borrow().resolve(&uuid) {
+                Some(state) => state,
+                None => continue
+            };
+            let (subs, collections) = self.modulators.borrow_mut().detach(&uuid);
+            self.release_modulator_bindings(subs, collections);
+            let name = self.graph.find_box(&uuid).map(|graph_box| graph_box.name.clone()).unwrap_or_default();
+            let (subs, params, collections) = self.bind_modulator(uuid, &name, &state);
+            self.modulators.borrow_mut().attach(&uuid, subs, params, collections);
+            self.modulation_dirty.set(true);
+        }
+        for uuid in added {
+            if self.modulators.borrow().resolve(&uuid).is_some() {
+                continue;
+            }
+            let name = self.graph.find_box(&uuid).map(|graph_box| graph_box.name.clone()).unwrap_or_default();
+            let state = Rc::new(match name.as_str() {
+                "StepsModulatorBox" => modulation::ModulatorState::steps(),
+                "MacroModulatorBox" => modulation::ModulatorState::macro_knob(),
+                "RandomModulatorBox" => modulation::ModulatorState::random(),
+                _ => modulation::ModulatorState::lfo()
+            });
+            let (subs, params, collections) = self.bind_modulator(uuid, &name, &state);
+            let slot = engine_env::telemetry::broadcast_slot(2);
+            self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &slot);
+            self.broadcasts.attach_producer_active(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY,
+                state.broadcast_active.clone());
+            *state.broadcast.borrow_mut() = Some(slot);
+            self.modulators.borrow_mut().add(uuid, state, subs, params, collections);
+            self.modulation_dirty.set(true);
+        }
+        // A field edit reaches the state through the handles, so it lands with the transaction rather than
+        // waiting for the next quantum's refresh.
+        self.modulators.borrow().refresh_params(self.transport.position(), self.transport.free_running());
+    }
+
+    fn release_modulator_bindings(&mut self, subs: Vec<SubscriptionId>,
+                                  collections: Vec<bindings::value_collection::ValueCollection>) {
+        for sub in subs {
+            self.graph.unsubscribe(sub);
+        }
+        for collection in collections {
+            collection.terminate(&mut self.graph);
+        }
+    }
+
+    /// A modulator's own parameters, bound like a device's: key, the mapping an automation curve folds
+    /// through, and where the resolved value lands.
+    /// WASM CONTRACT: mirrors `createParameter` in the modulator adapters (packages/studio/adapters).
+    fn modulator_params(name: &str) -> Vec<(u16, modulation::ParamMapping, fn(&modulation::ModulatorState, f32))> {
+        use math::value_mapping::{Linear, LinearInteger, Power};
+        use modulation::{ModulatorKind, ModulatorState};
+        use modulation::ParamMapping::{Float, Integer, Power as PowerMapping};
+        let rate_sync = Integer(LinearInteger {min: 0, max: modulation::RATES.len() as i32 - 1});
+        let rate_absolute = PowerMapping(Power::by_center(1.0, 0.0, 10.0));
+        let unipolar = Float(Linear::unipolar());
+        let bipolar = Float(Linear::bipolar());
+        let mut params: Vec<(u16, modulation::ParamMapping, fn(&ModulatorState, f32))> = alloc::vec![
+            (8u16, unipolar, (|state: &ModulatorState, value| state.amount.set(value))
+                as fn(&ModulatorState, f32))
+        ];
+        params.append(&mut match name {
+            "StepsModulatorBox" => alloc::vec![
+                (11u16, rate_sync,
+                    (|state: &ModulatorState, value| if let ModulatorKind::Steps(steps) = &state.kind {
+                        steps.rate_sync.set(value as i32)
+                    }) as fn(&ModulatorState, f32)),
+                (12, rate_absolute,
+                    |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.rate_absolute.set(value)}),
+                (13, unipolar,
+                    |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.phase.set(value)}),
+                (15, unipolar,
+                    |state, value| if let ModulatorKind::Steps(steps) = &state.kind {steps.smooth.set(value)})
+            ],
+            "MacroModulatorBox" => alloc::vec![
+                (10u16, unipolar,
+                    (|state: &ModulatorState, value| if let ModulatorKind::Macro(knob) = &state.kind {
+                        knob.value.set(value)
+                    }) as fn(&ModulatorState, f32))
+            ],
+            "RandomModulatorBox" => alloc::vec![
+                (11u16, rate_sync,
+                    (|state: &ModulatorState, value| if let ModulatorKind::Random(random) = &state.kind {
+                        random.rate_sync.set(value as i32)
+                    }) as fn(&ModulatorState, f32)),
+                (12, rate_absolute,
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.rate_absolute.set(value)}),
+                (13, unipolar,
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.phase.set(value)}),
+                (15, unipolar,
+                    |state, value| if let ModulatorKind::Random(random) = &state.kind {random.smooth.set(value)})
+            ],
+            _ => alloc::vec![
+                (10u16, Integer(LinearInteger {min: 0, max: 4}),
+                    (|state: &ModulatorState, value| if let ModulatorKind::Lfo(lfo) = &state.kind {
+                        lfo.shape.set(value as i32)
+                    }) as fn(&ModulatorState, f32)),
+                (11, rate_sync,
+                    |state, value| if let ModulatorKind::Lfo(lfo) = &state.kind {lfo.rate_sync.set(value as i32)}),
+                (12, rate_absolute,
+                    |state, value| if let ModulatorKind::Lfo(lfo) = &state.kind {lfo.rate_absolute.set(value)}),
+                (13, unipolar,
+                    |state, value| if let ModulatorKind::Lfo(lfo) = &state.kind {lfo.phase.set(value)}),
+                (15, bipolar,
+                    |state, value| if let ModulatorKind::Lfo(lfo) = &state.kind {lfo.exponent.set(value)})
+            ]
+        });
+        params
+    }
+
+    /// Bind one modulator: every own parameter through the SAME `observe_param` a device's field uses, so
+    /// automation, an assignment from another modulator and the knob's broadcast all come with it. The step
+    /// array is not a parameter, so it keeps its plain observers.
+    /// WASM CONTRACT: enabled 4, bipolar 7 (ModulatorFactory.ts).
+    fn bind_modulator(&mut self, uuid: Uuid, name: &str, state: &Rc<modulation::ModulatorState>)
+                      -> (Vec<SubscriptionId>, Vec<modulation::BoundParam>,
+                          Vec<bindings::value_collection::ValueCollection>) {
+        let invalidate: Rc<dyn Fn()> = {
+            let modulators = self.modulators.clone();
+            let dirty = self.modulation_dirty.clone();
+            Rc::new(move || {
+                modulators.borrow_mut().record_rebind(uuid);
+                dirty.set(true);
+            })
+        };
+        let mut subs = Vec::new();
+        let mut collections = Vec::new();
+        let mut params = Vec::new();
+        subs.push(self.observe_modulator_flag(uuid, 4, state, |state, value| state.enabled.set(value)));
+        subs.push(self.observe_modulator_flag(uuid, 7, state, |state, value| state.bipolar.set(value)));
+        for (index, (key, mapping, apply)) in Self::modulator_params(name).into_iter().enumerate() {
+            let (handle, mut param_subs, mut param_collections, _armed) =
+                self.observe_param(uuid, &[key], index as u32, &invalidate);
+            subs.append(&mut param_subs);
+            collections.append(&mut param_collections);
+            params.push(modulation::BoundParam {handle, mapping, apply});
+        }
+        // Bind is a catch-up: the cells hold the stored (or already automated) values before the first quantum.
+        let position = self.transport.position();
+        let free_running = self.transport.free_running();
+        for param in params.iter() {
+            param.refresh(state, position, free_running);
+        }
+        if name == "StepsModulatorBox" {
+            subs.push(self.observe_modulator_int(uuid, 10, state, |state, value|
+                if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.count.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 16, state, |state, value|
+                if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.direction.set(value)}));
+            for index in 0..modulation::MAX_STEPS {
+                let state = state.clone();
+                subs.push(self.observe_modulator_float(uuid, alloc::vec![20, index as u16], move |value| {
+                    if let modulation::ModulatorKind::Steps(steps) = &state.kind {steps.steps[index].set(value)}
+                }));
+            }
+        }
+        if name == "RandomModulatorBox" {
+            subs.push(self.observe_modulator_int(uuid, 10, state, |state, value|
+                if let modulation::ModulatorKind::Random(random) = &state.kind {random.loop_length.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 16, state, |state, value|
+                if let modulation::ModulatorKind::Random(random) = &state.kind {random.seed.set(value)}));
+            subs.push(self.observe_modulator_int(uuid, 17, state, |state, value|
+                if let modulation::ModulatorKind::Random(random) = &state.kind {random.levels.set(value)}));
+        }
+        (subs, params, collections)
+    }
+
+    fn observe_modulator_flag(&mut self, uuid: Uuid, key: u16, state: &Rc<modulation::ModulatorState>,
+                              apply: fn(&modulation::ModulatorState, bool)) -> SubscriptionId {
+        let state = state.clone();
+        let dirty = self.modulation_dirty.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![key]), move |value| {
+            if let Some(flag) = value.as_bool() {
+                apply(&state, flag);
+                dirty.set(true);
+            }
+        })
+    }
+
+    fn observe_modulator_float(&mut self, uuid: Uuid, path: Vec<u16>, apply: impl Fn(f32) + 'static) -> SubscriptionId {
+        let dirty = self.modulation_dirty.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, path), move |value| {
+            if let Some(value) = value.as_float32() {
+                apply(value);
+                dirty.set(true);
+            }
+        })
+    }
+
+    fn observe_modulator_int(&mut self, uuid: Uuid, key: u16, state: &Rc<modulation::ModulatorState>,
+                             apply: fn(&modulation::ModulatorState, i32)) -> SubscriptionId {
+        let state = state.clone();
+        let dirty = self.modulation_dirty.clone();
+        self.graph.catchup_and_subscribe(Address::of(uuid, vec![key]), move |value| {
+            if let Some(value) = value.as_int32() {
+                apply(&state, value);
+                dirty.set(true);
+            }
+        })
     }
 
     /// Track the `MIDIOutputBox`es connected to `RootBox.outputMidiDevices` (TS
@@ -1982,6 +2499,7 @@ pub extern "C" fn apply_updates(len: usize) -> i32 {
         let input = core::slice::from_raw_parts(INPUT.get().as_ptr(), len);
         match engine.apply_updates(input) {
             Ok(()) => {
+                engine.sync_modulators(); // before the units: they resolve assignments through the table
                 engine.reconcile_units(); // apply any audio-unit membership change this transaction recorded
                 engine.sync_midi_targets(); // realize any MIDIOutputBox joins / leaves this transaction recorded
                 0
@@ -2019,10 +2537,14 @@ pub extern "C" fn render() {
 /// LE]` (bit0 includeAudioEffects, bit1 includeSends, bit2 useInstrumentOutput, bit3 skipChannelStrip) in
 /// the input scratch, in EXPORT ORDER. Call BEFORE `bind` (an offline render configures once); allocates
 /// the staging each render fills (stem i -> planar channels 2i / 2i+1 at `stem_output_ptr`).
+/// `metronome_stem` (TS `exportConfiguration.metronome.stem`) appends the metronome as one further pair
+/// AFTER the unit stems, so it is part of the same allocation rather than a second call that could leave the
+/// staging a pair short.
 #[no_mangle]
-pub extern "C" fn set_stem_export(count: u32) {
+pub extern "C" fn set_stem_export(count: u32, metronome_stem: u32) {
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
+            engine.metronome_stem = metronome_stem != 0;
             let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), count as usize * 20);
             let mut stems = Vec::with_capacity(count as usize);
             for index in 0..count as usize {
@@ -2038,7 +2560,8 @@ pub extern "C" fn set_stem_export(count: u32) {
                     skip_channel_strip: flags & 8 != 0
                 });
             }
-            engine.stem_staging = alloc::vec![0.0; stems.len() * 2 * RENDER_QUANTUM];
+            let pairs = stems.len() + usize::from(engine.metronome_stem);
+            engine.stem_staging = alloc::vec![0.0; pairs * 2 * RENDER_QUANTUM];
             engine.stem_exports = stems;
         }
     }
@@ -2198,6 +2721,19 @@ pub extern "C" fn ignore_note_region() {
     let ignored = unsafe { IGNORED_REGIONS.get() };
     if !ignored.contains(&uuid) {
         ignored.push(uuid);
+    }
+}
+
+/// Put an automation lane under MANUAL control (TS `EngineCommands.suspendAutomation`, issue #347): its
+/// parameter reads its own field value until the transport stops, so a knob or a CC is heard at once instead
+/// of fighting the curve. The 16-byte lane uuid is written into the input scratch first.
+#[no_mangle]
+pub extern "C" fn suspend_automation() {
+    let mut uuid = [0u8; 16];
+    uuid.copy_from_slice(unsafe { core::slice::from_raw_parts(INPUT.get().as_ptr(), 16) });
+    let suspended = unsafe { SUSPENDED_AUTOMATION.get() };
+    if !suspended.contains(&uuid) {
+        suspended.push(uuid);
     }
 }
 
@@ -2546,7 +3082,7 @@ pub extern "C" fn device_set_box_type(device_id: u32, name_len: usize) {
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn composite_register(name_len: usize, children_field: u32, index_key: u32, exclude_key: u32,
                                      cell_instrument_field: u32, cell_midi_field: u32, cell_audio_field: u32, child_enabled_key: u32,
-                                     child_mute_key: u32, child_solo_key: u32) {
+                                     child_mute_key: u32, child_solo_key: u32, child_volume_key: u32, child_pan_key: u32) {
     unsafe {
         let engine = match ENGINE.get().as_mut() {
             Some(engine) => engine,
@@ -2556,7 +3092,33 @@ pub extern "C" fn composite_register(name_len: usize, children_field: u32, index
         if let Ok(name) = core::str::from_utf8(bytes) {
             engine.register_composite(String::from(name), children_field as u16, index_key as u16, exclude_key as u16,
                 cell_instrument_field as u16, cell_midi_field as u16, cell_audio_field as u16, child_enabled_key as u16,
-                child_mute_key as u16, child_solo_key as u16);
+                child_mute_key as u16, child_solo_key as u16, child_volume_key as u16, child_pan_key as u16);
+        }
+    }
+}
+
+/// Register an EFFECT composite box type (a parallel fx / note stack): its entry collection + the entry box's
+/// field keys + the composite's dry / wet + input tap. The sibling of `composite_register`; the engine reads no
+/// specifics beyond this record, so a new split container needs no engine change.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn effect_composite_register(name_len: usize, kind: u32, distributor: u32, entries_field: u32,
+                                            index_key: u32, chain_field: u32, label_key: u32, gain_key: u32,
+                                            pan_key: u32, mute_key: u32, solo_key: u32, dry_key: u32, wet_key: u32,
+                                            input_tap_field: u32, crossover1_key: u32, crossover2_key: u32,
+                                            crossover3_key: u32) {
+    unsafe {
+        let engine = match ENGINE.get().as_mut() {
+            Some(engine) => engine,
+            None => return
+        };
+        let bytes = core::slice::from_raw_parts(INPUT.get().as_ptr(), name_len);
+        if let Ok(name) = core::str::from_utf8(bytes) {
+            engine.register_effect_composite(String::from(name), kind as u8, Distributor::from_u32(distributor),
+                entries_field as u16, index_key as u16, chain_field as u16, label_key as u16, gain_key as u16,
+                pan_key as u16, mute_key as u16, solo_key as u16, dry_key as u16, wet_key as u16,
+                input_tap_field as u16,
+                [crossover1_key as u16, crossover2_key as u16, crossover3_key as u16]);
         }
     }
 }
@@ -2701,14 +3263,17 @@ mod heap {
 // panic is never anonymous (panic=abort + strip discard the message and the function names otherwise).
 // A fixed static, no alloc: the allocator may be the very thing that panicked.
 const PANIC_MESSAGE_CAPACITY: usize = 512;
-static PANIC_MESSAGE: Shared<([u8; PANIC_MESSAGE_CAPACITY], usize)> =
-    Shared::new(([0; PANIC_MESSAGE_CAPACITY], 0));
+shared_static! {
+    static PANIC_MESSAGE: ([u8; PANIC_MESSAGE_CAPACITY], usize) = ([0; PANIC_MESSAGE_CAPACITY], 0);
+}
 
+#[cfg(not(test))]
 struct PanicWriter {
     buffer: &'static mut [u8],
     written: usize
 }
 
+#[cfg(not(test))]
 impl core::fmt::Write for PanicWriter {
     fn write_str(&mut self, text: &str) -> core::fmt::Result {
         let bytes = text.as_bytes();
@@ -2737,6 +3302,25 @@ pub extern "C" fn host_panic(msg_ptr: u32, msg_len: u32) {
     let count = (msg_len as usize).min(PANIC_MESSAGE_CAPACITY);
     unsafe { core::ptr::copy_nonoverlapping(msg_ptr as *const u8, buffer.as_mut_ptr(), count); }
     *written = count;
+}
+
+/// Parity probe: the REAL value stored for a UNIT automation value, the modulator's `map_parameter`.
+#[no_mangle]
+pub extern "C" fn map_modulator_parameter(kind: u32, key: u32, unit: f32) -> f32 {
+    let name = match kind {
+        1 => "StepsModulatorBox",
+        2 => "MacroModulatorBox",
+        3 => "RandomModulatorBox",
+        _ => "LfoModulatorBox"
+    };
+    let value = abi::ParamValue::Unit(unit);
+    Engine::modulator_params(name).iter()
+        .find(|(field_key, _, _)| *field_key as u32 == key)
+        .map_or(f32::NAN, |(_, mapping, _)| match mapping {
+            modulation::ParamMapping::Float(mapping) => abi::float_value(value, mapping),
+            modulation::ParamMapping::Power(mapping) => abi::float_value(value, mapping),
+            modulation::ParamMapping::Integer(mapping) => abi::int_value(value, mapping) as f32
+        })
 }
 
 #[cfg(not(test))]

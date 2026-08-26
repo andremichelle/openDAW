@@ -57,7 +57,8 @@ describe("audio-clip playback", () => {
             let peak = 0
             for (let q = 0; q < quanta; q++) {
                 engine.render()
-                const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+                const enginePtr = engine.output_ptr()
+                const out = new Float32Array(memory.buffer, enginePtr, len)
                 for (let i = 0; i < len; i++) {
                     expect(Number.isFinite(out[i])).toBe(true)
                     if (Math.abs(out[i]) > peak) {peak = Math.abs(out[i])}
@@ -102,5 +103,69 @@ describe("audio-clip playback", () => {
 
         // The stop transition reached the change queue for the UI back-channel.
         expect(engine.clip_changes_count()).toBeGreaterThan(0)
+    }, 30000)
+
+    // Import-as-clip stores timeBase=Seconds with `duration` in SECONDS (AudioContentFactory.
+    // createNotStretchedClip). The engine must convert that to pulses; reading it raw makes a 2-second clip a
+    // 2-PULSE loop (~1 ms), audibly a repeated short burst that never advances.
+    it("a seconds-time-base clip advances through the file and loops at its converted duration", async () => {
+        const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
+            ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
+        source.beginTransaction()
+        const unit = AudioUnitBox.create(source, UUID.generate(), box => {
+            box.collection.refer(rootBox.audioUnits)
+            box.output.refer(primaryAudioBusBox.input)
+            box.index.setValue(1)
+        })
+        TapeDeviceBox.create(source, UUID.generate(), box => box.host.refer(unit.input))
+        const track = TrackBox.create(source, UUID.generate(), box => {
+            box.type.setValue(TrackType.Audio)
+            box.enabled.setValue(true)
+            box.index.setValue(0)
+            box.target.refer(unit)
+            box.tracks.refer(unit.tracks)
+        })
+        const file = AudioFileBox.create(source, UUID.generate(), box => {
+            box.startInSeconds.setValue(0.0)
+            box.endInSeconds.setValue(0.5)
+            box.fileName.setValue("synthetic")
+        })
+        const collection = ValueEventCollectionBox.create(source, UUID.generate())
+        const clipBox = AudioClipBox.create(source, UUID.generate(), box => {
+            box.clips.refer(track.clips)
+            box.file.refer(file)
+            box.timeBase.setValue("seconds")
+            box.duration.setValue(2.0) // SECONDS (= one bar at 120 bpm), the not-stretched import shape
+            box.events.refer(collection.owners)
+        })
+        source.endTransaction()
+        const {engine, memory, drainSamples} = await loadFullEngine()
+        const sync = connectSyncToEngine(engine, memory, source)
+        await sync.settle(); engine.bind(); await sync.settle()
+        engine.set_metronome_enabled(0)
+        expect(drainSamples()).toBeGreaterThan(0)
+        const peakOf = (quanta: number): number => {
+            const len = engine.output_len() >>> 0
+            let peak = 0
+            for (let q = 0; q < quanta; q++) {
+                engine.render()
+                const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+                for (let i = 0; i < len; i++) {
+                    expect(Number.isFinite(out[i])).toBe(true)
+                    if (Math.abs(out[i]) > peak) {peak = Math.abs(out[i])}
+                }
+            }
+            return peak
+        }
+        engine.stop()
+        const pointer = engine.input_reserve(16)
+        new Uint8Array(memory.buffer, pointer, 16).set(clipBox.address.uuid)
+        engine.schedule_clip_play()
+        // 375 quanta per second at 48 kHz / 128. The tone spans the file's first 0.5 s.
+        expect(peakOf(150)).toBeGreaterThan(0.01)         // 0.0 - 0.4 s: the head of the file sounds
+        peakOf(131)                                       // flush to ~0.75 s (past the 0.5 s tone end)
+        expect(peakOf(375)).toBe(0)                       // 0.75 - 1.75 s: PAST the file, BEFORE the 2 s wrap: silent
+        peakOf(112)                                       // flush across the 2 s loop boundary
+        expect(peakOf(130)).toBeGreaterThan(0.01)         // ~2.05 - 2.4 s: the wrapped pass sounds again
     }, 30000)
 })

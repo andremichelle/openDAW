@@ -373,9 +373,9 @@ fn apply_parameter(state: &mut ArpState, id: u32, value: ParamValue) {
 }
 
 #[no_mangle]
-pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32) {
+pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f32, modulation: f32) {
     let state = unsafe { &mut *(state_ptr as *mut ArpState) };
-    apply_parameter(state, id, ParamValue::from_wire(kind, value));
+    apply_parameter(state, id, ParamValue::from_wire(kind, value, modulation));
 }
 
 /// Parity probe: the REAL value stored for a UNIT automation value, ids in `init` bind order.

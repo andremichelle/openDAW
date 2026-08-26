@@ -1,4 +1,4 @@
-import {DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {assert, DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
 import {
     ExternalLib,
@@ -12,7 +12,6 @@ import {Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {ExportConfiguration} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs"
-import {WasmEngine} from "@opendaw/studio-core-wasm"
 
 export namespace Mixdowns {
     export const exportMixdown = async ({project: source, meta}: ProjectProfile): Promise<void> => {
@@ -25,7 +24,7 @@ export namespace Mixdowns {
             cancel: () => abortController.abort()
         })
         const result = await Promises.tryCatch(OfflineEngineRenderer
-            .start(project, Option.None, progress, abortController.signal, 48_000, WasmEngine.useForExports()))
+            .start(project, Option.None, progress, abortController.signal, 48_000))
         dialog.terminate()
         if (result.status === "rejected") {
             if (!Errors.isAbort(result.error)) {
@@ -76,7 +75,7 @@ export namespace Mixdowns {
             cancel: () => abortController.abort()
         })
         const {status, value, error: renderError} = await Promises.tryCatch(OfflineEngineRenderer
-            .start(project, Option.wrap(config), progress, abortController.signal, 48_000, WasmEngine.useForExports()))
+            .start(project, Option.wrap(config), progress, abortController.signal, 48_000))
         dialog.terminate()
         if (status === "rejected") {
             if (Errors.isAbort(renderError)) {return}
@@ -85,7 +84,7 @@ export namespace Mixdowns {
             return
         }
         const {status: zipStatus, error: zipError} = await Promises.tryCatch(
-            saveZipFile(value, meta, Object.values(config.stems ?? {}).map(({fileName}) => fileName)))
+            saveZipFile(value, meta, ExportConfiguration.stemFileNames(config)))
         if (zipStatus === "rejected") {
             console.warn(zipError)
             RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
@@ -151,6 +150,10 @@ export namespace Mixdowns {
         }
         const dialog = RuntimeNotifier.progress({headline: "Creating Zip File..."})
         const numStems = audioData.numberOfChannels >> 1
+        // One name per rendered pair, or `trackNames[stemIndex]` quietly yields undefined and writes
+        // "undefined.wav" instead of failing (which is exactly what a missing metronome name did).
+        assert(trackNames.length === numStems,
+            () => `Expected ${numStems} stem names for the rendered pairs, got ${trackNames.length}`)
         const zip = new libResult.value()
         for (let stemIndex = 0; stemIndex < numStems; stemIndex++) {
             const l = audioData.frames[stemIndex * 2]

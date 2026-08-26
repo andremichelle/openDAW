@@ -2,10 +2,79 @@
 # crate compiling to a focused .wasm (one entry point per feature). Add a member per feature.
 [workspace]
 resolver = "2"
-members = ["math", "dsp", "abi", "boxgraph", "studio-boxes", "transport", "value", "bindings", "processors", "engine-env", "voicing", "stock-devices/*", "engine", "sine"]
+members = ["math", "dsp", "abi", "boxgraph", "studio-boxes", "transport", "value", "bindings", "processors", "engine-env", "voicing", "stock-devices/*", "engine", "sine", "stretch", "stretch-wasm", "signalsmith"]
+# stretch-lab is a LOCAL research harness: it path-depends on a sibling checkout (../../../audio-analyzer-rs)
+# that does not exist in CI, and cargo loads every member's manifest for any workspace command. Excluding it
+# keeps the engine/wasm build (and CI) self-contained; build it directly from crates/stretch-lab when the
+# analyzer checkout is present.
+exclude = ["stretch-lab", "signalsmith-wasmbench"]
 
 [profile.release]
 opt-level = "z"
 lto = true
 panic = "abort"
 strip = true
+
+[profile.release.package.signalsmith]
+opt-level = 3
+[profile.release.package.engine]
+opt-level = 3
+[profile.release.package.dsp]
+opt-level = 3
+[profile.release.package.math]
+opt-level = 3
+[profile.release.package.processors]
+opt-level = 3
+# The Cubed voice is a per-sample DSP loop (ladder + tanh + table reads); at the workspace default
+# of opt-level="z" it is compiled for SIZE, which costs real CPU on the audio thread. Same reason
+# engine/dsp/math are already pinned to 3.
+[profile.release.package.device-autotune]
+opt-level = 3
+[profile.release.package.device-compressor]
+opt-level = 3
+[profile.release.package.device-convolver]
+opt-level = 3
+[profile.release.package.device-crusher]
+opt-level = 3
+[profile.release.package.device-dattorro-reverb]
+opt-level = 3
+[profile.release.package.device-delay]
+opt-level = 3
+[profile.release.package.device-fold]
+opt-level = 3
+[profile.release.package.device-gate]
+opt-level = 3
+[profile.release.package.device-maximizer]
+opt-level = 3
+[profile.release.package.device-neural-amp]
+opt-level = 3
+[profile.release.package.device-revamp]
+opt-level = 3
+[profile.release.package.device-reverb]
+opt-level = 3
+[profile.release.package.device-stereo-tool]
+opt-level = 3
+[profile.release.package.device-tidal]
+opt-level = 3
+[profile.release.package.device-vocoder]
+opt-level = 3
+[profile.release.package.device-waveshaper]
+opt-level = 3
+[profile.release.package.device-werkstatt]
+opt-level = 3
+[profile.release.package.device-apparat]
+opt-level = 3
+[profile.release.package.device-nano]
+opt-level = 3
+[profile.release.package.device-neon]
+opt-level = 3
+[profile.release.package.device-playfield-sample]
+opt-level = 3
+[profile.release.package.device-sine]
+opt-level = 3
+[profile.release.package.device-soundfont]
+opt-level = 3
+[profile.release.package.device-vaporisateur]
+opt-level = 3
+[profile.release.package.device-cubed]
+opt-level = 3

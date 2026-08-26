@@ -8,6 +8,7 @@ import {Snapping} from "@/ui/timeline/Snapping"
 import {Colors} from "@opendaw/studio-enums"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
 import {TransientMarkerBoxAdapter} from "@opendaw/studio-adapters"
+import {TransientMarkerEditing} from "@/ui/timeline/editors/audio/TransientMarkerEditing"
 
 const className = Html.adoptStyleSheet(css, "TransientMarkerEditor")
 
@@ -20,7 +21,7 @@ type Construct = {
     hoverTransient: ObservableValue<Nullable<TransientMarkerBoxAdapter>>
 }
 
-export const TransientMarkerEditor = ({lifecycle, range, reader, hoverTransient}: Construct) => {
+export const TransientMarkerEditor = ({lifecycle, project, range, reader, hoverTransient}: Construct) => {
     const {audioContent} = reader
     return (
         <div className={className} onInit={element =>
@@ -97,12 +98,21 @@ export const TransientMarkerEditor = ({lifecycle, range, reader, hoverTransient}
                     WheelScaling.install(canvas, range),
                     range.subscribe(requestUpdate),
                     reader.subscribeChange(requestUpdate),
+                    project.editing.subscribe(requestUpdate),
                     audioContent.observableOptPlayMode.catchupAndSubscribe((optPlayMode) => {
                         playModeTerminator.terminate()
-                        optPlayMode.ifSome(playMode => playModeTerminator.ownAll(
-                            playMode.subscribe(requestUpdate),
-                            hoverTransient.subscribe(requestUpdate)
-                        ))
+                        optPlayMode.ifSome(playMode => {
+                            playModeTerminator.ownAll(
+                                playMode.subscribe(requestUpdate),
+                                hoverTransient.subscribe(requestUpdate)
+                            )
+                            const optWarpMarkers = audioContent.optWarpMarkers
+                            if (!audioContent.asPlayModeTimeStretch.isEmpty()
+                                && !optWarpMarkers.isEmpty() && !audioContent.optFile.isEmpty()) {
+                                playModeTerminator.own(TransientMarkerEditing.install(project, canvas, range, reader,
+                                    optWarpMarkers.unwrap(), audioContent.file.transients))
+                            }
+                        })
                     })
                 )
             }}/>

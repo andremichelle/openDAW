@@ -1,4 +1,4 @@
-import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
+import {ppqn, PPQN, TempoMap, TimeBase} from "@opendaw/lib-dsp"
 import {ColorCodes, Sample, TrackType} from "@opendaw/studio-adapters"
 import {int, isDefined, panic, quantizeRound, UUID} from "@opendaw/lib-std"
 import {
@@ -6,6 +6,7 @@ import {
     AudioFileBox,
     AudioPitchStretchBox,
     AudioRegionBox,
+    AudioSignalsmithBox,
     AudioTimeStretchBox,
     TrackBox,
     ValueEventCollectionBox
@@ -38,16 +39,25 @@ export namespace AudioContentFactory {
 
     export type PitchStretchedProps = { /* Has no additional properties yet */ } & Props
 
+    export type SignalsmithProps = { transpose?: number } & Props
+
     export type NotStretchedProps = { /* Has no additional properties yet */ } & Props
 
     /**
      * Calculates the duration of an audio region based on sample properties.
      * Returns duration in PPQN for stretched regions, or in seconds for non-stretched.
      */
-    export const calculateDuration = (sample: Sample, disableQuantize: boolean = false): ppqn => {
+    // A bpm-less sample becomes a SECONDS-timebase region whose ppqn extent depends on the project tempo at
+    // its position, so the conversion must go through the tempo map — the same math as
+    // `TimeBaseConverter.toPPQN` — or the returned span disagrees with the region the drop creates. Returning
+    // the raw seconds here (the old behaviour) produced a near-zero clip mask, leaving the regions underneath
+    // a dropped file un-clipped: the silent creator of the "regions overlap" panics (#1054 family, #1080).
+    export const calculateDuration = (sample: Sample, tempoMap: TempoMap, position: ppqn,
+                                      disableQuantize: boolean = false): ppqn => {
         const {duration: durationInSeconds, bpm} = sample
         if (bpm === 0) {
-            return durationInSeconds
+            const startSeconds = tempoMap.ppqnToSeconds(position)
+            return tempoMap.intervalToPPQN(startSeconds, startSeconds + durationInSeconds)
         }
         const pulses = PPQN.secondsToPulses(durationInSeconds, bpm)
         if (disableQuantize || pulses < PPQN.SemiQuaver) {
@@ -68,6 +78,13 @@ export namespace AudioContentFactory {
 
     export const createPitchStretchedRegion = (props: PitchStretchedProps & Region): AudioRegionBox => {
         return createRegionWithWarpMarkers(AudioPitchStretchBox.create(props.boxGraph, UUID.generate()), props)
+    }
+
+    export const createSignalsmithRegion = (props: SignalsmithProps & Region): AudioRegionBox => {
+        const {boxGraph, transpose} = props
+        return createRegionWithWarpMarkers(AudioSignalsmithBox.create(boxGraph, UUID.generate(), box => {
+            if (isDefined(transpose)) {box.transpose.setValue(transpose)}
+        }), props)
     }
 
     export const createNotStretchedRegion = (props: NotStretchedProps & Region): AudioRegionBox => {
@@ -103,6 +120,13 @@ export namespace AudioContentFactory {
         return createClipWithWarpMarkers(AudioTimeStretchBox.create(boxGraph, UUID.generate()), props)
     }
 
+    export const createSignalsmithClip = (props: SignalsmithProps & Clip): AudioClipBox => {
+        const {boxGraph, transpose} = props
+        return createClipWithWarpMarkers(AudioSignalsmithBox.create(boxGraph, UUID.generate(), box => {
+            if (isDefined(transpose)) {box.transpose.setValue(transpose)}
+        }), props)
+    }
+
     export const createNotStretchedClip = (props: NotStretchedProps & Clip): AudioClipBox => {
         const {boxGraph, targetTrack, index, audioFileBox, sample: {name, duration: durationInSeconds}} = props
         const collectionBox = ValueEventCollectionBox.create(boxGraph, UUID.generate())
@@ -121,8 +145,8 @@ export namespace AudioContentFactory {
 
     // ---- HELPERS ---- //
 
-    const createRegionWithWarpMarkers = (playMode: AudioPitchStretchBox | AudioTimeStretchBox,
-                                         props: (TimeStretchedProps | PitchStretchedProps) & Region): AudioRegionBox => {
+    const createRegionWithWarpMarkers = (playMode: AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox,
+                                         props: (TimeStretchedProps | PitchStretchedProps | SignalsmithProps) & Region): AudioRegionBox => {
         const {boxGraph, targetTrack, position, audioFileBox, sample} = props
         if (targetTrack.type.getValue() !== TrackType.Audio) {
             return panic("Cannot create audio-region on non-audio track")
@@ -153,8 +177,8 @@ export namespace AudioContentFactory {
         })
     }
 
-    const createClipWithWarpMarkers = (playMode: AudioPitchStretchBox | AudioTimeStretchBox,
-                                       props: (TimeStretchedProps | PitchStretchedProps) & Clip): AudioClipBox => {
+    const createClipWithWarpMarkers = (playMode: AudioPitchStretchBox | AudioTimeStretchBox | AudioSignalsmithBox,
+                                       props: (TimeStretchedProps | PitchStretchedProps | SignalsmithProps) & Clip): AudioClipBox => {
         const {boxGraph, targetTrack, audioFileBox, sample} = props
         if (targetTrack.type.getValue() !== TrackType.Audio) {
             return panic("Cannot create audio-region on non-audio track")

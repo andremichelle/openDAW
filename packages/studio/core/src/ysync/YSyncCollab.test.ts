@@ -471,19 +471,28 @@ describe("YSync live collaboration", () => {
     })
 
     // Randomised multi-peer schedules. Exclusive attachments are kept APPEND-ONLY (a ref is never detached or
-    // retargeted away from an exclusive target) because the prototype suppresses its repair from the doc, so
-    // removing an exclusive survivor would diverge live peers from a fresh joiner. Within that regime the
-    // reconcile is a pure function of the converged doc, so every peer AND a late joiner must agree.
+    // retargeted away from an exclusive target), which bounds the scenario space but no longer hides anything:
+    // because the reconcile publishes its repair, every peer's graph stays a function of the converged doc, so
+    // every peer AND a late joiner must agree. Everything random here is derived from `seed` (schedule, uuids,
+    // Yjs client ids), so a reported seed replays the exact failure.
     it("fuzz: randomised concurrent schedules converge across peers and a late joiner", async () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
         const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
         try {
-            for (const seed of [1, 2, 5, 9, 13, 17, 23, 42, 99, 123, 777, 2024]) {
+            for (const seed of [1, 2, 5, 9, 13, 17, 23, 42, 99, 111, 122, 123, 132, 172, 777, 2024]) {
                 const rnd = mulberry32(seed)
                 const pick = <T>(items: ReadonlyArray<T>): T => items[Math.floor(rnd() * items.length)]
+                // Box uuids come from the seeded stream too: the reconcile breaks ties by address, so with
+                // random uuids a seed would replay the schedule but never the scenario.
+                const nextUuid = (): UUID.Bytes => {
+                    const bytes = new Uint8Array(UUID.length)
+                    for (let index = 0; index < UUID.length; index++) {bytes[index] = Math.floor(rnd() * 256)}
+                    return bytes
+                }
                 const peers: Array<Peer> = []
                 for (let index = 0; index < 4; index++) {
                     const doc = new Y.Doc()
+                    doc.clientID = index + 1 // Yjs breaks concurrent-write ties by client id: fix it, or replays drift
                     const boxes = doc.getMap("boxes")
                     const graph = new BoxGraph<any>(Option.wrap(factory as any))
                     peers.push({name: `P${index}`, doc, boxes, graph, sync: await YSync.populateRoom<any>({boxGraph: graph, boxes})})
@@ -496,9 +505,9 @@ describe("YSync live collaboration", () => {
                     }
                     panic(`seed ${seed}: no global convergence`)
                 }
-                const excl = [UUID.generate(), UUID.generate(), UUID.generate()]
-                const leaves = [UUID.generate(), UUID.generate()]
-                const refs = Array.from({length: 6}, () => UUID.generate())
+                const excl = [nextUuid(), nextUuid(), nextUuid()]
+                const leaves = [nextUuid(), nextUuid()]
+                const refs = Array.from({length: 6}, () => nextUuid())
                 edit(peers[0], graph => {
                     excl.forEach(id => ExclusiveBox.create(graph, id))
                     leaves.forEach(id => LeafBox.create(graph, id))
@@ -547,6 +556,7 @@ describe("YSync live collaboration", () => {
                 // A late joiner reconstructs from the document alone and must match the live room.
                 const joinGraph = new BoxGraph<any>(Option.wrap(factory as any))
                 const joinDoc = new Y.Doc()
+                joinDoc.clientID = 99
                 Y.applyUpdate(joinDoc, Y.encodeStateAsUpdate(peers[0].doc))
                 await YSync.joinRoom<any>({boxGraph: joinGraph, boxes: joinDoc.getMap("boxes")})
                 expect(checksumHex(joinGraph), `seed ${seed} joiner`).toBe(reference)
@@ -556,4 +566,183 @@ describe("YSync live collaboration", () => {
             debug.mockRestore()
         }
     })
+
+    // --- Dangling pointers -------------------------------------------------
+    //
+    // The producer is not a concurrent edit, it is a host app replaying its own undo into the Y.Doc: it puts
+    // a deleted box's map back CARRYING ITS ORIGINAL POINTER VALUES, and the target is gone. YSync treats a
+    // "[history]" origin as a genuine batch (not own-origin), so it re-enters through #applyEvents, where
+    // nothing checked that the address still resolves.
+
+    // Re-adding a box map is what the replay does, so snapshot it while the box is still alive.
+    const snapshotBoxMap = (peer: Peer, uuid: UUID.Bytes): Y.Map<unknown> =>
+        (peer.boxes.get(UUID.toString(uuid)) as Y.Map<unknown>).clone()
+
+    const replayAsUndo = (peer: Peer, uuid: UUID.Bytes, map: Y.Map<unknown>): void =>
+        peer.doc.transact(() => {peer.boxes.set(UUID.toString(uuid), map)}, "[history] undo")
+
+    it("repairs a box map replayed with a pointer to a box that is gone", () => {
+        const leafId = UUID.generate()
+        const refId = UUID.generate()
+        shared(graph => {
+            const leaf = LeafBox.create(graph, leafId)
+            RefBox.create(graph, refId, box => box.target.refer(leaf))
+        })
+        const restored = snapshotBoxMap(B, refId)
+        edit(A, graph => {
+            graph.findBox(refId).unwrap().delete()
+            graph.findBox(leafId).unwrap().delete()
+        })
+        converge(A, B)
+        expect(B.graph.findBox(refId).isEmpty()).toBe(true)
+        replayAsUndo(B, refId, restored)
+        const box = B.graph.findBox<RefBox>(refId)
+        expect(box.nonEmpty(), "the undone box comes back").toBe(true)
+        expect(box.unwrap().target.isEmpty(), "but its dead edge is cleared").toBe(true)
+    })
+
+    // Same replay, mandatory pointer: the edge cannot be cleared, so the owner goes instead.
+    it("drops the owner when the replayed pointer is mandatory", () => {
+        const leafId = UUID.generate()
+        const refId = UUID.generate()
+        shared(graph => {
+            const leaf = LeafBox.create(graph, leafId)
+            MandatoryRefBox.create(graph, refId, box => box.target.refer(leaf))
+        })
+        const restored = snapshotBoxMap(B, refId)
+        edit(A, graph => {
+            graph.findBox(refId).unwrap().delete()
+            graph.findBox(leafId).unwrap().delete()
+        })
+        converge(A, B)
+        replayAsUndo(B, refId, restored)
+        expect(B.graph.findBox(refId).isEmpty()).toBe(true)
+    })
+
+    // The repair is worthless if it stays local: A must end up on the same graph, and so must a late joiner.
+    it("publishes the repair so the room and a late joiner agree", async () => {
+        const leafId = UUID.generate()
+        const refId = UUID.generate()
+        shared(graph => {
+            const leaf = LeafBox.create(graph, leafId)
+            RefBox.create(graph, refId, box => box.target.refer(leaf))
+        })
+        const restored = snapshotBoxMap(B, refId)
+        edit(A, graph => {
+            graph.findBox(refId).unwrap().delete()
+            graph.findBox(leafId).unwrap().delete()
+        })
+        converge(A, B)
+        replayAsUndo(B, refId, restored)
+        converge(A, B)
+        expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+        const joinGraph = new BoxGraph<any>(Option.wrap(factory as any))
+        const joinDoc = new Y.Doc()
+        joinDoc.clientID = 99
+        Y.applyUpdate(joinDoc, Y.encodeStateAsUpdate(B.doc))
+        await YSync.joinRoom<any>({boxGraph: joinGraph, boxes: joinDoc.getMap("boxes")})
+        expect(checksumHex(joinGraph)).toBe(checksumHex(B.graph))
+    })
+
+
+    it("leaves a replay alone when its target comes back in the same batch", () => {
+        const leafId = UUID.generate()
+        const refId = UUID.generate()
+        shared(graph => {
+            const leaf = LeafBox.create(graph, leafId)
+            RefBox.create(graph, refId, box => box.target.refer(leaf))
+        })
+        const restoredRef = snapshotBoxMap(B, refId)
+        const restoredLeaf = snapshotBoxMap(B, leafId)
+        edit(A, graph => {
+            graph.findBox(refId).unwrap().delete()
+            graph.findBox(leafId).unwrap().delete()
+        })
+        converge(A, B)
+        B.doc.transact(() => {
+            B.boxes.set(UUID.toString(refId), restoredRef)
+            B.boxes.set(UUID.toString(leafId), restoredLeaf)
+        }, "[history] undo")
+        const box = B.graph.findBox<RefBox>(refId)
+        expect(box.nonEmpty()).toBe(true)
+        expect(box.unwrap().target.targetVertex.nonEmpty(), "a real undo keeps its edge").toBe(true)
+    })
+
+    it("repairs repeatedly, not just the first time", () => {
+        const run = (): void => {
+            const leafId = UUID.generate()
+            const refId = UUID.generate()
+            shared(graph => {
+                const leaf = LeafBox.create(graph, leafId)
+                RefBox.create(graph, refId, box => box.target.refer(leaf))
+            })
+            const restored = snapshotBoxMap(B, refId)
+            edit(A, graph => {
+                graph.findBox(refId).unwrap().delete()
+                graph.findBox(leafId).unwrap().delete()
+            })
+            converge(A, B)
+            replayAsUndo(B, refId, restored)
+            expect(B.graph.findBox<RefBox>(refId).unwrap().target.isEmpty()).toBe(true)
+        }
+        run()
+        run()
+        run()
+    })
+
+    it("keeps every healthy box in the room while it repairs one", () => {
+        const keepId = UUID.generate()
+        const leafId = UUID.generate()
+        const refId = UUID.generate()
+        shared(graph => {
+            const keep = LeafBox.create(graph, keepId)
+            RefBox.create(graph, UUID.generate(), box => box.target.refer(keep))
+            const leaf = LeafBox.create(graph, leafId)
+            RefBox.create(graph, refId, box => box.target.refer(leaf))
+        })
+        const restored = snapshotBoxMap(B, refId)
+        edit(A, graph => {
+            graph.findBox(refId).unwrap().delete()
+            graph.findBox(leafId).unwrap().delete()
+        })
+        converge(A, B)
+        replayAsUndo(B, refId, restored)
+        converge(A, B)
+        expect(B.graph.findBox(keepId).nonEmpty()).toBe(true)
+        expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+    })
+
+    it("a mandatory replay takes only its owner, and both peers agree", () => {
+        const keepId = UUID.generate()
+        const leafId = UUID.generate()
+        const refId = UUID.generate()
+        shared(graph => {
+            LeafBox.create(graph, keepId)
+            const leaf = LeafBox.create(graph, leafId)
+            MandatoryRefBox.create(graph, refId, box => box.target.refer(leaf))
+        })
+        const restored = snapshotBoxMap(B, refId)
+        edit(A, graph => {
+            graph.findBox(refId).unwrap().delete()
+            graph.findBox(leafId).unwrap().delete()
+        })
+        converge(A, B)
+        replayAsUndo(B, refId, restored)
+        converge(A, B)
+        expect(B.graph.findBox(refId).isEmpty()).toBe(true)
+        expect(B.graph.findBox(keepId).nonEmpty()).toBe(true)
+        expect(checksumHex(A.graph)).toBe(checksumHex(B.graph))
+    })
+
+    it("a batch that only touches healthy boxes is applied verbatim, with no repair", () => {
+        const leafId = UUID.generate()
+        shared(graph => {LeafBox.create(graph, leafId).label.setValue("start")})
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        edit(A, graph => graph.findBox<LeafBox>(leafId).unwrap().label.setValue("changed"))
+        converge(A, B)
+        expect(B.graph.findBox<LeafBox>(leafId).unwrap().label.getValue()).toBe("changed")
+        expect(warn.mock.calls.length, "no reconcile warning on a clean batch").toBe(0)
+        warn.mockRestore()
+    })
+
 })

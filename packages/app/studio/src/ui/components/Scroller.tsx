@@ -87,6 +87,10 @@ export const Scroller = ({lifecycle, model, orientation, floating, autoHide}: Co
         })
     }))
     update()
-    lifecycle.own(Html.watchResize(element, () => model.trackSize = element[props.clientSize]))
+    // Writing the track size straight from the observer feeds the thumb geometry back into the same layout
+    // pass, which is what makes Chrome log "ResizeObserver loop completed with undelivered notifications".
+    // One frame later the size is settled and the write costs nothing visually.
+    const readTrackSize = () => model.trackSize = element[props.clientSize]
+    lifecycle.own(Html.watchResize(element, () => AnimationFrame.once(readTrackSize)))
     return element
 }

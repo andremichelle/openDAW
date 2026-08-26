@@ -22,6 +22,7 @@ export interface Engine extends Terminable {
     noteSignal(signal: NoteSignal): void
     subscribeNotes(observer: Observer<NoteSignal>): Subscription
     ignoreNoteRegion(uuid: UUID.Bytes): void
+    suspendAutomation(uuid: UUID.Bytes): void
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription

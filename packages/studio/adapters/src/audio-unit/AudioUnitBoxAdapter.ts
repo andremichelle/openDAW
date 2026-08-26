@@ -59,8 +59,14 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     get captureBox(): Option<CaptureAudioBox | CaptureMidiBox> {return this.#box.capture.targetVertex as Option<CaptureAudioBox | CaptureMidiBox>}
     get tracks(): AudioUnitTracks {return this.#tracks}
     get input(): AudioUnitInput {return this.#input}
-    get midiEffects(): IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost> {return this.#midiEffects}
-    get audioEffects(): IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost> {return this.#audioEffects}
+    // An audio unit hosts BOTH chain kinds, so these are always present (a one-sided host, e.g. a composite
+    // entry, returns `None` for the kind it does not host — see `DeviceHost`).
+    get midiEffects(): Option<IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>> {
+        return Option.wrap(this.#midiEffects)
+    }
+    get audioEffects(): Option<IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>> {
+        return Option.wrap(this.#audioEffects)
+    }
     get inputAdapter(): Option<AudioUnitInputAdapter> {return this.#input.adapter()}
     get auxSends(): IndexedBoxAdapterCollection<AuxSendBoxAdapter, Pointers.AuxSend> {return this.#auxSends}
     get output(): AudioUnitOutput {return this.#output}
@@ -70,13 +76,14 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
         return this.#box.output.targetVertex.mapOr(output =>
             output.box.address.equals(this.#context.rootBoxAdapter.address), false)
     }
-
-    get midiEffectsField(): Field<Pointers.MIDIEffectHost> {return this.#box.midiEffects}
+    get automationCollapsed(): BooleanField {return this.#box.userInterface.automationCollapsed}
+    get midiEffectsField(): Option<Field<Pointers.MIDIEffectHost>> {return Option.wrap(this.#box.midiEffects)}
     get inputField(): Field<Pointers.InstrumentHost | Pointers.AudioOutput> {return this.#box.input}
-    get audioEffectsField(): Field<Pointers.AudioEffectHost> {return this.#box.audioEffects}
+    get audioEffectsField(): Option<Field<Pointers.AudioEffectHost>> {return Option.wrap(this.#box.audioEffects)}
     get tracksField(): Field<Pointers.TrackCollection> {return this.#box.tracks}
     get minimizedField(): BooleanField {return this.#input.adapter().unwrap("input.adapter").minimizedField}
     get isAudioUnit(): boolean {return true}
+    get hostsInstrument(): boolean {return true}
     get label(): string {return this.#input.adapter().mapOr(input => input.labelField.getValue(), "")}
 
     deviceHost(): DeviceHost {return this}
@@ -123,19 +130,19 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
             volume: this.#parametric.createParameter(
                 box.volume,
                 AudioUnitBoxAdapter.VolumeMapper,
-                StringMapping.decible, "volume"),
+                StringMapping.decible, "Volume"),
             panning: this.#parametric.createParameter(
                 box.panning,
                 ValueMapping.bipolar(),
-                StringMapping.panning, "panning", 0.5),
+                StringMapping.panning, "Panning", 0.5),
             mute: this.#parametric.createParameter(
                 box.mute,
                 ValueMapping.bool,
-                StringMapping.bool, "mute"),
+                StringMapping.bool, "Mute"),
             solo: this.#parametric.createParameter(
                 box.solo,
                 ValueMapping.bool,
-                StringMapping.bool, "solo")
+                StringMapping.bool, "Solo")
         } as const
     }
 

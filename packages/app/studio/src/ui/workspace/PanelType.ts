@@ -6,13 +6,14 @@ export enum PanelType {
     BrowserPanel,
     Notepad,
     Mixer,
+    Modulation,
     ModularSystem,
-    VUMeter,
     MidiFall,
     ProjectInfo,
     ShadertoyPreview,
     ShadertoyEditor,
     CodeEditor,
     EmptyFlexSpace,
-    TapTempo
+    TapTempo,
+    Analysis
 }

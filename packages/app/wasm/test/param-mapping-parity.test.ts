@@ -8,22 +8,25 @@
 import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
-import {isDefined, Option, Optional, panic, Terminable, UUID} from "@opendaw/lib-std"
-import {Address, BoxGraph, Constraints, Float32Field, PrimitiveType} from "@opendaw/lib-box"
+import {Arrays, isDefined, Option, Optional, panic, Terminable, UUID} from "@opendaw/lib-std"
+import {Address, BooleanField, BoxGraph, Constraints, Float32Field, Int32Field, PrimitiveType} from "@opendaw/lib-box"
 import {
-    ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, CompressorDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
-    DelayDeviceBox, FoldDeviceBox, GateDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
+    ArpeggioDeviceBox, AudioFileBox, AudioUnitBox, AutotuneDeviceBox, CompressorDeviceBox, ConvolverDeviceBox, CrusherDeviceBox, DattorroReverbDeviceBox,
+    DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
     PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
-    TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox
+    TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox,
+    ApparatDeviceBox, CubedDeviceBox, GrooveShuffleBox, SoundfontDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox, ZeitgeistDeviceBox,
+    LfoModulatorBox, MacroModulatorBox, RandomModulatorBox, StepsModulatorBox
 } from "@opendaw/studio-boxes"
 import {
-    ArpeggioDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
-    CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
-    GateDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
+    ArpeggioDeviceBoxAdapter, AutotuneDeviceBoxAdapter, AutomatableParameterFieldAdapter, BoxAdapters, BoxAdaptersContext, CompressorDeviceBoxAdapter,
+    ConvolverDeviceBoxAdapter, CrusherDeviceBoxAdapter, DattorroReverbDeviceBoxAdapter, DelayDeviceBoxAdapter, FoldDeviceBoxAdapter,
+    GateDeviceBoxAdapter, NeonDeviceBoxAdapter, MaximizerDeviceBoxAdapter, NanoDeviceBoxAdapter, NeuralAmpDeviceBoxAdapter,
     ParameterFieldAdapters, PitchDeviceBoxAdapter, PlayfieldSampleBoxAdapter, ProjectSkeleton,
     RevampDeviceBoxAdapter, ReverbDeviceBoxAdapter, SampleLoader, SampleLoaderManager, StereoToolDeviceBoxAdapter,
     TidalDeviceBoxAdapter, VaporisateurDeviceBoxAdapter, VelocityDeviceBoxAdapter, VocoderDeviceBoxAdapter,
-    WaveshaperDeviceBoxAdapter
+    WaveshaperDeviceBoxAdapter, LfoModulatorBoxAdapter, MacroModulatorBoxAdapter, RandomModulatorBoxAdapter,
+    StepsModulatorBoxAdapter
 } from "@opendaw/studio-adapters"
 import {DEVICE_STACK_SIZE, DeviceExports, parseDylink} from "../../../studio/core-wasm/src/device-linker"
 
@@ -36,12 +39,19 @@ const fieldPath = (address: Address): string => Array.from(address.fieldKeys).jo
 const alignUp = (value: number, alignment: number): number => Math.ceil(value / alignment) * alignment
 
 type WasmParameter = {id: number, path: string}
-type WasmDevice = {parameters: ReadonlyArray<WasmParameter>, map: (id: number, unit: number) => number}
+type WasmDevice = {
+    parameters: ReadonlyArray<WasmParameter>
+    map: (id: number, unit: number) => number
+    // Push a raw wire `(kind, value, modulation)` at a parameter, exactly as the engine's update clock does.
+    push: (id: number, kind: number, value: number, modulation: number) => void
+}
 
-const loadWasmDevice = (file: string): WasmDevice => {
+// `map_parameter` is a test-only export the parity devices carry; the scriptable ones and the preset
+// samplers have no static mapping table, so the wire sweep loads them without it.
+const loadWasmDevice = (file: string, requireMapping: boolean = true): WasmDevice => {
     const module = new WebAssembly.Module(readFileSync(path.join(PLUGINS, file)))
     const {memorySize, tableSize} = parseDylink(module)
-    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: Math.max(tableSize, 1), element: "anyfunc"})
     const memoryBase = 1024
     const stackBase = alignUp(memoryBase + memorySize, 16)
@@ -73,8 +83,14 @@ const loadWasmDevice = (file: string): WasmDevice => {
     const havePages = memory.buffer.byteLength / PAGE
     if (needed / PAGE > havePages) {memory.grow(needed / PAGE - havePages)}
     exports.init?.(statePtr, SAMPLE_RATE)
-    expect(typeof exports.map_parameter, `${file} misses the map_parameter export`).toBe("function")
-    return {parameters, map: (id, unit) => exports.map_parameter(id, unit)}
+    if (requireMapping) {
+        expect(typeof exports.map_parameter, `${file} misses the map_parameter export`).toBe("function")
+    }
+    return {
+        parameters,
+        map: (id, unit) => exports.map_parameter(id, unit),
+        push: (id, kind, value, modulation) => exports.parameter_changed?.(statePtr, id, kind, value, modulation)
+    }
 }
 
 // The boxes under test, hosted in a minimal skeleton: one unit carries every audio/midi effect, instruments
@@ -92,6 +108,7 @@ const buildBoxes = () => {
     const compressor = CompressorDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(0)})
     const crusher = CrusherDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(1)})
     const dattorro = DattorroReverbDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(2)})
+    const convolver = ConvolverDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(16)})
     const delay = DelayDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(3)})
     const fold = FoldDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(4)})
     const gate = GateDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(5)})
@@ -103,6 +120,7 @@ const buildBoxes = () => {
     const tidal = TidalDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(11)})
     const vocoder = VocoderDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(12)})
     const waveshaper = WaveshaperDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(13)})
+    const autotune = AutotuneDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(14)})
     const arpeggio = ArpeggioDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(0)})
     const pitch = PitchDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(1)})
     const velocity = VelocityDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(2)})
@@ -110,6 +128,8 @@ const buildBoxes = () => {
     const nanoUnit = createUnit(3)
     const playfieldUnit = createUnit(4)
     const vaporisateur = VaporisateurDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(vaporisateurUnit.input))
+    const neonUnit = createUnit(5)
+    const neon = NeonDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(neonUnit.input))
     const nano = NanoDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(nanoUnit.input))
     const playfield = PlayfieldDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(playfieldUnit.input))
     const file = AudioFileBox.create(boxGraph, UUID.generate(), box => {
@@ -122,9 +142,24 @@ const buildBoxes = () => {
         box.file.refer(file)
         box.index.setValue(60)
     })
+    const groove = GrooveShuffleBox.create(boxGraph, UUID.generate(), box => {box.label.setValue("Shuffle"); box.duration.setValue(480)})
+    const zeitgeist = ZeitgeistDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.groove.refer(groove); box.index.setValue(3)})
+    const werkstatt = WerkstattDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.audioEffects); box.index.setValue(15)})
+    const spielwerk = SpielwerkDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(effectUnit.midiEffects); box.index.setValue(4)})
+    const apparatUnit = createUnit(6)
+    const apparat = ApparatDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(apparatUnit.input))
+    const cubedUnit = createUnit(7)
+    const cubed = CubedDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(cubedUnit.input))
+    const soundfontUnit = createUnit(8)
+    const soundfont = SoundfontDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(soundfontUnit.input))
+    const lfoModulator = LfoModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(0)})
+    const stepsModulator = StepsModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(1)})
+    const macroModulator = MacroModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(2)})
+    const randomModulator = RandomModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(3)})
     boxGraph.endTransaction()
-    return {boxGraph, compressor, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
-        stereoTool, tidal, vocoder, waveshaper, arpeggio, pitch, velocity, vaporisateur, nano, playfieldSample}
+    return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, soundfont, compressor, convolver, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
+        stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, velocity, vaporisateur, neon, nano, playfieldSample,
+        lfoModulator, stepsModulator, macroModulator, randomModulator}
 }
 
 const boxes = buildBoxes()
@@ -197,8 +232,12 @@ type DeviceCase = {
 const CASES: ReadonlyArray<DeviceCase> = [
     {name: "arpeggio", file: "device_arpeggio.wasm",
         createAdapter: context => new ArpeggioDeviceBoxAdapter(context, boxes.arpeggio), tsOnly: []},
+    {name: "autotune", file: "device_autotune.wasm",
+        createAdapter: context => new AutotuneDeviceBoxAdapter(context, boxes.autotune), tsOnly: []},
     {name: "compressor", file: "device_compressor.wasm",
         createAdapter: context => new CompressorDeviceBoxAdapter(context, boxes.compressor), tsOnly: []},
+    {name: "convolver", file: "device_convolver.wasm",
+        createAdapter: context => new ConvolverDeviceBoxAdapter(context, boxes.convolver), tsOnly: []},
     {name: "crusher", file: "device_crusher.wasm",
         createAdapter: context => new CrusherDeviceBoxAdapter(context, boxes.crusher), tsOnly: []},
     {name: "dattorro-reverb", file: "device_dattorro_reverb.wasm",
@@ -209,6 +248,8 @@ const CASES: ReadonlyArray<DeviceCase> = [
         createAdapter: context => new FoldDeviceBoxAdapter(context, boxes.fold), tsOnly: []},
     {name: "gate", file: "device_gate.wasm",
         createAdapter: context => new GateDeviceBoxAdapter(context, boxes.gate), tsOnly: []},
+    {name: "neon", file: "device_neon.wasm",
+        createAdapter: context => new NeonDeviceBoxAdapter(context, boxes.neon), tsOnly: []},
     {name: "maximizer", file: "device_maximizer.wasm",
         createAdapter: context => new MaximizerDeviceBoxAdapter(context, boxes.maximizer), tsOnly: []},
     {name: "nano", file: "device_nano.wasm",
@@ -222,7 +263,9 @@ const CASES: ReadonlyArray<DeviceCase> = [
         // mute / solo / exclude are composite-child routing flags the engine reads via the Playfield
         // composite registration (childMuteKey / childSoloKey / excludeKey), not device parameters.
         tsOnly: [fieldPath(boxes.playfieldSample.mute.address), fieldPath(boxes.playfieldSample.solo.address),
-            fieldPath(boxes.playfieldSample.exclude.address)]},
+            fieldPath(boxes.playfieldSample.exclude.address),
+            // volume / panning are the slot's channel STRIP, applied by the composite engine-side, not the device.
+            fieldPath(boxes.playfieldSample.volume.address), fieldPath(boxes.playfieldSample.panning.address)]},
     {name: "revamp", file: "device_revamp.wasm",
         createAdapter: context => new RevampDeviceBoxAdapter(context, boxes.revamp), tsOnly: []},
     {name: "reverb", file: "device_reverb.wasm",
@@ -301,8 +344,71 @@ const floatRange = (constraints: Constraints.Float32): Optional<{min: number, ma
     return {min: constraints.min, max: constraints.max}
 }
 
+// A modulator is not a plugin, so the probe is `engine.wasm`'s `map_modulator_parameter`, not a device's.
+type ModulatorCase = {
+    name: string
+    kind: number
+    createAdapter: (context: BoxAdaptersContext) => {terminate(): void}
+}
+
+const MODULATOR_CASES: ReadonlyArray<ModulatorCase> = [
+    {name: "lfo-modulator", kind: 0,
+        createAdapter: context => new LfoModulatorBoxAdapter(context, boxes.lfoModulator)},
+    {name: "steps-modulator", kind: 1,
+        createAdapter: context => new StepsModulatorBoxAdapter(context, boxes.stepsModulator)},
+    {name: "macro-modulator", kind: 2,
+        createAdapter: context => new MacroModulatorBoxAdapter(context, boxes.macroModulator)},
+    {name: "random-modulator", kind: 3,
+        createAdapter: context => new RandomModulatorBoxAdapter(context, boxes.randomModulator)}
+]
+
+const ENGINE = path.resolve(__dirname, "../public/wasm/engine.wasm")
+// The shared table the engine imports, same reserve `core-wasm/src/boot.ts` boots it with.
+const ENGINE_TABLE_RESERVE = 512
+
+const loadEngine = (): (kind: number, key: number, unit: number) => number => {
+    const module = new WebAssembly.Module(readFileSync(ENGINE))
+    const memory = new WebAssembly.Memory({initial: 256})
+    const table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
+    const exports = new WebAssembly.Instance(module, {
+        env: {memory, __indirect_function_table: table, host_perf_now: () => 0}
+    }).exports as unknown as {
+        __wasm_call_ctors?: () => void
+        map_modulator_parameter: (kind: number, key: number, unit: number) => number
+    }
+    exports.__wasm_call_ctors?.()
+    expect(typeof exports.map_modulator_parameter, "engine.wasm misses map_modulator_parameter").toBe("function")
+    return exports.map_modulator_parameter
+}
+
+const MODULATOR_KEY_SPACE = 32
+
+describe("modulator param mapping parity (engine wasm vs TS BoxAdapter)", () => {
+    for (const {name, kind, createAdapter} of MODULATOR_CASES) {
+        it(name, () => {
+            const map = loadEngine()
+            const tsParameters = collectTsParameters(createAdapter)
+            expect(tsParameters.length, `${name}: wraps at least one parameter`).toBeGreaterThan(0)
+            for (const {path: keyPath, adapter} of tsParameters) {
+                const key = Number(keyPath)
+                const rust = map(kind, key, 0.5)
+                expect(Number.isNaN(rust), `${name} [${keyPath}] '${adapter.name}' is not bound by the engine`).toBe(false)
+                for (const unit of GRID) {
+                    expectValue(map(kind, key, unit), adapter.valueMapping.y(unit), adapter.type,
+                        `${name} [${keyPath}] '${adapter.name}' @ ${unit}`)
+                }
+            }
+            // An engine-only key would carry no automation lane and no MIDI learn.
+            const tsKeys = new Set(tsParameters.map(parameter => Number(parameter.path)))
+            const engineOnly = Arrays.create(index => index, MODULATOR_KEY_SPACE)
+                .filter(key => !tsKeys.has(key) && !Number.isNaN(map(kind, key, 0.5)))
+            expect(engineOnly, `${name}: engine-bound field keys without a TS adapter parameter`).toEqual([])
+        })
+    }
+})
+
 describe("box constraints vs TS BoxAdapter value mappings", () => {
-    for (const {name, createAdapter} of CASES) {
+    for (const {name, createAdapter} of [...CASES, ...MODULATOR_CASES]) {
         it(name, () => {
             const mismatches = collectTsParameters(createAdapter).flatMap(({path, adapter}) => {
                 const field = adapter.field
@@ -329,4 +435,114 @@ describe("vocoder band-count", () => {
         expect(bandCount.constraints).toEqual({values: [8, 12, 16]})
         expect(bandCount.initValue).toBe(16)
     })
+})
+
+// EVERY parameter must survive EVERY wire the engine can send it. `ParamHandle::resolve_split` produces
+// exactly two kinds — PARAM_KIND_UNIT while an automation curve covers the position, else the field's own
+// primitive kind — each with or without a modulation sum (NaN = none). A device that resolves a parameter by
+// matching `ParamValue` itself can miss the `Modulated` arm, and since the devices are built with
+// `-Cpanic=immediate-abort` that panic reaches the studio as a bare "RuntimeError: unreachable" (Tidal's
+// rate, #1). Modulation is UNCLAMPED on the wire, so the sweep drives it past both ends.
+const PARAM_KIND_UNIT = 0
+const PARAM_KIND_INT = 1
+const PARAM_KIND_FLOAT = 2
+const PARAM_KIND_BOOL = 3
+const MODULATIONS = [NaN, -1.5, -0.25, 0.0, 0.25, 1.5]
+
+const wireKind = (type: PrimitiveType): number => {
+    if (type === PrimitiveType.Int32) {return PARAM_KIND_INT}
+    if (type === PrimitiveType.Boolean) {return PARAM_KIND_BOOL}
+    return PARAM_KIND_FLOAT
+}
+
+describe("every parameter accepts every wire the engine sends", () => {
+    for (const {name, file, createAdapter} of CASES) {
+        it(name, () => {
+            const wasm = loadWasmDevice(file)
+            const tsByPath = new Map(collectTsParameters(createAdapter)
+                .map(parameter => [parameter.path, parameter]))
+            for (const {id, path: keyPath} of wasm.parameters) {
+                const ts = tsByPath.get(keyPath)
+                if (!isDefined(ts)) {continue}
+                const label = `${name} [${keyPath}] '${ts.adapter.name}'`
+                for (const unit of GRID) {
+                    const stored = ts.adapter.valueMapping.y(unit)
+                    const real = typeof stored === "boolean" ? (stored ? 1.0 : 0.0) : stored as number
+                    for (const modulation of MODULATIONS) {
+                        // The automation wire (a covering curve): the 0..1 value tagged UNIT.
+                        expect(() => wasm.push(id, PARAM_KIND_UNIT, unit, modulation),
+                            `${label} unit=${unit} modulation=${modulation}`).not.toThrow()
+                        // The storage wire: the field's REAL value with its own primitive kind.
+                        expect(() => wasm.push(id, wireKind(ts.adapter.type), real, modulation),
+                            `${label} stored=${real} modulation=${modulation}`).not.toThrow()
+                    }
+                }
+            }
+        })
+    }
+})
+
+// The device modules with no TS-adapter parity case above. Cubed binds its (composite slot) parameters at
+// init and gets the same wire sweep, with each parameter's primitive kind read off the box schema at the
+// field path the device bound. The rest bind nothing to sweep: Zeitgeist and Soundfont take FIELD
+// observations, not parameters (the studio offers neither automation nor modulation on them), and the
+// scriptable three bind whatever their script header declares, forwarding every wire — `Modulated` included
+// — straight to the script bridge (`abi::script_param`).
+const EXTRA_CASES: ReadonlyArray<{name: string, file: string, uuid: UUID.Bytes}> = [
+    {name: "cubed", file: "device_cubed.wasm", uuid: boxes.cubed.address.uuid}
+]
+
+const PARAMETERLESS = [
+    {name: "zeitgeist", file: "device_zeitgeist.wasm"},
+    {name: "soundfont", file: "device_soundfont.wasm"},
+    {name: "werkstatt", file: "device_werkstatt.wasm"},
+    {name: "apparat", file: "device_apparat.wasm"},
+    {name: "spielwerk", file: "device_spielwerk.wasm"}
+]
+
+const schemaWire = (uuid: UUID.Bytes, keyPath: string): Optional<{kind: number, values: ReadonlyArray<number>}> => {
+    const keys = keyPath.split(",").map(key => parseInt(key))
+    const vertex = boxes.boxGraph.findVertex(Address.compose(uuid, ...keys)).unwrapOrUndefined()
+    if (vertex instanceof Float32Field) {
+        const range = floatRange(vertex.constraints)
+        return {kind: PARAM_KIND_FLOAT, values: isDefined(range)
+            ? [range.min, vertex.initValue, range.max] : [vertex.initValue]}
+    }
+    if (vertex instanceof Int32Field) {
+        const constraints = vertex.constraints
+        const values = typeof constraints === "object" && "min" in constraints
+            ? [constraints.min, constraints.max]
+            : typeof constraints === "object" && "values" in constraints ? Array.from(constraints.values) : []
+        return {kind: PARAM_KIND_INT, values: [vertex.initValue, ...values]}
+    }
+    if (vertex instanceof BooleanField) {return {kind: PARAM_KIND_BOOL, values: [0.0, 1.0]}}
+    return undefined
+}
+
+describe("every parameter accepts every wire the engine sends (no adapter case)", () => {
+    for (const {name, file, uuid} of EXTRA_CASES) {
+        it(name, () => {
+            const wasm = loadWasmDevice(file, false)
+            expect(wasm.parameters.length, `${name}: binds no parameter at all`).toBeGreaterThan(0)
+            for (const {id, path: keyPath} of wasm.parameters) {
+                const wire = schemaWire(uuid, keyPath)
+                expect(wire, `${name} [${keyPath}]: no primitive field at that path`).toBeDefined()
+                if (!isDefined(wire)) {continue}
+                for (const modulation of MODULATIONS) {
+                    for (const unit of GRID) {
+                        expect(() => wasm.push(id, PARAM_KIND_UNIT, unit, modulation),
+                            `${name} [${keyPath}] unit=${unit} modulation=${modulation}`).not.toThrow()
+                    }
+                    for (const value of wire.values) {
+                        expect(() => wasm.push(id, wire.kind, value, modulation),
+                            `${name} [${keyPath}] stored=${value} modulation=${modulation}`).not.toThrow()
+                    }
+                }
+            }
+        })
+    }
+    for (const {name, file} of PARAMETERLESS) {
+        it(`${name} binds no parameter of its own`, () =>
+            expect(loadWasmDevice(file, false).parameters).toEqual([]))
+    }
 })

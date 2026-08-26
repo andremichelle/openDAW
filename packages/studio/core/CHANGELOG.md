@@ -3,6 +3,58 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.3](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.2...@opendaw/studio-core@0.2.3) (2026-08-24)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.2.2](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.1...@opendaw/studio-core@0.2.2) (2026-08-17)
+
+### Bug Fixes
+
+- **timeline:** calibrate wheel zoom per device ([#73](https://github.com/andremichelle/openDAW/issues/73)) ([8876b67](https://github.com/andremichelle/openDAW/commit/8876b67fd128098b71db941c0a46450def1a9613))
+
+## [0.2.1](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.1.6...@opendaw/studio-core@0.2.1) (2026-08-11)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.1.6](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.1.5...@opendaw/studio-core@0.1.6) (2026-08-05)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.1.5](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.1.4...@opendaw/studio-core@0.1.5) (2026-08-03)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.1.4](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.1.3...@opendaw/studio-core@0.1.4) (2026-07-29)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.1.3](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.1.2...@opendaw/studio-core@0.1.3) (2026-07-23)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.1.2](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.1.1...@opendaw/studio-core@0.1.2) (2026-07-22)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+## [0.1.1](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.1.0...@opendaw/studio-core@0.1.1) (2026-07-16)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
+# [0.1.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.156...@opendaw/studio-core@0.1.0) (2026-07-15)
+
+### Bug Fixes
+
+- **test:** satisfy RegionModifyStrategy in the 1054 sweep (readMirror, translateTrackIndex) ([566e984](https://github.com/andremichelle/openDAW/commit/566e984880c5b7e6119efc5fd7ba6766a2f5cc0f))
+
+### Features
+
+- **studio:** Signalsmith play-mode in the audio region/clip editor ([ce7d211](https://github.com/andremichelle/openDAW/commit/ce7d211653db3f0478b80795fd2e8d7c5a4ded80))
+
+## [0.0.156](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.155...@opendaw/studio-core@0.0.156) (2026-07-14)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
 ## [0.0.155](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.0.154...@opendaw/studio-core@0.0.155) (2026-07-07)
 
 **Note:** Version bump only for package @opendaw/studio-core

@@ -6,10 +6,10 @@
 //! re-reads the table and re-registers its packages. Nothing here runs during render.
 
 use alloc::boxed::Box;
-use alloc::rc::Weak;
+use alloc::rc::{Rc, Weak};
 use alloc::vec::Vec;
 use boxgraph::address::Uuid;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use engine_env::telemetry::BroadcastSlot;
 
 // WASM CONTRACT: the lib-fusion `PackageType` enum order (Float, FloatArray, Integer, IntegerArray, ByteArray).
@@ -30,6 +30,9 @@ pub struct BroadcastEntry {
     pub ptr: u32,
     pub len: u32, // floats at `ptr` (1 for a Float package, 4 for a meter FloatArray)
     pub active: bool, // the UI's subscription flag (round-tripped; producers MAY skip cold work)
+    // An ENGINE-realized producer (not a plugin, so no `host_broadcast_active`) mirrors the flag here to gate its
+    // own cold work, e.g. the frequency splitter's input-spectrum FFT.
+    producer_active: Option<Rc<Cell<bool>>>,
     owner: Weak<RefCell<Box<[f32]>>>
 }
 
@@ -72,9 +75,20 @@ impl Broadcasts {
             ptr,
             len,
             active: false,
-            owner: alloc::rc::Rc::downgrade(slot)
+            producer_active: None,
+            owner: Rc::downgrade(slot)
         });
         self.generation = self.generation.wrapping_add(1);
+    }
+
+    /// Attach an engine producer's `active` mirror to an already-registered entry (matched by address + type), so
+    /// its cold work follows the UI subscription just as a plugin's `host_broadcast_active` does.
+    pub fn attach_producer_active(&mut self, uuid: Uuid, keys: &[u16], package_type: u32, flag: Rc<Cell<bool>>) {
+        if let Some(entry) = self.entries.iter_mut().find(|entry|
+            entry.uuid == uuid && entry.keys == keys && entry.package_type == package_type) {
+            flag.set(entry.active);
+            entry.producer_active = Some(flag);
+        }
     }
 
     /// The live slot already registered at `(uuid, keys, package_type)`, if any — so a re-observe (an automation
@@ -117,6 +131,9 @@ impl Broadcasts {
     pub fn set_active(&mut self, index: usize, active: bool) {
         if let Some(entry) = self.entries.get_mut(index) {
             entry.active = active;
+            if let Some(flag) = &entry.producer_active {
+                flag.set(active);
+            }
         }
     }
 }

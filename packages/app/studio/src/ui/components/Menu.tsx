@@ -203,6 +203,7 @@ export class Menu implements Terminable, Lifecycle {
     }
 
     #onPointerLeave(_item: MenuItem, itemElement: HTMLElement, event: PointerEvent): void {
+        if (event.pointerType === "touch") {return} // touch emits a synthetic leave right after release
         if (this.#isChild(event.relatedTarget as Node)) {return}
         itemElement.classList.remove("selected")
         this.#closeChildMenu()

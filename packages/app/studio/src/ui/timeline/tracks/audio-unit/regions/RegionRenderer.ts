@@ -16,6 +16,7 @@ import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {Context2d} from "@opendaw/lib-dom"
 import {RegionPaintBucket} from "@/ui/timeline/tracks/audio-unit/regions/RegionPaintBucket"
 import {RegionLabel} from "@/ui/timeline/RegionLabel"
+import {TimelineLabels} from "@/ui/timeline/TimelineLabels"
 
 export namespace RegionRenderer {
     let audioRenderStrategy: AudioRenderer.Strategy = AudioRenderer.DefaultStrategy
@@ -89,7 +90,7 @@ export namespace RegionRenderer {
                 } else {
                     context.font = `${fontSize}px ${fontFamily}`
                 }
-                const text = region.label.length === 0 ? "◻" : region.label
+                const text = TimelineLabels.forRegion(region)
                 context.fillText(Context2d.truncateText(context, text, maxTextWidth).text, x0Int + 3 * dpr, 1 + labelHeight / 2)
                 if (!region.hasCollection) {continue}
                 context.fillStyle = contentColor

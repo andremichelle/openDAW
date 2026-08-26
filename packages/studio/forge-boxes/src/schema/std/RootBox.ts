@@ -22,6 +22,11 @@ export const RootBox: BoxSchema<Pointers> = {
                 name: "modular-setups",
                 pointerRules: {accepts: [Pointers.ModularSetup], mandatory: false}
             },
+            11: {
+                type: "field",
+                name: "modulators",
+                pointerRules: {accepts: [Pointers.ModulatorCollection], mandatory: false}
+            },
             20: {
                 type: "field",
                 name: "audio-units",

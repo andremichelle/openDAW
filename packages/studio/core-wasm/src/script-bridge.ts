@@ -11,9 +11,9 @@
 // call passes that handle. Buffers are byte offsets into the ONE shared memory; we re-derive `memory.buffer`
 // views EVERY call, since the SharedArrayBuffer can grow / detach (talc), never caching a typed-array view.
 
-import {isDefined, UUID, ValueMapping} from "@opendaw/lib-std"
+import {clamp, isDefined, UUID, ValueMapping} from "@opendaw/lib-std"
 import {SimpleLimiter} from "@opendaw/lib-dsp"
-import {runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
+import {copyEvents, runSpielwerk, SpielwerkRuntime} from "./script-spielwerk"
 
 const RENDER_QUANTUM = 128
 // ~1 second of render calls (128-frame quanta at 48k) before a scriptless device is reported — long enough to
@@ -38,7 +38,7 @@ const MAX_AMPLITUDE = 1000.0 // ~60 dB; matches the TS processors' validateOutpu
 
 type ParamDecl = {label: string, index: number, mapping: string, min: number, max: number, unit: string}
 type SampleDecl = {label: string, index: number}
-type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArray<ParamDecl>, samples: ReadonlyArray<SampleDecl>}
+type RegistryEntry = {update: number, create: new () => any, params: ReadonlyArray<ParamDecl>, samples: ReadonlyArray<SampleDecl>, pass: boolean}
 
 // The minimal engine surface the bridge needs to resolve a sample's resident frames during render.
 export interface ScriptEngine {
@@ -56,12 +56,15 @@ class Bridge {
     // index -> the raw (kind, value) the engine last delivered. Cached so a value pushed BEFORE the proc loads
     // (the engine pushes initial / automated params at bind, before the first render builds the mappings) is
     // replayed once the proc + mappings exist, and re-mapped through the NEW mapping on a hot-swap.
-    readonly rawParams = new Map<number, {kind: number, value: number}>()
+    readonly rawParams = new Map<number, {kind: number, value: number, modulation: number}>()
     // index -> label, for @sample slots (Apparat); the resolved sample handle is cached so a hot-swap re-delivers.
     sampleLabels = new Map<number, string>()
     readonly sampleHandles = new Map<number, number>() // index -> resolved engine sample handle (-1 = no sample; 0 is valid)
     limiter: SimpleLimiter | null = null
     spielwerk: SpielwerkRuntime | null = null
+    // Spielwerk's `@no-pass` verdict for the CURRENTLY loaded script. `true` by default so a device whose script
+    // never loaded (or died) forwards its input instead of muting the chain.
+    pass = true
     // A scriptable device with no registered Processor renders silence. That is legitimate for a block or two
     // while the script loads async, but a device that stays scriptless is an anomaly the host must surface (not
     // swallow). Count the render calls that found no registry entry; warn ONCE past the grace window.
@@ -124,7 +127,8 @@ export class ScriptBridges {
             host_script_note_on: (handle, pitch, velocity, cent, id) => this.#noteOn(handle, pitch, velocity, cent, id),
             host_script_note_off: (handle, id) => this.#noteOff(handle, id),
             host_script_reset: (handle) => this.#reset(handle),
-            host_script_param: (handle, index, kind, value) => this.#param(handle, index, kind, value),
+            host_script_param: (handle, index, kind, value, modulation) =>
+                this.#param(handle, index, kind, value, modulation),
             host_script_sample: (handle, index, sampleHandle, present) => this.#sample(handle, index, sampleHandle, present),
             host_script_notes: (handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1) =>
                 this.#notes(handle, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1),
@@ -159,6 +163,8 @@ export class ScriptBridges {
             return null
         }
         if (registry !== undefined && registry.update !== bridge.currentUpdate) {
+            // Outside the try: a script that throws in its constructor still gets ITS declared note routing.
+            bridge.pass = registry.pass !== false
             try {
                 const proc = new registry.create()
                 bridge.paramMappings = new Map(registry.params.map(declaration => [declaration.index, {label: declaration.label, mapping: resolveMapping(declaration)}]))
@@ -176,7 +182,7 @@ export class ScriptBridges {
                 bridge.silenced = false
                 // Re-apply the parameters + samples the engine pushed before this swap (re-mapping each raw value
                 // through the new script's @param mapping).
-                for (const [index, raw] of bridge.rawParams) {this.#applyParam(bridge, index, raw.kind, raw.value)}
+                for (const [index, raw] of bridge.rawParams) {this.#applyParam(bridge, index, raw.kind, raw.value, raw.modulation)}
                 for (const [index, sampleHandle] of bridge.sampleHandles) {this.#deliverSample(bridge, index, sampleHandle)}
             } catch (error) {
                 this.#silence(bridge, `Failed to instantiate Processor: ${error}`)
@@ -246,20 +252,25 @@ export class ScriptBridges {
         bridge?.spielwerk?.reset()
     }
 
-    #param(handle: number, index: number, kind: number, value: number): void {
+    #param(handle: number, index: number, kind: number, value: number, modulation: number): void {
         const bridge = this.#bridges.get(handle)
         if (bridge === undefined) {return}
-        bridge.rawParams.set(index, {kind, value}) // cache for replay once the proc + mappings exist
-        this.#applyParam(bridge, index, kind, value)
+        bridge.rawParams.set(index, {kind, value, modulation}) // cache for replay once the proc + mappings exist
+        this.#applyParam(bridge, index, kind, value, modulation)
     }
 
     // Map one raw (kind, value) through the param's @param mapping and hand it to the user proc. A no-op when the
-    // proc / mappings are not loaded yet — `#ensureProc` replays `rawParams` once they are.
-    #applyParam(bridge: Bridge, index: number, kind: number, value: number): void {
+    // proc / mappings are not loaded yet — `#ensureProc` replays `rawParams` once they are. The script's mapping
+    // lives here, so this is where a modulation sum (NaN = none) folds in, like the Rust `float_value`.
+    #applyParam(bridge: Bridge, index: number, kind: number, value: number, modulation: number): void {
         const entry = bridge.paramMappings.get(index)
         if (entry === undefined) {return}
-        const mapped = kind === PARAM_KIND_UNIT ? entry.mapping.y(value) : value
-        bridge.proc?.paramChanged?.(entry.label, mapped)
+        if (isNaN(modulation)) {
+            bridge.proc?.paramChanged?.(entry.label, kind === PARAM_KIND_UNIT ? entry.mapping.y(value) : value)
+            return
+        }
+        const unit = kind === PARAM_KIND_UNIT ? value : entry.mapping.x(value)
+        bridge.proc?.paramChanged?.(entry.label, entry.mapping.y(clamp(unit + modulation, 0.0, 1.0)))
     }
 
     // The engine's sample handles are 0-based slot indices, so 0 is a VALID handle; `present` is the absence
@@ -276,13 +287,16 @@ export class ScriptBridges {
            from: number, to: number, bpm: number, flags: number, s0: number, s1: number): number {
         const bridge = this.#bridges.get(handle)
         if (bridge === undefined) {return 0}
+        // No live Processor (never loaded, or silenced): forward the input, so a scriptless / broken Spielwerk
+        // is transparent rather than a mute button. A `@no-pass` script keeps its silence, as its author asked.
+        const forward = (): number => bridge.pass ? copyEvents(this.#memory.buffer, inPtr, inCount, outPtr, outMax) : 0
         const proc = this.#ensureProc(bridge)
-        if (proc === null || bridge.spielwerk === null) {return 0}
+        if (proc === null || bridge.spielwerk === null) {return forward()}
         try {
-            return runSpielwerk(bridge.spielwerk, proc, this.#memory.buffer, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1)
+            return runSpielwerk(bridge.spielwerk, proc, this.#memory.buffer, inPtr, inCount, outPtr, outMax, from, to, bpm, flags, s0, s1, bridge.pass)
         } catch (error) {
             this.#silence(bridge, `Runtime error: ${error}`)
-            return 0
+            return forward()
         }
     }
 

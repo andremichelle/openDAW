@@ -1,1 +1,10 @@
 /target
+/stretch-lab/out
+/signalsmith/out
+# stretch-lab is excluded from the workspace (external audio-analyzer-rs path dep); it builds standalone
+# into its own target/ with its own lockfile that references a machine-local path — keep both out of git.
+/stretch-lab/target
+/stretch-lab/Cargo.lock
+# signalsmith-wasmbench is also excluded from the workspace (standalone perf harness); keep its build output
+# out of git — the 45 tracked target/ artifacts were committed by mistake.
+/signalsmith-wasmbench/target

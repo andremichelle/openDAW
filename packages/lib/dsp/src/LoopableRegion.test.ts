@@ -52,6 +52,26 @@ describe("LoopableRegion cut-and-move scenario", () => {
     })
 })
 
+describe("LoopableRegion degenerate loop durations", () => {
+    const barPpqn = 4 * PPQN.Quarter
+
+    const region = (loopDuration: number) => ({
+        position: 4 * barPpqn,
+        complete: 8 * barPpqn,
+        loopOffset: 5 * barPpqn,
+        loopDuration
+    })
+
+    it.each([0, -barPpqn, NaN])("locateLoops terminates and yields nothing (loopDuration=%s)", loopDuration => {
+        const cycles = [...LoopableRegion.locateLoops(region(loopDuration), 0, 16 * barPpqn)]
+        expect(cycles.length).toBe(0)
+    })
+
+    it.each([0, -barPpqn, NaN])("locateLoop finds nothing (loopDuration=%s)", loopDuration => {
+        expect(LoopableRegion.locateLoop(region(loopDuration), 0, 16 * barPpqn).isEmpty()).toBe(true)
+    })
+})
+
 describe("TempoMap.intervalToSeconds with negative fromPPQN", () => {
     const barPpqn = 4 * PPQN.Quarter
     const bpm = 120

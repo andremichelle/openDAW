@@ -1,6 +1,21 @@
 import {describe, expect, it} from "vitest"
 import {Strings} from "./strings"
 
+describe("Strings.capitalize", () => {
+    it("upper-cases the first letter of every word", () => {
+        expect(Strings.capitalize("volume")).toBe("Volume")
+        expect(Strings.capitalize("low pass")).toBe("Low Pass")
+        expect(Strings.capitalize("Bits")).toBe("Bits")
+    })
+
+    it("leaves everything else as written", () => {
+        expect(Strings.capitalize("")).toBe("")
+        expect(Strings.capitalize("LFO rate")).toBe("LFO Rate")
+        expect(Strings.capitalize("cut-off")).toBe("Cut-off")
+        expect(Strings.capitalize("3 bits")).toBe("3 Bits")
+    })
+})
+
 describe("Strings.getUniqueName", () => {
     it("returns the desired name when it is free", () => {
         expect(Strings.getUniqueName([], "Foo")).toBe("Foo")

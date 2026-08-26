@@ -1,0 +1,154 @@
+@use "@/colors"
+
+component
+  flex: 1 1 auto
+  min-height: 0
+  display: flex
+  flex-direction: column
+  @include colors.panel-background
+  color: var(--color-bright)
+
+  > .toolbar
+    flex: 0 0 auto
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+    padding: 0.25em 0.5em
+    font-size: 0.7em
+    color: var(--color-gray)
+
+    > .source
+      color: var(--color-bright)
+
+    > .spacer
+      flex: 1 1 auto
+
+  > .cards
+    flex: 1
+    min-height: 0
+    display: flex
+    flex-direction: column
+    gap: 1em
+    padding: 0.5em
+
+    > .meters
+      flex: 0 0 auto
+      display: grid
+      grid-template-columns: 1fr 1fr
+      gap: 1em
+
+    > .grid
+      flex: 1
+      min-height: 0
+      display: grid
+      grid-template-columns: 1fr 1fr
+      grid-auto-rows: 1fr
+      gap: 1em
+
+  .card
+    display: flex
+    flex-direction: column
+    min-width: 0
+    min-height: 0
+
+    &.full
+      grid-column: 1 / -1
+
+    > .card-head
+      flex: 0 0 auto
+      display: flex
+      align-items: center
+      min-height: 21px
+      column-gap: 0.75em
+      padding: 0 0 0.5em 0
+      font-size: 0.7em
+      letter-spacing: 0.05em
+
+      > .title
+        color: var(--color-bright)
+        font-weight: 700
+        text-transform: uppercase
+        letter-spacing: 0.09em
+        white-space: nowrap
+
+      > .controls
+        display: flex
+        flex-wrap: wrap
+        align-items: center
+        column-gap: 0.75em
+        row-gap: 0.15em
+        margin-left: auto
+        justify-content: flex-end
+        text-transform: none
+        letter-spacing: 0
+
+        label
+          font-size: 1em
+
+    > .card-body
+      flex: 1 1 auto
+      min-height: 0
+      display: flex
+
+      > canvas
+        width: 100%
+        height: 100%
+        display: block
+        border-radius: 3px
+
+  .control
+    color: rgba(white, 0.3)
+    white-space: nowrap
+    cursor: pointer
+
+    &:hover
+      color: rgba(white, 0.7)
+
+  .controls [data-class="checkbox"], .controls [data-class="radio-group"]
+    --color: var(--color-shadow)
+
+  .card.meter > .card-body
+    height: auto
+
+  .card-body > .vu
+    display: block
+    width: 100%
+
+    > svg
+      display: block
+      width: 100%
+      height: auto
+      border-radius: 3px
+
+  .card-body > .lufs
+    display: flex
+    flex-direction: column
+    width: 100%
+    row-gap: 4px
+    padding: 4px
+
+    > .readout
+      font-size: 9px
+      display: flex
+      flex-wrap: nowrap
+      align-items: baseline
+      column-gap: 7px
+      white-space: nowrap
+
+      .metric
+        display: flex
+        align-items: baseline
+        column-gap: 2px
+
+      .name, .unit
+        color: var(--color-shadow)
+
+      .value
+        color: var(--color-gray)
+        font-variant-numeric: tabular-nums
+        min-width: 24px
+
+    > canvas
+      flex: 1 1 auto
+      width: 100%
+      min-height: 36px

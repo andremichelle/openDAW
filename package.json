@@ -21,6 +21,7 @@
     "publish-sdk": "lerna publish"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@types/ssh2-sftp-client": "^9.0.5",
     "@typescript-eslint/eslint-plugin": "^7.1.0",
     "@typescript-eslint/parser": "^7.1.0",

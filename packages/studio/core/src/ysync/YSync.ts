@@ -3,6 +3,7 @@ import {
     asInstanceOf,
     assert,
     EmptyExec,
+    int,
     isInstanceOf,
     isUndefined,
     JSONValue,
@@ -17,6 +18,7 @@ import {
 } from "@opendaw/lib-std"
 import {
     ArrayField,
+    Box,
     BoxGraph,
     Field,
     ObjectField,
@@ -71,9 +73,12 @@ export class YSync<T> implements Terminable {
             const fields = boxMap.get("fields") as Y.Map<unknown>
             boxGraph.createBox(name, uuid, box => YMapper.applyFromBoxMap(box, fields))
         })
-        // A room document can encode a state that violates a box-graph invariant (the live reconcile heals
-        // each peer's graph but leaves the doc as-is). Repair deterministically before validating, so a fresh
-        // joiner lands on the same graph every peer already holds instead of rejecting the whole snapshot.
+        // A room document can encode a state that violates a box-graph invariant. Repair deterministically
+        // before validating, so a fresh joiner lands on the same graph every peer already holds instead of
+        // rejecting the whole snapshot. The rebuild above only mirrors the document and must NOT be written
+        // back (that would republish every box map over the live room), but the repair must be, exactly as on
+        // the live path in #setupYjs.
+        sync.#publishFrom = Option.wrap(sync.#updates.length)
         deterministicReconcile(boxGraph)
         boxGraph.endTransaction()
         return sync
@@ -99,6 +104,7 @@ export class YSync<T> implements Terminable {
     readonly #pathPrefix: ReadonlyArray<string | number>
 
     #ignoreUpdates: boolean = false
+    #publishFrom: Option<int> = Option.None
 
     constructor({boxGraph, boxes, conflict}: Construct<T>) {
         this.#boxGraph = boxGraph
@@ -121,7 +127,7 @@ export class YSync<T> implements Terminable {
             // First attempt: apply the remote batch verbatim.
             this.#boxGraph.beginTransaction()
             const result = tryCatch(() => {
-                this.#applyEvents(events)
+                this.#assertResolvable(this.#applyEvents(events))
                 this.#ignoreUpdates = true
                 this.#boxGraph.endTransaction()
                 this.#ignoreUpdates = false
@@ -136,15 +142,21 @@ export class YSync<T> implements Terminable {
                 // forks the room, because each client reverts to its own different state — RE-APPLY the batch
                 // and repair the violation with a function that is deterministic in the converged document
                 // (see deterministicReconcile). Every client computes the same repair, so the graphs converge.
+                //
+                // The repair itself MUST be written back to the document (everything before `#publishFrom`
+                // mirrors the incoming batch and stays suppressed). Kept local-only, it silently breaks the
+                // 'graph equals document' invariant: the graph never re-derives an edge it dropped, so once the
+                // document's violation clears by other means (a later write wins the field by LWW) the healed
+                // peers hold a state no peer that never saw the violation, and no late joiner, can reproduce.
                 const reconciled = tryCatch(() => {
                     this.#boxGraph.beginTransaction()
                     this.#applyEvents(events)
+                    this.#publishFrom = Option.wrap(this.#updates.length)
                     deterministicReconcile(this.#boxGraph)
-                    this.#ignoreUpdates = true
                     this.#boxGraph.endTransaction()
-                    this.#ignoreUpdates = false
                 })
                 if (reconciled.status === "failure") {
+                    this.#publishFrom = Option.None
                     this.#ignoreUpdates = false
                     if (this.#boxGraph.inTransaction()) {
                         this.#boxGraph.abortTransaction()
@@ -170,7 +182,8 @@ export class YSync<T> implements Terminable {
     // Replay one remote Yjs event batch into the (already open) box-graph transaction. Idempotent enough to
     // run twice: the first attempt applies verbatim; on a constraint failure the reconcile path aborts and
     // replays through here before repairing.
-    #applyEvents(events: Array<Y.YEvent<any>>): void {
+    #applyEvents(events: Array<Y.YEvent<any>>): ReadonlyArray<Box> {
+        const touched: Array<Box> = []
         for (const event of events) {
             const path = this.#normalizePath(event.path)
             const keys = event.changes.keys
@@ -180,30 +193,50 @@ export class YSync<T> implements Terminable {
                 }
                 if (change.action === "add") {
                     assert(path.length === 0, "'Add' cannot have a path")
-                    this.#createBox(key)
+                    touched.push(this.#createBox(key))
                 } else if (change.action === "update") {
                     if (path.length === 0) {continue}
                     assert(path.length >= 2, "Invalid path: must have at least 2 elements (uuid, 'fields').")
-                    this.#updateValue(path, key)
+                    touched.push(this.#updateValue(path, key))
                 } else if (change.action === "delete") {
                     assert(path.length === 0, "'Delete' cannot have a path")
                     this.#deleteBox(key)
                 }
             }
         }
+        return touched
     }
 
-    #createBox(key: string): void {
+    // A batch can leave an edge naming a uuid no box occupies: the box map came back carrying its original
+    // pointer values (an undo replay in the host app does exactly this), or a peer deleted the target
+    // concurrently. Nothing downstream catches it, because endTransaction validates address PRESENCE, not
+    // resolvability, so it commits here and surfaces much later as a panic in dependenciesOf. Throw instead,
+    // which drops us into the reconcile path below and repairs it deterministically. Checked after the whole
+    // batch: a box created early may legitimately point at one created later in the same batch.
+    #assertResolvable(touched: ReadonlyArray<Box>): void {
+        for (const box of touched) {
+            if (!box.isAttached()) {continue}
+            for (const [pointer, targetAddress] of box.outgoingEdges()) {
+                if (this.#boxGraph.findVertex(targetAddress).isEmpty()) {
+                    return panic(`Pointer ${pointer.toString()} targets ${targetAddress.toString()} (no such vertex).`)
+                }
+            }
+        }
+    }
+
+    #createBox(key: string): Box {
         const map = this.#boxes.get(key) as Y.Map<unknown>
         const name = map.get("name") as keyof T
         const fields = map.get("fields") as Y.Map<unknown>
         const uuid = UUID.parse(key)
         const optBox = this.#boxGraph.findBox(UUID.parse(key))
         if (optBox.isEmpty()) {
-            this.#boxGraph.createBox(name, uuid, box => YMapper.applyFromBoxMap(box, fields))
+            return this.#boxGraph.createBox(name, uuid, box => YMapper.applyFromBoxMap(box, fields))
         } else {
             console.debug(`Box '${key}' has already been created. Performing 'Upsert'.`)
-            YMapper.applyFromBoxMap(optBox.unwrap(), fields)
+            const box = optBox.unwrap()
+            YMapper.applyFromBoxMap(box, fields)
+            return box
         }
     }
 
@@ -216,7 +249,7 @@ export class YSync<T> implements Terminable {
         return path.slice(prefix.length)
     }
 
-    #updateValue(path: ReadonlyArray<string | number>, key: string): void {
+    #updateValue(path: ReadonlyArray<string | number>, key: string): Box {
         const address = YMapper.pathToAddress(path, key)
         const vertex = this.#boxGraph.findVertex(address)
             .unwrap(`Vertex at '${address.toString()}' does not exist.`)
@@ -232,11 +265,17 @@ export class YSync<T> implements Terminable {
             visitPointerField: (field: PointerField) => field.fromJSON(targetMap.get(key) as JSONValue),
             visitPrimitiveField: (field: PrimitiveField) => field.fromJSON(targetMap.get(key) as JSONValue)
         })
+        return vertex.box
     }
 
     #deleteBox(key: string): void {
-        const box = this.#boxGraph.findBox(UUID.parse(key))
-            .unwrap(`Box '${key}' does not exist.`)
+        const optBox = this.#boxGraph.findBox(UUID.parse(key))
+        if (optBox.isEmpty()) {
+            // Two peers can publish the same repair (a mandatory owner losing an exclusive target).
+            console.debug(`Box '${key}' has already been deleted.`)
+            return
+        }
+        const box = optBox.unwrap()
         box.outgoingEdges().forEach(([pointer]) => pointer.defer())
         box.incomingEdges().forEach(pointer => pointer.defer())
         this.#boxGraph.unstageBox(box)
@@ -275,8 +314,12 @@ export class YSync<T> implements Terminable {
                 onBeginTransaction: EmptyExec,
                 onEndTransaction: (rolledBack) => {
                     const pending = this.#updates.splice(0)
-                    if (this.#ignoreUpdates || rolledBack) {return}
-                    const optimized = optimizeUpdates(pending)
+                    const publishFrom = this.#publishFrom
+                    this.#publishFrom = Option.None
+                    if (rolledBack) {return}
+                    const publishing: ReadonlyArray<Update> = publishFrom
+                        .mapOr(index => pending.slice(index), this.#ignoreUpdates ? [] : pending)
+                    const optimized = optimizeUpdates(publishing)
                     if (optimized.length === 0) {return}
                     const result = tryCatch(() => this.#getDoc()
                         .transact(() => optimized.forEach(update => this.#applyUpdate(update)),

@@ -40,7 +40,7 @@ export const ManualPage: PageFactory<StudioService> = ({lifecycle, service, path
     return (
         <div className={className}>
             <aside onConnect={host => lifecycle.own(installScrollbars(host))}>
-                <BackButton/>
+                <BackButton service={service}/>
                 <nav>
                     <LocalLink href="/manuals/">⇱</LocalLink>
                     <hr/>

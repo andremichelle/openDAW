@@ -103,9 +103,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         })
 
         const controlFlagsSAB = new SharedArrayBuffer(4) // 4 bytes minimum
-        const variant: Nullable<EngineWorkletVariant> = EngineVariant.current()
+        // The engine is ALWAYS the installed variant (the wasm engine). There is no built-in fallback
+        // processor to drop to, so an absent provider is a boot error rather than a silent downgrade.
+        const variant: EngineWorkletVariant = EngineVariant.current()
 
-        super(context, isNull(variant) ? "engine-processor" : variant.processorName, {
+        super(context, variant.processorName, {
                 numberOfInputs: 1,
                 numberOfOutputs: 2,
                 outputChannelCount: [numberOfChannels, 8],
@@ -116,7 +118,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     project: project.toArrayBuffer(),
                     exportConfiguration,
                     options,
-                    variant: isNull(variant) ? undefined : variant.attachment
+                    variant: variant.attachment
                 } satisfies EngineProcessorAttachment
             }
         )
@@ -155,6 +157,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     ignoreNoteRegion(uuid: UUID.Bytes): void {
                         dispatcher.dispatchAndForget(this.ignoreNoteRegion, uuid)
                     }
+                    suspendAutomation(uuid: UUID.Bytes): void {
+                        dispatcher.dispatchAndForget(this.suspendAutomation, uuid)
+                    }
                     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void {
                         dispatcher.dispatchAndForget(this.scheduleClipPlay, clipIds)
                     }
@@ -169,8 +174,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     }
                     terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
                 }))
-        this.#frozenAudioWriter = isNull(variant) || !isDefined(variant.connectFrozenAudio)
-            ? null : variant.connectFrozenAudio(messenger)
+        this.#frozenAudioWriter = isDefined(variant.connectFrozenAudio)
+            ? variant.connectFrozenAudio(messenger) : null
         this.#monitoringRouter = this.#terminator.own(new MonitoringRouter(this, this.#commands))
 
         const {port, sab} =
@@ -241,9 +246,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
             AnimationFrame.add(() => reader.tryRead()),
             project.liveStreamReceiver.connect(messenger.channel("engine-live-data")),
             this.#preferences.syncWith(messenger.channel("engine-preferences")),
-            isNull(variant)
-                ? new SyncSource<BoxIO.TypeMap>(project.boxGraph, messenger.channel("engine-sync"), false)
-                : variant.connectSync(messenger, project)
+            variant.connectSync(messenger, project)
         )
     }
 
@@ -290,6 +293,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     noteSignal(signal: NoteSignal): void {this.#commands.noteSignal(signal)}
     subscribeNotes(observer: Observer<NoteSignal>): Subscription {return this.#notifyNoteSignals.subscribe(observer)}
     ignoreNoteRegion(uuid: UUID.Bytes): void {this.#commands.ignoreNoteRegion(uuid)}
+    suspendAutomation(uuid: UUID.Bytes): void {this.#commands.suspendAutomation(uuid)}
     scheduleClipPlay(clipIds: ReadonlyArray<UUID.Bytes>): void {
         this.#notifyClipNotification.notify({type: "waiting", clips: clipIds})
         this.#commands.scheduleClipPlay(clipIds)

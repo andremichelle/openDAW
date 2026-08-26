@@ -3,7 +3,7 @@ import {asDefined, ControlSource, Editing, Lifecycle, Terminable} from "@opendaw
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {attachParameterContextMenu} from "@/ui/menu/automation.ts"
 import {AudioUnitTracks, AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
-import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
+import {AnimationFrame, Html} from "@opendaw/lib-dom"
 import {MIDILearning} from "@opendaw/studio-core"
 
 const className = Html.adoptStyleSheet(css, "AutomationControl")
@@ -43,6 +43,39 @@ const syncIndicator = (indicator: HTMLElement, target: Element, offset: number):
     indicator.style.height = `${bounds.height}px`
 }
 
+/// The control-source ring every automatable control shows: it follows the control's own bounds and lights
+/// up per source (automation, midi, modulation, external).
+export const installControlSourceIndicator = (lifecycle: Lifecycle,
+                                              parameter: AutomatableParameterFieldAdapter,
+                                              host: HTMLElement,
+                                              target: Element,
+                                              offset: number = 0): void => {
+    const indicator: HTMLElement = (<div className="automation-indicator hidden"/>)
+    host.appendChild(indicator)
+    let syncSubscription: Terminable = Terminable.Empty
+    let sourceCount = 0
+    lifecycle.ownAll(
+        parameter.catchupAndSubscribeControlSources({
+            onControlSourceAdd: (source: ControlSource) => {
+                indicator.classList.add(source)
+                if (sourceCount++ === 0) {
+                    indicator.classList.remove("hidden")
+                    syncSubscription = AnimationFrame.add(() => syncIndicator(indicator, target, offset))
+                }
+            },
+            onControlSourceRemove: (source: ControlSource) => {
+                indicator.classList.remove(source)
+                if (--sourceCount === 0) {
+                    syncSubscription.terminate()
+                    syncSubscription = Terminable.Empty
+                    indicator.classList.add("hidden")
+                }
+            }
+        }),
+        Terminable.create(() => syncSubscription.terminate())
+    )
+}
+
 type Construct = {
     lifecycle: Lifecycle
     editing: Editing
@@ -66,40 +99,7 @@ export const AutomationControl = (
     const indicatorOffset = offset ?? 0
     const element: HTMLElement = (<div className={className}>{children}</div>)
     const target = asDefined(element.firstElementChild, "firstElementChild not defined")
-    const indicator: HTMLElement = (<div className="automation-indicator hidden"/>)
-    element.appendChild(indicator)
-    let syncSubscription: Terminable = Terminable.Empty
-    let sourceCount = 0
-    lifecycle.ownAll(
-        attachParameterContextMenu(editing, midiLearning, tracks, parameter, target, disableAutomation),
-        parameter.catchupAndSubscribeControlSources({
-            onControlSourceAdd: (source: ControlSource) => {
-                indicator.classList.add(source)
-                if (sourceCount++ === 0) {
-                    indicator.classList.remove("hidden")
-                    syncSubscription = AnimationFrame.add(() => syncIndicator(indicator, target, indicatorOffset))
-                }
-            },
-            onControlSourceRemove: (source: ControlSource) => {
-                indicator.classList.remove(source)
-                if (--sourceCount === 0) {
-                    syncSubscription.terminate()
-                    syncSubscription = Terminable.Empty
-                    indicator.classList.add("hidden")
-                }
-            }
-        }),
-        parameter.registerTracks(tracks),
-        ...(disableAutomation === true ? [] : [
-            Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-                if (event.buttons !== 1) {return}
-                console.debug("touchStart")
-                parameter.touchStart()
-            }, {capture: true}),
-            Events.subscribe(element, "pointerup", () => parameter.touchEnd(), {capture: true}),
-            Events.subscribe(element, "pointercancel", () => parameter.touchEnd(), {capture: true})
-        ]),
-        Terminable.create(() => syncSubscription.terminate())
-    )
+    installControlSourceIndicator(lifecycle, parameter, element, target, indicatorOffset)
+    lifecycle.own(attachParameterContextMenu(editing, midiLearning, tracks, parameter, target, disableAutomation))
     return element
 }

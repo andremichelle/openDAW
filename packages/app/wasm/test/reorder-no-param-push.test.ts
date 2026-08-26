@@ -16,7 +16,7 @@ const ODSL = path.resolve(__dirname, "../public/odsl/test.odsl")
 
 describe("reorder touches no existing plugin", () => {
     it("toggling the reorder rebuilds nothing and re-pushes no parameters", async () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         const {engine, memory} = await loadFullEngine()
         const builds = () => engine.device_build_count() >>> 0
         const pushes = () => engine.param_push_count() >>> 0

@@ -29,8 +29,9 @@ export namespace DragAndDrop {
         return Arrays.empty()
     }
 
+    // A provider returning null VETOES the drag: no native drag starts (no ghost), no state is touched.
     export const installSource = (element: HTMLElement,
-                                  provider: Provider<AnyDragData>,
+                                  provider: Provider<Nullable<AnyDragData>>,
                                   classReceiver?: Element,
                                   dragImage?: Provider<HTMLElement>): Terminable => {
         classReceiver ??= element
@@ -49,10 +50,15 @@ export namespace DragAndDrop {
                 (event: DragEvent) => {
                     const dataTransfer = event.dataTransfer
                     if (!isDefined(dataTransfer)) {return}
+                    const data = provider()
+                    if (!isDefined(data)) {
+                        event.preventDefault()
+                        return
+                    }
                     dataTransfer.setData("application/json", "{custom: true}")
                     dataTransfer.effectAllowed = "copyMove"
                     classReceiver.classList.add("dragging")
-                    dragging = Option.wrap(provider())
+                    dragging = Option.wrap(data)
                     if (isDefined(dragImage)) {
                         const ghost = dragImage()
                         ghost.style.position = "fixed"
@@ -151,6 +157,25 @@ export namespace DragAndDrop {
             const rect = child.getBoundingClientRect()
             const center = (rect.left + rect.right) / 2
             if (clientX < center) {return [index, child]}
+            index++
+        }
+    }
+
+    // The vertical sibling of `findInsertLocation`. Skips hidden entries (an empty, display-none container
+    // would land at y 0 and shift every index) and sorts by the on-screen top edge, so it also serves
+    // containers whose children are grid-placed (DOM order differs from display order).
+    export const findInsertLocationVertical = ({clientY}: Client, parent: Element, limit?: [int, int]): [int, Nullable<Element>] => {
+        const elements = Array.from(parent.querySelectorAll("[data-drag]"))
+            .filter(candidate => candidate.getClientRects().length > 0)
+            .toSorted((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
+        const [minIndex, maxIndex] = limit ?? [0, elements.length]
+        let index: int = minIndex
+        while (true) {
+            const child = elements[index] ?? null
+            if (index >= maxIndex) {return [index, child]}
+            const rect = child.getBoundingClientRect()
+            const center = (rect.top + rect.bottom) / 2
+            if (clientY < center) {return [index, child]}
             index++
         }
     }

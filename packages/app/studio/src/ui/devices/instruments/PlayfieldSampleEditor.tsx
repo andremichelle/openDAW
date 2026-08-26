@@ -1,5 +1,5 @@
 import css from "./PlayfieldSampleEditor.sass?inline"
-import {Lifecycle, Terminable} from "@opendaw/lib-std"
+import {Lifecycle, Terminable, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -57,9 +57,14 @@ export const PlayfieldSampleEditor = ({lifecycle, service, adapter, deviceHost}:
                               </span>
                           )
                           let noteLifeTime = Terminable.Empty
+                          const fileLifecycle = lifecycle.own(new Terminator())
                           lifecycle.ownAll(
                               Terminable.create(() => noteLifeTime.terminate()),
-                              adapter.labelField.catchupAndSubscribe(owner => fileNameLabel.textContent = owner.getValue()),
+                              adapter.box.file.catchupAndSubscribe(() => {
+                                  fileLifecycle.terminate()
+                                  adapter.file().ifSome(({box: {fileName}}) => fileLifecycle.own(
+                                      fileName.catchupAndSubscribe(owner => fileNameLabel.textContent = owner.getValue())))
+                              }),
                               TextTooltip.default(deviceLabel, () => "Go back to device"),
                               Events.subscribe(playLabel, "dblclick", event => event.stopPropagation()),
                               Events.subscribe(playLabel, "pointerdown", (event: PointerEvent) => {

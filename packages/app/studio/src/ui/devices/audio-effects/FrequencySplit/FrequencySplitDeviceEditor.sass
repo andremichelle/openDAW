@@ -1,0 +1,35 @@
+@use "@/mixins"
+
+component
+  display: flex
+  align-items: flex-start
+  height: 100%
+  min-height: 0
+  gap: 0.5em
+
+  .main
+    display: flex
+    flex-direction: column
+    flex: 1 1 auto
+    min-height: 0
+    gap: 0
+
+  .mix
+    display: grid
+    grid-template: repeat(3, 3.5em) / auto
+    justify-items: center
+    align-items: center
+    row-gap: 0.25em
+    @include mixins.Control
+
+    .bands
+      display: flex
+      flex-direction: column
+      align-items: center
+      justify-content: center
+      gap: 0.125em
+      font-size: 0.625rem
+
+      .caption
+        color: var(--color-dark)
+        font-size: 0.625rem

@@ -6,6 +6,7 @@ import {TapeDeviceBox} from "./instruments/TapeDeviceBox"
 import {VaporisateurDeviceBox} from "./instruments/VaporisateurDeviceBox"
 import {ArpeggioDeviceBox} from "./midi-effects/ArpeggioDeviceBox"
 import {PitchDeviceBox} from "./midi-effects/PitchDeviceBox"
+import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
 import {ReSoulDeviceBox} from "./instruments/ReSoulDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
@@ -16,6 +17,7 @@ import {UnknownMidiEffectDevice} from "./midi-effects/UnknownMidiEffectDevice"
 import {SoundfontDeviceBox} from "./instruments/SoundfontDeviceBox"
 import {MaximizerDeviceBox} from "./audio-effects/MaximizerDeviceBox"
 import {CompressorDeviceBox} from "./audio-effects/CompressorDeviceBox"
+import {AutotuneDeviceBox} from "./audio-effects/AutotuneDeviceBox"
 import {CrusherDeviceBox} from "./audio-effects/CrusherDeviceBox"
 import {FoldDeviceBox} from "./audio-effects/FoldDeviceBox"
 import {MIDIOutputDeviceBox} from "./instruments/MIDIOutputDeviceBox"
@@ -33,9 +35,15 @@ import {WerkstattParameterBox} from "./audio-effects/WerkstattParameterBox"
 import {WerkstattSampleBox} from "./audio-effects/WerkstattSampleBox"
 import {SpielwerkDeviceBox} from "./midi-effects/SpielwerkDeviceBox"
 import {ApparatDeviceBox} from "./instruments/ApparatDeviceBox"
+import {CubedDeviceBox} from "./instruments/CubedDeviceBox"
 import {NoopInstrumentBox} from "./instruments/NoopInstrumentBox"
 import {CompositeDeviceBox} from "./instruments/CompositeDeviceBox"
 import {CompositeCellBox} from "./instruments/CompositeCellBox"
+import {AudioEffectCompositeBox} from "./audio-effects/AudioEffectCompositeBox"
+import {AudioEffectCompositeCellBox} from "./audio-effects/AudioEffectCompositeCellBox"
+import {StereoCompositeBox} from "./audio-effects/StereoCompositeBox"
+import {FrequencySplitBox} from "./audio-effects/FrequencySplitBox"
+import {ConvolverDeviceBox} from "./audio-effects/ConvolverDeviceBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -47,8 +55,10 @@ export const DeviceDefinitions = [
     CompressorDeviceBox,
     GateDeviceBox,
     DelayDeviceBox,
+    AutotuneDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
+    ConvolverDeviceBox,
     VelocityDeviceBox,
     FoldDeviceBox,
     TidalDeviceBox,
@@ -59,6 +69,7 @@ export const DeviceDefinitions = [
     MIDIOutputBox,
     MIDIOutputParameterBox,
     SoundfontDeviceBox,
+    NeonDeviceBox,
     NanoDeviceBox,
     ReSoulDeviceBox,
     PlayfieldDeviceBox,
@@ -75,7 +86,12 @@ export const DeviceDefinitions = [
     WerkstattSampleBox,
     SpielwerkDeviceBox,
     ApparatDeviceBox,
+    CubedDeviceBox,
     NoopInstrumentBox,
     CompositeDeviceBox,
-    CompositeCellBox
+    CompositeCellBox,
+    AudioEffectCompositeBox,
+    AudioEffectCompositeCellBox,
+    StereoCompositeBox,
+    FrequencySplitBox
 ]

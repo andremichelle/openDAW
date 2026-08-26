@@ -1,0 +1,35 @@
+# openDAW Studio — https://opendaw.studio
+# Search engines are welcome. openDAW is a free, open-source web-based digital
+# audio workstation with a focus on music education. The manuals under /manuals/
+# are public documentation and are explicitly open for crawling.
+#
+# Excluded below are internal debug pages that hold nothing worth indexing.
+#
+# Private user content (/join/ live rooms, /open-bundle/ project links) is NOT
+# listed here on purpose. Those paths return "X-Robots-Tag: noindex" from
+# .htaccess, and a noindex is only honoured on a URL the crawler is allowed to
+# fetch — disallowing them here would hide the header and let the bare URL be
+# indexed anyway. Crawling them reveals nothing: every route serves the same
+# empty single-page-app shell, never any room or project data.
+
+User-agent: *
+Allow: /
+
+# Internal / debug pages
+Disallow: /automation
+Disallow: /code
+Disallow: /colors
+Disallow: /components
+Disallow: /errors
+Disallow: /graph
+Disallow: /icons
+Disallow: /performance
+Disallow: /preferences
+Disallow: /scripting
+Disallow: /spike-test
+Disallow: /stats
+Disallow: /test
+Disallow: /upload
+Disallow: /users
+
+Sitemap: https://opendaw.studio/sitemap.xml

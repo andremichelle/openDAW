@@ -58,6 +58,12 @@ pub fn exp(x: f64) -> f64 {
     libm::exp(x)
 }
 
+/// `tan(x)` in f64 (libm-backed for no_std + host/wasm parity).
+#[inline]
+pub fn tan(x: f64) -> f64 {
+    libm::tan(x)
+}
+
 /// Round to nearest, half away from zero (libm-backed for no_std + host/wasm parity). Mirrors JS `Math.round`
 /// for the non-negative sample counts the granular voices round (`Math.round(VOICE_FADE_DURATION * sampleRate)`).
 #[inline]

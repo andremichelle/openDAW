@@ -1,8 +1,10 @@
 // Spielwerk's stateful note-transform orchestration (mirrors the TS `SpielwerkDeviceProcessor.processNotes`),
 // run JS-side by the script bridge. It reads the upstream input `EventRecord`s the device pulled (note-on /
-// note-off), builds the `UserEvent` stream, runs the user generator `*process(block, events)`, validates each
-// yielded note, schedules future-block notes, and correlates note-on -> note-off via a retainer so it can emit
-// the stops. The persistent state (retainer + scheduler) lives in `SpielwerkRuntime` across blocks.
+// note-off), FORWARDS them verbatim unless the script declared `// @no-pass`, builds the `UserEvent` stream,
+// runs the user generator `*process(block, events)`, validates each yielded note, schedules future-block notes,
+// and correlates note-on -> note-off via a retainer so it can emit the stops. Forwarded notes are NOT retained:
+// their note-off arrives from upstream. The persistent state (retainer + scheduler) lives in `SpielwerkRuntime`
+// across blocks.
 //
 // EventRecord (abi, 40 bytes, little-endian): position f64@0, offset u32@8, kind u32@12, id u32@16,
 // pitch u32@20, velocity f32@24, cent f32@28, duration f64@32. kind: 0 = note-on, 1 = note-off. `duration` is
@@ -13,6 +15,11 @@ const KIND_NOTE_ON = 0
 const KIND_NOTE_OFF = 1
 const MAX_NOTES_PER_BLOCK = 128
 const MAX_SCHEDULED_NOTES = 128
+// Forwarded input records keep their UPSTREAM ids, so the ids this device MINTS must live in a disjoint range:
+// the consumer matches a note-off to its voice by id, and a collision would stop the wrong note.
+const GENERATED_ID_BASE = 0x4000_0000
+const GENERATED_ID_MASK = 0x3fff_ffff
+const FLAG_DISCONTINUOUS = 1 << 1 // mirrors abi `BlockFlags::DISCONTINUOUS`: a loop wrap or a seek
 
 type ScheduledNote = {position: number, duration: number, pitch: number, velocity: number, cent: number}
 type RetainedNote = {id: number, position: number, duration: number, pitch: number, velocity: number, cent: number}
@@ -44,6 +51,15 @@ const writeRecord = (view: DataView, slot: number, kind: number, position: numbe
     view.setFloat64(base + 32, duration, true)
 }
 
+// Forward the pulled input records UNCHANGED (id, position, duration, pitch, velocity, cent). Used both as the
+// pass-through prologue of a run and as the fallback when there is no live Processor to run at all.
+export const copyEvents = (memory: ArrayBufferLike, inPtr: number, inCount: number,
+                           outPtr: number, outMax: number): number => {
+    const count = Math.min(inCount, outMax)
+    new Uint8Array(memory, outPtr, count * RECORD_SIZE).set(new Uint8Array(memory, inPtr, count * RECORD_SIZE))
+    return count
+}
+
 const validateNote = (note: any, from: number): string | null => {
     if (note === undefined || note === null) {return "process yielded undefined"}
     if (typeof note.pitch !== "number" || note.pitch !== note.pitch) {return `Invalid pitch: ${note.pitch}`}
@@ -61,13 +77,24 @@ const validateNote = (note: any, from: number): string | null => {
 // Throws on a script error / validation failure / flood (the bridge catches it and silences).
 export const runSpielwerk = (runtime: SpielwerkRuntime, proc: any, memory: ArrayBufferLike,
                              inPtr: number, inCount: number, outPtr: number, outMax: number,
-                             from: number, to: number, bpm: number, flags: number, s0: number, s1: number): number => {
+                             from: number, to: number, bpm: number, flags: number, s0: number, s1: number,
+                             pass: boolean): number => {
     const input = new DataView(memory, inPtr, inCount * RECORD_SIZE)
     const out = new DataView(memory, outPtr, outMax * RECORD_SIZE)
-    let outCount = 0
+    // Pass-through prologue: the input goes out verbatim (the output is still empty, so one bulk copy), and the
+    // generator's yields are ADDED on top. `@no-pass` scripts skip this and own the output alone.
+    let outCount = pass ? copyEvents(memory, inPtr, inCount, outPtr, outMax) : 0
     const emit = (kind: number, position: number, id: number, pitch: number, velocity: number, cent: number, duration: number): void => {
         if (outCount >= outMax) {throw new Error(`Note flood: exceeded ${outMax} output notes per range`)}
         writeRecord(out, outCount++, kind, position, id, pitch, velocity, cent, duration)
+    }
+
+    // A transport JUMP (loop wrap / seek) releases EVERYTHING held, at `from` — the contract the engine's own
+    // note source honours (`NoteSequencer::process_notes`). Without it a note whose span reaches past the loop
+    // end never sees its end position again and the downstream instrument holds that voice forever.
+    if ((flags & FLAG_DISCONTINUOUS) !== 0) {
+        for (const note of runtime.retained) {emit(KIND_NOTE_OFF, from, note.id, note.pitch, 0, 0, 0)}
+        runtime.reset()
     }
 
     // Release retained notes whose span completed within this range, emitting their note-off.
@@ -154,7 +181,7 @@ export const runSpielwerk = (runtime: SpielwerkRuntime, proc: any, memory: Array
 }
 
 const retain = (runtime: SpielwerkRuntime, note: ScheduledNote): number => {
-    const id = nextOutputId++
+    const id = GENERATED_ID_BASE + (nextOutputId++ & GENERATED_ID_MASK)
     runtime.retained.push({id, position: note.position, duration: note.duration, pitch: note.pitch, velocity: note.velocity, cent: note.cent})
     return id
 }

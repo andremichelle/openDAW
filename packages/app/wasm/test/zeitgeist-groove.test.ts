@@ -57,7 +57,7 @@ type ZeitgeistDevice = {
 const loadZeitgeist = (): ZeitgeistDevice => {
     const module = new WebAssembly.Module(readFileSync(path.join(PLUGINS, "device_zeitgeist.wasm")))
     const {memorySize, tableSize} = parseDylink(module)
-    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: Math.max(tableSize, 1), element: "anyfunc"})
     const memoryBase = 1024
     const stackBase = alignUp(memoryBase + memorySize, 16)
@@ -306,7 +306,8 @@ describe("zeitgeist groove (wasm device vs TS GrooveShuffle)", () => {
             const left = new Float32Array(quanta * half)
             for (let quantum = 0; quantum < quanta; quantum++) {
                 engine.render()
-                left.set(new Float32Array(memory.buffer, engine.output_ptr(), half), quantum * half)
+                const enginePtr = engine.output_ptr()
+                left.set(new Float32Array(memory.buffer, enginePtr, half), quantum * half)
             }
             const onset = left.findIndex(value => value > 0.1)
             expect(onset, "the note must be audible").toBeGreaterThan(0)

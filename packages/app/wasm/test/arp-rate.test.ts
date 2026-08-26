@@ -76,7 +76,8 @@ const countSteps = async (rateIndex: number): Promise<number> => {
     const left = new Float32Array(QUANTA * half)
     for (let quantum = 0; quantum < QUANTA; quantum++) {
         engine.render()
-        left.set(new Float32Array(memory.buffer, engine.output_ptr(), half), quantum * half)
+        const enginePtr = engine.output_ptr()
+        left.set(new Float32Array(memory.buffer, enginePtr, half), quantum * half)
     }
     let steps = 0
     for (let index = 1; index < left.length; index++) {

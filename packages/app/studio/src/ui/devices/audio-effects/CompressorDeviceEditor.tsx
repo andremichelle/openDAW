@@ -71,6 +71,7 @@ export const CompressorDeviceEditor = ({lifecycle, service, adapter, deviceHost}
                                       ))}
                                   <SidechainButton sideChain={adapter.sideChain}
                                                    rootBoxAdapter={project.rootBoxAdapter}
+                                                   deviceHost={deviceHost}
                                                    editing={editing}/>
                               </div>
                               <div className="control-section">

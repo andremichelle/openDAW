@@ -18,8 +18,9 @@ export class RegionDragAndDrop extends TimelineDragAndDrop<RegionCaptureTarget> 
         const pointerX = event.clientX - this.capturing.element.getBoundingClientRect().left
         const pointerPulse = Math.max(this.#snapping.xToUnitFloor(pointerX), 0)
         const boxGraph = this.project.boxGraph
-        // Calculate duration to determine target track and handle overlaps
-        const duration = AudioContentFactory.calculateDuration(sample)
+        // Calculate duration to determine target track and handle overlaps. The tempo map keeps the
+        // clip mask identical to the extent the created seconds-region will actually occupy.
+        const duration = AudioContentFactory.calculateDuration(sample, this.project.tempoMap, pointerPulse)
         const complete = pointerPulse + duration
         // Resolve target track (handles keep-existing by finding non-overlapping track)
         const targetTrack = this.project.overlapResolver.resolveTargetTrack(trackBoxAdapter, pointerPulse, complete)

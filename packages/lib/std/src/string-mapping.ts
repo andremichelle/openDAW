@@ -23,6 +23,13 @@ export namespace StringMapping {
         unitPrefix?: boolean
         bipolar?: boolean
     }
+    // Adorn BARE numeric input with the unit the label currently displays, so "10" typed while the
+    // label shows "ms" parses as 10 ms (a trailing dot counts as bare: "10." -> "10ms"). Input that
+    // carries its own unit or is not a number passes through untouched.
+    export const withDisplayUnit = (text: string, displayUnit: string): string => {
+        const numeric = text.trim().replace(/\.$/, "")
+        return /\d$/.test(numeric) ? `${numeric}${displayUnit}` : text
+    }
     export const percent =
         ({bipolar, fractionDigits}: NumericOptions = {}): StringMapping<number> =>
             new Numeric("%", fractionDigits, false, bipolar)
@@ -37,6 +44,16 @@ export namespace StringMapping {
             y(x: string): ParseResult<int> {
                 const index = values.indexOf(x)
                 return index === -1 ? {type: "unknown", value: "💣"} : {type: "explicit", value: index}
+            }
+        }
+    export const oneBasedIndex = (unit: string = ""): StringMapping<int> =>
+        new class implements StringMapping<int> {
+            x(y: int): StringResult {
+                return {unit, value: String(y + 1)}
+            }
+            y(x: string): ParseResult<int> {
+                const value = parseInt(x.trim(), 10)
+                return isNaN(value) ? {type: "unknown", value: x.trim()} : {type: "explicit", value: value - 1}
             }
         }
     export const values = <T>(unit: string, values: ReadonlyArray<T>, strings: ReadonlyArray<string>): StringMapping<T> =>
@@ -120,8 +137,10 @@ export namespace StringMapping {
                         : clamp(float / 100.0, 0.0, 1.0)
                 }
             } else {
-                const match: Nullable<RegExpExecArray> = /(\d+)(\D+)/.exec(value)
-                const last = match?.at(2)?.at(0)
+                // skip the FULL numeric literal (decimals included), then the first non-space char
+                // is the metric-prefix candidate ("10.0m" -> "m", never the decimal point)
+                const match: Nullable<RegExpExecArray> = /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)\s*(\D)/.exec(value)
+                const last = match?.at(1)
                 if (isDefined(last)) {
                     const index: int = prefixes.indexOf(last)
                     if (index > -1) {

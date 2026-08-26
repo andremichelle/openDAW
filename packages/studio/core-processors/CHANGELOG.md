@@ -3,6 +3,53 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.136](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.135...@opendaw/studio-core-processors@0.0.136) (2026-08-24)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
+## [0.0.135](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.134...@opendaw/studio-core-processors@0.0.135) (2026-08-17)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
+## [0.0.134](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.133...@opendaw/studio-core-processors@0.0.134) (2026-08-11)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
+## [0.0.133](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.132...@opendaw/studio-core-processors@0.0.133) (2026-08-05)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
+## [0.0.132](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.131...@opendaw/studio-core-processors@0.0.132) (2026-08-03)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
+## [0.0.131](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.130...@opendaw/studio-core-processors@0.0.131) (2026-07-29)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
+## [0.0.130](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.129...@opendaw/studio-core-processors@0.0.130) (2026-07-23)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
+## [0.0.129](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.128...@opendaw/studio-core-processors@0.0.129) (2026-07-22)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
+## [0.0.128](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.127...@opendaw/studio-core-processors@0.0.128) (2026-07-16)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
+## [0.0.127](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.126...@opendaw/studio-core-processors@0.0.127) (2026-07-15)
+
+### Bug Fixes
+
+- **tape:** [#311](https://github.com/andremichelle/openDAW/issues/311)a seam sample-drop + [#312](https://github.com/andremichelle/openDAW/issues/312) stacked crossfade dip (TS pitch path) ([dbc7f9c](https://github.com/andremichelle/openDAW/commit/dbc7f9cc2201d29c514b5ac5453edad65a3c3fe8))
+- **tape:** [#311](https://github.com/andremichelle/openDAW/issues/311)b — fade an ending region's tail at the region end, not late ([4f641cc](https://github.com/andremichelle/openDAW/commit/4f641cc910de52625fa0b1c16bf734329546ac80))
+
+## [0.0.126](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.125...@opendaw/studio-core-processors@0.0.126) (2026-07-14)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
 ## [0.0.125](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.124...@opendaw/studio-core-processors@0.0.125) (2026-07-07)
 
 **Note:** Version bump only for package @opendaw/studio-core-processors

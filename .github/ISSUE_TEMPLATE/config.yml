@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: openDAW Discord
+    url: https://discord.opendaw.studio/
+    about: Questions, help, and community chat — often faster than an issue.

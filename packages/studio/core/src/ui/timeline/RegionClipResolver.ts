@@ -1,4 +1,4 @@
-import {asDefined, assert, Exec, int, mod, panic} from "@opendaw/lib-std"
+import {asDefined, Exec, int, mod, panic, UUID} from "@opendaw/lib-std"
 import {Event, EventCollection, ppqn, TimeBase} from "@opendaw/lib-dsp"
 import {
     AnyRegionBoxAdapter,
@@ -74,18 +74,59 @@ export class RegionClipResolver {
         for (const track of tracks) {this.validateTrack(track)}
     }
 
+    // Fatal (throwing) by default so tests and dev builds fail loudly on a resolver invariant break; the shipped
+    // studio app flips this off at boot (see boot.ts) so a stray overlap — or a project SAVED with a pre-existing
+    // one — logs and continues instead of crashing the whole session.
+    static fatal: boolean = true
+
     static validateTrack(track: TrackBoxAdapter): void {
         const array = track.regions.collection.asArray()
         if (array.length === 0) {return}
         let prev = array[0]
-        assert(prev.duration > 0, `duration(${prev.duration}) must be positive`)
+        if (prev.duration <= 0) {RegionClipResolver.#violation(`duration(${prev.duration}) must be positive`)}
         for (let i = 1; i < array.length; i++) {
             const next = array[i]
-            assert(next.duration > 0, `duration(${next.duration}) must be positive`)
-            assert(allowOverlap(prev) || prev.complete <= next.position,
-                `regions overlap: prev.complete(${prev.complete}) > next.position(${next.position})`)
+            if (next.duration <= 0) {RegionClipResolver.#violation(`duration(${next.duration}) must be positive`)}
+            const overlaps = !allowOverlap(prev) && prev.complete > next.position + boundaryTolerance(next.position)
+            if (overlaps) {
+                RegionClipResolver.#reportOverlap(track, array, i)
+                RegionClipResolver.#violation(
+                    `regions overlap: prev.complete(${prev.complete}) > next.position(${next.position})`)
+            }
             prev = next
         }
+    }
+
+    static #violation(message: string): void {
+        if (RegionClipResolver.fatal) {return panic(message)}
+        console.warn(`[RegionClipResolver] ${message}`)
+    }
+
+    // Diagnostic only (#1054 family): the overlap panic below is unreproducible from a single geometry, so on
+    // the failure path dump the full track layout into the shipped log buffer to reveal the accumulated
+    // arrangement that produced the overlap. Fires once, immediately before the panic; no behaviour change.
+    static #reportOverlap(track: TrackBoxAdapter, regions: ReadonlyArray<AnyRegionBoxAdapter>, index: int): void {
+        const dump = (region: AnyRegionBoxAdapter, i: int) => ({
+            i,
+            uuid: UUID.toString(region.uuid),
+            type: region.isAudioRegion() ? "audio" : region.isNoteRegion() ? "note" : "value",
+            timeBase: region.isAudioRegion() ? region.box.timeBase.getValue() : undefined,
+            position: region.position,
+            duration: region.duration,
+            complete: region.complete,
+            loopOffset: region.loopOffset,
+            loopDuration: region.loopDuration,
+            mute: region.mute,
+            mirrored: region.isMirrowed
+        })
+        console.debug("regions-overlap", {
+            track: UUID.toString(track.uuid),
+            trackType: track.type,
+            count: regions.length,
+            prev: dump(regions[index - 1], index - 1),
+            next: dump(regions[index], index),
+            regions: regions.map(dump)
+        })
     }
 
     static createTasksFromMasks(regionIterator: Iterable<AnyRegionBoxAdapter>,

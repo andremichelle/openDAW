@@ -1,5 +1,4 @@
 import {
-    asInstanceOf,
     DefaultObservableValue,
     int,
     isInstanceOf,
@@ -19,11 +18,13 @@ import {BoxAdaptersContext} from "../BoxAdaptersContext"
 import {TrackClips} from "./TrackClips"
 import {TrackRegions} from "./TrackRegions"
 import {AudioUnitBoxAdapter} from "../audio-unit/AudioUnitBoxAdapter"
+import {ParameterOwner} from "../ParameterOwner"
+import {isModulatorBoxAdapter} from "../modulation/ModulatorBoxAdapter"
 import {TrackType} from "./TrackType"
 import {AnyClipBoxAdapter, AnyRegionBoxAdapter} from "../UnionAdapterTypes"
 import {ValueClipBoxAdapter} from "./clip/ValueClipBoxAdapter"
 import {ValueRegionBoxAdapter} from "./region/ValueRegionBoxAdapter"
-import {AudioUnitBox, TrackBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, ModulationBox, TrackBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 
 export class TrackBoxAdapter implements BoxAdapter {
@@ -95,36 +96,24 @@ export class TrackBoxAdapter implements BoxAdapter {
     }
 
     get targetName(): Option<string> {
-        return this.#box.target.targetVertex.flatMap(targetVertex => {
-            const box = targetVertex.box
-            if (box instanceof AudioUnitBox) {
-                const adapter = this.#context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter)
-                return adapter.input.label
-            }
-            const optAdapter = this.#context.boxAdapters.optAdapter(box)
-            if (optAdapter.nonEmpty()) {
-                const adapter = optAdapter.unwrap()
-                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
-                    return Option.wrap(adapter.labelField.getValue())
-                }
-            }
-            const ownerAdapter = this.#resolveOwnerDeviceBox(box)
-                .flatMap(owner => this.#context.boxAdapters.optAdapter(owner))
-            if (ownerAdapter.nonEmpty()) {
-                const adapter = ownerAdapter.unwrap()
-                if ("labelField" in adapter && adapter.labelField instanceof StringField) {
-                    return Option.wrap(adapter.labelField.getValue())
-                }
-            }
-            return Option.wrap(box.name)
-        })
+        return this.#box.target.targetVertex.flatMap(vertex => ParameterOwner.nameOf(this.#context, vertex))
     }
 
     #catchupAndSubscribeTargetName(observer: Observer<Option<string>>): Subscription {
         const targetVertex = this.#box.target.targetVertex
         if (targetVertex.nonEmpty()) {
             const box = targetVertex.unwrap().box
-            if (box instanceof AudioUnitBox) {
+            if (isInstanceOf(box, ModulationBox)) {
+                const vertex = targetVertex.unwrap()
+                const update = () => observer(ParameterOwner.nameOf(this.#context, vertex))
+                update()
+                return box.source.targetVertex
+                    .flatMap(source => this.#context.boxAdapters.optAdapter(source.box))
+                    .mapOr(adapter => isModulatorBoxAdapter(adapter)
+                        ? adapter.labelField.subscribe(update)
+                        : Terminable.Empty, Terminable.Empty)
+            }
+            if (isInstanceOf(box, AudioUnitBox)) {
                 const adapter = this.#context.boxAdapters.adapterFor(box, AudioUnitBoxAdapter)
                 return adapter.input.catchupAndSubscribeLabelChange(option => observer(option))
             }
@@ -153,11 +142,15 @@ export class TrackBoxAdapter implements BoxAdapter {
     terminate() {this.#terminator.terminate()}
 
     get audioUnit(): AudioUnitBox {
-        return asInstanceOf(this.#box.tracks.targetVertex.unwrap("track has no audioUnit").box, AudioUnitBox)
+        return this.optAudioUnit.unwrap("track has no audioUnit")
+    }
+
+    get optAudioUnit(): Option<AudioUnitBox> {
+        return this.#box.tracks.targetVertex
+            .flatMap(vertex => vertex.box instanceof AudioUnitBox ? Option.wrap(vertex.box) : Option.None)
     }
 
     get target(): PointerField<Pointers.Automation> {return this.#box.target}
-
     get clips(): TrackClips {return this.#clips}
     get regions(): TrackRegions {return this.#regions}
     get enabled(): BooleanField {return this.#box.enabled}
@@ -218,6 +211,19 @@ export class TrackBoxAdapter implements BoxAdapter {
         return value
     }
 
+    get targetControlName(): Option<string> {
+        if (this.type !== TrackType.Value) {return Option.None}
+        return this.#box.target.targetVertex.flatMap(target => {
+            if (target.isField()) {
+                return this.#context.parameterFieldAdapters.opt(target.address).map(vertex => vertex.name)
+            } else if (target.isBox()) {
+                // I cannot think of a scenario where target is a box, but at least the UI shows the box's name
+                return Option.wrap(target.name)
+            }
+            return panic("Illegal State. Vertex is not a field nor box.")
+        })
+    }
+
     #catchupAndSubscribeTargetControlName(observer: Observer<Option<string>>): Subscription {
         const type = this.type
         switch (type) {
@@ -227,16 +233,13 @@ export class TrackBoxAdapter implements BoxAdapter {
                 return Terminable.Empty
             }
             case TrackType.Value: {
-                const target = this.#box.target.targetVertex.unwrap("target.target")
-                if (target.isField()) {
-                    observer(this.#context.parameterFieldAdapters.opt(target.address).map(vertex => vertex.name))
-                } else if (target.isBox()) {
-                    // I cannot think of a scenario where target is a box, but at least the UI shows the box's name
-                    observer(Option.wrap(target.name))
-                } else {
-                    return panic("Illegal State. Vertex is not a field nor box.")
+                const optAdapter = this.#box.target.targetVertex.flatMap(target =>
+                    target.isField() ? this.#context.parameterFieldAdapters.opt(target.address) : Option.None)
+                if (optAdapter.isEmpty()) {
+                    observer(this.targetControlName)
+                    return Terminable.Empty
                 }
-                return Terminable.Empty
+                return optAdapter.unwrap().catchupAndSubscribeName(name => observer(Option.wrap(name)))
             }
             case TrackType.Undefined: {
                 observer(Option.wrap(""))

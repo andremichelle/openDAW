@@ -25,7 +25,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
-use abi::{DEVICE_KIND_AUDIO_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, FIELD_KIND_BOOL, FIELD_KIND_FLOAT, FIELD_KIND_INT, FIELD_KIND_STRING, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
+use abi::{DEVICE_KIND_AUDIO_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, FIELD_KIND_BOOL, FIELD_KIND_FLOAT, FIELD_KIND_INT, FIELD_KIND_INT_ARRAY, FIELD_KIND_STRING, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
 use bindings::indexed_collection::IndexedCollection;
 use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
@@ -40,8 +40,8 @@ use engine_env::audio_input::AudioInput;
 use engine_env::audio_buffer::shared_audio_buffer;
 use engine_env::audio_bus_processor::AudioBusProcessor;
 use engine_env::aux_send::{AuxSendProcessor, SendParams};
-use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripParams};
-use math::value_mapping::{Decibel, Linear, ValueMapping};
+use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripParams, StripValueSource};
+use math::value_mapping::{Decibel, Linear};
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_region::NoteRegion;
@@ -52,10 +52,12 @@ use value::event::EventCollection;
 use value::note::NoteEvent;
 use value::region::{RegionCollection, Span};
 use crate::param_automation::{BoundValueClip, FieldPath, ParamCurve, ParamHandle, ParamSink, ValueBoundRegion};
+use crate::modulation::{BoundModulation, ModulationChain};
 use crate::plugin_audio_effect::PluginAudioEffect;
 use crate::plugin_instrument::PluginInstrument;
 use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::composite::CompositeBinding;
+use crate::effect_composite::EffectCompositeBinding;
 use crate::audio_region_player::AudioRegionPlayer;
 use crate::midi_output::{self, CcBinding, MidiOutControls, MidiOutProcessor};
 use crate::time_stretch::{TimeStretchConfig, TransientPlayMode};
@@ -65,14 +67,14 @@ use crate::{call_device_init, call_device_field_changed, call_device_parameter_c
 mod wiring;
 mod routing;
 mod tracks;
-mod params;
+pub(crate) mod params;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use tracks::{AudioRegion, BoundAudioClip, BoundNoteTracks, SharedAudioTrackSets, SharedTrackSets,
+pub(crate) use tracks::{AudioRegion, SignalsmithConfig, BoundAudioClip, BoundNoteTracks, SharedAudioTrackSets, SharedTrackSets,
     TrackBinding, AudioTrackBinding, CollectionCache, reconcile_tracks, teardown_track, teardown_audio_track};
 pub(crate) use params::{resolve_and_deliver_sample, NoteSignal, set_params_signal,
-    params_invalidate, automation_invalidate};
+    params_invalidate, automation_invalidate, host_float, host_bool};
 pub(crate) use wiring::tape_region_counts;
 // Re-exported ONLY for the sibling test module's `super::` (whitebox) paths; not used by the non-test build.
 #[cfg(test)]
@@ -239,15 +241,14 @@ impl Wired {
 pub(crate) struct BusWired {
     pub(crate) bus_uuid: Uuid, // the AudioBusBox uuid; its sum node + `bus_registry` entry are dropped on teardown
     pub(crate) sum_buffer: SharedAudioBuffer, // the RAW sum (pre-fx), the `useInstrumentOutput` stem tap
+    pub(crate) sum_node: Option<NodeId>, // this bus's own sum; `None` for the output unit (the shared master is never removed)
     pub(crate) pre_strip: SharedAudioBuffer, // the fx-chain output feeding the strip (the send tap)
     pub(crate) pre_strip_node: NodeId,
     pub(crate) strip_id: NodeId,
     pub(crate) strip_output: SharedAudioBuffer,
-    pub(crate) nodes: Vec<NodeId>,           // sum + fx nodes + strip (removed on teardown)
+    pub(crate) audio: Vec<Member>,           // the bus's AUDIO-effects chain (sum -> fx0 -> ... -> strip), like a leaf
     pub(crate) edges: Vec<(NodeId, NodeId)>, // sum -> fx0 -> ... -> strip
-    pub(crate) device_params: Vec<DeviceParams>,
-    pub(crate) sidechains: Vec<SidechainBinding>, // a sidechained bus effect (e.g. a ducking compressor) resolved each pass
-    pub(crate) subs: Vec<SubscriptionId>     // the bus `enabled` monitor + each fx device's `enabled` monitor
+    pub(crate) subs: Vec<SubscriptionId>     // the bus `enabled` monitor
 }
 
 /// A unit's currently-wired OUTPUT route: which target bus sum its channel strip feeds. `bus` is the target
@@ -285,14 +286,14 @@ pub(crate) struct TapeWired {
     pub(crate) enabled_sub: SubscriptionId, // TapeDeviceBox `enabled` (4): gates the player, resets on disable (TS mirror)
     pub(crate) player_id: NodeId,
     pub(crate) instrument_uuid: Uuid,        // the TapeDeviceBox uuid: the player output is registered under it so a SIDECHAIN
-                                  // targeting the tape device taps its RAW output (pre fx / strip), matching TS
+                                  // targeting the tape device taps its output — which now includes the monitored
+                                  // live input (the player sums it in), so an armed tape drives such a side-chain
     pub(crate) audio: Vec<Member>,           // the unit's AUDIO-effects chain (player -> fx0 -> ... -> strip), like a leaf
     pub(crate) pre_strip: SharedAudioBuffer, // the fx-chain output feeding the strip (the send tap; == player output if no fx)
     pub(crate) pre_strip_node: NodeId,
     pub(crate) strip_id: NodeId,
     pub(crate) strip_output: SharedAudioBuffer,
-    pub(crate) edges: Vec<(NodeId, NodeId)>, // player -> fx0 -> ... -> strip
-    pub(crate) monitor_node: Option<NodeId>  // the EFFECTS-monitoring injector, rebuilt per re-wire
+    pub(crate) edges: Vec<(NodeId, NodeId)>  // player -> fx0 -> ... -> strip
 }
 
 /// A held device processor, kept alive across rewires so its DSP state (voices, delay tails, filter history)
@@ -301,7 +302,11 @@ pub(crate) struct TapeWired {
 pub(crate) enum ProcHandle {
     Instrument(Rc<RefCell<PluginInstrument>>),
     Audio(Rc<RefCell<PluginAudioEffect>>),
-    Midi(Rc<PluginMidiEffect>)
+    Midi(Rc<PluginMidiEffect>),
+    // A parallel EFFECT COMPOSITE: not one plugin but a whole sub-graph (distributor -> entries -> wet sum ->
+    // dry/wet mix) the engine owns itself. It sits in an audio chain like any other member — see `Member`'s
+    // `input_node` for how the chain wires through it.
+    EffectComposite(Box<EffectCompositeBinding>)
 }
 
 /// One persistent chain member: its device box uuid, the held processor, its graph node (none for a midi-fx,
@@ -311,9 +316,17 @@ pub(crate) enum ProcHandle {
 pub(crate) struct Member {
     pub(crate) uuid: Uuid,
     pub(crate) proc: ProcHandle,
+    // The chain's EXIT node for this member: what the next member reads / edges from. For a plugin it is the
+    // plugin's node; for an effect composite it is the dry/wet mix at the composite's end.
     pub(crate) node_id: Option<NodeId>,
+    // The chain's ENTRY node: what the PREVIOUS member edges INTO. `None` means "same as `node_id`", which is
+    // every plugin. An effect composite differs: the upstream feeds its DISTRIBUTOR while its exit is the mix,
+    // so the chain wires `prev -> input_node` and continues from `node_id`.
+    pub(crate) input_node: Option<NodeId>,
     pub(crate) output: Option<SharedAudioBuffer>,
-    pub(crate) params: DeviceParams,
+    // The device's bound parameters. `None` for a member that is NOT a plugin (an effect composite: its dry /
+    // wet and its entries' gain / mute / solo are bound by its own binding, not through the device ABI).
+    pub(crate) params: Option<DeviceParams>,
     pub(crate) sidechain: Option<SidechainBinding>,
     // A TARGETED `This` monitor on the device's `enabled` field: toggling it re-wires the unit (edge-only —
     // a disabled effect is skipped in the chain, its processor + params + DSP state left untouched).
@@ -340,6 +353,25 @@ pub(crate) struct LeafChain {
     pub(crate) monitor_node: Option<NodeId> // the EFFECTS-monitoring injector, rebuilt per re-wire
 }
 
+/// Visit one chain member's device parameters, recursing into an effect composite's ENTRIES — so an automation
+/// re-bind / param visit reaches every device in the cascade, not just the top-level plugins. A member that is
+/// not a plugin (a composite) contributes none of its own.
+pub(crate) fn visit_member_params(member: &mut Member, visit: &mut dyn FnMut(&mut DeviceParams)) {
+    if let Some(params) = &mut member.params { visit(params); }
+    if let ProcHandle::EffectComposite(binding) = &mut member.proc {
+        binding.for_each_params(visit);
+    }
+}
+
+/// Visit one chain member's sidechain bindings, recursing into an effect composite's ENTRIES — so the unit's
+/// sidechain re-resolve reaches a device nested inside a composite.
+pub(crate) fn visit_member_sidechains(member: &mut Member, visit: &mut dyn FnMut(&mut SidechainBinding)) {
+    if let Some(binding) = &mut member.sidechain { visit(binding); }
+    if let ProcHandle::EffectComposite(composite) = &mut member.proc {
+        composite.for_each_sidechain(visit);
+    }
+}
+
 /// A composite SLOT's persistent cluster (a direct-instrument child, e.g. a Playfield slot): the same per-member
 /// machinery as a leaf unit (instrument + midi/audio members + note source), reconciled EDGE-ONLY so a chain edit
 /// or an effect `enabled` toggle keeps every survivor's DSP state. Defined here (not in `composite`) so it can
@@ -363,9 +395,9 @@ impl SlotCluster {
 
     /// Visit every member's bound parameters (instrument + midi + audio), for the unit's automation re-bind.
     pub(crate) fn for_each_params(&mut self, visit: &mut dyn FnMut(&mut DeviceParams)) {
-        visit(&mut self.instrument.params);
-        for member in &mut self.midi { visit(&mut member.params); }
-        for member in &mut self.audio { visit(&mut member.params); }
+        if let Some(params) = &mut self.instrument.params { visit(params); }
+        for member in &mut self.midi { visit_member_params(member, visit); }
+        for member in &mut self.audio { visit_member_params(member, visit); }
     }
 
     /// Visit every audio member's sidechain binding, for the unit's sidechain re-resolve.
@@ -618,7 +650,9 @@ impl Engine {
     /// Copy each stem's TAP (per its options: chain start / pre-strip / strip, TS `unit.audioOutput()`)
     /// into the stem staging (planar, stem i -> channels 2i / 2i+1). Runs right after `render`.
     pub(crate) fn copy_stem_outputs(&mut self) {
-        if self.stem_exports.is_empty() {
+        // `metronome_stem` alone is a valid export (every unit deselected, just the click), and it has no
+        // entry in `stem_exports`, so an emptiness check on that list alone would silently drop it.
+        if self.stem_exports.is_empty() && !self.metronome_stem {
             return;
         }
         let stems = core::mem::take(&mut self.stem_exports);
@@ -631,6 +665,13 @@ impl Engine {
             self.stem_staging[base + engine_env::RENDER_QUANTUM..base + 2 * engine_env::RENDER_QUANTUM].copy_from_slice(&buffer.right);
         }
         self.stem_exports = stems;
+        // The metronome is not an audio unit and has no tap, so it is appended by hand as the LAST pair, from
+        // the buffer `render` just filled. `set_stem_export` sized the staging for it.
+        if self.metronome_stem {
+            let base = self.stem_exports.len() * 2 * engine_env::RENDER_QUANTUM;
+            self.stem_staging[base..base + 2 * engine_env::RENDER_QUANTUM]
+                .copy_from_slice(&self.metronome_staging);
+        }
     }
 
     /// Mark `uuids` for a chain re-wire (e.g. the monitoring map changed) and enqueue them; the next
@@ -647,6 +688,14 @@ impl Engine {
     pub(crate) fn reconcile_units(&mut self) {
         if self.master.is_none() {
             return;
+        }
+        // A modulator's own field moved: the cells are live for the render path, but a stopped transport
+        // runs no update clock, so every unit re-pushes once here (`refresh_params` still diffs per param).
+        if self.modulation_dirty.replace(false) {
+            for binding in &self.audio_units {
+                binding.params_dirty.set(true);
+                binding.mark.mark();
+            }
         }
         let changes = core::mem::take(&mut *self.unit_changes.borrow_mut());
         // A membership change is structural: a unit appearing / disappearing can resolve or strand a sidechain
@@ -783,7 +832,7 @@ impl Engine {
         let mut changed = false;
         for unit in &self.audio_units {
             let soloed = match unit.strip_automation.solo.borrow().as_ref() {
-                Some(source) => source(position) >= 0.5, // TS `ValueMapping.bool.y`
+                Some(source) => source(position, true) >= 0.5, // TS `ValueMapping.bool.y`
                 None => continue
             };
             if unit.strip_params.solo.get() != soloed {
@@ -957,9 +1006,6 @@ impl Engine {
                 }
                 self.context.remove_processor(tape.strip_id);
                 self.context.remove_processor(tape.player_id);
-                if let Some(node) = tape.monitor_node {
-                    self.context.remove_processor(node);
-                }
                 for member in tape.audio {
                     self.terminate_member(member);
                 }
@@ -967,26 +1013,21 @@ impl Engine {
             Wired::Bus(bus) => {
                 // Drop this bus from the registry FIRST so any source unit still routed to it re-resolves to the
                 // master fallback (and skips removing its summed source from the now-gone sum). Then remove the
-                // enabled monitors, the fx params, the internal edges, and every node (sum + fx + strip).
+                // enabled monitor, the internal edges, the strip + own sum, and terminate every fx member.
                 self.bus_registry.remove(&bus.bus_uuid);
                 self.output_registry.remove(&Address::of(bus.bus_uuid, vec![]));
                 for sub in bus.subs {
                     self.graph.unsubscribe(sub);
                 }
-                for binding in bus.sidechains {
-                    for port in binding.ports {
-                        self.graph.unsubscribe(port.pointer_sub);
-                    }
-                }
-                for params in &bus.device_params {
-                    self.output_registry.remove(&Address::of(params.device_uuid(), vec![]));
-                }
-                self.teardown_device_params(bus.device_params);
                 for (source, target) in &bus.edges {
                     self.context.remove_edge(*source, *target);
                 }
-                for node in bus.nodes {
-                    self.context.remove_processor(node);
+                self.context.remove_processor(bus.strip_id);
+                if let Some(sum_node) = bus.sum_node {
+                    self.context.remove_processor(sum_node);
+                }
+                for member in bus.audio {
+                    self.terminate_member(member);
                 }
             }
             Wired::Frozen(frozen) => {
@@ -1029,6 +1070,14 @@ impl Engine {
     /// never registered one; the remove is a no-op), remove its processor node (a midi-fx has none), drop its
     /// sidechain ports' pointer monitors, and unsubscribe its parameter observations.
     pub(crate) fn terminate_member(&mut self, member: Member) {
+        // An EFFECT COMPOSITE member is a whole sub-graph, not one node: hand it to its own teardown (which
+        // drops every entry, its three nodes, its edges, its dry/wet bindings and its observations). Removing
+        // just `node_id` here would leak all of that.
+        if let ProcHandle::EffectComposite(binding) = member.proc {
+            self.graph.unsubscribe(member.enabled_sub);
+            self.teardown_effect_composite(*binding);
+            return;
+        }
         self.output_registry.remove(&Address::of(member.uuid, vec![]));
         if let Some(node_id) = member.node_id {
             self.context.remove_processor(node_id);
@@ -1039,8 +1088,11 @@ impl Engine {
             }
         }
         self.graph.unsubscribe(member.enabled_sub);
-        self.teardown_device_params(vec![member.params]);
+        if let Some(params) = member.params {
+            self.teardown_device_params(vec![params]);
+        }
     }
+
 
     /// Build a unit binding: its per-track region collections list (`track_sets`, shared with the
     /// sequencer), the track-membership subscription (key 20) the cascade fills, and the three device-chain

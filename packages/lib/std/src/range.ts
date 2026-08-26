@@ -135,8 +135,20 @@ export class Range implements Observable<Range> {
     get innerWidth() {return Math.max(1.0, this.#width - this.#padding)}
 
     set(min: unitValue, max: unitValue): void {
-        const clampMin = Math.max(0.0, min)
-        const clampMax = Math.min(1.0, max)
+        if (!Number.isFinite(min) || !Number.isFinite(max)) {return}
+        let clampMin = Math.max(0.0, min)
+        let clampMax = Math.min(1.0, max)
+        // Uphold the `minimum`-width invariant here, at the one mutator every operation funnels through
+        // (scaleBy, center, moveTo, showUnitInterval, ...). The min/max/minimum setters enforce it, but this
+        // low-level setter did not — so a zero-width (or inverted) range could be established, and then
+        // `scaleBy`'s clamp `(minimum - range) / range` divides by zero and produces a non-finite range.
+        if (clampMax - clampMin < this.#minimum) {
+            clampMax = clampMin + this.#minimum
+            if (clampMax > 1.0) {
+                clampMax = 1.0
+                clampMin = Math.max(0.0, 1.0 - this.#minimum)
+            }
+        }
         if (this.#min !== clampMin || this.#max !== clampMax) {
             this.#min = clampMin
             this.#max = clampMax

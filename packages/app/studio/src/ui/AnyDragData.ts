@@ -38,6 +38,17 @@ export type DragDevice = (
         uuid: string
     }) & DragCopyHint
 export type DragChannelStrip = { type: "channelstrip", uuid: string, start_index: int } & DragCopyHint
+// One timeline track lane dragged to reorder it among the lanes sharing its device group (same unit, same
+// track type, same device).
+export type DragTrack = { type: "track", uuid: UUID.String } & DragCopyHint
+// One AudioComposite entry dragged to reorder it among its siblings. `composite` scopes the drop so an entry
+// only reorders within its OWN composite; `index` is the dragged entry's current order.
+export type DragCompositeEntry = {
+    type: "composite-entry"
+    uuid: UUID.String
+    index: int
+    composite: UUID.String
+} & DragCopyHint
 export type DragPreset = {
     type: "preset"
     category: PresetCategory
@@ -46,4 +57,15 @@ export type DragPreset = {
     device: Nullable<InstrumentFactories.Keys>
 } & DragCopyHint
 
-export type AnyDragData = DragSample | DragFile | DragDevice | DragChannelStrip | DragSoundfont | DragPreset
+// The dragged modulators, reordering them in the modulation panel's list: the whole selection when the one
+// under the pointer belongs to it, else that one alone. `index` is the dragged one's own place, which tells
+// a drop target which side of itself to mark.
+export type DragModulator = {
+    type: "modulator"
+    uuids: ReadonlyArray<UUID.String>
+    index: int
+} & DragCopyHint
+
+export type AnyDragData =
+    DragSample | DragFile | DragDevice | DragChannelStrip | DragTrack | DragSoundfont | DragPreset
+    | DragCompositeEntry | DragModulator

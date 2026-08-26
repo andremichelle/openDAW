@@ -14,6 +14,28 @@ describe("ScriptDeclaration", () => {
         })
     })
 
+    describe("parsePassThrough", () => {
+        it("passes through when the directive is absent", () => {
+            expect(ScriptDeclaration.parsePassThrough("class Processor {}")).toBe(true)
+        })
+        it("suppresses pass-through on @no-pass", () => {
+            expect(ScriptDeclaration.parsePassThrough("// @no-pass\nclass Processor {}")).toBe(false)
+        })
+        it("finds the directive anywhere in the code", () => {
+            const code = ["// @label Chords", "// @param mode 0 0 3 int", "// @no-pass", "class Processor {}"].join("\n")
+            expect(ScriptDeclaration.parsePassThrough(code)).toBe(false)
+        })
+        it("tolerates trailing whitespace", () => {
+            expect(ScriptDeclaration.parsePassThrough("// @no-pass   \nclass Processor {}")).toBe(false)
+        })
+        it("ignores the directive mid-line", () => {
+            expect(ScriptDeclaration.parsePassThrough("const text = \"// @no-pass\"")).toBe(true)
+        })
+        it("throws on trailing tokens", () => {
+            expect(() => ScriptDeclaration.parsePassThrough("// @no-pass please")).toThrow()
+        })
+    })
+
     describe("parseParams", () => {
         it("parses unipolar param with no args", () => {
             const params = ScriptDeclaration.parseParams("// @param gain")

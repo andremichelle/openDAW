@@ -15,6 +15,9 @@ a strong focus on **education** and data-privacy.
 
 Subscribe to our [Newsletter](https://buttondown.com/opendaw) for regular updates.
 
+New to the codebase? [introduction.md](introduction.md) maps every component of this repository and how they depend on
+each other.
+
 <p align="center">
 <img src="https://raw.githubusercontent.com/andremichelle/openDAW/main/assets/studio-teaser.png"/>
 </p>
@@ -99,20 +102,26 @@ skyboundzoo, JHINZ, Mark Dammer, fork-kun, Martin Eigel
 
 * Apparat (programmable instrument scripted in JavaScript)
 * Arpeggio (plays the notes of a chord one after another)
+* Autotune (real-time monophonic pitch correction)
 * Cheap Reverb (FreeVerb variation)
+* Convolver (zero-latency partitioned convolution with impulse-response samples)
 * Crusher (degenerates audio signal)
 * Dattorro Reverb (dense algorithmic reverb based on Dattorro's design)
 * Delay (stereo delay with cross and filter options)
 * Fold (waveform folding algorithm with oversampling)
+* Frequency Split (splits the signal into frequency bands, each with its own effect chain)
+* FX Composite (runs several effect chains in parallel and mixes them with dry/wet)
 * Gate (noise gate with sidechain support)
 * Maximizer (brickwall limiter with automatic makeup gain)
 * MIDI Output (sends MIDI messages to other devices)
 * Nano (nano sampler for a single audio file)
+* Neon (phase-distortion synthesizer)
 * Pitch (offsets midi note pitches)
 * Playfield (sample drum computer with individual effect chains)
 * Revamp (graphical equalizer with spectrum analyser)
 * Soundfont (soundfont player)
 * Spielwerk (programmable MIDI effect scripted in JavaScript)
+* Stereo Split (processes the left and right channels through separate effect chains)
 * Stereo Tool (volume, panning and invert the stereo signal)
 * Tape (playback device for audio regions and clips)
 * Tidal (shapes rhythm and space through volume and pan)
@@ -192,6 +201,16 @@ Before starting, ensure you have the following installed on your system:
 - [OpenSSL](https://openssl-library.org/) For generating local development certificates (), OpenSSL needs to be
   installed on
   your system. Most Linux/macOS systems have OpenSSL pre-installed.
+- [Rust](https://www.rust-lang.org/tools/install) (via `rustup`, **>= 1.82**) is required to build the WASM
+  audio engine (`@opendaw/studio-core-wasm`). Without it, `npm run build` / `npm run dev:studio` fails to
+  resolve that package (a Vite pre-transform error), because `packages/studio/core-wasm/dist` never gets built.
+  You need:
+    - the `wasm32-unknown-unknown` target — `rustup target add wasm32-unknown-unknown`
+    - a **nightly** toolchain with the `rust-src` component (the device crates build with `-Zbuild-std=core`) —
+      `rustup toolchain install nightly && rustup component add rust-src --toolchain nightly`
+- [binaryen](https://github.com/WebAssembly/binaryen) *(optional)* provides `wasm-opt`, used to size-optimise
+  the WASM modules (`brew install binaryen`, or `apt install binaryen`). If it is missing, the build still
+  succeeds and ships unoptimised modules.
 
 ### Clone
 
@@ -205,12 +224,6 @@ Before starting, ensure you have the following installed on your system:
 * `npm run build` (for the first time and after `npm run clean`)
 * `npm run dev:studio` | `npm run dev:headless` (start dev server)
 * Navigate to https://localhost:8080 (port is important > cors sample api)
-
-### Flow Charts
-
-<img width="6551" height="7057" alt="image" src="https://github.com/user-attachments/assets/266a9fb2-4b72-4752-bcf1-85fda2ff2cf1" />
-
----
 
 [![Custom Caption: Watch the Demo](https://img.youtube.com/vi/VPTXeJY6Eaw/0.jpg)](https://www.youtube.com/watch?v=VPTXeJY6Eaw)
 

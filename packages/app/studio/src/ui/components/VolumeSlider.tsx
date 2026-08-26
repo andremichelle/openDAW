@@ -8,7 +8,6 @@ import {
     Nullable,
     Option,
     Parameter,
-    Strings,
     Terminator,
     unitValue
 } from "@opendaw/lib-std"
@@ -206,8 +205,7 @@ export const VolumeSlider = ({lifecycle, editing, parameter, markers = DefaultVo
             const printValue = parameter.getPrintValue()
             const resolvers = Promise.withResolvers<string>()
             resolvers.promise.then(value => {
-                const withUnit = Strings.endsWithDigit(value) ? `${value}${printValue.unit}` : value
-                editing.modify(() => parameter.setPrintValue(withUnit))
+                editing.modify(() => parameter.setPrintValue(value))
                 editing.mark()
             }, EmptyExec)
             Surface.get(thumb).flyout.appendChild(

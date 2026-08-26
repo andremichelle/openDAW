@@ -71,21 +71,6 @@ class Processor {
     }
 
     * process(block, events) {
-        // Pass incoming note-ons through unchanged so the sequencer layers on
-        // top of any upstream MIDI rather than replacing it. The engine emits
-        // matching note-offs from the yielded duration, so iterating gate-on
-        // events alone is sufficient.
-        for (const event of events) {
-            if (event.gate) {
-                yield {
-                    position: event.position,
-                    duration: event.duration,
-                    pitch: event.pitch,
-                    velocity: event.velocity,
-                    cent: event.cent
-                }
-            }
-        }
         if ((block.flags & 4) === 0) return
         if (this.dirty) {
             this.generate()

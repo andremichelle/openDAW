@@ -1,12 +1,20 @@
 import {UUID} from "@opendaw/lib-std"
 import {Workers} from "./Workers"
 import {Promises} from "@opendaw/lib-runtime"
+import {StructureFile} from "./StructureFile"
 
 export abstract class Storage<ITEM extends { uuid: UUID.String } & META, META, NEW, PARTS> {
-    protected constructor(readonly folder: string) {}
+    readonly structure: StructureFile
+
+    protected constructor(readonly folder: string) {this.structure = new StructureFile(folder)}
 
     abstract save(item: NEW): Promise<void>
     abstract load(uuid: UUID.Bytes): Promise<PARTS>
+
+    async updateMeta(uuid: UUID.Bytes, meta: META): Promise<void> {
+        const path = `${this.folder}/${UUID.toString(uuid)}/meta.json`
+        return Workers.Opfs.write(path, new TextEncoder().encode(JSON.stringify(meta)))
+    }
 
     async deleteItem(uuid: UUID.Bytes): Promise<void> {
         const path = `${this.folder}/${UUID.toString(uuid)}`

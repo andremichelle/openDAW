@@ -13,7 +13,8 @@ import {
     tryCatch,
     UUID
 } from "@opendaw/lib-std"
-import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {EffectPointerType} from "../DeviceAdapter"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioFileBox,
@@ -242,10 +243,11 @@ export namespace PresetDecoder {
 
     export const insertEffectChain = (
         bytes: ArrayBufferLike,
-        targetAudioUnit: AudioUnitBox,
+        targetField: Field<EffectPointerType>,
         insertIndex: int,
         kind: PresetHeader.ChainKind
     ): Attempt<void, string> => {
+        if (bytes.byteLength < 8) {return Attempts.err("Invalid preset header")}
         const headerInput = new ByteArrayInput(bytes.slice(0, 8))
         if (headerInput.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {
             return Attempts.err("Invalid preset header")
@@ -272,14 +274,11 @@ export namespace PresetDecoder {
             : sourceAudioUnit.midiEffects
         const effects = IndexedBox.collectIndexedBoxes(sourceField)
         if (effects.length === 0) {return Attempts.err("Preset contains no effects of the requested kind")}
-        const targetField = kind === PresetHeader.ChainKind.Audio
-            ? targetAudioUnit.audioEffects
-            : targetAudioUnit.midiEffects
         const targetFieldAddress = targetField.address
         const hostPointerType: Pointers = kind === PresetHeader.ChainKind.Audio
             ? Pointers.AudioEffectHost
             : Pointers.MIDIEffectHost
-        const targetGraph = targetAudioUnit.graph
+        const targetGraph = targetField.box.graph
         const count = effects.length
         const existing = IndexedBox.collectIndexedBoxes(targetField)
         for (let i = existing.length - 1; i >= 0; i--) {
@@ -315,13 +314,19 @@ export namespace PresetDecoder {
         ])
         PointerField.decodeWith({
             map: (pointer: PointerField, address: Option<Address>): Option<Address> => {
+                // An INTERNAL target (a box inserted along with the chain) always re-targets to its copy —
+                // checked FIRST, and including host pointers: an effect nested inside a composite entry is
+                // hosted BY THAT ENTRY, and re-targeting it onto the destination chain would rip it out and
+                // flatten the composite.
+                const internal = address.flatMap(addr =>
+                    uuidMap.opt(addr.uuid).map(({target}) => addr.moveTo(target)))
+                if (internal.nonEmpty()) {return internal}
+                // A host pointing OUTSIDE the inserted set is a chain ROOT: re-target it onto the destination.
                 if (pointer.pointerType === hostPointerType) {
                     return Option.wrap(targetFieldAddress)
                 }
-                return address.flatMap(addr => uuidMap.opt(addr.uuid).match({
-                    some: ({target}) => Option.wrap(addr.moveTo(target)),
-                    none: () => targetGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None
-                }))
+                return address.flatMap(addr =>
+                    targetGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None)
             }
         }, () => {
             effects.forEach((source, i) => {

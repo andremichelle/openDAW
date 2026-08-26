@@ -91,7 +91,8 @@ const render = async (source: ReturnType<typeof build>) => {
     const out = new Float32Array(QUANTA * len)
     for (let q = 0; q < QUANTA; q++) {
         engine.render()
-        out.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+        const outputPtr = engine.output_ptr()
+        out.set(new Float32Array(memory.buffer, outputPtr, len), q * len)
     }
     return out
 }

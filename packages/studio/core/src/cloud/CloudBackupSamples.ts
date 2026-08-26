@@ -5,6 +5,8 @@ import {Sample} from "@opendaw/studio-adapters"
 import {SampleStorage} from "../samples"
 import {FactoryCatalog} from "../FactoryCatalog"
 import {CloudHandler} from "./CloudHandler"
+import {CloudBackupStructure} from "./CloudBackupStructure"
+import {CloudBackupTombstones} from "./CloudBackupTombstones"
 import {Workers} from "../Workers"
 import {WavFile} from "@opendaw/lib-dsp"
 
@@ -28,33 +30,46 @@ export class CloudBackupSamples {
                 .then(json => JSON.parse(new TextDecoder().decode(json)))
                 .catch(reason => reason instanceof Errors.FileNotFound ? Arrays.empty() : panic(reason))
         ])
-        return new CloudBackupSamples(cloudHandler, {stock, local, cloud}, log).#start(progress)
+        const trashed = CloudBackupStructure.trashedUuids(await SampleStorage.get().structure.load())
+        return new CloudBackupSamples(cloudHandler, {stock, local, cloud}, trashed, log).#start(progress)
     }
 
     readonly #cloudHandler: CloudHandler
     readonly #sampleDomains: SampleDomains
+    readonly #trashed: ReadonlySet<UUID.String>
     readonly #log: Procedure<string>
 
     private constructor(cloudHandler: CloudHandler,
                         sampleDomains: SampleDomains,
+                        trashed: ReadonlySet<UUID.String>,
                         log: Procedure<string>) {
         this.#cloudHandler = cloudHandler
         this.#sampleDomains = sampleDomains
+        this.#trashed = trashed
         this.#log = log
     }
 
     async #start(progress: Progress.Handler) {
-        const trashed = await SampleStorage.get().loadTrashedIds()
+        const storage = SampleStorage.get()
+        const tombstones = await CloudBackupTombstones.sync(this.#cloudHandler, CloudBackupSamples.RemotePath,
+            await storage.loadTrashedIds(), this.#log)
+        await storage.saveTrashedIds(tombstones)
         const [uploadProgress, trashProgress, downloadProgress] = Progress.splitWithWeights(progress, [0.45, 0.10, 0.45])
         await this.#upload(uploadProgress)
-        await this.#trash(trashed, trashProgress)
-        await this.#download(trashed, downloadProgress)
+        await this.#trash(tombstones, trashProgress)
+        await this.#download(tombstones, downloadProgress)
+        // Deleted for good elsewhere, still sitting here: it goes to this device's trash, not to the bin.
+        await CloudBackupStructure.trashLocally(storage.structure, this.#sampleDomains.local
+            .map(({uuid}) => uuid)
+            .filter(uuid => tombstones.includes(uuid) && !this.#trashed.has(uuid)))
+        await CloudBackupStructure.sync(this.#cloudHandler, storage.structure, CloudBackupSamples.RemotePath, this.#log)
     }
 
     async #upload(progress: Progress.Handler) {
         const {stock, local, cloud} = this.#sampleDomains
         const maybeUnsyncedSamples = Arrays.subtract(local, stock, CloudBackupSamples.areSamplesEqual)
         const unsyncedSamples = Arrays.subtract(maybeUnsyncedSamples, cloud, CloudBackupSamples.areSamplesEqual)
+            .filter(({uuid}) => !this.#trashed.has(uuid))
         if (unsyncedSamples.length === 0) {
             this.#log("No unsynced samples found.")
             progress(1.0)

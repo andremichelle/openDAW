@@ -1,5 +1,5 @@
 //! A stereo peak + RMS meter (the engine port of TS `PeakBroadcaster`'s DSP + lib-dsp `RMS`): a 250 ms
-//! peak decay and a 100 ms RMS window per channel, written each quantum into a SHARED 4-float slot
+//! peak decay and a 300 ms RMS window per channel, written each quantum into a SHARED 4-float slot
 //! (`[peakL, peakR, rmsL, rmsR]`) the JS `LiveStreamBroadcaster` reads as a live view over wasm memory.
 //! The slot lives behind an `Rc` (a stable talc heap address for the processor's life); the ring buffers
 //! are allocated at construction (reconcile), never on the render path.
@@ -8,7 +8,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 const PEAK_DECAY_SECONDS: f32 = 0.250; // TS PeakBroadcaster.PEAK_DECAY
-const RMS_WINDOW_SECONDS: f32 = 0.100; // TS PeakBroadcaster.RMS_WINDOW
+const RMS_WINDOW_SECONDS: f32 = 0.300; // TS PeakBroadcaster.RMS_WINDOW
 
 /// The sliding-window RMS (lib-dsp `RMS`): a ring of squares with a running sum.
 struct Rms {

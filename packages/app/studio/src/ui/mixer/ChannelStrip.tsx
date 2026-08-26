@@ -11,6 +11,7 @@ import {Knob} from "@/ui/components/Knob.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {SnapCenter} from "@/ui/configs"
 import {StudioService} from "@/service/StudioService"
+import {AutoEqAction} from "@/ui/mixer/AutoEqAction.tsx"
 import {ChannelStripView, ContextMenu, MenuItem} from "@opendaw/studio-core"
 import {AuxSendGroup} from "@/ui/mixer/AuxSendGroup.tsx"
 import {DblClckTextInput} from "@/ui/wrapper/DblClckTextInput.tsx"
@@ -167,7 +168,11 @@ export const ChannelStrip = ({lifecycle, service, adapter, compact}: Construct) 
                         hidden: !isFrozen
                     }).setTriggerProcedure(() => project.audioUnitFreeze.unfreeze(adapter)))
             }
-            if (!isOutput) {
+            if (isOutput) {
+                collector.addItems(
+                    MenuItem.default({label: "Auto-EQ..."})
+                        .setTriggerProcedure(() => AutoEqAction.run(service, adapter).catch(console.warn)))
+            } else {
                 collector.addItems(
                     MenuItem.default({label: `Delete '${adapter.input.label.unwrapOrElse("Untitled")}'`})
                         .setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(adapter.box))))

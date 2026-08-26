@@ -1,6 +1,7 @@
 import {ValueEventBoxAdapter, ValueEventCollectionBoxAdapter} from "@opendaw/studio-adapters"
 import {Interpolation, ppqn, ValueEvent} from "@opendaw/lib-dsp"
-import {assert, panic, unitValue} from "@opendaw/lib-std"
+import {asDefined, assert, panic, unitValue} from "@opendaw/lib-std"
+import {ValueEventPlacement} from "./ValueEventPlacement"
 
 export namespace ValueEventEditing {
     export const deleteEvent = (collection: ValueEventCollectionBoxAdapter, event: ValueEventBoxAdapter) => {
@@ -22,26 +23,41 @@ export namespace ValueEventEditing {
             successorToPromote.box.index.setValue(0)
         }
     }
+    // Issue #275: a double click places or overwrites a value event at `position`. `side` is the half of the node the
+    // cursor is on (left = incoming, right = outgoing); it selects which member of a same-time pair the click affects.
+    // The decision table is `resolvePlacement`; this executes it against the collection.
     export const createOrMoveEvent = (collection: ValueEventCollectionBoxAdapter,
                                       position: ppqn,
                                       value: unitValue,
-                                      interpolation: Interpolation = Interpolation.Linear): ValueEventBoxAdapter => {
-        const le = collection.events.lowerEqual(position)
-        const ge = collection.events.greaterEqual(position)
-        if (null === le || null === ge) {
-            return collection.createEvent({position, index: 0, value, interpolation})
-        } else if (le === ge) {
-            if (le.index === 0) {
+                                      interpolation: Interpolation = Interpolation.Linear,
+                                      side: ValueEventPlacement.Side = "outgoing"): ValueEventBoxAdapter => {
+        const events = collection.events
+        const first = events.greaterEqual(position)
+        const last = events.lowerEqual(position)
+        const incoming = first !== null && first.position === position && first.index === 0 ? first : null
+        const outgoing = last !== null && last.position === position && last.index === 1 ? last : null
+        switch (ValueEventPlacement.resolve(incoming !== null, outgoing !== null, side)) {
+            case "create":
+                return collection.createEvent({position, index: 0, value, interpolation})
+            case "add-outgoing":
                 return collection.createEvent({position, index: 1, value, interpolation})
-            } else {
-                le.box.value.setValue(value)
-                return le
+            case "add-incoming": {
+                // The existing lone node keeps its value as the OUTGOING (index 1); the click becomes the INCOMING.
+                const existing = asDefined(incoming, "incoming")
+                collection.createEvent({position, index: 1, value: existing.value, interpolation: existing.interpolation})
+                existing.box.value.setValue(value)
+                return existing
             }
-        } else if (le.position === ge.position) {
-            le.box.value.setValue(value)
-            return le
-        } else {
-            return collection.createEvent({position, index: 0, value, interpolation})
+            case "overwrite-incoming": {
+                const target = asDefined(incoming, "incoming")
+                target.box.value.setValue(value)
+                return target
+            }
+            case "overwrite-outgoing": {
+                const target = asDefined(outgoing, "outgoing")
+                target.box.value.setValue(value)
+                return target
+            }
         }
     }
 }

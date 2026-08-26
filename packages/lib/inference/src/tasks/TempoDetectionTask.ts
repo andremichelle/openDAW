@@ -1,10 +1,10 @@
 import {asDefined, clampUnit, panic} from "@opendaw/lib-std"
-import {FFT, ResamplerMono} from "@opendaw/lib-dsp"
+import {BiquadCoeff, BiquadStack, FFT, ResamplerMono, SampleRateConverter} from "@opendaw/lib-dsp"
 import {defineTask, TaskEnvironment} from "../Task"
 import {tensor, TensorMap} from "../Tensor"
 
 export interface TempoDetectionInput {
-    /** Mono PCM. Sample rate must be a 1/2/4/8 multiple of 11025. */
+    /** Mono PCM. Any sample rate at or above 11025 Hz; it is resampled to 11025 before analysis. */
     readonly audio: Float32Array
     readonly sampleRate: number
 }
@@ -149,16 +149,33 @@ const clampOctave = (winner: TempoCandidate, probs: Float32Array): TempoCandidat
     return {bpm: alternate, probability: alternateMass}
 }
 
-// 4× / 2× / 1× polyphase decimation to 11025 Hz. Other sample rates are
-// rejected to keep the model's mel filterbank aligned with what it was
-// trained against (40 bands across 0..5512.5 Hz).
-const downsampleTo11025 = (audio: Float32Array, sampleRate: number): Float32Array => {
-    if (sampleRate === TARGET_SR) {return audio}
-    const ratio = sampleRate / TARGET_SR
-    if (ratio !== 2 && ratio !== 4 && ratio !== 8) {
-        return panic(`tempo-cnn requires sampleRate to be 11025, 22050, 44100, or 88200 Hz — got ${sampleRate}`)
+// Decimation to 11025 Hz for ANY input rate, in two steps. The model's mel filterbank was trained
+// against 40 bands across 0..5512.5 Hz, so everything above the target Nyquist has to be gone before
+// the rate changes.
+//   1. Halve with the polyphase resampler (its half-band filters do the anti-aliasing) as often as
+//      the rate stays at or above the target: 48000 -> 12000, 88200 -> 11025, 32000 -> 16000.
+//   2. Whatever ratio is left is fractional. `SampleRateConverter` interpolates linearly and filters
+//      nothing, so the remaining band above the target Nyquist is low-passed away first. Without
+//      that filter a 32 kHz input folds 5512..8000 Hz straight back into the mel range.
+// An input already at 11025, or one an exact power of two above it, takes step 1 alone and comes out
+// bit-identical to what this function produced before.
+const LOWPASS_ORDER = 4
+const LOWPASS_MARGIN = 0.9 // of the target Nyquist, leaving the filter room to roll off
+
+export const downsampleTo11025 = (audio: Float32Array, sampleRate: number): Float32Array => {
+    if (sampleRate <= 0) {return panic(`tempo-cnn: invalid sampleRate ${sampleRate}`)}
+    if (sampleRate < TARGET_SR) {
+        return panic(`tempo-cnn requires at least ${TARGET_SR} Hz — got ${sampleRate}`)
     }
-    const factor = ratio as 2 | 4 | 8
+    const halvings = Math.min(3, Math.floor(Math.log2(sampleRate / TARGET_SR)))
+    const factor = (1 << halvings) as 1 | 2 | 4 | 8
+    const decimated = factor === 1 ? audio : halve(audio, factor)
+    const decimatedRate = sampleRate / factor
+    if (decimatedRate === TARGET_SR) {return decimated}
+    return SampleRateConverter.convert(lowpass(decimated, decimatedRate), decimatedRate, TARGET_SR)
+}
+
+const halve = (audio: Float32Array, factor: 2 | 4 | 8): Float32Array => {
     const resampler = new ResamplerMono(factor)
     const outputLength = Math.floor(audio.length / factor)
     const out = new Float32Array(outputLength)
@@ -170,6 +187,21 @@ const downsampleTo11025 = (audio: Float32Array, sampleRate: number): Float32Arra
         written += chunkOut
     }
     return out
+}
+
+// Forward then backward through the same cascade: the reverse pass undoes the phase shift of the
+// forward one, so the beat positions the model reads stay where they are.
+const lowpass = (audio: Float32Array, sampleRate: number): Float32Array => {
+    const coeff = new BiquadCoeff().setLowpassParams(TARGET_SR * 0.5 * LOWPASS_MARGIN / sampleRate)
+    const stack = new BiquadStack(LOWPASS_ORDER)
+    const forward = new Float32Array(audio.length)
+    stack.process(coeff, audio, forward, 0, audio.length)
+    forward.reverse()
+    const backward = new Float32Array(audio.length)
+    stack.reset()
+    stack.process(coeff, forward, backward, 0, backward.length)
+    backward.reverse()
+    return backward
 }
 
 // Mirrors `librosa.feature.melspectrogram(power=1, n_fft=1024, hop_length=512,

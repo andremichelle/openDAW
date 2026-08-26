@@ -1,6 +1,8 @@
 import {int, isUndefined} from "@opendaw/lib-std"
 
 export class MIDISender {
+    static dropped: int = 0
+
     readonly #port: MessagePort
     readonly #indices: Uint32Array
     readonly #ring: Uint32Array
@@ -31,6 +33,9 @@ export class MIDISender {
         const writeIdx = Atomics.load(this.#indices, 0)
         const nextIdx = (writeIdx + 1) & this.#ringMask
         if (nextIdx === Atomics.load(this.#indices, 1)) {
+            if (++MIDISender.dropped % 64 === 1) {
+                console.warn(`MIDISender: ring full, dropped ${MIDISender.dropped} message(s)`)
+            }
             return false
         }
         const length = data.length

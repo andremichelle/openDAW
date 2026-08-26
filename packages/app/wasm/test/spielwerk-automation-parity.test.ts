@@ -36,7 +36,8 @@ const APPARAT = `class Processor {
 }`
 
 // The script default shift (0) differs from the automated value, so the test fails unless the automation is applied.
-const SPIELWERK = `// @param shift 0 0 24 int
+const SPIELWERK = `// @no-pass
+// @param shift 0 0 24 int
 class Processor {
     shift = 0
     paramChanged(label, value) { if (label === "shift") this.shift = value }
@@ -140,7 +141,8 @@ describe("spielwerk automation parity", () => {
         const wasm = new Float32Array(QUANTA * len)
         for (let q = 0; q < QUANTA; q++) {
             engine.render()
-            wasm.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+            const outputPtr = engine.output_ptr()
+            wasm.set(new Float32Array(memory.buffer, outputPtr, len), q * len)
         }
         expect(wasm.some(sample => Math.abs(sample) > 0.01)).toBe(true)
         expect(SHIFT).toBeGreaterThan(0) // the automation actually transposes (else the test would be trivial)

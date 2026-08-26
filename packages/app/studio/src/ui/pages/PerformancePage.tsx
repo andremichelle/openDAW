@@ -111,7 +111,7 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
             return (
                 <tr className="error">
                     <td className="name">{result.name}</td>
-                    <td className="number" colSpan={8}>{result.error}</td>
+                    <td className="number" colSpan={4}>{result.error}</td>
                 </tr>
             )
         }
@@ -122,36 +122,27 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
                 <tr>
                     <td className="name">{result.name}</td>
                     <td className="number">{memory.bestMs.toFixed(2)}</td>
-                    <td className="number">{memory.mbPerSec.toFixed(0)} MB/s</td>
-                    <td className="number" colSpan={3}>{memory.nsPerOp.toFixed(2)} ns/op</td>
+                    <td className="number">{memory.mbPerSec.toFixed(0)} MB/s ({memory.nsPerOp.toFixed(2)} ns/op)</td>
                     <td className="bar-cell">
                         <div className="bar" style={{width: `${barWidth.toFixed(1)}%`}}/>
                     </td>
-                    <td className="audio-cell" colSpan={2}/>
+                    <td className="audio-cell"/>
                 </tr>
             )
         }
         const barWidth = result.marginalMs > 0 && maxMarginal > 0
             ? (result.marginalMs / maxMarginal) * 100 : 0
         const isBaseline = result.category === "Baseline"
-        const hasWasm = isDefined(result.wasmRenderMs) && !isDefined(result.wasmError)
-        const ratio = hasWasm && (result.wasmRenderMs ?? 0) > 0 ? result.renderMs / (result.wasmRenderMs ?? 1) : undefined
         return (
             <tr>
                 <td className="name">{result.name}</td>
                 <td className="number">{result.renderMs.toFixed(0)}</td>
-                <td className="number">{hasWasm ? (result.wasmRenderMs ?? 0).toFixed(0) : (result.wasmError ?? "-")}</td>
-                <td className="number">{isDefined(ratio) ? `${ratio.toFixed(2)}×` : "-"}</td>
                 <td className="number">{isBaseline ? "-" : result.marginalMs.toFixed(0)}</td>
-                <td className="number">{isBaseline || !hasWasm ? "-" : (result.wasmMarginalMs ?? 0).toFixed(0)}</td>
                 <td className="bar-cell">
                     <div className="bar" style={{width: `${barWidth.toFixed(1)}%`}}/>
                 </td>
                 <td className="audio-cell">
                     {isDefined(result.audio) ? createAudioElement(result.audio) : null}
-                </td>
-                <td className="audio-cell">
-                    {isDefined(result.wasmAudio) ? createAudioElement(result.wasmAudio) : null}
                 </td>
             </tr>
         )
@@ -167,7 +158,7 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
             if (categoryResults.length === 0) {continue}
             tbody.appendChild(
                 <tr className="category">
-                    <td colSpan={9}>{category}</td>
+                    <td colSpan={5}>{category}</td>
                 </tr>
             )
             const sorted = category === "Memory"
@@ -188,10 +179,7 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
                 renderMs: Number(result.renderMs.toFixed(2)),
                 marginalMs: Number(result.marginalMs.toFixed(2)),
                 perQuantumUs: Number(result.perQuantumUs.toFixed(3)),
-                wasmRenderMs: isDefined(result.wasmRenderMs) ? Number(result.wasmRenderMs.toFixed(2)) : null,
-                wasmMarginalMs: isDefined(result.wasmMarginalMs) ? Number(result.wasmMarginalMs.toFixed(2)) : null,
-                wasmPerQuantumUs: isDefined(result.wasmPerQuantumUs) ? Number(result.wasmPerQuantumUs.toFixed(3)) : null,
-                wasmError: result.wasmError ?? null
+                error: result.error ?? null
             }))
         const memory = results
             .filter(result => isDefined(result.memory))
@@ -337,14 +325,10 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
                 <thead>
                 <tr>
                     <th>Device</th>
-                    <th>ts (ms)</th>
-                    <th>wasm (ms)</th>
-                    <th>speedup</th>
-                    <th>ts marginal</th>
-                    <th>wasm marginal</th>
+                    <th>render (ms)</th>
+                    <th>marginal</th>
                     <th>relative</th>
-                    <th>ts</th>
-                    <th>wasm</th>
+                    <th>audio</th>
                 </tr>
                 </thead>
                 {tbody}

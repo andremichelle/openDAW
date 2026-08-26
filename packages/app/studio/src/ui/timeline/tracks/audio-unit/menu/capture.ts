@@ -8,12 +8,14 @@ import {StudioService} from "@/service/StudioService"
 export namespace MenuCapture {
     export const createItem = (service: StudioService,
                                audioUnitBoxAdapter: AudioUnitBoxAdapter,
-                               trackBoxAdapter: TrackBoxAdapter,
+                               optTrackBoxAdapter: Option<TrackBoxAdapter>,
                                editing: Editing,
                                captureOption: Option<Capture>) => MenuItem.default({
         label: audioUnitBoxAdapter.captureBox
             .mapOr(box => isInstanceOf(box, CaptureAudioBox) ? "Capture Audio" : "Capture MIDI", ""),
-        hidden: trackBoxAdapter.indexField.getValue() !== 0 || captureOption.isEmpty(),
+        // The unit lane carries no track, so it takes the place of track 0 here.
+        hidden: optTrackBoxAdapter.mapOr(track => track.indexField.getValue() !== 0, false)
+            || captureOption.isEmpty(),
         separatorBefore: true
     }).setRuntimeChildrenProcedure(parent => {
         if (captureOption.isEmpty()) {return}

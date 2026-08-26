@@ -6,9 +6,9 @@ export const JoinRoomPage: PageFactory<StudioService> = ({service, path}: PageCo
     const roomName = path.replace(/^\/join\//, "").trim()
     if (roomName.length > 0) {
         connectRoom(service, roomName)
-            .catch(() => RouteLocation.get().navigateTo("/"))
+            .catch(() => RouteLocation.get().replaceWith("/"))
     } else {
-        queueMicrotask(() => RouteLocation.get().navigateTo("/"))
+        queueMicrotask(() => RouteLocation.get().replaceWith("/"))
     }
     return <div style={{flex: "1", backgroundColor: "var(--color-background)"}}/>
 }

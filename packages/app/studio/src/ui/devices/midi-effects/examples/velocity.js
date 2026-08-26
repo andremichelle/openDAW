@@ -1,4 +1,5 @@
 // @label Velocity
+// @no-pass
 // @param target 0.5 0 1 linear
 // @param strength 0 0 1 linear
 // @param randomAmount 0 0 1 linear

@@ -1,4 +1,4 @@
-import {int, Iterables, Nullable, Procedure, TAU} from "@opendaw/lib-std"
+import {int, Iterables, Nullable, Procedure, TAU, UUID} from "@opendaw/lib-std"
 import {AudioClipBoxAdapter} from "@opendaw/studio-adapters"
 import {Peaks} from "@opendaw/lib-fusion"
 import {dbToGain} from "@opendaw/lib-dsp"
@@ -7,6 +7,18 @@ import {CanvasPainter} from "@opendaw/studio-core"
 export const createAudioClipPainter = (adapter: AudioClipBoxAdapter): Procedure<CanvasPainter> => painter => {
     const {context, actualHeight: size} = painter
     const radius = size >> 1
+    // Diagnostics only (live error 1097): name the clip and its file pointer before the unwrap panics.
+    if (adapter.optFile.isEmpty()) {
+        const pointer = adapter.box.file
+        console.warn("AudioClipPainter: empty file", {
+            clip: UUID.toString(adapter.uuid),
+            label: adapter.label,
+            attached: adapter.box.isAttached(),
+            pointerAddress: pointer.targetAddress.mapOr(address => address.toString(), "none"),
+            pointerResolves: pointer.targetVertex.nonEmpty(),
+            track: adapter.trackBoxAdapter.mapOr(track => UUID.toString(track.uuid), "none")
+        })
+    }
     const {file, gain, duration, optWarpMarkers, isPlayModeNoStretch, waveformOffset} = adapter
     if (file.peaks.isEmpty()) {return}
     const numRays = 256

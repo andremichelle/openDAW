@@ -1,0 +1,27 @@
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: column
+  @include mixins.Control
+  padding: 0 0 1em 0
+
+  > .controls
+    display: grid
+    grid-template-columns: repeat(8, 3.75em)
+    column-gap: 2px
+    align-items: start
+
+    > .waveform
+      align-self: center
+      display: flex
+      align-items: center
+      justify-content: center
+      font-size: 0.75em
+
+  > .body
+    display: flex
+    flex-direction: column
+    justify-content: end
+    row-gap: 0.25em
+    height: stretch

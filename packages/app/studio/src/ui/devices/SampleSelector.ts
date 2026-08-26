@@ -1,5 +1,5 @@
 import {AudioFileBox} from "@opendaw/studio-boxes"
-import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {isDefined, Option, Procedure, Terminable, UUID} from "@opendaw/lib-std"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Events, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
@@ -40,10 +40,32 @@ export namespace SampleSelectStrategy {
         })
     }
 
+    // Clear the pointer only (the owner box SURVIVES), deleting the target AudioFileBox when this
+    // was its last pointer. The remove path for pointers living on a DEVICE box (Convolver, Nano).
+    export const clearPointer = (filePointer: PointerField<Pointers.AudioFile>): void => {
+        if (!filePointer.box.isAttached()) {return}
+        filePointer.targetVertex.ifSome(({box: existingFile}) => {
+            const mustDelete = existingFile.pointerHub.size() === 1
+            filePointer.defer()
+            if (mustDelete) {existingFile.delete()}
+        })
+    }
+
+    // For a pointer on a dedicated per-sample box (a Playfield slot): removing the sample removes the box.
     export const forPointerField = (filePointer: PointerField<Pointers.AudioFile>): SampleSelectStrategy => ({
         isAttached: (): boolean => filePointer.box.isAttached(),
         hasSample: (): boolean => filePointer.nonEmpty(),
         replace: (replacement: Option<AudioFileBox>): void => changePointer(filePointer, replacement)
+    })
+
+    // For a pointer on a DEVICE box: removing the sample only empties the slot, never the device.
+    export const forDeviceFile = (filePointer: PointerField<Pointers.AudioFile>): SampleSelectStrategy => ({
+        isAttached: (): boolean => filePointer.box.isAttached(),
+        hasSample: (): boolean => filePointer.nonEmpty(),
+        replace: (replacement: Option<AudioFileBox>): void => replacement.match({
+            none: () => clearPointer(filePointer),
+            some: () => changePointer(filePointer, replacement)
+        })
     })
 }
 
@@ -109,11 +131,12 @@ export class SampleSelector {
         return ContextMenu.subscribe(button, collector => collector.addItems(this.createRemoveMenuData()))
     }
 
-    configureDrop(dropZone: HTMLElement): Terminable {
+    configureDrop(dropZone: HTMLElement, onShiftDrop?: Procedure<Sample>): Terminable {
         return DragAndDrop.installTarget(dropZone, {
             drag: (_event: DragEvent, data: AnyDragData): boolean => data.type === "sample" || data.type === "file",
-            drop: async (_event: DragEvent, data: AnyDragData): Promise<void> => {
+            drop: async (event: DragEvent, data: AnyDragData): Promise<void> => {
                 if (!(data.type === "sample" || data.type === "file")) {return}
+                const shift = event.shiftKey
                 const dialog = Dialogs.processMonolog("Import Sample")
                 let sample: Sample
                 if (data.type === "sample") {
@@ -135,8 +158,12 @@ export class SampleSelector {
                     dialog.close()
                     return
                 }
-                this.newSample(sample)
                 dialog.close()
+                if (shift && isDefined(onShiftDrop)) {
+                    onShiftDrop(sample)
+                } else {
+                    this.newSample(sample)
+                }
             },
             enter: (allowDrop: boolean) => dropZone.classList.toggle("accept", allowDrop),
             leave: () => dropZone.classList.remove("accept")

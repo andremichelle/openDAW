@@ -13,7 +13,7 @@ import {connectSyncToEngine} from "./connect-sync"
 const ODSL = path.resolve(__dirname, "../../public/odsl/test.odsl")
 
 export const buildProject = async () => {
-    const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+    const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
     const {engine, memory, drainSamples} = await loadFullEngine()
     const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)
     const steps = decodeSteps(commits)
@@ -28,7 +28,8 @@ export const buildProject = async () => {
         const buffer = new Float32Array(quanta * len)
         for (let q = 0; q < quanta; q++) {
             engine.render()
-            buffer.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+            const enginePtr = engine.output_ptr()
+            buffer.set(new Float32Array(memory.buffer, enginePtr, len), q * len)
         }
         return buffer
     }

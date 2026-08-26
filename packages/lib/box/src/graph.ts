@@ -136,6 +136,8 @@ export class BoxGraph<BoxMap = any> {
 
     stageBox<B extends Box>(box: B, constructor?: Procedure<B>): B {
         this.#assertTransaction()
+        // Nested construction: the outer box is not staged yet, so pointers into it would refer to a vertex
+        // the graph does not have. Create the boxes in sequence and wire them after.
         assert(!this.#constructingBox, "Cannot construct box while other box is constructing")
         if (isDefined(constructor)) {
             this.#constructingBox = true
@@ -210,6 +212,35 @@ export class BoxGraph<BoxMap = any> {
     }
 
     boxes(): ReadonlyArray<Box> {return this.#boxes.values()}
+
+    // Edges naming a box the graph does not hold. Deserialization and a merged document are the only ways in,
+    // since refer() demands a live vertex.
+    unresolvablePointers(): ReadonlyArray<PointerField> {
+        return this.#boxes.values().flatMap(box => box.outgoingEdges()
+            .filter(([, targetAddress]) => this.findVertex(targetAddress).isEmpty())
+            .map(([pointer]) => pointer))
+    }
+
+    // Make a pointer whose target is gone indistinguishable from one that was never set, so every consumer's
+    // existing "not set" handling applies unchanged. Never deletes: who cannot live without its target is a
+    // separate, later decision. Order-independent, so every peer computes the same result.
+    //
+    // Deliberately NOT part of deserialization: a partial graph (a clipboard subset) points outside itself on
+    // purpose. Only a caller that claims its graph should be whole may ask for this.
+    //
+    // Clearing a mandatory pointer leaves the graph momentarily invalid, by design, until the caller rebuilds
+    // the target or removes the owner. So when this opens its own transaction it closes it WITHOUT validation.
+    // Called inside an open transaction it just clears, and that caller's endTransaction validates as usual.
+    clearUnresolvablePointers(): int {
+        const pointers = this.unresolvablePointers()
+        if (pointers.length === 0) {return 0}
+        const nested = this.#inTransaction
+        if (!nested) {this.beginTransaction()}
+        pointers.forEach(pointer => pointer.targetAddress = Option.None)
+        if (!nested) {this.#finalizeWithoutValidation()}
+        console.warn(`[BoxGraph] cleared ${pointers.length} pointer(s) whose target is missing`)
+        return pointers.length
+    }
 
     edges(): GraphEdges {return this.#edges}
 
@@ -423,15 +454,22 @@ export class BoxGraph<BoxMap = any> {
             box.outgoingEdges()
                 .filter(([pointer]) => !pointers.has(pointer))
                 .forEach(([source, targetAddress]: [PointerField, Address]) => {
-                    const targetVertex = this.findVertex(targetAddress)
-                        .unwrap(`Could not find target of ${source.toString()}`)
+                    // A concurrent merge can leave an edge naming a box the document no longer holds. Record
+                    // the pointer regardless so Box.delete defers it (unstage rejects a box with live edges),
+                    // and skip the walk instead of panicking. Repairing it is deterministicReconcile's job.
                     pointers.add(source)
-                    if (targetVertex.pointerRules.mandatory &&
-                        (alwaysFollowMandatory || targetVertex.pointerHub.incoming()
-                            .filter(p => p.targetAddress.mapOr(address => address.equals(targetAddress), false))
-                            .every(pointer => pointers.has(pointer)))) {
-                        return trace(targetVertex.box)
-                    }
+                    this.findVertex(targetAddress).match({
+                        none: () => console.warn(
+                            `[BoxGraph] skipping dangling ${source.toString()} -> ${targetAddress.toString()}`),
+                        some: targetVertex => {
+                            if (targetVertex.pointerRules.mandatory &&
+                                (alwaysFollowMandatory || targetVertex.pointerHub.incoming()
+                                    .filter(p => p.targetAddress.mapOr(address => address.equals(targetAddress), false))
+                                    .every(pointer => pointers.has(pointer)))) {
+                                trace(targetVertex.box)
+                            }
+                        }
+                    })
                 })
             box.incomingEdges()
                 .forEach(pointer => {
@@ -541,13 +579,7 @@ export class BoxGraph<BoxMap = any> {
         if (validate) {
             this.endTransaction()
         } else {
-            if (this.#deferredPointerUpdates.length > 0) {
-                this.#deferredPointerUpdates.forEach(({pointerField, update}) =>
-                    this.#processPointerVertexUpdate(pointerField, update))
-                this.#deferredPointerUpdates.length = 0
-            }
-            this.#edges.clearAffected()
-            this.#finalizeTransaction()
+            this.#finalizeWithoutValidation()
         }
     }
 
@@ -577,14 +609,18 @@ export class BoxGraph<BoxMap = any> {
         if (validate) {
             this.endTransaction()
         } else {
-            if (this.#deferredPointerUpdates.length > 0) {
-                this.#deferredPointerUpdates.forEach(({pointerField, update}) =>
-                    this.#processPointerVertexUpdate(pointerField, update))
-                this.#deferredPointerUpdates.length = 0
-            }
-            this.#edges.clearAffected()
-            this.#finalizeTransaction()
+            this.#finalizeWithoutValidation()
         }
+    }
+
+    #finalizeWithoutValidation(): void {
+        if (this.#deferredPointerUpdates.length > 0) {
+            this.#deferredPointerUpdates.forEach(({pointerField, update}) =>
+                this.#processPointerVertexUpdate(pointerField, update))
+            this.#deferredPointerUpdates.length = 0
+        }
+        this.#edges.clearAffected()
+        this.#finalizeTransaction()
     }
 
     #assertTransaction(): void {

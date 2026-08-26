@@ -64,7 +64,8 @@ describe("audio-region playback", () => {
             let peak = 0
             for (let q = 0; q < quanta; q++) {
                 engine.render()
-                const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+                const enginePtr = engine.output_ptr()
+                const out = new Float32Array(memory.buffer, enginePtr, len)
                 for (let i = 0; i < len; i++) {
                     expect(Number.isFinite(out[i])).toBe(true)
                     if (Math.abs(out[i]) > peak) {peak = Math.abs(out[i])}
@@ -159,7 +160,8 @@ describe("audio-region playback", () => {
             let peak = 0
             for (let q = 0; q < quanta; q++) {
                 engine.render()
-                const out = new Float32Array(memory.buffer, engine.output_ptr(), len)
+                const enginePtr2 = engine.output_ptr()
+                const out = new Float32Array(memory.buffer, enginePtr2, len)
                 for (let i = 0; i < len; i++) {
                     expect(Number.isFinite(out[i])).toBe(true)
                     if (Math.abs(out[i]) > peak) {peak = Math.abs(out[i])}

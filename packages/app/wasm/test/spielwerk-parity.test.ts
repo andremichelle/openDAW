@@ -35,7 +35,7 @@ const APPARAT = `class Processor {
     }
 }`
 
-const renderTransform = async (spielwerkCode: string, transformedPitch: number) => {
+const renderTransform = async (spielwerkCode: string, transformedPitch: number | ReadonlyArray<number>) => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -97,12 +97,14 @@ const renderTransform = async (spielwerkCode: string, transformedPitch: number) 
     const wasm = new Float32Array(QUANTA * len)
     for (let q = 0; q < QUANTA; q++) {
         engine.render()
-        wasm.set(new Float32Array(memory.buffer, engine.output_ptr(), len), q * len)
+        const enginePtr = engine.output_ptr()
+        wasm.set(new Float32Array(memory.buffer, enginePtr, len), q * len)
     }
 
-    // Reference: the SAME Apparat voiced directly at the transformed pitch (the note rings the whole window).
+    // Reference: the SAME Apparat voiced directly at the transformed pitch(es) (the notes ring the whole window).
+    const pitches = Array.isArray(transformedPitch) ? transformedPitch : [transformedPitch as number]
     const proc = new (globalThis as any).openDAW.apparatProcessors[apparatUuid].create()
-    proc.noteOn(transformedPitch, VELOCITY, 0, 1)
+    pitches.forEach((pitch, index) => proc.noteOn(pitch, VELOCITY, 0, index + 1))
     const reference = new Float32Array(wasm.length)
     for (let q = 0; q < QUANTA; q++) {
         const base = q * len
@@ -113,7 +115,8 @@ const renderTransform = async (spielwerkCode: string, transformedPitch: number) 
     return {wasm, reference}
 }
 
-const PASSTHROUGH = `class Processor {
+const PASSTHROUGH = `// @no-pass
+class Processor {
     * process(block, events) {
         for (const e of events) {
             if (e.gate) { yield {position: e.position, duration: e.duration, pitch: e.pitch, velocity: e.velocity, cent: e.cent} }
@@ -121,7 +124,24 @@ const PASSTHROUGH = `class Processor {
     }
 }`
 
-const TRANSPOSE = `class Processor {
+const TRANSPOSE = `// @no-pass
+class Processor {
+    * process(block, events) {
+        for (const e of events) {
+            if (e.gate) { yield {position: e.position, duration: e.duration, pitch: e.pitch + 12, velocity: e.velocity, cent: e.cent} }
+        }
+    }
+}`
+
+// Yields nothing: without the `@no-pass` directive the device must forward the upstream note VERBATIM, so the
+// downstream Apparat voices the original pitch as if no Spielwerk sat in the chain.
+const SILENT = `class Processor {
+    * process(block, events) {
+    }
+}`
+
+// The same transpose WITHOUT `@no-pass`: the forwarded original AND the yielded octave must both sound.
+const TRANSPOSE_ADDITIVE = `class Processor {
     * process(block, events) {
         for (const e of events) {
             if (e.gate) { yield {position: e.position, duration: e.duration, pitch: e.pitch + 12, velocity: e.velocity, cent: e.cent} }
@@ -138,6 +158,18 @@ describe("spielwerk parity", () => {
 
     it("transposes a note up an octave", async () => {
         const {wasm, reference} = await renderTransform(TRANSPOSE, PITCH + 12)
+        expect(wasm.some(sample => Math.abs(sample) > 0.01)).toBe(true)
+        expect(maxDiff(wasm, reference)).toBeLessThan(1e-6)
+    }, 30000)
+
+    it("forwards the input when the script yields nothing", async () => {
+        const {wasm, reference} = await renderTransform(SILENT, PITCH)
+        expect(wasm.some(sample => Math.abs(sample) > 0.01)).toBe(true)
+        expect(maxDiff(wasm, reference)).toBeLessThan(1e-6)
+    }, 30000)
+
+    it("adds yielded notes on top of the forwarded input", async () => {
+        const {wasm, reference} = await renderTransform(TRANSPOSE_ADDITIVE, [PITCH, PITCH + 12])
         expect(wasm.some(sample => Math.abs(sample) > 0.01)).toBe(true)
         expect(maxDiff(wasm, reference)).toBeLessThan(1e-6)
     }, 30000)

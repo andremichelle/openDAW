@@ -120,6 +120,10 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                     if (target === null || target.type === "loop-duration") {
                         const rect = canvas.getBoundingClientRect()
                         const position = snapping.xToUnitRound(event.clientX - rect.left) - reader.offset
+                        // #275: when the snapped time already holds a node, the cursor's side of it picks which member
+                        // of the same-time pair the click sets — left of the node = incoming (index 0), right = outgoing.
+                        const side = range.xToUnit(event.clientX - rect.left) - reader.offset < position
+                            ? "incoming" : "outgoing"
                         const clickValue = valueAxis.axisToValue(event.clientY - rect.top)
                         const formatValue = context.currentValue
                         const value: number = Math.abs(valueToPixel(clickValue) - valueToPixel(formatValue))
@@ -128,21 +132,24 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             : context.quantize(clickValue)
                         return editing.modify(() =>
                             ValueEventEditing.createOrMoveEvent(reader.content, position, value,
-                                context.floating ? Interpolation.Linear : Interpolation.None), false)
+                                context.floating ? Interpolation.Linear : Interpolation.None, side), false)
                             .match({
                                 none: () => Option.None,
                                 some: adapter => {
                                     selection.deselectAll()
                                     selection.select(adapter)
-                                    const clientRect = canvas.getBoundingClientRect()
+                                    // #309: anchor the move on the node that was just created, not on the raw
+                                    // cursor. ValueMoveModifier keeps (pointer - reference) as a grab offset, so
+                                    // handing it the unsnapped click would shift every snap boundary by the
+                                    // double-click's snap residual (a 10/90 split instead of 50/50).
                                     return modifyContext.startModifier(ValueMoveModifier.create({
                                         editing,
                                         element: canvas,
                                         context,
                                         selection,
                                         snapping,
-                                        pointerValue: valueAxis.axisToValue(event.clientY - clientRect.top),
-                                        pointerPulse: range.xToUnit(event.clientX - clientRect.left),
+                                        pointerValue: adapter.value,
+                                        pointerPulse: adapter.position + reader.offset,
                                         valueAxis,
                                         eventMapping,
                                         reference: adapter,
@@ -193,7 +200,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                             valueAxis,
                             eventMapping,
                             reference: optCutEvent,
-                            collection: reader.content
+                            collection: reader.content,
+                            chainPending: true // cut(unmarked) + settle-move sealed as ONE undo step (#208 / #306)
                         }))
                     }
                 }

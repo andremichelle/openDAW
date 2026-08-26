@@ -10,17 +10,17 @@
 // bytes and posts them here. Each batch -> apply_updates, then bind() once the TimelineBox exists.
 
 import "../../../studio/core-wasm/src/worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
-import {isDefined, Terminable, UUID} from "@opendaw/lib-std"
+import {isDefined, Nullable, Terminable, UUID} from "@opendaw/lib-std"
 import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
-import {CompositeSpec} from "../../../studio/core-wasm/src/engine-modules"
+import {CompositeSpec, createEngineMemory, EffectCompositeSpec} from "../../../studio/core-wasm/src/engine-modules"
 import {SampleInfo, SampleLoader} from "./sample-loader"
 import {SoundfontInfo, SoundfontLoader} from "./soundfont-loader"
 import {EngineProtocol, HeapListener, HeapStats, ScriptListener, TransportListener} from "./engine-protocol"
 import {ScriptBridges, ScriptEngine} from "../../../studio/core-wasm/src/script-bridge"
 import {NamBridges} from "../../../studio/core-wasm/src/nam-bridge"
-import {linkDevice, registerComposite} from "../../../studio/core-wasm/src/device-linker"
+import {linkDevice, registerComposite, registerEffectComposite} from "../../../studio/core-wasm/src/device-linker"
 import {NamLoader} from "../../../studio/core-wasm/src/nam-loader"
 import {EngineExports} from "../../../studio/core-wasm/src/engine-exports"
 
@@ -31,7 +31,7 @@ type BootOptions = {
     deviceModules: ReadonlyArray<WebAssembly.Module> // PIC side modules, in load order (device 0, 1, ...)
     deviceBoxTypes: ReadonlyArray<string> // parallel to deviceModules: the device-box type each plugin realizes
     composites: ReadonlyArray<CompositeSpec> // composite box types the engine hosts as child collections
-    memory: WebAssembly.Memory // SHARED, created on the main thread so it can see the WASM heap
+    effectComposites: ReadonlyArray<EffectCompositeSpec> // parallel fx / midi stacks the engine hosts itself
     sampleRate: number
     metronome?: boolean // default true; the note's page sets false to hear only the instrument
 }
@@ -54,17 +54,18 @@ class EngineProcessor extends AudioWorkletProcessor {
     readonly #scriptBridges: ScriptBridges // runs the scriptable devices' user JS over the shared memory
     readonly #namBridges: NamBridges // runs the NeuralAmp devices' nam-wasm inference next to the engine
     // The live-telemetry bridge: the UNCHANGED lib-fusion protocol, fed by Float32Array views over the
-    // engine's broadcast slots (shared-memory views survive talc growth, so a view registers once).
+    // engine's broadcast slots. A grow DETACHES the held views (non-shared memory relocates), so a buffer
+    // identity change forces re-registration.
     readonly #broadcaster: LiveStreamBroadcaster
     readonly #broadcastSubs: Array<Terminable> = []
     #broadcastGeneration: number = -1
+    #broadcastBuffer: Nullable<ArrayBufferLike> = null
 
     constructor(options?: AudioWorkletNodeOptions) {
         super()
-        const {engineModule, deviceModules, deviceBoxTypes, composites, memory, sampleRate, metronome}: BootOptions = options?.processorOptions
+        const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites, sampleRate, metronome}: BootOptions = options?.processorOptions
         this.#sampleRate = sampleRate
-        // the one SHARED linear memory, created on the main thread and handed in (so the main thread can
-        // see the WASM heap). talc grows it on demand; shared memory grows in place without detaching.
+        const memory = createEngineMemory() // worklet-owned, non-shared: talc grows it on demand
         this.#memory = memory
         // the one shared function table: the engine (main module) imports it and uses the low slots; each
         // device's functions + its `process` entry are appended above via table.grow.
@@ -91,6 +92,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         deviceModules.forEach((deviceModule, index) =>
             linkDevice(engine, memory, this.#table, deviceModule, deviceBoxTypes[index], sampleRate, bridgeImports))
         composites.forEach(composite => registerComposite(engine, memory, composite))
+        effectComposites.forEach(composite => registerEffectComposite(engine, memory, composite))
         if (metronome === false) {engine.set_metronome_enabled(0)}
         // ONE Messenger over the engine port, split into typed Communicator protocols, one per named channel
         // (each channel is a single sender -> executor direction): `engine` receives the SyncSource transaction
@@ -104,6 +106,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             play(): void {processor.#engine?.play()}
             pause(): void {processor.#engine?.pause()}
             stop(): void {processor.#engine?.stop()}
+            setMetronome(enabled: boolean): void {processor.#engine?.set_metronome_enabled(enabled ? 1 : 0)}
         })
         this.#transport = Communicator.sender<TransportListener>(messenger.channel("transport"), dispatcher => new class implements TransportListener {
             state(bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.state, Communicator.makeTransferable(bytes))}
@@ -113,11 +116,9 @@ class EngineProcessor extends AudioWorkletProcessor {
         })
         this.#loader = Communicator.sender<SampleLoader>(messenger.channel("samples"), dispatcher => new class implements SampleLoader {
             decode(uuid: UUID.Bytes): Promise<SampleInfo> {return dispatcher.dispatchAndReturn(this.decode, uuid)}
-            write(uuid: UUID.Bytes, pointer: number): Promise<void> {return dispatcher.dispatchAndReturn(this.write, uuid, pointer)}
         })
         this.#soundfontLoader = Communicator.sender<SoundfontLoader>(messenger.channel("soundfonts"), dispatcher => new class implements SoundfontLoader {
             decode(uuid: UUID.Bytes): Promise<SoundfontInfo> {return dispatcher.dispatchAndReturn(this.decode, uuid)}
-            write(uuid: UUID.Bytes, pointer: number): Promise<void> {return dispatcher.dispatchAndReturn(this.write, uuid, pointer)}
         })
         this.#scripts = Communicator.sender<ScriptListener>(messenger.channel("script"), dispatcher => new class implements ScriptListener {
             deviceMessage(uuid: string, message: string): void {dispatcher.dispatchAndForget(this.deviceMessage, uuid, message)}
@@ -134,6 +135,11 @@ class EngineProcessor extends AudioWorkletProcessor {
     // values at flush, so the render path never copies. Entry indices are only valid for this generation; a
     // sweep re-runs this, so a captured `index` in the subscription round-trip can never go stale.
     #syncBroadcasts(): void {
+        const buffer = this.#memory.buffer
+        if (buffer !== this.#broadcastBuffer) {
+            this.#broadcastBuffer = buffer
+            this.#broadcastGeneration = -1
+        }
         const generation = this.#engine.broadcast_generation()
         if (generation === this.#broadcastGeneration) {return}
         this.#broadcastGeneration = generation
@@ -191,7 +197,11 @@ class EngineProcessor extends AudioWorkletProcessor {
             void (async () => {
                 const info = await loader.decode(uuid)
                 const pointer = this.#engine.sample_allocate(handle, info.byteLength)
-                await loader.write(uuid, pointer)
+                const frames = info.frameCount
+                for (let channel = 0; channel < info.channelCount; channel++) {
+                    new Float32Array(this.#memory.buffer, pointer + channel * frames * Float32Array.BYTES_PER_ELEMENT, frames)
+                        .set(info.frames[channel])
+                }
                 this.#engine.sample_set_ready(handle, info.frameCount, info.channelCount, info.sampleRate)
             })().catch((reason: unknown) => {
                 // A failed fetch/decode must not become an unhandled rejection: mark the handle ready as a
@@ -216,7 +226,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             void (async () => {
                 const info = await loader.decode(uuid)
                 const pointer = this.#engine.soundfont_allocate(handle, info.byteLength)
-                await loader.write(uuid, pointer)
+                new Uint8Array(this.#memory.buffer, pointer, info.byteLength).set(info.blob)
                 this.#engine.soundfont_set_ready(handle)
             })().catch((reason: unknown) => {
                 this.#scripts.deviceMessage("engine", `soundfont load failed: ${reason}`)

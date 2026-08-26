@@ -96,8 +96,12 @@ export class IndexedBoxAdapterCollection<A extends IndexedBoxAdapter, P extends 
 
     adapters(): ReadonlyArray<A> {
         if (this.#sorted === null) {
+            // Exclude a box being deleted: within the transaction its `delete()` detaches it (isAttached false)
+            // BEFORE the field pointer removal reaches `onRemoved`, so it lingers here as a zombie. A reindex of
+            // its survivors would otherwise re-render it and resolve its now-dangling mandatory pointers.
             this.#sorted = this.#entries.values()
                 .map(({adapter}) => adapter)
+                .filter(adapter => adapter.box.isAttached())
                 .sort((a, b) => a.indexField.getValue() - b.indexField.getValue())
         }
         return this.#sorted

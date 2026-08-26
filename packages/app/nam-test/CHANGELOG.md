@@ -3,6 +3,34 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.25](https://github.com/andremichelle/openDAW/compare/@opendaw/nam-test@0.0.24...@opendaw/nam-test@0.0.25) (2026-08-17)
+
+**Note:** Version bump only for package @opendaw/nam-test
+
+## [0.0.24](https://github.com/andremichelle/openDAW/compare/@opendaw/nam-test@0.0.23...@opendaw/nam-test@0.0.24) (2026-08-11)
+
+**Note:** Version bump only for package @opendaw/nam-test
+
+## [0.0.23](https://github.com/andremichelle/openDAW/compare/@opendaw/nam-test@0.0.22...@opendaw/nam-test@0.0.23) (2026-07-29)
+
+**Note:** Version bump only for package @opendaw/nam-test
+
+## [0.0.22](https://github.com/andremichelle/openDAW/compare/@opendaw/nam-test@0.0.21...@opendaw/nam-test@0.0.22) (2026-07-22)
+
+**Note:** Version bump only for package @opendaw/nam-test
+
+## [0.0.21](https://github.com/andremichelle/openDAW/compare/@opendaw/nam-test@0.0.20...@opendaw/nam-test@0.0.21) (2026-07-16)
+
+**Note:** Version bump only for package @opendaw/nam-test
+
+## [0.0.20](https://github.com/andremichelle/openDAW/compare/@opendaw/nam-test@0.0.19...@opendaw/nam-test@0.0.20) (2026-07-15)
+
+**Note:** Version bump only for package @opendaw/nam-test
+
+## [0.0.19](https://github.com/andremichelle/openDAW/compare/@opendaw/nam-test@0.0.18...@opendaw/nam-test@0.0.19) (2026-07-14)
+
+**Note:** Version bump only for package @opendaw/nam-test
+
 ## [0.0.18](https://github.com/andremichelle/openDAW/compare/@opendaw/nam-test@0.0.17...@opendaw/nam-test@0.0.18) (2026-07-07)
 
 **Note:** Version bump only for package @opendaw/nam-test

@@ -5,6 +5,7 @@ import {ContentEditor} from "@/ui/timeline/editors/ContentEditor.tsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Timeline} from "@/ui/timeline/Timeline.tsx"
 import {Mixer} from "@/ui/mixer/Mixer.tsx"
+import {ModulationPanel} from "@/ui/modulation/ModulationPanel.tsx"
 import {Modular} from "@/ui/modular/Modular.tsx"
 import {DevicePanel} from "@/ui/devices/panel/DevicePanel.tsx"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
@@ -13,12 +14,12 @@ import {ProjectProfileInfo} from "@/ui/info-panel/ProjectProfileInfo.tsx"
 import {BrowserPanel} from "@/ui/browse/BrowserPanel.tsx"
 import {NotePadPanel} from "@/ui/NotePadPanel"
 import {FlexSpace} from "./FlexSpace"
-import {VUMeterPanel} from "@/ui/meter/VUMeterPanel"
 import {PianoModePanel} from "@/ui/piano-panel/PianoModePanel.tsx"
 import {ShadertoyPreview} from "@/ui/shadertoy/ShadertoyPreview"
 import {ShadertoyEditor} from "@/ui/shadertoy/ShadertoyEditor"
 import {CodeEditorPanel} from "@/ui/code-editor/CodeEditorPanel"
 import {TapTempo} from "@/ui/pages/TapTempo"
+import {AnalysisPanel} from "@/ui/analysis/AnalysisPanel"
 
 export const createPanelFactory = (service: StudioService): PanelContentFactory => ({
     create: (lifecycle: Lifecycle, type: PanelType): JsxValue => {
@@ -37,10 +38,10 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<DevicePanel lifecycle={lifecycle} service={service}/>)
             case PanelType.Mixer:
                 return (<Mixer lifecycle={lifecycle} service={service}/>)
+            case PanelType.Modulation:
+                return (<ModulationPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.ModularSystem:
                 return (<Modular lifecycle={lifecycle} service={service}/>)
-            case PanelType.VUMeter:
-                return (<VUMeterPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.ProjectInfo:
                 return (<ProjectProfileInfo lifecycle={lifecycle} service={service}/>)
             case PanelType.MidiFall:
@@ -53,6 +54,8 @@ export const createPanelFactory = (service: StudioService): PanelContentFactory 
                 return (<CodeEditorPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.TapTempo:
                 return (<TapTempo lifecycle={lifecycle} service={service}/>)
+            case PanelType.Analysis:
+                return (<AnalysisPanel lifecycle={lifecycle} service={service}/>)
             case PanelType.EmptyFlexSpace:
                 return (<FlexSpace/>)
             default:

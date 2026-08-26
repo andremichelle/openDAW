@@ -178,12 +178,12 @@ export namespace StudioShortcutManager {
                     screen.setValue(Arrays.getPrev(keys, current))
                 }
             ),
-            gc.register(gs["workspace-screen-dashboard"].shortcut, async () => await service.closeProject()),
+            gc.register(gs["workspace-screen-dashboard"].shortcut, () => service.switchScreen("dashboard")),
             gc.register(gs["workspace-screen-default"].shortcut, () => service.runIfProject(() => service.switchScreen("default"))),
             gc.register(gs["workspace-screen-mixer"].shortcut, () => service.runIfProject(() => service.switchScreen("mixer"))),
+            gc.register(gs["workspace-screen-modulation"].shortcut, () => service.runIfProject(() => service.switchScreen("modulation"))),
             gc.register(gs["workspace-screen-piano"].shortcut, () => service.runIfProject(() => service.switchScreen("piano"))),
             gc.register(gs["workspace-screen-project"].shortcut, () => service.runIfProject(() => service.switchScreen("project"))),
-            gc.register(gs["workspace-screen-meter"].shortcut, () => service.runIfProject(() => service.switchScreen("meter"))),
             gc.register(gs["workspace-screen-shadertoy"].shortcut, () => service.runIfProject(() => service.switchScreen("shadertoy"))),
             gc.register(gs["workspace-screen-tap"].shortcut, () => service.runIfProject(() => service.switchScreen("tap"))),
             gc.register(gs["show-preferences"].shortcut, () => RouteLocation.get().navigateTo("/preferences"))

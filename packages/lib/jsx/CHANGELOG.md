@@ -3,6 +3,26 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.90](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-jsx@0.0.89...@opendaw/lib-jsx@0.0.90) (2026-08-17)
+
+**Note:** Version bump only for package @opendaw/lib-jsx
+
+## [0.0.89](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-jsx@0.0.88...@opendaw/lib-jsx@0.0.89) (2026-07-22)
+
+**Note:** Version bump only for package @opendaw/lib-jsx
+
+## [0.0.88](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-jsx@0.0.87...@opendaw/lib-jsx@0.0.88) (2026-07-16)
+
+**Note:** Version bump only for package @opendaw/lib-jsx
+
+## [0.0.87](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-jsx@0.0.86...@opendaw/lib-jsx@0.0.87) (2026-07-15)
+
+**Note:** Version bump only for package @opendaw/lib-jsx
+
+## [0.0.86](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-jsx@0.0.85...@opendaw/lib-jsx@0.0.86) (2026-07-14)
+
+**Note:** Version bump only for package @opendaw/lib-jsx
+
 ## [0.0.85](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-jsx@0.0.84...@opendaw/lib-jsx@0.0.85) (2026-07-07)
 
 **Note:** Version bump only for package @opendaw/lib-jsx

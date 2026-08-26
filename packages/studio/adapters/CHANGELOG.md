@@ -3,6 +3,56 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.3.1](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.0...@opendaw/studio-adapters@0.3.1) (2026-08-24)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+# [0.3.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.2.1...@opendaw/studio-adapters@0.3.0) (2026-08-17)
+
+### Features
+
+- **icons:** give the Vaporisateur its own icon ([1dbad8e](https://github.com/andremichelle/openDAW/commit/1dbad8e6aa2c8835877300a39fc45af2ce272ffb))
+
+## [0.2.1](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.1.6...@opendaw/studio-adapters@0.2.1) (2026-08-11)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.1.6](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.1.5...@opendaw/studio-adapters@0.1.6) (2026-08-05)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.1.5](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.1.4...@opendaw/studio-adapters@0.1.5) (2026-08-03)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.1.4](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.1.3...@opendaw/studio-adapters@0.1.4) (2026-07-29)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.1.3](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.1.2...@opendaw/studio-adapters@0.1.3) (2026-07-23)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.1.2](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.1.1...@opendaw/studio-adapters@0.1.2) (2026-07-22)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+## [0.1.1](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.1.0...@opendaw/studio-adapters@0.1.1) (2026-07-16)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
+# [0.1.0](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.0.120...@opendaw/studio-adapters@0.1.0) (2026-07-15)
+
+### Features
+
+- **studio:** cents input drives Signalsmith transpose ([a496cdb](https://github.com/andremichelle/openDAW/commit/a496cdb37e56eccef2931ea9bfd50ce1e86d26f5))
+- **studio:** editable transient markers ([#114](https://github.com/andremichelle/openDAW/issues/114)) ([bef368d](https://github.com/andremichelle/openDAW/commit/bef368d0b53b0f33bba9299315d570222aa4b35f))
+- **studio:** Signalsmith play-mode in the audio region/clip editor ([ce7d211](https://github.com/andremichelle/openDAW/commit/ce7d211653db3f0478b80795fd2e8d7c5a4ded80))
+
+## [0.0.120](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.0.119...@opendaw/studio-adapters@0.0.120) (2026-07-14)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
 ## [0.0.119](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.0.118...@opendaw/studio-adapters@0.0.119) (2026-07-07)
 
 ### Bug Fixes

@@ -12,10 +12,6 @@ export class AudioWorklets {
         this.#workletUrl = Option.wrap(url)
     }
 
-    static get processorsUrl(): string {
-        return this.#workletUrl.unwrap("WorkletUrl is missing (call 'install' first)")
-    }
-
     static #workletUrl: Option<string> = Option.None
 
     static async createFor(context: BaseAudioContext): Promise<AudioWorklets> {

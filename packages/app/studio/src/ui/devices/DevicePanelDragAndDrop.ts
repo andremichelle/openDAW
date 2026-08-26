@@ -1,10 +1,11 @@
-import {asDefined, isAbsent, isDefined, panic, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
+import {asDefined, isAbsent, isDefined, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {
     AudioBusBoxAdapter,
     AudioUnitBoxAdapter,
+    DeviceHost,
     Devices,
     InstrumentBox,
     InstrumentFactories,
@@ -13,7 +14,7 @@ import {
     PresetHeader
 } from "@opendaw/studio-adapters"
 import {InsertMarker} from "@/ui/components/InsertMarker"
-import {EffectFactories, PresetSource, Project} from "@opendaw/studio-core"
+import {EffectBox, EffectFactories, PresetSource, Project} from "@opendaw/studio-core"
 import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
@@ -29,6 +30,12 @@ export namespace DevicePanelDragAndDrop {
         return DragAndDrop.installTarget(editors, {
             drag: (event: DragEvent, dragData: AnyDragData): boolean => {
                 instrumentContainer.style.opacity = "1.0"
+                // A drop over a composite's branch list goes INTO a branch (or makes a new one), not into this
+                // parent chain. Its own target handles it, so suppress this chain's insert marker while there.
+                if (event.target instanceof Element && isDefined(event.target.closest("[data-composite-drop]"))) {
+                    if (insertMarker.isConnected) {insertMarker.remove()}
+                    return false
+                }
                 const editingDeviceChain = userEditingManager.audioUnit.get()
                 if (editingDeviceChain.isEmpty()) {return false}
                 const deviceHost = boxAdapters.adapterFor(editingDeviceChain.unwrap().box, Devices.isHost)
@@ -44,12 +51,13 @@ export namespace DevicePanelDragAndDrop {
                         return true
                     }
                     if (dragData.category === "audio-effect" || dragData.category === "audio-effect-chain") {
+                        if (!DeviceHost.takesEffect(deviceHost, "audio")) {return false}
                         const [_index, successor] = DragAndDrop.findInsertLocation(event, audioEffectsContainer)
                         audioEffectsContainer.insertBefore(insertMarker, successor)
                         return true
                     }
                     if (dragData.category === "midi-effect" || dragData.category === "midi-effect-chain") {
-                        if (deviceHost.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {return false}
+                        if (!DeviceHost.takesEffect(deviceHost, "midi")) {return false}
                         const [_index, successor] = DragAndDrop.findInsertLocation(event, midiEffectsContainer)
                         midiEffectsContainer.insertBefore(insertMarker, successor)
                         return true
@@ -58,11 +66,10 @@ export namespace DevicePanelDragAndDrop {
                 }
                 let container: HTMLElement
                 if (type === "audio-effect") {
+                    if (!DeviceHost.takesEffect(deviceHost, "audio")) {return false}
                     container = audioEffectsContainer
                 } else if (type === "midi-effect") {
-                    if (deviceHost.inputAdapter.mapOr(input => input.accepts !== "midi", true)) {
-                        return false
-                    }
+                    if (!DeviceHost.takesEffect(deviceHost, "midi")) {return false}
                     container = midiEffectsContainer
                 } else if (type === "instrument" && deviceHost.isAudioUnit) {
                     if (dragData.device === null) {return false}
@@ -110,17 +117,14 @@ export namespace DevicePanelDragAndDrop {
                     })
                     return
                 }
-                let container: HTMLElement
-                let field
-                if (type === "audio-effect") {
-                    container = audioEffectsContainer
-                    field = deviceHost.audioEffects.field()
-                } else if (type === "midi-effect") {
-                    container = midiEffectsContainer
-                    field = deviceHost.midiEffects.field()
-                } else {
-                    return panic(`Unknown type: ${type}`)
-                }
+                if (type === "instrument") {return} // an instrument drop onto a non-audio-unit host: nothing to do
+                const accepts = type === "audio-effect" ? "audio" : "midi"
+                // The `drag` gate already refused a host that takes no chain of this kind; re-checked here
+                // because `drop` is reachable on its own.
+                const optField = DeviceHost.chainFieldOf(deviceHost, accepts)
+                if (optField.isEmpty()) {return}
+                const field = optField.unwrap()
+                const container = accepts === "audio" ? audioEffectsContainer : midiEffectsContainer
                 const [index] = DragAndDrop.findInsertLocation(event, container)
                 if (dragData.uuids === null) {
                     editing.modify(() => {
@@ -130,14 +134,21 @@ export namespace DevicePanelDragAndDrop {
                 } else {
                     const uuids = dragData.uuids
                     if (uuids.length === 0) {return}
-                    const startIndices = uuids
+                    const deviceType = accepts === "audio" ? "audio-effect" : "midi-effect"
+                    const boxes = uuids
                         .map(uuidStr => project.boxGraph.findBox(UUID.parse(uuidStr)).unwrapOrNull())
                         .filter(isDefined)
-                        .filter(IndexedBox.isIndexedBox)
-                        .map(box => box.index.getValue())
-                        .toSorted((a, b) => a - b)
-                    if (startIndices.length === 0) {return}
-                    editing.modify(() => IndexedBox.moveIndices(field, startIndices, index))
+                        .filter((box): box is EffectBox => box.tags.deviceType === deviceType)
+                    if (boxes.length === 0) {return}
+                    const sameChain = boxes.every(box => box.host.targetVertex.mapOr(vertex => vertex === field, false))
+                    if (sameChain) {
+                        // A plain reorder WITHIN this chain: keep the slot-shuffling semantics.
+                        const startIndices = boxes.map(box => box.index.getValue()).toSorted((a, b) => a - b)
+                        editing.modify(() => IndexedBox.moveIndices(field, startIndices, index))
+                    } else {
+                        // A cross-chain MOVE (e.g. an effect dragged out of a composite branch): re-home it here.
+                        editing.modify(() => project.api.moveEffects(field, boxes, index))
+                    }
                 }
             },
             enter: () => {},
@@ -169,8 +180,8 @@ export namespace DevicePanelDragAndDrop {
                                     dropIndex: number): Promise<void> => {
         const editing = project.userEditingManager.audioUnit.get()
         if (editing.isEmpty()) {return}
-        const targetAudioUnit = project.boxAdapters
-            .adapterFor(editing.unwrap().box, Devices.isHost).audioUnitBoxAdapter().box
+        const host = project.boxAdapters.adapterFor(editing.unwrap().box, Devices.isHost)
+        const targetAudioUnit = host.audioUnitBoxAdapter().box
         const load = await Promises.tryCatch(PresetApplication.loadBytes(dragData.uuid, dragData.source))
         if (load.status === "rejected") {
             console.warn(load.error)
@@ -204,11 +215,17 @@ export namespace DevicePanelDragAndDrop {
         }
         if (dragData.category === "audio-effect" || dragData.category === "midi-effect"
             || dragData.category === "audio-effect-chain" || dragData.category === "midi-effect-chain") {
-            const chainKind = dragData.category === "midi-effect" || dragData.category === "midi-effect-chain"
-                ? PresetHeader.ChainKind.Midi
-                : PresetHeader.ChainKind.Audio
+            const isMidi = dragData.category === "midi-effect" || dragData.category === "midi-effect-chain"
+            const chainKind = isMidi ? PresetHeader.ChainKind.Midi : PresetHeader.ChainKind.Audio
+            // The chain being EDITED (a composite branch cell when inside one), not the audio unit, so a preset
+            // dropped while inside a branch lands in the branch.
+            const field = DeviceHost.chainFieldOf(host, isMidi ? "midi" : "audio")
+            if (field.isEmpty()) {
+                RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
+                return
+            }
             project.editing.modify(() => {
-                const attempt = PresetDecoder.insertEffectChain(load.value, targetAudioUnit, dropIndex, chainKind)
+                const attempt = PresetDecoder.insertEffectChain(load.value, field.unwrap("effect chain"), dropIndex, chainKind)
                 if (attempt.isFailure()) {
                     RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
                 }

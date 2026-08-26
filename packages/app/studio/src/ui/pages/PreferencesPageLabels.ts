@@ -11,7 +11,8 @@ export namespace PreferencesPageLabels {
                 "enable-history-buttons": "Show Undo/Redo buttons",
                 "auto-open-clips": "Always open clip view",
                 "base-frequency": "Show base frequency",
-                "toasts": "Show notifications"
+                "toasts": "Show notifications",
+                "show-output-track": "Always show the output track"
             }
         },
         "time-display": {
@@ -20,6 +21,7 @@ export namespace PreferencesPageLabels {
                 musical: "Show musical time",
                 absolute: "Show absolute time",
                 details: "Show details",
+                "count-bars-from-zero": "Count bars from zero",
                 fps: "Frame rate"
             }
         },
@@ -28,7 +30,8 @@ export namespace PreferencesPageLabels {
             fields: {
                 "note-audition-while-editing": "Note audition while editing",
                 "auto-create-output-maximizer": "Automatically add maximizer to main output",
-                "stop-playback-when-overloading": "Stop playback when overloading"
+                "stop-playback-when-overloading": "Stop playback when overloading",
+                "latency-warning-threshold": "Latency warning threshold (ms)"
             }
         },
         "pointer": {
@@ -36,7 +39,7 @@ export namespace PreferencesPageLabels {
             fields: {
                 "dragging-use-pointer-lock": "Use Pointer Lock at window edges [Chrome only]",
                 "modifying-controls-wheel": "Modify controls with mouse wheel",
-                "normalize-mouse-wheel": "Normalize mouse wheel speed"
+                "wheel-zoom-speed": "Wheel zoom speed (%)"
             }
         },
         "editing": {

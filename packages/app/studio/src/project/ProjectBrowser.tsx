@@ -3,6 +3,7 @@ import {StudioService} from "@/service/StudioService"
 import {
     DefaultObservableValue,
     Errors,
+    isDefined,
     Lifecycle,
     Procedure,
     RuntimeNotifier,
@@ -14,7 +15,7 @@ import {
 import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Dialogs} from "@/ui/components/dialogs"
-import {Await, createElement, DomElement, Frag, Group} from "@opendaw/lib-jsx"
+import {Await, createElement, DomElement, Frag, Group, JsxValue} from "@opendaw/lib-jsx"
 import {Files, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {
@@ -35,9 +36,10 @@ type Construct = {
     service: StudioService
     lifecycle: Lifecycle
     select: Procedure<[UUID.Bytes, ProjectMeta]>
+    empty?: JsxValue // rendered inside the list when there are no projects (replaces the "No projects yet." label)
 }
 
-export const ProjectBrowser = ({service, lifecycle, select}: Construct) => {
+export const ProjectBrowser = ({service, lifecycle, select, empty}: Construct) => {
     const now = new Date().getTime()
     const filter = new DefaultObservableValue("")
     return (
@@ -64,7 +66,9 @@ export const ProjectBrowser = ({service, lifecycle, select}: Construct) => {
                            <div className="content">
                                <div className="list"
                                     onConnect={list => lifecycle.own(installScrollbars(list))}>
-                                   {projects
+                                   {projects.length === 0 && isDefined(empty)
+                                       ? empty
+                                       : projects
                                        .toSorted((a, b) => -StringComparator(a.meta.modified, b.meta.modified))
                                        .map(({uuid, meta}) => {
                                            const icon: DomElement = <Icon symbol={IconSymbol.Delete}

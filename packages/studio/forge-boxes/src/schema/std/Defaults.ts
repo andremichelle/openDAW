@@ -10,6 +10,13 @@ export const PPQNDurationConstraints = {constraints: "positive", unit: "ppqn"} a
 export const IndexConstraints = {constraints: "index", unit: ""} as const
 export const MidiNoteConstraints = {constraints: {min: 0, max: 127}, unit: ""} as const
 
+/// A modulator's own parameters take MIDI and automation. Modulating one is open work (it needs a cycle
+/// check), so that pointer type stays out until the machinery exists.
+export const ModulatorParameterPointerRules = {
+    accepts: [Pointers.MIDIControl, Pointers.Automation],
+    mandatory: false
+} satisfies PointerRules<Pointers>
+
 export const ParameterPointerRules = {
     accepts: [Pointers.Modulation, Pointers.Automation, Pointers.MIDIControl],
     mandatory: false

@@ -13,6 +13,7 @@ use bindings::value_collection::ValueCurve;
 use boxgraph::address::Uuid;
 use engine_env::clip_sequencer::{ClipInfo, ClipSequencer};
 use value::region::{global_to_local, RegionCollection, Span};
+use crate::modulation::{modulation_sum_split, ModulationChain};
 
 /// A parameter's stable identifier: the field-key path to its box field (e.g. `[16, 10]` for
 /// `lowPass.frequency`). The same keys the box schema and the device use — never a packed encoding — so it
@@ -33,7 +34,9 @@ pub(crate) struct ParamHandle {
     pub(crate) field: Rc<Cell<f32>>, // the box field's current real value (Hz, semitones, bool 0/1) as an f32
     pub(crate) kind: u32,            // the field's primitive type, used when the parameter is NOT automated
     pub(crate) track: Option<ParamCurve>,
+    pub(crate) modulation: Option<ModulationChain>,
     pub(crate) last: Rc<Cell<f32>>,
+    pub(crate) last_modulation: Rc<Cell<f32>>,
     // The UI broadcast slot at the parameter's FIELD ADDRESS (TS `AutomatableParameter.onStartAutomation`:
     // `broadcastFloat(adapter.address, () => getUnitValue())`) — `Some` only while a track is attached;
     // `resolve` keeps `[0]` at the current unit value, the worklet mirrors it, the knob animates.
@@ -41,13 +44,66 @@ pub(crate) struct ParamHandle {
 }
 
 impl ParamHandle {
-    /// Resolve the parameter at `position`, returning `(value, kind)` for the wire: when a track is connected
-    /// AND its curve covers the position, the uniform `0..1` curve value tagged `PARAM_KIND_UNIT` (the device
-    /// maps it); else the box field's STORED value tagged with the field's primitive `kind` (the device uses
-    /// it directly). The host stays mapping-agnostic — the device owns the mapping. Mirrors TS
-    /// `valueMapping.y(track.valueAt(position, getUnitValue()))`: the TS fallback is the mapped FIELD value,
-    /// so a muted value clip / an empty curve resolves to the field's storage value, never a made-up 0.
-    pub(crate) fn resolve(&self, position: f64) -> (f32, u32) {
+    /// `(value, kind, modulation)` for the wire: a covering curve gives the `0..1` value tagged
+    /// `PARAM_KIND_UNIT`, else the field's STORED value with its own kind. Mirrors TS
+    /// `valueMapping.y(track.valueAt(position, getUnitValue()))`.
+    pub(crate) fn resolve(&self, position: f64) -> (f32, u32, f32) {
+        self.resolve_split(position, position)
+    }
+
+    /// While PAUSED the automation reads the FROZEN song position (a static curve there is the hold TS gets
+    /// from its silent update clock) while the modulation follows the free-running position.
+    pub(crate) fn resolve_split(&self, automation_position: f64, modulation_position: f64) -> (f32, u32, f32) {
+        let (value, kind) = self.resolve_base(automation_position);
+        let modulation = modulation_sum_split(self.modulation.as_ref(),
+            automation_position, modulation_position);
+        self.publish(modulation);
+        (value, kind, modulation)
+    }
+
+    /// `[0]` the automated unit value (NaN when no curve applies, so the knob keeps showing its storage
+    /// value), `[1]` the modulation sum. The UI adds them, since only it knows the mapping.
+    fn publish(&self, modulation: f32) {
+        if let Some(slot) = &self.broadcast {
+            let mut slot = slot.borrow_mut();
+            if slot.len() > 1 {
+                slot[1] = modulation;
+            }
+            if self.track.is_none() || self.suspended() {
+                slot[0] = f32::NAN;
+            }
+        }
+    }
+
+    /// For a HOST-side consumer, called per BLOCK rather than on the update clock. Same split as
+    /// `resolve_split`: while PAUSED the block carries the free-running pulse, which the modulation follows
+    /// while every curve reads the song position instead.
+    pub(crate) fn resolve_held(&self, position: f64, transporting: bool) -> (f32, u32, f32) {
+        let automation_position = if transporting {position} else {crate::song_position()};
+        self.resolve_split(automation_position, position)
+    }
+
+    /// The modulation compares by BIT PATTERN: its "none" sentinel is NaN, and `NaN != NaN` would report a
+    /// change on every push.
+    pub(crate) fn changed(&self, value: f32, modulation: f32) -> bool {
+        value != self.last.get() || modulation.to_bits() != self.last_modulation.get().to_bits()
+    }
+
+    pub(crate) fn mark(&self, value: f32, modulation: f32) {
+        self.last.set(value);
+        self.last_modulation.set(modulation);
+    }
+
+    /// Under manual control (issue #347) the curve is bypassed WHOLE — no region lookup, no clip section —
+    /// and the parameter reads its own field, which is what the hand (or the CC) is setting.
+    fn suspended(&self) -> bool {
+        self.track.as_ref().is_some_and(|curve| curve.is_suspended())
+    }
+
+    fn resolve_base(&self, position: f64) -> (f32, u32) {
+        if self.suspended() {
+            return (self.field.get(), self.kind);
+        }
         match self.track.as_ref().and_then(|curve| curve.value_at(position)) {
             Some(value) => {
                 if let Some(slot) = &self.broadcast {
@@ -170,6 +226,12 @@ impl ParamCurve {
     pub(crate) fn new(track: Uuid, regions: RegionCollection<ValueBoundRegion>,
                       clips: Vec<BoundValueClip>, sequencer: Rc<RefCell<ClipSequencer>>) -> Self {
         Self(Rc::new(RefCell::new(CurveState {track, regions, clips, sequencer})))
+    }
+
+    /// Whether this lane is under manual control right now (issue #347).
+    pub(crate) fn is_suspended(&self) -> bool {
+        let track = self.0.borrow().track;
+        unsafe { crate::SUSPENDED_AUTOMATION.get() }.contains(&track)
     }
 
     /// The parameter's unit value (0..1) at `position`, mirroring TS `TrackBoxAdapter.valueAt` INCLUDING the

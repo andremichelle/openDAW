@@ -1,4 +1,5 @@
 // @label Chord Generator
+// @no-pass
 // @param mode 0 0 3 int
 
 class Processor {

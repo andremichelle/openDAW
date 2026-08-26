@@ -23,13 +23,19 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 use abi::DEVICE_KIND_INSTRUMENT;
 use bindings::indexed_collection::IndexedCollection;
+use bindings::value_collection::ValueCollection;
 use boxgraph::address::{Address, Uuid};
 use boxgraph::subscription::{Propagation, SubscriptionId};
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
 use engine_env::audio_bus_processor::AudioBusProcessor;
+use engine_env::audio_generator::AudioGenerator;
+use engine_env::audio_input::AudioInput;
+use engine_env::channel_strip::{ChannelStripProcessor, StripAutomation, StripParams};
 use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_sequencer::NoteSequencer;
+use math::value_mapping::{Decibel, Linear};
+use crate::audio_unit::host_float;
 use crate::audio_unit::{BoundNoteTracks, BuiltCluster, DeviceParams, Member, SharedTrackSets, SidechainBinding, SlotCluster};
 use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::{CompositeSpec, DeviceReg, Engine, PullLink, EFFECT_INDEX_KEY};
@@ -84,6 +90,36 @@ enum ChildBody {
     Nested {binding: CompositeBinding}
 }
 
+/// The gain mapping a child's `volume` automation curve resolves through: the TS `ValueMapping.DefaultDecibel`
+/// the slot adapter creates the parameter with.
+// WASM CONTRACT: mirrors `ValueMapping.DefaultDecibel` (lib-std) as used by `PlayfieldSampleBoxAdapter`.
+const GAIN: Decibel = Decibel::default_volume();
+
+/// The pan mapping a child's `panning` automation curve resolves through: bipolar, matching the strip's own pan.
+const PAN: Linear = Linear::bipolar();
+
+fn map_gain(value: f32, kind: u32, modulation: f32) -> f32 {host_float(value, kind, modulation, &GAIN)}
+
+fn map_pan(value: f32, kind: u32, modulation: f32) -> f32 {host_float(value, kind, modulation, &PAN)}
+
+/// A child's OWN channel strip (declared via `spec.child_volume_key` / `child_pan_key`): a
+/// `ChannelStripProcessor` between the child's output (post its own fx chain) and the composite sum, exactly
+/// like an effect-composite entry's strip. Static drags land in the `params` cells; automation overrides are
+/// bound per reconcile (`bind_slot_strip_params`). `source_node` is the child node currently feeding the strip
+/// (the inner edge `source_node -> strip_id`), re-pointed when the child's chain re-wires.
+struct SlotStrip {
+    strip: Rc<RefCell<ChannelStripProcessor>>,
+    strip_id: NodeId,
+    #[allow(dead_code)] // read by the cfg(test) introspection helpers
+    params: Rc<StripParams>,
+    automation: Rc<StripAutomation>,
+    output: SharedAudioBuffer,
+    source_node: NodeId,
+    field_subs: Vec<SubscriptionId>,        // static volume / pan monitors (live for the strip's life)
+    param_subs: Vec<SubscriptionId>,        // automation observers, dropped + re-observed each bind
+    param_collections: Vec<ValueCollection>
+}
+
 /// One persistent composite child: its body (kept across reconciles so DSP state survives), its choke set (to
 /// detect a choke-context change), whether it is currently summed, and its `enabled` monitor. `output` /
 /// `output_node` is what feeds the bus; `effects_dirty` is the slot's re-wire flag (a member `enabled` toggle).
@@ -91,7 +127,8 @@ struct CompositeChild {
     uuid: Uuid,
     choke: Vec<i32>,
     body: ChildBody,
-    output: SharedAudioBuffer,              // the child's output buffer, summed into the bus
+    strip: Option<SlotStrip>,               // the child's own volume / pan strip (None when undeclared)
+    output: SharedAudioBuffer,              // the child's output buffer, summed into the bus (the strip's, if any)
     output_node: NodeId,                    // the node feeding the sum (sum edge: output_node -> sum_id)
     summed: bool,                           // whether `output` is currently a source of the sum (false = disabled)
     enabled_sub: Option<SubscriptionId>,    // monitor on the child's OWN `enabled` field (None if unsupported)
@@ -154,10 +191,30 @@ impl CompositeBinding {
         })
     }
 
+    /// A child strip's static (volume_db, panning) cells — for tests.
+    #[cfg(test)]
+    pub(crate) fn child_strip_values(&self, uuid: Uuid) -> Option<(f32, f32)> {
+        self.find(uuid).and_then(|child| child.strip.as_ref())
+            .map(|strip| (strip.params.volume_db.get(), strip.params.panning.get()))
+    }
+
+    /// The node feeding the SUM for a child (its strip when declared, else its cluster output) — for tests.
+    #[cfg(test)]
+    pub(crate) fn child_output_node(&self, uuid: Uuid) -> Option<NodeId> {
+        self.find(uuid).map(|child| child.output_node)
+    }
+
+    /// Whether a child strip's volume automation override is installed — for tests.
+    #[cfg(test)]
+    pub(crate) fn child_volume_automated(&self, uuid: Uuid) -> bool {
+        self.find(uuid).and_then(|child| child.strip.as_ref())
+            .is_some_and(|strip| strip.automation.volume.borrow().is_some())
+    }
+
     /// Visit every device's bound parameters in this composite (recursing into nested composites), so the unit
     /// can re-bind automation across the whole cascade.
     pub(crate) fn for_each_params(&mut self, visit: &mut dyn FnMut(&mut DeviceParams)) {
-        for member in &mut self.unit_midi_members { visit(&mut member.params); }
+        for member in &mut self.unit_midi_members { crate::audio_unit::visit_member_params(member, visit); }
         for child in &mut self.members {
             match &mut child.body {
                 ChildBody::Slot {cluster, ..} => cluster.for_each_params(visit),
@@ -313,41 +370,59 @@ impl Engine {
     #[allow(clippy::too_many_arguments)] // threads the reconcile cascade context
     fn reconcile_one_child(&mut self, binding: &mut CompositeBinding, child: CompositeChild, choke: Vec<i32>,
                            spec: &CompositeSpec, track_sets: &SharedTrackSets, unit_midi: &[Rc<PluginMidiEffect>], signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>) -> Option<CompositeChild> {
-        let CompositeChild {uuid, choke: old_choke, body, output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs} = child;
+        let CompositeChild {uuid, choke: old_choke, body, strip, output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs} = child;
         let choke_changed = old_choke != choke;
         match body {
             ChildBody::Slot {cluster, device, midi_obs, audio_obs} => {
                 let dirty = slot_obs_dirty(&midi_obs, &audio_obs, &effects_dirty) | choke_changed;
+                let mut strip = strip;
                 let (cluster, output, output_node, summed) = if dirty {
-                    // Edge-only re-wire: drop the old sum wiring, reconcile the cluster (reusing survivors), re-wire.
-                    if summed { binding.sum.borrow_mut().remove_audio_source(&output); }
-                    self.context.remove_edge(output_node, binding.sum_id);
                     let midi_uuids = midi_obs.as_ref().map(|obs| obs.sorted()).unwrap_or_default();
                     let audio_uuids = audio_obs.as_ref().map(|obs| obs.sorted()).unwrap_or_default();
                     let rewire = slot_rewire(&effects_dirty, signal);
-                    let cluster = self.reconcile_slot_cluster(Some(cluster), uuid, device, &midi_uuids, &audio_uuids, track_sets, unit_midi, &choke, &gate, signal, invalidate, &rewire);
-                    self.context.register_edge(cluster.output_node, binding.sum_id);
-                    self.output_registry.register(Address::of(uuid, vec![]), cluster.output.clone(), cluster.output_node);
-                    let (output, output_node) = (cluster.output.clone(), cluster.output_node);
-                    (cluster, output, output_node, false) // source was removed; re-added below per `enabled`
+                    match strip.as_mut() {
+                        Some(slot_strip) => {
+                            // The strip and its sum wiring are STABLE (its output buffer never changes); only
+                            // the inner edge re-points to the reconciled cluster's output.
+                            self.context.remove_edge(slot_strip.source_node, slot_strip.strip_id);
+                            let cluster = self.reconcile_slot_cluster(Some(cluster), uuid, device, &midi_uuids, &audio_uuids, track_sets, unit_midi, &choke, &gate, signal, invalidate, &rewire);
+                            slot_strip.strip.borrow_mut().set_audio_source(cluster.output.clone());
+                            self.context.register_edge(cluster.output_node, slot_strip.strip_id);
+                            slot_strip.source_node = cluster.output_node;
+                            (cluster, output, output_node, summed)
+                        }
+                        None => {
+                            // Edge-only re-wire: drop the old sum wiring, reconcile the cluster (reusing survivors), re-wire.
+                            if summed { binding.sum.borrow_mut().remove_audio_source(&output); }
+                            self.context.remove_edge(output_node, binding.sum_id);
+                            let cluster = self.reconcile_slot_cluster(Some(cluster), uuid, device, &midi_uuids, &audio_uuids, track_sets, unit_midi, &choke, &gate, signal, invalidate, &rewire);
+                            self.context.register_edge(cluster.output_node, binding.sum_id);
+                            self.output_registry.register(Address::of(uuid, vec![]), cluster.output.clone(), cluster.output_node);
+                            let (output, output_node) = (cluster.output.clone(), cluster.output_node);
+                            (cluster, output, output_node, false) // source was removed; re-added below per `enabled`
+                        }
+                    }
                 } else {
                     (cluster, output, output_node, summed)
                 };
+                if let Some(slot_strip) = strip.as_mut() {
+                    self.bind_slot_strip_params(uuid, slot_strip, spec, invalidate);
+                }
                 let summed = sync_sum(&binding.sum, &output, summed, self.child_enabled(uuid, spec.child_enabled_key));
-                Some(CompositeChild {uuid, choke, body: ChildBody::Slot {cluster, device, midi_obs, audio_obs},
+                Some(CompositeChild {uuid, choke, body: ChildBody::Slot {cluster, device, midi_obs, audio_obs}, strip,
                     output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs})
             }
             ChildBody::Cell {chains, nodes, edges, device_params, sidechains, note_source} => {
                 let dirty = chains.iter().fold(false, |acc, chain| acc | chain.take_dirty()) | choke_changed;
                 let child = CompositeChild {uuid, choke: if dirty {choke.clone()} else {choke},
-                    body: ChildBody::Cell {chains, nodes, edges, device_params, sidechains, note_source},
+                    body: ChildBody::Cell {chains, nodes, edges, device_params, sidechains, note_source}, strip,
                     output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs};
                 self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, unit_midi, signal, invalidate)
             }
             ChildBody::Nested {binding: nested} => {
                 let dirty = self.composite_dirty(&nested) | choke_changed;
                 let child = CompositeChild {uuid, choke: if dirty {choke.clone()} else {choke},
-                    body: ChildBody::Nested {binding: nested},
+                    body: ChildBody::Nested {binding: nested}, strip,
                     output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs};
                 self.reconcile_wholesale_child(binding, child, dirty, spec, track_sets, unit_midi, signal, invalidate)
             }
@@ -365,6 +440,9 @@ impl Engine {
             self.detach_child_sum(binding, &child);
             self.teardown_child(child);
             return self.build_one_child(binding.sum.clone(), binding.sum_id, track_sets, uuid, choke, spec, unit_midi, signal, invalidate);
+        }
+        if let Some(slot_strip) = child.strip.as_mut() {
+            self.bind_slot_strip_params(child.uuid, slot_strip, spec, invalidate);
         }
         child.summed = sync_sum(&binding.sum, &child.output, child.summed, self.child_enabled(child.uuid, spec.child_enabled_key));
         Some(child)
@@ -475,6 +553,19 @@ impl Engine {
                 (ChildBody::Slot {cluster, device, midi_obs, audio_obs}, output, output_node)
             }
         };
+        // The child's own strip (volume / pan), between its output and the sum. Downstream wiring (the sum
+        // edge, the sidechain registration) sees the POST-strip output, like an effect-composite entry.
+        let strip = if spec.child_volume_key != 0 || spec.child_pan_key != 0 {
+            let mut slot_strip = self.build_slot_strip(child_uuid, spec, &output, output_node);
+            self.bind_slot_strip_params(child_uuid, &mut slot_strip, spec, invalidate);
+            Some(slot_strip)
+        } else {
+            None
+        };
+        let (output, output_node) = match &strip {
+            Some(slot_strip) => (slot_strip.output.clone(), slot_strip.strip_id),
+            None => (output, output_node)
+        };
         self.output_registry.register(Address::of(child_uuid, vec![]), output.clone(), output_node);
         let summed = sync_sum(&sum, &output, false, self.child_enabled(child_uuid, spec.child_enabled_key));
         self.context.register_edge(output_node, sum_id);
@@ -483,7 +574,78 @@ impl Engine {
         // every sibling's silent state (solo is a cross-child fact) and re-chokes.
         let gate_subs: Vec<SubscriptionId> = [spec.child_mute_key, spec.child_solo_key].iter()
             .filter_map(|&key| self.subscribe_child_enabled(child_uuid, key, signal)).collect();
-        Some(CompositeChild {uuid: child_uuid, choke, body, output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs})
+        Some(CompositeChild {uuid: child_uuid, choke, body, strip, output, output_node, summed, enabled_sub, effects_dirty, gate, gate_subs})
+    }
+
+    /// Build one child's strip: the processor, its inner edge (`source_node -> strip`), and the STATIC volume /
+    /// pan monitors, synced straight into the strip's cells (a drag never re-wires; routing it through a
+    /// reconcile would rebuild the child on every knob tick).
+    fn build_slot_strip(&mut self, child_uuid: Uuid, spec: &CompositeSpec, source: &SharedAudioBuffer, source_node: NodeId) -> SlotStrip {
+        let params = Rc::new(StripParams::new());
+        let automation = Rc::new(StripAutomation::new());
+        let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(params.clone(), automation.clone(), self.sample_rate)));
+        strip.borrow_mut().set_audio_source(source.clone());
+        let output = strip.borrow().audio_output();
+        let strip_id = self.context.register_processor(strip.clone());
+        self.context.set_label(strip_id, alloc::string::String::from("slot-strip"));
+        self.context.register_edge(source_node, strip_id);
+        let mut field_subs: Vec<SubscriptionId> = Vec::new();
+        if spec.child_volume_key != 0 {
+            let cells = params.clone();
+            field_subs.push(self.graph.catchup_and_subscribe(Address::of(child_uuid, vec![spec.child_volume_key]),
+                move |value| {
+                    if let Some(value) = value.as_float32() { cells.volume_db.set(value) }
+                }));
+        }
+        if spec.child_pan_key != 0 {
+            let cells = params.clone();
+            field_subs.push(self.graph.catchup_and_subscribe(Address::of(child_uuid, vec![spec.child_pan_key]),
+                move |value| {
+                    if let Some(value) = value.as_float32() { cells.panning.set(value) }
+                }));
+        }
+        SlotStrip {strip, strip_id, params, automation, output, source_node, field_subs, param_subs: Vec::new(), param_collections: Vec::new()}
+    }
+
+    /// Bind ONE child strip's volume / pan AUTOMATION + MODULATION (the static cells are kept live by the strip's own field
+    /// monitors). The previous observers + curve collections are dropped first — a plain drop would leak their
+    /// hub / event / curve observers.
+    fn bind_slot_strip_params(&mut self, child_uuid: Uuid, strip: &mut SlotStrip, spec: &CompositeSpec, invalidate: &Rc<dyn Fn()>) {
+        *strip.automation.volume.borrow_mut() = None;
+        *strip.automation.panning.borrow_mut() = None;
+        for sub in core::mem::take(&mut strip.param_subs) {
+            self.graph.unsubscribe(sub);
+        }
+        for collection in core::mem::take(&mut strip.param_collections) {
+            collection.terminate(&mut self.graph);
+        }
+        if spec.child_volume_key != 0 {
+            // `resolve` hands back a UNIT value while the curve covers the position, else the FIELD's stored
+            // value with its own kind (already real dB) — map only the unit case.
+            let (_, resolver) = self.observe_field_automation(child_uuid, &[spec.child_volume_key], 0,
+                &mut strip.param_subs, &mut strip.param_collections, invalidate, map_gain);
+            *strip.automation.volume.borrow_mut() = resolver;
+        }
+        if spec.child_pan_key != 0 {
+            let (_, resolver) = self.observe_field_automation(child_uuid, &[spec.child_pan_key], 1,
+                &mut strip.param_subs, &mut strip.param_collections, invalidate, map_pan);
+            *strip.automation.panning.borrow_mut() = resolver;
+        }
+    }
+
+    /// Re-bind every child strip's volume / pan automation across a (nested) composite, on a REAL automation
+    /// change (`rebind_automation`): the per-reconcile binds only reach children the reconcile visits, but an
+    /// automation attach / detach re-binds the whole cascade like the devices' `for_each_params` walk.
+    pub(crate) fn rebind_composite_strips(&mut self, binding: &mut CompositeBinding, invalidate: &Rc<dyn Fn()>) {
+        let spec = binding.spec.clone();
+        for child in binding.members.iter_mut() {
+            if let Some(slot_strip) = child.strip.as_mut() {
+                self.bind_slot_strip_params(child.uuid, slot_strip, &spec, invalidate);
+            }
+            if let ChildBody::Nested {binding: nested} = &mut child.body {
+                self.rebind_composite_strips(nested, invalidate);
+            }
+        }
     }
 
     /// Observe one fx-host collection of a child (`field` = the device-declared host key; 0 = none), sorted by
@@ -507,6 +669,19 @@ impl Engine {
         }
         for sub in child.gate_subs {
             self.graph.unsubscribe(sub);
+        }
+        if let Some(slot_strip) = child.strip {
+            self.context.remove_edge(slot_strip.source_node, slot_strip.strip_id);
+            self.context.remove_processor(slot_strip.strip_id);
+            for sub in slot_strip.field_subs {
+                self.graph.unsubscribe(sub);
+            }
+            for sub in slot_strip.param_subs {
+                self.graph.unsubscribe(sub);
+            }
+            for collection in slot_strip.param_collections {
+                collection.terminate(&mut self.graph);
+            }
         }
         self.output_registry.remove(&Address::of(child.uuid, vec![]));
         match child.body {

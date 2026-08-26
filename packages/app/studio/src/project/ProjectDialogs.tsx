@@ -6,7 +6,11 @@ import {createElement} from "@opendaw/lib-jsx"
 import {Errors, isDefined, Objects, Terminator, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {ProjectBrowser} from "@/project/ProjectBrowser"
-import {EditableExportStemsConfiguration, ExportStemsConfigurator} from "@/service/ExportStemsConfigurator"
+import {
+    EditableExportMetronomeConfiguration,
+    EditableExportStemsConfiguration,
+    ExportStemsConfigurator
+} from "@/service/ExportStemsConfigurator"
 import {Project, ProjectMeta} from "@opendaw/studio-core"
 
 export namespace ProjectDialogs {
@@ -143,6 +147,8 @@ export namespace ProjectDialogs {
                         fileName: ExportConfiguration.sanitizeFileName(unit.input.label.unwrap("input.label"))
                     }
                 ])))
+        // Off by default: an export only carries a click when it was asked for.
+        const metronome: EditableExportMetronomeConfiguration = {include: false, fileName: "Metronome"}
         const dialog: HTMLDialogElement = (
             <Dialog headline={"Export Stems"}
                     icon={IconSymbol.FileList}
@@ -168,14 +174,18 @@ export namespace ProjectDialogs {
                                                 "includeSends",
                                                 "fileName"
                                             ] as const))])) as Record<string, ExportStemConfiguration>
-                                resolve({stems})
+                                // Omitted entirely when unchecked, so the engine keeps the metronome silent
+                                // rather than rendering a stem nobody asked for.
+                                resolve(metronome.include
+                                    ? {stems, metronome: {stem: {fileName: metronome.fileName}}}
+                                    : {stems})
                                 dialog.close()
                             },
                             primary: true
                         }
                     ]}
                     cancelable={true}>
-                <ExportStemsConfigurator lifecycle={terminator} configuration={configuration}/>
+                <ExportStemsConfigurator lifecycle={terminator} configuration={configuration} metronome={metronome}/>
             </Dialog>
         )
         dialog.oncancel = () => reject(Errors.AbortError)

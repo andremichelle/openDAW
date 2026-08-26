@@ -3,7 +3,6 @@ import {ExportConfiguration} from "./EngineProcessorAttachment"
 export interface OfflineEngineInitializeConfig {
     sampleRate: number
     numberOfChannels: number
-    processorsUrl: string
     syncStreamBuffer: SharedArrayBuffer
     controlFlagsBuffer: SharedArrayBuffer
     project: ArrayBufferLike

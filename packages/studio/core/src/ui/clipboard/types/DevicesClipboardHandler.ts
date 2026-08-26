@@ -12,9 +12,9 @@ import {
     RuntimeNotifier,
     UUID
 } from "@opendaw/lib-std"
-import {Box, BoxGraph} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph, PointerField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {RootBox, TrackBox} from "@opendaw/studio-boxes"
+import {ModulationBox, NoteEventCollectionBox, RootBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {
     AudioEffectDeviceAdapter,
     BoxAdapters,
@@ -25,7 +25,9 @@ import {
     EffectDeviceBox,
     FilteredSelection,
     InstrumentDeviceBoxAdapter,
-    MidiEffectDeviceAdapter
+    isModulatorBox,
+    MidiEffectDeviceAdapter,
+    UnionBoxTypes
 } from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
@@ -33,6 +35,10 @@ import {ClipboardUtils} from "../ClipboardUtils"
 type ClipboardDevices = ClipboardEntry<"devices">
 
 type InstrumentContent = "notes" | "audio"
+
+// The chain kind an effect device box belongs in.
+const effectAccepts = (box: EffectDeviceBox): "audio" | "midi" =>
+    box.tags.deviceType === "audio-effect" ? "audio" : "midi"
 
 type DeviceMetadata = {
     hasInstrument: boolean
@@ -76,6 +82,105 @@ export namespace DevicesClipboard {
         }
     }
 
+    // Every box a set of selected devices OWNS and depends on, for the clipboard. The owned subtree is walked
+    // RECURSIVELY through mandatory incoming edges — a composite's entry cells, the effects nested inside them,
+    // deeper composites and their chains — and each box in it contributes its mandatory deps and preserved
+    // resources (so a nested effect's soundfont / NN model comes along too). A one-level walk that stopped at
+    // the entry cells, plus the `isDeviceBox` exclusion, previously dropped everything hosted in a composite
+    // entry. Excludes device boxes and the RootBox from the OUTGOING dep walks; the audio-unit timeline is
+    // bundled separately (only alongside an instrument).
+    export const collectDeviceDependencies = (deviceBoxes: ReadonlyArray<Box>,
+                                              boxGraph: BoxGraph): ReadonlyArray<Box> => {
+        const collectOwned = (root: Box): ReadonlyArray<Box> => {
+            const owned: Array<Box> = []
+            const seen = new Set<Box>()
+            const visit = (box: Box): void => box.incomingEdges().forEach(pointer => {
+                if (!pointer.mandatory || pointer.box.ephemeral || isDefined(pointer.box.resource)
+                    || seen.has(pointer.box)) {return}
+                seen.add(pointer.box)
+                owned.push(pointer.box)
+                visit(pointer.box)
+            })
+            visit(root)
+            return owned
+        }
+        return deviceBoxes.flatMap(box => {
+            const owned = collectOwned(box)
+            // A ModulationBox's `source` leaves the owned subtree: the modulator's `assignments` field is not
+            // mandatory, so the dependency walk stops before the modulator. Take the modulator box ALONE (never as
+            // a walk root: `dependenciesOf` follows incoming mandatory edges, which would drag in that modulator's
+            // assignments to OTHER devices), otherwise a paste into another project has nothing to point at.
+            const modulators = owned.flatMap(candidate => isInstanceOf(candidate, ModulationBox)
+                ? candidate.source.targetVertex.mapOr(vertex => [vertex.box], []) : [])
+            const roots = [box, ...owned]
+            const mandatoryDeps = roots.flatMap(root => Array.from(boxGraph.dependenciesOf(root, {
+                alwaysFollowMandatory: true,
+                stopAtResources: true,
+                excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
+                    || dep.name === RootBox.ClassName
+            }).boxes).filter(dep => dep.resource !== "preserved"))
+            const preserved = roots.flatMap(root => Array.from(boxGraph.dependenciesOf(root, {
+                alwaysFollowMandatory: true,
+                excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
+            }).boxes).filter(dep => dep.resource === "preserved"))
+            return [...owned, ...modulators, ...mandatoryDeps, ...preserved]
+        })
+    }
+
+    export const findRootBox = (boxGraph: BoxGraph): Option<RootBox> =>
+        Option.wrap(boxGraph.boxes().find(box => isInstanceOf(box, RootBox)) as Optional<RootBox>)
+
+    // The bundle carries the modulator so a paste into ANOTHER project gets a copy. Pasting into the project the
+    // copy came from must not add a second one: the existing modulator is dropped from the paste here, and
+    // `mapModulationPointer` then keeps the assignment pointing at it.
+    export const excludeExistingModulator = (box: Box, boxGraph: BoxGraph): boolean =>
+        isModulatorBox(box) && boxGraph.findBox(box.address.uuid).nonEmpty()
+
+    // Only reached for a pointer the uuid remap did not answer, i.e. a target outside the pasted set. A `source`
+    // whose modulator is already in this graph keeps its address (same project). A `collection` belongs to a
+    // modulator copy that just landed in another project and has to join THAT project's root.
+    export const mapModulationPointer = (pointer: PointerField,
+                                         address: Option<Address>,
+                                         boxGraph: BoxGraph): Option<Address> => {
+        if (pointer.pointerType === Pointers.ModulatorSource) {
+            return address.flatMap(target => boxGraph.findVertex(target).map(() => target))
+        }
+        if (pointer.pointerType === Pointers.ModulatorCollection) {
+            return findRootBox(boxGraph).map(rootBox => rootBox.modulators.address)
+        }
+        return Option.None
+    }
+
+    // Place the freshly pasted effects into the destination chain at the insert index. ONLY top-level effects
+    // (hosted by the destination chain field) are re-indexed; effects nested inside a pasted composite entry are
+    // hosted by their entry, keep the in-entry index they were copied with, and must NOT compete for a top-level
+    // slot — otherwise the composite itself lands at a wrong index (e.g. after the following device).
+    export const reindexPastedTopLevelEffects = (pastedBoxes: ReadonlyArray<Box>,
+                                                 audioChainAddress: Option<Address>,
+                                                 midiChainAddress: Option<Address>,
+                                                 audioInsertIndex: int,
+                                                 midiInsertIndex: int): void => {
+        const hostedByChain = (box: EffectDeviceBox, chain: Option<Address>): boolean =>
+            chain.mapOr(address => box.host.targetVertex
+                .mapOr(vertex => vertex.address.equals(address), false), false)
+        const effects = pastedBoxes.filter(DeviceBoxUtils.isEffectDeviceBox)
+        const newMidi = effects
+            .filter(box => box.tags.deviceType === "midi-effect" && hostedByChain(box, midiChainAddress))
+            .sort((a, b) => a.index.getValue() - b.index.getValue())
+        const newAudio = effects
+            .filter(box => box.tags.deviceType === "audio-effect" && hostedByChain(box, audioChainAddress))
+            .sort((a, b) => a.index.getValue() - b.index.getValue())
+        newMidi.forEach((box, idx) => box.index.setValue(midiInsertIndex + idx))
+        newAudio.forEach((box, idx) => box.index.setValue(audioInsertIndex + idx))
+    }
+
+    // Duplicate the current device selection in place (copy then paste through an internal clipboard entry,
+    // leaving the OS clipboard untouched). Paste inserts the copies right after the selection and re-selects them.
+    export const duplicate = (context: Context): void => {
+        const handler = createHandler(context)
+        handler.copy().ifSome(entry => handler.paste(entry))
+    }
+
     export const createHandler = ({
                                       getEnabled,
                                       editing,
@@ -87,6 +192,10 @@ export namespace DevicesClipboard {
         const isCopyable = (adapter: DeviceBoxAdapter): boolean => adapter.box.tags.copyable !== false
         const copyableSelected = (): ReadonlyArray<DeviceBoxAdapter> => selection.selected().filter(isCopyable)
         const copyDevices = (): Option<ClipboardDevices> => {
+            // Seal any pending UI-state (e.g. the editing-chain pointer set when entering a composite branch) as
+            // its own history step, so the following PASTE does not fold it into the paste's undo entry — undoing
+            // the paste must remove the pasted device without also navigating out of the branch.
+            editing.mark()
             const selected = copyableSelected()
             if (selected.length === 0) {return Option.None}
             let instrument: InstrumentDeviceBoxAdapter | null = null
@@ -115,24 +224,7 @@ export namespace DevicesClipboard {
                 ...midiEffects.map(adapter => adapter.box),
                 ...audioEffects.map(adapter => adapter.box)
             ]
-            const dependencies = deviceBoxes.flatMap(box => {
-                const ownedChildren = box.incomingEdges()
-                    .filter(pointer => pointer.mandatory && !pointer.box.ephemeral
-                        && !isDefined(pointer.box.resource))
-                    .map(pointer => pointer.box)
-                const mandatoryDeps = Array.from(boxGraph.dependenciesOf(box, {
-                    alwaysFollowMandatory: true,
-                    stopAtResources: true,
-                    excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-                        || dep.name === RootBox.ClassName
-                }).boxes).filter(dep => dep.resource !== "preserved")
-                const preserved = [box, ...ownedChildren].flatMap(root =>
-                    Array.from(boxGraph.dependenciesOf(root, {
-                        alwaysFollowMandatory: true,
-                        excludeBox: (dep: Box) => dep.ephemeral || DeviceBoxUtils.isDeviceBox(dep)
-                    }).boxes).filter(dep => dep.resource === "preserved"))
-                return [...ownedChildren, ...mandatoryDeps, ...preserved]
-            })
+            const dependencies = collectDeviceDependencies(deviceBoxes, boxGraph)
             const trackContent: Box[] = []
             if (isNotNull(instrument)) {
                 getHost().ifSome(host => {
@@ -182,8 +274,10 @@ export namespace DevicesClipboard {
                     if (optHost.isEmpty()) {return}
                     const host = optHost.unwrap()
                     const selected = new Set(selection.selected().filter(adapter => adapter.type !== "instrument"))
-                    const remainingMidi = host.midiEffects.adapters().filter(adapter => !selected.has(adapter))
-                    const remainingAudio = host.audioEffects.adapters().filter(adapter => !selected.has(adapter))
+                    const remainingMidi = host.midiEffects
+                        .mapOr(chain => chain.adapters().filter(adapter => !selected.has(adapter)), [])
+                    const remainingAudio = host.audioEffects
+                        .mapOr(chain => chain.adapters().filter(adapter => !selected.has(adapter)), [])
                     editing.modify(() => {
                         selected.forEach(adapter => adapter.box.delete())
                         remainingMidi.forEach((adapter, index) => adapter.indexField.setValue(index))
@@ -232,18 +326,22 @@ export namespace DevicesClipboard {
                         }
                         selectedInstrument.box.delete()
                     }
-                    for (const adapter of host.midiEffects.adapters()) {
-                        const currentIndex = adapter.indexField.getValue()
-                        if (currentIndex >= midiInsertIndex) {
-                            adapter.indexField.setValue(currentIndex + metadata.midiEffectCount)
+                    host.midiEffects.ifSome(chain => {
+                        for (const adapter of chain.adapters()) {
+                            const currentIndex = adapter.indexField.getValue()
+                            if (currentIndex >= midiInsertIndex) {
+                                adapter.indexField.setValue(currentIndex + metadata.midiEffectCount)
+                            }
                         }
-                    }
-                    for (const adapter of host.audioEffects.adapters()) {
-                        const currentIndex = adapter.indexField.getValue()
-                        if (currentIndex >= audioInsertIndex) {
-                            adapter.indexField.setValue(currentIndex + metadata.audioEffectCount)
+                    })
+                    host.audioEffects.ifSome(chain => {
+                        for (const adapter of chain.adapters()) {
+                            const currentIndex = adapter.indexField.getValue()
+                            if (currentIndex >= audioInsertIndex) {
+                                adapter.indexField.setValue(currentIndex + metadata.audioEffectCount)
+                            }
                         }
-                    }
+                    })
                     const boxes = ClipboardUtils.deserializeBoxes(
                         entry.data,
                         boxGraph,
@@ -254,10 +352,10 @@ export namespace DevicesClipboard {
                                     return Option.wrap(host.inputField.address)
                                 }
                                 if (pointer.pointerType === Pointers.MIDIEffectHost) {
-                                    return Option.wrap(host.midiEffectsField.address)
+                                    return host.midiEffectsField.map(field => field.address)
                                 }
                                 if (pointer.pointerType === Pointers.AudioEffectHost) {
-                                    return Option.wrap(host.audioEffectsField.address)
+                                    return host.audioEffectsField.map(field => field.address)
                                 }
                                 if (pointer.pointerType === Pointers.TrackCollection) {
                                     return Option.wrap(host.audioUnitBoxAdapter().tracksField.address)
@@ -266,33 +364,44 @@ export namespace DevicesClipboard {
                                     return Option.wrap(host.audioUnitBoxAdapter().address)
                                 }
                                 if (pointer.pointerType === Pointers.MIDIDevice) {
-                                    const rootBox: Optional<RootBox> = boxGraph.boxes()
-                                        .find(box => isInstanceOf(box, RootBox)) as Optional<RootBox>
-                                    if (isDefined(rootBox)) {
-                                        return Option.wrap(rootBox.outputMidiDevices.address)
-                                    }
+                                    return findRootBox(boxGraph).map(rootBox => rootBox.outputMidiDevices.address)
                                 }
-                                return Option.None
+                                return mapModulationPointer(pointer, address, boxGraph)
                             },
+                            keepUuid: isModulatorBox,
                             excludeBox: box => {
+                                if (excludeExistingModulator(box, boxGraph)) {return true}
+                                // A ONE-SIDED host (a composite entry) takes only ONE chain kind. An effect of the
+                                // other kind has nowhere to attach: `mapPointer` finds no host field, so its
+                                // mandatory `host` would dangle and reject the whole transaction (as the timeline
+                                // subtree below would). Drop it rather than paste a broken box. Checked BEFORE the
+                                // replaceInstrument bail: that case must not smuggle an unattachable effect in.
+                                if (DeviceBoxUtils.isEffectDeviceBox(box)
+                                    && DeviceHost.chainFieldOf(host, effectAccepts(box)).isEmpty()) {return true}
                                 if (replaceInstrument) {return false}
                                 if (DeviceBoxUtils.isInstrumentDeviceBox(box)) {return true}
-                                if (isInstanceOf(box, TrackBox)) {return metadata.hasInstrument}
+                                // The unit's timeline content (tracks + their regions/clips/event-collections)
+                                // is bundled only alongside an instrument, for the REPLACE case. When an
+                                // instrument is present but we are NOT replacing, none of it may be pasted: a
+                                // region deserialized without its excluded track dangles its mandatory `regions`
+                                // pointer and rejects the whole transaction (#1049-#1051). Drop the entire
+                                // timeline subtree, not just the TrackBox. (An effect-only copy has no
+                                // instrument, so its automation tracks/regions still paste.)
+                                if (metadata.hasInstrument
+                                    && (isInstanceOf(box, TrackBox)
+                                        || UnionBoxTypes.isRegionBox(box)
+                                        || UnionBoxTypes.isClipBox(box)
+                                        || isInstanceOf(box, NoteEventCollectionBox)
+                                        || isInstanceOf(box, ValueEventCollectionBox))) {return true}
                                 return false
                             }
                         }
                     )
                     const deviceBoxes = boxes.filter(box => DeviceBoxUtils.isDeviceBox(box))
-                    const newMidiEffects = deviceBoxes
-                        .filter((box): box is EffectDeviceBox =>
-                            DeviceBoxUtils.isEffectDeviceBox(box) && box.tags.deviceType === "midi-effect")
-                        .sort((a, b) => a.index.getValue() - b.index.getValue())
-                    const newAudioEffects = deviceBoxes
-                        .filter((box): box is EffectDeviceBox =>
-                            DeviceBoxUtils.isEffectDeviceBox(box) && box.tags.deviceType === "audio-effect")
-                        .sort((a, b) => a.index.getValue() - b.index.getValue())
-                    newMidiEffects.forEach((box, idx) => box.index.setValue(midiInsertIndex + idx))
-                    newAudioEffects.forEach((box, idx) => box.index.setValue(audioInsertIndex + idx))
+                    reindexPastedTopLevelEffects(boxes,
+                        host.audioEffectsField.map(field => field.address),
+                        host.midiEffectsField.map(field => field.address),
+                        audioInsertIndex, midiInsertIndex)
                     const tracksField = host.audioUnitBoxAdapter().tracksField
                     const allTracks = tracksField.pointerHub.filter(Pointers.TrackCollection)
                         .filter(pointer => isInstanceOf(pointer.box, TrackBox))

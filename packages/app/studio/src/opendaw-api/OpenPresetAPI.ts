@@ -2,6 +2,7 @@ import {
     asDefined, DefaultObservableValue, isDefined, Lazy, panic, Procedure, RuntimeNotifier, tryCatch, unitValue, UUID
 } from "@opendaw/lib-std"
 import {network, Promises} from "@opendaw/lib-runtime"
+import {AccessKey} from "./AccessKey"
 import {base64Credentials, OpenDAWHeaders} from "./OpenDAWHeaders"
 import {PresetMeta} from "@opendaw/studio-core"
 
@@ -74,8 +75,7 @@ export class OpenPresetAPI {
         const dialog = RuntimeNotifier.progress({headline: "Uploading", progress})
         const formData = new FormData()
         Object.entries(meta).forEach(([key, value]) => formData.set(key, String(value)))
-        const params = new URLSearchParams(location.search)
-        const accessKey = asDefined(params.get("access-key"), "Cannot upload without access-key.")
+        const accessKey = AccessKey.get().unwrap("Cannot upload without access-key.")
         formData.set("key", accessKey)
         formData.append("file", new Blob([arrayBuffer]))
         const xhr = new XMLHttpRequest()

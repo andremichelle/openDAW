@@ -56,25 +56,36 @@ pub trait VoicingStrategy {
     fn reset(&mut self);
 }
 
-/// One pool slot: a voice plus the note id it is playing and whether it is in use.
+/// One pool slot: a voice plus the note id it is playing, whether it is in use, when it was started (the
+/// pool's monotonic counter, so the newest released voice is findable) and whether it may still seed a glide.
 struct Slot<V> {
     voice: V,
     note_id: i32,
-    active: bool
+    active: bool,
+    started: u64,
+    glide_source: bool
 }
 
 /// A fixed pool of `VOICES` voices with polyphonic allocation (a port of TS `PolyphonicStrategy`). Lives in the
 /// device's zeroed state (a zeroed pool is all-inactive). On note-on it takes a free slot, else steals a
 /// released (un-gated) one, else the first slot; on note-off it releases the matching voice; each chunk it
 /// renders the active voices and frees any that report finished. A new note glides in from the frequency of a
-/// still-decaying released voice when one exists (mirroring the TS `availableForGlide` behaviour).
+/// still-decaying released voice when one exists (the TS `availableForGlide` list): the NEWEST such voice, and
+/// each one seeds exactly ONE note (TS spliced it out of the list). Without both, a phrase played over a long
+/// release keeps gliding from the same stale voice instead of from the note before it (#334).
 pub struct PolyphonicStrategy<V, const VOICES: usize> {
-    slots: [Slot<V>; VOICES]
+    slots: [Slot<V>; VOICES],
+    started: u64
 }
 
 impl<V: Voice + Default, const VOICES: usize> Default for PolyphonicStrategy<V, VOICES> {
     fn default() -> Self {
-        Self {slots: core::array::from_fn(|_| Slot {voice: V::default(), note_id: 0, active: false})}
+        Self {
+            slots: core::array::from_fn(|_| Slot {
+                voice: V::default(), note_id: 0, active: false, started: 0, glide_source: false
+            }),
+            started: 0
+        }
     }
 }
 
@@ -105,8 +116,15 @@ impl<V: Voice + Default, const VOICES: usize> VoicingStrategy for PolyphonicStra
     type Voice = V;
 
     fn start(&mut self, event: &EventRecord, frequency: f32, gain: f32, glide_duration: f64, unison: usize, shared: &V::Shared) {
-        let from = self.slots.iter().find(|slot| slot.active && !slot.voice.gate())
-            .map(|slot| slot.voice.current_frequency());
+        // The glide source is the NEWEST released voice still decaying, and it is spent here: the note after
+        // this one glides from THIS voice, not from the same ageing tail again.
+        let from = self.slots.iter_mut()
+            .filter(|slot| slot.active && slot.glide_source && !slot.voice.gate())
+            .max_by_key(|slot| slot.started)
+            .map(|slot| {
+                slot.glide_source = false;
+                slot.voice.current_frequency()
+            });
         let index = self.allocate();
         self.slots[index].voice.start(event, from.unwrap_or(frequency), gain, 0.0, unison, shared);
         if from.is_some() {
@@ -114,6 +132,9 @@ impl<V: Voice + Default, const VOICES: usize> VoicingStrategy for PolyphonicStra
         }
         self.slots[index].note_id = event.id as i32;
         self.slots[index].active = true;
+        self.slots[index].started = self.started;
+        self.slots[index].glide_source = true;
+        self.started += 1;
     }
 
     fn stop(&mut self, note_id: i32, _glide_duration: f64) {
@@ -128,6 +149,7 @@ impl<V: Voice + Default, const VOICES: usize> VoicingStrategy for PolyphonicStra
         for slot in &mut self.slots {
             if slot.active {
                 slot.voice.force_stop();
+                slot.glide_source = false; // a cut voice is not a pitch to glide from
             }
         }
     }
@@ -137,6 +159,7 @@ impl<V: Voice + Default, const VOICES: usize> VoicingStrategy for PolyphonicStra
         for slot in &mut self.slots {
             if slot.active && slot.voice.process([&mut *out_left, &mut *out_right], block, shared) {
                 slot.active = false;
+                slot.glide_source = false;
             }
         }
         self.slots.iter().all(|slot| !slot.active)
@@ -148,6 +171,7 @@ impl<V: Voice + Default, const VOICES: usize> VoicingStrategy for PolyphonicStra
                 slot.voice.force_stop();
                 slot.active = false;
             }
+            slot.glide_source = false;
         }
     }
 }
@@ -703,6 +727,7 @@ mod tests {
     #[derive(Default)]
     struct FreqMock {
         current: f32,
+        started_from: f32,
         gated: bool,
         release: i32
     }
@@ -711,6 +736,7 @@ mod tests {
         type Shared = ();
         fn start(&mut self, _event: &EventRecord, frequency: f32, _gain: f32, _spread: f32, _unison: usize, _shared: &()) {
             self.current = frequency;
+            self.started_from = frequency;
             self.gated = true;
             self.release = MOCK_RELEASE;
         }
@@ -791,6 +817,46 @@ mod tests {
         assert!((mono.current_frequency() - 100.0).abs() < 1.0e-6, "and back again to the lowest held note");
         assert!(mono.is_active(), "still sounding while the last note is held");
         mono.stop(1, GLIDE);
+    }
+
+    // ---- Polyphonic glide (#334) ----
+
+    fn poly_step(poly: &mut PolyphonicStrategy<FreqMock, 8>, id: u32, frequency: f32) -> f32 {
+        poly.start(&note(id), frequency, 1.0, GLIDE, 1, &());
+        let from = poly.slots.iter()
+            .find(|slot| slot.active && slot.note_id == id as i32)
+            .map(|slot| slot.voice.started_from)
+            .expect("the note took a slot");
+        poly.stop(id as i32, GLIDE);
+        poly.process([&mut [0.0; 4], &mut [0.0; 4]], &block(), &());
+        from
+    }
+
+    #[test]
+    fn poly_glide_walks_the_phrase_note_by_note() {
+        // Every note is released before the next starts, and the releases OVERLAP (a long release), so several
+        // decaying voices are around at once. Each note must glide from the one before it, not from the oldest
+        // tail still in the pool (the #334 "restarts gliding").
+        let mut poly = PolyphonicStrategy::<FreqMock, 8>::new();
+        assert!((poly_step(&mut poly, 1, 100.0) - 100.0).abs() < 1.0e-6, "the first note has nothing to glide from");
+        assert!((poly_step(&mut poly, 2, 200.0) - 100.0).abs() < 1.0e-6, "glides from the note before it");
+        assert!((poly_step(&mut poly, 3, 300.0) - 200.0).abs() < 1.0e-6, "and from that one, not from the first");
+        assert!((poly_step(&mut poly, 4, 400.0) - 300.0).abs() < 1.0e-6, "and so on down the phrase");
+    }
+
+    #[test]
+    fn poly_a_released_voice_seeds_only_one_glide() {
+        let mut poly = PolyphonicStrategy::<FreqMock, 8>::new();
+        poly.start(&note(1), 100.0, 1.0, GLIDE, 1, &());
+        poly.stop(1, GLIDE);
+        poly.process([&mut [0.0; 4], &mut [0.0; 4]], &block(), &());
+        poly.start(&note(2), 200.0, 1.0, GLIDE, 1, &()); // glides from the released note 1, spending it
+        poly.start(&note(3), 300.0, 1.0, GLIDE, 1, &()); // note 2 is still HELD, so nothing left to glide from
+        let started = |note_id: i32| poly.slots.iter()
+            .find(|slot| slot.active && slot.note_id == note_id)
+            .map(|slot| slot.voice.started_from).expect("slot");
+        assert!((started(2) - 100.0).abs() < 1.0e-6, "the released note seeded the first glide");
+        assert!((started(3) - 300.0).abs() < 1.0e-6, "it does not seed the next one too");
     }
 
     // ---- Voicing dispatcher ----

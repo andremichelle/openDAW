@@ -1,11 +1,17 @@
-import {UUID} from "@opendaw/lib-std"
+import {Optional, UUID} from "@opendaw/lib-std"
+import {Box} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox,
+    AudioEffectCompositeBox,
+    AudioEffectCompositeCellBox,
+    AutotuneDeviceBox,
     CompressorDeviceBox,
+    ConvolverDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
     DelayDeviceBox,
     FoldDeviceBox,
+    FrequencySplitBox,
     GateDeviceBox,
     GrooveShuffleBox,
     MaximizerDeviceBox,
@@ -18,6 +24,7 @@ import {
     PitchDeviceBox,
     RevampDeviceBox,
     ReverbDeviceBox,
+    StereoCompositeBox,
     StereoToolDeviceBox,
     TidalDeviceBox,
     SpielwerkDeviceBox,
@@ -33,6 +40,12 @@ import {EffectFactory} from "./EffectFactory"
 import {EffectParameterDefaults} from "./EffectParameterDefaults"
 
 export namespace EffectFactories {
+    // The stereo split's FIXED entries, in the order the engine's distributor maps them: index 0 = left,
+    // index 1 = right. The UI offers no add / remove / reorder for them (StereoCompositeBoxAdapter.entriesFixed).
+    export const STEREO_ENTRY_LABELS: ReadonlyArray<string> = ["L", "R"]
+
+    export const FREQUENCY_SPLIT_ENTRY_LABELS: ReadonlyArray<string> = ["Low", "Low Mid", "High Mid", "High"]
+
     export const Arpeggio: EffectFactory = {
         defaultName: "Arpeggio",
         defaultIcon: IconSymbol.Stack,
@@ -170,6 +183,23 @@ export namespace EffectFactories {
             })
     }
 
+    export const Convolver: EffectFactory = {
+        defaultName: "Convolver",
+        defaultIcon: IconSymbol.Convolver,
+        briefDescription: "Convolution Reverb",
+        description: "Convolution effect: convolves the signal with an impulse-response sample (spaces, springs, cabinets)",
+        manualPage: DeviceManualUrls.Convolver,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): ConvolverDeviceBox =>
+            ConvolverDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Convolver")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const DattorroReverb: EffectFactory = {
         defaultName: "Dattorro Reverb",
         defaultIcon: IconSymbol.Dattorro,
@@ -251,6 +281,23 @@ export namespace EffectFactories {
             ReverbDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Reverb")
                 box.preDelay.setInitValue(0.001)
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    export const Autotune: EffectFactory = {
+        defaultName: "Autotune",
+        defaultIcon: IconSymbol.Note,
+        briefDescription: "Pitch Correction",
+        description: "Shifts the signal towards the nearest note of a key and scale",
+        manualPage: DeviceManualUrls.Autotune,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): AutotuneDeviceBox =>
+            AutotuneDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Autotune")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
@@ -446,6 +493,79 @@ export namespace EffectFactories {
         }
     }
 
+    // A parallel FX stack: the user drags effects into its entries, so it starts EMPTY — an empty composite
+    // passes its input through untouched, so inserting one never kills the chain.
+    export const AudioEffectComposite: EffectFactory = {
+        defaultName: "FX Composite",
+        defaultIcon: IconSymbol.Stack,
+        briefDescription: "Parallel FX stack",
+        description: "Runs several effect chains in parallel and mixes them back (dry/wet)",
+        manualPage: DeviceManualUrls.AudioEffectComposite,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index) =>
+            AudioEffectCompositeBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("FX Composite")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
+    // The stereo SPLIT: unlike the plain stack its entries are FIXED — the engine feeds entry 0 the left
+    // channel and entry 1 the right, so the two are created here and the UI offers no add / remove.
+    export const StereoComposite: EffectFactory = {
+        defaultName: "Stereo Split",
+        defaultIcon: IconSymbol.Stereo,
+        briefDescription: "Per-channel split",
+        description: "Processes the left and right channels through their own effect chains",
+        manualPage: DeviceManualUrls.StereoComposite,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index) => {
+            const composite = StereoCompositeBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Stereo Split")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+            // Entry 0 = left, entry 1 = right: the distributor maps them BY INDEX, so both must exist and
+            // keep their order. Their chains start empty, which sums back to the untouched input.
+            STEREO_ENTRY_LABELS.forEach((label, entryIndex) =>
+                AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+                    box.composite.refer(composite.entries)
+                    box.index.setValue(entryIndex)
+                    box.label.setValue(label)
+                }))
+            return composite
+        }
+    }
+
+    export const FrequencySplit: EffectFactory = {
+        defaultName: "Frequency Split",
+        defaultIcon: IconSymbol.Charts,
+        briefDescription: "Multiband split",
+        description: "Splits the signal into frequency bands and processes each on its own chain",
+        manualPage: DeviceManualUrls.FrequencySplit,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index) => {
+            const composite = FrequencySplitBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Frequency Split")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+            FREQUENCY_SPLIT_ENTRY_LABELS.forEach((label, entryIndex) =>
+                AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+                    box.composite.refer(composite.entries)
+                    box.index.setValue(entryIndex)
+                    box.label.setValue(label)
+                }))
+            return composite
+        }
+    }
+
     export const MidiNamed = {
         Arpeggio,
         Pitch,
@@ -455,7 +575,12 @@ export namespace EffectFactories {
     }
 
     export const AudioNamed = {
+        AudioEffectComposite, // FX Composite
+        StereoComposite,      // Stereo Split
+        FrequencySplit,       // Frequency Split
+        Autotune,
         Compressor,
+        Convolver,
         Crusher,
         DattorroReverb,  // Dattorro Reverb
         Delay,
@@ -478,4 +603,8 @@ export namespace EffectFactories {
     export const MergedNamed = {...MidiNamed, ...AudioNamed}
     export type MidiEffectKeys = keyof typeof MidiNamed
     export type AudioEffectKeys = keyof typeof AudioNamed
+
+    export const keyOfBox = (box: Box): Optional<MidiEffectKeys | AudioEffectKeys> =>
+        (Object.keys(MergedNamed) as Array<MidiEffectKeys | AudioEffectKeys>)
+            .find(key => box.name === `${key}DeviceBox` || box.name === `${key}Box`)
 }

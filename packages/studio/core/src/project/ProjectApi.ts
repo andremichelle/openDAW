@@ -15,10 +15,11 @@ import {
     quantizeRound,
     Strings,
     Subscription,
+    unitValue,
     UUID
 } from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioClipBox,
@@ -32,6 +33,7 @@ import {
     NoteRegionBox,
     TrackBox,
     ValueClipBox,
+    ValueEventBox,
     ValueEventCollectionBox,
     ValueRegionBox
 } from "@opendaw/studio-boxes"
@@ -51,6 +53,7 @@ import {
     InstrumentFactory,
     InstrumentOptions,
     InstrumentProduct,
+    InterpolationFieldAdapter,
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
     ProjectQueries,
@@ -58,6 +61,7 @@ import {
     TrackType
 } from "@opendaw/studio-adapters"
 import {Project} from "./Project"
+import {ProjectModulation} from "./ProjectModulation"
 import {EffectFactory} from "../EffectFactory"
 import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
@@ -92,6 +96,11 @@ export type NoteRegionParams = {
     hue?: number
 }
 
+export type AutomationSeed = {
+    value: unitValue
+    interpolation: InterpolationFieldAdapter.Plain
+}
+
 export type QuantiseNotesOptions = {
     positionQuantisation?: ppqn
     durationQuantisation?: ppqn
@@ -100,9 +109,14 @@ export type QuantiseNotesOptions = {
 
 // noinspection JSUnusedGlobalSymbols
 export class ProjectApi {
+    readonly modulation: ProjectModulation
+
     readonly #project: Project
 
-    constructor(project: Project) {this.#project = project}
+    constructor(project: Project) {
+        this.#project = project
+        this.modulation = new ProjectModulation(project)
+    }
 
     setBpm(value: number): void {
         if (isNaN(value)) {return}
@@ -168,6 +182,24 @@ export class ProjectApi {
 
     insertEffect(field: Field<EffectPointerType>, factory: EffectFactory, insertIndex: int = Number.MAX_SAFE_INTEGER): EffectBox {
         return factory.create(this.#project, field, IndexedBox.insertOrder(field, insertIndex))
+    }
+
+    moveEffects(targetField: Field<EffectPointerType>, boxes: ReadonlyArray<EffectBox>, insertIndex: int): void {
+        if (boxes.length === 0) {return}
+        const movedSet = new Set<Box>(boxes)
+        // The chains the boxes currently live in, captured BEFORE re-homing so they can be reindexed afterwards.
+        const sourceFields = new Set<Field<EffectPointerType>>()
+        boxes.forEach(box => box.host.targetVertex.ifSome(vertex => sourceFields.add(vertex as Field<EffectPointerType>)))
+        const moved = boxes.slice().sort((left, right) => left.index.getValue() - right.index.getValue())
+        const kept = IndexedBox.collectIndexedBoxes(targetField).filter(box => !movedSet.has(box))
+        const at = clamp(insertIndex, 0, kept.length)
+        const finalOrder: ReadonlyArray<IndexedBox> = [...kept.slice(0, at), ...moved, ...kept.slice(at)]
+        moved.forEach(box => box.host.refer(targetField))
+        finalOrder.forEach((box, index) => box.index.setValue(index))
+        sourceFields.forEach(field => {
+            if (field === targetField) {return}
+            IndexedBox.collectIndexedBoxes(field).forEach((box, index) => box.index.setValue(index))
+        })
     }
 
     createNoteTrack(audioUnitBox: AudioUnitBox, insertIndex: int = Number.MAX_SAFE_INTEGER): TrackBox {
@@ -267,7 +299,7 @@ export class ProjectApi {
         const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
         return NoteClipBox.create(boxGraph, UUID.generate(), box => {
             box.index.setValue(clipIndex)
-            box.label.setValue(name ?? "Notes")
+            box.label.setValue(name ?? "")
             box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
             box.mute.setValue(false)
             box.duration.setValue(PPQN.Bar)
@@ -276,10 +308,12 @@ export class ProjectApi {
         })
     }
 
-    duplicateRegion<R extends AnyRegionBoxAdapter>(region: R, options?: { findFreeSpace?: boolean }): Option<R> {
+    duplicateRegion<R extends AnyRegionBoxAdapter>(region: R,
+                                                   options?: { findFreeSpace?: boolean, position?: ppqn }): Option<R> {
         if (region.trackBoxAdapter.isEmpty()) {return Option.None}
         const track = region.trackBoxAdapter.unwrap()
-        if (options?.findFreeSpace === true) {
+        const explicitPosition = options?.position
+        if (!isDefined(explicitPosition) && options?.findFreeSpace === true) {
             let insert = region.complete
             for (const {position, complete} of track.regions.collection.iterateFrom(region.complete)) {
                 if (insert + region.duration <= position) {break}
@@ -289,18 +323,18 @@ export class ProjectApi {
                 position: insert,
                 consolidate: true
             }) as R)
-        } else {
-            const clearFrom = region.complete
-            const clearTo = region.complete + region.duration
-            const targetTrack = this.#project.overlapResolver.resolveTargetTrack(track, clearFrom, clearTo)
-            const solver = this.#project.overlapResolver.fromRange(targetTrack, clearFrom, clearTo)
-            const duplicate = region.copyTo({
-                position: region.complete,
-                consolidate: true
-            }) as R
-            solver()
-            return Option.wrap(duplicate)
         }
+        const position = explicitPosition ?? region.complete
+        const complete = position + region.duration
+        const targetTrack = this.#project.overlapResolver.resolveTargetTrack(track, position, complete)
+        const solver = this.#project.overlapResolver.fromRange(targetTrack, position, complete)
+        const duplicate = region.copyTo({
+            position,
+            target: targetTrack.box.regions,
+            consolidate: true
+        }) as R
+        solver()
+        return Option.wrap(duplicate)
     }
 
     async exportMIDI(collection: NoteEventCollectionBoxAdapter, suggestedName: string = "notes.mid") {
@@ -342,7 +376,7 @@ export class ProjectApi {
         const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
         return ValueClipBox.create(boxGraph, UUID.generate(), box => {
             box.index.setValue(clipIndex)
-            box.label.setValue(name ?? "Automation")
+            box.label.setValue(name ?? "")
             box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
             box.mute.setValue(false)
             box.duration.setValue(PPQN.Bar)
@@ -362,7 +396,7 @@ export class ProjectApi {
         const events = eventCollection ?? NoteEventCollectionBox.create(boxGraph, UUID.generate())
         return NoteRegionBox.create(boxGraph, UUID.generate(), box => {
             box.position.setValue(position)
-            box.label.setValue(name ?? "Notes")
+            box.label.setValue(name ?? "")
             box.hue.setValue(hue ?? ColorCodes.forTrackType(trackBox.type.getValue()))
             box.mute.setValue(mute ?? false)
             box.duration.setValue(duration)
@@ -381,35 +415,79 @@ export class ProjectApi {
         if (duration <= 0.0) {return Option.None}
         const {boxGraph} = this.#project
         const type = trackBox.type.getValue()
-        switch (type) {
-            case TrackType.Notes: {
-                const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
-                return Option.wrap(NoteRegionBox.create(boxGraph, UUID.generate(), box => {
-                    box.position.setValue(Math.max(position, 0))
-                    box.label.setValue(name ?? "Notes")
-                    box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
-                    box.mute.setValue(false)
-                    box.duration.setValue(duration)
-                    box.loopDuration.setValue(duration)
-                    box.events.refer(events.owners)
-                    box.regions.refer(trackBox.regions)
-                }))
+        const startPosition = Math.max(position, 0)
+        // Resolve overlaps against existing regions BEFORE creating (mirrors duplicateRegion): drawing a region
+        // over an existing one must clip / push / keep per the setting, never STACK a second region at the same
+        // position. A raw create left two regions overlapping, which a later validateTracks hard-asserts on and
+        // crashes the app (live errors 1086/1087).
+        const trackAdapter = this.#project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
+        const solver = this.#project.overlapResolver.fromRange(trackAdapter, startPosition, startPosition + duration)
+        const created: Option<AnyRegionBox> = (() => {
+            switch (type) {
+                case TrackType.Notes: {
+                    const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
+                    return Option.wrap(NoteRegionBox.create(boxGraph, UUID.generate(), box => {
+                        box.position.setValue(startPosition)
+                        box.label.setValue(name ?? "")
+                        box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
+                        box.mute.setValue(false)
+                        box.duration.setValue(duration)
+                        box.loopDuration.setValue(duration)
+                        box.events.refer(events.owners)
+                        box.regions.refer(trackBox.regions)
+                    }))
+                }
+                case TrackType.Value: {
+                    // #271: a new automation region inherits a single node from its surroundings — the preceding
+                    // region's held (outgoing) value, else the following region's incoming value, else the
+                    // parameter's current dial value. Computed BEFORE creating the region so the scan sees only
+                    // the existing regions.
+                    const seed = this.#automationSeed(trackBox, trackAdapter, startPosition)
+                    const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+                    const region = ValueRegionBox.create(boxGraph, UUID.generate(), box => {
+                        box.position.setValue(startPosition)
+                        box.label.setValue(name ?? "")
+                        box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
+                        box.mute.setValue(false)
+                        box.duration.setValue(duration)
+                        box.loopDuration.setValue(duration)
+                        box.events.refer(events.owners)
+                        box.regions.refer(trackBox.regions)
+                    })
+                    seed.ifSome(({value, interpolation}) => ValueEventBox.create(boxGraph, UUID.generate(), box => {
+                        box.position.setValue(0)
+                        box.value.setValue(value)
+                        box.events.refer(events.events)
+                        InterpolationFieldAdapter.write(box.interpolation, interpolation)
+                    }))
+                    return Option.wrap(region)
+                }
             }
-            case TrackType.Value: {
-                const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
-                return Option.wrap(ValueRegionBox.create(boxGraph, UUID.generate(), box => {
-                    box.position.setValue(Math.max(position, 0))
-                    box.label.setValue(name ?? "Automation")
-                    box.hue.setValue(hue ?? ColorCodes.forTrackType(type))
-                    box.mute.setValue(false)
-                    box.duration.setValue(duration)
-                    box.loopDuration.setValue(duration)
-                    box.events.refer(events.owners)
-                    box.regions.refer(trackBox.regions)
-                }))
-            }
-        }
-        return Option.None
+            return Option.None
+        })()
+        if (created.nonEmpty()) {solver()}
+        return created
+    }
+
+    // #271: the node a freshly drawn automation region should hold. Hold-from-left: the preceding region's
+    // outgoing (held) value wins; else the following region's incoming value; else the parameter's current dial
+    // value. Returns None only when the track's target parameter cannot be resolved (a bug — seed no node then).
+    #automationSeed(trackBox: TrackBox, trackAdapter: TrackBoxAdapter, position: ppqn): Option<AutomationSeed> {
+        return trackBox.target.targetVertex
+            .flatMap(vertex => this.#project.parameterFieldAdapters.opt(vertex.address))
+            .map(parameter => {
+                const dial = parameter.getControlledUnitValue()
+                const interpolation = InterpolationFieldAdapter.map(parameter.type)
+                const preceding = trackAdapter.regions.collection.lowerEqual(position)
+                if (isDefined(preceding) && preceding.isValueRegion()) {
+                    return {value: preceding.outgoingValue(dial), interpolation}
+                }
+                const following = trackAdapter.regions.collection.greaterEqual(position)
+                if (isDefined(following) && following.isValueRegion()) {
+                    return {value: following.incomingValue(dial), interpolation}
+                }
+                return {value: dial, interpolation}
+            })
     }
 
     createNoteEvent({owner, position, duration, velocity, pitch, chance, cent}: NoteEventParams): NoteEventBox {
@@ -428,6 +506,8 @@ export class ProjectApi {
     }
 
     deleteAudioUnit(audioUnitBox: AudioUnitBox): void {
+        // The output unit is mandatory; deleting it desyncs the engine (it rejects the transaction).
+        if (audioUnitBox.type.getValue() === AudioUnitType.Output) {return}
         const {rootBox} = this.#project
         IndexedBox.removeOrder(rootBox.audioUnits, audioUnitBox.index.getValue())
         audioUnitBox.delete()

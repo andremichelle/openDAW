@@ -12,7 +12,7 @@ export class ShadertoyState implements Terminable {
     readonly #midiCCData = new Uint8Array(128)
     readonly #midiNoteData = new Uint8Array(128)
     readonly #noteVelocities: Array<Array<number>> = Array.from({length: 128}, () => [])
-    readonly #peaks = new Float32Array(4) // [leftPeak, leftRMS, rightPeak, rightRMS]
+    readonly #peaks = new Float32Array(4) // [leftPeak, rightPeak, leftRMS, rightRMS]
 
     #beat = 0.0
 
@@ -76,7 +76,7 @@ export class ShadertoyState implements Terminable {
 
     /**
      * Sets stereo peak and RMS values.
-     * @param peaks Float32Array with [leftPeak, leftRMS, rightPeak, rightRMS]
+     * @param peaks Float32Array with [leftPeak, rightPeak, leftRMS, rightRMS]
      */
     #setPeaks(peaks: Float32Array): void {
         this.#peaks.set(peaks)
@@ -114,11 +114,14 @@ export class ShadertoyState implements Terminable {
         const {engine: {position, sampleRate}, liveStreamReceiver} = project
         return Terminable.many(
             AnimationFrame.add(() => this.setPPQN(position.getValue())),
-            ShadertoyMIDIOutput.subscribe(message => MidiData.accept(message, {
-                controller: (id: byte, value: unitValue) => this.#onMidiCC(id, value),
-                noteOn: (note: byte, velocity: byte) => this.#onMidiNoteOn(note, velocity),
-                noteOff: (note: byte) => this.#onMidiNoteOff(note)
-            })),
+            project.subscribeMIDIOut(({deviceId, data}) => {
+                if (deviceId !== ShadertoyMIDIOutput.Default.id) {return}
+                MidiData.accept(data, {
+                    controller: (id: byte, value: unitValue) => this.#onMidiCC(id, value),
+                    noteOn: (note: byte, velocity: byte) => this.#onMidiNoteOn(note, velocity),
+                    noteOff: (note: byte) => this.#onMidiNoteOff(note)
+                })
+            }),
             liveStreamReceiver.subscribeFloats(EngineAddresses.PEAKS, (peaks) => this.#setPeaks(peaks)),
             liveStreamReceiver.subscribeFloats(EngineAddresses.SPECTRUM, spectrum => this.#setSpectrum(spectrum, sampleRate)),
             liveStreamReceiver.subscribeFloats(EngineAddresses.WAVEFORM, waveform => this.#setWaveform(waveform))

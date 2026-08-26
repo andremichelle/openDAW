@@ -1,4 +1,15 @@
-import {asInstanceOf, isDefined, Notifier, Nullable, Observable, Option, StringMapping, Terminable, ValueMapping} from "@opendaw/lib-std"
+import {
+    asInstanceOf,
+    isDefined,
+    Notifier,
+    Nullable,
+    Observable,
+    Option,
+    StringMapping,
+    Strings,
+    Terminable,
+    ValueMapping
+} from "@opendaw/lib-std"
 import {Field, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {WerkstattParameterBox} from "@opendaw/studio-boxes"
@@ -39,6 +50,7 @@ const SAMPLE_LINE = /^\/\/ @sample .+$/gm
 const GROUP_LINE = /^\/\/ @group .+$/gm
 const DIRECTIVE_LINE = /^\/\/ @(group|param|sample) .+$/gm
 const DECLARATION_LINE = /^\/\/ @(?:param|sample) \S+/gm
+const NO_PASS_LINE = /^\/\/ @no-pass\b(.*)$/m
 const FLOAT_TOLERANCE = 1e-6
 const VALID_MAPPINGS: ReadonlyArray<string> = ["linear", "exp", "int", "bool"]
 
@@ -129,6 +141,15 @@ export namespace ScriptDeclaration {
         const label = match[0].replace(/^\/\/ @label\s+/, "").trim()
         if (label.length === 0) {throw new Error("Malformed @label: expected: // @label <name>")}
         return Option.wrap(label)
+    }
+
+    // A note transformer forwards its input VERBATIM unless the script opts out with `// @no-pass`, so a device
+    // with no (or a broken) script never eats the note stream.
+    export const parsePassThrough = (code: string): boolean => {
+        const match = NO_PASS_LINE.exec(code)
+        if (match === null) {return true}
+        if (match[1].trim().length > 0) {throw new Error("Malformed @no-pass: expected: // @no-pass")}
+        return false
     }
 
     export const parseParams = (code: string): ReadonlyArray<ParamDeclaration> => {
@@ -267,7 +288,9 @@ export namespace ScriptDeclaration {
                             valueMapping: ValueMapping.unipolar(),
                             stringMapping: StringMapping.percent({fractionDigits: 1})
                         }
-                    parametric.createParameter(paramBox.value, valueMapping, stringMapping, label,
+                    // Script authors write `@param` names in any case they like. The stored label stays verbatim
+                    // (ScriptCompiler keys parameter boxes by it), only the displayed name is normalised.
+                    parametric.createParameter(paramBox.value, valueMapping, stringMapping, Strings.capitalize(label),
                         undefined, paramBox.defaultValue.getValue())
                     if (isDefined(declaration)) {cachedDeclarations.set(label, declaration)}
                 }),
@@ -280,13 +303,13 @@ export namespace ScriptDeclaration {
             codeField.subscribe(() => {
                 const declarations = parseParams(codeField.getValue())
                 for (const adapter of parametric.parameters()) {
-                    const newDeclaration = declarations.find(decl => decl.label === adapter.name)
+                    const newDeclaration = declarations.find(decl => Strings.capitalize(decl.label) === adapter.name)
                     if (!isDefined(newDeclaration)) {continue}
-                    const oldDeclaration = cachedDeclarations.get(adapter.name)
+                    const oldDeclaration = cachedDeclarations.get(newDeclaration.label)
                     if (isDefined(oldDeclaration) && declarationEquals(oldDeclaration, newDeclaration)) {continue}
                     const {valueMapping, stringMapping} = resolveParamMappings(newDeclaration)
                     adapter.updateMappings(valueMapping, stringMapping)
-                    cachedDeclarations.set(adapter.name, newDeclaration)
+                    cachedDeclarations.set(newDeclaration.label, newDeclaration)
                 }
                 codeChangedNotifier.notify()
             }),

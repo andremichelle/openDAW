@@ -53,9 +53,12 @@ export namespace YService {
             return {project, provider}
         } else {
             if (optProject.nonEmpty()) {
+                const hasChanges = optProject.mapOr(({editing}) => editing.hasUnsavedChanges(), false)
                 const approved = await RuntimeNotifier.approve({
                     headline: "Room Already Exists",
-                    message: "Do you want to join it?",
+                    message: hasChanges
+                        ? "Joining will replace your current project. You will lose all progress!"
+                        : "Do you want to join it?",
                     approveText: "Join",
                     cancelText: "Cancel"
                 })

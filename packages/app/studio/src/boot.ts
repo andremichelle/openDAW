@@ -1,4 +1,10 @@
 import "./main.sass"
+
+// Escape hatch for AUTOMATED browser sessions (set `localStorage["opendaw-suppress-unload-guard"]`):
+// swallow every beforeunload prompt so scripted reloads never hang on the native dialog.
+if (localStorage.getItem("opendaw-suppress-unload-guard") !== null) {
+    window.addEventListener("beforeunload", event => event.stopImmediatePropagation(), {capture: true})
+}
 import {App} from "@/ui/App.tsx"
 import {isDefined, panic, Progress, RuntimeNotification, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
@@ -9,6 +15,7 @@ import {BuildInfo} from "./BuildInfo"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {replaceChildren} from "@opendaw/lib-jsx"
 import {
+    AudioContexts,
     AudioWorklets,
     BufferUnderrunDetector,
     CloudAuthManager,
@@ -16,7 +23,7 @@ import {
     FactoryCatalog,
     GlobalSampleLoaderManager,
     GlobalSoundfontLoaderManager,
-    OfflineEngineRenderer,
+    RegionClipResolver,
     Workers
 } from "@opendaw/studio-core"
 import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI} from "@/opendaw-api"
@@ -36,6 +43,7 @@ import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Menu} from "@/ui/components/Menu"
+import {TouchContextMenu} from "@/ui/TouchContextMenu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
 
 if ("stackTraceLimit" in Error) {Error.stackTraceLimit = 50}
@@ -44,8 +52,8 @@ const loadBuildInfo = async () => fetch(`/build-info.json?v=${Date.now()}`)
     .then(x => x.json())
     .then(x => BuildInfo.parse(x))
 
-export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProcessorUrl, wasmOfflineWorkerUrl}: {
-    workersUrl: string, workletsUrl: string, offlineEngineUrl: string
+export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOfflineWorkerUrl}: {
+    workersUrl: string, workletsUrl: string
     wasmProcessorUrl: string, wasmOfflineWorkerUrl: string
 }) => {
     console.debug("booting...")
@@ -56,10 +64,12 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProce
         return
     }
     console.debug("buildInfo", JSON.stringify(buildInfo, null, 2))
+    // A residual region overlap must never crash a user's session: log-and-continue in production, keep the
+    // fail-fast throw in dev so resolver bugs surface. See RegionClipResolver.validateTrack.
+    RegionClipResolver.fatal = buildInfo.env !== "production"
     await FontLoader.load()
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)
-    OfflineEngineRenderer.install(offlineEngineUrl)
     const testFeaturesResult = await Promises.tryCatch(testFeatures())
     if (testFeaturesResult.status === "rejected") {
         document.querySelector("#preloader")?.remove()
@@ -84,15 +94,24 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProce
         offlineWorkerUrl: wasmOfflineWorkerUrl,
         wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`
     })
-    if (WasmEngine.isEnabled() && !await WasmEngine.ensureReady(context)) {
-        // Session-only fallback (the EngineVariant provider yields null while the modules are absent):
-        // persisting the opt-out would strand the user on the TS engine after the artifacts return.
-        console.warn("WASM engine artifacts unavailable — falling back to the TypeScript engine.")
+    // The engine IS the wasm engine, so this is a hard boot requirement: without its artifacts there is no
+    // engine to fall back to, and every worklet-dependent screen would fail on construction instead.
+    if (!await WasmEngine.ensureReady(context)) {
+        document.querySelector("#preloader")?.remove()
+        Dialogs.info({
+            headline: "Engine Unavailable",
+            message: "openDAW could not load its audio engine. This is usually a temporary network issue, please reload the page."
+        }).finally()
+        return
     }
     if (context.state === "suspended") {
-        window.addEventListener("click",
-            async () => await context.resume().then(() =>
-                console.debug(`AudioContext resumed (${context.state})`)), {capture: true, once: true})
+        // Not `once`: a rejected resume (device busy, output unavailable) must stay retryable on the next click.
+        const resumeOnClick = async () => {
+            if (!await AudioContexts.resume(context)) {return}
+            console.debug(`AudioContext resumed (${context.state})`)
+            window.removeEventListener("click", resumeOnClick, {capture: true})
+        }
+        window.addEventListener("click", resumeOnClick, {capture: true})
     }
     const audioDevices = await AudioOutputDevice.create(context)
     FactoryCatalog.install({
@@ -123,15 +142,17 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProce
     }
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
-        config: (surface: Surface) => surface.own(ContextMenu.install(surface.owner, (menuItem, {clientX, clientY}) => {
-            Html.unfocus(surface.owner)
-            const offset = 2
-            const x: number = clientX - offset
-            const y: number = clientY
-            const menu = Menu.create(menuItem)
-            menu.moveTo(x, y)
-            menu.attach(Surface.get(surface.owner).flyout)
-        }))
+        config: (surface: Surface) => surface.ownAll(
+            ContextMenu.install(surface.owner, (menuItem, {clientX, clientY}) => {
+                Html.unfocus(surface.owner)
+                const offset = 2
+                const x: number = clientX - offset
+                const y: number = clientY
+                const menu = Menu.create(menuItem)
+                menu.moveTo(x, y)
+                menu.attach(Surface.get(surface.owner).flyout)
+            }),
+            TouchContextMenu.install(surface.owner))
     }, errorHandler)
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
     document.querySelector("#preloader")?.remove()
@@ -145,8 +166,8 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProce
         notify: ({message, icon, origin}) => Surface.get(origin)
             .toast(message, isDefined(icon) ? IconSymbol.fromName(icon) : IconSymbol.Notification)
     })
-    const opfsProbe = await Promises.tryCatch(navigator.storage.getDirectory())
-    if (opfsProbe.status === "rejected") {
+    const opfsProbe = await Promises.tryCatch(Workers.Opfs.isAvailable())
+    if (opfsProbe.status === "rejected" || !opfsProbe.value) {
         Dialogs.info({
             headline: "Storage Unavailable",
             message: "openDAW cannot start because the browser is blocking access to private storage, so samples, presets and projects cannot be persisted. This typically happens in Private Browsing mode. Please reopen openDAW in a regular browser window."
@@ -175,7 +196,7 @@ export const boot = async ({workersUrl, workletsUrl, offlineEngineUrl, wasmProce
             if (!navigator.onLine) {return}
             const {status, value: newBuildInfo} = await Promises.tryCatch(loadBuildInfo())
             if (status === "resolved" && newBuildInfo.uuid !== undefined && newBuildInfo.uuid !== buildInfo.uuid) {
-                document.body.prepend(UpdateMessage())
+                document.body.prepend(UpdateMessage({service}))
                 console.warn("A new version is online.")
                 clearInterval(checkUpdates)
             }

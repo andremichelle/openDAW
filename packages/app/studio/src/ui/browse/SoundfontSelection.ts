@@ -1,4 +1,4 @@
-import {asDefined, isAbsent, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Arrays, asDefined, isAbsent, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories, Soundfont} from "@opendaw/studio-adapters"
 import {PresetStorage, ProjectStorage, SoundfontStorage, TemplateStorage} from "@opendaw/studio-core"
 import {OpenSoundfontAPI} from "@/opendaw-api"
@@ -8,7 +8,7 @@ import {Dialogs} from "../components/dialogs"
 import {SoundfontFileBox} from "@opendaw/studio-boxes"
 import {ResourceSelection, truncateList} from "@/ui/browse/ResourceSelection"
 
-export class SoundfontSelection implements ResourceSelection {
+export class SoundfontSelection implements ResourceSelection<Soundfont> {
     readonly #service: StudioService
     readonly #selection: HTMLSelection
 
@@ -17,19 +17,23 @@ export class SoundfontSelection implements ResourceSelection {
         this.#selection = selection
     }
 
-    requestDevice(): void {
-        if (!this.#service.hasProfile) {return}
-        const project = this.#service.project
-        const [soundfont] = this.#selected()
+    async requestDevice(soundfonts: ReadonlyArray<Soundfont>): Promise<void> {
+        const [soundfont] = soundfonts
         if (isAbsent(soundfont)) {return}
-        const {uuid, name} = soundfont
-        const {api, editing} = project
-        editing.modify(() => api.createInstrument(InstrumentFactories.Soundfont, {attachment: {uuid, name}}))
+        if (!this.#service.hasProfile) {
+            await this.#service.newProject()
+            if (!this.#service.hasProfile) {return}
+        }
+        const {boxGraph, api, editing} = this.#service.project
+        const uuid = UUID.parse(soundfont.uuid)
+        editing.modify(() => {
+            const fileBox = boxGraph.findBox<SoundfontFileBox>(uuid).unwrapOrElse(() =>
+                SoundfontFileBox.create(boxGraph, uuid, box => box.fileName.setValue(soundfont.name)))
+            api.createInstrument(InstrumentFactories.Soundfont, {attachment: fileBox})
+        })
     }
 
-    async deleteSelected() {return this.deleteSoundfonts(...this.#selected())}
-
-    async deleteSoundfonts(...soundfonts: ReadonlyArray<Soundfont>) {
+    async deleteItems(soundfonts: ReadonlyArray<Soundfont>): Promise<ReadonlyArray<Soundfont>> {
         const dialog = RuntimeNotifier.progress({headline: "Checking Soundfont Usages"})
         const [usedByProjects, usedByTemplates, usedByPresets, onlineList] = await Promise.all([
             ProjectStorage.listUsedAssets(SoundfontFileBox),
@@ -74,19 +78,20 @@ export class SoundfontSelection implements ResourceSelection {
                 deletable.push(soundfont)
             }
         }
-        if (deletable.length === 0) {return}
+        if (deletable.length === 0) {return Arrays.empty()}
         const approved = await Dialogs.approve({
             headline: "Remove Soundfont(s)?",
             message: "This cannot be undone!",
             approveText: "Remove"
         })
-        if (!approved) {return}
+        if (!approved) {return Arrays.empty()}
         for (const {uuid} of deletable) {
             await SoundfontStorage.get().deleteItem(UUID.parse(uuid))
         }
+        return deletable
     }
 
-    #selected(): ReadonlyArray<Soundfont> {
+    selected(): ReadonlyArray<Soundfont> {
         const selected = this.#selection.getSelected()
         return selected.map(element =>
             JSON.parse(asDefined(element.getAttribute("data-selection"))) as Soundfont)

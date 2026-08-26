@@ -1,14 +1,27 @@
 # Working past the memory ceiling
 
-## The constraint (fixed, not negotiable)
+> Companion: `memory-systems.md` evaluates REPLACEMENT memory-management systems (media arena + eviction,
+> shared media pool + streaming, consolidated multi-engine memory) with trade-offs and dry-run
+> implementations. This file covers the current system's ceiling/crash behaviour.
 
-The engine's linear memory is a SHARED `WebAssembly.Memory`. Shared memory must declare a `maximum` and cannot grow past it (proven: `grow` past max → "Maximum memory size exceeded"), and the runtime reserves the whole `maximum` as virtual address space at creation (proven: 64×1 GB reserved on a machine without 64 GB RAM). So:
+> **STATUS 2026-07-28: the address-space ceiling is GONE.** `84f763642` dropped `shared:true` — the memory
+> is non-shared, created inside the worklet/worker, `{initial: 256}` with no maximum and no probe ladder.
+> The runtime relocates the buffer on grow, so the reservation-failure class (#1030, the Riffle Android
+> export crash) no longer exists. The frozen-audio main-thread writer and its RPC protocol were removed
+> (delivery via the `setFrozenAudio` command, worklet-side copy), and grow-safety landed with it: held
+> broadcast views re-register on buffer identity change, and every `new View(memory.buffer, ptr_call())`
+> site is call-first-then-view (argument evaluation fetched the buffer BEFORE the call that could grow it).
+> `3f79e440d` also shipped the RMS-meter decimation from the device-state refactor below.
+> The remaining ceiling is REAL RAM: physical exhaustion still traps the engine, so Phases 1-4 below stand.
 
-- The ceiling = the reservation = the growth cap. One number.
-- A device can only host an engine whose ceiling it can reserve. A low-end Chromebook cannot reserve 4 GB of contiguous address space (error #1030), so on that device the ceiling is whatever it CAN reserve, not 4 GB.
-- Samples, soundfont PCM, frozen audio and each device instance's data region + stack all live IN this memory (wasm can't read a foreign SAB). So total loaded media + devices is bounded by the ceiling.
+## The constraint (historical — resolved by 84f763642)
 
-Nothing makes media larger than a device's reservable address space fit in that memory. The plan is therefore two things: (1) never crash when the ceiling is hit, and (2) give the user a way to keep working and recover — plus a long-term path that removes media from the ceiling entirely.
+The engine's linear memory WAS a SHARED `WebAssembly.Memory`: shared memory cannot relocate, so the whole
+`maximum` had to be reserved as address space at creation, and a constrained device could fail that
+reservation outright (#1030). With the non-shared memory this section no longer constrains anything; what
+remains true: samples, soundfont PCM, frozen audio and each device instance's data region + stack all live
+IN this memory, so total loaded media + devices is bounded by the device's REAL memory, and an allocation
+that cannot be satisfied still traps the engine today (Phase 1 fixes that).
 
 ## Invariants
 
@@ -16,9 +29,64 @@ Nothing makes media larger than a device's reservable address space fit in that 
 2. The box graph is always intact, editable and saveable, even when assets failed to load. A save reloaded on a capable device restores full fidelity.
 3. Every failure is visible and actionable: the user is told what didn't fit and can free space to recover.
 
-## Boot ceiling: take the most the device will give
+## Boot ceiling (historical — the ladder is deleted)
 
-Boot at the LARGEST `maximum` the device accepts (probe 4 GB → 2 → 1 → 512 MB, keep the first that constructs — already implemented in `createEngineMemory`). Capable devices are not limited; constrained devices get their best. This avoids a reboot-to-grow scheme: the ceiling is the device's ceiling, chosen once at boot. Expose the chosen ceiling to the UI (for the meter + budget below).
+`createEngineMemory` probed maxima 4 GB → 2 → 1 → 512 MB and the final rung was unguarded (the literal
+Riffle crash). All gone: non-shared memory needs no maximum, every engine starts at 16 MB and grows on
+demand. The multi-engine caveat (N engines starving each other's reservations) dissolved with it — engines
+now cost what they actually use. The heap meter shipped separately (`EngineAddresses.HEAP` broadcast + the
+footer "Memory" item), giving the observability Phases 3-4 need.
+
+## Findings 2026-07-28 — Riffle production crash (RESOLVED by 84f763642)
+
+`RangeError: WebAssembly.Memory(): could not allocate memory` at `initialize` in `wasm-offline-worker.js`
+(`[components/Track.error.exporting.track]`). Riffle runs one AudioWorklet per project in parallel and
+exports tracks via the offline worker. The reservation mechanics below are historical (no reservations
+exist anymore); the OOM chain and the retention holes remain accurate. Verified facts:
+
+- **Every engine boot allocates a fresh memory.** Realtime: the `EngineVariant` factory runs per
+  `EngineWorklet` boot and calls `createEngineMemory()` each time (`WasmEngine.ts:70`; deliberate — a
+  recycled heap would leak the previous instance's allocations). Offline: each export spawns a fresh
+  `Worker` whose `initialize` calls `createEngineMemory()` again (`offline-worker.ts:105`). So N parallel
+  projects = N live reservations, plus one more per concurrent export.
+- **The scarce resource on Android is the reservation budget, not RAM.** Chrome's per-process wasm
+  address-space budget is far smaller than desktop. Parallel worklets each holding multi-GiB maxima
+  exhaust it; the export worker's probe ladder then falls all the way through.
+- **BUG (fix immediately, independent of everything else): the final ladder rung is unguarded.**
+  `engine-modules.ts:79` (`maximum: 4096`) sits OUTSIDE the tryCatch — when even 256 MiB cannot be
+  reserved, the raw `RangeError` escapes. That is verbatim Riffle's stack. It must throw a NAMED error
+  ("engine memory reservation failed") so hosts can react programmatically; consider 2048/1024-page rungs
+  before failing.
+- **What happens today when a RUNNING engine hits its ceiling (verified chain):** talc `memory.grow` →
+  refused at max → allocation returns null → Rust alloc-error panic ("memory allocation of N bytes
+  failed") → `panic_to_host` trap → the worklet catches it, invalidates (`process()` returns false) and
+  escalates via `engineToClient.error` → `StudioService.restartEngine()` offers the reboot. Offline: the
+  render rejects cleanly and `worker.terminate()` releases the reservation. No tab crash, no corruption.
+  The dominant allocator is sample data, so OOM fires almost always during LOADING, not mid-DSP —
+  which is what makes Phase 1's per-asset fallible-alloc approach viable.
+- **Cleanup audit — the two main paths do NOT leak.** Offline: `worker.terminate()` runs on success,
+  failure, and abort. Realtime: `EngineWorklet.terminate()` → processor invalid → collectible; the
+  frozen-audio bridge closure holding the memory dies with the worklet.
+- **Real retention holes (not the crash, fix cheaply):**
+  1. `OfflineEngineRenderer.create()` without a later `render()`/`terminate()` retains worker+memory
+     forever (SDK-misuse trap; `start()` is safe).
+  2. If loading never completes (a sample fetch rejects in the worker), `render`'s
+     `queryLoadingComplete` poll loop spins forever with no timeout — worker + memory retained until the
+     tab dies unless an `abortSignal` was passed. Add a timeout.
+  3. Crash→reboot transiently double-holds (old reservation until GC + the new boot's) — only matters on
+     Android-class budgets.
+- **Advice to Riffle regardless of our changes:** serialize exports (one offline worker at a time), do not
+  keep one live worklet per project on mobile (suspend/terminate background projects), always pass an
+  `abortSignal` to exports.
+
+## Out-growing the maximum (historical — there is no maximum anymore)
+
+The analysis (raw heap migration rejected; escalation-by-reboot as the alternative) became moot when the
+shared flag dropped: a non-shared memory has no reservation to escalate past, the runtime relocates on
+grow. What survives from that analysis: the `EngineOOM` classification idea (tag "memory allocation …
+failed" panics distinctly in `describeEngineTrap`) is still useful for Phase 2's messaging, and a reboot
+remains the only way to RETURN committed pages (see "Idle compaction" under remaining issues) because wasm
+memory never shrinks.
 
 ## Phase 1 — Never-trap foundation (correctness; do first)
 
@@ -72,6 +140,17 @@ Phases 1–4 keep the user working WITHIN the device's ceiling. To let a device 
 
 This decouples library size from the ceiling entirely: a 256 MB engine heap can play a 10 GB soundfont. Cost: a paging layer, per-block copies of active windows, prefetch/underrun handling, and a real measurement pass on the audio thread with many simultaneous voices before committing (the per-block copy cost is the risk). Largest effort; do last, and only if projects that exceed a capable device's ceiling are actually common — measure the heap high-water on heavy real projects (Phase 3's meter) to decide.
 
+## Device-state refactor: stop compile-time worst-case sizing
+
+Orthogonal to the OOM phases: this one lowers baseline usage. Most device crates export `state_size()` as a plain `size_of::<State>()`, a compile-time constant. Any rate-dependent ring inside the state must then be a fixed-length array sized for a worst case chosen at compile time, even though the engine's sample rate is fixed at boot and known before any device instantiates. The pattern wastes memory in one direction and truncates DSP in the other:
+
+- ~~`dsp::meter::StereoMeter`~~ DONE (`3f79e440d`): the RMS ring now stores one mean-square per 128-frame bucket — 2 KB per channel instead of 115 KB, correct at any rate up to ~218 kHz.
+- `dsp::dattorro`: `PRE_DELAY_SIZE = 65536` (`next_pow_of_2(48000 + 1)`) — 256 KB sized for 48 kHz, and the opposite failure above that: at 96 kHz the maximum pre-delay TIME halves instead of the buffer growing.
+- `dsp::freeverb`: `MAX_DELAY_SIZE = 32768` per channel plus comb/allpass arrays tuned for 44.1/48 kHz — same dual problem.
+- Smaller cases (`device-maximizer` look-ahead, scratch buffers) follow the same pattern but are cheap enough to ignore.
+
+The contract already supports the fix: `device-delay` ends its state with a flexible `[f32; 0]` tail, exports `state_size(sample_rate)` (header + rate-derived buffer bytes), and slices its four delay lines out of the engine-allocated tail in `process`. The refactor is migrating every rate-dependent fixed array onto that pattern so blocks shrink to what the boot rate actually needs and the 48 kHz-sized rings stop truncating at 96 kHz. Where per-sample exactness is irrelevant (the meter RMS), decimating the ring to per-quantum sums (~1 KB per channel) is an acceptable cheaper alternative.
+
 ## What each phase does and does not do
 
 - Phases 1–2 stop the crash and keep the project alive/editable. They do NOT make more fit.
@@ -80,4 +159,8 @@ This decouples library size from the ceiling entirely: a 256 MB engine heap can 
 
 ## Immediate next step
 
-Phase 1 (fallible allocs + host `pointer === 0` handling) is small, purely defensive, and turns the current hard crash into graceful silence. Land it first, then instrument the heap high-water (Phase 3's meter) so the ceiling and the streaming decision are driven by real numbers, not guesses.
+Phase 1 (fallible allocs + host `pointer === 0` handling) is small, purely defensive, and turns a real-RAM
+OOM from an engine death into graceful silence for the one asset. Land it next; the heap high-water meter
+already exists (footer "Memory" item), so Phases 3-5 decisions can be data-driven. Of the earlier
+one-liners: the ladder guard died with the ladder (`84f763642`); still open are the `EngineOOM` panic
+classification in `describeEngineTrap` and a timeout on the offline `queryLoadingComplete` poll loop.

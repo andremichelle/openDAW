@@ -28,6 +28,7 @@ import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
 import {ClipboardManager, ElementCapturing, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
+import {WheelScaling} from "@/ui/timeline/WheelScaling"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
 
@@ -96,7 +97,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
         ClipboardManager.install(element, clipboardHandler),
         shortcuts.register(RegionsShortcuts["select-all"].shortcut, () => {
             regionSelection.select(...manager.tracks()
-                .filter(track => !audioUnitFreeze.isFrozen(track.audioUnitBoxAdapter))
+                .filter(track => !track.audioUnitBoxAdapter.mapOr(unit => audioUnitFreeze.isFrozen(unit), false))
                 .flatMap(({trackBoxAdapter: {regions}}) => regions.collection.asArray()))
         }),
         shortcuts.register(RegionsShortcuts["deselect-all"].shortcut, () => regionSelection.deselectAll()),
@@ -112,6 +113,8 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             editing.modify(() => selected.forEach(({box: {mute}}) => mute.toggle()))
             return true
         }),
+        shortcuts.register(RegionsShortcuts["snapping-finer"].shortcut, () => snapping.stepFiner(), {allowRepeat: true}),
+        shortcuts.register(RegionsShortcuts["snapping-coarser"].shortcut, () => snapping.stepCoarser(), {allowRepeat: true}),
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
         Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
             const target = capturing.captureEvent(event)
@@ -119,17 +122,25 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             if (target === null) {return}
             if (target.type === "region") {
                 timelineFocus.focusRegion(target.region)
-                target.region.trackBoxAdapter.ifSome(trackBoxAdapter => {
-                    if (!userEditingManager.audioUnit.isEditing(trackBoxAdapter.audioUnit.editing)) {
-                        userEditingManager.audioUnit.edit(trackBoxAdapter.audioUnit.editing)
-                    }
-                })
+                const optDeviceChain = target.region.trackBoxAdapter
+                    .flatMap(track => track.optAudioUnit)
+                    .map(unit => unit.editing)
+                const switchDeviceChain = optDeviceChain
+                    .mapOr(vertex => !userEditingManager.audioUnit.isEditing(vertex), false)
                 // If the ContentEditor panel is open, clicking a region
                 // (whether already selected or not) brings it into
                 // edit-mode. No-op when that region is already the
                 // current edit target.
-                if (service.panelLayout.getByType(PanelType.ContentEditor).isVisible) {
-                    userEditingManager.timeline.editIfDifferent(target.region.box)
+                const switchRegion = service.panelLayout.getByType(PanelType.ContentEditor).isVisible
+                    && !userEditingManager.timeline.isEditing(target.region.box)
+                if (switchDeviceChain || switchRegion) {
+                    // Sealed into its own history entry: the edit pointers write unmarked, and a leftover
+                    // unmarked pending is folded into the NEXT marked modify, so an unsealed switch rides along
+                    // with whatever the user edits next and undoing that edit jumps region and device chain back.
+                    editing.modify(() => {
+                        if (switchDeviceChain) {userEditingManager.audioUnit.edit(optDeviceChain.unwrap("editing"))}
+                        if (switchRegion) {userEditingManager.timeline.edit(target.region.box)}
+                    })
                 }
             } else if (target.type === "track") {
                 timelineFocus.focusTrack(target.track.trackBoxAdapter)
@@ -144,7 +155,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                     service.panelLayout.showIfAvailable(PanelType.ContentEditor)
                 })
             } else if (target.type === "track") {
-                if (audioUnitFreeze.isFrozen(target.track.audioUnitBoxAdapter)) {return}
+                if (target.track.audioUnitBoxAdapter.mapOr(unit => audioUnitFreeze.isFrozen(unit), false)) {return}
                 const {trackBoxAdapter} = target.track
                 const x = event.clientX - element.getBoundingClientRect().left
                 let {position, complete} = snapping.xToBarInterval(x)
@@ -237,9 +248,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             if (event.shiftKey) {
                 event.preventDefault()
                 event.stopPropagation()
-                const scale = event.deltaY * 0.01
-                const rect = element.getBoundingClientRect()
-                range.scaleBy(scale, range.xToValue(event.clientX - rect.left))
+                WheelScaling.apply(element, range, event)
             } else if (event.altKey) {
                 event.preventDefault()
                 event.stopPropagation()

@@ -10,13 +10,15 @@ export namespace DeviceManualUrls {
     export const Zeitgeist = "manuals/devices/midi/zeitgeist"
 
     // Audio Effects
-    export const StereoTool = "manuals/devices/audio/stereo-tool"
+    export const Autotune = "manuals/devices/audio/autotune"
+    export const StereoTool = "manuals/devices/audio/stereotool"
     export const Delay = "manuals/devices/audio/delay"
+    export const Convolver = "manuals/devices/audio/convolver"
     export const DattorroReverb = "manuals/devices/audio/dattorro-reverb"
     export const Maximizer = "manuals/devices/audio/maximizer"
     export const Compressor = "manuals/devices/audio/compressor"
     export const Gate = "manuals/devices/audio/gate"
-    export const Reverb = "manuals/devices/audio/cheap-reverb"
+    export const Reverb = "manuals/devices/audio/reverb"
     export const Crusher = "manuals/devices/audio/crusher"
     export const Fold = "manuals/devices/audio/fold"
     export const Tidal = "manuals/devices/audio/tidal"
@@ -26,6 +28,8 @@ export namespace DeviceManualUrls {
     export const Vocoder = "manuals/devices/audio/vocoder"
     export const Waveshaper = "manuals/devices/audio/waveshaper"
     export const Werkstatt = "manuals/devices/audio/werkstatt"
+    export const AudioEffectComposite = "manuals/devices/audio/effect-composite"
+    export const StereoComposite = "manuals/devices/audio/stereo-composite"
 
     // Instruments
     export const Apparat = "manuals/devices/instruments/apparat"
@@ -34,6 +38,8 @@ export namespace DeviceManualUrls {
     export const ReSoul = "manuals/devices/instruments/re-soul"
     export const Playfield = "manuals/devices/instruments/playfield"
     export const Vaporisateur = "manuals/devices/instruments/vaporisateur"
-    export const MIDIOutput = "manuals/devices/instruments/midi-output"
+    export const Neon = "manuals/devices/instruments/neon"
+    export const MIDIOutput = "manuals/devices/instruments/midioutput"
     export const Soundfont = "manuals/devices/instruments/soundfont"
+    export const FrequencySplit = "manuals/devices/audio/frequency-split"
 }

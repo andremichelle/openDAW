@@ -23,6 +23,10 @@ component
       font-size: 0.5em
       column-gap: 0.5em
 
+      // The output has no solo (master), but the control stays for layout so the mute keeps its position.
+      &.solo-hidden > :last-child
+        visibility: hidden
+
     > div.channel-capture
       width: 2em
       display: flex

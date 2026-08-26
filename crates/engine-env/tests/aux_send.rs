@@ -45,7 +45,7 @@ fn automated_send_gain_retargets_at_the_update_clock_inside_the_quantum() {
     // Block p0 = 8, 5.12 pulses over 128 samples (120 bpm, 48 kHz): the 10-pulse grid point lands at
     // sample 50, unity before it, ramping toward -72 dB after it.
     let automation = Rc::new(StripAutomation::new());
-    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64| if position < 10.0 {0.0} else {-72.0}));
+    *automation.volume.borrow_mut() = Some(Rc::new(|position: f64, _transporting: bool| if position < 10.0 {0.0} else {-72.0}));
     let mut send = send_with_input(automation);
     let block = Block {index: 0, flags: BlockFlags(BlockFlags::TRANSPORTING | BlockFlags::PLAYING), p0: 8.0, p1: 13.12, s0: 0, s1: RENDER_QUANTUM as u32, bpm: 120.0};
     send.process(&ProcessInfo {blocks: &[block]});

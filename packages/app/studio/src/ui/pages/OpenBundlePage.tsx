@@ -31,7 +31,6 @@ export const OpenBundlePage: PageFactory<StudioService> = ({service, path}: Page
                     return RuntimeNotifier.info({headline: "Could not decode bundle file", message: String(error)})
                 }
                 service.projectProfileService.setValue(Option.wrap(profile))
-                service.switchScreen("default")
             }
         }}>{message}</div>
     )

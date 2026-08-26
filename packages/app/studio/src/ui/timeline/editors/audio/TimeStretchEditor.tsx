@@ -28,24 +28,26 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
             lifecycle.ownAll(
                 audioContent.box.playMode.catchupAndSubscribe(() => {
                     activeLifecycle.terminate()
+                    // Grain (transient) mode drives the deactivated Once/Repeat/Pingpong buttons.
                     audioContent.asPlayModeTimeStretch.match({
                         none: () => transientPlayModeEnumValue.setValue(null),
-                        some: adapter => {
-                            activeLifecycle.ownAll(
-                                adapter.box.transientPlayMode.catchupAndSubscribe(transientPlayMode =>
-                                    transientPlayModeEnumValue.setValue(transientPlayMode.getValue())),
-                                adapter.box.playbackRate
-                                    .catchupAndSubscribe(() => observableCents.setValue(adapter.cents)),
-                                observableCents.subscribe(owner => {
-                                    const value = owner.getValue()
-                                    editing.modify(() => adapter.cents = value)
-                                })
-                            )
-                        }
+                        some: adapter => activeLifecycle.own(
+                            adapter.box.transientPlayMode.catchupAndSubscribe(transientPlayMode =>
+                                transientPlayModeEnumValue.setValue(transientPlayMode.getValue())))
                     })
-                    const disabled = transientPlayModeEnumValue.getValue() === null
-                    element.classList.toggle("disabled", disabled)
-                    if (disabled) {
+                    // Cents drives the Grain playbackRate OR the Signalsmith transpose (whichever is active).
+                    // catchup runs before the write-back subscribe, so switching modes never emits a spurious edit.
+                    audioContent.asPlayModeTimeStretch.ifSome(adapter => activeLifecycle.ownAll(
+                        adapter.box.playbackRate.catchupAndSubscribe(() => observableCents.setValue(adapter.cents)),
+                        observableCents.subscribe(owner => editing.modify(() => adapter.cents = owner.getValue()))))
+                    audioContent.asPlayModeSignalsmith.ifSome(adapter => activeLifecycle.ownAll(
+                        adapter.box.transpose.catchupAndSubscribe(() => observableCents.setValue(adapter.cents)),
+                        observableCents.subscribe(owner => editing.modify(() => adapter.cents = owner.getValue()))))
+                    // The row (cents) is live for the stretch modes that carry pitch; inert for No-Warp / Pitch.
+                    const hasCents = audioContent.asPlayModeTimeStretch.nonEmpty()
+                        || audioContent.asPlayModeSignalsmith.nonEmpty()
+                    element.classList.toggle("disabled", !hasCents)
+                    if (!hasCents) {
                         activeLifecycle.own(Events.subscribe(element, "click", event => {
                             event.preventDefault()
                             event.stopImmediatePropagation()
@@ -59,25 +61,6 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                     }))
             )
         }}>
-            <RadioGroup lifecycle={lifecycle}
-                        model={transientPlayModeEnumValue}
-                        elements={[
-                            {
-                                value: TransientPlayMode.Once,
-                                element: (<Icon symbol={IconSymbol.PlayOnce}/>),
-                                tooltip: "Play transient once"
-                            },
-                            {
-                                value: TransientPlayMode.Repeat,
-                                element: (<Icon symbol={IconSymbol.PlayRepeat}/>),
-                                tooltip: "Repeat transient"
-                            },
-                            {
-                                value: TransientPlayMode.Pingpong,
-                                element: (<Icon symbol={IconSymbol.PlayAlternate}/>),
-                                tooltip: "Alternate playback"
-                            }
-                        ]}/>
             <NumberInput lifecycle={lifecycle}
                          mapper={StringMapping.numeric({unit: "cents"})}
                          className="input"
@@ -85,6 +68,28 @@ export const TimeStretchEditor = ({lifecycle, project, reader}: Construct) => {
                          step={1}
                          model={observableCents}/>
             <span>cents</span>
+            {/* The grain transient play-modes are deactivated for now (kept visible for layout). */}
+            <div className="playback-modes">
+                <RadioGroup lifecycle={lifecycle}
+                            model={transientPlayModeEnumValue}
+                            elements={[
+                                {
+                                    value: TransientPlayMode.Once,
+                                    element: (<Icon symbol={IconSymbol.PlayOnce}/>),
+                                    tooltip: "Play transient once"
+                                },
+                                {
+                                    value: TransientPlayMode.Repeat,
+                                    element: (<Icon symbol={IconSymbol.PlayRepeat}/>),
+                                    tooltip: "Repeat transient"
+                                },
+                                {
+                                    value: TransientPlayMode.Pingpong,
+                                    element: (<Icon symbol={IconSymbol.PlayAlternate}/>),
+                                    tooltip: "Alternate playback"
+                                }
+                            ]}/>
+            </div>
         </div>
     )
 }

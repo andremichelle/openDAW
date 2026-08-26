@@ -9,37 +9,42 @@ export const StudioSettingsSchema = z.object({
         "enable-history-buttons": z.boolean(),
         "auto-open-clips": z.boolean(),
         "base-frequency": z.boolean(),
-        "toasts": z.boolean()
+        "toasts": z.boolean(),
+        "show-output-track": z.boolean()
     }).default({
         "visible-help-hints": true,
         "enable-history-buttons": navigator.maxTouchPoints > 0,
         "auto-open-clips": true,
         "base-frequency": false,
-        "toasts": true
+        "toasts": true,
+        "show-output-track": false
     }),
     "time-display": z.object({
         "musical": z.boolean(),
         "absolute": z.boolean(),
         "details": z.boolean(),
+        "count-bars-from-zero": z.boolean(),
         "fps": z.union(FpsOptions.map(value => z.literal(value)))
-    }).default({musical: true, absolute: false, details: false, fps: 25}),
+    }).default({musical: true, absolute: false, details: false, "count-bars-from-zero": false, fps: 25}),
     "engine": z.object({
         "note-audition-while-editing": z.boolean(),
         "auto-create-output-maximizer": z.boolean(),
-        "stop-playback-when-overloading": z.boolean()
+        "stop-playback-when-overloading": z.boolean(),
+        "latency-warning-threshold": z.number().catch(25)
     }).default({
         "note-audition-while-editing": true,
         "auto-create-output-maximizer": true,
-        "stop-playback-when-overloading": true
+        "stop-playback-when-overloading": true,
+        "latency-warning-threshold": 25
     }),
     "pointer": z.object({
         "dragging-use-pointer-lock": z.boolean(),
         "modifying-controls-wheel": z.boolean(),
-        "normalize-mouse-wheel": z.boolean()
+        "wheel-zoom-speed": z.number().catch(100)
     }).default({
         "dragging-use-pointer-lock": false,
         "modifying-controls-wheel": false,
-        "normalize-mouse-wheel": true
+        "wheel-zoom-speed": 100
     }),
     "editing": z.object({
         "overlapping-regions-behaviour": z.enum(OverlappingRegionsBehaviourOptions),

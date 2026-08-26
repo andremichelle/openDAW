@@ -54,7 +54,7 @@ type EngineExports = {
 // box-graph / checksum path is rate-independent). No devices are loaded; this only replays update bytes.
 const loadEngine = async (): Promise<{engine: EngineExports, memory: WebAssembly.Memory}> => {
     const module = await WebAssembly.compile(readFileSync(WASM))
-    const memory = new WebAssembly.Memory({initial: 256, maximum: 65536, shared: true})
+    const memory = new WebAssembly.Memory({initial: 256})
     const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
     const engine = new WebAssembly.Instance(module, {env: {memory, __indirect_function_table: table, host_perf_now: () => performance.now() * 1000.0}})
         .exports as unknown as EngineExports
@@ -67,21 +67,24 @@ const checksumsEqual = (left: Int8Array, right: Int8Array): boolean =>
 
 describe("sync: actions.odsl -> SyncSource -> wasm engine (checksum per transaction)", () => {
     it("matches the engine checksum after every transaction", async () => {
-        const commits = readCommits(readFileSync(ODSL).buffer as ArrayBuffer)
+        const commits = readCommits(new Uint8Array(readFileSync(ODSL)).buffer as ArrayBuffer)
         expect(commits.length).toBeGreaterThan(1)
         expect(commits[0].type).toBe(COMMIT_INIT)
 
         const {engine, memory} = await loadEngine()
         const {boxGraph: source} = ProjectSkeleton.decode(commits[0].payload)
 
-        const readEngineChecksum = (): Int8Array =>
-            new Int8Array(memory.buffer, engine.checksum_ptr(), 32).slice()
+        const readEngineChecksum = (): Int8Array => {
+            const pointer = engine.checksum_ptr() // may compute lazily and grow: call BEFORE reading buffer
+            return new Int8Array(memory.buffer, pointer, 32).slice()
+        }
 
         const target: Synchronization<BoxIO.TypeMap> = {
             sendUpdates(tasks: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>): void {
                 const bytes = new Uint8Array(serializeUpdateTasks(tasks))
                 expect(bytes.length).toBeLessThanOrEqual(engine.input_capacity())
-                new Uint8Array(memory.buffer, engine.input_ptr(), bytes.length).set(bytes)
+                const enginePtr2 = engine.input_ptr()
+                new Uint8Array(memory.buffer, enginePtr2, bytes.length).set(bytes)
                 expect(engine.apply_updates(bytes.length)).toBe(0)
             },
             checksum(value: Int8Array): Promise<void> {

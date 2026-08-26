@@ -34,6 +34,13 @@ const ProjectInfoPanel = PanelState.create({
     notMinimizable: true,
     constrains: {type: "flex", minSize: 384, flex: 1}
 })
+const AnalysisPanel: PanelState = PanelState.create({
+    type: "panel",
+    name: "Analysis",
+    icon: IconSymbol.Charts,
+    panelType: PanelType.Analysis,
+    constrains: {type: "flex", minSize: 448, maxSize: 448, flex: 1.0}
+})
 
 /*const ModularSystem = PanelState.create({
     type: "panel",
@@ -124,7 +131,8 @@ export const DefaultWorkspace = Object.freeze({
                         DevicesPanel
                     ],
                     constrains: {type: "flex", minSize: 0, flex: 1}
-                }
+                },
+                AnalysisPanel
             ],
             constrains: {type: "flex", minSize: 20, flex: 1}
         }
@@ -151,6 +159,34 @@ export const DefaultWorkspace = Object.freeze({
             constrains: {type: "flex", minSize: 20, flex: 1}
         }
     },*/
+    "modulation": {
+        name: "Modulation",
+        icon: IconSymbol.Modulation,
+        content: {
+            type: "layout",
+            orientation: "horizontal",
+            contents: [
+                BrowserPanel,
+                {
+                    type: "layout",
+                    orientation: "vertical",
+                    contents: [
+                        PanelState.create({
+                            type: "panel",
+                            name: "Modulation",
+                            icon: IconSymbol.Modulation,
+                            panelType: PanelType.Modulation,
+                            notMinimizable: true,
+                            constrains: {type: "flex", minSize: 0, flex: 1}
+                        }),
+                        DevicesPanel
+                    ],
+                    constrains: {type: "flex", minSize: 0, flex: 1}
+                }
+            ],
+            constrains: {type: "flex", minSize: 20, flex: 1}
+        }
+    },
     "piano": {
         name: "Piano Tutorial Mode",
         icon: IconSymbol.Piano,
@@ -207,18 +243,6 @@ export const DefaultWorkspace = Object.freeze({
             ],
             constrains: {type: "flex", minSize: 0, flex: 1}
         }
-    },
-    "meter": {
-        name: "VU-Meter",
-        icon: IconSymbol.VUMeter,
-        content: PanelState.create({
-            type: "panel",
-            name: "VU-Meter",
-            icon: IconSymbol.VUMeter,
-            panelType: PanelType.VUMeter,
-            notMinimizable: true,
-            constrains: {type: "flex", minSize: 0, flex: 1}
-        })
     },
     "code": {
         name: "Code",

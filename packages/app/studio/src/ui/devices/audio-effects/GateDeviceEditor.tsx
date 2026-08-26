@@ -69,6 +69,7 @@ export const GateDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                               <div className="sidechain">
                                   <SidechainButton sideChain={adapter.sideChain}
                                                    rootBoxAdapter={project.rootBoxAdapter}
+                                                   deviceHost={deviceHost}
                                                    editing={editing}/>
                               </div>
                               {[threshold, returnParam, floor].map(parameter => createLabelControlFrag(parameter))}

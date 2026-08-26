@@ -3,6 +3,9 @@
   "include": [
     "src"
   ],
+  "exclude": [
+    "src/**/*.test.ts"
+  ],
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
