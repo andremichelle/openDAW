@@ -23,7 +23,7 @@ export class SwarmDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly #terminator: Terminator
 
     readonly #parametric: ParameterAdapterSet
-    readonly namedParameter // let typescript infer the type
+    readonly namedParameter
 
     #file: Option<AudioFileBoxAdapter> = Option.None
 
