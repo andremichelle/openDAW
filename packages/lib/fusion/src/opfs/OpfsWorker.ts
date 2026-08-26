@@ -133,7 +133,11 @@ export namespace OpfsWorker {
 
     const getOpfsRoot = async (): Promise<FileSystemDirectoryHandle> => {
         const result = await Promises.tryCatch(navigator.storage.getDirectory())
-        if (result.status === "rejected") {throw new Error("Storage not available")}
+        if (result.status === "rejected") {
+            const {error} = result
+            const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+            throw new Error(`Storage not available (${reason})`)
+        }
         return result.value
     }
 

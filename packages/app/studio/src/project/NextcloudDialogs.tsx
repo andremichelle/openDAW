@@ -140,14 +140,24 @@ export namespace NextcloudDialogs {
                 // The constructor reads meta back from the copied graph's ProjectMetaBox (old name), so we
                 // apply the new name afterwards via saveAs, which writes it to the box and to OPFS.
                 const copy = new ProjectProfile(UUID.generate(), profile.project.copy(), ProjectMeta.copy(profile.meta), profile.cover)
-                await copy.saveAs(meta.value)
+                await persist(copy, meta.value)
                 service.projectProfileService.setValue(Option.wrap(copy))
                 return
             }
         }
         // No conflict, or "override": write at the project's own UUID and mark it saved.
-        await profile.saveAs(profile.meta)
+        await persist(profile, profile.meta)
         service.projectProfileService.setValue(Option.wrap(profile))
+    }
+
+    const persist = async (profile: ProjectProfile, meta: ProjectMeta): Promise<void> => {
+        const {status, error} = await Promises.tryCatch(profile.saveAs(meta))
+        if (status === "rejected") {
+            await RuntimeNotifier.info({
+                headline: "Storage Unavailable",
+                message: `The project could not be saved to local storage (${String(error)}). It will open, but your changes will be lost when you close the tab.`
+            })
+        }
     }
 
     const askConflict = (name: string): Promise<Conflict> => {

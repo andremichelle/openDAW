@@ -65,7 +65,13 @@ const loadDemoProject = async (service: StudioService, json: DemoProjectJson) =>
     if (decodeStatus === "rejected") {
         return RuntimeNotifier.info({headline: "Could not decode bundle file", message: String(decodeError)})
     }
-    await profile.saveAs(profile.meta)
+    const {status: saveStatus, error: saveError} = await Promises.tryCatch(profile.saveAs(profile.meta))
+    if (saveStatus === "rejected") {
+        await RuntimeNotifier.info({
+            headline: "Storage Unavailable",
+            message: `The demo project could not be saved to local storage (${String(saveError)}). It will open, but your changes will be lost when you close the tab.`
+        })
+    }
     service.projectProfileService.setValue(Option.wrap(profile))
 }
 

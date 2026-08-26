@@ -1,6 +1,6 @@
 import {OfflineEngineRenderer, ProjectBundle, ProjectProfile} from "@opendaw/studio-core"
 import {WavFile} from "@opendaw/lib-dsp"
-import {DefaultObservableValue, isDefined, Option, panic, Procedure, Progress} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Option, panic, Procedure, Progress, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace PublishMusic {
@@ -45,7 +45,14 @@ export namespace PublishMusic {
             if (xhr.status === 200 || xhr.status === 201) {
                 const response = JSON.parse(xhr.responseText)
                 profile.meta.radioToken = response.id
-                profile.save()
+                Promises.tryCatch(profile.save()).then(({status, error}) => {
+                    if (status === "rejected") {
+                        RuntimeNotifier.info({
+                            headline: "Storage Unavailable",
+                            message: `The upload succeeded, but the publish token could not be saved locally (${String(error)}). Future publishes from this project will create a new entry instead of updating this one.`
+                        }).finally()
+                    }
+                })
                 resolve(response.id)
             } else {
                 console.warn(xhr.status, xhr.responseText)

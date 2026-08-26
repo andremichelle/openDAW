@@ -264,6 +264,14 @@ describe("OpfsWorker", () => {
             })
             expect(await protocol.isAvailable()).toBe(false)
         })
+        it("should carry the getDirectory rejection reason in the thrown error", async () => {
+            vi.stubGlobal("navigator", {
+                storage: {getDirectory: async () => {throw new DOMException("denied", "SecurityError")}}
+            })
+            await expect(protocol.read("any.bin")).rejects.toThrow("Storage not available (SecurityError: denied)")
+            await expect(protocol.write("any.bin", new Uint8Array([1])))
+                .rejects.toThrow("Storage not available (SecurityError: denied)")
+        })
     })
 
     describe("clear", () => {
