@@ -378,6 +378,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-resoul"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-revamp"
 version = "0.0.0"
 dependencies = [
