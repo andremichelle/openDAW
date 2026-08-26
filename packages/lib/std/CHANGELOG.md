@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.84](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-std@0.0.83...@opendaw/lib-std@0.0.84) (2026-08-26)
+
+**Note:** Version bump only for package @opendaw/lib-std
+
 ## [0.0.83](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-std@0.0.82...@opendaw/lib-std@0.0.83) (2026-08-17)
 
 **Note:** Version bump only for package @opendaw/lib-std
