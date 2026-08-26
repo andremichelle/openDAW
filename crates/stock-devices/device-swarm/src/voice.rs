@@ -1,12 +1,12 @@
-//! The re-soul sampler's per-note voice, a port of the inner `Voice` of the (retired) TS
-//! `ReSoulDeviceProcessor`: a pitch-rate read head over the loaded sample with linear interpolation and a
+//! The swarm sampler's per-note voice, a port of the inner `Voice` of the (retired) TS
+//! `SwarmDeviceProcessor`: a pitch-rate read head over the loaded sample with linear interpolation and a
 //! squared attack/release envelope, extended over the Nano voice by a root key (the pitch that plays the
 //! sample at its native rate), an octave shift, a start/end region and reverse playback. Pure DSP over
 //! slices, unit-testable with synthetic frames; heap-free and valid when zeroed (voices live in the device's
 //! zeroed state, a fixed pool).
 
 #[derive(Clone, Copy, Default)]
-pub struct ReSoulVoice {
+pub struct SwarmVoice {
     active: bool,
     id: u32,
     speed: f32, // read-head increment per output sample, before the sample-rate ratio
@@ -20,10 +20,11 @@ pub struct ReSoulVoice {
     position: f64, // read head in source frames (f64 for precision over long samples)
     env_position: u32,
     decay_position: u32, // the env position at note-off (only meaningful once `releasing`)
+    released_level: f32, // the (pre-square) envelope level captured at note-off; release decays from it
     releasing: bool
 }
 
-impl ReSoulVoice {
+impl SwarmVoice {
     pub fn is_active(&self) -> bool {
         self.active
     }
@@ -55,14 +56,21 @@ impl ReSoulVoice {
         self.position = 0.0;
         self.env_position = 0;
         self.decay_position = 0;
+        self.released_level = 0.0;
         self.releasing = false;
     }
 
-    /// Note-off: enter the release from the current envelope position.
+    /// Note-off: capture the envelope level reached (the attack may still be ramping) and decay from it, so
+    /// the output never rises after note-off.
     pub fn stop(&mut self) {
         if !self.releasing {
             self.releasing = true;
             self.decay_position = self.env_position;
+            self.released_level = if self.env_position < self.attack {
+                self.env_position as f32 / self.attack as f32
+            } else {
+                1.0
+            };
         }
     }
 
@@ -111,13 +119,14 @@ impl ReSoulVoice {
             }
             let partner = if int_position + 1 < num_frames {int_position + 1} else {int_position};
             let frac = (self.position - int_position as f64) as f32;
-            let att = if self.env_position < self.attack {self.env_position as f32 / self.attack as f32} else {1.0};
-            let release_factor = if self.releasing {
-                (1.0 - (self.env_position - self.decay_position) as f32 * release_inverse).min(1.0)
+            let shaped = if self.releasing {
+                let release_factor = (1.0 - (self.env_position - self.decay_position) as f32 * release_inverse).min(1.0);
+                self.released_level * release_factor
+            } else if self.env_position < self.attack {
+                self.env_position as f32 / self.attack as f32
             } else {
                 1.0
             };
-            let shaped = release_factor * att;
             let env = shaped * shaped;
             let sample_left = left[int_position] * (1.0 - frac) + left[partner] * frac;
             let sample_right = right[int_position] * (1.0 - frac) + right[partner] * frac;
@@ -135,12 +144,12 @@ impl ReSoulVoice {
 
 #[cfg(test)]
 mod tests {
-    use super::ReSoulVoice;
+    use super::SwarmVoice;
 
     const SR: f32 = 48_000.0;
 
-    fn started(pitch: u32, root_key: i32, octave: i32, reverse: bool) -> ReSoulVoice {
-        let mut voice = ReSoulVoice::default();
+    fn started(pitch: u32, root_key: i32, octave: i32, reverse: bool) -> SwarmVoice {
+        let mut voice = SwarmVoice::default();
         voice.start(7, pitch, 0.0, 1.0, root_key, octave, reverse, (0.003 * SR) as u32, 4_800);
         voice
     }
@@ -152,6 +161,10 @@ mod tests {
 
     fn dc(frames: usize) -> Vec<f32> {
         vec![1.0f32; frames]
+    }
+
+    fn peak(buffer: &[f32]) -> f32 {
+        buffer.iter().fold(0.0f32, |acc, value| acc.max(value.abs()))
     }
 
     #[test]
@@ -211,6 +224,26 @@ mod tests {
     }
 
     #[test]
+    fn release_during_the_attack_never_rises_after_note_off() {
+        let frames = dc(480_000);
+        let mut voice = SwarmVoice::default();
+        // a 1 s attack, a 10 ms release: note-off lands 5% into the attack (level 0.05)
+        voice.start(7, 60, 0.0, 1.0, 60, 0, false, 48_000, 480);
+        let (mut left, mut right) = (vec![0.0f32; 2_400], vec![0.0f32; 2_400]);
+        voice.process(&mut left, &mut right, &frames, &frames, 1.0, 1.0, 0.0, 1.0);
+        voice.stop();
+        let (mut tail_left, mut tail_right) = (vec![0.0f32; 2_048], vec![0.0f32; 2_048]);
+        let finished = voice.process(&mut tail_left, &mut tail_right, &frames, &frames, 1.0, 1.0, 0.0, 1.0);
+        assert!(finished, "the release elapses within the chunk");
+        let first = tail_left[0];
+        let tail_peak = peak(&tail_left);
+        assert!(tail_peak <= first + 1.0e-6,
+                "output never rises after note-off (peak {tail_peak}, first release sample {first})");
+        assert!((first - 0.05f32 * 0.05).abs() < 1.0e-4, "the release starts from the captured attack level");
+        assert!(peak(&tail_left[481..]) < 1.0e-6, "silent once the release elapsed");
+    }
+
+    #[test]
     fn a_shrunken_sample_mid_note_cannot_read_out_of_bounds() {
         let frames = dc(48_000);
         let mut voice = started(72, 60, 1, false); // 4x rate, far into the sample quickly
@@ -221,7 +254,7 @@ mod tests {
         assert!(finished, "the frame clamp ends the voice instead of reading past the new sample");
     }
 
-    impl ReSoulVoice {
+    impl SwarmVoice {
         // test-only accessor for the computed read-head rate
         fn speed(&self) -> f32 {self.speed}
     }

@@ -8,7 +8,7 @@ import {ArpeggioDeviceBox} from "./midi-effects/ArpeggioDeviceBox"
 import {PitchDeviceBox} from "./midi-effects/PitchDeviceBox"
 import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
-import {ReSoulDeviceBox} from "./instruments/ReSoulDeviceBox"
+import {SwarmDeviceBox} from "./instruments/SwarmDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
 import {StereoToolDeviceBox} from "./audio-effects/StereoToolDeviceBox"
 import {ZeitgeistDeviceBox} from "./midi-effects/ZeitGeistDeviceBox"
@@ -71,7 +71,7 @@ export const DeviceDefinitions = [
     SoundfontDeviceBox,
     NeonDeviceBox,
     NanoDeviceBox,
-    ReSoulDeviceBox,
+    SwarmDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
     TapeDeviceBox,

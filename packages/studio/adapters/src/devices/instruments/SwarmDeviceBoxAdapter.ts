@@ -1,4 +1,4 @@
-import {ReSoulDeviceBox} from "@opendaw/studio-boxes"
+import {SwarmDeviceBox} from "@opendaw/studio-boxes"
 import {Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
@@ -13,13 +13,13 @@ import {AudioFileBoxAdapter} from "../../audio/AudioFileBoxAdapter"
 
 const RootKeyLabels: ReadonlyArray<string> = Array.from({length: 128}, (_, note) => MidiKeys.toFullString(note))
 
-export class ReSoulDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
+export class SwarmDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
     readonly accepts = "midi"
-    readonly manualUrl = DeviceManualUrls.ReSoul
+    readonly manualUrl = DeviceManualUrls.Swarm
 
     readonly #context: BoxAdaptersContext
-    readonly #box: ReSoulDeviceBox
+    readonly #box: SwarmDeviceBox
     readonly #terminator: Terminator
 
     readonly #parametric: ParameterAdapterSet
@@ -27,7 +27,7 @@ export class ReSoulDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     #file: Option<AudioFileBoxAdapter> = Option.None
 
-    constructor(context: BoxAdaptersContext, box: ReSoulDeviceBox) {
+    constructor(context: BoxAdaptersContext, box: SwarmDeviceBox) {
         this.#context = context
         this.#box = box
         this.#terminator = new Terminator()
@@ -39,7 +39,7 @@ export class ReSoulDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         }))
     }
 
-    get box(): ReSoulDeviceBox {return this.#box}
+    get box(): SwarmDeviceBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get labelField(): StringField {return this.#box.label}
@@ -68,7 +68,7 @@ export class ReSoulDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.#parametric.terminate()
     }
 
-    #wrapParameters(box: ReSoulDeviceBox) {
+    #wrapParameters(box: SwarmDeviceBox) {
         return {
             volume: this.#parametric.createParameter(
                 box.volume,

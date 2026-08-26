@@ -1,10 +1,10 @@
-# re-soul — polyphonic sampler instrument
+# swarm — polyphonic sampler instrument
 
 A sampler instrument that maps ONE dropped sample across the keyboard: each note is a pitch-rate
 read head over the sample (linear interpolation), transposed relative to a configurable **root key**
 (the note that plays the sample at its native rate), with an attack/release envelope, a start/end
 region, reverse playback and an octave shift. The reference device throughout is **Nano**
-(`device-nano`), which re-soul extends; the Playfield sample slot (`device-playfield-sample`)
+(`device-nano`), which swarm extends; the Playfield sample slot (`device-playfield-sample`)
 informed the region and parameter patterns.
 
 ## Feature set
@@ -20,12 +20,12 @@ informed the region and parameter patterns.
 
 ## Structure
 
-- `packages/studio/forge-boxes` … `ReSoulDeviceBox` schema (field keys 10..23) → generated box +
+- `packages/studio/forge-boxes` … `SwarmDeviceBox` schema (field keys 10..23) → generated box +
   `registry.rs` entry.
-- `packages/studio/adapters` … `ReSoulDeviceBoxAdapter` (parameter mappings, note-name
-  `StringMapping.indices` for the root key), `InstrumentFactories.ReSoul`.
-- `packages/app/studio` … `ReSoulDeviceEditor` (waveform + region dragging + drop zone + knobs).
-- `crates/stock-devices/device-resoul` … the DSP as a runtime-loadable WASM device (`lib.rs` the
+- `packages/studio/adapters` … `SwarmDeviceBoxAdapter` (parameter mappings, note-name
+  `StringMapping.indices` for the root key), `InstrumentFactories.Swarm`.
+- `packages/app/studio` … `SwarmDeviceEditor` (waveform + region dragging + drop zone + knobs).
+- `crates/stock-devices/device-swarm` … the DSP as a runtime-loadable WASM device (`lib.rs` the
   `Instrument` impl and ABI exports, `voice.rs` the pure-DSP voice with unit tests), registered in
   `build-wasm.sh` `DEVICE_CRATES` and `engine-modules.ts` `DEVICES`.
 
@@ -34,7 +34,7 @@ informed the region and parameter patterns.
 Built with AI assistance (Claude Code). The TypeScript processor came first (a Nano derivative,
 verified interactively in the studio: drag & drop import, four-voice chords with divergent playhead
 rates, forward/reverse playback, root-key unity-rate check). When upstream removed the TypeScript
-device engine, the DSP was ported to `device-resoul` following the Nano port, and the port's unit
+device engine, the DSP was ported to `device-swarm` following the Nano port, and the port's unit
 tests immediately caught a regression the interactive testing had missed (an end-of-sample clamp
 that terminated reverse voices on their first frame — reverse starts AT the last frame). The clamp
 now bounds the interpolation partner instead, and a dedicated test covers a sample swapped mid-note

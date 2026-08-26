@@ -1,13 +1,13 @@
 import {describe, expect, it} from "vitest"
 import {Option, UUID} from "@opendaw/lib-std"
 import {BoxGraph} from "@opendaw/lib-box"
-import {BoxIO, ReSoulDeviceBox} from "@opendaw/studio-boxes"
+import {BoxIO, SwarmDeviceBox} from "@opendaw/studio-boxes"
 
-describe("ReSoulDeviceBox defaults", () => {
+describe("SwarmDeviceBox defaults", () => {
     it("creates with expected parameter defaults", () => {
         const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
         boxGraph.beginTransaction()
-        const box = ReSoulDeviceBox.create(boxGraph, UUID.generate())
+        const box = SwarmDeviceBox.create(boxGraph, UUID.generate())
         expect(box.reverse.getValue()).toBe(false)
         expect(box.octave.getValue()).toBe(0)
         expect(box.volume.getValue()).toBeCloseTo(-3.0)

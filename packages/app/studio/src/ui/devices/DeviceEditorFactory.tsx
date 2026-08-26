@@ -20,7 +20,7 @@ import {
     ModularDeviceBox,
     NanoDeviceBox,
     NeuralAmpDeviceBox,
-    ReSoulDeviceBox,
+    SwarmDeviceBox,
     PitchDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
@@ -67,7 +67,7 @@ import {
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
     NeuralAmpDeviceBoxAdapter,
-    ReSoulDeviceBoxAdapter,
+    SwarmDeviceBoxAdapter,
     PitchDeviceBoxAdapter,
     PlayfieldDeviceBoxAdapter,
     PlayfieldSampleBoxAdapter,
@@ -103,7 +103,7 @@ import {NeonDeviceEditor} from "@/ui/devices/instruments/NeonDeviceEditor.tsx"
 import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
 import {ApparatDeviceEditor} from "./instruments/ApparatDeviceEditor"
 import {NanoDeviceEditor} from "./instruments/NanoDeviceEditor"
-import {ReSoulDeviceEditor} from "./instruments/ReSoulDeviceEditor"
+import {SwarmDeviceEditor} from "./instruments/SwarmDeviceEditor"
 import {PlayfieldDeviceEditor} from "./instruments/PlayfieldDeviceEditor"
 import {StereoToolDeviceEditor} from "./audio-effects/StereoToolDeviceEditor"
 import {PlayfieldSampleEditor} from "./instruments/PlayfieldSampleEditor"
@@ -223,10 +223,10 @@ export namespace DeviceEditorFactory {
                                   adapter={service.project.boxAdapters.adapterFor(box, NanoDeviceBoxAdapter)}
                                   deviceHost={deviceHost}/>
             ),
-            visitReSoulDeviceBox: (box: ReSoulDeviceBox): JsxValue => (
-                <ReSoulDeviceEditor lifecycle={lifecycle}
+            visitSwarmDeviceBox: (box: SwarmDeviceBox): JsxValue => (
+                <SwarmDeviceEditor lifecycle={lifecycle}
                                          service={service}
-                                         adapter={service.project.boxAdapters.adapterFor(box, ReSoulDeviceBoxAdapter)}
+                                         adapter={service.project.boxAdapters.adapterFor(box, SwarmDeviceBoxAdapter)}
                                          deviceHost={deviceHost}/>
             ),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox): JsxValue => (

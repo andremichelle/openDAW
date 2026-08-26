@@ -1,11 +1,11 @@
-import css from "./ReSoulDeviceEditor.sass?inline"
+import css from "./SwarmDeviceEditor.sass?inline"
 import {asDefined, asInstanceOf, clamp, Lifecycle, Option, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Dragging, Html} from "@opendaw/lib-dom"
 import {PeaksPainter} from "@opendaw/lib-fusion"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
-import {DeviceHost, InstrumentFactories, ReSoulDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {DeviceHost, InstrumentFactories, SwarmDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
@@ -19,16 +19,16 @@ import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {SnapValueThresholdInPixels} from "@/ui/timeline/editors/value/ValueMoveModifier"
 import {StudioService} from "@/service/StudioService"
 
-const className = Html.adoptStyleSheet(css, "ReSoulDeviceEditor")
+const className = Html.adoptStyleSheet(css, "SwarmDeviceEditor")
 
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
-    adapter: ReSoulDeviceBoxAdapter
+    adapter: SwarmDeviceBoxAdapter
     deviceHost: DeviceHost
 }
 
-const paintWaveform = ({context, width, height}: CanvasPainter, adapter: ReSoulDeviceBoxAdapter): void =>
+const paintWaveform = ({context, width, height}: CanvasPainter, adapter: SwarmDeviceBoxAdapter): void =>
     adapter.file().match({
         none: () => context.clearRect(0, 0, width, height),
         some: file => {
@@ -68,7 +68,7 @@ const paintWaveform = ({context, width, height}: CanvasPainter, adapter: ReSoulD
         }
     })
 
-export const ReSoulDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
+export const SwarmDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {volume, octave, reverse, attack, release, sampleStart, sampleEnd, rootKey} = adapter.namedParameter
     const {project} = service
     const {editing, midiLearning, liveStreamReceiver} = project
@@ -131,7 +131,7 @@ export const ReSoulDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                 dir = -1
             }
             if (Math.abs(min) > Math.abs(dr)) {
-                min = Math.abs(dr)
+                min = dr
                 dir = 1
             }
             if (dir === 0) {return Option.None}
@@ -230,6 +230,6 @@ export const ReSoulDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                                            receiver={liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={InstrumentFactories.ReSoul.defaultIcon}/>
+                      icon={InstrumentFactories.Swarm.defaultIcon}/>
     )
 }
