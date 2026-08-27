@@ -24,7 +24,7 @@ informed the region and parameter patterns.
 
 ## Structure
 
-- `packages/studio/forge-boxes` … `SwarmDeviceBox` schema (field keys 10..23) → generated box +
+- `packages/studio/forge-boxes` … `SwarmDeviceBox` schema (field keys 10..27) → generated box +
   `registry.rs` entry.
 - `packages/studio/adapters` … `SwarmDeviceBoxAdapter` (parameter mappings, note-name
   `StringMapping.indices` for the root key), `InstrumentFactories.Swarm`.
@@ -48,5 +48,4 @@ to a shorter one.
 
 - Built-in FX (vibrato / filter / reverb / tone shift) were prototyped and removed again; effects
   compose behind the instrument in the audio-effect chain instead.
-- No loop mode (Playfield's `gate: Loop` pattern is the reference when it lands) and no multi-zone
-  key mapping — one sample, one zone.
+- No multi-zone key mapping — one sample, one zone.

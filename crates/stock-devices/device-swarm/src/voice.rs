@@ -119,18 +119,19 @@ impl SwarmVoice {
             loop_hi = self.end;
         }
         let loop_span = loop_hi - loop_lo;
-        let fade = if loop_enabled {loop_fade_frames.min(loop_span * 0.5).max(1.0)} else {0.0};
-        let shift = loop_span - fade;
+        let fade = if loop_enabled {loop_fade_frames.min(loop_span * 0.5)} else {0.0};
+        let shift = loop_span - fade; // >= loop_span/2, so wrapping always advances
         let increment = self.speed as f64 * rate_ratio * if self.reverse {-1.0} else {1.0};
         let gain = gain * self.velocity;
         let release_inverse = 1.0 / self.release as f32;
         for index in 0..out_left.len() {
             if loop_enabled {
-                while self.reverse && self.position <= loop_lo {
-                    self.position += shift;
-                }
-                while !self.reverse && self.position >= loop_hi {
-                    self.position -= shift;
+                if self.reverse && self.position <= loop_lo {
+                    let wraps = libm::floor((loop_lo - self.position) / shift) + 1.0;
+                    self.position += wraps * shift;
+                } else if !self.reverse && self.position >= loop_hi {
+                    let wraps = libm::floor((self.position - loop_hi) / shift) + 1.0;
+                    self.position -= wraps * shift;
                 }
             } else if self.reverse && self.position <= self.start {
                 return true;
@@ -386,6 +387,20 @@ mod tests {
         let position = voice.position();
         assert!((9_600.0 - 0.5..19_200.5).contains(&position),
                 "the reverse head stays inside the loop range (at {position})");
+    }
+
+    #[test]
+    fn a_one_frame_loop_span_cannot_stall_the_render() {
+        let frames = dc(48_000);
+        // two octaves above the root (4x rate) stresses the wrap; the loop span is exactly ONE source
+        // frame, which used to make shift zero (fade floored to a frame) and spin the wrap forever
+        let mut voice = started(84, 60, 0, false);
+        let (mut left, mut right) = (vec![0.0f32; 512], vec![0.0f32; 512]);
+        let loop_end = 1.0 / 47_999.0;
+        for _ in 0..4 {
+            assert!(!voice.process(&mut left, &mut right, &frames, &frames, 1.0, 1.0, 0.0, 1.0, true, 480.0, 0.0, loop_end),
+                    "the voice keeps rendering a one-frame loop");
+        }
     }
 
     #[test]
