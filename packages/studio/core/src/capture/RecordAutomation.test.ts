@@ -307,6 +307,35 @@ describe("RecordAutomation", () => {
             expect(positions()).toEqual([0, 0, PPQN.SemiQuaver * 2])
         })
 
+        it("keeps a smooth arc within epsilon of every raw sample", async () => {
+            // Issue #363: a greedy filter swallowed the whole parabola (max deviation 0.198 = 19.8 x epsilon).
+            const {record, seek, write, stop, events} = await setup()
+            const spacing = 66
+            const count = 116
+            const raw = Array.from({length: count}, (_, index) => ({
+                position: index * spacing,
+                value: 0.9 - 0.8 * (index / (count - 1)) ** 2
+            }))
+            record(true)
+            raw.forEach(({position, value}) => {
+                seek(position)
+                write(value)
+            })
+            stop()
+            const kept = events()
+            expect(kept.length).toBeLessThan(raw.length / 2)
+            const valueAt = (position: ppqn): unitValue => {
+                const right = kept.findIndex(event => event.position > position)
+                const a = kept[right - 1]
+                const b = kept[right]
+                if (a.position === position) {return a.value}
+                return a.value + (position - a.position) / (b.position - a.position) * (b.value - a.value)
+            }
+            const deviation = raw.reduce((max, {position, value}) =>
+                Math.max(max, Math.abs(valueAt(position) - value)), 0)
+            expect(deviation).toBeLessThanOrEqual(0.01)
+        })
+
         it("closes the take at the loop end and opens the next one at the loop start", async () => {
             const {record, seek, write, regions, loop} = await setup()
             loop(0, PPQN.Bar)

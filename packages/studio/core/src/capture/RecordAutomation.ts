@@ -1,4 +1,4 @@
-import {Option, quantizeCeil, quantizeFloor, SortedSet, Terminable, unitValue, UUID} from "@opendaw/lib-std"
+import {int, Option, quantizeCeil, quantizeFloor, SortedSet, Terminable, unitValue, UUID} from "@opendaw/lib-std"
 import {Interpolation, ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Address} from "@opendaw/lib-box"
 import {TrackBox, ValueEventBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
@@ -111,22 +111,34 @@ export namespace RecordAutomation {
         if (!state.floating) {return}
         const adapter = boxAdapters.adapterFor(state.collectionBox, ValueEventCollectionBoxAdapter)
         const events = [...adapter.events.asArray()]
-        const keep: typeof events = []
-        for (const event of events) {
-            while (keep.length >= 2) {
-                const a = keep[keep.length - 2]
-                const b = keep[keep.length - 1]
-                if (a.position === b.position || b.position === event.position) {break}
-                if (a.interpolation.type !== "linear" || b.interpolation.type !== "linear") {break}
-                const t = (b.position - a.position) / (event.position - a.position)
-                const expected = a.value + t * (event.value - a.value)
-                if (Math.abs(b.value - expected) > Epsilon) {break}
-                keep.pop()
-                adapter.events.remove(b)
-                b.box.delete()
+        const anchored = (index: int): boolean =>
+            events[index].interpolation.type !== "linear"
+            || events[index].position === events[index - 1].position
+            || events[index].position === events[index + 1].position
+        const drop: typeof events = []
+        const simplify = (from: int, to: int): void => {
+            if (to - from < 2) {return}
+            const a = events[from]
+            const b = events[to]
+            const span = b.position - a.position
+            const worst = events.slice(from + 1, to).reduce((worst, event, offset) => {
+                const index = from + 1 + offset
+                const expected = a.value + (event.position - a.position) / span * (b.value - a.value)
+                const error = anchored(index) ? Infinity : Math.abs(event.value - expected)
+                return error > worst.error ? {index, error} : worst
+            }, {index: -1, error: Epsilon})
+            if (worst.index === -1) {
+                drop.push(...events.slice(from + 1, to))
+            } else {
+                simplify(from, worst.index)
+                simplify(worst.index, to)
             }
-            keep.push(event)
         }
+        simplify(0, events.length - 1)
+        drop.forEach(event => {
+            adapter.events.remove(event)
+            event.box.delete()
+        })
     }
 
     const handleWriteUpdate = (
