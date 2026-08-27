@@ -64,12 +64,22 @@ const paintWaveform = ({context, width, height}: CanvasPainter, adapter: SwarmDe
                 if (u0 > 0.0) {renderRange(0.0, u0, 0.0, x0)}
                 if (u1 < numFrames) {renderRange(u1, numFrames, x1, wd)}
                 context.globalAlpha = 1.0
+                const {loop, loopStart, loopEnd} = adapter.namedParameter
+                if (loop.getValue()) {
+                    const l0 = Math.min(loopStart.getValue(), loopEnd.getValue()) * wd
+                    const l1 = Math.max(loopStart.getValue(), loopEnd.getValue()) * wd
+                    context.fillStyle = Colors.green.toString()
+                    context.fillRect(Math.round(l0), 0, 1, height * devicePixelRatio)
+                    context.fillRect(Math.round(l1), 0, 1, height * devicePixelRatio)
+                }
             })
         }
     })
 
 export const SwarmDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
-    const {volume, octave, reverse, attack, release, sampleStart, sampleEnd, rootKey} = adapter.namedParameter
+    const {
+        volume, octave, reverse, attack, release, sampleStart, sampleEnd, rootKey, loop, loopFade, loopStart, loopEnd
+    } = adapter.namedParameter
     const {project} = service
     const {editing, midiLearning, liveStreamReceiver} = project
     const fileNameLabel: HTMLElement = (<span className="file-name"/>)
@@ -120,6 +130,9 @@ export const SwarmDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         }),
         sampleStart.subscribe(waveformPainter.requestUpdate),
         sampleEnd.subscribe(waveformPainter.requestUpdate),
+        loop.subscribe(waveformPainter.requestUpdate),
+        loopStart.subscribe(waveformPainter.requestUpdate),
+        loopEnd.subscribe(waveformPainter.requestUpdate),
         Dragging.attach(waveformCanvas, ({clientX}: PointerEvent) => {
             const {left, width} = waveformCanvas.getBoundingClientRect()
             const dl = clientX - (left + sampleStart.getValue() * width)
@@ -219,6 +232,29 @@ export const SwarmDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                           </Checkbox>
                                       </AutomationControl>
                                   </div>
+                                  <div className="loop">
+                                      <div className="label">loop</div>
+                                      <AutomationControl lifecycle={lifecycle}
+                                                         editing={editing}
+                                                         midiLearning={midiLearning}
+                                                         tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                         parameter={loop}>
+                                          <Checkbox lifecycle={lifecycle}
+                                                    model={EditWrapper.forAutomatableParameter(editing, loop)}
+                                                    appearance={{activeColor: Colors.green, framed: true}}>
+                                              <Icon symbol={IconSymbol.Loop}/>
+                                          </Checkbox>
+                                      </AutomationControl>
+                                  </div>
+                                  {ControlBuilder.createKnob({
+                                      lifecycle, editing, midiLearning, adapter, parameter: loopStart
+                                  })}
+                                  {ControlBuilder.createKnob({
+                                      lifecycle, editing, midiLearning, adapter, parameter: loopEnd, anchor: 1.0
+                                  })}
+                                  {ControlBuilder.createKnob({
+                                      lifecycle, editing, midiLearning, adapter, parameter: loopFade
+                                  })}
                                   {ControlBuilder.createKnob({
                                       lifecycle, editing, midiLearning, adapter, parameter: volume
                                   })}

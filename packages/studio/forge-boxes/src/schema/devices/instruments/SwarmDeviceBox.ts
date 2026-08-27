@@ -33,5 +33,18 @@ export const SwarmDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrumen
     23: {
         type: "float32", name: "sample-end", pointerRules: ParameterPointerRules,
         value: 1.0, ...UnipolarConstraints
+    },
+    24: {type: "boolean", name: "loop", pointerRules: ParameterPointerRules, value: false},
+    25: {
+        type: "float32", name: "loop-fade", pointerRules: ParameterPointerRules,
+        value: 0.05, constraints: {min: 0.001, max: 1.0, scaling: "exponential"}, unit: "s"
+    },
+    26: {
+        type: "float32", name: "loop-start", pointerRules: ParameterPointerRules,
+        value: 0.0, ...UnipolarConstraints
+    },
+    27: {
+        type: "float32", name: "loop-end", pointerRules: ParameterPointerRules,
+        value: 1.0, ...UnipolarConstraints
     }
 })

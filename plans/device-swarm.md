@@ -15,6 +15,10 @@ informed the region and parameter patterns.
   rate read head — playing the root key reproduces the sample at its native rate.
 - Root key (C-2..G8, note-name knob), octave shift (±3), reverse playback, attack (1 ms..5 s) and
   release (1 ms..8 s) squared envelope, unit sample start/end region, output volume.
+- Crossfade loop: a loop toggle, dedicated loop start/end points (unit positions, clamped inside the
+  sample region, live-adjustable, green markers on the waveform) and a fade time (1 ms..1 s). The
+  voice plays the sample lead-in, then cycles the loop range through an equal-gain linear crossfade,
+  so a held note sustains perpetually; the release still decays it, and it mirrors under reverse.
 - Live per-voice playhead lines painted over the waveform (a float broadcast at the box address
   + `[1001]`, mirroring the Playfield slot pattern).
 

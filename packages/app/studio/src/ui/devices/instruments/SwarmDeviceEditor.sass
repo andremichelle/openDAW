@@ -2,7 +2,7 @@
 
 component
   display: grid
-  grid-template: 6em 4.5em / 28em
+  grid-template: 6em 4.5em / 38em
   row-gap: 0.25em
   color: var(--color-dark)
   @include mixins.Control
@@ -65,7 +65,8 @@ component
     align-items: flex-start
     column-gap: 0.5em
 
-    > div.reverse
+    > div.reverse,
+    > div.loop
       display: flex
       flex-direction: column
       align-items: center

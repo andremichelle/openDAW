@@ -48,6 +48,10 @@ const ATTACK_FIELD: [u16; 1] = [20];
 const RELEASE_FIELD: [u16; 1] = [21];
 const SAMPLE_START_FIELD: [u16; 1] = [22];
 const SAMPLE_END_FIELD: [u16; 1] = [23];
+const LOOP_FIELD: [u16; 1] = [24];
+const LOOP_FADE_FIELD: [u16; 1] = [25];
+const LOOP_START_FIELD: [u16; 1] = [26];
+const LOOP_END_FIELD: [u16; 1] = [27];
 const POSITIONS_PATH: [u16; 1] = [1001];
 
 const VOLUME_MAPPING: Decibel = Decibel::default_volume();
@@ -56,6 +60,7 @@ const ROOT_KEY_MAPPING: LinearInteger = LinearInteger {min: 0, max: 127};
 const ATTACK_MAPPING: Exponential = Exponential {min: 0.001, max: 5.0}; // seconds
 const RELEASE_MAPPING: Exponential = Exponential {min: 0.001, max: 8.0}; // seconds
 const REGION_MAPPING: Linear = Linear::unipolar();
+const LOOP_FADE_MAPPING: Exponential = Exponential {min: 0.001, max: 1.0}; // seconds
 
 /// The device's per-instance state, interpreted from the engine-allocated (zeroed) block: a fixed voice
 /// pool, the resolved parameter values, the sample rate, the bound sample handle, and the parameter /
@@ -70,6 +75,10 @@ pub struct SwarmState {
     release: u32, // release length in samples
     sample_start: f32, // unit region
     sample_end: f32,
+    loop_enabled: bool,
+    loop_fade_seconds: f32,
+    loop_start: f32,
+    loop_end: f32,
     sample_rate: f32,
     sample: Option<u32>,
     gain_id: u32,
@@ -80,6 +89,10 @@ pub struct SwarmState {
     release_id: u32,
     sample_start_id: u32,
     sample_end_id: u32,
+    loop_id: u32,
+    loop_fade_id: u32,
+    loop_start_id: u32,
+    loop_end_id: u32,
     sample_id: u32,
     positions_id: u32,
     positions_ptr: u32
@@ -101,6 +114,10 @@ impl Instrument for Swarm {
         state.release = (0.1 * sample_rate) as u32;
         state.sample_start = 0.0;
         state.sample_end = 1.0;
+        state.loop_enabled = false;
+        state.loop_fade_seconds = 0.05;
+        state.loop_start = 0.0;
+        state.loop_end = 1.0;
         state.sample = None;
         state.gain_id = abi::bind_parameter(&VOLUME_FIELD);
         state.octave_id = abi::bind_parameter(&OCTAVE_FIELD);
@@ -110,6 +127,10 @@ impl Instrument for Swarm {
         state.release_id = abi::bind_parameter(&RELEASE_FIELD);
         state.sample_start_id = abi::bind_parameter(&SAMPLE_START_FIELD);
         state.sample_end_id = abi::bind_parameter(&SAMPLE_END_FIELD);
+        state.loop_id = abi::bind_parameter(&LOOP_FIELD);
+        state.loop_fade_id = abi::bind_parameter(&LOOP_FADE_FIELD);
+        state.loop_start_id = abi::bind_parameter(&LOOP_START_FIELD);
+        state.loop_end_id = abi::bind_parameter(&LOOP_END_FIELD);
         state.sample_id = abi::observe_sample(&SAMPLE_POINTER);
         state.positions_id = abi::bind_broadcast(&POSITIONS_PATH, POSITION_SLOTS);
     }
@@ -141,8 +162,13 @@ impl Instrument for Swarm {
         let rate_ratio = sample.sample_rate as f64 / state.sample_rate as f64;
         let gain = state.gain;
         let (sample_start, sample_end) = (state.sample_start, state.sample_end);
+        let loop_fade_frames = if state.loop_enabled {
+            (state.loop_fade_seconds as f64 * sample.sample_rate as f64).max(1.0)
+        } else {
+            0.0
+        };
         for voice in state.voices.iter_mut() {
-            if voice.is_active() && voice.process(out_left, out_right, left, right, rate_ratio, gain, sample_start, sample_end) {
+            if voice.is_active() && voice.process(out_left, out_right, left, right, rate_ratio, gain, sample_start, sample_end, state.loop_enabled, loop_fade_frames, state.loop_start, state.loop_end) {
                 voice.force_stop();
             }
         }
@@ -166,6 +192,14 @@ impl Instrument for Swarm {
             state.sample_start = float_value(value, &REGION_MAPPING);
         } else if id == state.sample_end_id {
             state.sample_end = float_value(value, &REGION_MAPPING);
+        } else if id == state.loop_id {
+            state.loop_enabled = bool_value(value);
+        } else if id == state.loop_fade_id {
+            state.loop_fade_seconds = float_value(value, &LOOP_FADE_MAPPING);
+        } else if id == state.loop_start_id {
+            state.loop_start = float_value(value, &REGION_MAPPING);
+        } else if id == state.loop_end_id {
+            state.loop_end = float_value(value, &REGION_MAPPING);
         }
     }
 

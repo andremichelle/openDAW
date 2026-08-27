@@ -101,7 +101,23 @@ export class SwarmDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
             sampleEnd: this.#parametric.createParameter(
                 box.sampleEnd,
                 ValueMapping.unipolar(),
-                StringMapping.percent(), "end", 1.0)
+                StringMapping.percent(), "end", 1.0),
+            loop: this.#parametric.createParameter(
+                box.loop,
+                ValueMapping.bool,
+                StringMapping.bool, "loop"),
+            loopFade: this.#parametric.createParameter(
+                box.loopFade,
+                ValueMapping.exponential(0.001, 1.0),
+                StringMapping.numeric({unit: "s", fractionDigits: 3}), "fade"),
+            loopStart: this.#parametric.createParameter(
+                box.loopStart,
+                ValueMapping.unipolar(),
+                StringMapping.percent(), "lp start", 0.0),
+            loopEnd: this.#parametric.createParameter(
+                box.loopEnd,
+                ValueMapping.unipolar(),
+                StringMapping.percent(), "lp end", 1.0)
         } as const
     }
 }
