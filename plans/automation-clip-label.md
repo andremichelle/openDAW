@@ -6,8 +6,8 @@
 
 ## Context
 
-#212 made automation labels render the bound parameter's name, composed at draw time, instead of the literal
-"Automation". The label is stored empty and `TimelineLabels` composes the visible string from the track's
+Issue #212 made automation labels render the bound parameter's name, composed at draw time, instead of the
+literal "Automation". The label is stored empty and `TimelineLabels` composes the visible string from the track's
 `targetControlName` plus any custom text (`MigrateDefaultLabels` clears the old stored defaults).
 
 That work landed for **value regions** (the arranger): `TimelineLabels.forRegion`'s
@@ -15,7 +15,7 @@ That work landed for **value regions** (the arranger): `TimelineLabels.forRegion
 (`TimelineLabels.forClip`'s `visitValueClipBoxAdapter`) was left returning the raw stored `label`. Because
 clips are now created with an empty label and the migration clears the old "Automation" default, an
 automation **clip** in the clip-launcher renders **nothing** instead of its parameter name — the exact gap
-#212 set out to close, just on the other surface.
+issue #212 set out to close, just on the other surface.
 
 ## Root cause
 
