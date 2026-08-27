@@ -1,0 +1,12 @@
+{
+  "extends": "@opendaw/typescript-config/test.json",
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/library.d.ts",
+    "src/api.declaration.d.ts"
+  ]
+}

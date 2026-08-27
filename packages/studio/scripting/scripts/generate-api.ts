@@ -16,7 +16,13 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
     const { inputFile, outputFile, rootDir } = options
 
     const visited = new Set<string>()
+    const printed = new Set<string>()
     const output: string[] = []
+    const emit = (text: string): void => {
+        if (printed.has(text)) return
+        printed.add(text)
+        output.push(text)
+    }
 
     const packageMap = findAllPackages(rootDir)
 
@@ -152,6 +158,8 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
         )
 
         const exports = new Map<string, { node: ts.Node, sourceFile: ts.SourceFile }>()
+        const hasName = (name: string): boolean => Array.from(exports.keys()).some(key => key.split("#")[0] === name)
+        const keyOf = (name: string, node: ts.Node): string => `${name}#${node.kind}`
 
         // Collect all imported names from this file
         const importedNames = new Set<string>()
@@ -174,12 +182,12 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
             if (hasExportModifier(statement)) {
                 const name = getDeclarationName(statement)
                 if (name && importNames.has(name)) {
-                    exports.set(name, { node: statement, sourceFile })
+                    exports.set(keyOf(name, statement), { node: statement, sourceFile })
 
                     // Extract type dependencies that are imported
                     const typeRefs = extractTypeReferences(statement)
                     typeRefs.forEach(ref => {
-                        if (importedNames.has(ref) && !importNames.has(ref) && !exports.has(ref)) {
+                        if (importedNames.has(ref) && !importNames.has(ref) && !hasName(ref)) {
                             additionalTypesToFind.add(ref)
                         }
                     })
@@ -215,7 +223,7 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
                                 sourceFile.statements.forEach(stmt => {
                                     const declName = getDeclarationName(stmt)
                                     if (declName === originalName) {
-                                        exports.set(exportName, { node: stmt, sourceFile })
+                                        exports.set(keyOf(exportName, stmt), { node: stmt, sourceFile })
                                     }
                                 })
                             }
@@ -322,7 +330,7 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
                     modifiedNode,
                     sourceFile
                 )
-                output.push(printed)
+                emit(printed)
             })
         })
 
@@ -359,7 +367,7 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
                                 modifiedNode,
                                 sourceFile
                             )
-                            output.push(printed)
+                            emit(printed)
                         })
                     }
                 }
@@ -379,7 +387,7 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
                     modifiedNode,
                     sourceFile
                 )
-                output.push(printed)
+                emit(printed)
             }
         })
     }
@@ -465,6 +473,7 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
 
     output.push('declare const openDAW: Api')
     output.push('declare const sampleRate: number')
+    output.push('declare const baseFrequency: number')
 
     fs.writeFileSync(outputFile, output.join('\n\n'))
     console.log(`\nGenerated flattened declarations: ${outputFile}`)

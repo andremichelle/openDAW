@@ -96,18 +96,16 @@ const sample = await openDAW.addSample(audioData, "Lush Chorus Pad")
 const project = openDAW.newProject("Time")
 project.bpm = 80
 
-const nanoUnit = project.addInstrumentUnit("Nano", x => x.sample = sample)
-nanoUnit.volume = -6
-nanoUnit.addAudioEffect("delay", {
-    delay: 4,
+const nanoUnit = project.addInstrumentUnit("Nano", {volume: -6}, {sample, release: 0.8})
+nanoUnit.addAudioEffect("Delay", {
+    delay: 14,
     feedback: 0.75,
     cross: 1.0,
     wet: -3.0,
     dry: 0.0
 })
 
-const noteTrack = nanoUnit.addNoteTrack()
-const region = noteTrack.addRegion({
+const region = nanoUnit.noteTracks[0].addRegion({
     position: 0,
     duration: PPQN.Bar * 4
 })

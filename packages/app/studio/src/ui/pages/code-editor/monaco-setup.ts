@@ -34,10 +34,6 @@ tsDefaults.setDiagnosticsOptions({
 
 tsDefaults.addExtraLib(library, "file:///library.d.ts")
 tsDefaults.addExtraLib(declarations, "ts:opendaw.d.ts")
-tsDefaults.addExtraLib(`
-declare const console: Console
-declare const Math: Math
-`, "ts:libs.d.ts")
 
 export {monaco}
 export type Monaco = typeof monaco

@@ -14,11 +14,10 @@ import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem, Project} from "@opendaw/studio-core"
 import {WavFile} from "@opendaw/lib-dsp"
 import scriptWorkerUrl from "@opendaw/studio-scripting/ScriptWorker.js?worker&url"
-import ScriptSimple from "./code-editor/examples/simple.ts?raw"
-import ScriptRetro from "./code-editor/examples/retro.ts?raw"
 import ScriptAudioRegion from "./code-editor/examples/create-sample.ts?raw"
 import ScriptNanoWavetable from "./code-editor/examples/nano-wavetable.ts?raw"
-import ScriptStressTest from "./code-editor/examples/stress-test.ts?raw"
+import ScriptAcid from "./code-editor/examples/acid.ts?raw"
+import ScriptInventory from "./code-editor/examples/inventory.ts?raw"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
 import {ProjectSkeleton, Sample} from "@opendaw/studio-adapters"
 import {BoxGraph} from "@opendaw/lib-box"
@@ -27,11 +26,10 @@ import {AudioData} from "@opendaw/lib-dsp"
 
 const truncateImports = (script: string) => script.substring(script.indexOf("//"))
 const Examples = {
-    Simple: truncateImports(ScriptSimple),
-    Retro: truncateImports(ScriptRetro),
     AudioRegion: truncateImports(ScriptAudioRegion),
     NanoWavetable: truncateImports(ScriptNanoWavetable),
-    StressTest: truncateImports(ScriptStressTest)
+    Acid: truncateImports(ScriptAcid),
+    Inventory: truncateImports(ScriptInventory)
 }
 
 const className = Html.adoptStyleSheet(css, "CodeEditorPage")
@@ -51,6 +49,8 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
             pendingSamples.clear()
             service.projectProfileService.setProject(project, name ?? "Scripted Project")
         },
+        hasProject: async (): Promise<boolean> => service.projectProfileService.getValue().nonEmpty(),
+        showInfo: (headline: string, message: string): Promise<void> => RuntimeNotifier.info({headline, message}),
         fetchProject: async (): Promise<{ buffer: ArrayBuffer; name: string }> => {
             return service.projectProfileService.getValue().match({
                 none: () => panic("No project available"),
@@ -70,7 +70,8 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                 some: project => {project.trackUserCreatedSample(uuid)}
             })
             return sample
-        }
+        },
+        listSamples: async (): Promise<ReadonlyArray<Sample>> => service.sampleService.list()
     }, scriptWorkerUrl)
     return (
         <div className={className}>
@@ -81,7 +82,7 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                 success={([monaco]) => {
                     const {model, container} = MonacoFactory.create({
                         monaco, lifecycle, language: "typescript",
-                        uri: "file:///main.ts", initialCode: Examples.Simple
+                        uri: "file:///main.ts", initialCode: Examples.Acid
                     })
                     const compileAndRun = async () => {
                         try {

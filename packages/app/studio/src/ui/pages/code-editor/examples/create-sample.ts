@@ -1,10 +1,10 @@
 import {InaccessibleProperty} from "@opendaw/lib-std"
-import {Api, AudioPlayback} from "@opendaw/studio-scripting"
+import {Api} from "@opendaw/studio-scripting"
 import {AudioData, dbToGain} from "@opendaw/lib-dsp"
 
 const openDAW: Api = InaccessibleProperty("Not to be executed.")
 
-// openDAW script editor (very early preview - under heavy construction)
+// Generates a chirp, imports it as a sample and places it on an audio track
 
 export {}
 
@@ -26,7 +26,7 @@ for (let i = 0, phase = 0.0; i < numberOfFrames; i++) {
 const sample = await openDAW.addSample(audioData, "Chirp 200-4000Hz")
 
 const project = openDAW.newProject("Test Audio")
-const tapeUnit = project.addInstrumentUnit("Tape")
-const audioTrack = tapeUnit.addAudioTrack()
-audioTrack.addRegion(sample, {playback: AudioPlayback.NoWarp, duration: numberOfFrames / sampleRate})
+const tape = project.addInstrumentUnit("Tape")
+tape.audioTracks[0].addRegion(sample, {playback: "no-sync"})
+tape.addAudioEffect("Reverb", {wet: -9})
 project.openInStudio()

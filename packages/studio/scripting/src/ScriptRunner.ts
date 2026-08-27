@@ -7,26 +7,33 @@ import {
     gainToDb,
     Interpolation,
     midiToHz,
+    Mixing,
     PPQN
 } from "@opendaw/lib-dsp"
-import {VoicingMode} from "@opendaw/studio-enums"
+import {AudioSendRouting, TransientPlayMode, VoicingMode} from "@opendaw/studio-enums"
 import {ScriptHostProtocol} from "./ScriptHostProtocol"
 import {ScriptExecutionContext} from "./ScriptExecutionProtocol"
-import {Api, AudioPlayback} from "./Api"
-import {ApiImpl} from "./impl"
+import {Api} from "./Api"
+import {ApiImpl} from "./impl/ApiImpl"
+
+export namespace ScriptGlobals {
+    export const create = (api: Api, context: ScriptExecutionContext): Record<string, unknown> => ({
+        ...context,
+        openDAW: api,
+        AudioData, midiToHz, PPQN, FFT, Chord, Interpolation, dbToGain, gainToDb,
+        ClassicWaveform, VoicingMode, Mixing, TransientPlayMode, AudioSendRouting
+    })
+}
 
 export class ScriptRunner {
     readonly #api: Api
 
     constructor(protocol: ScriptHostProtocol) {this.#api = new ApiImpl(protocol)}
 
-    async run(jsCode: string, context: ScriptExecutionContext) {
-        Object.assign(globalThis, {
-            ...context,
-            openDAW: this.#api,
-            AudioData, AudioPlayback, midiToHz, PPQN, FFT, Chord, Interpolation,
-            dbToGain, gainToDb, ClassicWaveform, VoicingMode
-        })
+    get api(): Api {return this.#api}
+
+    async run(jsCode: string, context: ScriptExecutionContext): Promise<void> {
+        Object.assign(globalThis, ScriptGlobals.create(this.#api, context))
         const blob = new Blob([jsCode], {type: "text/javascript"})
         const url = URL.createObjectURL(blob)
         try {

@@ -27,7 +27,7 @@
     "build": "npm run generate-api && tsc",
     "generate-api": "npx tsx scripts/generate-api.ts",
     "lint": "eslint \"**/*.ts\"",
-    "test": "echo \"No tests to run\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@opendaw/lib-box": "^0.0.93",
