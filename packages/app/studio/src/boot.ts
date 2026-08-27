@@ -94,8 +94,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         offlineWorkerUrl: wasmOfflineWorkerUrl,
         wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`
     })
-    // The engine IS the wasm engine, so this is a hard boot requirement: without its artifacts there is no
-    // engine to fall back to, and every worklet-dependent screen would fail on construction instead.
     if (!await WasmEngine.ensureReady(context)) {
         document.querySelector("#preloader")?.remove()
         Dialogs.info({
@@ -105,7 +103,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         return
     }
     if (context.state === "suspended") {
-        // Not `once`: a rejected resume (device busy, output unavailable) must stay retryable on the next click.
         const resumeOnClick = async () => {
             if (!await AudioContexts.resume(context)) {return}
             console.debug(`AudioContext resumed (${context.state})`)
