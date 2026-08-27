@@ -5,9 +5,17 @@ import {
     NoteRegionBoxAdapter,
     ProjectSkeleton,
     TrackType,
+    ValueClipBoxAdapter,
     ValueRegionBoxAdapter
 } from "@opendaw/studio-adapters"
-import {NoteEventCollectionBox, NoteRegionBox, TrackBox, ValueEventCollectionBox, ValueRegionBox} from "@opendaw/studio-boxes"
+import {
+    NoteEventCollectionBox,
+    NoteRegionBox,
+    TrackBox,
+    ValueClipBox,
+    ValueEventCollectionBox,
+    ValueRegionBox
+} from "@opendaw/studio-boxes"
 import {TimelineLabels} from "@/ui/timeline/TimelineLabels"
 
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
@@ -55,6 +63,17 @@ const setup = async (resolvable: boolean) => {
             box.regions.refer(valueTrack.regions)
         })
     }).map(box => project.boxAdapters.adapterFor(box, ValueRegionBoxAdapter)).unwrap("value-region")
+    let clipIndex = 0
+    const valueClip = (label: string): ValueClipBoxAdapter => project.editing.modify(() => {
+        const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+        return ValueClipBox.create(boxGraph, UUID.generate(), box => {
+            box.index.setValue(clipIndex++)
+            box.label.setValue(label)
+            box.duration.setValue(1920)
+            box.events.refer(events.owners)
+            box.clips.refer(valueTrack.clips)
+        })
+    }).map(box => project.boxAdapters.adapterFor(box, ValueClipBoxAdapter)).unwrap("value-clip")
     const noteRegion = (label: string): NoteRegionBoxAdapter => project.editing.modify(() => {
         const events = NoteEventCollectionBox.create(boxGraph, UUID.generate())
         return NoteRegionBox.create(boxGraph, UUID.generate(), box => {
@@ -65,7 +84,7 @@ const setup = async (resolvable: boolean) => {
             box.regions.refer(noteTrack.regions)
         })
     }).map(box => project.boxAdapters.adapterFor(box, NoteRegionBoxAdapter)).unwrap("note-region")
-    return {valueRegion, noteRegion}
+    return {valueRegion, valueClip, noteRegion}
 }
 
 describe("TimelineLabels.forRegion", () => {
@@ -96,5 +115,30 @@ describe("TimelineLabels.forRegion", () => {
         const {noteRegion} = await setup(true)
         expect(TimelineLabels.forRegion(noteRegion(""))).toBe("")
         expect(TimelineLabels.forRegion(noteRegion("Verse"))).toBe("Verse")
+    })
+})
+
+describe("TimelineLabels.forClip", () => {
+    it("shows the automated parameter name when the clip carries no custom label", async () => {
+        const {valueClip} = await setup(true)
+        expect(TimelineLabels.forClip(valueClip(""))).toBe("Volume")
+    })
+
+    it("appends a custom label behind the parameter name", async () => {
+        const {valueClip} = await setup(true)
+        expect(TimelineLabels.forClip(valueClip("Build-up"))).toBe("Volume · Build-up")
+    })
+
+    it("never repeats the parameter name, whatever recorded automation stored", async () => {
+        const {valueClip} = await setup(true)
+        expect(TimelineLabels.forClip(valueClip("volume"))).toBe("Volume")
+        expect(TimelineLabels.forClip(valueClip("Volume"))).toBe("Volume")
+        expect(TimelineLabels.forClip(valueClip("  volume  "))).toBe("Volume")
+    })
+
+    it("falls back to N/A when the parameter cannot be resolved", async () => {
+        const {valueClip} = await setup(false)
+        expect(TimelineLabels.forClip(valueClip(""))).toBe("N/A")
+        expect(TimelineLabels.forClip(valueClip("Build-up"))).toBe("N/A · Build-up")
     })
 })
