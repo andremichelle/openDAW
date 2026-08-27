@@ -1,4 +1,4 @@
-import {Arrays, Errors, isAbsent, isDefined, Maybe, panic, Procedure, Progress, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Arrays, Errors, isAbsent, isDefined, Maybe, Option, panic, Procedure, Progress, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {network, Promises} from "@opendaw/lib-runtime"
 import {CloudHandler} from "./CloudHandler"
 import {ScriptMeta, ScriptPaths, ScriptStorage} from "../scripts"
@@ -15,33 +15,44 @@ export class CloudBackupScripts {
 
     static async start(cloudHandler: CloudHandler,
                        progress: Progress.Handler,
-                       log: Procedure<string>) {
+                       log: Procedure<string>,
+                       storage: ScriptStorage = ScriptStorage.get()) {
         log("Collecting all script domains...")
-        const [local, cloud] = await Promise.all([
-            ScriptStorage.get().list()
-                .then(list => list.reduce((record: Scripts, {uuid, meta}) => {
-                    record[UUID.toString(uuid)] = meta
-                    return record
-                }, {})),
+        const [list, cloud] = await Promise.all([
+            storage.list(),
             cloudHandler.download(CloudBackupScripts.RemoteCatalogPath)
                 .then(json => JSON.parse(new TextDecoder().decode(json)))
                 .catch(reason => reason instanceof Errors.FileNotFound ? {} : panic(reason))
         ])
-        return new CloudBackupScripts(cloudHandler, {local, cloud}, log).#start(progress)
+        const local = list.reduce((record: Scripts, {uuid, meta}) => {
+            record[UUID.toString(uuid)] = meta
+            return record
+        }, {})
+        const pristine = await Promise.all(list
+            .filter(({meta}) => isDefined(meta.stock))
+            .map(async ({uuid, meta}) => ScriptStorage.hash(await storage.loadSource(uuid)) === meta.stock
+                ? Option.wrap(UUID.toString(uuid)) : Option.None))
+            .then(options => new Set(options.filter(option => option.nonEmpty()).map(option => option.unwrap())))
+        return new CloudBackupScripts(cloudHandler, storage, {local, cloud}, pristine, log).#start(progress)
     }
 
     readonly #cloudHandler: CloudHandler
+    readonly #storage: ScriptStorage
     readonly #scriptDomains: ScriptDomains
+    readonly #pristine: ReadonlySet<UUID.String>
     readonly #log: Procedure<string>
 
-    private constructor(cloudHandler: CloudHandler, scriptDomains: ScriptDomains, log: Procedure<string>) {
+    private constructor(cloudHandler: CloudHandler, storage: ScriptStorage, scriptDomains: ScriptDomains,
+                        pristine: ReadonlySet<UUID.String>, log: Procedure<string>) {
         this.#cloudHandler = cloudHandler
+        this.#storage = storage
         this.#scriptDomains = scriptDomains
+        this.#pristine = pristine
         this.#log = log
     }
 
     async #start(progress: Progress.Handler): Promise<void> {
-        const trashed = await ScriptStorage.get().loadTrashedIds()
+        const trashed = await this.#storage.loadTrashedIds()
         const [uploadProgress, trashProgress, downloadProgress] = Progress.splitWithWeights(progress, [0.45, 0.10, 0.45])
         await this.#upload(uploadProgress)
         await this.#trash(trashed, trashProgress)
@@ -53,7 +64,7 @@ export class CloudBackupScripts {
         const isUnsynced = (localScript: ScriptMeta, cloudScript: Maybe<ScriptMeta>) =>
             isAbsent(cloudScript) || CloudBackupScripts.#time(cloudScript) < CloudBackupScripts.#time(localScript)
         const unsynced: ReadonlyArray<Entry> = CloudBackupScripts.#entries(local)
-            .filter(([uuid, meta]) => isUnsynced(meta, cloud[uuid]))
+            .filter(([uuid, meta]) => !this.#pristine.has(uuid) && isUnsynced(meta, cloud[uuid]))
         if (unsynced.length === 0) {
             this.#log("No unsynced scripts found.")
             progress(1.0)
@@ -64,7 +75,7 @@ export class CloudBackupScripts {
                 progress((index + 1) / length)
                 this.#log(`Uploading script '${meta.name}'`)
                 const folder = CloudBackupScripts.folderFor(uuid)
-                const source = await ScriptStorage.get().loadSource(UUID.parse(uuid))
+                const source = await this.#storage.loadSource(UUID.parse(uuid))
                 await Promises.approvedRetry(async () => {
                     await this.#cloudHandler.upload(`${folder}/${ScriptPaths.ScriptFile}`, CloudBackupScripts.#encode(source))
                     await this.#cloudHandler.upload(`${folder}/${ScriptPaths.ScriptMetaFile}`, CloudBackupScripts.#encode(JSON.stringify(meta)))
@@ -117,8 +128,8 @@ export class CloudBackupScripts {
         const newer = CloudBackupScripts.#entries(cloud)
             .filter(([uuid, meta]) => {
                 const localMeta = local[uuid]
-                return isDefined(localMeta) && !isDefined(localMeta.stock)
-                    && CloudBackupScripts.#time(meta) > CloudBackupScripts.#time(localMeta)
+                if (!isDefined(localMeta)) {return false}
+                return this.#pristine.has(uuid) || CloudBackupScripts.#time(meta) > CloudBackupScripts.#time(localMeta)
             })
         const overriding = newer.length === 0 ? Arrays.empty<Entry>() : await RuntimeNotifier.approve({
             headline: "Override Scripts?",
@@ -142,7 +153,7 @@ export class CloudBackupScripts {
             const metaBytes = await Promises.guardedRetry(() =>
                 this.#cloudHandler.download(`${folder}/${ScriptPaths.ScriptMetaFile}`), network.defaultRetry)
             const decoder = new TextDecoder()
-            await ScriptStorage.get().save(UUID.parse(uuid),
+            await this.#storage.save(UUID.parse(uuid),
                 ScriptMeta.fromJSON(JSON.parse(decoder.decode(metaBytes))), decoder.decode(source))
         }))
         this.#log("Download scripts complete.")
