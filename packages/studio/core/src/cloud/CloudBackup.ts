@@ -18,6 +18,7 @@ import {CloudBackupProjects} from "./CloudBackupProjects"
 import {CloudBackupTemplates} from "./CloudBackupTemplates"
 import {CloudBackupSoundfonts} from "./CloudBackupSoundfonts"
 import {CloudBackupPresets} from "./CloudBackupPresets"
+import {CloudBackupScripts} from "./CloudBackupScripts"
 import {ProjectSignals} from "../project"
 
 export namespace CloudBackup {
@@ -74,8 +75,8 @@ export namespace CloudBackup {
         const progressValue = new DefaultObservableValue<unitValue>(0.0)
         const notification = RuntimeNotifier.progress({headline: `Backup with ${service}`, progress: progressValue})
         const log = (text: string) => notification.message = text
-        const [progressSamples, progressProjects, progressTemplates, progressSoundfonts, progressPresets] =
-            Progress.split(progress => progressValue.setValue(progress), 5)
+        const [progressSamples, progressProjects, progressTemplates, progressSoundfonts, progressPresets, progressScripts] =
+            Progress.split(progress => progressValue.setValue(progress), 6)
         const lockPath = "lock.json"
         type Lock = { id: string, created: string }
         let canReleaseLock = false
@@ -114,6 +115,7 @@ export namespace CloudBackup {
             await CloudBackupTemplates.start(cloudHandler, progressTemplates, log)
             await CloudBackupSoundfonts.start(cloudHandler, progressSoundfonts, log)
             await CloudBackupPresets.start(cloudHandler, progressPresets, log)
+            await CloudBackupScripts.start(cloudHandler, progressScripts, log)
         } finally {
             if (canReleaseLock) {
                 await cloudHandler.delete(lockPath)
