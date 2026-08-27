@@ -13,7 +13,7 @@ export class DropboxHandler implements CloudHandler {
     async alive(): Promise<void> {
         const client = await this.#ensureClient()
         const {status, error} = await Promises.tryCatch(client.usersGetCurrentAccount())
-        if (status === "rejected") return panic(error)
+        if (status === "rejected") return panic(this.#describe("alive", "/", error))
     }
 
     async upload(path: string, buffer: ArrayBuffer): Promise<void> {
@@ -23,7 +23,7 @@ export class DropboxHandler implements CloudHandler {
         const {status, error, value: result} = await Promises.tryCatch(client
             .filesUpload({path: fullPath, contents: buffer, mode: {".tag": "overwrite"}}))
         if (status === "rejected") {
-            return panic(error)
+            return panic(this.#describe("upload", fullPath, error))
         } else {
             console.debug("[Dropbox] Upload successful:", result.result.path_display)
         }
@@ -40,7 +40,7 @@ export class DropboxHandler implements CloudHandler {
             if (this.#isNotFoundError(error)) {
                 throw new Errors.FileNotFound(path)
             }
-            throw error
+            throw new Error(this.#describe("download", fullPath, error))
         }
     }
 
@@ -52,20 +52,22 @@ export class DropboxHandler implements CloudHandler {
             error
         } = await Promises.tryCatch(client.filesGetMetadata({path: fullPath})).catch(error => (error as any))
         if (status === "resolved") return true
-        return this.#isNotFoundError(error) ? false : panic(error)
+        return this.#isNotFoundError(error) ? false : panic(this.#describe("exists", fullPath, error))
     }
 
     async list(path?: string): Promise<Array<string>> {
         const client = await this.#ensureClient()
         const fullPath = path ? this.#getFullPath(path) : ""
-        const response = await client.filesListFolder({path: fullPath})
+        const {status, error, value: response} = await Promises.tryCatch(client.filesListFolder({path: fullPath}))
+        if (status === "rejected") {return panic(this.#describe("list", fullPath, error))}
         return response.result.entries.map(entry => entry.name).filter(isDefined)
     }
 
     async delete(path: string): Promise<void> {
         const client = await this.#ensureClient()
         const fullPath = this.#getFullPath(path)
-        await client.filesDeleteV2({path: fullPath})
+        const {status, error} = await Promises.tryCatch(client.filesDeleteV2({path: fullPath}))
+        if (status === "rejected") {return panic(this.#describe("delete", fullPath, error))}
     }
 
     async #ensureClient(): Promise<Dropbox> {
@@ -82,6 +84,13 @@ export class DropboxHandler implements CloudHandler {
             return filename.startsWith("/") ? filename : `/${filename}`
         }
         return path.startsWith("/") ? path : `/${path}`
+    }
+
+    #describe(operation: string, path: string, error: unknown): string {
+        const response = error as {status?: number, error?: {error_summary?: string} | string}
+        const body = response?.error
+        const summary = typeof body === "string" ? body : body?.error_summary ?? String(error)
+        return `Dropbox ${operation} '${path}' failed (${response?.status ?? "?"}): ${summary}`
     }
 
     #isNotFoundError(error: unknown): boolean {
