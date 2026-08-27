@@ -33,7 +33,7 @@ export const FloatingTextInput = ({resolvers, position, value, unit, numeric}: C
             reject(Errors.AbortError)
         }
         inputField.onkeydown = (event: KeyboardEvent) => {
-            if (event.key.toLowerCase() === "enter") {
+            if (isDefined(event.key) && event.key.toLowerCase() === "enter") {
                 const value = numeric ? inputField.value.replace(",", ".") : inputField.value
                 remove()
                 resolve(value)

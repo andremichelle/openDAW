@@ -1,4 +1,4 @@
-import {isNull, Lifecycle} from "@opendaw/lib-std"
+import {isDefined, isNull, Lifecycle} from "@opendaw/lib-std"
 import {Events} from "@opendaw/lib-dom"
 import type * as MonacoEditor from "monaco-editor"
 
@@ -41,13 +41,13 @@ export namespace MonacoFactory {
         const allowed = ["c", "v", "x", "a", "z", "y"]
         lifecycle.ownAll(
             Events.subscribe(container, "keydown", event => {
-                if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {
+                if ((event.ctrlKey || event.metaKey) && isDefined(event.key) && allowed.includes(event.key.toLowerCase())) {
                     return
                 }
                 event.stopPropagation()
             }),
             Events.subscribe(container, "keyup", event => {
-                if ((event.ctrlKey || event.metaKey) && allowed.includes(event.key.toLowerCase())) {
+                if ((event.ctrlKey || event.metaKey) && isDefined(event.key) && allowed.includes(event.key.toLowerCase())) {
                     return
                 }
                 event.stopPropagation()

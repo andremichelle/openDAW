@@ -287,6 +287,11 @@ export class PeerAssetProvider {
                 pending.resolve(zipBytes)
                 break
             }
+            case ChunkProtocol.MsgType.Cancel: {
+                console.warn("[P2P:Provider] peer cannot serve", pending.uuidString)
+                this.#retryTransfer(pending.uuidString, "peer cancelled")
+                break
+            }
         }
     }
 

@@ -43,7 +43,14 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
             createSocket: url => new WebSocket(url) as SignalingSocket,
             localPeerId: UUID.toString(UUID.generate()),
             assetReader: {
-                hasSample: uuid => SampleStorage.get().exists(uuid),
+                hasSample: async uuid => {
+                    const path = `${SampleStorage.Folder}/${UUID.toString(uuid)}`
+                    const [audio, meta] = await Promise.all([
+                        Workers.Opfs.exists(`${path}/audio.wav`),
+                        Workers.Opfs.exists(`${path}/meta.json`)
+                    ])
+                    return audio && meta
+                },
                 hasSoundfont: uuid => Workers.Opfs.exists(`${SoundfontStorage.Folder}/${UUID.toString(uuid)}`),
                 hasCover: async uuid => service.projectProfileService.getValue()
                     .mapOr(profile => profile.coverId === UUID.toString(uuid) && profile.cover.nonEmpty(), false),
