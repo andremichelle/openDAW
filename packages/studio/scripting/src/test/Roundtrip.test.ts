@@ -53,10 +53,50 @@ describe("Roundtrip", () => {
         lead.instrument.key === "Vaporisateur" && (lead.instrument.cutoff = 500)
         lead.noteTracks[0].regions[0].addEvent({pitch: 67})
         loaded.openInStudio()
-        expect(host.opened.length).toBe(2)
+        expect(host.opened.length).toBe(1)
+        expect(host.applied.length).toBe(1)
         const reloaded = await api.getProject()
         const reloadedLead = reloaded.findAudioUnit("Lead")!
         expect(reloadedLead.kind === "instrument" && reloadedLead.noteTracks[0].regions[0].events.length).toBe(3)
+        expect(reloadedLead.kind === "instrument" && reloadedLead.instrument.key === "Vaporisateur" && reloadedLead.instrument.cutoff).toBe(500)
+    })
+
+    it("replays edits as update batches and only sends the delta on a second apply", async () => {
+        const {api, project, host} = createFixture()
+        project.addInstrumentUnit("Vaporisateur", {label: "Lead"})
+        project.openInStudio()
+        const loaded = await api.getProject()
+        const lead = loaded.findAudioUnit("Lead")!
+        if (lead.kind !== "instrument") {throw new Error("lead missing")}
+        lead.volume = -12
+        loaded.openInStudio()
+        expect(host.applied.length).toBe(1)
+        expect(host.applied[0].map(task => task.type)).toEqual(["update-primitive"])
+        const removed = lead.addAudioEffect("Delay")
+        removed.remove()
+        const kept = lead.addAudioEffect("Reverb", {wet: -9})
+        loaded.openInStudio()
+        expect(host.applied.length).toBe(2)
+        expect(host.applied[1].some(task => task.type === "new")).toBe(true)
+        expect(host.applied[1].some(task => task.type === "delete")).toBe(true)
+        const reloaded = await api.getProject()
+        const reloadedLead = reloaded.findAudioUnit("Lead")!
+        expect(reloadedLead.kind === "instrument" && reloadedLead.volume).toBe(-12)
+        expect(reloadedLead.kind === "instrument" && reloadedLead.audioEffects.map(effect => effect.key)).toEqual(["Reverb"])
+        expect(reloadedLead.kind === "instrument" && reloadedLead.audioEffects[0].uuid).toBe(kept.uuid)
+        expect(host.opened.length).toBe(1)
+    })
+
+    it("refuses to replay onto a project that changed in the meantime", async () => {
+        const {api, project, host} = createFixture()
+        project.addInstrumentUnit("Vaporisateur", {label: "Lead"})
+        project.openInStudio()
+        const loaded = await api.getProject()
+        loaded.bpm = 90
+        const other = await api.getProject()
+        other.bpm = 100
+        other.openInStudio()
+        expect(() => loaded.openInStudio()).toThrow("Checksum mismatch")
     })
 
     it("lists and adds samples through the host", async () => {

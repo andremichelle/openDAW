@@ -1,4 +1,5 @@
 import {describe, expect, it} from "vitest"
+import {PPQN} from "@opendaw/lib-dsp"
 import {readdirSync, readFileSync} from "node:fs"
 import {resolve} from "node:path"
 import {transformSync} from "esbuild"
@@ -10,8 +11,7 @@ import {FakeHost} from "./Fixture"
 const examplesDir = resolve(__dirname, "../../../../app/studio/src/ui/pages/code-editor/examples")
 const truncateImports = (script: string) => script.substring(script.indexOf("//"))
 
-const run = async (name: string): Promise<FakeHost> => {
-    const host = new FakeHost()
+const runWith = async (host: FakeHost, name: string): Promise<FakeHost> => {
     const api = new ApiImpl(host)
     const source = truncateImports(readFileSync(resolve(examplesDir, name), "utf-8"))
     const {code} = transformSync(source, {loader: "ts", format: "esm", target: "es2022"})
@@ -23,12 +23,58 @@ const run = async (name: string): Promise<FakeHost> => {
     return host
 }
 
+const run = (name: string): Promise<FakeHost> => runWith(new FakeHost(), name)
+
 describe("Example scripts", () => {
     readdirSync(examplesDir).filter(name => name.endsWith(".ts")).forEach(name => {
         it(`runs ${name}`, async () => {
             const host = await run(name)
             expect(host.opened.length + host.dialogs.length).toBe(1)
         })
+    })
+
+    it("cleans up the current project", async () => {
+        const empty = await run("cleanup.ts")
+        expect(empty.dialogs[0].message).toContain("No project")
+        const host = new FakeHost()
+        const api = new ApiImpl(host)
+        const project = api.newProject("Messy")
+        project.duration = PPQN.Bar * 8
+        const synth = project.addInstrumentUnit("Vaporisateur", {label: "Synth"})
+        const track = synth.noteTracks[0]
+        track.addRegion({position: 0, duration: PPQN.Bar, label: "keep"})
+        track.addRegion({position: PPQN.Bar, duration: PPQN.Bar, mute: true, label: "muted"})
+        track.addRegion({position: PPQN.Bar * 8, duration: PPQN.Bar, label: "beyond"})
+        track.addClip({mute: true})
+        track.addClip({label: "keep"})
+        synth.addNoteTrack()
+        synth.addValueTrack(synth, "volume")
+        const bare = project.addInstrumentUnit("Nano", {label: "Bare"})
+        bare.addNoteTrack()
+        const used = project.addAuxUnit({label: "Used"})
+        project.addAuxUnit({label: "Unused"})
+        synth.addSend(used)
+        project.openInStudio()
+        await runWith(host, "cleanup.ts")
+        expect(host.dialogs[0].message).toContain("1 × muted regions")
+        expect(host.dialogs[0].message).toContain("1 × muted clips")
+        expect(host.dialogs[0].message).toContain("1 × regions beyond the project end")
+        expect(host.dialogs[0].message).toContain("3 × empty tracks")
+        expect(host.dialogs[0].message).toContain("1 × unused auxiliary units")
+        expect(host.opened.length).toBe(1)
+        expect(host.applied.length).toBe(1)
+        const cleaned = await new ApiImpl(host).getProject()
+        const cleanedSynth = cleaned.findAudioUnit("Synth")
+        if (cleanedSynth?.kind !== "instrument") {throw new Error("synth missing")}
+        expect(cleanedSynth.tracks.length).toBe(1)
+        expect(cleanedSynth.noteTracks[0].regions.map(region => region.label)).toEqual(["keep"])
+        expect(cleanedSynth.noteTracks[0].clips.map(clip => clip.label)).toEqual(["keep"])
+        const cleanedBare = cleaned.findAudioUnit("Bare")
+        expect(cleanedBare?.kind === "instrument" && cleanedBare.tracks.length).toBe(1)
+        expect(cleaned.auxUnits.map(aux => aux.label)).toEqual(["Used"])
+        await runWith(host, "cleanup.ts")
+        expect(host.dialogs[1].message).toContain("already tidy")
+        expect(host.applied.length).toBe(1)
     })
 
     it("counts the elements of the current project", async () => {

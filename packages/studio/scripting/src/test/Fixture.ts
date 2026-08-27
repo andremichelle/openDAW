@@ -1,8 +1,8 @@
 import {AudioData} from "@opendaw/lib-dsp"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
-import {BoxGraph} from "@opendaw/lib-box"
+import {applyUpdateTasks, BoxGraph, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {Option, UUID} from "@opendaw/lib-std"
+import {Arrays, Option, UUID} from "@opendaw/lib-std"
 import {Api, Project, Sample} from "../Api"
 import {ScriptHostProtocol} from "../ScriptHostProtocol"
 import {ApiImpl} from "../impl/ApiImpl"
@@ -12,20 +12,30 @@ export class FakeHost implements ScriptHostProtocol {
     readonly opened: Array<{ buffer: ArrayBufferLike, name: string }> = []
     readonly samples: Array<Sample> = []
     readonly dialogs: Array<{ headline: string, message: string }> = []
-    current: { buffer: ArrayBuffer, name: string } | null = null
+    readonly applied: Array<ReadonlyArray<UpdateTask<BoxIO.TypeMap>>> = []
+    current: { graph: BoxGraph<BoxIO.TypeMap>, name: string } | null = null
 
     async hasProject(): Promise<boolean> {return this.current !== null}
     async showInfo(headline: string, message: string): Promise<void> {this.dialogs.push({headline, message})}
 
     openProject(buffer: ArrayBufferLike, name?: string): void {
         this.opened.push({buffer, name: name ?? ""})
-        const boxGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
-        boxGraph.fromArrayBuffer(buffer, false)
-        this.current = {buffer: ProjectSkeleton.encode(boxGraph) as ArrayBuffer, name: name ?? ""}
+        const graph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+        graph.fromArrayBuffer(buffer, false)
+        this.current = {graph, name: name ?? ""}
+    }
+    applyUpdates(updates: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>, checksum: Int8Array): void {
+        if (this.current === null) {throw new Error("No project")}
+        const {graph} = this.current
+        if (!Arrays.equals(graph.checksum(), checksum)) {throw new Error("Checksum mismatch")}
+        graph.beginTransaction()
+        applyUpdateTasks(graph, updates)
+        graph.endTransaction()
+        this.applied.push(updates)
     }
     async fetchProject(): Promise<{ buffer: ArrayBuffer, name: string }> {
         if (this.current === null) {throw new Error("No project")}
-        return this.current
+        return {buffer: ProjectSkeleton.encode(this.current.graph) as ArrayBuffer, name: this.current.name}
     }
     async addSample(data: AudioData, name: string): Promise<Sample> {
         const sample: Sample = {

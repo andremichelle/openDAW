@@ -256,7 +256,12 @@ export class ProjectImpl implements Project {
                 .at(0)
             if (isDefined(first)) {this.#context.edit(() => defaultUser.editingDeviceChain.refer(first.editing))}
         }
-        this.#protocol.openProject(boxGraph.toArrayBuffer(), this.#name)
+        const origin = this.#context.origin
+        if (isNull(origin)) {
+            this.#protocol.openProject(boxGraph.toArrayBuffer(), this.#name)
+        } else {
+            this.#protocol.applyUpdates(this.#context.takeUpdates(), origin)
+        }
     }
 
     static clampBpm(value: number): number {return clamp(value, 30, 1000)}

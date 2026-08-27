@@ -8,7 +8,7 @@ import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 import {EditorLoadFailure} from "@/ui/components/EditorLoadFailure"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Arrays, Option, panic, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {ScriptHost} from "@opendaw/studio-scripting"
 import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem, Project} from "@opendaw/studio-core"
@@ -19,9 +19,10 @@ import ScriptAudioRegion from "./code-editor/examples/create-sample.ts?raw"
 import ScriptNanoWavetable from "./code-editor/examples/nano-wavetable.ts?raw"
 import ScriptAcid from "./code-editor/examples/acid.ts?raw"
 import ScriptInventory from "./code-editor/examples/inventory.ts?raw"
+import ScriptCleanup from "./code-editor/examples/cleanup.ts?raw"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
 import {ProjectSkeleton, Sample} from "@opendaw/studio-adapters"
-import {BoxGraph} from "@opendaw/lib-box"
+import {applyUpdateTasks, BoxGraph, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {AudioData} from "@opendaw/lib-dsp"
 
@@ -31,7 +32,8 @@ const Examples = {
     AudioRegion: truncateImports(ScriptAudioRegion),
     NanoWavetable: truncateImports(ScriptNanoWavetable),
     Acid: truncateImports(ScriptAcid),
-    Inventory: truncateImports(ScriptInventory)
+    Inventory: truncateImports(ScriptInventory),
+    Cleanup: truncateImports(ScriptCleanup)
 }
 
 const className = Html.adoptStyleSheet(css, "CodeEditorPage")
@@ -51,6 +53,18 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
             pendingSamples.clear()
             service.projectProfileService.setProject(project, name ?? "Scripted Project")
         },
+        applyUpdates: (updates: ReadonlyArray<UpdateTask<BoxIO.TypeMap>>, checksum: Int8Array): void =>
+            service.optProject.match({
+                none: () => RuntimeNotifier.notify({message: "No project to apply the script to.", icon: "Warning"}),
+                some: project => {
+                    if (!Arrays.equals(project.boxGraph.checksum(), checksum)) {
+                        RuntimeNotifier.notify({message: "The project changed while the script ran. Run it again.", icon: "Warning"})
+                        return
+                    }
+                    project.editing.modify(() => applyUpdateTasks(project.boxGraph, updates))
+                    RouteLocation.get().navigateTo("/create")
+                }
+            }),
         hasProject: async (): Promise<boolean> => service.projectProfileService.getValue().nonEmpty(),
         showInfo: (headline: string, message: string): Promise<void> => RuntimeNotifier.info({headline, message}),
         fetchProject: async (): Promise<{ buffer: ArrayBuffer; name: string }> => {

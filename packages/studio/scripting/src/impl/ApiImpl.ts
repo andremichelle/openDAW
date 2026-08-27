@@ -24,7 +24,9 @@ export class ApiImpl implements Api {
 
     async getProject(): Promise<Project> {
         const {buffer, name} = await this.#protocol.fetchProject()
-        return new ProjectImpl(this.#protocol, ProjectSkeleton.decode(buffer), name)
+        const project = new ProjectImpl(this.#protocol, ProjectSkeleton.decode(buffer), name)
+        project.context.startRecording()
+        return project
     }
 
     async addSample(data: AudioData, name: string): Promise<Sample> {
