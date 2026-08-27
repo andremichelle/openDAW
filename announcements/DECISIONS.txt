@@ -98,6 +98,18 @@ Feature framing (Modulators)
   UI mechanics (no "right-click"), no Macro fader, no instructions to teachers.
 • Manual: https://opendaw.studio/manuals/modulation
 
+Feature framing (Script Editor)
+• The script editor is NOT new. Announcements describe an update: scripts now reach everything in a
+  project, can edit the open project (changes land as one undo step), are saved with name and
+  description, travel with the cloud backup, and the examples were rewritten.
+• Education angle: code and music in one window, a generated melody is a coding exercise and a
+  composition at once, teachers script the same starting project for the whole class.
+• Do not name the box behind the acid example, say "acid line".
+• No manual page yet, link to https://opendaw.studio only.
+• Discord: no advertisement tone. No sublines like "Your Scripts Stay With You" or "Examples to
+  Start From", no "so nothing is lost". State what changed, plain sublines like "Full API",
+  "Saving Scripts", "Examples".
+
 Still open (see the questions at the bottom of nextcloud.txt)
 • Release status and whether to call for pilot schools.
 • Discord channel name for the post.
