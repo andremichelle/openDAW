@@ -30,4 +30,4 @@ packages/app/studio/.env
 /presets/
 /announcements/temp.txt
 /tmp/
-/packages/app/studio/public/docs/
+/packages/app/studio/public/docs/scripting/
