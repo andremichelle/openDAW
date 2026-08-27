@@ -41,13 +41,14 @@ export const renderMarkdown = (element: HTMLElement, text: string, actions?: Rec
             return
         }
         const url = new URL(a.href)
-        if (url.origin === location.origin) {
+        const external = url.origin !== location.origin || url.pathname.startsWith("/docs/")
+        if (external) {
+            a.target = "_blank"
+        } else {
             a.onclick = (event: Event) => {
                 event.preventDefault()
                 RouteLocation.get().navigateTo(url.pathname)
             }
-        } else {
-            a.target = "_blank"
         }
     })
     element.querySelectorAll("code").forEach(code => {

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "openDAW Scripting API",
+  "entryPoints": [
+    "src/Api.ts"
+  ],
+  "tsconfig": "tsconfig.json",
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "hideGenerator": true,
+  "searchInComments": true,
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": true
+  },
+  "treatWarningsAsErrors": false,
+  "alwaysCreateEntryPointModule": false,
+  "disableSources": true,
+  "plugin": [
+    "./scripts/typedoc-used-by.mjs",
+    "@clean-jsdoc-theme/typedoc"
+  ],
+  "outputs": [
+    {
+      "name": "clean-jsdoc-theme",
+      "path": "../../app/studio/public/docs/scripting"
+    }
+  ],
+  "cleanJsdocTheme": {
+    "siteName": "openDAW Scripting API",
+    "docs": "docs",
+    "strict": true,
+    "menu": [
+      {
+        "title": "Studio",
+        "link": "https://opendaw.studio",
+        "icon": "lucide:music"
+      },
+      {
+        "title": "GitHub",
+        "link": "https://github.com/andremichelle/opendaw",
+        "icon": "lucide:github"
+      }
+    ],
+    "basePath": "/docs/scripting/"
+  },
+  "sort": [
+    "source-order"
+  ]
+}

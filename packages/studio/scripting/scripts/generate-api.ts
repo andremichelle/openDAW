@@ -18,7 +18,8 @@ export function generateFlattenedDeclarations(options: GeneratorOptions): void {
     const visited = new Set<string>()
     const printed = new Set<string>()
     const output: string[] = []
-    const emit = (text: string): void => {
+    const emit = (raw: string): void => {
+        const text = raw.replace(/^\s*\* @group .*\n/gm, "")
         if (printed.has(text)) return
         printed.add(text)
         output.push(text)

@@ -24,10 +24,11 @@
     "./dist/ScriptWorker.js"
   ],
   "scripts": {
-    "build": "npm run generate-api && tsc",
+    "build": "npm run generate-api && tsc && npm run docs",
     "generate-api": "npx tsx scripts/generate-api.ts",
     "lint": "eslint \"**/*.ts\"",
-    "test": "vitest run"
+    "test": "vitest run",
+    "docs": "typedoc && node scripts/docs-postprocess.mjs ../../app/studio/public/docs/scripting /docs/scripting/"
   },
   "dependencies": {
     "@opendaw/lib-box": "^0.0.93",
@@ -39,8 +40,10 @@
     "@opendaw/studio-enums": "^0.1.1"
   },
   "devDependencies": {
+    "@clean-jsdoc-theme/typedoc": "^5.1.1",
     "@opendaw/eslint-config": "^0.0.28",
-    "@opendaw/typescript-config": "^0.0.32"
+    "@opendaw/typescript-config": "^0.0.32",
+    "typedoc": "^0.28.20"
   },
   "gitHead": "8350421e29d38c9f31e88def06e1f2e6d174acff"
 }

@@ -141,6 +141,10 @@ export default defineConfig(({command}) => {
                 configureServer(server) {
                     server.middlewares.use((req, res, next) => {
                         const url: string | undefined = req.url
+                        if (url !== undefined && url.startsWith("/docs/scripting") && url.indexOf(".") === -1) {
+                            req.url = `${url.replace(/\/$/, "")}/index.html`
+                            return next()
+                        }
                         if (url !== undefined && url.indexOf(".") === -1 && !url.startsWith("/@vite/")) {
                             if (url === "/overlay-preview") {
                                 const previewPath = resolve(__dirname, "overlay-preview.html")

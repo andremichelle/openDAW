@@ -20,7 +20,10 @@ import {AudioSendRouting, TransientPlayMode, VoicingMode} from "@opendaw/studio-
 export {PPQN, FFT, Chord, dbToGain, gainToDb, midiToHz, ClassicWaveform, VoicingMode, Mixing, TransientPlayMode, AudioSendRouting}
 export type {ppqn, seconds, bpm, samples}
 
-/** A sample known to the studio. Obtain one via {@link Api.addSample} or {@link Api.listSamples}. */
+/**
+ * A sample known to the studio. Obtain one via {@link Api.addSample} or {@link Api.listSamples}.
+ * @group Samples
+ */
 export interface Sample {
     /** Unique id of the sample (uuid string) */
     readonly uuid: string
@@ -34,13 +37,21 @@ export interface Sample {
     readonly sample_rate: number
 }
 
-/** Reference to a soundfont (.sf2) file known to the studio */
+/**
+ * Reference to a soundfont (.sf2) file known to the studio
+ * @group Samples
+ */
 export interface SoundfontFile {
+    /** Unique id of the file (uuid string) */
     readonly uuid: string
+    /** Display name */
     readonly name: string
 }
 
-/** Recursive partial used for construction props. Functions and read-only references are ignored. */
+/**
+ * Recursive partial used for construction props. Functions and read-only references are ignored.
+ * @internal
+ */
 export type DeepPartial<T> = {
     [K in keyof T]?: T[K] extends (...args: never[]) => unknown
         ? never
@@ -60,9 +71,13 @@ export type Shallower = [never, 0, 1, 2]
 
 /**
  * All automatable parameter paths of an object, e.g. `"cutoff"`, `"lfo.rate"`, `"oscillators.0.volume"`.
- * Used by {@link AudioUnit.addValueTrack} and {@link Modulator.assign}.
+ * Used by {@link AudioUnit.addValueTrack} and {@link Modulator.assign}. The editor completes valid paths.
+ * @internal
  */
-export type ParameterPath<T, D extends number = 3> = D extends 0 ? never : {
+export type ParameterPath<T> = ParameterPathAt<T, 3>
+
+/** @internal building block of {@link ParameterPath} */
+export type ParameterPathAt<T, D extends number> = D extends 0 ? never : {
     [K in keyof T & string]: T[K] extends (...args: never[]) => unknown
         ? never
         : T[K] extends Reference
@@ -72,9 +87,9 @@ export type ParameterPath<T, D extends number = 3> = D extends 0 ? never : {
                 : T[K] extends ReadonlyArray<infer E>
                     ? E extends Primitive
                         ? `${K}.${number}`
-                        : E extends Reference ? never : `${K}.${number}.${ParameterPath<E, Shallower[D]>}`
+                        : E extends Reference ? never : `${K}.${number}.${ParameterPathAt<E, Shallower[D]>}`
                     : T[K] extends object
-                        ? `${K}.${ParameterPath<T[K], Shallower[D]>}`
+                        ? `${K}.${ParameterPathAt<T[K], Shallower[D]>}`
                         : never
 }[keyof T & string]
 
@@ -82,6 +97,10 @@ export type ParameterPath<T, D extends number = 3> = D extends 0 ? never : {
 // Sends
 // ---------------------------------------------------------------------------------------------------------
 
+/**
+ * A send tap from a unit's channel strip to an aux or group bus
+ * @group Sends
+ */
 export interface Send {
     /** Unique id */
     readonly uuid: string
@@ -101,6 +120,10 @@ export interface Send {
     remove(): void
 }
 
+/**
+ * Units that can send their signal to buses
+ * @group Sends
+ */
 export interface Sendable {
     /** All sends of this unit ordered by index */
     readonly sends: ReadonlyArray<Send>
@@ -108,6 +131,12 @@ export interface Sendable {
      * Add a send to an auxiliary or group unit
      * @param target - The destination unit
      * @param props - Send configuration ({@link Send})
+     * @example
+     * ```ts
+     * const reverb = project.addAuxUnit({label: "Reverb"})
+     * reverb.addAudioEffect("Reverb", {decay: 0.7})
+     * synth.addSend(reverb, {amount: -12})
+     * ```
      */
     addSend(target: AuxAudioUnit | GroupAudioUnit, props?: Partial<Pick<Send, "amount" | "pan" | "mode">>): Send
 }
@@ -116,6 +145,10 @@ export interface Sendable {
 // Devices
 // ---------------------------------------------------------------------------------------------------------
 
+/**
+ * Common surface of instruments and effects
+ * @group Devices
+ */
 export interface Device {
     /** Unique id */
     readonly uuid: string
@@ -129,6 +162,10 @@ export interface Device {
     remove(): void
 }
 
+/**
+ * A MIDI or audio effect sitting in a chain
+ * @group Devices
+ */
 export interface Effect extends Device {
     /** Position in the effect chain (0 = first) */
     readonly index: int
@@ -136,6 +173,10 @@ export interface Effect extends Device {
     move(index: int): void
 }
 
+/**
+ * Effect processing notes before they reach the instrument
+ * @group Devices
+ */
 export interface MIDIEffect extends Effect {
     /** Effect type identifier */
     readonly key: keyof MIDIEffects
@@ -143,6 +184,10 @@ export interface MIDIEffect extends Effect {
     readonly audioUnit: AnyAudioUnit
 }
 
+/**
+ * Effect processing the audio signal after the instrument
+ * @group Devices
+ */
 export interface AudioEffect extends Effect {
     /** Effect type identifier */
     readonly key: keyof AudioEffects
@@ -150,9 +195,16 @@ export interface AudioEffect extends Effect {
     readonly audioUnit: AnyAudioUnit
 }
 
-/** Anything the studio can tap as a sidechain source: a unit's channel strip, an instrument, an effect or a Playfield slot */
+/**
+ * Anything the studio can tap as a sidechain source: a unit's channel strip, an instrument, an effect or a Playfield slot
+ * @group Devices
+ */
 export type SideChainSource = AnyAudioUnit | AnyInstrument | AnyAudioEffect | PlayfieldSlot | AudioEffectCompositeEntry
 
+/**
+ * Effects that can listen to an external detection source
+ * @group Devices
+ */
 export interface SideChainable {
     /** External detection source (null = the effect listens to its own input) */
     sideChain: Nullable<SideChainSource>
@@ -160,8 +212,12 @@ export interface SideChainable {
 
 // ---- MIDI effects
 
-/** Generates rhythmic note sequences from held chords */
+/**
+ * Generates rhythmic note sequences from held chords
+ * @group MIDI Effects
+ */
 export interface ArpeggioEffect extends MIDIEffect {
+    /** Always "Arpeggio" */
     readonly key: "Arpeggio"
     /** Playback direction: 0 = Up, 1 = Down, 2 = UpDown (default 0) */
     mode: 0 | 1 | 2
@@ -177,8 +233,12 @@ export interface ArpeggioEffect extends MIDIEffect {
     velocity: bipolar
 }
 
-/** Shifts the pitch of incoming notes */
+/**
+ * Shifts the pitch of incoming notes
+ * @group MIDI Effects
+ */
 export interface PitchEffect extends MIDIEffect {
+    /** Always "Pitch" */
     readonly key: "Pitch"
     /** Octave shift (-7 to 7, default 0) */
     octaves: int
@@ -188,8 +248,12 @@ export interface PitchEffect extends MIDIEffect {
     cents: float
 }
 
-/** Reshapes note velocities */
+/**
+ * Reshapes note velocities
+ * @group MIDI Effects
+ */
 export interface VelocityEffect extends MIDIEffect {
+    /** Always "Velocity" */
     readonly key: "Velocity"
     /** Velocity all notes are pulled towards (0.0 to 1.0, default 0.5) */
     magnetPosition: unitValue
@@ -205,32 +269,57 @@ export interface VelocityEffect extends MIDIEffect {
     mix: unitValue
 }
 
-/** Shuffle / swing */
+/**
+ * Shuffle / swing
+ * @group MIDI Effects
+ */
 export interface ZeitgeistEffect extends MIDIEffect {
+    /** Always "Zeitgeist" */
     readonly key: "Zeitgeist"
     /** The shuffle groove driving this effect */
     readonly groove: GrooveShuffle
 }
 
-/** Scriptable MIDI effect. See {@link ScriptDevice} */
+/**
+ * Scriptable MIDI effect. See {@link ScriptDevice}
+ * @group MIDI Effects
+ */
 export interface SpielwerkEffect extends MIDIEffect, ScriptDevice {
+    /** Always "Spielwerk" */
     readonly key: "Spielwerk"
 }
 
+/**
+ * MIDI effect types by key. Use the keys with {@link MIDIEffectHost.addMIDIEffect}
+ * @group MIDI Effects
+ */
 export interface MIDIEffects {
+    /** {@link ArpeggioEffect} */
     "Arpeggio": ArpeggioEffect
+    /** {@link PitchEffect} */
     "Pitch": PitchEffect
+    /** {@link VelocityEffect} */
     "Velocity": VelocityEffect
+    /** {@link ZeitgeistEffect} */
     "Zeitgeist": ZeitgeistEffect
+    /** {@link SpielwerkEffect} */
     "Spielwerk": SpielwerkEffect
 }
 
+/**
+ * Any MIDI effect
+ * @group MIDI Effects
+ */
 export type AnyMIDIEffect = MIDIEffects[keyof MIDIEffects]
 
 // ---- Audio effects
 
-/** Pitch correction towards a key and scale */
+/**
+ * Pitch correction towards a key and scale
+ * @group Audio Effects
+ */
 export interface AutotuneEffect extends AudioEffect {
+    /** Always "Autotune" */
     readonly key: "Autotune"
     /** Key (0-11): C, C#, D, D#, E, F, F#, G, G#, A, A#, B (default 0) */
     scaleKey: int
@@ -246,8 +335,12 @@ export interface AutotuneEffect extends AudioEffect {
     smooth: unitValue
 }
 
-/** Dynamic range compressor */
+/**
+ * Dynamic range compressor
+ * @group Audio Effects
+ */
 export interface CompressorEffect extends AudioEffect, SideChainable {
+    /** Always "Compressor" */
     readonly key: "Compressor"
     /** Look ahead detection (default false) */
     lookahead: boolean
@@ -275,8 +368,12 @@ export interface CompressorEffect extends AudioEffect, SideChainable {
     mix: unitValue
 }
 
-/** Convolution reverb using an impulse response sample */
+/**
+ * Convolution reverb using an impulse response sample
+ * @group Audio Effects
+ */
 export interface ConvolverEffect extends AudioEffect {
+    /** Always "Convolver" */
     readonly key: "Convolver"
     /** Impulse response sample (null = none) */
     impulse: Nullable<Sample>
@@ -292,8 +389,12 @@ export interface ConvolverEffect extends AudioEffect {
     reverse: boolean
 }
 
-/** Bit crusher */
+/**
+ * Bit crusher
+ * @group Audio Effects
+ */
 export interface CrusherEffect extends AudioEffect {
+    /** Always "Crusher" */
     readonly key: "Crusher"
     /** Sample rate reduction (0.0 to 1.0, default 0.0) */
     crush: unitValue
@@ -305,8 +406,12 @@ export interface CrusherEffect extends AudioEffect {
     mix: float
 }
 
-/** Dense algorithmic reverb based on Dattorro's design */
+/**
+ * Dense algorithmic reverb based on Dattorro's design
+ * @group Audio Effects
+ */
 export interface DattorroReverbEffect extends AudioEffect {
+    /** Always "DattorroReverb" */
     readonly key: "DattorroReverb"
     /** Pre-delay in ms (0 to 1000, default 0) */
     preDelay: float
@@ -334,8 +439,12 @@ export interface DattorroReverbEffect extends AudioEffect {
     dry: float
 }
 
-/** Stereo delay with tempo-synced times */
+/**
+ * Stereo delay with tempo-synced times
+ * @group Audio Effects
+ */
 export interface DelayEffect extends AudioEffect {
+    /** Always "Delay" */
     readonly key: "Delay"
     /** Delay time index (0-20): Off, 1/128, 1/96, 1/64, 1/48, 1/32, 1/24, 3/64, 1/16, 1/12, 3/32, 1/8, 1/6, 3/16, 1/4, 5/16, 1/3, 3/8, 7/16, 1/2, 1/1 (default 13 = 3/16) */
     delay: int
@@ -365,8 +474,12 @@ export interface DelayEffect extends AudioEffect {
     dry: float
 }
 
-/** Wavefolder distortion */
+/**
+ * Wavefolder distortion
+ * @group Audio Effects
+ */
 export interface FoldEffect extends AudioEffect {
+    /** Always "Fold" */
     readonly key: "Fold"
     /** Drive in dB (0 to 30, default 0) */
     drive: float
@@ -376,8 +489,12 @@ export interface FoldEffect extends AudioEffect {
     volume: float
 }
 
-/** Noise gate */
+/**
+ * Noise gate
+ * @group Audio Effects
+ */
 export interface GateEffect extends AudioEffect, SideChainable {
+    /** Always "Gate" */
     readonly key: "Gate"
     /** Threshold in dB (-80 to 0, default -6) */
     threshold: float
@@ -395,8 +512,12 @@ export interface GateEffect extends AudioEffect, SideChainable {
     inverse: boolean
 }
 
-/** Brickwall limiter with automatic makeup gain */
+/**
+ * Brickwall limiter with automatic makeup gain
+ * @group Audio Effects
+ */
 export interface MaximizerEffect extends AudioEffect {
+    /** Always "Maximizer" */
     readonly key: "Maximizer"
     /** Look ahead (default true) */
     lookahead: boolean
@@ -404,8 +525,12 @@ export interface MaximizerEffect extends AudioEffect {
     threshold: float
 }
 
-/** Neural amp modeler (model is chosen in the studio) */
+/**
+ * Neural amp modeler (model is chosen in the studio)
+ * @group Audio Effects
+ */
 export interface NeuralAmpEffect extends AudioEffect {
+    /** Always "NeuralAmp" */
     readonly key: "NeuralAmp"
     /** Input gain in dB (default 0) */
     inputGain: float
@@ -417,7 +542,10 @@ export interface NeuralAmpEffect extends AudioEffect {
     mix: unitValue
 }
 
-/** High/low-pass band of the Revamp equalizer */
+/**
+ * High/low-pass band of the Revamp equalizer
+ * @group Effect Parts
+ */
 export interface RevampPass {
     /** Enable the band */
     enabled: boolean
@@ -429,7 +557,10 @@ export interface RevampPass {
     q: float
 }
 
-/** Shelf band of the Revamp equalizer */
+/**
+ * Shelf band of the Revamp equalizer
+ * @group Effect Parts
+ */
 export interface RevampShelf {
     /** Enable the band */
     enabled: boolean
@@ -439,7 +570,10 @@ export interface RevampShelf {
     gain: float
 }
 
-/** Bell band of the Revamp equalizer */
+/**
+ * Bell band of the Revamp equalizer
+ * @group Effect Parts
+ */
 export interface RevampBell {
     /** Enable the band */
     enabled: boolean
@@ -451,20 +585,35 @@ export interface RevampBell {
     q: float
 }
 
-/** Graphical equalizer with seven bands */
+/**
+ * Graphical equalizer with seven bands
+ * @group Audio Effects
+ */
 export interface RevampEffect extends AudioEffect {
+    /** Always "Revamp" */
     readonly key: "Revamp"
+    /** High-pass band */
     readonly highPass: RevampPass
+    /** Low shelf band */
     readonly lowShelf: RevampShelf
+    /** Low bell band */
     readonly lowBell: RevampBell
+    /** Mid bell band */
     readonly midBell: RevampBell
+    /** High bell band */
     readonly highBell: RevampBell
+    /** High shelf band */
     readonly highShelf: RevampShelf
+    /** Low-pass band */
     readonly lowPass: RevampPass
 }
 
-/** Free reverb */
+/**
+ * Free reverb
+ * @group Audio Effects
+ */
 export interface ReverbEffect extends AudioEffect {
+    /** Always "Reverb" */
     readonly key: "Reverb"
     /** Decay (0.0 to 1.0, default 0.5) */
     decay: unitValue
@@ -480,8 +629,12 @@ export interface ReverbEffect extends AudioEffect {
     dry: float
 }
 
-/** Stereo imaging tool */
+/**
+ * Stereo imaging tool
+ * @group Audio Effects
+ */
 export interface StereoToolEffect extends AudioEffect {
+    /** Always "StereoTool" */
     readonly key: "StereoTool"
     /** Volume in dB (-72 to 12, default 0) */
     volume: float
@@ -499,8 +652,12 @@ export interface StereoToolEffect extends AudioEffect {
     panningMixing: Mixing
 }
 
-/** Tremolo and auto-pan */
+/**
+ * Tremolo and auto-pan
+ * @group Audio Effects
+ */
 export interface TidalEffect extends AudioEffect {
+    /** Always "Tidal" */
     readonly key: "Tidal"
     /** Waveform slope (-1.0 to 1.0, default -0.25) */
     slope: bipolar
@@ -516,8 +673,12 @@ export interface TidalEffect extends AudioEffect {
     channelOffset: float
 }
 
-/** Classic analysis/synthesis vocoder */
+/**
+ * Classic analysis/synthesis vocoder
+ * @group Audio Effects
+ */
 export interface VocoderEffect extends AudioEffect, SideChainable {
+    /** Always "Vocoder" */
     readonly key: "Vocoder"
     /** Lowest carrier band in Hz (20 to 20000, default 100) */
     carrierMinFreq: float
@@ -545,8 +706,12 @@ export interface VocoderEffect extends AudioEffect, SideChainable {
     modulatorSource: "noise-pink" | "noise-white" | "input"
 }
 
-/** Nonlinear waveshaping distortion */
+/**
+ * Nonlinear waveshaping distortion
+ * @group Audio Effects
+ */
 export interface WaveshaperEffect extends AudioEffect {
+    /** Always "Waveshaper" */
     readonly key: "Waveshaper"
     /** Transfer function preset name or custom equation (default "hardclip") */
     equation: string
@@ -558,12 +723,19 @@ export interface WaveshaperEffect extends AudioEffect {
     mix: unitValue
 }
 
-/** Scriptable audio effect. See {@link ScriptDevice} */
+/**
+ * Scriptable audio effect. See {@link ScriptDevice}
+ * @group Audio Effects
+ */
 export interface WerkstattEffect extends AudioEffect, ScriptDevice {
+    /** Always "Werkstatt" */
     readonly key: "Werkstatt"
 }
 
-/** One entry (layer) of a parallel effect composite hosting its own effect chain */
+/**
+ * One entry (layer) of a parallel effect composite hosting its own effect chain
+ * @group Effect Parts
+ */
 export interface AudioEffectCompositeEntry extends AudioEffectHost {
     /** Unique id */
     readonly uuid: string
@@ -585,8 +757,12 @@ export interface AudioEffectCompositeEntry extends AudioEffectHost {
     remove(): void
 }
 
-/** Runs several effect chains in parallel and mixes them back */
+/**
+ * Runs several effect chains in parallel and mixes them back
+ * @group Audio Effects
+ */
 export interface AudioEffectCompositeEffect extends AudioEffect {
+    /** Always "Composite" */
     readonly key: "Composite"
     /** Dry level in dB (default -inf) */
     dry: float
@@ -598,8 +774,12 @@ export interface AudioEffectCompositeEffect extends AudioEffect {
     addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "label" | "gain" | "mute" | "solo" | "pan">>): AudioEffectCompositeEntry
 }
 
-/** Processes left and right channels through their own chains (entries are fixed: 0 = left, 1 = right) */
+/**
+ * Processes left and right channels through their own chains (entries are fixed: 0 = left, 1 = right)
+ * @group Audio Effects
+ */
 export interface StereoSplitEffect extends AudioEffect {
+    /** Always "StereoSplit" */
     readonly key: "StereoSplit"
     /** Dry level in dB (default -inf) */
     dry: float
@@ -609,8 +789,12 @@ export interface StereoSplitEffect extends AudioEffect {
     readonly entries: ReadonlyArray<AudioEffectCompositeEntry>
 }
 
-/** Splits the signal into four frequency bands, each with its own chain (Low, Low Mid, High Mid, High) */
+/**
+ * Splits the signal into four frequency bands, each with its own chain (Low, Low Mid, High Mid, High)
+ * @group Audio Effects
+ */
 export interface FrequencySplitEffect extends AudioEffect {
+    /** Always "FrequencySplit" */
     readonly key: "FrequencySplit"
     /** Dry level in dB (default -inf) */
     dry: float
@@ -626,33 +810,65 @@ export interface FrequencySplitEffect extends AudioEffect {
     readonly entries: ReadonlyArray<AudioEffectCompositeEntry>
 }
 
+/**
+ * Audio effect types by key. Use the keys with {@link AudioEffectHost.addAudioEffect}
+ * @group Audio Effects
+ */
 export interface AudioEffects {
+    /** {@link AutotuneEffect} */
     "Autotune": AutotuneEffect
+    /** {@link CompressorEffect} */
     "Compressor": CompressorEffect
+    /** {@link ConvolverEffect} */
     "Convolver": ConvolverEffect
+    /** {@link CrusherEffect} */
     "Crusher": CrusherEffect
+    /** {@link DattorroReverbEffect} */
     "DattorroReverb": DattorroReverbEffect
+    /** {@link DelayEffect} */
     "Delay": DelayEffect
+    /** {@link FoldEffect} */
     "Fold": FoldEffect
+    /** {@link GateEffect} */
     "Gate": GateEffect
+    /** {@link MaximizerEffect} */
     "Maximizer": MaximizerEffect
+    /** {@link NeuralAmpEffect} */
     "NeuralAmp": NeuralAmpEffect
+    /** {@link RevampEffect} */
     "Revamp": RevampEffect
+    /** {@link ReverbEffect} */
     "Reverb": ReverbEffect
+    /** {@link StereoToolEffect} */
     "StereoTool": StereoToolEffect
+    /** {@link TidalEffect} */
     "Tidal": TidalEffect
+    /** {@link VocoderEffect} */
     "Vocoder": VocoderEffect
+    /** {@link WaveshaperEffect} */
     "Waveshaper": WaveshaperEffect
+    /** {@link WerkstattEffect} */
     "Werkstatt": WerkstattEffect
+    /** {@link AudioEffectCompositeEffect} */
     "Composite": AudioEffectCompositeEffect
+    /** {@link StereoSplitEffect} */
     "StereoSplit": StereoSplitEffect
+    /** {@link FrequencySplitEffect} */
     "FrequencySplit": FrequencySplitEffect
 }
 
+/**
+ * Any audio effect
+ * @group Audio Effects
+ */
 export type AnyAudioEffect = AudioEffects[keyof AudioEffects]
 
 // ---- Effect hosts
 
+/**
+ * Anything with a MIDI effect chain (units and Playfield slots)
+ * @group Devices
+ */
 export interface MIDIEffectHost {
     /** MIDI effects ordered by index */
     readonly midiEffects: ReadonlyArray<AnyMIDIEffect>
@@ -661,10 +877,18 @@ export interface MIDIEffectHost {
      * @param key - Effect type
      * @param props - Initial parameter values
      * @param index - Insert position (default: end of chain)
+     * @example
+     * ```ts
+     * synth.addMIDIEffect("Arpeggio", {rate: 9, octaves: 2})
+     * ```
      */
     addMIDIEffect<K extends keyof MIDIEffects>(key: K, props?: DeepPartial<MIDIEffects[K]>, index?: int): MIDIEffects[K]
 }
 
+/**
+ * Anything with an audio effect chain (units, Playfield slots, composite entries)
+ * @group Devices
+ */
 export interface AudioEffectHost {
     /** Audio effects ordered by index */
     readonly audioEffects: ReadonlyArray<AnyAudioEffect>
@@ -673,13 +897,22 @@ export interface AudioEffectHost {
      * @param key - Effect type
      * @param props - Initial parameter values
      * @param index - Insert position (default: end of chain)
+     * @example
+     * ```ts
+     * synth.addAudioEffect("Delay", {delay: 13, feedback: 0.4, wet: -9})
+     * const composite = synth.addAudioEffect("Composite")
+     * composite.addEntry({label: "Crushed"}).addAudioEffect("Crusher", {bits: 8})
+     * ```
      */
     addAudioEffect<K extends keyof AudioEffects>(key: K, props?: DeepPartial<AudioEffects[K]>, index?: int): AudioEffects[K]
 }
 
 // ---- Script devices (Werkstatt, Apparat, Spielwerk)
 
-/** A `// @param` declared by a script */
+/**
+ * A `// @param` declared by a script
+ * @group Script Devices
+ */
 export interface ScriptParameter {
     /** Parameter name as declared in the script */
     readonly label: string
@@ -691,7 +924,10 @@ export interface ScriptParameter {
     readonly defaultValue: float
 }
 
-/** A `// @sample` declared by a script */
+/**
+ * A `// @sample` declared by a script
+ * @group Script Devices
+ */
 export interface ScriptSample {
     /** Sample slot name as declared in the script */
     readonly label: string
@@ -701,6 +937,10 @@ export interface ScriptSample {
     sample: Nullable<Sample>
 }
 
+/**
+ * Common surface of the scriptable devices Werkstatt, Apparat and Spielwerk
+ * @group Script Devices
+ */
 export interface ScriptDevice {
     /** The script source. Setting it re-declares the parameters and samples from its `// @param` / `// @sample` lines */
     code: string
@@ -716,6 +956,10 @@ export interface ScriptDevice {
 
 // ---- Instruments
 
+/**
+ * The sound source of an instrument unit
+ * @group Devices
+ */
 export interface Instrument extends Device {
     /** Instrument type identifier */
     readonly key: keyof Instruments
@@ -727,7 +971,10 @@ export interface Instrument extends Device {
     remove(): void
 }
 
-/** Vaporisateur oscillator */
+/**
+ * Vaporisateur oscillator
+ * @group Instrument Parts
+ */
 export interface VaporisateurOscillator {
     /** Waveform */
     waveform: ClassicWaveform
@@ -739,7 +986,10 @@ export interface VaporisateurOscillator {
     tune: float
 }
 
-/** Vaporisateur LFO */
+/**
+ * Vaporisateur LFO
+ * @group Instrument Parts
+ */
 export interface VaporisateurLFO {
     /** Waveform */
     waveform: ClassicWaveform
@@ -755,7 +1005,10 @@ export interface VaporisateurLFO {
     targetVolume: bipolar
 }
 
-/** Vaporisateur noise generator */
+/**
+ * Vaporisateur noise generator
+ * @group Instrument Parts
+ */
 export interface VaporisateurNoise {
     /** Attack in seconds (0.001 to 5.0) */
     attack: float
@@ -767,8 +1020,12 @@ export interface VaporisateurNoise {
     volume: float
 }
 
-/** Classic subtractive synthesizer */
+/**
+ * Classic subtractive synthesizer
+ * @group Instruments
+ */
 export interface Vaporisateur extends Instrument {
+    /** Always "Vaporisateur" */
     readonly key: "Vaporisateur"
     /** Filter cutoff in Hz (20 to 20000, default 8000) */
     cutoff: float
@@ -798,13 +1055,18 @@ export interface Vaporisateur extends Instrument {
     unisonDetune: float
     /** Unison stereo spread (0.0 to 1.0, default 1.0) */
     unisonStereo: unitValue
+    /** The LFO */
     readonly lfo: VaporisateurLFO
     /** Two oscillators */
     readonly oscillators: ReadonlyArray<VaporisateurOscillator>
+    /** The noise generator */
     readonly noise: VaporisateurNoise
 }
 
-/** One slot (pad) of the Playfield drum machine */
+/**
+ * One slot (pad) of the Playfield drum machine
+ * @group Instrument Parts
+ */
 export interface PlayfieldSlot extends MIDIEffectHost, AudioEffectHost {
     /** Unique id */
     readonly uuid: string
@@ -848,8 +1110,12 @@ export interface PlayfieldSlot extends MIDIEffectHost, AudioEffectHost {
     remove(): void
 }
 
-/** Drum machine playing one sample per note */
+/**
+ * Drum machine playing one sample per note
+ * @group Instruments
+ */
 export interface Playfield extends Instrument {
+    /** Always "Playfield" */
     readonly key: "Playfield"
     /** All slots ordered by note */
     readonly slots: ReadonlyArray<PlayfieldSlot>
@@ -859,12 +1125,22 @@ export interface Playfield extends Instrument {
      * Assign a sample to a note. Replaces an existing slot at that note.
      * @param sample - The sample to play
      * @param props - Slot settings (`note` defaults to the next free note starting at 60)
+     * @example
+     * ```ts
+     * const samples = await openDAW.listSamples()
+     * const drums = project.addInstrumentUnit("Playfield", {label: "Drums"})
+     * drums.instrument.addSample(samples[0], {note: 36})
+     * ```
      */
     addSample(sample: Sample, props?: Partial<Omit<PlayfieldSlot, "uuid" | "playfield" | "sample" | "midiEffects" | "audioEffects" | "addMIDIEffect" | "addAudioEffect" | "remove">>): PlayfieldSlot
 }
 
-/** Minimal sampler */
+/**
+ * Minimal sampler
+ * @group Instruments
+ */
 export interface Nano extends Instrument {
+    /** Always "Nano" */
     readonly key: "Nano"
     /** The sample (null = none) */
     sample: Nullable<Sample>
@@ -874,8 +1150,12 @@ export interface Nano extends Instrument {
     release: float
 }
 
-/** Soundfont (.sf2) player */
+/**
+ * Soundfont (.sf2) player
+ * @group Instruments
+ */
 export interface Soundfont extends Instrument {
+    /** Always "Soundfont" */
     readonly key: "Soundfont"
     /** The soundfont file (null = none) */
     file: Nullable<SoundfontFile>
@@ -883,7 +1163,10 @@ export interface Soundfont extends Instrument {
     presetIndex: int
 }
 
-/** A MIDI CC parameter of the MIDI output device */
+/**
+ * A MIDI CC parameter of the MIDI output device
+ * @group Instrument Parts
+ */
 export interface MIDIOutputParameter {
     /** Unique id */
     readonly uuid: string
@@ -897,8 +1180,12 @@ export interface MIDIOutputParameter {
     remove(): void
 }
 
-/** Sends notes to an external MIDI device */
+/**
+ * Sends notes to an external MIDI device
+ * @group Instruments
+ */
 export interface MIDIOutput extends Instrument {
+    /** Always "MIDIOutput" */
     readonly key: "MIDIOutput"
     /** MIDI channel (0 to 15) */
     channel: int
@@ -908,8 +1195,12 @@ export interface MIDIOutput extends Instrument {
     addParameter(props?: Partial<Pick<MIDIOutputParameter, "label" | "controller" | "value">>): MIDIOutputParameter
 }
 
-/** Tape audio player (hosts audio tracks) */
+/**
+ * Tape audio player (hosts audio tracks)
+ * @group Instruments
+ */
 export interface Tape extends Instrument {
+    /** Always "Tape" */
     readonly key: "Tape"
     /** Flutter (0.0 to 1.0, default 0.2) */
     flutter: unitValue
@@ -921,7 +1212,10 @@ export interface Tape extends Instrument {
     saturation: unitValue
 }
 
-/** Neon vibrato */
+/**
+ * Neon vibrato
+ * @group Instrument Parts
+ */
 export interface NeonVibrato {
     /** Waveform: 0 = Triangle, 1 = Saw Up, 2 = Saw Down, 3 = Square */
     wave: 0 | 1 | 2 | 3
@@ -933,7 +1227,10 @@ export interface NeonVibrato {
     depth: float
 }
 
-/** One of the two Neon oscillator lines */
+/**
+ * One of the two Neon oscillator lines
+ * @group Instrument Parts
+ */
 export interface NeonLine {
     /** First waveform (0-7): Saw, Square, Pulse, Double Sine, Saw-Pulse, Resonance Saw, Resonance Triangle, Resonance Trapezoid */
     wave1: int
@@ -945,23 +1242,42 @@ export interface NeonLine {
     dcaKeyFollow: float
 }
 
-/** One 8-stage Neon envelope (rates and levels in the CZ 0-99 domain) */
+/**
+ * One 8-stage Neon envelope (rates and levels in the CZ 0-99 domain)
+ * @group Instrument Parts
+ */
 export interface NeonEnvelope {
+    /** Rate of stage 1 (0 to 99) */
     rate1: float
+    /** Rate of stage 2 (0 to 99) */
     rate2: float
+    /** Rate of stage 3 (0 to 99) */
     rate3: float
+    /** Rate of stage 4 (0 to 99) */
     rate4: float
+    /** Rate of stage 5 (0 to 99) */
     rate5: float
+    /** Rate of stage 6 (0 to 99) */
     rate6: float
+    /** Rate of stage 7 (0 to 99) */
     rate7: float
+    /** Rate of stage 8 (0 to 99) */
     rate8: float
+    /** Level of stage 1 (0 to 99) */
     level1: float
+    /** Level of stage 2 (0 to 99) */
     level2: float
+    /** Level of stage 3 (0 to 99) */
     level3: float
+    /** Level of stage 4 (0 to 99) */
     level4: float
+    /** Level of stage 5 (0 to 99) */
     level5: float
+    /** Level of stage 6 (0 to 99) */
     level6: float
+    /** Level of stage 7 (0 to 99) */
     level7: float
+    /** Level of stage 8 (0 to 99) */
     level8: float
     /** Sustain stage (1 to 8, 0 = none) */
     sustain: int
@@ -969,8 +1285,12 @@ export interface NeonEnvelope {
     end: int
 }
 
-/** CZ-style phase distortion synthesizer */
+/**
+ * CZ-style phase distortion synthesizer
+ * @group Instruments
+ */
 export interface Neon extends Instrument {
+    /** Always "Neon" */
     readonly key: "Neon"
     /** Line select (0-3): 1, 2, 1+1', 1+2' */
     lineSelect: 0 | 1 | 2 | 3
@@ -986,6 +1306,7 @@ export interface Neon extends Instrument {
     tune: float
     /** Monophonic or polyphonic */
     voicingMode: VoicingMode
+    /** The vibrato */
     readonly vibrato: NeonVibrato
     /** Two lines */
     readonly lines: ReadonlyArray<NeonLine>
@@ -993,7 +1314,10 @@ export interface Neon extends Instrument {
     readonly envelopes: ReadonlyArray<NeonEnvelope>
 }
 
-/** One step of a Cubed pattern */
+/**
+ * One step of a Cubed pattern
+ * @group Instrument Parts
+ */
 export interface CubedStep {
     /** MIDI note (0 to 127) */
     note: int
@@ -1005,7 +1329,10 @@ export interface CubedStep {
     accent: boolean
 }
 
-/** One of the 16 Cubed patterns */
+/**
+ * One of the 16 Cubed patterns
+ * @group Instrument Parts
+ */
 export interface CubedPattern {
     /** Number of steps played (1 to 64) */
     length: int
@@ -1015,8 +1342,12 @@ export interface CubedPattern {
     setSteps(steps: ReadonlyArray<Partial<CubedStep>>): void
 }
 
-/** 303-style acid bassline synthesizer with a built-in sequencer */
+/**
+ * 303-style acid bassline synthesizer with a built-in sequencer
+ * @group Instruments
+ */
 export interface Cubed extends Instrument {
+    /** Always "Cubed" */
     readonly key: "Cubed"
     /** Tuning in cents (-1200 to 1200, default 0) */
     tuning: float
@@ -1040,28 +1371,56 @@ export interface Cubed extends Instrument {
     readonly patterns: ReadonlyArray<CubedPattern>
 }
 
-/** Scriptable instrument. See {@link ScriptDevice} */
+/**
+ * Scriptable instrument. See {@link ScriptDevice}
+ * @group Instruments
+ */
 export interface Apparat extends Instrument, ScriptDevice {
+    /** Always "Apparat" */
     readonly key: "Apparat"
 }
 
+/**
+ * Instrument types by key. Use the keys with {@link Project.addInstrumentUnit}
+ * @group Instruments
+ */
 export interface Instruments {
+    /** {@link Vaporisateur} */
     "Vaporisateur": Vaporisateur
+    /** {@link Playfield} */
     "Playfield": Playfield
+    /** {@link Nano} */
     "Nano": Nano
+    /** {@link Soundfont} */
     "Soundfont": Soundfont
+    /** {@link MIDIOutput} */
     "MIDIOutput": MIDIOutput
+    /** {@link Tape} */
     "Tape": Tape
+    /** {@link Neon} */
     "Neon": Neon
+    /** {@link Cubed} */
     "Cubed": Cubed
+    /** {@link Apparat} */
     "Apparat": Apparat
 }
 
+/**
+ * Any instrument
+ * @group Instruments
+ */
 export type AnyInstrument = Instruments[keyof Instruments]
 
+/**
+ * Any instrument or effect
+ * @group Devices
+ */
 export type AnyDevice = AnyInstrument | AnyMIDIEffect | AnyAudioEffect
 
-/** Anything with automatable parameters */
+/**
+ * Anything with automatable parameters
+ * @group Automation
+ */
 export type Automatable =
     | AnyDevice
     | AnyAudioUnit
@@ -1078,8 +1437,16 @@ export type Automatable =
 // Audio units
 // ---------------------------------------------------------------------------------------------------------
 
+/**
+ * The four unit kinds
+ * @group Audio Units
+ */
 export type AudioUnitKind = "instrument" | "auxiliary" | "group" | "output"
 
+/**
+ * A channel in the mixer: devices, tracks, volume, pan and routing
+ * @group Audio Units
+ */
 export interface AudioUnit extends MIDIEffectHost, AudioEffectHost {
     /** Unique id */
     readonly uuid: string
@@ -1115,6 +1482,14 @@ export interface AudioUnit extends MIDIEffectHost, AudioEffectHost {
      * Add an automation track for a parameter
      * @param target - Any automatable object (this unit, a device, a send, ...)
      * @param parameter - Parameter path, e.g. `"cutoff"` or `"lfo.rate"`
+     * @example
+     * ```ts
+     * const lane = synth.addValueTrack(synth.instrument, "cutoff")
+     * lane.addRegion({duration: PPQN.Bar * 4}).addEvents([
+     *     {position: 0, value: 0.2},
+     *     {position: PPQN.Bar * 4, value: 0.9}
+     * ])
+     * ```
      */
     addValueTrack<T extends Automatable>(target: T, parameter: ParameterPath<T>, props?: Partial<Pick<Track, "enabled">>, index?: int): ValueTrack
     /** The automation track controlling a parameter, if any */
@@ -1123,14 +1498,29 @@ export interface AudioUnit extends MIDIEffectHost, AudioEffectHost {
     remove(): void
 }
 
+/**
+ * Unit hosting an instrument, created with {@link Project.addInstrumentUnit}
+ * @group Audio Units
+ */
 export interface InstrumentAudioUnit<K extends keyof Instruments = keyof Instruments> extends AudioUnit, Sendable {
+    /** Always "instrument" */
     readonly kind: "instrument"
     /** The instrument */
     readonly instrument: Instruments[K]
-    /** Replace the instrument with another type (keeps tracks and effects) */
+    /**
+     * Replace the instrument with another type (keeps tracks and effects)
+     * @example
+     * ```ts
+     * const nano = synth.setInstrument("Nano", {release: 0.5})
+     * ```
+     */
     setInstrument<N extends keyof Instruments>(key: N, props?: DeepPartial<Instruments[N]>): Instruments[N]
 }
 
+/**
+ * Common surface of aux, group and output units
+ * @group Audio Units
+ */
 export interface BusAudioUnit extends AudioUnit {
     /** Icon name (see IconSymbol) */
     icon: string
@@ -1138,29 +1528,64 @@ export interface BusAudioUnit extends AudioUnit {
     color: string
 }
 
+/**
+ * Send effect bus, fed by {@link Sendable.addSend}
+ * @group Audio Units
+ */
 export interface AuxAudioUnit extends BusAudioUnit, Sendable {
+    /** Always "auxiliary" */
     readonly kind: "auxiliary"
 }
 
+/**
+ * Group bus, fed by routing a unit's {@link AudioUnit.output} to it or by sends
+ * @group Audio Units
+ */
 export interface GroupAudioUnit extends BusAudioUnit, Sendable {
+    /** Always "group" */
     readonly kind: "group"
 }
 
+/**
+ * The primary output. Exactly one per project, cannot be removed
+ * @group Audio Units
+ */
 export interface OutputAudioUnit extends BusAudioUnit {
+    /** Always "output" */
     readonly kind: "output"
 }
 
+/**
+ * Any unit
+ * @group Audio Units
+ */
 export type AnyAudioUnit = InstrumentAudioUnit | AuxAudioUnit | GroupAudioUnit | OutputAudioUnit
 
+/**
+ * Settings accepted when creating a unit
+ * @group Audio Units
+ */
 export type AudioUnitProps = Partial<Pick<AudioUnit, "label" | "volume" | "panning" | "mute" | "solo" | "output">>
+/**
+ * Settings accepted when creating a bus unit
+ * @group Audio Units
+ */
 export type BusAudioUnitProps = AudioUnitProps & Partial<Pick<BusAudioUnit, "icon" | "color">>
 
 // ---------------------------------------------------------------------------------------------------------
 // Timeline
 // ---------------------------------------------------------------------------------------------------------
 
+/**
+ * The three track types
+ * @group Timeline
+ */
 export type TrackType = "notes" | "audio" | "value"
 
+/**
+ * Lane of a unit holding regions (arrangement) and clips (launcher)
+ * @group Timeline
+ */
 export interface Track {
     /** Unique id */
     readonly uuid: string
@@ -1180,6 +1605,10 @@ export interface Track {
     remove(): void
 }
 
+/**
+ * Content placed on the arrangement timeline
+ * @group Timeline
+ */
 export interface Region {
     /** Unique id */
     readonly uuid: string
@@ -1199,6 +1628,10 @@ export interface Region {
     remove(): void
 }
 
+/**
+ * Region repeating its content every `loopDuration`
+ * @group Timeline
+ */
 export interface LoopableRegion extends Region {
     /** Loop cycle length in PPQN (seconds for non-synced audio regions) */
     loopDuration: number
@@ -1206,7 +1639,10 @@ export interface LoopableRegion extends Region {
     loopOffset: number
 }
 
-/** Clip launch settings */
+/**
+ * Clip launch settings
+ * @group Timeline
+ */
 export interface ClipPlayback {
     /** Loop the clip (default true) */
     loop: boolean
@@ -1220,6 +1656,10 @@ export interface ClipPlayback {
     trigger: int
 }
 
+/**
+ * Content in the clip launcher
+ * @group Timeline
+ */
 export interface Clip {
     /** Unique id */
     readonly uuid: string
@@ -1239,6 +1679,10 @@ export interface Clip {
     remove(): void
 }
 
+/**
+ * A single note
+ * @group Notes
+ */
 export interface NoteEvent {
     /** Unique id */
     readonly uuid: string
@@ -1262,19 +1706,37 @@ export interface NoteEvent {
     remove(): void
 }
 
+/**
+ * Settings accepted by {@link NoteEventOwner.addEvent}
+ * @group Notes
+ */
 export type NoteEventProps = Partial<Pick<NoteEvent, "position" | "duration" | "pitch" | "velocity" | "cents" | "playCount" | "playCurve" | "chance">>
 
+/**
+ * Common surface of note regions and clips
+ * @group Notes
+ */
 export interface NoteEventOwner {
     /** All notes sorted by position */
     readonly events: ReadonlyArray<NoteEvent>
     /** Add a note (defaults: position 0, duration 1/16, pitch 60, velocity 100/127) */
     addEvent(props?: NoteEventProps): NoteEvent
-    /** Add many notes at once */
+    /**
+     * Add many notes at once
+     * @example
+     * ```ts
+     * region.addEvents([60, 64, 67].map((pitch, index) => ({position: index * PPQN.Quarter, duration: PPQN.Quarter, pitch})))
+     * ```
+     */
     addEvents(events: ReadonlyArray<NoteEventProps>): ReadonlyArray<NoteEvent>
     /** Remove all notes */
     clearEvents(): void
 }
 
+/**
+ * Region holding notes
+ * @group Notes
+ */
 export interface NoteRegion extends LoopableRegion, NoteEventOwner {
     /** The note track this region belongs to */
     readonly track: NoteTrack
@@ -1282,27 +1744,62 @@ export interface NoteRegion extends LoopableRegion, NoteEventOwner {
     eventOffset: ppqn
 }
 
+/**
+ * Clip holding notes
+ * @group Notes
+ */
 export interface NoteClip extends Clip, NoteEventOwner {
     /** The note track this clip belongs to */
     readonly track: NoteTrack
 }
 
-/** Region props. Pass `mirror` to share the notes of another region (a linked copy). */
-export type NoteRegionProps = Partial<Pick<NoteRegion, "position" | "duration" | "loopDuration" | "loopOffset" | "eventOffset" | "mute" | "label" | "hue">> & { mirror?: NoteRegion | NoteClip }
-export type NoteClipProps = Partial<Pick<NoteClip, "index" | "duration" | "mute" | "label" | "hue">> & { launch?: Partial<ClipPlayback>, mirror?: NoteRegion | NoteClip }
+/**
+ * Region props. Pass `mirror` to share the notes of another region (a linked copy).
+ * @group Notes
+ */
+export type NoteRegionProps = Partial<Pick<NoteRegion, "position" | "duration" | "loopDuration" | "loopOffset" | "eventOffset" | "mute" | "label" | "hue">> & {
+    /** Share the notes of another region or clip (linked copy) */
+    mirror?: NoteRegion | NoteClip
+}
+/**
+ * Clip props. Pass `mirror` to share the notes of another region or clip (a linked copy)
+ * @group Notes
+ */
+export type NoteClipProps = Partial<Pick<NoteClip, "index" | "duration" | "mute" | "label" | "hue">> & {
+    /** Launch settings */
+    launch?: Partial<ClipPlayback>
+    /** Share the notes of another region or clip (linked copy) */
+    mirror?: NoteRegion | NoteClip
+}
 
+/**
+ * Track holding note regions and clips
+ * @group Notes
+ */
 export interface NoteTrack extends Track {
+    /** Always "notes" */
     readonly type: "notes"
     /** All regions sorted by position */
     readonly regions: ReadonlyArray<NoteRegion>
     /** All clips sorted by slot index */
     readonly clips: ReadonlyArray<NoteClip>
-    /** Add a region (default duration one bar). Throws if it overlaps an existing region */
+    /**
+     * Add a region (default duration one bar). Throws if it overlaps an existing region
+     * @example
+     * ```ts
+     * const region = synth.noteTracks[0].addRegion({duration: PPQN.Bar * 2, loopDuration: PPQN.Bar})
+     * region.addEvent({position: 0, duration: PPQN.Quarter, pitch: 60})
+     * ```
+     */
     addRegion(props?: NoteRegionProps): NoteRegion
     /** Add a clip (default: next free slot, one bar) */
     addClip(props?: NoteClipProps): NoteClip
 }
 
+/**
+ * One automation point
+ * @group Automation
+ */
 export interface ValueEvent {
     /** Unique id */
     readonly uuid: string
@@ -1316,8 +1813,16 @@ export interface ValueEvent {
     remove(): void
 }
 
+/**
+ * Settings accepted by {@link ValueEventOwner.addEvent}
+ * @group Automation
+ */
 export type ValueEventProps = Partial<Pick<ValueEvent, "position" | "value" | "interpolation">>
 
+/**
+ * Common surface of automation regions and clips
+ * @group Automation
+ */
 export interface ValueEventOwner {
     /** All events sorted by position */
     readonly events: ReadonlyArray<ValueEvent>
@@ -1329,20 +1834,49 @@ export interface ValueEventOwner {
     clearEvents(): void
 }
 
+/**
+ * Region holding automation points
+ * @group Automation
+ */
 export interface ValueRegion extends LoopableRegion, ValueEventOwner {
     /** The automation track this region belongs to */
     readonly track: ValueTrack
 }
 
+/**
+ * Clip holding automation points
+ * @group Automation
+ */
 export interface ValueClip extends Clip, ValueEventOwner {
     /** The automation track this clip belongs to */
     readonly track: ValueTrack
 }
 
-export type ValueRegionProps = Partial<Pick<ValueRegion, "position" | "duration" | "loopDuration" | "loopOffset" | "mute" | "label" | "hue">> & { mirror?: ValueRegion | ValueClip }
-export type ValueClipProps = Partial<Pick<ValueClip, "index" | "duration" | "mute" | "label" | "hue">> & { launch?: Partial<ClipPlayback>, mirror?: ValueRegion | ValueClip }
+/**
+ * Region props. Pass `mirror` to share the points of another region or clip (a linked copy)
+ * @group Automation
+ */
+export type ValueRegionProps = Partial<Pick<ValueRegion, "position" | "duration" | "loopDuration" | "loopOffset" | "mute" | "label" | "hue">> & {
+    /** Share the points of another region or clip (linked copy) */
+    mirror?: ValueRegion | ValueClip
+}
+/**
+ * Clip props. Pass `mirror` to share the points of another region or clip (a linked copy)
+ * @group Automation
+ */
+export type ValueClipProps = Partial<Pick<ValueClip, "index" | "duration" | "mute" | "label" | "hue">> & {
+    /** Launch settings */
+    launch?: Partial<ClipPlayback>
+    /** Share the points of another region or clip (linked copy) */
+    mirror?: ValueRegion | ValueClip
+}
 
+/**
+ * Automation track bound to one parameter, created with {@link AudioUnit.addValueTrack}
+ * @group Automation
+ */
 export interface ValueTrack extends Track {
+    /** Always "value" */
     readonly type: "value"
     /** The object owning the automated parameter */
     readonly target: Automatable
@@ -1364,10 +1898,14 @@ export interface ValueTrack extends Track {
  * - `"pitch"`: repitches to fit the tempo (classic sampler stretch)
  * - `"timestretch"`: transient based time-stretch keeping the pitch
  * - `"signalsmith"`: spectral time-stretch with independent transpose
+ * @group Audio
  */
 export type AudioPlayback = "no-sync" | "pitch" | "timestretch" | "signalsmith"
 
-/** Fade in/out of an audio region */
+/**
+ * Fade in/out of an audio region
+ * @group Audio
+ */
 export interface AudioFading {
     /** Fade-in length in PPQN */
     in: number
@@ -1379,6 +1917,10 @@ export interface AudioFading {
     outSlope: unitValue
 }
 
+/**
+ * Common surface of audio regions and clips
+ * @group Audio
+ */
 export interface AudioContent {
     /** The sample */
     readonly sample: Sample
@@ -1396,21 +1938,49 @@ export interface AudioContent {
     transpose: float
 }
 
+/**
+ * Region playing a sample
+ * @group Audio
+ */
 export interface AudioRegion extends LoopableRegion, AudioContent {
     /** The audio track this region belongs to */
     readonly track: AudioTrack
+    /** Fade in and out */
     readonly fading: AudioFading
 }
 
+/**
+ * Clip playing a sample
+ * @group Audio
+ */
 export interface AudioClip extends Clip, AudioContent {
     /** The audio track this clip belongs to */
     readonly track: AudioTrack
 }
 
-export type AudioRegionProps = Partial<Pick<AudioRegion, "position" | "duration" | "loopDuration" | "loopOffset" | "mute" | "label" | "hue" | "gain" | "waveformOffset" | "playback" | "transientPlayMode" | "playbackRate" | "transpose">> & { fading?: Partial<AudioFading> }
-export type AudioClipProps = Partial<Pick<AudioClip, "index" | "duration" | "mute" | "label" | "hue" | "gain" | "waveformOffset" | "playback" | "transientPlayMode" | "playbackRate" | "transpose">> & { launch?: Partial<ClipPlayback> }
+/**
+ * Settings accepted by {@link AudioTrack.addRegion}
+ * @group Audio
+ */
+export type AudioRegionProps = Partial<Pick<AudioRegion, "position" | "duration" | "loopDuration" | "loopOffset" | "mute" | "label" | "hue" | "gain" | "waveformOffset" | "playback" | "transientPlayMode" | "playbackRate" | "transpose">> & {
+    /** Fade in and out */
+    fading?: Partial<AudioFading>
+}
+/**
+ * Settings accepted by {@link AudioTrack.addClip}
+ * @group Audio
+ */
+export type AudioClipProps = Partial<Pick<AudioClip, "index" | "duration" | "mute" | "label" | "hue" | "gain" | "waveformOffset" | "playback" | "transientPlayMode" | "playbackRate" | "transpose">> & {
+    /** Launch settings */
+    launch?: Partial<ClipPlayback>
+}
 
+/**
+ * Track holding audio regions and clips (Tape units)
+ * @group Audio
+ */
 export interface AudioTrack extends Track {
+    /** Always "audio" */
     readonly type: "audio"
     /** All regions sorted by position */
     readonly regions: ReadonlyArray<AudioRegion>
@@ -1419,18 +1989,39 @@ export interface AudioTrack extends Track {
     /**
      * Add an audio region. Default playback is `"pitch"` when the sample has a tempo, otherwise `"no-sync"`.
      * Default duration is the sample length. Throws if it overlaps an existing region
+     * @example
+     * ```ts
+     * const tape = project.addInstrumentUnit("Tape", {label: "Loop"})
+     * tape.audioTracks[0].addRegion(sample, {position: PPQN.Bar, playback: "timestretch"})
+     * ```
      */
     addRegion(sample: Sample, props?: AudioRegionProps): AudioRegion
     /** Add an audio clip (default: next free slot) */
     addClip(sample: Sample, props?: AudioClipProps): AudioClip
 }
 
+/**
+ * Any track
+ * @group Timeline
+ */
 export type AnyTrack = NoteTrack | AudioTrack | ValueTrack
+/**
+ * Any region
+ * @group Timeline
+ */
 export type AnyRegion = NoteRegion | AudioRegion | ValueRegion
+/**
+ * Any clip
+ * @group Timeline
+ */
 export type AnyClip = NoteClip | AudioClip | ValueClip
 
 // ---- Global timeline
 
+/**
+ * Arrangement marker
+ * @group Timeline
+ */
 export interface Marker {
     /** Unique id */
     readonly uuid: string
@@ -1446,8 +2037,16 @@ export interface Marker {
     remove(): void
 }
 
+/**
+ * Settings accepted by {@link Project.addMarker}
+ * @group Timeline
+ */
 export type MarkerProps = Partial<Pick<Marker, "position" | "label" | "hue" | "plays">>
 
+/**
+ * A tempo change
+ * @group Timeline
+ */
 export interface TempoEvent {
     /** Unique id */
     readonly uuid: string
@@ -1461,8 +2060,16 @@ export interface TempoEvent {
     remove(): void
 }
 
+/**
+ * Settings accepted by {@link TempoTrack.addEvent}
+ * @group Timeline
+ */
 export type TempoEventProps = Partial<Pick<TempoEvent, "position" | "bpm" | "interpolation">>
 
+/**
+ * Tempo automation of the project
+ * @group Timeline
+ */
 export interface TempoTrack {
     /** Enable tempo automation */
     enabled: boolean
@@ -1478,6 +2085,10 @@ export interface TempoTrack {
     clearEvents(): void
 }
 
+/**
+ * A time signature change
+ * @group Timeline
+ */
 export interface SignatureEvent {
     /** Unique id */
     readonly uuid: string
@@ -1495,6 +2106,10 @@ export interface SignatureEvent {
     remove(): void
 }
 
+/**
+ * Time signature changes of the project
+ * @group Timeline
+ */
 export interface SignatureTrack {
     /** Enable signature changes */
     enabled: boolean
@@ -1506,6 +2121,10 @@ export interface SignatureTrack {
     clearEvents(): void
 }
 
+/**
+ * Transport loop range
+ * @group Core
+ */
 export interface LoopArea {
     /** Loop enabled */
     enabled: boolean
@@ -1515,6 +2134,10 @@ export interface LoopArea {
     to: ppqn
 }
 
+/**
+ * Beats per bar and beat unit
+ * @group Core
+ */
 export interface TimeSignature {
     /** Beats per bar (1 to 31) */
     numerator: int
@@ -1522,7 +2145,10 @@ export interface TimeSignature {
     denominator: int
 }
 
-/** Global shuffle groove */
+/**
+ * Global shuffle groove
+ * @group Core
+ */
 export interface GrooveShuffle {
     /** Custom label */
     label: string
@@ -1532,6 +2158,10 @@ export interface GrooveShuffle {
     duration: ppqn
 }
 
+/**
+ * Descriptive project metadata
+ * @group Core
+ */
 export interface ProjectMeta {
     /** Artist */
     artist: string
@@ -1547,6 +2177,10 @@ export interface ProjectMeta {
 // Modulators
 // ---------------------------------------------------------------------------------------------------------
 
+/**
+ * An assignment of a modulator to a parameter
+ * @group Modulators
+ */
 export interface Modulation {
     /** Unique id */
     readonly uuid: string
@@ -1564,6 +2198,10 @@ export interface Modulation {
     remove(): void
 }
 
+/**
+ * Common surface of all modulators, created with {@link Project.addModulator}
+ * @group Modulators
+ */
 export interface Modulator {
     /** Unique id */
     readonly uuid: string
@@ -1594,14 +2232,23 @@ export interface Modulator {
      * @param target - Any modulatable object (a device, a unit, ...)
      * @param parameter - Parameter path, e.g. `"cutoff"`
      * @param depth - Modulation depth (-1.0 to 1.0, default 0.25)
+     * @example
+     * ```ts
+     * const lfo = project.addModulator("LFO", {rateSync: 6})
+     * lfo.assign(synth.instrument, "cutoff", 0.5)
+     * ```
      */
     assign<T extends Automatable>(target: T, parameter: ParameterPath<T>, depth?: bipolar): Modulation
     /** Remove this modulator including its assignments */
     remove(): void
 }
 
-/** Low frequency oscillator */
+/**
+ * Low frequency oscillator
+ * @group Modulators
+ */
 export interface LfoModulator extends Modulator {
+    /** Always "LFO" */
     readonly kind: "LFO"
     /** Shape (0-4): Sine, Triangle, Saw up, Saw down, Square */
     shape: 0 | 1 | 2 | 3 | 4
@@ -1615,8 +2262,12 @@ export interface LfoModulator extends Modulator {
     exponent: bipolar
 }
 
-/** Step sequencer */
+/**
+ * Step sequencer
+ * @group Modulators
+ */
 export interface StepsModulator extends Modulator {
+    /** Always "Steps" */
     readonly kind: "Steps"
     /** Number of steps (1 to 64, default 16) */
     count: int
@@ -1636,15 +2287,23 @@ export interface StepsModulator extends Modulator {
     setSteps(values: ReadonlyArray<unitValue>): void
 }
 
-/** Manual macro control */
+/**
+ * Manual macro control
+ * @group Modulators
+ */
 export interface MacroModulator extends Modulator {
+    /** Always "Macro" */
     readonly kind: "Macro"
     /** Value (0.0 to 1.0, default 0.5) */
     value: unitValue
 }
 
-/** Random generator */
+/**
+ * Random generator
+ * @group Modulators
+ */
 export interface RandomModulator extends Modulator {
+    /** Always "Random" */
     readonly kind: "Random"
     /** Repeat after n values (0 = never, 1 to 64) */
     loop: int
@@ -1662,19 +2321,35 @@ export interface RandomModulator extends Modulator {
     levels: int
 }
 
+/**
+ * Modulator types by kind. Use the kinds with {@link Project.addModulator}
+ * @group Modulators
+ */
 export interface Modulators {
+    /** {@link LfoModulator} */
     "LFO": LfoModulator
+    /** {@link StepsModulator} */
     "Steps": StepsModulator
+    /** {@link MacroModulator} */
     "Macro": MacroModulator
+    /** {@link RandomModulator} */
     "Random": RandomModulator
 }
 
+/**
+ * Any modulator
+ * @group Modulators
+ */
 export type AnyModulator = Modulators[keyof Modulators]
 
 // ---------------------------------------------------------------------------------------------------------
 // Project
 // ---------------------------------------------------------------------------------------------------------
 
+/**
+ * A project under construction or the one open in the studio. Hand it back with {@link Project.openInStudio}
+ * @group Core
+ */
 export interface Project {
     /** Project name */
     name: string
@@ -1709,6 +2384,10 @@ export interface Project {
      * @param key - Instrument type
      * @param props - Unit settings
      * @param instrument - Initial instrument parameters
+     * @example
+     * ```ts
+     * const synth = project.addInstrumentUnit("Vaporisateur", {label: "Lead", volume: -6}, {cutoff: 2400, resonance: 0.4})
+     * ```
      */
     addInstrumentUnit<K extends keyof Instruments>(key: K, props?: AudioUnitProps, instrument?: DeepPartial<Instruments[K]>): InstrumentAudioUnit<K>
     /** Add an auxiliary (send effect) unit */
@@ -1725,22 +2404,57 @@ export interface Project {
     readonly signatureTrack: SignatureTrack
     /** All modulators ordered by index */
     readonly modulators: ReadonlyArray<AnyModulator>
-    /** Add a modulator */
+    /**
+     * Add a modulator
+     * @example
+     * ```ts
+     * const steps = project.addModulator("Steps", {count: 8, rateSync: 10})
+     * steps.setSteps([1, 0, 0.5, 0, 1, 0, 0.5, 0.25])
+     * ```
+     */
     addModulator<K extends keyof Modulators>(kind: K, props?: DeepPartial<Modulators[K]>): Modulators[K]
     /** Open the project in the studio (replaces the current project). Throws if the project is invalid */
     openInStudio(): void
 }
 
+/**
+ * The global `openDAW` object, entry point of every script
+ * @group Core
+ */
 export interface Api {
-    /** Create a new empty project */
+    /**
+     * Create a new empty project
+     * @example
+     * ```ts
+     * const project = openDAW.newProject("Hello")
+     * project.bpm = 120
+     * project.openInStudio()
+     * ```
+     */
     newProject(name?: string): Project
     /** Whether a project is open in the studio */
     hasProject(): Promise<boolean>
-    /** Load the project currently open in the studio for modification. Call {@link Project.openInStudio} to apply. Throws if none is open */
+    /**
+     * Load the project currently open in the studio for modification. Call {@link Project.openInStudio} to apply. Throws if none is open
+     * @example
+     * ```ts
+     * const project = await openDAW.getProject()
+     * project.audioUnits.forEach(unit => unit.mute = false)
+     * project.openInStudio()
+     * ```
+     */
     getProject(): Promise<Project>
     /** Show an info dialog in the studio and wait until it is closed */
     showInfo(headline: string, message: string): Promise<void>
-    /** Create a sample in the studio from raw audio data */
+    /**
+     * Create a sample in the studio from raw audio data
+     * @example
+     * ```ts
+     * const audio = AudioData.create(sampleRate, sampleRate, 1)
+     * audio.frames[0].forEach((_, index) => audio.frames[0][index] = Math.sin(index * 440 / sampleRate * Math.PI * 2) * 0.5)
+     * const sample = await openDAW.addSample(audio, "Sine")
+     * ```
+     */
     addSample(data: AudioData, name: string): Promise<Sample>
     /** All samples available in the studio (stock and user samples) */
     listSamples(): Promise<ReadonlyArray<Sample>>

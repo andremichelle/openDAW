@@ -269,7 +269,7 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                         MenuItem.default({label: "Export Script..."})
                             .setTriggerProcedure(exportScript),
                         MenuItem.default({label: "Manual", icon: IconSymbol.Help, separatorBefore: true})
-                            .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/script-editor"))
+                            .setTriggerProcedure(() => window.open("/docs/scripting/", "_blank"))
                     ))
                     const onKeyDown = (event: KeyboardEvent) => {
                         if (!Keyboard.isControlKey(event)) {return}
