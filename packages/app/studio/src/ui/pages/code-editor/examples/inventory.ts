@@ -5,8 +5,6 @@ const openDAW: Api = InaccessibleProperty("Not to be executed.")
 
 // Inventory: reads the project currently open in the studio, counts everything in it and shows the result
 
-export {}
-
 if (!await openDAW.hasProject()) {
     await openDAW.showInfo("Inventory", "No project is open. Create or load one first.")
 } else {

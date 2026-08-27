@@ -14,6 +14,7 @@ import {MenuButton} from "@/ui/components/MenuButton"
 import {MenuItem, Project} from "@opendaw/studio-core"
 import {WavFile} from "@opendaw/lib-dsp"
 import scriptWorkerUrl from "@opendaw/studio-scripting/ScriptWorker.js?worker&url"
+import ScriptStarter from "./code-editor/examples/starter.ts?raw"
 import ScriptAudioRegion from "./code-editor/examples/create-sample.ts?raw"
 import ScriptNanoWavetable from "./code-editor/examples/nano-wavetable.ts?raw"
 import ScriptAcid from "./code-editor/examples/acid.ts?raw"
@@ -26,6 +27,7 @@ import {AudioData} from "@opendaw/lib-dsp"
 
 const truncateImports = (script: string) => script.substring(script.indexOf("//"))
 const Examples = {
+    Starter: truncateImports(ScriptStarter),
     AudioRegion: truncateImports(ScriptAudioRegion),
     NanoWavetable: truncateImports(ScriptNanoWavetable),
     Acid: truncateImports(ScriptAcid),
@@ -82,7 +84,7 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                 success={([monaco]) => {
                     const {model, container} = MonacoFactory.create({
                         monaco, lifecycle, language: "typescript",
-                        uri: "file:///main.ts", initialCode: Examples.Acid
+                        uri: "file:///main.ts", initialCode: Examples.Starter, keepExisting: true
                     })
                     const compileAndRun = async () => {
                         try {

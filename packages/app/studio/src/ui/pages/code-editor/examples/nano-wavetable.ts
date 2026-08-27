@@ -6,8 +6,6 @@ const openDAW: Api = InaccessibleProperty("Not to be executed.")
 
 // PADsynth algorithm by Paul Nasca (ZynAddSubFX)
 
-export {}
-
 class SeededRandom {
     #seed: number
     constructor(seed: number) {this.#seed = seed}

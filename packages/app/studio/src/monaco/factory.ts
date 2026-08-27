@@ -11,16 +11,18 @@ export namespace MonacoFactory {
         uri: string
         initialCode: string
         lifecycle: Lifecycle
+        // An existing model for this uri keeps its content and undo history instead of being reset to initialCode
+        keepExisting?: boolean
     }
 
-    export const create = ({monaco, language, uri, initialCode, lifecycle}: Options) => {
+    export const create = ({monaco, language, uri, initialCode, lifecycle, keepExisting = false}: Options) => {
         const container = document.createElement("div")
         container.className = "monaco-host"
         const modelUri = monaco.Uri.parse(uri)
         let model = monaco.editor.getModel(modelUri)
         if (isNull(model)) {
             model = monaco.editor.createModel(initialCode, language, modelUri)
-        } else {
+        } else if (!keepExisting) {
             model.setValue(initialCode)
         }
         const editor = monaco.editor.create(container, {

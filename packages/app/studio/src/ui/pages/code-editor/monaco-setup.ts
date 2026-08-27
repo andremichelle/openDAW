@@ -21,7 +21,9 @@ tsDefaults.setCompilerOptions({
     jsx: monaco.languages.typescript.JsxEmit.Preserve,
     noEmit: false,
     esModuleInterop: true,
-    allowSyntheticDefaultImports: true
+    allowSyntheticDefaultImports: true,
+    // Every script is a module (top-level await, no global leaks) without the user writing `export {}`
+    moduleDetection: 3
 })
 
 tsDefaults.setDiagnosticsOptions({

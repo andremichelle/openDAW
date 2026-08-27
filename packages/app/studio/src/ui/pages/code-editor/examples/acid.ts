@@ -7,7 +7,7 @@ const openDAW: Api = InaccessibleProperty("Not to be executed.")
 // Acid: a seeded 303 line with Euclidean 808/909 drums (the scripted twin of andre.michelle/acid)
 // Change the seed for a new track. The clips are laid out as a 64-cycle arrangement on the timeline.
 
-const SEED = 3030808
+const SEED = 12345678
 
 // ---------- helpers ----------
 
@@ -48,29 +48,29 @@ const euclid = (steps: number, pulses: number, rotation: number = 0): boolean[] 
     return result.map((_, index) => result[(index + offset) % length])
 }
 
-// ---------- samples (openDAW stock one shots) ----------
+// ---------- samples (openDAW stock one shots, laid out from C3 so they sit in the default pad octave) ----------
 
 const stock = (name: string, uuid: string, duration: number): Sample => ({uuid, name, duration, bpm: 0, sample_rate: 44100})
 
 type Pad = { note: number, sample: Sample, exclude: boolean }
 
 const Pads: Pad[] = [
-    {note: 36, sample: stock("TR-808 Bass Drum", "b50f6f4f-d933-400c-a63a-83b3c2f6c8b2", 3.0), exclude: false},
-    {note: 37, sample: stock("909 Bassdrum", "8bb2c6e8-9a6d-4d32-b7ec-1263594ef367", 0.509), exclude: false},
-    {note: 38, sample: stock("TR-808 Snare Drum", "0378e25e-6d3f-4db3-a54f-4ae795ca0ff7", 0.5), exclude: false},
-    {note: 39, sample: stock("909 Clap", "32a6f36f-06eb-4b84-bb57-5f51103eb9e6", 0.507), exclude: false},
-    {note: 40, sample: stock("TR-808 Rim Shot", "5dd8103f-d6a2-4604-8464-320f9e1c2f1e", 0.25), exclude: false},
-    {note: 41, sample: stock("TR-808 Low Tom", "e82935b9-c17f-4348-9e8f-5b18c25da355", 1.0), exclude: false},
-    {note: 42, sample: stock("909 Closed Hat", "e0ac4b39-23fb-4a56-841d-c9e0ff440cab", 0.154), exclude: true},
-    {note: 43, sample: stock("TR-808 Mid Tom", "3026d15b-2b29-4c14-b1f1-bdd1521fb982", 1.0), exclude: false},
-    {note: 44, sample: stock("TR-808 Maracas", "ac1bb797-a90a-4782-8a08-7b249ef18b42", 0.25), exclude: false},
-    {note: 45, sample: stock("TR-808 Hi Tom", "74426997-2554-4511-8030-92fd4b3e02bb", 1.0), exclude: false},
-    {note: 46, sample: stock("909 Open Hat", "51c5eea4-391c-4743-896a-859692ec1105", 0.502), exclude: true},
-    {note: 47, sample: stock("TR-808 Low Conga", "5170fed0-42dd-4e27-ad8e-c6f28f7a385f", 0.5), exclude: false},
-    {note: 48, sample: stock("TR-808 Mid Conga", "50da4fe7-f2e5-4173-930a-6c3bd18ebe03", 0.5), exclude: false},
-    {note: 49, sample: stock("909 Crash", "42a56ff6-89b6-4f2e-8a66-5a41d316f4cb", 1.055), exclude: false},
-    {note: 50, sample: stock("TR-808 Cowbell", "bc034fa6-0ac5-40d2-96a4-e04165922294", 1.5), exclude: false},
-    {note: 51, sample: stock("909 Ride", "87cde966-b799-4efc-a994-069e703478d3", 1.72), exclude: false}
+    {note: 60, sample: stock("TR-808 Bass Drum", "b50f6f4f-d933-400c-a63a-83b3c2f6c8b2", 3.0), exclude: false},
+    {note: 61, sample: stock("909 Bassdrum", "8bb2c6e8-9a6d-4d32-b7ec-1263594ef367", 0.509), exclude: false},
+    {note: 62, sample: stock("TR-808 Snare Drum", "0378e25e-6d3f-4db3-a54f-4ae795ca0ff7", 0.5), exclude: false},
+    {note: 63, sample: stock("909 Clap", "32a6f36f-06eb-4b84-bb57-5f51103eb9e6", 0.507), exclude: false},
+    {note: 64, sample: stock("TR-808 Rim Shot", "5dd8103f-d6a2-4604-8464-320f9e1c2f1e", 0.25), exclude: false},
+    {note: 65, sample: stock("TR-808 Low Tom", "e82935b9-c17f-4348-9e8f-5b18c25da355", 1.0), exclude: false},
+    {note: 66, sample: stock("909 Closed Hat", "e0ac4b39-23fb-4a56-841d-c9e0ff440cab", 0.154), exclude: true},
+    {note: 67, sample: stock("TR-808 Mid Tom", "3026d15b-2b29-4c14-b1f1-bdd1521fb982", 1.0), exclude: false},
+    {note: 68, sample: stock("TR-808 Maracas", "ac1bb797-a90a-4782-8a08-7b249ef18b42", 0.25), exclude: false},
+    {note: 69, sample: stock("TR-808 Hi Tom", "74426997-2554-4511-8030-92fd4b3e02bb", 1.0), exclude: false},
+    {note: 70, sample: stock("909 Open Hat", "51c5eea4-391c-4743-896a-859692ec1105", 0.502), exclude: true},
+    {note: 71, sample: stock("TR-808 Low Conga", "5170fed0-42dd-4e27-ad8e-c6f28f7a385f", 0.5), exclude: false},
+    {note: 72, sample: stock("TR-808 Mid Conga", "50da4fe7-f2e5-4173-930a-6c3bd18ebe03", 0.5), exclude: false},
+    {note: 73, sample: stock("909 Crash", "42a56ff6-89b6-4f2e-8a66-5a41d316f4cb", 1.055), exclude: false},
+    {note: 74, sample: stock("TR-808 Cowbell", "bc034fa6-0ac5-40d2-96a4-e04165922294", 1.5), exclude: false},
+    {note: 75, sample: stock("909 Ride", "87cde966-b799-4efc-a994-069e703478d3", 1.72), exclude: false}
 ]
 
 // ---------- drums ----------
@@ -102,14 +102,14 @@ const lane = (name: string, note: number, steps: number, pulses: number, rotatio
 
 // The kick is locked, which keeps it four to the floor
 const defaultLanes = (): DrumLane[] => [
-    lane("Kick", 36, 16, 4, 0, {accents: 1, velocity: 1.0, locked: true}),
-    lane("Clap", 39, 16, 2, 4, {accents: 1}),
-    lane("Snare", 38, 16, 3, 12, {accents: 1, probability: 0.6, velocity: 0.6}),
-    lane("Closed Hat", 42, 16, 11, 0, {accents: 4, velocity: 0.55, humanize: 6}),
-    lane("Open Hat", 46, 16, 2, 2, {accents: 0, velocity: 0.7}),
-    lane("Rim", 40, 12, 5, 3, {accents: 2, probability: 0.7, velocity: 0.5}),
-    lane("Cowbell", 50, 10, 3, 1, {accents: 1, probability: 0.4, velocity: 0.45}),
-    lane("Maracas", 44, 24, 7, 5, {accents: 3, probability: 0.8, velocity: 0.4, humanize: 8})
+    lane("Kick", 60, 16, 4, 0, {accents: 1, velocity: 1.0, locked: true}),
+    lane("Clap", 63, 16, 2, 4, {accents: 1}),
+    lane("Snare", 62, 16, 3, 12, {accents: 1, probability: 0.6, velocity: 0.6}),
+    lane("Closed Hat", 66, 16, 11, 0, {accents: 4, velocity: 0.55, humanize: 6}),
+    lane("Open Hat", 70, 16, 2, 2, {accents: 0, velocity: 0.7}),
+    lane("Rim", 64, 12, 5, 3, {accents: 2, probability: 0.7, velocity: 0.5}),
+    lane("Cowbell", 74, 10, 3, 1, {accents: 1, probability: 0.4, velocity: 0.45}),
+    lane("Maracas", 68, 24, 7, 5, {accents: 3, probability: 0.8, velocity: 0.4, humanize: 8})
 ]
 
 type DrumOptions = { seed: number, density: number }
@@ -142,7 +142,7 @@ const generateFill = (lanes: DrumLane[], {seed}: DrumOptions): NoteEventProps[] 
     const rng = new Rng(seed + 31337)
     const step = PPQN.SemiQuaver
     const duration = step >> 1
-    const noteOf = (name: string): number => lanes.find(lane => lane.name === name)?.note ?? 36
+    const noteOf = (name: string): number => lanes.find(lane => lane.name === name)?.note ?? 60
     const events: NoteEventProps[] = []
     const hit = (index: number, pitch: number, velocity: number) => events.push({position: index * step, duration, pitch, velocity})
     hit(0, noteOf("Kick"), 1.0)
@@ -153,7 +153,7 @@ const generateFill = (lanes: DrumLane[], {seed}: DrumOptions): NoteEventProps[] 
         hit(index, roll, 0.4 + 0.6 * index / 15)
     }
     if (rng.next() < 0.6) {
-        [45, 43, 41, 41].forEach((pitch, offset) => hit(12 + offset, pitch, 0.8))
+        [69, 67, 65, 65].forEach((pitch, offset) => hit(12 + offset, pitch, 0.8))
     }
     hit(14, noteOf("Open Hat"), 0.8)
     return events

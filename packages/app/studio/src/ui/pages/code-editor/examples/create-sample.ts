@@ -6,8 +6,6 @@ const openDAW: Api = InaccessibleProperty("Not to be executed.")
 
 // Generates a chirp, imports it as a sample and places it on an audio track
 
-export {}
-
 const numberOfFrames = sampleRate * 3 // three seconds of audio
 const f0 = 200.0
 const f1 = 4000.0
