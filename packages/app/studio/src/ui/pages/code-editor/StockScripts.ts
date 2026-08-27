@@ -61,12 +61,12 @@ project.openInStudio()
     export const Edit = `// Edits the project that is currently open in the studio
 if (!await openDAW.hasProject()) {
     await openDAW.showInfo("Edit Script", "No project is open. Create or load one first.")
-} else {
-    const project = await openDAW.getProject()
-
-    // Here comes your code
-
-    project.openInStudio()
+    return
 }
+const project = await openDAW.getProject()
+
+// Here comes your code
+
+project.openInStudio()
 `
 }

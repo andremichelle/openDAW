@@ -105,7 +105,7 @@ Feature framing (Script Editor)
 • Education angle: code and music in one window, a generated melody is a coding exercise and a
   composition at once, teachers script the same starting project for the whole class.
 • Do not name the box behind the acid example, say "acid line".
-• No manual page yet, link to https://opendaw.studio only.
+• Manual: https://opendaw.studio/manuals/script-editor (brief on purpose, auto-completion does the rest).
 • Discord: no advertisement tone. No sublines like "Your Scripts Stay With You" or "Examples to
   Start From", no "so nothing is lost". State what changed, plain sublines like "Full API",
   "Saving Scripts", "Examples".

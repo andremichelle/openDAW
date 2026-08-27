@@ -14,6 +14,8 @@ export namespace ScriptMeta {
         return {name, description, created, modified: created}
     }
 
+    export const copy = (meta: ScriptMeta): ScriptMeta => Object.assign({}, meta)
+
     export const fromJSON = (json: JSONValue): ScriptMeta => {
         if (!isDefined(json) || typeof json !== "object" || Array.isArray(json)) {return init()}
         return Object.assign(init(), json) as ScriptMeta

@@ -34,14 +34,8 @@ export class ScriptRunner {
 
     async run(jsCode: string, context: ScriptExecutionContext): Promise<void> {
         Object.assign(globalThis, ScriptGlobals.create(this.#api, context))
-        const blob = new Blob([jsCode], {type: "text/javascript"})
-        const url = URL.createObjectURL(blob)
-        try {
-            const AsyncFunction = (async () => {}).constructor as new (arg: string, body: string) =>
-                (...args: any[]) => Promise<any>
-            await new AsyncFunction("url", "return import(url)")(url)
-        } finally {
-            URL.revokeObjectURL(url)
-        }
+        // Runs as a function body, not a module, so a script may `return` early
+        const AsyncFunction = (async () => {}).constructor as new (body: string) => () => Promise<void>
+        await new AsyncFunction(jsCode.replace(/^\s*export\s*\{\s*\};?/m, ""))()
     }
 }

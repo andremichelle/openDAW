@@ -142,6 +142,7 @@ declare class Array<T> {
     pop(): T | undefined
     push(...items: T[]): number
     reduce(callbackfn: (prev: T, curr: T, index: number, array: T[]) => T): T
+    reduce<U>(callbackfn: (prev: U, curr: T, index: number, array: T[]) => U, initialValue: U): U
     reduceRight(callbackfn: (prev: T, curr: T, index: number, array: T[]) => T): T
     reverse(): this
     shift(): T | undefined
@@ -252,8 +253,11 @@ interface ReadonlyArray<T> {
     indexOf(value: T, fromIndex?: number): number
     join(separator?: string): string
     lastIndexOf(value: T, fromIndex?: number): number
+    at(index: number): T | undefined
+    flatMap<U>(callbackfn: (value: T, index: number, array: readonly T[]) => U | readonly U[]): U[]
     map<U>(callbackfn: (value: T, index: number, array: readonly T[]) => U): U[]
     reduce(callbackfn: (prev: T, curr: T, index: number, array: readonly T[]) => T): T
+    reduce<U>(callbackfn: (prev: U, curr: T, index: number, array: readonly T[]) => U, initialValue: U): U
     reduceRight(callbackfn: (prev: T, curr: T, index: number, array: readonly T[]) => T): T
     slice(start?: number, end?: number): T[]
     some(callbackfn: (value: T, index: number, array: readonly T[]) => boolean): boolean

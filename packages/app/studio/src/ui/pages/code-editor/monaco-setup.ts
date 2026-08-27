@@ -4,6 +4,7 @@ import "monaco-editor/esm/vs/language/typescript/monaco.contribution"
 import "monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution"
 import declarations from "@opendaw/studio-scripting/api.declaration?raw"
 import library from "@opendaw/studio-scripting/library?raw"
+import {TopLevelReturn} from "./TopLevelReturn"
 
 // Configure TypeScript defaults
 const tsDefaults = monaco.languages.typescript.typescriptDefaults
@@ -31,7 +32,7 @@ tsDefaults.setDiagnosticsOptions({
     noSyntaxValidation: false,
     noSuggestionDiagnostics: false,
     onlyVisible: false,
-    diagnosticCodesToIgnore: []
+    diagnosticCodesToIgnore: [TopLevelReturn]
 })
 
 tsDefaults.addExtraLib(library, "file:///library.d.ts")

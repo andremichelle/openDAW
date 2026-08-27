@@ -8,6 +8,7 @@ import {Button} from "@/ui/components/Button"
 import {Icon} from "@/ui/components/Icon"
 import {EditorLoadFailure} from "@/ui/components/EditorLoadFailure"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {TopLevelReturn} from "./code-editor/TopLevelReturn"
 import {Arrays, Errors, isDefined, isNull, Option, panic, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {ScriptHost} from "@opendaw/studio-scripting"
@@ -106,6 +107,7 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                             const semanticDiagnostics = await client.getSemanticDiagnostics(model.uri.toString())
                             const syntacticDiagnostics = await client.getSyntacticDiagnostics(model.uri.toString())
                             const allDiagnostics = [...semanticDiagnostics, ...syntacticDiagnostics]
+                                .filter(diagnostic => diagnostic.code !== TopLevelReturn)
                             if (allDiagnostics.length > 0) {
                                 const errors = allDiagnostics.map(d => d.messageText).join("\n")
                                 console.warn(errors)
@@ -130,7 +132,23 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                             RuntimeNotifier.notify({message: "Compilation error.", icon: "Warning"})
                         }
                     }
-                    const title: HTMLElement = <span className="script-name"/>
+                    const editMeta = (): Promise<void> => ScriptSession.current.match({
+                        none: () => saveAs(),
+                        some: async ({uuid, meta}) => {
+                            const {status, value} = await Promises.tryCatch(
+                                ScriptDialogs.showMetaDialog({headline: "Edit Script", meta, buttonText: "Apply"}))
+                            if (status === "rejected") {return}
+                            const next = Object.assign(ScriptMeta.copy(meta), value, {modified: new Date().toISOString()})
+                            const saved = await Promises.tryCatch(storage.saveMeta(uuid, next))
+                            if (saved.status === "rejected") {
+                                console.warn(saved.error)
+                                RuntimeNotifier.notify({message: "Could not update script.", icon: "Warning"})
+                                return
+                            }
+                            ScriptSession.current.wrap({uuid, meta: next})
+                        }
+                    })
+                    const title: HTMLElement = <span className="script-name" title="Double-click to rename" ondblclick={() => editMeta().finally()}/>
                     const scriptName = () => ScriptSession.current
                         .mapOr(({meta}) => meta.name, ScriptSession.suggestedName.getValue())
                     const isDirty = () => model.getValue() !== ScriptSession.savedSource.getValue()
@@ -249,7 +267,9 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                         MenuItem.default({label: "Import Script...", separatorBefore: true})
                             .setTriggerProcedure(importScript),
                         MenuItem.default({label: "Export Script..."})
-                            .setTriggerProcedure(exportScript)
+                            .setTriggerProcedure(exportScript),
+                        MenuItem.default({label: "Manual", icon: IconSymbol.Help, separatorBefore: true})
+                            .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/script-editor"))
                     ))
                     const onKeyDown = (event: KeyboardEvent) => {
                         if (!Keyboard.isControlKey(event)) {return}
