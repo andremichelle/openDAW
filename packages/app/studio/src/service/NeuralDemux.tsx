@@ -130,7 +130,7 @@ export namespace NeuralDemux {
     export const explain = async (service: StudioService): Promise<void> => {
         const approved = await RuntimeNotifier.approve({
             headline: "Neural Demux",
-            message: "Separates an audio file into drums, bass, vocals and other.",
+            message: "Separates an audio file into drums, bass, vocals and other and turns it into an openDAW project.",
             approveText: "Browse...",
             cancelText: "Cancel"
         })
