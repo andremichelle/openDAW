@@ -34,6 +34,9 @@ import {NoteShortcuts, SoftwareMIDIShortcuts} from "@/ui/shortcuts/SoftwareMIDIS
 
 const className = Html.adoptStyleSheet(css, "SoftwareMIDIPanel")
 
+const octave = new DefaultObservableValue(5, {guard: (value: number): number => clamp(value, 0, 10)})
+const channel = new DefaultObservableValue(0, {guard: (value: number): number => clamp(value, 0, 15)})
+const velocity =  new DefaultObservableValue(100, {guard: (value: number): number => clamp(value, 0, 100)})
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
@@ -46,9 +49,6 @@ export const SoftwareMIDIPanel = ({lifecycle, service}: Construct) => {
         blackKeys: {width: 19, height: 24}
     })
     const {softwareMIDIInput} = MidiDevices
-    const octave = new DefaultObservableValue(5, {guard: (value: number): number => clamp(value, 0, 10)})
-    const channel = new DefaultObservableValue(0, {guard: (value: number): number => clamp(value, 0, 15)})
-    const velocity = new DefaultObservableValue(100, {guard: (value: number): number => clamp(value, 0, 100)})
     const svg: SVGElement = (<PianoRoll lifecycle={lifecycle} pianoLayout={pianoLayout}/>)
     const midiIndicator: DomElement = <Icon symbol={IconSymbol.Connected}/>
     const element: HTMLElement = <div className={className}>
