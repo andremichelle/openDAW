@@ -1470,9 +1470,7 @@ impl Engine {
             self.is_recording = true;
             self.metronome.set_enabled(self.metronome_pref);
         }
-        // The flip above is quantum-granular; when the metronome is forced on ONLY for the count-in (the
-        // preference is off), cap its clicks at recording_start so the punch-in downbeat does not leak a
-        // block past the boundary (#367). A preference-driven metronome stays unbounded.
+        // the flip is quantum-granular: cap the forced count-in clicks at the punch-in
         self.metronome.set_click_ceiling(
             if self.is_counting_in && !self.metronome_pref {self.recording_start} else {f64::INFINITY});
         let recording_start = self.recording_start;

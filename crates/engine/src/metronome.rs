@@ -126,7 +126,7 @@ pub struct Metronome {
     monophonic: bool,
     sample_rate: f32,
     enabled: bool,
-    click_ceiling: f64 // exclusive pulse beyond which no click schedules; INFINITY = unbounded (#367)
+    click_ceiling: f64 // exclusive, INFINITY = unbounded
 }
 
 impl Metronome {
@@ -148,11 +148,6 @@ impl Metronome {
         self.enabled = enabled
     }
 
-    /// Stop scheduling clicks at (and past) `pulse`. The engine sets this to `recording_start` while the
-    /// metronome is forced on for a count-in but the preference is off, so the punch-in downbeat does not
-    /// leak: the count-in -> recording flip is quantum-granular, so without a sample-accurate ceiling a
-    /// `recording_start` landing mid-quantum renders one extra click (TS split the block at that point). Set
-    /// `f64::INFINITY` for the unbounded (preference-driven) metronome.
     pub fn set_click_ceiling(&mut self, pulse: f64) {
         self.click_ceiling = pulse
     }
@@ -199,8 +194,6 @@ impl Metronome {
                 // the storage entry covers the count-in's NEGATIVE pulses too (TS: index -1 -> p0 as-is)
                 let region_start = if curr.index == -1 || block.p0 > signature_start {block.p0} else {signature_start};
                 let region_end = if block.p1 < signature_end {block.p1} else {signature_end};
-                // Clamp to the count-in click ceiling so the punch-in downbeat at recording_start is not
-                // scheduled when the metronome is only forced on for the count-in (#367).
                 let region_end = if region_end < self.click_ceiling {region_end} else {self.click_ceiling};
                 let denominator = curr.denominator * self.beat_sub_division;
                 let step_size = from_signature(1, denominator);
