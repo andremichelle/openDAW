@@ -36,7 +36,7 @@ walk(root, ".js").forEach(file => {
 // the studio uses Rubik 300 as regular and 400 as bold
 const fontFaces = [["400", 300], ["500 700", 400]].map(([weight, file]) =>
     `@font-face{font-family:Rubik;font-weight:${weight};font-style:normal;font-display:swap;src:url(/fonts/rubik-${file}.woff2) format("woff2")}`).join("")
-const sizes = "main h1{font-size:1.5rem}main h2{font-size:1.125rem}main h3{font-size:1rem}main code,main pre,main h3 code{font-size:.875rem}"
+const sizes = "main h1{font-size:1.5rem}main>div:has(>h1)+p{margin-top:-.5rem;font-size:1.125rem;color:var(--clean-fg-muted)}main h2{font-size:1.125rem}main h3{font-size:1rem}main code,main pre,main h3 code{font-size:.875rem}"
 const assets = join(root, "_assets")
 readdirSync(assets).filter(name => name.endsWith(".css")).forEach(name => {
     const css = readFileSync(join(assets, name), "utf8")

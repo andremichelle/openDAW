@@ -1,3 +1,7 @@
+# openDAW Scripting API
+
+## Create and modify projects with code
+
 A script is a few lines of TypeScript that create a new project or change the one open in the studio. Scripts run
 in the script editor (openDAW menu > Script Editor) and talk to the global `openDAW` object.
 

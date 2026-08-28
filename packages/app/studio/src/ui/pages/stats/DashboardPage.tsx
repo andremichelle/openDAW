@@ -22,6 +22,7 @@ import {
     fetchLatencyStats,
     fetchNpmWeeklyDownloads,
     fetchRoomStats,
+    fetchContributors,
     fetchSponsorStats,
     fetchUserStats,
     fetchVisitorStats,
@@ -33,6 +34,7 @@ import {
     LatencyStats,
     minutesToHours,
     RoomStats,
+    Contributor,
     SponsorStats,
     sumValues
 } from "./data"
@@ -185,6 +187,22 @@ const SponsorsCard = ({stats}: { stats: SponsorStats }) => {
     )
 }
 
+const ContributorsCard = ({contributors}: { contributors: ReadonlyArray<Contributor> }) => {
+    const grid: HTMLDivElement = <div className="sponsors"/>
+    grid.append(...contributors.map(contributor => (
+        <a className="sponsor" href={contributor.url} target="_blank" rel="noopener noreferrer"
+           title={`${contributor.login} · ${formatNumber(contributor.contributions)} commits`}>
+            <img className="sponsor-avatar" src={contributor.avatarUrl} alt={contributor.login} loading="lazy"/>
+            <span className="sponsor-name">{contributor.login}</span>
+        </a>
+    )))
+    return (
+        <Card title="GitHub Contributors" accent={<span>{formatNumber(contributors.length)} contributors · thank you</span>}>
+            {grid}
+        </Card>
+    )
+}
+
 export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageContext<StudioService>) => {
     const updatedAt = new Date().toLocaleString()
     const tiles: LiveTiles = {
@@ -212,6 +230,12 @@ export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageConte
                 loading={() => null}
                 failure={() => null}
                 success={(stats: SponsorStats) => stats.totalCount > 0 ? <SponsorsCard stats={stats}/> : null}
+            />
+            <Await
+                factory={() => fetchContributors()}
+                loading={() => null}
+                failure={() => null}
+                success={(contributors: ReadonlyArray<Contributor>) => contributors.length > 0 ? <ContributorsCard contributors={contributors}/> : null}
             />
             <div className="tiles">
                 <Await

@@ -2,6 +2,7 @@ import {Await, createElement} from "@opendaw/lib-jsx"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
 import {RailSection} from "@/ui/dashboard/RailSection"
+import {RailFooterLink} from "@/ui/dashboard/RailFooterLink"
 import {fetchSponsorStats, SponsorStats} from "@/ui/pages/stats/data"
 
 // Up to 20 sponsor avatars, reusing the /stats sponsor feed. No "+N more" cap (see plans/welcome-dashboard.md).
@@ -21,12 +22,6 @@ export const Sponsors = () => (
                        ))}
                    </div>
                )}/>
-        <a className="link"
-           href="https://github.com/sponsors/andremichelle"
-           style={{marginTop: "16px", borderBottom: "dotted 1px rgba(255, 255, 255, 0.2)"}}
-           target="_blank"
-           rel="noopener noreferrer">
-            <span>Join them ♡</span>
-        </a>
+        <RailFooterLink href="https://github.com/sponsors/andremichelle">Join them ♡</RailFooterLink>
     </RailSection>
 )

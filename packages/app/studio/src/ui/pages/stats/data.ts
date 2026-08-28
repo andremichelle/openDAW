@@ -42,6 +42,13 @@ export type Sponsor = {
     url: string
 }
 
+export type Contributor = {
+    login: string
+    avatarUrl: string
+    url: string
+    contributions: number
+}
+
 export type SponsorStats = {
     fetchedAt: Nullable<string>
     totalCount: number
@@ -100,7 +107,8 @@ export const fetchUserStats = async (): Promise<DailySeries> => {
     return sortByDate(data)
 }
 
-const GITHUB_REPO = "andremichelle/openDAW"
+const GITHUB_OWNER = "andremichelle"
+const GITHUB_REPO = `${GITHUB_OWNER}/openDAW`
 const GITHUB_CACHE_KEY = "stats:github:v2"
 const GITHUB_TTL = 10 * 60 * 1000
 
@@ -124,6 +132,33 @@ export const fetchGitHubStats = async (): Promise<GitHubStats> => {
     }
     cacheSet(GITHUB_CACHE_KEY, stats)
     return stats
+}
+
+const CONTRIBUTORS_CACHE_KEY = "stats:contributors"
+const CONTRIBUTORS_TTL = 60 * 60 * 1000
+
+export const fetchContributors = async (): Promise<ReadonlyArray<Contributor>> => {
+    const cached = cacheGet<ReadonlyArray<Contributor>>(CONTRIBUTORS_CACHE_KEY, CONTRIBUTORS_TTL)
+    if (cached.nonEmpty()) return cached.unwrap()
+    type ContributorResponse = {
+        login: string
+        type: "User" | "Bot"
+        avatar_url: string
+        html_url: string
+        contributions: number
+    }
+    const data = await fetchJson<ReadonlyArray<ContributorResponse>>(
+        `https://api.github.com/repos/${GITHUB_REPO}/contributors?per_page=100`)
+    const contributors: ReadonlyArray<Contributor> = data
+        .filter(entry => entry.type === "User" && entry.login !== GITHUB_OWNER)
+        .map(entry => ({
+            login: entry.login,
+            avatarUrl: entry.avatar_url,
+            url: entry.html_url,
+            contributions: entry.contributions
+        }))
+    cacheSet(CONTRIBUTORS_CACHE_KEY, contributors)
+    return contributors
 }
 
 const DISCORD_INVITE = "ZRm8du7vn4"

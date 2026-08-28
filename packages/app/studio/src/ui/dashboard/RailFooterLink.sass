@@ -1,0 +1,17 @@
+@use "tokens" as *
+
+component
+  &#{&}
+    display: inline-flex
+    width: max-content
+    margin-top: 12px
+    border-radius: 32px
+    padding: 2px 8px
+    color: var(--color-green)
+    background-color: color-mix(in srgb, var(--color-green) 25%, black)
+    font-size: $fs-m
+    text-decoration: none
+
+    &:hover
+      color: color-mix(in srgb, var(--color-green) 25%, black)
+      background-color: var(--color-green)

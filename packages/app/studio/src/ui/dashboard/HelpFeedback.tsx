@@ -14,6 +14,9 @@ export const HelpFeedback = () => (
         <button className="link" onclick={() => RouteLocation.get().navigateTo("/manuals/")}>
             <Icon symbol={IconSymbol.Book}/><span>Manuals</span>
         </button>
+        <a className="link" href="/docs/scripting/" target="_blank" rel="noopener noreferrer">
+            <Icon symbol={IconSymbol.Code}/><span>Scripting Docs</span>
+        </a>
         <a className="link" href={BUG} target="_blank" rel="noopener noreferrer">
             <Icon symbol={IconSymbol.Bug}/><span>Report a bug</span>
         </a>
