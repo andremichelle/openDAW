@@ -1740,8 +1740,6 @@ export interface NoteEventOwner {
 export interface NoteRegion extends LoopableRegion, NoteEventOwner {
     /** The note track this region belongs to */
     readonly track: NoteTrack
-    /** Offset of the events in PPQN */
-    eventOffset: ppqn
 }
 
 /**
@@ -1757,7 +1755,7 @@ export interface NoteClip extends Clip, NoteEventOwner {
  * Region props. Pass `mirror` to share the notes of another region (a linked copy).
  * @group Notes
  */
-export type NoteRegionProps = Partial<Pick<NoteRegion, "position" | "duration" | "loopDuration" | "loopOffset" | "eventOffset" | "mute" | "label" | "hue">> & {
+export type NoteRegionProps = Partial<Pick<NoteRegion, "position" | "duration" | "loopDuration" | "loopOffset" | "mute" | "label" | "hue">> & {
     /** Share the notes of another region or clip (linked copy) */
     mirror?: NoteRegion | NoteClip
 }

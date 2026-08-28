@@ -21,8 +21,8 @@ Derive other lengths by arithmetic, `PPQN.Quarter / 3` is a triplet eighth, `PPQ
 
 Conversions: `PPQN.secondsToPulses(seconds, bpm)` and `PPQN.pulsesToSeconds(pulses, bpm)`.
 
-Positions inside a region or clip are relative to its start. `NoteRegion.eventOffset` shifts the notes of a
-region without moving them.
+Positions inside a region or clip are relative to its start. A region plays its content from `loopOffset`, so a
+region starting at `PPQN.Quarter * 2` with `loopOffset: PPQN.Quarter` begins with the second beat of its notes.
 
 ## Audio regions
 

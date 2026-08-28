@@ -89,7 +89,6 @@ export type NoteRegionParams = {
     duration: ppqn
     loopOffset?: ppqn
     loopDuration?: ppqn
-    eventOffset?: ppqn
     eventCollection?: NoteEventCollectionBox
     mute?: boolean
     name?: string
@@ -387,7 +386,7 @@ export class ProjectApi {
 
     createNoteRegion({
                          trackBox, position, duration, loopOffset, loopDuration,
-                         eventOffset, eventCollection, mute, name, hue
+                         eventCollection, mute, name, hue
                      }: NoteRegionParams): NoteRegionBox {
         if (trackBox.type.getValue() !== TrackType.Notes) {
             console.warn("You should not create a note-region in mismatched track")
@@ -402,7 +401,6 @@ export class ProjectApi {
             box.duration.setValue(duration)
             box.loopDuration.setValue(loopOffset ?? 0)
             box.loopDuration.setValue(loopDuration ?? duration)
-            box.eventOffset.setValue(eventOffset ?? 0)
             box.events.refer(events.owners)
             box.regions.refer(trackBox.regions)
         })

@@ -69,12 +69,7 @@ export class NoteRegionImpl extends RegionFacade<NoteRegionBox> implements NoteR
         return context.facade(box, () => new NoteRegionImpl(context, box))
     }
 
-    declare eventOffset: ppqn
-
-    private constructor(context: Context, box: NoteRegionBox) {
-        super(context, box)
-        this.bind({eventOffset: box.eventOffset})
-    }
+    private constructor(context: Context, box: NoteRegionBox) {super(context, box)}
 
     get track(): NoteTrack {return TrackImpls.wrap(this.context, this.trackBox) as NoteTrack}
     get noteEvents(): NoteEvents {
