@@ -125,7 +125,8 @@ pub struct Metronome {
     gain_db: f32,
     monophonic: bool,
     sample_rate: f32,
-    enabled: bool
+    enabled: bool,
+    click_ceiling: f64 // exclusive pulse beyond which no click schedules; INFINITY = unbounded (#367)
 }
 
 impl Metronome {
@@ -138,12 +139,22 @@ impl Metronome {
             gain_db: -6.0,
             monophonic: true,
             sample_rate,
-            enabled: true
+            enabled: true,
+            click_ceiling: f64::INFINITY
         }
     }
 
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled
+    }
+
+    /// Stop scheduling clicks at (and past) `pulse`. The engine sets this to `recording_start` while the
+    /// metronome is forced on for a count-in but the preference is off, so the punch-in downbeat does not
+    /// leak: the count-in -> recording flip is quantum-granular, so without a sample-accurate ceiling a
+    /// `recording_start` landing mid-quantum renders one extra click (TS split the block at that point). Set
+    /// `f64::INFINITY` for the unbounded (preference-driven) metronome.
+    pub fn set_click_ceiling(&mut self, pulse: f64) {
+        self.click_ceiling = pulse
     }
 
     pub fn set_gain(&mut self, gain_db: f32) {
@@ -188,6 +199,9 @@ impl Metronome {
                 // the storage entry covers the count-in's NEGATIVE pulses too (TS: index -1 -> p0 as-is)
                 let region_start = if curr.index == -1 || block.p0 > signature_start {block.p0} else {signature_start};
                 let region_end = if block.p1 < signature_end {block.p1} else {signature_end};
+                // Clamp to the count-in click ceiling so the punch-in downbeat at recording_start is not
+                // scheduled when the metronome is only forced on for the count-in (#367).
+                let region_end = if region_end < self.click_ceiling {region_end} else {self.click_ceiling};
                 let denominator = curr.denominator * self.beat_sub_division;
                 let step_size = from_signature(1, denominator);
                 if step_size <= 0.0 {
@@ -324,6 +338,41 @@ mod tests {
         let signature = [storage(3, 4)];
         let clicks = render_impulses(&mut metronome, &signature, -2880.0, quanta_for(2880.0));
         assert_click_train(&clicks, &[(0.0, 1.0), (960.0, 0.5), (1920.0, 0.5)]);
+    }
+
+    #[test]
+    fn count_in_click_ceiling_suppresses_the_punch_in_downbeat() {
+        // #367: recording_start (the "1" after "1 2 3 4") falls strictly inside a quantum, so the
+        // quantum-granular count-in -> recording flip has not fired yet and the forced-on metronome would
+        // schedule the boundary downbeat. A block straddling pulse 0 (p0 < 0 < p1) reproduces that.
+        let signature = [storage(4, 4)];
+        let step = samples_to_pulses(QUANTUM as f64, BPM, SAMPLE_RATE);
+        let block = Block {p0: -step / 2.0, p1: step / 2.0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
+        let mut leaked = impulse_metronome();
+        let mut left = [0.0f32; QUANTUM];
+        let mut right = [0.0f32; QUANTUM];
+        leaked.process(&block, &signature, &mut left, &mut right);
+        assert!(left.iter().any(|value| *value != 0.0), "without a ceiling the boundary downbeat leaks");
+        let mut suppressed = impulse_metronome();
+        suppressed.set_click_ceiling(0.0); // recording_start
+        let mut left = [0.0f32; QUANTUM];
+        let mut right = [0.0f32; QUANTUM];
+        suppressed.process(&block, &signature, &mut left, &mut right);
+        assert!(left.iter().all(|value| *value == 0.0), "the ceiling suppresses the punch-in downbeat (#367)");
+    }
+
+    #[test]
+    fn count_in_click_ceiling_keeps_the_count_in_beats() {
+        // The ceiling must cut ONLY at/after recording_start: a count-in beat strictly before it still sounds.
+        let signature = [storage(4, 4)];
+        let step = samples_to_pulses(QUANTUM as f64, BPM, SAMPLE_RATE);
+        let block = Block {p0: -960.0 - step / 2.0, p1: -960.0 + step / 2.0, s0: 0, s1: QUANTUM, bpm: BPM, discontinuous: false};
+        let mut metronome = impulse_metronome();
+        metronome.set_click_ceiling(0.0); // recording_start, well past this block
+        let mut left = [0.0f32; QUANTUM];
+        let mut right = [0.0f32; QUANTUM];
+        metronome.process(&block, &signature, &mut left, &mut right);
+        assert!(left.iter().any(|value| *value != 0.0), "the -960 count-in beat still sounds below the ceiling");
     }
 
     #[test]
