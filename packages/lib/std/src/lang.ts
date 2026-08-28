@@ -136,6 +136,7 @@ export const canWrite = <T>(obj: T, key: keyof any): obj is T & Record<typeof ke
     return false
 }
 export const requireProperty = <T extends {}>(object: T, key: keyof T): void => {
+    if (isAbsent(object)) {throw `${String(key)}'s owner not available`}
     const {status, value} = tryCatch(() => object instanceof Function ? object.name : object.constructor.name)
     const feature = status === "failure" ? `${object}.${String(key)}` : `${value}.${String(key)}`
     if (!(key in object)) {throw `${feature} not available`}
