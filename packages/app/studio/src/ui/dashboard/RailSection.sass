@@ -3,6 +3,8 @@
 component
   display: flex
   flex-direction: column
+  min-width: 0
+  container-type: inline-size
 
   > .body
     display: flex
@@ -12,6 +14,15 @@ component
       flex-direction: column
       flex-wrap: nowrap
       row-gap: 0.4em
+
+      @media (max-height: 720px)
+        @container (min-width: 12.75em)
+          display: grid
+          grid-template-columns: auto auto
+          column-gap: 0.75em
+
+          > .provider
+            grid-column: 1 / -1
 
   .entry
     display: flex
@@ -72,11 +83,11 @@ component
   .sponsors
     width: 100%
     display: grid
-    grid-template-columns: repeat(auto-fill, 26px)
+    grid-template-columns: repeat(auto-fill, 24px)
     gap: 2px
 
     > a > img
-      width: 26px
-      height: 26px
+      width: 24px
+      height: 24px
       border-radius: 50%
       display: block
