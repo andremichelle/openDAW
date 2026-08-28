@@ -163,4 +163,37 @@ describe("recording state machine", () => {
         engine.play()
         expect(peakOf(64), "after recording the region plays again").toBeGreaterThan(0.01)
     }, 60000)
+
+    it("the punch-in downbeat does not click when the metronome preference is off (#367)", async () => {
+        const {source, region} = build()
+        // 44.1 kHz at 120 BPM: a bar is 689.0625 quanta, so recording_start always lands strictly inside a quantum
+        const {engine, memory} = await loadFullEngine(44100)
+        const sync = connectSyncToEngine(engine, memory, source)
+        await sync.settle(); engine.bind(); await sync.settle()
+        engine.set_metronome_enabled(0)
+        // silence the region so the output carries nothing but the metronome
+        const pointer = engine.input_reserve(16)
+        new Uint8Array(memory.buffer, pointer, 16).set(region.address.uuid)
+        engine.ignore_note_region()
+        engine.prepare_recording_state(1, 1.0)
+        const len = engine.output_len() >>> 0
+        // a click onset = signal after more than 50 ms of silence; `position` is the quantum END position
+        const onsets: Array<number> = []
+        let silentSamples = 44100
+        for (let quantum = 0; quantum < 1400; quantum++) { // the count-in bar plus one recorded bar
+            engine.render()
+            const output = new Float32Array(memory.buffer, engine.output_ptr(), len)
+            const {position} = readState(engine, memory)
+            for (let index = 0; index < len; index++) {
+                if (Math.abs(output[index]) > 0.01) {
+                    if (silentSamples > 2205) {onsets.push(position)}
+                    silentSamples = 0
+                } else {
+                    silentSamples++
+                }
+            }
+        }
+        expect(onsets.length, `1 2 3 4 and nothing at the punch-in (onsets at ${onsets.join(", ")})`).toBe(4)
+        expect(onsets.every(position => position < 0), "every click lies inside the count-in").toBe(true)
+    }, 60000)
 })

@@ -1470,6 +1470,9 @@ impl Engine {
             self.is_recording = true;
             self.metronome.set_enabled(self.metronome_pref);
         }
+        // the flip is quantum-granular: cap the forced count-in clicks at the punch-in
+        self.metronome.set_click_ceiling(
+            if self.is_counting_in && !self.metronome_pref {self.recording_start} else {f64::INFINITY});
         let recording_start = self.recording_start;
         let denominator = self.recording_denominator;
         let sample_rate = self.sample_rate;
