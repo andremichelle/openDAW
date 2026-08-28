@@ -1,7 +1,7 @@
 //! The NeuralAmp AUDIO-EFFECT device, a faithful port of the TS `NeuralAmpDeviceProcessor`'s WRAPPER: gains,
 //! mono downmix, dry/wet mix, and lifecycle live here in Rust; the inference itself runs in the SAME
 //! `@opendaw/nam-wasm` module (NeuralAmpModelerCore) the TS engine uses, instantiated next to the engine and
-//! reached through the `host_nam_*` JS bridge (script-bridge style; see `packages/app/wasm/src/nam-bridge.ts`).
+//! reached through the `host_nam_*` JS bridge (script-bridge style; see `packages/studio/core-wasm/src/nam-bridge.ts`).
 //! The model JSON travels in the box graph (`NeuralAmpModelBox`, content-addressed): the device observes its
 //! `model` pointer (`[20]`) via `observe_target_string` and forwards the delivered JSON to the bridge.
 //!

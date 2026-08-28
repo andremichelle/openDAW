@@ -26,7 +26,9 @@
     "build:api": "tsc --project tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.ts\"",
-    "test": "vitest run",
+    "test:rust": ". \"$HOME/.cargo/env\" && cargo test --manifest-path ../../../crates/Cargo.toml --workspace",
+    "test:vitest": "vitest run",
+    "test": "npm run test:rust && npm run test:vitest",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -44,9 +46,11 @@
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",
     "@opendaw/studio-core-processors": "^0.0.137",
+    "@opendaw/studio-enums": "^0.1.1",
     "@opendaw/typescript-config": "^0.0.32",
     "@types/audioworklet": "^0.0.77",
     "esbuild": "^0.25.0",
+    "jszip": "^3.10.1",
     "vitest": "^3.1.3"
   },
   "gitHead": "8350421e29d38c9f31e88def06e1f2e6d174acff"

@@ -221,29 +221,11 @@ Sass. The interesting subtrees under `src/ui`:
 
 `src/service/StudioService.ts` is the central runtime object wiring project, engine, storage and UI together.
 
-### @opendaw/app-wasm
-Depends on `lib-dom`, `lib-dsp`, `lib-fusion`, `lib-jsx`, `lib-std`, `nam-wasm`, `studio-enums`, `jszip`,
-`soundfont2`.
-
-The development harness for the WASM engine. Loads patches and bundles without the full studio UI, runs parity tests
-against the TypeScript engine, hosts the performance A/B page and the live meter pages. This is where engine work
-happens before it reaches the studio.
-
 ### @opendaw/lab
 Depends on `lib-box`, `lib-dom`, `lib-dsp`, `lib-jsx`, `lib-runtime`, `lib-std`, `studio-adapters`, `studio-boxes`,
 `studio-core`, `studio-enums`.
 
 A scratch app for isolated DSP experiments with an oscilloscope and sliders.
-
-### @opendaw/nam-test
-Depends on `lib-dom`, `lib-dsp`, `lib-jsx`, `lib-runtime`, `lib-std`, `nam-wasm`.
-
-Test bench for the Neural Amp Modeler integration.
-
-### @opendaw/transient
-Depends on `lib-dsp`, `lib-std`.
-
-Minimal page for tuning the transient detection algorithm against sample material.
 
 ---
 
@@ -314,7 +296,6 @@ Four artifacts are generated and gitignored. A clone that skips `npm run build` 
 studio-forge-boxes ──▶ studio-boxes            (schemas generate the box classes)
 studio-core-workers ─▶ studio-core             (bundles into core/dist/workers-main.js)
 studio-core-processors ▶ studio-core           (bundles into core/dist/processors.js)
-studio-core-wasm     ──▶ app-wasm              (needs dist/wasm before the app builds)
 crates/**            ──▶ studio-core-wasm      (declared as an input, so Rust edits invalidate the cache)
 ```
 
@@ -323,7 +304,7 @@ Useful entry points:
 - `npm run build` builds everything
 - `npm run build-wasm` rebuilds only the Rust modules
 - `npm run dev:studio` starts the studio on https://localhost:8080
-- `npm run dev:lab`, `npm run dev:nam-test` start the smaller harnesses
+- `npm run dev:lab` starts the DSP scratch app
 - `npm run test` runs the vitest suites, one package at a time
 - `npm run clean` removes every `node_modules` and `dist`
 

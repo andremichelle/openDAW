@@ -237,8 +237,6 @@ export const ComponentsPage: PageFactory<StudioService> = ({lifecycle}: PageCont
                         document.body.appendChild(dialog)
                         dialog.showModal()
                     }}>Open</Button>
-                    <label>Dialog (Error)</label>
-                    <Button lifecycle={lifecycle} onClick={() => panic("I have thrown an error")}>Throw</Button>
                 </div>
             </div>
         </div>

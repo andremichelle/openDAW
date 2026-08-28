@@ -457,11 +457,11 @@ npm run build-wasm   # the engine + all device crates (needs the Rust toolchain 
 The device should now appear in the audio effects menu when adding effects to a track. Hard-reload the
 studio after `build-wasm` so the browser drops the cached wasm.
 
-**Parity test:** add your device to `packages/app/wasm/test/param-mapping-parity.test.ts` — it loads the
+**Parity test:** add your device to `packages/studio/core-wasm/test/param-mapping-parity.test.ts` — it loads the
 wasm standalone and asserts every bound parameter's value mapping matches the TS adapter's. Run with:
 
 ```bash
-cd packages/app/wasm && npx vitest run test/param-mapping-parity.test.ts
+cd packages/studio/core-wasm && npx vitest run test/param-mapping-parity.test.ts
 ```
 
 ## Common Patterns
@@ -565,6 +565,6 @@ This makes the manual accessible via the device's context menu in the UI.
 | EffectBox           | `packages/studio/core/src/EffectBox.ts`                         |
 | EditorFactory       | `packages/app/studio/src/ui/devices/DeviceEditorFactory.tsx`    |
 | BoxAdapters         | `packages/studio/adapters/src/BoxAdapters.ts`                   |
-| Parity test         | `packages/app/wasm/test/param-mapping-parity.test.ts`           |
+| Parity test         | `packages/studio/core-wasm/test/param-mapping-parity.test.ts`   |
 | Manual              | `packages/app/studio/public/manuals/devices/<category>/`        |
 | ManualUrls          | `packages/studio/adapters/src/DeviceManualUrls.ts`              |

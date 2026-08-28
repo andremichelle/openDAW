@@ -39,7 +39,7 @@ fn main() {
     println!("dense 24-partial 1.0x: {:.1} ms / {:.1}s  ->  {:.2}x realtime  ({:.1}% of one core)",
              elapsed*1000.0, audio, audio/elapsed, elapsed/audio*100.0);
     // Real-world case: a 44.1k sample on a 48k engine (resample), at native tempo.
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../packages/app/wasm/public/loops/endeavour-140.wav");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../packages/studio/core-wasm/test/fixtures/loops/endeavour-140.wav");
     if let Ok(bytes) = std::fs::read(path) {
         let (rl, rr) = read_stereo(&bytes);
         let resample = 44100.0 / 48000.0;

@@ -1,5 +1,5 @@
 //! Zero-copy reader over the SIMPLIFIED soundfont BLOB the host delivers (built on the main thread from the
-//! parsed `.sf2`; see `packages/app/wasm/src/soundfont-simplify.ts`). The device reads it IN PLACE by fixed
+//! parsed `.sf2`; see `packages/studio/core-wasm/src/soundfont-simplify.ts`). The device reads it IN PLACE by fixed
 //! byte offset — no allocation, no parsing. All scalars are little-endian.
 //!
 //! Layout (WASM CONTRACT — mirrored exactly by the TS builder):
