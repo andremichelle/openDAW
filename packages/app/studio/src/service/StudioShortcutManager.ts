@@ -109,8 +109,12 @@ export namespace StudioShortcutManager {
                 const {engine} = service
                 const isPlaying = engine.isPlaying.getValue()
                 if (isPlaying) {engine.stop()} else {engine.play()}
+                service.transportSync.publishLocal(!isPlaying)
             }),
-            gc.register(gs["stop-playback"].shortcut, () => engine.stop(true)),
+            gc.register(gs["stop-playback"].shortcut, () => {
+                engine.stop(true)
+                service.transportSync.publishLocal(false)
+            }),
             gc.register(gs["start-recording"].shortcut, () => {
                 if (isCountingIn.getValue()) {
                     engine.stop()
