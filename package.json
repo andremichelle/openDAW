@@ -13,6 +13,8 @@
     "build-wasm": "npm run build:wasm -w @opendaw/studio-core-wasm",
     "dev:studio": "turbo run dev --filter=@opendaw/app-studio",
     "dev:lab": "turbo run dev --filter=@opendaw/lab",
+    "dev:desktop": "turbo run dev --filter=@opendaw/app-desktop",
+    "build:desktop": "npm run build:desktop --workspace=@opendaw/app-desktop",
     "dev:yjs-server": "turbo run dev --filter=yjs-server",
     "test": "turbo run test --concurrency=1",
     "lint": "turbo run lint",

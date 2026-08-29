@@ -1,0 +1,19 @@
+[package]
+name = "opendaw-desktop"
+version = "0.0.1"
+description = "macOS desktop shell for the existing openDAW studio web build"
+authors = ["openDAW contributors"]
+license = "AGPL-3.0-or-later"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[lib]
+name = "opendaw_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }

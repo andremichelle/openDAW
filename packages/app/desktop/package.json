@@ -1,0 +1,15 @@
+{
+  "name": "@opendaw/app-desktop",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "license": "LGPL-3.0-or-later",
+  "scripts": {
+    "dev": "tauri dev",
+    "build:desktop": "tauri build --bundles app,dmg",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
+  }
+}

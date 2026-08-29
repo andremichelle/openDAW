@@ -30,4 +30,6 @@ packages/app/studio/.env
 /presets/
 /announcements/temp.txt
 /tmp/
+/packages/app/desktop/src-tauri/target
+/packages/app/desktop/src-tauri/gen
 /packages/app/studio/public/docs/scripting/

@@ -222,8 +222,9 @@ Before starting, ensure you have the following installed on your system:
 * `npm run clean` (to revert to clean slate, removes all `node_modules` and `dist` folders)
 * `npm install` (for the first time and after `npm run clean`)
 * `npm run build` (for the first time and after `npm run clean`)
-* `npm run dev:studio` | `npm run dev:headless` (start dev server)
-* Navigate to https://localhost:8080 (port is important > cors sample api)
+* `npm run dev:studio` | `npm run dev:lab` (start the Vite app; then open https://localhost:8080)
+* `npm run dev:desktop` (macOS Tauri shell around the same studio Vite URL — see `plans/tauri-macos.md`)
+* `npm run build:desktop` (macOS `.app` / `.dmg`; run on a Mac, not in Linux CI)
 
 [![Custom Caption: Watch the Demo](https://img.youtube.com/vi/VPTXeJY6Eaw/0.jpg)](https://www.youtube.com/watch?v=VPTXeJY6Eaw)
 

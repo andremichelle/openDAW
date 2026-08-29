@@ -43,7 +43,7 @@ architecture work or maintainer decisions).
 | [203](203-analyser-device.md) | Analyser device | feature | 3 | FFT/broadcast exist, 4 new visualizations |
 | [211](211-werkstatt-sidechain-input.md) | Werkstatt sidechain input | feature | 3 | proven pattern, ABI bridge widening |
 | [201](201-classic-time-stretch.md) | classic time stretch | feature | 3 | extends voice arch, new timing model |
-| [23](023-native-version.md) | native version | feature | 3 | needs PWA vs Tauri decision |
+| [23](023-native-version.md) | native version | feature | 3 | macOS Tauri wrapper slice in; Linux/native-audio still open |
 | [255](255-dough-samples-default.md) | dough-samples default set | content | 3 | no code change, licensing is the blocker |
 | [277](277-werkstatt-midi-input.md) | Werkstatt midi input | feature | 3 | clear template, needs routing decision |
 | ~~[291](291-automation-curve-render-bug.md)~~ | ~~automation curve render bug~~ | bug | 2 | ✅ done (clamp curve slope in renderer) |

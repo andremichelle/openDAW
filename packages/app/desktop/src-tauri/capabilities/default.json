@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Capability for the openDAW window. Wrapper only — no native FS or shell APIs.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

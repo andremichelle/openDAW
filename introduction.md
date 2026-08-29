@@ -24,7 +24,7 @@ The TypeScript side is organised in four layers. Each layer may only depend on t
      |
    studio/*      DAW domain: box schemas, adapters, project model, engines
      |
-   app/*         deployable web applications (studio, wasm, lab, ...)
+   app/*         deployable applications (studio, lab, desktop Tauri shell)
 ```
 
 The Rust side mirrors the same idea. Small leaf crates (`math`, `dsp`, `value`) feed shared infrastructure
@@ -226,6 +226,10 @@ Depends on `lib-box`, `lib-dom`, `lib-dsp`, `lib-jsx`, `lib-runtime`, `lib-std`,
 `studio-core`, `studio-enums`.
 
 A scratch app for isolated DSP experiments with an oscilloscope and sliders.
+
+### @opendaw/app-desktop
+A Tauri 2 macOS shell that loads `@opendaw/app-studio` in a webview. No DAW code of its own.
+See [`plans/tauri-macos.md`](plans/tauri-macos.md).
 
 ---
 

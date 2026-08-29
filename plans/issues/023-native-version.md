@@ -4,6 +4,11 @@
 **Type:** feature
 **Scope:** large
 
+**Status (2026-08-29):** first slice is a **macOS-only Tauri 2 wrapper** around the
+existing studio (`packages/app/desktop/`, [`plans/tauri-macos.md`](../tauri-macos.md)).
+That slice does **not** close this issue (Linux install was the original ask) and does
+**not** start the native-audio / OPFS-replacement path.
+
 ## What is asked
 User wants a locally installable version of openDAW for Linux, for offline use and better audio performance than a browser tab gives. Implied acceptance criteria: launches without a browser chrome, works fully offline, and ideally gets closer to the metal for audio (lower latency / no browser power-saving throttling).
 
@@ -15,7 +20,7 @@ openDAW today is a pure browser SPA (`packages/app/studio/`), requires COOP/COEP
 2. PWA — turning openDAW into a fully installable Progressive Web App with offline support
 ```
 
-A full PWA plan already exists at `plans/pwa.md` (SW strategy, manifest, consent-gated update flow, offline degradation). No Tauri/Electron scaffolding exists anywhere in the repo (verified: no `tauri.conf.json`, no `electron` deps, no `src-tauri/`).
+A full PWA plan already exists at `plans/pwa.md` (SW strategy, manifest, consent-gated update flow, offline degradation). A macOS-only Tauri 2 shell now lives at `packages/app/desktop/` (see `plans/tauri-macos.md`). There is still no Windows/Linux bundling, Electron scaffolding, native audio backend, or OPFS replacement.
 
 Audio engine is being ported to WASM (`plans/wasm-audio/README.md`, tracked separately as #261) which is the real lever for "better audio performance" — that is an engine change, not a packaging change, and applies equally to browser, PWA, and native-wrapper builds.
 
