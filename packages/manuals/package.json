@@ -1,0 +1,26 @@
+{
+  "name": "@opendaw/manuals",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "license": "LGPL-3.0-or-later",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opendaw/studio-enums": "^0.1.1"
+  },
+  "devDependencies": {
+    "@opendaw/eslint-config": "^0.0.28",
+    "@opendaw/typescript-config": "^0.0.32",
+    "@types/node": "^22.15.18"
+  }
+}

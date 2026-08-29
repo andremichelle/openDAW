@@ -1,19 +1,19 @@
 import css from "./ManualPage.sass?inline"
-import {Await, createElement, Frag, LocalLink, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
+import {Await, createElement, Frag, LocalLink, PageContext, PageFactory} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {ThreeDots} from "@/ui/spinner/ThreeDots"
 import {BackButton} from "@/ui/pages/BackButton"
-import {Markdown} from "@/ui/Markdown"
-import {Manual, Manuals} from "@/ui/pages/Manuals"
+import {Markdown} from "@opendaw/studio-markdown"
+import {Manual, Manuals, manualsMarkdownHref} from "@opendaw/manuals"
 import {Html} from "@opendaw/lib-dom"
-import {CloudBackup, MenuItem} from "@opendaw/studio-core"
-import {EmptyExec, panic} from "@opendaw/lib-std"
-import {network} from "@opendaw/lib-runtime"
+import {panic} from "@opendaw/lib-std"
+import {IconSymbol} from "@opendaw/studio-enums"
 import {installScrollbars} from "@/ui/components/Scrollbars"
+import {Surface} from "@/ui/surface/Surface"
 
 const className = Html.adoptStyleSheet(css, "ManualPage")
 
-const addManuals = (manuals: ReadonlyArray<Manual>): ReadonlyArray<MenuItem> => manuals.map(manual => {
+const addManuals = (manuals: ReadonlyArray<Manual>) => manuals.map(manual => {
     if (manual.type === "page") {
         return (
             <Frag>
@@ -36,6 +36,12 @@ const addManuals = (manuals: ReadonlyArray<Manual>): ReadonlyArray<MenuItem> => 
     }
 })
 
+const loadMarkdown = (path: string): Promise<string> =>
+    fetch(manualsMarkdownHref(path), {cache: "no-store"}).then(response => {
+        if (!response.ok) {return Promise.reject(response.statusText)}
+        return response.text()
+    })
+
 export const ManualPage: PageFactory<StudioService> = ({lifecycle, service, path}: PageContext<StudioService>) => {
     return (
         <div className={className}>
@@ -48,17 +54,13 @@ export const ManualPage: PageFactory<StudioService> = ({lifecycle, service, path
                 </nav>
             </aside>
             <div className="manual" onConnect={host => lifecycle.own(installScrollbars(host))}>
-                {path === "/manuals/" ? (<p>Select a topic in the side bar...</p>) : (<Await
-                    factory={() => network.defaultFetch(`${path ?? "index"}.md?uuid=${service.buildInfo.uuid}`)
-                        .then(x => x.text())}
+                <Await
+                    factory={() => loadMarkdown(path)}
                     failure={(error) => `Unknown request (${error.reason})`}
                     loading={() => <ThreeDots/>}
-                    success={text => <Markdown text={text} actions={{
-                        "open-preferences": () => RouteLocation.get().navigateTo("/preferences"),
-                        "backup-google-drive": () => CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec),
-                        "backup-dropbox": () => CloudBackup.backup(service.cloudAuthManager, "Dropbox").catch(EmptyExec)
-                    }}/>}
-                />)}
+                    success={text => <Markdown text={text} onCopied={element =>
+                        Surface.get(element).toast("Copied to clipboard", IconSymbol.Copy)}/>}
+                />
             </div>
         </div>
     )

@@ -1,0 +1,20 @@
+# Enable Brotli Compression for supported files, only if they exist
+RewriteEngine On
+
+RewriteCond %{HTTP:Accept-Encoding} br
+RewriteCond %{REQUEST_FILENAME}.br -f
+RewriteRule ^(.*)$ $1.br [QSA,L]
+
+<FilesMatch "\.(js|css|html|json|svg|xml)\.br$">
+    Header set Content-Encoding br
+</FilesMatch>
+
+<Files "index.html">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+</Files>
+
+# SPA fallback within /manuals/ — parent studio .htaccess must rewrite here first
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.html [L]

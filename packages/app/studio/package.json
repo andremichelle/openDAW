@@ -6,7 +6,7 @@
   "license": "LGPL-3.0-or-later",
   "scripts": {
     "dev": "CI=true vite --clearScreen false --host",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && node ./scripts/embed-manuals.mjs",
     "preview": "vite preview --host",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "vitest run --config vitest.config.ts"
@@ -25,6 +25,9 @@
     "@opendaw/studio-core": "^0.2.4",
     "@opendaw/studio-core-wasm": "^0.0.15",
     "@opendaw/studio-enums": "^0.1.1",
+    "@opendaw/studio-icons": "0.0.1",
+    "@opendaw/studio-markdown": "0.0.1",
+    "@opendaw/manuals": "0.0.1",
     "@opendaw/studio-p2p": "^0.0.33",
     "@opendaw/studio-scripting": "^0.0.84",
     "@types/d3-force": "^3.0.10",
@@ -32,15 +35,12 @@
     "dropbox": "^10.34.0",
     "force-graph": "^1.50.1",
     "jszip": "^3.10.1",
-    "markdown-it": "^14.1.0",
-    "markdown-it-table": "^4.1.1",
     "mediabunny": "^1.0.3",
     "monaco-editor": "^0.54.0"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",
     "@opendaw/typescript-config": "^0.0.32",
-    "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.15.18",
     "eslint": "^8.57.0",
     "sass": "^1.88.0",

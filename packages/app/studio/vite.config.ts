@@ -1,5 +1,5 @@
 import {readdirSync, readFileSync, writeFileSync} from "fs"
-import {resolve} from "path"
+import {extname, resolve} from "path"
 import {defineConfig} from "vite"
 import crossOriginIsolation from "vite-plugin-cross-origin-isolation"
 import viteCompression from "vite-plugin-compression"
@@ -32,7 +32,8 @@ export default defineConfig(({command}) => {
             }
         },
         optimizeDeps: {
-            exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util", "monaco-editor", "onnxruntime-web"]
+            exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util", "monaco-editor", "onnxruntime-web",
+                "@opendaw/studio-icons", "@opendaw/studio-markdown", "@opendaw/manuals"]
         },
         build: {
             target: "esnext",
@@ -134,6 +135,29 @@ export default defineConfig(({command}) => {
                         fileName: `wasm-engine/${name}`,
                         source: readFileSync(resolve(sourceDir, name))
                     }))
+                }
+            },
+            {
+                name: "manuals-assets",
+                configureServer(server) {
+                    const manualsContent = resolve(__dirname, "../../manuals/content")
+                    server.middlewares.use((req, res, next) => {
+                        const url = (req.url ?? "").split("?")[0]
+                        if (!url.startsWith("/manuals/") || url.endsWith("/")) {return next()}
+                        const relativePath = decodeURIComponent(url.slice("/manuals/".length))
+                        const file = resolve(manualsContent, relativePath)
+                        if (!file.startsWith(manualsContent) || !existsSync(file)) {return next()}
+                        const types: Record<string, string> = {
+                            ".md": "text/markdown; charset=utf-8",
+                            ".webp": "image/webp",
+                            ".png": "image/png",
+                            ".jpg": "image/jpeg",
+                            ".jpeg": "image/jpeg",
+                            ".svg": "image/svg+xml"
+                        }
+                        res.setHeader("Content-Type", types[extname(file)] ?? "application/octet-stream")
+                        res.end(readFileSync(file))
+                    })
                 }
             },
             {
