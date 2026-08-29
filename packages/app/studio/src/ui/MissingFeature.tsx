@@ -11,7 +11,10 @@ export const MissingFeature = ({error}: Construct) => {
     return (
         <div className={className}>
             <h1>Get openDAW Working</h1>
-            <h2>Problem: <span style={{color: Colors.purple.toString()}}>{error}</span></h2>
+            <h2>Problem: <span style={{color: Colors.purple.toString()}}>
+                {error instanceof Error ? error.message : String(error)}
+            </span>
+            </h2>
             <p>Please update your browser or switch to the latest Chrome (recommended).</p>
             <p>openDAW should run on all modern browsers like Chrome, Edge, Firefox, and Safari.</p>
             <p>If you are already using one of these, please report your problem to <a
