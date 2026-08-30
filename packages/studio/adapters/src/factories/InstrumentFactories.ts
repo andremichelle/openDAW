@@ -8,6 +8,7 @@ import {
     NanoDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
+    SwarmDeviceBox,
     SoundfontDeviceBox,
     SoundfontFileBox,
     TapeDeviceBox,
@@ -56,6 +57,25 @@ export namespace InstrumentFactories {
                  name: string,
                  icon: IconSymbol,
                  attachment?: AudioFileBox): NanoDeviceBox => NanoDeviceBox.create(boxGraph, UUID.generate(), box => {
+            box.label.setValue(name)
+            box.icon.setValue(IconSymbol.toName(icon))
+            if (isDefined(attachment)) {box.file.refer(attachment)}
+            box.host.refer(host)
+        })
+    }
+
+    export const Swarm: InstrumentFactory<AudioFileBox, SwarmDeviceBox> = {
+        defaultName: "swarm",
+        defaultIcon: IconSymbol.Stack,
+        briefDescription: "Polyphonic Sampler",
+        description: "Polyphonic sampler with envelope and sample region",
+        manualPage: DeviceManualUrls.Swarm,
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 attachment?: AudioFileBox): SwarmDeviceBox => SwarmDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.label.setValue(name)
             box.icon.setValue(IconSymbol.toName(icon))
             if (isDefined(attachment)) {box.file.refer(attachment)}
@@ -245,7 +265,7 @@ export namespace InstrumentFactories {
         })
     }
 
-    export const Named = {Apparat, Cubed, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
+    export const Named = {Apparat, Cubed, Neon, MIDIOutput, Nano, Playfield, Swarm, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
     const useAudioFile = (boxGraph: BoxGraph, fileUUID: UUID.Bytes, name: string, duration: number) =>
