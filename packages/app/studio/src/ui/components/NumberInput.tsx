@@ -39,19 +39,26 @@ export const NumberInput = ({
             {input}
         </div>
     )
-    const updateDigits = () => {
+    let editing = false
+    const updateDigits = (force: boolean = false) => {
         const value = model.getValue()
         element.classList.toggle("negative", negativeWarning === true && value < 0)
+        // While the field is focused the user's in-progress text is authoritative; an external model change
+        // (e.g. the property-table writing the focus note's values back) must not overwrite it (#369). Only
+        // this field's own edits (Arrow/Enter) force a refresh.
+        if (editing && !force) {return}
         input.textContent = mapper.x(value).value
     }
     lifecycle.ownAll(
-        model.subscribe(updateDigits),
+        model.subscribe(() => updateDigits()),
         Events.subscribe(element, "focusin", (event: Event) => {
             if (!isInstanceOf(event.target, HTMLElement)) {return}
+            editing = true
             Html.selectContent(event.target)
         }),
         Events.subscribe(element, "focusout", (event: Event) => {
             if (!isInstanceOf(event.target, HTMLElement)) {return}
+            editing = false
             const result = mapper.y(event.target.textContent ?? "")
             if (result.type === "explicit" && !isNaN(result.value)) {
                 model.setValue(isDefined(guard) ? guard.guard(result.value) : result.value)
@@ -74,6 +81,7 @@ export const NumberInput = ({
                 if (status === "success" && json.app === "openDAW" && json.content === "number") {
                     event.preventDefault()
                     model.setValue(isDefined(guard) ? guard.guard(json.value) : json.value)
+                    updateDigits(true) // reflect the paste while focused, else focusout reverts to the old text
                 }
             }
         }),
@@ -88,6 +96,7 @@ export const NumberInput = ({
                     if (result.type !== "explicit" || isNaN(result.value)) {return}
                     const nextValue: int = result.value + step
                     model.setValue(isDefined(guard) ? guard.guard(nextValue) : nextValue)
+                    updateDigits(true)
                     Html.selectContent(target)
                     break
                 }
@@ -97,6 +106,7 @@ export const NumberInput = ({
                     if (result.type !== "explicit" || isNaN(result.value)) {return}
                     const nextValue: int = result.value - step
                     model.setValue(isDefined(guard) ? guard.guard(nextValue) : nextValue)
+                    updateDigits(true)
                     Html.selectContent(target)
                     break
                 }
