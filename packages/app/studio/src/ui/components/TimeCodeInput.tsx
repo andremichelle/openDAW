@@ -46,10 +46,15 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
             {inputs}
         </div>
     )
-    const updateDigits = () => {
+    let editing = false
+    const updateDigits = (force: boolean = false) => {
         const value = model.getValue()
         const negative = value < 0
         element.classList.toggle("negative", negativeWarning === true && negative)
+        // While a sub-field is focused, do not overwrite the user's in-progress text with an external model
+        // change (e.g. the property-table writing the focus note's values back) — that jumps the field back to
+        // the previous number (#369). Only this field's own edits (Arrow/Enter) force a refresh.
+        if (editing && !force) {return}
         const {bars, beats, semiquavers, ticks} = PPQN.toParts(value, upper, lower)
         inputs[0].textContent = negative ? String(bars) : String(bars + barOffset()).padStart(3, "0")
         inputs[1].textContent = String(beats + subOffset)
@@ -57,16 +62,22 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
         inputs[3].textContent = String(ticks).padStart(3, "0")
     }
     if (oneBased === true) {
-        lifecycle.own(StudioPreferences.subscribe(updateDigits, "time-display", "count-bars-from-zero"))
+        lifecycle.own(StudioPreferences.subscribe(() => updateDigits(), "time-display", "count-bars-from-zero"))
     }
     lifecycle.ownAll(
-        model.subscribe(updateDigits),
+        model.subscribe(() => updateDigits()),
         Events.subscribe(element, "focusin", (event: Event) => {
             if (!isInstanceOf(event.target, HTMLElement)) {return}
+            editing = true
             Html.selectContent(event.target)
         }),
-        Events.subscribe(element, "focusout", (event: Event) => {
+        Events.subscribe(element, "focusout", (event: FocusEvent) => {
             if (!isInstanceOf(event.target, HTMLElement)) {return}
+            // focusout bubbles from every sub-field: moving between them is still editing, so only end
+            // editing (and flush any deferred model change) once focus leaves the whole element (#369).
+            if (isInstanceOf(event.relatedTarget, Node) && element.contains(event.relatedTarget)) {return}
+            editing = false
+            updateDigits()
             Html.unselectContent(event.target)
         }),
         Events.subscribe(element, "copy", (event: ClipboardEvent) => {
@@ -85,6 +96,7 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
                 if (safeRead(json, "app") === "openDAW" && safeRead(json, "content") === "timecode") {
                     event.preventDefault()
                     model.setValue(json.value ?? 0)
+                    updateDigits(true) // reflect the paste while focused, else the parts stay stale
                 }
             }
         }),
@@ -97,12 +109,14 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
                 case "ArrowUp": {
                     event.preventDefault()
                     model.setValue(model.getValue() + units[index].amount)
+                    updateDigits(true)
                     Html.selectContent(target)
                     break
                 }
                 case "ArrowDown": {
                     event.preventDefault()
                     model.setValue(model.getValue() - units[index].amount)
+                    updateDigits(true)
                     Html.selectContent(target)
                     break
                 }
@@ -117,9 +131,10 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
                         + units[2].amount * (index === 2 ? unit - subOffset : semiquavers)
                         + units[3].amount * (index === 3 ? unit : ticks)
                     if (prevValue === nextValue) {
-                        updateDigits()
+                        updateDigits(true)
                     } else {
                         model.setValue(nextValue)
+                        updateDigits(true)
                     }
                     Html.selectContent(target)
                     break
