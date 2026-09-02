@@ -142,6 +142,22 @@ describe("RecordAudio", () => {
                 expect(region.box.waveformOffset.getValue()).toBeCloseTo(0.0, 6)
             })
 
+        it("rounds a covered start that falls between pulses up to the next one and keeps the rest in the offset",
+            async () => {
+                const {regions, tick, record, startAt, firstQuantumAt, deliver} = await setup()
+                // the first frame is 960.5 pulses late: the take cannot begin on the half pulse
+                firstQuantumAt(1.5 + 0.020 + 0.010 + PPQN.pulsesToSeconds(960.5, 120))
+                startAt(1.5, PPQN.Bar)
+                deliver(0.1)
+                record()
+                tick(PPQN.Bar + 1000)
+                const region = regions()[0]
+                expect(region.position).toBe(PPQN.Bar + 961)
+                // the audio covers the half pulse before the rounded position
+                expect(region.box.waveformOffset.getValue()).toBeCloseTo(PPQN.pulsesToSeconds(0.5, 120), 8)
+                expect(region.box.waveformOffset.getValue()).toBeGreaterThan(0)
+            })
+
         it("waits for both anchors before placing the take", async () => {
             const {regions, tick, record, startAt, firstQuantumAt, deliver} = await setup()
             firstQuantumAt(1.0)
