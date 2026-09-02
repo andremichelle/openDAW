@@ -1,10 +1,11 @@
-import {describe, expect, it} from "vitest"
+import {describe, expect, it, vi} from "vitest"
 import {DefaultObservableValue, isDefined, MutableObservableOption, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {AudioRegionBoxAdapter, AudioUnitBoxAdapter, ProjectSkeleton} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "../project/ProjectEnv"
 import type {EngineWorklet} from "../EngineWorklet"
 import type {RecordingWorklet} from "../RecordingWorklet"
+import {InputLatency} from "./InputLatency"
 import type {Capture} from "./Capture"
 
 // An audio take is placed from two audio-thread reports: the engine's `recordingStart` (context time and
@@ -50,10 +51,18 @@ const createFakeRecordingWorklet = () => ({
     get data() {return Option.None}
 })
 
-const setup = async () => {
+// `inputLatency` is the engine preference, not the resolved term: the provider resolves it the way
+// CaptureAudio does, so `InputLatency.EqualsOutput` derives it from whichever output latency was read.
+const setup = async ({outputLatency = 0.020, inputLatency = 0.010}:
+                     {outputLatency?: number, inputLatency?: number} = {}) => {
     const {Project} = await import("../project/Project")
     const {RecordAudio} = await import("./RecordAudio")
     const audioContext = {currentTime: 0, sampleRate: SAMPLE_RATE}
+    let reportedOutputLatency = outputLatency
+    const readLatency = () => ({
+        outputLatency: reportedOutputLatency,
+        inputLatency: InputLatency.resolve(InputLatency.Inherit, inputLatency, reportedOutputLatency)
+    })
     const env = {
         audioContext, audioWorklets: undefined, sampleManager: sampleManager(),
         soundfontManager: undefined, sampleService: undefined, soundfontService: undefined
@@ -76,8 +85,7 @@ const setup = async () => {
         sampleManager: project.env.sampleManager,
         project,
         capture,
-        outputLatency: 0.020,
-        inputLatency: 0.010
+        readLatency
     })
     const regions = (): ReadonlyArray<AudioRegionBoxAdapter> => audioUnit.tracks.values()
         .flatMap(track => track.regions.collection.asArray())
@@ -97,7 +105,18 @@ const setup = async () => {
         loopArea.to.setValue(to)
         loopArea.enabled.setValue(true)
     })
-    return {project, audioContext, recordingWorklet, regions, tick, record, startAt, firstQuantumAt, deliver, stop, loop}
+    const reportOutputLatency = (seconds: number) => reportedOutputLatency = seconds
+    return {
+        project, audioContext, recordingWorklet, regions, tick, record, startAt, firstQuantumAt, deliver, stop, loop,
+        reportOutputLatency
+    }
+}
+
+const captureDebugLines = () => {
+    const lines = new Array<string>()
+    const spy = vi.spyOn(console, "debug")
+        .mockImplementation((...args: ReadonlyArray<unknown>) => {lines.push(args.map(String).join(" "))})
+    return {lines, restore: () => spy.mockRestore()}
 }
 
 describe("RecordAudio", () => {
@@ -171,6 +190,73 @@ describe("RecordAudio", () => {
             expect(regions()[0].position).toBe(PPQN.Bar)
         })
 
+        it("reads the output latency again when the take is placed", async () => {
+            const {lines, restore} = captureDebugLines()
+            try {
+                const {regions, tick, record, startAt, firstQuantumAt, deliver, reportOutputLatency} =
+                    await setup({outputLatency: 0}) // no output has been rendered yet when recording starts
+                reportOutputLatency(0.023)
+                firstQuantumAt(1.0)
+                startAt(1.5, PPQN.Bar)
+                deliver(0.6)
+                record()
+                tick(PPQN.Bar + 40)
+                expect(regions()[0].box.waveformOffset.getValue()).toBeCloseTo(0.5 + 0.023 + 0.010, 6)
+                expect(lines.filter(line => line.includes("outputLatency=")))
+                    .toEqual(["[RecordAudio] outputLatency=0.023 inputLatency=0.01 source=placement"])
+            } finally {
+                restore()
+            }
+        })
+
+        it("keeps the output latency read at start when the read at placement is still zero", async () => {
+            const {lines, restore} = captureDebugLines()
+            try {
+                const {regions, tick, record, startAt, firstQuantumAt, deliver} = await setup({outputLatency: 0})
+                firstQuantumAt(1.0)
+                startAt(1.5, PPQN.Bar)
+                deliver(0.6)
+                record()
+                tick(PPQN.Bar + 40)
+                expect(regions()[0].box.waveformOffset.getValue()).toBeCloseTo(0.5 + 0.010, 6)
+                expect(lines.filter(line => line.includes("outputLatency=")))
+                    .toEqual(["[RecordAudio] outputLatency=0 inputLatency=0.01 source=start"])
+            } finally {
+                restore()
+            }
+        })
+
+        it("resolves an input latency that equals the output latency from the read at placement", async () => {
+            const {regions, tick, record, startAt, firstQuantumAt, deliver, reportOutputLatency} =
+                await setup({outputLatency: 0, inputLatency: InputLatency.EqualsOutput})
+            reportOutputLatency(0.023)
+            firstQuantumAt(1.0)
+            startAt(1.5, PPQN.Bar)
+            deliver(0.6)
+            record()
+            tick(PPQN.Bar + 40)
+            // both terms follow the placement read, not the 0 the context reported while starting
+            expect(regions()[0].box.waveformOffset.getValue()).toBeCloseTo(0.5 + 0.023 + 0.023, 6)
+        })
+
+        it("carries the output latency read at placement into the takes a loop wrap opens", async () => {
+            const {regions, tick, record, startAt, firstQuantumAt, deliver, loop, reportOutputLatency} =
+                await setup({outputLatency: 0})
+            loop(0, PPQN.Bar) // 2 s at 120 bpm
+            reportOutputLatency(0.023)
+            firstQuantumAt(1.0)
+            startAt(1.5, 0)
+            deliver(0.6)
+            record()
+            tick(40)
+            deliver(2.4)
+            tick(PPQN.Bar - 40)
+            tick(20) // the wrap closes take 1 at the loop end and opens take 2
+            expect(regions().length).toBe(2)
+            expect(regions().map(region => region.box.waveformOffset.getValue()))
+                .toEqual([expect.closeTo(0.533, 6), expect.closeTo(2.533, 6)])
+        })
+
         it("falls back to the main-thread observations once the wait for the anchors expires", async () => {
             const {audioContext, regions, tick, record, deliver} = await setup()
             audioContext.currentTime = 10.0
@@ -184,6 +270,19 @@ describe("RecordAudio", () => {
             const region = regions()[0]
             expect(region.position).toBe(PPQN.Bar + 80)
             expect(region.box.waveformOffset.getValue()).toBeCloseTo(0.6 + 0.020 + 0.010, 6)
+        })
+
+        it("compensates the fallback take with the latency read at start", async () => {
+            const {audioContext, regions, tick, record, deliver, reportOutputLatency} = await setup()
+            audioContext.currentTime = 10.0
+            deliver(0.6)
+            record()
+            tick(PPQN.Bar + 40)
+            // a later read cannot reach a take the anchors never placed
+            reportOutputLatency(0.999)
+            audioContext.currentTime = 10.3
+            tick(PPQN.Bar + 80)
+            expect(regions()[0].box.waveformOffset.getValue()).toBeCloseTo(0.6 + 0.020 + 0.010, 6)
         })
     })
 

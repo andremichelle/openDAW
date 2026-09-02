@@ -3,6 +3,7 @@ import {
     int,
     Nullable,
     Option,
+    Provider,
     Terminable,
     Terminator,
     tryCatch,
@@ -18,14 +19,22 @@ import {Recording} from "./Recording"
 import {RecordTrack} from "./RecordTrack"
 
 export namespace RecordAudio {
+    /** The two latency terms a take's waveform offset compensates, in seconds. */
+    export type Latency = {
+        outputLatency: number
+        inputLatency: number
+    }
+
     type RecordAudioContext = {
         recordingWorklet: RecordingWorklet
         sourceNode: AudioNode
         sampleManager: SampleLoaderManager
         project: Project
         capture: Capture
-        outputLatency: number
-        inputLatency: number
+        // Read on demand: `AudioContext.outputLatency` reads 0 in Chrome until output has actually been
+        // rendered to the device, which a recording started right after the context resumed precedes.
+        // The input term rides along because it can be configured to equal the output term.
+        readLatency: Provider<Latency>
     }
 
     type TakeData = {
@@ -39,9 +48,10 @@ export namespace RecordAudio {
     const ANCHOR_WAIT_SECONDS = 0.25
 
     export const start = (
-        {recordingWorklet, sourceNode, sampleManager, project, capture, outputLatency, inputLatency}: RecordAudioContext)
+        {recordingWorklet, sourceNode, sampleManager, project, capture, readLatency}: RecordAudioContext)
         : Terminable => {
-        console.debug("[RecordAudio] start", {outputLatency, inputLatency})
+        const startLatency = readLatency()
+        console.debug("[RecordAudio] start", startLatency)
         const terminator = new Terminator()
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, engine, boxGraph, timelineBox, tempoMap} = project
@@ -50,7 +60,10 @@ export namespace RecordAudio {
         let fileBox: Option<AudioFileBox> = Option.None
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
-        let currentWaveformOffset: number = outputLatency + inputLatency
+        // Set from the take that is placed first, and read only through `currentTake`, which stays
+        // empty until that placement — so the takes a loop wrap opens inherit the latency the take
+        // was placed with, never the one read at `start`.
+        let currentWaveformOffset: number = 0
         let takeNumber: int = 0
         let firstRecordingTick: Option<number> = Option.None
 
@@ -278,6 +291,16 @@ export namespace RecordAudio {
                     let waveformOffset: number
                     if (recordingStart.nonEmpty() && firstQuantumTime.nonEmpty()) {
                         const {contextTime, position} = recordingStart.unwrap()
+                        // The engine has reported its recording start, so at least one quantum has reached
+                        // the device and the context can report an output latency it did not have while
+                        // starting. Read both terms again here (the input term can be derived from the
+                        // output one) and keep the pair from `start` when the output term stays unset.
+                        const placedLatency = readLatency()
+                        const placed = Number.isFinite(placedLatency.outputLatency)
+                            && placedLatency.outputLatency > 0
+                        const {outputLatency, inputLatency} = placed ? placedLatency : startLatency
+                        console.debug(`[RecordAudio] outputLatency=${outputLatency} inputLatency=${inputLatency} `
+                            + `source=${placed ? "placement" : "start"}`)
                         // Buffer time of the recording start, plus the two latency terms: the performer
                         // plays to output that reaches them outputLatency late, and the input path
                         // delivers their signal inputLatency later still.
@@ -318,7 +341,8 @@ export namespace RecordAudio {
                             ? Math.max(0, wallclockSinceWorklet - countInSeconds)
                             : wallclockSinceWorklet
                         takePosition = currentPosition
-                        waveformOffset = headStartSeconds + countInSeconds + outputLatency + inputLatency
+                        waveformOffset = headStartSeconds + countInSeconds
+                            + startLatency.outputLatency + startLatency.inputLatency
                         console.debug(`[RecordAudio] anchor fallback: recordingStart=${recordingStart.nonEmpty()} `
                             + `firstQuantumTime=${firstQuantumTime.nonEmpty()} takePosition=${takePosition} `
                             + `waveformOffset=${waveformOffset}`)
