@@ -41,6 +41,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     #audioChain: Nullable<{
         sourceNode: MediaStreamAudioSourceNode
         recordGainNode: GainNode
+        keepAliveSink: GainNode
         channelCount: 1 | 2
     }> = null
     #preparedWorklet: Nullable<RecordingWorklet> = null
@@ -312,7 +313,12 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         recordGainNode.channelCount = channelCount
         recordGainNode.channelCountMode = "explicit"
         sourceNode.connect(recordGainNode)
-        this.#audioChain = {sourceNode, recordGainNode, channelCount}
+        // a silent sink on the destination keeps the source pulled, so its input delay stays settled
+        const keepAliveSink = audioContext.createGain()
+        keepAliveSink.gain.value = 0.0
+        sourceNode.connect(keepAliveSink)
+        keepAliveSink.connect(audioContext.destination)
+        this.#audioChain = {sourceNode, recordGainNode, keepAliveSink, channelCount}
         this.#connectMonitoring()
     }
 
@@ -327,9 +333,10 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     #destroyAudioChain(): void {
         if (isDefined(this.#audioChain)) {
-            const {sourceNode, recordGainNode} = this.#audioChain
+            const {sourceNode, recordGainNode, keepAliveSink} = this.#audioChain
             sourceNode.disconnect()
             recordGainNode.disconnect()
+            keepAliveSink.disconnect()
             this.#audioChain = null
         }
     }
