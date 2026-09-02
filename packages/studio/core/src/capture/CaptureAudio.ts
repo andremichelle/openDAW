@@ -5,6 +5,7 @@ import {
     MutableObservableOption,
     Nullable,
     Option,
+    Optional,
     RuntimeNotifier,
     Terminable,
     tryCatch,
@@ -45,6 +46,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         channelCount: 1 | 2
     }> = null
     #preparedWorklet: Nullable<RecordingWorklet> = null
+    #streamNamedDeviceId: Optional<string> = undefined
     #monitorOutputDeviceId: Option<string> = Option.None
     #monitorAudioElement: Nullable<HTMLAudioElement> = null
     #monitorStreamDest: Nullable<MediaStreamAudioDestinationNode> = null
@@ -255,18 +257,22 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
 
     async #updateStream(): Promise<void> {
+        const namedDeviceId = this.deviceId.getValue().unwrapOrUndefined()
         if (this.#stream.nonEmpty()) {
             const stream = this.#stream.unwrap()
             const settings = stream.getAudioTracks().at(0)?.getSettings()
             if (isDefined(settings)) {
-                const deviceId = this.deviceId.getValue().unwrapOrUndefined()
-                if (deviceId === settings.deviceId) {
+                // an unnamed device never equals the reported id, so compare the request instead
+                const unchanged = isUndefined(namedDeviceId)
+                    ? isUndefined(this.#streamNamedDeviceId)
+                    : namedDeviceId === settings.deviceId
+                if (unchanged) {
                     return Promise.resolve()
                 }
             }
         }
         this.#stopStream()
-        const deviceId = this.deviceId.getValue().unwrapOrUndefined() ?? AudioDevices.defaultInput?.deviceId
+        const deviceId = namedDeviceId ?? AudioDevices.defaultInput?.deviceId
         const channelCount = this.#requestChannels.unwrapOrElse(2)
         const baseConstraints: MediaTrackConstraints = {
             echoCancellation: false,
@@ -292,6 +298,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const gotDeviceId = settings?.deviceId
         console.debug(`new stream. device requested: ${deviceId ?? "default"}, got: ${gotDeviceId ?? "unknown"}. channelCount requested: ${channelCount}, got: ${settings?.channelCount}`)
         this.#rebuildAudioChain(stream)
+        this.#streamNamedDeviceId = namedDeviceId
         this.#stream.wrap(stream)
     }
 
