@@ -132,8 +132,6 @@ export class TracksManager implements Terminable {
     readonly #modulatorLanes: HTMLElement
     readonly #modulatorsCollapsed: DefaultObservableValue<boolean>
     readonly #tracks: SortedSet<UUID.Bytes, TrackContext>
-    readonly #maxClipsIndex: DefaultObservableValue<int>
-
     #currentClipModifier: Option<ClipModifier> = Option.None
     #currentRegionModifier: Option<RegionModifier> = Option.None
     #orderedByIndex: Option<ReadonlyArray<TrackContext>> = Option.None
@@ -153,7 +151,6 @@ export class TracksManager implements Terminable {
         }))
         this.#terminator.own(this.#modulatorsCollapsed.subscribe(() => this.#invalidateOrder()))
         this.#tracks = UUID.newSet(({trackBoxAdapter: {uuid}}) => uuid)
-        this.#maxClipsIndex = this.#terminator.own(new DefaultObservableValue(8))
         this.#terminator.own(this.#subscribe())
     }
 
@@ -209,7 +206,6 @@ export class TracksManager implements Terminable {
 
     get currentClipModifier(): Option<ClipModifier> {return this.#currentClipModifier}
     get currentRegionModifier(): Option<RegionModifier> {return this.#currentRegionModifier}
-    get maxClipsIndex(): DefaultObservableValue<number> {return this.#maxClipsIndex}
     get service(): StudioService {return this.#service}
 
     localToIndex(position: number): int {

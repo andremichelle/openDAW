@@ -5,6 +5,11 @@ import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
 import {Dragging} from "@opendaw/lib-dom"
 import {Project} from "@opendaw/studio-core"
+import {
+    clampClipMoveDelta,
+    MaxClipCount,
+    movedClipCount
+} from "@/ui/timeline/tracks/audio-unit/clips/constants.ts"
 
 class UnselectedModifyStrategy implements ClipModifyStrategy {
     readonly #tool: ClipMoveModifier
@@ -50,6 +55,7 @@ export class ClipMoveModifier implements ClipModifier {
     readonly #yAxis: ValueAxis
     readonly #pointerClipIndex: int
     readonly #pointerTrackIndex: int
+    readonly #initialClipCount: int
 
     readonly #selectedModifyStrategy: ClipModifyStrategy
     readonly #unselectedModifyStrategy: ClipModifyStrategy
@@ -67,6 +73,7 @@ export class ClipMoveModifier implements ClipModifier {
         this.#yAxis = yAxis
         this.#pointerClipIndex = pointerClipIndex
         this.#pointerTrackIndex = pointerTrackIndex
+        this.#initialClipCount = manager.service.timeline.clips.count.getValue()
 
         this.#selectedModifyStrategy = new SelectedModifyStrategy(this)
         this.#unselectedModifyStrategy = new UnselectedModifyStrategy(this)
@@ -86,10 +93,12 @@ export class ClipMoveModifier implements ClipModifier {
         const trackIndex: int = this.#yAxis.axisToValue(clientY)
         const maxTrackIndex = this.#manager.numTracks() - 1
         const adapters = this.#selection.selected()
-        const clipDelta = adapters.reduce((delta, adapter) => {
-            const listIndex = adapter.indexField.getValue()
-            return clamp(delta, -listIndex, this.#manager.maxClipsIndex.getValue() + 1)
-        }, clipIndex - this.#pointerClipIndex)
+        const clipIndices = adapters.map(adapter => adapter.indexField.getValue())
+        const maxClipCount = Math.max(MaxClipCount, this.#initialClipCount)
+        const clipDelta = clampClipMoveDelta(
+            clipIndex - this.#pointerClipIndex, clipIndices, maxClipCount)
+        this.#manager.service.timeline.clips.count.setValue(
+            movedClipCount(this.#initialClipCount, clipIndices, clipDelta))
         const trackDelta = adapters.reduce((delta, adapter) => {
             const listIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex
             return clamp(delta, -listIndex, maxTrackIndex - listIndex)
@@ -187,7 +196,10 @@ export class ClipMoveModifier implements ClipModifier {
         })
     }
 
-    cancel(): void {this.#dispatchChange()}
+    cancel(): void {
+        this.#manager.service.timeline.clips.count.setValue(this.#initialClipCount)
+        this.#dispatchChange()
+    }
 
     #dispatchChange(): void {
         this.#dispatchSameTrackChange()
