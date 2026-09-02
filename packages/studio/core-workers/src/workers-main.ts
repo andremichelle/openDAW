@@ -1,10 +1,14 @@
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {OpfsWorker, SamplePeakWorker} from "@opendaw/lib-fusion"
 import {
+    analyzeBursts,
     AudioData,
     AudioMaterialFeatures,
     AudioMaterialProtocol,
     BpmProtocol,
+    LatencyCalibrationAnalysis,
+    LatencyCalibrationInput,
+    LatencyCalibrationProtocol,
     TransientDetector,
     TransientProtocol
 } from "@opendaw/lib-dsp"
@@ -31,6 +35,12 @@ Communicator.executor(messenger.channel("bpm"), new class implements BpmProtocol
 Communicator.executor(messenger.channel("material"), new class implements AudioMaterialProtocol {
     async analyze(audioData: AudioData, moduleUrl: string): Promise<AudioMaterialFeatures> {
         return analyzeMaterial(audioData, moduleUrl)
+    }
+})
+
+Communicator.executor(messenger.channel("latency-calibration"), new class implements LatencyCalibrationProtocol {
+    async analyze(input: LatencyCalibrationInput): Promise<LatencyCalibrationAnalysis> {
+        return analyzeBursts(input)
     }
 })
 
