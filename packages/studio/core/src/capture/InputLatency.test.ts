@@ -39,6 +39,16 @@ describe("InputLatency.resolve", () => {
         expect(InputLatency.resolve(InputLatency.Inherit, InputLatency.Reported, outputLatency, Number.POSITIVE_INFINITY))
             .toBe(0.0)
     })
+    it("applies a reported latency that sits exactly on the ceiling", () => {
+        expect(InputLatency.resolve(
+            InputLatency.Inherit, InputLatency.Reported, outputLatency, InputLatency.ReportedMaximum))
+            .toBe(InputLatency.ReportedMaximum)
+    })
+    it("falls back to zero when the reported latency exceeds the ceiling", () => {
+        expect(InputLatency.resolve(
+            InputLatency.Inherit, InputLatency.Reported, outputLatency, InputLatency.ReportedMaximum + 0.001))
+            .toBe(0.0)
+    })
     it("prefers a numeric per-capture override over a Reported preference", () => {
         expect(InputLatency.resolve(overriddenLatency, InputLatency.Reported, outputLatency, reportedLatency))
             .toBe(overriddenLatency)
@@ -95,6 +105,16 @@ describe("InputLatency.resolveWithSource", () => {
         expect(InputLatency.resolveWithSource(
             InputLatency.Inherit, InputLatency.Reported, outputLatency, Number.POSITIVE_INFINITY))
             .toEqual({seconds: 0.0, source: "reported-unavailable"})
+    })
+    it("names the reported source for a latency that sits exactly on the ceiling", () => {
+        expect(InputLatency.resolveWithSource(
+            InputLatency.Inherit, InputLatency.Reported, outputLatency, InputLatency.ReportedMaximum))
+            .toEqual({seconds: InputLatency.ReportedMaximum, source: "reported"})
+    })
+    it("names the out-of-range source for a latency above the ceiling", () => {
+        expect(InputLatency.resolveWithSource(
+            InputLatency.Inherit, InputLatency.Reported, outputLatency, InputLatency.ReportedMaximum + 0.001))
+            .toEqual({seconds: 0.0, source: "reported-out-of-range"})
     })
     it("names the capture source for a numeric per-capture override", () => {
         expect(InputLatency.resolveWithSource(overriddenLatency, InputLatency.Reported, outputLatency, reportedLatency))
