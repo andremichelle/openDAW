@@ -1,5 +1,12 @@
 import {describe, expect, test} from "vitest"
-import {crossCorrelate, generateMls, peakToMeanRatioDb, refinePeak} from "./latency-calibration"
+import {
+    analyzeBursts,
+    crossCorrelate,
+    generateMls,
+    LatencyCalibrationInput,
+    peakToMeanRatioDb,
+    refinePeak
+} from "./latency-calibration"
 
 describe("generateMls", () => {
     test("has length 2^order − 1 and values ±1", () => {
@@ -115,5 +122,66 @@ describe("peakToMeanRatioDb", () => {
         expect(peakToMeanRatioDb(lone, 400)).toBeGreaterThan(30)
         const flat = new Float32Array(1000).fill(1)
         expect(peakToMeanRatioDb(flat, 400)).toBeCloseTo(0, 6)
+    })
+})
+
+describe("analyzeBursts", () => {
+    const sampleRate = 48000
+    const order = 12 // short MLS keeps the test fast; the routine uses 15
+    const mls = generateMls(order)
+    const spacingSeconds = mls.length / sampleRate + 0.5
+    const captureStartTime = 10.0
+    const burstStartTimes = [10.1, 10.1 + spacingSeconds, 10.1 + 2 * spacingSeconds]
+    const captureLength = Math.ceil((burstStartTimes[2] + spacingSeconds - captureStartTime) * sampleRate)
+
+    const synthesize = (delaysSeconds: ReadonlyArray<number>, gains: ReadonlyArray<number> = [1, 1, 1]): Float32Array => {
+        const capture = new Float32Array(captureLength)
+        burstStartTimes.forEach((startTime, burst) => {
+            const offset = (startTime - captureStartTime + delaysSeconds[burst]) * sampleRate
+            const whole = Math.floor(offset)
+            const fraction = offset - whole
+            for (let index = 0; index < mls.length; index++) {
+                capture[whole + index] += mls[index] * (1 - fraction) * gains[burst]
+                capture[whole + index + 1] += mls[index] * fraction * gains[burst]
+            }
+        })
+        return capture
+    }
+    const input = (capture: Float32Array): LatencyCalibrationInput => ({
+        sampleRate, capture, captureStartTime, mlsOrder: order, burstStartTimes,
+        maxRoundTripSeconds: 0.6, ratioThresholdDb: 18
+    })
+
+    test("recovers the same delay on every burst", () => {
+        const analysis = analyzeBursts(input(synthesize([0.0213, 0.0213, 0.0213])))
+        expect(analysis.identifiedBursts).toBe(3)
+        analysis.delays.forEach(delay => expect(delay).toBeCloseTo(0.0213, 4))
+        expect(analysis.roundTripSeconds).toBeCloseTo(0.0213, 4)
+        expect(analysis.spreadSeconds).toBeLessThan(0.0001)
+        analysis.ratiosDb.forEach(ratio => expect(ratio).toBeGreaterThan(18))
+    })
+    test("reports the spread when one burst is late", () => {
+        const analysis = analyzeBursts(input(synthesize([0.020, 0.020, 0.023])))
+        expect(analysis.identifiedBursts).toBe(3)
+        expect(analysis.roundTripSeconds).toBeCloseTo(0.020, 4)
+        expect(analysis.spreadSeconds).toBeCloseTo(0.003, 4)
+    })
+    test("a silent burst is not identified and does not enter the median", () => {
+        const analysis = analyzeBursts(input(synthesize([0.020, 0.020, 0.020], [1, 0, 1])))
+        expect(analysis.identifiedBursts).toBe(2)
+        expect(Number.isNaN(analysis.delays[1])).toBe(true)
+        expect(analysis.ratiosDb[1]).toBeLessThan(18)
+        expect(analysis.roundTripSeconds).toBeCloseTo(0.020, 4)
+    })
+    test("all silent → nothing identified, NaN round trip", () => {
+        const analysis = analyzeBursts(input(new Float32Array(captureLength)))
+        expect(analysis.identifiedBursts).toBe(0)
+        expect(Number.isNaN(analysis.roundTripSeconds)).toBe(true)
+        expect(analysis.spreadSeconds).toBe(0)
+    })
+    test("a burst whose window runs past the capture end is skipped, not thrown", () => {
+        const short = synthesize([0.020, 0.020, 0.020]).slice(0, Math.floor((burstStartTimes[2] - captureStartTime) * sampleRate) + 100)
+        const analysis = analyzeBursts(input(short))
+        expect(analysis.identifiedBursts).toBe(2)
     })
 })

@@ -93,3 +93,65 @@ export const peakToMeanRatioDb = (correlation: Float32Array, index: int): number
     const meanPower = sum / Math.max(1, correlation.length - 1)
     return meanPower === 0.0 ? Number.POSITIVE_INFINITY : 10.0 * Math.log10(peakPower / meanPower)
 }
+
+export interface LatencyCalibrationInput {
+    sampleRate: number
+    capture: Float32Array
+    captureStartTime: number
+    mlsOrder: int
+    burstStartTimes: ReadonlyArray<number>
+    maxRoundTripSeconds: number
+    ratioThresholdDb: number
+}
+
+export interface LatencyCalibrationAnalysis {
+    delays: ReadonlyArray<number>
+    ratiosDb: ReadonlyArray<number>
+    roundTripSeconds: number
+    spreadSeconds: number
+    identifiedBursts: int
+}
+
+export interface LatencyCalibrationProtocol {
+    analyze(input: LatencyCalibrationInput): Promise<LatencyCalibrationAnalysis>
+}
+
+const median = (values: ReadonlyArray<number>): number => {
+    const sorted = [...values].sort((left, right) => left - right)
+    const middle = sorted.length >> 1
+    return sorted.length % 2 === 1 ? sorted[middle] : 0.5 * (sorted[middle - 1] + sorted[middle])
+}
+
+/** Locates each scheduled burst in the capture and reduces the per-burst delays to one round trip. */
+export const analyzeBursts = (input: LatencyCalibrationInput): LatencyCalibrationAnalysis => {
+    const {sampleRate, capture, captureStartTime, mlsOrder, burstStartTimes, maxRoundTripSeconds, ratioThresholdDb} = input
+    const mls = generateMls(mlsOrder)
+    const maxLag = Math.ceil(maxRoundTripSeconds * sampleRate)
+    const delays: Array<number> = []
+    const ratiosDb: Array<number> = []
+    for (const startTime of burstStartTimes) {
+        const startFrame = Math.round((startTime - captureStartTime) * sampleRate)
+        // The search window reaches maxLag past the probe so a late burst is still inside it; a
+        // capture that ends first is clipped, not rejected — only the probe itself must fit.
+        if (startFrame < 0 || startFrame + mls.length > capture.length) {
+            delays.push(Number.NaN)
+            ratiosDb.push(Number.NEGATIVE_INFINITY)
+            continue
+        }
+        const endFrame = Math.min(startFrame + mls.length + maxLag, capture.length)
+        const correlation = crossCorrelate(capture.subarray(startFrame, endFrame), mls, maxLag)
+        let peak = 0
+        for (let lag = 1; lag < correlation.length; lag++) {if (correlation[lag] > correlation[peak]) {peak = lag}}
+        const ratio = peakToMeanRatioDb(correlation, peak)
+        ratiosDb.push(ratio)
+        // A silent window correlates to exactly zero, and peakToMeanRatioDb's zero-mean branch
+        // reports that as +Infinity — excluded here alongside every ratio under threshold.
+        delays.push(Number.isFinite(ratio) && ratio >= ratioThresholdDb
+            ? (peak + refinePeak(correlation, peak)) / sampleRate : Number.NaN)
+    }
+    const identified = delays.filter(delay => !Number.isNaN(delay))
+    const roundTripSeconds = identified.length === 0 ? Number.NaN : median(identified)
+    const spreadSeconds = identified.length <= 1 ? 0.0
+        : Math.max(...identified.map(delay => Math.abs(delay - roundTripSeconds)))
+    return {delays, ratiosDb, roundTripSeconds, spreadSeconds, identifiedBursts: identified.length}
+}
