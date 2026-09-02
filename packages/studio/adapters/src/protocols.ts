@@ -41,5 +41,9 @@ export interface EngineToClient {
     fetchNamWasm(): Promise<ArrayBuffer>
     notifyClipSequenceChanges(changes: ClipSequencingUpdates): void
     switchMarkerState(state: Nullable<[UUID.Bytes, int]>): void
+    // The transport began recording during the render quantum that ended at `contextTime` (audio-thread
+    // clock) and left the playhead at `position`. Both describe the same instant, so a capture can pair
+    // its own audio-thread anchors with the timeline without reading the main-thread state observables.
+    recordingStarted(contextTime: number, position: ppqn): void
     ready(): void
 }

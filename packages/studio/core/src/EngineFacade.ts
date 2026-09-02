@@ -1,7 +1,9 @@
 import {
     DefaultObservableValue,
     int,
+    MutableObservableOption,
     Nullable,
+    ObservableOption,
     ObservableValue,
     Observer,
     Option,
@@ -20,7 +22,7 @@ import {
     PreferencesFacade
 } from "@opendaw/studio-adapters"
 import {AudioContexts} from "./AudioContexts"
-import {Engine} from "./Engine"
+import {Engine, RecordingStart} from "./Engine"
 import {EngineWorklet} from "./EngineWorklet"
 import {Project} from "./project"
 import {Preferences} from "@opendaw/lib-fusion"
@@ -31,6 +33,7 @@ export class EngineFacade implements Engine {
     readonly #playbackTimestamp: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
     readonly #countInBeatsRemaining: DefaultObservableValue<int> = new DefaultObservableValue(0)
     readonly #position: DefaultObservableValue<ppqn> = new DefaultObservableValue(0.0)
+    readonly #recordingStart: MutableObservableOption<RecordingStart> = new MutableObservableOption()
     readonly #bpm: DefaultObservableValue<bpm> = new DefaultObservableValue(12.0)
     readonly #isPlaying: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
     readonly #isRecording: DefaultObservableValue<boolean> = new DefaultObservableValue(false)
@@ -54,6 +57,10 @@ export class EngineFacade implements Engine {
             worklet.playbackTimestamp.catchupAndSubscribe(owner => this.#playbackTimestamp.setValue(owner.getValue())),
             worklet.countInBeatsRemaining.catchupAndSubscribe(owner => this.#countInBeatsRemaining.setValue(owner.getValue())),
             worklet.position.catchupAndSubscribe(owner => this.#position.setValue(owner.getValue())),
+            worklet.recordingStart.catchupAndSubscribe(option => option.match({
+                none: () => this.#recordingStart.clear(),
+                some: start => this.#recordingStart.wrap(start)
+            })),
             worklet.bpm.catchupAndSubscribe(owner => this.#bpm.setValue(owner.getValue())),
             worklet.isPlaying.catchupAndSubscribe(owner => this.#isPlaying.setValue(owner.getValue())),
             worklet.isRecording.catchupAndSubscribe(owner => this.#isRecording.setValue(owner.getValue())),
@@ -88,6 +95,7 @@ export class EngineFacade implements Engine {
     stopRecording(): void {this.#worklet.ifSome(worklet => worklet.stopRecording())}
 
     get position(): ObservableValue<ppqn> {return this.#position}
+    get recordingStart(): ObservableOption<RecordingStart> {return this.#recordingStart}
     get bpm(): ObservableValue<bpm> {return this.#bpm}
     get isPlaying(): ObservableValue<boolean> {return this.#isPlaying}
     get isRecording(): ObservableValue<boolean> {return this.#isRecording}

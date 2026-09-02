@@ -127,6 +127,9 @@ Communicator.executor<OfflineEngineProtocol>(
                     switchMarkerState(markerState: Nullable<[UUID.Bytes, int]>): void {
                         dispatcher.dispatchAndForget(this.switchMarkerState, markerState)
                     }
+                    recordingStarted(contextTime: number, position: ppqn): void {
+                        dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position)
+                    }
                     ready() {dispatcher.dispatchAndForget(this.ready)}
                 })
             const engine = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient)

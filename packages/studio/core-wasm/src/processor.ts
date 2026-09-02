@@ -81,6 +81,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #measureLoad: boolean = false // debug.dspLoadMeasurement (TS EngineProcessor.render's measureLoad)
     #perfWriteIndex: int = 0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
+    #wasRecording: boolean = false
 
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
         super()
@@ -102,6 +103,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 }
                 switchMarkerState(state: Nullable<[UUID.Bytes, int]>): void {
                     dispatcher.dispatchAndForget(this.switchMarkerState, state)
+                }
+                recordingStarted(contextTime: number, position: ppqn): void {
+                    dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position)
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
@@ -337,6 +341,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             }
         }
         engine.render()
+        this.#announceRecordingStart(engine)
         if (monitoring.length > 0 && monitorOutput !== undefined) {
             const outputPtr = engine.monitor_output_ptr()
             const staged = new Float32Array(this.#memory.buffer, outputPtr, 8 * RenderQuantum)
@@ -374,6 +379,20 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#drainClipChanges()
         this.#drainMarkerChanges()
         this.#midi.drain(engine, this.#memory)
+    }
+
+    // One-shot per recording, on the rising edge of the transport's recording flag as rendered this quantum.
+    // `currentTime` is the START of the quantum in an AudioWorkletGlobalScope, while the position in the
+    // state buffer is the one reached after rendering it: report the quantum END so both describe the same
+    // instant. Read straight from the engine state, not the sync packet, whose populate callback only runs
+    // when the main thread has consumed the previous packet.
+    #announceRecordingStart(engine: EngineExports): void {
+        const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
+        const isRecording = view.getUint8(18) === 1
+        if (isRecording && !this.#wasRecording) {
+            this.#engineToClient.recordingStarted(currentTime + RenderQuantum / sampleRate, view.getFloat32(0))
+        }
+        this.#wasRecording = isRecording
     }
 
     // Forward the engine's queued clip transitions to the client (TS `clipSequencing.changes()` +
