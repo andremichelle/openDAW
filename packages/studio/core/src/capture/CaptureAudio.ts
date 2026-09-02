@@ -16,6 +16,7 @@ import {AudioContexts} from "../AudioContexts"
 import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {InputLatency} from "./InputLatency"
+import {InputLatencyCalibration} from "./InputLatencyCalibration"
 import {RecordAudio} from "./RecordAudio"
 import {AudioDevices} from "../AudioDevices"
 import {RecordingWorklet} from "../RecordingWorklet"
@@ -267,6 +268,65 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             capture: this,
             readLatency
         })
+    }
+
+    /**
+     * Measures this capture's input-path delay with a loopback probe played through its monitor route (or the
+     * context destination) and captured through its own stream. Stores the result per device id when apply is set.
+     */
+    async calibrateInputLatency(options: InputLatencyCalibration.Options & {apply?: boolean} = {},
+                                dependencies: Partial<InputLatencyCalibration.Dependencies> = {})
+        : Promise<InputLatencyCalibration.Result> {
+        const {engine, env: {audioContext}} = this.manager.project
+        const now = dependencies.now ?? (() => Date.now())
+        const scheduledBursts = options.burstCount ?? InputLatencyCalibration.BurstCount
+        // The probe plays over the output and records over the input: both are the transport's while it runs.
+        if (engine.isPlaying.getValue() || engine.isRecording.getValue()) {
+            return InputLatencyCalibration.emptyResult(
+                "transport-running", audioContext.sampleRate, scheduledBursts, now())
+        }
+        const audioChain = this.#audioChain
+        if (!isDefined(audioChain)) {
+            return InputLatencyCalibration.emptyResult("no-stream", audioContext.sampleRate, scheduledBursts, now())
+        }
+        const result = await InputLatencyCalibration.measure(
+            audioContext, audioChain.sourceNode, this.#monitorDestination(), options, dependencies)
+        if (options.apply === true && (result.verdict === "ok" || result.verdict === "noisy")) {
+            const deviceId = this.streamDeviceId.unwrapOrUndefined()
+            // An entry outside the numeric range the settings schema accepts costs the user the whole
+            // recording section on the next load, so a non-finite measurement is reported but not stored.
+            if (!(Number.isFinite(result.inputLatencySeconds)
+                && Number.isFinite(result.outputLatencySeconds)
+                && Number.isFinite(result.spreadSeconds))) {
+                console.debug("[CaptureAudio] calibration not stored: the measurement is not a finite number"
+                    + ` (input ${result.inputLatencySeconds}, output ${result.outputLatencySeconds},`
+                    + ` spread ${result.spreadSeconds})`)
+                return result
+            }
+            if (isDefined(deviceId) && deviceId !== "") {
+                const {recording} = engine.preferences.settings
+                recording.inputLatencyCalibrations = [
+                    ...recording.inputLatencyCalibrations.filter(entry => entry.deviceId !== deviceId),
+                    {
+                        deviceId,
+                        inputLatency: Math.max(0.0, result.inputLatencySeconds),
+                        outputLatencyAtCalibration: result.outputLatencySeconds,
+                        spread: result.spreadSeconds,
+                        measuredAt: result.measuredAt
+                    }
+                ]
+            }
+        }
+        return result
+    }
+
+    /** Drops the stored calibration for the device this capture streams from, leaving every other device's. */
+    clearInputLatencyCalibration(): void {
+        const deviceId = this.streamDeviceId.unwrapOrUndefined()
+        if (!isDefined(deviceId) || deviceId === "") {return}
+        const {recording} = this.manager.project.engine.preferences.settings
+        recording.inputLatencyCalibrations =
+            recording.inputLatencyCalibrations.filter(entry => entry.deviceId !== deviceId)
     }
 
     async #updateStream(): Promise<void> {
