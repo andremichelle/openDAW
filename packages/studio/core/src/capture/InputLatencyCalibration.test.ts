@@ -1,6 +1,6 @@
 import {describe, expect, test, vi} from "vitest"
 import {int, isDefined, Optional} from "@opendaw/lib-std"
-import {LatencyCalibrationAnalysis} from "@opendaw/lib-dsp"
+import {LatencyCalibrationAnalysis, LatencyProbe} from "@opendaw/lib-dsp"
 import type {InputLatencyCalibration as Calibration} from "./InputLatencyCalibration"
 
 // The module reaches LatencyCaptureNode, which extends AudioWorkletNode; jsdom has no Web Audio, and
@@ -26,6 +26,7 @@ interface FakeContext {
     createGain(): GainNode
     started: Array<number>
     gains: Array<FakeGain>
+    bufferLengths: Array<int>
 }
 
 const makeContext = (state: AudioContextState, outputLatency: Optional<number>,
@@ -34,9 +35,12 @@ const makeContext = (state: AudioContextState, outputLatency: Optional<number>,
         state, sampleRate: 48000, currentTime: 100.0,
         outputLatency,
         resume: async () => {context.state = resumeTo},
-        createBuffer: (channels: int, length: int, sampleRate: number) => ({
-            numberOfChannels: channels, length, sampleRate, getChannelData: () => new Float32Array(length)
-        } as unknown as AudioBuffer),
+        createBuffer: (channels: int, length: int, sampleRate: number) => {
+            context.bufferLengths.push(length)
+            return {
+                numberOfChannels: channels, length, sampleRate, getChannelData: () => new Float32Array(length)
+            } as unknown as AudioBuffer
+        },
         createBufferSource: () => ({
             buffer: null, connect() {}, disconnect() {}, start(time: number) {context.started.push(time)}
         } as unknown as AudioBufferSourceNode),
@@ -48,7 +52,8 @@ const makeContext = (state: AudioContextState, outputLatency: Optional<number>,
             } as unknown as GainNode
         },
         started: [],
-        gains: []
+        gains: [],
+        bufferLengths: []
     }
     return context
 }
@@ -102,6 +107,24 @@ describe("InputLatencyCalibration.measure", () => {
         expect(result.scheduledBursts).toBe(3)
         expect(result.correlationRatioDb).toBe(29)
         expect(result.measuredAt).toBe(1700000000000)
+        expect(result.probe).toBe("mls-15")
+    })
+    test("an injected probe is the burst that plays and the probe the result names", async () => {
+        const context = makeContext("running", 0.02)
+        const renderedAt: Array<number> = []
+        const probe: LatencyProbe = {
+            name: "test-burst",
+            render: sampleRate => {
+                renderedAt.push(sampleRate)
+                return new Float32Array(512)
+            }
+        }
+        const result = await measure(context, {probe}, deps(analysisOf([0.03, 0.03, 0.03], [30, 30, 30])))
+        expect(result.probe).toBe("test-burst")
+        expect(renderedAt).toEqual([48000]) // rendered once, at the context's rate
+        expect(context.bufferLengths).toEqual([512])
+        const spacing = 512 / 48000 + InputLatencyCalibration.BurstTailSeconds
+        expect(context.started[1] - context.started[0]).toBeCloseTo(spacing, 6)
     })
     test("schedules the bursts at increasing context times starting after the lead-in", async () => {
         const context = makeContext("running", 0.02)
@@ -110,6 +133,7 @@ describe("InputLatencyCalibration.measure", () => {
         expect(context.started[0]).toBeGreaterThanOrEqual(100.0 + InputLatencyCalibration.LeadInSeconds)
         const spacing = (Math.pow(2, InputLatencyCalibration.MlsOrder) - 1) / 48000 + InputLatencyCalibration.BurstTailSeconds
         expect(context.started[1] - context.started[0]).toBeCloseTo(spacing, 6)
+        expect(context.bufferLengths).toEqual([Math.pow(2, InputLatencyCalibration.MlsOrder) - 1])
     })
     test("unreported output latency: input part equals the round trip and is flagged", async () => {
         const context = makeContext("running", undefined)

@@ -4,6 +4,7 @@ import {
     crossCorrelate,
     generateMls,
     LatencyCalibrationInput,
+    LatencyProbes,
     peakToMeanRatioDb,
     refinePeak
 } from "./latency-calibration"
@@ -36,6 +37,22 @@ describe("generateMls", () => {
     })
     test("is deterministic", () => {
         expect(Array.from(generateMls(12))).toEqual(Array.from(generateMls(12)))
+    })
+})
+
+describe("LatencyProbes.mls", () => {
+    test("renders the sequence of its order, at any rate", () => {
+        const probe = LatencyProbes.mls(10)
+        expect(Array.from(probe.render(48000))).toEqual(Array.from(generateMls(10)))
+        expect(Array.from(probe.render(44100))).toEqual(Array.from(generateMls(10)))
+    })
+    test("names itself after its order", () => {
+        expect(LatencyProbes.mls(10).name).toBe("mls-10")
+        expect(LatencyProbes.mls(15).name).toBe("mls-15")
+    })
+    test("defaults to order 15", () => {
+        expect(LatencyProbes.mls().name).toBe("mls-15")
+        expect(LatencyProbes.mls().render(48000).length).toBe(32767)
     })
 })
 
@@ -134,26 +151,48 @@ describe("analyzeBursts", () => {
     const burstStartTimes = [10.1, 10.1 + spacingSeconds, 10.1 + 2 * spacingSeconds]
     const captureLength = Math.ceil((burstStartTimes[2] + spacingSeconds - captureStartTime) * sampleRate)
 
-    const synthesize = (delaysSeconds: ReadonlyArray<number>, gains: ReadonlyArray<number> = [1, 1, 1]): Float32Array => {
+    // A linear sweep of the same length, standing in for any deterministic non-MLS probe.
+    const chirp = ((): Float32Array => {
+        const sweep = new Float32Array(mls.length)
+        const duration = sweep.length / sampleRate
+        const startHz = 200.0
+        const endHz = 8000.0
+        for (let index = 0; index < sweep.length; index++) {
+            const time = index / sampleRate
+            sweep[index] = Math.sin(2.0 * Math.PI * (startHz * time + (endHz - startHz) * time * time / (2.0 * duration)))
+        }
+        return sweep
+    })()
+
+    const synthesize = (delaysSeconds: ReadonlyArray<number>, gains: ReadonlyArray<number> = [1, 1, 1],
+                        reference: Float32Array = mls): Float32Array => {
         const capture = new Float32Array(captureLength)
         burstStartTimes.forEach((startTime, burst) => {
             const offset = (startTime - captureStartTime + delaysSeconds[burst]) * sampleRate
             const whole = Math.floor(offset)
             const fraction = offset - whole
-            for (let index = 0; index < mls.length; index++) {
-                capture[whole + index] += mls[index] * (1 - fraction) * gains[burst]
-                capture[whole + index + 1] += mls[index] * fraction * gains[burst]
+            for (let index = 0; index < reference.length; index++) {
+                capture[whole + index] += reference[index] * (1 - fraction) * gains[burst]
+                capture[whole + index + 1] += reference[index] * fraction * gains[burst]
             }
         })
         return capture
     }
-    const input = (capture: Float32Array): LatencyCalibrationInput => ({
-        sampleRate, capture, captureStartTime, mlsOrder: order, burstStartTimes,
+    const input = (capture: Float32Array, reference: Float32Array = mls): LatencyCalibrationInput => ({
+        sampleRate, capture, captureStartTime, reference, burstStartTimes,
         maxRoundTripSeconds: 0.6, ratioThresholdDb: 18
     })
 
     test("recovers the same delay on every burst", () => {
         const analysis = analyzeBursts(input(synthesize([0.0213, 0.0213, 0.0213])))
+        expect(analysis.identifiedBursts).toBe(3)
+        analysis.delays.forEach(delay => expect(delay).toBeCloseTo(0.0213, 4))
+        expect(analysis.roundTripSeconds).toBeCloseTo(0.0213, 4)
+        expect(analysis.spreadSeconds).toBeLessThan(0.0001)
+        analysis.ratiosDb.forEach(ratio => expect(ratio).toBeGreaterThan(18))
+    })
+    test("recovers the same delay against a non-MLS reference", () => {
+        const analysis = analyzeBursts(input(synthesize([0.0213, 0.0213, 0.0213], [1, 1, 1], chirp), chirp))
         expect(analysis.identifiedBursts).toBe(3)
         analysis.delays.forEach(delay => expect(delay).toBeCloseTo(0.0213, 4))
         expect(analysis.roundTripSeconds).toBeCloseTo(0.0213, 4)

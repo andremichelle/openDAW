@@ -1,5 +1,6 @@
 /**
- * Input-latency calibration analysis: an MLS probe located by cross-correlation.
+ * Input-latency calibration analysis: a deterministic probe burst located by cross-correlation. The
+ * probe is supplied by the caller (see LatencyProbe) and defaults to the MLS below.
  *
  * The probe and its trust figure follow:
  *   Gil Panal, J. M., Richard, G., & David, A. (2025). A Maximum Length Sequence–Based Method for
@@ -46,6 +47,26 @@ export const generateMls = (order: int): Float32Array => {
         register = (register >>> 1) | (feedback << (order - 1))
     }
     return sequence
+}
+
+/**
+ * The burst the calibration emits and correlates against: a deterministic waveform rendered for the
+ * rate it will play at, plus a name that identifies it in the result. Every probe is located by the
+ * same correlation-peak search, so a probe swap changes only the emitted signal, not the analysis. A
+ * method that needs a different locator (a different peak search or gate) is a second method on
+ * LatencyCalibrationProtocol, not a probe.
+ */
+export interface LatencyProbe {
+    name: string
+    render(sampleRate: number): Float32Array
+}
+
+export namespace LatencyProbes {
+    /** The maximum-length sequence; its length is 2^order − 1 frames, independent of the rate. */
+    export const mls = (order: int = 15): LatencyProbe => ({
+        name: `mls-${order}`,
+        render: () => generateMls(order)
+    })
 }
 
 const nextPowerOfTwo = (value: int): int => 1 << Math.ceil(Math.log2(value))
@@ -101,7 +122,8 @@ export interface LatencyCalibrationInput {
     sampleRate: number
     capture: Float32Array
     captureStartTime: number
-    mlsOrder: int
+    /** The waveform that was emitted, rendered at `sampleRate`; each window is correlated against it. */
+    reference: Float32Array
     burstStartTimes: ReadonlyArray<number>
     maxRoundTripSeconds: number
     ratioThresholdDb: number
@@ -127,8 +149,7 @@ const median = (values: ReadonlyArray<number>): number => {
 
 /** Locates each scheduled burst in the capture and reduces the per-burst delays to one round trip. */
 export const analyzeBursts = (input: LatencyCalibrationInput): LatencyCalibrationAnalysis => {
-    const {sampleRate, capture, captureStartTime, mlsOrder, burstStartTimes, maxRoundTripSeconds, ratioThresholdDb} = input
-    const mls = generateMls(mlsOrder)
+    const {sampleRate, capture, captureStartTime, reference, burstStartTimes, maxRoundTripSeconds, ratioThresholdDb} = input
     const maxLag = Math.ceil(maxRoundTripSeconds * sampleRate)
     const delays: Array<number> = []
     const ratiosDb: Array<number> = []
@@ -136,15 +157,15 @@ export const analyzeBursts = (input: LatencyCalibrationInput): LatencyCalibratio
         const startFrame = Math.round((startTime - captureStartTime) * sampleRate)
         // The search window reaches maxLag past the probe so a late burst is still inside it; a
         // capture that ends first is clipped, not rejected — only the probe itself must fit.
-        if (startFrame < 0 || startFrame + mls.length > capture.length) {
+        if (startFrame < 0 || startFrame + reference.length > capture.length) {
             delays.push(Number.NaN)
             ratiosDb.push(Number.NEGATIVE_INFINITY)
             continue
         }
-        const endFrame = Math.min(startFrame + mls.length + maxLag, capture.length)
-        const correlation = crossCorrelate(capture.subarray(startFrame, endFrame), mls, maxLag)
+        const endFrame = Math.min(startFrame + reference.length + maxLag, capture.length)
+        const correlation = crossCorrelate(capture.subarray(startFrame, endFrame), reference, maxLag)
         // The peak is searched on |correlation|: a polarity-inverting loopback negates the captured
-        // MLS, which flips the peak's sign without moving it. refinePeak reads the same vertex from
+        // burst, which flips the peak's sign without moving it. refinePeak reads the same vertex from
         // the negated parabola (its numerator and denominator both change sign) and the ratio is
         // computed on power, so both stay on the signed values.
         let peak = 0

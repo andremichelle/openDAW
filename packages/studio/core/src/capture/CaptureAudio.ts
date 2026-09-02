@@ -281,14 +281,16 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const {engine, env: {audioContext}} = this.manager.project
         const now = dependencies.now ?? (() => Date.now())
         const scheduledBursts = options.burstCount ?? InputLatencyCalibration.BurstCount
+        const probeName = (options.probe ?? InputLatencyCalibration.DefaultProbe).name
         // The probe plays over the output and records over the input: both are the transport's while it runs.
         if (engine.isPlaying.getValue() || engine.isRecording.getValue()) {
             return InputLatencyCalibration.emptyResult(
-                "transport-running", audioContext.sampleRate, scheduledBursts, now())
+                "transport-running", audioContext.sampleRate, scheduledBursts, now(), probeName)
         }
         const audioChain = this.#audioChain
         if (!isDefined(audioChain)) {
-            return InputLatencyCalibration.emptyResult("no-stream", audioContext.sampleRate, scheduledBursts, now())
+            return InputLatencyCalibration.emptyResult(
+                "no-stream", audioContext.sampleRate, scheduledBursts, now(), probeName)
         }
         const result = await InputLatencyCalibration.measure(
             audioContext, audioChain.sourceNode, this.#monitorDestination(), options, dependencies)
