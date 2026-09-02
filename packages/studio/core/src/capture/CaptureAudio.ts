@@ -230,12 +230,23 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         // Both terms are read on demand: the input latency can be configured to equal the output
         // latency, which is only known once output has started, so resolving it needs the same read.
         const readLatency = (): RecordAudio.Latency & {inputLatencySource: InputLatency.Source} => {
+            const {recording} = engine.preferences.settings
             const outputLatency = audioContext.outputLatency ?? 0
+            const calibration = InputLatency.findCalibration(recording.inputLatencyCalibrations,
+                trackSettings?.deviceId)
+            if (isDefined(calibration)
+                && Math.abs(outputLatency - calibration.outputLatencyAtCalibration)
+                > InputLatency.OutputLatencyMismatchSeconds) {
+                console.debug(`[CaptureAudio] output latency ${outputLatency.toFixed(4)}s differs from `
+                    + `${calibration.outputLatencyAtCalibration.toFixed(4)}s seen at calibration; `
+                    + `the calibrated input part is applied unchanged`)
+            }
             const {seconds, source} = InputLatency.resolveWithSource(
                 this.captureBox.inputLatency.getValue(),
-                engine.preferences.settings.recording.inputLatency,
+                recording.inputLatency,
                 outputLatency,
-                trackSettings?.latency)
+                trackSettings?.latency,
+                calibration?.inputLatency)
             return {outputLatency, inputLatency: seconds, inputLatencySource: source}
         }
         const {inputLatency, inputLatencySource} = readLatency()

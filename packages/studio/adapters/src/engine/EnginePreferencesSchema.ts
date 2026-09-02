@@ -12,6 +12,13 @@ const _OlderTakeScopeOptions = ["none", "all", "previous-only"] as const
 const _InputLatencyMinimum = -3
 // Metronome gain is attenuation only, in decibel.
 const _MetronomeGainMaximum = 0
+const _InputLatencyCalibrationEntry = z.object({
+    deviceId: z.string(),
+    inputLatency: z.number().min(0),
+    outputLatencyAtCalibration: z.number().min(0),
+    spread: z.number().min(0),
+    measuredAt: z.number()
+})
 
 export const EngineSettingsSchema = z.object({
     metronome: z.object({
@@ -45,18 +52,23 @@ export const EngineSettingsSchema = z.object({
         automationEnabled: z.boolean(),
         olderTakeAction: z.union(_OlderTakeActionOptions.map(value => z.literal(value))),
         olderTakeScope: z.union(_OlderTakeScopeOptions.map(value => z.literal(value))),
-        inputLatency: z.number().min(_InputLatencyMinimum)
+        inputLatency: z.number().min(_InputLatencyMinimum),
+        // Replaced wholesale on write; entries are keyed by the capture device id, which is per browser
+        // and per origin.
+        inputLatencyCalibrations: z.array(_InputLatencyCalibrationEntry).default([])
     }).default({
         countInBars: 1,
         allowTakes: true,
         automationEnabled: true,
         olderTakeAction: "mute-region",
         olderTakeScope: "previous-only",
-        inputLatency: _InputLatencyMinimum // the Reported sentinel
+        inputLatency: _InputLatencyMinimum, // the Reported sentinel
+        inputLatencyCalibrations: []
     })
 })
 
 export type EngineSettings = z.infer<typeof EngineSettingsSchema>
+export type InputLatencyCalibrationEntry = z.infer<typeof _InputLatencyCalibrationEntry>
 
 export namespace EngineSettings {
     export const InputLatencyMinimum = _InputLatencyMinimum

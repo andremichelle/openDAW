@@ -14,8 +14,10 @@ const className = Html.adoptStyleSheet(css, "PreferencePanel")
 
 type Primitive = boolean | number | string
 
+// Array-valued settings hold data the app writes for itself, not a field a user edits. The panel
+// renders whatever the labels name, so dropping those keys here keeps them off the page.
 export type NestedLabels<T> = {
-    [K in keyof T]: T[K] extends Primitive
+    [K in keyof T as T[K] extends ReadonlyArray<unknown> ? never : K]: T[K] extends Primitive
         ? string
         : T[K] extends object
             ? { label: string; fields: NestedLabels<T[K]> }
@@ -64,7 +66,8 @@ export const PreferencePanel = <ROOT_SETTINGS, SETTINGS = ROOT_SETTINGS>(
             {Object.keys(labels).map(key => {
                 const pKey = key as keyof SETTINGS & string
                 const setting = settings[pKey]
-                const label = labels[pKey]
+                // The labels map omits the settings it does not name, so it is indexed by string here.
+                const label = (labels as Record<string, string | {label: string, fields: unknown}>)[pKey]
                 const currentPath = [...pathPrefix, pKey]
                 if (typeof setting === "object" && setting !== null && typeof label === "object" && "fields" in label) {
                     const nestedLabels = label as { label: string; fields: NestedLabels<typeof setting> }

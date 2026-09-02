@@ -1,4 +1,4 @@
-import {describe, expect, it} from "vitest"
+import {describe, expect, it, vi} from "vitest"
 import {isDefined, Option, UUID} from "@opendaw/lib-std"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {CaptureAudioBox} from "@opendaw/studio-boxes"
@@ -55,8 +55,14 @@ const installFakeMediaDevices = () => {
 const createFakeRecordingWorklet = () => ({
     uuid: UUID.generate(),
     terminated: false,
+    numberOfFrames: 0,
+    firstQuantumTime: Option.None as Option<number>,
     set bpm(_: number) {},
     set sampleService(_: unknown) {},
+    set onSaved(_: unknown) {},
+    get data() {return Option.None},
+    limit(_: number): void {},
+    setFillLength(): void {},
     terminate(): void {this.terminated = true}
 })
 
@@ -108,7 +114,7 @@ const setup = async ({state = "running", resumesTo = "running"}:
     const capture = new CaptureAudio(manager, primaryAudioUnitBox, captureBox)
     // The record gain node is the one the audio chain holds; the monitor nodes come from the same factory.
     const recordGainNode = (): FakeNode => capture.outputNode.unwrap("no audio chain") as unknown as FakeNode
-    return {capture, audioContext, preparedWorklets, removedFromSampleManager, recordGainNode}
+    return {capture, project, audioContext, preparedWorklets, removedFromSampleManager, recordGainNode}
 }
 
 describe("CaptureAudio", () => {
@@ -162,6 +168,35 @@ describe("CaptureAudio", () => {
             expect(capture.startRecording()).toBeDefined()
             expect(worklet.terminated).toBe(true)
             expect(removedFromSampleManager).toEqual([worklet.uuid])
+        })
+
+        it("applies the calibration entry stored for the capture device", async () => {
+            const {capture, project} = await setup()
+            const {recording} = project.engine.preferences.settings
+            recording.inputLatencyCalibrations = [{
+                deviceId: "fake-device", // the id the fake track reports
+                inputLatency: 0.0175,
+                outputLatencyAtCalibration: 0.020,
+                spread: 0.0001,
+                measuredAt: 1
+            }]
+            await capture.prepareRecording()
+            const reports = new Array<Record<string, unknown>>()
+            const debug = vi.spyOn(console, "debug").mockImplementation((...args: ReadonlyArray<unknown>) => {
+                if (args[0] === "[CaptureAudio] latency report") {
+                    reports.push(args[1] as Record<string, unknown>)
+                }
+            })
+            try {
+                capture.startRecording().terminate()
+            } finally {
+                debug.mockRestore()
+                recording.inputLatencyCalibrations = []
+            }
+            expect(reports.length).toBe(1)
+            // The entry beats the track's own reported 0.005s and the Reported preference default.
+            expect(reports[0].inputLatencyApplied).toBe(0.0175)
+            expect(reports[0].inputLatencySource).toBe("calibrated")
         })
     })
 })

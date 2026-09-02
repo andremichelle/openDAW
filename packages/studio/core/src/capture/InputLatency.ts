@@ -1,4 +1,5 @@
 import {isDefined, Optional} from "@opendaw/lib-std"
+import {InputLatencyCalibrationEntry} from "@opendaw/studio-adapters"
 
 export namespace InputLatency {
     /** Per-track override sentinel: inherit the value from the engine preferences. */
@@ -13,12 +14,21 @@ export namespace InputLatency {
      */
     export const ReportedMaximum = 1.0
 
+    /** Live output latency may differ from the one seen at calibration by this much before it is worth a note. */
+    export const OutputLatencyMismatchSeconds = 0.002
+
     /** Names the rule that produced a resolved input latency. */
     export type Source =
-        "capture" | "preference" | "equals-output" | "reported" | "reported-unavailable" | "reported-out-of-range"
+        "capture" | "calibrated" | "preference" | "equals-output"
+        | "reported" | "reported-unavailable" | "reported-out-of-range"
 
     /** A resolved input latency in seconds together with the rule that produced it. */
     export type Resolution = { seconds: number, source: Source }
+
+    /** Returns the entry a previous calibration stored for that capture device, if there is one. */
+    export const findCalibration = (entries: ReadonlyArray<InputLatencyCalibrationEntry>,
+                                    deviceId: Optional<string>): Optional<InputLatencyCalibrationEntry> =>
+        deviceId === undefined ? undefined : entries.find(entry => entry.deviceId === deviceId)
 
     /**
      * Resolves the additional latency (in seconds) to add to the output latency when recording.
@@ -27,19 +37,26 @@ export namespace InputLatency {
      * @param outputLatency the current output latency in seconds
      * @param reportedLatency the latency the capture's MediaStreamTrack reports; omit it when the browser
      *  reports none, which resolves the Reported sentinel to no compensation
+     * @param calibratedLatency the input latency a loopback calibration measured for this capture device;
+     *  it outranks the preference, since it is a measurement of the very path being compensated
      */
     export const resolve = (localOverride: number,
                             preference: number,
                             outputLatency: number,
-                            reportedLatency: Optional<number> = undefined): number =>
-        resolveWithSource(localOverride, preference, outputLatency, reportedLatency).seconds
+                            reportedLatency: Optional<number> = undefined,
+                            calibratedLatency: Optional<number> = undefined): number =>
+        resolveWithSource(localOverride, preference, outputLatency, reportedLatency, calibratedLatency).seconds
 
     /** Resolves as {@link resolve} does and additionally names which rule won, for diagnostics. */
     export const resolveWithSource = (localOverride: number,
                                       preference: number,
                                       outputLatency: number,
-                                      reportedLatency: Optional<number> = undefined): Resolution => {
+                                      reportedLatency: Optional<number> = undefined,
+                                      calibratedLatency: Optional<number> = undefined): Resolution => {
         const inherits = localOverride === Inherit
+        if (inherits && isDefined(calibratedLatency) && Number.isFinite(calibratedLatency)) {
+            return {seconds: Math.max(0.0, calibratedLatency), source: "calibrated"}
+        }
         const value = inherits ? preference : localOverride
         if (value === EqualsOutput) {return {seconds: outputLatency, source: "equals-output"}}
         if (value === Reported) {

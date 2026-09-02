@@ -153,3 +153,38 @@ describe("InputLatency.resolveWithSource", () => {
             .toEqual({seconds: 0.0, source: "capture"})
     })
 })
+
+// A stored calibration is a measurement of this very device, so it outranks both the Reported sentinel
+// and a hand-typed preference. Only a per-capture override, which the user set for this track, beats it.
+describe("InputLatency calibrated rung", () => {
+    const calibratedLatency = 0.0175
+    it("prefers a calibration entry over a Reported preference", () => {
+        expect(InputLatency.resolveWithSource(
+            InputLatency.Inherit, InputLatency.Reported, outputLatency, reportedLatency, calibratedLatency))
+            .toEqual({seconds: calibratedLatency, source: "calibrated"})
+    })
+    it("prefers a calibration entry over a numeric preference", () => {
+        expect(InputLatency.resolveWithSource(
+            InputLatency.Inherit, preferredLatency, outputLatency, undefined, calibratedLatency))
+            .toEqual({seconds: calibratedLatency, source: "calibrated"})
+    })
+    it("prefers a per-capture override over a calibration entry", () => {
+        expect(InputLatency.resolveWithSource(
+            overriddenLatency, InputLatency.Reported, outputLatency, reportedLatency, calibratedLatency))
+            .toEqual({seconds: overriddenLatency, source: "capture"})
+    })
+    it("falls through to the preference when there is no entry", () => {
+        expect(InputLatency.resolveWithSource(
+            InputLatency.Inherit, InputLatency.Reported, outputLatency, reportedLatency, undefined))
+            .toEqual({seconds: reportedLatency, source: "reported"})
+    })
+    it("matches the device id and ignores the other entries", () => {
+        const entries = [
+            {deviceId: "a", inputLatency: 0.01, outputLatencyAtCalibration: 0.05, spread: 0.0001, measuredAt: 1},
+            {deviceId: "b", inputLatency: 0.02, outputLatencyAtCalibration: 0.05, spread: 0.0001, measuredAt: 2}
+        ]
+        expect(InputLatency.findCalibration(entries, "b")?.inputLatency).toBe(0.02)
+        expect(InputLatency.findCalibration(entries, "c")).toBeUndefined()
+        expect(InputLatency.findCalibration(entries, undefined)).toBeUndefined()
+    })
+})
