@@ -4,12 +4,20 @@ const _BeatSubDivisionOptions = [1, 2, 4, 8] as const
 const _RecordingCountInBars = [1, 2, 3, 4, 5, 6, 7, 8] as const
 const _OlderTakeActionOptions = ["disable-track", "mute-region"] as const
 const _OlderTakeScopeOptions = ["none", "all", "previous-only"] as const
+// Bounds of the two free numeric settings. Editors have to clamp to them, since a value outside the
+// bound fails the schema and costs the user that whole settings section on the next load.
+// Input latency is a number of seconds, or one of the InputLatency sentinels: -1 equals the output
+// latency, -3 takes whatever latency the capture's own MediaStreamTrack reports. The most negative
+// sentinel is the field's lower bound.
+const _InputLatencyMinimum = -3
+// Metronome gain is attenuation only, in decibel.
+const _MetronomeGainMaximum = 0
 
 export const EngineSettingsSchema = z.object({
     metronome: z.object({
         enabled: z.boolean(),
         beatSubDivision: z.union(_BeatSubDivisionOptions.map(value => z.literal(value))),
-        gain: z.number().min(Number.NEGATIVE_INFINITY).max(0),
+        gain: z.number().min(Number.NEGATIVE_INFINITY).max(_MetronomeGainMaximum),
         monophonic: z.boolean()
     }).default({
         enabled: false,
@@ -37,20 +45,22 @@ export const EngineSettingsSchema = z.object({
         automationEnabled: z.boolean(),
         olderTakeAction: z.union(_OlderTakeActionOptions.map(value => z.literal(value))),
         olderTakeScope: z.union(_OlderTakeScopeOptions.map(value => z.literal(value))),
-        inputLatency: z.number().min(-1)
+        inputLatency: z.number().min(_InputLatencyMinimum)
     }).default({
         countInBars: 1,
         allowTakes: true,
         automationEnabled: true,
         olderTakeAction: "mute-region",
         olderTakeScope: "previous-only",
-        inputLatency: 0
+        inputLatency: _InputLatencyMinimum // the Reported sentinel
     })
 })
 
 export type EngineSettings = z.infer<typeof EngineSettingsSchema>
 
 export namespace EngineSettings {
+    export const InputLatencyMinimum = _InputLatencyMinimum
+    export const MetronomeGainMaximum = _MetronomeGainMaximum
     export const BeatSubDivisionOptions = _BeatSubDivisionOptions
     export const RecordingCountInBars = _RecordingCountInBars
     export const OlderTakeActionOptions = _OlderTakeActionOptions
