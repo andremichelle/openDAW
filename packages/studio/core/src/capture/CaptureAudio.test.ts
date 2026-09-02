@@ -54,13 +54,19 @@ const createFakeStream = (deviceId: string) => ({
 })
 
 // `AudioDevices.requestStream` goes through `navigator.mediaDevices`; nothing else in these tests does.
-const installFakeMediaDevices = (deviceId: string) => {
+// The counter tells a reused stream from a re-opened one: every re-open is one more `getUserMedia`.
+const installFakeMediaDevices = (deviceId: string): {calls: int} => {
+    const counter = {calls: 0}
     Reflect.set(globalThis, "navigator", {
         mediaDevices: {
-            getUserMedia: async () => createFakeStream(deviceId),
+            getUserMedia: async () => {
+                counter.calls++
+                return createFakeStream(deviceId)
+            },
             enumerateDevices: async () => []
         }
     })
+    return counter
 }
 
 const createFakeRecordingWorklet = () => ({
@@ -79,7 +85,7 @@ const createFakeRecordingWorklet = () => ({
 
 const setup = async ({state = "running", resumesTo = "running", deviceId = "fake-device"}:
                      {state?: AudioContextState, resumesTo?: AudioContextState, deviceId?: string} = {}) => {
-    installFakeMediaDevices(deviceId)
+    const getUserMediaCounter = installFakeMediaDevices(deviceId)
     const {Project} = await import("../project/Project")
     const {CaptureAudio} = await import("./CaptureAudio")
     const destination = createFakeNode()
@@ -138,9 +144,10 @@ const setup = async ({state = "running", resumesTo = "running", deviceId = "fake
     const capture = new CaptureAudio(manager, primaryAudioUnitBox, captureBox)
     // The record gain node is the one the audio chain holds; the monitor nodes come from the same factory.
     const recordGainNode = (): FakeNode => capture.outputNode.unwrap("no audio chain") as unknown as FakeNode
+    const getUserMediaCalls = (): int => getUserMediaCounter.calls
     return {
         capture, project, audioContext, preparedWorklets, removedFromSampleManager, recordGainNode,
-        destination, createdSourceNodes
+        destination, createdSourceNodes, getUserMediaCalls
     }
 }
 
@@ -150,6 +157,12 @@ const armAndAwaitChain = async (capture: Awaited<ReturnType<typeof setup>>["capt
     capture.armed.setValue(true)
     for (let attempt = 0; attempt < 100 && capture.outputNode.isEmpty(); attempt++) {await Promise.resolve()}
     expect(capture.outputNode.nonEmpty()).toBe(true)
+}
+
+// The stream generator runs off an observable subscription, so a change made through the box settles a
+// few microtasks later with nothing to await from the caller's side.
+const flushMicrotasks = async (): Promise<void> => {
+    for (let attempt = 0; attempt < 100; attempt++) {await Promise.resolve()}
 }
 
 // The calibration factory: a capture whose transport state, device id and stored entries are given, and
@@ -318,10 +331,76 @@ describe("CaptureAudio", () => {
             await armAndAwaitChain(capture)
             await expect(capture.prepareRecording()).resolves.toBeUndefined()
             expect(preparedWorklets.length).toBe(1)
-            // The capture box carries no device id, so the requested id never matches the one the fake
-            // stream reports and `prepareRecording` rebuilds the chain: the sink under test is the newest.
             const newestSourceNode = createdSourceNodes[createdSourceNodes.length - 1]
             expect(keepAliveSinkOf(newestSourceNode).connected).toContain(destination)
+        })
+    })
+
+    describe("reusing the audio chain across recordings", () => {
+        it("keeps the chain of a capture whose box names no device", async () => {
+            const {capture, createdSourceNodes, getUserMediaCalls} = await setup()
+            await armAndAwaitChain(capture)
+            const sourceNode = createdSourceNodes[0]
+            const callsWhileArming = getUserMediaCalls()
+            await capture.prepareRecording()
+            await capture.prepareRecording()
+            expect(getUserMediaCalls()).toBe(callsWhileArming)
+            expect(createdSourceNodes).toEqual([sourceNode])
+        })
+
+        it("re-opens when the box names a device the open stream does not report", async () => {
+            const {capture, project, createdSourceNodes, getUserMediaCalls} =
+                await setup({deviceId: "reported-device"})
+            await armAndAwaitChain(capture)
+            project.editing.modify(() => capture.deviceId.setValue(Option.wrap("named-device")))
+            await flushMicrotasks()
+            const callsBefore = getUserMediaCalls()
+            const nodesBefore = createdSourceNodes.length
+            await capture.prepareRecording()
+            expect(getUserMediaCalls()).toBe(callsBefore + 1)
+            expect(createdSourceNodes.length).toBe(nodesBefore + 1)
+        })
+
+        it("keeps the chain when the box names the device the open stream reports", async () => {
+            const {capture, project, createdSourceNodes, getUserMediaCalls} = await setup({deviceId: "mic-a"})
+            project.editing.modify(() => capture.deviceId.setValue(Option.wrap("mic-a")))
+            await armAndAwaitChain(capture)
+            const sourceNode = createdSourceNodes[0]
+            const callsWhileArming = getUserMediaCalls()
+            await capture.prepareRecording()
+            expect(getUserMediaCalls()).toBe(callsWhileArming)
+            expect(createdSourceNodes).toEqual([sourceNode])
+        })
+
+        it("rebuilds the chain on the open stream when the channel count changes", async () => {
+            const {capture, project, createdSourceNodes, getUserMediaCalls} = await setup()
+            await armAndAwaitChain(capture)
+            const callsWhileArming = getUserMediaCalls()
+            project.editing.modify(() => {capture.requestChannels = 1})
+            expect(createdSourceNodes.length).toBe(2)
+            expect(getUserMediaCalls()).toBe(callsWhileArming)
+            expect(capture.effectiveChannelCount).toBe(1)
+        })
+
+        it("re-opens the stream when the device is changed through the box while armed", async () => {
+            const {capture, project, createdSourceNodes, getUserMediaCalls} = await setup()
+            await armAndAwaitChain(capture)
+            const callsWhileArming = getUserMediaCalls()
+            project.editing.modify(() => capture.deviceId.setValue(Option.wrap("other-device")))
+            await flushMicrotasks()
+            expect(getUserMediaCalls()).toBe(callsWhileArming + 1)
+            expect(createdSourceNodes.length).toBe(2)
+        })
+
+        it("re-opens the stream when a named device is cleared back to the default", async () => {
+            const {capture, project, createdSourceNodes, getUserMediaCalls} = await setup({deviceId: "mic-a"})
+            project.editing.modify(() => capture.deviceId.setValue(Option.wrap("mic-a")))
+            await armAndAwaitChain(capture)
+            const callsWhileArming = getUserMediaCalls()
+            project.editing.modify(() => capture.deviceId.setValue(Option.None))
+            await flushMicrotasks()
+            expect(getUserMediaCalls()).toBe(callsWhileArming + 1)
+            expect(createdSourceNodes.length).toBe(2)
         })
     })
 

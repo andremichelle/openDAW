@@ -5,6 +5,7 @@ import {
     MutableObservableOption,
     Nullable,
     Option,
+    Optional,
     RuntimeNotifier,
     Terminable,
     tryCatch
@@ -45,6 +46,10 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         channelCount: 1 | 2
     }> = null
     #preparedWorklet: Nullable<RecordingWorklet> = null
+    // The device the box named when the open stream was requested, which is undefined for a box that
+    // names none. Only this tells a box that has always asked for the default input from one whose
+    // named device was cleared back to it: both read as no device now, and the second must re-open.
+    #streamNamedDeviceId: Optional<string> = undefined
     #monitorOutputDeviceId: Option<string> = Option.None
     #monitorAudioElement: Nullable<HTMLAudioElement> = null
     #monitorStreamDest: Nullable<MediaStreamAudioDestinationNode> = null
@@ -333,18 +338,25 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
 
     async #updateStream(): Promise<void> {
+        const namedDeviceId = this.deviceId.getValue().unwrapOrUndefined()
         if (this.#stream.nonEmpty()) {
             const stream = this.#stream.unwrap()
             const settings = stream.getAudioTracks().at(0)?.getSettings()
             if (isDefined(settings)) {
-                const deviceId = this.deviceId.getValue().unwrapOrUndefined()
-                if (deviceId === settings.deviceId) {
+                // A box that names no device asks for the default input, which is what the open stream
+                // already is: its empty id never equals the id the device reports, so comparing the two
+                // would re-open the stream, and rebuild the chain with it, before every recording. The
+                // input path then reads a first-pull delay on every take instead of a settled one.
+                const unchanged = isUndefined(namedDeviceId)
+                    ? isUndefined(this.#streamNamedDeviceId)
+                    : namedDeviceId === settings.deviceId
+                if (unchanged) {
                     return Promise.resolve()
                 }
             }
         }
         this.#stopStream()
-        const deviceId = this.deviceId.getValue().unwrapOrUndefined() ?? AudioDevices.defaultInput?.deviceId
+        const deviceId = namedDeviceId ?? AudioDevices.defaultInput?.deviceId
         const channelCount = this.#requestChannels.unwrapOrElse(2)
         const baseConstraints: MediaTrackConstraints = {
             echoCancellation: false,
@@ -370,6 +382,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const gotDeviceId = settings?.deviceId
         console.debug(`new stream. device requested: ${deviceId ?? "default"}, got: ${gotDeviceId ?? "unknown"}. channelCount requested: ${channelCount}, got: ${settings?.channelCount}`)
         this.#rebuildAudioChain(stream)
+        this.#streamNamedDeviceId = namedDeviceId
         this.#stream.wrap(stream)
     }
 
