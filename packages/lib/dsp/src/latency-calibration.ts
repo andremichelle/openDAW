@@ -13,6 +13,7 @@
  * copied from that repository.
  */
 import {int} from "@opendaw/lib-std"
+import {FFT} from "./fft"
 
 /** Primitive-polynomial taps per register length; x^n + x^a + … + 1 with the constant term implied. */
 export const MLS_TAPS: ReadonlyMap<int, ReadonlyArray<int>> = new Map<int, ReadonlyArray<int>>([
@@ -42,4 +43,53 @@ export const generateMls = (order: int): Float32Array => {
         register = (register >>> 1) | (feedback << (order - 1))
     }
     return sequence
+}
+
+const nextPowerOfTwo = (value: int): int => 1 << Math.ceil(Math.log2(value))
+
+/**
+ * result[lag] = Σ_n segment[n + lag] · reference[n], for lag in [0, maxLag], computed through an FFT
+ * of size ≥ segment.length + reference.length so the circular correlation carries no wrap-around.
+ */
+export const crossCorrelate = (segment: Float32Array, reference: Float32Array, maxLag: int): Float32Array => {
+    const size = nextPowerOfTwo(segment.length + reference.length)
+    const fft = new FFT(size)
+    const segmentReal = new Float32Array(size)
+    const segmentImag = new Float32Array(size)
+    const referenceReal = new Float32Array(size)
+    const referenceImag = new Float32Array(size)
+    segmentReal.set(segment)
+    referenceReal.set(reference)
+    fft.process(segmentReal, segmentImag)
+    fft.process(referenceReal, referenceImag)
+    // S · conj(R)
+    for (let bin = 0; bin < size; bin++) {
+        const real = segmentReal[bin] * referenceReal[bin] + segmentImag[bin] * referenceImag[bin]
+        const imag = segmentImag[bin] * referenceReal[bin] - segmentReal[bin] * referenceImag[bin]
+        segmentReal[bin] = real
+        segmentImag[bin] = imag
+    }
+    fft.inverse(segmentReal, segmentImag)
+    return segmentReal.slice(0, Math.min(maxLag + 1, size))
+}
+
+/** Sub-sample offset of the vertex of the parabola through the peak and its two neighbours. */
+export const refinePeak = (correlation: Float32Array, index: int): number => {
+    if (index <= 0 || index >= correlation.length - 1) {return 0.0}
+    const left = correlation[index - 1]
+    const centre = correlation[index]
+    const right = correlation[index + 1]
+    const denominator = left - 2.0 * centre + right
+    return denominator === 0.0 ? 0.0 : 0.5 * (left - right) / denominator
+}
+
+/** 10·log10 of the peak's power over the mean power of every other lag. */
+export const peakToMeanRatioDb = (correlation: Float32Array, index: int): number => {
+    const peakPower = correlation[index] * correlation[index]
+    let sum = 0.0
+    for (let lag = 0; lag < correlation.length; lag++) {
+        if (lag !== index) {sum += correlation[lag] * correlation[lag]}
+    }
+    const meanPower = sum / Math.max(1, correlation.length - 1)
+    return meanPower === 0.0 ? Number.POSITIVE_INFINITY : 10.0 * Math.log10(peakPower / meanPower)
 }
