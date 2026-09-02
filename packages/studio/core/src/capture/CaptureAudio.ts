@@ -215,15 +215,17 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const track = this.#stream.unwrapOrNull()?.getAudioTracks().at(0)
         const trackSettings = track?.getSettings()
         const outputLatency = audioContext.outputLatency ?? 0
-        const inputLatency = InputLatency.resolve(
+        const {seconds: inputLatency, source: inputLatencySource} = InputLatency.resolveWithSource(
             this.captureBox.inputLatency.getValue(),
             engine.preferences.settings.recording.inputLatency,
-            outputLatency)
+            outputLatency,
+            trackSettings?.latency)
         console.debug("[CaptureAudio] latency report", {
             outputLatency: audioContext.outputLatency,
             baseLatency: audioContext.baseLatency,
             inputLatencyReported: trackSettings?.latency,
             inputLatencyApplied: inputLatency,
+            inputLatencySource,
             deviceId: trackSettings?.deviceId,
             deviceLabel: track?.label
         })
