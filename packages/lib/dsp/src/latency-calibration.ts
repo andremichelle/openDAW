@@ -1,0 +1,45 @@
+/**
+ * Input-latency calibration analysis: an MLS probe located by cross-correlation.
+ *
+ * The probe and its trust figure follow:
+ *   Gil Panal, J. M., Richard, G., & David, A. (2025). A Maximum Length Sequence–Based Method for
+ *   Robust Round-Trip Latency Estimation in online Digital Audio Workstations.
+ *   In Proceedings of the Web Audio Conference (WAC 2025). https://doi.org/10.5281/zenodo.17642262
+ *   Reference implementation: https://github.com/gilpanal/weblatencytest (MIT)
+ * Taken from that work: the MLS probe, locating it by the cross-correlation peak, and the
+ * peak-to-mean ratio as the gate for a trustworthy estimate. Different here: the burst's emission
+ * time and the capture's first-frame time are both AudioContext clock readings, so the delay is
+ * measured against the engine's own clock rather than against MediaRecorder.start(). No code is
+ * copied from that repository.
+ */
+import {int} from "@opendaw/lib-std"
+
+/** Primitive-polynomial taps per register length; x^n + x^a + … + 1 with the constant term implied. */
+export const MLS_TAPS: ReadonlyMap<int, ReadonlyArray<int>> = new Map<int, ReadonlyArray<int>>([
+    [10, [10, 7]],
+    [11, [11, 9]],
+    [12, [12, 11, 10, 4]],
+    [13, [13, 12, 11, 8]],
+    [14, [14, 13, 12, 2]],
+    [15, [15, 14]],
+    [16, [16, 15, 13, 4]]
+])
+
+/** A maximum-length sequence of the given register order as ±1 samples, length 2^order − 1. */
+export const generateMls = (order: int): Float32Array => {
+    const taps = MLS_TAPS.get(order)
+    if (taps === undefined) {throw new Error(`No MLS taps for order ${order}`)}
+    const length = (1 << order) - 1
+    const sequence = new Float32Array(length)
+    let register = (1 << order) - 1 // all ones; any non-zero seed works
+    for (let index = 0; index < length; index++) {
+        // Fibonacci form shifting towards bit 0: the register holds the last `order` outputs with the
+        // oldest in bit 0, so the exponent x^tap sits at bit `order - tap` and the implied constant
+        // term is bit 0 itself. The feedback becomes the output `order` steps later.
+        sequence[index] = (register & 1) === 1 ? 1.0 : -1.0
+        let feedback = 0
+        for (const tap of taps) {feedback ^= (register >>> (order - tap)) & 1}
+        register = (register >>> 1) | (feedback << (order - 1))
+    }
+    return sequence
+}
