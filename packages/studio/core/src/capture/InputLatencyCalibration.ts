@@ -7,6 +7,12 @@ import {LatencyCaptureNode} from "./LatencyCaptureNode"
  * Loopback input-latency calibration: scheduled probe bursts on the AudioContext clock, captured through a
  * worklet that reports its first-frame context time, located by cross-correlation in the SDK worker.
  * See @opendaw/lib-dsp latency-calibration for the probes and the analysis.
+ *
+ * The same emission is captured twice, through two worklets opened at different instants: a capture's
+ * reported first-frame time has been seen a whole render quantum off on some chains (once in twenty-four
+ * calls at 44.1 kHz; the cause is not identified), and one anchor alone cannot tell that from a real
+ * round trip, since all of its bursts agree on the wrong figure. The second anchor makes the miss visible
+ * as a disagreement between the two.
  */
 export namespace InputLatencyCalibration {
     export const MlsOrder = 15
@@ -21,6 +27,18 @@ export namespace InputLatencyCalibration {
     export const GainDb = -12.0
     /** Wall-clock grace the default wait allows the context clock beyond the time it is waiting for. */
     export const WaitDeadlineMarginSeconds = 2.0
+    export const RenderQuantumFrames = 128
+    /** How much of a render quantum the two capture anchors may differ by before the run is distrusted. */
+    export const AnchorAgreementQuanta = 0.5
+    /**
+     * The bound the two anchors' round trips must agree within, in seconds at the context's rate. Half a
+     * render quantum: a chain that reports one anchor's first-frame time a whole quantum off clears it,
+     * ordinary sub-sample noise on the correlation peak does not.
+     */
+    export const anchorAgreementSeconds = (sampleRate: number): number =>
+        AnchorAgreementQuanta * RenderQuantumFrames / sampleRate
+    export const AnchorsDisagreeReason = "capture anchors disagree"
+    export const SecondaryAnchorUnavailableReason = "secondary anchor unavailable"
 
     /** The context clock stopped advancing mid-run: a suspended, closed or dead output device. */
     export class ClockStalled extends Error {
@@ -33,7 +51,10 @@ export namespace InputLatencyCalibration {
 
     export interface Result {
         verdict: Verdict
+        /** The primary anchor's round trip; every derived figure below is that anchor's too. */
         roundTripSeconds: number
+        /** The secondary anchor's round trip, NaN when it identified no burst. */
+        roundTripSecondsSecondary: number
         outputLatencySeconds: number
         outputLatencyReported: boolean
         inputLatencySeconds: number
@@ -41,10 +62,16 @@ export namespace InputLatencyCalibration {
         correlationRatioDb: number
         identifiedBursts: int
         scheduledBursts: int
+        /** First-frame context time of the primary and the secondary anchor. */
+        captureStartTimes: [number, number]
+        /** Per-anchor, per-burst delays, so a disagreement can be read burst by burst. */
+        burstDelays: [ReadonlyArray<number>, ReadonlyArray<number>]
         sampleRate: number
         measuredAt: number
         /** Name of the probe the bursts carried, so a stored or displayed figure names its signal. */
         probe: string
+        /** Why the verdict reads as it does, when the figures alone do not say so. */
+        reason?: string
     }
 
     export interface Capture {
@@ -95,9 +122,11 @@ export namespace InputLatencyCalibration {
     /** A result carrying only the verdict, for the paths that never reach the analysis. */
     export const emptyResult = (verdict: Verdict, sampleRate: number, scheduledBursts: int, now: number,
                                 probe: string = DefaultProbe.name): Result => ({
-        verdict, roundTripSeconds: Number.NaN, outputLatencySeconds: 0.0, outputLatencyReported: false,
+        verdict, roundTripSeconds: Number.NaN, roundTripSecondsSecondary: Number.NaN,
+        outputLatencySeconds: 0.0, outputLatencyReported: false,
         inputLatencySeconds: Number.NaN, spreadSeconds: 0.0, correlationRatioDb: Number.NEGATIVE_INFINITY,
-        identifiedBursts: 0, scheduledBursts, sampleRate, measuredAt: now, probe
+        identifiedBursts: 0, scheduledBursts, captureStartTimes: [Number.NaN, Number.NaN], burstDelays: [[], []],
+        sampleRate, measuredAt: now, probe
     })
 
     export const measure = async (context: AudioContext, source: AudioNode, output: AudioNode,
@@ -116,14 +145,21 @@ export namespace InputLatencyCalibration {
             return emptyResult("context-not-running", sampleRate, burstCount, now(), probe.name)
         }
         const reference = probe.render(sampleRate)
-        const burstSpacingSeconds = options.burstSpacingSeconds ?? (reference.length / sampleRate + BurstTailSeconds)
+        const referenceSeconds = reference.length / sampleRate
+        const burstSpacingSeconds = options.burstSpacingSeconds ?? (referenceSeconds + BurstTailSeconds)
         const buffer = context.createBuffer(1, reference.length, sampleRate)
         buffer.getChannelData(0).set(reference)
         const gainNode = context.createGain()
         gainNode.gain.value = dbToGain(gainDb)
         gainNode.connect(output)
-        const capture = createCapture(context)
-        capture.connectFrom(source)
+        // Both anchors capture the same source until the same end time; only the instant they open differs.
+        const captures: Array<Capture> = []
+        const openCapture = () => {
+            const capture = createCapture(context)
+            capture.connectFrom(source)
+            captures.push(capture)
+        }
+        openCapture()
         const firstBurst = context.currentTime + LeadInSeconds
         const burstStartTimes: Array<number> = []
         for (let burst = 0; burst < burstCount; burst++) {
@@ -134,15 +170,23 @@ export namespace InputLatencyCalibration {
             node.start(startTime)
             burstStartTimes.push(startTime)
         }
-        const lastEnd = burstStartTimes[burstCount - 1] + reference.length / sampleRate
+        const lastEnd = burstStartTimes[burstCount - 1] + referenceSeconds
+        // The second anchor opens in the first burst's tail, not at its onset: constructing a capture
+        // worklet runs user code on the render thread, and an overrun there would corrupt the very
+        // window the first anchor is capturing. The anchor misses the first burst either way, so the
+        // tail costs it nothing. A caller who packs the bursts closer than the probe is long leaves no
+        // gap to aim for; the spacing then caps the wait so the anchor cannot open past the next burst.
+        const secondAnchorTime = firstBurst + Math.min(referenceSeconds, burstSpacingSeconds)
         try {
+            await waitUntil(context, secondAnchorTime)
+            openCapture()
             await waitUntil(context, lastEnd + MaxRoundTripSeconds)
         } catch (reason) {
-            if (!(reason instanceof ClockStalled)) {throw reason}
-            // The frames cannot arrive if the clock stopped, so the capture's own promise is abandoned;
-            // stopping it still releases the worklet and its connection to the source.
-            capture.stop().catch(() => {})
+            // Neither anchor's frames can arrive if the clock stopped, so their promises are abandoned;
+            // stopping them still posts the stop message, which is all a dead render thread can act on.
+            captures.forEach(capture => capture.stop().catch(() => {}))
             gainNode.disconnect()
+            if (!(reason instanceof ClockStalled)) {throw reason}
             return emptyResult("context-not-running", sampleRate, burstCount, now(), probe.name)
         }
         // Read only now: Chrome reports 0 until audio has been rendered to the device.
@@ -150,30 +194,46 @@ export namespace InputLatencyCalibration {
         const outputLatencyReported = reported !== undefined && Number.isFinite(reported) && reported > 0.0
         const outputLatencySeconds = outputLatencyReported ? reported : 0.0
         gainNode.disconnect()
-        const {startTime, frames} = await capture.stop()
-        const analysis = await analyze({
-            sampleRate, capture: frames, captureStartTime: startTime, reference, burstStartTimes,
+        const [primaryCapture, secondaryCapture] = await Promise.all(captures.map(capture => capture.stop()))
+        // One analyze call per anchor: the same protocol, run twice over the same emission.
+        const common = {
+            sampleRate, reference, burstStartTimes,
             maxRoundTripSeconds: MaxRoundTripSeconds, ratioThresholdDb: RatioThresholdDb
-        })
-        if (analysis.identifiedBursts === 0) {
+        }
+        const [primary, secondary] = await Promise.all([
+            analyze({...common, capture: primaryCapture.frames, captureStartTime: primaryCapture.startTime}),
+            analyze({...common, capture: secondaryCapture.frames, captureStartTime: secondaryCapture.startTime})
+        ])
+        if (primary.identifiedBursts === 0) {
             return emptyResult("no-signal", sampleRate, burstCount, now(), probe.name)
         }
-        const identifiedRatios = analysis.ratiosDb.filter((_, index) => !Number.isNaN(analysis.delays[index]))
-        const verdict: Verdict = analysis.identifiedBursts === burstCount && analysis.spreadSeconds <= SpreadBoundSeconds
-            ? "ok" : "noisy"
+        const identifiedRatios = primary.ratiosDb.filter((_, index) => !Number.isNaN(primary.delays[index]))
+        // The second anchor opens after the first burst, so it usually identifies one burst fewer; that
+        // is expected and only its round trip is compared. An anchor that identified nothing at all says
+        // nothing about the first one, so it is disclosed rather than held against the measurement.
+        const anchorsDisagree = secondary.identifiedBursts > 0
+            && Math.abs(primary.roundTripSeconds - secondary.roundTripSeconds) > anchorAgreementSeconds(sampleRate)
+        const verdict: Verdict = anchorsDisagree ? "noisy"
+            : primary.identifiedBursts === burstCount && primary.spreadSeconds <= SpreadBoundSeconds
+                ? "ok" : "noisy"
         return {
             verdict,
-            roundTripSeconds: analysis.roundTripSeconds,
+            roundTripSeconds: primary.roundTripSeconds,
+            roundTripSecondsSecondary: secondary.roundTripSeconds,
             outputLatencySeconds,
             outputLatencyReported,
-            inputLatencySeconds: analysis.roundTripSeconds - outputLatencySeconds,
-            spreadSeconds: analysis.spreadSeconds,
+            inputLatencySeconds: primary.roundTripSeconds - outputLatencySeconds,
+            spreadSeconds: primary.spreadSeconds,
             correlationRatioDb: Math.min(...identifiedRatios),
-            identifiedBursts: analysis.identifiedBursts,
+            identifiedBursts: primary.identifiedBursts,
             scheduledBursts: burstCount,
+            captureStartTimes: [primaryCapture.startTime, secondaryCapture.startTime],
+            burstDelays: [primary.delays, secondary.delays],
             sampleRate,
             measuredAt: now(),
-            probe: probe.name
+            probe: probe.name,
+            reason: anchorsDisagree ? AnchorsDisagreeReason
+                : secondary.identifiedBursts === 0 ? SecondaryAnchorUnavailableReason : undefined
         }
     }
 }

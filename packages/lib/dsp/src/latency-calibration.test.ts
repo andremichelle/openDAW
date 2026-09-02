@@ -228,6 +228,25 @@ describe("analyzeBursts", () => {
         expect(Number.isNaN(analysis.roundTripSeconds)).toBe(true)
         expect(analysis.spreadSeconds).toBe(0)
     })
+    test("a burst that started before the capture's first frame is skipped, not thrown", () => {
+        // The calibration's second capture anchor opens after the first burst is already over, so that
+        // burst's window begins before the anchor's first frame and only the later bursts are located.
+        const delaySeconds = 0.020
+        const lateStart = burstStartTimes[0] + mls.length / sampleRate // the first burst's scheduled end
+        const droppedFrames = Math.round((lateStart - captureStartTime) * sampleRate)
+        const analysis = analyzeBursts({
+            sampleRate,
+            capture: synthesize([delaySeconds, delaySeconds, delaySeconds]).slice(droppedFrames),
+            captureStartTime: lateStart,
+            reference: mls, burstStartTimes, maxRoundTripSeconds: 0.6, ratioThresholdDb: 18
+        })
+        expect(analysis.identifiedBursts).toBe(2)
+        expect(Number.isNaN(analysis.delays[0])).toBe(true)
+        expect(analysis.ratiosDb[0]).toBe(Number.NEGATIVE_INFINITY)
+        expect(analysis.delays[1]).toBeCloseTo(delaySeconds, 4)
+        expect(analysis.delays[2]).toBeCloseTo(delaySeconds, 4)
+        expect(analysis.roundTripSeconds).toBeCloseTo(delaySeconds, 4)
+    })
     test("a burst whose window runs past the capture end is skipped, not thrown", () => {
         const short = synthesize([0.020, 0.020, 0.020]).slice(0, Math.floor((burstStartTimes[2] - captureStartTime) * sampleRate) + 100)
         const analysis = analyzeBursts(input(short))

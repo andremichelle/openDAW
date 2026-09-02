@@ -57,14 +57,21 @@ const makeContext = (state: AudioContextState, outputLatency: Optional<number>,
     }
     return context
 }
-interface FakeCapture extends Calibration.Capture {stopped: boolean}
-const makeCapture = (): FakeCapture => {
+interface FakeCapture extends Calibration.Capture {
+    stopped: boolean
+    /** The context time the routine asked for this capture at, so the anchors' instants are testable. */
+    createdAt: number
+    connectedTo: Optional<AudioNode>
+}
+const makeCapture = (startTime: number = 100.05): FakeCapture => {
     const capture: FakeCapture = {
         stopped: false,
-        connectFrom() {},
+        createdAt: Number.NaN,
+        connectedTo: undefined,
+        connectFrom(source: AudioNode) {capture.connectedTo = source},
         stop: async () => {
             capture.stopped = true
-            return {startTime: 100.05, frames: new Float32Array(16)}
+            return {startTime, frames: new Float32Array(16)}
         }
     }
     return capture
@@ -80,18 +87,33 @@ const analysisOf = (delays: Array<number>, ratios: Array<number>) => async (): P
     const spreadSeconds = identified.length <= 1 ? 0 : Math.max(...identified.map(delay => Math.abs(delay - roundTripSeconds)))
     return {delays, ratiosDb: ratios, roundTripSeconds, spreadSeconds, identifiedBursts: identified.length}
 }
+/** Hands out one analysis per analyze call, in call order, repeating the last one. */
+const analysesOf = (...analyses: ReadonlyArray<() => Promise<LatencyCalibrationAnalysis>>)
+    : Calibration.Dependencies["analyze"] => {
+    let call = 0
+    return async () => analyses[Math.min(call++, analyses.length - 1)]()
+}
 const deps = (analyze: Calibration.Dependencies["analyze"],
               latencyDuringRun?: (context: FakeContext) => void,
-              capture: FakeCapture = makeCapture()): Calibration.Dependencies => ({
-    analyze,
-    createCapture: () => capture,
-    waitUntil: async (context, time) => {
-        const fake = context as unknown as FakeContext
-        fake.currentTime = time
-        latencyDuringRun?.(fake)
-    },
-    now: () => 1700000000000
-})
+              captures: ReadonlyArray<FakeCapture> = [makeCapture()]): Calibration.Dependencies => {
+    let created = 0
+    return {
+        analyze,
+        // Fewer fakes than anchors hands the last one out again, so a test that cares about only one
+        // capture passes only that one.
+        createCapture: context => {
+            const capture = captures[Math.min(created++, captures.length - 1)]
+            capture.createdAt = (context as unknown as FakeContext).currentTime
+            return capture
+        },
+        waitUntil: async (context, time) => {
+            const fake = context as unknown as FakeContext
+            fake.currentTime = time
+            latencyDuringRun?.(fake)
+        },
+        now: () => 1700000000000
+    }
+}
 
 describe("InputLatencyCalibration.measure", () => {
     test("ok: subtracts the output latency read after the bursts played", async () => {
@@ -196,7 +218,7 @@ describe("InputLatencyCalibration.measure", () => {
         const context = makeContext("running", 0.02)
         const capture = makeCapture()
         const result = await measure(context, {}, {
-            ...deps(analysisOf([0.03, 0.03, 0.03], [30, 30, 30]), undefined, capture),
+            ...deps(analysisOf([0.03, 0.03, 0.03], [30, 30, 30]), undefined, [capture]),
             waitUntil: async (_context, time) => {throw new InputLatencyCalibration.ClockStalled(time)}
         })
         expect(result.verdict).toBe("context-not-running")
@@ -226,8 +248,149 @@ describe("InputLatencyCalibration.measure", () => {
         const context = makeContext("running", 0.02)
         const capture = makeCapture()
         const failing = async () => {throw new Error("worker died")}
-        await expect(measure(context, {}, {...deps(failing, undefined, capture)})).rejects.toThrow("worker died")
+        await expect(measure(context, {}, {...deps(failing, undefined, [capture])})).rejects.toThrow("worker died")
         expect(capture.stopped).toBe(true)
         expect(context.gains[0].disconnected).toBe(true)
+    })
+    describe("second capture anchor", () => {
+        test("opens in the first burst's tail, on the same source, and both anchors are analysed", async () => {
+            const context = makeContext("running", 0.02)
+            const anchors = [makeCapture(100.05), makeCapture(100.2)]
+            const analysed: Array<number> = []
+            const dependencies = deps(analysesOf(
+                analysisOf([0.031, 0.031, 0.031], [30, 30, 30]),
+                analysisOf([Number.NaN, 0.031, 0.031], [Number.NEGATIVE_INFINITY, 30, 30])), undefined, anchors)
+            const result = await measure(context, {}, {
+                ...dependencies,
+                analyze: async input => {
+                    analysed.push(input.captureStartTime)
+                    return dependencies.analyze(input)
+                }
+            })
+            const referenceSeconds = (Math.pow(2, InputLatencyCalibration.MlsOrder) - 1) / 48000
+            expect(anchors[0].createdAt).toBe(100.0) // before the bursts were scheduled
+            // At the first burst's scheduled end, so constructing it cannot disturb that burst.
+            expect(anchors[1].createdAt).toBeCloseTo(context.started[0] + referenceSeconds, 9)
+            expect(anchors[1].createdAt).toBeLessThan(context.started[1]) // and before the second burst
+            expect(anchors[0].connectedTo).toBeDefined()
+            expect(anchors[1].connectedTo).toBe(anchors[0].connectedTo)
+            expect(anchors.every(anchor => anchor.stopped)).toBe(true)
+            expect(analysed).toEqual([100.05, 100.2]) // one analyze call per anchor, primary first
+            expect(result.captureStartTimes).toEqual([100.05, 100.2])
+            expect(result.burstDelays[0]).toEqual([0.031, 0.031, 0.031])
+            expect(result.burstDelays[1][0]).toBeNaN() // the burst that started before this anchor
+            expect(result.roundTripSecondsSecondary).toBeCloseTo(0.031, 6)
+            expect(result.verdict).toBe("ok")
+            expect(result.reason).toBeUndefined()
+        })
+        test("agreeing anchors keep the primary figures and the existing verdict", async () => {
+            const context = makeContext("running", 0.02)
+            const withinBound = 0.031 + 0.4 * 128 / 48000
+            const result = await measure(context, {}, deps(analysesOf(
+                analysisOf([0.031, 0.031, 0.031], [30, 31, 29]),
+                analysisOf([withinBound, withinBound, withinBound], [40, 40, 40])),
+            undefined, [makeCapture(100.05), makeCapture(100.2)]))
+            expect(result.verdict).toBe("ok")
+            expect(result.reason).toBeUndefined()
+            expect(result.roundTripSeconds).toBeCloseTo(0.031, 6)
+            expect(result.correlationRatioDb).toBe(29) // the primary anchor's, not the secondary's
+            expect(result.roundTripSecondsSecondary).toBeCloseTo(withinBound, 6)
+        })
+        test("anchors disagreeing by more than half a render quantum read noisy with the reason", async () => {
+            const context = makeContext("running", 0.02)
+            const oneQuantumShort = 0.031 - 128 / 48000
+            const result = await measure(context, {}, deps(analysesOf(
+                analysisOf([0.031, 0.031, 0.031], [30, 30, 30]),
+                analysisOf([oneQuantumShort, oneQuantumShort, oneQuantumShort], [30, 30, 30])),
+            undefined, [makeCapture(100.05), makeCapture(100.2)]))
+            expect(result.verdict).toBe("noisy")
+            expect(result.reason).toBe(InputLatencyCalibration.AnchorsDisagreeReason)
+            // The reported figures stay the primary anchor's; both anchors' delays are disclosed.
+            expect(result.roundTripSeconds).toBeCloseTo(0.031, 6)
+            expect(result.spreadSeconds).toBeCloseTo(0.0, 9)
+            expect(result.identifiedBursts).toBe(3)
+            expect(result.roundTripSecondsSecondary).toBeCloseTo(oneQuantumShort, 6)
+        })
+        test("the agreement bound is half a render quantum at the context's rate", async () => {
+            expect(InputLatencyCalibration.anchorAgreementSeconds(48000)).toBeCloseTo(0.5 * 128 / 48000, 12)
+            expect(InputLatencyCalibration.anchorAgreementSeconds(44100)).toBeCloseTo(0.5 * 128 / 44100, 12)
+        })
+        test("a secondary anchor that identifies nothing is reported but does not fail the result", async () => {
+            const context = makeContext("running", 0.02)
+            const result = await measure(context, {}, deps(analysesOf(
+                analysisOf([0.031, 0.031, 0.031], [30, 30, 30]),
+                analysisOf([Number.NaN, Number.NaN, Number.NaN], [3, 2, 4])),
+            undefined, [makeCapture(100.05), makeCapture(100.2)]))
+            expect(result.verdict).toBe("ok")
+            expect(result.reason).toBe(InputLatencyCalibration.SecondaryAnchorUnavailableReason)
+            expect(result.roundTripSeconds).toBeCloseTo(0.031, 6)
+            expect(result.roundTripSecondsSecondary).toBeNaN()
+        })
+        test("no-signal follows the primary anchor even when the secondary identified bursts", async () => {
+            const context = makeContext("running", 0.02)
+            const result = await measure(context, {}, deps(analysesOf(
+                analysisOf([Number.NaN, Number.NaN, Number.NaN], [3, 2, 4]),
+                analysisOf([0.031, 0.031, 0.031], [30, 30, 30])),
+            undefined, [makeCapture(100.05), makeCapture(100.2)]))
+            expect(result.verdict).toBe("no-signal")
+            expect(result.roundTripSeconds).toBeNaN()
+            expect(result.roundTripSecondsSecondary).toBeNaN()
+            expect(result.captureStartTimes).toEqual([Number.NaN, Number.NaN])
+            expect(result.burstDelays).toEqual([[], []])
+        })
+        test("a clock that stalls before the second anchor opens stops the first and gives up", async () => {
+            const context = makeContext("running", 0.02)
+            const anchors = [makeCapture(100.05), makeCapture(100.2)]
+            const result = await measure(context, {}, {
+                ...deps(analysisOf([0.03, 0.03, 0.03], [30, 30, 30]), undefined, anchors),
+                waitUntil: async (_context, time) => {throw new InputLatencyCalibration.ClockStalled(time)}
+            })
+            expect(result.verdict).toBe("context-not-running")
+            expect(anchors[0].stopped).toBe(true)
+            expect(anchors[1].stopped).toBe(false) // never opened
+            expect(context.gains[0].disconnected).toBe(true)
+        })
+        test("a wait that throws anything else stops what was opened before rethrowing", async () => {
+            const context = makeContext("running", 0.02)
+            const anchors = [makeCapture(100.05), makeCapture(100.2)]
+            let waits = 0
+            await expect(measure(context, {}, {
+                ...deps(analysisOf([0.03, 0.03, 0.03], [30, 30, 30]), undefined, anchors),
+                waitUntil: async (context, time) => {
+                    if (waits++ === 0) {
+                        (context as unknown as FakeContext).currentTime = time
+                        return
+                    }
+                    throw new Error("context closed")
+                }
+            })).rejects.toThrow("context closed")
+            expect(anchors.every(anchor => anchor.stopped)).toBe(true)
+            expect(context.gains[0].disconnected).toBe(true)
+        })
+        test("a clock that stalls after the second anchor opened stops both", async () => {
+            const context = makeContext("running", 0.02)
+            const anchors = [makeCapture(100.05), makeCapture(100.2)]
+            let waits = 0
+            const result = await measure(context, {}, {
+                ...deps(analysisOf([0.03, 0.03, 0.03], [30, 30, 30]), undefined, anchors),
+                waitUntil: async (context, time) => {
+                    if (waits++ === 0) {
+                        (context as unknown as FakeContext).currentTime = time
+                        return
+                    }
+                    throw new InputLatencyCalibration.ClockStalled(time)
+                }
+            })
+            expect(result.verdict).toBe("context-not-running")
+            expect(anchors.every(anchor => anchor.stopped)).toBe(true)
+            expect(context.gains[0].disconnected).toBe(true)
+        })
+    })
+    test("emptyResult carries no anchor diagnostics", () => {
+        const result = InputLatencyCalibration.emptyResult("no-stream", 48000, 3, 1700000000000)
+        expect(result.roundTripSecondsSecondary).toBeNaN()
+        expect(result.captureStartTimes).toEqual([Number.NaN, Number.NaN])
+        expect(result.burstDelays).toEqual([[], []])
+        expect(result.reason).toBeUndefined()
     })
 })
