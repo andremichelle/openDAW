@@ -160,6 +160,16 @@ describe("analyzeBursts", () => {
         expect(analysis.spreadSeconds).toBeLessThan(0.0001)
         analysis.ratiosDb.forEach(ratio => expect(ratio).toBeGreaterThan(18))
     })
+    test("recovers the same delay through a polarity-inverting loopback", () => {
+        const inverted = synthesize([0.0213, 0.0213, 0.0213])
+        for (let index = 0; index < inverted.length; index++) {inverted[index] = -inverted[index]}
+        const analysis = analyzeBursts(input(inverted))
+        expect(analysis.identifiedBursts).toBe(3)
+        analysis.delays.forEach(delay => expect(delay).toBeCloseTo(0.0213, 4))
+        expect(analysis.roundTripSeconds).toBeCloseTo(0.0213, 4)
+        expect(analysis.spreadSeconds).toBeLessThan(0.0001)
+        analysis.ratiosDb.forEach(ratio => expect(ratio).toBeGreaterThan(18))
+    })
     test("reports the spread when one burst is late", () => {
         const analysis = analyzeBursts(input(synthesize([0.020, 0.020, 0.023])))
         expect(analysis.identifiedBursts).toBe(3)

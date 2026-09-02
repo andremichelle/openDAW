@@ -11,6 +11,9 @@
  * time and the capture's first-frame time are both AudioContext clock readings, so the delay is
  * measured against the engine's own clock rather than against MediaRecorder.start(). No code is
  * copied from that repository.
+ *
+ * A loopback that inverts polarity (unbalanced adapters, some interfaces) negates the captured
+ * sequence and with it the correlation peak, so the peak is located on the magnitude.
  */
 import {int} from "@opendaw/lib-std"
 import {FFT} from "./fft"
@@ -140,8 +143,14 @@ export const analyzeBursts = (input: LatencyCalibrationInput): LatencyCalibratio
         }
         const endFrame = Math.min(startFrame + mls.length + maxLag, capture.length)
         const correlation = crossCorrelate(capture.subarray(startFrame, endFrame), mls, maxLag)
+        // The peak is searched on |correlation|: a polarity-inverting loopback negates the captured
+        // MLS, which flips the peak's sign without moving it. refinePeak reads the same vertex from
+        // the negated parabola (its numerator and denominator both change sign) and the ratio is
+        // computed on power, so both stay on the signed values.
         let peak = 0
-        for (let lag = 1; lag < correlation.length; lag++) {if (correlation[lag] > correlation[peak]) {peak = lag}}
+        for (let lag = 1; lag < correlation.length; lag++) {
+            if (Math.abs(correlation[lag]) > Math.abs(correlation[peak])) {peak = lag}
+        }
         const ratio = peakToMeanRatioDb(correlation, peak)
         ratiosDb.push(ratio)
         // A silent window correlates to exactly zero, and peakToMeanRatioDb's zero-mean branch
