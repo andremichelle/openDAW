@@ -6,11 +6,13 @@ import {
     Nullable,
     Option,
     RuntimeNotifier,
-    Terminable
+    Terminable,
+    tryCatch
 } from "@opendaw/lib-std"
 import {dbToGain} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBox, CaptureAudioBox} from "@opendaw/studio-boxes"
+import {AudioContexts} from "../AudioContexts"
 import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {InputLatency} from "./InputLatency"
@@ -176,6 +178,9 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     async prepareRecording(): Promise<void> {
         const {project} = this.manager
         const {env: {audioContext, audioWorklets, sampleManager, sampleService}} = project
+        // A worklet still prepared here was never consumed by `startRecording`, so nothing will ever
+        // terminate it: it stays connected to the record gain and its reader keeps appending chunks.
+        this.#discardPreparedWorklet()
         if (isUndefined(audioContext.outputLatency)) {
             const approved = await RuntimeNotifier.approve({
                 headline: "Warning",
@@ -186,6 +191,13 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             if (!approved) {
                 return Promise.reject("Recording cancelled")
             }
+        }
+        // The take is placed from reports the audio thread sends while rendering: a context that is
+        // not running sends none, and the transport would count in over a capture that records
+        // nothing. Rejecting here aborts the whole recording session before the transport starts.
+        await AudioContexts.resume(audioContext)
+        if (audioContext.state !== "running") {
+            return Promise.reject(`Cannot record while the audio context is '${audioContext.state}'.`)
         }
         await this.#streamGenerator()
         const audioChain = this.#audioChain
@@ -208,18 +220,25 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const recordingWorklet = this.#preparedWorklet
         if (!isDefined(audioChain) || !isDefined(recordingWorklet)) {
             console.warn("No audio chain or worklet available for recording.")
+            this.#discardPreparedWorklet()
             return Terminable.Empty
         }
         this.#preparedWorklet = null
         const {recordGainNode} = audioChain
         const track = this.#stream.unwrapOrNull()?.getAudioTracks().at(0)
         const trackSettings = track?.getSettings()
-        const outputLatency = audioContext.outputLatency ?? 0
-        const {seconds: inputLatency, source: inputLatencySource} = InputLatency.resolveWithSource(
-            this.captureBox.inputLatency.getValue(),
-            engine.preferences.settings.recording.inputLatency,
-            outputLatency,
-            trackSettings?.latency)
+        // Both terms are read on demand: the input latency can be configured to equal the output
+        // latency, which is only known once output has started, so resolving it needs the same read.
+        const readLatency = (): RecordAudio.Latency & {inputLatencySource: InputLatency.Source} => {
+            const outputLatency = audioContext.outputLatency ?? 0
+            const {seconds, source} = InputLatency.resolveWithSource(
+                this.captureBox.inputLatency.getValue(),
+                engine.preferences.settings.recording.inputLatency,
+                outputLatency,
+                trackSettings?.latency)
+            return {outputLatency, inputLatency: seconds, inputLatencySource: source}
+        }
+        const {inputLatency, inputLatencySource} = readLatency()
         console.debug("[CaptureAudio] latency report", {
             outputLatency: audioContext.outputLatency,
             baseLatency: audioContext.baseLatency,
@@ -235,8 +254,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             sampleManager,
             project,
             capture: this,
-            outputLatency,
-            inputLatency
+            readLatency
         })
     }
 
@@ -301,6 +319,19 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         sourceNode.connect(recordGainNode)
         this.#audioChain = {sourceNode, recordGainNode, channelCount}
         this.#connectMonitoring()
+    }
+
+    // The teardown `RecordAudio`'s terminator performs when it aborts a recording, for a worklet that
+    // never reached `RecordAudio` at all. Without it the node stays connected to the record gain and
+    // its ring reader appends every delivered chunk to an unbounded buffer for the life of the page.
+    #discardPreparedWorklet(): void {
+        const recordingWorklet = this.#preparedWorklet
+        if (!isDefined(recordingWorklet)) {return}
+        this.#preparedWorklet = null
+        // The chain may already be gone or rebuilt, in which case the node is no longer connected.
+        tryCatch(() => this.#audioChain?.recordGainNode.disconnect(recordingWorklet))
+        this.manager.project.env.sampleManager.remove(recordingWorklet.uuid)
+        recordingWorklet.terminate()
     }
 
     #destroyAudioChain(): void {

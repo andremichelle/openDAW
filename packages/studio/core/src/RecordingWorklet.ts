@@ -17,6 +17,16 @@ import {RenderQuantum} from "./RenderQuantum"
 import {PeaksWriter} from "./PeaksWriter"
 import {SampleService} from "./samples"
 
+/**
+ * The first `numFrames` frames of the recorded chunks, as one plane per channel. The ring delivers
+ * whole chunks, so the recording can run past the frame count the takes reference: the HEAD is kept
+ * (regions address the buffer from frame 0 through `waveformOffset`) and the overshoot is dropped
+ * at the tail. `numFrames` must not exceed the frames the chunks hold.
+ */
+export const recordedFrames = (chunks: ReadonlyArray<ReadonlyArray<Float32Array>>,
+                               numFrames: int): ReadonlyArray<Float32Array> =>
+    mergeChunkPlanes(chunks.slice(0, Math.ceil(numFrames / RenderQuantum)), RenderQuantum, numFrames)
+
 export class RecordingWorklet extends AudioWorkletNode implements Terminable, SampleLoader {
     readonly #terminator: Terminator = new Terminator()
 
@@ -29,6 +39,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
 
     #data: Option<AudioData> = Option.None
     #peaks: Option<Peaks> = Option.None
+    #firstQuantumTime: Option<number> = Option.None
     #isRecording: boolean = true
     #limitSamples: int = Number.POSITIVE_INFINITY
     #state: SampleLoaderState = {type: "record"}
@@ -46,6 +57,12 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
 
         this.#peakWriter = new PeaksWriter(config.numberOfChannels)
         this.#peaks = Option.wrap(this.#peakWriter)
+        this.port.addEventListener("message", ({data}: MessageEvent) => {
+            if (data?.type === "first-quantum" && typeof data.contextTime === "number") {
+                this.#firstQuantumTime = Option.wrap(data.contextTime)
+            }
+        })
+        this.port.start()
         this.#output = []
         this.#notifier = new Notifier<SampleLoaderState>()
         this.#reader = RingBuffer.reader(config, array => {
@@ -75,6 +92,13 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
     setFillLength(value: int): void {this.#peakWriter.numFrames = value}
 
     get numberOfFrames(): int {return this.#output.length * RenderQuantum}
+    /**
+     * Context time of the buffer's first frame, reported by the processor from the audio thread.
+     * Empty until the announcement arrives over the port. Frame `(t - firstQuantumTime) * sampleRate`
+     * of the buffer was captured at context time `t`; `numberOfFrames` cannot say that, because it
+     * counts chunks as the ring reader delivers them.
+     */
+    get firstQuantumTime(): Option<number> {return this.#firstQuantumTime}
     // A take in progress is not a stored sample yet, so it has no metadata to report. It acquires some when
     // `#save` hands it to `SampleService.importRecording`, and from then on a `DefaultSampleLoader` serves it.
     get meta(): Option<SampleMetaData> {return Option.None}
@@ -105,8 +129,7 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
         this.#reader.stop()
         if (this.#output.length === 0) {return panic("No recording data available")}
         const totalSamples: int = this.#limitSamples
-        const mergedFrames = mergeChunkPlanes(this.#output, RenderQuantum, this.#output.length * RenderQuantum)
-            .map(frame => frame.slice(-totalSamples))
+        const mergedFrames = recordedFrames(this.#output, totalSamples)
         const audioData = AudioData.create(this.context.sampleRate, totalSamples, this.channelCount)
         mergedFrames.forEach((frame, index) => audioData.frames[index].set(frame))
         this.#data = Option.wrap(audioData)

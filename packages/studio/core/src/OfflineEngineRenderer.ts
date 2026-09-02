@@ -119,6 +119,7 @@ export class OfflineEngineRenderer {
             },
             notifyClipSequenceChanges: (): void => {},
             switchMarkerState: (): void => {},
+            recordingStarted: (): void => {},
             deviceMessage: (uuid: string, message: string): void => {
                 console.warn(`OFFLINE-ENGINE device(${uuid}): ${message}`)
             }
