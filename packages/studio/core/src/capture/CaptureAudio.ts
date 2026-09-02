@@ -311,7 +311,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                         deviceId,
                         inputLatency: Math.max(0.0, result.inputLatencySeconds),
                         outputLatencyAtCalibration: result.outputLatencySeconds,
-                        spread: result.spreadSeconds,
+                        spread: Math.max(0.0, result.spreadSeconds),
                         measuredAt: result.measuredAt
                     }
                 ]

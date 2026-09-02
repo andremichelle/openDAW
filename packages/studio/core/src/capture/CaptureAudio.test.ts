@@ -150,8 +150,8 @@ const setupCalibration = async ({isPlaying = false, isRecording = false, hasChai
 }
 
 /** Dependencies for {@link InputLatencyCalibration.measure} that report the given round trip on every burst. */
-const fakeMeasureDeps = ({roundTrip, outputLatency, identified = 3}:
-                         {roundTrip: number, outputLatency: number, identified?: int})
+const fakeMeasureDeps = ({roundTrip, outputLatency, identified = 3, spread = 0.0}:
+                         {roundTrip: number, outputLatency: number, identified?: int, spread?: number})
     : InputLatencyCalibration.Dependencies => ({
     analyze: async () => {
         const delays = Arrays.create(index => index < identified ? roundTrip : Number.NaN, 3)
@@ -159,7 +159,7 @@ const fakeMeasureDeps = ({roundTrip, outputLatency, identified = 3}:
             delays,
             ratiosDb: delays.map(delay => Number.isNaN(delay) ? Number.NEGATIVE_INFINITY : 30),
             roundTripSeconds: identified === 0 ? Number.NaN : roundTrip,
-            spreadSeconds: 0.0,
+            spreadSeconds: spread,
             identifiedBursts: identified
         }
     },
@@ -322,6 +322,20 @@ describe("CaptureAudio", () => {
             expect(result.verdict).toBe("ok")
             expect(Number.isNaN(result.inputLatencySeconds)).toBe(true)
             expect(storedEntries()).toEqual([])
+        })
+
+        it("stores a negative spread as zero", async () => {
+            const {capture, storedEntries} = await setupCalibration({deviceId: "mic-1"})
+            try {
+                // The schema requires a non-negative spread; an analysis reporting less costs the user
+                // the whole recording section on the next load, so the stored entry is clamped.
+                const result = await capture.calibrateInputLatency({apply: true},
+                    fakeMeasureDeps({roundTrip: 0.0312, outputLatency: 0.023, spread: -0.001}))
+                expect(result.verdict).toBe("ok")
+                expect(storedEntries()[0].spread).toBe(0)
+            } finally {
+                capture.clearInputLatencyCalibration()
+            }
         })
 
         it("clears only this device's entry", async () => {
