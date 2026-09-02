@@ -4,6 +4,8 @@
 // studio needs either way: meters and audio recording.
 import {MeterProcessor} from "./MeterProcessor"
 import {RecordingProcessor} from "./RecordingProcessor"
+import {LatencyCaptureProcessor} from "./LatencyCaptureProcessor"
 
 registerProcessor("meter-processor", MeterProcessor)
 registerProcessor("recording-processor", RecordingProcessor)
+registerProcessor("latency-capture-processor", LatencyCaptureProcessor)
