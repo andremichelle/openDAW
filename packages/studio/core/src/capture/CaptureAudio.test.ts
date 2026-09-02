@@ -18,6 +18,7 @@ if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
 type FakeNode = {
     connect: (target: unknown) => void
     disconnect: (target?: unknown) => void
+    connected: Array<unknown>
     disconnected: Array<unknown>
     gain: {value: number}
     pan: {value: number}
@@ -26,14 +27,23 @@ type FakeNode = {
 }
 
 const createFakeNode = (): FakeNode => ({
-    connect: () => {},
+    connect(target: unknown) {this.connected.push(target)},
     disconnect(target?: unknown) {this.disconnected.push(target)},
+    connected: new Array<unknown>(),
     disconnected: new Array<unknown>(),
     gain: {value: 0},
     pan: {value: 0},
     channelCount: 2,
     channelCountMode: "explicit"
 })
+
+// The audio chain's silent sink is the only node the source is connected to that has its gain at zero:
+// the record gain and the monitor gain both sit at unity while the chain is built.
+const keepAliveSinkOf = (sourceNode: FakeNode): FakeNode => {
+    const sinks = sourceNode.connected.filter(target => (target as FakeNode).gain?.value === 0) as Array<FakeNode>
+    expect(sinks.length).toBe(1)
+    return sinks[0]
+}
 
 const createFakeStream = (deviceId: string) => ({
     getAudioTracks: () => [{
@@ -72,6 +82,8 @@ const setup = async ({state = "running", resumesTo = "running", deviceId = "fake
     installFakeMediaDevices(deviceId)
     const {Project} = await import("../project/Project")
     const {CaptureAudio} = await import("./CaptureAudio")
+    const destination = createFakeNode()
+    const createdSourceNodes = new Array<FakeNode>()
     const audioContext = {
         state,
         currentTime: 100.0,
@@ -83,9 +95,14 @@ const setup = async ({state = "running", resumesTo = "running", deviceId = "fake
             this.resumeCalls++
             this.state = resumesTo
         },
+        destination,
         createGain: () => createFakeNode(),
         createStereoPanner: () => createFakeNode(),
-        createMediaStreamSource: () => createFakeNode(),
+        createMediaStreamSource: () => {
+            const sourceNode = createFakeNode()
+            createdSourceNodes.push(sourceNode)
+            return sourceNode
+        },
         // The calibration probe builds one buffer and one source node per burst.
         createBuffer: (channels: int, length: int, sampleRate: number) => ({
             numberOfChannels: channels, length, sampleRate, getChannelData: () => new Float32Array(length)
@@ -121,12 +138,22 @@ const setup = async ({state = "running", resumesTo = "running", deviceId = "fake
     const capture = new CaptureAudio(manager, primaryAudioUnitBox, captureBox)
     // The record gain node is the one the audio chain holds; the monitor nodes come from the same factory.
     const recordGainNode = (): FakeNode => capture.outputNode.unwrap("no audio chain") as unknown as FakeNode
-    return {capture, project, audioContext, preparedWorklets, removedFromSampleManager, recordGainNode}
+    return {
+        capture, project, audioContext, preparedWorklets, removedFromSampleManager, recordGainNode,
+        destination, createdSourceNodes
+    }
+}
+
+// Arming requests the stream from the fake `getUserMedia`, which settles in microtasks, so the audio
+// chain is there after flushing them.
+const armAndAwaitChain = async (capture: Awaited<ReturnType<typeof setup>>["capture"]): Promise<void> => {
+    capture.armed.setValue(true)
+    for (let attempt = 0; attempt < 100 && capture.outputNode.isEmpty(); attempt++) {await Promise.resolve()}
+    expect(capture.outputNode.nonEmpty()).toBe(true)
 }
 
 // The calibration factory: a capture whose transport state, device id and stored entries are given, and
-// whose audio chain is either built (armed) or absent. Arming requests the stream from the fake
-// `getUserMedia`, which settles in microtasks, so the chain is there after flushing them.
+// whose audio chain is either built (armed) or absent.
 const setupCalibration = async ({isPlaying = false, isRecording = false, hasChain = true,
                                  deviceId = "mic-1", existingEntries = []}: {
     isPlaying?: boolean, isRecording?: boolean, hasChain?: boolean, deviceId?: string,
@@ -140,9 +167,7 @@ const setupCalibration = async ({isPlaying = false, isRecording = false, hasChai
     // jsdom keeps a localStorage, so preferences survive between tests; every case states its own entries.
     engine.preferences.settings.recording.inputLatencyCalibrations = [...existingEntries]
     if (hasChain) {
-        capture.armed.setValue(true)
-        for (let attempt = 0; attempt < 100 && capture.outputNode.isEmpty(); attempt++) {await Promise.resolve()}
-        expect(capture.outputNode.nonEmpty()).toBe(true)
+        await armAndAwaitChain(capture)
     }
     const storedEntries = (): ReadonlyArray<InputLatencyCalibrationEntry> =>
         engine.preferences.settings.recording.inputLatencyCalibrations
@@ -255,6 +280,48 @@ describe("CaptureAudio", () => {
             // The entry beats the track's own reported 0.005s and the Reported preference default.
             expect(reports[0].inputLatencyApplied).toBe(0.0175)
             expect(reports[0].inputLatencySource).toBe("calibrated")
+        })
+    })
+
+    describe("keeping the input path pulled", () => {
+        it("connects the source to a silent sink on the destination while the chain exists", async () => {
+            const {capture, createdSourceNodes, destination} = await setup()
+            await armAndAwaitChain(capture)
+            expect(createdSourceNodes.length).toBe(1)
+            expect(keepAliveSinkOf(createdSourceNodes[0]).connected).toContain(destination)
+        })
+
+        it("disconnects the silent sink when the chain is destroyed", async () => {
+            const {capture, createdSourceNodes} = await setup()
+            await armAndAwaitChain(capture)
+            const sink = keepAliveSinkOf(createdSourceNodes[0])
+            capture.armed.setValue(false)
+            expect(capture.outputNode).toEqual(Option.None)
+            expect(sink.disconnected).toEqual([undefined]) // a bare disconnect drops every edge
+        })
+
+        it("leaves the silent sink in place while monitoring is switched on and off", async () => {
+            const {capture, createdSourceNodes} = await setup()
+            await armAndAwaitChain(capture)
+            const sourceNode = createdSourceNodes[0]
+            const sink = keepAliveSinkOf(sourceNode)
+            capture.monitoringMode = "direct"
+            capture.monitoringMode = "off"
+            expect(sink.disconnected).toEqual([])
+            expect(sourceNode.disconnected).not.toContain(sink)
+            expect(sourceNode.disconnected).not.toContain(undefined)
+            expect(sourceNode.connected.filter(target => target === sink).length).toBe(1)
+        })
+
+        it("prepares a recording with the sink on the chain the recording uses", async () => {
+            const {capture, createdSourceNodes, destination, preparedWorklets} = await setup()
+            await armAndAwaitChain(capture)
+            await expect(capture.prepareRecording()).resolves.toBeUndefined()
+            expect(preparedWorklets.length).toBe(1)
+            // The capture box carries no device id, so the requested id never matches the one the fake
+            // stream reports and `prepareRecording` rebuilds the chain: the sink under test is the newest.
+            const newestSourceNode = createdSourceNodes[createdSourceNodes.length - 1]
+            expect(keepAliveSinkOf(newestSourceNode).connected).toContain(destination)
         })
     })
 

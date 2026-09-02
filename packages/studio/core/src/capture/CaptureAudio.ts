@@ -41,6 +41,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     #audioChain: Nullable<{
         sourceNode: MediaStreamAudioSourceNode
         recordGainNode: GainNode
+        keepAliveSink: GainNode
         channelCount: 1 | 2
     }> = null
     #preparedWorklet: Nullable<RecordingWorklet> = null
@@ -388,7 +389,15 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         recordGainNode.channelCount = channelCount
         recordGainNode.channelCountMode = "explicit"
         sourceNode.connect(recordGainNode)
-        this.#audioChain = {sourceNode, recordGainNode, channelCount}
+        // A source node nothing pulls keeps its stream buffered: the first pull after an idle period reads a
+        // shorter input delay than every later one, so a stored input latency would only hold for one of the
+        // two states. Everything reaching the destination is rendered every quantum, so a sink there pulls
+        // the source for as long as the chain exists, at a gain of zero, which contributes no output.
+        const keepAliveSink = audioContext.createGain()
+        keepAliveSink.gain.value = 0.0
+        sourceNode.connect(keepAliveSink)
+        keepAliveSink.connect(audioContext.destination)
+        this.#audioChain = {sourceNode, recordGainNode, keepAliveSink, channelCount}
         this.#connectMonitoring()
     }
 
@@ -407,9 +416,10 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     #destroyAudioChain(): void {
         if (isDefined(this.#audioChain)) {
-            const {sourceNode, recordGainNode} = this.#audioChain
+            const {sourceNode, recordGainNode, keepAliveSink} = this.#audioChain
             sourceNode.disconnect()
             recordGainNode.disconnect()
+            keepAliveSink.disconnect()
             this.#audioChain = null
         }
     }
