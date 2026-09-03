@@ -9,10 +9,10 @@ import {LatencyCaptureNode} from "./LatencyCaptureNode"
  * See @opendaw/lib-dsp latency-calibration for the probes and the analysis.
  *
  * The same emission is captured twice, through two worklets opened at different instants: a capture's
- * reported first-frame time has been seen a whole render quantum off on some chains (once in twenty-four
- * calls at 44.1 kHz; the cause is not identified), and one anchor alone cannot tell that from a real
- * round trip, since all of its bursts agree on the wrong figure. The second anchor makes the miss visible
- * as a disagreement between the two.
+ * reported first-frame time has been seen a whole render quantum off on some chains (once in twenty-nine
+ * calls at 44.1 kHz on the single-anchor build; the cause is not identified), and one anchor alone cannot
+ * tell that from a real round trip, since all of its bursts agree on the wrong figure. The second anchor
+ * makes the miss visible as a disagreement between the two.
  */
 export namespace InputLatencyCalibration {
     export const MlsOrder = 15
