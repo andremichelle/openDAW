@@ -83,7 +83,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #perfWriteIndex: int = 0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
     readonly #recordingStartEdge: RecordingStartEdge = new RecordingStartEdge()
-    #recordingGeneration: int = 0
+    #recordingGeneration: int = -1 // the client counts from 1, so a report before any prepare never matches
 
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
         super()
