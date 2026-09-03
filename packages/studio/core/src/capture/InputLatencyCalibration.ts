@@ -1,4 +1,4 @@
-import {int, isDefined, Optional, panic} from "@opendaw/lib-std"
+import {int, isDefined, Optional, panic, tryCatch} from "@opendaw/lib-std"
 import {dbToGain, LatencyCalibrationProtocol, LatencyProbe, LatencyProbes} from "@opendaw/lib-dsp"
 import {Workers} from "../Workers"
 import {LatencyCaptureNode} from "./LatencyCaptureNode"
@@ -98,7 +98,10 @@ export namespace InputLatencyCalibration {
                 },
                 stop: async () => {
                     const capture = await node.stop()
-                    connected?.disconnect(node)
+                    // The chain this was connected to can be destroyed mid-run (a disarm, a device
+                    // change): the edge is already gone and `disconnect` throws InvalidAccessError.
+                    // The frames are in hand by then, so the teardown must not lose them to that.
+                    tryCatch(() => connected?.disconnect(node))
                     return capture
                 }
             }
@@ -164,7 +167,6 @@ export namespace InputLatencyCalibration {
         buffer.getChannelData(0).set(reference)
         const gainNode = context.createGain()
         gainNode.gain.value = dbToGain(gainDb)
-        gainNode.connect(output)
         // Both anchors capture the same source until the same end time; only the instant they open differs.
         const captures: Array<Capture> = []
         const openCapture = () => {
@@ -172,28 +174,33 @@ export namespace InputLatencyCalibration {
             capture.connectFrom(source)
             captures.push(capture)
         }
-        openCapture()
-        const firstBurst = context.currentTime + LeadInSeconds
         const burstStartTimes: Array<number> = []
-        for (let burst = 0; burst < burstCount; burst++) {
-            const startTime = firstBurst + burst * burstSpacingSeconds
-            const node = context.createBufferSource()
-            node.buffer = buffer
-            node.connect(gainNode)
-            node.start(startTime)
-            burstStartTimes.push(startTime)
-        }
-        const lastEnd = burstStartTimes[burstCount - 1] + referenceSeconds
-        // The second anchor opens in the first burst's tail, not at its onset: constructing a capture
-        // worklet runs user code on the render thread, and an overrun there would corrupt the very
-        // window the first anchor is capturing. The anchor misses the first burst either way, so the
-        // tail costs it nothing. A caller who packs the bursts closer than the probe is long leaves no
-        // gap to aim for; the spacing then caps the wait so the anchor cannot open past the next burst.
-        const secondAnchorTime = firstBurst + Math.min(referenceSeconds, burstSpacingSeconds)
         try {
-            await waitUntil(context, secondAnchorTime)
+            // Everything from the first edge on is inside the try: opening a capture constructs a
+            // worklet node, which throws on a context whose processor module was never added, and a
+            // gain node already put on the output would then stay there with nothing to remove it.
+            gainNode.connect(output)
             openCapture()
-            await waitUntil(context, lastEnd + MaxRoundTripSeconds)
+            const firstBurst = context.currentTime + LeadInSeconds
+            for (let burst = 0; burst < burstCount; burst++) {
+                const startTime = firstBurst + burst * burstSpacingSeconds
+                const node = context.createBufferSource()
+                node.buffer = buffer
+                node.connect(gainNode)
+                node.start(startTime)
+                burstStartTimes.push(startTime)
+            }
+            // The second anchor opens at the end of the first burst's emission, not at its onset:
+            // constructing a capture worklet runs user code on the render thread, and an overrun there
+            // would fall inside the burst while it is still playing. The first anchor keeps capturing
+            // that burst's echo for one round trip past this instant, so the construction is out of the
+            // emission but not out of the first anchor's window — the second anchor misses the first
+            // burst either way, so the wait costs it nothing. A caller who packs the bursts closer than
+            // the probe is long leaves no gap to aim for; the spacing then caps the wait so the anchor
+            // cannot open past the next burst.
+            await waitUntil(context, firstBurst + Math.min(referenceSeconds, burstSpacingSeconds))
+            openCapture()
+            await waitUntil(context, burstStartTimes[burstCount - 1] + referenceSeconds + MaxRoundTripSeconds)
         } catch (reason) {
             // Neither anchor's frames can arrive if the clock stopped, so their promises are abandoned;
             // stopping them still posts the stop message, which is all a dead render thread can act on.

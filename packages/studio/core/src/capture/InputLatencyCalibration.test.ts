@@ -276,6 +276,16 @@ describe("InputLatencyCalibration.measure", () => {
             vi.useRealTimers()
         }
     })
+    test("a capture that cannot be opened leaves nothing connected to the output", async () => {
+        // The processor a capture node needs is registered per context; a host that never added the
+        // module throws here, after the gain node has already been put on the output.
+        const context = makeContext("running", 0.02)
+        await expect(measure(context, {}, {
+            ...deps(analysisOf([0.03, 0.03, 0.03], [30, 30, 30])),
+            createCapture: () => {throw new Error("latency-capture-processor is not registered")}
+        })).rejects.toThrow("latency-capture-processor is not registered")
+        expect(context.gains[0].disconnected).toBe(true)
+    })
     test("a rejecting analyze leaves nothing connected", async () => {
         const context = makeContext("running", 0.02)
         const capture = makeCapture()

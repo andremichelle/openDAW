@@ -247,6 +247,20 @@ describe("analyzeBursts", () => {
         expect(analysis.delays[2]).toBeCloseTo(delaySeconds, 4)
         expect(analysis.roundTripSeconds).toBeCloseTo(delaySeconds, 4)
     })
+    test("a capture with no first-frame time identifies nothing", () => {
+        // A capture worklet that never saw a quantum carrying channels reports NaN; every burst
+        // window is then unlocatable and each is skipped with the same figures a missed burst gets.
+        const analysis = analyzeBursts({
+            sampleRate,
+            capture: synthesize([0.020, 0.020, 0.020]),
+            captureStartTime: Number.NaN,
+            reference: mls, burstStartTimes, maxRoundTripSeconds: 0.6, ratioThresholdDb: 18
+        })
+        expect(analysis.identifiedBursts).toBe(0)
+        expect(analysis.delays.every(delay => Number.isNaN(delay))).toBe(true)
+        expect(analysis.ratiosDb).toEqual(burstStartTimes.map(() => Number.NEGATIVE_INFINITY))
+        expect(Number.isNaN(analysis.roundTripSeconds)).toBe(true)
+    })
     test("a burst whose window runs past the capture end is skipped, not thrown", () => {
         const short = synthesize([0.020, 0.020, 0.020]).slice(0, Math.floor((burstStartTimes[2] - captureStartTime) * sampleRate) + 100)
         const analysis = analyzeBursts(input(short))

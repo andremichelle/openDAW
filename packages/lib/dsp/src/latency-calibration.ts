@@ -156,8 +156,10 @@ export const analyzeBursts = (input: LatencyCalibrationInput): LatencyCalibratio
     for (const startTime of burstStartTimes) {
         const startFrame = Math.round((startTime - captureStartTime) * sampleRate)
         // The search window reaches maxLag past the probe so a late burst is still inside it; a
-        // capture that ends first is clipped, not rejected — only the probe itself must fit.
-        if (startFrame < 0 || startFrame + reference.length > capture.length) {
+        // capture that ends first is clipped, not rejected — only the probe itself must fit. A
+        // capture that never saw input reports a NaN first-frame time, which is skipped here rather
+        // than left to fall through both comparisons into an empty subarray.
+        if (!Number.isFinite(startFrame) || startFrame < 0 || startFrame + reference.length > capture.length) {
             delays.push(Number.NaN)
             ratiosDb.push(Number.NEGATIVE_INFINITY)
             continue
