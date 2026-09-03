@@ -127,6 +127,9 @@ Communicator.executor<OfflineEngineProtocol>(
                     switchMarkerState(markerState: Nullable<[UUID.Bytes, int]>): void {
                         dispatcher.dispatchAndForget(this.switchMarkerState, markerState)
                     }
+                    recordingStarted(contextTime: number, position: ppqn, generation: int): void {
+                        dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position, generation)
+                    }
                     ready() {dispatcher.dispatchAndForget(this.ready)}
                 })
             const engine = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient)
@@ -245,7 +248,7 @@ Communicator.executor<OfflineEngineProtocol>(
                     if (reset) {engine.stop()}
                 },
                 setPosition: (position: ppqn): void => engine.set_position(position),
-                prepareRecordingState: (_countIn: boolean): void => {},
+                prepareRecordingState: (_countIn: boolean, _generation: int): void => {},
                 stopRecording: (): void => {},
                 queryLoadingComplete: (): Promise<boolean> => Promise.all(pending).then(() => true),
                 panic: (): void => {},

@@ -5,15 +5,19 @@ import {
     MutableObservableOption,
     Nullable,
     Option,
+    Optional,
     RuntimeNotifier,
-    Terminable
+    Terminable,
+    tryCatch
 } from "@opendaw/lib-std"
 import {dbToGain} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBox, CaptureAudioBox} from "@opendaw/studio-boxes"
+import {AudioContexts} from "../AudioContexts"
 import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {InputLatency} from "./InputLatency"
+import {InputLatencyCalibration} from "./InputLatencyCalibration"
 import {RecordAudio} from "./RecordAudio"
 import {AudioDevices} from "../AudioDevices"
 import {RecordingWorklet} from "../RecordingWorklet"
@@ -38,9 +42,14 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     #audioChain: Nullable<{
         sourceNode: MediaStreamAudioSourceNode
         recordGainNode: GainNode
+        keepAliveSink: GainNode
         channelCount: 1 | 2
     }> = null
     #preparedWorklet: Nullable<RecordingWorklet> = null
+    // The device the box named when the open stream was requested, which is undefined for a box that
+    // names none. Only this tells a box that has always asked for the default input from one whose
+    // named device was cleared back to it: both read as no device now, and the second must re-open.
+    #streamNamedDeviceId: Optional<string> = undefined
     #monitorOutputDeviceId: Option<string> = Option.None
     #monitorAudioElement: Nullable<HTMLAudioElement> = null
     #monitorStreamDest: Nullable<MediaStreamAudioDestinationNode> = null
@@ -57,7 +66,13 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         this.#streamGenerator = Promises.sequentialize(() => this.#updateStream())
         this.ownAll(
             Terminable.create(() => {
-                this.#disconnectMonitoring()
+                // A capture is terminated when it is gone for good: the project it belongs to was
+                // replaced, or its audio unit removed. Nothing disarms it first, so without this the
+                // audio chain outlives it — and the chain's silent sink sits on the destination, which
+                // renders its source node every quantum for the life of the page. Stopping the stream
+                // with it releases the microphone. A capture terminated mid-recording loses its input
+                // here, which is the intent: the recording it fed cannot outlive its capture either.
+                this.#stopStream()
                 if (isDefined(this.#monitorAudioElement)) {
                     this.#monitorAudioElement.pause()
                     this.#monitorAudioElement.srcObject = null
@@ -176,6 +191,9 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     async prepareRecording(): Promise<void> {
         const {project} = this.manager
         const {env: {audioContext, audioWorklets, sampleManager, sampleService}} = project
+        // A worklet still prepared here was never consumed by `startRecording`, so nothing will ever
+        // terminate it: it stays connected to the record gain and its reader keeps appending chunks.
+        this.#discardPreparedWorklet()
         if (isUndefined(audioContext.outputLatency)) {
             const approved = await RuntimeNotifier.approve({
                 headline: "Warning",
@@ -186,6 +204,13 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             if (!approved) {
                 return Promise.reject("Recording cancelled")
             }
+        }
+        // The take is placed from reports the audio thread sends while rendering: a context that is
+        // not running sends none, and the transport would count in over a capture that records
+        // nothing. Rejecting here aborts the whole recording session before the transport starts.
+        await AudioContexts.resume(audioContext)
+        if (audioContext.state !== "running") {
+            return Promise.reject(`Cannot record while the audio context is '${audioContext.state}'.`)
         }
         await this.#streamGenerator()
         const audioChain = this.#audioChain
@@ -208,22 +233,42 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const recordingWorklet = this.#preparedWorklet
         if (!isDefined(audioChain) || !isDefined(recordingWorklet)) {
             console.warn("No audio chain or worklet available for recording.")
+            this.#discardPreparedWorklet()
             return Terminable.Empty
         }
         this.#preparedWorklet = null
         const {recordGainNode} = audioChain
         const track = this.#stream.unwrapOrNull()?.getAudioTracks().at(0)
         const trackSettings = track?.getSettings()
-        const outputLatency = audioContext.outputLatency ?? 0
-        const inputLatency = InputLatency.resolve(
-            this.captureBox.inputLatency.getValue(),
-            engine.preferences.settings.recording.inputLatency,
-            outputLatency)
+        // Both terms are read on demand: the input latency can be configured to equal the output
+        // latency, which is only known once output has started, so resolving it needs the same read.
+        const readLatency = (): RecordAudio.Latency & {inputLatencySource: InputLatency.Source} => {
+            const {recording} = engine.preferences.settings
+            const outputLatency = audioContext.outputLatency ?? 0
+            const calibration = InputLatency.findCalibration(recording.inputLatencyCalibrations,
+                trackSettings?.deviceId)
+            if (isDefined(calibration)
+                && Math.abs(outputLatency - calibration.outputLatencyAtCalibration)
+                > InputLatency.OutputLatencyMismatchSeconds) {
+                console.debug(`[CaptureAudio] output latency ${outputLatency.toFixed(4)}s differs from `
+                    + `${calibration.outputLatencyAtCalibration.toFixed(4)}s seen at calibration; `
+                    + `the calibrated input part is applied unchanged`)
+            }
+            const {seconds, source} = InputLatency.resolveWithSource(
+                this.captureBox.inputLatency.getValue(),
+                recording.inputLatency,
+                outputLatency,
+                trackSettings?.latency,
+                calibration?.inputLatency)
+            return {outputLatency, inputLatency: seconds, inputLatencySource: source}
+        }
+        const {inputLatency, inputLatencySource} = readLatency()
         console.debug("[CaptureAudio] latency report", {
             outputLatency: audioContext.outputLatency,
             baseLatency: audioContext.baseLatency,
             inputLatencyReported: trackSettings?.latency,
             inputLatencyApplied: inputLatency,
+            inputLatencySource,
             deviceId: trackSettings?.deviceId,
             deviceLabel: track?.label
         })
@@ -233,24 +278,96 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             sampleManager,
             project,
             capture: this,
-            outputLatency,
-            inputLatency
+            readLatency
         })
     }
 
+    /**
+     * Measures this capture's input-path delay with a loopback probe played through the context destination and
+     * captured through its own stream. Stores the result per device id when apply is set.
+     *
+     * The probe travels the output path whose latency the SDK compensates: the measurement subtracts
+     * `AudioContext.outputLatency` and `RecordAudio` adds the same figure back when it places a take, so the
+     * remainder only names the input path if the emission left through the context sink. This capture's monitor
+     * route may be an `<audio>` element on another device, whose delay that figure does not describe.
+     */
+    async calibrateInputLatency(options: InputLatencyCalibration.Options & {apply?: boolean} = {},
+                                dependencies: Partial<InputLatencyCalibration.Dependencies> = {})
+        : Promise<InputLatencyCalibration.Result> {
+        const {engine, env: {audioContext}} = this.manager.project
+        const now = dependencies.now ?? (() => Date.now())
+        const scheduledBursts = options.burstCount ?? InputLatencyCalibration.BurstCount
+        const probeName = (options.probe ?? InputLatencyCalibration.DefaultProbe).name
+        // The probe plays over the output and records over the input: both are the transport's while it runs.
+        if (engine.isPlaying.getValue() || engine.isRecording.getValue()) {
+            return InputLatencyCalibration.emptyResult(
+                "transport-running", audioContext.sampleRate, scheduledBursts, now(), probeName)
+        }
+        const audioChain = this.#audioChain
+        if (!isDefined(audioChain)) {
+            return InputLatencyCalibration.emptyResult(
+                "no-stream", audioContext.sampleRate, scheduledBursts, now(), probeName)
+        }
+        const result = await InputLatencyCalibration.measure(
+            audioContext, audioChain.sourceNode, audioContext.destination, options, dependencies)
+        if (options.apply === true && (result.verdict === "ok" || result.verdict === "noisy")) {
+            const deviceId = this.streamDeviceId.unwrapOrUndefined()
+            // An entry outside the numeric range the settings schema accepts costs the user the whole
+            // recording section on the next load, so a non-finite measurement is reported but not stored.
+            if (!(Number.isFinite(result.inputLatencySeconds)
+                && Number.isFinite(result.outputLatencySeconds)
+                && Number.isFinite(result.spreadSeconds))) {
+                console.debug("[CaptureAudio] calibration not stored: the measurement is not a finite number"
+                    + ` (input ${result.inputLatencySeconds}, output ${result.outputLatencySeconds},`
+                    + ` spread ${result.spreadSeconds})`)
+                return result
+            }
+            if (isDefined(deviceId) && deviceId !== "") {
+                const {recording} = engine.preferences.settings
+                recording.inputLatencyCalibrations = [
+                    ...recording.inputLatencyCalibrations.filter(entry => entry.deviceId !== deviceId),
+                    {
+                        deviceId,
+                        inputLatency: Math.max(0.0, result.inputLatencySeconds),
+                        outputLatencyAtCalibration: result.outputLatencySeconds,
+                        spread: Math.max(0.0, result.spreadSeconds),
+                        measuredAt: result.measuredAt
+                    }
+                ]
+            }
+        }
+        return result
+    }
+
+    /** Drops the stored calibration for the device this capture streams from, leaving every other device's. */
+    clearInputLatencyCalibration(): void {
+        const deviceId = this.streamDeviceId.unwrapOrUndefined()
+        if (!isDefined(deviceId) || deviceId === "") {return}
+        const {recording} = this.manager.project.engine.preferences.settings
+        recording.inputLatencyCalibrations =
+            recording.inputLatencyCalibrations.filter(entry => entry.deviceId !== deviceId)
+    }
+
     async #updateStream(): Promise<void> {
+        const namedDeviceId = this.deviceId.getValue().unwrapOrUndefined()
         if (this.#stream.nonEmpty()) {
             const stream = this.#stream.unwrap()
             const settings = stream.getAudioTracks().at(0)?.getSettings()
             if (isDefined(settings)) {
-                const deviceId = this.deviceId.getValue().unwrapOrUndefined()
-                if (deviceId === settings.deviceId) {
+                // A box that names no device asks for the default input, which is what the open stream
+                // already is: its empty id never equals the id the device reports, so comparing the two
+                // would re-open the stream, and rebuild the chain with it, before every recording. The
+                // input path then reads a first-pull delay on every take instead of a settled one.
+                const unchanged = isUndefined(namedDeviceId)
+                    ? isUndefined(this.#streamNamedDeviceId)
+                    : namedDeviceId === settings.deviceId
+                if (unchanged) {
                     return Promise.resolve()
                 }
             }
         }
         this.#stopStream()
-        const deviceId = this.deviceId.getValue().unwrapOrUndefined() ?? AudioDevices.defaultInput?.deviceId
+        const deviceId = namedDeviceId ?? AudioDevices.defaultInput?.deviceId
         const channelCount = this.#requestChannels.unwrapOrElse(2)
         const baseConstraints: MediaTrackConstraints = {
             echoCancellation: false,
@@ -276,6 +393,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const gotDeviceId = settings?.deviceId
         console.debug(`new stream. device requested: ${deviceId ?? "default"}, got: ${gotDeviceId ?? "unknown"}. channelCount requested: ${channelCount}, got: ${settings?.channelCount}`)
         this.#rebuildAudioChain(stream)
+        this.#streamNamedDeviceId = namedDeviceId
         this.#stream.wrap(stream)
     }
 
@@ -297,15 +415,37 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         recordGainNode.channelCount = channelCount
         recordGainNode.channelCountMode = "explicit"
         sourceNode.connect(recordGainNode)
-        this.#audioChain = {sourceNode, recordGainNode, channelCount}
+        // A source node nothing pulls keeps its stream buffered: the first pull after an idle period reads a
+        // shorter input delay than every later one, so a stored input latency would only hold for one of the
+        // two states. Everything reaching the destination is rendered every quantum, so a sink there pulls
+        // the source for as long as the chain exists, at a gain of zero, which contributes no output.
+        const keepAliveSink = audioContext.createGain()
+        keepAliveSink.gain.value = 0.0
+        sourceNode.connect(keepAliveSink)
+        keepAliveSink.connect(audioContext.destination)
+        this.#audioChain = {sourceNode, recordGainNode, keepAliveSink, channelCount}
         this.#connectMonitoring()
+    }
+
+    // The teardown `RecordAudio`'s terminator performs when it aborts a recording, for a worklet that
+    // never reached `RecordAudio` at all. Without it the node stays connected to the record gain and
+    // its ring reader appends every delivered chunk to an unbounded buffer for the life of the page.
+    #discardPreparedWorklet(): void {
+        const recordingWorklet = this.#preparedWorklet
+        if (!isDefined(recordingWorklet)) {return}
+        this.#preparedWorklet = null
+        // The chain may already be gone or rebuilt, in which case the node is no longer connected.
+        tryCatch(() => this.#audioChain?.recordGainNode.disconnect(recordingWorklet))
+        this.manager.project.env.sampleManager.remove(recordingWorklet.uuid)
+        recordingWorklet.terminate()
     }
 
     #destroyAudioChain(): void {
         if (isDefined(this.#audioChain)) {
-            const {sourceNode, recordGainNode} = this.#audioChain
+            const {sourceNode, recordGainNode, keepAliveSink} = this.#audioChain
             sourceNode.disconnect()
             recordGainNode.disconnect()
+            keepAliveSink.disconnect()
             this.#audioChain = null
         }
     }

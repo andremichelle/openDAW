@@ -8,6 +8,7 @@ import {ApparatDeviceBox, AudioUnitBox, CaptureMidiBox, NoteEventBox, NoteEventC
 import {ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
+import {RecordingStartEdge} from "../src/recording-start-edge"
 
 const SYNTH = `class Processor {
     voices = []
@@ -132,6 +133,60 @@ describe("recording state machine", () => {
         engine.pause()
         engine.render()
         expect(readState(engine, memory).isRecording, "pause ends recording (TS TimeInfo.pause)").toBe(false)
+    }, 60000)
+
+    it("a restart handled between two renders is announced only when the stop reset the edge", async () => {
+        const {source} = build()
+        const {engine, memory} = await loadFullEngine()
+        const sync = connectSyncToEngine(engine, memory, source)
+        try {
+            await sync.settle(); engine.bind(); await sync.settle()
+            engine.set_metronome_enabled(0)
+            // The processor's per-quantum announcement: render, then read the recording flag from the state.
+            // Two edges observe the same flag: `edge` is reset by the stop commands as the worklet's handlers
+            // do, `unreset` never is (the render-only edge), so the two must diverge exactly at the restart.
+            const edge = new RecordingStartEdge()
+            const unreset = new RecordingStartEdge()
+            const starts: Array<number> = []
+            const unresetStarts: Array<number> = []
+            const render = (): State => {
+                engine.render()
+                const state = readState(engine, memory)
+                if (edge.observe(state.isRecording)) {starts.push(state.position)}
+                if (unreset.observe(state.isRecording)) {unresetStarts.push(state.position)}
+                return state
+            }
+            engine.prepare_recording_state(0, 1.0)
+            for (let quantum = 0; quantum < 8; quantum++) {render()}
+            expect(starts.length, "the first start").toBe(1)
+            expect(unresetStarts.length, "the first start needs no reset").toBe(1)
+            // Commands run between renders, and only render writes the state: the flag reads 1 on the quantum
+            // before the stop and on the quantum after the restart, so nothing but the reset marks the gap.
+            expect(readState(engine, memory).isRecording, "recording before the stop").toBe(true)
+            engine.stop_recording()
+            edge.reset() // the worklet's stopRecording command
+            engine.prepare_recording_state(0, 1.0)
+            const restarted = render()
+            expect(restarted.isRecording, "recording again on the next render").toBe(true)
+            expect(starts.length, "the restart is announced").toBe(2)
+            expect(starts[1], "with the position the restart began at").toBeGreaterThan(starts[0])
+            expect(unresetStarts.length, "without the reset the restart passes unannounced").toBe(1)
+            // The same through the transport stop command (pause), which ends a recording as well.
+            for (let quantum = 0; quantum < 8; quantum++) {render()}
+            engine.pause()
+            edge.reset() // the worklet's stop command
+            engine.prepare_recording_state(0, 1.0)
+            expect(render().isRecording).toBe(true)
+            expect(starts.length, "the start after a pause is announced").toBe(3)
+            expect(starts[2]).toBeGreaterThan(starts[1])
+            expect(unresetStarts.length, "the render-only edge misses this one too").toBe(1)
+            // Without any command in between, a recording that keeps running announces nothing more.
+            for (let quantum = 0; quantum < 8; quantum++) {render()}
+            expect(starts.length).toBe(3)
+            expect(unresetStarts.length).toBe(1)
+        } finally {
+            sync.close()
+        }
     }, 60000)
 
     it("an ignored note region emits nothing until the recording ends", async () => {

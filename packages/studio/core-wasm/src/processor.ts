@@ -32,6 +32,7 @@ import {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
 import {GonioCapture, LoudnessMeter, StereoAnalyser} from "./analysis-dsp"
 import {EngineExports} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
+import {RecordingStartEdge} from "./recording-start-edge"
 import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 import {
     WASM_ENGINE_PROCESSOR_NAME,
@@ -81,6 +82,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #measureLoad: boolean = false // debug.dspLoadMeasurement (TS EngineProcessor.render's measureLoad)
     #perfWriteIndex: int = 0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
+    readonly #recordingStartEdge: RecordingStartEdge = new RecordingStartEdge()
+    #recordingGeneration: int = -1 // the client counts from 1, so a report before any prepare never matches
 
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
         super()
@@ -102,6 +105,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 }
                 switchMarkerState(state: Nullable<[UUID.Bytes, int]>): void {
                     dispatcher.dispatchAndForget(this.switchMarkerState, state)
+                }
+                recordingStarted(contextTime: number, position: ppqn, generation: int): void {
+                    dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position, generation)
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
@@ -188,14 +194,16 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     this.#playbackTimestamp = position
                     engine.set_position(position)
                 }),
-                prepareRecordingState: (countIn: boolean): void => this.#guarded(() => {
+                prepareRecordingState: (countIn: boolean, generation: int): void => this.#guarded(() => {
                     this.#transporting = true
+                    this.#recordingGeneration = generation
                     engine.prepare_recording_state(countIn ? 1 : 0,
                         this.#preferences.settings.recording.countInBars)
                 }),
                 stopRecording: (): void => this.#guarded(() => {
                     this.#transporting = false
                     engine.stop_recording()
+                    this.#recordingStartEdge.reset()
                 }),
                 queryLoadingComplete: (): Promise<boolean> =>
                     Promise.all(this.#pendingResources).then(() => true),
@@ -337,6 +345,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
             }
         }
         engine.render()
+        this.#announceRecordingStart(engine)
         if (monitoring.length > 0 && monitorOutput !== undefined) {
             const outputPtr = engine.monitor_output_ptr()
             const staged = new Float32Array(this.#memory.buffer, outputPtr, 8 * RenderQuantum)
@@ -374,6 +383,20 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#drainClipChanges()
         this.#drainMarkerChanges()
         this.#midi.drain(engine, this.#memory)
+    }
+
+    // One-shot per recording, on the rising edge of the transport's recording flag as rendered this quantum
+    // (the stop command paths reset the edge, since the state buffer only changes in `render`).
+    // `currentTime` is the START of the quantum in an AudioWorkletGlobalScope, while the position in the
+    // state buffer is the one reached after rendering it: report the quantum END so both describe the same
+    // instant. Read straight from the engine state, not the sync packet, whose populate callback only runs
+    // when the main thread has consumed the previous packet.
+    #announceRecordingStart(engine: EngineExports): void {
+        const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
+        if (this.#recordingStartEdge.observe(view.getUint8(18) === 1)) {
+            this.#engineToClient.recordingStarted(currentTime + RenderQuantum / sampleRate, view.getFloat32(0),
+                this.#recordingGeneration)
+        }
     }
 
     // Forward the engine's queued clip transitions to the client (TS `clipSequencing.changes()` +
@@ -449,6 +472,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         const wasRecording = view.getUint8(17) === 1 || view.getUint8(18) === 1
         this.#transporting = false
         this.#engine.pause()
+        this.#recordingStartEdge.reset()
         if (wasRecording) {
             // TS `#stop`: leaving a recording returns the playhead to where playback started (or 0).
             this.#engine.set_position(this.#preferences.settings.playback.timestampEnabled ? this.#playbackTimestamp : 0.0)
