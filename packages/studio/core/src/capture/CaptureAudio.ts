@@ -277,8 +277,13 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
 
     /**
-     * Measures this capture's input-path delay with a loopback probe played through its monitor route (or the
-     * context destination) and captured through its own stream. Stores the result per device id when apply is set.
+     * Measures this capture's input-path delay with a loopback probe played through the context destination and
+     * captured through its own stream. Stores the result per device id when apply is set.
+     *
+     * The probe travels the output path whose latency the SDK compensates: the measurement subtracts
+     * `AudioContext.outputLatency` and `RecordAudio` adds the same figure back when it places a take, so the
+     * remainder only names the input path if the emission left through the context sink. This capture's monitor
+     * route may be an `<audio>` element on another device, whose delay that figure does not describe.
      */
     async calibrateInputLatency(options: InputLatencyCalibration.Options & {apply?: boolean} = {},
                                 dependencies: Partial<InputLatencyCalibration.Dependencies> = {})
@@ -298,7 +303,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                 "no-stream", audioContext.sampleRate, scheduledBursts, now(), probeName)
         }
         const result = await InputLatencyCalibration.measure(
-            audioContext, audioChain.sourceNode, this.#monitorDestination(), options, dependencies)
+            audioContext, audioChain.sourceNode, audioContext.destination, options, dependencies)
         if (options.apply === true && (result.verdict === "ok" || result.verdict === "noisy")) {
             const deviceId = this.streamDeviceId.unwrapOrUndefined()
             // An entry outside the numeric range the settings schema accepts costs the user the whole

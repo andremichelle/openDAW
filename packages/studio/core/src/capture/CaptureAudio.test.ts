@@ -15,6 +15,16 @@ if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
     Reflect.set(globalThis, "AudioWorkletNode", class {})
 }
 
+// `setMonitorOutputDevice` builds an `<audio>` element and routes a MediaStream to a named sink;
+// jsdom has neither `setSinkId` nor a playable media element, so the whole element is faked.
+Reflect.set(globalThis, "Audio", class {
+    srcObject: unknown = null
+    sinkId: string = ""
+    async setSinkId(deviceId: string): Promise<void> {this.sinkId = deviceId}
+    async play(): Promise<void> {}
+    pause(): void {}
+})
+
 type FakeNode = {
     connect: (target: unknown) => void
     disconnect: (target?: unknown) => void
@@ -45,23 +55,29 @@ const keepAliveSinkOf = (sourceNode: FakeNode): FakeNode => {
     return sinks[0]
 }
 
-const createFakeStream = (deviceId: string) => ({
-    getAudioTracks: () => [{
+type FakeTrack = {label: string, stopped: boolean, getSettings: () => MediaTrackSettings, stop: () => void}
+
+// One track object per stream, kept across `getAudioTracks()` calls so `stop()` is observable.
+const createFakeStream = (deviceId: string, tracks: Array<FakeTrack>) => {
+    const track: FakeTrack = {
         label: "Fake Input",
-        getSettings: () => ({deviceId, channelCount: 2, latency: 0.005}),
-        stop: () => {}
-    }]
-})
+        stopped: false,
+        getSettings: () => ({deviceId, channelCount: 2, latency: 0.005}) as MediaTrackSettings,
+        stop() {track.stopped = true}
+    }
+    tracks.push(track)
+    return {getAudioTracks: () => [track]}
+}
 
 // `AudioDevices.requestStream` goes through `navigator.mediaDevices`; nothing else in these tests does.
 // The counter tells a reused stream from a re-opened one: every re-open is one more `getUserMedia`.
-const installFakeMediaDevices = (deviceId: string): {calls: int} => {
-    const counter = {calls: 0}
+const installFakeMediaDevices = (deviceId: string): {calls: int, tracks: Array<FakeTrack>} => {
+    const counter = {calls: 0, tracks: new Array<FakeTrack>()}
     Reflect.set(globalThis, "navigator", {
         mediaDevices: {
             getUserMedia: async () => {
                 counter.calls++
-                return createFakeStream(deviceId)
+                return createFakeStream(deviceId, counter.tracks)
             },
             enumerateDevices: async () => []
         }
@@ -90,6 +106,8 @@ const setup = async ({state = "running", resumesTo = "running", deviceId = "fake
     const {CaptureAudio} = await import("./CaptureAudio")
     const destination = createFakeNode()
     const createdSourceNodes = new Array<FakeNode>()
+    const createdGainNodes = new Array<FakeNode>()
+    const createdStreamDestinations = new Array<FakeNode>()
     const audioContext = {
         state,
         currentTime: 100.0,
@@ -102,8 +120,17 @@ const setup = async ({state = "running", resumesTo = "running", deviceId = "fake
             this.state = resumesTo
         },
         destination,
-        createGain: () => createFakeNode(),
+        createGain: () => {
+            const gainNode = createFakeNode()
+            createdGainNodes.push(gainNode)
+            return gainNode
+        },
         createStereoPanner: () => createFakeNode(),
+        createMediaStreamDestination: () => {
+            const streamDestination = createFakeNode()
+            createdStreamDestinations.push(streamDestination)
+            return Object.assign(streamDestination, {stream: {}})
+        },
         createMediaStreamSource: () => {
             const sourceNode = createFakeNode()
             createdSourceNodes.push(sourceNode)
@@ -145,9 +172,11 @@ const setup = async ({state = "running", resumesTo = "running", deviceId = "fake
     // The record gain node is the one the audio chain holds; the monitor nodes come from the same factory.
     const recordGainNode = (): FakeNode => capture.outputNode.unwrap("no audio chain") as unknown as FakeNode
     const getUserMediaCalls = (): int => getUserMediaCounter.calls
+    const openedTracks = (): ReadonlyArray<FakeTrack> => getUserMediaCounter.tracks
     return {
         capture, project, audioContext, preparedWorklets, removedFromSampleManager, recordGainNode,
-        destination, createdSourceNodes, getUserMediaCalls
+        destination, createdSourceNodes, createdGainNodes, createdStreamDestinations,
+        getUserMediaCalls, openedTracks
     }
 }
 
@@ -423,6 +452,25 @@ describe("CaptureAudio", () => {
             const {capture} = await setupCalibration({hasChain: false})
             const result = await capture.calibrateInputLatency({})
             expect(result.verdict).toBe("no-stream")
+        })
+
+        it("plays the probe through the context destination even with a monitor output device set", async () => {
+            const {capture, audioContext, destination, createdGainNodes, createdStreamDestinations} =
+                await setupCalibration({deviceId: "mic-1"})
+            await capture.setMonitorOutputDevice(Option.wrap("headphones"))
+            expect(createdStreamDestinations.length).toBe(1)
+            const gainNodesBefore = createdGainNodes.length
+            const result = await capture.calibrateInputLatency({},
+                fakeMeasureDeps({roundTrip: 0.0312, outputLatency: 0.023}))
+            expect(result.verdict).toBe("ok")
+            // The measurement subtracts `audioContext.outputLatency`, so the probe has to travel the
+            // path that figure describes: the context sink, not this capture's monitor element.
+            expect(createdGainNodes.length).toBe(gainNodesBefore + 1)
+            const probeGainNode = createdGainNodes[gainNodesBefore]
+            expect(probeGainNode.connected.length).toBe(1)
+            expect(probeGainNode.connected[0]).toBe(destination)
+            expect(probeGainNode.connected[0]).not.toBe(createdStreamDestinations[0])
+            expect(audioContext.destination).toBe(destination)
         })
 
         it("stores one entry per device id, replacing an older one", async () => {
