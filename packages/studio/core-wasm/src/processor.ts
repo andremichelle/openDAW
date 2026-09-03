@@ -83,6 +83,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #perfWriteIndex: int = 0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
     readonly #recordingStartEdge: RecordingStartEdge = new RecordingStartEdge()
+    #recordingGeneration: int = 0
 
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
         super()
@@ -105,8 +106,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 switchMarkerState(state: Nullable<[UUID.Bytes, int]>): void {
                     dispatcher.dispatchAndForget(this.switchMarkerState, state)
                 }
-                recordingStarted(contextTime: number, position: ppqn): void {
-                    dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position)
+                recordingStarted(contextTime: number, position: ppqn, generation: int): void {
+                    dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position, generation)
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
@@ -193,8 +194,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     this.#playbackTimestamp = position
                     engine.set_position(position)
                 }),
-                prepareRecordingState: (countIn: boolean): void => this.#guarded(() => {
+                prepareRecordingState: (countIn: boolean, generation: int): void => this.#guarded(() => {
                     this.#transporting = true
+                    this.#recordingGeneration = generation
                     engine.prepare_recording_state(countIn ? 1 : 0,
                         this.#preferences.settings.recording.countInBars)
                 }),
@@ -392,7 +394,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #announceRecordingStart(engine: EngineExports): void {
         const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
         if (this.#recordingStartEdge.observe(view.getUint8(18) === 1)) {
-            this.#engineToClient.recordingStarted(currentTime + RenderQuantum / sampleRate, view.getFloat32(0))
+            this.#engineToClient.recordingStarted(currentTime + RenderQuantum / sampleRate, view.getFloat32(0),
+                this.#recordingGeneration)
         }
     }
 
