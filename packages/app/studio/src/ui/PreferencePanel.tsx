@@ -1,6 +1,6 @@
 import css from "./PreferencePanel.sass?inline"
 import {Html} from "@opendaw/lib-dom"
-import {Lifecycle, Optional, ValueGuard} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, Optional, ValueGuard} from "@opendaw/lib-std"
 import {createElement, Frag} from "@opendaw/lib-jsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Checkbox} from "@/ui/components/Checkbox"
@@ -20,9 +20,14 @@ export type NestedLabels<T> = {
     [K in keyof T as T[K] extends ReadonlyArray<unknown> ? never : K]: T[K] extends Primitive
         ? string
         : T[K] extends object
-            ? { label: string; fields: NestedLabels<T[K]> }
+            ? NestedLabel<T[K]>
             : never
 }
+
+export type NestedLabel<T> = {label: string, fields: NestedLabels<T>}
+
+const isNestedLabel = <T,>(label: unknown): label is NestedLabel<T> =>
+    typeof label === "object" && isDefined(label) && typeof Reflect.get(label, "fields") === "object"
 
 export type SelectOptions<T> = {
     [K in keyof T]?: T[K] extends Primitive
@@ -66,21 +71,20 @@ export const PreferencePanel = <ROOT_SETTINGS, SETTINGS = ROOT_SETTINGS>(
             {Object.keys(labels).map(key => {
                 const pKey = key as keyof SETTINGS & string
                 const setting = settings[pKey]
-                // The labels map omits the settings it does not name, so it is indexed by string here.
-                const label = (labels as Record<string, string | {label: string, fields: unknown}>)[pKey]
+                // The labels map omits the settings it does not name, so it is read by string here.
+                const label: unknown = Reflect.get(labels, pKey)
                 const currentPath = [...pathPrefix, pKey]
-                if (typeof setting === "object" && setting !== null && typeof label === "object" && "fields" in label) {
-                    const nestedLabels = label as { label: string; fields: NestedLabels<typeof setting> }
+                if (typeof setting === "object" && isDefined(setting) && isNestedLabel<typeof setting>(label)) {
                     const nestedOptions = options?.[pKey] as Optional<SelectOptions<typeof setting>>
                     const nestedGuards = guards?.[pKey] as Optional<ValueGuards<typeof setting>>
                     return (
                         <details className="accordion" open>
-                            <summary>{nestedLabels.label}</summary>
+                            <summary>{label.label}</summary>
                             <PreferencePanel
                                 lifecycle={lifecycle}
                                 preferences={preferences}
                                 pathPrefix={currentPath}
-                                labels={nestedLabels.fields}
+                                labels={label.fields}
                                 options={nestedOptions}
                                 guards={nestedGuards}/>
                         </details>
