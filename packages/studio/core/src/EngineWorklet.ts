@@ -69,6 +69,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
     readonly #recordingStart: MutableObservableOption<RecordingStart> = new MutableObservableOption()
+    #recordingGeneration: int = 0
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #notifyClipNotification: Notifier<ClipNotification>
     readonly #notifyNoteSignals: Notifier<NoteSignal>
@@ -140,8 +141,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     play(): void {dispatcher.dispatchAndForget(this.play)}
                     stop(reset: boolean): void {dispatcher.dispatchAndForget(this.stop, reset)}
                     setPosition(position: number): void {dispatcher.dispatchAndForget(this.setPosition, position)}
-                    prepareRecordingState(countIn: boolean) {
-                        dispatcher.dispatchAndForget(this.prepareRecordingState, countIn)
+                    prepareRecordingState(countIn: boolean, generation: int) {
+                        dispatcher.dispatchAndForget(this.prepareRecordingState, countIn, generation)
                     }
                     stopRecording() {dispatcher.dispatchAndForget(this.stopRecording)}
                     queryLoadingComplete(): Promise<boolean> {
@@ -242,8 +243,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     this.#notifyClipNotification.notify({type: "sequencing", changes})
                 },
                 switchMarkerState: (state: Nullable<[UUID.Bytes, int]>): void => this.#markerState.setValue(state),
-                recordingStarted: (contextTime: number, position: ppqn): void =>
+                recordingStarted: (contextTime: number, position: ppqn, generation: int): void => {
+                    // a report for an earlier recording, delivered after the next one was prepared
+                    if (generation !== this.#recordingGeneration) {return}
                     this.#recordingStart.wrap({contextTime, position})
+                }
             } satisfies EngineToClient
         )
         this.#preferences = this.#terminator.own(new PreferencesHost<EngineSettings>(EngineSettingsSchema.parse({})))
@@ -262,8 +266,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     stop(reset: boolean = false): void {this.#commands.stop(reset)}
     setPosition(position: ppqn): void {this.#commands.setPosition(position)}
     prepareRecordingState(countIn: boolean): void {
+        this.#recordingGeneration++
         this.#recordingStart.clear() // the engine reports the new start once the transport flips
-        this.#commands.prepareRecordingState(countIn)
+        this.#commands.prepareRecordingState(countIn, this.#recordingGeneration)
     }
     stopRecording(): void {this.#commands.stopRecording()}
     panic(): void {this.#commands.panic()}

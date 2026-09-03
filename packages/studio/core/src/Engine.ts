@@ -16,7 +16,7 @@ import {Project} from "./project"
 // Where and when the transport began recording, as reported by the engine from the audio thread:
 // `position` is the playhead after the render quantum in which recording began and `contextTime` is
 // the context clock at the end of that quantum. Empty until the engine reports it; cleared when a
-// recording is prepared.
+// recording is prepared, and a report for an earlier recording that arrives after that is dropped.
 export type RecordingStart = {readonly contextTime: number, readonly position: ppqn}
 
 export interface Engine extends Terminable {

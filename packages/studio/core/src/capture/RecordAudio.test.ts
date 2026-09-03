@@ -4,6 +4,7 @@ import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {AudioRegionBoxAdapter, AudioUnitBoxAdapter, ProjectSkeleton} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "../project/ProjectEnv"
 import type {EngineWorklet} from "../EngineWorklet"
+import type {RecordingStart} from "../Engine"
 import type {RecordingWorklet} from "../RecordingWorklet"
 import {InputLatency} from "./InputLatency"
 import type {Capture} from "./Capture"
@@ -35,7 +36,7 @@ const createFakeWorklet = () => ({
     isCountingIn: new DefaultObservableValue(false),
     markerState: new DefaultObservableValue(null),
     cpuLoad: new DefaultObservableValue(0),
-    recordingStart: new MutableObservableOption<{contextTime: number, position: ppqn}>(),
+    recordingStart: new MutableObservableOption<RecordingStart>(),
     preferences: {update: () => {}, subscribeAll: () => Terminable.Empty}
 })
 
