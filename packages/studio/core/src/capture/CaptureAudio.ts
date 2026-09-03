@@ -66,7 +66,13 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         this.#streamGenerator = Promises.sequentialize(() => this.#updateStream())
         this.ownAll(
             Terminable.create(() => {
-                this.#disconnectMonitoring()
+                // A capture is terminated when it is gone for good: the project it belongs to was
+                // replaced, or its audio unit removed. Nothing disarms it first, so without this the
+                // audio chain outlives it — and the chain's silent sink sits on the destination, which
+                // renders its source node every quantum for the life of the page. Stopping the stream
+                // with it releases the microphone. A capture terminated mid-recording loses its input
+                // here, which is the intent: the recording it fed cannot outlive its capture either.
+                this.#stopStream()
                 if (isDefined(this.#monitorAudioElement)) {
                     this.#monitorAudioElement.pause()
                     this.#monitorAudioElement.srcObject = null

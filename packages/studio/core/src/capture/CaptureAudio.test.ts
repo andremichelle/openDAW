@@ -342,6 +342,19 @@ describe("CaptureAudio", () => {
             expect(sink.disconnected).toEqual([undefined]) // a bare disconnect drops every edge
         })
 
+        it("tears the chain down and releases the stream when the capture is terminated", async () => {
+            const {capture, createdSourceNodes, openedTracks} = await setup()
+            await armAndAwaitChain(capture)
+            const sink = keepAliveSinkOf(createdSourceNodes[0])
+            expect(openedTracks().length).toBe(1)
+            // A terminated capture is gone for good (project switch, audio unit removed); leaving the
+            // sink on the destination would render its source every quantum for the life of the page.
+            capture.terminate()
+            expect(capture.outputNode).toEqual(Option.None)
+            expect(sink.disconnected).toEqual([undefined]) // a bare disconnect drops every edge
+            expect(openedTracks()[0].stopped).toBe(true)
+        })
+
         it("leaves the silent sink in place while monitoring is switched on and off", async () => {
             const {capture, createdSourceNodes} = await setup()
             await armAndAwaitChain(capture)
