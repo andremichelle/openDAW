@@ -1,4 +1,5 @@
 import {int, isDefined, Optional, panic, tryCatch} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {dbToGain, LatencyCalibrationProtocol, LatencyProbe, LatencyProbes} from "@opendaw/lib-dsp"
 import {Workers} from "../Workers"
 import {LatencyCaptureNode} from "./LatencyCaptureNode"
@@ -175,10 +176,10 @@ export namespace InputLatencyCalibration {
             captures.push(capture)
         }
         const burstStartTimes: Array<number> = []
-        try {
-            // Everything from the first edge on is inside the try: opening a capture constructs a
-            // worklet node, which throws on a context whose processor module was never added, and a
-            // gain node already put on the output would then stay there with nothing to remove it.
+        // Everything from the first edge on is inside the closure: opening a capture constructs a
+        // worklet node, which throws on a context whose processor module was never added, and a
+        // gain node already put on the output would then stay there with nothing to remove it.
+        const run = await Promises.tryCatch((async () => {
             gainNode.connect(output)
             openCapture()
             const firstBurst = context.currentTime + LeadInSeconds
@@ -201,12 +202,13 @@ export namespace InputLatencyCalibration {
             await waitUntil(context, firstBurst + Math.min(referenceSeconds, burstSpacingSeconds))
             openCapture()
             await waitUntil(context, burstStartTimes[burstCount - 1] + referenceSeconds + MaxRoundTripSeconds)
-        } catch (reason) {
+        })())
+        if (run.status === "rejected") {
             // Neither anchor's frames can arrive if the clock stopped, so their promises are abandoned;
             // stopping them still posts the stop message, which is all a dead render thread can act on.
-            captures.forEach(capture => capture.stop().catch(() => {}))
+            captures.forEach(capture => Promises.tryCatch(capture.stop()))
             gainNode.disconnect()
-            if (!(reason instanceof ClockStalled)) {throw reason}
+            if (!(run.error instanceof ClockStalled)) {throw run.error}
             return emptyResult("context-not-running", sampleRate, burstCount, now(), probe.name)
         }
         // Read only now: Chrome reports 0 until audio has been rendered to the device.
