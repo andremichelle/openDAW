@@ -1,4 +1,4 @@
-import {int, Optional, panic} from "@opendaw/lib-std"
+import {int, isDefined, Optional, panic} from "@opendaw/lib-std"
 import {dbToGain, LatencyCalibrationProtocol, LatencyProbe, LatencyProbes} from "@opendaw/lib-dsp"
 import {Workers} from "../Workers"
 import {LatencyCaptureNode} from "./LatencyCaptureNode"
@@ -136,7 +136,20 @@ export namespace InputLatencyCalibration {
         const burstCount = options.burstCount ?? BurstCount
         const probe = options.probe ?? DefaultProbe
         const gainDb = options.gainDb ?? GainDb
+        const spacingOption = options.burstSpacingSeconds
         const {sampleRate} = context
+        // Every one of these leaves the last burst's scheduled end as NaN, and the default clock wait
+        // can neither reach a NaN time nor time out on it: the routine would hang with an anchor open
+        // and the probe already audible. A caller mistake, so it is refused before anything is built.
+        if (!Number.isInteger(burstCount) || burstCount < 1) {
+            return panic(`burstCount must be a positive integer (got ${burstCount})`)
+        }
+        if (isDefined(spacingOption) && !(Number.isFinite(spacingOption) && spacingOption > 0.0)) {
+            return panic(`burstSpacingSeconds must be a positive, finite number (got ${spacingOption})`)
+        }
+        if (!Number.isFinite(gainDb)) {
+            return panic(`gainDb must be a finite number (got ${gainDb})`)
+        }
         // The default analysis dispatches to the SDK worker, so a host that never installed the workers
         // would fail only after the probe had already played. An injected analyze never reaches them.
         if (analyze === defaults.analyze && Workers.messenger.isEmpty()) {return panic("Workers are not installed")}
@@ -146,7 +159,7 @@ export namespace InputLatencyCalibration {
         }
         const reference = probe.render(sampleRate)
         const referenceSeconds = reference.length / sampleRate
-        const burstSpacingSeconds = options.burstSpacingSeconds ?? (referenceSeconds + BurstTailSeconds)
+        const burstSpacingSeconds = spacingOption ?? (referenceSeconds + BurstTailSeconds)
         const buffer = context.createBuffer(1, reference.length, sampleRate)
         buffer.getChannelData(0).set(reference)
         const gainNode = context.createGain()

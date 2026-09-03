@@ -201,6 +201,38 @@ describe("InputLatencyCalibration.measure", () => {
         expect(result.scheduledBursts).toBe(2)
         expect(context.started.length).toBe(2)
     })
+    describe("invalid options", () => {
+        // Each of these leaves the last burst's end time as NaN, which the default clock wait can
+        // neither reach nor time out on: it would hang with the first anchor open and the probe
+        // already audible. They are caller mistakes, so they are refused before anything is built.
+        const rejects = async (options: Calibration.Options, message: string) => {
+            const context = makeContext("running", 0.02)
+            await expect(measure(context, options, deps(analysisOf([0.03, 0.03, 0.03], [30, 30, 30]))))
+                .rejects.toThrow(message)
+            expect(context.started.length).toBe(0)
+            expect(context.gains.length).toBe(0)
+            expect(context.bufferLengths.length).toBe(0)
+        }
+        test("burstCount below one", async () => {
+            await rejects({burstCount: 0}, "burstCount")
+            await rejects({burstCount: -3}, "burstCount")
+        })
+        test("a fractional burstCount", async () => {
+            await rejects({burstCount: 2.5}, "burstCount")
+        })
+        test("a non-positive burst spacing", async () => {
+            await rejects({burstSpacingSeconds: 0}, "burstSpacingSeconds")
+            await rejects({burstSpacingSeconds: -0.5}, "burstSpacingSeconds")
+        })
+        test("a non-finite burst spacing", async () => {
+            await rejects({burstSpacingSeconds: Number.NaN}, "burstSpacingSeconds")
+            await rejects({burstSpacingSeconds: Number.POSITIVE_INFINITY}, "burstSpacingSeconds")
+        })
+        test("a non-finite gain", async () => {
+            await rejects({gainDb: Number.NaN}, "gainDb")
+            await rejects({gainDb: Number.NEGATIVE_INFINITY}, "gainDb")
+        })
+    })
     test("throws before building anything when the SDK worker is not installed", async () => {
         expect(Workers.messenger.isEmpty()).toBe(true)
         const context = makeContext("running", 0.02)
