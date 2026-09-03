@@ -1,3 +1,6 @@
+import {int, TimeSpan} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
+
 export interface LatencyCapture {
     startTime: number
     frames: Float32Array
@@ -5,6 +8,9 @@ export interface LatencyCapture {
 
 /** Main-thread handle of LatencyCaptureProcessor: connect a source, call stop() to receive the frames. */
 export class LatencyCaptureNode extends AudioWorkletNode {
+    /** The frames follow the stop message at once; a processor that is gone never sends them. */
+    static readonly StopDeadlineMs: int = 2000
+
     static create(context: BaseAudioContext): LatencyCaptureNode {
         return new LatencyCaptureNode(context)
     }
@@ -27,8 +33,9 @@ export class LatencyCaptureNode extends AudioWorkletNode {
         this.port.start()
     }
 
-    stop(): Promise<LatencyCapture> {
+    stop(deadlineMs: int = LatencyCaptureNode.StopDeadlineMs): Promise<LatencyCapture> {
         this.port.postMessage("stop")
-        return this.#result.promise
+        return Promises.timeout(this.#result.promise, TimeSpan.millis(deadlineMs),
+            `latency capture delivered no frames within ${deadlineMs} ms`)
     }
 }

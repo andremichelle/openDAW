@@ -98,12 +98,13 @@ export namespace InputLatencyCalibration {
                     connected = source
                 },
                 stop: async () => {
-                    const capture = await node.stop()
+                    const stopped = await Promises.tryCatch(node.stop())
                     // The chain this was connected to can be destroyed mid-run (a disarm, a device
                     // change): the edge is already gone and `disconnect` throws InvalidAccessError.
                     // The frames are in hand by then, so the teardown must not lose them to that.
                     tryCatch(() => connected?.disconnect(node))
-                    return capture
+                    if (stopped.status === "rejected") {throw stopped.error}
+                    return stopped.value
                 }
             }
         },
@@ -216,7 +217,13 @@ export namespace InputLatencyCalibration {
         const outputLatencyReported = reported !== undefined && Number.isFinite(reported) && reported > 0.0
         const outputLatencySeconds = outputLatencyReported ? reported : 0.0
         gainNode.disconnect()
-        const [primaryCapture, secondaryCapture] = await Promise.all(captures.map(capture => capture.stop()))
+        const stopped = await Promises.tryCatch(Promise.all(captures.map(capture => capture.stop())))
+        // An anchor that delivers no frames has lost its processor (a removed device, a closed
+        // context); the gain node is already off the output, so nothing is left to tear down.
+        if (stopped.status === "rejected") {
+            return emptyResult("context-not-running", sampleRate, burstCount, now(), probe.name)
+        }
+        const [primaryCapture, secondaryCapture] = stopped.value
         // One analyze call per anchor: the same protocol, run twice over the same emission.
         const common = {
             sampleRate, reference, burstStartTimes,

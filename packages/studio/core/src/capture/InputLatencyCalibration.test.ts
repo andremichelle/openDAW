@@ -286,6 +286,17 @@ describe("InputLatencyCalibration.measure", () => {
         })).rejects.toThrow("latency-capture-processor is not registered")
         expect(context.gains[0].disconnected).toBe(true)
     })
+    test("a capture whose stop delivers no frames reads context-not-running without analysing", async () => {
+        // The bounded stop rejects once the processor is gone (a removed device, a closed context).
+        const context = makeContext("running", 0.02)
+        const capture = makeCapture()
+        capture.stop = async () => {throw new Error("latency capture delivered no frames within 2000 ms")}
+        const analyze = vi.fn(analysisOf([0.03, 0.03, 0.03], [30, 30, 30]))
+        const result = await measure(context, {}, deps(analyze, undefined, [capture]))
+        expect(result.verdict).toBe("context-not-running")
+        expect(analyze).not.toHaveBeenCalled()
+        expect(context.gains[0].disconnected).toBe(true)
+    })
     test("a rejecting analyze leaves nothing connected", async () => {
         const context = makeContext("running", 0.02)
         const capture = makeCapture()
