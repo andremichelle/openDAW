@@ -294,6 +294,7 @@ describe("InputLatencyCalibration.measure", () => {
         const analyze = vi.fn(analysisOf([0.03, 0.03, 0.03], [30, 30, 30]))
         const result = await measure(context, {}, deps(analyze, undefined, [capture]))
         expect(result.verdict).toBe("context-not-running")
+        expect(result.reason).toBe(InputLatencyCalibration.NoFramesReason)
         expect(analyze).not.toHaveBeenCalled()
         expect(context.gains[0].disconnected).toBe(true)
     })

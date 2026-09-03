@@ -40,6 +40,7 @@ export namespace InputLatencyCalibration {
         AnchorAgreementQuanta * RenderQuantumFrames / sampleRate
     export const AnchorsDisagreeReason = "capture anchors disagree"
     export const SecondaryAnchorUnavailableReason = "secondary anchor unavailable"
+    export const NoFramesReason = "capture delivered no frames"
 
     /** The context clock stopped advancing mid-run: a suspended, closed or dead output device. */
     export class ClockStalled extends Error {
@@ -221,7 +222,9 @@ export namespace InputLatencyCalibration {
         // An anchor that delivers no frames has lost its processor (a removed device, a closed
         // context); the gain node is already off the output, so nothing is left to tear down.
         if (stopped.status === "rejected") {
-            return emptyResult("context-not-running", sampleRate, burstCount, now(), probe.name)
+            return {
+                ...emptyResult("context-not-running", sampleRate, burstCount, now(), probe.name), reason: NoFramesReason
+            }
         }
         const [primaryCapture, secondaryCapture] = stopped.value
         // One analyze call per anchor: the same protocol, run twice over the same emission.
