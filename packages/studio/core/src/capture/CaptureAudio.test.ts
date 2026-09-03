@@ -44,23 +44,29 @@ const keepAliveSinkOf = (sourceNode: FakeNode): FakeNode => {
     return sinks[0]
 }
 
-const createFakeStream = (deviceId: string) => ({
-    getAudioTracks: () => [{
+type FakeTrack = {label: string, stopped: boolean, getSettings: () => MediaTrackSettings, stop: () => void}
+
+// One track object per stream, kept across `getAudioTracks()` calls so `stop()` is observable.
+const createFakeStream = (deviceId: string, tracks: Array<FakeTrack>) => {
+    const track: FakeTrack = {
         label: "Fake Input",
-        getSettings: () => ({deviceId, channelCount: 2, latency: 0.005}),
-        stop: () => {}
-    }]
-})
+        stopped: false,
+        getSettings: () => ({deviceId, channelCount: 2, latency: 0.005}) as MediaTrackSettings,
+        stop() {track.stopped = true}
+    }
+    tracks.push(track)
+    return {getAudioTracks: () => [track]}
+}
 
 // `AudioDevices.requestStream` goes through `navigator.mediaDevices`; nothing else in these tests does.
 // The counter tells a reused stream from a re-opened one: every re-open is one more `getUserMedia`.
-const installFakeMediaDevices = (deviceId: string): {calls: int} => {
-    const counter = {calls: 0}
+const installFakeMediaDevices = (deviceId: string): {calls: int, tracks: Array<FakeTrack>} => {
+    const counter = {calls: 0, tracks: new Array<FakeTrack>()}
     Reflect.set(globalThis, "navigator", {
         mediaDevices: {
             getUserMedia: async () => {
                 counter.calls++
-                return createFakeStream(deviceId)
+                return createFakeStream(deviceId, counter.tracks)
             },
             enumerateDevices: async () => []
         }
@@ -132,9 +138,10 @@ const setup = async ({state = "running", resumesTo = "running", deviceId = "fake
     // The record gain node is the one the audio chain holds; the monitor nodes come from the same factory.
     const recordGainNode = (): FakeNode => capture.outputNode.unwrap("no audio chain") as unknown as FakeNode
     const getUserMediaCalls = (): int => getUserMediaCounter.calls
+    const openedTracks = (): ReadonlyArray<FakeTrack> => getUserMediaCounter.tracks
     return {
         capture, project, audioContext, preparedWorklets, removedFromSampleManager, recordGainNode,
-        destination, createdSourceNodes, getUserMediaCalls
+        destination, createdSourceNodes, getUserMediaCalls, openedTracks
     }
 }
 
@@ -221,6 +228,19 @@ describe("CaptureAudio", () => {
             capture.armed.setValue(false)
             expect(capture.outputNode).toEqual(Option.None)
             expect(sink.disconnected).toEqual([undefined]) // a bare disconnect drops every edge
+        })
+
+        it("tears the chain down and releases the stream when the capture is terminated", async () => {
+            const {capture, createdSourceNodes, openedTracks} = await setup()
+            await armAndAwaitChain(capture)
+            const sink = keepAliveSinkOf(createdSourceNodes[0])
+            expect(openedTracks().length).toBe(1)
+            // A terminated capture is gone for good (project switch, audio unit removed); leaving the
+            // sink on the destination would render its source every quantum for the life of the page.
+            capture.terminate()
+            expect(capture.outputNode).toEqual(Option.None)
+            expect(sink.disconnected).toEqual([undefined]) // a bare disconnect drops every edge
+            expect(openedTracks()[0].stopped).toBe(true)
         })
 
         it("leaves the silent sink in place while monitoring is switched on and off", async () => {

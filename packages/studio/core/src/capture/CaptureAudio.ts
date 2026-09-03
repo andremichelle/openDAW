@@ -63,7 +63,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         this.#streamGenerator = Promises.sequentialize(() => this.#updateStream())
         this.ownAll(
             Terminable.create(() => {
-                this.#disconnectMonitoring()
+                this.#stopStream()
                 if (isDefined(this.#monitorAudioElement)) {
                     this.#monitorAudioElement.pause()
                     this.#monitorAudioElement.srcObject = null
