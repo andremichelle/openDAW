@@ -141,8 +141,8 @@ export default defineConfig(({command}) => {
                 name: "manuals-assets",
                 configureServer(server) {
                     const manualsContent = resolve(__dirname, "../../manuals/content")
-                    server.middlewares.use((req, res, next) => {
-                        const url = (req.url ?? "").split("?")[0]
+                    server.middlewares.use((request, response, next) => {
+                        const url = (request.url ?? "").split("?")[0]
                         if (!url.startsWith("/manuals/") || url.endsWith("/")) {return next()}
                         const relativePath = decodeURIComponent(url.slice("/manuals/".length))
                         const file = resolve(manualsContent, relativePath)
@@ -155,8 +155,8 @@ export default defineConfig(({command}) => {
                             ".jpeg": "image/jpeg",
                             ".svg": "image/svg+xml"
                         }
-                        res.setHeader("Content-Type", types[extname(file)] ?? "application/octet-stream")
-                        res.end(readFileSync(file))
+                        response.setHeader("Content-Type", types[extname(file)] ?? "application/octet-stream")
+                        response.end(readFileSync(file))
                     })
                 }
             },
