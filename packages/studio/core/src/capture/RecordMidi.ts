@@ -5,6 +5,7 @@ import {
     Notifier,
     Nullable,
     Option,
+    Optional,
     quantizeCeil,
     quantizeFloor,
     Terminable,
@@ -39,6 +40,13 @@ export namespace RecordMidi {
 
     const MIN_NOTE_DURATION = PPQN.fromSignature(1, 128)
 
+    // Compensate note placement for the engine-to-speaker output latency. `AudioContext.outputLatency` is
+    // undefined on browsers that do not implement it (Safari and iOS before 18.4); when it is missing we
+    // compensate by nothing rather than by a fixed guess, since the true value is device-specific and unknown.
+    // The old code fell back to `10.0`, read as seconds, which placed every recorded note about five bars late.
+    export const latencyInPulses = (outputLatency: Optional<number>, bpm: number): ppqn =>
+        PPQN.secondsToPulses(outputLatency ?? 0.0, bpm)
+
     export const start = ({notifier, project, capture}: RecordMidiContext): Terminable => {
         const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, boxGraph, engine, env: {audioContext}, timelineBox} = project
@@ -47,7 +55,9 @@ export namespace RecordMidi {
         const terminator = new Terminator()
         const activeNotes = new Map<byte, ActiveNote>()
         const pendingNotes = new Map<byte, byte>()
-        const latency = PPQN.secondsToPulses(audioContext.outputLatency ?? 10.0, timelineBox.bpm.getValue())
+        // Read the output latency and tempo at write time, not once here: the browser reports 0 for
+        // outputLatency until output is running, and the tempo can change during the recording (#379).
+        const currentLatency = (): ppqn => latencyInPulses(audioContext.outputLatency, timelineBox.bpm.getValue())
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
         let positionOffset: ppqn = 0
@@ -132,7 +142,7 @@ export namespace RecordMidi {
         terminator.own(position.catchupAndSubscribe(owner => {
             if (!isRecording.getValue()) {return}
             const currentPosition = owner.getValue()
-            const writePosition = currentPosition + latency
+            const writePosition = currentPosition + currentLatency()
             const loopEnabled = loopArea.enabled.getValue()
             const loopFrom = loopArea.from.getValue()
             const loopTo = loopArea.to.getValue()
@@ -189,7 +199,7 @@ export namespace RecordMidi {
         }))
 
         terminator.ownAll(notifier.subscribe((signal: NoteSignal) => {
-            const writePosition = position.getValue() + latency
+            const writePosition = position.getValue() + currentLatency()
             if (NoteSignal.isOn(signal)) {
                 const {pitch, velocity} = signal
                 if (currentTake.isEmpty()) {
