@@ -1,0 +1,74 @@
+component
+  color: var(--color-gray)
+
+  *
+    user-select: text !important
+    -webkit-user-select: text !important
+
+  h1
+    margin: 0 0 1rem 0
+    color: var(--color-blue)
+
+  h2, h3, h4, h5, h6, p
+    margin: 0 0 0.75rem 0
+
+  h2
+    margin-top: 1.5rem
+    color: var(--color-green)
+
+  h3
+    margin-top: 1.5rem
+    color: var(--color-orange)
+
+  ul
+    padding-inline-start: 1em
+
+  table
+    border-collapse: collapse
+    margin: 1rem 0
+
+    th, td
+      padding: 0.125em 2em 0.125em 0
+      text-align: left
+
+    th
+      padding-bottom: 0.5em
+      border-bottom: 1px solid var(--color-green)
+
+    tbody
+      background: linear-gradient(to bottom, var(--color-green) -16em, transparent 0.75em)
+
+    td
+      padding-top: 0.75em
+
+  li
+    margin: 0.5rem 0
+    position: relative
+    line-height: 1.5em
+
+    > svg
+      top: 1px !important
+      position: relative
+      margin: -0.25em 0
+
+  code
+    font-size: 90%
+    color: var(--color-purple)
+    padding: 2px 4px
+    border-radius: 3px
+    background-color: rgba(black, 0.4)
+    cursor: pointer
+    display: inline-block
+
+  a
+    color: var(--color-purple)
+
+  strong
+    color: white
+    font-weight: bolder
+
+  hr
+    margin: 2rem 0
+    height: 1px
+    border: none
+    background-color: rgba(white, 0.1)

@@ -1,0 +1,28 @@
+{
+  "name": "@opendaw/studio-icons",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "license": "LGPL-3.0-or-later",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\" \"src/**/*.tsx\"",
+    "test": "echo \"No tests to run\""
+  },
+  "dependencies": {
+    "@opendaw/lib-dom": "^0.0.89",
+    "@opendaw/lib-jsx": "^0.0.91",
+    "@opendaw/lib-std": "^0.0.84",
+    "@opendaw/studio-enums": "^0.1.1"
+  },
+  "devDependencies": {
+    "@opendaw/eslint-config": "^0.0.28",
+    "@opendaw/typescript-config": "^0.0.32"
+  }
+}

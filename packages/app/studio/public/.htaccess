@@ -65,13 +65,17 @@ RewriteRule ^ - [E=NOINDEX_ROUTE:1]
 
 # --------------------------------------------------
 
+# Standalone manuals app: deep links under /manuals/ fall back to manuals/index.html.
+# Real files (markdown, images, hashed assets) are served as-is.
+RewriteCond %{REQUEST_URI} /manuals/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ manuals/index.html [L]
+
 # Static documentation sites under /docs/ serve their own index.html per directory
 # (matched on the per-directory path, REQUEST_URI is already rewritten into the release folder here)
 RewriteCond %{REQUEST_FILENAME}/index.html -f
 RewriteRule ^(docs/.*?)/?$ $1/index.html [L]
 
-# SPA fallback - route all non-file requests to index.html
-# Note: We only skip files (!-f), not directories (!-d), because the SPA router
-# needs to handle directory paths like /manuals/ even though that folder exists
+# SPA fallback - route all remaining non-file requests to the studio index.html
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.html [L]

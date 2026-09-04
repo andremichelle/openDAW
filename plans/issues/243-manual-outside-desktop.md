@@ -1,8 +1,9 @@
 # Make the Manual Accessible Outside Desktop Computers (#243)
 
-**Doability:** ⭐⭐⭐⭐☆ (4/5) — a full plan already exists in `plans/manuals.md`, mostly package-extraction work with no unsolved design questions
+**Doability:** ⭐⭐⭐⭐☆ (4/5) — implemented; see `plans/manuals.md` for what shipped and remaining follow-ups
 **Type:** documentation, ux
 **Scope:** medium
+**Status:** implemented (standalone `/manuals/` app; in-studio page kept as a desktop SPA)
 
 ## What is asked
 A version of the manual that keeps the current visual style but does not boot the full studio, so it works on mobile/tablet (and loads fast from external links like Discord/GitHub/search).
