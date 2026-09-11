@@ -6,6 +6,9 @@ import type {
     AudioMaterialFeatures,
     AudioMaterialProtocol,
     BpmProtocol,
+    LatencyCalibrationAnalysis,
+    LatencyCalibrationInput,
+    LatencyCalibrationProtocol,
     TransientProtocol
 } from "@opendaw/lib-dsp"
 
@@ -55,6 +58,17 @@ export class Workers {
                     delete(path: string): Promise<void> {return router.dispatchAndReturn(this.delete, path)}
                     list(path: string): Promise<ReadonlyArray<OpfsProtocol.Entry>> {return router.dispatchAndReturn(this.list, path)}
                     isAvailable(): Promise<boolean> {return router.dispatchAndReturn(this.isAvailable)}
+                })
+    }
+
+    @Lazy
+    static get LatencyCalibration(): LatencyCalibrationProtocol {
+        return Communicator
+            .sender<LatencyCalibrationProtocol>(this.messenger.unwrap("Workers are not installed").channel("latency-calibration"),
+                router => new class implements LatencyCalibrationProtocol {
+                    analyze(input: LatencyCalibrationInput): Promise<LatencyCalibrationAnalysis> {
+                        return router.dispatchAndReturn(this.analyze, input)
+                    }
                 })
     }
 

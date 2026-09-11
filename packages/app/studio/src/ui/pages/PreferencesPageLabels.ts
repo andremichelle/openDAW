@@ -1,4 +1,4 @@
-import {NestedLabels} from "@/ui/PreferencePanel"
+import {NestedLabels, ValueGuards} from "@/ui/PreferencePanel"
 import {FpsOptions, OverlappingRegionsBehaviourOptions, StudioSettings} from "@opendaw/studio-core"
 import {EngineSettings} from "@opendaw/studio-adapters"
 
@@ -116,7 +116,7 @@ export namespace PreferencesPageLabels {
                 automationEnabled: "Record automation",
                 olderTakeAction: "Older take action",
                 olderTakeScope: "Older take scope",
-                inputLatency: "Input latency"
+                inputLatency: "Input latency (seconds, -1 = output latency, -3 = reported)"
             }
         }
     }
@@ -135,6 +135,15 @@ export namespace PreferencesPageLabels {
                 value,
                 label: value === "all" ? "All takes" : value === "previous-only" ? "Previous only" : "None"
             }))
+        }
+    }
+
+    export const EngineSettingsGuards: ValueGuards<EngineSettings> = {
+        metronome: {
+            gain: {guard: value => Math.min(EngineSettings.MetronomeGainMaximum, value)}
+        },
+        recording: {
+            inputLatency: {guard: value => Math.max(EngineSettings.InputLatencyMinimum, value)}
         }
     }
 }

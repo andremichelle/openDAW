@@ -4,9 +4,11 @@ import {
     int,
     isDefined,
     isNull,
+    MutableObservableOption,
     MutableObservableValue,
     Notifier,
     Nullable,
+    ObservableOption,
     ObservableValue,
     Observer,
     Option,
@@ -39,7 +41,7 @@ import {
 import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {Engine} from "./Engine"
+import {Engine, RecordingStart} from "./Engine"
 import {EngineVariant, EngineWorkletVariant, FrozenAudioWriter} from "./EngineVariant"
 import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
@@ -66,6 +68,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #markerState: DefaultObservableValue<Nullable<[UUID.Bytes, int]>> =
         new DefaultObservableValue<Nullable<[UUID.Bytes, int]>>(null)
     readonly #cpuLoad: DefaultObservableValue<number> = new DefaultObservableValue(0)
+    readonly #recordingStart: MutableObservableOption<RecordingStart> = new MutableObservableOption()
+    #recordingGeneration: int = 0
     readonly #controlFlags: Int32Array<SharedArrayBuffer>
     readonly #notifyClipNotification: Notifier<ClipNotification>
     readonly #notifyNoteSignals: Notifier<NoteSignal>
@@ -137,8 +141,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     play(): void {dispatcher.dispatchAndForget(this.play)}
                     stop(reset: boolean): void {dispatcher.dispatchAndForget(this.stop, reset)}
                     setPosition(position: number): void {dispatcher.dispatchAndForget(this.setPosition, position)}
-                    prepareRecordingState(countIn: boolean) {
-                        dispatcher.dispatchAndForget(this.prepareRecordingState, countIn)
+                    prepareRecordingState(countIn: boolean, generation: int) {
+                        dispatcher.dispatchAndForget(this.prepareRecordingState, countIn, generation)
                     }
                     stopRecording() {dispatcher.dispatchAndForget(this.stopRecording)}
                     queryLoadingComplete(): Promise<boolean> {
@@ -238,7 +242,12 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     changes.started.forEach(uuid => this.#playingClips.push(uuid))
                     this.#notifyClipNotification.notify({type: "sequencing", changes})
                 },
-                switchMarkerState: (state: Nullable<[UUID.Bytes, int]>): void => this.#markerState.setValue(state)
+                switchMarkerState: (state: Nullable<[UUID.Bytes, int]>): void => this.#markerState.setValue(state),
+                recordingStarted: (contextTime: number, position: ppqn, generation: int): void => {
+                    // a report for an earlier recording, delivered after the next one was prepared
+                    if (generation !== this.#recordingGeneration) {return}
+                    this.#recordingStart.wrap({contextTime, position})
+                }
             } satisfies EngineToClient
         )
         this.#preferences = this.#terminator.own(new PreferencesHost<EngineSettings>(EngineSettingsSchema.parse({})))
@@ -256,7 +265,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     }
     stop(reset: boolean = false): void {this.#commands.stop(reset)}
     setPosition(position: ppqn): void {this.#commands.setPosition(position)}
-    prepareRecordingState(countIn: boolean): void {this.#commands.prepareRecordingState(countIn)}
+    prepareRecordingState(countIn: boolean): void {
+        this.#recordingGeneration++
+        this.#recordingStart.clear() // the engine reports the new start once the transport flips
+        this.#commands.prepareRecordingState(countIn, this.#recordingGeneration)
+    }
     stopRecording(): void {this.#commands.stopRecording()}
     panic(): void {this.#commands.panic()}
     sleep(): void {
@@ -279,6 +292,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     get isCountingIn(): ObservableValue<boolean> {return this.#isCountingIn}
     get countInBeatsRemaining(): ObservableValue<number> {return this.#countInBeatsRemaining}
     get position(): ObservableValue<ppqn> {return this.#position}
+    get recordingStart(): ObservableOption<RecordingStart> {return this.#recordingStart}
     get bpm(): ObservableValue<bpm> {return this.#bpm}
     get playbackTimestamp(): MutableObservableValue<number> {return this.#playbackTimestamp}
     get markerState(): ObservableValue<Nullable<[UUID.Bytes, int]>> {return this.#markerState}

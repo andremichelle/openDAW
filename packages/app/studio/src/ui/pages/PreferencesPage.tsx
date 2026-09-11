@@ -46,7 +46,8 @@ export const PreferencesPage: PageFactory<StudioService> = ({lifecycle, service}
                     <PreferencePanel lifecycle={lifecycle}
                                      preferences={service.engine.preferences}
                                      labels={PreferencesPageLabels.EngineSettingsLabels}
-                                     options={PreferencesPageLabels.EngineSettingsOptions}/>
+                                     options={PreferencesPageLabels.EngineSettingsOptions}
+                                     guards={PreferencesPageLabels.EngineSettingsGuards}/>
                 </section>
                 <section>
                     <div className="shortcuts">

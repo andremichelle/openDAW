@@ -119,6 +119,7 @@ export class OfflineEngineRenderer {
             },
             notifyClipSequenceChanges: (): void => {},
             switchMarkerState: (): void => {},
+            recordingStarted: (): void => {},
             deviceMessage: (uuid: string, message: string): void => {
                 console.warn(`OFFLINE-ENGINE device(${uuid}): ${message}`)
             }
@@ -130,7 +131,7 @@ export class OfflineEngineRenderer {
                 play(): void { dispatcher.dispatchAndForget(this.play) }
                 stop(reset: boolean): void { dispatcher.dispatchAndForget(this.stop, reset) }
                 setPosition(position: ppqn): void { dispatcher.dispatchAndForget(this.setPosition, position) }
-                prepareRecordingState(countIn: boolean): void { dispatcher.dispatchAndForget(this.prepareRecordingState, countIn) }
+                prepareRecordingState(countIn: boolean, generation: int): void { dispatcher.dispatchAndForget(this.prepareRecordingState, countIn, generation) }
                 stopRecording(): void { dispatcher.dispatchAndForget(this.stopRecording) }
                 queryLoadingComplete(): Promise<boolean> { return dispatcher.dispatchAndReturn(this.queryLoadingComplete) }
                 panic(): void { dispatcher.dispatchAndForget(this.panic) }

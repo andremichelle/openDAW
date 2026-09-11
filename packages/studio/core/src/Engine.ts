@@ -1,7 +1,23 @@
-import {int, Nullable, ObservableValue, Observer, Procedure, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {
+    int,
+    Nullable,
+    ObservableOption,
+    ObservableValue,
+    Observer,
+    Procedure,
+    Subscription,
+    Terminable,
+    UUID
+} from "@opendaw/lib-std"
 import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
 import {ClipNotification, EnginePreferences, NoteSignal} from "@opendaw/studio-adapters"
 import {Project} from "./project"
+
+// Where and when the transport began recording, as reported by the engine from the audio thread:
+// `position` is the playhead after the render quantum in which recording began and `contextTime` is
+// the context clock at the end of that quantum. Empty until the engine reports it; cleared when a
+// recording is prepared, and a report for an earlier recording that arrives after that is dropped.
+export type RecordingStart = {readonly contextTime: number, readonly position: ppqn}
 
 export interface Engine extends Terminable {
     play(): void
@@ -31,6 +47,7 @@ export interface Engine extends Terminable {
     unregisterMonitoringSource(uuid: UUID.Bytes): void
 
     get position(): ObservableValue<ppqn>
+    get recordingStart(): ObservableOption<RecordingStart>
     get bpm(): ObservableValue<bpm>
     get isPlaying(): ObservableValue<boolean>
     get isRecording(): ObservableValue<boolean>

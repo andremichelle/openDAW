@@ -11,7 +11,7 @@ export interface EngineCommands extends Terminable {
     stop(reset: boolean): void
     setPosition(position: ppqn): void
     /** @internal */
-    prepareRecordingState(countIn: boolean): void
+    prepareRecordingState(countIn: boolean, generation: int): void
     /** @internal */
     stopRecording(): void
     queryLoadingComplete(): Promise<boolean>
@@ -41,5 +41,10 @@ export interface EngineToClient {
     fetchNamWasm(): Promise<ArrayBuffer>
     notifyClipSequenceChanges(changes: ClipSequencingUpdates): void
     switchMarkerState(state: Nullable<[UUID.Bytes, int]>): void
+    // The transport began recording during the render quantum that ended at `contextTime` (audio-thread
+    // clock) and left the playhead at `position`. Both describe the same instant, so a capture can pair
+    // its own audio-thread anchors with the timeline without reading the main-thread state observables.
+    // `generation` echoes the `prepareRecordingState` call the report belongs to.
+    recordingStarted(contextTime: number, position: ppqn, generation: int): void
     ready(): void
 }
