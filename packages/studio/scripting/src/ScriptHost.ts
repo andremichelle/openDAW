@@ -1,4 +1,4 @@
-import {RuntimeNotifier} from "@opendaw/lib-std"
+import {Errors, RuntimeNotifier} from "@opendaw/lib-std"
 import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {ScriptExecutionContext, ScriptExecutionProtocol} from "./ScriptExecutionProtocol"
 import {ScriptHostProtocol} from "./ScriptHostProtocol"
@@ -21,7 +21,7 @@ export class ScriptHost implements ScriptExecutionProtocol {
         const progressUpdater = RuntimeNotifier.progress({headline: "Executing Script..."})
         const {status, error} = await Promises.tryCatch(this.#executor.executeScript(script, context))
         progressUpdater.terminate()
-        if (status === "rejected") {
+        if (status === "rejected" && !Errors.isAbort(error)) {
             console.warn(error)
             RuntimeNotifier.notify({message: "The script caused an error.", icon: "Warning"})
         }

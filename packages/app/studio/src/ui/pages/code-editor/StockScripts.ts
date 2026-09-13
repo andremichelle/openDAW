@@ -5,6 +5,7 @@ import ScriptNanoWavetable from "./examples/nano-wavetable.ts?raw"
 import ScriptAcid from "./examples/acid.ts?raw"
 import ScriptInventory from "./examples/inventory.ts?raw"
 import ScriptCleanup from "./examples/cleanup.ts?raw"
+import ScriptMixdown from "./examples/mixdown.ts?raw"
 
 const truncateImports = (script: string) => script.substring(script.indexOf("//"))
 
@@ -46,6 +47,12 @@ export const StockScripts: ReadonlyArray<StockScript> = [
         name: "Cleanup",
         description: "Removes empty tracks, muted content, regions beyond the end and unused aux units.",
         source: truncateImports(ScriptCleanup)
+    },
+    {
+        uuid: "c1f3a9d2-7e4b-4a6f-9b8e-2d5c6f7a8b9c",
+        name: "Mixdown",
+        description: "Renders the current project, normalizes the peak and saves it as a wav file.",
+        source: truncateImports(ScriptMixdown)
     }
 ]
 

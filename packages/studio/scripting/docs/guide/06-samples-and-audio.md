@@ -55,3 +55,22 @@ the slopes shape the region.
 
 {@link Soundfont} takes a `SoundfontFile` and a `presetIndex`, the file itself is chosen
 in the studio. {@link ConvolverEffect} takes any sample as its `impulse`.
+
+## Mixdown and saving files
+
+`project.mixdown()` renders the project the script holds, including edits that were not yet applied with
+`openInStudio()`, and resolves with {@link AudioData}. The studio shows a progress dialog while rendering.
+`options.sampleRate` defaults to 48000.
+
+`openDAW.saveFile(data, fileName, mimeType?)` offers any `ArrayBuffer` or typed array for download. The
+studio asks for confirmation first, then opens the save dialog. `WavFile.encodeFloats(audioData)` turns
+audio into a wav buffer.
+
+```ts
+const project = await openDAW.getProject()
+const audio = await project.mixdown()
+await openDAW.saveFile(WavFile.encodeFloats(audio), `${project.name}.wav`, "audio/wav")
+```
+
+Because the render is plain `AudioData`, a script can inspect or process it before saving, or hand it back
+to the studio with `openDAW.addSample(audio, "Bounce")`.

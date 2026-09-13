@@ -15,6 +15,7 @@ Scripts have no imports. These names are available everywhere:
 | `baseFrequency`       | Tuning reference of the studio in Hz                                                            |
 | `PPQN`                | `Bar`, `Quarter`, `SemiQuaver`, `fromSignature()`, `secondsToPulses()`, `pulsesToSeconds()`, `toString()` |
 | `AudioData`           | `AudioData.create(sampleRate, numberOfFrames, numberOfChannels)` for {@link Api | addSample} |
+| `WavFile`             | `WavFile.encodeFloats(audioData)` for {@link Api | saveFile}, `WavFile.decodeFloats(buffer)`     |
 | `midiToHz`            | `midiToHz(note, baseFrequency?)`                                                                |
 | `dbToGain`, `gainToDb`| Decibel conversions                                                                             |
 | `FFT`                 | Fast Fourier transform helper                                                                   |
