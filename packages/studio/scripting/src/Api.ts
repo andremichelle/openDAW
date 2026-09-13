@@ -2122,7 +2122,7 @@ export interface SignatureTrack {
 
 /**
  * Transport loop range
- * @group Core
+ * @group Essentials
  */
 export interface LoopArea {
     /** Loop enabled */
@@ -2135,7 +2135,7 @@ export interface LoopArea {
 
 /**
  * Beats per bar and beat unit
- * @group Core
+ * @group Essentials
  */
 export interface TimeSignature {
     /** Beats per bar (1 to 31) */
@@ -2146,7 +2146,7 @@ export interface TimeSignature {
 
 /**
  * Global shuffle groove
- * @group Core
+ * @group Essentials
  */
 export interface GrooveShuffle {
     /** Custom label */
@@ -2159,7 +2159,7 @@ export interface GrooveShuffle {
 
 /**
  * Descriptive project metadata
- * @group Core
+ * @group Essentials
  */
 export interface ProjectMeta {
     /** Artist */
@@ -2347,7 +2347,7 @@ export type AnyModulator = Modulators[keyof Modulators]
 
 /**
  * A project under construction or the one open in the studio. Hand it back with {@link Project.openInStudio}
- * @group Core
+ * @group Essentials
  */
 export interface Project {
     /** Project name */
@@ -2427,7 +2427,7 @@ export interface Project {
 
 /**
  * Options for {@link Project.mixdown}
- * @group Core
+ * @group Essentials
  */
 export interface MixdownOptions {
     /** Render sample rate in Hz (default 48000) */
@@ -2436,7 +2436,7 @@ export interface MixdownOptions {
 
 /**
  * The global `openDAW` object, entry point of every script
- * @group Core
+ * @group Essentials
  */
 export interface Api {
     /**
