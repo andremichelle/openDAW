@@ -8,9 +8,11 @@ component
   @include mixins.Control
   padding: 2px 0 0.25em 0
 
-  > .presets
+  .presets
     display: flex
     align-items: center
+    justify-self: end
+    margin-left: 8px
     column-gap: 2px
     font-size: 9px
     color: hsla(0, 0%, 100%, 0.55)
@@ -26,8 +28,11 @@ component
         background: hsla(0, 0%, 100%, 0.08)
 
     .preset-name
-      min-width: 7.5em
+      width: 7.5em
       text-align: center
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
 
   > .signal
     display: flex
@@ -58,7 +63,7 @@ component
 
       > .quad
         display: grid
-        grid-template-columns: repeat(2, max-content)
+        grid-template-columns: repeat(2, 2.625em)
         gap: 0.25em 2px
 
       > .rows
@@ -68,7 +73,7 @@ component
 
   .row
     display: grid
-    grid-template-columns: 1.1em 1fr
+    grid-template-columns: 1.1em max-content 1fr
     column-gap: 4px
     align-items: center
 
@@ -83,7 +88,9 @@ component
   .knobs
     display: grid
     grid-auto-flow: column
-    grid-auto-columns: max-content
+    // Object selector column is wider (longest material name), the rest share one rhythm.
+    grid-template-columns: 3.125em
+    grid-auto-columns: 2.625em
     justify-content: start
     gap: 0.25em 2px
 

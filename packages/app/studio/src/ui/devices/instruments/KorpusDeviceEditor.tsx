@@ -75,18 +75,6 @@ export const KorpusDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                       }}
                       populateControls={() => (
                           <div className={className}>
-                              <div className="presets">
-                                  <span className="step" onclick={() => stepPreset(-1)}>&#9666;</span>
-                                  <MenuButton root={MenuItem.root()
-                                      .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-                                          ...KorpusPresets.Factory.map((preset, index) =>
-                                              MenuItem.default({label: preset.name,
-                                                  checked: index === matchIndex()})
-                                                  .setTriggerProcedure(() => loadPreset(index)))))}
-                                              appearance={{tinyTriangle: true}}
-                                              pointer>{presetName}</MenuButton>
-                                  <span className="step" onclick={() => stepPreset(1)}>&#9656;</span>
-                              </div>
                               <div className="signal">
                               <section className="zone">
                                   <h5>Exciter</h5>
@@ -107,6 +95,18 @@ export const KorpusDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Co
                                               {knob(dampingA, "Damping")}
                                               {knob(tuneA, "Tune")}
                                               {knob(widthA, "Width")}
+                                          </div>
+                                          <div className="presets">
+                                              <span className="step" onclick={() => stepPreset(-1)}>&#9666;</span>
+                                              <MenuButton root={MenuItem.root()
+                                                  .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
+                                                      ...KorpusPresets.Factory.map((preset, index) =>
+                                                          MenuItem.default({label: preset.name,
+                                                              checked: index === matchIndex()})
+                                                              .setTriggerProcedure(() => loadPreset(index)))))}
+                                                          appearance={{tinyTriangle: true}}
+                                                          pointer>{presetName}</MenuButton>
+                                              <span className="step" onclick={() => stepPreset(1)}>&#9656;</span>
                                           </div>
                                       </div>
                                       <div className="row">
