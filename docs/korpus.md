@@ -5,7 +5,8 @@ sounds entirely from physics — modal resonator banks and waveguides driven by
 physical exciter models, with no samples anywhere. Architecturally it follows
 the Chromaphone lineage (a patchable exciter feeding two couplable resonator
 objects) and extends it with continuous exciters that lineage lacks: a
-stick-slip friction bow with a pitch servo, and a "living breath" driver.
+stick-slip friction bow with a pitch servo, a "living breath" driver, and a
+self-oscillating wind pipe.
 
 This document covers the engine end to end: the architecture, each DSP block
 and the reasoning behind it, the parameter surface, and how the device is wired
@@ -21,8 +22,9 @@ user-facing manual lives at
                         ┌──────────── OBJECT A (modal bank) ───────────┐
   EXCITER ──────────────┤     parallel │ serial │ sympathetic coupling  ├──► OUT
   Strike | Breath       └──────────── OBJECT B (modal bank, opt.) ─────┘
-  Bow    | Pick                │ Bow → bowed modal bank (object A material)
+  Bow | Pick | Wind            │ Bow → bowed modal bank (object A material)
                                │ Pick → dual-polarization waveguide string
+                               │ Wind → self-oscillating jet + bore pipe (object A = pipe color)
 ```
 
 - **Strike / Breath** produce a mono excitation signal that continuously drives
@@ -116,6 +118,28 @@ force→displacement modes:
 - Output: velocity/displacement blend for warmth, keyboard-compensated
   (velocity output scales with ω), gentle soft saturation.
 
+## The blown pipe (`engine/wind.rs`)
+
+The Wind exciter is a self-oscillating air column: an air jet (delay + cubic
+deflection nonlinearity, slightly biased so even harmonics grow with blowing
+pressure) locked to a bore waveguide with a one-pole reflection loss. The jet
+loop blows sharp of the passive bore resonance by an amount that moves with
+pitch, pressure and loss — instead of fitting it, a zero-crossing pitch servo
+(sub-period crossings merged, since a harmonic-rich bore wave crosses several
+times per cycle, and a period-doubled regime reads as half pitch — unfolded)
+tunes the pipe like a player, then keeps correcting softly below the vibrato
+rate; vibrato waits for the lock. Notes start flat and scoop in (per-pipe
+meri depth — bright pipes speak straight, a scoop pushes them into bad
+regimes). The jet ratio (Position = embouchure) is capped below the 0.5
+octave-regime boundary. Breath noise is also blown INTO the bore — air
+filtered by the pipe's own resonances is the shakuhachi airiness; hiss beside
+the tone never fuses with it. Aliveness follows the bow's recipe: multiplicative
+pressure-riding turbulence, an overpressure attack that relaxes, breath drift
+and tremor, re-breath dips every ~2.6–3.7 s, delayed wandering vibrato
+(pressure-dominant, a few cents of pitch), pitch micro-jitter, and a
+decorrelated stereo air halo. Object A selects the pipe color (loss, air,
+jet bite); object B, routing and couple are inactive.
+
 ## Exciters (`engine/exciter.rs`)
 
 - **Strike**: raised-cosine contact pulse with unit area across the hardness
@@ -133,7 +157,7 @@ Box fields 10–26 (`KorpusDeviceBox`), grouped as the editor shows them:
 
 | # | name | type | notes |
 |---|------|------|-------|
-| 10 | exciter | int 0–3 | Strike, Breath, Bow, Pick |
+| 10 | exciter | int 0–4 | Strike, Breath, Bow, Pick, Wind |
 | 11 | intensity | unipolar | hardness / breath brightness / bow pressure / pick color |
 | 12 | position | unipolar | strike/bow/pluck point (mode comb) |
 | 13 | vibrato | unipolar | Bow only; delayed, ≤ ±15 cents |
@@ -142,10 +166,52 @@ Box fields 10–26 (`KorpusDeviceBox`), grouped as the editor shows them:
 | 24 | routing | int 0–1 | Parallel, Serial (A's output drives B) |
 | 25 | couple | unipolar | eigensplit strength, k = value²·8 Hz |
 | 26 | volume | decibel | default −9 dB |
+| 27 | preset-epoch | int (plain field) | bumped by every preset load; the device observes it and hard-cuts its voices (~1.5 ms declick) |
 
 Loudness is a contract, not an accident: every engine path is calibrated to a
 common momentary-RMS target at A3 and locked by test (±3 dB across the twelve
 reference configurations), with keyboard-flattening laws per engine.
+
+### Live parameters
+
+Continuous knobs act on sounding voices, not just the next note. Each voice
+snapshots its knobs at note-on and, once per chunk, smooths the current values
+toward the host's (~60 ms settle — no zipper) and re-derives coefficients only
+while a knob is actually moving:
+
+- **Driven banks**: every mode keeps its note-on `DrivenSpec` (pan stored as a
+  width-independent unit offset); `retune()` rebuilds a₁/a₂/injection/taps —
+  damping through the shared `t60_scale` law, tune/detune as a frequency
+  ratio, width applied absolutely (so a note started at width 0 still
+  spreads), Level B as a send scale (serial `18·level` directly). Injection
+  normalization is re-derived per drive kind, so the loudness contract follows
+  the knob. With strong coupling, live Level B reaches only the B-bank's share
+  of the eigensplit rotation — the note-on path folds the send in pre-rotation.
+- **Bow**: pressure re-derives force scale/slope/grit/halo (a `force_trim`
+  keeps sub-lock lightening across pressure moves), damping scales per-mode γ,
+  tune scales the stored `base_theta` exactly (clamping only at realization,
+  so an up-down sweep returns home) with the servo lock intact, width re-pans
+  stored unit offsets, vibrato depth is direct. `resync_modes` re-derives
+  b₁/b₂/cv outside the servo's gated pass using the servo's last full retune,
+  so vibrato keeps running while a knob moves.
+- **Wind**: pressure scales the breath target, damping re-derives the loss
+  filter and re-opens the pitch servo, tune retargets the bore (servo trim
+  carried), width scales the air halo, vibrato depth is direct. **Breath
+  release**: on note-off a blown driven bank re-damps to 0.3x its T60 — the
+  air stops and the player settles the bars; without it, blown pads rang
+  their full struck T60 and stale voices choked the polyphony pool.
+- **Pluck**: tune glides the delay lines, interpolated per sample inside
+  `tick()` (a chunk-rate length step reads a distant tap and clicks); damping
+  retargets loop gain at the shifted pitch; width re-blends the polarization
+  mix. The delay length compensates the exact phase delay of the stiffness
+  allpass and damping filters at the fundamental (uncompensated it reads as
+  flatness growing with pitch, −59c nylon / −94c wire at A4), and the loop
+  gain compensates the damping filter's fundamental attenuation so pick color
+  is tone, not a hidden decay/volume control. **Breath**: Intensity re-aims
+  the turbulence lowpass, damping the release time.
+
+Structural knobs — exciter, objects, routing, couple — stay note-on decisions
+(a marimba cannot become a bell mid-ring); they apply from the next note.
 
 ## Implementation wiring
 
