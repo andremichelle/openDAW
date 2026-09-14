@@ -39,6 +39,14 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
 }
 
 #[no_mangle]
+pub extern "C" fn field_changed(state_ptr: u32, id: u32, kind: u32, bits: u32, len: u32) {
+    unsafe {
+        abi::with_state(state_ptr, |state| <device::Device as abi::Instrument>::field_changed(
+            state, id, abi::FieldValue::from_wire(kind, bits, len)))
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn reset(state_ptr: u32) {
     unsafe {abi::with_state(state_ptr, |state| <device::Device as abi::Instrument>::reset(state))}
 }

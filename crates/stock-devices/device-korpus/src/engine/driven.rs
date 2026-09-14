@@ -17,16 +17,23 @@ pub struct DrivenSpec {
     pub t60: f32,
     pub gain_in: f32,
     pub gain_out: f32,
-    pub pan: f32,
+    pub pan_offset: f32,
 }
 
 pub const SILENT_SPEC: DrivenSpec =
-    DrivenSpec {frequency: 0.0, t60: 0.1, gain_in: 0.0, gain_out: 0.0, pan: 0.5};
+    DrivenSpec {frequency: 0.0, t60: 0.1, gain_in: 0.0, gain_out: 0.0, pan_offset: 0.0};
 
-/// Fills `out` from the material law; returns the mode count.
-pub fn build_specs(material: Material, f0: f32, damping: f32, position: f32, width: f32,
+/// The damping knob's T60 law. The live path bends by ratios of this, so note-on and live must
+/// share one definition.
+pub fn t60_scale(damping: f32) -> f32 {
+    0.12 + 3.4 * damping * damping
+}
+
+/// Fills `out` from the material law; returns the mode count. Pan is stored as a unit offset —
+/// the width knob applies it absolutely at shape time, so width stays live on sounding notes.
+pub fn build_specs(material: Material, f0: f32, damping: f32, position: f32,
                    sample_rate: f32, out: &mut [DrivenSpec; MAX_MODES]) -> usize {
-    let t60_scale = 0.12 + 3.4 * damping * damping;
+    let scale = t60_scale(damping);
     let mut seed = 0x2545f491u32;
     let mut count = 0;
     let mut index = 0;
@@ -36,18 +43,17 @@ pub fn build_specs(material: Material, f0: f32, damping: f32, position: f32, wid
         if frequency < 20.0 || frequency > sample_rate * 0.45 {
             continue;
         }
-        let t60 = (mode.t60 * t60_scale * powf(f0 * 1.6 / frequency, 0.5)).max(0.012);
+        let t60 = (mode.t60 * scale * powf(f0 * 1.6 / frequency, 0.5)).max(0.012);
         let position_gain = fabsf(sinf(index as f32 * PI * (0.06 + 0.88 * position)));
         seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
         let rand = (seed >> 8) as f32 / 16777216.0;
         let side = if index % 2 == 1 {1.0} else {-1.0};
-        let pan = (0.5 + side * width * (0.12 + 0.38 * rand)).clamp(0.02, 0.98);
         out[count] = DrivenSpec {
             frequency,
             t60,
             gain_in: 0.25 + 0.75 * position_gain,
             gain_out: mode.amp,
-            pan,
+            pan_offset: side * (0.12 + 0.38 * rand),
         };
         count += 1;
         if count == MAX_MODES {
@@ -97,9 +103,9 @@ pub fn eigensplit(a: &mut [DrivenSpec], a_count: usize, b: &mut [DrivenSpec], b_
         high.gain_out = cos_t * gh_out + sin_t * gl_out;
         low.gain_out = cos_t * gl_out - sin_t * gh_out;
         let (weight, cross_weight) = (cos_t * cos_t, sin_t * sin_t);
-        let pan_h = high.pan;
-        high.pan = weight * pan_h + cross_weight * low.pan;
-        low.pan = weight * low.pan + cross_weight * pan_h;
+        let offset_h = high.pan_offset;
+        high.pan_offset = weight * offset_h + cross_weight * low.pan_offset;
+        low.pan_offset = weight * low.pan_offset + cross_weight * offset_h;
         high.t60 = 1.0 / (weight * decay_h + cross_weight * decay_l).max(1.0e-3);
         low.t60 = 1.0 / (weight * decay_l + cross_weight * decay_h).max(1.0e-3);
         if a_is_high {
@@ -131,14 +137,42 @@ struct DrivenMode {
     shim: f32,
     y1: f32,
     y2: f32,
+    spec: DrivenSpec,
 }
 
 const SILENT_MODE: DrivenMode = DrivenMode {a1: 0.0, a2: 0.0, inject: 0.0, tap_l: 0.0,
-    tap_r: 0.0, inv_a0: 1.0, shim_state: 0.0, shim: 1.0, y1: 0.0, y2: 0.0};
+    tap_r: 0.0, inv_a0: 1.0, shim_state: 0.0, shim: 1.0, y1: 0.0, y2: 0.0, spec: SILENT_SPEC};
+
+/// Derives every coefficient from the note-on spec scaled by the live ratios (width is the
+/// absolute knob value); ring state and the shimmer walk are untouched, so a sounding mode
+/// bends instead of restarting.
+fn shape(mode: &mut DrivenMode, kind: Injection, sample_rate: f32, freq_ratio: f32,
+         t60_ratio: f32, width: f32, send: f32) {
+    let spec = &mode.spec;
+    let frequency = (spec.frequency * freq_ratio).clamp(8.0, sample_rate * 0.475);
+    let t60 = (spec.t60 * t60_ratio).max(0.012);
+    let omega = 2.0 * PI * frequency / sample_rate;
+    let eps = LN1000 / (t60 * sample_rate);
+    let inv_a0 = 1.0 / (1.0 + eps);
+    let injection = match kind {
+        Injection::Strike => 0.5,
+        Injection::Noise => eps * sqrtf(t60),
+        Injection::Tonal => eps,
+    };
+    let pan = (0.5 + spec.pan_offset * width).clamp(0.02, 0.98);
+    mode.a1 = -2.0 * cosf(omega);
+    mode.a2 = 1.0 - eps;
+    mode.inv_a0 = inv_a0;
+    mode.inject = injection * spec.gain_in * send * inv_a0;
+    mode.tap_l = spec.gain_out * sqrtf(1.0 - pan);
+    mode.tap_r = spec.gain_out * sqrtf(pan);
+}
 
 pub struct DrivenBank {
     modes: [DrivenMode; MAX_MODES],
     count: usize,
+    kind: Injection,
+    sample_rate: f32,
     noise_state: u32,
     x1: f32,
     x2: f32,
@@ -146,7 +180,8 @@ pub struct DrivenBank {
 
 impl DrivenBank {
     pub const fn silent() -> Self {
-        Self {modes: [SILENT_MODE; MAX_MODES], count: 0, noise_state: 0x51f15eed, x1: 0.0, x2: 0.0}
+        Self {modes: [SILENT_MODE; MAX_MODES], count: 0, kind: Injection::Strike,
+            sample_rate: 48_000.0, noise_state: 0x51f15eed, x1: 0.0, x2: 0.0}
     }
 
     /// Injection normalization per drive type: an impulse through a unity-peak mode rings at
@@ -155,32 +190,23 @@ impl DrivenBank {
     /// power ∝ bandwidth ∝ 1/T60). TONAL sustained drive (serial ring-through) injects plain ε —
     /// unity peak IS tonal-neutral, and √T60 would hand long-ring objects +15dB.
     pub fn build(&mut self, specs: &[DrivenSpec], count: usize, injection_kind: Injection,
-                 sample_rate: f32) {
+                 width: f32, sample_rate: f32) {
         self.count = count;
+        self.kind = injection_kind;
+        self.sample_rate = sample_rate;
         self.x1 = 0.0;
         self.x2 = 0.0;
         for index in 0..count {
-            let mode_spec = &specs[index];
-            let omega = 2.0 * PI * mode_spec.frequency / sample_rate;
-            let eps = LN1000 / (mode_spec.t60 * sample_rate);
-            let inv_a0 = 1.0 / (1.0 + eps);
-            let injection = match injection_kind {
-                Injection::Strike => 0.5,
-                Injection::Noise => eps * sqrtf(mode_spec.t60),
-                Injection::Tonal => eps,
-            };
-            self.modes[index] = DrivenMode {
-                a1: -2.0 * cosf(omega),
-                a2: 1.0 - eps,
-                inject: injection * mode_spec.gain_in * inv_a0,
-                tap_l: mode_spec.gain_out * sqrtf(1.0 - mode_spec.pan),
-                tap_r: mode_spec.gain_out * sqrtf(mode_spec.pan),
-                inv_a0,
-                shim_state: 0.0,
-                shim: 1.0,
-                y1: 0.0,
-                y2: 0.0,
-            };
+            self.modes[index] = DrivenMode {spec: specs[index], ..SILENT_MODE};
+            shape(&mut self.modes[index], injection_kind, sample_rate, 1.0, 1.0, width, 1.0);
+        }
+    }
+
+    /// Live knob feedback: rebends the sounding bank against its note-on specs — frequency and
+    /// T60 as ratios, width as the absolute knob, send as a drive scale. The caller smooths.
+    pub fn retune(&mut self, freq_ratio: f32, t60_ratio: f32, width: f32, send: f32) {
+        for mode in self.modes[..self.count].iter_mut() {
+            shape(mode, self.kind, self.sample_rate, freq_ratio, t60_ratio, width, send);
         }
     }
 

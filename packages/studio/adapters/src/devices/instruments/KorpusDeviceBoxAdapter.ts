@@ -60,8 +60,8 @@ export class KorpusDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         const objectLabels = ["Marimba", "Vibraphone", "Bell", "Membrane", "Plate", "Piano Wire"]
         return {
             exciter: this.#parametric.createParameter(
-                box.exciter, ValueMapping.linearInteger(0, 3),
-                StringMapping.indices("", ["Strike", "Breath", "Bow", "Pick"]), "Exciter"),
+                box.exciter, ValueMapping.linearInteger(0, 4),
+                StringMapping.indices("", ["Strike", "Breath", "Bow", "Pick", "Wind"]), "Exciter"),
             intensity: unipolar(box.intensity, "Intensity"),
             position: unipolar(box.position, "Position"),
             vibrato: unipolar(box.vibrato, "Vibrato"),

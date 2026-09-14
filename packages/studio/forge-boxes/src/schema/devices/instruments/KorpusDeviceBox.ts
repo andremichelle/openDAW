@@ -6,7 +6,7 @@ import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 export const KorpusDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("KorpusDeviceBox", "notes", {
     10: {
         type: "int32", name: "exciter", pointerRules: ParameterPointerRules,
-        value: 0, constraints: {min: 0, max: 3}, unit: ""
+        value: 0, constraints: {min: 0, max: 4}, unit: ""
     },
     11: {type: "float32", name: "intensity", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
     12: {type: "float32", name: "position", pointerRules: ParameterPointerRules, value: 0.35, ...UnipolarConstraints},
@@ -44,5 +44,6 @@ export const KorpusDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrume
     26: {
         type: "float32", name: "volume", pointerRules: ParameterPointerRules,
         value: -9.0, constraints: "decibel", unit: "dB"
-    }
+    },
+    27: {type: "int32", name: "preset-epoch", value: 0, constraints: "any", unit: ""}
 })

@@ -10,6 +10,7 @@
 
 use libm::{cosf, expf, fabsf, powf, sinf, sqrtf};
 
+use crate::engine::driven::t60_scale;
 use crate::engine::tables::{spec, Material};
 
 const PI: f32 = core::f32::consts::PI;
@@ -30,6 +31,8 @@ struct BowMode {
     phi: f32,
     tap_l: f32,
     tap_r: f32,
+    pan_offset: f32,
+    amp: f32,
     shim_state: f32,
     shim: f32,
     vib_am_sin: f32,
@@ -39,8 +42,8 @@ struct BowMode {
 }
 
 const SILENT_MODE: BowMode = BowMode {base_theta: 0.1, r: 0.0, gamma: 1.0, b1: 0.0, b2: 0.0,
-    force_gain: 0.0, cv1: 0.0, cv2: 0.0, phi: 0.0, tap_l: 0.0, tap_r: 0.0, shim_state: 0.0,
-    shim: 1.0, vib_am_sin: 0.0, vib_am_cos: 0.0, y1: 0.0, y2: 0.0};
+    force_gain: 0.0, cv1: 0.0, cv2: 0.0, phi: 0.0, tap_l: 0.0, tap_r: 0.0, pan_offset: 0.0,
+    amp: 0.0, shim_state: 0.0, shim: 1.0, vib_am_sin: 0.0, vib_am_cos: 0.0, y1: 0.0, y2: 0.0};
 
 #[derive(Clone, Copy)]
 struct Candidate {
@@ -48,13 +51,13 @@ struct Candidate {
     t60: f32,
     phi: f32,
     amp: f32,
-    pan: f32,
+    pan_offset: f32,
     keep: bool,
     is_anchor: bool,
 }
 
 const NO_CANDIDATE: Candidate = Candidate {frequency: 0.0, t60: 0.1, phi: 0.0, amp: 0.0,
-    pan: 0.5, keep: false, is_anchor: false};
+    pan_offset: 0.0, keep: false, is_anchor: false};
 
 #[inline]
 fn dc_block(state: &mut (f32, f32), value: f32) -> f32 {
@@ -64,8 +67,8 @@ fn dc_block(state: &mut (f32, f32), value: f32) -> f32 {
     output
 }
 
-fn realize(frequency: f32, t60: f32, phi: f32, phi_inject: f32, amp: f32, pan: f32,
-           sample_rate: f32) -> BowMode {
+fn realize(frequency: f32, t60: f32, phi: f32, phi_inject: f32, amp: f32, pan_offset: f32,
+           width: f32, sample_rate: f32) -> BowMode {
     let w = 2.0 * PI * frequency;
     let gamma = LN1000 / t60;
     let theta = w / sample_rate;
@@ -75,6 +78,7 @@ fn realize(frequency: f32, t60: f32, phi: f32, phi_inject: f32, amp: f32, pan: f
     let hash = frequency.to_bits().wrapping_mul(2654435761) >> 8;
     let phase = hash as f32 / 16777216.0 * 2.0 * PI;
     let depth = 0.15 + 0.25 * ((hash >> 4 & 0xff) as f32 / 255.0);
+    let pan = (0.5 + pan_offset * width).clamp(0.05, 0.95);
     BowMode {
         base_theta: theta,
         r,
@@ -87,6 +91,8 @@ fn realize(frequency: f32, t60: f32, phi: f32, phi_inject: f32, amp: f32, pan: f
         phi,
         tap_l: amp * sqrtf(1.0 - pan),
         tap_r: amp * sqrtf(pan),
+        pan_offset,
+        amp,
         shim_state: 0.0,
         shim: 1.0,
         vib_am_sin: depth * sinf(phase),
@@ -149,6 +155,13 @@ pub struct BowState {
     dc_l: (f32, f32),
     dc_r: (f32, f32),
     out_gain: f32,
+    admittance_full: f32,
+    force_trim: f32,
+    live_pressure: f32,
+    live_t60_ratio: f32,
+    live_width: f32,
+    live_freq_ratio: f32,
+    last_retune: f32,
 }
 
 impl BowState {
@@ -164,7 +177,9 @@ impl BowState {
             vib_rot: (0.0, 1.0), vib_ramp: 0.0, servo_locked: false, servo_stable: 0,
             sub_lock_count: 0, force_floor: 0.0, released_damped: false, grit: 1.0,
             halo_gain: 0.0, jitter_walk: 0.0, rate_walk: 0.0, stroke_timer: 2.4, stroke_dip: 0.0,
-            age: 0.0, dc_l: (0.0, 0.0), dc_r: (0.0, 0.0), out_gain: 1.0}
+            age: 0.0, dc_l: (0.0, 0.0), dc_r: (0.0, 0.0), out_gain: 1.0, admittance_full: 1.0e-5,
+            force_trim: 1.0, live_pressure: 0.5, live_t60_ratio: 1.0, live_width: 1.0,
+            live_freq_ratio: 1.0, last_retune: 1.0}
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -183,7 +198,7 @@ impl BowState {
             table_index += 1;
         }
         let pressure_gain = 0.2 + 0.5 * pressure;
-        let t60_scale = (0.12 + 3.4 * damping * damping) * 3.0; // bowing feeds on Q
+        let t60_boost = t60_scale(damping) * 3.0; // bowing feeds on Q
         let position = 0.06 + 0.88 * position_knob;
         let harmonic_series = material.harmonic_series();
         let mut seed = 0x51ed270bu32;
@@ -219,7 +234,7 @@ impl BowState {
             };
             let keep = bump * bump >= 0.3;
             let is_anchor = fabsf(ratio - 1.0) < 1.0e-4;
-            let t60 = (mode.t60 * t60_scale * powf(f0 * 1.6 / frequency, 0.5)).max(0.05);
+            let t60 = (mode.t60 * t60_boost * powf(f0 * 1.6 / frequency, 0.5)).max(0.05);
             seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
             let magnitude = 0.4 + 0.6 * ((seed >> 8) as f32 / 16777216.0);
             let sign = if seed & 0x10000 != 0 {1.0} else {-1.0};
@@ -232,8 +247,9 @@ impl BowState {
             seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
             let rand = (seed >> 8) as f32 / 16777216.0;
             let side = if table_slot % 2 == 0 {1.0} else {-1.0};
-            let pan = (0.5 + side * width * (0.1 + 0.3 * rand)).clamp(0.05, 0.95);
-            raw[raw_count] = Candidate {frequency, t60, phi, amp: mode.amp, pan, keep, is_anchor};
+            let pan_offset = side * (0.1 + 0.3 * rand);
+            raw[raw_count] = Candidate {frequency, t60, phi, amp: mode.amp, pan_offset, keep,
+                is_anchor};
             raw_count += 1;
         }
         // phi normalization and the reference admittance run over ALL candidates so gating does
@@ -250,7 +266,7 @@ impl BowState {
         for candidate in raw[..raw_count].iter() {
             let phi = candidate.phi / phi_norm;
             let probe = realize(candidate.frequency, candidate.t60, phi, phi, candidate.amp,
-                candidate.pan, sample_rate);
+                candidate.pan_offset, width, sample_rate);
             // Drive-point admittance terms computed directly (g = r·sinθ/(ω·fs), m = 1).
             let w = 2.0 * PI * candidate.frequency;
             let theta = w / sample_rate;
@@ -276,7 +292,7 @@ impl BowState {
             seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
             let detune = 1.0015 + 0.0035 * ((seed >> 8) as f32 / 16777216.0);
             self.modes[count] = realize(candidate.frequency * detune, candidate.t60 * 0.8, 0.0,
-                phi * 0.12, candidate.amp * 0.85, 1.0 - candidate.pan, sample_rate);
+                phi * 0.12, candidate.amp * 0.85, -candidate.pan_offset, width, sample_rate);
             count += 1;
         }
         self.count = count;
@@ -297,9 +313,16 @@ impl BowState {
         self.bow_velocity = 0.0;
         self.bow_target = 0.06 + 0.10 * velocity;
         self.slope = 5.5 - 3.0 * pressure;
-        self.force_scale = pressure_gain / admittance_full.max(1.0e-9);
+        self.admittance_full = admittance_full.max(1.0e-9);
+        self.force_trim = 1.0;
+        self.force_scale = pressure_gain / self.admittance_full;
         self.force_floor = 0.22 * self.force_scale;
         self.force_max = 1.5 * self.force_scale * self.bow_target;
+        self.live_pressure = pressure;
+        self.live_t60_ratio = 1.0;
+        self.live_width = width;
+        self.live_freq_ratio = 1.0;
+        self.last_retune = self.tune_ratio;
         self.attack_coefficient =
             1.0 - expf(-1.0 / ((0.12 + 0.45 * (1.0 - velocity)) * sample_rate));
         self.release_coefficient = 1.0 - expf(-1.0 / (0.09 * sample_rate));
@@ -349,11 +372,12 @@ impl BowState {
         self.gate = false;
         if !self.released_damped {
             self.released_damped = true;
+            self.last_retune = self.tune_ratio;
             // The bow fed on tripled Q; the free instrument rings at its natural T60.
             for mode in self.modes[..self.count].iter_mut() {
                 let gamma = mode.gamma * 3.0;
                 let r = expf(-gamma / self.sample_rate);
-                let theta = mode.base_theta * self.tune_ratio;
+                let theta = (mode.base_theta * self.tune_ratio).clamp(1.0e-4, 2.4);
                 let (s, c) = (sinf(theta), cosf(theta));
                 let w = theta * self.sample_rate;
                 mode.gamma = gamma;
@@ -363,6 +387,68 @@ impl BowState {
                 mode.cv1 = w * c / s - gamma;
                 mode.cv2 = -w * r / s;
             }
+        }
+    }
+
+    /// Live knob feedback on a sounding bow: pressure, damping, width, tune and vibrato act on
+    /// the note in flight. Scalars are cheap; per-mode loops run only while a knob is moving.
+    /// The caller hands in already-smoothed values (freq/t60 as ratios, width absolute).
+    pub fn refresh(&mut self, pressure: f32, t60_ratio: f32, width: f32, freq_ratio: f32,
+                   vibrato: f32) {
+        self.vibrato_depth = vibrato * 0.009;
+        if fabsf(pressure - self.live_pressure) > 1.0e-4 {
+            self.live_pressure = pressure;
+            let pressure_gain = 0.2 + 0.5 * pressure;
+            self.slope = 5.5 - 3.0 * pressure;
+            self.grit = 0.6 + 1.1 * pressure;
+            self.halo_gain = 0.06 * (0.5 + 1.4 * pressure);
+            let base_scale = pressure_gain / self.admittance_full;
+            self.force_scale = base_scale * self.force_trim;
+            self.force_floor = 0.22 * base_scale;
+            self.force_max = 1.5 * base_scale * self.bow_target;
+        }
+        if fabsf(freq_ratio - self.live_freq_ratio) > 1.0e-4 {
+            let factor = freq_ratio / self.live_freq_ratio;
+            self.live_freq_ratio = freq_ratio;
+            self.f0 *= factor;
+            // The stored theta stays exact (no clamp) so an up-down sweep returns home; every
+            // realization site clamps the effective theta instead.
+            for mode in self.modes[..self.count].iter_mut() {
+                mode.base_theta *= factor;
+            }
+            self.resync_modes();
+        }
+        if fabsf(t60_ratio - self.live_t60_ratio) > 1.0e-4 {
+            let factor = self.live_t60_ratio / t60_ratio; // gamma ∝ 1/T60
+            self.live_t60_ratio = t60_ratio;
+            for mode in self.modes[..self.count].iter_mut() {
+                mode.gamma *= factor;
+                mode.r = expf(-mode.gamma / self.sample_rate);
+            }
+            self.resync_modes();
+        }
+        if fabsf(width - self.live_width) > 1.0e-4 {
+            self.live_width = width;
+            for mode in self.modes[..self.count].iter_mut() {
+                let pan = (0.5 + mode.pan_offset * width).clamp(0.05, 0.95);
+                mode.tap_l = mode.amp * sqrtf(1.0 - pan);
+                mode.tap_r = mode.amp * sqrtf(pan);
+            }
+        }
+    }
+
+    /// Re-derives b1/b2/cv from the current theta, r and gamma — needed outside the servo's own
+    /// per-chunk pass, which only runs while the bow is in contact. Uses the servo's last full
+    /// retune (tuning + vibrato + jitter) so a moving knob does not suspend the vibrato.
+    fn resync_modes(&mut self) {
+        for mode in self.modes[..self.count].iter_mut() {
+            let theta = (mode.base_theta * self.last_retune).clamp(1.0e-4, 2.4);
+            let (s, c) = (sinf(theta), cosf(theta));
+            let w = theta * self.sample_rate;
+            mode.b1 = 2.0 * mode.r * c;
+            mode.b2 = -mode.r * mode.r;
+            mode.cv1 = w * c / s - mode.gamma;
+            mode.cv2 = -w * mode.r / s;
         }
     }
 
@@ -387,6 +473,7 @@ impl BowState {
                 // lighten the bow until the note speaks, like a player would.
                 self.sub_lock_count += 1;
                 if self.sub_lock_count >= 3 && self.force_scale > self.force_floor {
+                    self.force_trim *= 0.85;
                     self.force_scale *= 0.85;
                     self.sub_lock_count = 0;
                 }
@@ -425,9 +512,10 @@ impl BowState {
         let vibrato = 1.0 + self.vib_sin * self.vibrato_depth * self.vib_ramp * self.vib_ramp
             + self.jitter_walk * 0.0026;
         let retune = self.tune_ratio * vibrato;
+        self.last_retune = retune;
         let vib_amount = self.vib_ramp * self.vib_ramp;
         for mode in self.modes[..self.count].iter_mut() {
-            let theta = mode.base_theta * retune;
+            let theta = (mode.base_theta * retune).clamp(1.0e-4, 2.4);
             let (s, c) = (sinf(theta), cosf(theta));
             let w = theta * self.sample_rate;
             mode.b1 = 2.0 * mode.r * c;

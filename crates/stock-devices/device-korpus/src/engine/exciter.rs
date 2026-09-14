@@ -89,6 +89,13 @@ impl Breath {
         self.gate = false;
     }
 
+    /// Live knob feedback while blowing: brightness retargets the turbulence lowpass and damping
+    /// retargets the release time. The attack already in flight keeps its note-on speed.
+    pub fn adjust(&mut self, brightness: f32, damping: f32) {
+        self.noise_lp = 0.10 + 0.28 * brightness;
+        self.release_coefficient = 1.0 - expf(-1.0 / ((0.03 + 0.4 * damping) * self.sample_rate));
+    }
+
     pub fn level(&self) -> f32 {
         self.breath
     }
