@@ -30,6 +30,7 @@ import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {TransferUtils} from "../transfer"
 import {PresetHeader} from "./PresetHeader"
 import {TrackType} from "../timeline/TrackType"
+import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
 
 export namespace PresetDecoder {
     export const decode = (bytes: ArrayBufferLike, target: ProjectSkeleton): ReadonlyArray<AudioUnitBox> => {
@@ -61,11 +62,11 @@ export namespace PresetDecoder {
             .filter(box => isInstanceOf(box, AudioUnitBox))
             .filter(box => box.type.getValue() !== AudioUnitType.Output)
         const excludeBox = (box: Box): boolean => TransferUtils.shouldExclude(box)
-        const dependencies = Array.from(sourceBoxGraph.dependenciesOf(sourceAudioUnitBoxes, {
+        const dependencies = TransferUtils.withModulators(Array.from(sourceBoxGraph.dependenciesOf(sourceAudioUnitBoxes, {
             alwaysFollowMandatory: true,
             stopAtResources: true,
             excludeBox
-        }).boxes)
+        }).boxes))
         const {mandatoryBoxes: {rootBox, primaryAudioBusBox}} = target
         const uuidMap = TransferUtils.generateMap(
             sourceAudioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
@@ -189,49 +190,40 @@ export namespace PresetDecoder {
         type UUIDMapper = { source: UUID.Bytes, target: UUID.Bytes }
         const uuidMap = UUID.newSet<UUIDMapper>(({source}) => source)
 
-        const dependencies = Array.from(sourceBoxGraph.dependenciesOf(sourceAudioUnitBox, {
+        const dependencies = TransferUtils.withModulators(Array.from(sourceBoxGraph.dependenciesOf(sourceAudioUnitBox, {
             excludeBox,
             alwaysFollowMandatory: true,
             stopAtResources: true
-        }).boxes)
+        }).boxes))
+        const keepsIdentity = (box: Box): boolean =>
+            box instanceof AudioFileBox || box instanceof SoundfontFileBox || isModulatorBox(box)
         uuidMap.addMany([
             {
                 source: sourceAudioUnitBox.address.uuid,
                 target: targetAudioUnitBox.address.uuid
             },
             ...dependencies
-                .map(({address: {uuid}, name}) =>
-                    ({
-                        source: uuid,
-                        target: name === AudioFileBox.ClassName || name === SoundfontFileBox.ClassName
-                            ? uuid
-                            : UUID.generate()
-                    }))
+                .map(box => ({source: box.address.uuid, target: keepsIdentity(box) ? box.address.uuid : UUID.generate()}))
         ])
-        // First, identify which file boxes already exist and should be skipped
-        const existingFileBoxUUIDs = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        // Identity-keeping boxes already in the target graph are shared, not copied
+        const existingKeptUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
         dependencies.forEach((source: Box) => {
-            if (source instanceof AudioFileBox || source instanceof SoundfontFileBox) {
-                if (targetBoxGraph.findBox(source.address.uuid).nonEmpty()) {
-                    existingFileBoxUUIDs.add(source.address.uuid)
-                }
+            if (keepsIdentity(source) && targetBoxGraph.findBox(source.address.uuid).nonEmpty()) {
+                existingKeptUuids.add(source.address.uuid)
             }
         })
         PointerField.decodeWith({
-            map: (_pointer: PointerField, newAddress: Option<Address>): Option<Address> =>
+            map: (pointer: PointerField, newAddress: Option<Address>): Option<Address> =>
                 newAddress.flatMap(address => uuidMap.opt(address.uuid).match({
                     some: ({target}) => Option.wrap(address.moveTo(target)),
-                    none: () => targetBoxGraph.findBox(address.uuid).nonEmpty() ? Option.wrap(address) : Option.None
+                    none: () => targetBoxGraph.findBox(address.uuid).nonEmpty()
+                        ? Option.wrap(address)
+                        : TransferUtils.mapModulatorCollection(pointer, targetBoxGraph)
                 }))
         }, () => {
             dependencies
                 .forEach((source: Box) => {
-                    if (source instanceof AudioFileBox || source instanceof SoundfontFileBox) {
-                        // Those boxes keep their UUID. So if they are already in the graph, skip them.
-                        if (existingFileBoxUUIDs.opt(source.address.uuid).nonEmpty()) {
-                            return
-                        }
-                    }
+                    if (existingKeptUuids.hasKey(source.address.uuid)) {return}
                     const input = new ByteArrayInput(source.toArrayBuffer())
                     const key = source.name as keyof BoxIO.TypeMap
                     const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
@@ -293,15 +285,15 @@ export namespace PresetDecoder {
             || TransferUtils.excludeTimelinePredicate(box)
             || box instanceof AudioUnitBox
         const effectSet = new Set<Box>(effects)
-        const dependencies = Array.from(sourceGraph.dependenciesOf(effects, {
+        const dependencies = TransferUtils.withModulators(Array.from(sourceGraph.dependenciesOf(effects, {
             alwaysFollowMandatory: true,
             stopAtResources: true,
             excludeBox
-        }).boxes).filter(box => !effectSet.has(box))
-        const existingPreservedUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        }).boxes).filter(box => !effectSet.has(box)))
+        const existingKeptUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
         dependencies.forEach(source => {
-            if (source.resource === "preserved" && targetGraph.findBox(source.address.uuid).nonEmpty()) {
-                existingPreservedUuids.add(source.address.uuid)
+            if (TransferUtils.keepsIdentity(source) && targetGraph.findBox(source.address.uuid).nonEmpty()) {
+                existingKeptUuids.add(source.address.uuid)
             }
         })
         const uuidMap = UUID.newSet<TransferUtils.UUIDMapper>(({source}) => source)
@@ -309,7 +301,7 @@ export namespace PresetDecoder {
             ...effects.map(box => ({source: box.address.uuid, target: UUID.generate()})),
             ...dependencies.map(box => ({
                 source: box.address.uuid,
-                target: box.resource === "preserved" ? box.address.uuid : UUID.generate()
+                target: TransferUtils.keepsIdentity(box) ? box.address.uuid : UUID.generate()
             }))
         ])
         PointerField.decodeWith({
@@ -326,7 +318,9 @@ export namespace PresetDecoder {
                     return Option.wrap(targetFieldAddress)
                 }
                 return address.flatMap(addr =>
-                    targetGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None)
+                    targetGraph.findBox(addr.uuid).nonEmpty()
+                        ? Option.wrap(addr)
+                        : TransferUtils.mapModulatorCollection(pointer, targetGraph))
             }
         }, () => {
             effects.forEach((source, i) => {
@@ -338,7 +332,7 @@ export namespace PresetDecoder {
                 })
             })
             dependencies.forEach(source => {
-                if (existingPreservedUuids.hasKey(source.address.uuid)) {return}
+                if (existingKeptUuids.hasKey(source.address.uuid)) {return}
                 const input = new ByteArrayInput(source.toArrayBuffer())
                 const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
                 targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))

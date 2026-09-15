@@ -19,7 +19,8 @@ export const ImprintPage: PageFactory<StudioService> = ({lifecycle}: PageContext
         </p>
         <p>
             This website is a personal, non-commercial project.<br/>
-            <span style={{color: Colors.red.toString()}}>No data collection, no user accounts.</span>
+            <span style={{color: Colors.red.toString()}}>No personal data collection, no user accounts. Visitors are
+                counted anonymously without storing anything on your device (see Privacy).</span>
         </p>
         <p>
             This imprint is provided to comply with German law.<br/>

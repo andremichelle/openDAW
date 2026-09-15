@@ -478,6 +478,7 @@ export class StudioService implements ProjectEnv {
         const lifeTime = new Terminator()
         const observer = (optProfile: Option<ProjectProfile>) => {
             this.layout.screen.setValue(null)
+            this.panelLayout.releasePopouts()
             lifeTime.terminate()
             document.body.classList.toggle("no-project", optProfile.isEmpty())
             if (optProfile.nonEmpty()) {

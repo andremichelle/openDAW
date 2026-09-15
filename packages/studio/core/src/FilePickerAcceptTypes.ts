@@ -51,4 +51,8 @@ export namespace FilePickerAcceptTypes {
         description: "json",
         accept: {"application/json": [".json"]}
     }
+    export const ScriptFileType: FilePickerAcceptType = {
+        description: "openDAW script",
+        accept: {"text/plain": [".ts"]}
+    }
 }

@@ -1,6 +1,7 @@
 import css from "./StreamPeakMeter.sass?inline"
 import {Arrays, int, Lifecycle, Terminator, ValueMapping} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
+import {meterRatio} from "@/ui/components/MeterRatio"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
 import {Colors} from "@opendaw/studio-enums"
 
@@ -59,7 +60,7 @@ export const StreamPeakMeter = ({lifecycle, peaks}: Construct) => {
         animation.own(AnimationFrame.add(() => {
             peaks.forEach((db: number, index: int) => {
                 const bar = bars[index]
-                const ratio = db === Number.NEGATIVE_INFINITY ? 0.0 : mapping.x(db)
+                const ratio = meterRatio(mapping, db)
                 const barWidth = Math.ceil(innerWidth * ratio)
                 bar.x.baseVal.value = barPadding
                 bar.width.baseVal.value = barWidth

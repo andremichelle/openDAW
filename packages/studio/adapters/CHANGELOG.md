@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.3.3](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.2...@opendaw/studio-adapters@0.3.3) (2026-09-14)
+
+### Bug Fixes
+
+- **recording:** anchor takes on the engine's own recording start and keep the buffer head ([e1c533f](https://github.com/andremichelle/openDAW/commit/e1c533f692f4cc40b5bc9bd7ea27e07c9406595d))
+- **recording:** drop a recording-start report that belongs to an earlier recording ([38d453c](https://github.com/andremichelle/openDAW/commit/38d453c6cfd3ae28420fdbc034b7919e337dc982))
+
+## [0.3.2](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.1...@opendaw/studio-adapters@0.3.2) (2026-08-26)
+
+**Note:** Version bump only for package @opendaw/studio-adapters
+
 ## [0.3.1](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-adapters@0.3.0...@opendaw/studio-adapters@0.3.1) (2026-08-24)
 
 **Note:** Version bump only for package @opendaw/studio-adapters

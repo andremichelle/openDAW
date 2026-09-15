@@ -34,7 +34,6 @@ import {showStoragePersistDialog} from "@/AppDialogs"
 import {Promises} from "@opendaw/lib-runtime"
 import {AnimationFrame, Browser, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
-import {installLatencyReporter} from "@/LatencyReporter"
 import {reportVisitor} from "@/VisitorReporter"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
@@ -83,7 +82,9 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     const context = new AudioContext({sampleRate, latencyHint: 0})
     console.debug(`AudioContext state: ${context.state}, sampleRate: ${context.sampleRate}`)
     console.debug(`Error.stackTraceLimit: ${Error.stackTraceLimit ?? "N/A"}`)
-    installLatencyReporter(context)
+    // purge identifiers written by the old client-side counting (§25 TDDDG)
+    localStorage.removeItem("__id__")
+    localStorage.removeItem("reported-latencies")
     reportVisitor()
     const audioWorklets = await Promises.tryCatch(AudioWorklets.createFor(context))
     if (audioWorklets.status === "rejected") {
@@ -94,8 +95,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         offlineWorkerUrl: wasmOfflineWorkerUrl,
         wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`
     })
-    // The engine IS the wasm engine, so this is a hard boot requirement: without its artifacts there is no
-    // engine to fall back to, and every worklet-dependent screen would fail on construction instead.
     if (!await WasmEngine.ensureReady(context)) {
         document.querySelector("#preloader")?.remove()
         Dialogs.info({
@@ -105,7 +104,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         return
     }
     if (context.state === "suspended") {
-        // Not `once`: a rejected resume (device busy, output unavailable) must stay retryable on the next click.
         const resumeOnClick = async () => {
             if (!await AudioContexts.resume(context)) {return}
             console.debug(`AudioContext resumed (${context.state})`)

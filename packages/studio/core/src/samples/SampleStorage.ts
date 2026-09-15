@@ -53,6 +53,13 @@ export class SampleStorage extends Storage<Sample, SampleMetaData, SampleStorage
         return JSON.parse(new TextDecoder().decode(bytes))
     }
 
+    async loadPeaks(uuid: UUID.Bytes, audio: AudioData): Promise<Peaks> {
+        const path = `${this.folder}/${UUID.toString(uuid)}`
+        const bytes = await Workers.Opfs.read(`${path}/peaks.bin`)
+        return this.#readOrRegeneratePeaks(path, bytes, audio,
+            bytes => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
+    }
+
     async load(uuid: UUID.Bytes): Promise<[AudioData, Peaks, SampleMetaData]> {
         const path = `${this.folder}/${UUID.toString(uuid)}`
         const exactBuffer = (bytes: Uint8Array): ArrayBuffer =>

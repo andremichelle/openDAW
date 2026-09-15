@@ -4,6 +4,7 @@ export const testFeatures = async (): Promise<void> => {
     requireProperty(Promise, "withResolvers")
     requireProperty(Array.prototype, "toSorted")
     requireProperty(window, "indexedDB")
+    requireProperty(window, "WebAssembly")
     requireProperty(window, "AudioWorkletNode")
     requireProperty(window, "SharedArrayBuffer")
     requireProperty(navigator, "storage")

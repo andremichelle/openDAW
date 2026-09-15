@@ -9,8 +9,9 @@ import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {VideoRenderer} from "@/video/VideoRenderer"
 import {createDebugMenu} from "@/service/DebugMenu"
 import {connectRoom} from "@/service/StudioLiveRoomConnect"
-import {AiDemux} from "@/service/AiDemux.tsx"
+import {NeuralDemux} from "@/service/NeuralDemux.tsx"
 import {NextcloudDialogs} from "@/project/NextcloudDialogs"
+import {openManual} from "@/ui/manuals"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
@@ -50,8 +51,8 @@ export const populateStudioMenu = (service: StudioService) => {
                                 .setTriggerProcedure(() => service.sampleService.browse(true)),
                             MenuItem.default({label: "Stems (Zip)..."})
                                 .setTriggerProcedure(() => service.importStems()),
-                            MenuItem.default({label: "AI Demux..."})
-                                .setTriggerProcedure(() => AiDemux.run(service).catch(EmptyExec)),
+                            MenuItem.default({label: "Neural Demux..."})
+                                .setTriggerProcedure(() => NeuralDemux.run(service).catch(EmptyExec)),
                             MenuItem.default({label: "Soundfont Files..."})
                                 .setTriggerProcedure(() => service.soundfontService.browse(true)),
                             MenuItem.default({label: "Project Bundle..."})
@@ -118,7 +119,7 @@ export const populateStudioMenu = (service: StudioService) => {
                             }).setTriggerProcedure(() =>
                                 CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec)),
                             MenuItem.default({label: "Help", icon: IconSymbol.Help, separatorBefore: true})
-                                .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/cloud-backup"))
+                                .setTriggerProcedure(() => openManual("/manuals/cloud-backup"))
                         )
                     }),
                     MenuItem.default({
@@ -131,7 +132,7 @@ export const populateStudioMenu = (service: StudioService) => {
                             MenuItem.default({label: "Upload project...", selectable: service.hasProfile})
                                 .setTriggerProcedure(() => NextcloudDialogs.save(service)),
                             MenuItem.default({label: "Help", icon: IconSymbol.Help, separatorBefore: true})
-                                .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/nextcloud"))
+                                .setTriggerProcedure(() => openManual("/manuals/nextcloud"))
                         )
                     }),
                     MenuItem.default({

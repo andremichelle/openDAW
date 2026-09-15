@@ -11,7 +11,7 @@ export interface EngineCommands extends Terminable {
     stop(reset: boolean): void
     setPosition(position: ppqn): void
     /** @internal */
-    prepareRecordingState(countIn: boolean): void
+    prepareRecordingState(countIn: boolean, generation: int): void
     /** @internal */
     stopRecording(): void
     queryLoadingComplete(): Promise<boolean>
@@ -41,5 +41,6 @@ export interface EngineToClient {
     fetchNamWasm(): Promise<ArrayBuffer>
     notifyClipSequenceChanges(changes: ClipSequencingUpdates): void
     switchMarkerState(state: Nullable<[UUID.Bytes, int]>): void
+    recordingStarted(contextTime: number, position: ppqn, generation: int): void
     ready(): void
 }

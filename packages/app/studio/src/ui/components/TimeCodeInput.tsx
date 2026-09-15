@@ -2,13 +2,11 @@ import css from "./TimeCodeInput.sass?inline"
 import {
     checkIndex,
     int,
-    isDefined,
     isInstanceOf,
     Lifecycle,
     MutableObservableValue,
-    safeRead,
-    tryCatch
 } from "@opendaw/lib-std"
+import {ClipboardPayload} from "./ClipboardPayload"
 import {createElement} from "@opendaw/lib-jsx"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Events, Html} from "@opendaw/lib-dom"
@@ -59,34 +57,36 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
     if (oneBased === true) {
         lifecycle.own(StudioPreferences.subscribe(updateDigits, "time-display", "count-bars-from-zero"))
     }
+    const commit = () => {
+        const part = (index: int): int => parseInt(inputs[index].textContent ?? "") | 0
+        const bars = model.getValue() >= 0 ? part(0) - barOffset() : part(0)
+        model.setValue(units[0].amount * bars
+            + units[1].amount * (part(1) - subOffset)
+            + units[2].amount * (part(2) - subOffset)
+            + units[3].amount * part(3))
+        updateDigits()
+    }
     lifecycle.ownAll(
         model.subscribe(updateDigits),
         Events.subscribe(element, "focusin", (event: Event) => {
             if (!isInstanceOf(event.target, HTMLElement)) {return}
             Html.selectContent(event.target)
         }),
-        Events.subscribe(element, "focusout", (event: Event) => {
+        Events.subscribe(element, "focusout", (event: FocusEvent) => {
             if (!isInstanceOf(event.target, HTMLElement)) {return}
+            if (isInstanceOf(event.relatedTarget, Node) && element.contains(event.relatedTarget)) {return}
+            commit()
             Html.unselectContent(event.target)
         }),
         Events.subscribe(element, "copy", (event: ClipboardEvent) => {
             event.preventDefault()
-            event.clipboardData?.setData("application/json", JSON.stringify({
-                app: "openDAW",
-                content: "timecode",
-                value: model.getValue()
-            }))
+            event.clipboardData?.setData("application/json", ClipboardPayload.write("timecode", model.getValue()))
         }),
         Events.subscribe(element, "paste", (event: ClipboardEvent) => {
-            const data = event.clipboardData?.getData("application/json")
-            if (isDefined(data)) {
-                const {status, value: json} = tryCatch(() => JSON.parse(data))
-                if (status === "failure") {return}
-                if (safeRead(json, "app") === "openDAW" && safeRead(json, "content") === "timecode") {
-                    event.preventDefault()
-                    model.setValue(json.value ?? 0)
-                }
-            }
+            ClipboardPayload.read(event.clipboardData?.getData("application/json"), "timecode").ifSome(value => {
+                event.preventDefault()
+                model.setValue(Number(value ?? 0))
+            })
         }),
         Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {return}
@@ -108,19 +108,7 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
                 }
                 case "Enter": {
                     event.preventDefault()
-                    const unit = parseInt(target.textContent ?? "") | 0
-                    const prevValue = model.getValue()
-                    const {bars, beats, semiquavers, ticks} = PPQN.toParts(prevValue, upper, lower)
-                    const nextValue: int =
-                        units[0].amount * (index === 0 ? prevValue >= 0 ? unit - barOffset() : unit : bars)
-                        + units[1].amount * (index === 1 ? unit - subOffset : beats)
-                        + units[2].amount * (index === 2 ? unit - subOffset : semiquavers)
-                        + units[3].amount * (index === 3 ? unit : ticks)
-                    if (prevValue === nextValue) {
-                        updateDigits()
-                    } else {
-                        model.setValue(nextValue)
-                    }
+                    commit()
                     Html.selectContent(target)
                     break
                 }

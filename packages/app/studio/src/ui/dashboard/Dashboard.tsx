@@ -8,6 +8,7 @@ import {IntroTiles} from "@/ui/dashboard/IntroTiles"
 import {ActionButtons} from "@/ui/dashboard/ActionButtons"
 import {Backup} from "@/ui/dashboard/Backup"
 import {Sponsors} from "@/ui/dashboard/Sponsors"
+import {Contributors} from "@/ui/dashboard/Contributors"
 import {SampleProviders} from "@/ui/dashboard/SampleProviders"
 import {HelpFeedback} from "@/ui/dashboard/HelpFeedback"
 import {Links} from "@/ui/dashboard/Links"
@@ -38,6 +39,7 @@ export const Dashboard = ({lifecycle, service}: Construct) => (
                 <Links/>
                 <Sponsors/>
                 <SampleProviders/>
+                <Contributors/>
             </div>
         </div>
         <IntroTiles/>

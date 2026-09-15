@@ -44,6 +44,8 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
 
     abstract importFile(args: AssetService.ImportArgs): Promise<T>
 
+    async list(): Promise<ReadonlyArray<T>> {return this.collectAllFiles()}
+
     async replaceMissingFiles(boxGraph: BoxGraph, manager: { invalidate: (uuid: UUID.Bytes) => void }): Promise<void> {
         const {status, error, value: available} = await Promises.tryCatch(this.collectAllFiles())
         if (status === "rejected") {

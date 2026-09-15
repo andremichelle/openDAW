@@ -1,4 +1,5 @@
 import {UUID} from "@opendaw/lib-std"
+import {Promises} from "@opendaw/lib-runtime"
 import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {AssetSignaling, type SignalingMessage} from "./AssetSignaling"
 import {AssetPeerConnection} from "./AssetPeerConnection"
@@ -100,6 +101,7 @@ export class AssetServer {
         channel.onmessage = (event: MessageEvent) => {
             console.debug("[P2P:Server] data channel message received from", peerId)
             this.#onChannelMessage(connection, channel, event.data as string)
+                .catch(error => console.warn("[P2P:Server] error handling transfer-request:", error))
         }
     }
 
@@ -111,23 +113,14 @@ export class AssetServer {
         }
         console.debug("[P2P:Server] transfer-request for", request.uuid, request.assetType)
         const uuid = UUID.parse(request.uuid) as UUID.Bytes
-        const assetType = request.assetType as string
-        let zipBytes: ArrayBuffer
-        if (assetType === "sample") {
-            console.debug("[P2P:Server] reading sample from OPFS...")
-            const [wavBytes, meta] = await this.#assetReader.readSample(uuid)
-            console.debug("[P2P:Server] sample read, wav size:", wavBytes.byteLength, "packing zip...")
-            zipBytes = await AssetZip.packSample(wavBytes, meta)
-        } else if (assetType === "soundfont") {
-            console.debug("[P2P:Server] reading soundfont from OPFS...")
-            const [sf2Bytes, meta] = await this.#assetReader.readSoundfont(uuid)
-            console.debug("[P2P:Server] soundfont read, sf2 size:", sf2Bytes.byteLength, "packing zip...")
-            zipBytes = await AssetZip.packSoundfont(sf2Bytes, meta)
-        } else {
-            console.debug("[P2P:Server] reading cover...")
-            // The cover is already a compressed WebP and carries no metadata, so it is transferred as raw bytes.
-            zipBytes = await this.#assetReader.readCover(uuid)
+        const packed = await Promises.tryCatch(this.#pack(uuid, request.assetType as string))
+        if (packed.status === "rejected") {
+            console.warn("[P2P:Server] cannot serve", request.assetType, request.uuid, packed.error)
+            await connection.sendWithBackpressure(channel,
+                ChunkProtocol.encode(ChunkProtocol.MsgType.Cancel, uuid, 0, new Uint8Array(0)))
+            return
         }
+        const zipBytes = packed.value
         const chunks = ChunkProtocol.split(zipBytes)
         console.debug("[P2P:Server] sending", chunks.length, "chunks, zip size:", zipBytes.byteLength)
         const startPayload = new TextEncoder().encode(JSON.stringify({
@@ -153,6 +146,23 @@ export class AssetServer {
             return
         }
         console.debug("[P2P:Server] transfer complete for", request.uuid)
+    }
+
+    async #pack(uuid: UUID.Bytes, assetType: string): Promise<ArrayBuffer> {
+        if (assetType === "sample") {
+            console.debug("[P2P:Server] reading sample from OPFS...")
+            const [wavBytes, meta] = await this.#assetReader.readSample(uuid)
+            console.debug("[P2P:Server] sample read, wav size:", wavBytes.byteLength, "packing zip...")
+            return AssetZip.packSample(wavBytes, meta)
+        }
+        if (assetType === "soundfont") {
+            console.debug("[P2P:Server] reading soundfont from OPFS...")
+            const [sf2Bytes, meta] = await this.#assetReader.readSoundfont(uuid)
+            console.debug("[P2P:Server] soundfont read, sf2 size:", sf2Bytes.byteLength, "packing zip...")
+            return AssetZip.packSoundfont(sf2Bytes, meta)
+        }
+        console.debug("[P2P:Server] reading cover...")
+        return this.#assetReader.readCover(uuid)
     }
 
     async #onIceCandidate(message: SignalingMessage): Promise<void> {

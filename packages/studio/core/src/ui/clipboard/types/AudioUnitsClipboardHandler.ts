@@ -1,4 +1,4 @@
-import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Provider} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, Editing, int, isDefined, Option, Optional, Provider, UUID} from "@opendaw/lib-std"
 import {Box, BoxGraph, IndexedBox} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
@@ -11,9 +11,18 @@ import {
     RootBox,
     TrackBox
 } from "@opendaw/studio-boxes"
-import {AudioUnitBoxAdapter, AudioUnitOrdering, RootBoxAdapter, UserEditing} from "@opendaw/studio-adapters"
+import {
+    AudioUnitBoxAdapter,
+    AudioUnitOrdering,
+    isModulatorBox,
+    RootBoxAdapter,
+    TransferUtils,
+    UserEditing
+} from "@opendaw/studio-adapters"
 import {ClipboardEntry, ClipboardHandler} from "../ClipboardManager"
 import {ClipboardUtils} from "../ClipboardUtils"
+import {BoxGraphCopy} from "../../../BoxGraphCopy"
+import {DevicesClipboard} from "./DevicesClipboardHandler"
 
 type ClipboardAudioUnits = ClipboardEntry<"audio-units">
 
@@ -52,7 +61,7 @@ export namespace AudioUnitsClipboard {
     // The exact box set copyAudioUnit serializes (excluding the audio unit itself). Exported so tests
     // exercise the real exclusion logic rather than a drifting copy.
     export const collectDependencies = (audioUnitBox: AudioUnitBox, isOutput: boolean): ReadonlyArray<Box> =>
-        Array.from(audioUnitBox.graph.dependenciesOf(audioUnitBox, {
+        TransferUtils.withModulators(Array.from(audioUnitBox.graph.dependenciesOf(audioUnitBox, {
             alwaysFollowMandatory: true,
             stopAtResources: true,
             excludeBox: (box: Box) => {
@@ -69,7 +78,25 @@ export namespace AudioUnitsClipboard {
                 }
                 return false
             }
-        }).boxes)
+        }).boxes))
+
+    export const newAudioUnitPasteOptions = (rootBox: RootBox, primaryBusUuid: UUID.Bytes): BoxGraphCopy.Options => ({
+        mapPointer: (pointer, address) => {
+            if (address.isEmpty()) {return Option.None}
+            if (pointer.pointerType === Pointers.AudioUnits) {
+                return Option.wrap(rootBox.audioUnits.address)
+            }
+            if (pointer.pointerType === Pointers.AudioOutput) {
+                return address.map(addr => addr.moveTo(primaryBusUuid))
+            }
+            if (pointer.pointerType === Pointers.MIDIDevice) {
+                return Option.wrap(rootBox.outputMidiDevices.address)
+            }
+            return DevicesClipboard.mapModulationPointer(pointer, address, rootBox.graph)
+        },
+        keepUuid: isModulatorBox,
+        excludeBox: box => DevicesClipboard.excludeExistingModulator(box, rootBox.graph)
+    })
 
     export const createHandler = ({
                                       getEnabled,
@@ -187,9 +214,13 @@ export namespace AudioUnitsClipboard {
                     if (pointer.pointerType === Pointers.MIDIDevice) {
                         return Option.wrap(rootBoxAdapter.box.outputMidiDevices.address)
                     }
-                    return Option.None
+                    return DevicesClipboard.mapModulationPointer(pointer, address, boxGraph)
                 },
-                excludeBox: box => box.name === AudioUnitBox.ClassName || box.name === AudioBusBox.ClassName || box.name === RootBox.ClassName
+                keepUuid: isModulatorBox,
+                excludeBox: box => box.name === AudioUnitBox.ClassName
+                    || box.name === AudioBusBox.ClassName
+                    || box.name === RootBox.ClassName
+                    || DevicesClipboard.excludeExistingModulator(box, boxGraph)
             }
         )
     }
@@ -202,24 +233,7 @@ export namespace AudioUnitsClipboard {
         const primaryBusAddress = rootBoxAdapter.audioBusses.adapters().at(0)?.address
         if (!primaryBusAddress) {return undefined}
         const boxes = ClipboardUtils.deserializeBoxes(
-            data,
-            boxGraph,
-            {
-                mapPointer: (pointer, address) => {
-                    if (address.isEmpty()) {return Option.None}
-                    if (pointer.pointerType === Pointers.AudioUnits) {
-                        return Option.wrap(rootBox.audioUnits.address)
-                    }
-                    if (pointer.pointerType === Pointers.AudioOutput) {
-                        return address.map(addr => addr.moveTo(primaryBusAddress.uuid))
-                    }
-                    if (pointer.pointerType === Pointers.MIDIDevice) {
-                        return Option.wrap(rootBox.outputMidiDevices.address)
-                    }
-                    return Option.None
-                }
-            }
-        )
+            data, boxGraph, newAudioUnitPasteOptions(rootBox, primaryBusAddress.uuid))
         const pastedAudioUnit = boxes.find(box => box.name === AudioUnitBox.ClassName) as AudioUnitBox | undefined
         if (!pastedAudioUnit) {return undefined}
         const insertAfterIndex = currentAudioUnit

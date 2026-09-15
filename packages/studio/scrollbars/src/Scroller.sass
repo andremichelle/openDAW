@@ -1,0 +1,51 @@
+$thickness: 8px
+
+component
+  display: flex
+  width: $thickness
+  height: $thickness
+  position: relative
+  outline: none
+
+  &:active > div
+    background-color: rgba(white, 0.25)
+
+  &:not(.floating)
+    background-color: var(--color-panel-background)
+
+  &.floating
+    position: absolute
+    border: none
+
+  &.auto-hide
+    opacity: 0
+    transition: opacity 400ms ease
+
+    &.scrolling, &:hover
+      opacity: 1
+      transition: opacity 80ms ease
+
+  &.horizontal
+    width: 100%
+    bottom: 0
+
+    > div
+      left: 0
+      top: 1px
+      bottom: 1px
+      height: calc(#{$thickness} - 2px)
+
+  &.vertical
+    right: 0
+    height: 100%
+
+    > div
+      top: 0
+      left: 1px
+      right: 1px
+      width: calc(#{$thickness} - 2px)
+
+  > div
+    border-radius: calc(#{$thickness} - 2px)
+    position: absolute
+    background-color: rgba(white, 0.3)

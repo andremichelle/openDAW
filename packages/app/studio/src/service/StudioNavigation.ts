@@ -3,6 +3,10 @@ import {RouteLocation} from "@opendaw/lib-jsx"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {ProjectProfileService} from "@/service/ProjectProfileService"
 
+// Deep links that open a project are consumed: the back button must not land on them again and re-open it.
+// Every other page (script editor, graph, ...) stays reachable with the back button.
+const ConsumedRoutes: ReadonlyArray<string> = ["/open-bundle", "/open-project", "/join"]
+
 // The project profile is the single source of truth: project open ⇔ "/create" + a studio screen,
 // no project ⇔ "/" + dashboard. Other routes are plain pages and leave everything untouched.
 // Routes never mutate state directly: "/" with an open project is a close request (confirmed when
@@ -55,10 +59,10 @@ export class StudioNavigation {
     onProjectOpened(): void {
         this.#screen.setValue("default")
         const route = RouteLocation.get()
-        if (route.path === "/") {
-            route.navigateTo("/create")
-        } else {
+        if (ConsumedRoutes.some(prefix => route.path.startsWith(prefix))) {
             route.replaceWith("/create")
+        } else {
+            route.navigateTo("/create")
         }
     }
 

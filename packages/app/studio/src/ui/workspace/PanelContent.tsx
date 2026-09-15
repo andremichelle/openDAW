@@ -33,6 +33,7 @@ export class PanelContent {
     readonly #id: string
 
     #placeholder: Option<PlaceHolder> = Option.None
+    #popoutBuilt: boolean = false
 
     constructor(factory: PanelContentFactory, panelType: PanelType) {
         this.#factory = factory
@@ -47,6 +48,7 @@ export class PanelContent {
             `Cannot have panel open in multiple location (${this.#placeholder.unwrapOrNull()?.panelState})`)
         this.#placeholder = Option.wrap({panelState, container, listener})
         if (this.isPopout) {
+            this.#restorePopout()
             listener.onPopout()
         } else if (panelState.isMinimized) {
             listener.onMinimized()
@@ -63,6 +65,13 @@ export class PanelContent {
     }
 
     get isPopout(): boolean {return Surface.getById(this.#id).nonEmpty()}
+
+    releasePopout(): void {
+        if (!this.#popoutBuilt) {return}
+        this.#terminator.terminate()
+        Surface.getById(this.#id).ifSome(surface => Html.empty(surface.ground))
+        this.#popoutBuilt = false
+    }
     get panelState(): Option<PanelState> {return this.#placeholder.map(placeholder => placeholder.panelState)}
     // True when the panel is popped-out in its own window, or embedded and
     // not minimized.
@@ -91,11 +100,13 @@ export class PanelContent {
                         this.#terminator.terminate()
                         Html.empty(container)
                         replaceChildren(surface.ground, this.#factory.create(this.#terminator, this.#panelType))
+                        this.#popoutBuilt = true
                         listener.onPopout()
                         surface.own({
                             terminate: () => {
                                 this.#terminator.terminate()
                                 Html.empty(surface.ground)
+                                this.#popoutBuilt = false
                                 this.#onSurfaceCloses()
                             }
                         })
@@ -149,6 +160,14 @@ export class PanelContent {
             panelState.isMinimized = false
             listener.onEmbed()
         }
+    }
+
+    #restorePopout(): void {
+        if (this.#popoutBuilt) {return}
+        Surface.getById(this.#id).ifSome(surface => {
+            replaceChildren(surface.ground, this.#factory.create(this.#terminator, this.#panelType))
+            this.#popoutBuilt = true
+        })
     }
 
     #closePopout(): void {Surface.getById(this.#id).ifSome(surface => surface.close())}
