@@ -46,9 +46,10 @@ hitting the studio's `Browser.isMobile()` desktop-only gate.
   `deploy/run.ts` uploads both after the studio release, and with `DOCS_ONLY=true` (workflow "Deploy openDAW
   docs") it deploys just the documentation without a studio build. Files that vanished locally are pruned.
 - The generated root `.htaccess` passes `/<env>/manuals` and `/<env>/docs` through, redirects `/manuals` to
-  `/manuals/`, adds the trailing slash to scripting-doc folder paths, and rewrites `/manuals/*` and `/docs/*` per
-  host into those folders, ahead of the studio release routing. The manual's own `.htaccess` serves Brotli files,
-  caches hashed assets and falls back to `index.html`, the scripting docs are plain folders with an `index.html`.
+  `/manuals/`, and rewrites `/manuals/*` and `/docs/*` per host into those folders, ahead of the studio release
+  routing. The manual's own `.htaccess` serves Brotli files, caches hashed assets and falls back to `index.html`.
+  `packages/studio/docs/.htaccess` (tracked, uploaded with the generated site) serves each folder's `index.html`
+  with or without trailing slash, so no mod_dir redirect leaks the internal path.
 - Studio hrefs stay relative (`/manuals/...`, `/docs/scripting/`), so they work on both hosts and on localhost.
 
 ## Scripting docs

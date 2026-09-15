@@ -90,16 +90,6 @@ RewriteRule ^ - [L]
 
 RewriteRule ^manuals$ /manuals/ [R=301,L]
 
-# The scripting docs are plain folders with an index.html each, so a folder path needs its trailing slash
-# added here, before the internal path could leak through a mod_dir redirect
-RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
-RewriteCond %{DOCUMENT_ROOT}/dev/docs/$1 -d
-RewriteRule ^docs/(.*[^/])$ /docs/$1/ [R=301,L]
-
-RewriteCond %{HTTP_HOST} ^opendaw\\.studio$ [NC]
-RewriteCond %{DOCUMENT_ROOT}/main/docs/$1 -d
-RewriteRule ^docs/(.*[^/])$ /docs/$1/ [R=301,L]
-
 RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
 RewriteRule ^(manuals|docs)/(.*)$ /dev/$1/$2 [L]
 
