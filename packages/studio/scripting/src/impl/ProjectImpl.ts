@@ -1,5 +1,5 @@
 import {AudioUnitBox, GrooveShuffleBox, ProjectMetaBox} from "@opendaw/studio-boxes"
-import {ppqn} from "@opendaw/lib-dsp"
+import {AudioData, ppqn} from "@opendaw/lib-dsp"
 import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ProjectSkeleton, Validator} from "@opendaw/studio-adapters"
 import {asInstanceOf, clamp, float, isDefined, isNull, Nullable, panic, tryCatch, UUID} from "@opendaw/lib-std"
@@ -17,6 +17,7 @@ import {
     LoopArea,
     Marker,
     MarkerProps,
+    MixdownOptions,
     Modulators,
     OutputAudioUnit,
     Project,
@@ -262,6 +263,15 @@ export class ProjectImpl implements Project {
         } else {
             this.#protocol.applyUpdates(this.#context.takeUpdates(), origin)
         }
+    }
+
+    async mixdown(options?: MixdownOptions): Promise<AudioData> {
+        this.validate()
+        const sampleRate = isDefined(options?.sampleRate) ? Guard.int32({min: 8_000, max: 192_000}, options.sampleRate, "sampleRate") : 48_000
+        if (!this.audioUnits.some(unit => unit.tracks.some(track => track.regions.length > 0 || track.clips.length > 0))) {
+            return panic(new RangeError("Project has no regions or clips to render"))
+        }
+        return this.#protocol.renderMixdown(ProjectSkeleton.encode(this.#context.skeleton.boxGraph), {sampleRate})
     }
 
     static clampBpm(value: number): number {return clamp(value, 30, 1000)}

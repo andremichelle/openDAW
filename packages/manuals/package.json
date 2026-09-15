@@ -16,7 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@opendaw/studio-enums": "^0.1.1"
+    "@opendaw/studio-enums": "^0.1.2"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",

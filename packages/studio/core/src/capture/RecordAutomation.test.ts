@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from "vitest"
-import {DefaultObservableValue, isDefined, Option, Terminable, unitValue, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, MutableObservableOption, Option, Terminable, unitValue, UUID} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {
     AudioUnitBoxAdapter,
@@ -50,6 +50,7 @@ const createFakeWorklet = () => ({
     isCountingIn: new DefaultObservableValue(false),
     markerState: new DefaultObservableValue(null),
     cpuLoad: new DefaultObservableValue(0),
+    recordingStart: new MutableObservableOption(),
     preferences: {update: () => {}, subscribeAll: () => Terminable.Empty}
 })
 

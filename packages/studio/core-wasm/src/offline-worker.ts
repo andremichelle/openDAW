@@ -38,7 +38,7 @@ import {
     ProjectSkeleton
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
-import {EngineExports} from "./engine-exports"
+import {EngineExports, takeReportMessage} from "./engine-exports"
 import {createEngineMemory, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
@@ -76,6 +76,7 @@ const renderQuantum = (engineState: EngineState, out: Float32Array[]): void => {
         // A wasm trap is an anonymous RuntimeError; the panic handler left the real message in its buffer.
         throw describeEngineTrap(engine, memory, rendered.error)
     }
+    takeReportMessage(engine, memory).ifSome(message => {throw new Error(`engine: ${message}`)})
     midi.drain(engine, memory)
     if (stems > 0) {
         // STEM export: each stem's tap lands planar in the stem staging (stem i -> channels 2i / 2i+1).
@@ -126,6 +127,9 @@ Communicator.executor<OfflineEngineProtocol>(
                     }
                     switchMarkerState(markerState: Nullable<[UUID.Bytes, int]>): void {
                         dispatcher.dispatchAndForget(this.switchMarkerState, markerState)
+                    }
+                    recordingStarted(contextTime: number, position: ppqn, generation: int): void {
+                        dispatcher.dispatchAndForget(this.recordingStarted, contextTime, position, generation)
                     }
                     ready() {dispatcher.dispatchAndForget(this.ready)}
                 })
@@ -245,7 +249,7 @@ Communicator.executor<OfflineEngineProtocol>(
                     if (reset) {engine.stop()}
                 },
                 setPosition: (position: ppqn): void => engine.set_position(position),
-                prepareRecordingState: (_countIn: boolean): void => {},
+                prepareRecordingState: (_countIn: boolean, _generation: int): void => {},
                 stopRecording: (): void => {},
                 queryLoadingComplete: (): Promise<boolean> => Promise.all(pending).then(() => true),
                 panic: (): void => {},

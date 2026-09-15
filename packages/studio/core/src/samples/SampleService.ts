@@ -20,7 +20,7 @@ export class SampleService extends AssetService<Sample, AudioData> {
 
     constructor(readonly audioContext: AudioContext, readonly bpmDetector: BpmDetector) {super()}
 
-    async importRecording(audioData: AudioData, bpm: number, name: string = "Recording"): Promise<Sample> {
+    async importRecording(uuid: UUID.Bytes, audioData: AudioData, bpm: number, name: string = "Recording"): Promise<Sample> {
         // A sample MUST have a positive length. A zero-frame take would become a duration-0 sample and, once
         // dropped, a duration-0 region that later trips validateTrack ("duration must be positive"). Reject it
         // at the door so the invariant "every sample has duration > 0" holds for every downstream consumer.
@@ -33,7 +33,7 @@ export class SampleService extends AssetService<Sample, AudioData> {
             numberOfChannels: audioData.numberOfChannels,
             sampleRate: audioData.sampleRate
         })
-        return this.importFile({name, bpm, arrayBuffer, origin: "recording"})
+        return this.importFile({uuid, name, bpm, arrayBuffer, origin: "recording"})
     }
 
     async importFile({uuid, name, bpm, arrayBuffer, progressHandler = Progress.Empty, origin = "import"}

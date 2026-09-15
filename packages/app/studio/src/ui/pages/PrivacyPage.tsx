@@ -21,6 +21,12 @@ export const PrivacyPage: PageFactory<StudioService> = ({lifecycle}: PageContext
         <h3>Data usage</h3>
         <p>openDAW does not process, analyze, or share any personal data. Files remain under your control in your chosen
             storage location.</p>
+        <h3>Visitor counting</h3>
+        <p>We count unique visitors per day. Our server derives a temporary identifier from data your browser sends
+            with every request anyway (IP address and browser version), using a secret key that is deleted within
+            24 hours, after which the identifier cannot be recreated. Nothing is stored on or read from your device,
+            and no data is shared with anyone. This counting complies with the GDPR (DSGVO) and §25 TDDDG and
+            therefore requires no consent banner.</p>
         <h3>Contact</h3>
         <p>For questions about this policy, contact: <a style={{color: Colors.blue}}
                                                         href="mailto:hello@opendaw.org">hello@opendaw.org</a>

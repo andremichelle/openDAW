@@ -1,18 +1,21 @@
 import {beforeEach, describe, expect, it} from "vitest"
-import {isInstanceOf, Option, UUID} from "@opendaw/lib-std"
-import {Address, Box, BoxEditing, PointerField} from "@opendaw/lib-box"
+import {isInstanceOf, UUID} from "@opendaw/lib-std"
+import {Box, BoxEditing, Vertex} from "@opendaw/lib-box"
 import {
     AudioUnitBox,
     AuxSendBox,
     CompressorDeviceBox,
+    CrusherDeviceBox,
     MIDIOutputDeviceBox,
     MIDIOutputParameterBox,
+    ModulationBox,
     RootBox,
+    StepsModulatorBox,
     TrackBox,
     ValueEventCollectionBox,
     ValueRegionBox
 } from "@opendaw/studio-boxes"
-import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
+import {AudioUnitType} from "@opendaw/studio-enums"
 import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {ClipboardUtils} from "../ClipboardUtils"
 import {AudioUnitsClipboard} from "./AudioUnitsClipboardHandler"
@@ -80,16 +83,9 @@ describe("AudioUnitsClipboardHandler", () => {
     const collectAudioUnitDependencies = (audioUnitBox: AudioUnitBox): ReadonlyArray<Box> =>
         AudioUnitsClipboard.collectDependencies(audioUnitBox, false)
 
-    // Mirrors AudioUnitsClipboard.pasteNewAudioUnit pointer remapping.
-    const makePasteMapper = (rootBox: RootBox, primaryBusUuid: UUID.Bytes) => ({
-        mapPointer: (pointer: PointerField, address: Option<Address>): Option<Address> => {
-            if (address.isEmpty()) {return Option.None}
-            if (pointer.pointerType === Pointers.AudioUnits) {return Option.wrap(rootBox.audioUnits.address)}
-            if (pointer.pointerType === Pointers.AudioOutput) {return address.map(addr => addr.moveTo(primaryBusUuid))}
-            if (pointer.pointerType === Pointers.MIDIDevice) {return Option.wrap(rootBox.outputMidiDevices.address)}
-            return Option.None
-        }
-    })
+    // The real pasteNewAudioUnit options, so the tests cannot drift from the handler.
+    const makePasteMapper = (rootBox: RootBox, primaryBusUuid: UUID.Bytes) =>
+        AudioUnitsClipboard.newAudioUnitPasteOptions(rootBox, primaryBusUuid)
 
     it("includes the MIDIOutputParameterBox when copying a MIDI-output unit with a CC automation lane", () => {
         const audioUnit = createAudioUnit(source)
@@ -220,5 +216,104 @@ describe("AudioUnitsClipboardHandler", () => {
         expect(pastedCompressor).toBeDefined()
         expect(pastedTracks.length).toBe(1) // local lane kept, aux-send lane dropped
         expect(pastedTracks[0].target.targetVertex.unwrap().box).toBe(pastedCompressor) // target rewired
+    })
+    // #385: a device parameter modulated by a project-level modulator (rootBox.modulators). The ModulationBox
+    // rides along through its mandatory `target`, but its mandatory `source` points OUTSIDE the unit, at the
+    // modulator. Pasting into another project (or even the same one, the mapper answered None) then panics
+    // "Pointer {ModulationBox (source) …/1 requires an edge".
+    describe("modulated parameters (#385)", () => {
+        const addCrusher = (skeleton: ProjectSkeleton, audioUnit: AudioUnitBox): CrusherDeviceBox => {
+            const {boxGraph} = skeleton
+            boxGraph.beginTransaction()
+            const crusher = CrusherDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue("Crusher")
+                box.host.refer(audioUnit.audioEffects)
+                box.index.setValue(0)
+            })
+            boxGraph.endTransaction()
+            return crusher
+        }
+        const addModulator = (skeleton: ProjectSkeleton): StepsModulatorBox => {
+            const {boxGraph, mandatoryBoxes: {rootBox}} = skeleton
+            boxGraph.beginTransaction()
+            const modulator = StepsModulatorBox.create(boxGraph, UUID.generate(), box => {
+                box.collection.refer(rootBox.modulators)
+                box.label.setValue("Steps")
+                box.index.setValue(0)
+            })
+            boxGraph.endTransaction()
+            return modulator
+        }
+        const assign = (skeleton: ProjectSkeleton, modulator: StepsModulatorBox, target: Vertex): ModulationBox => {
+            const {boxGraph} = skeleton
+            boxGraph.beginTransaction()
+            const modulation = ModulationBox.create(boxGraph, UUID.generate(), box => {
+                box.source.refer(modulator.assignments)
+                box.target.refer(target)
+                box.depth.setValue(0.25)
+                box.index.setValue(0)
+            })
+            boxGraph.endTransaction()
+            return modulation
+        }
+        const modulatorsOf = (skeleton: ProjectSkeleton): ReadonlyArray<Box> =>
+            skeleton.mandatoryBoxes.rootBox.modulators.pointerHub.incoming().map(({box}) => box)
+        const modulationsOf = (skeleton: ProjectSkeleton): ReadonlyArray<ModulationBox> =>
+            skeleton.boxGraph.boxes().filter((box): box is ModulationBox => isInstanceOf(box, ModulationBox))
+        const pasteInto = (skeleton: ProjectSkeleton, data: ArrayBufferLike): void => {
+            const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = skeleton
+            new BoxEditing(boxGraph).modify(() =>
+                ClipboardUtils.deserializeBoxes(data, boxGraph, makePasteMapper(rootBox, primaryAudioBusBox.address.uuid)))
+        }
+        const modulatedUnitBundle = (): {audioUnit: AudioUnitBox, modulator: StepsModulatorBox, data: ArrayBufferLike} => {
+            const audioUnit = createAudioUnit(source)
+            const crusher = addCrusher(source, audioUnit)
+            const modulator = addModulator(source)
+            assign(source, modulator, crusher.crush)
+            const data = ClipboardUtils.serializeBoxes([audioUnit, ...collectAudioUnitDependencies(audioUnit)])
+            return {audioUnit, modulator, data}
+        }
+
+        it("collects the modulator the assignment points at", () => {
+            const audioUnit = createAudioUnit(source)
+            const crusher = addCrusher(source, audioUnit)
+            const modulator = addModulator(source)
+            const modulation = assign(source, modulator, crusher.crush)
+            const deps = collectAudioUnitDependencies(audioUnit)
+            expect(deps).toContain(modulation)
+            expect(deps).toContain(modulator)
+        })
+
+        it("paste into another project carries the modulator and rewires the assignment to it", () => {
+            const {modulator, data} = modulatedUnitBundle()
+            expect(() => pasteInto(target, data)).not.toThrow()
+            const pastedModulators = modulatorsOf(target)
+            expect(pastedModulators.length).toBe(1)
+            expect(UUID.equals(pastedModulators[0].address.uuid, modulator.address.uuid)).toBe(true)
+            const [modulation] = modulationsOf(target)
+            expect(modulation).toBeDefined()
+            expect(modulation.source.targetVertex.unwrap().box).toBe(pastedModulators[0])
+            const pastedCrusher = target.boxGraph.boxes().find(box => isInstanceOf(box, CrusherDeviceBox)) as CrusherDeviceBox
+            expect(modulation.target.targetVertex.unwrap()).toBe(pastedCrusher.crush)
+        })
+
+        it("pasting the same bundle twice into another project shares one modulator", () => {
+            const {data} = modulatedUnitBundle()
+            pasteInto(target, data)
+            pasteInto(target, data)
+            expect(modulatorsOf(target).length).toBe(1)
+            expect(modulationsOf(target).length).toBe(2)
+            modulationsOf(target).forEach(modulation =>
+                expect(modulation.source.targetVertex.unwrap().box).toBe(modulatorsOf(target)[0]))
+        })
+
+        it("paste into the same project shares the existing modulator", () => {
+            const {modulator, data} = modulatedUnitBundle()
+            expect(() => pasteInto(source, data)).not.toThrow()
+            expect(modulatorsOf(source)).toEqual([modulator])
+            const modulations = modulationsOf(source)
+            expect(modulations.length).toBe(2)
+            modulations.forEach(modulation => expect(modulation.source.targetVertex.unwrap().box).toBe(modulator))
+        })
     })
 })

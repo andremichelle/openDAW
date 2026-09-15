@@ -5,7 +5,7 @@ import {BoxIO} from "@opendaw/studio-boxes"
 import {ScriptExecutionContext, ScriptExecutionProtocol} from "./ScriptExecutionProtocol"
 import {ScriptRunner} from "./ScriptRunner"
 import {ScriptHostProtocol} from "./ScriptHostProtocol"
-import {Sample} from "./Api"
+import {MixdownOptions, Sample} from "./Api"
 
 const messenger: Messenger = Messenger.for(self)
 
@@ -31,6 +31,12 @@ const hostProtocol = Communicator.sender<ScriptHostProtocol>(messenger.channel("
         }
         listSamples(): Promise<ReadonlyArray<Sample>> {
             return dispatcher.dispatchAndReturn(this.listSamples)
+        }
+        renderMixdown(buffer: ArrayBufferLike, options: MixdownOptions): Promise<AudioData> {
+            return dispatcher.dispatchAndReturn(this.renderMixdown, buffer, options)
+        }
+        saveFile(buffer: ArrayBuffer, fileName: string, mimeType: string): Promise<void> {
+            return dispatcher.dispatchAndReturn(this.saveFile, buffer, fileName, mimeType)
         }
     })
 

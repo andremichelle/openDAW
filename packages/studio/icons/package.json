@@ -16,10 +16,10 @@
     "test": "echo \"No tests to run\""
   },
   "dependencies": {
-    "@opendaw/lib-dom": "^0.0.89",
-    "@opendaw/lib-jsx": "^0.0.91",
-    "@opendaw/lib-std": "^0.0.84",
-    "@opendaw/studio-enums": "^0.1.1"
+    "@opendaw/lib-dom": "^0.0.90",
+    "@opendaw/lib-jsx": "^0.0.92",
+    "@opendaw/lib-std": "^0.0.85",
+    "@opendaw/studio-enums": "^0.1.2"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",

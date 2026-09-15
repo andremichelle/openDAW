@@ -3270,14 +3270,12 @@ shared_static! {
     static PANIC_MESSAGE: ([u8; PANIC_MESSAGE_CAPACITY], usize) = ([0; PANIC_MESSAGE_CAPACITY], 0);
 }
 
-#[cfg(not(test))]
-struct PanicWriter {
+struct BufferWriter {
     buffer: &'static mut [u8],
     written: usize
 }
 
-#[cfg(not(test))]
-impl core::fmt::Write for PanicWriter {
+impl core::fmt::Write for BufferWriter {
     fn write_str(&mut self, text: &str) -> core::fmt::Result {
         let bytes = text.as_bytes();
         let count = bytes.len().min(self.buffer.len() - self.written);
@@ -3307,6 +3305,41 @@ pub extern "C" fn host_panic(msg_ptr: u32, msg_len: u32) {
     *written = count;
 }
 
+// non-fatal report: the first message stands until the host clears it after `render`
+const REPORT_MESSAGE_CAPACITY: usize = 256;
+shared_static! {
+    static REPORT_MESSAGE: ([u8; REPORT_MESSAGE_CAPACITY], usize) = ([0; REPORT_MESSAGE_CAPACITY], 0);
+}
+
+pub(crate) fn report_error(args: core::fmt::Arguments) {
+    use core::fmt::Write;
+    let (buffer, written) = unsafe { REPORT_MESSAGE.get() };
+    if *written > 0 {return}
+    let mut writer = BufferWriter {buffer, written: 0};
+    let _ = writer.write_fmt(args);
+    *written = writer.written;
+}
+
+pub(crate) fn first_non_finite(left: &[f32], right: &[f32]) -> Option<(usize, usize)> {
+    let frame = |channel: &[f32]| channel.iter().position(|sample| !sample.is_finite());
+    frame(left).map(|index| (0, index)).or_else(|| frame(right).map(|index| (1, index)))
+}
+
+#[no_mangle]
+pub extern "C" fn report_message_ptr() -> *const u8 {
+    unsafe { REPORT_MESSAGE.get() }.0.as_ptr()
+}
+
+#[no_mangle]
+pub extern "C" fn report_message_len() -> usize {
+    unsafe { REPORT_MESSAGE.get() }.1
+}
+
+#[no_mangle]
+pub extern "C" fn report_message_clear() {
+    unsafe { REPORT_MESSAGE.get() }.1 = 0;
+}
+
 /// Parity probe: the REAL value stored for a UNIT automation value, the modulator's `map_parameter`.
 #[no_mangle]
 pub extern "C" fn map_modulator_parameter(kind: u32, key: u32, unit: f32) -> f32 {
@@ -3331,7 +3364,7 @@ pub extern "C" fn map_modulator_parameter(kind: u32, key: u32, unit: f32) -> f32
 fn panic(info: &core::panic::PanicInfo) -> ! {
     use core::fmt::Write;
     let (buffer, written) = unsafe { PANIC_MESSAGE.get() };
-    let mut writer = PanicWriter {buffer, written: 0};
+    let mut writer = BufferWriter {buffer, written: 0};
     let _ = write!(writer, "{}", info); // Display = "panicked at <file>:<line>: <message>"
     *written = writer.written;
     // Trap (observable RuntimeError) rather than `loop {}` (a silent hang), so a panic surfaces.
@@ -3375,5 +3408,41 @@ mod tests {
         let mut events = [note_on(5.0), note_off(20.0), update(1.0)];
         events.sort_unstable_by(compare_lifecycle);
         assert_eq!(events.iter().map(Event::position).collect::<Vec<_>>(), vec![1.0, 5.0, 20.0]);
+    }
+}
+
+#[cfg(test)]
+mod non_finite_report_tests {
+    use super::{first_non_finite, report_error, report_message_clear, report_message_len, report_message_ptr};
+
+    #[test]
+    fn finds_the_first_non_finite_sample_per_channel_order() {
+        let clean = [0.5f32; 4];
+        assert_eq!(first_non_finite(&clean, &clean), None);
+        let nan_right = [0.0f32, f32::NAN, 0.0, 0.0];
+        assert_eq!(first_non_finite(&clean, &nan_right), Some((1, 1)));
+        let inf_left = [0.0f32, 0.0, f32::INFINITY, f32::NAN];
+        assert_eq!(first_non_finite(&inf_left, &nan_right), Some((0, 2)));
+        let neg_inf = [f32::NEG_INFINITY];
+        assert_eq!(first_non_finite(&neg_inf, &[0.0]), Some((0, 0)));
+    }
+
+    fn message() -> alloc::string::String {
+        let bytes = unsafe { core::slice::from_raw_parts(report_message_ptr(), report_message_len()) };
+        alloc::string::String::from_utf8(bytes.to_vec()).unwrap()
+    }
+
+    #[test]
+    fn the_first_report_stands_until_cleared() {
+        report_message_clear();
+        assert_eq!(report_message_len(), 0);
+        report_error(format_args!("first {}", 1));
+        report_error(format_args!("second {}", 2));
+        assert_eq!(message(), "first 1");
+        report_message_clear();
+        assert_eq!(report_message_len(), 0);
+        report_error(format_args!("third"));
+        assert_eq!(message(), "third");
+        report_message_clear();
     }
 }

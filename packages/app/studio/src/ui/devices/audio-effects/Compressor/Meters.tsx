@@ -23,8 +23,9 @@ export const Meters = ({lifecycle, values}: Construct) => {
     const setMeter = (meter: SVGRectElement, top: number, bottom: number) => {
         const min = Math.min(top, bottom)
         const max = Math.max(top, bottom)
-        meter.y.baseVal.value = min
-        meter.height.baseVal.value = max - min
+        const blank = !Number.isFinite(min) || !Number.isFinite(max)
+        meter.y.baseVal.value = blank ? 0.0 : min
+        meter.height.baseVal.value = blank ? 0.0 : max - min
     }
     lifecycle.own(AnimationFrame.add(() => {
         const [inputDb, reductionDb, outputDb] = values

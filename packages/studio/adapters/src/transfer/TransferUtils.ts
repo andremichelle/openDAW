@@ -14,11 +14,13 @@ import {
     SortedSet,
     UUID
 } from "@opendaw/lib-std"
-import {AudioUnitBox, AuxSendBox, BoxIO, BoxVisitor, RootBox, TrackBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, AuxSendBox, BoxIO, BoxVisitor, ModulationBox, RootBox, TrackBox} from "@opendaw/studio-boxes"
+import {Pointers} from "@opendaw/studio-enums"
 import {Address, Box, BoxGraph, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {ProjectSkeleton} from "../project/ProjectSkeleton"
 import {AnyRegionBox, UnionBoxTypes} from "../unions"
 import {AudioUnitOrdering} from "../factories/AudioUnitOrdering"
+import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
 
 export namespace TransferUtils {
     export type UUIDMapper = { source: UUID.Bytes, target: UUID.Bytes }
@@ -28,6 +30,29 @@ export namespace TransferUtils {
     export const excludeTimelinePredicate = (box: Box): boolean =>
         box.accept<BoxVisitor<boolean>>({visitTrackBox: () => true}) === true
     export const shouldExclude = (box: Box): boolean => box.ephemeral || box.name === AuxSendBox.ClassName
+    export const keepsIdentity = (box: Box): boolean => box.resource === "preserved" || isModulatorBox(box)
+
+    // modulators live in rootBox.modulators, outside every unit; carried alone, never walked (their other assignments)
+    export const withModulators = (boxes: ReadonlyArray<Box>): ReadonlyArray<Box> => {
+        const known = UUID.newSet<Box>(box => box.address.uuid)
+        boxes.forEach(box => known.add(box))
+        const modulators: Array<Box> = []
+        boxes.forEach(box => {
+            if (!isInstanceOf(box, ModulationBox)) {return}
+            box.source.targetVertex.ifSome(({box: modulator}) => {
+                if (known.hasKey(modulator.address.uuid)) {return}
+                known.add(modulator)
+                modulators.push(modulator)
+            })
+        })
+        return [...boxes, ...modulators]
+    }
+
+    export const mapModulatorCollection = (pointer: PointerField, targetGraph: BoxGraph): Option<Address> =>
+        pointer.pointerType === Pointers.ModulatorCollection
+            ? Option.wrap(targetGraph.boxes().find(box => isInstanceOf(box, RootBox)))
+                .map(rootBox => rootBox.modulators.address)
+            : Option.None
 
     export const generateMap = (audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                                 dependencies: ReadonlyArray<Box>,
@@ -54,7 +79,7 @@ export namespace TransferUtils {
             ...dependencies
                 .map(box => ({
                     source: box.address.uuid,
-                    target: box.resource === "preserved" ? box.address.uuid : UUID.generate()
+                    target: keepsIdentity(box) ? box.address.uuid : UUID.generate()
                 }))
         ])
         return uuidMap
@@ -65,10 +90,11 @@ export namespace TransferUtils {
                               audioUnitBoxes: ReadonlyArray<AudioUnitBox>,
                               dependencies: ReadonlyArray<Box>): void => {
         const existingPreservedUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        const existingModulatorUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
         dependencies.forEach((source: Box) => {
-            if (source.resource === "preserved" && targetBoxGraph.findBox(source.address.uuid).nonEmpty()) {
-                existingPreservedUuids.add(source.address.uuid)
-            }
+            if (targetBoxGraph.findBox(source.address.uuid).isEmpty()) {return}
+            if (source.resource === "preserved") {existingPreservedUuids.add(source.address.uuid)}
+            if (isModulatorBox(source)) {existingModulatorUuids.add(source.address.uuid)}
         })
         const isOwnedByExistingPreserved = (box: Box): boolean => {
             for (const [pointer, targetAddress] of box.outgoingEdges()) {
@@ -92,6 +118,7 @@ export namespace TransferUtils {
             })
             dependencies.forEach((source: Box) => {
                 if (existingPreservedUuids.hasKey(source.address.uuid)) {return}
+                if (existingModulatorUuids.hasKey(source.address.uuid)) {return}
                 if (isOwnedByExistingPreserved(source)) {return}
                 const input = new ByteArrayInput(source.toArrayBuffer())
                 const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
@@ -153,11 +180,11 @@ export namespace TransferUtils {
             shouldExclude(box)
             || (isInstanceOf(box, TrackBox) && !trackBoxSet.has(box))
             || (UnionBoxTypes.isRegionBox(box) && !regionBoxSet.has(box))
-        const dependencies = Array.from(audioUnitBoxes[0].graph.dependenciesOf(audioUnitBoxes, {
+        const dependencies = withModulators(Array.from(audioUnitBoxes[0].graph.dependenciesOf(audioUnitBoxes, {
             alwaysFollowMandatory: true,
             stopAtResources: true,
             excludeBox
-        }).boxes)
+        }).boxes))
         const uuidMap = generateMap(
             audioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
         copyBoxes(uuidMap, boxGraph, audioUnitBoxes, dependencies)

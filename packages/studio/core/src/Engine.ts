@@ -1,7 +1,19 @@
-import {int, Nullable, ObservableValue, Observer, Procedure, Subscription, Terminable, UUID} from "@opendaw/lib-std"
+import {
+    int,
+    Nullable,
+    ObservableOption,
+    ObservableValue,
+    Observer,
+    Procedure,
+    Subscription,
+    Terminable,
+    UUID
+} from "@opendaw/lib-std"
 import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
 import {ClipNotification, EnginePreferences, NoteSignal} from "@opendaw/studio-adapters"
 import {Project} from "./project"
+
+export type RecordingStart = {readonly contextTime: number, readonly position: ppqn}
 
 export interface Engine extends Terminable {
     play(): void
@@ -31,6 +43,7 @@ export interface Engine extends Terminable {
     unregisterMonitoringSource(uuid: UUID.Bytes): void
 
     get position(): ObservableValue<ppqn>
+    get recordingStart(): ObservableOption<RecordingStart>
     get bpm(): ObservableValue<bpm>
     get isPlaying(): ObservableValue<boolean>
     get isRecording(): ObservableValue<boolean>

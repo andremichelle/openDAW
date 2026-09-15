@@ -24,13 +24,15 @@ export class SampleSelection implements ResourceSelection<Sample> {
     }
 
     async requestDevice(samples: ReadonlyArray<Sample>): Promise<void> {
-        if (!this.#service.hasProfile) {
+        const hasNoProfile = !this.#service.hasProfile
+        if (hasNoProfile) {
             await this.#service.newProject()
             if (!this.#service.hasProfile) {return}
         }
         const project = this.#service.project
         const {editing, boxGraph} = project
         editing.modify(() => {
+            if (hasNoProfile && samples.length === 1 && samples[0].bpm > 0) {project.api.setBpm(samples[0].bpm)}
             samples.forEach(sample => {
                 const {uuid: uuidAsString, name, duration: durationInSeconds, bpm} = sample
                 const uuid = UUID.parse(uuidAsString)

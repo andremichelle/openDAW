@@ -2,6 +2,7 @@ import css from "./Meters.sass?inline"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
 import {Lifecycle, ValueMapping} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
+import {meterRatio} from "@/ui/components/MeterRatio"
 import {Colors} from "@opendaw/studio-enums"
 import {gainToDb} from "@opendaw/lib-dsp"
 
@@ -76,14 +77,14 @@ export const Meters = ({lifecycle, inputPeaks, outputPeaks, reduction}: Construc
     let innerHeight = 0
 
     const setLevelMeter = (meter: SVGRectElement, dbValue: number) => {
-        const h = mapping.x(Math.round(dbValue)) * innerHeight
+        const h = meterRatio(mapping, Math.round(dbValue)) * innerHeight
         meter.y.baseVal.value = innerHeight - h
         meter.height.baseVal.value = h
     }
 
     const setReductionMeter = (meter: SVGRectElement, reductionDb: number) => {
         const h0 = (1.0 - mapping.x(0)) * innerHeight
-        const h1 = (1.0 - mapping.x(Math.min(0, reductionDb))) * innerHeight
+        const h1 = (1.0 - meterRatio(mapping, Math.min(0, reductionDb))) * innerHeight
         meter.y.baseVal.value = h0
         meter.height.baseVal.value = h1 - h0
     }

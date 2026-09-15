@@ -2,13 +2,11 @@ import css from "./TimeCodeInput.sass?inline"
 import {
     checkIndex,
     int,
-    isDefined,
     isInstanceOf,
     Lifecycle,
     MutableObservableValue,
-    safeRead,
-    tryCatch
 } from "@opendaw/lib-std"
+import {ClipboardPayload} from "./ClipboardPayload"
 import {createElement} from "@opendaw/lib-jsx"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {Events, Html} from "@opendaw/lib-dom"
@@ -71,22 +69,13 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
         }),
         Events.subscribe(element, "copy", (event: ClipboardEvent) => {
             event.preventDefault()
-            event.clipboardData?.setData("application/json", JSON.stringify({
-                app: "openDAW",
-                content: "timecode",
-                value: model.getValue()
-            }))
+            event.clipboardData?.setData("application/json", ClipboardPayload.write("timecode", model.getValue()))
         }),
         Events.subscribe(element, "paste", (event: ClipboardEvent) => {
-            const data = event.clipboardData?.getData("application/json")
-            if (isDefined(data)) {
-                const {status, value: json} = tryCatch(() => JSON.parse(data))
-                if (status === "failure") {return}
-                if (safeRead(json, "app") === "openDAW" && safeRead(json, "content") === "timecode") {
-                    event.preventDefault()
-                    model.setValue(json.value ?? 0)
-                }
-            }
+            ClipboardPayload.read(event.clipboardData?.getData("application/json"), "timecode").ifSome(value => {
+                event.preventDefault()
+                model.setValue(Number(value ?? 0))
+            })
         }),
         Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {return}

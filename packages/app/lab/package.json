@@ -1,9 +1,9 @@
 {
   "name": "@opendaw/lab",
   "private": true,
-  "version": "0.0.167",
+  "version": "0.0.168",
   "type": "module",
-  "license": "LGPL-3.0-or-later",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "CI=true vite --clearScreen false",
     "build": "tsc && vite build",
@@ -11,16 +11,16 @@
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.93",
-    "@opendaw/lib-dom": "^0.0.89",
-    "@opendaw/lib-dsp": "^0.0.92",
-    "@opendaw/lib-jsx": "^0.0.91",
-    "@opendaw/lib-runtime": "^0.0.85",
-    "@opendaw/lib-std": "^0.0.84",
-    "@opendaw/studio-adapters": "^0.3.2",
-    "@opendaw/studio-boxes": "^0.0.108",
-    "@opendaw/studio-core": "^0.2.4",
-    "@opendaw/studio-enums": "^0.1.1"
+    "@opendaw/lib-box": "^0.0.94",
+    "@opendaw/lib-dom": "^0.0.90",
+    "@opendaw/lib-dsp": "^0.0.93",
+    "@opendaw/lib-jsx": "^0.0.92",
+    "@opendaw/lib-runtime": "^0.0.86",
+    "@opendaw/lib-std": "^0.0.85",
+    "@opendaw/studio-adapters": "^0.3.3",
+    "@opendaw/studio-boxes": "^0.0.109",
+    "@opendaw/studio-core": "^0.2.5",
+    "@opendaw/studio-enums": "^0.1.2"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",

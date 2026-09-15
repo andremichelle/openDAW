@@ -14,7 +14,16 @@ import {
 } from "@opendaw/lib-std"
 import {Address, Box, BoxGraph, PointerField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
-import {ModulationBox, NoteEventCollectionBox, RootBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
+import {
+    ModulationBox,
+    NoteEventBox,
+    NoteEventCollectionBox,
+    RootBox,
+    TrackBox,
+    ValueEventBox,
+    ValueEventCollectionBox,
+    ValueEventCurveBox
+} from "@opendaw/studio-boxes"
 import {
     AudioEffectDeviceAdapter,
     BoxAdapters,
@@ -133,6 +142,16 @@ export namespace DevicesClipboard {
     // The bundle carries the modulator so a paste into ANOTHER project gets a copy. Pasting into the project the
     // copy came from must not add a second one: the existing modulator is dropped from the paste here, and
     // `mapModulationPointer` then keeps the assignment pointing at it.
+    export const isTimelineContent = (box: Box): boolean =>
+        isInstanceOf(box, TrackBox)
+        || UnionBoxTypes.isRegionBox(box)
+        || UnionBoxTypes.isClipBox(box)
+        || isInstanceOf(box, NoteEventCollectionBox)
+        || isInstanceOf(box, ValueEventCollectionBox)
+        || isInstanceOf(box, NoteEventBox)
+        || isInstanceOf(box, ValueEventBox)
+        || isInstanceOf(box, ValueEventCurveBox)
+
     export const excludeExistingModulator = (box: Box, boxGraph: BoxGraph): boolean =>
         isModulatorBox(box) && boxGraph.findBox(box.address.uuid).nonEmpty()
 
@@ -293,7 +312,9 @@ export namespace DevicesClipboard {
                 const host = optHost.unwrap()
                 const metadata = decodeMetadata(ClipboardUtils.extractMetadata(entry.data))
                 const selected = selection.selected()
-                const selectedInstrument = selected.find(adapter => adapter.type === "instrument")
+                // the selection outlives a switch of the edited unit, so only the host's own instrument is replaceable
+                const selectedInstrument = selected.find(adapter => adapter.type === "instrument"
+                    && adapter.deviceHost().inputField.address.equals(host.inputField.address))
                 const selectedMidiEffects = selected.filter(adapter => adapter.type === "midi-effect") as MidiEffectDeviceAdapter[]
                 const selectedAudioEffects = selected.filter(adapter => adapter.type === "audio-effect") as AudioEffectDeviceAdapter[]
                 let replaceInstrument = metadata.hasInstrument && isDefined(selectedInstrument)
@@ -380,20 +401,8 @@ export namespace DevicesClipboard {
                                     && DeviceHost.chainFieldOf(host, effectAccepts(box)).isEmpty()) {return true}
                                 if (replaceInstrument) {return false}
                                 if (DeviceBoxUtils.isInstrumentDeviceBox(box)) {return true}
-                                // The unit's timeline content (tracks + their regions/clips/event-collections)
-                                // is bundled only alongside an instrument, for the REPLACE case. When an
-                                // instrument is present but we are NOT replacing, none of it may be pasted: a
-                                // region deserialized without its excluded track dangles its mandatory `regions`
-                                // pointer and rejects the whole transaction (#1049-#1051). Drop the entire
-                                // timeline subtree, not just the TrackBox. (An effect-only copy has no
-                                // instrument, so its automation tracks/regions still paste.)
-                                if (metadata.hasInstrument
-                                    && (isInstanceOf(box, TrackBox)
-                                        || UnionBoxTypes.isRegionBox(box)
-                                        || UnionBoxTypes.isClipBox(box)
-                                        || isInstanceOf(box, NoteEventCollectionBox)
-                                        || isInstanceOf(box, ValueEventCollectionBox))) {return true}
-                                return false
+                                // timeline content is bundled for the REPLACE case only: pasted without its track it dangles (#1049, #1128)
+                                return metadata.hasInstrument && isTimelineContent(box)
                             }
                         }
                     )

@@ -19,19 +19,15 @@ import {
     fetchDiscordStats,
     fetchErrorStats,
     fetchGitHubStats,
-    fetchLatencyStats,
     fetchNpmWeeklyDownloads,
     fetchRoomStats,
     fetchContributors,
     fetchSponsorStats,
-    fetchUserStats,
     fetchVisitorStats,
-    fetchVisitStats,
     formatHours,
     formatNumber,
     formatRelativeDate,
     GitHubStats,
-    LatencyStats,
     minutesToHours,
     RoomStats,
     Contributor,
@@ -45,24 +41,18 @@ const NPM_PACKAGE = "@opendaw/lib-std"
 
 type DashboardData = {
     rooms: RoomStats
-    users: DailySeries
     visitors: DailySeries
-    visits: DailySeries
 }
 
 type LiveTiles = {
-    peakUsers: HTMLSpanElement
     maxVisitors: HTMLSpanElement
-    maxVisits: HTMLSpanElement
 }
 
 const unionDates = (data: DashboardData): ReadonlyArray<string> => {
     const set = new Set<string>()
     data.rooms.count.forEach(([date]) => set.add(date))
     data.rooms.duration.forEach(([date]) => set.add(date))
-    data.users.forEach(([date]) => set.add(date))
     data.visitors.forEach(([date]) => set.add(date))
-    data.visits.forEach(([date]) => set.add(date))
     return [...set].sort()
 }
 
@@ -75,9 +65,7 @@ type StatsBodyProps = {
 const StatsBody = ({lifecycle, data: rawData, tiles}: StatsBodyProps) => {
     const data: DashboardData = {
         rooms: {count: dropPartialDay(rawData.rooms.count), duration: dropPartialDay(rawData.rooms.duration)},
-        users: dropPartialDay(rawData.users),
-        visitors: dropPartialDay(rawData.visitors),
-        visits: dropPartialDay(rawData.visits)
+        visitors: dropPartialDay(rawData.visitors)
     }
     const dates = unionDates(data)
     if (dates.length === 0) {
@@ -85,29 +73,14 @@ const StatsBody = ({lifecycle, data: rawData, tiles}: StatsBodyProps) => {
     }
     const liveRoomsSeries = lifecycle.own(new DefaultObservableValue<DailySeries>(data.rooms.count))
     const liveHoursSeries = lifecycle.own(new DefaultObservableValue<DailySeries>(minutesToHours(data.rooms.duration)))
-    const peakUsersSeries = lifecycle.own(new DefaultObservableValue<DailySeries>(data.users))
     const visitorsSeries = lifecycle.own(new DefaultObservableValue<DailySeries>(data.visitors))
-    const visitsSeries = lifecycle.own(new DefaultObservableValue<DailySeries>(data.visits))
-    tiles.peakUsers.textContent = formatNumber(Math.max(0, ...data.users.map(([, value]) => value)))
     tiles.maxVisitors.textContent = formatNumber(Math.max(0, ...data.visitors.map(([, value]) => value)))
-    tiles.maxVisits.textContent = formatNumber(Math.max(0, ...data.visits.map(([, value]) => value)))
-    const latencySeries = lifecycle.own(new DefaultObservableValue<DailySeries>([]))
     return (
         <Frag>
             <div className="grid">
                 <div className="span-12">
                     <Card title="Daily Unique Visitors" accent={<span>unique visitors per day</span>} className="hero">
                         <LineChart lifecycle={lifecycle} series={visitorsSeries} color={Colors.orange.toString()}/>
-                    </Card>
-                </div>
-                <div className="span-12">
-                    <Card title="Daily Visitors" accent={<span>visits per day</span>} className="hero">
-                        <LineChart lifecycle={lifecycle} series={visitsSeries} color={Colors.red.toString()}/>
-                    </Card>
-                </div>
-                <div className="span-12">
-                    <Card title="Daily Peak Users" accent={<span>peak concurrent users</span>} className="hero">
-                        <LineChart lifecycle={lifecycle} series={peakUsersSeries} color={Colors.green.toString()}/>
                     </Card>
                 </div>
                 <div className="span-6">
@@ -121,23 +94,6 @@ const StatsBody = ({lifecycle, data: rawData, tiles}: StatsBodyProps) => {
                     </Card>
                 </div>
             </div>
-            <Await
-                factory={() => fetchLatencyStats()}
-                loading={() => null}
-                failure={() => null}
-                success={({distribution, unsupported, total}: LatencyStats) => {
-                    latencySeries.setValue(distribution)
-                    const parts = [`${formatNumber(total)} measurements`]
-                    if (unsupported > 0) {parts.push(`${formatNumber(unsupported)} unsupported`)}
-                    const subtitle = parts.join(" · ")
-                    return (
-                        <Card title="Audio Output Latency" accent={<span>{subtitle}</span>} className="compact">
-                            <BarChart lifecycle={lifecycle} series={latencySeries} color={Colors.cream.toString()}
-                                      peakLabels={true} unit="%"/>
-                        </Card>
-                    )
-                }}
-            />
         </Frag>
     )
 }
@@ -206,18 +162,14 @@ const ContributorsCard = ({contributors}: { contributors: ReadonlyArray<Contribu
 export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageContext<StudioService>) => {
     const updatedAt = new Date().toLocaleString()
     const tiles: LiveTiles = {
-        peakUsers: <span/>,
-        maxVisitors: <span/>,
-        maxVisits: <span/>
+        maxVisitors: <span/>
     }
     const dataPromise: Promise<DashboardData> = (async () => {
-        const [rooms, users, visitors, visits] = await Promise.all([
+        const [rooms, visitors] = await Promise.all([
             fetchRoomStats(),
-            fetchUserStats().catch(() => [] as DailySeries),
-            fetchVisitorStats().catch(() => [] as DailySeries),
-            fetchVisitStats().catch(() => [] as DailySeries)
+            fetchVisitorStats().catch(() => [] as DailySeries)
         ])
-        return {rooms, users, visitors, visits}
+        return {rooms, visitors}
     })()
     return (
         <div className={className} onConnect={host => lifecycle.own(installScrollbars(host))}>
@@ -280,9 +232,7 @@ export const DashboardPage: PageFactory<StudioService> = ({lifecycle}: PageConte
                     failure={() => <Tile label="All-time" value="n/a"/>}
                     success={(data: DashboardData) => <AllTimeTiles data={data}/>}
                 />
-                <Tile label="Peak users" value={tiles.peakUsers}/>
                 <Tile label="Max unique visitors" value={tiles.maxVisitors}/>
-                <Tile label="Max visitors" value={tiles.maxVisits}/>
             </div>
             <Await
                 factory={() => dataPromise}
