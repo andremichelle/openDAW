@@ -8,7 +8,7 @@ import {TourPlacement} from "./TourPlacement"
 export type TourStep = {
     screen: Workspace.ScreenKeys
     placement: TourPlacement
-    frame?: true
+    frame?: number
     headline: string
     text: string
     prepare?: Procedure<StudioService>
@@ -19,27 +19,27 @@ const browse = (scope: BrowseScope): Procedure<StudioService> => service => serv
 // Keys are the anchors. A key without a registered element shows a centered card.
 export const TourSteps: Record<TourAnchor, TourStep> = {
     menu: {
-        screen: "default", placement: "below", frame: true, headline: "openDAW Menu",
+        screen: "default", placement: "below", frame: 8, headline: "openDAW Menu",
         text: "Create, open, save and export projects here. Preferences and the debug tools live here too."
     },
     manuals: {
-        screen: "default", placement: "below", frame: true, headline: "Manuals",
+        screen: "default", placement: "below", frame: 6, headline: "Manuals",
         text: "Opens the manuals in a separate tab whenever you need more than this tour."
     },
     midi: {
-        screen: "default", placement: "below", frame: true, headline: "MIDI",
+        screen: "default", placement: "below", frame: 6, headline: "MIDI",
         text: "Enable MIDI access to play with a keyboard or controller. The capture button learns a controller for the knob you touch next."
     },
     transport: {
-        screen: "default", placement: "below", frame: true, headline: "Transport",
+        screen: "default", placement: "below", frame: 4, headline: "Transport",
         text: "Play, stop, record and loop. The metronome and count-in sit right next to it."
     },
     timecodes: {
-        screen: "default", placement: "below", frame: true, headline: "Timecodes",
+        screen: "default", placement: "below", frame: 2, headline: "Timecodes",
         text: "Shows where you are in bars and in time. Click a field to type a new position."
     },
     screens: {
-        screen: "default", placement: "below", frame: true, headline: "Screens",
+        screen: "default", placement: "below", frame: 4, headline: "Screens",
         text: "Switch between the arrangement, mixer, modulation and the special views. Each has a keyboard shortcut."
     },
     presets: {

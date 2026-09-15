@@ -9,10 +9,11 @@ component
   flex-direction: column
   row-gap: 0.75em
   font-size: 0.875rem
-  color: var(--color-black)
-  background-color: var(--color-bright)
+  color: black
+  background: rgba(white, 0.7)
+  backdrop-filter: blur(8px)
+  -webkit-backdrop-filter: blur(8px)
   border-radius: 0.75em
-  box-shadow: 0 1em 2em rgba(black, 0.4)
   transition: transform 200ms ease-out
   will-change: transform
 
@@ -24,20 +25,26 @@ component
     position: absolute
     width: 1em
     height: 1em
-    background-color: inherit
+    background-color: hsla(197, 5%, 95%, 0.55)
+    backdrop-filter: inherit
+    -webkit-backdrop-filter: inherit
     transform: translate(-50%, -50%) rotate(45deg)
 
   &[data-side="below"] > .notch
     top: 0
+    clip-path: polygon(0 0, 100% 0, 0 100%)
 
   &[data-side="above"] > .notch
     top: 100%
+    clip-path: polygon(100% 100%, 100% 0, 0 100%)
 
   &[data-side="right"] > .notch
     left: 0
+    clip-path: polygon(0 0, 0 100%, 100% 100%)
 
   &[data-side="left"] > .notch
     left: 100%
+    clip-path: polygon(0 0, 100% 0, 100% 100%)
 
   > header
     display: flex
@@ -56,11 +63,8 @@ component
       background: none
       padding: 0
       display: flex
-      color: var(--color-shadow)
+      color: var(--color-black)
       cursor: pointer
-
-      &:hover
-        color: var(--color-black)
 
       > svg
         width: 1em
@@ -77,17 +81,19 @@ component
 
     > span
       font-size: 0.75em
-      color: var(--color-shadow)
+      color: black
 
     > button.next
       appearance: none
       border: none
-      padding: 0.375em 0.75em
-      border-radius: 0.375em
+      outline: none
+      padding: 0.25em 0.5em
+      border-radius: 3px
       font: inherit
+      font-size: 0.75em
       font-weight: 600
       color: var(--color-bright)
-      background-color: var(--color-black)
+      background-color: rgba(black, 0.8)
       cursor: pointer
       display: flex
       align-items: center

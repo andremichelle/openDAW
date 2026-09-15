@@ -9,7 +9,6 @@ import {CardLayout, Rect, Size} from "./TourPlacement"
 
 const className = Html.adoptStyleSheet(css, "TourCard")
 const ringClassName = Html.adoptStyleSheet(ringCss, "TourRing")
-const RingInset = 3
 
 type Construct = {
     onClose: Exec
@@ -78,9 +77,9 @@ export class TourCard {
     layout({x, y, side, notch}: CardLayout, frame: Optional<Rect>): void {
         this.#element.style.transform = `translate(${x}px, ${y}px)`
         if (isDefined(frame)) {
-            this.#ring.style.transform = `translate(${frame.x - RingInset}px, ${frame.y - RingInset}px)`
-            this.#ring.style.width = `${frame.width + 2 * RingInset}px`
-            this.#ring.style.height = `${frame.height + 2 * RingInset}px`
+            this.#ring.style.transform = `translate(${frame.x}px, ${frame.y}px)`
+            this.#ring.style.width = `${frame.width}px`
+            this.#ring.style.height = `${frame.height}px`
             this.#ring.classList.remove("hidden")
         } else {
             this.#ring.classList.add("hidden")

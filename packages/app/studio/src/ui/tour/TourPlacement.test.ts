@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {centerCard, placeCard} from "./TourPlacement"
+import {centerCard, frameRect, placeCard} from "./TourPlacement"
 
 const viewport = {width: 1000, height: 600}
 const card = {width: 200, height: 100}
@@ -35,6 +35,10 @@ describe("TourPlacement", () => {
             .toEqual({x: 700, y: 250, side: undefined, notch: 0})
         expect(placeCard({x: 900, y: 550, width: 400, height: 400}, card, viewport, "center"))
             .toEqual({x: 792, y: 492, side: undefined, notch: 0})
+    })
+    it("inflates the frame and keeps it inside the viewport", () => {
+        expect(frameRect({x: 100, y: 10, width: 60, height: 20}, 4, viewport)).toEqual({x: 96, y: 6, width: 68, height: 28})
+        expect(frameRect({x: 100, y: 0, width: 60, height: 40}, 6, viewport)).toEqual({x: 94, y: 2, width: 72, height: 44})
     })
     it("places to the right of a panel with a vertical notch", () => {
         const layout = placeCard({x: 0, y: 40, width: 300, height: 500}, card, viewport, "right")

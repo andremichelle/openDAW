@@ -1,5 +1,5 @@
 import {createElement, RouteLocation} from "@opendaw/lib-jsx"
-import {DefaultObservableValue, EmptyExec, Option, Terminable, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, EmptyExec, isDefined, Option, Terminable, Terminator} from "@opendaw/lib-std"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
@@ -13,7 +13,7 @@ import {TourAnchors} from "./TourAnchors"
 import {TourStep, TourSteps} from "./TourSteps"
 import {TourAnchor} from "./TourAnchor"
 import {TourCard} from "./TourCard"
-import {centerCard, placeCard} from "./TourPlacement"
+import {centerCard, frameRect, placeCard} from "./TourPlacement"
 
 export namespace Tour {
     // Offered once per arrival from the dashboard or a shared bundle link, never when switching between projects.
@@ -40,10 +40,11 @@ export namespace Tour {
             okText: "Start tour",
             buttons: [{text: "Not now", onClick: handler => handler.close()}],
             content: (
-                <div style={{display: "flex", flexDirection: "column", rowGap: "1em"}}>
-                    <p>Take a quick tour of the studio?</p>
+                <div style={{display: "flex", flexDirection: "column", rowGap: "0.5em", paddingBottom: "1em"}}>
+                    <p style={{margin: "0"}}>Take a quick tour of the studio?</p>
                     <Checkbox lifecycle={lifecycle} model={never}
-                              appearance={{color: Colors.dark, activeColor: Colors.bright, cursor: "pointer"}}>
+                              style={{marginLeft: "-0.25em"}}
+                              appearance={{color: Colors.shadow, activeColor: Colors.green, cursor: "pointer"}}>
                         <span>Never show this again</span>
                         <Icon symbol={IconSymbol.Checkbox}/>
                     </Checkbox>
@@ -153,7 +154,8 @@ export namespace Tour {
                     some: element => {
                         const {x, y, width, height} = element.getBoundingClientRect()
                         const rect = {x, y, width, height}
-                        card.layout(placeCard(rect, size, viewport, step.placement), step.frame === true ? rect : undefined)
+                        card.layout(placeCard(rect, size, viewport, step.placement),
+                            isDefined(step.frame) ? frameRect(rect, step.frame, viewport) : undefined)
                     }
                 })
             }

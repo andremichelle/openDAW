@@ -30,6 +30,16 @@ const spaceFor = (side: TourSide, anchor: Rect, viewport: Size): number => {
 const needed = (side: TourSide, card: Size): number =>
     (side === "above" || side === "below" ? card.height : card.width) + Gap + Margin
 
+export const frameRect = (anchor: Rect, padding: number, viewport: Size): Rect => {
+    const x = Math.max(Margin / 4, anchor.x - padding)
+    const y = Math.max(Margin / 4, anchor.y - padding)
+    return {
+        x, y,
+        width: Math.min(viewport.width - Margin / 4, anchor.x + anchor.width + padding) - x,
+        height: Math.min(viewport.height - Margin / 4, anchor.y + anchor.height + padding) - y
+    }
+}
+
 export const centerCard = (card: Size, viewport: Size): CardLayout => ({
     x: Math.round((viewport.width - card.width) / 2),
     y: Math.round((viewport.height - card.height) / 2),
