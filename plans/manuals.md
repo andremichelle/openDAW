@@ -39,12 +39,17 @@ hitting the studio's `Browser.isMobile()` desktop-only gate.
 - Local: `npm run dev:manual` (port 8081). The studio `vite` dev server proxies `/manuals/*` to port 8081, so
   run both when testing manual links from the studio.
 
-## Open
+## Deploy
 
-1. Deploy: `deploy/run.ts` uploads only the studio dist, and the root `.htaccess` on the server routes every
-   `opendaw.studio` path into the current studio release folder. The manual app needs its own upload target and a
-   root rewrite for `/manuals/` that wins over the studio release routing (or its own host, then the studio hrefs
-   must become absolute).
+- The manual dist is uploaded to one fixed folder per environment, `/main/manuals` and `/dev/manuals`, next to
+  the release folders. `deploy/run.ts` does it after the studio upload, and with `MANUAL_ONLY=true` (workflow
+  "Deploy openDAW manuals") it deploys just the manual without a studio build. Files that vanished locally are
+  pruned from the server folder.
+- The generated root `.htaccess` passes `/main/manuals` and `/dev/manuals` through, redirects `/manuals` to
+  `/manuals/`, and rewrites `/manuals/*` per host into that folder, ahead of the studio release routing. Inside the
+  folder the app's own `.htaccess` serves Brotli files, caches hashed assets, keeps `DirectorySlash` off (page
+  paths are also content folders) and falls back to `index.html`.
+- Studio hrefs stay relative (`/manuals/...`), so they work on both hosts and on localhost via the dev proxy.
 
 ## Follow-ups
 

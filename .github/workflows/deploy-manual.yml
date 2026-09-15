@@ -1,0 +1,42 @@
+# .github/workflows/deploy-manual.yml
+name: Deploy openDAW manuals
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: ⬇️ Checkout main repo
+        uses: actions/checkout@v5
+
+      - name: 🦄 Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build manual app
+        shell: bash
+        env:
+          CI: true
+        run: |
+          npx turbo run build --filter=@opendaw/manual
+
+      - name: 🚚 Run deploy script
+        env:
+          TERM: xterm-256color
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          MANUAL_ONLY: true
+        run: |
+          npx ts-node --transpile-only deploy/run.ts

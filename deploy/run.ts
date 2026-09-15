@@ -12,6 +12,8 @@ const config = {
 
 const sftp = new SftpClient()
 const distDir = "./packages/app/studio/dist"
+const manualDistDir = "./packages/app/manual/dist"
+const manualOnly = process.env.MANUAL_ONLY === "true"
 const buildInfoPath = "./packages/app/studio/public/build-info.json"
 const branchName = process.env.BRANCH_NAME || "main"
 const isMainBranch = branchName === "main"
@@ -80,6 +82,18 @@ RewriteRule ^extract\\.php$ - [L]
 RewriteCond %{REQUEST_URI} ^/(main|dev)/releases/ [NC]
 RewriteRule ^ - [L]
 
+# Standalone manuals app: one fixed folder per environment, deployed with the studio or alone (MANUAL_ONLY=true)
+RewriteCond %{REQUEST_URI} ^/(main|dev)/manuals(/|$) [NC]
+RewriteRule ^ - [L]
+
+RewriteRule ^manuals$ /manuals/ [R=301,L]
+
+RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
+RewriteRule ^manuals/(.*)$ /dev/manuals/$1 [L]
+
+RewriteCond %{HTTP_HOST} ^opendaw\\.studio$ [NC]
+RewriteRule ^manuals/(.*)$ /main/manuals/$1 [L]
+
 # Route entry points based on hostname (only non-release paths reach here)
 RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
 RewriteRule ^(.*)$ ${devReleaseDir}/$1 [L]
@@ -100,37 +114,19 @@ RewriteRule ^(.*)$ ${mainReleaseDir}/$1 [L]
 </IfModule>
 `
 
-;(async () => {
-    await sftp.connect(config)
-
-    const {uuid} = readBuildInfo()
-    const releaseDir = `/${envFolder}/releases/${uuid}`
-    const currentCommit = execSync("git rev-parse HEAD", {encoding: "utf8"}).trim()
-    let previousCommit: string | null = null
-    try {
-        previousCommit = (await sftp.get(lastCommitFile)).toString().trim() || null
-        console.log(`last deployed commit: ${previousCommit}`)
-    } catch (err) {
-        console.log("no last-deployed-commit file found, skipping deploy summary")
-    }
-
-    console.log(`deploying branch "${branchName}" to ${domain}`)
-    console.log("creating", releaseDir)
-    await sftp.mkdir(releaseDir, true).catch(() => {})
-
-    // Compress dist directory
-    console.log("compressing dist...")
+// Uploads a dist folder as one tarball and lets extract.php unpack it next to the tarball.
+const uploadDist = async (localDir: string, remoteDir: string): Promise<void> => {
+    console.log("creating", remoteDir)
+    await sftp.mkdir(remoteDir, true).catch(() => {})
+    console.log(`compressing ${localDir}...`)
     const tarballPath = "./dist.tar.gz"
-    execSync(`tar -czf ${tarballPath} -C ${distDir} .`)
-
-    // Upload the single compressed file
-    console.log("uploading compressed dist...")
-    const remoteTarball = `${releaseDir}/dist.tar.gz`
+    execSync(`tar -czf ${tarballPath} -C ${localDir} .`)
+    console.log(`uploading to ${remoteDir}...`)
+    const remoteTarball = `${remoteDir}/dist.tar.gz`
     const startTime = Date.now()
     await sftp.put(tarballPath, remoteTarball)
     console.log(`Upload took ${((Date.now() - startTime) / 1000).toFixed(1)}s`)
-
-    // Extract on server via PHP
+    fs.unlinkSync(tarballPath)
     console.log("extracting on server via PHP...")
     const extractUrl = `https://${domain}/extract.php?file=${encodeURIComponent(remoteTarball)}`
     const extractResponse = await fetch(extractUrl)
@@ -143,11 +139,35 @@ RewriteRule ^(.*)$ ${mainReleaseDir}/$1 [L]
     if (!extractText.trim().startsWith("✅")) {
         throw new Error(`Extraction incomplete: ${extractText}`)
     }
+}
 
-    // Clean up local tarball
-    fs.unlinkSync(tarballPath)
+// The manual is unpacked over its previous version, so anything that no longer exists locally must go.
+const pruneRemote = async (localDir: string, remoteDir: string): Promise<void> => {
+    const local = new Set(fs.readdirSync(localDir))
+    for (const entry of await sftp.list(remoteDir)) {
+        const remotePath = `${remoteDir}/${entry.name}`
+        if (!local.has(entry.name)) {
+            console.log(`pruning ${remotePath}`)
+            if (entry.type === "d") {
+                await sftp.rmdir(remotePath, true)
+            } else {
+                await sftp.delete(remotePath)
+            }
+        } else if (entry.type === "d") {
+            await pruneRemote(`${localDir}/${entry.name}`, remotePath)
+        }
+    }
+}
 
-    // Read existing .htaccess or create default values
+const deployManual = async (): Promise<string> => {
+    const manualDir = `/${envFolder}/manuals`
+    await uploadDist(manualDistDir, manualDir)
+    await pruneRemote(manualDistDir, manualDir)
+    return manualDir
+}
+
+// Rewrites the root .htaccess, keeping the other environment's release folder. Pass null to keep both.
+const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> => {
     console.log("updating root .htaccess...")
     let mainReleaseDir: string | null = null
     let devReleaseDir: string | null = null
@@ -179,10 +199,12 @@ RewriteRule ^(.*)$ ${mainReleaseDir}/$1 [L]
     }
 
     // Update the appropriate release directory
-    if (isMainBranch) {
-        mainReleaseDir = releaseDir
-    } else {
-        devReleaseDir = releaseDir
+    if (newReleaseDir !== null) {
+        if (isMainBranch) {
+            mainReleaseDir = newReleaseDir
+        } else {
+            devReleaseDir = newReleaseDir
+        }
     }
 
     // Use placeholder for environments that haven't been deployed yet
@@ -195,6 +217,35 @@ RewriteRule ^(.*)$ ${mainReleaseDir}/$1 [L]
     fs.writeFileSync(tmpFile, rootHtaccess)
     await sftp.put(tmpFile, "/.htaccess")
     fs.unlinkSync(tmpFile)
+}
+
+;(async () => {
+    await sftp.connect(config)
+
+    if (manualOnly) {
+        console.log(`deploying manuals for branch "${branchName}" to ${domain}`)
+        const manualDir = await deployManual()
+        await updateRootHtaccess(null)
+        await sftp.end()
+        console.log(`✅ Manuals uploaded and activated: ${manualDir}`)
+        return
+    }
+
+    const {uuid} = readBuildInfo()
+    const releaseDir = `/${envFolder}/releases/${uuid}`
+    const currentCommit = execSync("git rev-parse HEAD", {encoding: "utf8"}).trim()
+    let previousCommit: string | null = null
+    try {
+        previousCommit = (await sftp.get(lastCommitFile)).toString().trim() || null
+        console.log(`last deployed commit: ${previousCommit}`)
+    } catch (err) {
+        console.log("no last-deployed-commit file found, skipping deploy summary")
+    }
+
+    console.log(`deploying branch "${branchName}" to ${domain}`)
+    await uploadDist(distDir, releaseDir)
+    await deployManual()
+    await updateRootHtaccess(releaseDir)
 
     await sftp.put(Buffer.from(`${currentCommit}\n`), lastCommitFile)
     await sftp.end()
