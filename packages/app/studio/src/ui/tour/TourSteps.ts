@@ -20,7 +20,7 @@ const browse = (scope: BrowseScope): Procedure<StudioService> => service => serv
 export const TourSteps: Record<TourAnchor, TourStep> = {
     menu: {
         screen: "default", placement: "below", frame: 8, headline: "openDAW Menu",
-        text: "Create, open, save and export projects here. Preferences and the debug tools live here too."
+        text: "Create, open, save and export projects here. It also imports audio and stems, joins live rooms, backs up to the cloud and opens the preferences."
     },
     manuals: {
         screen: "default", placement: "below", frame: 6, headline: "Manuals",
