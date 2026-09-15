@@ -28,6 +28,7 @@ export namespace Dialogs {
         content: JsxValue,
         okText?: string,
         buttons?: ReadonlyArray<Button>
+        leading?: JsxValue
         origin?: Element
         abortSignal?: AbortSignal
         excludeOk?: boolean
@@ -47,7 +48,7 @@ export namespace Dialogs {
 
     export const show = async (
         {
-            headline, content, okText, buttons, origin,
+            headline, content, okText, buttons, leading, origin,
             abortSignal, excludeOk, cancelable, growWidth
         }: Default): Promise<void> => {
         const actualButtons: Array<Button> = isDefined(buttons) ? [...buttons] : []
@@ -70,6 +71,7 @@ export namespace Dialogs {
                     icon={IconSymbol.System}
                     cancelable={cancelable !== false}
                     buttons={actualButtons}
+                    leading={leading}
                     growWidth={growWidth}>
                 <div style={{padding: "1em 0", color: Colors.dark.toString(), overflowY: "auto", minHeight: "0"}}
                      onConnect={element => scrollbars.own(installScrollbars(element))}>{content}</div>

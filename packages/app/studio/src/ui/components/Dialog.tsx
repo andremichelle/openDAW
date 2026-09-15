@@ -1,5 +1,5 @@
 import css from "./Dialog.sass?inline"
-import {Exec, Procedure, safeExecute, Terminator} from "@opendaw/lib-std"
+import {Exec, isDefined, Procedure, safeExecute, Terminator} from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -24,19 +24,21 @@ type Construct = {
     onCancel?: Exec
     cancelable?: boolean
     buttons?: ReadonlyArray<Button>
+    leading?: JsxValue
     style?: Partial<CSSStyleDeclaration>
     growWidth?: boolean
     error?: boolean
 }
 
 export const Dialog = (
-    {headline, icon, onCancel, buttons, cancelable, style, growWidth, error}: Construct, children: JsxValue) => {
+    {headline, icon, onCancel, buttons, leading, cancelable, style, growWidth, error}: Construct, children: JsxValue) => {
     const lifecycle = new Terminator()
     const dialog: HTMLDialogElement = (
         <dialog className={Html.buildClassList(className, error && "error", growWidth && "grow-width")} style={style}>
             <h1><Icon symbol={icon}/> <span>{headline}</span></h1>
             {children}
             <footer>
+                {isDefined(leading) && <div className="leading">{leading}</div>}
                 {buttons?.map(({onClick, primary, text}) => (
                     <Button lifecycle={lifecycle}
                             onClick={() => onClick({close: () => dialog.close()})}

@@ -39,16 +39,14 @@ export namespace Tour {
             headline: "Welcome to openDAW",
             okText: "Start tour",
             buttons: [{text: "Not now", onClick: handler => handler.close()}],
-            content: (
-                <div style={{display: "flex", flexDirection: "column", rowGap: "0.5em", paddingBottom: "1em"}}>
-                    <p style={{margin: "0"}}>Take a quick tour of the studio?</p>
-                    <Checkbox lifecycle={lifecycle} model={never}
-                              style={{marginLeft: "-0.25em"}}
-                              appearance={{color: Colors.shadow, activeColor: Colors.green, cursor: "pointer"}}>
-                        <span>Never show this again</span>
-                        <Icon symbol={IconSymbol.Checkbox}/>
-                    </Checkbox>
-                </div>
+            content: <p style={{margin: "0"}}>Take a quick tour of the studio?</p>,
+            leading: (
+                <Checkbox lifecycle={lifecycle} model={never}
+                          style={{marginLeft: "-0.25em"}}
+                          appearance={{color: Colors.shadow, activeColor: Colors.green, cursor: "pointer"}}>
+                    <span>Never show this again</span>
+                    <Icon symbol={IconSymbol.Checkbox}/>
+                </Checkbox>
             )
         }).then(() => start(service), EmptyExec).finally(() => {
             if (never.getValue()) {StudioPreferences.settings.visibility["offer-studio-tour"] = false}
@@ -98,6 +96,7 @@ export namespace Tour {
         next(): void {
             if (this.#index + 1 >= Steps.length) {
                 this.finish()
+                StudioPreferences.settings.visibility["offer-studio-tour"] = false
                 Dialogs.approve({
                     headline: "That was the tour",
                     message: "Want to read on? The manuals cover every part in depth.",
