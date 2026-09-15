@@ -57,14 +57,25 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
     if (oneBased === true) {
         lifecycle.own(StudioPreferences.subscribe(updateDigits, "time-display", "count-bars-from-zero"))
     }
+    const commit = () => {
+        const part = (index: int): int => parseInt(inputs[index].textContent ?? "") | 0
+        const bars = model.getValue() >= 0 ? part(0) - barOffset() : part(0)
+        model.setValue(units[0].amount * bars
+            + units[1].amount * (part(1) - subOffset)
+            + units[2].amount * (part(2) - subOffset)
+            + units[3].amount * part(3))
+        updateDigits()
+    }
     lifecycle.ownAll(
         model.subscribe(updateDigits),
         Events.subscribe(element, "focusin", (event: Event) => {
             if (!isInstanceOf(event.target, HTMLElement)) {return}
             Html.selectContent(event.target)
         }),
-        Events.subscribe(element, "focusout", (event: Event) => {
+        Events.subscribe(element, "focusout", (event: FocusEvent) => {
             if (!isInstanceOf(event.target, HTMLElement)) {return}
+            if (isInstanceOf(event.relatedTarget, Node) && element.contains(event.relatedTarget)) {return}
+            commit()
             Html.unselectContent(event.target)
         }),
         Events.subscribe(element, "copy", (event: ClipboardEvent) => {
@@ -97,19 +108,7 @@ export const TimeCodeInput = ({lifecycle, model, className, negativeWarning, sig
                 }
                 case "Enter": {
                     event.preventDefault()
-                    const unit = parseInt(target.textContent ?? "") | 0
-                    const prevValue = model.getValue()
-                    const {bars, beats, semiquavers, ticks} = PPQN.toParts(prevValue, upper, lower)
-                    const nextValue: int =
-                        units[0].amount * (index === 0 ? prevValue >= 0 ? unit - barOffset() : unit : bars)
-                        + units[1].amount * (index === 1 ? unit - subOffset : beats)
-                        + units[2].amount * (index === 2 ? unit - subOffset : semiquavers)
-                        + units[3].amount * (index === 3 ? unit : ticks)
-                    if (prevValue === nextValue) {
-                        updateDigits()
-                    } else {
-                        model.setValue(nextValue)
-                    }
+                    commit()
                     Html.selectContent(target)
                     break
                 }
