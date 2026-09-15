@@ -15,8 +15,8 @@ it goes. Brief text only, an overview, not a manual.
   - Not offered for engine restarts (profile unchanged), not offered while another dialog is open.
 - **Preference.** `visibility["offer-studio-tour"]` (default `true`), label
   "Offer the studio tour when a project opens". Rendered automatically by `PreferencePanel`.
-- **Manual start.** Menu entry `Studio Tour` in the openDAW menu (next to Preferences), always
-  available when a project is open. This is also the dev entry point.
+- **Manual start.** No menu entry. To see the tour again, turn the preference back on and open a
+  project from the dashboard.
 - **The card.** One headline, one short float text, a close button and a `Next` button that
   shows its shortcut (`→`). The last card's button reads `Finish`.
   - Advance: `Next` button or `ArrowRight` / `Enter`.
@@ -218,14 +218,13 @@ ui/tour/
 - `app/studio/src/ui/header/Header.tsx` register six anchors
 - `app/studio/src/ui/workspace/PanelPlaceholder.tsx` register panel anchors by `PanelType`
 - `app/studio/src/ui/timeline/Timeline.tsx`, `tracks/audio-unit/AudioUnitsTimeline.tsx` register clips/regions
-- `app/studio/src/ui/menu/*` `Studio Tour` entry
 - `app/studio/src/boot.ts` `Tour.install(service)`
 - new `app/studio/src/ui/tour/*`
 
 ## Status (2026-09-15)
 
 Implemented and checked in the browser: offer on new project, `Not now`, `Never show this again`
-(persists, offer stays away, preference visible on the preferences page), menu entry, all 19
+(persists, offer stays away, preference visible on the preferences page), all 19
 cards with notch and outline, keyboard, screen switches, finish returns to default with browser
 tab and clip visibility restored, Escape, ring only on header groups, mixer card beside the first
 strip, devices/analysis centered on their panel, manuals prompt after the last card. Not yet
@@ -233,7 +232,7 @@ checked: popped-out panel, abort on project close, resize. Design pass still ope
 
 ## Phases (browser checkpoint after each)
 
-1. Preference + offer dialog + menu entry. Card not built, `Start tour` logs. Verify the offer
+1. Preference + offer dialog. Card not built, `Start tour` logs. Verify the offer
    appears once per project open, respects checkbox and `Not now`.
 2. `TourPlacement` with tests, `TourCard`, `TourAnchors`. Show step 4 (Transport) only.
    Verify notch, clamp, resize, Escape, close button.
