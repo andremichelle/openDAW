@@ -8,6 +8,10 @@ import {App} from "./App"
 import {ToastLayer} from "./Toast"
 
 initializeColors(document.documentElement)
+await Promise.all([
+    loadFont({"font-family": "Rubik", "font-weight": 300, "font-style": "normal", "src": "/manuals/fonts/rubik-300.woff2"}),
+    loadFont({"font-family": "Rubik", "font-weight": 400, "font-style": "normal", "src": "/manuals/fonts/rubik-400.woff2"})
+])
 const terminator = new Terminator()
 replaceChildren(document.body, (
     <Frag>
@@ -16,5 +20,3 @@ replaceChildren(document.body, (
         <ToastLayer/>
     </Frag>
 ))
-loadFont({"font-family": "Rubik", "font-weight": 300, "font-style": "normal", "src": "/manuals/fonts/rubik-300.woff2"})
-loadFont({"font-family": "Rubik", "font-weight": 400, "font-style": "normal", "src": "/manuals/fonts/rubik-400.woff2"})
