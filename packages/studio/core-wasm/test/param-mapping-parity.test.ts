@@ -15,7 +15,7 @@ import {
     DelayDeviceBox, FoldDeviceBox, GateDeviceBox, NeonDeviceBox, MaximizerDeviceBox, NanoDeviceBox, NeuralAmpDeviceBox,
     PitchDeviceBox, PlayfieldDeviceBox, PlayfieldSampleBox, RevampDeviceBox, ReverbDeviceBox, StereoToolDeviceBox,
     TidalDeviceBox, VaporisateurDeviceBox, VelocityDeviceBox, VocoderDeviceBox, WaveshaperDeviceBox,
-    ApparatDeviceBox, CubedDeviceBox, GrooveShuffleBox, SoundfontDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox, ZeitgeistDeviceBox,
+    ApparatDeviceBox, CubedDeviceBox, KorpusDeviceBox, GrooveShuffleBox, SoundfontDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox, ZeitgeistDeviceBox,
     LfoModulatorBox, MacroModulatorBox, RandomModulatorBox, StepsModulatorBox
 } from "@opendaw/studio-boxes"
 import {
@@ -150,6 +150,8 @@ const buildBoxes = () => {
     const apparat = ApparatDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(apparatUnit.input))
     const cubedUnit = createUnit(7)
     const cubed = CubedDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(cubedUnit.input))
+    const korpusUnit = createUnit(11)
+    const korpus = KorpusDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(korpusUnit.input))
     const soundfontUnit = createUnit(8)
     const soundfont = SoundfontDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(soundfontUnit.input))
     const lfoModulator = LfoModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(0)})
@@ -157,7 +159,7 @@ const buildBoxes = () => {
     const macroModulator = MacroModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(2)})
     const randomModulator = RandomModulatorBox.create(boxGraph, UUID.generate(), box => {box.collection.refer(rootBox.modulators); box.index.setValue(3)})
     boxGraph.endTransaction()
-    return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, soundfont, compressor, convolver, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
+    return {boxGraph, zeitgeist, werkstatt, spielwerk, apparat, cubed, korpus, soundfont, compressor, convolver, crusher, dattorro, delay, fold, gate, maximizer, neuralAmp, revamp, reverb,
         stereoTool, tidal, vocoder, waveshaper, autotune, arpeggio, pitch, velocity, vaporisateur, neon, nano, playfieldSample,
         lfoModulator, stepsModulator, macroModulator, randomModulator}
 }
@@ -489,7 +491,8 @@ describe("every parameter accepts every wire the engine sends", () => {
 // scriptable three bind whatever their script header declares, forwarding every wire — `Modulated` included
 // — straight to the script bridge (`abi::script_param`).
 const EXTRA_CASES: ReadonlyArray<{name: string, file: string, uuid: UUID.Bytes}> = [
-    {name: "cubed", file: "device_cubed.wasm", uuid: boxes.cubed.address.uuid}
+    {name: "cubed", file: "device_cubed.wasm", uuid: boxes.cubed.address.uuid},
+    {name: "korpus", file: "device_korpus.wasm", uuid: boxes.korpus.address.uuid}
 ]
 
 const PARAMETERLESS = [

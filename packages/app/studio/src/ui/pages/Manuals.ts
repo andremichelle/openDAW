@@ -195,6 +195,12 @@ export const Manuals: ReadonlyArray<Manual> = [
                     },
                     {
                         type: "page",
+                        label: "Korpus",
+                        path: "/manuals/devices/instruments/korpus",
+                        icon: InstrumentFactories.Korpus.defaultIcon
+                    },
+                    {
+                        type: "page",
                         label: "MIDIOutput",
                         path: "/manuals/devices/instruments/midioutput",
                         icon: InstrumentFactories.MIDIOutput.defaultIcon

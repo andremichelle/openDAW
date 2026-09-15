@@ -321,6 +321,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-korpus"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "hound",
+ "libm",
+ "math",
+ "voicing",
+]
+
+[[package]]
 name = "device-maximizer"
 version = "0.0.0"
 dependencies = [
@@ -543,6 +555,12 @@ name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
+
+[[package]]
+name = "hound"
+version = "3.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62adaabb884c94955b19907d60019f4e145d091c75345379e70d1ee696f7854f"
 
 [[package]]
 name = "itertools"
