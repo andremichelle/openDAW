@@ -28,7 +28,7 @@
     "generate-api": "npx tsx scripts/generate-api.ts",
     "lint": "eslint \"**/*.ts\"",
     "test": "vitest run",
-    "docs": "typedoc && node scripts/docs-postprocess.mjs ../../app/studio/public/docs/scripting /docs/scripting/"
+    "docs": "typedoc && node scripts/docs-postprocess.mjs ../docs/scripting /docs/scripting/"
   },
   "dependencies": {
     "@opendaw/lib-box": "^0.0.94",

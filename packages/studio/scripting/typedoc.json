@@ -24,7 +24,7 @@
   "outputs": [
     {
       "name": "clean-jsdoc-theme",
-      "path": "../../app/studio/public/docs/scripting"
+      "path": "../docs/scripting"
     }
   ],
   "cleanJsdocTheme": {

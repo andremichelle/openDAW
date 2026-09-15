@@ -2,7 +2,7 @@
 
 openDAW is built with a strong focus on education. It is free to use, needs no account, and runs on any modern browser, which makes it well suited for classrooms and self-study.
 
-![Classroom](../images/classroom.webp)
+![Classroom](classroom.webp)
 
 ## For learners
 

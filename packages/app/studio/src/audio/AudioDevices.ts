@@ -2,6 +2,7 @@ import {Func, int, Option, panic} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Dialogs} from "@/ui/components/dialogs"
 import {Button} from "@/ui/components/Dialog"
+import {openManual} from "@/ui/manuals"
 
 export class AudioDevices {
     static #granted: Option<Promise<void>> = Option.None
@@ -64,7 +65,7 @@ export class AudioDevices {
         const buttons: ReadonlyArray<Button> = [{
             text: "Help",
             primary: false,
-            onClick: () => window.open("/manuals/permissions", "_blank")
+            onClick: () => openManual("/manuals/permissions")
         }, {
             text: "Cancel",
             primary: false,

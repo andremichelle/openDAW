@@ -1,6 +1,6 @@
 # Cloud Backup
 
-openDAW supports privately synchronizing your projects in [Google Drive](action://backup-google-drive) and [Dropbox](action://backup-dropbox).  
+openDAW supports privately synchronizing your projects in Google Drive and Dropbox.  
 Both services require a one-time **OAuth login**. OAuth is the official login method provided by many cloud services.
 
 ## Flow
