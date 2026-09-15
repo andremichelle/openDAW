@@ -33,8 +33,7 @@
     },
     "@opendaw/app-studio#build": {
       "dependsOn": [
-        "^build",
-        "@opendaw/manual#build"
+        "^build"
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -43,9 +42,6 @@
       "outputs": [
         "dist/**"
       ]
-    },
-    "@opendaw/manuals#build": {
-      "outputs": []
     },
     "@opendaw/studio-icons#build": {
       "outputs": []

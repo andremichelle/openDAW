@@ -6,7 +6,7 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "CI=true vite --clearScreen false --host",
-    "build": "tsc && vite build && node ./scripts/embed-manuals.mjs",
+    "build": "tsc && vite build",
     "preview": "vite preview --host",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "vitest run --config vitest.config.ts"
@@ -27,7 +27,6 @@
     "@opendaw/studio-enums": "^0.1.2",
     "@opendaw/studio-icons": "0.0.1",
     "@opendaw/studio-markdown": "0.0.1",
-    "@opendaw/manuals": "0.0.1",
     "@opendaw/studio-p2p": "^0.0.34",
     "@opendaw/studio-scripting": "^0.0.85",
     "@types/d3-force": "^3.0.10",

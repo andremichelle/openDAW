@@ -11,6 +11,7 @@ import {createDebugMenu} from "@/service/DebugMenu"
 import {connectRoom} from "@/service/StudioLiveRoomConnect"
 import {NeuralDemux} from "@/service/NeuralDemux.tsx"
 import {NextcloudDialogs} from "@/project/NextcloudDialogs"
+import {openManual} from "@/ui/manuals"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
@@ -118,7 +119,7 @@ export const populateStudioMenu = (service: StudioService) => {
                             }).setTriggerProcedure(() =>
                                 CloudBackup.backup(service.cloudAuthManager, "GoogleDrive").catch(EmptyExec)),
                             MenuItem.default({label: "Help", icon: IconSymbol.Help, separatorBefore: true})
-                                .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/cloud-backup"))
+                                .setTriggerProcedure(() => openManual("/manuals/cloud-backup"))
                         )
                     }),
                     MenuItem.default({
@@ -131,7 +132,7 @@ export const populateStudioMenu = (service: StudioService) => {
                             MenuItem.default({label: "Upload project...", selectable: service.hasProfile})
                                 .setTriggerProcedure(() => NextcloudDialogs.save(service)),
                             MenuItem.default({label: "Help", icon: IconSymbol.Help, separatorBefore: true})
-                                .setTriggerProcedure(() => RouteLocation.get().navigateTo("/manuals/nextcloud"))
+                                .setTriggerProcedure(() => openManual("/manuals/nextcloud"))
                         )
                     }),
                     MenuItem.default({

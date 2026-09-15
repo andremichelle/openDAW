@@ -780,6 +780,10 @@ export const IconLibrary = () => (
                 <path d="M18 20v-2.5"/>
                 <path d="M21 20v-1.5"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.StereoSplit)} viewBox="0 0 16 16" fill="none"
+                    stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 14c-3.311 0-6-2.689-6-6s2.689-6 6-6zM9 14c3.311 0 6-2.689 6-6s-2.689-6-6-6z"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.PlayOnce)} viewBox="0 0 24 24" fill="currentColor">
                 <path
                     d="M10.0858 12L5.29289 16.7929L6.70711 18.2071L12.9142 12L6.70711 5.79291L5.29289 7.20712L10.0858 12ZM17 6.00002L17 18H15L15 6.00002L17 6.00002Z"/>

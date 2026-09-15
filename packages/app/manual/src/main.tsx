@@ -14,5 +14,5 @@ replaceChildren(document.body, (
         {App(terminator)}
     </Frag>
 ))
-loadFont({"font-family": "Rubik", "font-weight": 300, "font-style": "normal", "src": "/fonts/rubik-300.woff2"})
-loadFont({"font-family": "Rubik", "font-weight": 400, "font-style": "normal", "src": "/fonts/rubik-400.woff2"})
+loadFont({"font-family": "Rubik", "font-weight": 300, "font-style": "normal", "src": "/manuals/fonts/rubik-300.woff2"})
+loadFont({"font-family": "Rubik", "font-weight": 400, "font-style": "normal", "src": "/manuals/fonts/rubik-400.woff2"})

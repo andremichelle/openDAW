@@ -7,7 +7,7 @@ ohne Abhängigkeit von kommerziellen Plattformen.
 
 ---
 
-![studio.png](../images/studio.png)
+![openDAW studio](studio.webp)
 
 ---
 

@@ -1,27 +1,29 @@
 import {IconSymbol} from "@opendaw/studio-enums"
 
-export type Manual = (
-    | {
+export type ManualPageEntry = {
     type: "page"
     label: string
     path: string
     icon?: IconSymbol
+    separatorBefore?: boolean
 }
-    | {
+
+export type ManualFolderEntry = {
     type: "folder"
     label: string
     icon?: IconSymbol
     files: ReadonlyArray<Manual>
-}) & { separatorBefore?: boolean }
+    separatorBefore?: boolean
+}
+
+export type Manual = ManualPageEntry | ManualFolderEntry
 
 export const isManualsIndex = (path: string): boolean => path === "/manuals" || path === "/manuals/"
 
 export const manualsMarkdownHref = (path: string): string =>
     isManualsIndex(path) ? "/manuals/index.md" : `${path}.md`
 
-export const collectManualPages = (
-    manuals: ReadonlyArray<Manual> = Manuals
-): ReadonlyArray<Extract<Manual, {type: "page"}>> =>
+export const collectManualPages = (manuals: ReadonlyArray<Manual> = Manuals): ReadonlyArray<ManualPageEntry> =>
     manuals.flatMap(manual => manual.type === "page" ? [manual] : collectManualPages(manual.files))
 
 export const Manuals: ReadonlyArray<Manual> = [
@@ -29,7 +31,7 @@ export const Manuals: ReadonlyArray<Manual> = [
         type: "folder",
         label: "General",
         files: [
-            {type: "page", label: "Introduction", path: "/manuals/introduction"},
+            {type: "page", label: "Introduction", path: "/manuals/"},
             {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
             {type: "page", label: "Automation", path: "/manuals/automation"},
             {type: "page", label: "Browser Support", path: "/manuals/browser-support"},
@@ -76,7 +78,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Gate", path: "/manuals/devices/audio/gate", icon: IconSymbol.Gate},
                     {type: "page", label: "Maximizer", path: "/manuals/devices/audio/maximizer", icon: IconSymbol.Volume},
                     {type: "page", label: "Revamp", path: "/manuals/devices/audio/revamp", icon: IconSymbol.EQ},
-                    {type: "page", label: "Stereo Split", path: "/manuals/devices/audio/stereo-composite", icon: IconSymbol.Stereo},
+                    {type: "page", label: "Stereo Split", path: "/manuals/devices/audio/stereo-composite", icon: IconSymbol.StereoSplit},
                     {type: "page", label: "Stereo Tool", path: "/manuals/devices/audio/stereotool", icon: IconSymbol.Stereo},
                     {type: "page", label: "Tidal", path: "/manuals/devices/audio/tidal", icon: IconSymbol.Tidal},
                     {type: "page", label: "Tone3000", path: "/manuals/devices/audio/neural-amp", icon: IconSymbol.Tone3000},

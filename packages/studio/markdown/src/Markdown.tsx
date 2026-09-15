@@ -1,6 +1,6 @@
 import {Browser, Clipboard, Html, ModfierKeys} from "@opendaw/lib-dom"
 import css from "./Markdown.sass?inline"
-import {Exec, isDefined, Procedure} from "@opendaw/lib-std"
+import {isDefined, Procedure} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {createElement, RouteLocation} from "@opendaw/lib-jsx"
 import markdownit from "markdown-it"
@@ -12,7 +12,6 @@ import {isManualsPath} from "./links"
 const className = Html.adoptStyleSheet(css, "Markdown")
 
 export type MarkdownOptions = {
-    actions?: Record<string, Exec>
     onCopied?: Procedure<HTMLElement>
 }
 
@@ -28,7 +27,7 @@ const replaceModifierKeys = (text: string): string => {
 }
 
 export const renderMarkdown = (element: HTMLElement, text: string, options?: MarkdownOptions) => {
-    const {actions, onCopied} = options ?? {}
+    const {onCopied} = options ?? {}
     text = replaceModifierKeys(text)
     const md = markdownit()
     md.use(markdownItTable)
@@ -38,17 +37,6 @@ export const renderMarkdown = (element: HTMLElement, text: string, options?: Mar
         img.style.maxWidth = "100%"
     })
     element.querySelectorAll("a").forEach(anchor => {
-        if (anchor.href.startsWith("action://")) {
-            const actionName = anchor.href.replace("action://", "")
-            const action = actions?.[actionName]
-            if (isDefined(action)) {
-                anchor.onclick = (event: Event) => {
-                    event.preventDefault()
-                    action()
-                }
-            }
-            return
-        }
         const url = new URL(anchor.href)
         if (url.origin !== location.origin || url.pathname.startsWith("/docs/")) {
             anchor.target = "_blank"
@@ -104,9 +92,9 @@ export const renderMarkdown = (element: HTMLElement, text: string, options?: Mar
     }
 }
 
-export const Markdown = ({text, actions, onCopied}: Construct) => {
+export const Markdown = ({text, onCopied}: Construct) => {
     if (text.startsWith("<")) {return "Invalid Markdown"}
     const element: HTMLElement = <div className={Html.buildClassList(className, "markdown")}/>
-    renderMarkdown(element, text, {actions, onCopied})
+    renderMarkdown(element, text, {onCopied})
     return element
 }

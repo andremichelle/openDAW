@@ -16,43 +16,77 @@ component
     overflow: hidden auto
     padding-right: 2em
 
-    > a.studio
-      font-size: 0.75rem
-      color: var(--color-blue)
-
-      &:hover
-        color: var(--color-bright)
-
     > nav
       display: flex
       flex-direction: column
-      row-gap: 0.25em
+      row-gap: 0.375em
       font-size: 0.75rem
-      left: -1em
-      position: relative
-      padding-left: 1em
+      line-height: 1.25em
+      user-select: none
 
-      details
-        &.separator-before
-          margin-top: 1em
+      div.folder
+        display: flex
+        flex-direction: column
+        row-gap: 0.375em
 
-        summary
-          list-style: none
+        > div.header
+          display: flex
+          align-items: center
+          column-gap: 0.125em
+          cursor: pointer
+
+          &:hover
+            color: var(--color-bright)
+
+          > span.triangle
+            box-sizing: content-box
+            width: 6px
+            padding: 0 0.5em
+            margin-left: -0.5em
+            align-self: stretch
+            display: flex
+            align-items: center
+            justify-content: center
+
+            &::before
+              content: ""
+              width: 0
+              height: 0
+              border-left: 5px solid currentColor
+              border-top: 3px solid transparent
+              border-bottom: 3px solid transparent
+              transition: transform 0.12s ease
+
+        &.expanded > div.header > span.triangle::before
+          transform: rotate(90deg)
+
+        > div.list
+          position: relative
+          display: flex
+          flex-direction: column
+          row-gap: 0.375em
+          padding-left: 1.25em
 
           &::before
-            content: "▸ "
-            display: inline-block
-            width: 1em
+            content: ""
+            position: absolute
+            left: 2.5px
+            top: 3px
+            bottom: 3px
+            width: 1px
+            background-color: color-mix(in srgb, currentColor, transparent 33%)
+            opacity: 0.3
+            pointer-events: none
 
-        &[open] > summary::before
-          content: "▾ "
-
-        nav
-          padding: 0 1em
-
-      a
-        display: block
+      a.page
+        display: flex
+        align-items: center
+        column-gap: 0.5em
         color: inherit
+        white-space: nowrap
+
+        > svg
+          opacity: 0.8
 
         &:hover
           color: var(--color-bright)

@@ -1,29 +1,62 @@
 import css from "./ManualPage.sass?inline"
-import {Await, createElement, Frag, JsxValue, LocalLink, PageContext, PageFactory} from "@opendaw/lib-jsx"
+import {Await, createElement, Frag, JsxValue, PageContext, PageFactory, RouteLocation} from "@opendaw/lib-jsx"
 import {Markdown} from "@opendaw/studio-markdown"
-import {Manual, Manuals, manualsMarkdownHref} from "@opendaw/manuals"
+import {Manual, ManualFolderEntry, ManualPageEntry, Manuals, manualsMarkdownHref} from "./Manuals"
 import {Html} from "@opendaw/lib-dom"
-import {panic} from "@opendaw/lib-std"
+import {isDefined, Lifecycle, panic} from "@opendaw/lib-std"
+import {Icon} from "@opendaw/studio-icons"
 
 const className = Html.adoptStyleSheet(css, "ManualPage")
 
-const addManuals = (manuals: ReadonlyArray<Manual>): ReadonlyArray<JsxValue> =>
+const trimSlash = (path: string): string => path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path
+
+const PageLink = ({lifecycle, manual}: { lifecycle: Lifecycle, manual: ManualPageEntry }) => {
+    const link: HTMLAnchorElement = (
+        <a className="page" href={manual.path} onclick={(event: Event) => {
+            event.preventDefault()
+            RouteLocation.get().navigateTo(manual.path)
+        }}>
+            {isDefined(manual.icon) && <Icon symbol={manual.icon}/>}
+            <span className="name">{manual.label}</span>
+        </a>
+    )
+    lifecycle.own(RouteLocation.get().catchupAndSubscribe(location =>
+        link.classList.toggle("active", trimSlash(location.path) === trimSlash(manual.path))))
+    return link
+}
+
+const Folder = ({lifecycle, manual}: { lifecycle: Lifecycle, manual: ManualFolderEntry }) => {
+    const list: HTMLElement = <div className="list">{...addManuals(lifecycle, manual.files)}</div>
+    const item: HTMLElement = (
+        <div className="folder expanded">
+            <div className="header" onclick={() => {
+                const hidden = list.classList.toggle("hidden")
+                item.classList.toggle("expanded", !hidden)
+            }}>
+                <span className="triangle"/>
+                {isDefined(manual.icon) && <Icon symbol={manual.icon}/>}
+                <span className="name">{manual.label}</span>
+            </div>
+            {list}
+        </div>
+    )
+    return item
+}
+
+const addManuals = (lifecycle: Lifecycle, manuals: ReadonlyArray<Manual>): ReadonlyArray<JsxValue> =>
     manuals.map(manual => {
         if (manual.type === "page") {
             return (
                 <Frag>
                     {manual.separatorBefore && <hr/>}
-                    <LocalLink href={manual.path}>{manual.label}</LocalLink>
+                    <PageLink lifecycle={lifecycle} manual={manual}/>
                 </Frag>
             )
         } else if (manual.type === "folder") {
             return (
                 <Frag>
                     {manual.separatorBefore && <hr/>}
-                    <details open>
-                        <summary>{manual.label}</summary>
-                        <nav>{...addManuals(manual.files)}</nav>
-                    </details>
+                    <Folder lifecycle={lifecycle} manual={manual}/>
                 </Frag>
             )
         } else {
@@ -37,15 +70,10 @@ const loadMarkdown = (path: string): Promise<string> =>
         return response.text()
     })
 
-export const ManualPage: PageFactory<null> = ({path}: PageContext<null>) => (
+export const ManualPage: PageFactory<null> = ({lifecycle, path}: PageContext<null>) => (
     <div className={className}>
         <aside>
-            <a className="studio" href="/">openDAW Studio</a>
-            <nav>
-                <LocalLink href="/manuals/">⇱</LocalLink>
-                <hr/>
-                {addManuals(Manuals)}
-            </nav>
+            <nav>{...addManuals(lifecycle, Manuals)}</nav>
         </aside>
         <div className="manual">
             <Await
