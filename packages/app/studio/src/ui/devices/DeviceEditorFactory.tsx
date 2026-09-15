@@ -20,6 +20,7 @@ import {
     ModularDeviceBox,
     NanoDeviceBox,
     NeuralAmpDeviceBox,
+    SwarmDeviceBox,
     PitchDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
@@ -66,6 +67,7 @@ import {
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
     NeuralAmpDeviceBoxAdapter,
+    SwarmDeviceBoxAdapter,
     PitchDeviceBoxAdapter,
     PlayfieldDeviceBoxAdapter,
     PlayfieldSampleBoxAdapter,
@@ -101,6 +103,7 @@ import {NeonDeviceEditor} from "@/ui/devices/instruments/NeonDeviceEditor.tsx"
 import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
 import {ApparatDeviceEditor} from "./instruments/ApparatDeviceEditor"
 import {NanoDeviceEditor} from "./instruments/NanoDeviceEditor"
+import {SwarmDeviceEditor} from "./instruments/SwarmDeviceEditor"
 import {PlayfieldDeviceEditor} from "./instruments/PlayfieldDeviceEditor"
 import {StereoToolDeviceEditor} from "./audio-effects/StereoToolDeviceEditor"
 import {PlayfieldSampleEditor} from "./instruments/PlayfieldSampleEditor"
@@ -219,6 +222,12 @@ export namespace DeviceEditorFactory {
                                   service={service}
                                   adapter={service.project.boxAdapters.adapterFor(box, NanoDeviceBoxAdapter)}
                                   deviceHost={deviceHost}/>
+            ),
+            visitSwarmDeviceBox: (box: SwarmDeviceBox): JsxValue => (
+                <SwarmDeviceEditor lifecycle={lifecycle}
+                                         service={service}
+                                         adapter={service.project.boxAdapters.adapterFor(box, SwarmDeviceBoxAdapter)}
+                                         deviceHost={deviceHost}/>
             ),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox): JsxValue => (
                 <PlayfieldDeviceEditor lifecycle={lifecycle}
