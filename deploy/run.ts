@@ -13,7 +13,8 @@ const config = {
 const sftp = new SftpClient()
 const distDir = "./packages/app/studio/dist"
 const manualDistDir = "./packages/app/manual/dist"
-const manualOnly = process.env.MANUAL_ONLY === "true"
+const docsDistDir = "./packages/studio/docs"
+const docsOnly = process.env.DOCS_ONLY === "true"
 const buildInfoPath = "./packages/app/studio/public/build-info.json"
 const branchName = process.env.BRANCH_NAME || "main"
 const isMainBranch = branchName === "main"
@@ -82,17 +83,28 @@ RewriteRule ^extract\\.php$ - [L]
 RewriteCond %{REQUEST_URI} ^/(main|dev)/releases/ [NC]
 RewriteRule ^ - [L]
 
-# Standalone manuals app: one fixed folder per environment, deployed with the studio or alone (MANUAL_ONLY=true)
-RewriteCond %{REQUEST_URI} ^/(main|dev)/manuals(/|$) [NC]
+# Documentation: the manuals app and the generated scripting docs live in one fixed folder each per
+# environment, deployed with the studio or alone (DOCS_ONLY=true)
+RewriteCond %{REQUEST_URI} ^/(main|dev)/(manuals|docs)(/|$) [NC]
 RewriteRule ^ - [L]
 
 RewriteRule ^manuals$ /manuals/ [R=301,L]
 
+# The scripting docs are plain folders with an index.html each, so a folder path needs its trailing slash
+# added here, before the internal path could leak through a mod_dir redirect
 RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
-RewriteRule ^manuals/(.*)$ /dev/manuals/$1 [L]
+RewriteCond %{DOCUMENT_ROOT}/dev/docs/$1 -d
+RewriteRule ^docs/(.*[^/])$ /docs/$1/ [R=301,L]
 
 RewriteCond %{HTTP_HOST} ^opendaw\\.studio$ [NC]
-RewriteRule ^manuals/(.*)$ /main/manuals/$1 [L]
+RewriteCond %{DOCUMENT_ROOT}/main/docs/$1 -d
+RewriteRule ^docs/(.*[^/])$ /docs/$1/ [R=301,L]
+
+RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
+RewriteRule ^(manuals|docs)/(.*)$ /dev/$1/$2 [L]
+
+RewriteCond %{HTTP_HOST} ^opendaw\\.studio$ [NC]
+RewriteRule ^(manuals|docs)/(.*)$ /main/$1/$2 [L]
 
 # Route entry points based on hostname (only non-release paths reach here)
 RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
@@ -159,12 +171,17 @@ const pruneRemote = async (localDir: string, remoteDir: string): Promise<void> =
     }
 }
 
-const deployManual = async (): Promise<string> => {
-    const manualDir = `/${envFolder}/manuals`
-    await uploadDist(manualDistDir, manualDir)
-    await pruneRemote(manualDistDir, manualDir)
-    return manualDir
+const deployFixed = async (localDir: string, name: string): Promise<string> => {
+    const remoteDir = `/${envFolder}/${name}`
+    await uploadDist(localDir, remoteDir)
+    await pruneRemote(localDir, remoteDir)
+    return remoteDir
 }
+
+const deployDocs = async (): Promise<ReadonlyArray<string>> => [
+    await deployFixed(manualDistDir, "manuals"),
+    await deployFixed(docsDistDir, "docs")
+]
 
 // Rewrites the root .htaccess, keeping the other environment's release folder. Pass null to keep both.
 const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> => {
@@ -222,12 +239,12 @@ const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> =
 ;(async () => {
     await sftp.connect(config)
 
-    if (manualOnly) {
-        console.log(`deploying manuals for branch "${branchName}" to ${domain}`)
-        const manualDir = await deployManual()
+    if (docsOnly) {
+        console.log(`deploying docs for branch "${branchName}" to ${domain}`)
+        const dirs = await deployDocs()
         await updateRootHtaccess(null)
         await sftp.end()
-        console.log(`✅ Manuals uploaded and activated: ${manualDir}`)
+        console.log(`✅ Docs uploaded and activated: ${dirs.join(", ")}`)
         return
     }
 
@@ -244,7 +261,7 @@ const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> =
 
     console.log(`deploying branch "${branchName}" to ${domain}`)
     await uploadDist(distDir, releaseDir)
-    await deployManual()
+    await deployDocs()
     await updateRootHtaccess(releaseDir)
 
     await sftp.put(Buffer.from(`${currentCommit}\n`), lastCommitFile)

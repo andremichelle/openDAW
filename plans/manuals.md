@@ -41,15 +41,21 @@ hitting the studio's `Browser.isMobile()` desktop-only gate.
 
 ## Deploy
 
-- The manual dist is uploaded to one fixed folder per environment, `/main/manuals` and `/dev/manuals`, next to
-  the release folders. `deploy/run.ts` does it after the studio upload, and with `MANUAL_ONLY=true` (workflow
-  "Deploy openDAW manuals") it deploys just the manual without a studio build. Files that vanished locally are
-  pruned from the server folder.
-- The generated root `.htaccess` passes `/main/manuals` and `/dev/manuals` through, redirects `/manuals` to
-  `/manuals/`, and rewrites `/manuals/*` per host into that folder, ahead of the studio release routing. Inside the
-  folder the app's own `.htaccess` serves Brotli files, caches hashed assets, keeps `DirectorySlash` off (page
-  paths are also content folders) and falls back to `index.html`.
-- Studio hrefs stay relative (`/manuals/...`), so they work on both hosts and on localhost via the dev proxy.
+- Documentation is deployed to one fixed folder each per environment, next to the release folders: the manual
+  dist to `/<env>/manuals`, the generated scripting docs to `/<env>/docs` (site at `/<env>/docs/scripting`).
+  `deploy/run.ts` uploads both after the studio release, and with `DOCS_ONLY=true` (workflow "Deploy openDAW
+  docs") it deploys just the documentation without a studio build. Files that vanished locally are pruned.
+- The generated root `.htaccess` passes `/<env>/manuals` and `/<env>/docs` through, redirects `/manuals` to
+  `/manuals/`, adds the trailing slash to scripting-doc folder paths, and rewrites `/manuals/*` and `/docs/*` per
+  host into those folders, ahead of the studio release routing. The manual's own `.htaccess` serves Brotli files,
+  caches hashed assets and falls back to `index.html`, the scripting docs are plain folders with an `index.html`.
+- Studio hrefs stay relative (`/manuals/...`, `/docs/scripting/`), so they work on both hosts and on localhost.
+
+## Scripting docs
+
+TypeDoc renders `packages/studio/scripting/src/Api.ts` plus the guide markdown into `packages/studio/docs/scripting`
+(gitignored, `npm run docs` in the scripting package, part of its build). The studio no longer carries the site,
+its dev server serves that folder at `/docs/` so the links keep working locally.
 
 ## Follow-ups
 

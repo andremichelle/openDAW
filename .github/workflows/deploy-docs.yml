@@ -1,5 +1,5 @@
-# .github/workflows/deploy-manual.yml
-name: Deploy openDAW manuals
+# .github/workflows/deploy-docs.yml
+name: Deploy openDAW docs
 
 on:
   workflow_dispatch:
@@ -22,12 +22,12 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
 
-      - name: 🏗️ Build manual app
+      - name: 🏗️ Build manual app and scripting docs
         shell: bash
         env:
           CI: true
         run: |
-          npx turbo run build --filter=@opendaw/manual
+          npx turbo run build --filter=@opendaw/manual --filter=@opendaw/studio-scripting
 
       - name: 🚚 Run deploy script
         env:
@@ -37,6 +37,6 @@ jobs:
           SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
           SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
           BRANCH_NAME: ${{ github.ref_name }}
-          MANUAL_ONLY: true
+          DOCS_ONLY: true
         run: |
           npx ts-node --transpile-only deploy/run.ts
