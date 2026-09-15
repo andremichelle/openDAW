@@ -169,6 +169,21 @@ impl Envelope {
 
     fn advance(&mut self, spec: &EnvelopeSpec, dt: f32, pitch: bool, min_full_swing: f32) -> f32 {
         if self.holding {
+            if !self.releasing {
+                // Chase the live sustain level so panel edits reach holding voices.
+                let stage = self.stage.min(STAGES - 1);
+                let rate = spec.rates[stage].clamp(0.0, 99.0);
+                let (target, step) = if pitch {
+                    (pitch_semitones(spec.levels[stage]), PITCH_RANGE_SEMITONES * dt / full_swing_seconds_pitch(rate))
+                } else {
+                    (spec.levels[stage].clamp(0.0, 99.0), 99.0 * dt / full_swing_seconds(rate).max(min_full_swing))
+                };
+                if self.value < target {
+                    self.value = (self.value + step).min(target);
+                } else if self.value > target {
+                    self.value = (self.value - step).max(target);
+                }
+            }
             return self.value;
         }
         let end = spec.end.clamp(1, STAGES as i32) as usize;
@@ -255,6 +270,32 @@ mod tests {
         let released = run(&mut env, &spec, 0.5);
         assert_eq!(released, 0.0, "the post-sustain tail ran to the end level");
         assert!(env.finished(), "released and at the end: finished");
+    }
+
+    #[test]
+    fn holding_chases_a_live_sustain_level_edit() {
+        // A voice parked at sustain must follow spec edits (the input-window
+        // Hold/Colour macros write the sustain level while notes sound),
+        // walking at the sustain step's own rate. A released voice must not.
+        let mut spec = EnvelopeSpec {
+            rates: [99.0; STAGES],
+            levels: [99.0, 50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            sustain: 1,
+            end: 3
+        };
+        let mut env = Envelope::default();
+        env.start();
+        assert_eq!(run(&mut env, &spec, 0.1), 99.0, "held at the original level");
+        spec.levels[0] = 20.0;
+        assert_eq!(run(&mut env, &spec, 0.5), 20.0, "chased down to the edited level");
+        spec.levels[0] = 70.0;
+        assert_eq!(run(&mut env, &spec, 0.5), 70.0, "chased back up");
+        env.release(&spec);
+        let released = run(&mut env, &spec, 0.5);
+        assert_eq!(released, 0.0, "release still runs the tail to silence");
+        spec.levels[0] = 99.0;
+        assert_eq!(run(&mut env, &spec, 0.1), 0.0, "a finished voice stays silent");
+        assert!(env.finished());
     }
 
     #[test]
