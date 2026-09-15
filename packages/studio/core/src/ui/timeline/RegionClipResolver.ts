@@ -159,6 +159,17 @@ export class RegionClipResolver {
         return tasks
     }
 
+    // Fold a within-tolerance remainder into the empty side so RegionEditing.clip never carves a degenerate part.
+    static classifySeparation(region: AnyRegionBoxAdapter, begin: ppqn, end: ppqn):
+        "delete" | "start" | "complete" | "clip" {
+        const leftEmpty = begin <= region.position // position is an Int32 box field, so the left edge never drifts
+        const rightEmpty = end >= region.complete - boundaryTolerance(region.complete)
+        if (leftEmpty && rightEmpty) {return "delete"}
+        if (leftEmpty) {return "start"}
+        if (rightEmpty) {return "complete"}
+        return "clip"
+    }
+
     static sortAndJoinMasks(masks: ReadonlyArray<Mask>): ReadonlyArray<Mask> {
         if (masks.length === 0) {return panic("No clip-masks to solve")}
         if (masks.length === 1) {return [masks[0]]}
@@ -243,12 +254,12 @@ export class RegionClipResolver {
                 case "separate": {
                     const begin = Math.floor(task.begin)
                     const end = Math.ceil(task.end)
-                    const leftEmpty = begin <= region.position
-                    const rightEmpty = end >= region.complete
-                    if (leftEmpty && rightEmpty) {region.box.delete()}
-                    else if (leftEmpty) {this.#trimStart(region, end)}
-                    else if (rightEmpty) {this.#trimComplete(region, begin)}
-                    else {RegionEditing.clip(region, begin, end)}
+                    switch (RegionClipResolver.classifySeparation(region, begin, end)) {
+                        case "delete": region.box.delete(); break
+                        case "start": this.#trimStart(region, end); break
+                        case "complete": this.#trimComplete(region, begin); break
+                        case "clip": RegionEditing.clip(region, begin, end); break
+                    }
                     break
                 }
             }
