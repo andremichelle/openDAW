@@ -41,6 +41,7 @@ import {AudioData} from "@opendaw/lib-dsp"
 import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
 import {TouchContextMenu} from "@/ui/TouchContextMenu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
@@ -155,6 +156,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
     document.querySelector("#preloader")?.remove()
     replaceChildren(surface.ground, App(service))
+    Tour.install(service)
     AnimationFrame.start(window)
     installCursors()
     RuntimeNotifier.install({

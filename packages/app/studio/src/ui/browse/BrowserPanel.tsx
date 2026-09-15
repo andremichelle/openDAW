@@ -1,5 +1,5 @@
 import css from "./BrowserPanel.sass?inline"
-import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
+import {Lifecycle, Terminator} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
 import {createElement, DomElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
@@ -17,7 +17,7 @@ type Construct = {
 }
 
 export const BrowserPanel = ({lifecycle, service}: Construct) => {
-    const scope = new DefaultObservableValue(BrowseScope.Presets)
+    const scope = service.layout.browseScope
     const placeholder: DomElement = <Group/>
     const contentLifecycle = lifecycle.own(new Terminator())
     lifecycle.own(scope.catchupAndSubscribe(owner => {

@@ -1,11 +1,13 @@
 import {PanelContentFactory} from "@/ui/workspace/PanelContents.tsx"
-import {DomElement, replaceChildren} from "@opendaw/lib-jsx"
-import {assert, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {DomElement, JsxValue, replaceChildren} from "@opendaw/lib-jsx"
+import {assert, isDefined, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {PanelState} from "@/ui/workspace/PanelState.ts"
 import {Surface} from "../surface/Surface"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {Html} from "@opendaw/lib-dom"
+import {TourAnchor} from "@/ui/tour/TourAnchor"
+import {TourAnchors} from "@/ui/tour/TourAnchors"
 
 export type PlaceHolder = {
     panelState: PanelState
@@ -23,6 +25,13 @@ export interface PanelContentHandler extends Terminable {
     togglePopout(): void
     toggleMinimize(): void
     isPopout(): boolean
+}
+
+const PanelAnchors: Partial<Record<PanelType, ReadonlyArray<TourAnchor>>> = {
+    [PanelType.BrowserPanel]: ["presets", "samples", "soundfonts"],
+    [PanelType.DevicePanel]: ["devices"],
+    [PanelType.Analysis]: ["analysis"],
+    [PanelType.Modulation]: ["modulation"]
 }
 
 export class PanelContent {
@@ -53,7 +62,7 @@ export class PanelContent {
         } else if (panelState.isMinimized) {
             listener.onMinimized()
         } else {
-            replaceChildren(container, this.#factory.create(this.#terminator, this.#panelType))
+            replaceChildren(container, this.#createContent())
             listener.onEmbed()
         }
         return {
@@ -99,7 +108,7 @@ export class PanelContent {
                     some: surface => {
                         this.#terminator.terminate()
                         Html.empty(container)
-                        replaceChildren(surface.ground, this.#factory.create(this.#terminator, this.#panelType))
+                        replaceChildren(surface.ground, this.#createContent())
                         this.#popoutBuilt = true
                         listener.onPopout()
                         surface.own({
@@ -127,7 +136,7 @@ export class PanelContent {
         if (this.isPopout) {
             this.#closePopout()
         } else if (panelState.isMinimized) {
-            replaceChildren(container, this.#factory.create(this.#terminator, this.#panelType))
+            replaceChildren(container, this.#createContent())
             panelState.isMinimized = false
             listener.onEmbed()
         } else {
@@ -156,7 +165,7 @@ export class PanelContent {
         if (panelState.isMinimized) {
             listener.onMinimized()
         } else {
-            replaceChildren(container, this.#factory.create(this.#terminator, this.#panelType))
+            replaceChildren(container, this.#createContent())
             panelState.isMinimized = false
             listener.onEmbed()
         }
@@ -165,10 +174,17 @@ export class PanelContent {
     #restorePopout(): void {
         if (this.#popoutBuilt) {return}
         Surface.getById(this.#id).ifSome(surface => {
-            replaceChildren(surface.ground, this.#factory.create(this.#terminator, this.#panelType))
+            replaceChildren(surface.ground, this.#createContent())
             this.#popoutBuilt = true
         })
     }
 
     #closePopout(): void {Surface.getById(this.#id).ifSome(surface => surface.close())}
+
+    #createContent(): JsxValue {
+        const content = this.#factory.create(this.#terminator, this.#panelType)
+        const anchors = PanelAnchors[this.#panelType]
+        if (isDefined(anchors) && content instanceof Element) {TourAnchors.register(this.#terminator, content, ...anchors)}
+        return content
+    }
 }

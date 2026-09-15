@@ -1,0 +1,99 @@
+component
+  position: fixed
+  top: 0
+  left: 0
+  z-index: 9999
+  width: 20em
+  padding: 1em 1.25em
+  display: flex
+  flex-direction: column
+  row-gap: 0.75em
+  font-size: 0.875rem
+  color: var(--color-black)
+  background-color: var(--color-bright)
+  border-radius: 0.75em
+  box-shadow: 0 1em 2em rgba(black, 0.4)
+  transition: transform 200ms ease-out
+  will-change: transform
+
+  &.measuring
+    visibility: hidden
+    transition: none
+
+  > .notch
+    position: absolute
+    width: 1em
+    height: 1em
+    background-color: inherit
+    transform: translate(-50%, -50%) rotate(45deg)
+
+  &[data-side="below"] > .notch
+    top: 0
+
+  &[data-side="above"] > .notch
+    top: 100%
+
+  &[data-side="right"] > .notch
+    left: 0
+
+  &[data-side="left"] > .notch
+    left: 100%
+
+  > header
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+
+    > h1
+      flex: 1 0 0
+      margin: 0
+      font-size: 1.125em
+      font-weight: 700
+
+    > button.close
+      appearance: none
+      border: none
+      background: none
+      padding: 0
+      display: flex
+      color: var(--color-shadow)
+      cursor: pointer
+
+      &:hover
+        color: var(--color-black)
+
+      > svg
+        width: 1em
+        height: 1em
+
+  > p
+    margin: 0
+    line-height: 1.4
+
+  > footer
+    display: flex
+    align-items: center
+    justify-content: space-between
+
+    > span
+      font-size: 0.75em
+      color: var(--color-shadow)
+
+    > button.next
+      appearance: none
+      border: none
+      padding: 0.375em 0.75em
+      border-radius: 0.375em
+      font: inherit
+      font-weight: 600
+      color: var(--color-bright)
+      background-color: var(--color-black)
+      cursor: pointer
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+
+      > kbd
+        font: inherit
+        font-size: 0.75em
+        opacity: 0.6

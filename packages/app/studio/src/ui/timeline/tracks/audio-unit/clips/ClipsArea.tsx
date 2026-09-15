@@ -1,4 +1,5 @@
 import css from "./ClipsArea.sass?inline"
+import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {
     clamp,
     int,
@@ -47,6 +48,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
     const {selection, boxAdapters, editing, userEditingManager} = project
     const dropPreview: HTMLElement = (<div className="drop-target" tabIndex={-1}/>)
     const element: HTMLElement = (<div className={className} tabIndex={-1}>{dropPreview}</div>)
+    TourAnchors.register(lifecycle, element, "clips")
     const clipSelection: Selection<AnyClipBoxAdapter> = lifecycle.own(selection
         .createFilteredSelection(isVertexOfBox(UnionBoxTypes.isClipBox), {
             fx: (adapter: AnyClipBoxAdapter) => adapter.box,

@@ -10,14 +10,16 @@ export const StudioSettingsSchema = z.object({
         "auto-open-clips": z.boolean(),
         "base-frequency": z.boolean(),
         "toasts": z.boolean(),
-        "show-output-track": z.boolean()
+        "show-output-track": z.boolean(),
+        "offer-studio-tour": z.boolean()
     }).default({
         "visible-help-hints": true,
         "enable-history-buttons": navigator.maxTouchPoints > 0,
         "auto-open-clips": true,
         "base-frequency": false,
         "toasts": true,
-        "show-output-track": false
+        "show-output-track": false,
+        "offer-studio-tour": true
     }),
     "time-display": z.object({
         "musical": z.boolean(),

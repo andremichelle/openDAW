@@ -12,6 +12,7 @@ import {connectRoom} from "@/service/StudioLiveRoomConnect"
 import {NeuralDemux} from "@/service/NeuralDemux.tsx"
 import {NextcloudDialogs} from "@/project/NextcloudDialogs"
 import {openManual} from "@/ui/manuals"
+import {Tour} from "@/ui/tour/Tour"
 
 export const populateStudioMenu = (service: StudioService) => {
     const Global = GlobalShortcuts
@@ -140,6 +141,12 @@ export const populateStudioMenu = (service: StudioService) => {
                         separatorBefore: true,
                         icon: IconSymbol.Code
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/scripting")),
+                    MenuItem.default({
+                        label: "Studio Tour",
+                        separatorBefore: true,
+                        selectable: service.hasProfile,
+                        icon: IconSymbol.Help
+                    }).setTriggerProcedure(() => Tour.start(service)),
                     MenuItem.default({
                         label: "Preferences",
                         shortcut: GlobalShortcuts["show-preferences"].shortcut.format(),
