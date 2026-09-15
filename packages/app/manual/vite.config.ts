@@ -15,7 +15,7 @@ export default defineConfig(({command}) => ({
         target: "esnext"
     },
     optimizeDeps: {
-        exclude: ["@opendaw/studio-icons", "@opendaw/studio-markdown"]
+        exclude: ["@opendaw/studio-icons", "@opendaw/studio-markdown", "@opendaw/studio-scrollbars"]
     },
     clearScreen: false,
     server: {

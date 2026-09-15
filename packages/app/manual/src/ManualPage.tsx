@@ -5,6 +5,9 @@ import {Manual, ManualFolderEntry, ManualPageEntry, Manuals, manualsMarkdownHref
 import {Html} from "@opendaw/lib-dom"
 import {isDefined, Lifecycle, panic} from "@opendaw/lib-std"
 import {Icon} from "@opendaw/studio-icons"
+import {installScrollbars} from "@opendaw/studio-scrollbars"
+import {IconSymbol} from "@opendaw/studio-enums"
+import {toast} from "./Toast"
 
 const className = Html.adoptStyleSheet(css, "ManualPage")
 
@@ -72,15 +75,15 @@ const loadMarkdown = (path: string): Promise<string> =>
 
 export const ManualPage: PageFactory<null> = ({lifecycle, path}: PageContext<null>) => (
     <div className={className}>
-        <aside>
+        <aside onConnect={host => lifecycle.own(installScrollbars(host))}>
             <nav>{...addManuals(lifecycle, Manuals)}</nav>
         </aside>
-        <div className="manual">
+        <div className="manual" onConnect={host => lifecycle.own(installScrollbars(host))}>
             <Await
                 factory={() => loadMarkdown(path)}
                 failure={(error) => `Unknown request (${error.reason})`}
                 loading={() => <p>Loading…</p>}
-                success={text => <Markdown text={text}/>}
+                success={text => <Markdown text={text} onCopied={() => toast("Copied to clipboard", IconSymbol.Copy)}/>}
             />
         </div>
     </div>

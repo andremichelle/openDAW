@@ -1,0 +1,29 @@
+component
+  font-size: 1rem
+  display: flex
+  align-items: center
+  column-gap: 0.5em
+  padding: 0.5em 1em
+  outline: none
+  border: none
+  border-radius: 2em
+  color: var(--color-bright)
+  box-shadow: 0 0 0 0.5px rgba(white, 0.1), 0 2em 1.5em 0 rgba(black, 0.3)
+  backdrop-filter: blur(2px)
+  background-color: color-mix(in srgb, var(--color-panel-background-dark), transparent 5%)
+  pointer-events: auto
+  transition: opacity 0.2s ease, transform 0.2s ease
+
+  > svg
+    flex: 0 0 auto
+    width: 1.5em !important
+    height: 1.5em !important
+
+  > span
+    font-size: 1em
+    max-width: 24em
+    text-align: center
+
+  &.leaving
+    opacity: 0
+    transform: translateY(-0.5em)

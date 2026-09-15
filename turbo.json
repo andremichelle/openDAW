@@ -49,6 +49,12 @@
       ],
       "outputs": []
     },
+    "@opendaw/studio-scrollbars#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
     "@opendaw/studio-markdown#build": {
       "dependsOn": [
         "^build"

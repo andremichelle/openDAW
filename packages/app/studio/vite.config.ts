@@ -33,7 +33,7 @@ export default defineConfig(({command}) => {
         },
         optimizeDeps: {
             exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util", "monaco-editor", "onnxruntime-web",
-                "@opendaw/studio-icons", "@opendaw/studio-markdown"]
+                "@opendaw/studio-icons", "@opendaw/studio-markdown", "@opendaw/studio-scrollbars"]
         },
         build: {
             target: "esnext",

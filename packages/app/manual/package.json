@@ -14,10 +14,12 @@
   "dependencies": {
     "@opendaw/lib-dom": "^0.0.90",
     "@opendaw/lib-jsx": "^0.0.92",
+    "@opendaw/lib-runtime": "^0.0.86",
     "@opendaw/lib-std": "^0.0.85",
     "@opendaw/studio-enums": "^0.1.2",
     "@opendaw/studio-icons": "0.0.1",
-    "@opendaw/studio-markdown": "0.0.1"
+    "@opendaw/studio-markdown": "0.0.1",
+    "@opendaw/studio-scrollbars": "0.0.1"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",

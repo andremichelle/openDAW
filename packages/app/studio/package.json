@@ -27,6 +27,7 @@
     "@opendaw/studio-enums": "^0.1.2",
     "@opendaw/studio-icons": "0.0.1",
     "@opendaw/studio-markdown": "0.0.1",
+    "@opendaw/studio-scrollbars": "0.0.1",
     "@opendaw/studio-p2p": "^0.0.34",
     "@opendaw/studio-scripting": "^0.0.85",
     "@types/d3-force": "^3.0.10",

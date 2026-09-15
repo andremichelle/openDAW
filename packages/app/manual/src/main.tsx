@@ -5,6 +5,7 @@ import {initializeColors} from "@opendaw/studio-enums"
 import {loadFont} from "@opendaw/lib-dom"
 import {IconLibrary} from "@opendaw/studio-icons"
 import {App} from "./App"
+import {ToastLayer} from "./Toast"
 
 initializeColors(document.documentElement)
 const terminator = new Terminator()
@@ -12,6 +13,7 @@ replaceChildren(document.body, (
     <Frag>
         <IconLibrary/>
         {App(terminator)}
+        <ToastLayer/>
     </Frag>
 ))
 loadFont({"font-family": "Rubik", "font-weight": 300, "font-style": "normal", "src": "/manuals/fonts/rubik-300.woff2"})

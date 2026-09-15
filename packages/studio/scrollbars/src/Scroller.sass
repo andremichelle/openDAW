@@ -1,5 +1,3 @@
-@use "@/colors"
-
 $thickness: 8px
 
 component
@@ -13,7 +11,7 @@ component
     background-color: rgba(white, 0.25)
 
   &:not(.floating)
-    @include colors.panel-background
+    background-color: var(--color-panel-background)
 
   &.floating
     position: absolute
