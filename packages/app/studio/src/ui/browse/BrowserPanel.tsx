@@ -8,6 +8,7 @@ import {PresetBrowser} from "@/ui/browse/PresetBrowser.tsx"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {Html} from "@opendaw/lib-dom"
 import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
+import {TourAnchors} from "@/ui/tour/TourAnchors"
 
 const className = Html.adoptStyleSheet(css, "BrowserPanel")
 
@@ -42,13 +43,17 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
             }
         })())
     }))
+    const tabs: HTMLElement = (
+        <RadioGroup lifecycle={lifecycle} elements={[
+            {value: BrowseScope.Presets, element: <span>Presets</span>},
+            {value: BrowseScope.Samples, element: <span>Samples</span>},
+            {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>}
+        ]} model={scope} style={{fontSize: "11px", columnGap: "8px", padding: "0.5em 0.75em"}}/>
+    )
+    TourAnchors.register(lifecycle, tabs, "presets", "samples", "soundfonts")
     return (
         <div className={className}>
-            <RadioGroup lifecycle={lifecycle} elements={[
-                {value: BrowseScope.Presets, element: <span>Presets</span>},
-                {value: BrowseScope.Samples, element: <span>Samples</span>},
-                {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>}
-            ]} model={scope} style={{fontSize: "11px", columnGap: "8px", padding: "0.5em 0.75em"}}/>
+            {tabs}
             {placeholder}
         </div>
     )

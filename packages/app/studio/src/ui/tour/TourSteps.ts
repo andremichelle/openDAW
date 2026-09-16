@@ -28,43 +28,46 @@ export const TourSteps: Record<TourAnchor, TourStep> = {
     },
     midi: {
         screen: "default", placement: "below", frame: 6, headline: "MIDI",
-        text: "Enable MIDI access to play with a keyboard or controller. The capture button learns a controller for the knob you touch next."
+        text: "Enable MIDI access to play with a keyboard or controller. The capture button keeps notes you played without recording."
     },
     transport: {
         screen: "default", placement: "below", frame: 4, headline: "Transport",
-        text: "Play, stop, record and loop. The metronome and count-in sit right next to it."
+        text: "Record, play, stop and toggle the loop. Each has a keyboard shortcut, hover a button to see it."
     },
     timecodes: {
         screen: "default", placement: "below", frame: 2, headline: "Timecodes",
-        text: "Shows where you are in bars and in time. Click a field to type a new position."
+        text: "Shows where you are in bars and in time. The metronome sits right next to it."
     },
     screens: {
         screen: "default", placement: "below", frame: 4, headline: "Screens",
-        text: "Switch between the arrangement, mixer, modulation and the special views. Each has a keyboard shortcut."
+        text: "Switch between the arrangement, mixer, modulation and the special views."
     },
     presets: {
-        screen: "default", placement: "right", headline: "Presets",
+        screen: "default", placement: "right", frame: 4, headline: "Presets",
         text: "Instruments and effects ready to drop onto the timeline or into a device chain.",
         prepare: browse(BrowseScope.Presets)
     },
     samples: {
-        screen: "default", placement: "right", headline: "Samples",
+        screen: "default", placement: "right", frame: 4, headline: "Samples",
         text: "Your audio files. Drag one onto the timeline to create a track, or onto a sampler.",
         prepare: browse(BrowseScope.Samples)
     },
     soundfonts: {
-        screen: "default", placement: "right", headline: "Soundfonts",
-        text: "General MIDI style instrument banks. Drag one to the timeline like a preset.",
+        screen: "default", placement: "right", frame: 4, headline: "Soundfonts",
+        text: "General MIDI style instrument banks. Create the Soundfont device to use them.",
         prepare: browse(BrowseScope.Soundfonts)
     },
     clips: {
         screen: "default", placement: "right", headline: "Clips",
         text: "Launch loops per track without arranging them. Great for sketching ideas live.",
-        prepare: service => service.timeline.clips.visible.setValue(true)
+        prepare: service => {
+            service.layout.browseScope.setValue(BrowseScope.Presets)
+            service.timeline.clips.visible.setValue(true)
+        }
     },
     regions: {
-        screen: "default", placement: "above", headline: "Regions",
-        text: "The arrangement. Draw, move, loop and edit notes and audio on the tracks."
+        screen: "default", placement: "left", headline: "Regions",
+        text: "The arrangement. Draw, move, loop and edit notes, audio and automation regions on the tracks."
     },
     devices: {
         screen: "default", placement: "center", headline: "Devices",

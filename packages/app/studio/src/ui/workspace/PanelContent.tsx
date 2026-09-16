@@ -28,7 +28,6 @@ export interface PanelContentHandler extends Terminable {
 }
 
 const PanelAnchors: Partial<Record<PanelType, ReadonlyArray<TourAnchor>>> = {
-    [PanelType.BrowserPanel]: ["presets", "samples", "soundfonts"],
     [PanelType.DevicePanel]: ["devices"],
     [PanelType.Analysis]: ["analysis"],
     [PanelType.Modulation]: ["modulation"]

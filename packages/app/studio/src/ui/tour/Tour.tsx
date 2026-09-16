@@ -141,17 +141,17 @@ export namespace Tour {
         #present(anchor: TourAnchor, step: TourStep): void {
             this.#stepLifecycle.terminate()
             this.#userFocusedInput = false
-            const optAnchor = TourAnchors.resolve(anchor)
-            const surface = optAnchor.match({none: () => Surface.get(), some: element => Surface.get(element)})
+            const optTarget = TourAnchors.resolve(anchor)
+            const surface = optTarget.match({none: () => Surface.get(), some: ({element}) => Surface.get(element)})
             const card = this.#cardFor(surface)
             card.update({headline: step.headline, text: step.text, index: this.#index, count: Steps.length})
             const layout = () => {
                 const size = card.measure()
                 const viewport = {width: surface.width, height: surface.height}
-                optAnchor.match({
+                optTarget.match({
                     none: () => card.layout(centerCard(size, viewport), undefined),
-                    some: element => {
-                        const {x, y, width, height} = element.getBoundingClientRect()
+                    some: target => {
+                        const {x, y, width, height} = target.rect()
                         const rect = {x, y, width, height}
                         card.layout(placeCard(rect, size, viewport, step.placement),
                             isDefined(step.frame) ? frameRect(rect, step.frame, viewport) : undefined)
@@ -167,7 +167,7 @@ export namespace Tour {
             )
             if (surface.owner !== window) {this.#stepLifecycle.own(this.#subscribeKeys(surface.owner))}
             this.#stepLifecycle.own(TourAnchors.subscribe(anchor, () => this.#present(anchor, step)))
-            optAnchor.ifSome(element => this.#stepLifecycle.own(Html.watchResize(element, layout)))
+            optTarget.ifSome(({element}) => this.#stepLifecycle.own(Html.watchResize(element, layout)))
         }
 
         #cardFor(surface: Surface): TourCard {
@@ -189,14 +189,14 @@ export namespace Tour {
                 if (this.#userFocusedInput && Events.isTextInput(event.target)) {return}
                 switch (event.code) {
                     case "Escape":
-                        this.finish()
+                        if (!event.repeat) {this.finish()}
                         break
                     case "ArrowRight":
                     case "Enter":
-                        this.next()
+                        if (!event.repeat) {this.next()}
                         break
                     case "ArrowLeft":
-                        this.back()
+                        if (!event.repeat) {this.back()}
                         break
                     default:
                         return

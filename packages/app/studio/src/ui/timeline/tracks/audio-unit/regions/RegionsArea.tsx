@@ -1,5 +1,6 @@
 import css from "./RegionsArea.sass?inline"
 import {TourAnchors} from "@/ui/tour/TourAnchors"
+import {firstTrackRect} from "@/ui/timeline/tracks/audio-unit/FirstTrackRect"
 import {clamp, DefaultObservableValue, EmptyExec, Lifecycle, Nullable, Option, Unhandled} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
@@ -70,7 +71,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             <CutCursor lifecycle={lifecycle} position={markerPosition} range={range}/>
         </div>
     )
-    TourAnchors.register(lifecycle, element, "regions")
+    TourAnchors.registerRect(lifecycle, element, () => firstTrackRect(element, manager), "regions")
     const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range, project.audioUnitFreeze)
     const {audioUnitFreeze} = project
     const regionLocator = createRegionLocator(manager, range, regionSelection, audioUnitFreeze)
