@@ -1,4 +1,4 @@
-import {afterEach, describe, expect, it, vi} from "vitest"
+import {afterEach, describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {ProjectSkeleton, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {TrackBox} from "@opendaw/studio-boxes"
@@ -38,7 +38,6 @@ const buildNotesTrack = async () => {
 
 afterEach(() => {
     StudioPreferences.settings.editing["overlapping-regions-behaviour"] = "clip"
-    RegionClipResolver.fatal = true
 })
 
 describe("createTrackRegion resolves overlaps (live errors 1086/1087)", () => {
@@ -60,8 +59,8 @@ describe("createTrackRegion resolves overlaps (live errors 1086/1087)", () => {
     })
 })
 
-describe("validateTrack non-fatal net (pre-existing overlaps must not crash the session)", () => {
-    it("fatal=true throws, fatal=false logs and continues on the SAME overlapping data", async () => {
+describe("validateTrack is always fatal (an overlap must crash and report, never be dropped silently)", () => {
+    it("throws on overlapping data in every environment", async () => {
         const {project, trackBox, trackAdapter} = await buildNotesTrack()
         // Force a genuine overlap: two creates in ONE transaction stack, since the adapter collection is not
         // updated mid-transaction, so the second create's resolver sees an empty track.
@@ -70,13 +69,7 @@ describe("validateTrack non-fatal net (pre-existing overlaps must not crash the 
             project.api.createTrackRegion(trackBox, 0, 6720)
         })
         expect(trackAdapter.regions.collection.asArray().length).toBe(2)
-        RegionClipResolver.fatal = true
         expect(() => RegionClipResolver.validateTracks([trackAdapter]))
             .toThrow("regions overlap: prev.complete(6720) > next.position(0)")
-        RegionClipResolver.fatal = false
-        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-        expect(() => RegionClipResolver.validateTracks([trackAdapter])).not.toThrow()
-        expect(warn).toHaveBeenCalled()
-        warn.mockRestore()
     })
 })
