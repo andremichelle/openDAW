@@ -83,7 +83,7 @@ export const TourSteps: Record<TourAnchor, TourStep> = {
     },
     modulation: {
         screen: "modulation", placement: "center", headline: "Modulation",
-        text: "All modulators and what they drive. Connect an LFO or envelope to any parameter."
+        text: "All modulators and what they drive. Connect them to any parameter."
     },
     piano: {
         screen: "piano", placement: "center", headline: "Piano Tutorial Mode",

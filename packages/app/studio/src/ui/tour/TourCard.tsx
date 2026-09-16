@@ -45,7 +45,7 @@ export class TourCard {
                 {this.#notch}
                 <header>
                     {this.#headline}
-                    <button className="close" onclick={onClose} title="Close tour">
+                    <button className="close" onclick={onClose} title="Close tour (Esc)">
                         <Icon symbol={IconSymbol.Close}/>
                     </button>
                 </header>
@@ -65,7 +65,9 @@ export class TourCard {
         this.#headline.textContent = headline
         this.#text.textContent = text
         this.#counter.textContent = `${index + 1} / ${count}`
-        this.#nextLabel.textContent = index + 1 === count ? "Finish" : "Next"
+        const last = index + 1 === count
+        this.#nextLabel.textContent = last ? "Finish" : "Next"
+        this.#nextButton.title = last ? "Finish the tour (→ or Enter)" : "Next card (→ or Enter)"
     }
 
     measure(): Size {
