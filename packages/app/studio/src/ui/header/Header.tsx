@@ -1,18 +1,17 @@
 import css from "./Header.sass?inline"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
-import {Lifecycle, Nullable, ObservableValue, Observer, panic, Subscription, Terminator} from "@opendaw/lib-std"
+import {Lifecycle, Nullable, ObservableValue, Observer, Subscription, Terminator} from "@opendaw/lib-std"
 import {TransportGroup} from "@/ui/header/TransportGroup.tsx"
 import {TimeStateDisplay} from "@/ui/header/TimeStateDisplay.tsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
-import {createElement, Group, RouteLocation} from "@opendaw/lib-jsx"
+import {createElement, Group} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
-import {MenuItem, MidiDevices, StudioPreferences} from "@opendaw/studio-core"
-import {Manual, Manuals} from "@/ui/pages/Manuals"
+import {MidiDevices, StudioPreferences} from "@opendaw/studio-core"
 import {HorizontalPeakMeter} from "@/ui/components/HorizontalPeakMeter"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {EngineAddresses} from "@opendaw/studio-adapters"
@@ -58,24 +57,6 @@ export const Header = ({lifecycle, service}: Construct) => {
                     }))
         })
     }))
-    const addManualMenuItems = (manuals: ReadonlyArray<Manual>): ReadonlyArray<MenuItem> => manuals.map(manual => {
-        if (manual.type === "page") {
-            return MenuItem.default({
-                label: manual.label,
-                icon: manual.icon,
-                checked: RouteLocation.get().path === manual.path,
-                separatorBefore: manual.separatorBefore ?? false
-            }).setTriggerProcedure(() => RouteLocation.get().navigateTo(manual.path))
-        } else if (manual.type === "folder") {
-            return MenuItem.default({
-                label: manual.label,
-                icon: manual.icon,
-                separatorBefore: manual.separatorBefore ?? false
-            }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(...addManualMenuItems(manual.files)))
-        } else {
-            return panic()
-        }
-    })
     const {preferences} = service.engine
     return (
         <header className={className}>
@@ -83,14 +64,9 @@ export const Header = ({lifecycle, service}: Construct) => {
                         appearance={{color: Colors.gray, activeColor: Colors.bright, tinyTriangle: true}}>
                 <h5>openDAW</h5>
             </MenuButton>
-            <MenuButton root={MenuItem.root()
-                .setRuntimeChildrenProcedure(parent =>
-                    parent.addMenuItem(
-                        MenuItem.header({label: "Manuals", icon: IconSymbol.OpenDAW, color: Colors.green}),
-                        ...addManualMenuItems(Manuals)
-                    ))} appearance={{color: Colors.green, tinyTriangle: true}}>
+            <a className="manuals" href="/manuals/" target="manuals" title="Manuals">
                 <Icon symbol={IconSymbol.Help}/>
-            </MenuButton>
+            </a>
             <hr/>
             <Group onInit={element => StudioPreferences.catchupAndSubscribe(enabled =>
                 element.classList.toggle("hidden", !enabled), "visibility", "enable-history-buttons")}>

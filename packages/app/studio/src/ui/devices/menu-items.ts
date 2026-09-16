@@ -11,7 +11,7 @@ import {IndexedBox, PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
 import {Editing, isDefined, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {StudioService} from "@/service/StudioService"
-import {RouteLocation} from "@opendaw/lib-jsx"
+import {openManual} from "@/ui/manuals"
 import {PresetService, PresetEffectKind} from "@/ui/browse/PresetService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
@@ -137,7 +137,7 @@ export namespace MenuItems {
 
     const populateMenuItemToNavigateToManual = (path: string, name: string) => {
         return MenuItem.default({label: `Visit '${name}' Manual...`})
-            .setTriggerProcedure(() => RouteLocation.get().navigateTo(path))
+            .setTriggerProcedure(() => openManual(path))
     }
 
     const populateMenuItemToDeleteDevice = (editing: Editing,

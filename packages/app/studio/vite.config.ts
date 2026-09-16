@@ -1,5 +1,5 @@
-import {readdirSync, readFileSync, writeFileSync} from "fs"
-import {resolve} from "path"
+import {readdirSync, readFileSync, statSync, writeFileSync} from "fs"
+import {extname, resolve} from "path"
 import {defineConfig} from "vite"
 import crossOriginIsolation from "vite-plugin-cross-origin-isolation"
 import viteCompression from "vite-plugin-compression"
@@ -32,7 +32,8 @@ export default defineConfig(({command}) => {
             }
         },
         optimizeDeps: {
-            exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util", "monaco-editor", "onnxruntime-web"]
+            exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util", "monaco-editor", "onnxruntime-web",
+                "@opendaw/studio-icons", "@opendaw/studio-markdown", "@opendaw/studio-scrollbars"]
         },
         build: {
             target: "esnext",
@@ -71,6 +72,9 @@ export default defineConfig(({command}) => {
             fs: {
                 // Allow serving files from the entire workspace
                 allow: [resolve(__dirname, "../../../")]
+            },
+            proxy: {
+                "/manuals": {target: "https://localhost:8081", secure: false}
             },
             hmr: {
                 overlay: false
@@ -137,14 +141,37 @@ export default defineConfig(({command}) => {
                 }
             },
             {
+                // The generated scripting docs live in packages/studio/docs, deployed as their own folder
+                name: "scripting-docs",
+                configureServer(server) {
+                    const docsDir = resolve(__dirname, "../../studio/docs")
+                    const types: Record<string, string> = {
+                        ".html": "text/html; charset=utf-8",
+                        ".js": "text/javascript",
+                        ".css": "text/css",
+                        ".json": "application/json",
+                        ".svg": "image/svg+xml",
+                        ".png": "image/png",
+                        ".woff2": "font/woff2"
+                    }
+                    server.middlewares.use((request, response, next) => {
+                        const url = (request.url ?? "").split("?")[0]
+                        if (!url.startsWith("/docs/")) {return next()}
+                        const path = resolve(docsDir, decodeURIComponent(url.slice("/docs/".length)))
+                        if (!path.startsWith(docsDir) || !existsSync(path)) {return next()}
+                        const file = statSync(path).isDirectory() ? resolve(path, "index.html") : path
+                        if (!existsSync(file)) {return next()}
+                        response.setHeader("Content-Type", types[extname(file)] ?? "application/octet-stream")
+                        response.end(readFileSync(file))
+                    })
+                }
+            },
+            {
                 name: "spa",
                 configureServer(server) {
                     server.middlewares.use((req, res, next) => {
                         const url: string | undefined = req.url
-                        if (url !== undefined && url.startsWith("/docs/scripting") && url.indexOf(".") === -1) {
-                            req.url = `${url.replace(/\/$/, "")}/index.html`
-                            return next()
-                        }
+                        if (url !== undefined && url.startsWith("/manuals")) {return next()}
                         if (url !== undefined && url.indexOf(".") === -1 && !url.startsWith("/@vite/")) {
                             if (url === "/overlay-preview") {
                                 const previewPath = resolve(__dirname, "overlay-preview.html")

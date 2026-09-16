@@ -3,6 +3,8 @@ import {Html} from "@opendaw/lib-dom"
 import {createElement, RouteLocation} from "@opendaw/lib-jsx"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
+import {openManual} from "@/ui/manuals"
+import {isManualsPath} from "@opendaw/studio-markdown"
 
 const className = Html.adoptStyleSheet(css, "IntroTiles")
 
@@ -19,7 +21,7 @@ const tiles: ReadonlyArray<Tile> = [
         title: "Your Studio",
         text: "Instruments, effects, a mixer, MIDI and audio recording, all in one place. Arrange, produce and "
             + "mix complete tracks.",
-        path: "/manuals/introduction"
+        path: "/manuals/"
     },
     {
         icon: IconSymbol.Connected,
@@ -55,7 +57,9 @@ export const IntroTiles = () => (
     <div className={className}>
         <div className="tiles">
             {tiles.map(({icon, title, text, path}) => (
-                <div className="tile" onclick={() => RouteLocation.get().navigateTo(path)}>
+                <div className="tile" onclick={() => isManualsPath(path)
+                    ? openManual(path)
+                    : RouteLocation.get().navigateTo(path)}>
                     <div className="tile-head">
                         <Icon symbol={icon}/>
                         <div className="tile-title">{title}</div>

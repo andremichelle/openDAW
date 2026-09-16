@@ -516,7 +516,7 @@ export namespace EffectFactories {
     // channel and entry 1 the right, so the two are created here and the UI offers no add / remove.
     export const StereoComposite: EffectFactory = {
         defaultName: "Stereo Split",
-        defaultIcon: IconSymbol.Stereo,
+        defaultIcon: IconSymbol.StereoSplit,
         briefDescription: "Per-channel split",
         description: "Processes the left and right channels through their own effect chains",
         manualPage: DeviceManualUrls.StereoComposite,

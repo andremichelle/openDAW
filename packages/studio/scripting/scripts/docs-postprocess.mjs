@@ -16,13 +16,16 @@ for (const [, label, slug] of readFileSync(join(root, "index.html"), "utf8").mat
 }
 const labels = new RegExp(`\\b(${[...pages.keys()].sort((left, right) => right.length - left.length).join("|")})\\b`, "g")
 const rawLinks = /\{@link [^|}]*\|([^}]*)\}/g
+// the guide markdown links its siblings as ./name.md (readable on GitHub), the site serves them as guide/name/
+const guideLinks = /href="\.\/(?:guide\/)?([\w-]+)\.md"/g
 const linkTypes = (html, own) => html.replace(/<code\b[\s\S]*?<\/code>/g, code =>
     code.split(/(<[^>]+>)/).map(part => part.startsWith("<") ? part : part.replace(/;(?=\s*$)/, "").replace(labels, (text, label) =>
         pages.get(label) === own ? text : `<a href="${basePath}${pages.get(label)}" class="no-underline hover:underline">${text}</a>`)).join(""))
 walk(root).forEach(file => {
     const own = relative(root, file).replace(/\/index\.html$/, "")
     const html = readFileSync(file, "utf8")
-    writeFileSync(file, linkTypes(html.replace(before, after).replace(googleFonts, "").replace(rawLinks, "$1").replace(/\u2800/g, " ")
+    writeFileSync(file, linkTypes(html.replace(before, after).replace(googleFonts, "").replace(rawLinks, "$1")
+        .replace(guideLinks, `href="${basePath}guide/$1/"`).replace(/\u2800/g, " ")
         .replace(modulePrefix, `<span style="color:#6F42C1;--shiki-dark:#B392F0">$1`), own))
 })
 walk(root, ".md").forEach(file => {

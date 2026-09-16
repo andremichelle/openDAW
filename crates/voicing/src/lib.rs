@@ -66,6 +66,13 @@ struct Slot<V> {
     glide_source: bool
 }
 
+/// Extra physical slots that hold a STOLEN voice while it finishes its short force-stop de-click fade. A
+/// saturated pool has no free slot, so without these the steal path would have to overwrite a voice in place
+/// (`start` resets its fade), cutting an audible waveform mid-cycle — the click heard once play exceeds
+/// `VOICES` notes. Mirrors `MonophonicStrategy`'s spare slots (`MONO_VOICES` > 1 logical voice). Four covers
+/// the steals that can land in one 3 ms window; a rarer burst past that falls back to an in-place cut.
+const FADE_SLOTS: usize = 4;
+
 /// A fixed pool of `VOICES` voices with polyphonic allocation (a port of TS `PolyphonicStrategy`). Lives in the
 /// device's zeroed state (a zeroed pool is all-inactive). On note-on it takes a free slot, else steals a
 /// released (un-gated) one, else the first slot; on note-off it releases the matching voice; each chunk it
@@ -73,17 +80,21 @@ struct Slot<V> {
 /// still-decaying released voice when one exists (the TS `availableForGlide` list): the NEWEST such voice, and
 /// each one seeds exactly ONE note (TS spliced it out of the list). Without both, a phrase played over a long
 /// release keeps gliding from the same stale voice instead of from the note before it (#334).
+///
+/// A stolen voice is relocated into a small `fading` reserve so its force-stop fade completes instead of being
+/// cut in place; the reserve is rendered every chunk beside the main pool.
 pub struct PolyphonicStrategy<V, const VOICES: usize> {
     slots: [Slot<V>; VOICES],
+    fading: [Slot<V>; FADE_SLOTS],
     started: u64
 }
 
 impl<V: Voice + Default, const VOICES: usize> Default for PolyphonicStrategy<V, VOICES> {
     fn default() -> Self {
+        let empty = || Slot {voice: V::default(), note_id: 0, active: false, started: 0, glide_source: false};
         Self {
-            slots: core::array::from_fn(|_| Slot {
-                voice: V::default(), note_id: 0, active: false, started: 0, glide_source: false
-            }),
+            slots: core::array::from_fn(|_| empty()),
+            fading: core::array::from_fn(|_| empty()),
             started: 0
         }
     }
@@ -98,12 +109,22 @@ impl<V: Voice + Default, const VOICES: usize> PolyphonicStrategy<V, VOICES> {
         if let Some(index) = self.slots.iter().position(|slot| !slot.active) {
             return index;
         }
-        if let Some(index) = self.slots.iter().position(|slot| !slot.voice.gate()) {
-            self.slots[index].voice.force_stop();
-            return index;
+        // Saturated: steal a released (un-gated) voice if there is one, else the oldest.
+        let victim = self.slots.iter().position(|slot| !slot.voice.gate())
+            .unwrap_or_else(|| self.slots.iter().enumerate()
+                .min_by_key(|(_, slot)| slot.started).map(|(index, _)| index).unwrap_or(0));
+        // Relocate the victim into the fade reserve so its de-click fade finishes instead of being cut, and
+        // hand the new note the freed main slot. If the reserve is full (a burst of steals inside one fade
+        // window), fall back to the in-place cut.
+        if let Some(reserve) = self.fading.iter().position(|slot| !slot.active) {
+            self.slots[victim].voice.force_stop();
+            self.fading[reserve].voice = core::mem::replace(&mut self.slots[victim].voice, V::default());
+            self.fading[reserve].active = true;
+            self.fading[reserve].glide_source = false;
+        } else {
+            self.slots[victim].voice.force_stop();
         }
-        self.slots[0].voice.force_stop();
-        0
+        victim
     }
 
     /// The number of slots currently in use.
@@ -162,7 +183,12 @@ impl<V: Voice + Default, const VOICES: usize> VoicingStrategy for PolyphonicStra
                 slot.glide_source = false;
             }
         }
-        self.slots.iter().all(|slot| !slot.active)
+        for slot in &mut self.fading {
+            if slot.active && slot.voice.process([&mut *out_left, &mut *out_right], block, shared) {
+                slot.active = false;
+            }
+        }
+        self.slots.iter().chain(self.fading.iter()).all(|slot| !slot.active)
     }
 
     fn reset(&mut self) {
@@ -172,6 +198,9 @@ impl<V: Voice + Default, const VOICES: usize> VoicingStrategy for PolyphonicStra
                 slot.active = false;
             }
             slot.glide_source = false;
+        }
+        for slot in &mut self.fading {
+            slot.active = false;
         }
     }
 }
@@ -649,6 +678,78 @@ mod tests {
         voicing.start(&note(2), 550.0, 0.5, 0.0, 1, &());
         voicing.reset();
         assert_eq!(voicing.active_count(), 0);
+    }
+
+    // A voice with a multi-chunk force-stop fade, like the real de-click fade: gated -> full gain; once
+    // un-gated it ramps to zero over FADE_CHUNKS and only then reports finished.
+    const FADE_CHUNKS: i32 = 4;
+
+    #[derive(Default)]
+    struct FadeMock {
+        gain: f32,
+        gated: bool,
+        fade: i32
+    }
+
+    impl Voice for FadeMock {
+        type Shared = ();
+        fn start(&mut self, _event: &EventRecord, _frequency: f32, gain: f32, _spread: f32, _unison: usize, _shared: &()) {
+            self.gain = gain;
+            self.gated = true;
+            self.fade = FADE_CHUNKS;
+        }
+        fn stop(&mut self) {self.gated = false;}
+        fn force_stop(&mut self) {self.gated = false;} // the fade counts down in process (a de-click ramp, not a cut)
+        fn start_glide(&mut self, _target_frequency: f32, _glide_duration: f64) {}
+        fn gate(&self) -> bool {self.gated}
+        fn current_frequency(&self) -> f32 {0.0}
+        fn process(&mut self, output: [&mut [f32]; 2], _block: &Block, _shared: &()) -> bool {
+            let [left, right] = output;
+            if !self.gated && self.fade > 0 {self.fade -= 1;}
+            let level = if self.gated {self.gain} else {self.gain * self.fade as f32 / FADE_CHUNKS as f32};
+            for index in 0..left.len() {
+                left[index] += level;
+                right[index] += level;
+            }
+            !self.gated && self.fade == 0
+        }
+    }
+
+    #[test]
+    fn a_stolen_voice_finishes_its_fade_instead_of_being_cut() {
+        // The "click after more than VOICES notes" fix: with the pool full, a new note steals a voice.
+        // The stolen voice must keep sounding through its de-click fade (relocated to the reserve), not be
+        // overwritten in place. A silent stealing note isolates the stolen voice's tail in the output.
+        let mut voicing = PolyphonicStrategy::<FadeMock, 4>::new();
+        for id in 0..4 {
+            voicing.start(&note(id), 440.0, 1.0, 0.0, 1, &());
+        }
+        let (mut left, mut right) = ([0.0f32; 8], [0.0f32; 8]);
+        voicing.process([&mut left, &mut right], &block(), &());
+        assert!((left[0] - 4.0).abs() < 1.0e-6, "four gated voices sum to 4.0, got {}", left[0]);
+        voicing.start(&note(99), 880.0, 0.0, 0.0, 1, &()); // steal with a SILENT note
+        let (mut left, mut right) = ([0.0f32; 8], [0.0f32; 8]);
+        voicing.process([&mut left, &mut right], &block(), &());
+        // 3 still-gated voices (3.0) + the stolen voice fading from 1.0 (first step 0.75) ~= 3.75.
+        // A hard in-place cut (the bug) would drop straight to 3.0.
+        assert!(left[0] > 3.5,
+            "a stolen voice must fade, not be cut: got {} (a hard cut yields 3.0)", left[0]);
+    }
+
+    #[test]
+    fn a_stolen_voice_tail_eventually_frees_its_reserve_slot() {
+        let mut voicing = PolyphonicStrategy::<FadeMock, 4>::new();
+        for id in 0..4 {
+            voicing.start(&note(id), 440.0, 1.0, 0.0, 1, &());
+        }
+        voicing.start(&note(99), 880.0, 1.0, 0.0, 1, &()); // steal -> one voice moves to the fade reserve
+        assert_eq!(voicing.active_count(), 4, "the main pool stays at capacity");
+        for _ in 0..FADE_CHUNKS {
+            let (mut left, mut right) = ([0.0f32; 8], [0.0f32; 8]);
+            voicing.process([&mut left, &mut right], &block(), &());
+        }
+        // The stolen tail has faded out; the four gated notes still hold.
+        assert_eq!(voicing.active_count(), 4, "the four held notes still sound after the tail is gone");
     }
 
     // ---- VoiceUnison ----

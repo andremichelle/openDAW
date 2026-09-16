@@ -1,7 +1,7 @@
 import {AudioData} from "@opendaw/lib-dsp"
 import {UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {Sample} from "./Api"
+import {MixdownOptions, Sample} from "./Api"
 
 export interface ScriptHostProtocol {
     openProject(buffer: ArrayBufferLike, name?: string): void
@@ -13,4 +13,6 @@ export interface ScriptHostProtocol {
     showInfo(headline: string, message: string): Promise<void>
     addSample(data: AudioData, name: string): Promise<Sample>
     listSamples(): Promise<ReadonlyArray<Sample>>
+    renderMixdown(buffer: ArrayBufferLike, options: MixdownOptions): Promise<AudioData>
+    saveFile(buffer: ArrayBuffer, fileName: string, mimeType: string): Promise<void>
 }

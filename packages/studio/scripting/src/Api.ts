@@ -12,12 +12,13 @@ import {
     ppqn,
     samples,
     seconds,
-    bpm
+    bpm,
+    WavFile
 } from "@opendaw/lib-dsp"
 import {bipolar, float, int, Nullable, unitValue} from "@opendaw/lib-std"
 import {AudioSendRouting, TransientPlayMode, VoicingMode} from "@opendaw/studio-enums"
 
-export {PPQN, FFT, Chord, dbToGain, gainToDb, midiToHz, ClassicWaveform, VoicingMode, Mixing, TransientPlayMode, AudioSendRouting}
+export {PPQN, FFT, Chord, dbToGain, gainToDb, midiToHz, ClassicWaveform, VoicingMode, Mixing, TransientPlayMode, AudioSendRouting, WavFile}
 export type {ppqn, seconds, bpm, samples}
 
 /**
@@ -2121,7 +2122,7 @@ export interface SignatureTrack {
 
 /**
  * Transport loop range
- * @group Core
+ * @group Essentials
  */
 export interface LoopArea {
     /** Loop enabled */
@@ -2134,7 +2135,7 @@ export interface LoopArea {
 
 /**
  * Beats per bar and beat unit
- * @group Core
+ * @group Essentials
  */
 export interface TimeSignature {
     /** Beats per bar (1 to 31) */
@@ -2145,7 +2146,7 @@ export interface TimeSignature {
 
 /**
  * Global shuffle groove
- * @group Core
+ * @group Essentials
  */
 export interface GrooveShuffle {
     /** Custom label */
@@ -2158,7 +2159,7 @@ export interface GrooveShuffle {
 
 /**
  * Descriptive project metadata
- * @group Core
+ * @group Essentials
  */
 export interface ProjectMeta {
     /** Artist */
@@ -2346,7 +2347,7 @@ export type AnyModulator = Modulators[keyof Modulators]
 
 /**
  * A project under construction or the one open in the studio. Hand it back with {@link Project.openInStudio}
- * @group Core
+ * @group Essentials
  */
 export interface Project {
     /** Project name */
@@ -2413,11 +2414,29 @@ export interface Project {
     addModulator<K extends keyof Modulators>(kind: K, props?: DeepPartial<Modulators[K]>): Modulators[K]
     /** Open the project in the studio (replaces the current project). Throws if the project is invalid */
     openInStudio(): void
+    /**
+     * Render this project (including unapplied edits) to audio. Does not require {@link openInStudio}. Throws if the project is invalid
+     * @example
+     * ```ts
+     * const audio = await project.mixdown()
+     * await openDAW.saveFile(WavFile.encodeFloats(audio), `${project.name}.wav`, "audio/wav")
+     * ```
+     */
+    mixdown(options?: MixdownOptions): Promise<AudioData>
+}
+
+/**
+ * Options for {@link Project.mixdown}
+ * @group Essentials
+ */
+export interface MixdownOptions {
+    /** Render sample rate in Hz (default 48000) */
+    sampleRate?: int
 }
 
 /**
  * The global `openDAW` object, entry point of every script
- * @group Core
+ * @group Essentials
  */
 export interface Api {
     /**
@@ -2456,4 +2475,16 @@ export interface Api {
     addSample(data: AudioData, name: string): Promise<Sample>
     /** All samples available in the studio (stock and user samples) */
     listSamples(): Promise<ReadonlyArray<Sample>>
+    /**
+     * Offer a file for download. The studio asks for confirmation, then shows the save dialog
+     * @param data - File content
+     * @param fileName - Suggested name including extension
+     * @param mimeType - Content type (default "application/octet-stream")
+     * @example
+     * ```ts
+     * const audio = await project.mixdown()
+     * await openDAW.saveFile(WavFile.encodeFloats(audio), "mixdown.wav", "audio/wav")
+     * ```
+     */
+    saveFile(data: ArrayBuffer | ArrayBufferView, fileName: string, mimeType?: string): Promise<void>
 }

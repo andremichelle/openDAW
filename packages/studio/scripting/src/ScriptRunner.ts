@@ -8,7 +8,8 @@ import {
     Interpolation,
     midiToHz,
     Mixing,
-    PPQN
+    PPQN,
+    WavFile
 } from "@opendaw/lib-dsp"
 import {AudioSendRouting, TransientPlayMode, VoicingMode} from "@opendaw/studio-enums"
 import {ScriptHostProtocol} from "./ScriptHostProtocol"
@@ -20,7 +21,7 @@ export namespace ScriptGlobals {
     export const create = (api: Api, context: ScriptExecutionContext): Record<string, unknown> => ({
         ...context,
         openDAW: api,
-        AudioData, midiToHz, PPQN, FFT, Chord, Interpolation, dbToGain, gainToDb,
+        AudioData, WavFile, midiToHz, PPQN, FFT, Chord, Interpolation, dbToGain, gainToDb,
         ClassicWaveform, VoicingMode, Mixing, TransientPlayMode, AudioSendRouting
     })
 }

@@ -1,11 +1,12 @@
 import {EmptyExec} from "@opendaw/lib-std"
-import {createElement, RouteLocation} from "@opendaw/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {CloudBackup} from "@opendaw/studio-core"
 import {Icon} from "@/ui/components/Icon"
 import {StudioService} from "@/service/StudioService"
 import {NextcloudDialogs} from "@/project/NextcloudDialogs"
 import {RailSection} from "@/ui/dashboard/RailSection"
+import {openManual} from "@/ui/manuals"
 
 type Construct = {
     service: StudioService
@@ -13,7 +14,7 @@ type Construct = {
 
 // The action itself is the entry; the trailing '?' opens the manual for that service.
 const HelpLink = ({path, title}: { path: string, title: string }) => (
-    <button className="help" title={title} onclick={() => RouteLocation.get().navigateTo(path)}>
+    <button className="help" title={title} onclick={() => openManual(path)}>
         <Icon symbol={IconSymbol.Help}/>
     </button>
 )

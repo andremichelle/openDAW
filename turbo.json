@@ -43,6 +43,24 @@
         "dist/**"
       ]
     },
+    "@opendaw/studio-icons#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
+    "@opendaw/studio-scrollbars#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
+    "@opendaw/studio-markdown#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
     "@opendaw/studio-forge-boxes#build": {
       "dependsOn": [
         "^build"

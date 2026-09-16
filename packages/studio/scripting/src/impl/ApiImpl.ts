@@ -38,4 +38,21 @@ export class ApiImpl implements Api {
     }
 
     listSamples(): Promise<ReadonlyArray<Sample>> {return this.#protocol.listSamples()}
+
+    async saveFile(data: ArrayBuffer | ArrayBufferView, fileName: string, mimeType?: string): Promise<void> {
+        const buffer = toArrayBuffer(data)
+        const name = Guard.string(fileName, "fileName").trim()
+        if (name.length === 0) {return panic(new RangeError("saveFile: fileName is empty"))}
+        if (/[\\/]/.test(name)) {return panic(new RangeError("saveFile: fileName must not contain path separators"))}
+        const type = isDefined(mimeType) ? Guard.string(mimeType, "mimeType") : "application/octet-stream"
+        return this.#protocol.saveFile(buffer, name, type)
+    }
+}
+
+const toArrayBuffer = (data: unknown): ArrayBuffer => {
+    if (data instanceof ArrayBuffer) {return data}
+    if (ArrayBuffer.isView(data)) {
+        return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
+    }
+    return panic(new TypeError("saveFile: expected an ArrayBuffer or a typed array"))
 }

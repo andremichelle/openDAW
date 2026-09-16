@@ -9,22 +9,49 @@ import {Icon} from "@/ui/components/Icon"
 import {EditorLoadFailure} from "@/ui/components/EditorLoadFailure"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {TopLevelReturn} from "./code-editor/TopLevelReturn"
-import {Arrays, Errors, isDefined, isNull, Option, panic, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
+import {
+    Arrays,
+    DefaultObservableValue,
+    Errors,
+    isDefined,
+    isNull,
+    Option,
+    Optional,
+    panic,
+    RuntimeNotifier,
+    Terminable,
+    UUID
+} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
-import {ScriptHost} from "@opendaw/studio-scripting"
+import {MixdownOptions, ScriptHost} from "@opendaw/studio-scripting"
 import {MenuButton} from "@/ui/components/MenuButton"
-import {FilePickerAcceptTypes, MenuItem, Project, ScriptMeta, ScriptStorage} from "@opendaw/studio-core"
-import {WavFile} from "@opendaw/lib-dsp"
+import {
+    AudioContexts,
+    FilePickerAcceptTypes,
+    MenuItem,
+    OfflineEngineRenderer,
+    Project,
+    ScriptMeta,
+    ScriptStorage
+} from "@opendaw/studio-core"
+import {AudioData, WavFile} from "@opendaw/lib-dsp"
 import scriptWorkerUrl from "@opendaw/studio-scripting/ScriptWorker.js?worker&url"
 import {dynamicImportWithRetry} from "@/ui/components/dynamicImportWithRetry"
 import {ProjectSkeleton, Sample} from "@opendaw/studio-adapters"
 import {applyUpdateTasks, BoxGraph, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
-import {AudioData} from "@opendaw/lib-dsp"
 import {Dialogs} from "@/ui/components/dialogs"
 import {ScriptDialogs} from "@/script/ScriptDialogs"
 import {ScriptSession} from "./code-editor/ScriptSession"
 import {ScriptTemplates, StockScripts} from "./code-editor/StockScripts"
+
+const isMimeType = (value: string): value is `${string}/${string}` => /^[^/]+\/[^/]+$/.test(value)
+const isExtension = (value: string): value is `.${string}` => value.length > 1 && value.startsWith(".")
+const acceptTypes = (fileName: string, mimeType: string): Optional<Array<FilePickerAcceptType>> => {
+    const extension = fileName.substring(fileName.lastIndexOf("."))
+    if (!isMimeType(mimeType) || !isExtension(extension)) {return undefined}
+    return [{description: mimeType, accept: {[mimeType]: [extension]}}]
+}
 
 const ctrl = true
 const shift = true
@@ -85,7 +112,29 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
             })
             return sample
         },
-        listSamples: async (): Promise<ReadonlyArray<Sample>> => service.sampleService.list()
+        listSamples: async (): Promise<ReadonlyArray<Sample>> => service.sampleService.list(),
+        renderMixdown: async (buffer: ArrayBufferLike, {sampleRate}: MixdownOptions): Promise<AudioData> => {
+            const project = Project.load(service, buffer as ArrayBuffer)
+            const abortController = new AbortController()
+            const progress = new DefaultObservableValue(0.0)
+            const dialog = RuntimeNotifier.progress({
+                headline: "Rendering mixdown...",
+                progress,
+                cancel: () => abortController.abort()
+            })
+            await service.audioContext.suspend()
+            const result = await Promises.tryCatch(OfflineEngineRenderer
+                .start(project, Option.None, progress, abortController.signal, sampleRate))
+            dialog.terminate()
+            project.terminate()
+            AudioContexts.resume(service.audioContext).then()
+            if (result.status === "rejected") {return Promise.reject(result.error)}
+            return result.value
+        },
+        saveFile: async (buffer: ArrayBuffer, fileName: string, mimeType: string): Promise<void> =>
+            Files.saveWithApproval({
+                buffer, headline: "Save File", suggestedName: fileName, types: acceptTypes(fileName, mimeType)
+            })
     }, scriptWorkerUrl)
     const storage = ScriptStorage.get()
     const stockReady = storage.syncStock(StockScripts)
