@@ -6,7 +6,8 @@ import {StudioService} from "@/service/StudioService"
 import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {Checkbox} from "@/ui/components/Checkbox"
-import {renderMarkdown} from "@/ui/Markdown"
+import {renderMarkdown} from "@opendaw/studio-markdown"
+import {Surface} from "@/ui/surface/Surface"
 import {Events, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {installScrollbars} from "@/ui/components/Scrollbars"
@@ -37,7 +38,7 @@ export const NotePadPanel = ({lifecycle, service}: Construct) => {
             notepad.focus()
         } else {
             notepad.removeAttribute("contentEditable")
-            renderMarkdown(notepad, text)
+            renderMarkdown(notepad, text, {onCopied: () => Surface.get(notepad).toast("Copied to clipboard", IconSymbol.Copy)})
         }
     }
     if ((service.profile.meta.notepad?.length ?? 0) > 0) {

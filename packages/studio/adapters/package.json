@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/studio-adapters",
-  "version": "0.3.2",
-  "license": "LGPL-3.0-or-later",
+  "version": "0.3.3",
+  "license": "AGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
   },
@@ -25,14 +25,14 @@
     "pregenerate-all-boxes": "npm run build -w @opendaw/studio-forge-boxes && npm run build -w @opendaw/studio-boxes"
   },
   "dependencies": {
-    "@opendaw/lib-box": "^0.0.93",
-    "@opendaw/lib-dsp": "^0.0.92",
-    "@opendaw/lib-fusion": "^0.0.102",
-    "@opendaw/lib-midi": "^0.0.73",
-    "@opendaw/lib-runtime": "^0.0.85",
-    "@opendaw/lib-std": "^0.0.84",
-    "@opendaw/studio-boxes": "^0.0.108",
-    "@opendaw/studio-enums": "^0.1.1",
+    "@opendaw/lib-box": "^0.0.94",
+    "@opendaw/lib-dsp": "^0.0.93",
+    "@opendaw/lib-fusion": "^0.0.103",
+    "@opendaw/lib-midi": "^0.0.74",
+    "@opendaw/lib-runtime": "^0.0.86",
+    "@opendaw/lib-std": "^0.0.85",
+    "@opendaw/studio-boxes": "^0.0.109",
+    "@opendaw/studio-enums": "^0.1.2",
     "soundfont2": "^0.5.0"
   },
   "devDependencies": {

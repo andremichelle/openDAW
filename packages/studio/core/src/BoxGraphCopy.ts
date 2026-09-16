@@ -33,14 +33,16 @@ export namespace BoxGraphCopy {
         return arrayBuffer
     }
 
+    export type Options<T extends Box = Box> = {
+        mapPointer: SpecialDecoder["map"]
+        modifyBox?: Procedure<T>
+        excludeBox?: Predicate<Box>
+        keepUuid?: Predicate<Box>
+    }
+
     export const deserializeBoxes = <T extends Box = Box>(data: ArrayBufferLike,
                                                           targetGraph: BoxGraph,
-                                                          options: {
-                                                              mapPointer: SpecialDecoder["map"]
-                                                              modifyBox?: Procedure<T>
-                                                              excludeBox?: Predicate<Box>
-                                                              keepUuid?: Predicate<Box>
-                                                          }): ReadonlyArray<T> => {
+                                                          options: Options<T>): ReadonlyArray<T> => {
         const input = new ByteArrayInput(data)
         input.skip(input.readInt())
         const graphDataLength = input.readInt()

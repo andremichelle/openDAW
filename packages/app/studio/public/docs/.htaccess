@@ -1,2 +1,0 @@
-# Static documentation sites: no slash redirect, the release .htaccess maps directories to their index.html
-DirectorySlash Off

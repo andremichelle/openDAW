@@ -13,6 +13,15 @@
 and to **resurface the process of making music** by making **high-quality** creation tools accessible to everyone, with
 a strong focus on **education** and data-privacy.
 
+> [!IMPORTANT]
+> **NEWS: openDAW 1.0 Release Meetup**
+>
+> Celebrate the 1.0 release with us on **Saturday, 3 October 2026** at [Studio A](https://www.studioakoeln.de),
+> Aachener Str. 65, 50674 Cologne, Germany. Doors open at 1:00pm, admission is free, registration is required. Expect
+> talks and panel discussions with André Michelle, live acts produced entirely with openDAW, stations to try it yourself,
+> plus drinks, food and a meetup with the people building openDAW. All talks and panels are held in English.
+> Request your invitation at [opendaw.org/release26](https://opendaw.org/release26/).
+
 Subscribe to our [Newsletter](https://buttondown.com/opendaw) for regular updates.
 
 New to the codebase? [introduction.md](introduction.md) maps every component of this repository and how they depend on
@@ -143,36 +152,6 @@ skyboundzoo, JHINZ, Mark Dammer, fork-kun, Martin Eigel
 * [openDAW-headless (SDK)](https://github.com/andremichelle/opendaw-headless)
 * [openDAW-headless @naomiaro](https://github.com/naomiaro/opendaw-test) (openDAW-headless fork with more docs and
   examples)
-
-### Roadmap
-
-This roadmap represents an estimation of the upcoming development steps. Timelines and priorities may shift as openDAW
-evolves.
-
-#### 2025/Q4
-
-- [X] Preset API
-- [X] Full implementation of connecting several cloud services to store samples, projects, and presets
-- [X] Implement audio playback algorithms (pitch, stretch, absolute) including interpolation
-
-#### 2026/Q1
-
-- [X] Fade-in and out on audio-regions
-- [X] Signature automation track
-- [X] Tempo automation track
-- [X] Fine-tune recording including loops (takes)
-
-#### 2026/Q2
-
-- [X] WASM Audio-Engine
-- [ ] Polish UI
-
-#### 2026/Q3
-
-- [ ] Testing & QA
-- [ ] [Launch 1.0](https://opendaw.org/release26/)
-
-For more issues and feature requests, visit [github.com/andremichelle/opendaw/issues/](https://github.com/andremichelle/opendaw/issues/)
 
 ### Prepare, Clone, Installation, and Run
 

@@ -5,6 +5,7 @@ import {FlexSpacer} from "@/ui/components/FlexSpacer"
 type Provider = { name: string, href: string, logo: string }
 
 const providers: ReadonlyArray<Provider> = [
+    {name: "Loopmasters", href: "https://www.loopmasters.com/", logo: "/images/loopmasters.webp"},
     {name: "ModeAudio", href: "https://modeaudio.com/", logo: "/images/modeaudio.webp"}
 ]
 

@@ -1,4 +1,4 @@
-import {Arrays, asDefined, Errors, isDefined, RuntimeNotifier} from "@opendaw/lib-std"
+import {Arrays, asDefined, Errors, isDefined, panic, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace Files {
@@ -30,6 +30,22 @@ export namespace Files {
             return handle.name ?? "unknown"
         } else {
             return saveBlobFallback(arrayBuffer, options)
+        }
+    }
+
+    // browsers need a user-input to allow download
+    export const saveWithApproval = async ({buffer, headline, message, suggestedName, types}: {
+        buffer: ArrayBuffer,
+        headline: string,
+        message?: string,
+        suggestedName: string,
+        types?: ReadonlyArray<FilePickerAcceptType>
+    }): Promise<void> => {
+        const approved = await RuntimeNotifier.approve({headline, message: message ?? "", approveText: "Save"})
+        if (!approved) {return}
+        const {status, error} = await Promises.tryCatch(save(buffer, {suggestedName, types: types?.slice()}))
+        if (status === "rejected" && !Errors.isAbort(error)) {
+            panic(String(error))
         }
     }
 

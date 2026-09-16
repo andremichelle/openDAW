@@ -794,6 +794,10 @@ impl Engine {
 
     /// Reuse the pooled instrument processor (a survivor: its voices live on) or build + bind a fresh one (a
     /// joiner). A pooled entry of a different role under this uuid is terminated and rebuilt.
+    fn box_type_name(&self, uuid: Uuid) -> String {
+        self.graph.find_box(&uuid).map_or_else(String::new, |device_box| device_box.name.clone())
+    }
+
     pub(crate) fn take_or_build_instrument(&mut self, pool: &mut BTreeMap<Uuid, Member>, uuid: Uuid, device: DeviceReg,
                                 invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> Member {
         if let Some(existing) = pool.remove(&uuid) {
@@ -802,7 +806,7 @@ impl Engine {
             }
             self.terminate_member(existing);
         }
-        let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, device)));
+        let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, device, uuid, self.box_type_name(uuid))));
         let state_ptr = instrument.borrow().state_ptr();
         let sink: Rc<RefCell<dyn ParamSink>> = instrument.clone();
         let params = self.bind_device(uuid, device, state_ptr, ParamNode::Audio(sink), invalidate);
@@ -854,7 +858,7 @@ impl Engine {
             }
             self.terminate_member(existing);
         }
-        let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
+        let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device, uuid, self.box_type_name(uuid))));
         let state_ptr = node.borrow().state_ptr();
         let sink: Rc<RefCell<dyn ParamSink>> = node.clone();
         let params = self.bind_device(uuid, device, state_ptr, ParamNode::Audio(sink), invalidate);
@@ -1047,7 +1051,7 @@ impl Engine {
                 _ => {}
             }
         }
-        let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, instrument_device)));
+        let instrument = Rc::new(RefCell::new(PluginInstrument::new(self.sample_rate, instrument_device, instrument_uuid, self.box_type_name(instrument_uuid))));
         let instrument_state = instrument.borrow().state_ptr();
         let instrument_sink: Rc<RefCell<dyn ParamSink>> = instrument.clone();
         device_params.push(self.bind_device(instrument_uuid, instrument_device, instrument_state, ParamNode::Audio(instrument_sink), invalidate));
@@ -1072,7 +1076,7 @@ impl Engine {
             if !self.device_enabled(device_uuid) {
                 continue; // a disabled effect is bypassed: not built, not wired into the chain
             }
-            let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device)));
+            let node = Rc::new(RefCell::new(PluginAudioEffect::new(self.sample_rate, device, device_uuid, self.box_type_name(device_uuid))));
             let node_state = node.borrow().state_ptr();
             let node_sink: Rc<RefCell<dyn ParamSink>> = node.clone();
             let params = self.bind_device(device_uuid, device, node_state, ParamNode::Audio(node_sink), invalidate);

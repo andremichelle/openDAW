@@ -9,6 +9,8 @@
 //! splits each block at the clock and refreshes parameters; with no automation it pulls nothing.
 
 use alloc::boxed::Box;
+use alloc::string::String;
+use boxgraph::address::Uuid;
 use alloc::vec;
 use alloc::vec::Vec;
 use engine_env::audio_buffer::{shared_audio_buffer, SharedAudioBuffer};
@@ -51,6 +53,9 @@ pub(crate) struct PluginAudioEffect {
     #[allow(dead_code)]
     sidechain_buffers: Vec<SharedAudioBuffer>,
     device_output: [Box<[f32]>; 2], // the device's stereo output buffers ([left, right])
+    uuid: Uuid,
+    type_name: String,
+    reported_non_finite: bool,
     in_offsets: Box<[u32]>,
     #[allow(dead_code)]
     out_offsets: Box<[u32]>,
@@ -60,7 +65,7 @@ pub(crate) struct PluginAudioEffect {
 }
 
 impl PluginAudioEffect {
-    pub(crate) fn new(sample_rate: f32, device: DeviceReg) -> Self {
+    pub(crate) fn new(sample_rate: f32, device: DeviceReg, uuid: Uuid, type_name: String) -> Self {
         crate::note_device_build();
         let device_output = [
             vec![0.0f32; RENDER_QUANTUM].into_boxed_slice(),
@@ -91,6 +96,9 @@ impl PluginAudioEffect {
             reset_index: device.reset_index,
             sample_rate,
             meter: engine_env::meter::Meter::new(sample_rate),
+            uuid,
+            type_name,
+            reported_non_finite: false,
             events: EventBuffer::new(),
             params: Vec::new(),
             clock_armed: false,
@@ -209,6 +217,13 @@ impl Processor for PluginAudioEffect {
             for index in 0..RENDER_QUANTUM {
                 output.left[index] = self.device_output[0][index];
                 output.right[index] = self.device_output[1][index];
+            }
+        }
+        if !self.reported_non_finite {
+            if let Some((channel, frame)) = crate::first_non_finite(&self.device_output[0], &self.device_output[1]) {
+                self.reported_non_finite = true;
+                crate::report_error(format_args!("{} {} wrote a non-finite sample (channel {}, frame {})",
+                    self.type_name, boxgraph::address::uuid_to_string(&self.uuid), channel, frame));
             }
         }
         self.meter.process(&self.device_output[0], &self.device_output[1]);

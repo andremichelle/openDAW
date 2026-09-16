@@ -12,7 +12,8 @@ export namespace PreferencesPageLabels {
                 "auto-open-clips": "Always open clip view",
                 "base-frequency": "Show base frequency",
                 "toasts": "Show notifications",
-                "show-output-track": "Always show the output track"
+                "show-output-track": "Always show the output track",
+                "offer-studio-tour": "Offer the studio tour when a project opens"
             }
         },
         "time-display": {

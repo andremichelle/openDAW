@@ -1,6 +1,7 @@
 import {Events, Html} from "@opendaw/lib-dom"
 import css from "./TextInput.sass?inline"
-import {int, isDefined, isInstanceOf, Lifecycle, MutableObservableValue} from "@opendaw/lib-std"
+import {int, isInstanceOf, Lifecycle, MutableObservableValue} from "@opendaw/lib-std"
+import {ClipboardPayload} from "./ClipboardPayload"
 import {createElement} from "@opendaw/lib-jsx"
 
 const defaultClassName = Html.adoptStyleSheet(css, "TextInput")
@@ -33,21 +34,13 @@ export const TextInput = ({lifecycle, model, className, maxChars}: Construct) =>
         }),
         Events.subscribe(element, "copy", (event: ClipboardEvent) => {
             event.preventDefault()
-            event.clipboardData?.setData("application/json", JSON.stringify({
-                app: "openDAW",
-                content: "text",
-                value: model.getValue()
-            }))
+            event.clipboardData?.setData("application/json", ClipboardPayload.write("text", model.getValue()))
         }),
         Events.subscribe(element, "paste", (event: ClipboardEvent) => {
-            const data = event.clipboardData?.getData("application/json")
-            if (isDefined(data)) {
-                const json = JSON.parse(data)
-                if (json.app === "openDAW" && json.content === "text") {
-                    event.preventDefault()
-                    model.setValue(json.value)
-                }
-            }
+            ClipboardPayload.read(event.clipboardData?.getData("application/json"), "text").ifSome(value => {
+                event.preventDefault()
+                model.setValue(String(value))
+            })
         }),
         Events.subscribe(element, "input", (event: Event) => {
             const target = event.target

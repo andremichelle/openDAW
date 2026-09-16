@@ -1,6 +1,7 @@
 import css from "./EntryPeakMeter.sass?inline"
 import {Arrays, int, Lifecycle, Terminator, ValueMapping} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
+import {meterRatio} from "@/ui/components/MeterRatio"
 import {Address} from "@opendaw/lib-box"
 import {gainToDb} from "@opendaw/lib-dsp"
 import {LiveStreamReceiver} from "@opendaw/lib-fusion"
@@ -56,7 +57,7 @@ export const EntryPeakMeter = ({lifecycle, receiver, address}: Construct) => {
             peaks[1] = gainToDb(values[1])
             peaks.forEach((db: number, index: int) => {
                 const bar = bars[index]
-                const ratio = db === Number.NEGATIVE_INFINITY ? 0.0 : mapping.x(db)
+                const ratio = meterRatio(mapping, db)
                 const barHeight = Math.ceil(innerHeight * ratio)
                 bar.y.baseVal.value = barPadding + (innerHeight - barHeight)
                 bar.height.baseVal.value = barHeight

@@ -1,6 +1,6 @@
 import css from "./LatencyWarning.sass?inline"
 import {Exec} from "@opendaw/lib-std"
-import {createElement, LocalLink} from "@opendaw/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon"
@@ -23,7 +23,7 @@ export const LatencyWarning = ({anchor, dismiss}: Construct) => {
             <Icon symbol={IconSymbol.Warning}/>
             <span>High output latency</span>
             <span onclick={dismiss}>
-                <LocalLink href="/manuals/latency">How to reduce it</LocalLink>
+                <a href="/manuals/latency" target="manuals">How to reduce it</a>
             </span>
             <div className="close" onclick={dismiss}>✕</div>
         </div>

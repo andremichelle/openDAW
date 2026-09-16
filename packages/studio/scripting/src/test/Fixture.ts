@@ -3,7 +3,7 @@ import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {applyUpdateTasks, BoxGraph, UpdateTask} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
 import {Arrays, Option, UUID} from "@opendaw/lib-std"
-import {Api, Project, Sample} from "../Api"
+import {Api, MixdownOptions, Project, Sample} from "../Api"
 import {ScriptHostProtocol} from "../ScriptHostProtocol"
 import {ApiImpl} from "../impl/ApiImpl"
 import {ProjectImpl} from "../impl/ProjectImpl"
@@ -13,6 +13,8 @@ export class FakeHost implements ScriptHostProtocol {
     readonly samples: Array<Sample> = []
     readonly dialogs: Array<{ headline: string, message: string }> = []
     readonly applied: Array<ReadonlyArray<UpdateTask<BoxIO.TypeMap>>> = []
+    readonly rendered: Array<{ buffer: ArrayBufferLike, options: MixdownOptions }> = []
+    readonly saved: Array<{ byteLength: number, fileName: string, mimeType: string }> = []
     current: { graph: BoxGraph<BoxIO.TypeMap>, name: string } | null = null
 
     async hasProject(): Promise<boolean> {return this.current !== null}
@@ -46,6 +48,14 @@ export class FakeHost implements ScriptHostProtocol {
         return sample
     }
     async listSamples(): Promise<ReadonlyArray<Sample>> {return this.samples}
+    async renderMixdown(buffer: ArrayBufferLike, options: MixdownOptions): Promise<AudioData> {
+        this.rendered.push({buffer, options})
+        const sampleRate = options.sampleRate ?? 48000
+        return AudioData.create(sampleRate, sampleRate, 2)
+    }
+    async saveFile(buffer: ArrayBuffer, fileName: string, mimeType: string): Promise<void> {
+        this.saved.push({byteLength: buffer.byteLength, fileName, mimeType})
+    }
 }
 
 export const createFixture = (): { api: Api, host: FakeHost, project: Project } => {

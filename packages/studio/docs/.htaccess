@@ -1,0 +1,7 @@
+# Generated documentation sites, every folder carries its own index.html.
+# Serve it for folder paths with or without trailing slash instead of a mod_dir redirect
+# that would expose the internal /<env>/docs path.
+DirectorySlash Off
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^(.*?)/?$ $1/index.html [L]

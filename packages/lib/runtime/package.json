@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/lib-runtime",
-  "version": "0.0.85",
-  "license": "LGPL-3.0-or-later",
+  "version": "0.0.86",
+  "license": "AGPL-3.0-or-later",
   "sideEffects": false,
   "publishConfig": {
     "access": "public"
@@ -23,7 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@opendaw/lib-std": "^0.0.84"
+    "@opendaw/lib-std": "^0.0.85"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",

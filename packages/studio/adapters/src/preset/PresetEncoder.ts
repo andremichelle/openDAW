@@ -25,11 +25,11 @@ export namespace PresetEncoder {
             || (!includeTimeline && TransferUtils.excludeTimelinePredicate(box))
             || excludeEffect(box)
         boxGraph.beginTransaction()
-        const dependencies = Array.from(audioUnitBox.graph.dependenciesOf(audioUnitBoxes, {
+        const dependencies = TransferUtils.withModulators(Array.from(audioUnitBox.graph.dependenciesOf(audioUnitBoxes, {
             alwaysFollowMandatory: true,
             stopAtResources: true,
             excludeBox
-        }).boxes)
+        }).boxes))
         const summary: Record<string, number> = {}
         for (const dep of dependencies) {
             summary[dep.name] = (summary[dep.name] ?? 0) + 1
@@ -74,17 +74,17 @@ export namespace PresetEncoder {
                 || TransferUtils.excludeTimelinePredicate(box)
                 || box instanceof AudioUnitBox
             const effectSet = new Set<Box>(effects)
-            const dependencies = Array.from(sourceGraph.dependenciesOf(effects, {
+            const dependencies = TransferUtils.withModulators(Array.from(sourceGraph.dependenciesOf(effects, {
                 alwaysFollowMandatory: true,
                 stopAtResources: true,
                 excludeBox
-            }).boxes).filter(box => !effectSet.has(box))
+            }).boxes).filter(box => !effectSet.has(box)))
             const uuidMap = UUID.newSet<TransferUtils.UUIDMapper>(({source}) => source)
             uuidMap.addMany([
                 ...effects.map(box => ({source: box.address.uuid, target: UUID.generate()})),
                 ...dependencies.map(box => ({
                     source: box.address.uuid,
-                    target: box.resource === "preserved" ? box.address.uuid : UUID.generate()
+                    target: TransferUtils.keepsIdentity(box) ? box.address.uuid : UUID.generate()
                 }))
             ])
             const targetField = kind === PresetHeader.ChainKind.Audio
@@ -105,6 +105,9 @@ export namespace PresetEncoder {
                     // A host pointing OUTSIDE the copied set is a chain ROOT: re-target it onto the wrapper.
                     if (pointer.pointerType === hostPointerType) {
                         return Option.wrap(targetField.address)
+                    }
+                    if (pointer.pointerType === Pointers.ModulatorCollection) {
+                        return Option.wrap(rootBox.modulators.address)
                     }
                     return address.flatMap(addr =>
                         boxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None)

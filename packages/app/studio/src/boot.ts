@@ -34,7 +34,6 @@ import {showStoragePersistDialog} from "@/AppDialogs"
 import {Promises} from "@opendaw/lib-runtime"
 import {AnimationFrame, Browser, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
-import {installLatencyReporter} from "@/LatencyReporter"
 import {reportVisitor} from "@/VisitorReporter"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
@@ -42,6 +41,7 @@ import {AudioData} from "@opendaw/lib-dsp"
 import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
 import {TouchContextMenu} from "@/ui/TouchContextMenu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
@@ -83,7 +83,9 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     const context = new AudioContext({sampleRate, latencyHint: 0})
     console.debug(`AudioContext state: ${context.state}, sampleRate: ${context.sampleRate}`)
     console.debug(`Error.stackTraceLimit: ${Error.stackTraceLimit ?? "N/A"}`)
-    installLatencyReporter(context)
+    // purge identifiers written by the old client-side counting (§25 TDDDG)
+    localStorage.removeItem("__id__")
+    localStorage.removeItem("reported-latencies")
     reportVisitor()
     const audioWorklets = await Promises.tryCatch(AudioWorklets.createFor(context))
     if (audioWorklets.status === "rejected") {
@@ -154,6 +156,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
     document.querySelector("#preloader")?.remove()
     replaceChildren(surface.ground, App(service))
+    Tour.install(service)
     AnimationFrame.start(window)
     installCursors()
     RuntimeNotifier.install({

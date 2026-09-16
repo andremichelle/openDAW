@@ -1,4 +1,4 @@
-import {asDefined, int, Option} from "@opendaw/lib-std"
+import {asDefined, int, Option, UUID} from "@opendaw/lib-std"
 import {ExportConfiguration, ProcessorOptions, RingBuffer} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {EngineWorklet} from "./EngineWorklet"
@@ -44,11 +44,11 @@ export class AudioWorklets {
         return new EngineWorklet(this.#context, project, exportConfiguration, options)
     }
 
-    createRecording(numberOfChannels: int, numChunks: int): RecordingWorklet {
+    createRecording(uuid: UUID.Bytes, numberOfChannels: int, numChunks: int): RecordingWorklet {
         const audioBytes = numberOfChannels * numChunks * RenderQuantum * Float32Array.BYTES_PER_ELEMENT
         const pointerBytes = Int32Array.BYTES_PER_ELEMENT * 2
         const sab = new SharedArrayBuffer(audioBytes + pointerBytes)
         const buffer: RingBuffer.Config = {sab, numChunks, numberOfChannels, bufferSize: RenderQuantum}
-        return new RecordingWorklet(this.#context, buffer)
+        return new RecordingWorklet(this.#context, uuid, buffer)
     }
 }

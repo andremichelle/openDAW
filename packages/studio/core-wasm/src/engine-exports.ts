@@ -1,3 +1,4 @@
+import {Option} from "@opendaw/lib-std"
 // The engine wasm module's export surface, shared by every host that instantiates it (the wasm app's own
 // worklet, the offline perf renderer, and the studio's wasm engine processor).
 import {decodeUtf8} from "./utf8"
@@ -169,6 +170,10 @@ export type EngineExports = {
     // host reads it back here, so a production panic is never anonymous (panic=abort strips it otherwise).
     panic_message_ptr: () => number
     panic_message_len: () => number
+    // non-fatal report: read and cleared after `render`, raised by the host as an engine error
+    report_message_ptr: () => number
+    report_message_len: () => number
+    report_message_clear: () => void
 }
 
 // Read the panic message the trapped engine left behind (empty when the failure was not a wasm panic).
@@ -178,4 +183,12 @@ export const readPanicMessage = (exports: EngineExports, memory: WebAssembly.Mem
     const length = exports.panic_message_len()
     if (length === 0) {return ""}
     return decodeUtf8(new Uint8Array(memory.buffer, exports.panic_message_ptr(), length))
+}
+
+export const takeReportMessage = (exports: EngineExports, memory: WebAssembly.Memory): Option<string> => {
+    const length = exports.report_message_len()
+    if (length === 0) {return Option.None}
+    const message = decodeUtf8(new Uint8Array(memory.buffer, exports.report_message_ptr(), length))
+    exports.report_message_clear()
+    return Option.wrap(message)
 }
