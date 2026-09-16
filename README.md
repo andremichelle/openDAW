@@ -13,13 +13,14 @@
 and to **resurface the process of making music** by making **high-quality** creation tools accessible to everyone, with
 a strong focus on **education** and data-privacy.
 
-**NEWS: openDAW 1.0 Release Meetup**
-
-Celebrate the 1.0 release with us on **Saturday, 3 October 2026** at [Studio A](https://www.studioakoeln.de),
-Aachener Str. 65, 50674 Cologne, Germany. Doors open at 1:00pm, admission is free, registration is required. Expect
-talks and panel discussions with André Michelle, live acts produced entirely with openDAW, stations to try it yourself,
-plus drinks, food and a meetup with the people building openDAW. All talks and panels are held in English.
-Request your invitation at [opendaw.org/release26](https://opendaw.org/release26/).
+> [!IMPORTANT]
+> **NEWS: openDAW 1.0 Release Meetup**
+>
+> Celebrate the 1.0 release with us on **Saturday, 3 October 2026** at [Studio A](https://www.studioakoeln.de),
+> Aachener Str. 65, 50674 Cologne, Germany. Doors open at 1:00pm, admission is free, registration is required. Expect
+> talks and panel discussions with André Michelle, live acts produced entirely with openDAW, stations to try it yourself,
+> plus drinks, food and a meetup with the people building openDAW. All talks and panels are held in English.
+> Request your invitation at [opendaw.org/release26](https://opendaw.org/release26/).
 
 Subscribe to our [Newsletter](https://buttondown.com/opendaw) for regular updates.
 
