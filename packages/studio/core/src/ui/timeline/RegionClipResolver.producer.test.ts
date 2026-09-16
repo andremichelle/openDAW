@@ -109,4 +109,41 @@ describe("RegionClipResolver producer: fractional boundary quantization (#287)",
         expect(() => RegionClipResolver.validateTrack(trackAdapter)).not.toThrow()
         project.terminate()
     })
+
+    it("deletes instead of leaving a sub-ulp sliver when a START task's end ceils within float drift of a seconds-based complete", async () => {
+        const {Project} = await import("../../project/Project")
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox}} = skeleton
+        boxGraph.beginTransaction()
+        const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+            box.type.setValue(TrackType.Audio)
+            box.tracks.refer(primaryAudioUnitBox.tracks)
+            box.target.refer(primaryAudioUnitBox)
+        })
+        const fileBox = AudioFileBox.create(boxGraph, UUID.generate(), box => box.endInSeconds.setValue(60))
+        const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+        // Same drifted region as above (complete = 2103.0001068…), but the mask covers the region's START, so
+        // createTasksFromMasks emits a plain "start" task (not "separate") and #executeTasks calls #trimStart
+        // with the ceiled end 2103. Without the tolerance in #trimStart the region survives as [2103, 2103.0001].
+        AudioRegionBox.create(boxGraph, UUID.generate(), box => {
+            box.timeBase.setValue(TimeBase.Seconds)
+            box.position.setValue(100)
+            box.duration.setValue(PPQN.pulsesToSeconds(2003, 120))
+            box.loopDuration.setValue(PPQN.pulsesToSeconds(2003, 120))
+            box.loopOffset.setValue(0)
+            box.regions.refer(trackBox.regions)
+            box.file.refer(fileBox)
+            box.events.refer(events.owners)
+        })
+        boxGraph.endTransaction()
+        const project = Project.fromSkeleton(createEnv(), skeleton)
+        const trackAdapter = project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
+        expect(trackAdapter.regions.collection.asArray()[0].complete).toBeGreaterThan(2103)
+        const exec = RegionClipResolver.fromRange(trackAdapter, 50, 2102.5)
+        boxGraph.beginTransaction()
+        exec()
+        boxGraph.endTransaction()
+        expect(trackAdapter.regions.collection.asArray()).toHaveLength(0)
+        project.terminate()
+    })
 })

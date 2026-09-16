@@ -268,7 +268,7 @@ export class RegionClipResolver {
 
     #trimStart(region: AnyRegionBoxAdapter, position: ppqn): void {
         if (!UnionAdapterTypes.isLoopableRegion(region)) {return panic("Not yet implemented")}
-        if (position >= region.complete) {return region.box.delete()}
+        if (position >= region.complete - boundaryTolerance(region.complete)) {return region.box.delete()}
         const delta = position - region.position
         const oldDuration = region.duration
         const oldLoopOffset = region.loopOffset
