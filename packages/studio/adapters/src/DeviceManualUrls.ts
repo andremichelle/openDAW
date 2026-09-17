@@ -35,7 +35,6 @@ export namespace DeviceManualUrls {
     export const Apparat = "manuals/devices/instruments/apparat"
     export const Tape = "manuals/devices/instruments/tape"
     export const Nano = "manuals/devices/instruments/nano"
-    export const NanoSampler2 = "manuals/devices/instruments/nano-sampler-2"
     export const Playfield = "manuals/devices/instruments/playfield"
     export const Vaporisateur = "manuals/devices/instruments/vaporisateur"
     export const Neon = "manuals/devices/instruments/neon"

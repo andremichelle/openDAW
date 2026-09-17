@@ -232,11 +232,24 @@ export class PlayfieldImpl extends InstrumentFacade<PlayfieldDeviceBox> implemen
 export class NanoImpl extends InstrumentFacade<NanoDeviceBox> implements Nano {
     readonly key = "Nano" as const
     declare volume: float
+    declare octave: int
+    declare rootKey: int
+    declare attack: float
     declare release: float
+    declare sampleStart: unitValue
+    declare sampleEnd: unitValue
+    declare loop: boolean
+    declare loopFade: float
+    declare loopStart: unitValue
+    declare loopEnd: unitValue
 
     constructor(context: Context, box: NanoDeviceBox) {
         super(context, box)
-        this.bind({volume: box.volume, release: box.release})
+        this.bind({
+            volume: box.volume, octave: box.octave, rootKey: box.rootKey, attack: box.attack, release: box.release,
+            sampleStart: box.sampleStart, sampleEnd: box.sampleEnd, loop: box.loop, loopFade: box.loopFade,
+            loopStart: box.loopStart, loopEnd: box.loopEnd
+        })
     }
 
     get sample(): Nullable<Sample> {

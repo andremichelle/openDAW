@@ -53,7 +53,6 @@ import {
     ModuleGainBox,
     ModuleMultiplierBox,
     NanoDeviceBox,
-    NanoSampler2DeviceBox,
     NeuralAmpDeviceBox,
     NeuralAmpModelBox,
     NoteClipBox,
@@ -134,7 +133,6 @@ import {ApparatDeviceBoxAdapter} from "./devices/instruments/ApparatDeviceBoxAda
 import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter"
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
-import {NanoSampler2DeviceBoxAdapter} from "./devices/instruments/NanoSampler2DeviceBoxAdapter"
 import {PlayfieldDeviceBoxAdapter} from "./devices/instruments/PlayfieldDeviceBoxAdapter"
 import {StereoToolDeviceBoxAdapter} from "./devices/audio-effects/StereoToolDeviceBoxAdapter"
 import {PlayfieldSampleBoxAdapter} from "./devices/instruments/Playfield/PlayfieldSampleBoxAdapter"
@@ -275,7 +273,6 @@ export class BoxAdapters implements Terminable {
             visitModuleMultiplierBox: (box: ModuleMultiplierBox) => new ModuleMultiplierAdapter(this.#context, box),
             visitNeonDeviceBox: (box: NeonDeviceBox) => new NeonDeviceBoxAdapter(this.#context, box),
             visitNanoDeviceBox: (box: NanoDeviceBox) => new NanoDeviceBoxAdapter(this.#context, box),
-            visitNanoSampler2DeviceBox: (box: NanoSampler2DeviceBox) => new NanoSampler2DeviceBoxAdapter(this.#context, box),
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => new NeuralAmpDeviceBoxAdapter(this.#context, box),
             visitNeuralAmpModelBox: (box: NeuralAmpModelBox) => new NeuralAmpModelBoxAdapter(this.#context, box),
             visitNoteClipBox: (box: NoteClipBox) => new NoteClipBoxAdapter(this.#context, box),

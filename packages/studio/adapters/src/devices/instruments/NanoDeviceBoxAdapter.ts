@@ -1,5 +1,6 @@
 import {NanoDeviceBox} from "@opendaw/studio-boxes"
-import {Option, StringMapping, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {MidiKeys} from "@opendaw/lib-dsp"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
@@ -8,6 +9,9 @@ import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
 import {TrackType} from "../../timeline/TrackType"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
+import {AudioFileBoxAdapter} from "../../audio/AudioFileBoxAdapter"
+
+const RootKeyLabels: ReadonlyArray<string> = Array.from({length: 128}, (_, note) => MidiKeys.toFullString(note))
 
 export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
@@ -16,15 +20,23 @@ export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     readonly #context: BoxAdaptersContext
     readonly #box: NanoDeviceBox
+    readonly #terminator: Terminator
 
     readonly #parametric: ParameterAdapterSet
     readonly namedParameter // let typescript infer the type
 
+    #file: Option<AudioFileBoxAdapter> = Option.None
+
     constructor(context: BoxAdaptersContext, box: NanoDeviceBox) {
         this.#context = context
         this.#box = box
+        this.#terminator = new Terminator()
         this.#parametric = new ParameterAdapterSet(this.#context)
         this.namedParameter = this.#wrapParameters(box)
+        this.#terminator.own(this.#box.file.catchupAndSubscribe(pointer => {
+            this.#file = pointer.targetVertex.map(({box}) => this.#context.boxAdapters.adapterFor(box, AudioFileBoxAdapter))
+            this.#file.ifSome(file => file.getOrCreateLoader())
+        }))
     }
 
     get box(): NanoDeviceBox {return this.#box}
@@ -36,6 +48,9 @@ export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     get enabledField(): BooleanField {return this.#box.enabled}
     get minimizedField(): BooleanField {return this.#box.minimized}
     get acceptsMidiEvents(): boolean {return true}
+    get positionsAddress(): Address {return this.#box.address.append(1001)}
+
+    file(): Option<AudioFileBoxAdapter> {return this.#file}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters
@@ -49,6 +64,7 @@ export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     }
 
     terminate(): void {
+        this.#terminator.terminate()
         this.#parametric.terminate()
     }
 
@@ -58,10 +74,46 @@ export class NanoDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                 box.volume,
                 ValueMapping.DefaultDecibel,
                 StringMapping.numeric({unit: "db", fractionDigits: 1}), "Volume"),
+            octave: this.#parametric.createParameter(
+                box.octave,
+                ValueMapping.linearInteger(-3, 3),
+                StringMapping.numeric({unit: "oct"}), "Octave", 0.5),
+            rootKey: this.#parametric.createParameter(
+                box.rootKey,
+                ValueMapping.linearInteger(0, 127),
+                StringMapping.indices("", RootKeyLabels), "Root", 60 / 127),
             release: this.#parametric.createParameter(
                 box.release,
                 ValueMapping.exponential(0.001, 8.0),
-                StringMapping.numeric({unit: "s", fractionDigits: 3}), "Release")
+                StringMapping.numeric({unit: "s", fractionDigits: 3}), "Release"),
+            attack: this.#parametric.createParameter(
+                box.attack,
+                ValueMapping.exponential(0.001, 5.0),
+                StringMapping.numeric({unit: "s", fractionDigits: 3}), "Attack"),
+            sampleStart: this.#parametric.createParameter(
+                box.sampleStart,
+                ValueMapping.unipolar(),
+                StringMapping.percent(), "Start", 0.0),
+            sampleEnd: this.#parametric.createParameter(
+                box.sampleEnd,
+                ValueMapping.unipolar(),
+                StringMapping.percent(), "End", 1.0),
+            loop: this.#parametric.createParameter(
+                box.loop,
+                ValueMapping.bool,
+                StringMapping.bool, "Loop"),
+            loopFade: this.#parametric.createParameter(
+                box.loopFade,
+                ValueMapping.exponential(0.001, 1.0),
+                StringMapping.numeric({unit: "s", fractionDigits: 3}), "Fade"),
+            loopStart: this.#parametric.createParameter(
+                box.loopStart,
+                ValueMapping.unipolar(),
+                StringMapping.percent(), "Loop Start", 0.0),
+            loopEnd: this.#parametric.createParameter(
+                box.loopEnd,
+                ValueMapping.unipolar(),
+                StringMapping.percent(), "Loop End", 1.0)
         } as const
     }
 }

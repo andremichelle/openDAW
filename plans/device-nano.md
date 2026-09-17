@@ -1,11 +1,12 @@
-# Nano Sampler 2.0 — polyphonic sampler instrument
+# Nano — polyphonic sampler instrument
 
 A sampler instrument that maps ONE dropped sample across the keyboard: each note is a pitch-rate
 read head over the sample (linear interpolation), transposed relative to a configurable **root key**
 (the note that plays the sample at its native rate), with an attack/release envelope, a start/end
-region, reverse playback and an octave shift. The reference device throughout is **Nano**
-(`device-nano`), which Nano Sampler 2.0 extends; the Playfield sample slot (`device-playfield-sample`)
-informed the region and parameter patterns.
+region (a start past the end plays backwards) and an octave shift. It replaced the original
+two-parameter Nano in place: the same box, the original field keys kept, every new field defaulting
+to the original behaviour so old projects sound identical (`device-nano/tests/legacy_parity.rs`).
+The Playfield sample slot (`device-playfield-sample`) informed the region and parameter patterns.
 
 ## Feature set
 
@@ -13,8 +14,9 @@ informed the region and parameter patterns.
   region emphasised and the region boundaries draggable directly on the waveform.
 - Polyphonic voice pool (64 voices), each voice a `2^((pitch - rootKey + cent/100)/12 + octave)`
   rate read head — playing the root key reproduces the sample at its native rate.
-- Root key (C-2..G8, note-name knob), octave shift (±3), reverse playback, attack (1 ms..5 s) and
-  release (1 ms..8 s) squared envelope, unit sample start/end region, output volume.
+- Root key (C-2..G8, note-name knob), octave shift (±3), attack (1 ms..5 s) and release (1 ms..8 s)
+  squared envelope, unit sample start/end region (swapped = backwards, a "Reverse" menu entry swaps
+  them), output volume. Attack and release are read live, so a knob change reaches held notes.
 - Crossfade loop: a loop toggle, dedicated loop start/end points (unit positions, clamped inside the
   sample region, live-adjustable, green markers on the waveform) and a fade time (1 ms..1 s). The
   voice plays the sample lead-in, then cycles the loop range through an equal-gain linear crossfade,
@@ -24,12 +26,12 @@ informed the region and parameter patterns.
 
 ## Structure
 
-- `packages/studio/forge-boxes` … `NanoSampler2DeviceBox` schema (field keys 10..27) → generated box +
+- `packages/studio/forge-boxes` … `NanoDeviceBox` schema (field keys 10..27) → generated box +
   `registry.rs` entry.
-- `packages/studio/adapters` … `NanoSampler2DeviceBoxAdapter` (parameter mappings, note-name
-  `StringMapping.indices` for the root key), `InstrumentFactories.NanoSampler2`.
-- `packages/app/studio` … `NanoSampler2DeviceEditor` (waveform + region dragging + drop zone + knobs).
-- `crates/stock-devices/device-nano-sampler-2` … the DSP as a runtime-loadable WASM device (`lib.rs` the
+- `packages/studio/adapters` … `NanoDeviceBoxAdapter` (parameter mappings, note-name
+  `StringMapping.indices` for the root key), `InstrumentFactories.Nano`.
+- `packages/app/studio` … `NanoDeviceEditor` (waveform + region dragging + drop zone + knobs).
+- `crates/stock-devices/device-nano` … the DSP as a runtime-loadable WASM device (`lib.rs` the
   `Instrument` impl and ABI exports, `voice.rs` the pure-DSP voice with unit tests), registered in
   `build-wasm.sh` `DEVICE_CRATES` and `engine-modules.ts` `DEVICES`.
 
@@ -38,7 +40,7 @@ informed the region and parameter patterns.
 Built with AI assistance (Claude Code). The TypeScript processor came first (a Nano derivative,
 verified interactively in the studio: drag & drop import, four-voice chords with divergent playhead
 rates, forward/reverse playback, root-key unity-rate check). When upstream removed the TypeScript
-device engine, the DSP was ported to `device-nano-sampler-2` following the Nano port, and the port's unit
+device engine, the DSP was ported to `device-nano` following the Nano port, and the port's unit
 tests immediately caught a regression the interactive testing had missed (an end-of-sample clamp
 that terminated reverse voices on their first frame — reverse starts AT the last frame). The clamp
 now bounds the interpolation partner instead, and a dedicated test covers a sample swapped mid-note

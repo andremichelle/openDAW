@@ -8,7 +8,6 @@ import {
     NanoDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
-    NanoSampler2DeviceBox,
     SoundfontDeviceBox,
     SoundfontFileBox,
     TapeDeviceBox,
@@ -48,8 +47,8 @@ export namespace InstrumentFactories {
     export const Nano: InstrumentFactory<AudioFileBox, NanoDeviceBox> = {
         defaultName: "Nano",
         defaultIcon: IconSymbol.NanoWave,
-        briefDescription: "Simple Sampler",
-        description: "Simple sampler",
+        briefDescription: "Polyphonic Sampler",
+        description: "Polyphonic sampler with root key, region, crossfade loop and envelope",
         manualPage: DeviceManualUrls.Nano,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph,
@@ -57,25 +56,6 @@ export namespace InstrumentFactories {
                  name: string,
                  icon: IconSymbol,
                  attachment?: AudioFileBox): NanoDeviceBox => NanoDeviceBox.create(boxGraph, UUID.generate(), box => {
-            box.label.setValue(name)
-            box.icon.setValue(IconSymbol.toName(icon))
-            if (isDefined(attachment)) {box.file.refer(attachment)}
-            box.host.refer(host)
-        })
-    }
-
-    export const NanoSampler2: InstrumentFactory<AudioFileBox, NanoSampler2DeviceBox> = {
-        defaultName: "Nano Sampler 2.0",
-        defaultIcon: IconSymbol.Stack,
-        briefDescription: "Polyphonic Sampler",
-        description: "Polyphonic sampler with envelope and sample region",
-        manualPage: DeviceManualUrls.NanoSampler2,
-        trackType: TrackType.Notes,
-        create: (boxGraph: BoxGraph,
-                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
-                 name: string,
-                 icon: IconSymbol,
-                 attachment?: AudioFileBox): NanoSampler2DeviceBox => NanoSampler2DeviceBox.create(boxGraph, UUID.generate(), box => {
             box.label.setValue(name)
             box.icon.setValue(IconSymbol.toName(icon))
             if (isDefined(attachment)) {box.file.refer(attachment)}
@@ -265,7 +245,7 @@ export namespace InstrumentFactories {
         })
     }
 
-    export const Named = {Apparat, Cubed, Neon, MIDIOutput, Nano, Playfield, NanoSampler2, Soundfont, Tape, Vaporisateur}
+    export const Named = {Apparat, Cubed, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
     const useAudioFile = (boxGraph: BoxGraph, fileUUID: UUID.Bytes, name: string, duration: number) =>
