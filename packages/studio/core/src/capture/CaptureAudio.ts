@@ -6,11 +6,14 @@ import {
     Nullable,
     Option,
     RuntimeNotifier,
-    Terminable
+    Terminable,
+    tryCatch,
+    UUID
 } from "@opendaw/lib-std"
 import {dbToGain} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioUnitBox, CaptureAudioBox} from "@opendaw/studio-boxes"
+import {AudioContexts} from "../AudioContexts"
 import {Capture} from "./Capture"
 import {CaptureDevices} from "./CaptureDevices"
 import {InputLatency} from "./InputLatency"
@@ -176,6 +179,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     async prepareRecording(): Promise<void> {
         const {project} = this.manager
         const {env: {audioContext, audioWorklets, sampleManager, sampleService}} = project
+        // a prepared worklet that startRecording never consumed stays connected and buffering forever
+        this.#discardPreparedWorklet()
         if (isUndefined(audioContext.outputLatency)) {
             const approved = await RuntimeNotifier.approve({
                 headline: "Warning",
@@ -187,13 +192,17 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                 return Promise.reject("Recording cancelled")
             }
         }
+        await AudioContexts.resume(audioContext)
+        if (audioContext.state !== "running") {
+            return Promise.reject(`Cannot record while the audio context is '${audioContext.state}'.`)
+        }
         await this.#streamGenerator()
         const audioChain = this.#audioChain
         if (!isDefined(audioChain)) {
             return Promise.reject("No audio chain available for recording.")
         }
         const {recordGainNode, channelCount} = audioChain
-        const recordingWorklet = audioWorklets.createRecording(channelCount, RecordingRingChunks)
+        const recordingWorklet = audioWorklets.createRecording(UUID.generate(), channelCount, RecordingRingChunks)
         recordingWorklet.bpm = project.timelineBox.bpm.getValue()
         recordingWorklet.sampleService = sampleService
         sampleManager.record(recordingWorklet)
@@ -208,17 +217,24 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         const recordingWorklet = this.#preparedWorklet
         if (!isDefined(audioChain) || !isDefined(recordingWorklet)) {
             console.warn("No audio chain or worklet available for recording.")
+            this.#discardPreparedWorklet()
             return Terminable.Empty
         }
         this.#preparedWorklet = null
         const {recordGainNode} = audioChain
         const track = this.#stream.unwrapOrNull()?.getAudioTracks().at(0)
         const trackSettings = track?.getSettings()
-        const outputLatency = audioContext.outputLatency ?? 0
-        const inputLatency = InputLatency.resolve(
-            this.captureBox.inputLatency.getValue(),
-            engine.preferences.settings.recording.inputLatency,
-            outputLatency)
+        const readLatency = (): RecordAudio.Latency => {
+            const outputLatency = audioContext.outputLatency ?? 0
+            return {
+                outputLatency,
+                inputLatency: InputLatency.resolve(
+                    this.captureBox.inputLatency.getValue(),
+                    engine.preferences.settings.recording.inputLatency,
+                    outputLatency)
+            }
+        }
+        const {inputLatency} = readLatency()
         console.debug("[CaptureAudio] latency report", {
             outputLatency: audioContext.outputLatency,
             baseLatency: audioContext.baseLatency,
@@ -233,8 +249,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             sampleManager,
             project,
             capture: this,
-            outputLatency,
-            inputLatency
+            readLatency
         })
     }
 
@@ -299,6 +314,15 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         sourceNode.connect(recordGainNode)
         this.#audioChain = {sourceNode, recordGainNode, channelCount}
         this.#connectMonitoring()
+    }
+
+    #discardPreparedWorklet(): void {
+        const recordingWorklet = this.#preparedWorklet
+        if (!isDefined(recordingWorklet)) {return}
+        this.#preparedWorklet = null
+        tryCatch(() => this.#audioChain?.recordGainNode.disconnect(recordingWorklet))
+        this.manager.project.env.sampleManager.remove(recordingWorklet.uuid)
+        recordingWorklet.terminate()
     }
 
     #destroyAudioChain(): void {

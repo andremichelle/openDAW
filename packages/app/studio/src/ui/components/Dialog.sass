@@ -5,6 +5,7 @@ component
   flex-direction: column
   min-width: min(35em, 75vw)
   max-width: min(35em, 75vw)
+  max-height: 75vh
   padding: 2em
 
   &.grow-width
@@ -41,6 +42,11 @@ component
 
     &:empty
       display: none
+
+    > div.leading
+      margin-right: auto
+      display: flex
+      align-items: center
 
     > [data-class='button'] label
       min-width: 4em

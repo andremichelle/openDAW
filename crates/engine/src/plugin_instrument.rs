@@ -7,6 +7,8 @@
 //! device PULLS its own events (notes + param updates) through `host_pull_events`, so this node pushes no event list.
 
 use alloc::boxed::Box;
+use alloc::string::String;
+use boxgraph::address::Uuid;
 use alloc::vec;
 use alloc::vec::Vec;
 use abi::EventRecord;
@@ -47,6 +49,9 @@ pub(crate) struct PluginInstrument {
     // construction; composite slots share their unit's slot (idempotent bit writes).
     note_bits: Option<engine_env::telemetry::BroadcastSlot>,
     device_output: [Box<[f32]>; 2], // the device's stereo output buffers ([left, right])
+    uuid: Uuid,
+    type_name: String,
+    reported_non_finite: bool,
     // `device_events` (the event scratch the device pulls into), `device_state`, and `out_offsets` are
     // referenced only by raw address inside `descriptor`; they must stay alive (dropping them frees the
     // memory the device reads/writes), so keep the fields even though Rust sees no direct reads. The block
@@ -62,7 +67,7 @@ pub(crate) struct PluginInstrument {
 }
 
 impl PluginInstrument {
-    pub(crate) fn new(sample_rate: f32, device: DeviceReg) -> Self {
+    pub(crate) fn new(sample_rate: f32, device: DeviceReg, uuid: Uuid, type_name: String) -> Self {
         crate::note_device_build();
         let device_output = [
             vec![0.0f32; RENDER_QUANTUM].into_boxed_slice(),
@@ -99,6 +104,9 @@ impl PluginInstrument {
             events: EventBuffer::new(),
             output: shared_audio_buffer(),
             meter: engine_env::meter::Meter::new(sample_rate),
+            uuid,
+            type_name,
+            reported_non_finite: false,
             note_bits: crate::current_unit_note_bits(),
             device_output,
             device_events,
@@ -203,6 +211,13 @@ impl Processor for PluginInstrument {
             for index in 0..RENDER_QUANTUM {
                 output.left[index] = self.device_output[0][index];
                 output.right[index] = self.device_output[1][index];
+            }
+        }
+        if !self.reported_non_finite {
+            if let Some((channel, frame)) = crate::first_non_finite(&self.device_output[0], &self.device_output[1]) {
+                self.reported_non_finite = true;
+                crate::report_error(format_args!("{} {} wrote a non-finite sample (channel {}, frame {})",
+                    self.type_name, boxgraph::address::uuid_to_string(&self.uuid), channel, frame));
             }
         }
         self.meter.process(&self.device_output[0], &self.device_output[1]);

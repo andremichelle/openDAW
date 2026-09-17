@@ -47,20 +47,31 @@ export namespace RecordMidi {
         const terminator = new Terminator()
         const activeNotes = new Map<byte, ActiveNote>()
         const pendingNotes = new Map<byte, byte>()
-        const latency = PPQN.secondsToPulses(audioContext.outputLatency ?? 10.0, timelineBox.bpm.getValue())
+        const latency = PPQN.secondsToPulses(audioContext.outputLatency ?? 0.01, timelineBox.bpm.getValue()) // 10ms fallback (seconds)
         let currentTake: Option<TakeData> = Option.None
         let lastPosition: ppqn = 0
         let positionOffset: ppqn = 0
         let takeCount: int = 0
 
-        const createTakeRegion = (position: ppqn, excludeTrack: Nullable<TrackBox>): TakeData => {
+        const takeDuration = (regionPosition: ppqn, writePosition: ppqn): ppqn => {
+            const loopTo = loopArea.to.getValue()
+            const capped = loopArea.enabled.getValue()
+                && engine.preferences.settings.recording.allowTakes && regionPosition < loopTo
+            const cap = capped ? loopTo - regionPosition : Infinity
+            return Math.min(cap, Math.max(beats, quantizeCeil(writePosition, beats) - regionPosition))
+        }
+
+        const createTakeRegion = (position: ppqn, writePosition: ppqn, excludeTrack: Nullable<TrackBox>): TakeData => {
             takeCount++
             const trackBox = RecordTrack.findOrCreate(editing, capture.audioUnitBox, TrackType.Notes, excludeTrack)
             const collection = NoteEventCollectionBox.create(boxGraph, UUID.generate())
+            const duration = takeDuration(position, writePosition)
             const regionBox = NoteRegionBox.create(boxGraph, UUID.generate(), box => {
                 box.regions.refer(trackBox.regions)
                 box.events.refer(collection.owners)
                 box.position.setValue(position)
+                box.duration.setValue(duration)
+                box.loopDuration.setValue(duration)
                 box.hue.setValue(ColorCodes.forTrackType(TrackType.Notes))
                 box.label.setValue(`Take ${takeCount}`)
             })
@@ -124,9 +135,9 @@ export namespace RecordMidi {
             pendingNotes.clear()
         }
 
-        const startNewTake = (position: ppqn) => {
+        const startNewTake = (position: ppqn, writePosition: ppqn) => {
             const previousTrack = currentTake.mapOr(take => take.trackBox, null)
-            currentTake = Option.wrap(createTakeRegion(position, previousTrack))
+            currentTake = Option.wrap(createTakeRegion(position, writePosition, previousTrack))
         }
 
         terminator.own(position.catchupAndSubscribe(owner => {
@@ -135,30 +146,22 @@ export namespace RecordMidi {
             const writePosition = currentPosition + latency
             const loopEnabled = loopArea.enabled.getValue()
             const loopFrom = loopArea.from.getValue()
-            const loopTo = loopArea.to.getValue()
             const allowTakes = project.engine.preferences.settings.recording.allowTakes
             if (loopEnabled && allowTakes && currentTake.nonEmpty() && currentPosition < lastPosition) {
                 editing.modify(() => {
                     currentTake.ifSome(take => {
                         const actualDurationPPQN = take.regionBox.duration.getValue()
-                        if (actualDurationPPQN <= 0) {
-                            take.regionBox.delete()
-                            currentTake = Option.None
-                            return
-                        }
                         finalizeTake(take, actualDurationPPQN)
                         positionOffset += actualDurationPPQN
                     })
-                    if (currentTake.nonEmpty()) {
-                        startNewTake(loopFrom)
-                    }
+                    startNewTake(loopFrom, writePosition)
                 }, false)
             }
             lastPosition = currentPosition
             if (currentTake.isEmpty()) {
                 editing.modify(() => {
                     const pos = quantizeFloor(currentPosition, beats)
-                    const take = createTakeRegion(pos, null)
+                    const take = createTakeRegion(pos, writePosition, null)
                     currentTake = Option.wrap(take)
                     flushPendingNotes(take)
                 }, false)
@@ -167,9 +170,8 @@ export namespace RecordMidi {
                 editing.modify(() => {
                     if (regionBox.isAttached() && collection.isAttached()) {
                         const {position: regionPosition, duration, loopDuration} = regionBox
-                        const maxDuration = loopEnabled && allowTakes ? loopTo - regionPosition.getValue() : Infinity
                         const newDuration = Math.max(duration.getValue(),
-                            Math.min(maxDuration, quantizeCeil(writePosition, beats) - regionPosition.getValue()))
+                            takeDuration(regionPosition.getValue(), writePosition))
                         duration.setValue(newDuration)
                         loopDuration.setValue(newDuration)
                         for (const {event, take, creationOffset} of activeNotes.values()) {
@@ -217,13 +219,6 @@ export namespace RecordMidi {
                     activeNotes.delete(signal.pitch)
                 }
             }
-        }))
-        terminator.own(Terminable.create(() => {
-            currentTake.ifSome(({regionBox}) => {
-                if (regionBox.isAttached() && regionBox.duration.getValue() <= 0) {
-                    editing.modify(() => regionBox.delete(), false)
-                }
-            })
         }))
         return terminator
     }

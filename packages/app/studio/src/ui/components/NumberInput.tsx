@@ -7,9 +7,9 @@ import {
     Lifecycle,
     MutableObservableValue,
     StringMapping,
-    tryCatch,
     ValueGuard
 } from "@opendaw/lib-std"
+import {ClipboardPayload} from "./ClipboardPayload"
 import {createElement} from "@opendaw/lib-jsx"
 
 const defaultClassName = Html.adoptStyleSheet(css, "NumberInput")
@@ -61,21 +61,13 @@ export const NumberInput = ({
         }),
         Events.subscribe(element, "copy", (event: ClipboardEvent) => {
             event.preventDefault()
-            event.clipboardData?.setData("application/json", JSON.stringify({
-                app: "openDAW",
-                content: "number",
-                value: model.getValue()
-            }))
+            event.clipboardData?.setData("application/json", ClipboardPayload.write("number", model.getValue()))
         }),
         Events.subscribe(element, "paste", (event: ClipboardEvent) => {
-            const data = event.clipboardData?.getData("application/json")
-            if (isDefined(data)) {
-                const {status, value: json} = tryCatch(() => JSON.parse(data))
-                if (status === "success" && json.app === "openDAW" && json.content === "number") {
-                    event.preventDefault()
-                    model.setValue(isDefined(guard) ? guard.guard(json.value) : json.value)
-                }
-            }
+            ClipboardPayload.read(event.clipboardData?.getData("application/json"), "number").ifSome(value => {
+                event.preventDefault()
+                model.setValue(isDefined(guard) ? guard.guard(Number(value)) : Number(value))
+            })
         }),
         Events.subscribe(element, "keydown", (event: KeyboardEvent) => {
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {return}

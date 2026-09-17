@@ -8,3 +8,4 @@ declare interface AudioNodeOptions {
 }
 
 declare const sampleRate: number
+declare const currentTime: number

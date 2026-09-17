@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {DefaultObservableValue, isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, MutableObservableOption, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import type {ProjectEnv} from "./ProjectEnv"
 import type {RestartWorklet} from "./Project"
@@ -39,6 +39,7 @@ const createFakeWorklet = () => {
         isCountingIn: new DefaultObservableValue(false),
         markerState: new DefaultObservableValue(null),
         cpuLoad: new DefaultObservableValue(0),
+        recordingStart: new MutableObservableOption(),
         preferences: {update: () => {}, subscribeAll: () => Terminable.Empty},
         context: {destination: {}},
         addEventListener: (type: string, listener: (event: unknown) => void) => {

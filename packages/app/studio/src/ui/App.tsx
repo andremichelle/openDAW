@@ -9,7 +9,6 @@ import {SampleUploadPage} from "@/ui/pages/SampleUploadPage.tsx"
 import {Footer} from "@/ui/Footer"
 import {RoomStatus} from "@/ui/RoomStatus"
 import {ChatOverlay} from "@/ui/ChatOverlay"
-import {ManualPage} from "@/ui/pages/ManualPage"
 import {ColorsPage} from "@/ui/pages/ColorsPage"
 import {Header} from "@/ui/header/Header"
 import {ErrorsPage} from "@/ui/pages/ErrorsPage.tsx"
@@ -17,6 +16,7 @@ import {ImprintPage} from "@/ui/pages/ImprintPage.tsx"
 import {GraphPage} from "@/ui/pages/GraphPage"
 import {CodeEditorPage} from "@/ui/pages/CodeEditorPage"
 import {OpenBundlePage} from "@/ui/pages/OpenBundlePage"
+import {OpenProjectPage} from "@/ui/pages/OpenProjectPage"
 import {DashboardPage} from "@/ui/pages/stats/DashboardPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
@@ -48,7 +48,6 @@ export const App = (service: StudioService) => {
                 routes={[
                     {path: "/", factory: WorkspacePage, reuse: true},
                     {path: "/create", factory: WorkspacePage, reuse: true},
-                    {path: "/manuals/*", factory: ManualPage},
                     {path: "/preferences", factory: PreferencesPage},
                     {path: "/imprint", factory: ImprintPage},
                     {path: "/privacy", factory: PrivacyPage},
@@ -69,6 +68,7 @@ export const App = (service: StudioService) => {
                         }
                     },
                     {path: "/open-bundle/*", factory: OpenBundlePage},
+                    {path: "/open-project", factory: OpenProjectPage},
                     {path: "/test", factory: TestPage},
                     {path: "/performance", factory: PerformancePage},
                     {path: "/performance/sample-read", factory: SampleReadPage},

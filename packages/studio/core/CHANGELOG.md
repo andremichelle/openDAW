@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.5](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.4...@opendaw/studio-core@0.2.5) (2026-09-14)
+
+### Bug Fixes
+
+- **recording:** anchor takes on the engine's own recording start and keep the buffer head ([e1c533f](https://github.com/andremichelle/openDAW/commit/e1c533f692f4cc40b5bc9bd7ea27e07c9406595d))
+- **recording:** announce a recording restart handled before the next render ([1ba3aa2](https://github.com/andremichelle/openDAW/commit/1ba3aa20e72dc531232aa0e8bc33f9b3f1ad9734))
+- **recording:** drop a recording-start report that belongs to an earlier recording ([38d453c](https://github.com/andremichelle/openDAW/commit/38d453c6cfd3ae28420fdbc034b7919e337dc982))
+- **recording:** read the recording latency after output has started ([2069b41](https://github.com/andremichelle/openDAW/commit/2069b419c41d748005cf31b71b178543d2bedcdf))
+
+## [0.2.4](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.3...@opendaw/studio-core@0.2.4) (2026-08-26)
+
+**Note:** Version bump only for package @opendaw/studio-core
+
 ## [0.2.3](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.2...@opendaw/studio-core@0.2.3) (2026-08-24)
 
 **Note:** Version bump only for package @opendaw/studio-core

@@ -1,4 +1,0 @@
-# build artifacts
-dist/
-node_modules/
-public/stretch_wasm.wasm

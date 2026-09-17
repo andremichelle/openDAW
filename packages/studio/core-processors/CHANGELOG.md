@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.138](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.137...@opendaw/studio-core-processors@0.0.138) (2026-09-14)
+
+### Bug Fixes
+
+- **recording:** anchor takes on the engine's own recording start and keep the buffer head ([e1c533f](https://github.com/andremichelle/openDAW/commit/e1c533f692f4cc40b5bc9bd7ea27e07c9406595d))
+
+## [0.0.137](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.136...@opendaw/studio-core-processors@0.0.137) (2026-08-26)
+
+**Note:** Version bump only for package @opendaw/studio-core-processors
+
 ## [0.0.136](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core-processors@0.0.135...@opendaw/studio-core-processors@0.0.136) (2026-08-24)
 
 **Note:** Version bump only for package @opendaw/studio-core-processors

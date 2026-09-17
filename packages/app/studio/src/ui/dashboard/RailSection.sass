@@ -3,6 +3,8 @@
 component
   display: flex
   flex-direction: column
+  min-width: 0
+  container-type: inline-size
 
   > .body
     display: flex
@@ -12,6 +14,15 @@ component
       flex-direction: column
       flex-wrap: nowrap
       row-gap: 0.4em
+
+      @media (max-height: 720px)
+        @container (min-width: 12.75em)
+          display: grid
+          grid-template-columns: auto auto
+          column-gap: 0.75em
+
+          > .provider
+            grid-column: 1 / -1
 
   .entry
     display: flex
@@ -52,8 +63,8 @@ component
       color: var(--color-blue)
 
     > svg
-      width: 16px
-      height: 16px
+      width: 13px
+      height: 13px
 
   .provider
     display: block
@@ -72,11 +83,11 @@ component
   .sponsors
     width: 100%
     display: grid
-    grid-template-columns: repeat(auto-fill, 32px)
-    gap: 4px
+    grid-template-columns: repeat(auto-fill, 24px)
+    gap: 2px
 
     > a > img
-      width: 32px
-      height: 32px
+      width: 24px
+      height: 24px
       border-radius: 50%
       display: block

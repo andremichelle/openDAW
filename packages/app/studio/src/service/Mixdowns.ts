@@ -1,4 +1,4 @@
-import {assert, DefaultObservableValue, Errors, Option, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {assert, DefaultObservableValue, Errors, Option, RuntimeNotifier} from "@opendaw/lib-std"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
 import {
     ExternalLib,
@@ -93,7 +93,7 @@ export namespace Mixdowns {
     }
 
     const saveWavFile = async (audioData: AudioData, meta: ProjectMeta) => {
-        return saveFileAfterAsync({
+        return Files.saveWithApproval({
             buffer: WavFile.encodeFloats(audioData),
             headline: "Save Wav",
             suggestedName: `${meta.name}.wav`
@@ -134,7 +134,7 @@ export namespace Mixdowns {
         const flac = await converter.convert(new Blob([WavFile.encodeFloats(audioData)]),
             value => progress.setValue(value))
         progressDialog.terminate()
-        return saveFileAfterAsync({
+        return Files.saveWithApproval({
             buffer: flac,
             headline: `Save ${fileType}`,
             suggestedName: `${fileName}.${fileExtension}`
@@ -175,7 +175,7 @@ export namespace Mixdowns {
             RuntimeNotifier.notify({message: "Could not create zip.", icon: "Warning"})
             return
         }
-        return saveFileAfterAsync({
+        return Files.saveWithApproval({
             buffer: arrayBuffer,
             headline: "Save Zip",
             message: `Size: ${arrayBuffer.byteLength >> 20}M`,
@@ -196,20 +196,5 @@ export namespace Mixdowns {
             throw error
         }
         return value
-    }
-
-    // browsers need a user-input to allow download
-    const saveFileAfterAsync = async ({buffer, headline, message, suggestedName}: {
-        buffer: ArrayBuffer,
-        headline: string,
-        message?: string,
-        suggestedName: string
-    }) => {
-        const approved = await RuntimeNotifier.approve({headline, message: message ?? "", approveText: "Save"})
-        if (!approved) {return}
-        const saveResult = await Promises.tryCatch(Files.save(buffer, {suggestedName}))
-        if (saveResult.status === "rejected" && !Errors.isAbort(saveResult.error)) {
-            panic(String(saveResult.error))
-        }
     }
 }

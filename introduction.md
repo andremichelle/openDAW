@@ -24,7 +24,7 @@ The TypeScript side is organised in four layers. Each layer may only depend on t
      |
    studio/*      DAW domain: box schemas, adapters, project model, engines
      |
-   app/*         deployable web applications (studio, wasm, lab, ...)
+   app/*         deployable web applications (studio, manual, lab, ...)
 ```
 
 The Rust side mirrors the same idea. Small leaf crates (`math`, `dsp`, `value`) feed shared infrastructure
@@ -43,6 +43,7 @@ The bridge between both worlds is `@opendaw/studio-core-wasm`. It compiles the c
 | `packages/lib` | Generic libraries, published to npm under `@opendaw/lib-*` |
 | `packages/studio` | DAW domain packages, published under `@opendaw/studio-*` |
 | `packages/app` | Web applications, not published |
+| `packages/manuals` | Markdown sources and nav tree for the manuals |
 | `crates` | Cargo workspace, WASM audio engine and devices |
 | `docs` | Deep dives on single subsystems |
 | `plans` | Design documents written while implementing features |
@@ -108,6 +109,22 @@ Depends on `lib-std`.
 Frozen enumerations shared across every layer and mirrored in Rust. `Pointers` (the edge types of the box graph),
 `AudioUnitType`, `IconSymbol`, `Colors`, `VoicingMode`, `AudioPlayback`, `AudioSendRouting`. Because the WASM engine
 mirrors several of these, they must be changed in lockstep with their Rust counterparts.
+
+### @opendaw/studio-icons
+Depends on `lib-std`, `lib-dom`, `lib-jsx`, `studio-enums`. Monorepo-internal (not in `studio-sdk`).
+
+`Icon`, `IconCartridge` and `IconLibrary`. Source package consumed by Vite apps. Studio re-exports the old
+`@/ui/components/Icon` path so existing imports stay put.
+
+### @opendaw/studio-markdown
+Depends on `lib-std`, `lib-dom`, `lib-jsx`, `lib-runtime`, `studio-enums`, `studio-icons`, `markdown-it`.
+Monorepo-internal (not in `studio-sdk`).
+
+Shared markdown renderer (`{icon:Name}` substitution, manuals-only SPA link rewriting). Used by the Note Pad and
+both manuals surfaces.
+
+### @opendaw/manuals
+Depends on `studio-enums`. Source-only nav tree plus `content/*.md` (and images). Not published.
 
 ### @opendaw/studio-forge-boxes
 Depends on `lib-box`, `lib-dsp`, `lib-runtime`, `lib-std`, `studio-enums`.
@@ -207,8 +224,9 @@ A meta package with no code of its own. Installing it pulls the whole toolchain 
 
 ### @opendaw/app-studio
 Depends on `lib-box`, `lib-dom`, `lib-dsp`, `lib-inference`, `lib-jsx`, `lib-midi`, `lib-runtime`, `lib-std`,
-`studio-adapters`, `studio-boxes`, `studio-core`, `studio-core-wasm`, `studio-enums`, `studio-p2p`,
-`studio-scripting`, plus `jszip`, `markdown-it`, `d3-force`, `monaco-editor`, `mediabunny`, `dropbox`.
+`studio-adapters`, `studio-boxes`, `studio-core`, `studio-core-wasm`, `studio-enums`, `studio-icons`,
+`studio-markdown`, `manuals`, `studio-p2p`, `studio-scripting`, plus `jszip`, `d3-force`, `monaco-editor`,
+`mediabunny`, `dropbox`.
 
 The actual DAW at [opendaw.studio](https://opendaw.studio). Built with Vite and the homebrew JSX runtime, styled with
 Sass. The interesting subtrees under `src/ui`:
@@ -221,29 +239,17 @@ Sass. The interesting subtrees under `src/ui`:
 
 `src/service/StudioService.ts` is the central runtime object wiring project, engine, storage and UI together.
 
-### @opendaw/app-wasm
-Depends on `lib-dom`, `lib-dsp`, `lib-fusion`, `lib-jsx`, `lib-std`, `nam-wasm`, `studio-enums`, `jszip`,
-`soundfont2`.
-
-The development harness for the WASM engine. Loads patches and bundles without the full studio UI, runs parity tests
-against the TypeScript engine, hosts the performance A/B page and the live meter pages. This is where engine work
-happens before it reaches the studio.
-
 ### @opendaw/lab
 Depends on `lib-box`, `lib-dom`, `lib-dsp`, `lib-jsx`, `lib-runtime`, `lib-std`, `studio-adapters`, `studio-boxes`,
 `studio-core`, `studio-enums`.
 
 A scratch app for isolated DSP experiments with an oscilloscope and sliders.
 
-### @opendaw/nam-test
-Depends on `lib-dom`, `lib-dsp`, `lib-jsx`, `lib-runtime`, `lib-std`, `nam-wasm`.
+### @opendaw/manual
+Depends on `lib-dom`, `lib-jsx`, `lib-std`, `studio-enums`, `studio-icons`, `studio-markdown`, `manuals`.
 
-Test bench for the Neural Amp Modeler integration.
-
-### @opendaw/transient
-Depends on `lib-dsp`, `lib-std`.
-
-Minimal page for tuning the transient detection algorithm against sample material.
+Standalone manuals viewer at `/manuals/`. Same markdown and visual style as the in-studio page, without the audio
+engine, boxes, P2P or worklets. Built into `app-studio`'s `dist/manuals/` so production URLs stay on the same origin.
 
 ---
 
@@ -314,7 +320,6 @@ Four artifacts are generated and gitignored. A clone that skips `npm run build` 
 studio-forge-boxes ──▶ studio-boxes            (schemas generate the box classes)
 studio-core-workers ─▶ studio-core             (bundles into core/dist/workers-main.js)
 studio-core-processors ▶ studio-core           (bundles into core/dist/processors.js)
-studio-core-wasm     ──▶ app-wasm              (needs dist/wasm before the app builds)
 crates/**            ──▶ studio-core-wasm      (declared as an input, so Rust edits invalidate the cache)
 ```
 
@@ -323,7 +328,7 @@ Useful entry points:
 - `npm run build` builds everything
 - `npm run build-wasm` rebuilds only the Rust modules
 - `npm run dev:studio` starts the studio on https://localhost:8080
-- `npm run dev:lab`, `npm run dev:nam-test` start the smaller harnesses
+- `npm run dev:lab` starts the DSP scratch app
 - `npm run test` runs the vitest suites, one package at a time
 - `npm run clean` removes every `node_modules` and `dist`
 

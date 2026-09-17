@@ -20,6 +20,7 @@ import {BoxDebugView} from "./BoxDebugView"
 import {BoxesDebugView} from "@/ui/components/BoxesDebugView.tsx"
 import {ProgressBar} from "@/ui/components/ProgressBar.tsx"
 import {Browser, Clipboard} from "@opendaw/lib-dom"
+import {installScrollbars} from "@/ui/components/Scrollbars"
 
 export namespace Dialogs {
     type Default = {
@@ -27,6 +28,7 @@ export namespace Dialogs {
         content: JsxValue,
         okText?: string,
         buttons?: ReadonlyArray<Button>
+        leading?: JsxValue
         origin?: Element
         abortSignal?: AbortSignal
         excludeOk?: boolean
@@ -46,7 +48,7 @@ export namespace Dialogs {
 
     export const show = async (
         {
-            headline, content, okText, buttons, origin,
+            headline, content, okText, buttons, leading, origin,
             abortSignal, excludeOk, cancelable, growWidth
         }: Default): Promise<void> => {
         const actualButtons: Array<Button> = isDefined(buttons) ? [...buttons] : []
@@ -63,18 +65,24 @@ export namespace Dialogs {
         }
         let resolved = false
         const {resolve, reject, promise} = Promise.withResolvers<void>()
+        const scrollbars = new Terminator()
         const dialog: HTMLDialogElement = (
             <Dialog headline={headline ?? "Dialog"}
                     icon={IconSymbol.System}
                     cancelable={cancelable !== false}
                     buttons={actualButtons}
+                    leading={leading}
                     growWidth={growWidth}>
-                <div style={{padding: "1em 0", color: Colors.dark.toString()}}>{content}</div>
+                <div style={{padding: "1em 0", color: Colors.dark.toString(), overflowY: "auto", minHeight: "0"}}
+                     onConnect={element => scrollbars.own(installScrollbars(element))}>{content}</div>
             </Dialog>
         )
         Surface.get(origin).body.appendChild(dialog)
         dialog.showModal()
-        dialog.addEventListener("close", () => {if (!resolved) {reject(Errors.AbortError)}}, {once: true})
+        dialog.addEventListener("close", () => {
+            scrollbars.terminate()
+            if (!resolved) {reject(Errors.AbortError)}
+        }, {once: true})
         abortSignal?.addEventListener("abort", () => {
             if (!resolved) {
                 resolved = true

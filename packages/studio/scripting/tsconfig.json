@@ -12,6 +12,9 @@
     "dist",
     "node_modules",
     "scripts/**",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "vitest.config.ts",
+    "src/library.d.ts",
+    "src/api.declaration.d.ts"
   ]
 }

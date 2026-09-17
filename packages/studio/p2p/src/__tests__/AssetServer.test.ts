@@ -4,6 +4,7 @@ import {AssetSignaling, type SignalingSocket} from "../AssetSignaling"
 import {AssetServer, type AssetReader} from "../AssetServer"
 import {AssetPeerConnection} from "../AssetPeerConnection"
 import {AssetZip} from "../AssetZip"
+import * as ChunkProtocol from "../ChunkProtocol"
 
 type MockChannel = {
     binaryType: string
@@ -196,6 +197,49 @@ describe("AssetServer channel-close safety", () => {
         for (let tick = 0; tick < 20; tick++) {await Promise.resolve()}
         // Expected: TransferStart + first chunk (= 2). No further chunks, no TransferComplete.
         expect(callCount).toBe(2)
+        server.terminate()
+    })
+
+    // Live error 1110: the host advertised a sample whose OPFS files were missing, readSample threw
+    // NotFoundError and the rejection escaped channel.onmessage as an uncaught crash of the host.
+    it("answers with Cancel and does not crash when the asset cannot be read", async () => {
+        const sent: Array<ArrayBuffer> = []
+        const {promise: cancelSent, resolve: signalCancel} = Promise.withResolvers<void>()
+        vi.spyOn(AssetPeerConnection.prototype, "sendWithBackpressure")
+            .mockImplementation(async (_channel, buffer: ArrayBuffer) => {
+                sent.push(buffer)
+                signalCancel()
+                return true
+            })
+        const unhandled = vi.fn()
+        process.on("unhandledRejection", unhandled)
+        const socket = createMockSocket()
+        const signaling = new AssetSignaling(socket, "assets:room")
+        const reader: AssetReader = {
+            ...createMockAssetReader(0),
+            readSoundfont: async () => {
+                const error = new Error("A requested file or directory could not be found")
+                error.name = "NotFoundError"
+                throw error
+            }
+        }
+        const server = new AssetServer(signaling, "peer-local", reader)
+        const uuid = UUID.generate()
+        const channel = await openConnection(socket, "peer-remote", "peer-local")
+        channel.onmessage!({data: JSON.stringify({
+            type: "transfer-request",
+            uuid: UUID.toString(uuid),
+            assetType: "soundfont"
+        })})
+        await cancelSent
+        for (let tick = 0; tick < 20; tick++) {await Promise.resolve()}
+        await new Promise(resolve => setTimeout(resolve, 0))
+        process.off("unhandledRejection", unhandled)
+        expect(unhandled).not.toHaveBeenCalled()
+        expect(sent).toHaveLength(1)
+        const frame = ChunkProtocol.decode(sent[0])
+        expect(frame.msgType).toBe(ChunkProtocol.MsgType.Cancel)
+        expect(UUID.toString(frame.assetId)).toBe(UUID.toString(uuid))
         server.terminate()
     })
 

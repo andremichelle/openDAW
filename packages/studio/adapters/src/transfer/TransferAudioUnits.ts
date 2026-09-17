@@ -28,11 +28,11 @@ export namespace TransferAudioUnits {
         const excludeBox = (box: Box): boolean =>
             TransferUtils.shouldExclude(box)
             || (options?.excludeTimeline === true && TransferUtils.excludeTimelinePredicate(box))
-        const dependencies = Array.from(sources[0].graph.dependenciesOf(sources, {
+        const dependencies = TransferUtils.withModulators(Array.from(sources[0].graph.dependenciesOf(sources, {
             alwaysFollowMandatory: true,
             stopAtResources: true,
             excludeBox
-        }).boxes)
+        }).boxes))
         const uuidMap = TransferUtils.generateMap(
             sources, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
         TransferUtils.copyBoxes(uuidMap, targetBoxGraph, sources, dependencies)

@@ -1,0 +1,109 @@
+component
+  position: fixed
+  top: 0
+  left: 0
+  z-index: 9999
+  width: 20em
+  padding: 1em 1.25em
+  display: flex
+  flex-direction: column
+  row-gap: 0.75em
+  font-size: 0.875rem
+  color: black
+  background: rgba(white, 0.7)
+  backdrop-filter: blur(8px)
+  -webkit-backdrop-filter: blur(8px)
+  border-radius: 0.75em
+  box-shadow: 0 16px 16px 0 rgba(black, 0.2), 0 4px 8px 0 rgba(black, 0.2)
+
+  &.measuring
+    visibility: hidden
+
+  > .notch
+    position: absolute
+    width: 1em
+    height: 1em
+    background-color: hsla(197, 5%, 95%, 0.55)
+    backdrop-filter: inherit
+    -webkit-backdrop-filter: inherit
+    transform: translate(-50%, -50%) rotate(45deg)
+
+  &[data-side="below"] > .notch
+    top: 0
+    clip-path: polygon(0 0, 100% 0, 0 100%)
+
+  &[data-side="above"] > .notch
+    top: 100%
+    clip-path: polygon(100% 100%, 100% 0, 0 100%)
+
+  &[data-side="right"] > .notch
+    left: 0
+    clip-path: polygon(0 0, 0 100%, 100% 100%)
+
+  &[data-side="left"] > .notch
+    left: 100%
+    clip-path: polygon(0 0, 100% 0, 100% 100%)
+
+  > header
+    display: flex
+    align-items: center
+    column-gap: 0.5em
+
+    > h1
+      flex: 1 0 0
+      margin: 0
+      font-size: 1.125em
+      font-weight: 700
+
+    > button.close
+      appearance: none
+      border: none
+      background: none
+      padding: 0
+      display: flex
+      color: var(--color-black)
+      cursor: pointer
+
+      > svg
+        width: 1em
+        height: 1em
+
+  > p
+    margin: 0
+    line-height: 1.4
+
+  > footer
+    display: flex
+    align-items: center
+    justify-content: space-between
+
+    > span
+      font-size: 0.75em
+      color: black
+
+    > button.next
+      appearance: none
+      border: none
+      outline: none
+      padding: 0.25em 0.5em
+      border-radius: 3px
+      font: inherit
+      font-size: 0.75em
+      font-weight: 600
+      color: var(--color-bright)
+      background-color: rgba(black, 0.8)
+      cursor: pointer
+      display: flex
+      align-items: center
+      column-gap: 0.5em
+
+      > kbd
+        font: inherit
+        font-size: 0.75em
+        line-height: 1
+        min-width: 1em
+        padding: 0.25em 0.375em
+        border-radius: 3px
+        border: 0.5px solid rgba(white, 0.5)
+        color: rgba(white, 0.8)
+        text-align: center

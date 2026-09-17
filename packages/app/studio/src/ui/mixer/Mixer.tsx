@@ -1,5 +1,6 @@
 import css from "./Mixer.sass?inline"
-import {clamp, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {clamp, isDefined, Lifecycle, Option, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {TourAnchors} from "@/ui/tour/TourAnchors"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {AudioUnitBoxAdapter, Devices} from "@opendaw/studio-adapters"
@@ -66,12 +67,16 @@ export const Mixer = ({lifecycle, service}: Construct) => {
         scrollModel.contentSize = contentSize
     }
     const audioUnits = UUID.newSet<AudioUnitEntry>(entry => entry.adapter.uuid)
+    const anchorLifecycle = lifecycle.own(new Terminator())
     const updateDom = deferNextFrame(() => {
         Html.empty(channelStripContainer)
         channelStripContainer.appendChild(headers)
-        audioUnits.values()
+        const sorted = audioUnits.values()
             .toSorted((a, b) => a.adapter.indexField.getValue() - b.adapter.indexField.getValue())
-            .forEach(({editor}) => channelStripContainer.appendChild(editor))
+        sorted.forEach(({editor}) => channelStripContainer.appendChild(editor))
+        anchorLifecycle.terminate()
+        const first = sorted.at(0)
+        if (isDefined(first)) {TourAnchors.register(anchorLifecycle, first.editor, "mixer")}
         updateScroller()
     })
     const removeEditingIndicator = () => channelStripContainer

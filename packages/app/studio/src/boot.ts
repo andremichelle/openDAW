@@ -23,7 +23,6 @@ import {
     FactoryCatalog,
     GlobalSampleLoaderManager,
     GlobalSoundfontLoaderManager,
-    RegionClipResolver,
     Workers
 } from "@opendaw/studio-core"
 import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI} from "@/opendaw-api"
@@ -34,7 +33,6 @@ import {showStoragePersistDialog} from "@/AppDialogs"
 import {Promises} from "@opendaw/lib-runtime"
 import {AnimationFrame, Browser, Html, ShortcutManager} from "@opendaw/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
-import {installLatencyReporter} from "@/LatencyReporter"
 import {reportVisitor} from "@/VisitorReporter"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
@@ -42,6 +40,7 @@ import {AudioData} from "@opendaw/lib-dsp"
 import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
 import {TouchContextMenu} from "@/ui/TouchContextMenu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
@@ -64,9 +63,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         return
     }
     console.debug("buildInfo", JSON.stringify(buildInfo, null, 2))
-    // A residual region overlap must never crash a user's session: log-and-continue in production, keep the
-    // fail-fast throw in dev so resolver bugs surface. See RegionClipResolver.validateTrack.
-    RegionClipResolver.fatal = buildInfo.env !== "production"
     await FontLoader.load()
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)
@@ -83,7 +79,9 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     const context = new AudioContext({sampleRate, latencyHint: 0})
     console.debug(`AudioContext state: ${context.state}, sampleRate: ${context.sampleRate}`)
     console.debug(`Error.stackTraceLimit: ${Error.stackTraceLimit ?? "N/A"}`)
-    installLatencyReporter(context)
+    // purge identifiers written by the old client-side counting (§25 TDDDG)
+    localStorage.removeItem("__id__")
+    localStorage.removeItem("reported-latencies")
     reportVisitor()
     const audioWorklets = await Promises.tryCatch(AudioWorklets.createFor(context))
     if (audioWorklets.status === "rejected") {
@@ -94,8 +92,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         offlineWorkerUrl: wasmOfflineWorkerUrl,
         wasmUrl: `${import.meta.env.BASE_URL}wasm-engine`
     })
-    // The engine IS the wasm engine, so this is a hard boot requirement: without its artifacts there is no
-    // engine to fall back to, and every worklet-dependent screen would fail on construction instead.
     if (!await WasmEngine.ensureReady(context)) {
         document.querySelector("#preloader")?.remove()
         Dialogs.info({
@@ -105,7 +101,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         return
     }
     if (context.state === "suspended") {
-        // Not `once`: a rejected resume (device busy, output unavailable) must stay retryable on the next click.
         const resumeOnClick = async () => {
             if (!await AudioContexts.resume(context)) {return}
             console.debug(`AudioContext resumed (${context.state})`)
@@ -157,6 +152,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
     document.querySelector("#preloader")?.remove()
     replaceChildren(surface.ground, App(service))
+    Tour.install(service)
     AnimationFrame.start(window)
     installCursors()
     RuntimeNotifier.install({

@@ -1,0 +1,152 @@
+component
+  flex: 1
+  padding: 1.5em 0 1.5em 1.5em
+  display: grid
+  grid-template-columns: auto 1fr
+  column-gap: 1em
+  overflow: hidden
+  line-height: 1em
+  color: var(--color-dark)
+  background-color: var(--color-panel-background)
+
+  > aside
+    display: flex
+    flex-direction: column
+    row-gap: 0.75em
+    overflow: hidden auto
+    padding-right: 2em
+
+    > nav
+      display: flex
+      flex-direction: column
+      row-gap: 0.375em
+      font-size: 0.75rem
+      line-height: 1.25em
+      user-select: none
+
+      div.folder
+        display: flex
+        flex-direction: column
+        row-gap: 0.375em
+
+        > div.header
+          display: flex
+          align-items: center
+          column-gap: 0.125em
+          cursor: pointer
+
+          &:hover
+            color: var(--color-bright)
+
+          > span.triangle
+            box-sizing: content-box
+            width: 6px
+            padding: 0 0.5em
+            margin-left: -0.5em
+            align-self: stretch
+            display: flex
+            align-items: center
+            justify-content: center
+
+            &::before
+              content: ""
+              width: 0
+              height: 0
+              border-left: 5px solid currentColor
+              border-top: 3px solid transparent
+              border-bottom: 3px solid transparent
+              transition: transform 0.12s ease
+
+        &.expanded > div.header > span.triangle::before
+          transform: rotate(90deg)
+
+        > div.list
+          position: relative
+          display: flex
+          flex-direction: column
+          row-gap: 0.375em
+          padding-left: 1.25em
+
+          &::before
+            content: ""
+            position: absolute
+            left: 2.5px
+            top: 3px
+            bottom: 3px
+            width: 1px
+            background-color: color-mix(in srgb, currentColor, transparent 33%)
+            opacity: 0.3
+            pointer-events: none
+
+      a.page
+        display: flex
+        align-items: center
+        column-gap: 0.5em
+        color: inherit
+        white-space: nowrap
+
+        > svg
+          opacity: 0.8
+
+        &:hover
+          color: var(--color-bright)
+
+        &.active
+          cursor: default
+          color: var(--color-orange)
+
+  hr
+    width: 100%
+    height: 1px
+    border: none
+    background-color: var(--color-black)
+
+  > div.manual
+    padding-left: 1.5em
+    padding-right: 1.5em
+    display: flex
+    flex-direction: column
+    row-gap: 0.75em
+    overflow: hidden auto
+
+    p, ul, strong
+      font-size: 0.875rem
+      color: var(--color-dark)
+
+    strong
+      color: var(--color-cream)
+
+    div.markdown
+      padding: 1em 0 0 0
+      max-width: 50rem
+      font-size: 0.875rem
+
+      .icon
+        top: 0.3em
+        position: relative
+        color: var(--color-blue)
+        zoom: 1.625
+        padding: 0.2em
+        border-radius: 50%
+        background-color: color-mix(in srgb, var(--color-blue), black 80%)
+
+      img
+        zoom: 0.5
+        border-radius: 5px
+        box-shadow: 4px 20px 2px 1px rgba(black, 0.08), 4px 32px 32px 0 rgba(black, 0.25), -0.25px -1px 1px 0 rgba(white, 0.08)
+
+@media (max-width: 720px)
+  component
+    grid-template-columns: 1fr
+    padding: 1em
+    row-gap: 1em
+    overflow: auto
+
+    > aside
+      max-height: 40vh
+      padding-right: 0
+
+    > div.manual
+      padding-left: 0
+      padding-right: 0
+      overflow: visible

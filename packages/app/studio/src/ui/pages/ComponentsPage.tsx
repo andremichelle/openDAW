@@ -2,7 +2,7 @@ import css from "./ComponentsPage.sass?inline"
 import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Checkbox} from "@/ui/components/Checkbox.tsx"
-import {DefaultObservableValue, Option, panic, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, Option, UUID} from "@opendaw/lib-std"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
 import {Button} from "@/ui/components/Button.tsx"
@@ -237,8 +237,6 @@ export const ComponentsPage: PageFactory<StudioService> = ({lifecycle}: PageCont
                         document.body.appendChild(dialog)
                         dialog.showModal()
                     }}>Open</Button>
-                    <label>Dialog (Error)</label>
-                    <Button lifecycle={lifecycle} onClick={() => panic("I have thrown an error")}>Throw</Button>
                 </div>
             </div>
         </div>

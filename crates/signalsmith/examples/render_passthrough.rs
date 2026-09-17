@@ -60,7 +60,7 @@ fn cleanliness(src: &[f32], out: &[f32]) -> f64 {
 }
 
 fn main() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../packages/app/wasm/public/loops/");
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../packages/studio/core-wasm/test/fixtures/loops/");
     let out = concat!(env!("CARGO_MANIFEST_DIR"), "/out/");
     let (mut left, mut right, rate) = read_stereo(&format!("{dir}endeavour-140.wav"));
     let src_len = left.len();

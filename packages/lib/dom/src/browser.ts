@@ -25,9 +25,11 @@ export namespace Browser {
         .replace(/\bSafari\/[\d.]+\s*/g, "")
         .replace(/\s+/g, " ")
         .trim() : "N/A"
+    // for user-initiated features only (e.g. cloud-backup lock), never for tracking or analytics.
+    // "browser-id", not the legacy "__id__" key: that one carried the visitor-counting uuid and is purged at boot.
     export const id = () => {
         if (!hasLocation || typeof localStorage === "undefined") {return ""}
-        const key = "__id__"
+        const key = "browser-id"
         const id = localStorage.getItem(key)
         if (isDefined(id)) {return id}
         const newID = UUID.toString(UUID.generate())

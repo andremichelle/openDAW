@@ -36,5 +36,7 @@ export class PanelContents {
         })
     }
 
+    releasePopouts(): void {this.#contents.forEach(content => content.releasePopout())}
+
     get factory(): PanelContentFactory {return this.#factory}
 }

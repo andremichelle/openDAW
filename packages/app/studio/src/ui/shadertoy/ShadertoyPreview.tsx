@@ -1,7 +1,7 @@
 import css from "./ShadertoyPreview.sass?inline"
 import {Events, Html} from "@opendaw/lib-dom"
 import {asInstanceOf, isAbsent, Lifecycle, Nullable, Terminable, Terminator, tryCatch} from "@opendaw/lib-std"
-import {createElement, LocalLink} from "@opendaw/lib-jsx"
+import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {Promises} from "@opendaw/lib-runtime"
 import {ShadertoyRunner} from "@/ui/shadertoy/ShadertoyRunner"
@@ -25,8 +25,8 @@ export const ShadertoyPreview = ({lifecycle, service}: Construct) => {
                 Write GLSL shaders to create visuals for your music. The editor supports <a
                 href="https://shadertoy.com/" target="shadertoy">Shadertoy</a> compatible syntax.<br/>
                 MIDI data is passed to the shader if you route a MIDI output to the <span
-                style={{color: Colors.cream.toString()}}>Shadertoy</span> MIDI device. Read the <LocalLink
-                href="/manuals/shadertoy">manual</LocalLink>.
+                style={{color: Colors.cream.toString()}}>Shadertoy</span> MIDI device. Read the <a
+                href="/manuals/shadertoy" target="manuals">manual</a>.
             </p>
             <div className="canvas-wrapper">
                 <canvas onInit={canvas => {

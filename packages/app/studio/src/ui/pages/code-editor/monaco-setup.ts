@@ -4,6 +4,7 @@ import "monaco-editor/esm/vs/language/typescript/monaco.contribution"
 import "monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution"
 import declarations from "@opendaw/studio-scripting/api.declaration?raw"
 import library from "@opendaw/studio-scripting/library?raw"
+import {TopLevelReturn} from "./TopLevelReturn"
 
 // Configure TypeScript defaults
 const tsDefaults = monaco.languages.typescript.typescriptDefaults
@@ -21,7 +22,9 @@ tsDefaults.setCompilerOptions({
     jsx: monaco.languages.typescript.JsxEmit.Preserve,
     noEmit: false,
     esModuleInterop: true,
-    allowSyntheticDefaultImports: true
+    allowSyntheticDefaultImports: true,
+    // Every script is a module (top-level await, no global leaks) without the user writing `export {}`
+    moduleDetection: 3
 })
 
 tsDefaults.setDiagnosticsOptions({
@@ -29,15 +32,11 @@ tsDefaults.setDiagnosticsOptions({
     noSyntaxValidation: false,
     noSuggestionDiagnostics: false,
     onlyVisible: false,
-    diagnosticCodesToIgnore: []
+    diagnosticCodesToIgnore: [TopLevelReturn]
 })
 
 tsDefaults.addExtraLib(library, "file:///library.d.ts")
 tsDefaults.addExtraLib(declarations, "ts:opendaw.d.ts")
-tsDefaults.addExtraLib(`
-declare const console: Console
-declare const Math: Math
-`, "ts:libs.d.ts")
 
 export {monaco}
 export type Monaco = typeof monaco

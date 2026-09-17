@@ -28,6 +28,7 @@ import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {createPanelFactory} from "@/ui/workspace/PanelFactory.tsx"
 import {SpotlightDataSupplier} from "@/ui/spotlight/SpotlightDataSupplier.ts"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
+import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
@@ -100,7 +101,8 @@ const STRETCH_WASM_URL = `${import.meta.env.BASE_URL}wasm-engine/wasm/stretch_wa
 
 export class StudioService implements ProjectEnv {
     readonly layout = {
-        screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default")
+        screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default"),
+        browseScope: new DefaultObservableValue<BrowseScope>(BrowseScope.Presets)
     } as const
     readonly timeline = {
         range,
@@ -478,6 +480,7 @@ export class StudioService implements ProjectEnv {
         const lifeTime = new Terminator()
         const observer = (optProfile: Option<ProjectProfile>) => {
             this.layout.screen.setValue(null)
+            this.panelLayout.releasePopouts()
             lifeTime.terminate()
             document.body.classList.toggle("no-project", optProfile.isEmpty())
             if (optProfile.nonEmpty()) {

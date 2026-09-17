@@ -1,0 +1,48 @@
+@font-face
+  font-family: Rubik
+  font-weight: 300
+  src: url(/fonts/rubik-300.woff2)
+
+@font-face
+  font-family: Rubik
+  font-weight: 400
+  src: url(/fonts/rubik-400.woff2)
+
+component
+  display: flex
+  flex: 1
+  min-height: 0
+  padding: 2em
+  text-align: center
+  font-family: Rubik, sans-serif
+  font-weight: 300
+  line-height: 1.5
+  color: #ccc
+  background: #1a1a1a
+  overflow: auto
+
+  > div
+    max-width: 32em
+    margin: auto
+
+  h1
+    font-weight: 400
+
+  .logo
+    width: 4em
+
+  .claim
+    margin: 0 0 0.75em
+    font-size: 1.25em
+    color: hsl(189, 100%, 65%)
+
+  .screenshot
+    width: 100%
+    border-radius: 2px
+    margin-bottom: 1.5em
+
+  p
+    margin: 0
+
+  p + p
+    margin-top: 1em

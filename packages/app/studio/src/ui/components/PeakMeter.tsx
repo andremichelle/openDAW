@@ -1,6 +1,7 @@
 import css from "./PeakMeter.sass?inline"
 import {Arrays, int, Lifecycle, Terminator, ValueMapping} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
+import {meterRatio} from "@/ui/components/MeterRatio"
 import {AnimationFrame, Html} from "@opendaw/lib-dom"
 import {Colors} from "@opendaw/studio-enums"
 
@@ -132,7 +133,7 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
             const now = Date.now()
             peaks.forEach((db: number, index: int) => {
                 const bar = bars[index]
-                const ratio = db === Number.NEGATIVE_INFINITY ? 0.0 : mapping.x(db)
+                const ratio = meterRatio(mapping, db)
                 const barHeight = Math.ceil(trackHeight * ratio)
                 bar.y.baseVal.value = paddingInPX + (trackHeight - barHeight)
                 bar.height.baseVal.value = barHeight
@@ -143,7 +144,7 @@ export const PeakMeter = ({lifecycle, peaks, channelWidthInEm, channelOffsetInEm
                 } else if (now - peakHold.time >= 2000) {
                     peakHold.value -= 0.25
                 }
-                const peakRatio = peakHold.value === Number.NEGATIVE_INFINITY ? 0.0 : mapping.x(peakHold.value)
+                const peakRatio = meterRatio(mapping, peakHold.value)
                 const peakY = paddingInPX + trackHeight * (1.0 - peakRatio)
                 const peakLine = peakLines[index]
                 peakLine.y.baseVal.value = peakY

@@ -455,22 +455,24 @@ impl Convolver {
             self.loader.head_done = true;
             work -= 16384;
         }
-        while work > 0 && self.loader.cursor < self.loader.total {
+        while self.loader.cursor < self.loader.total {
             let part = self.loader.cursor;
             let (l1, l2) = (self.l1.parts(), self.l2.parts());
+            let cost = if part < l1 { 256 } else if part < l1 + l2 { 2048 } else { 16384 };
+            if work < cost {
+                break;
+            }
             if part < l1 {
                 self.l1.load_partition(part, &read, &mut self.fft_in, &mut self.sc_re, &mut self.sc_im);
-                work -= 256;
             } else if part < l1 + l2 {
                 self.l2.load_partition(part - l1, &read, &mut self.fft_in, &mut self.sc_re, &mut self.sc_im);
-                work -= 2048;
             } else {
                 self.l3.load_partition(part - l1 - l2, &read, &mut self.fft_in, &mut self.sc_re, &mut self.sc_im);
                 if self.loader.normalize {
                     self.accumulate_l3_spectrum(part - l1 - l2);
                 }
-                work -= 16384;
             }
+            work -= cost;
             self.loader.cursor += 1;
         }
         let done = self.loader.cursor >= self.loader.total;
