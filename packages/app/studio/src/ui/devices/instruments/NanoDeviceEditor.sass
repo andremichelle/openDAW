@@ -2,7 +2,7 @@
 
 component
   display: grid
-  grid-template-rows: minmax(0, 1fr) auto
+  grid-template-rows: auto minmax(0, 1fr)
   grid-template-columns: repeat(6, auto)
   column-gap: 1px
   row-gap: 0.75em
@@ -29,7 +29,7 @@ component
     --edge: color-mix(in srgb, var(--color) 6%, transparent)
     border-bottom: 1px var(--edge) solid
 
-    &:nth-child(2)
+    &:first-child
       border-left: 1px var(--edge) solid
       border-radius: 3px 0 0 3px
 
@@ -37,7 +37,7 @@ component
         margin-left: -1px
         border-radius: 3px 0 0 0
 
-    &:last-child
+    &:nth-last-child(2)
       border-right: 1px var(--edge) solid
       border-radius: 0 3px 3px 0
 
@@ -49,7 +49,7 @@ component
       --color: var(--color-blue)
 
     &.waveform
-      --color: var(--color-bright)
+      --color: var(--color-cream)
 
     &.loop
       --color: var(--color-green)
@@ -99,9 +99,9 @@ component
     grid-column: 1 / -1
     align-self: stretch
     position: relative
-    background-color: rgba(black, 0.32)
-    border-radius: 2px
-    box-shadow: 0 0.5px 1px 0 rgba(white, 0.1), 0 0.5px 1px 0 rgba(black, 0.1) inset
+    border-radius: 1px
+    overflow: hidden
+    box-shadow: 0 0 1px 0 rgba(white, 0.2) inset
 
     &.accept
       outline: solid var(--color-green) 1px

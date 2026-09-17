@@ -71,7 +71,7 @@ const paintWaveform = ({context, width, height}: CanvasPainter, adapter: NanoDev
                         PeaksPainter.renderPixelStrips(context, peaks, channelIndex, layout)
                     }
                 }
-                context.fillStyle = Colors.bright.toString()
+                context.fillStyle = Colors.shadow.toString()
                 renderRange(u0, u1, x0, x1)
                 context.fillRect(Math.round(x0), 0, 1, height * devicePixelRatio)
                 context.fillRect(Math.round(x1), 0, 1, height * devicePixelRatio)
@@ -256,7 +256,6 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                       }}
                       populateControls={() => (
                           <div className={className}>
-                              {display}
                               {createParameterStack("tone", "Tone", rootKey, octave)}
                               {createParameterStack("waveform", "Waveform", sampleStart, sampleEnd)}
                               <div className="parameter-stack loop">
@@ -280,6 +279,7 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                               </div>
                               {createParameterStack("envelope", "Envelope", attack, release)}
                               {createParameterStack("output", "Output", volume)}
+                              {display}
                           </div>
                       )}
                       populateMeter={() => (
