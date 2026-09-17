@@ -4,7 +4,7 @@ component
   display: grid
   grid-template-rows: minmax(0, 1fr) auto
   grid-template-columns: repeat(6, auto)
-  column-gap: 0.25em
+  column-gap: 1px
   row-gap: 0.75em
   color: var(--color-dark)
   @include mixins.Control
@@ -24,11 +24,26 @@ component
     align-items: center
     align-content: start
     padding: 0 0 2px 0
-    border-radius: 3px
     background-color: color-mix(in srgb, var(--color) 3%, transparent)
-    outline: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
-    outline-offset: -1px
     --color: var(--color-shadow)
+    --edge: color-mix(in srgb, var(--color) 6%, transparent)
+    border-bottom: 1px var(--edge) solid
+
+    &:nth-child(2)
+      border-left: 1px var(--edge) solid
+      border-radius: 3px 0 0 3px
+
+      > div.label
+        margin-left: -1px
+        border-radius: 3px 0 0 0
+
+    &:last-child
+      border-right: 1px var(--edge) solid
+      border-radius: 0 3px 3px 0
+
+      > div.label
+        margin-right: -1px
+        border-radius: 0 3px 0 0
 
     &.tone
       --color: var(--color-blue)
@@ -55,7 +70,6 @@ component
       white-space: nowrap
       color: rgba(black, 0.8)
       background-color: color-mix(in srgb, var(--color) 66%, black)
-      border-radius: 2px 2px 0 0
 
     label
       justify-self: end

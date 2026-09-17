@@ -5,7 +5,12 @@ import {Dragging, Html} from "@opendaw/lib-dom"
 import {PeaksPainter} from "@opendaw/lib-fusion"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
-import {AutomatableParameterFieldAdapter, DeviceHost, InstrumentFactories, NanoDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {
+    AutomatableParameterFieldAdapter,
+    DeviceHost,
+    InstrumentFactories,
+    NanoDeviceBoxAdapter
+} from "@opendaw/studio-adapters"
 import {CanvasPainter, MenuItem} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ParameterLabel} from "@/ui/components/ParameterLabel"
@@ -45,7 +50,16 @@ const paintWaveform = ({context, width, height}: CanvasPainter, adapter: NanoDev
                 const x0 = s0 * wd
                 const x1 = s1 * wd
                 const rowHeight = height * devicePixelRatio / numChannels
-                const layout: PeaksPainter.Layout = {u0: 0.0, u1: 0.0, x0: 0.0, x1: 0.0, v0: +1.1, v1: -1.1, y0: 0.0, y1: 0.0}
+                const layout: PeaksPainter.Layout = {
+                    u0: 0.0,
+                    u1: 0.0,
+                    x0: 0.0,
+                    x1: 0.0,
+                    v0: +1.1,
+                    v1: -1.1,
+                    y0: 0.0,
+                    y1: 0.0
+                }
                 const renderRange = (from: number, to: number, xFrom: number, xTo: number) => {
                     for (let channelIndex = 0; channelIndex < numChannels; channelIndex++) {
                         layout.u0 = from
@@ -87,7 +101,19 @@ const paintWaveform = ({context, width, height}: CanvasPainter, adapter: NanoDev
     })
 
 export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
-    const {volume, octave, attack, release, sampleStart, sampleEnd, rootKey, loop, loopFade, loopStart, loopEnd} = adapter.namedParameter
+    const {
+        volume,
+        octave,
+        attack,
+        release,
+        sampleStart,
+        sampleEnd,
+        rootKey,
+        loop,
+        loopFade,
+        loopStart,
+        loopEnd
+    } = adapter.namedParameter
     const {project} = service
     const {editing, midiLearning, liveStreamReceiver} = project
     const fileNameLabel: HTMLElement = (<span className="file-name"/>)
@@ -180,7 +206,10 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
             const {left, width} = waveformCanvas.getBoundingClientRect()
             const dl = clientX - (left + sampleStart.getValue() * width)
             const dr = clientX - (left + sampleEnd.getValue() * width)
-            const nearest = Math.abs(dl) <= Math.abs(dr) ? {parameter: sampleStart, delta: dl} : {parameter: sampleEnd, delta: dr}
+            const nearest = Math.abs(dl) <= Math.abs(dr) ? {parameter: sampleStart, delta: dl} : {
+                parameter: sampleEnd,
+                delta: dr
+            }
             if (Math.abs(nearest.delta) > SnapValueThresholdInPixels) {return Option.None}
             const {parameter, delta} = nearest
             return Option.wrap({
@@ -244,7 +273,7 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                       <Checkbox lifecycle={lifecycle}
                                                 model={EditWrapper.forAutomatableParameter(editing, loop)}
                                                 className="toggle"
-                                                appearance={{activeColor: Colors.green, framed: true}}>
+                                                appearance={{activeColor: Colors.green}}>
                                           <Icon symbol={IconSymbol.Checkbox}/>
                                       </Checkbox>
                                   </AutomationControl>
