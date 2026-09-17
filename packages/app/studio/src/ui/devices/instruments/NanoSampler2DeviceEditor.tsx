@@ -1,11 +1,11 @@
-import css from "./SwarmDeviceEditor.sass?inline"
+import css from "./NanoSampler2DeviceEditor.sass?inline"
 import {asDefined, asInstanceOf, clamp, Lifecycle, Option, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Dragging, Html} from "@opendaw/lib-dom"
 import {PeaksPainter} from "@opendaw/lib-fusion"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
-import {DeviceHost, InstrumentFactories, SwarmDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {DeviceHost, InstrumentFactories, NanoSampler2DeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
@@ -19,16 +19,16 @@ import {SampleSelector, SampleSelectStrategy} from "@/ui/devices/SampleSelector"
 import {SnapValueThresholdInPixels} from "@/ui/timeline/editors/value/ValueMoveModifier"
 import {StudioService} from "@/service/StudioService"
 
-const className = Html.adoptStyleSheet(css, "SwarmDeviceEditor")
+const className = Html.adoptStyleSheet(css, "NanoSampler2DeviceEditor")
 
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
-    adapter: SwarmDeviceBoxAdapter
+    adapter: NanoSampler2DeviceBoxAdapter
     deviceHost: DeviceHost
 }
 
-const paintWaveform = ({context, width, height}: CanvasPainter, adapter: SwarmDeviceBoxAdapter): void =>
+const paintWaveform = ({context, width, height}: CanvasPainter, adapter: NanoSampler2DeviceBoxAdapter): void =>
     adapter.file().match({
         none: () => context.clearRect(0, 0, width, height),
         some: file => {
@@ -76,7 +76,7 @@ const paintWaveform = ({context, width, height}: CanvasPainter, adapter: SwarmDe
         }
     })
 
-export const SwarmDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
+export const NanoSampler2DeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {
         volume, octave, reverse, attack, release, sampleStart, sampleEnd, rootKey, loop, loopFade, loopStart, loopEnd
     } = adapter.namedParameter
@@ -266,6 +266,6 @@ export const SwarmDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                            receiver={liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={InstrumentFactories.Swarm.defaultIcon}/>
+                      icon={InstrumentFactories.NanoSampler2.defaultIcon}/>
     )
 }

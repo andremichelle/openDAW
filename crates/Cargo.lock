@@ -340,6 +340,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-nano-sampler-2"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-neon"
 version = "0.0.0"
 dependencies = [
@@ -425,15 +434,6 @@ version = "0.0.0"
 dependencies = [
  "abi",
  "dsp",
- "math",
-]
-
-[[package]]
-name = "device-swarm"
-version = "0.0.0"
-dependencies = [
- "abi",
- "libm",
  "math",
 ]
 

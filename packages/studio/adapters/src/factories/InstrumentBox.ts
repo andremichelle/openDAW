@@ -5,7 +5,7 @@ import {
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,
-    SwarmDeviceBox,
+    NanoSampler2DeviceBox,
     SoundfontDeviceBox,
     TapeDeviceBox,
     VaporisateurDeviceBox
@@ -18,7 +18,7 @@ export type InstrumentBox =
     | VaporisateurDeviceBox
     | NeonDeviceBox
     | NanoDeviceBox
-    | SwarmDeviceBox
+    | NanoSampler2DeviceBox
     | PlayfieldDeviceBox
     | SoundfontDeviceBox
     | MIDIOutputDeviceBox

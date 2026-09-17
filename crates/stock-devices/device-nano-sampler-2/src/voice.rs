@@ -1,12 +1,12 @@
-//! The swarm sampler's per-note voice, a port of the inner `Voice` of the (retired) TS
-//! `SwarmDeviceProcessor`: a pitch-rate read head over the loaded sample with linear interpolation and a
+//! The Nano Sampler 2.0's per-note voice, a port of the inner `Voice` of the (retired) TS
+//! `NanoSampler2DeviceProcessor`: a pitch-rate read head over the loaded sample with linear interpolation and a
 //! squared attack/release envelope, extended over the Nano voice by a root key (the pitch that plays the
 //! sample at its native rate), an octave shift, a start/end region and reverse playback. Pure DSP over
 //! slices, unit-testable with synthetic frames; heap-free and valid when zeroed (voices live in the device's
 //! zeroed state, a fixed pool).
 
 #[derive(Clone, Copy, Default)]
-pub struct SwarmVoice {
+pub struct NanoSampler2Voice {
     active: bool,
     id: u32,
     speed: f32, // read-head increment per output sample, before the sample-rate ratio
@@ -24,7 +24,7 @@ pub struct SwarmVoice {
     releasing: bool
 }
 
-impl SwarmVoice {
+impl NanoSampler2Voice {
     pub fn is_active(&self) -> bool {
         self.active
     }
@@ -189,12 +189,12 @@ impl SwarmVoice {
 
 #[cfg(test)]
 mod tests {
-    use super::SwarmVoice;
+    use super::NanoSampler2Voice;
 
     const SR: f32 = 48_000.0;
 
-    fn started(pitch: u32, root_key: i32, octave: i32, reverse: bool) -> SwarmVoice {
-        let mut voice = SwarmVoice::default();
+    fn started(pitch: u32, root_key: i32, octave: i32, reverse: bool) -> NanoSampler2Voice {
+        let mut voice = NanoSampler2Voice::default();
         voice.start(7, pitch, 0.0, 1.0, root_key, octave, reverse, (0.003 * SR) as u32, 4_800);
         voice
     }
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn release_during_the_attack_never_rises_after_note_off() {
         let frames = dc(480_000);
-        let mut voice = SwarmVoice::default();
+        let mut voice = NanoSampler2Voice::default();
         // a 1 s attack, a 10 ms release: note-off lands 5% into the attack (level 0.05)
         voice.start(7, 60, 0.0, 1.0, 60, 0, false, 48_000, 480);
         let (mut left, mut right) = (vec![0.0f32; 2_400], vec![0.0f32; 2_400]);
@@ -414,7 +414,7 @@ mod tests {
         assert!(finished, "the frame clamp ends the voice instead of reading past the new sample");
     }
 
-    impl SwarmVoice {
+    impl NanoSampler2Voice {
         // test-only accessor for the computed read-head rate
         fn speed(&self) -> f32 {self.speed}
     }

@@ -1,4 +1,4 @@
-import {SwarmDeviceBox} from "@opendaw/studio-boxes"
+import {NanoSampler2DeviceBox} from "@opendaw/studio-boxes"
 import {Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {MidiKeys} from "@opendaw/lib-dsp"
 import {Address, BooleanField, StringField} from "@opendaw/lib-box"
@@ -13,13 +13,13 @@ import {AudioFileBoxAdapter} from "../../audio/AudioFileBoxAdapter"
 
 const RootKeyLabels: ReadonlyArray<string> = Array.from({length: 128}, (_, note) => MidiKeys.toFullString(note))
 
-export class SwarmDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
+export class NanoSampler2DeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     readonly type = "instrument"
     readonly accepts = "midi"
-    readonly manualUrl = DeviceManualUrls.Swarm
+    readonly manualUrl = DeviceManualUrls.NanoSampler2
 
     readonly #context: BoxAdaptersContext
-    readonly #box: SwarmDeviceBox
+    readonly #box: NanoSampler2DeviceBox
     readonly #terminator: Terminator
 
     readonly #parametric: ParameterAdapterSet
@@ -27,7 +27,7 @@ export class SwarmDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
 
     #file: Option<AudioFileBoxAdapter> = Option.None
 
-    constructor(context: BoxAdaptersContext, box: SwarmDeviceBox) {
+    constructor(context: BoxAdaptersContext, box: NanoSampler2DeviceBox) {
         this.#context = context
         this.#box = box
         this.#terminator = new Terminator()
@@ -39,7 +39,7 @@ export class SwarmDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         }))
     }
 
-    get box(): SwarmDeviceBox {return this.#box}
+    get box(): NanoSampler2DeviceBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get labelField(): StringField {return this.#box.label}
@@ -68,7 +68,7 @@ export class SwarmDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
         this.#parametric.terminate()
     }
 
-    #wrapParameters(box: SwarmDeviceBox) {
+    #wrapParameters(box: NanoSampler2DeviceBox) {
         return {
             volume: this.#parametric.createParameter(
                 box.volume,

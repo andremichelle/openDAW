@@ -3,7 +3,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
 import {DeviceFactory} from "../../std/DeviceFactory"
 
-export const SwarmDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("SwarmDeviceBox", "notes", {
+export const NanoSampler2DeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("NanoSampler2DeviceBox", "notes", {
     10: {
         type: "float32", name: "volume", pointerRules: ParameterPointerRules,
         value: -3.0, constraints: "decibel", unit: "dB"
