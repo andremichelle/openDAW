@@ -1,13 +1,15 @@
 import {defineConfig} from "vite"
 import crossOriginIsolation from "vite-plugin-cross-origin-isolation"
-import {readFileSync} from "fs"
+import {existsSync, readFileSync} from "fs"
 import {resolve} from "path"
+
+const certsExist = existsSync(resolve(__dirname, "../../../certs/localhost-key.pem"))
 
 export default defineConfig(({command}) => ({
     server: {
         port: 8080,
         host: "localhost",
-        https: command === "serve" ? {
+        https: command === "serve" && certsExist ? {
             key: readFileSync(resolve(__dirname, "../../../certs/localhost-key.pem")),
             cert: readFileSync(resolve(__dirname, "../../../certs/localhost.pem"))
         } : undefined,
