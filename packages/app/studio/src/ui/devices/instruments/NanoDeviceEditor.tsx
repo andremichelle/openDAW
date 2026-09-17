@@ -71,7 +71,7 @@ const paintWaveform = ({context, width, height}: CanvasPainter, adapter: NanoDev
                         PeaksPainter.renderPixelStrips(context, peaks, channelIndex, layout)
                     }
                 }
-                context.fillStyle = Colors.bright.toString()
+                context.fillStyle = Colors.dark.toString()
                 renderRange(u0, u1, x0, x1)
                 context.fillRect(Math.round(x0), 0, 1, height * devicePixelRatio)
                 context.fillRect(Math.round(x1), 0, 1, height * devicePixelRatio)
