@@ -1,16 +1,15 @@
 import css from "./NanoDeviceEditor.sass?inline"
-import {asDefined, asInstanceOf, clamp, Lifecycle, Option, Terminable, Terminator} from "@opendaw/lib-std"
+import {asDefined, asInstanceOf, clamp, isDefined, Lifecycle, Option, Terminable, Terminator} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Dragging, Html} from "@opendaw/lib-dom"
 import {PeaksPainter} from "@opendaw/lib-fusion"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
-import {DeviceHost, InstrumentFactories, NanoDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {AutomatableParameterFieldAdapter, DeviceHost, InstrumentFactories, NanoDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {CanvasPainter, MenuItem} from "@opendaw/studio-core"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
-import {Column} from "@/ui/devices/Column.tsx"
-import {LKR} from "@/ui/devices/constants.ts"
+import {ParameterLabel} from "@/ui/components/ParameterLabel"
+import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {Icon} from "@/ui/components/Icon"
@@ -101,7 +100,7 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
     const waveformCanvas: HTMLCanvasElement = (<canvas/>)
     const playbackCanvas: HTMLCanvasElement = (<canvas style={{pointerEvents: "none"}}/>)
     const display: HTMLElement = (
-        <div className="waveform">
+        <div className="display">
             {waveformCanvas}
             {playbackCanvas}
             {dropHint}
@@ -112,6 +111,32 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
     const waveformPainter = new CanvasPainter(waveformCanvas, painter => paintWaveform(painter, adapter))
     const sampleSelector = new SampleSelector(service, SampleSelectStrategy.forDeviceFile(adapter.box.file))
     const loaderTerminator = new Terminator()
+    const createParameterInput = (parameter: AutomatableParameterFieldAdapter) => (
+        <AutomationControl lifecycle={lifecycle}
+                           editing={editing}
+                           midiLearning={midiLearning}
+                           tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                           parameter={parameter}>
+            <RelativeUnitValueDragging lifecycle={lifecycle}
+                                       editing={editing}
+                                       parameter={parameter}>
+                <ParameterLabel lifecycle={lifecycle}
+                                parameter={parameter}
+                                framed/>
+            </RelativeUnitValueDragging>
+        </AutomationControl>
+    )
+    const createParameterRow = (parameter: AutomatableParameterFieldAdapter, name?: string, second?: boolean) => [
+        <div className={Html.buildClassList("name", second && "second")}>{name ?? parameter.name}</div>,
+        createParameterInput(parameter)
+    ]
+    const createParameterStack = (group: string, heading: string, upper: AutomatableParameterFieldAdapter, lower?: AutomatableParameterFieldAdapter) => (
+        <div className={`parameter-stack ${group}`}>
+            <div className="label">{heading}</div>
+            {createParameterRow(upper)}
+            {isDefined(lower) ? createParameterRow(lower) : null}
+        </div>
+    )
     lifecycle.ownAll(
         loaderTerminator,
         waveformPainter,
@@ -203,32 +228,29 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                       populateControls={() => (
                           <div className={className}>
                               {display}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: attack})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: release})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: sampleStart})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: sampleEnd})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: rootKey, anchor: 60 / 127})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: octave, anchor: 0.5})}
-                              <AutomationControl lifecycle={lifecycle}
-                                                 editing={editing}
-                                                 midiLearning={midiLearning}
-                                                 tracks={deviceHost.audioUnitBoxAdapter().tracks}
-                                                 parameter={loop}>
-                                  <Column ems={LKR} color={Colors.cream}>
-                                      <h5>{loop.name}</h5>
-                                      <div className="loop">
-                                          <Checkbox lifecycle={lifecycle}
-                                                    model={EditWrapper.forAutomatableParameter(editing, loop)}
-                                                    appearance={{activeColor: Colors.cream, framed: true}}>
-                                              <Icon symbol={IconSymbol.Loop}/>
-                                          </Checkbox>
-                                      </div>
-                                  </Column>
-                              </AutomationControl>
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: loopStart})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: loopEnd, anchor: 1.0})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: loopFade})}
-                              {ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter: volume})}
+                              {createParameterStack("tone", "Tone", rootKey, octave)}
+                              {createParameterStack("waveform", "Waveform", sampleStart, sampleEnd)}
+                              <div className="parameter-stack loop">
+                                  <div className="label">Loop</div>
+                                  {createParameterRow(loopStart, "Start")}
+                                  {createParameterRow(loopFade, "Fade", true)}
+                                  {createParameterRow(loopEnd, "End")}
+                                  <div className="name second">Enabled</div>
+                                  <AutomationControl lifecycle={lifecycle}
+                                                     editing={editing}
+                                                     midiLearning={midiLearning}
+                                                     tracks={deviceHost.audioUnitBoxAdapter().tracks}
+                                                     parameter={loop}>
+                                      <Checkbox lifecycle={lifecycle}
+                                                model={EditWrapper.forAutomatableParameter(editing, loop)}
+                                                className="toggle"
+                                                appearance={{activeColor: Colors.green, framed: true}}>
+                                          <Icon symbol={IconSymbol.Checkbox}/>
+                                      </Checkbox>
+                                  </AutomationControl>
+                              </div>
+                              {createParameterStack("envelope", "Envelope", attack, release)}
+                              {createParameterStack("output", "Output", volume)}
                           </div>
                       )}
                       populateMeter={() => (
