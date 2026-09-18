@@ -64,13 +64,17 @@ export const paintWaveform = ({context, width, height}: CanvasPainter, adapter: 
         context.globalAlpha = 1.0
         if (adapter.namedParameter.loop.getValue()) {
             loopRangeOf(adapter).ifSome(({lo, hi, fade}) => {
+                const xLo = Math.round(lo * wd)
+                const xHi = Math.round(hi * wd)
+                const xFadeIn = Math.round((lo + fade) * wd)
+                const xFadeOut = Math.round((hi - fade) * wd)
                 context.fillStyle = Colors.green.toString()
                 context.globalAlpha = 0.2
-                context.fillRect(Math.round(lo * wd), 0, Math.round(fade * wd), fullHeight)
-                context.fillRect(Math.round((hi - fade) * wd), 0, Math.round(fade * wd), fullHeight)
+                context.fillRect(xLo, 0, xFadeIn - xLo, fullHeight)
+                context.fillRect(xFadeOut, 0, xHi - xFadeOut, fullHeight)
                 context.globalAlpha = 1.0
-                context.fillRect(Math.round(lo * wd), 0, 1, fullHeight)
-                context.fillRect(Math.round(hi * wd), 0, 1, fullHeight)
+                context.fillRect(xLo, 0, 1, fullHeight)
+                context.fillRect(xHi, 0, 1, fullHeight)
             })
         }
     }))
