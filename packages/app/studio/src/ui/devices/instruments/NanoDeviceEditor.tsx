@@ -112,7 +112,8 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
         loop,
         loopFade,
         loopStart,
-        loopEnd
+        loopEnd,
+        tune
     } = adapter.namedParameter
     const {project} = service
     const {editing, midiLearning, liveStreamReceiver} = project
@@ -257,14 +258,16 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                       populateControls={() => (
                           <div className={className}>
                               {display}
-                              {createParameterStack("tone", "Tone", rootKey, octave)}
+                              {createParameterStack("main", "Main", rootKey, volume)}
+                              {createParameterStack("pitch", "Pitch", tune, octave)}
+                              {createParameterStack("envelope", "Envelope", attack, release)}
                               {createParameterStack("waveform", "Waveform", sampleStart, sampleEnd)}
-                              <div className="parameter-stack loop">
+                              <div className="parameter-stack wide loop">
                                   <div className="label">Loop</div>
                                   {createParameterRow(loopStart, "Start")}
                                   {createParameterRow(loopFade, "Fade", true)}
                                   {createParameterRow(loopEnd, "End")}
-                                  <div className="name second">Enabled</div>
+                                  <div className="name second">On</div>
                                   <AutomationControl lifecycle={lifecycle}
                                                      editing={editing}
                                                      midiLearning={midiLearning}
@@ -278,8 +281,6 @@ export const NanoDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Cons
                                       </Checkbox>
                                   </AutomationControl>
                               </div>
-                              {createParameterStack("envelope", "Envelope", attack, release)}
-                              {createParameterStack("output", "Output", volume)}
                           </div>
                       )}
                       populateMeter={() => (

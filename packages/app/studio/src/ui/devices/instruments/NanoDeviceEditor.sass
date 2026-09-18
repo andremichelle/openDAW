@@ -17,11 +17,11 @@ component
 
   div.parameter-stack
     display: grid
-    grid-template-columns: auto 40px
+    grid-template-columns: 2.625em 40px
     grid-template-rows: auto 18px 18px
     column-gap: 0.125em
     row-gap: 0.25em
-    align-items: center
+    align-items: baseline
     align-content: start
     padding: 0 0 2px 0
     background-color: color-mix(in srgb, var(--color) 3%, transparent)
@@ -45,20 +45,21 @@ component
         margin-right: -1px
         border-radius: 0 3px 0 0
 
-    &.tone
-      --color: var(--color-blue)
+    &.main
+      --color: var(--color-orange)
 
-    &.waveform
-      --color: var(--color-bright)
-
-    &.loop
-      --color: var(--color-green)
-
-    &.envelope
+    &.pitch
       --color: var(--color-yellow)
 
-    &.output
-      --color: var(--color-orange)
+    &.waveform
+      --color: var(--color-blue)
+
+    &.loop
+      --color: var(--color-purple)
+
+    &.envelope
+      --color: var(--color-green)
+
 
     > div.label
       grid-column: 1 / -1
@@ -76,14 +77,15 @@ component
       min-width: 40px
       margin-right: 0.375em
 
-    &.loop
-      grid-template-columns: auto 40px 0.25em auto 40px
+    &.wide
+      grid-template-columns: 2.625em 40px 0.25em 2.625em 40px
 
       > div.name.second
         grid-column: 4
 
       .toggle
         justify-self: end
+        align-self: center
 
         > label
           width: 18px
@@ -99,7 +101,7 @@ component
     grid-column: 1 / -1
     align-self: stretch
     position: relative
-    background-color: rgba(black, 0.2)
+    background-color: rgba(black, 0.1)
     border-radius: 2px
     box-shadow: 0 0.5px 1px 0 rgba(white, 0.1), 0 0.5px 1px 0 rgba(black, 0.1) inset
 
@@ -108,9 +110,10 @@ component
       background-color: rgba(white, 0.04)
 
     > canvas
-      width: 100%
-      height: 100%
       position: absolute
+      inset: 12px
+      width: calc(100% - 24px)
+      height: calc(100% - 24px)
 
     > div.drop-hint
       position: absolute
@@ -134,12 +137,17 @@ component
 
     > span.file-name
       position: absolute
-      left: 0.375em
-      bottom: 0.25em
+      left: 50%
+      transform: translateX(-50%)
+      bottom: 2px
+      padding: 2px 3px
+      border-radius: 3px
+      background-color: rgba(black, 0.2)
       font-size: 0.5em
-      color: var(--color-shadow)
+      color: var(--color-dark)
       pointer-events: none
-      max-width: 90%
+      max-width: 80%
       white-space: nowrap
       text-overflow: ellipsis
       overflow: hidden
+      box-shadow: 0 0.5px 1px 0 rgba(white, 0.04)

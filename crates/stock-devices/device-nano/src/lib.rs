@@ -36,6 +36,7 @@ const LEGACY_ATTACK_SECONDS: f32 = 0.003; // the original Nano's fixed attack, t
 // The Nano box's field-key paths (the stable schema keys). `[10]`, `[15]` and `[20]` are the original fields.
 const VOLUME_FIELD: [u16; 1] = [10];
 const OCTAVE_FIELD: [u16; 1] = [11];
+const TUNE_FIELD: [u16; 1] = [13];
 const ROOT_KEY_FIELD: [u16; 1] = [14];
 const SAMPLE_POINTER: [u16; 1] = [15];
 const RELEASE_FIELD: [u16; 1] = [20];
@@ -50,6 +51,7 @@ const POSITIONS_PATH: [u16; 1] = [1001];
 
 const VOLUME_MAPPING: Decibel = Decibel::default_volume();
 const OCTAVE_MAPPING: LinearInteger = LinearInteger {min: -3, max: 3};
+const TUNE_MAPPING: Linear = Linear {min: -1200.0, max: 1200.0}; // cents
 const ROOT_KEY_MAPPING: LinearInteger = LinearInteger {min: 0, max: 127};
 const RELEASE_MAPPING: Exponential = Exponential {min: 0.001, max: 8.0}; // seconds
 const ATTACK_MAPPING: Exponential = Exponential {min: 0.001, max: 5.0}; // seconds
@@ -63,6 +65,7 @@ pub struct NanoState {
     voices: [NanoVoice; MAX_VOICES],
     gain: f32,
     octave: i32,
+    tune_cents: f32,
     root_key: i32,
     attack: u32,  // in samples
     release: u32, // in samples
@@ -85,6 +88,7 @@ pub struct NanoState {
     loop_fade_id: u32,
     loop_start_id: u32,
     loop_end_id: u32,
+    tune_id: u32,
     sample_id: u32,
     positions_id: u32,
     positions_ptr: u32
@@ -100,6 +104,7 @@ impl Instrument for Nano {
         state.sample_rate = sample_rate; // stable for the device's life
         state.gain = 1.0; // schema defaults; the engine pushes the real values right after
         state.octave = 0;
+        state.tune_cents = 0.0;
         state.root_key = 60;
         state.attack = (LEGACY_ATTACK_SECONDS * sample_rate) as u32;
         state.release = sample_rate as u32;
@@ -121,6 +126,7 @@ impl Instrument for Nano {
         state.loop_fade_id = abi::bind_parameter(&LOOP_FADE_FIELD);
         state.loop_start_id = abi::bind_parameter(&LOOP_START_FIELD);
         state.loop_end_id = abi::bind_parameter(&LOOP_END_FIELD);
+        state.tune_id = abi::bind_parameter(&TUNE_FIELD);
         state.sample_id = abi::observe_sample(&SAMPLE_POINTER);
         state.positions_id = abi::bind_broadcast(&POSITIONS_PATH, POSITION_SLOTS);
     }
@@ -156,6 +162,7 @@ impl Instrument for Nano {
             rate_ratio: sample.sample_rate as f64 / state.sample_rate as f64,
             root_key: state.root_key,
             octave: state.octave,
+            tune_cents: state.tune_cents,
             gain: state.gain,
             attack: state.attack,
             release: state.release,
@@ -197,6 +204,8 @@ impl Instrument for Nano {
             state.loop_start = float_value(value, &REGION_MAPPING);
         } else if id == state.loop_end_id {
             state.loop_end = float_value(value, &REGION_MAPPING);
+        } else if id == state.tune_id {
+            state.tune_cents = float_value(value, &TUNE_MAPPING);
         }
     }
 
@@ -298,6 +307,7 @@ pub extern "C" fn map_parameter(id: u32, unit: f32) -> f32 {
         5 | 6 | 9 | 10 => float_value(value, &REGION_MAPPING),
         7 => if bool_value(value) {1.0} else {0.0},
         8 => float_value(value, &LOOP_FADE_MAPPING),
+        11 => float_value(value, &TUNE_MAPPING),
         _ => f32::NAN
     }
 }

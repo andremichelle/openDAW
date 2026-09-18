@@ -9,6 +9,7 @@ pub struct Playback {
     pub rate_ratio: f64, // sample rate / engine rate
     pub root_key: i32,
     pub octave: i32,
+    pub tune_cents: f32,
     pub gain: f32,
     pub attack: u32,  // in engine samples
     pub release: u32, // in engine samples
@@ -20,10 +21,11 @@ pub struct Playback {
     pub loop_end: f32
 }
 
-/// The read-head rate for `pitch` (pitch + cent/100): `2^(pitch/12 - (root_key/12 - octave))`, so the root key
-/// reads at the native rate (bit-identical to the original `2^(pitch/12 - 5)` at root key 60).
-pub fn rate(pitch: f32, root_key: i32, octave: i32) -> f32 {
-    libm::exp2f(pitch / 12.0 - (root_key as f32 / 12.0 - octave as f32))
+/// The read-head rate for `pitch` (pitch + cent/100): `2^(pitch/12 - (root_key/12 - octave - tune/1200))`, so
+/// the root key reads at the native rate (bit-identical to the original `2^(pitch/12 - 5)` at root key 60,
+/// octave 0, tune 0).
+pub fn rate(pitch: f32, root_key: i32, octave: i32, tune_cents: f32) -> f32 {
+    libm::exp2f(pitch / 12.0 - (root_key as f32 / 12.0 - octave as f32 - tune_cents / 1200.0))
 }
 
 #[derive(Clone, Copy, Default)]
@@ -119,7 +121,7 @@ impl NanoVoice {
         let loop_span = loop_hi - loop_lo;
         let fade = if loop_enabled {playback.loop_fade_frames.min(loop_span * 0.5)} else {0.0};
         let shift = loop_span - fade; // >= loop_span/2, so wrapping always advances
-        let speed = rate(self.pitch, playback.root_key, playback.octave);
+        let speed = rate(self.pitch, playback.root_key, playback.octave, playback.tune_cents);
         let increment = speed as f64 * playback.rate_ratio * if backwards {-1.0} else {1.0};
         let attack = playback.attack.max(1);
         let release = playback.release.max(1);
@@ -195,7 +197,7 @@ mod tests {
 
     fn playback(sample_start: f32, sample_end: f32) -> Playback {
         Playback {
-            rate_ratio: 1.0, root_key: 60, octave: 0, gain: 1.0, attack: (0.003 * SR) as u32, release: 4_800, sample_start, sample_end,
+            rate_ratio: 1.0, root_key: 60, octave: 0, tune_cents: 0.0, gain: 1.0, attack: (0.003 * SR) as u32, release: 4_800, sample_start, sample_end,
             loop_enabled: false, loop_fade_frames: 0.0, loop_start: 0.0, loop_end: 1.0
         }
     }
@@ -231,10 +233,13 @@ mod tests {
 
     #[test]
     fn the_root_key_reads_at_the_native_rate() {
-        assert!((rate(60.0, 60, 0) - 1.0).abs() < 1.0e-6, "playing the root is rate 1.0");
-        assert!((rate(69.0, 57, 0) - 2.0).abs() < 1.0e-6, "an octave over the root doubles");
-        assert!((rate(45.0, 45, 1) - 2.0).abs() < 1.0e-6, "the octave shift stacks on top");
-        assert!((rate(33.0, 45, 0) - 0.5).abs() < 1.0e-6, "an octave under the root halves");
+        assert!((rate(60.0, 60, 0, 0.0) - 1.0).abs() < 1.0e-6, "playing the root is rate 1.0");
+        assert!((rate(69.0, 57, 0, 0.0) - 2.0).abs() < 1.0e-6, "an octave over the root doubles");
+        assert!((rate(45.0, 45, 1, 0.0) - 2.0).abs() < 1.0e-6, "the octave shift stacks on top");
+        assert!((rate(33.0, 45, 0, 0.0) - 0.5).abs() < 1.0e-6, "an octave under the root halves");
+        assert!((rate(60.0, 60, 0, 1200.0) - 2.0).abs() < 1.0e-6, "+1200 cents doubles");
+        assert!((rate(60.0, 60, 0, -1200.0) - 0.5).abs() < 1.0e-6, "-1200 cents halves");
+        assert!((rate(60.0, 60, 0, 100.0) - rate(61.0, 60, 0, 0.0)).abs() < 1.0e-6, "100 cents is a semitone");
     }
 
     #[test]
@@ -242,7 +247,7 @@ mod tests {
         for pitch in 0..128u32 {
             for cent in [-99.0f32, -37.0, 0.0, 12.5, 50.0, 99.0] {
                 let legacy = libm::exp2f((pitch as f32 + cent / 100.0) / 12.0 - 5.0);
-                assert_eq!(rate(pitch as f32 + cent / 100.0, 60, 0).to_bits(), legacy.to_bits(), "pitch {pitch} cent {cent}");
+                assert_eq!(rate(pitch as f32 + cent / 100.0, 60, 0, 0.0).to_bits(), legacy.to_bits(), "pitch {pitch} cent {cent}");
             }
         }
     }

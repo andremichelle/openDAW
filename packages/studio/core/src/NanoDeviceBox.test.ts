@@ -9,6 +9,7 @@ describe("NanoDeviceBox defaults", () => {
         boxGraph.beginTransaction()
         const box = NanoDeviceBox.create(boxGraph, UUID.generate())
         expect(box.octave.getValue()).toBe(0)
+        expect(box.tune.getValue()).toBe(0)
         expect(box.volume.getValue()).toBeCloseTo(-3.0)
         expect(box.attack.getValue()).toBeCloseTo(0.003)
         expect(box.release.getValue()).toBeCloseTo(0.1)

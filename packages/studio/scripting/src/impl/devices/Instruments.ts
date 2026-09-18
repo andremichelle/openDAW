@@ -233,6 +233,7 @@ export class NanoImpl extends InstrumentFacade<NanoDeviceBox> implements Nano {
     readonly key = "Nano" as const
     declare volume: float
     declare octave: int
+    declare tune: float
     declare rootKey: int
     declare attack: float
     declare release: float
@@ -246,7 +247,7 @@ export class NanoImpl extends InstrumentFacade<NanoDeviceBox> implements Nano {
     constructor(context: Context, box: NanoDeviceBox) {
         super(context, box)
         this.bind({
-            volume: box.volume, octave: box.octave, rootKey: box.rootKey, attack: box.attack, release: box.release,
+            volume: box.volume, octave: box.octave, tune: box.tune, rootKey: box.rootKey, attack: box.attack, release: box.release,
             sampleStart: box.sampleStart, sampleEnd: box.sampleEnd, loop: box.loop, loopFade: box.loopFade,
             loopStart: box.loopStart, loopEnd: box.loopEnd
         })

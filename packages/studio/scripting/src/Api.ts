@@ -1149,6 +1149,8 @@ export interface Nano extends Instrument {
     volume: float
     /** Octave shift (-3 to 3, default 0) */
     octave: int
+    /** Fine tune in cents (-1200 to 1200, default 0) */
+    tune: float
     /** The MIDI note that plays the sample at its native rate (0 to 127, default 60) */
     rootKey: int
     /** Attack in seconds (0.001 to 5, default 0.003) */

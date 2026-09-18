@@ -56,18 +56,22 @@ The note that plays the sample at its original pitch. Every other note transpose
 
 Shifts the whole keyboard up or down by octaves.
 
-### 2.6 Loop
+### 2.6 Tune
+
+Fine tuning in cents, up to an octave in either direction. 100 cents equal one semitone.
+
+### 2.7 Loop
 
 While enabled, a held note cycles the range between _Loop Start_ and _Loop End_ instead of stopping at the end of the region. The loop points stay inside the region.
 
-### 2.7 Loop Start / Loop End
+### 2.8 Loop Start / Loop End
 
 The loop range, as a percentage of the sample length.
 
-### 2.8 Fade
+### 2.9 Fade
 
 The crossfade length at the loop point. Longer fades hide the seam on sustained material, shorter fades keep transients sharp.
 
-### 2.9 Volume
+### 2.10 Gain
 
 Output level in dB.

@@ -12,6 +12,10 @@ export const NanoDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument
         type: "int32", name: "octave", pointerRules: ParameterPointerRules,
         value: 0, constraints: {min: -3, max: 3}, unit: "oct"
     },
+    13: {
+        type: "float32", name: "tune", pointerRules: ParameterPointerRules,
+        value: 0.0, constraints: {min: -1200.0, max: 1200.0, scaling: "linear"}, unit: "ct"
+    },
     14: {
         type: "int32", name: "root-key", pointerRules: ParameterPointerRules,
         value: 60, constraints: {min: 0, max: 127}, unit: ""
