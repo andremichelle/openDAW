@@ -91,3 +91,9 @@ The crossfade length at the loop point. Longer fades hide the seam on sustained 
 ### 6.3 On
 
 While on, a held note cycles the loop range instead of stopping at the end of the region. The release still ends the note.
+
+---
+
+## Credits
+
+Root key, octave, sample region, crossfade loop and the attack envelope were contributed by [SynthsBack-lab](https://github.com/SynthsBack-lab).
