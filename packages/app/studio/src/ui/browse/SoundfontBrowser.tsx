@@ -68,7 +68,8 @@ export const SoundfontBrowser = ({lifecycle, service, background, fontSize}: Con
         resolveEntryName: (soundfont: Soundfont) => soundfont.name,
         resolveEntryUuid: (soundfont: Soundfont) => soundfont.uuid,
         createSelection: (svc: StudioService, htmlSelection: HTMLSelection) => new SoundfontSelection(svc, htmlSelection),
-        importSignal: "import-soundfont"
+        importSignal: "import-soundfont",
+        importFiles: files => service.soundfontService.importFiles(files)
     }
     return (
         <ResourceBrowser

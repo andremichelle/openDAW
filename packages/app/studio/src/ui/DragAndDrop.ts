@@ -88,7 +88,7 @@ export namespace DragAndDrop {
                     process.enter(dragging.match({
                         none: () => hasFiles(event) && process.drag(event, {
                             type: "file",
-                            file: InaccessibleProperty("Cannot access file while dragging")
+                            files: InaccessibleProperty("Cannot access files while dragging")
                         }),
                         some: data => process.drag(event, data)
                     }))
@@ -101,7 +101,7 @@ export namespace DragAndDrop {
                     none: () => {
                         if (hasFiles(event) && process.drag(event, {
                             type: "file",
-                            file: InaccessibleProperty("Cannot access file while dragging")
+                            files: InaccessibleProperty("Cannot access files while dragging")
                         })) {
                             event.preventDefault()
                             dataTransfer.dropEffect = "copy"
@@ -123,7 +123,7 @@ export namespace DragAndDrop {
                     none: () => {
                         const files = extractFiles(event)
                         if (files.length === 0) {return}
-                        const data: DragFile = {type: "file", file: files[0]}
+                        const data: DragFile = {type: "file", files}
                         if (process.drag(event, data)) {
                             event.preventDefault()
                             process.drop(event, data)

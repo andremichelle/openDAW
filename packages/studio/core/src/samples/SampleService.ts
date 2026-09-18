@@ -13,12 +13,19 @@ import {SampleStorage} from "./SampleStorage"
 import {FactoryCatalog} from "../FactoryCatalog"
 
 export class SampleService extends AssetService<Sample, AudioData> {
+    static readonly AudioExtensions: ReadonlySet<string> = new Set(
+        ["wav", "wave", "aif", "aiff", "aifc", "mp3", "ogg", "oga", "opus", "flac", "m4a", "aac", "webm", "weba"])
+
     protected readonly namePlural: string = "Samples"
     protected readonly nameSingular: string = "Sample"
     protected readonly boxType: Class<Box> = AudioFileBox
     protected readonly filePickerOptions: FilePickerOptions = FilePickerAcceptTypes.WavFiles
 
     constructor(readonly audioContext: AudioContext, readonly bpmDetector: BpmDetector) {super()}
+
+    acceptsFile(file: File): boolean {
+        return file.type.startsWith("audio/") || SampleService.AudioExtensions.has(AssetService.extensionOf(file))
+    }
 
     async importRecording(uuid: UUID.Bytes, audioData: AudioData, bpm: number, name: string = "Recording"): Promise<Sample> {
         // A sample MUST have a positive length. A zero-frame take would become a duration-0 sample and, once

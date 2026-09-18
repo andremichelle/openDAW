@@ -15,11 +15,14 @@ type Construct = {
     expandedKeys: Set<string>
     entries: ReadonlyArray<HTMLElement>
     install: Procedure<HTMLElement>
+    symbols?: [collapsed: IconSymbol, expanded: IconSymbol]
 }
 
 export const ResourceFolderItem = ({
-                                       label, count, depth, expandKey, expandedKeys, entries, install
+                                       label, count, depth, expandKey, expandedKeys, entries, install,
+                                       symbols = [IconSymbol.Folder, IconSymbol.FolderOpen]
                                    }: Construct): HTMLElement => {
+    const [collapsed, expanded] = symbols
     const empty = entries.length === 0
     const item: HTMLElement = <div className={Html.buildClassList(className, empty && "empty")}/>
     item.style.setProperty("--depth", String(depth))
@@ -27,8 +30,8 @@ export const ResourceFolderItem = ({
         <div className="folder-header">
             <span className="label">
                 <div className="icon">
-                    <Icon symbol={IconSymbol.Folder} className="collapsed"/>
-                    <Icon symbol={IconSymbol.FolderOpen} className="expanded"/>
+                    <Icon symbol={collapsed} className="collapsed"/>
+                    <Icon symbol={expanded} className="expanded"/>
                 </div>
                 <span className="name">{label}</span>
                 <span className="brief">{count === 0 ? "" : `(${count})`}</span>
