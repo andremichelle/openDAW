@@ -47,8 +47,8 @@ export namespace InstrumentFactories {
     export const Nano: InstrumentFactory<AudioFileBox, NanoDeviceBox> = {
         defaultName: "Nano",
         defaultIcon: IconSymbol.NanoWave,
-        briefDescription: "Simple Sampler",
-        description: "Simple sampler",
+        briefDescription: "Polyphonic Sampler",
+        description: "Polyphonic sampler with root key, region, crossfade loop and envelope",
         manualPage: DeviceManualUrls.Nano,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph,

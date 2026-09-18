@@ -1147,8 +1147,28 @@ export interface Nano extends Instrument {
     sample: Nullable<Sample>
     /** Volume in dB (default -3) */
     volume: float
+    /** Octave shift (-3 to 3, default 0) */
+    octave: int
+    /** Fine tune in cents (-1200 to 1200, default 0) */
+    tune: float
+    /** The MIDI note that plays the sample at its native rate (0 to 127, default 60) */
+    rootKey: int
+    /** Attack in seconds (0.001 to 5, default 0.003) */
+    attack: float
     /** Release in seconds (0.001 to 8, default 0.1) */
     release: float
+    /** Region start as a fraction of the sample (default 0). A start past the end plays backwards. */
+    sampleStart: unitValue
+    /** Region end as a fraction of the sample (default 1) */
+    sampleEnd: unitValue
+    /** Cycle the loop range while a note holds (default false) */
+    loop: boolean
+    /** Loop crossfade in seconds (0.001 to 1, default 0.05) */
+    loopFade: float
+    /** Loop start as a fraction of the sample, clamped inside the region (default 0) */
+    loopStart: unitValue
+    /** Loop end as a fraction of the sample, clamped inside the region (default 1) */
+    loopEnd: unitValue
 }
 
 /**

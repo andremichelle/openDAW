@@ -458,14 +458,20 @@ impl SampleRef {
     /// frames as a slice. The slice borrows the resident sample memory, valid while the sample stays resident.
     #[inline]
     pub fn plane(&self, channel: u32) -> &[f32] {
-        let offset = self.frames_ptr as usize + channel as usize * self.frame_count as usize * 4;
-        unsafe { slice::from_raw_parts(offset as *const f32, self.frame_count as usize) }
+        #[cfg(target_family = "wasm")]
+        {
+            let offset = self.frames_ptr as usize + channel as usize * self.frame_count as usize * 4;
+            unsafe { slice::from_raw_parts(offset as *const f32, self.frame_count as usize) }
+        }
+        #[cfg(not(target_family = "wasm"))]
+        { native_samples::plane(self.frames_ptr, channel, self.frame_count) }
     }
 }
 
 /// Resolve a sample `handle` (Route F) to its resident PLANAR frames, or `None` when not yet resident (the
 /// device skips that sample for the block). The host writes a [`SampleRef`] into an on-stack scratch and
-/// returns 1 when resident. Native stub returns `None` (native device tests supply samples directly).
+/// returns 1 when resident. Native builds serve the test registry ([`set_native_sample`]), `None` for an
+/// unregistered handle.
 #[inline]
 pub fn resolve_sample(handle: u32) -> Option<SampleRef> {
     #[cfg(target_family = "wasm")]
@@ -478,9 +484,86 @@ pub fn resolve_sample(handle: u32) -> Option<SampleRef> {
         }
     }
     #[cfg(not(target_family = "wasm"))]
-    {
-        let _ = handle;
-        None
+    { native_samples::resolve(handle) }
+}
+
+/// Native TEST SEAM: make `handle` (1-based, at most [`NATIVE_SAMPLE_SLOTS`]) resolve to `planar`, `channel_count`
+/// consecutive planes of `planar.len() / channel_count` frames at `sample_rate`, so a device test can drive
+/// the real sample path (`observe_sample` -> `sample_changed` -> `resolve_sample` -> `plane`). The registry is
+/// process-wide: parallel tests take distinct handles.
+#[cfg(not(target_family = "wasm"))]
+pub fn set_native_sample(handle: u32, planar: &'static [f32], channel_count: u32, sample_rate: f32) {
+    native_samples::set(handle, planar, channel_count, sample_rate)
+}
+
+/// Native TEST SEAM: forget `handle`, so it resolves to `None` again (a sample removed while notes hold).
+#[cfg(not(target_family = "wasm"))]
+pub fn clear_native_sample(handle: u32) {
+    native_samples::clear(handle)
+}
+
+/// How many handles the native sample registry holds.
+#[cfg(not(target_family = "wasm"))]
+pub const NATIVE_SAMPLE_SLOTS: u32 = native_samples::SLOTS as u32;
+
+/// The native sample registry behind [`resolve_sample`] / [`SampleRef::plane`]: on wasm `frames_ptr` is the
+/// resident plane pointer, natively it carries the registered HANDLE and the planes live in `'static` slices
+/// the test leaked. Atomics only, so it stays `no_std`.
+#[cfg(not(target_family = "wasm"))]
+mod native_samples {
+    use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+    use super::SampleRef;
+
+    pub const SLOTS: usize = 32;
+    const PTR: AtomicUsize = AtomicUsize::new(0);
+    const ZERO: AtomicU32 = AtomicU32::new(0);
+    static PTRS: [AtomicUsize; SLOTS] = [PTR; SLOTS];
+    static FRAMES: [AtomicU32; SLOTS] = [ZERO; SLOTS];
+    static CHANNELS: [AtomicU32; SLOTS] = [ZERO; SLOTS];
+    static RATES: [AtomicU32; SLOTS] = [ZERO; SLOTS];
+
+    fn slot(handle: u32) -> usize {
+        assert!(handle >= 1 && handle as usize <= SLOTS, "native sample handle out of range: {handle}");
+        handle as usize - 1
+    }
+
+    pub fn set(handle: u32, planar: &'static [f32], channel_count: u32, sample_rate: f32) {
+        assert!(channel_count >= 1, "a sample needs at least one channel");
+        assert_eq!(planar.len() % channel_count as usize, 0, "planar length must be a multiple of the channel count");
+        let index = slot(handle);
+        FRAMES[index].store((planar.len() / channel_count as usize) as u32, Ordering::SeqCst);
+        CHANNELS[index].store(channel_count, Ordering::SeqCst);
+        RATES[index].store(sample_rate.to_bits(), Ordering::SeqCst);
+        PTRS[index].store(planar.as_ptr() as usize, Ordering::SeqCst);
+    }
+
+    pub fn clear(handle: u32) {
+        PTRS[slot(handle)].store(0, Ordering::SeqCst);
+    }
+
+    pub fn resolve(handle: u32) -> Option<SampleRef> {
+        if handle < 1 || handle as usize > SLOTS {
+            return None;
+        }
+        let index = slot(handle);
+        if PTRS[index].load(Ordering::SeqCst) == 0 {
+            return None;
+        }
+        Some(SampleRef {
+            frames_ptr: handle,
+            frame_count: FRAMES[index].load(Ordering::SeqCst),
+            channel_count: CHANNELS[index].load(Ordering::SeqCst),
+            sample_rate: f32::from_bits(RATES[index].load(Ordering::SeqCst))
+        })
+    }
+
+    pub fn plane(handle: u32, channel: u32, frame_count: u32) -> &'static [f32] {
+        let index = slot(handle);
+        let base = PTRS[index].load(Ordering::SeqCst);
+        assert!(base != 0, "native sample {handle} is not registered");
+        assert!(channel < CHANNELS[index].load(Ordering::SeqCst), "channel {channel} out of range");
+        let offset = base + channel as usize * frame_count as usize * core::mem::size_of::<f32>();
+        unsafe { core::slice::from_raw_parts(offset as *const f32, frame_count as usize) }
     }
 }
 
@@ -586,13 +669,21 @@ pub fn observe_target_string(path: &[u16], field_key: u16) -> u32 {
 /// (`path`) — e.g. `[16, 10]` for `lowPass.frequency`, the same keys the box schema uses (no encoding).
 /// Returns an opaque `id` the device keeps and matches in `parameter_changed`. A device calls this from its
 /// `init` hook, once per parameter; the host then observes that field's value and any automation track. The
-/// host stays mapping-agnostic — the device maps the uniform automation value itself. Native stub returns 0.
+/// host stays mapping-agnostic — the device maps the uniform automation value itself. Native builds return
+/// [`native_parameter_id`] of the path, so a device test can push each parameter by its field key.
 #[inline]
 pub fn bind_parameter(path: &[u16]) -> u32 {
     #[cfg(target_family = "wasm")]
     { unsafe { host_bind_parameter(path.as_ptr() as u32, path.len() as u32) } }
     #[cfg(not(target_family = "wasm"))]
-    { let _ = path; 0 }
+    { native_parameter_id(path) }
+}
+
+/// Native TEST SEAM: the id [`bind_parameter`] hands back for `path` on native builds, distinct per field-key
+/// path and never 0, so a test addresses a parameter by the same key the box schema uses.
+#[cfg(not(target_family = "wasm"))]
+pub fn native_parameter_id(path: &[u16]) -> u32 {
+    path.iter().fold(1u32, |id, key| id.wrapping_mul(0x1_0001).wrapping_add(*key as u32))
 }
 
 /// Register a LIVE-DATA broadcast slot for THIS device (call from `init`): `len` floats published to the UI
