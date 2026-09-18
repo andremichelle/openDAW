@@ -10,39 +10,59 @@
 
 component
   display: flex
-  flex: 1
-  min-height: 0
-  padding: 2em
+  height: 100dvh
+  box-sizing: border-box
+  padding: 1.5em
   text-align: center
   font-family: Rubik, sans-serif
   font-weight: 300
-  line-height: 1.5
+  font-size: clamp(12px, 2.2dvh, 16px)
+  line-height: 1.4
   color: #ccc
   background: #1a1a1a
-  overflow: auto
+  overflow: hidden
 
   > div
+    display: flex
+    flex-direction: column
+    align-items: center
+    justify-content: center
+    gap: 0.75em
+    width: 100%
     max-width: 32em
+    max-height: 100%
     margin: auto
 
   h1
+    margin: 0
     font-weight: 400
 
   .logo
-    width: 4em
+    width: 3.5em
 
   .claim
-    margin: 0 0 0.75em
+    margin: 0
     font-size: 1.25em
     color: hsl(189, 100%, 65%)
 
   .screenshot
     width: 100%
+    min-height: 0
+    object-fit: contain
     border-radius: 2px
-    margin-bottom: 1.5em
 
   p
     margin: 0
 
-  p + p
-    margin-top: 1em
+  .instagram
+    display: inline-flex
+    align-items: center
+    gap: 0.5em
+    margin-top: 0.5em
+    color: hsl(189, 100%, 65%)
+    text-decoration: none
+
+    svg
+      width: 1.5em
+      height: 1.5em
+      flex-shrink: 0
