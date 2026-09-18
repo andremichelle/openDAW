@@ -114,3 +114,10 @@ Still open (see the questions at the bottom of nextcloud.txt)
 • Release status and whether to call for pilot schools.
 • Discord channel name for the post.
 • Newsletter subject line (currently a general blast, no greeting).
+
+Feature framing (Nano)
+• Nano is not new. The update adds root key, octave, tune, a sample region with reverse by swapping
+  start and end, a crossfade loop and an attack. Projects made with the old Nano sound exactly as before.
+• Credit SynthsBack-lab (https://github.com/SynthsBack-lab) for root key, octave, region, loop and
+  attack. Tune was added by us, do not credit it to them.
+• Manual: https://opendaw.studio/manuals/devices/instruments/nano
