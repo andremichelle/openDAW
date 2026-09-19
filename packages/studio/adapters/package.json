@@ -20,7 +20,7 @@
     "generate-exports": "node generate-exports.mjs",
     "build": "npm run generate-exports && tsc",
     "lint": "eslint \"**/*.ts\"",
-    "test": "echo \"No tests to run\"",
+    "test": "vitest run",
     "generate-all-boxes": "npx tsx scripts/generate-all-boxes.ts",
     "pregenerate-all-boxes": "npm run build -w @opendaw/studio-forge-boxes && npm run build -w @opendaw/studio-boxes"
   },

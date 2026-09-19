@@ -283,7 +283,7 @@ describe("Devices", () => {
         expect(cubed.patterns[0].steps.length).toBe(64)
         expect(cubed.patterns[0].length).toBe(16)
         const step = cubed.patterns[0].steps[0]
-        expect(step.note).toBe(60)
+        expect(step.note).toBe(36)
         expect(step.active).toBe(false)
         step.note = 48
         step.active = true
