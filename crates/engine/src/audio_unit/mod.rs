@@ -47,7 +47,9 @@ use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_region::NoteRegion;
 use engine_env::clip_sequencer::ClipSequencer;
 use engine_env::note_content_source::{NoteContentSource, NoteTrackAccess};
-use engine_env::note_sequencer::NoteSequencer;
+use engine_env::note_sequencer::{advance_clips, ClipRead, NoteSequencer};
+use engine_env::block::Block;
+use engine_env::block_flags::BlockFlags;
 use value::event::EventCollection;
 use value::note::NoteEvent;
 use value::region::{RegionCollection, Span};
@@ -380,6 +382,8 @@ pub(crate) fn visit_member_sidechains(member: &mut Member, visit: &mut dyn FnMut
 pub(crate) struct SlotCluster {
     pub(crate) instrument: Member,
     pub(crate) sequencer: SharedNoteEventSource,
+    // This slot's OWN instances of the unit-level midi effects (a stateful one cannot be pulled by several slots).
+    pub(crate) unit_replicas: Vec<Member>,
     pub(crate) midi: Vec<Member>,
     pub(crate) audio: Vec<Member>,
     pub(crate) internal_edges: Vec<(NodeId, NodeId)>,
@@ -396,6 +400,7 @@ impl SlotCluster {
     /// Visit every member's bound parameters (instrument + midi + audio), for the unit's automation re-bind.
     pub(crate) fn for_each_params(&mut self, visit: &mut dyn FnMut(&mut DeviceParams)) {
         if let Some(params) = &mut self.instrument.params { visit(params); }
+        for member in &mut self.unit_replicas { visit_member_params(member, visit); }
         for member in &mut self.midi { visit_member_params(member, visit); }
         for member in &mut self.audio { visit_member_params(member, visit); }
     }
@@ -587,7 +592,23 @@ pub(crate) struct AudioUnitBinding {
     pub(crate) mark: DirtyMark
 }
 
+/// The ONE clip advance per block for every unit whose layers read launched clips shared (a cell composite),
+/// before any node processes. Mirrors the sequencer's own read gate: only transporting + playing blocks.
+pub(crate) fn advance_shared_clips(units: &[AudioUnitBinding], clips: &Rc<RefCell<ClipSequencer>>, blocks: &[Block]) {
+    for unit in units.iter().filter(|unit| unit.shares_clip_read()) {
+        let source = BoundNoteTracks {tracks: unit.track_sets.clone()};
+        let mut clips = clips.borrow_mut();
+        for block in blocks.iter().filter(|block| block.flags.has(BlockFlags::TRANSPORTING | BlockFlags::PLAYING)) {
+            advance_clips(&source, &mut clips, block.p0, block.p1, block.flags.discontinuous());
+        }
+    }
+}
+
 impl AudioUnitBinding {
+    pub(crate) fn shares_clip_read(&self) -> bool {
+        matches!(&self.wired, Some(Wired::Composite(composite)) if composite.binding.cell_based())
+    }
+
     /// Clear the unit's held-note indicator bits (transport stop; TS `NoteBroadcaster.clear`).
     pub(crate) fn clear_note_bits(&self) {
         engine_env::telemetry::clear_note_bits(&self.note_bits);
@@ -882,7 +903,9 @@ impl Engine {
             let invalidate = automation_invalidate(unit);
             let track_sets = unit.track_sets.clone();
             if let Some(Wired::Composite(composite)) = &mut unit.wired {
+                self.clip_read = if composite.binding.cell_based() { ClipRead::Shared } else { ClipRead::Advance };
                 self.reconcile_composite_children(&mut composite.binding, &track_sets, &signal, &invalidate);
+                self.clip_read = ClipRead::Advance;
             }
         }
         // The unit's parallel aux sends: build / destroy the send processors on a collection change (source +

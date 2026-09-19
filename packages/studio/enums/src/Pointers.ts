@@ -56,7 +56,7 @@ export enum Pointers {
     VoltageConnection,
     WarpMarkers,
     NeuralAmpModel,
-    CompositeCell,
+    InstrumentCompositeCell,
     AudioEffectCompositeCell,
     Pattern,
     // APPEND ONLY: the values are ordinals, so inserting one renumbers every member after it.

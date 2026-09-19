@@ -1102,7 +1102,7 @@ fn composite_engine() -> Engine {
 
 #[test]
 fn a_cell_composite_builds_its_hosted_instrument_and_keeps_it_across_reconcile() {
-    // A CELL composite (CompositeDeviceBox path): children are generic wrappers that HOST one instrument at a
+    // A CELL composite (InstrumentCompositeBox path): children are generic wrappers that HOST one instrument at a
     // fixed field. Exercises the `ChildBody::Cell` build + survive + teardown path (otherwise untested).
     const CELL: Uuid = [40u8; 16];
     const CELL_INSTRUMENT_FIELD: u16 = 50;
@@ -1133,6 +1133,221 @@ fn a_cell_composite_builds_its_hosted_instrument_and_keeps_it_across_reconcile()
     let node = child_instrument(&unit, CELL).expect("cell child built");
     engine.reconcile_one(&mut unit);
     assert_eq!(child_instrument(&unit, CELL), Some(node), "the cell child survives an idle reconcile (same processor)");
+}
+
+#[test]
+fn cell_composite_layers_share_one_clip_advance() {
+    // Two layers read the unit's launched clip with DIFFERENT windows (one has its own Zeitgeist). The layers
+    // never advance the clip machine, the engine does it once per block, and both hand over at the bar.
+    const CELL_A: Uuid = [40u8; 16];
+    const CELL_B: Uuid = [41u8; 16];
+    const CELL_INSTRUMENT_FIELD: u16 = 50;
+    const CLIP: Uuid = [60u8; 16];
+    const CLIP_COLLECTION: Uuid = [61u8; 16];
+    const CLIP_NOTE: Uuid = [62u8; 16];
+    let mut engine = engine_with_devices();
+    engine.composites = vec![CompositeSpec {
+        box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
+        cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+    }];
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(COMPOSITE, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (CHILDREN_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CELL_A, "TestCell", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))), (CELL_INSTRUMENT_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CELL_B, "TestCell", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))), (CELL_INSTRUMENT_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CHILD_A, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(CELL_A, vec![CELL_INSTRUMENT_FIELD]))))
+        ]),
+        graph_box(CHILD_B, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(CELL_B, vec![CELL_INSTRUMENT_FIELD]))))
+        ]),
+        graph_box(TRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(1)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(CLIP, "NoteClipBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![super::TRACK_CLIPS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(CLIP_COLLECTION, vec![2])))),
+            (10, FieldValue::Int32(960))
+        ]),
+        graph_box(CLIP_COLLECTION, "NoteEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(CLIP_NOTE, "NoteEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(CLIP_COLLECTION, vec![1])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(240)),
+            (20, FieldValue::Int32(72)), (21, FieldValue::Float32(0.9)), (24, FieldValue::Float32(0.0))
+        ])
+    ]);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let mut sources: Vec<engine_env::note_event_instrument::SharedNoteEventSource> = Vec::new();
+    match unit.wired.as_ref().expect("wired after reconcile") {
+        Wired::Composite(composite) => composite.binding.collect_note_sources(&mut sources),
+        _ => panic!("expected a composite chain")
+    }
+    assert_eq!(sources.len(), 2);
+    assert!(unit.shares_clip_read(), "a cell composite's layers read clips shared");
+    engine.schedule_clip_play(CLIP);
+    engine.audio_units.push(unit);
+    let started = |engine: &mut Engine| {
+        let mut count = 0;
+        engine.clip_sequencer.borrow_mut().take_changes(&mut |uuid, change| {
+            if uuid == &CLIP && change == engine_env::clip_sequencer::Change::Started {
+                count += 1;
+            }
+        });
+        count
+    };
+    let flags = engine_env::block_flags::BlockFlags::create(true, false, true, false);
+    let block = |p0: f64, p1: f64| engine_env::block::Block {index: 0, flags, p0, p1, s0: 0, s1: 128, bpm: 120.0};
+    let pull = |source: &engine_env::note_event_instrument::SharedNoteEventSource, from: f64, to: f64| {
+        let mut starts: Vec<f64> = Vec::new();
+        source.borrow_mut().process_notes(from, to, flags, &mut |event| {
+            if let engine_env::event::Event::NoteStart {pitch: 72, position, ..} = event {
+                starts.push(position)
+            }
+        });
+        starts
+    };
+    // A layer pulling on its own never launches the clip.
+    assert!(pull(&sources[0], 3800.0, 3830.0).is_empty());
+    assert_eq!(started(&mut engine), 0, "a layer read does not transition");
+    // The engine advances once for the block, the layers read it with shifted windows.
+    engine.advance_shared_clips(&[block(3830.0, 3860.0)]);
+    assert_eq!(pull(&sources[0], 3830.0, 3860.0), [3840.0], "the straight layer");
+    assert_eq!(pull(&sources[1], 3815.0, 3845.0), [3840.0], "the layer reading behind");
+    assert_eq!(started(&mut engine), 1, "exactly one started notification for two layers");
+    // A paused (non-transporting) block advances nothing.
+    let paused = engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
+        p0: 3860.0, p1: 3890.0, s0: 0, s1: 128, bpm: 120.0};
+    engine.advance_shared_clips(&[paused]);
+    assert!(pull(&sources[0], 4790.0, 4810.0) == [4800.0], "ahead of the cursor the looping clip is predicted");
+}
+
+#[test]
+fn each_cell_gets_its_own_replica_of_a_unit_level_midi_effect() {
+    // A unit-level midi effect (an arp) is STATEFUL: two layers pulling one shared instance over the same
+    // window corrupt each other. Every cell folds its OWN replica, bound to the same device box.
+    const CELL_A: Uuid = [40u8; 16];
+    const CELL_B: Uuid = [41u8; 16];
+    const UNIT_FX: Uuid = [42u8; 16];
+    const CELL_INSTRUMENT_FIELD: u16 = 50;
+    let mut engine = engine_with_devices();
+    engine.devices.push(stub_device(abi::DEVICE_KIND_MIDI_EFFECT));
+    engine.device_box_types.push(("TestMidiEffect".to_string(), 2));
+    engine.composites = vec![CompositeSpec {
+        box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
+        cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+    }];
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(UNIT_FX, "TestMidiEffect", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_MIDI_KEY]))))
+        ]),
+        graph_box(COMPOSITE, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (CHILDREN_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CELL_A, "TestCell", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))), (CELL_INSTRUMENT_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CELL_B, "TestCell", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))), (CELL_INSTRUMENT_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CHILD_A, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(CELL_A, vec![CELL_INSTRUMENT_FIELD]))))
+        ]),
+        graph_box(CHILD_B, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(CELL_B, vec![CELL_INSTRUMENT_FIELD]))))
+        ])
+    ]);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let binding = match unit.wired.as_ref().expect("wired after reconcile") {
+        Wired::Composite(composite) => &composite.binding,
+        _ => panic!("expected a composite chain")
+    };
+    let replica_a = binding.child_midi_replica(CELL_A, UNIT_FX).expect("cell A folds a replica of the unit fx");
+    let replica_b = binding.child_midi_replica(CELL_B, UNIT_FX).expect("cell B folds a replica of the unit fx");
+    assert_ne!(replica_a, replica_b, "every cell owns its instance (its own device state)");
+    let original = binding.unit_midi_state(UNIT_FX).expect("the unit-level member still exists");
+    assert!(replica_a != original && replica_b != original, "no cell pulls the shared unit-level instance");
+}
+
+#[test]
+fn a_leaving_cell_releases_its_midi_replica() {
+    // The replica binds the unit-level effect's box a second time. When the cell leaves, every observation
+    // of that second bind must go with it, and the surviving cell keeps its own replica.
+    const CELL_A: Uuid = [40u8; 16];
+    const CELL_B: Uuid = [41u8; 16];
+    const UNIT_FX: Uuid = [42u8; 16];
+    const CELL_INSTRUMENT_FIELD: u16 = 50;
+    let mut engine = engine_with_devices();
+    engine.devices.push(stub_device(abi::DEVICE_KIND_MIDI_EFFECT));
+    engine.device_box_types.push(("TestMidiEffect".to_string(), 2));
+    engine.composites = vec![CompositeSpec {
+        box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
+        cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+    }];
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(UNIT_FX, "TestMidiEffect", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_MIDI_KEY]))))
+        ]),
+        graph_box(COMPOSITE, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (CHILDREN_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CELL_A, "TestCell", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))), (CELL_INSTRUMENT_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CELL_B, "TestCell", &[(HOST_KEY, FieldValue::Pointer(None)), (CELL_INSTRUMENT_FIELD, FieldValue::Hook)]),
+        graph_box(CHILD_A, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(CELL_A, vec![CELL_INSTRUMENT_FIELD]))))
+        ]),
+        graph_box(CHILD_B, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(CELL_B, vec![CELL_INSTRUMENT_FIELD]))))
+        ])
+    ]);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let replica = |unit: &AudioUnitBinding, cell: Uuid| match unit.wired.as_ref().expect("wired") {
+        Wired::Composite(composite) => composite.binding.child_midi_replica(cell, UNIT_FX),
+        _ => panic!("expected a composite chain")
+    };
+    let replica_a = replica(&unit, CELL_A).expect("cell A folds a replica");
+    let (nodes_one, subs_one) = (engine.context.debug_counts()[0], engine.graph.subscription_count());
+    let join = Update::Pointer {address: Address::of(CELL_B, vec![HOST_KEY]), old: None, new: Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD]))};
+    engine.graph.transaction(&[join], &engine.registry).expect("cell B joins");
+    engine.reconcile_one(&mut unit);
+    assert!(replica(&unit, CELL_B).is_some(), "the joiner folds its own replica");
+    assert_eq!(replica(&unit, CELL_A), Some(replica_a), "the survivor keeps its replica (same device state)");
+    assert!(engine.graph.subscription_count() > subs_one);
+    let leave = Update::Pointer {address: Address::of(CELL_B, vec![HOST_KEY]), old: Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])), new: None};
+    engine.graph.transaction(&[leave], &engine.registry).expect("cell B leaves");
+    engine.reconcile_one(&mut unit);
+    assert_eq!(replica(&unit, CELL_B), None);
+    assert_eq!(replica(&unit, CELL_A), Some(replica_a));
+    assert_eq!(engine.context.debug_counts()[0], nodes_one, "the leaver's nodes are gone");
+    assert_eq!(engine.graph.subscription_count(), subs_one, "the leaver's replica released every observation");
 }
 
 #[test]

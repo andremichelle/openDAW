@@ -1106,7 +1106,7 @@ fn pull_from_slot_route(upstream: &SharedNoteEventSource, choke: &[i32], gate: &
             break;
         }
         match *event {
-            Event::NoteStart {id, position, pitch, cent, velocity, ..} => {
+            Event::NoteStart {id, position, duration, pitch, cent, velocity} => {
                 if choke.contains(&(pitch as i32)) {
                     out[count] = EventRecord {position, offset: 0, kind: EVENT_CHOKE, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
                     count += 1;
@@ -1117,7 +1117,7 @@ fn pull_from_slot_route(upstream: &SharedNoteEventSource, choke: &[i32], gate: &
                 if gate.get() {
                     continue; // silent (muted / not soloed): the start never reaches the device (TS mirror)
                 }
-                out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_ON, id: id as u32, pitch: pitch as u32, velocity, cent, duration: 0.0};
+                out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_ON, id: id as u32, pitch: pitch as u32, velocity, cent, duration};
             }
             Event::NoteComplete {id, position, pitch} => {
                 out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_OFF, id: id as u32, pitch: pitch as u32, velocity: 0.0, cent: 0.0, duration: 0.0};
@@ -1241,6 +1241,8 @@ struct Engine {
     // The clip-launch state machine (TS ClipSequencingAudioContext), shared with every unit's note
     // sequencer(s); its change queue feeds the notifyClipSequenceChanges back-channel.
     clip_sequencer: Rc<RefCell<engine_env::clip_sequencer::ClipSequencer>>,
+    // How the sequencers built RIGHT NOW read launched clips: `Shared` while a cell composite's cascade builds.
+    pub(crate) clip_read: engine_env::note_sequencer::ClipRead,
     // The `playback.truncateNotesAtRegionEnd` preference (TS reads it live per block), shared with
     // every note sequencer via `bind_truncate_preference`.
     pub(crate) truncate_pref: Rc<Cell<bool>>,
@@ -1316,6 +1318,7 @@ impl Engine {
             master_id: 0,
             audio_units: Vec::new(),
             clip_sequencer: Rc::new(RefCell::new(engine_env::clip_sequencer::ClipSequencer::new())),
+            clip_read: engine_env::note_sequencer::ClipRead::Advance,
             truncate_pref: Rc::new(Cell::new(false)),
             solo_dirty: Rc::new(Cell::new(false)),
             unit_changes: Rc::new(RefCell::new(Members::default())),
@@ -1439,6 +1442,11 @@ impl Engine {
         self.graph.checksum()
     }
 
+    #[cfg(test)]
+    pub(crate) fn advance_shared_clips(&self, blocks: &[Block]) {
+        audio_unit::advance_shared_clips(&self.audio_units, &self.clip_sequencer, blocks);
+    }
+
     /// Render one quantum into `output` (planar L|R) and write the transport state into `state`.
     fn render(&mut self, output: &mut [f32], state: &mut [u8]) {
         for sample in output.iter_mut() {
@@ -1487,7 +1495,7 @@ impl Engine {
         self.advance_modulation();
         let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
-            metronome_pref, ..} = self;
+            metronome_pref, audio_units, clip_sequencer, ..} = self;
         // `Metronome::process` mixes ADDITIVELY, so its buffer starts cleared every quantum, exactly like
         // `output` above.
         metronome_staging.fill(0.0);
@@ -1586,6 +1594,7 @@ impl Engine {
         for index in 0..RENDER_QUANTUM * 2 {
             output[index] += metronome_staging[index];
         }
+        audio_unit::advance_shared_clips(audio_units, clip_sequencer, blocks.as_slice());
         // drive the processor graph over the quantum's blocks (advancing or static), then mix the output bus in
         context.process(&ProcessInfo {blocks: blocks.as_slice()});
         if let Some(buffer) = output_bus.as_ref() {

@@ -9,16 +9,16 @@ We shipped TWO ways a composite child gets its fx chains:
 1. Playfield, direct: the slot box IS the instrument and self-hosts its chains through device-declared
    field-key exports (`midi_effects_field()` / `audio_effects_field()`), stored in `DeviceReg`, plumbed
    through two extra `device_register` args + JS, and folded by `build_instrument`.
-2. Generic, cell: a `CompositeCellBox` carries the chains, read from fixed keys, folded by `build_cell`.
+2. Generic, cell: a `InstrumentCompositeCellBox` carries the chains, read from fixed keys, folded by `build_cell`.
 
 The cell mechanism subsumes the device-declared one. Collapsing to cells deletes the two device exports, the
 two `DeviceReg` fields, the two `device_register` args + JS, and `build_instrument` itself, leaving one
-builder. Playfield becomes a `CompositeDeviceBox` of cells, each cell wrapping a playfield-slot instrument. The
+builder. Playfield becomes a `InstrumentCompositeBox` of cells, each cell wrapping a playfield-slot instrument. The
 render path is unchanged, cells are a build-time structure only.
 
 ## Target architecture
 
-- One composite box type, `CompositeDeviceBox`, hosts `CompositeCellBox` cells.
+- One composite box type, `InstrumentCompositeBox`, hosts `InstrumentCompositeCellBox` cells.
 - A cell wraps ONE instrument plus its own midi / audio fx chains, and carries an `index` for its position in
   the composite. Fixed cell keys: composite 1, instrument 2, midi-effects 3, audio-effects 4, index 5.
 - Routing (note index, plus the choke exclude flag) is read from the instrument INSIDE each cell. The slot
@@ -35,18 +35,18 @@ to every instrument box would pollute all of them with a value that is meaningle
 "-1 / 0 when alone" awkwardness). The cell is the composite-specific container, so it is the natural home and
 the instrument schemas stay clean.
 
-So `CompositeCellBox` carries `index` (int32, key 5). The composite sorts its cells by this index, which is
+So `InstrumentCompositeCellBox` carries `index` (int32, key 5). The composite sorts its cells by this index, which is
 SEPARATE from a slot instrument's note-routing index (field 15, on the instrument, read for the choke and
 observed by the slot for self-filtering). The two are conflated in the current single `index_key`; cells split
 them cleanly: cell index = position in the composite, instrument index = which note it plays.
 
-This applies to the ALREADY-shipped `CompositeCellBox` too, which currently sorts by insertion order (the
+This applies to the ALREADY-shipped `InstrumentCompositeCellBox` too, which currently sorts by insertion order (the
 composite observes its cells with `index_key` 0). Adding the field is independent of the Playfield fold and can
 land first.
 
 ## Key decision: where routing config lives
 
-Once everything is a `CompositeDeviceBox`, the box type can no longer say "drum machine vs bundle", so routing
+Once everything is a `InstrumentCompositeBox`, the box type can no longer say "drum machine vs bundle", so routing
 (index / exclude for the choke) has to come from somewhere else. Two options:
 
 - A. Device-declared routing (recommended, matches the one-box-type goal). The slot exports `index_field()` and
@@ -55,7 +55,7 @@ Once everything is a `CompositeDeviceBox`, the box type can no longer say "drum 
   device-declared chains for a smaller device-declared routing, conceptually cleaner: chains are a container
   property, routing is an instrument property.
 - B. Thin spec variant. Keep `PlayfieldDeviceBox` as a registered composite spec (`indexKey:15, excludeKey:42`
-  plus the cell keys), with `CompositeDeviceBox` as `0, 0, cells`. Both run through `build_cell`. Less UI churn,
+  plus the cell keys), with `InstrumentCompositeBox` as `0, 0, cells`. Both run through `build_cell`. Less UI churn,
   but `PlayfieldDeviceBox` survives as a near-trivial entry.
 
 Pick A for the clean end state. B is the lower-risk fallback.
@@ -82,11 +82,11 @@ exactly the behaviour we want: old projects still parse, the engine reads chains
 Add `migratePlayfieldDeviceBox` to the 2nd pass of `ProjectMigration` (it ADDS boxes, so it must run on a
 `boxGraph.boxes().slice()` copy, like the existing migrators). Per `PlayfieldDeviceBox`:
 
-1. Create a `CompositeDeviceBox`; move every pointer that targets the old box (the unit's instrument host) onto
+1. Create a `InstrumentCompositeBox`; move every pointer that targets the old box (the unit's instrument host) onto
    it with `oldBox.<field>.pointerHub.incoming().forEach(pointer => pointer.refer(newField))`, the same move
    pattern `migrateVaporisateurDeviceBox` uses.
 2. For each `PlayfieldSampleBox` in `.samples`:
-   - create a `CompositeCellBox`; `cell.composite.refer(newComposite.cells)`.
+   - create a `InstrumentCompositeCellBox`; `cell.composite.refer(newComposite.cells)`.
    - re-point the slot to the cell: `slot.host.refer(cell.instrument)` (the deprecated `device` attach drops).
    - move the chains: `slot.midiEffects` incoming pointers to `cell.midiEffects`, `slot.audioEffects` to
      `cell.audioEffects`.
@@ -111,7 +111,7 @@ Version-gate it like the other migrators (a box / project version bump), so it r
 
 ## UI (the expensive, separable pass)
 
-The Playfield editor builds `CompositeDeviceBox` + `CompositeCellBox`-wrapped slots instead of
+The Playfield editor builds `InstrumentCompositeBox` + `InstrumentCompositeCellBox`-wrapped slots instead of
 `PlayfieldDeviceBox` + `PlayfieldSampleBox`. The drum-pad UX (per-pad note index, choke, mute / solo) maps onto
 cells and their slot instruments. This is the bulk of the work and is independent of the engine collapse.
 

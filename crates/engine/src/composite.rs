@@ -36,7 +36,7 @@ use engine_env::note_event_instrument::SharedNoteEventSource;
 use engine_env::note_sequencer::NoteSequencer;
 use math::value_mapping::{Decibel, Linear};
 use crate::audio_unit::host_float;
-use crate::audio_unit::{BoundNoteTracks, BuiltCluster, DeviceParams, Member, SharedTrackSets, SidechainBinding, SlotCluster};
+use crate::audio_unit::{BoundNoteTracks, BuiltCluster, DeviceParams, Member, ParamNode, SharedTrackSets, SidechainBinding, SlotCluster};
 use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::{CompositeSpec, DeviceReg, Engine, PullLink, EFFECT_INDEX_KEY};
 
@@ -64,6 +64,11 @@ pub(crate) struct CompositeBinding {
 }
 
 impl CompositeBinding {
+    /// Whether the children are CELLS: their sequencers read launched clips shared, the engine advances once.
+    pub(crate) fn cell_based(&self) -> bool {
+        self.spec.cell_instrument_field != 0
+    }
+
     /// Collect the live-note injection targets: every SLOT's sequencer (its device filters by pad note) and
     /// every CELL's sequencer (the retained handle to the pull link's source), recursing into nested
     /// composites.
@@ -164,6 +169,22 @@ impl CompositeBinding {
     }
 
     /// The instrument node of a child, by uuid — for tests / introspection.
+    /// The device-state address of a cell's OWN replica of the unit-level midi effect `effect`.
+    #[cfg(test)]
+    pub(crate) fn child_midi_replica(&self, uuid: Uuid, effect: Uuid) -> Option<u32> {
+        self.find(uuid).and_then(|child| match &child.body {
+            ChildBody::Cell {device_params, ..} => device_params.iter()
+                .find(|params| params.device_uuid == effect).map(|params| params.state_ptr),
+            _ => None
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn unit_midi_state(&self, effect: Uuid) -> Option<u32> {
+        self.unit_midi_members.iter().find(|member| member.uuid == effect)
+            .and_then(|member| member.params.as_ref()).map(|params| params.state_ptr)
+    }
+
     #[cfg(test)]
     pub(crate) fn child_instrument_node(&self, uuid: Uuid) -> Option<NodeId> {
         self.find(uuid).and_then(|child| match &child.body {
@@ -769,13 +790,28 @@ impl Engine {
             {
                 let sequencer = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: track_sets.clone()}), self.clip_sequencer.clone())));
                 sequencer.borrow_mut().bind_truncate_preference(self.truncate_pref.clone());
+                sequencer.borrow_mut().set_clip_read(self.clip_read);
                 sequencer
             };
         let mut chains = vec![instrument_obs];
         let midi = self.observe_child_chain(cell_uuid, spec.cell_midi_field, &mut chains, signal);
         let audio = self.observe_child_chain(cell_uuid, spec.cell_audio_field, &mut chains, signal);
         let note_source = sequencer.clone();
-        let cluster = self.build_cluster(PullLink::Source(sequencer), instrument_uuid, device, &midi, &audio, unit_midi, signal, invalidate);
+        // A stateful unit-level effect (an arp) cannot be pulled by several cells over the same window, so
+        // every cell folds its OWN replica at its pull base, bound to the same device box.
+        let mut base = PullLink::Source(sequencer);
+        let mut replica_params: Vec<DeviceParams> = Vec::new();
+        for original in unit_midi {
+            let uuid = original.box_uuid();
+            let replica_device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name));
+            if let Some(replica_device) = replica_device {
+                let replica = Rc::new(PluginMidiEffect::replica(replica_device, original));
+                replica_params.push(self.bind_device(uuid, replica_device, replica.state_ptr(), ParamNode::Midi(replica.clone()), invalidate));
+                base = PullLink::MidiFx {effect: replica, upstream: Rc::new(base)};
+            }
+        }
+        let mut cluster = self.build_cluster(base, instrument_uuid, device, &midi, &audio, &[], signal, invalidate);
+        cluster.device_params.extend(replica_params);
         Some((cluster, chains, note_source))
     }
 }

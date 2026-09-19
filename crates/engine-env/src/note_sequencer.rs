@@ -21,7 +21,7 @@ use value::region::locate_loops;
 use value::retainer::EventSpanRetainer;
 use crate::block_flags::BlockFlags;
 use crate::event::Event;
-use crate::clip_sequencer::{ClipInfo, ClipKey, ClipSequencer};
+use crate::clip_sequencer::{ClipInfo, ClipKey, ClipSequencer, Section};
 use crate::note_event_source::NoteEventSource;
 use crate::note_content_source::{NoteContentSource, NoteTrackAccess};
 
@@ -67,9 +67,23 @@ struct ScheduledNote {
     velocity: f32
 }
 
+/// How a sequencer reads its tracks' launched clips: `Advance` drives the clip machine itself (a leaf unit,
+/// a Playfield slot), `Shared` reads pure while `advance_clips` drives it once per block (composite layers).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ClipRead {
+    Advance,
+    Shared
+}
+
+/// The ONE clip advance per block for a source whose sequencers read `ClipRead::Shared`.
+pub fn advance_clips(source: &dyn NoteContentSource, clips: &mut ClipSequencer, p0: f64, p1: f64, discontinuous: bool) {
+    source.for_each_track(&mut |track, access| clips.advance(track, p0, p1, discontinuous, &LiveClipInfo {access}));
+}
+
 pub struct NoteSequencer {
     source: Box<dyn NoteContentSource>,
     clips: Rc<RefCell<ClipSequencer>>,
+    clip_read: ClipRead,
     retainer: EventSpanRetainer<RetainedNote>,
     raw_notes: Vec<RawNote>,
     audition_queue: Vec<ScheduledNote>,
@@ -84,6 +98,7 @@ impl NoteSequencer {
         Self {
             source,
             clips,
+            clip_read: ClipRead::Advance,
             retainer: EventSpanRetainer::new(),
             raw_notes: Vec::new(),
             audition_queue: Vec::new(),
@@ -98,6 +113,10 @@ impl NoteSequencer {
     /// region / loop-cycle end with its full duration).
     pub fn set_truncate_at_region_end(&mut self, value: bool) {
         self.truncate_at_region_end.set(value);
+    }
+
+    pub fn set_clip_read(&mut self, clip_read: ClipRead) {
+        self.clip_read = clip_read;
     }
 
     /// Share the engine's `playback.truncateNotesAtRegionEnd` preference cell, so a live preference
@@ -164,11 +183,12 @@ impl NoteEventSource for NoteSequencer {
             return;
         }
         let truncate = self.truncate_at_region_end.get();
-        let Self {source, retainer, random, next_id, clips, ..} = self;
+        let Self {source, retainer, random, next_id, clips, clip_read, ..} = self;
+        let shared = *clip_read == ClipRead::Shared;
         let mut clips = clips.borrow_mut();
         source.for_each_track(&mut |track, access| {
             let info = LiveClipInfo {access};
-            clips.iterate(track, from, to, &info, &mut |section| {
+            let mut on_section = |section: Section| {
                 match section.clip {
                     // Timeline: the track's regions within the section (TS `#processRegions`).
                     None => access.for_each_region(section.from, section.to, &mut |region, notes| {
@@ -200,7 +220,12 @@ impl NoteEventSource for NoteSequencer {
                         });
                     }
                 }
-            });
+            };
+            if shared {
+                clips.sections_shared(track, from, to, &info, &mut on_section);
+            } else {
+                clips.iterate(track, from, to, &info, &mut on_section);
+            }
         });
         drop(clips);
         // TS re-drains after region processing, "in case they complete in the same block".

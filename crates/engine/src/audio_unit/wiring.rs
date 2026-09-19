@@ -609,7 +609,9 @@ impl Engine {
                 _ => None
             })
             .collect();
+        self.clip_read = if spec.cell_instrument_field != 0 { ClipRead::Shared } else { ClipRead::Advance };
         let binding = self.build_composite(&track_sets, instrument_uuid, &spec, signal, invalidate, unit_midi_members, unit_midi);
+        self.clip_read = ClipRead::Advance;
         // The unit's AUDIO-effects chain over the sum (reusing survivors, building joiners, terminating leavers)
         // exactly like a leaf / tape unit.
         let mut audio_members: Vec<Member> = Vec::new();
@@ -838,6 +840,7 @@ impl Engine {
             self.terminate_member(existing);
         }
         let effect = Rc::new(PluginMidiEffect::new(device));
+        effect.set_box_uuid(uuid);
         let params = self.bind_device(uuid, device, effect.state_ptr(), ParamNode::Midi(effect.clone()), invalidate);
         refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position()); // joiner only
         // Live telemetry: the fx's 128-bit note set (TS midi effects own a `NoteBroadcaster` at the device address).
@@ -845,6 +848,25 @@ impl Engine {
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_INT_ARRAY, &note_bits);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Midi(effect), node_id: None, input_node: None, output: None, params: Some(params), sidechain: None, enabled_sub}
+    }
+
+    /// A slot's OWN instance of the unit-level midi effect `original` (pooled across reconciles by the effect's
+    /// box uuid): fresh device state, the same box and note-bits slot. `None` when the box or its plugin is gone.
+    pub(crate) fn take_or_build_midi_replica(&mut self, pool: &mut BTreeMap<Uuid, Member>, original: &Rc<PluginMidiEffect>,
+                                  invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> Option<Member> {
+        let uuid = original.box_uuid();
+        if let Some(existing) = pool.remove(&uuid) {
+            if matches!(existing.proc, ProcHandle::Midi(_)) {
+                return Some(existing);
+            }
+            self.terminate_member(existing);
+        }
+        let device = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name))?;
+        let effect = Rc::new(PluginMidiEffect::replica(device, original));
+        let params = self.bind_device(uuid, device, effect.state_ptr(), ParamNode::Midi(effect.clone()), invalidate);
+        refresh_params(&params.handles, params.reg, params.state_ptr, self.transport.position());
+        let enabled_sub = self.subscribe_enabled(uuid, rewire);
+        Some(Member {uuid, proc: ProcHandle::Midi(effect), node_id: None, input_node: None, output: None, params: Some(params), sidechain: None, enabled_sub})
     }
 
     /// Reuse the pooled audio-fx (a survivor: its delay tail / filter history live on) or build + bind a fresh
@@ -978,10 +1000,17 @@ impl Engine {
             }
             sequencer_keep = Some((prev.instrument.uuid, prev.sequencer));
             pool.insert(prev.instrument.uuid, prev.instrument);
+            for member in prev.unit_replicas { pool.insert(member.uuid, member); }
             for member in prev.midi { pool.insert(member.uuid, member); }
             for member in prev.audio { pool.insert(member.uuid, member); }
         }
         let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, device, invalidate, rewire);
+        let unit_replicas: Vec<Member> = unit_midi.iter()
+            .filter_map(|original| self.take_or_build_midi_replica(&mut pool, original, invalidate, rewire)).collect();
+        let replica_handles: Vec<Rc<PluginMidiEffect>> = unit_replicas.iter().filter_map(|member| match &member.proc {
+            ProcHandle::Midi(effect) => Some(effect.clone()),
+            _ => None
+        }).collect();
         let mut midi_members: Vec<Member> = Vec::new();
         for uuid in midi_uuids.iter().copied() {
             if let Some(device) = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
@@ -1005,11 +1034,12 @@ impl Engine {
             _ => {
                 let sequencer = Rc::new(RefCell::new(NoteSequencer::new(Box::new(BoundNoteTracks {tracks: track_sets.clone()}), self.clip_sequencer.clone())));
                 sequencer.borrow_mut().bind_truncate_preference(self.truncate_pref.clone());
+                sequencer.borrow_mut().set_clip_read(self.clip_read);
                 sequencer
             }
         };
-        let (output, output_node, internal_edges, _) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, unit_midi, choke, Some(gate), None, true);
-        SlotCluster {instrument, sequencer, midi: midi_members, audio: audio_members, internal_edges, output, output_node}
+        let (output, output_node, internal_edges, _) = self.wire_cluster(&instrument, instrument_uuid, &sequencer, &midi_members, &audio_members, &replica_handles, choke, Some(gate), None, true);
+        SlotCluster {instrument, sequencer, unit_replicas, midi: midi_members, audio: audio_members, internal_edges, output, output_node}
     }
 
     /// Tear a slot cluster down: remove its internal edges, terminate every member (its node + params + sidechain
@@ -1019,6 +1049,7 @@ impl Engine {
             self.context.remove_edge(*source, *target);
         }
         self.terminate_member(cluster.instrument);
+        for member in cluster.unit_replicas { self.terminate_member(member); }
         for member in cluster.midi { self.terminate_member(member); }
         for member in cluster.audio { self.terminate_member(member); }
     }
