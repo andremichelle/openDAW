@@ -29,7 +29,7 @@ export const PanelPlaceholder =
         const {icon, name, constrains, minimizable, popoutable} = panelState
         const HeaderSize = 18
         const container = <Group/>
-        const element: DomElement = <div className={Html.buildClassList(className, orientation)}
+        const element: DomElement = <div className={Html.buildClassList(className, orientation, minimizable && "minimizable")}
                                          data-panel-type={name}/>
         const panelContent = panelContents.getByType(panelState.panelType)
 
@@ -133,7 +133,9 @@ export const PanelPlaceholder =
             }
         }))
         appendChildren(element, <Frag>{header}{container}</Frag>)
-        lifecycle.own(Events.subscribeDblDwn(header, () => handler.toggleMinimize()))
+        if (minimizable) {
+            lifecycle.own(Events.subscribe(header, "click", () => handler.toggleMinimize()))
+        }
         lifecycle.own(ContextMenu.subscribe(header, collector => collector.addItems(
             MenuItem.default({
                 label: "Popout into new browser window",
