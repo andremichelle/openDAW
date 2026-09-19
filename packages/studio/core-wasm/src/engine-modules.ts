@@ -115,10 +115,11 @@ export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
         childMuteKey: 40, childSoloKey: 41, childVolumeKey: 50, childPanKey: 51},
     // A generic instrument bundle: children are CELLS (InstrumentCompositeCellBox) at field 10, each wrapping one
     // instrument (field 2) plus its midi-fx (3) and audio-fx (4) chains, ordered by the cell's own `index`
-    // (field 5, UI position + engine sort). No note routing, no choke.
+    // (field 5, UI position + engine sort). No note routing, no choke. A cell has its own strip: gain 40,
+    // pan 43, and mute 41 / solo 42 silence at the STRIP (the layer keeps running), unlike a Playfield pad.
     {boxType: "InstrumentCompositeBox", childrenField: 10, indexKey: 5, excludeKey: 0,
         cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4, childEnabledKey: 0,
-        childMuteKey: 0, childSoloKey: 0, childVolumeKey: 0, childPanKey: 0}
+        childMuteKey: 41, childSoloKey: 42, childVolumeKey: 40, childPanKey: 43}
 ]
 
 // The EFFECT composite box types (parallel fx / midi stacks). Each hosts its ENTRIES at field 10, ordered by the

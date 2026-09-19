@@ -1350,6 +1350,381 @@ fn a_leaving_cell_releases_its_midi_replica() {
     assert_eq!(engine.graph.subscription_count(), subs_one, "the leaver's replica released every observation");
 }
 
+const LAYER_A: Uuid = [70u8; 16];
+const LAYER_B: Uuid = [71u8; 16];
+const LAYER_FX: Uuid = [72u8; 16];
+const LAYER_SYNTH_C: Uuid = [73u8; 16];
+const LAYER_INSTRUMENT_FIELD: u16 = 50;
+const LAYER_AUDIO_FIELD: u16 = 52;
+const EFFECT_INDEX_FIELD: u16 = 2;
+
+fn layer_engine() -> Engine {
+    let mut engine = engine_with_devices();
+    engine.composites = vec![CompositeSpec {
+        box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
+        cell_instrument_field: LAYER_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: LAYER_AUDIO_FIELD,
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+    }];
+    engine
+}
+
+// Two layers, each hosting one instrument. LAYER_FX and LAYER_SYNTH_C exist DETACHED, tests attach them live.
+fn layer_boxes() -> Vec<GraphBox> {
+    let layer = |uuid: Uuid| graph_box(uuid, "TestCell", &[
+        (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))),
+        (LAYER_INSTRUMENT_FIELD, FieldValue::Hook), (LAYER_AUDIO_FIELD, FieldValue::Hook)
+    ]);
+    vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(COMPOSITE, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (CHILDREN_FIELD, FieldValue::Hook)
+        ]),
+        layer(LAYER_A),
+        layer(LAYER_B),
+        graph_box(CHILD_A, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(LAYER_A, vec![LAYER_INSTRUMENT_FIELD]))))]),
+        graph_box(CHILD_B, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(LAYER_B, vec![LAYER_INSTRUMENT_FIELD]))))]),
+        graph_box(LAYER_SYNTH_C, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(None))]),
+        graph_box(LAYER_FX, "TestEffect", &[(HOST_KEY, FieldValue::Pointer(None)), (EFFECT_INDEX_FIELD, FieldValue::Int32(0))])
+    ]
+}
+
+fn repoint_host(engine: &mut Engine, device: Uuid, old: Option<Address>, new: Option<Address>) {
+    engine.graph.transaction(&[Update::Pointer {address: Address::of(device, vec![HOST_KEY]), old, new}], &engine.registry)
+        .expect("repoint the device host");
+}
+
+#[test]
+fn adding_an_effect_to_a_layer_keeps_every_instrument_processor() {
+    // A layer is reconciled EDGE-ONLY like a leaf unit: a reverb joining layer A must not rebuild layer A's
+    // synth (voices and tails live on), and must not touch layer B at all.
+    let mut engine = layer_engine();
+    engine.graph = BoxGraph::from_boxes(layer_boxes());
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let synth_a = child_instrument(&unit, LAYER_A).expect("layer A built");
+    let synth_b = child_instrument(&unit, LAYER_B).expect("layer B built");
+    assert_eq!(child_audio_members(&unit, LAYER_A), Some(0));
+    repoint_host(&mut engine, LAYER_FX, None, Some(Address::of(LAYER_A, vec![LAYER_AUDIO_FIELD])));
+    engine.reconcile_one(&mut unit);
+    assert_eq!(child_audio_members(&unit, LAYER_A), Some(1), "the effect joined layer A's chain");
+    assert_eq!(child_instrument(&unit, LAYER_A), Some(synth_a), "layer A's synth survives the join");
+    assert_eq!(child_instrument(&unit, LAYER_B), Some(synth_b), "layer B is untouched");
+    repoint_host(&mut engine, LAYER_FX, Some(Address::of(LAYER_A, vec![LAYER_AUDIO_FIELD])), None);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(child_audio_members(&unit, LAYER_A), Some(0), "the effect left again");
+    assert_eq!(child_instrument(&unit, LAYER_A), Some(synth_a), "and the synth still survives");
+}
+
+#[test]
+fn swapping_a_layers_instrument_rebuilds_only_that_instrument() {
+    let mut engine = layer_engine();
+    engine.graph = BoxGraph::from_boxes(layer_boxes());
+    let mut unit = engine.build_unit(UNIT);
+    repoint_host(&mut engine, LAYER_FX, None, Some(Address::of(LAYER_A, vec![LAYER_AUDIO_FIELD])));
+    engine.reconcile_one(&mut unit);
+    let synth_a = child_instrument(&unit, LAYER_A).expect("layer A built");
+    let synth_b = child_instrument(&unit, LAYER_B).expect("layer B built");
+    let subs = engine.graph.subscription_count();
+    engine.graph.transaction(&[
+        Update::Pointer {address: Address::of(CHILD_A, vec![HOST_KEY]), old: Some(Address::of(LAYER_A, vec![LAYER_INSTRUMENT_FIELD])), new: None},
+        Update::Pointer {address: Address::of(LAYER_SYNTH_C, vec![HOST_KEY]), old: None, new: Some(Address::of(LAYER_A, vec![LAYER_INSTRUMENT_FIELD]))}
+    ], &engine.registry).expect("swap the instrument");
+    engine.reconcile_one(&mut unit);
+    let swapped = child_instrument(&unit, LAYER_A).expect("layer A still built");
+    assert_ne!(swapped, synth_a, "layer A hosts the new synth");
+    assert_eq!(child_audio_members(&unit, LAYER_A), Some(1), "layer A keeps its effect chain");
+    assert_eq!(child_instrument(&unit, LAYER_B), Some(synth_b), "layer B is untouched");
+    assert_eq!(composite_sum_sources(&unit), 2);
+    assert_eq!(engine.graph.subscription_count(), subs, "the swap leaks no observation");
+}
+
+#[test]
+fn an_empty_layer_comes_alive_when_its_instrument_arrives() {
+    let mut engine = layer_engine();
+    let mut boxes = layer_boxes();
+    boxes.retain(|graph_box| graph_box.uuid != CHILD_A);
+    engine.graph = BoxGraph::from_boxes(boxes);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(child_instrument(&unit, LAYER_A), None, "an empty layer builds nothing");
+    assert_eq!(composite_sum_sources(&unit), 1, "only layer B feeds the sum");
+    engine.dirty_units.borrow_mut().clear();
+    repoint_host(&mut engine, LAYER_SYNTH_C, None, Some(Address::of(LAYER_A, vec![LAYER_INSTRUMENT_FIELD])));
+    assert!(engine.dirty_units.borrow().contains(&UNIT), "the arrival enqueues the owning unit");
+    engine.reconcile_one(&mut unit);
+    assert!(child_instrument(&unit, LAYER_A).is_some(), "the layer is built once its instrument arrives");
+    assert_eq!(composite_sum_sources(&unit), 2);
+}
+
+const LAYER_GAIN_KEY: u16 = 40;
+const LAYER_MUTE_KEY: u16 = 41;
+const LAYER_SOLO_KEY: u16 = 42;
+const LAYER_PAN_KEY: u16 = 43;
+
+fn layer_strip_engine() -> Engine {
+    let mut engine = layer_engine();
+    engine.composites[0].child_volume_key = LAYER_GAIN_KEY;
+    engine.composites[0].child_pan_key = LAYER_PAN_KEY;
+    engine.composites[0].child_mute_key = LAYER_MUTE_KEY;
+    engine.composites[0].child_solo_key = LAYER_SOLO_KEY;
+    engine
+}
+
+fn layer_strip_boxes() -> Vec<GraphBox> {
+    let mut boxes = layer_boxes();
+    for graph_box in boxes.iter_mut().filter(|graph_box| graph_box.uuid == LAYER_A || graph_box.uuid == LAYER_B) {
+        graph_box.fields.insert(LAYER_GAIN_KEY, FieldValue::Float32(0.0));
+        graph_box.fields.insert(LAYER_MUTE_KEY, FieldValue::Boolean(false));
+        graph_box.fields.insert(LAYER_SOLO_KEY, FieldValue::Boolean(false));
+        graph_box.fields.insert(LAYER_PAN_KEY, FieldValue::Float32(0.0));
+    }
+    boxes
+}
+
+// (strip mute, strip forced-silent, note gate) of a child.
+fn layer_gates(unit: &AudioUnitBinding, child: Uuid) -> (bool, bool, bool) {
+    match unit.wired.as_ref().expect("wired after reconcile") {
+        Wired::Composite(composite) => composite.binding.child_gates(child).expect("child with a strip"),
+        _ => panic!("expected a composite chain")
+    }
+}
+
+fn set_flag(engine: &mut Engine, target: Uuid, key: u16, value: bool) {
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(target, vec![key]), old: FieldValue::Boolean(!value), new: FieldValue::Boolean(value)
+    }], &engine.registry).expect("edit the flag");
+}
+
+#[test]
+fn muting_a_layer_silences_its_strip_and_keeps_its_notes_flowing() {
+    // Unlike a Playfield pad (which drops note STARTS), a muted layer keeps running and is silenced at its
+    // strip, so an unmute is instant and in phase.
+    let mut engine = layer_strip_engine();
+    engine.graph = BoxGraph::from_boxes(layer_strip_boxes());
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let synth_a = child_instrument(&unit, LAYER_A).expect("layer A built");
+    assert_eq!(strip_values(&unit, LAYER_A), Some((0.0, 0.0)), "the layer has its own strip");
+    assert_eq!(layer_gates(&unit, LAYER_A), (false, false, false));
+    set_flag(&mut engine, LAYER_A, LAYER_MUTE_KEY, true);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(layer_gates(&unit, LAYER_A), (true, true, false), "muted at the strip, the note gate stays open");
+    assert_eq!(layer_gates(&unit, LAYER_B), (false, false, false), "the sibling is untouched");
+    assert_eq!(child_instrument(&unit, LAYER_A), Some(synth_a), "a mute never rebuilds the layer");
+    set_flag(&mut engine, LAYER_A, LAYER_MUTE_KEY, false);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(layer_gates(&unit, LAYER_A), (false, false, false));
+}
+
+#[test]
+fn soloing_a_layer_silences_the_other_strips() {
+    let mut engine = layer_strip_engine();
+    engine.graph = BoxGraph::from_boxes(layer_strip_boxes());
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    set_flag(&mut engine, LAYER_B, LAYER_SOLO_KEY, true);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(layer_gates(&unit, LAYER_A), (false, true, false), "not soloed while a sibling is: silent at the strip");
+    assert_eq!(layer_gates(&unit, LAYER_B), (false, false, false), "the soloed layer sounds");
+    set_flag(&mut engine, LAYER_B, LAYER_SOLO_KEY, false);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(layer_gates(&unit, LAYER_A), (false, false, false));
+}
+
+#[test]
+fn a_playfield_style_slot_still_mutes_by_dropping_note_starts() {
+    // Rule 0: a DIRECT slot composite keeps today's mute semantic (the note gate), its strip mute stays off.
+    let mut engine = composite_engine_with_strip();
+    engine.composites[0].child_mute_key = LAYER_MUTE_KEY;
+    let mut boxes = strip_composite_boxes();
+    for graph_box in boxes.iter_mut().filter(|graph_box| graph_box.uuid == CHILD_A) {
+        graph_box.fields.insert(LAYER_MUTE_KEY, FieldValue::Boolean(true));
+    }
+    engine.graph = BoxGraph::from_boxes(boxes);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(layer_gates(&unit, CHILD_A), (false, false, true));
+}
+
+const NESTED_PADS: Uuid = [80u8; 16];
+const PAD_1: Uuid = [81u8; 16];
+const PAD_2: Uuid = [82u8; 16];
+const PAD_3: Uuid = [83u8; 16];
+const PADS_FIELD: u16 = 31;
+
+// Layer A hosts a NESTED direct-slot composite (a Playfield shape) with two pads, layer B hosts a plain synth.
+fn nested_layer_engine() -> Engine {
+    let mut engine = layer_engine();
+    engine.composites.push(CompositeSpec {
+        box_type: "TestPads".to_string(), children_field: PADS_FIELD, index_key: 0, exclude_key: 0,
+        cell_instrument_field: 0, cell_midi_field: 0, cell_audio_field: 0,
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: 0, child_pan_key: 0
+    });
+    engine
+}
+
+fn nested_layer_boxes() -> Vec<GraphBox> {
+    let mut boxes = layer_boxes();
+    boxes.retain(|graph_box| graph_box.uuid != CHILD_A);
+    let pad = |uuid: Uuid, attached: bool| graph_box(uuid, "TestInstrument", &[
+        (HOST_KEY, FieldValue::Pointer(attached.then(|| Address::of(NESTED_PADS, vec![PADS_FIELD]))))
+    ]);
+    boxes.push(graph_box(NESTED_PADS, "TestPads", &[
+        (HOST_KEY, FieldValue::Pointer(Some(Address::of(LAYER_A, vec![LAYER_INSTRUMENT_FIELD])))), (PADS_FIELD, FieldValue::Hook)
+    ]));
+    boxes.push(pad(PAD_1, true));
+    boxes.push(pad(PAD_2, true));
+    boxes.push(pad(PAD_3, false));
+    boxes
+}
+
+fn nested_pad(unit: &AudioUnitBinding, layer: Uuid, pad: Uuid) -> Option<NodeId> {
+    match unit.wired.as_ref().expect("wired after reconcile") {
+        Wired::Composite(composite) => composite.binding.nested_in(layer).and_then(|nested| nested.child_instrument_node(pad)),
+        _ => panic!("expected a composite chain")
+    }
+}
+
+#[test]
+fn a_layer_hosts_a_nested_composite() {
+    let mut engine = nested_layer_engine();
+    engine.graph = BoxGraph::from_boxes(nested_layer_boxes());
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    assert_eq!(composite_sum_sources(&unit), 2, "the nested composite's layer and layer B feed the sum");
+    assert!(nested_pad(&unit, LAYER_A, PAD_1).is_some() && nested_pad(&unit, LAYER_A, PAD_2).is_some(), "both pads are built");
+    let mut sources: Vec<engine_env::note_event_instrument::SharedNoteEventSource> = Vec::new();
+    match unit.wired.as_ref().expect("wired") {
+        Wired::Composite(composite) => composite.binding.collect_note_sources(&mut sources),
+        _ => panic!("expected a composite chain")
+    }
+    assert_eq!(sources.len(), 3, "live notes reach both nested pads and layer B");
+}
+
+#[test]
+fn edits_inside_a_nested_composite_keep_every_other_processor() {
+    let mut engine = nested_layer_engine();
+    engine.graph = BoxGraph::from_boxes(nested_layer_boxes());
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let pad_1 = nested_pad(&unit, LAYER_A, PAD_1).expect("pad 1");
+    let synth_b = child_instrument(&unit, LAYER_B).expect("layer B");
+    repoint_host(&mut engine, PAD_3, None, Some(Address::of(NESTED_PADS, vec![PADS_FIELD])));
+    engine.reconcile_one(&mut unit);
+    assert!(nested_pad(&unit, LAYER_A, PAD_3).is_some(), "the joining pad is built");
+    assert_eq!(nested_pad(&unit, LAYER_A, PAD_1), Some(pad_1), "a pad joining keeps its siblings' voices");
+    assert_eq!(child_instrument(&unit, LAYER_B), Some(synth_b));
+    repoint_host(&mut engine, LAYER_FX, None, Some(Address::of(LAYER_A, vec![LAYER_AUDIO_FIELD])));
+    engine.reconcile_one(&mut unit);
+    assert_eq!(nested_pad(&unit, LAYER_A, PAD_1), Some(pad_1), "an effect joining the LAYER keeps the nested pads");
+    assert_eq!(child_instrument(&unit, LAYER_B), Some(synth_b));
+}
+
+// (graph subscriptions, graph nodes) after a composite was built with an effect on layer A and then detached.
+fn residue_after_detach(mut engine: Engine, boxes: Vec<GraphBox>) -> (usize, u32) {
+    engine.graph = BoxGraph::from_boxes(boxes);
+    let mut unit = engine.build_unit(UNIT);
+    repoint_host(&mut engine, LAYER_FX, None, Some(Address::of(LAYER_A, vec![LAYER_AUDIO_FIELD])));
+    engine.reconcile_one(&mut unit);
+    repoint_host(&mut engine, COMPOSITE, Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])), None);
+    engine.reconcile_one(&mut unit);
+    (engine.graph.subscription_count(), engine.context.debug_counts()[0])
+}
+
+#[test]
+fn removing_a_composite_with_a_nested_layer_leaks_nothing() {
+    // The unit keeps its own observations (tracks, strip) after the composite left. A nested cascade must
+    // leave exactly what a plain two-layer composite leaves.
+    let plain = residue_after_detach(layer_engine(), layer_boxes());
+    let nested = residue_after_detach(nested_layer_engine(), nested_layer_boxes());
+    assert_eq!(nested, plain);
+}
+
+fn layer_mute_automated(unit: &AudioUnitBinding, child: Uuid) -> bool {
+    match unit.wired.as_ref().expect("wired after reconcile") {
+        Wired::Composite(composite) => composite.binding.child_mute_automated(child),
+        _ => panic!("expected a composite chain")
+    }
+}
+
+#[test]
+fn automating_layer_gain_and_mute_binds_and_unbinds_without_leaks() {
+    const VALUE_TRACK: Uuid = [90u8; 16];
+    const VALUE_REGION: Uuid = [91u8; 16];
+    const VALUE_COLLECTION: Uuid = [92u8; 16];
+    const VALUE_EVENT: Uuid = [93u8; 16];
+    let mut engine = layer_strip_engine();
+    let mut boxes = layer_strip_boxes();
+    boxes.push(graph_box(VALUE_TRACK, "TrackBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))),
+        (2, FieldValue::Pointer(None)),
+        (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+        (TRACK_REGIONS_KEY, FieldValue::Hook),
+        (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+        (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+    ]));
+    boxes.push(graph_box(VALUE_REGION, "ValueRegionBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(VALUE_TRACK, vec![TRACK_REGIONS_KEY])))),
+        (2, FieldValue::Pointer(Some(Address::of(VALUE_COLLECTION, vec![2])))),
+        (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+        (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+    ]));
+    boxes.push(graph_box(VALUE_COLLECTION, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]));
+    boxes.push(graph_box(VALUE_EVENT, "ValueEventBox", &[
+        (1, FieldValue::Pointer(Some(Address::of(VALUE_COLLECTION, vec![1])))),
+        (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+    ]));
+    engine.graph = BoxGraph::from_boxes(boxes);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let synth_a = child_instrument(&unit, LAYER_A).expect("layer A built");
+    let baseline = engine.graph.subscription_count();
+    for (key, automated) in [(LAYER_GAIN_KEY, volume_automated as fn(&AudioUnitBinding, Uuid) -> bool), (LAYER_MUTE_KEY, layer_mute_automated)] {
+        for _cycle in 0..2 {
+            engine.graph.transaction(&[Update::Pointer {
+                address: Address::of(VALUE_TRACK, vec![2]), old: None, new: Some(Address::of(LAYER_A, vec![key]))
+            }], &engine.registry).expect("aim the track at the layer field");
+            engine.reconcile_one(&mut unit);
+            assert!(automated(&unit, LAYER_A), "the curve drives the layer strip (key {key})");
+            assert!(!automated(&unit, LAYER_B), "the sibling stays static");
+            engine.graph.transaction(&[Update::Pointer {
+                address: Address::of(VALUE_TRACK, vec![2]), old: Some(Address::of(LAYER_A, vec![key])), new: None
+            }], &engine.registry).expect("detach the track");
+            engine.reconcile_one(&mut unit);
+            assert!(!automated(&unit, LAYER_A), "detaching drops the override (key {key})");
+        }
+    }
+    assert_eq!(engine.graph.subscription_count(), baseline, "attach / detach cycles leave no observers behind");
+    assert_eq!(child_instrument(&unit, LAYER_A), Some(synth_a), "automation never rebuilds the layer");
+}
+
+#[test]
+fn reordering_layers_keeps_every_processor() {
+    const LAYER_INDEX_KEY: u16 = 5;
+    let mut engine = layer_engine();
+    engine.composites[0].index_key = LAYER_INDEX_KEY;
+    let mut boxes = layer_boxes();
+    for (uuid, index) in [(LAYER_A, 0), (LAYER_B, 1)] {
+        for graph_box in boxes.iter_mut().filter(|graph_box| graph_box.uuid == uuid) {
+            graph_box.fields.insert(LAYER_INDEX_KEY, FieldValue::Int32(index));
+        }
+    }
+    engine.graph = BoxGraph::from_boxes(boxes);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    let (synth_a, synth_b) = (child_instrument(&unit, LAYER_A), child_instrument(&unit, LAYER_B));
+    engine.graph.transaction(&[
+        Update::Primitive {address: Address::of(LAYER_A, vec![LAYER_INDEX_KEY]), old: FieldValue::Int32(0), new: FieldValue::Int32(1)},
+        Update::Primitive {address: Address::of(LAYER_B, vec![LAYER_INDEX_KEY]), old: FieldValue::Int32(1), new: FieldValue::Int32(0)}
+    ], &engine.registry).expect("swap the layer order");
+    engine.reconcile_one(&mut unit);
+    assert_eq!((child_instrument(&unit, LAYER_A), child_instrument(&unit, LAYER_B)), (synth_a, synth_b));
+    assert_eq!(composite_sum_sources(&unit), 2);
+}
+
 #[test]
 fn live_note_signal_reaches_a_cell_composites_sequencer() {
     // A CELL-based composite dropped live notes: `build_cell` moved its sequencer into the pull link with

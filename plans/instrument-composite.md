@@ -296,6 +296,26 @@ as done on a manual check alone. The browser checkpoint in phase 3 is additional
     pull-count independent, the arp was silent before. The one thing that changes: a STATEFUL Spielwerk
     script in front of a Playfield ran once per pad per block, now once per pad instance.
 
+- Phases 0 + 0b COMMITTED 2026-09-19 (`e0c609fb7`, `9299675c0`, not pushed).
+- Phase 1 engine side DONE (2026-09-19), uncommitted:
+  - Cell schema: label 6, minimized 7, gain 40, mute 41, solo 42, pan 43, accepts `Pointers.Editing`.
+    Registration keys 40 / 43 / 41 / 42.
+  - Layers are EDGE-ONLY: a cell is the same `SlotCluster` as a Playfield slot, with the instrument and the
+    chain hosts looked up on the cell (`ChildBody::Slot.instrument_obs`). `ChildBody::Cell`, `build_cell`,
+    `build_cluster`, `BuiltCluster` are deleted. An instrument swap keeps the layer's effects, an EMPTY layer
+    stays observed (`CompositeBinding.pending`) and comes alive when its instrument arrives (it never did).
+  - Layer mute / solo silence at the STRIP (`params.mute` + automation, `forced_silent` for solo). A cell's
+    note gate is never closed and its `index` is never a note route. Playfield keeps its note-start mute
+    (guard test `a_playfield_style_slot_still_mutes_by_dropping_note_starts`).
+  - Nesting: `ChildBody::NestedCell`. A layer hosts any registered composite. The nested cascade reconciles
+    per child in place, the layer's midi chain is folded into every nested leaf as a replica, the layer's
+    audio chain is edge-only over the nested sum. A change of the hosted composite, of the layer's midi chain,
+    or an `enabled` toggle of a layer effect rebuilds that layer only.
+  - Tests: 12 new engine tests, wasm `instrument-composite-layer-strip` (5) and `instrument-composite-nesting`
+    (3: Playfield in a layer, composite in a layer, the hosting strip scales the nested sum).
+  - Layer gain and mute automation binds, unbinds and leaks nothing, a layer reorder keeps every processor.
+    Phase 1 engine side is complete, next = phase 2 (adapters).
+
 ## Phases (each gated on green tests)
 
 0. Rename (decision 1). All existing cargo + vitest suites green, `test-files/all-boxes.od` regenerated

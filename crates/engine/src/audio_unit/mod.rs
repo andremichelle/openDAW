@@ -25,7 +25,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
-use abi::{DEVICE_KIND_AUDIO_EFFECT, DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, FIELD_KIND_BOOL, FIELD_KIND_FLOAT, FIELD_KIND_INT, FIELD_KIND_INT_ARRAY, FIELD_KIND_STRING, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
+use abi::{DEVICE_KIND_INSTRUMENT, DEVICE_KIND_MIDI_EFFECT, FIELD_KIND_BOOL, FIELD_KIND_FLOAT, FIELD_KIND_INT, FIELD_KIND_INT_ARRAY, FIELD_KIND_STRING, PARAM_KIND_BOOL, PARAM_KIND_FLOAT, PARAM_KIND_INT};
 use bindings::indexed_collection::IndexedCollection;
 use bindings::note_collection::NoteCollection;
 use bindings::value_collection::ValueCollection;
@@ -448,19 +448,6 @@ pub(crate) struct CompositeWired {
     pub(crate) monitor_node: Option<NodeId> // the EFFECTS-monitoring injector, rebuilt per re-wire
 }
 
-/// The result of `build_cluster` (the wholesale CELL composite-child path; a leaf unit and a direct slot use the
-/// edge-only `wire_cluster` instead): an instrument plus its midi-fx pull chain and audio-fx chain, wired into the
-/// global graph. `output` is the chain's final buffer and `output_node` its last node, so the caller appends its
-/// own tail (the per-child sum). The `nodes` / `edges` / `device_params` / `sidechains` fold into the child's body.
-pub(crate) struct BuiltCluster {
-    pub(crate) output: SharedAudioBuffer,
-    pub(crate) output_node: NodeId,
-    pub(crate) nodes: Vec<NodeId>,
-    pub(crate) edges: Vec<(NodeId, NodeId)>,
-    pub(crate) device_params: Vec<DeviceParams>,
-    pub(crate) sidechains: Vec<SidechainBinding> // sidechain bindings collected from this cluster's audio fx
-}
-
 /// One device's bound parameters: enough to re-observe and re-push them on a runtime automation change. The
 /// `handles` are clones the engine reads for the build / edit push (sharing the node's `Rc<Cell>`s, so the
 /// `last`-value diff stays consistent with the clock pull); `field_subs` + `collections` are the graph
@@ -489,13 +476,6 @@ pub(crate) struct DeviceParams {
     // The device's LIVE-DATA broadcast slots (`host_bind_broadcast`): (global registry id, slot). The Rc keeps
     // the table entry alive (Weak-swept on drop); teardown zeroes the registry ptr + frees the id.
     pub(crate) broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)>
-}
-
-impl DeviceParams {
-    /// The owning device box uuid, for the output-registry cleanup on a wholesale (non-member) teardown.
-    pub(crate) fn device_uuid(&self) -> Uuid {
-        self.device_uuid
-    }
 }
 
 /// A persistent sidechain binding kept by the owning unit: an audio effect that declared sidechain ports, the
