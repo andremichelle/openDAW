@@ -10,6 +10,7 @@ import {
     Lifecycle,
     NumberComparator,
     Nullable,
+    ObservableOption,
     Option,
     SortedSet,
     Terminable,
@@ -17,9 +18,10 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {
-    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, BoxAdapters, DeviceBoxAdapter,
-    DeviceHost, Devices, IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection, ModulatorBoxAdapter,
-    PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter, TrackBoxAdapter, TrackType
+    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, AudioUnitInputAdapter, BoxAdapters,
+    DeviceBoxAdapter, DeviceHost, Devices, IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection,
+    InstrumentCompositeBoxAdapter, InstrumentCompositeCellBoxAdapter, ModulatorBoxAdapter, PlayfieldDeviceBoxAdapter,
+    PlayfieldSampleBoxAdapter, TrackBoxAdapter, TrackType
 } from "@opendaw/studio-adapters"
 import {Box} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
@@ -45,11 +47,16 @@ const Unresolved: TrackOrderKey = {category: 9, path: Arrays.empty()}
 
 // A composite's nested chain host (FX Composite cell, Playfield slot) with its branch index and owning device.
 const nestedHost = (host: DeviceHost): Option<{parent: DeviceBoxAdapter, index: int}> =>
-    host instanceof AudioEffectCompositeCellBoxAdapter
-        ? Option.wrap({parent: host.compositeDevice(), index: host.indexField.getValue()})
-        : host instanceof PlayfieldSampleBoxAdapter
+    host.asCompositeCell().match<Option<{parent: DeviceBoxAdapter, index: int}>>({
+        some: cell => Option.wrap({parent: cell.compositeDevice(), index: cell.indexField.getValue()}),
+        none: () => host instanceof PlayfieldSampleBoxAdapter
             ? Option.wrap({parent: host.device(), index: host.indexField.getValue()})
             : Option.None
+    })
+
+// Inside an instrument LAYER the three device kinds share one host, so they rank like on an audio unit.
+const kindRank = (adapter: DeviceBoxAdapter): int =>
+    Devices.isMidiEffect(adapter) ? 1 : Devices.isInstrument(adapter) ? 2 : Devices.isAudioEffect(adapter) ? 3 : 9
 
 const deviceOrderKey = (adapter: DeviceBoxAdapter): TrackOrderKey => {
     const ownIndex = Devices.isEffect(adapter) ? adapter.indexField.getValue() : 0
@@ -64,7 +71,9 @@ const deviceOrderKey = (adapter: DeviceBoxAdapter): TrackOrderKey => {
         none: () => ({category: 9, path: [ownIndex]}),
         some: ({parent, index}) => {
             const outer = deviceOrderKey(parent)
-            return {category: outer.category, path: [...outer.path, index, ownIndex]}
+            return host instanceof InstrumentCompositeCellBoxAdapter
+                ? {category: outer.category, path: [...outer.path, index, kindRank(adapter), ownIndex]}
+                : {category: outer.category, path: [...outer.path, index, ownIndex]}
         }
     })
 }
@@ -269,6 +278,7 @@ export class TracksManager implements Terminable {
                     this.#scrollContainer.appendChild(unitTracks)
                     audioUnitBoxAdapter.midiEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
                     audioUnitBoxAdapter.audioEffects.ifSome(chain => this.#watchDeviceChain(audioUnitLifecycle, chain))
+                    this.#watchLayers(audioUnitLifecycle, audioUnitBoxAdapter.input.adapter())
                     // Collapsing/expanding this unit's automation re-sorts (its value lanes leave/rejoin the set).
                     audioUnitLifecycle.own(audioUnitBoxAdapter.automationCollapsed
                         .subscribe(() => this.#invalidateOrder()))
@@ -454,6 +464,10 @@ export class TracksManager implements Terminable {
                     this.#watchDeviceChain(deviceLifecycle, adapter.entries)
                 } else if (adapter instanceof AudioEffectCompositeCellBoxAdapter) {
                     adapter.audioEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
+                } else if (adapter instanceof InstrumentCompositeCellBoxAdapter) {
+                    adapter.midiEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
+                    adapter.audioEffects.ifSome(chain => this.#watchDeviceChain(deviceLifecycle, chain))
+                    this.#watchLayers(deviceLifecycle, adapter.input.adapter())
                 } else if (adapter instanceof PlayfieldDeviceBoxAdapter) {
                     this.#watchDeviceChain(deviceLifecycle, adapter.samples)
                 } else if (adapter instanceof PlayfieldSampleBoxAdapter) {
@@ -467,6 +481,21 @@ export class TracksManager implements Terminable {
                 this.#invalidateOrder()
             },
             onReorder: () => this.#invalidateOrder()
+        }))
+    }
+
+    // An Instrument Composite is a host's INSTRUMENT, not a chain member: follow it (and whatever replaces it)
+    // into its layers, whose chains and nested composites re-sort the automation lanes too.
+    #watchLayers(lifecycle: Terminator, instrument: ObservableOption<AudioUnitInputAdapter>): void {
+        const instrumentLifecycle = lifecycle.own(new Terminator())
+        lifecycle.own(instrument.catchupAndSubscribe(option => {
+            instrumentLifecycle.terminate()
+            option.ifSome(adapter => {
+                if (adapter instanceof InstrumentCompositeBoxAdapter) {
+                    this.#watchDeviceChain(instrumentLifecycle, adapter.cells)
+                }
+            })
+            this.#invalidateOrder()
         }))
     }
 

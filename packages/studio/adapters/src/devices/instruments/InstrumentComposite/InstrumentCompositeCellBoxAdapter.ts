@@ -1,8 +1,8 @@
 import {Pointers} from "@opendaw/studio-enums"
 import {InstrumentCompositeCellBox} from "@opendaw/studio-boxes"
-import {Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Exec, Option, StringMapping, Subscription, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Field, Int32Field, StringField} from "@opendaw/lib-box"
-import {AudioEffectDeviceAdapter, DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../../DeviceAdapter"
+import {AudioEffectDeviceAdapter, CompositeCell, DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../../LabeledAudioOutputsOwner"
 import {IndexedBoxAdapter, IndexedBoxAdapterCollection} from "../../../IndexedBoxAdapterCollection"
 import {BoxAdaptersContext} from "../../../BoxAdaptersContext"
@@ -14,8 +14,9 @@ import {InstrumentCompositeBoxAdapter} from "../InstrumentCompositeBoxAdapter"
 
 // One LAYER of an InstrumentCompositeBox: a full DeviceHost, an audio unit minus tracks and sends. It hosts an
 // instrument plus both effect chains, and leads back to the host the owning composite sits in.
-export class InstrumentCompositeCellBoxAdapter implements DeviceHost, IndexedBoxAdapter {
+export class InstrumentCompositeCellBoxAdapter implements CompositeCell, IndexedBoxAdapter {
     readonly class = "device-host"
+    readonly cellKind = "instrument"
 
     readonly #terminator = new Terminator()
 
@@ -70,6 +71,11 @@ export class InstrumentCompositeCellBoxAdapter implements DeviceHost, IndexedBox
     }
 
     deviceHost(): DeviceHost {return this.compositeDevice().deviceHost()}
+    asCompositeCell(): Option<CompositeCell> {return Option.wrap(this)}
+    siblings(): ReadonlyArray<CompositeCell> {return this.compositeDevice().cells.adapters()}
+    subscribeSiblings(observer: Exec): Subscription {
+        return this.compositeDevice().cells.subscribe({onAdd: observer, onRemove: observer, onReorder: observer})
+    }
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
     * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {

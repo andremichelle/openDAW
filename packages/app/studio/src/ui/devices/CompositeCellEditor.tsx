@@ -1,13 +1,13 @@
 import css from "./CompositeCellEditor.sass?inline"
 import {DefaultObservableValue, Errors, Lifecycle, MutableObservableValue, Option, panic, Terminable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Vertex} from "@opendaw/lib-box"
+import {StringField, Vertex} from "@opendaw/lib-box"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {TextScroller} from "@/ui/TextScroller"
 import {Surface} from "@/ui/surface/Surface"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
-import {AudioEffectCompositeCellBoxAdapter, DeviceHost} from "@opendaw/studio-adapters"
+import {CompositeCell, DeviceHost} from "@opendaw/studio-adapters"
 import {Icon} from "@/ui/components/Icon"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Knob} from "@/ui/components/Knob.tsx"
@@ -30,16 +30,17 @@ type Construct = {
     host: DeviceHost
 }
 
-// Shown in the instrument slot while a composite ENTRY is edited: the way BACK to the parent composite plus the
-// entry's own gain / pan / mute / solo, matching the entry row's controls.
+// Shown while a composite CELL is edited (an FX entry in the instrument slot, an instrument layer at the far
+// left of the panel): the way BACK to the parent chain plus the cell's own gain / pan / mute / solo.
 export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     const {editing, midiLearning, userEditingManager, deviceSelection} = service.project
     // A composite CELL accepts the Editing pointer at the box level; an AUDIO UNIT only through its `editing`.
-    const parent = host.deviceHost()
-    const backTarget: Vertex<Pointers> = parent instanceof AudioEffectCompositeCellBoxAdapter
-        ? parent.box
-        : parent.audioUnitBoxAdapter().box.editing
-    const entry = host instanceof AudioEffectCompositeCellBoxAdapter ? host : null
+    const backTarget: Vertex<Pointers> = MenuItems.backTargetOfCell(host)
+    const entry = host.asCompositeCell().unwrapOrNull()
+    // An FX entry has no name of its own and shows its composite's, a layer shows (and renames) its own.
+    const labelFieldOf = (cell: CompositeCell): StringField => cell.cellKind === "instrument"
+        ? cell.labelField : cell.compositeDevice().labelField
+    const noun = entry?.cellKind === "instrument" ? "layer" : "entry"
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
     // The parent composite's name as a NORMAL device-header label (scroller + dblclick rename, no pill):
@@ -51,7 +52,7 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
                 TextScroller.install(element),
                 Events.subscribeDblDwn(element, async event => {
                     if (entry === null) {return}
-                    const labelField = entry.compositeDevice().labelField
+                    const labelField = labelFieldOf(entry)
                     const {status, error, value} = await Promises.tryCatch(Surface.get(element)
                         .requestFloatingTextInput(event, labelField.getValue()))
                     if (status === "rejected") {
@@ -104,11 +105,11 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             </div>
             <div className="channel-isolation">
                 <Checkbox lifecycle={lifecycle} model={muteValue}
-                          appearance={{activeColor: Colors.orange, framed: true, tooltip: "Mute entry"}}>
+                          appearance={{activeColor: Colors.orange, framed: true, tooltip: `Mute ${noun}`}}>
                     <Icon symbol={IconSymbol.Mute}/>
                 </Checkbox>
                 <Checkbox lifecycle={lifecycle} model={soloValue}
-                          appearance={{activeColor: Colors.yellow, framed: true, tooltip: "Solo entry"}}>
+                          appearance={{activeColor: Colors.yellow, framed: true, tooltip: `Solo ${noun}`}}>
                     <Icon symbol={IconSymbol.Solo}/>
                 </Checkbox>
             </div>
@@ -148,10 +149,9 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
         }))
     )
     if (entry !== null) {
-        const composite = entry.compositeDevice()
         const rebuildNumbers = () => {
             Html.empty(numbers)
-            composite.entries.adapters().forEach(sibling => numbers.appendChild((
+            entry.siblings().forEach(sibling => numbers.appendChild((
                 <div className={Html.buildClassList("entry-number", sibling === entry && "current")}
                      onclick={() => {
                          if (sibling !== entry) {userEditingManager.audioUnit.edit(sibling.box)}
@@ -160,10 +160,8 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
         }
         rebuildNumbers()
         lifecycle.ownAll(
-            composite.entries.subscribe({
-                onAdd: rebuildNumbers, onRemove: rebuildNumbers, onReorder: rebuildNumbers
-            }),
-            composite.labelField.catchupAndSubscribe(owner => name.textContent = owner.getValue()),
+            entry.subscribeSiblings(rebuildNumbers),
+            labelFieldOf(entry).catchupAndSubscribe(owner => name.textContent = owner.getValue()),
             connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.mute)),
             connectBoolean(soloValue, EditWrapper.forAutomatableParameter(editing, entry.namedParameter.solo))
         )

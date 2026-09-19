@@ -59,8 +59,8 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         // Exactly ONE composite, and it is what sits on the target unit's chain.
         const composites = boxGraph.boxes().filter(box => box instanceof AudioEffectCompositeBox)
         expect(composites.length).toBe(1)
-        expect(composites[0].host.targetVertex.unwrap("composite.host").address)
-            .toStrictEqual(targetUnit.audioEffects.address)
+        expect(composites[0].host.targetVertex.unwrap("composite.host").address.toString())
+            .toStrictEqual(targetUnit.audioEffects.address.toString())
         const entries = boxGraph.boxes().filter(box => box instanceof AudioEffectCompositeCellBox)
         expect(entries.length).toBe(2)
         for (const entry of entries) {
@@ -153,7 +153,7 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         const {boxGraph: targetGraph, targetUnit} = decodeChain(bytes)
         const splits = targetGraph.boxes().filter(box => box instanceof StereoCompositeBox) as StereoCompositeBox[]
         expect(splits.length).toBe(1)
-        expect(splits[0].host.targetVertex.unwrap("split.host").address).toStrictEqual(targetUnit.audioEffects.address)
+        expect(splits[0].host.targetVertex.unwrap("split.host").address.toString()).toStrictEqual(targetUnit.audioEffects.address.toString())
         const entries = (targetGraph.boxes().filter(box => box instanceof AudioEffectCompositeCellBox) as AudioEffectCompositeCellBox[])
             .sort((a, b) => a.index.getValue() - b.index.getValue())
         expect(entries.map(entry => entry.label.getValue())).toStrictEqual(["L", "R"])

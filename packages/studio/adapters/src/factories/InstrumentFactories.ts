@@ -246,7 +246,6 @@ export namespace InstrumentFactories {
         })
     }
 
-    // Not in `Named` yet: the studio lists every `Named` factory, and this device has no editor until phase 3.
     export const InstrumentComposite: InstrumentFactory<void, InstrumentCompositeBox> = {
         defaultName: "Instrument Composite",
         defaultIcon: IconSymbol.Stack,
@@ -271,7 +270,7 @@ export namespace InstrumentFactories {
     export const isLayerInstrument = (factory: InstrumentFactory<any, any>): boolean =>
         factory.trackType === TrackType.Notes && factory !== MIDIOutput
 
-    export const Named = {Apparat, Cubed, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
+    export const Named = {Apparat, Cubed, InstrumentComposite, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
     const useAudioFile = (boxGraph: BoxGraph, fileUUID: UUID.Bytes, name: string, duration: number) =>

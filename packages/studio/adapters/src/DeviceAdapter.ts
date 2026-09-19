@@ -1,5 +1,5 @@
 import {BooleanField, Box, Field, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
-import {Arrays, assert, AssertType, int, Option, panic, UUID} from "@opendaw/lib-std"
+import {Arrays, assert, AssertType, Exec, int, Option, panic, Subscription, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
 import {TrackType} from "./timeline/TrackType"
 import {IndexedBoxAdapterCollection} from "./IndexedBoxAdapterCollection"
@@ -8,6 +8,7 @@ import {AudioUnitInputAdapter} from "./audio-unit/AudioUnitInputAdapter"
 import {AudioUnitBoxAdapter} from "./audio-unit/AudioUnitBoxAdapter"
 import {DeviceBoxUtils} from "./DeviceBox"
 import {LabeledAudioOutputsOwner} from "./LabeledAudioOutputsOwner"
+import {AutomatableParameterFieldAdapter} from "./AutomatableParameterFieldAdapter"
 
 export type DeviceType = "midi-effect" | "bus" | "instrument" | "audio-effect"
 export type DeviceAccepts = "midi" | "audio" | false
@@ -79,6 +80,28 @@ export interface DeviceHost extends BoxAdapter, LabeledAudioOutputsOwner {
 
     deviceHost(): DeviceHost
     audioUnitBoxAdapter(): AudioUnitBoxAdapter
+    // `Some` when this host is one CELL of a composite (an FX Composite entry, an Instrument Composite layer).
+    asCompositeCell(): Option<CompositeCell>
+}
+
+// What every composite cell shares, whatever it hosts: its place among its siblings, its own strip, and the
+// composite device it belongs to. The editor of an entered cell is written against this, not a class.
+export interface CompositeCell extends DeviceHost {
+    readonly cellKind: "audio-effect" | "instrument"
+    readonly namedParameter: {
+        readonly gain: AutomatableParameterFieldAdapter<number>
+        readonly pan: AutomatableParameterFieldAdapter<number>
+        readonly mute: AutomatableParameterFieldAdapter<boolean>
+        readonly solo: AutomatableParameterFieldAdapter<boolean>
+    }
+
+    get box(): Box<Pointers> // entered by pointing the Editing pointer at the cell box itself
+    get indexField(): Int32Field
+    get labelField(): StringField
+
+    compositeDevice(): DeviceBoxAdapter
+    siblings(): ReadonlyArray<CompositeCell>
+    subscribeSiblings(observer: Exec): Subscription
 }
 
 export namespace DeviceHost {

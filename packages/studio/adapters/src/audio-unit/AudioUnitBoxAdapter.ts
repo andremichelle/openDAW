@@ -2,7 +2,7 @@ import {AudioUnitBox, CaptureAudioBox, CaptureMidiBox} from "@opendaw/studio-box
 import {assert, int, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Field, Int32Field} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
-import {AudioEffectDeviceAdapter, DeviceHost, Devices, MidiEffectDeviceAdapter} from "../DeviceAdapter"
+import {AudioEffectDeviceAdapter, CompositeCell, DeviceHost, Devices, MidiEffectDeviceAdapter} from "../DeviceAdapter"
 import {LabeledAudioOutput} from "../LabeledAudioOutputsOwner"
 import {AudioUnitTracks} from "./AudioUnitTracks"
 import {AudioUnitInput} from "./AudioUnitInput"
@@ -87,6 +87,7 @@ export class AudioUnitBoxAdapter implements DeviceHost, BoxAdapter {
     get label(): string {return this.#input.adapter().mapOr(input => input.labelField.getValue(), "")}
 
     deviceHost(): DeviceHost {return this}
+    asCompositeCell(): Option<CompositeCell> {return Option.None}
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this}
 
     * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {

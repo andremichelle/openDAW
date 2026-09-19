@@ -1,15 +1,17 @@
 import {
-    AudioCompositeAdapter,
+    DeviceBoxAdapter,
     DeviceHost,
     Devices,
     EffectDeviceBoxAdapter,
+    InstrumentCompositeCellBoxAdapter,
     InstrumentFactories,
     PresetHeader
 } from "@opendaw/studio-adapters"
 import {DevicesClipboard, EffectFactories, MenuItem} from "@opendaw/studio-core"
-import {IndexedBox, PrimitiveField, PrimitiveValues} from "@opendaw/lib-box"
+import {IndexedBox, PrimitiveField, PrimitiveValues, Vertex} from "@opendaw/lib-box"
 import {Editing, isDefined, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
+import {Pointers} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {openManual} from "@/ui/manuals"
 import {PresetService, PresetEffectKind} from "@/ui/browse/PresetService"
@@ -53,6 +55,15 @@ export namespace MenuItems {
                         api.insertEffect(optAudioField.unwrap("audioEffectsField"), entry, 0))))
                 ))
         )
+        // An instrument inside a LAYER belongs to that layer: its menu deletes the layer, never the audio unit.
+        if (deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
+            parent.addMenuItem(MenuItem.default({label: "Delete layer", separatorBefore: true})
+                .setTriggerProcedure(() => editing.modify(() => {
+                    project.userEditingManager.audioUnit.edit(backTargetOfCell(deviceHost))
+                    api.deleteCompositeLayer(deviceHost.box)
+                })))
+            return
+        }
         populatePresetSubmenu(parent, service, deviceHost, {kind: "instrument-context"})
         parent.addMenuItem(MenuItem.default({
             label: `Delete '${audioUnit.label}'`,
@@ -61,6 +72,12 @@ export namespace MenuItems {
         }).setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(audioUnit.box))))
     }
 
+    // Where the panel goes when a composite cell is left: the parent cell when nested, else the audio unit.
+    export const backTargetOfCell = (cell: DeviceHost): Vertex<Pointers> => cell.deviceHost().asCompositeCell().match<Vertex<Pointers>>({
+        none: () => cell.audioUnitBoxAdapter().box.editing,
+        some: parent => parent.box
+    })
+
     export const createForValue = <V extends PrimitiveValues>(editing: Editing,
                                                               label: string,
                                                               primitive: PrimitiveField<V, any>,
@@ -68,19 +85,32 @@ export namespace MenuItems {
         MenuItem.default({label, checked: primitive.getValue() === value})
             .setTriggerProcedure(() => editing.modify(() => primitive.setValue(value)))
 
-    // The hamburger of a composite BRANCH (cell) editor: the manual goes to the PARENT composite device,
-    // and "Add Audio Effect" inserts into this branch's own chain (a cell hosts no midi chain, no instrument).
+    // The hamburger of a composite CELL editor: the manual goes to the PARENT composite device, and each
+    // "Add ..." inserts into this cell's own chain of that kind (an FX entry hosts no midi chain).
     export const forCompositeCell = (parent: MenuItem,
                                      service: StudioService,
                                      host: DeviceHost,
-                                     composite: AudioCompositeAdapter): void => {
+                                     composite: DeviceBoxAdapter): void => {
         const {editing, api} = service.project
+        const optMidiField = host.midiEffectsField
         const optAudioField = host.audioEffectsField
         parent.addMenuItem(
             populateMenuItemToNavigateToManual(composite.manualUrl, composite.labelField.getValue()),
             MenuItem.default({
-                label: "Add Audio Effect",
+                label: "Add Midi-Effect",
                 separatorBefore: true,
+                hidden: !DeviceHost.takesEffect(host, "midi")
+            }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.MidiList
+                .map(entry => MenuItem.default({
+                    label: entry.defaultName,
+                    icon: entry.defaultIcon,
+                    separatorBefore: entry.separatorBefore
+                }).setTriggerProcedure(() => editing.modify(() =>
+                    api.insertEffect(optMidiField.unwrap("midiEffectsField"), entry, 0))))
+            )),
+            MenuItem.default({
+                label: "Add Audio Effect",
+                separatorBefore: optMidiField.isEmpty(),
                 hidden: optAudioField.isEmpty()
             }).setRuntimeChildrenProcedure(parent => parent.addMenuItem(...EffectFactories.AudioList
                 .map(entry => MenuItem.default({

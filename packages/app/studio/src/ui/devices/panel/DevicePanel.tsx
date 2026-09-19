@@ -15,13 +15,14 @@ import {
 } from "@opendaw/lib-std"
 import {appendChildren, createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
-import {AudioUnitBox, BoxVisitor, PlayfieldSampleBox} from "@opendaw/studio-boxes"
+import {AudioUnitBox, BoxVisitor, InstrumentCompositeCellBox, PlayfieldSampleBox} from "@opendaw/studio-boxes"
 import {
     AudioEffectDeviceAdapter,
     AudioUnitInputAdapter,
     DeviceHost,
     Devices,
     IndexedBoxAdapterCollection,
+    InstrumentCompositeCellBoxAdapter,
     MidiEffectDeviceAdapter,
     PlayfieldSampleBoxAdapter
 } from "@opendaw/studio-adapters"
@@ -53,6 +54,7 @@ type Construct = {
 type Context = { deviceHost: DeviceHost, instrument: ObservableOption<AudioUnitInputAdapter> }
 
 export const DevicePanel = ({lifecycle, service}: Construct) => {
+    const cellContainer: HTMLElement = <div className="cell-container"/>
     const midiEffectsContainer: HTMLElement = <div className="midi-container"/>
     const instrumentContainer: HTMLElement = <div className="source-container"/>
     const audioEffectsContainer: HTMLElement = <div className="audio-container"/>
@@ -65,6 +67,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
     )
     const containers: HTMLElement = (
         <div className="containers">
+            {cellContainer}
             {midiEffectsContainer}
             {instrumentContainer}
             {audioEffectsContainer}
@@ -96,7 +99,11 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
             }),
             // A composite ENTRY is a host in its own right, but hosts no instrument: its signal comes from the
             // composite. The instrument slot shows the way back out instead (see `updateDom`).
-            visitAudioEffectCompositeCellBox: (): Context => ({deviceHost, instrument: new MutableObservableOption()})
+            visitAudioEffectCompositeCellBox: (): Context => ({deviceHost, instrument: new MutableObservableOption()}),
+            visitInstrumentCompositeCellBox: (box: InstrumentCompositeCellBox): Context => ({
+                deviceHost,
+                instrument: project.boxAdapters.adapterFor(box, InstrumentCompositeCellBoxAdapter).input.adapter()
+            })
         }))
     }
 
@@ -109,6 +116,7 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         const activeElement = document.activeElement
         const previouslyFocused: Nullable<HTMLElement> = isInstanceOf(activeElement, HTMLElement)
             && element.contains(activeElement) ? activeElement : null
+        Html.empty(cellContainer)
         Html.empty(midiEffectsContainer)
         Html.empty(instrumentContainer)
         Html.empty(audioEffectsContainer)
@@ -122,6 +130,10 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         noEffectPlaceholder.classList.toggle("hidden", optEditing.isEmpty())
         if (optEditing.isEmpty()) {return}
         const {deviceHost, instrument} = getContext(project, optEditing.unwrap().box)
+        // An instrument LAYER keeps its instrument slot for its synth, so its own cell sits at the far left.
+        if (deviceHost.hostsInstrument && deviceHost.asCompositeCell().nonEmpty()) {
+            appendChildren(cellContainer, <CompositeCellEditor lifecycle={chainLifecycle} service={service} host={deviceHost}/>)
+        }
         if (instrument.nonEmpty()) {
             const input = instrument.unwrap()
             if (input.accepts === "midi") {

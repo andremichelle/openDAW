@@ -1,9 +1,10 @@
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioEffectCompositeCellBox} from "@opendaw/studio-boxes"
-import {int, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Exec, int, Option, StringMapping, Subscription, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Field, Int32Field, StringField} from "@opendaw/lib-box"
 import {
     AudioEffectDeviceAdapter,
+    CompositeCell,
     DeviceHost,
     Devices,
     MidiEffectDeviceAdapter
@@ -20,8 +21,9 @@ import {AudioCompositeAdapter} from "./AudioCompositeAdapter"
 // (`midiEffects` / `midiEffectsField` are `None`), and no instrument — the composite hands it a signal. Being a
 // DeviceHost is what lets the device panel be ENTERED on this cell (userEditingManager.audioUnit.edit(cellBox)),
 // exactly as a Playfield slot is entered.
-export class AudioEffectCompositeCellBoxAdapter implements DeviceHost, IndexedBoxAdapter {
+export class AudioEffectCompositeCellBoxAdapter implements CompositeCell, IndexedBoxAdapter {
     readonly class = "device-host"
+    readonly cellKind = "audio-effect"
 
     readonly #terminator = new Terminator()
 
@@ -77,6 +79,11 @@ export class AudioEffectCompositeCellBoxAdapter implements DeviceHost, IndexedBo
     // The host the OWNING COMPOSITE lives in — where the panel returns to when leaving this entry. NOT the
     // composite itself (see `compositeDevice`): an entry's host is where its composite sits in a chain.
     deviceHost(): DeviceHost {return this.compositeDevice().deviceHost()}
+    asCompositeCell(): Option<CompositeCell> {return Option.wrap(this)}
+    siblings(): ReadonlyArray<CompositeCell> {return this.compositeDevice().entries.adapters()}
+    subscribeSiblings(observer: Exec): Subscription {
+        return this.compositeDevice().entries.subscribe({onAdd: observer, onRemove: observer, onReorder: observer})
+    }
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
     * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {

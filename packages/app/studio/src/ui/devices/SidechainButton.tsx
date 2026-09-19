@@ -1,6 +1,6 @@
 import css from "./SidechainButton.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
-import {Editing, Option} from "@opendaw/lib-std"
+import {Editing, isDefined, Option} from "@opendaw/lib-std"
 import {Address, PointerField} from "@opendaw/lib-box"
 import {Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
@@ -25,16 +25,14 @@ export const SidechainButton = ({sideChain, rootBoxAdapter, editing, deviceHost}
             sideChain.targetAddress.mapOr(other => other.equals(address), false)
         // Every composite this device is nested inside, innermost first. A device in entry A of composite C
         // may sidechain off C's INPUT (the signal entering C), and off an OUTER composite's input if C nests.
-        const enclosingComposites = (): ReadonlyArray<AudioCompositeAdapter> => {
-            const result: Array<AudioCompositeAdapter> = []
-            let host: DeviceHost | undefined = deviceHost
-            while (host instanceof AudioEffectCompositeCellBoxAdapter) {
-                const composite = host.compositeDevice()
-                result.push(composite)
-                host = composite.deviceHost()
-            }
-            return result
-        }
+        // The walk continues THROUGH an instrument layer: an FX Composite inside a layer inside an FX Composite
+        // still reaches the outer one.
+        const enclosingCompositesOf = (host: DeviceHost): ReadonlyArray<AudioCompositeAdapter> =>
+            host.asCompositeCell().mapOr(cell => host instanceof AudioEffectCompositeCellBoxAdapter
+                ? [host.compositeDevice(), ...enclosingCompositesOf(cell.deviceHost())]
+                : enclosingCompositesOf(cell.deviceHost()), [])
+        const enclosingComposites = (): ReadonlyArray<AudioCompositeAdapter> =>
+            isDefined(deviceHost) ? enclosingCompositesOf(deviceHost) : []
         const createSelectableItem = (output: LabeledAudioOutput): MenuItem => {
             if (output.children().nonEmpty()) {
                 return MenuItem.default({label: output.label})

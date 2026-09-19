@@ -325,7 +325,7 @@ as done on a manual check alone. The browser checkpoint in phase 3 is additional
     lists every `Named` factory, the editor arrives in phase 3). `InstrumentFactories.isLayerInstrument`
     rejects Tape (audio) and MIDI Output (unit-level only).
   - `ProjectApi.createCompositeLayer` (cell + instrument together, label = instrument name) and
-    `ProjectApi.replaceLayerInstrument` (keeps the layer, its strip and its effects). The old
+    `ProjectApi.setLayerInstrument` (keeps the layer, its strip and its effects, also refills an emptied layer). The old
     `replaceMIDIInstrument` is untouched.
   - SCHEMA CORRECTION: the cell's `instrument` field was `mandatory: true`, so deleting a layer's synth
     cascaded into deleting the whole layer and a replace was impossible. It is now `mandatory: false`, the
@@ -337,6 +337,30 @@ as done on a manual check alone. The browser checkpoint in phase 3 is additional
   - FOUND: `Address` has private fields only, so vitest `toStrictEqual(addressA, addressB)` is ALWAYS true.
     The new tests compare `address.toString()`. The existing `CompositeAdapters.test.ts` address assertions
     are vacuous and were not touched.
+
+- Phase 2 COMMITTED (`42ca5449c`, not pushed).
+- Phase 3 first pass DONE (2026-09-19), uncommitted:
+  - Decision: an entered layer shows its own CELL at the FAR LEFT of the panel (back, layer numbers, gain,
+    pan, mute, solo), then midi fx, synth, audio fx.
+  - `CompositeCell` contract on `DeviceHost.asCompositeCell()` (kind, strip parameters, `siblings`,
+    `subscribeSiblings`, `compositeDevice`), implemented by the FX entry and the layer. The cell editor, the
+    back target, the timeline ordering and the sidechain walk use it instead of class checks.
+  - `InstrumentCompositeDeviceEditor` (layer rows + Add Layer), `InstrumentCompositeLayer`, `AddLayerButton`
+    (offers `isLayerInstrument` factories only), `DevicePanel` visitor arm + `cell-container`,
+    `DeviceEditorFactory` arm, factory listed in `InstrumentFactories.Named`.
+  - Closed gaps: a synth's menu inside a layer offered "Delete <unit>" and would have deleted the whole audio
+    unit, it now offers "Delete layer" (no unit presets there yet). An instrument dropped onto an entered
+    layer replaces the layer's synth (`setLayerInstrument`), gated to layer instruments. Automation lanes of
+    devices inside a layer sort midi fx, synth, audio fx, and the timeline follows the unit's composite into
+    its layers (`#watchLayers`). The sidechain walk continues through a layer.
+  - `ProjectApi.deleteCompositeLayer` (reindexes), `setLayerInstrument`. Tests: 9 in
+    `InstrumentCompositeAdapters.test.ts`. The 8 vacuous address assertions in `CompositeAdapters.test.ts` and
+    `PresetEncoder.composite.test.ts` now compare strings and still pass.
+  - Browser checkpoint: composite listed in the browser, editor renders, Add Layer menu offers the right
+    instruments, a layer row appears, entering shows the layer cell at the far left, back works, no console
+    errors. NOT checked in the browser: sound, mute / solo, a second layer, nesting, drag and drop.
+  - OPEN in phase 3: drag and drop of layers and of effects between layers (the FX entry has
+    `AudioCompositeEntryDnD`), row styling of its own, a vitest for the timeline order key.
 
 ## Phases (each gated on green tests)
 

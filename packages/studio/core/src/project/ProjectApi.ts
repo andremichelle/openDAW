@@ -204,18 +204,21 @@ export class ProjectApi {
         return Attempts.ok({cellBox, instrumentBox: create(boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment)})
     }
 
-    // The layer keeps its label, strip and effect chains, only the instrument changes.
-    replaceLayerInstrument<A>(target: InstrumentBox, factory: InstrumentFactory<A>, attachment?: A): Attempt<InstrumentBox, string> {
-        const hostBox = target.host.targetVertex.unwrap("instrument.host").box
-        if (!isInstanceOf(hostBox, InstrumentCompositeCellBox)) {
-            return Attempts.err("The instrument is not hosted by a layer")
-        }
+    // Puts `factory`'s instrument into the layer, replacing the one it hosts (an emptied layer just gets it).
+    setLayerInstrument<A>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A>, attachment?: A): Attempt<InstrumentBox, string> {
         if (!InstrumentFactories.isLayerInstrument(factory)) {
             return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
         }
-        target.delete()
+        cellBox.instrument.pointerHub.incoming().forEach(pointer => pointer.box.delete())
         const {create, defaultIcon, defaultName}: InstrumentFactory = factory
-        return Attempts.ok(create(this.#project.boxGraph, hostBox.instrument, defaultName, defaultIcon, attachment))
+        return Attempts.ok(create(this.#project.boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment))
+    }
+
+    deleteCompositeLayer(cellBox: InstrumentCompositeCellBox): void {
+        const composite = asInstanceOf(cellBox.composite.targetVertex.unwrap("composite.target").box, InstrumentCompositeBox)
+        const survivors = IndexedBox.collectIndexedBoxes(composite.cells).filter(box => box !== cellBox)
+        cellBox.delete()
+        survivors.forEach((box, index) => box.index.setValue(index))
     }
 
     insertEffect(field: Field<EffectPointerType>, factory: EffectFactory, insertIndex: int = Number.MAX_SAFE_INTEGER): EffectBox {

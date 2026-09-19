@@ -1,4 +1,4 @@
-import {asDefined, isAbsent, isDefined, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
+import {asDefined, isAbsent, isDefined, Optional, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
@@ -8,6 +8,7 @@ import {
     DeviceHost,
     Devices,
     InstrumentBox,
+    InstrumentCompositeCellBoxAdapter,
     InstrumentFactories,
     InstrumentFactory,
     PresetDecoder,
@@ -71,6 +72,12 @@ export namespace DevicePanelDragAndDrop {
                 } else if (type === "midi-effect") {
                     if (!DeviceHost.takesEffect(deviceHost, "midi")) {return false}
                     container = midiEffectsContainer
+                } else if (type === "instrument" && deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
+                    if (dragData.device === null) {return false}
+                    const factory: Optional<InstrumentFactory> = InstrumentFactories.Named[dragData.device]
+                    if (!isDefined(factory) || !InstrumentFactories.isLayerInstrument(factory)) {return false}
+                    instrumentContainer.style.opacity = "0.5"
+                    return true
                 } else if (type === "instrument" && deviceHost.isAudioUnit) {
                     if (dragData.device === null) {return false}
                     if (deviceHost.inputAdapter.mapOr(input => input instanceof AudioBusBoxAdapter, false)) {
@@ -117,7 +124,16 @@ export namespace DevicePanelDragAndDrop {
                     })
                     return
                 }
-                if (type === "instrument") {return} // an instrument drop onto a non-audio-unit host: nothing to do
+                if (type === "instrument" && deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
+                    if (dragData.device === null) {return}
+                    const factory = asDefined(InstrumentFactories.Named[dragData.device], `Unknown: '${dragData.device}'`) as InstrumentFactory
+                    editing.modify(() => {
+                        const attempt = project.api.setLayerInstrument(deviceHost.box, factory)
+                        if (attempt.isFailure()) {console.debug(attempt.failureReason())}
+                    })
+                    return
+                }
+                if (type === "instrument") {return} // an instrument drop onto any other host: nothing to do
                 const accepts = type === "audio-effect" ? "audio" : "midi"
                 // The `drag` gate already refused a host that takes no chain of this kind; re-checked here
                 // because `drop` is reachable on its own.

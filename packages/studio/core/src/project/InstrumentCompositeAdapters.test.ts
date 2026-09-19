@@ -1,10 +1,12 @@
 import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {
-    DeviceHost, Devices, InstrumentBox, InstrumentCompositeBoxAdapter, InstrumentCompositeCellBoxAdapter,
-    InstrumentFactories, ProjectSkeleton
+    AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, DeviceHost, Devices,
+    InstrumentCompositeBoxAdapter, InstrumentCompositeCellBoxAdapter, InstrumentFactories, ProjectSkeleton
 } from "@opendaw/studio-adapters"
-import {DelayDeviceBox, InstrumentCompositeBox, PitchDeviceBox} from "@opendaw/studio-boxes"
+import {
+    AudioEffectCompositeBox, AudioEffectCompositeCellBox, DelayDeviceBox, InstrumentCompositeBox, PitchDeviceBox
+} from "@opendaw/studio-boxes"
 import type {ProjectEnv} from "./ProjectEnv"
 import type {Project} from "./Project"
 
@@ -92,7 +94,7 @@ describe("Instrument Composite adapters", () => {
         const layer = firstLayer(project, composite)
         const before = layer.inputAdapter.unwrap("before").address.toString()
         const replaced = project.editing.modify(() =>
-            project.api.replaceLayerInstrument(layer.inputAdapter.unwrap("instrument").box as InstrumentBox, InstrumentFactories.Nano).result()).unwrap()
+            project.api.setLayerInstrument(cellBox, InstrumentFactories.Nano).result()).unwrap()
         expect(firstLayer(project, composite).address.toString(), "the layer survives").toStrictEqual(cellBox.address.toString())
         expect(layer.inputAdapter.unwrap("after").address.toString()).toStrictEqual(replaced.address.toString())
         expect(layer.inputAdapter.unwrap("after").address.toString()).not.toStrictEqual(before)
@@ -103,10 +105,36 @@ describe("Instrument Composite adapters", () => {
         expect(layer.inputAdapter.isEmpty()).toBe(true)
         expect(DeviceHost.takesEffect(layer, "midi")).toBe(false)
         expect(DeviceHost.takesEffect(layer, "audio")).toBe(true)
-        const unitSynth = project.editing.modify(() => project.api.createAnyInstrument(InstrumentFactories.Nano).instrumentBox).unwrap()
+        const refilled = project.editing.modify(() =>
+            project.api.setLayerInstrument(cellBox, InstrumentFactories.Vaporisateur).result()).unwrap()
+        expect(layer.inputAdapter.unwrap("refilled").address.toString(), "an emptied layer takes a new instrument")
+            .toBe(refilled.address.toString())
         project.editing.modify(() =>
-            expect(project.api.replaceLayerInstrument(unitSynth, InstrumentFactories.Vaporisateur).isFailure(),
-                "an instrument on a plain unit is not a layer instrument").toBe(true))
+            expect(project.api.setLayerInstrument(cellBox, InstrumentFactories.Tape).isFailure()).toBe(true))
+        expect(layer.inputAdapter.unwrap("kept").address.toString(), "a rejected factory changes nothing")
+            .toBe(refilled.address.toString())
+        project.terminate()
+    })
+
+    it("deleting a layer removes its devices and closes the gap in the order", async () => {
+        const project = await createProject()
+        const {composite, first, delay} = project.editing.modify(() => {
+            const composite = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite).instrumentBox as InstrumentCompositeBox
+            const first = project.api.createCompositeLayer(composite, InstrumentFactories.Vaporisateur).result()
+            project.api.createCompositeLayer(composite, InstrumentFactories.Nano).result()
+            project.api.createCompositeLayer(composite, InstrumentFactories.Vaporisateur).result()
+            const delay = DelayDeviceBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(first.cellBox.audioEffects)
+                box.index.setValue(0)
+            })
+            return {composite, first, delay}
+        }).unwrap()
+        project.editing.modify(() => project.api.deleteCompositeLayer(first.cellBox))
+        const layers = project.boxAdapters.adapterFor(composite, InstrumentCompositeBoxAdapter).cells.adapters()
+        expect(layers.map(layer => [layer.label, layer.indexField.getValue()])).toStrictEqual([["Nano", 0], ["Vaporisateur", 1]])
+        expect(first.instrumentBox.isAttached(), "the layer's synth goes with it").toBe(false)
+        expect(delay.isAttached(), "and so do its effects").toBe(false)
+        expect(composite.isAttached()).toBe(true)
         project.terminate()
     })
 
@@ -195,6 +223,44 @@ describe("Instrument Composite adapters", () => {
         expect(outputs.map(output => output.label)).toStrictEqual(["Instrument Composite", "Bass"])
         const children = Array.from(outputs[1].children().unwrap("layer children"))
         expect(children.map(output => output.label)).toContain("Layer synth")
+        project.terminate()
+    })
+
+    it("both kinds of composite cell answer the shared cell contract, other hosts do not", async () => {
+        const project = await createProject()
+        const {composite, audioUnitBox, entry} = project.editing.modify(() => {
+            const {instrumentBox, audioUnitBox} = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
+            const composite = instrumentBox as InstrumentCompositeBox
+            project.api.createCompositeLayer(composite, InstrumentFactories.Vaporisateur).result()
+            const {cellBox} = project.api.createCompositeLayer(composite, InstrumentFactories.Nano).result()
+            const stack = AudioEffectCompositeBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(cellBox.audioEffects)
+                box.index.setValue(0)
+            })
+            const entry = AudioEffectCompositeCellBox.create(project.boxGraph, UUID.generate(), box => {
+                box.composite.refer(stack.entries)
+                box.index.setValue(0)
+            })
+            return {composite, audioUnitBox, entry}
+        }).unwrap()
+        const compositeAdapter = project.boxAdapters.adapterFor(composite, InstrumentCompositeBoxAdapter)
+        const [layerA, layerB] = compositeAdapter.cells.adapters()
+        const cell = layerB.asCompositeCell().unwrap("a layer is a composite cell")
+        expect(cell.cellKind).toBe("instrument")
+        expect(cell.compositeDevice().address.toString()).toBe(compositeAdapter.address.toString())
+        expect(cell.siblings().map(sibling => sibling.address.toString()))
+            .toStrictEqual([layerA.address.toString(), layerB.address.toString()])
+        const entryCell = project.boxAdapters.adapterFor(entry, AudioEffectCompositeCellBoxAdapter).asCompositeCell().unwrap("entry")
+        expect(entryCell.cellKind).toBe("audio-effect")
+        expect(entryCell.siblings().length).toBe(1)
+        expect(entryCell.deviceHost().address.toString(), "an FX entry inside a layer leads back to that layer")
+            .toBe(layerB.address.toString())
+        expect(project.boxAdapters.adapterFor(audioUnitBox, AudioUnitBoxAdapter).asCompositeCell().isEmpty()).toBe(true)
+        let notified = 0
+        const subscription = cell.subscribeSiblings(() => notified++)
+        project.editing.modify(() => project.api.createCompositeLayer(composite, InstrumentFactories.Nano).result())
+        expect(notified).toBe(1)
+        subscription.terminate()
         project.terminate()
     })
 })
