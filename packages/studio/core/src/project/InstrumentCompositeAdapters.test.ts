@@ -138,6 +138,36 @@ describe("Instrument Composite adapters", () => {
         project.terminate()
     })
 
+    it("a layer can be inserted at a position and moved, the order stays gapless", async () => {
+        const project = await createProject()
+        const composite = project.editing.modify(() => {
+            const composite = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite).instrumentBox as InstrumentCompositeBox
+            project.api.createCompositeLayer(composite, InstrumentFactories.Vaporisateur).result()
+            project.api.createCompositeLayer(composite, InstrumentFactories.Nano).result()
+            return composite
+        }).unwrap()
+        const order = () => project.boxAdapters.adapterFor(composite, InstrumentCompositeBoxAdapter).cells.adapters()
+            .map(layer => [layer.label, layer.indexField.getValue()])
+        project.editing.modify(() => project.api.createCompositeLayer(composite, InstrumentFactories.Playfield, undefined, 1).result())
+        expect(order()).toStrictEqual([["Vaporisateur", 0], ["Playfield", 1], ["Nano", 2]])
+        project.editing.modify(() => project.api.createCompositeLayer(composite, InstrumentFactories.Neon, undefined, 0).result())
+        expect(order()).toStrictEqual([["Neon", 0], ["Vaporisateur", 1], ["Playfield", 2], ["Nano", 3]])
+        project.editing.modify(() => project.api.createCompositeLayer(composite, InstrumentFactories.Cubed, undefined, 99).result())
+        expect(order().at(-1), "an index past the end appends").toStrictEqual(["Cubed", 4])
+        project.editing.modify(() => project.api.moveCompositeLayer(composite, 0, 3))
+        expect(order()).toStrictEqual([["Vaporisateur", 0], ["Playfield", 1], ["Nano", 2], ["Neon", 3], ["Cubed", 4]])
+        project.editing.modify(() => project.api.moveCompositeLayer(composite, 4, 0))
+        expect(order()).toStrictEqual([["Cubed", 0], ["Vaporisateur", 1], ["Playfield", 2], ["Nano", 3], ["Neon", 4]])
+        project.editing.modify(() => {
+            project.api.moveCompositeLayer(composite, 2, 2)
+            project.api.moveCompositeLayer(composite, 7, 0)
+            project.api.moveCompositeLayer(composite, 0, -1)
+        })
+        expect(order(), "a no-op or an index out of range changes nothing")
+            .toStrictEqual([["Cubed", 0], ["Vaporisateur", 1], ["Playfield", 2], ["Nano", 3], ["Neon", 4]])
+        project.terminate()
+    })
+
     it("a layer hosts an instrument plus both effect chains", async () => {
         const project = await createProject()
         const {composite, synth, pitch, delay, audioUnitBox} = project.editing.modify(() => {

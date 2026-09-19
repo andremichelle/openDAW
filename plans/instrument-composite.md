@@ -362,6 +362,20 @@ as done on a manual check alone. The browser checkpoint in phase 3 is additional
   - OPEN in phase 3: drag and drop of layers and of effects between layers (the FX entry has
     `AudioCompositeEntryDnD`), row styling of its own, a vitest for the timeline order key.
 
+- Phase 3 first pass COMMITTED (`73e9c29cd`, not pushed).
+- Phase 3 drag and drop DONE (2026-09-19), uncommitted: `InstrumentCompositeLayerDnD` (reorder by the row's
+  icons within one composite, a browser instrument onto a row's edge = new layer there, onto its middle =
+  replace that layer's synth, onto the Add Layer footer or the empty list = new last layer, a new or an
+  existing audio / midi effect onto a row = appended to that layer's chain of its kind, Tape and MIDI Output
+  refused). No cycle guard needed: a dragged effect hosts effects only and can never contain a layer.
+  `ProjectApi.createCompositeLayer(..., atIndex)` and `moveCompositeLayer` with tests (10 in
+  `InstrumentCompositeAdapters.test.ts`). Browser checkpoint with synthetic drag events (the automation
+  tool cannot start a native drag): reorder, Delay onto a layer, Neon onto a top edge, Cubed onto a middle,
+  Tape refused, Nano onto the footer, no console errors. NOT checked: an EXISTING effect dragged out of a
+  chain onto a layer, a real mouse drag.
+- Still open in phase 3: the rows' own styling, a vitest for the timeline order key, sound / mute / solo /
+  nesting in the browser.
+
 ## Phases (each gated on green tests)
 
 0. Rename (decision 1). All existing cargo + vitest suites green, `test-files/all-boxes.od` regenerated

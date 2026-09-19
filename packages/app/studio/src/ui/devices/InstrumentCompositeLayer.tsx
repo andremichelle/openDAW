@@ -13,6 +13,7 @@ import {AutomationControl} from "@/ui/components/AutomationControl"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {SnapCenter, SnapCommonDecibel} from "@/ui/configs.ts"
 import {EntryPeakMeter} from "@/ui/devices/EntryPeakMeter"
+import {InstrumentCompositeLayerDnD} from "@/ui/devices/InstrumentCompositeLayerDnD"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper.ts"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {StudioService} from "@/service/StudioService"
@@ -29,7 +30,9 @@ type Construct = {
 export const InstrumentCompositeLayer = ({lifecycle, service, layer}: Construct) => {
     const {project} = service
     const {editing, midiLearning, userEditingManager, api} = project
+    const composite = layer.compositeDevice()
     const tracks = layer.audioUnitBoxAdapter().tracks
+    const getIndex = () => layer.indexField.getValue()
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
     const remove: HTMLElement = <Icon symbol={IconSymbol.Close} className="remove"/>
@@ -88,6 +91,10 @@ export const InstrumentCompositeLayer = ({lifecycle, service, layer}: Construct)
             const target = event.target
             if (target instanceof Element && isDefined(target.closest("[data-swallow-click]"))) {return}
             userEditingManager.audioUnit.edit(layer.box)
+        }),
+        InstrumentCompositeLayerDnD.installTarget({element, project, composite, layer, getIndex}),
+        InstrumentCompositeLayerDnD.installHandle({
+            handle: iconsElement, classReceiver: element, composite, uuid: layer.uuid, getIndex
         }),
         TextTooltip.default(remove, () => "Delete layer"),
         Events.subscribe(remove, "click", (event: Event) => {

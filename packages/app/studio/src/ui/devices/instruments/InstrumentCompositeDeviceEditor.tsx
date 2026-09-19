@@ -9,6 +9,7 @@ import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {CompositeEntryList} from "@/ui/devices/CompositeEntryList"
 import {InstrumentCompositeLayer} from "@/ui/devices/InstrumentCompositeLayer"
 import {AddLayerButton} from "@/ui/devices/AddLayerButton"
+import {InstrumentCompositeLayerDnD} from "@/ui/devices/InstrumentCompositeLayerDnD"
 import {StudioService} from "@/service/StudioService"
 import {IconSymbol} from "@opendaw/studio-enums"
 
@@ -30,23 +31,30 @@ export const InstrumentCompositeDeviceEditor = ({lifecycle, service, adapter, de
         <AddLayerButton select={factory => editing.modify(() => {
             const attempt = api.createCompositeLayer(adapter.box, factory)
             if (attempt.isFailure()) {console.debug(attempt.failureReason())}
-        })}/>
+        })} onInit={button => lifecycle.own(InstrumentCompositeLayerDnD.installAppendTarget({
+            element: button, project, composite: adapter
+        }))}/>
     )
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
                       adapter={adapter}
                       populateMenu={parent => MenuItems.forAudioUnitInput(parent, service, deviceHost)}
-                      populateControls={() => (
-                          <div className={className}>
+                      populateControls={() => {
+                          const list: HTMLElement = (
                               <CompositeEntryList lifecycle={lifecycle}
                                                   rows={rows}
                                                   watch={update => adapter.cells.subscribe({
                                                       onAdd: update, onRemove: update, onReorder: update
                                                   })}
                                                   footer={footer}/>
-                          </div>
-                      )}
+                          )
+                          lifecycle.own(InstrumentCompositeLayerDnD.installAppendTarget({
+                              element: list, project, composite: adapter,
+                              active: () => adapter.cells.adapters().length === 0
+                          }))
+                          return <div className={className}>{list}</div>
+                      }}
                       populateMeter={() => (
                           <DevicePeakMeter lifecycle={lifecycle}
                                            receiver={project.liveStreamReceiver}

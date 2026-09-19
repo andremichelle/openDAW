@@ -187,15 +187,19 @@ export class ProjectApi {
         return Attempts.ok(create(boxGraph, audioUnitBox.input, defaultName, defaultIcon, attachment))
     }
 
+    // `atIndex` inserts the layer there and shifts the layers behind it, the default appends.
     createCompositeLayer<A, INST extends InstrumentBox>(composite: InstrumentCompositeBox,
                                                         factory: InstrumentFactory<A, INST>,
-                                                        attachment?: A): Attempt<CompositeLayerProduct<INST>, string> {
+                                                        attachment?: A,
+                                                        atIndex: int = Number.MAX_SAFE_INTEGER): Attempt<CompositeLayerProduct<INST>, string> {
         if (!InstrumentFactories.isLayerInstrument(factory)) {
             return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
         }
         const {boxGraph} = this.#project
         const {create, defaultIcon, defaultName} = factory
-        const index = composite.cells.pointerHub.incoming().length
+        const layers = IndexedBox.collectIndexedBoxes(composite.cells)
+        const index = clamp(atIndex, 0, layers.length)
+        layers.slice(index).forEach((box, offset) => box.index.setValue(index + offset + 1))
         const cellBox = InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(composite.cells)
             box.index.setValue(index)
@@ -212,6 +216,14 @@ export class ProjectApi {
         cellBox.instrument.pointerHub.incoming().forEach(pointer => pointer.box.delete())
         const {create, defaultIcon, defaultName}: InstrumentFactory = factory
         return Attempts.ok(create(this.#project.boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment))
+    }
+
+    moveCompositeLayer(composite: InstrumentCompositeBox, fromIndex: int, toIndex: int): void {
+        const layers = IndexedBox.collectIndexedBoxes(composite.cells).slice()
+        if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= layers.length || toIndex >= layers.length) {return}
+        const [moved] = layers.splice(fromIndex, 1)
+        layers.splice(toIndex, 0, moved)
+        layers.forEach((box, index) => box.index.setValue(index))
     }
 
     deleteCompositeLayer(cellBox: InstrumentCompositeCellBox): void {
