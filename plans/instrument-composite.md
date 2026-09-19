@@ -316,6 +316,28 @@ as done on a manual check alone. The browser checkpoint in phase 3 is additional
   - Layer gain and mute automation binds, unbinds and leaks nothing, a layer reorder keeps every processor.
     Phase 1 engine side is complete, next = phase 2 (adapters).
 
+- Phase 1 COMMITTED (`370fbe12c`, not pushed).
+- Phase 2 DONE (2026-09-19), uncommitted:
+  - `InstrumentCompositeBoxAdapter` (instrument, `cells`) and `InstrumentCompositeCellBoxAdapter` (full
+    `DeviceHost`, reuses `AudioUnitInput` for the hosted instrument, gain / pan / mute / solo parameters),
+    `BoxAdapters` visitor arms, `InstrumentBox` union, `DeviceManualUrls.InstrumentComposite`.
+  - `InstrumentFactories.InstrumentComposite` creates an EMPTY composite and is NOT in `Named` yet (the studio
+    lists every `Named` factory, the editor arrives in phase 3). `InstrumentFactories.isLayerInstrument`
+    rejects Tape (audio) and MIDI Output (unit-level only).
+  - `ProjectApi.createCompositeLayer` (cell + instrument together, label = instrument name) and
+    `ProjectApi.replaceLayerInstrument` (keeps the layer, its strip and its effects). The old
+    `replaceMIDIInstrument` is untouched.
+  - SCHEMA CORRECTION: the cell's `instrument` field was `mandatory: true`, so deleting a layer's synth
+    cascaded into deleting the whole layer and a replace was impossible. It is now `mandatory: false`, the
+    same as `AudioUnitBox.input`. An emptied layer survives, takes no midi effect, and the engine keeps
+    watching it (`CompositeBinding.pending`).
+  - No `copyToIndex` on the layer adapter (nothing calls it). Duplicating a layer WITH its instrument and
+    effects is a copy path, phase 4.
+  - Tests: `core/src/project/InstrumentCompositeAdapters.test.ts` (7).
+  - FOUND: `Address` has private fields only, so vitest `toStrictEqual(addressA, addressB)` is ALWAYS true.
+    The new tests compare `address.toString()`. The existing `CompositeAdapters.test.ts` address assertions
+    are vacuous and were not touched.
+
 ## Phases (each gated on green tests)
 
 0. Rename (decision 1). All existing cargo + vitest suites green, `test-files/all-boxes.od` regenerated

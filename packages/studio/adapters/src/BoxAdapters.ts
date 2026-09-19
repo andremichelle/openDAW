@@ -62,6 +62,8 @@ import {
     PitchDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
+    InstrumentCompositeBox,
+    InstrumentCompositeCellBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
     StereoCompositeBox,
@@ -134,6 +136,8 @@ import {CubedDeviceBoxAdapter} from "./devices/instruments/CubedDeviceBoxAdapter
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
 import {PlayfieldDeviceBoxAdapter} from "./devices/instruments/PlayfieldDeviceBoxAdapter"
+import {InstrumentCompositeBoxAdapter} from "./devices/instruments/InstrumentCompositeBoxAdapter"
+import {InstrumentCompositeCellBoxAdapter} from "./devices/instruments/InstrumentComposite/InstrumentCompositeCellBoxAdapter"
 import {StereoToolDeviceBoxAdapter} from "./devices/audio-effects/StereoToolDeviceBoxAdapter"
 import {PlayfieldSampleBoxAdapter} from "./devices/instruments/Playfield/PlayfieldSampleBoxAdapter"
 import {AudioEffectCompositeBoxAdapter} from "./devices/audio-effects/AudioEffectCompositeBoxAdapter"
@@ -281,6 +285,8 @@ export class BoxAdapters implements Terminable {
             visitNoteRegionBox: (box: NoteRegionBox) => new NoteRegionBoxAdapter(this.#context, box),
             visitPitchDeviceBox: (box: PitchDeviceBox) => new PitchDeviceBoxAdapter(this.#context, box),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox) => new PlayfieldDeviceBoxAdapter(this.#context, box),
+            visitInstrumentCompositeBox: (box: InstrumentCompositeBox) => new InstrumentCompositeBoxAdapter(this.#context, box),
+            visitInstrumentCompositeCellBox: (box: InstrumentCompositeCellBox) => new InstrumentCompositeCellBoxAdapter(this.#context, box),
             visitPlayfieldSampleBox: (box: PlayfieldSampleBox) => new PlayfieldSampleBoxAdapter(this.#context, box),
             visitAudioEffectCompositeBox: (box: AudioEffectCompositeBox) => new AudioEffectCompositeBoxAdapter(this.#context, box),
             visitAudioEffectCompositeCellBox: (box: AudioEffectCompositeCellBox) => new AudioEffectCompositeCellBoxAdapter(this.#context, box),

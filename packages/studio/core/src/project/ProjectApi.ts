@@ -27,6 +27,8 @@ import {
     AudioUnitBox,
     CaptureAudioBox,
     CaptureMidiBox,
+    InstrumentCompositeBox,
+    InstrumentCompositeCellBox,
     NoteClipBox,
     NoteEventBox,
     NoteEventCollectionBox,
@@ -50,6 +52,7 @@ import {
     EffectPointerType,
     IndexedAdapterCollectionListener,
     InstrumentBox,
+    InstrumentFactories,
     InstrumentFactory,
     InstrumentOptions,
     InstrumentProduct,
@@ -67,6 +70,11 @@ import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
 import {NoteMidiExport} from "./NoteMidiExport"
 import {AudioWavExport} from "./AudioWavExport"
+
+export type CompositeLayerProduct<INST extends InstrumentBox> = {
+    cellBox: InstrumentCompositeCellBox
+    instrumentBox: INST
+}
 
 export type ClipRegionOptions = {
     name?: string
@@ -177,6 +185,37 @@ export class ProjectApi {
         const {boxGraph} = this.#project
         const {create, defaultIcon, defaultName}: InstrumentFactory = fromFactory
         return Attempts.ok(create(boxGraph, audioUnitBox.input, defaultName, defaultIcon, attachment))
+    }
+
+    createCompositeLayer<A, INST extends InstrumentBox>(composite: InstrumentCompositeBox,
+                                                        factory: InstrumentFactory<A, INST>,
+                                                        attachment?: A): Attempt<CompositeLayerProduct<INST>, string> {
+        if (!InstrumentFactories.isLayerInstrument(factory)) {
+            return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
+        }
+        const {boxGraph} = this.#project
+        const {create, defaultIcon, defaultName} = factory
+        const index = composite.cells.pointerHub.incoming().length
+        const cellBox = InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+            box.composite.refer(composite.cells)
+            box.index.setValue(index)
+            box.label.setValue(defaultName)
+        })
+        return Attempts.ok({cellBox, instrumentBox: create(boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment)})
+    }
+
+    // The layer keeps its label, strip and effect chains, only the instrument changes.
+    replaceLayerInstrument<A>(target: InstrumentBox, factory: InstrumentFactory<A>, attachment?: A): Attempt<InstrumentBox, string> {
+        const hostBox = target.host.targetVertex.unwrap("instrument.host").box
+        if (!isInstanceOf(hostBox, InstrumentCompositeCellBox)) {
+            return Attempts.err("The instrument is not hosted by a layer")
+        }
+        if (!InstrumentFactories.isLayerInstrument(factory)) {
+            return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
+        }
+        target.delete()
+        const {create, defaultIcon, defaultName}: InstrumentFactory = factory
+        return Attempts.ok(create(this.#project.boxGraph, hostBox.instrument, defaultName, defaultIcon, attachment))
     }
 
     insertEffect(field: Field<EffectPointerType>, factory: EffectFactory, insertIndex: int = Number.MAX_SAFE_INTEGER): EffectBox {

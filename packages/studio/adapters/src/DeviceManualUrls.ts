@@ -36,6 +36,7 @@ export namespace DeviceManualUrls {
     export const Tape = "manuals/devices/instruments/tape"
     export const Nano = "manuals/devices/instruments/nano"
     export const Playfield = "manuals/devices/instruments/playfield"
+    export const InstrumentComposite = "manuals/devices/instruments/instrument-composite"
     export const Vaporisateur = "manuals/devices/instruments/vaporisateur"
     export const Neon = "manuals/devices/instruments/neon"
     export const MIDIOutput = "manuals/devices/instruments/midioutput"

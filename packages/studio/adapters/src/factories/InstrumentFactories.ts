@@ -6,6 +6,7 @@ import {
     NeonDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
+    InstrumentCompositeBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
     SoundfontDeviceBox,
@@ -244,6 +245,31 @@ export namespace InstrumentFactories {
             box.host.refer(host)
         })
     }
+
+    // Not in `Named` yet: the studio lists every `Named` factory, and this device has no editor until phase 3.
+    export const InstrumentComposite: InstrumentFactory<void, InstrumentCompositeBox> = {
+        defaultName: "Instrument Composite",
+        defaultIcon: IconSymbol.Stack,
+        briefDescription: "Layered instruments",
+        description: "Plays several instruments at once, each layer with its own effects, volume and panning",
+        manualPage: DeviceManualUrls.InstrumentComposite,
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol): InstrumentCompositeBox => {
+            return InstrumentCompositeBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                box.host.refer(host)
+            })
+        }
+    }
+
+    // Whether an instrument can live in a LAYER of an Instrument Composite: it must play notes, and it must be
+    // a device the engine builds inside a composite (MIDI Output is wired at unit level only).
+    export const isLayerInstrument = (factory: InstrumentFactory<any, any>): boolean =>
+        factory.trackType === TrackType.Notes && factory !== MIDIOutput
 
     export const Named = {Apparat, Cubed, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
