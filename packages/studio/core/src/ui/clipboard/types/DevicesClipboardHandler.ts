@@ -142,6 +142,21 @@ export namespace DevicesClipboard {
     // The bundle carries the modulator so a paste into ANOTHER project gets a copy. Pasting into the project the
     // copy came from must not add a second one: the existing modulator is dropped from the paste here, and
     // `mapModulationPointer` then keeps the assignment pointing at it.
+    // an instrument that is not pasted takes what it owns with it, or the mandatory owner pointer dangles
+    export const isOwnedByInstrument = (box: Box, visited: Set<Box> = new Set()): boolean => {
+        if (visited.has(box)) {return false}
+        visited.add(box)
+        for (const [pointer, targetAddress] of box.outgoingEdges()) {
+            if (!pointer.mandatory) {continue}
+            const owner = box.graph.findBox(targetAddress.uuid)
+            if (owner.isEmpty()) {continue}
+            if (DeviceBoxUtils.isInstrumentDeviceBox(owner.unwrap()) || isOwnedByInstrument(owner.unwrap(), visited)) {
+                return true
+            }
+        }
+        return false
+    }
+
     export const isTimelineContent = (box: Box): boolean =>
         isInstanceOf(box, TrackBox)
         || UnionBoxTypes.isRegionBox(box)
@@ -404,7 +419,7 @@ export namespace DevicesClipboard {
                                 if (DeviceBoxUtils.isEffectDeviceBox(box)
                                     && DeviceHost.chainFieldOf(host, effectAccepts(box)).isEmpty()) {return true}
                                 if (replaceInstrument) {return !host.isAudioUnit && isTimelineContent(box)}
-                                if (DeviceBoxUtils.isInstrumentDeviceBox(box)) {return true}
+                                if (DeviceBoxUtils.isInstrumentDeviceBox(box) || isOwnedByInstrument(box)) {return true}
                                 // timeline content is bundled for the REPLACE case only: pasted without its track it dangles (#1049, #1128)
                                 return metadata.hasInstrument && isTimelineContent(box)
                             }

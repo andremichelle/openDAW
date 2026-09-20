@@ -5,8 +5,9 @@ import {
     InstrumentCompositeBoxAdapter, InstrumentCompositeCellBoxAdapter, InstrumentFactories, ProjectSkeleton, TrackType
 } from "@opendaw/studio-adapters"
 import {
-    AudioEffectCompositeBox, AudioEffectCompositeCellBox, AudioUnitBox, DelayDeviceBox, InstrumentCompositeBox,
-    InstrumentCompositeCellBox, NanoDeviceBox, NoteClipBox, NoteEventCollectionBox, PitchDeviceBox, TrackBox
+    ApparatDeviceBox, AudioEffectCompositeBox, AudioEffectCompositeCellBox, AudioUnitBox, DelayDeviceBox, InstrumentCompositeBox,
+    InstrumentCompositeCellBox, NanoDeviceBox, NoteClipBox, NoteEventCollectionBox, PitchDeviceBox, TrackBox,
+    WerkstattParameterBox
 } from "@opendaw/studio-boxes"
 import {Box} from "@opendaw/lib-box"
 import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
@@ -283,6 +284,39 @@ describe("Instrument Composite adapters", () => {
         expect(hosted.map(box => box.name)).toStrictEqual(["NanoDeviceBox"])
         expect(target.instrumentBox.isAttached(), "the old Nano is replaced").toBe(false)
         expect(plain.instrumentBox.isAttached(), "the copied Nano stays").toBe(true)
+        project.terminate()
+    })
+
+    it("pasting an instrument with owned children where nothing is replaced drops them with it (live 1139)", async () => {
+        const project = await createProject()
+        const {plain, target} = project.editing.modify(() => {
+            const plain = project.api.createAnyInstrument(InstrumentFactories.Apparat)
+            WerkstattParameterBox.create(project.boxGraph, UUID.generate(), box => {
+                box.owner.refer((plain.instrumentBox as ApparatDeviceBox).parameters)
+                box.label.setValue("cutoff")
+            })
+            const composed = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
+            const target = project.api.createCompositeLayer(composed.instrumentBox as InstrumentCompositeBox, InstrumentFactories.Nano).result()
+            return {plain, target}
+        }).unwrap()
+        const {boxAdapters, deviceSelection} = project
+        const handlerIn = (box: Box) => DevicesClipboard.createHandler({
+            getEnabled: () => true,
+            editing: project.editing,
+            selection: deviceSelection,
+            boxGraph: project.boxGraph,
+            boxAdapters,
+            getHost: () => Option.wrap(boxAdapters.adapterFor(box, Devices.isHost))
+        })
+        deviceSelection.select(boxAdapters.adapterFor(plain.instrumentBox, Devices.isInstrument))
+        const entry = handlerIn(plain.audioUnitBox).copy().unwrap("copy")
+        const parameters = () => project.boxGraph.boxes().filter(box => box instanceof WerkstattParameterBox).length
+        expect(() => handlerIn(target.cellBox).paste(entry), "the layer's own instrument is not selected").not.toThrow()
+        expect(target.instrumentBox.isAttached(), "nothing is replaced").toBe(true)
+        expect(parameters(), "no orphaned parameter came in").toBe(1)
+        deviceSelection.deselectAll()
+        expect(() => handlerIn(plain.audioUnitBox).paste(entry), "no selection on a plain track").not.toThrow()
+        expect(parameters()).toBe(1)
         project.terminate()
     })
 
