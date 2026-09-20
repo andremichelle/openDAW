@@ -246,7 +246,9 @@ export namespace DevicesClipboard {
             const dependencies = collectDeviceDependencies(deviceBoxes, boxGraph)
             const trackContent: Box[] = []
             if (isNotNull(instrument)) {
+                // only an audio unit's instrument owns the timeline, a nested one (a layer's) travels alone
                 getHost().ifSome(host => {
+                    if (!host.isAudioUnit) {return}
                     const tracksField = host.audioUnitBoxAdapter().tracksField
                     for (const pointer of tracksField.pointerHub.filter(Pointers.TrackCollection)) {
                         if (!isInstanceOf(pointer.box, TrackBox)) {continue}
@@ -339,10 +341,12 @@ export namespace DevicesClipboard {
                 editing.modify(() => {
                     selection.deselectAll()
                     if (replaceInstrument && isDefined(selectedInstrument)) {
-                        const tracksField = host.audioUnitBoxAdapter().tracksField
-                        for (const pointer of tracksField.pointerHub.filter(Pointers.TrackCollection)) {
-                            if (isInstanceOf(pointer.box, TrackBox)) {
-                                pointer.box.delete()
+                        if (host.isAudioUnit) {
+                            const tracksField = host.audioUnitBoxAdapter().tracksField
+                            for (const pointer of tracksField.pointerHub.filter(Pointers.TrackCollection)) {
+                                if (isInstanceOf(pointer.box, TrackBox)) {
+                                    pointer.box.delete()
+                                }
                             }
                         }
                         selectedInstrument.box.delete()
@@ -399,7 +403,7 @@ export namespace DevicesClipboard {
                                 // replaceInstrument bail: that case must not smuggle an unattachable effect in.
                                 if (DeviceBoxUtils.isEffectDeviceBox(box)
                                     && DeviceHost.chainFieldOf(host, effectAccepts(box)).isEmpty()) {return true}
-                                if (replaceInstrument) {return false}
+                                if (replaceInstrument) {return !host.isAudioUnit && isTimelineContent(box)}
                                 if (DeviceBoxUtils.isInstrumentDeviceBox(box)) {return true}
                                 // timeline content is bundled for the REPLACE case only: pasted without its track it dangles (#1049, #1128)
                                 return metadata.hasInstrument && isTimelineContent(box)

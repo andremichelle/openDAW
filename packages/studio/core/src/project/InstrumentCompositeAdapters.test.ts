@@ -2,11 +2,14 @@ import {describe, expect, it} from "vitest"
 import {isDefined, Option, Terminable, UUID} from "@opendaw/lib-std"
 import {
     AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, DeviceHost, Devices,
-    InstrumentCompositeBoxAdapter, InstrumentCompositeCellBoxAdapter, InstrumentFactories, ProjectSkeleton
+    InstrumentCompositeBoxAdapter, InstrumentCompositeCellBoxAdapter, InstrumentFactories, ProjectSkeleton, TrackType
 } from "@opendaw/studio-adapters"
 import {
-    AudioEffectCompositeBox, AudioEffectCompositeCellBox, DelayDeviceBox, InstrumentCompositeBox, PitchDeviceBox
+    AudioEffectCompositeBox, AudioEffectCompositeCellBox, AudioUnitBox, DelayDeviceBox, InstrumentCompositeBox,
+    InstrumentCompositeCellBox, NanoDeviceBox, NoteClipBox, NoteEventCollectionBox, PitchDeviceBox, TrackBox
 } from "@opendaw/studio-boxes"
+import {Box} from "@opendaw/lib-box"
+import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
 import type {ProjectEnv} from "./ProjectEnv"
 import type {Project} from "./Project"
 
@@ -35,6 +38,14 @@ const createProject = async (): Promise<Project> => {
     const {Project} = await import("./Project")
     return Project.fromSkeleton(createEnv(), ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
 }
+
+const lane = (project: Project, audioUnitBox: AudioUnitBox, nano: NanoDeviceBox): TrackBox =>
+    TrackBox.create(project.boxGraph, UUID.generate(), box => {
+        box.tracks.refer(audioUnitBox.tracks)
+        box.target.refer(nano.volume)
+        box.type.setValue(TrackType.Value)
+        box.index.setValue(1)
+    })
 
 const firstLayer = (project: Project, composite: InstrumentCompositeBox): InstrumentCompositeCellBoxAdapter =>
     project.boxAdapters.adapterFor(composite, InstrumentCompositeBoxAdapter).cells.adapters()[0]
@@ -192,6 +203,86 @@ describe("Instrument Composite adapters", () => {
         project.editing.modify(() => audioUnitBox.delete())
         await Promise.resolve()
         expect(editing.get().isEmpty()).toBe(true)
+        project.terminate()
+    })
+
+    it("pasting an instrument over a layer's instrument leaves the unit's timeline alone (#390)", async () => {
+        const project = await createProject()
+        const {audioUnitBox, source, target} = project.editing.modify(() => {
+            const {instrumentBox, audioUnitBox} = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
+            const composite = instrumentBox as InstrumentCompositeBox
+            const source = project.api.createCompositeLayer(composite, InstrumentFactories.Vaporisateur).result()
+            const target = project.api.createCompositeLayer(composite, InstrumentFactories.Apparat).result()
+            return {audioUnitBox, source, target}
+        }).unwrap()
+        const trackBox = audioUnitBox.tracks.pointerHub.incoming()
+            .map(pointer => pointer.box).find(box => box instanceof TrackBox) as TrackBox
+        const clip = project.editing.modify(() => {
+            const events = NoteEventCollectionBox.create(project.boxGraph, UUID.generate())
+            return NoteClipBox.create(project.boxGraph, UUID.generate(), box => {
+                box.clips.refer(trackBox.clips)
+                box.events.refer(events.owners)
+                box.duration.setValue(3840)
+            })
+        }).unwrap()
+        const {boxAdapters, deviceSelection} = project
+        const handlerIn = (cellBox: InstrumentCompositeCellBox) => DevicesClipboard.createHandler({
+            getEnabled: () => true,
+            editing: project.editing,
+            selection: deviceSelection,
+            boxGraph: project.boxGraph,
+            boxAdapters,
+            getHost: () => Option.wrap(boxAdapters.adapterFor(cellBox, InstrumentCompositeCellBoxAdapter))
+        })
+        deviceSelection.select(boxAdapters.adapterFor(source.instrumentBox, Devices.isInstrument))
+        const entry = handlerIn(source.cellBox).copy().unwrap("copy")
+        deviceSelection.deselectAll()
+        deviceSelection.select(boxAdapters.adapterFor(target.instrumentBox, Devices.isInstrument))
+        handlerIn(target.cellBox).paste(entry)
+        expect(clip.isAttached(), "the unit's note clip").toBe(true)
+        expect(trackBox.isAttached(), "the unit's note track").toBe(true)
+        const pasted = target.cellBox.instrument.pointerHub.incoming().map(pointer => pointer.box.name)
+        expect(pasted).toStrictEqual(["VaporisateurDeviceBox"])
+        expect(source.instrumentBox.isAttached(), "the copied instrument stays").toBe(true)
+        project.terminate()
+    })
+
+    it("an instrument copied from a plain track pastes into a layer without its timeline (#390)", async () => {
+        const project = await createProject()
+        const {plain, composed, target} = project.editing.modify(() => {
+            const plain = project.api.createAnyInstrument(InstrumentFactories.Nano)
+            lane(project, plain.audioUnitBox, plain.instrumentBox as NanoDeviceBox)
+            const composed = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
+            const target = project.api.createCompositeLayer(composed.instrumentBox as InstrumentCompositeBox, InstrumentFactories.Nano).result()
+            lane(project, composed.audioUnitBox, target.instrumentBox as NanoDeviceBox)
+            return {plain, composed, target}
+        }).unwrap()
+        const tracksOf = (audioUnitBox: AudioUnitBox) => audioUnitBox.tracks.pointerHub.incoming()
+            .map(pointer => pointer.box).filter(box => box instanceof TrackBox)
+        const noteTrack = tracksOf(composed.audioUnitBox).find(track => track.type.getValue() === TrackType.Notes) as TrackBox
+        const clip = project.editing.modify(() => project.api.createNoteClip(noteTrack, 0)).unwrap()
+        expect(tracksOf(composed.audioUnitBox).length, "note track and the Nano's lane").toBe(2)
+        const {boxAdapters, deviceSelection} = project
+        const handlerIn = (box: Box) => DevicesClipboard.createHandler({
+            getEnabled: () => true,
+            editing: project.editing,
+            selection: deviceSelection,
+            boxGraph: project.boxGraph,
+            boxAdapters,
+            getHost: () => Option.wrap(boxAdapters.adapterFor(box, Devices.isHost))
+        })
+        deviceSelection.select(boxAdapters.adapterFor(plain.instrumentBox, Devices.isInstrument))
+        const entry = handlerIn(plain.audioUnitBox).copy().unwrap("copy")
+        deviceSelection.deselectAll()
+        deviceSelection.select(boxAdapters.adapterFor(target.instrumentBox, Devices.isInstrument))
+        handlerIn(target.cellBox).paste(entry)
+        expect(clip.isAttached(), "the unit's note clip").toBe(true)
+        expect(tracksOf(composed.audioUnitBox), "the replaced Nano's lane went with it, nothing came in").toStrictEqual([noteTrack])
+        expect(tracksOf(plain.audioUnitBox).length, "the source keeps its tracks").toBe(2)
+        const hosted = target.cellBox.instrument.pointerHub.incoming().map(pointer => pointer.box)
+        expect(hosted.map(box => box.name)).toStrictEqual(["NanoDeviceBox"])
+        expect(target.instrumentBox.isAttached(), "the old Nano is replaced").toBe(false)
+        expect(plain.instrumentBox.isAttached(), "the copied Nano stays").toBe(true)
         project.terminate()
     })
 
