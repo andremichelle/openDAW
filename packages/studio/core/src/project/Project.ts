@@ -78,6 +78,7 @@ import {ProjectEnv} from "./ProjectEnv"
 import {BoxGraphCopy} from "../BoxGraphCopy"
 import {Mixer} from "../Mixer"
 import {ProjectApi} from "./ProjectApi"
+import {NestedHostExit} from "./NestedHostExit"
 import {ProjectMigration} from "./ProjectMigration"
 import {CaptureDevices, CaptureMidi, Recording, ResolvedNote} from "../capture"
 import {EngineFacade} from "../EngineFacade"
@@ -234,6 +235,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             }
         ))
         this.userEditingManager = new UserEditingManager(this.editing)
+        this.#terminator.own(new NestedHostExit(this.boxAdapters, this.userEditingManager.audioUnit))
         this.midiLearning = this.#terminator.own(new MIDILearning(this))
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
         this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)

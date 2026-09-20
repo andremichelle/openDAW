@@ -1,5 +1,6 @@
 export * from "./audio"
 export * from "./AudioWavExport"
+export * from "./NestedHostExit"
 export * from "./NoteMidiExport"
 export * from "./Project"
 export * from "./ProjectApi"

@@ -112,16 +112,16 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     cell.match({
         none: () => {name.textContent = host.label},
         some: entry => {
-            const rebuildNumbers = () => {
+            const rebuildNumbers = (siblings: ReadonlyArray<CompositeCell>) => {
                 Html.empty(numbers)
-                entry.siblings().forEach(sibling => numbers.appendChild((
+                siblings.forEach(sibling => numbers.appendChild((
                     <div className={Html.buildClassList("entry-number", sibling === entry && "current")}
                          onclick={() => {
                              if (sibling !== entry) {userEditingManager.audioUnit.edit(sibling.box)}
                          }}>{String(sibling.indexField.getValue() + 1)}</div>
                 )))
             }
-            rebuildNumbers()
+            rebuildNumbers(entry.siblings())
             lifecycle.ownAll(
                 entry.subscribeSiblings(rebuildNumbers),
                 entry.compositeDevice().labelField.catchupAndSubscribe(owner => name.textContent = owner.getValue())

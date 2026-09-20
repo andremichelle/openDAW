@@ -138,6 +138,63 @@ describe("Instrument Composite adapters", () => {
         project.terminate()
     })
 
+    it("a deleted layer's sibling observer still reads the remaining layers", async () => {
+        const project = await createProject()
+        const composite = project.editing.modify(() => {
+            const {instrumentBox} = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
+            const composite = instrumentBox as InstrumentCompositeBox
+            project.api.createCompositeLayer(composite, InstrumentFactories.Vaporisateur)
+            project.api.createCompositeLayer(composite, InstrumentFactories.Nano)
+            return composite
+        }).unwrap()
+        const layer = firstLayer(project, composite)
+        const seen: Array<number> = []
+        const subscription = layer.subscribeSiblings(siblings => seen.push(siblings.length))
+        project.editing.modify(() => project.api.deleteCompositeLayer(layer.box))
+        // the removal and the survivor's re-index both notify
+        expect(seen).toStrictEqual([1, 1])
+        subscription.terminate()
+        project.terminate()
+    })
+
+    it("a layer deleted from under the editing pointer leaves to the nearest surviving parent", async () => {
+        const project = await createProject()
+        const {audioUnitBox, outer, inner} = project.editing.modify(() => {
+            const {instrumentBox, audioUnitBox} = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
+            const composite = instrumentBox as InstrumentCompositeBox
+            const outer = project.api.createCompositeLayer(composite, InstrumentFactories.InstrumentComposite).result()
+            project.api.createCompositeLayer(composite, InstrumentFactories.Nano)
+            const inner = project.api.createCompositeLayer(outer.instrumentBox as InstrumentCompositeBox, InstrumentFactories.Vaporisateur).result()
+            return {audioUnitBox, outer: outer.cellBox, inner: inner.cellBox}
+        }).unwrap()
+        const editing = project.userEditingManager.audioUnit
+        const editedBox = () => editing.get().map(vertex => vertex.address.toString()).unwrapOrNull()
+        editing.edit(inner)
+        project.editing.modify(() => project.api.deleteCompositeLayer(inner))
+        await Promise.resolve()
+        expect(editedBox(), "the parent layer").toBe(outer.address.toString())
+        editing.edit(outer)
+        project.editing.modify(() => project.api.deleteCompositeLayer(outer))
+        await Promise.resolve()
+        expect(editedBox(), "the audio unit").toBe(audioUnitBox.editing.address.toString())
+        project.terminate()
+    })
+
+    it("deleting the whole unit from inside a nested layer leaves nothing to edit", async () => {
+        const project = await createProject()
+        const {audioUnitBox, cellBox} = project.editing.modify(() => {
+            const {instrumentBox, audioUnitBox} = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
+            const {cellBox} = project.api.createCompositeLayer(instrumentBox as InstrumentCompositeBox, InstrumentFactories.Nano).result()
+            return {audioUnitBox, cellBox}
+        }).unwrap()
+        const editing = project.userEditingManager.audioUnit
+        editing.edit(cellBox)
+        project.editing.modify(() => audioUnitBox.delete())
+        await Promise.resolve()
+        expect(editing.get().isEmpty()).toBe(true)
+        project.terminate()
+    })
+
     it("a layer can be inserted at a position and moved, the order stays gapless", async () => {
         const project = await createProject()
         const composite = project.editing.modify(() => {

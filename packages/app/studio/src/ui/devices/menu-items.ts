@@ -7,7 +7,7 @@ import {
     InstrumentFactories,
     PresetHeader
 } from "@opendaw/studio-adapters"
-import {DevicesClipboard, EffectFactories, MenuItem} from "@opendaw/studio-core"
+import {DevicesClipboard, EffectFactories, MenuItem, NestedHostExit} from "@opendaw/studio-core"
 import {IndexedBox, PrimitiveField, PrimitiveValues, Vertex} from "@opendaw/lib-box"
 import {Editing, isDefined, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
@@ -76,10 +76,7 @@ export namespace MenuItems {
         }).setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(audioUnit.box))))
     }
 
-    export const backTargetOfCell = (cell: DeviceHost): Vertex<Pointers> => cell.deviceHost().asCompositeCell().match<Vertex<Pointers>>({
-        none: () => cell.audioUnitBoxAdapter().box.editing,
-        some: parent => parent.box
-    })
+    export const backTargetOfCell = (cell: DeviceHost): Vertex<Pointers> => NestedHostExit.targetsOf(cell)[0]
 
     export const createForValue = <V extends PrimitiveValues>(editing: Editing,
                                                               label: string,

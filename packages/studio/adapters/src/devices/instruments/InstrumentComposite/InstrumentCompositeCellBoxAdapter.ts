@@ -1,6 +1,6 @@
 import {Pointers} from "@opendaw/studio-enums"
 import {InstrumentCompositeCellBox} from "@opendaw/studio-boxes"
-import {Exec, Option, StringMapping, Subscription, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {Option, Procedure, StringMapping, Subscription, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Field, Int32Field} from "@opendaw/lib-box"
 import {AudioEffectDeviceAdapter, CompositeCell, DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../../LabeledAudioOutputsOwner"
@@ -70,8 +70,10 @@ export class InstrumentCompositeCellBoxAdapter implements CompositeCell, Indexed
     deviceHost(): DeviceHost {return this.compositeDevice().deviceHost()}
     asCompositeCell(): Option<CompositeCell> {return Option.wrap(this)}
     siblings(): ReadonlyArray<CompositeCell> {return this.compositeDevice().cells.adapters()}
-    subscribeSiblings(observer: Exec): Subscription {
-        return this.compositeDevice().cells.subscribe({onAdd: observer, onRemove: observer, onReorder: observer})
+    subscribeSiblings(observer: Procedure<ReadonlyArray<CompositeCell>>): Subscription {
+        const {cells} = this.compositeDevice()
+        const notify = () => observer(cells.adapters())
+        return cells.subscribe({onAdd: notify, onRemove: notify, onReorder: notify})
     }
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 

@@ -1,5 +1,5 @@
 import {BooleanField, Box, Field, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
-import {Arrays, assert, AssertType, Exec, int, Option, panic, Subscription, UUID} from "@opendaw/lib-std"
+import {Arrays, assert, AssertType, int, Option, panic, Procedure, Subscription, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
 import {TrackType} from "./timeline/TrackType"
 import {IndexedBoxAdapterCollection} from "./IndexedBoxAdapterCollection"
@@ -97,7 +97,7 @@ export interface CompositeCell extends DeviceHost {
 
     compositeDevice(): DeviceBoxAdapter
     siblings(): ReadonlyArray<CompositeCell>
-    subscribeSiblings(observer: Exec): Subscription
+    subscribeSiblings(observer: Procedure<ReadonlyArray<CompositeCell>>): Subscription
 }
 
 export namespace DeviceHost {
