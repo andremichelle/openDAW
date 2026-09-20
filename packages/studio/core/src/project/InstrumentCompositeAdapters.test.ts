@@ -290,7 +290,7 @@ describe("Instrument Composite adapters", () => {
             return {composite}
         }).unwrap()
         const outputs = Array.from(project.boxAdapters.adapterFor(composite, InstrumentCompositeBoxAdapter).labeledAudioOutputs())
-        expect(outputs.map(output => output.label)).toStrictEqual(["Instrument Composite", "Bass"])
+        expect(outputs.map(output => output.label)).toStrictEqual(["Composite", "Bass"])
         const children = Array.from(outputs[1].children().unwrap("layer children"))
         expect(children.map(output => output.label), "the layer goes by its instrument").toContain("Bass")
         project.terminate()

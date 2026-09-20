@@ -1,12 +1,16 @@
-# Instrument Composite
+# Composite
 
 Plays several instruments at once from the same notes. Each instrument lives in its own layer with its own effects, volume and panning.
 
 ---
 
+![screenshot](composite.webp)
+
+---
+
 ## 0. Overview
 
-_Instrument Composite_ is an instrument that holds other instruments. Every note the track plays reaches every **layer** at the same time, each layer turns it into sound with its own instrument and its own effect chains, and the layers are summed into the track's channel strip.
+_Composite_ is an instrument that holds other instruments. Every note the track plays reaches every **layer** at the same time, each layer turns it into sound with its own instrument and its own effect chains, and the layers are summed into the track's channel strip.
 
 A layer is a small track inside the track. It has MIDI effects, one instrument, audio effects, and a strip with gain, pan, mute and solo.
 
@@ -15,9 +19,9 @@ Example uses:
 - Stack a pad, a pluck and a sub under one set of notes
 - Give each part of a sound its own reverb, delay or distortion
 - Put an arpeggiator on one layer only, while another layer holds the chord
-- Layer a Playfield kit under a synth, or nest a second Instrument Composite inside a layer
+- Layer a Playfield kit under a synth, or nest a second Composite inside a layer
 
-A new Instrument Composite has no layers and makes no sound until you add one.
+A new Composite has no layers and makes no sound until you add one.
 
 ---
 
@@ -31,7 +35,7 @@ The layer's position in the list. The layers play in parallel, so reordering the
 
 **Icons**
 
-The layer's instrument first, then its audio effects in chain order.
+The layer's whole chain in order: MIDI effects in orange, the instrument in green, audio effects in blue.
 
 **Peak meter**
 
@@ -73,7 +77,7 @@ Gain, pan, mute and solo can be automated. Their lanes appear with the track's o
 
 The **Add Layer** button below the list opens a menu of instruments. Picking one creates a new layer that plays it.
 
-Every instrument that plays notes can be a layer, including Playfield and another Instrument Composite. Tape and MIDI Output cannot, because they are wired to the track itself.
+Every instrument that plays notes can be a layer, including Playfield and another Composite. Tape and MIDI Output cannot, because they are wired to the track itself.
 
 ---
 

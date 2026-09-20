@@ -247,7 +247,7 @@ export namespace InstrumentFactories {
     }
 
     export const InstrumentComposite: InstrumentFactory<void, InstrumentCompositeBox> = {
-        defaultName: "Instrument Composite",
+        defaultName: "Composite",
         defaultIcon: IconSymbol.Stack,
         briefDescription: "Layered instruments",
         description: "Plays several instruments at once, each layer with its own effects, volume and panning",
