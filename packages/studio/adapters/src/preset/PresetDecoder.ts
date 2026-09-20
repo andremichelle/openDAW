@@ -9,6 +9,7 @@ import {
     isDefined,
     isInstanceOf,
     Option,
+    Optional,
     RuntimeNotifier,
     tryCatch,
     UUID
@@ -23,6 +24,7 @@ import {
     BoxVisitor,
     CaptureAudioBox,
     CaptureMidiBox,
+    InstrumentCompositeCellBox,
     SoundfontFileBox,
     TrackBox
 } from "@opendaw/studio-boxes"
@@ -31,6 +33,8 @@ import {TransferUtils} from "../transfer"
 import {PresetHeader} from "./PresetHeader"
 import {TrackType} from "../timeline/TrackType"
 import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
+import {InstrumentFactories} from "../factories/InstrumentFactories"
+import {InstrumentFactory} from "../factories/InstrumentFactory"
 
 export namespace PresetDecoder {
     export const decode = (bytes: ArrayBufferLike, target: ProjectSkeleton): ReadonlyArray<AudioUnitBox> => {
@@ -332,6 +336,90 @@ export namespace PresetDecoder {
                 })
             })
             dependencies.forEach(source => {
+                if (existingKeptUuids.hasKey(source.address.uuid)) {return}
+                const input = new ByteArrayInput(source.toArrayBuffer())
+                const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
+                targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
+            })
+        })
+        return Attempts.Ok
+    }
+
+    // Replaces the instrument a LAYER of an Instrument Composite hosts with the preset's instrument. The layer,
+    // its strip and its effect chains stay, the preset's own unit, effects and timeline do not travel.
+    export const replaceLayerInstrument = (bytes: ArrayBufferLike, cellBox: InstrumentCompositeCellBox): Attempt<void, string> => {
+        if (bytes.byteLength < 8) {return Attempts.err("Invalid preset header")}
+        const headerInput = new ByteArrayInput(bytes.slice(0, 8))
+        if (headerInput.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {
+            return Attempts.err("Invalid preset header")
+        }
+        const version = headerInput.readInt()
+        if (version !== PresetHeader.FORMAT_VERSION) {
+            return Attempts.err(
+                `Unsupported preset version ${version} (this build supports ${PresetHeader.FORMAT_VERSION}).`)
+        }
+        const sourceGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+        const loaded = tryCatch(() => sourceGraph.fromArrayBuffer(bytes.slice(8), false))
+        if (loaded.status === "failure") {
+            return Attempts.err(`Failed to decode preset: ${String(loaded.error)}`)
+        }
+        const sourceAudioUnit = sourceGraph.boxes()
+            .filter(box => isInstanceOf(box, AudioUnitBox))
+            .map(box => asInstanceOf(box, AudioUnitBox))
+            .find(box => box.type.getValue() !== AudioUnitType.Output)
+        if (isAbsent(sourceAudioUnit)) {
+            return Attempts.err("Preset contains no audio unit")
+        }
+        const instrument = sourceAudioUnit.input.pointerHub.incoming().at(0)?.box
+        if (isAbsent(instrument) || instrument.tags.deviceType !== "instrument") {
+            return Attempts.err("Preset contains no instrument")
+        }
+        const factoryKey = instrument.name.replace(/DeviceBox$/, "").replace(/Box$/, "")
+        const factory: Optional<InstrumentFactory> = (InstrumentFactories.Named as Record<string, InstrumentFactory>)[factoryKey]
+        if (!isDefined(factory) || !InstrumentFactories.isLayerInstrument(factory)) {
+            return Attempts.err(`${factoryKey} cannot be used as a layer`)
+        }
+        const targetGraph = cellBox.graph
+        const targetFieldAddress = cellBox.instrument.address
+        const excludeBox = (box: Box): boolean =>
+            TransferUtils.shouldExclude(box)
+            || TransferUtils.excludeTimelinePredicate(box)
+            || box instanceof AudioUnitBox
+        const dependencies = TransferUtils.withModulators(Array.from(sourceGraph.dependenciesOf([instrument], {
+            alwaysFollowMandatory: true,
+            stopAtResources: true,
+            excludeBox
+        }).boxes).filter(box => box !== instrument))
+        const existingKeptUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
+        dependencies.forEach(source => {
+            if (TransferUtils.keepsIdentity(source) && targetGraph.findBox(source.address.uuid).nonEmpty()) {
+                existingKeptUuids.add(source.address.uuid)
+            }
+        })
+        const uuidMap = UUID.newSet<TransferUtils.UUIDMapper>(({source}) => source)
+        uuidMap.addMany([
+            {source: instrument.address.uuid, target: UUID.generate()},
+            ...dependencies.map(box => ({
+                source: box.address.uuid,
+                target: TransferUtils.keepsIdentity(box) ? box.address.uuid : UUID.generate()
+            }))
+        ])
+        cellBox.instrument.pointerHub.incoming().forEach(({box}) => box.delete())
+        PointerField.decodeWith({
+            map: (pointer: PointerField, address: Option<Address>): Option<Address> => {
+                const internal = address.flatMap(addr =>
+                    uuidMap.opt(addr.uuid).map(({target}) => addr.moveTo(target)))
+                if (internal.nonEmpty()) {return internal}
+                if (pointer.pointerType === Pointers.InstrumentHost) {
+                    return Option.wrap(targetFieldAddress)
+                }
+                return address.flatMap(addr =>
+                    targetGraph.findBox(addr.uuid).nonEmpty()
+                        ? Option.wrap(addr)
+                        : TransferUtils.mapModulatorCollection(pointer, targetGraph))
+            }
+        }, () => {
+            [instrument, ...dependencies].forEach(source => {
                 if (existingKeptUuids.hasKey(source.address.uuid)) {return}
                 const input = new ByteArrayInput(source.toArrayBuffer())
                 const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target

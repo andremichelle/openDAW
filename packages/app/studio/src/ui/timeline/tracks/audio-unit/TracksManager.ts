@@ -18,12 +18,11 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {
-    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, AudioUnitInputAdapter, BoxAdapters,
-    DeviceBoxAdapter, DeviceHost, Devices, IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection,
-    InstrumentCompositeBoxAdapter, InstrumentCompositeCellBoxAdapter, ModulatorBoxAdapter, PlayfieldDeviceBoxAdapter,
-    PlayfieldSampleBoxAdapter, TrackBoxAdapter, TrackType
+    AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter, AudioUnitBoxAdapter, AudioUnitInputAdapter,
+    IndexComparator, IndexedBoxAdapter, IndexedBoxAdapterCollection, InstrumentCompositeBoxAdapter,
+    InstrumentCompositeCellBoxAdapter, ModulatorBoxAdapter, PlayfieldDeviceBoxAdapter, PlayfieldSampleBoxAdapter,
+    TrackBoxAdapter, TrackType
 } from "@opendaw/studio-adapters"
-import {Box} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {StudioPreferences} from "@opendaw/studio-core"
 import {RegionModifier} from "@/ui/timeline/tracks/audio-unit/regions/RegionModifier.ts"
@@ -32,89 +31,10 @@ import {AudioUnitTracks} from "@/ui/timeline/tracks/audio-unit/AudioUnitTracks.t
 import {ClipModifier} from "./clips/ClipModifier"
 import {Dragging} from "@opendaw/lib-dom"
 import {ExtraSpace} from "@/ui/timeline/tracks/audio-unit/Constants"
+import {TrackOrder} from "@/ui/timeline/tracks/audio-unit/TrackOrder"
 import {UnitLane} from "@/ui/timeline/tracks/audio-unit/UnitLane.tsx"
 import {ModulatorLanes} from "@/ui/timeline/tracks/audio-unit/ModulatorLanes.tsx"
 import {ModulatorsLane} from "@/ui/timeline/tracks/audio-unit/ModulatorsLane.tsx"
-
-// Group order within a unit (mirrors the device panel): instrument tracks, midi-fx automation, instrument
-// automation, audio-fx automation. `path` is the device's index chain from the unit's chain down through
-// nested composites (composite index, cell/slot index, inner device index, ...), compared lexicographically,
-// so one device's automation stays together and nested devices sort right after their composite.
-type TrackOrderKey = {category: int, path: ReadonlyArray<int>}
-
-const InstrumentTracks: TrackOrderKey = {category: 0, path: Arrays.empty()}
-const Unresolved: TrackOrderKey = {category: 9, path: Arrays.empty()}
-
-// A composite's nested chain host (FX Composite cell, Playfield slot) with its branch index and owning device.
-const nestedHost = (host: DeviceHost): Option<{parent: DeviceBoxAdapter, index: int}> =>
-    host.asCompositeCell().match<Option<{parent: DeviceBoxAdapter, index: int}>>({
-        some: cell => Option.wrap({parent: cell.compositeDevice(), index: cell.indexField.getValue()}),
-        none: () => host instanceof PlayfieldSampleBoxAdapter
-            ? Option.wrap({parent: host.device(), index: host.indexField.getValue()})
-            : Option.None
-    })
-
-// Inside an instrument LAYER the three device kinds share one host, so they rank like on an audio unit.
-const kindRank = (adapter: DeviceBoxAdapter): int =>
-    Devices.isMidiEffect(adapter) ? 1 : Devices.isInstrument(adapter) ? 2 : Devices.isAudioEffect(adapter) ? 3 : 9
-
-const deviceOrderKey = (adapter: DeviceBoxAdapter): TrackOrderKey => {
-    const ownIndex = Devices.isEffect(adapter) ? adapter.indexField.getValue() : 0
-    const host = adapter.deviceHost()
-    if (host.isAudioUnit) {
-        const category = Devices.isMidiEffect(adapter) ? 1
-            : Devices.isInstrument(adapter) ? 2
-                : Devices.isAudioEffect(adapter) ? 3 : 9
-        return {category, path: [ownIndex]}
-    }
-    return nestedHost(host).match({
-        none: () => ({category: 9, path: [ownIndex]}),
-        some: ({parent, index}) => {
-            const outer = deviceOrderKey(parent)
-            return host instanceof InstrumentCompositeCellBoxAdapter
-                ? {category: outer.category, path: [...outer.path, index, kindRank(adapter), ownIndex]}
-                : {category: outer.category, path: [...outer.path, index, ownIndex]}
-        }
-    })
-}
-
-// An indirectly targeted parameter (modular) reaches its device through a Parameter edge
-// (mirrors TrackBoxAdapter#resolveOwnerDeviceBox).
-const ownerDeviceBox = (box: Box): Option<Box> => {
-    for (const [pointer] of box.outgoingEdges()) {
-        if (pointer.pointerType === Pointers.Parameter) {
-            return pointer.targetVertex.map(vertex => vertex.box)
-        }
-    }
-    return Option.None
-}
-
-const trackOrderKey = (boxAdapters: BoxAdapters, adapter: TrackBoxAdapter): TrackOrderKey => {
-    if (adapter.type !== TrackType.Value) {return InstrumentTracks}
-    return adapter.target.targetVertex.match({
-        none: () => Unresolved,
-        some: targetVertex => {
-            const box = targetVertex.box
-            const direct = boxAdapters.optAdapter(box).flatMap(deviceAdapter =>
-                Devices.isAny(deviceAdapter) ? Option.wrap(deviceAdapter) : Option.None)
-            const resolved = direct.nonEmpty()
-                ? direct
-                : ownerDeviceBox(box)
-                    .flatMap(owner => boxAdapters.optAdapter(owner))
-                    .flatMap(deviceAdapter =>
-                        Devices.isAny(deviceAdapter) ? Option.wrap(deviceAdapter) : Option.None)
-            return resolved.mapOr(deviceOrderKey, Unresolved)
-        }
-    })
-}
-
-const comparePaths = (a: ReadonlyArray<int>, b: ReadonlyArray<int>): int => {
-    const shared = Math.min(a.length, b.length)
-    for (let level = 0; level < shared; level++) {
-        if (a[level] !== b[level]) {return a[level] - b[level]}
-    }
-    return a.length - b.length
-}
 
 export interface TrackFactory {
     create(manager: TracksManager,
@@ -612,11 +532,9 @@ export class TracksManager implements Terminable {
                         b.trackBoxAdapter.indexField.getValue())
                 }
                 const boxAdapters = this.#service.project.boxAdapters
-                const keyA = trackOrderKey(boxAdapters, a.trackBoxAdapter)
-                const keyB = trackOrderKey(boxAdapters, b.trackBoxAdapter)
-                if (keyA.category !== keyB.category) {return keyA.category - keyB.category}
-                const pathDiff = comparePaths(keyA.path, keyB.path)
-                if (pathDiff !== 0) {return pathDiff}
+                const orderDiff = TrackOrder.compare(
+                    TrackOrder.keyOf(boxAdapters, a.trackBoxAdapter), TrackOrder.keyOf(boxAdapters, b.trackBoxAdapter))
+                if (orderDiff !== 0) {return orderDiff}
                 return IndexComparator(a.trackBoxAdapter.indexField.getValue(), b.trackBoxAdapter.indexField.getValue())
             })
     }

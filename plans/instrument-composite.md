@@ -373,8 +373,53 @@ as done on a manual check alone. The browser checkpoint in phase 3 is additional
   tool cannot start a native drag): reorder, Delay onto a layer, Neon onto a top edge, Cubed onto a middle,
   Tape refused, Nano onto the footer, no console errors. NOT checked: an EXISTING effect dragged out of a
   chain onto a layer, a real mouse drag.
-- Still open in phase 3: the rows' own styling, a vitest for the timeline order key, sound / mute / solo /
-  nesting in the browser.
+- Drag and drop COMMITTED (`cd162d36a`, not pushed).
+- Phase 3 rest (2026-09-19), uncommitted: the lane ordering moved out of `TracksManager.ts` into the pure
+  `TrackOrder.ts` (`keyOf`, `compare`) with `TrackOrder.test.ts`: notes, unit midi fx, then per layer its
+  STRIP, midi fx, synth, audio fx, then the unit's audio fx. New: a layer's strip automation (gain / pan /
+  mute / solo) sorts at the head of its layer, it was "unresolved" at the very end. FX entry strips are
+  unchanged (still unresolved, existing behaviour).
+- NOT DONE, needs the user at the studio: sound, mute / solo and nesting by ear. The automated browser check
+  was inconclusive: the software keyboard (cmd+K) opened and showed the key held, but no meter moved, and the
+  automation tab is known to freeze meters. Row styling was left as the FX entry's (a layer row shows icons,
+  no name, the name is in the tooltip and in the entered layer's cell).
+
+- User test 2026-09-19: two layers SOUND. Two reports:
+  - No peak meter on the composite and on the layer rows (an effect's meter worked). Cause: nothing was
+    registered at those addresses. Fixed for CELL composites: the sum's meter at the composite's bare address,
+    each layer strip's meter at the cell's bare address (`composite.rs`). A Playfield gets neither, its bare
+    slot address carries the voice positions. Wasm test in `instrument-composite-layer-strip.test.ts`.
+  - "With an arpeggio the instrument gets no notes, Pitch works." NOT reproduced as a composite defect. New
+    wasm tests, all equal to a plain unit's arp (31 steps): an arp inside a layer's own midi chain, LIVE notes
+    with an arp in front of and inside the layers, an arp ADDED to running layers (16 = 16). The one silent
+    case is a STOPPED transport: the song position is frozen, the arp steps on the position grid, so it emits
+    nothing, on a plain unit as well. User confirmed: transport stopped, and it is a bug in prod too.
+    ROOT CAUSE (not composite related, fix NOT applied): `device-arpeggio` `process` gates its whole step loop
+    on `transporting` (`lib.rs:262`), pinned by its own test `not_transporting_emits_nothing`. The port misread
+    TS: `onlyExternal = !transporting` there means "arpeggiate only the EXTERNAL (live) notes", not "emit
+    nothing" (`ArpeggioDeviceProcessor.processNotes`, removed in `bcc5adbaa`). The engine's paused block keeps
+    a free-running position (`transport.render_paused`), so the grid moves. While stopped the sequencer emits
+    raw notes only and releases the sequenced ones, so dropping the gate leaves exactly the live notes in the
+    arp's source. One remaining difference to TS: an arp BEHIND another arp would also step while stopped.
+    FIXED 2026-09-20: the `transporting` gate is gone, the pinning test became
+    `a_stopped_transport_arpeggiates_the_held_live_notes`. Wasm: a held key on a stopped transport gives 31
+    steps on a plain unit, with the arp in front of the layers and inside them, and a transport stop still
+    silences an arp that stepped sequenced notes (0 late steps).
+
+- User test 2026-09-20: mute and solo WORK by ear. Report: loading a preset into a Neon inside a layer
+  replaced the ENTIRE composite. Cause: both preset paths (`PresetService.applyPresetTo` = the device header
+  pager / browser, `DevicePanelDragAndDrop.handlePresetDrop`) resolve `host.audioUnitBoxAdapter().box` and call
+  `PresetDecoder.replaceAudioUnit`, which swaps the UNIT's instrument. Fixed, uncommitted:
+  - `PresetDecoder.replaceLayerInstrument(bytes, cellBox)`: only the layer's instrument is replaced, the layer's
+    name, strip and effects stay, the preset's unit, its effects and its timeline do not travel, Tape / MIDI
+    Output presets are refused without touching the layer, an emptied layer is filled. 4 tests in
+    `PresetDecoder.replaceLayerInstrument.test.ts`.
+  - Both call sites use it when the host is a layer. A rack (audio-unit) preset is refused inside a layer.
+  - The preset pager cursor was keyed by audio unit + device type, so every layer synth of one unit shared
+    one cursor. A layer now keys by its own box.
+  - SAVING an instrument or rack preset from inside a layer would have encoded the whole composite under the
+    layer synth's name. All save paths go through `PresetService.#audioUnitBoxForInstrumentUuid`, which now
+    refuses with a notice. Encoding a single layer instrument is phase 4.
 
 ## Phases (each gated on green tests)
 

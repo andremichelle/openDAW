@@ -204,6 +204,21 @@ export namespace DevicePanelDragAndDrop {
             RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
             return
         }
+        if (host instanceof InstrumentCompositeCellBoxAdapter
+            && (dragData.category === "audio-unit" || dragData.category === "instrument")) {
+            if (dragData.category === "audio-unit") {
+                RuntimeNotifier.notify({message: "A rack preset cannot be loaded into a layer.", icon: "Warning"})
+                return
+            }
+            project.editing.modify(() => {
+                const attempt = PresetDecoder.replaceLayerInstrument(load.value, host.box)
+                if (attempt.isFailure()) {
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
+                }
+            })
+            project.loadScriptDevices()
+            return
+        }
         if (dragData.category === "audio-unit") {
             const keepTimeline = await resolveKeepTimeline(load.value, targetAudioUnit)
             if (keepTimeline === "abort") {return}

@@ -380,6 +380,12 @@ impl Engine {
         // (e.g. a Playfield clap track) taps its mix — pre the owning unit's fx + strip + mute. Mirrors TS
         // `MixProcessor` registering `device.adapter.address -> output`.
         self.output_registry.register(Address::of(composite_uuid, vec![]), sum_buffer.clone(), sum_id);
+        // A CELL composite's editor meters its sum and every layer at their BARE addresses. A Playfield keeps
+        // its bare addresses for its own telemetry (a slot's voice positions), so it gets none of these.
+        if spec.cell_instrument_field != 0 {
+            let sum_meter = sum.borrow_mut().meter_slot(self.sample_rate);
+            self.broadcasts.register(composite_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &sum_meter);
+        }
         let mut binding = CompositeBinding {spec: spec.clone(), composite_uuid, children, sum, sum_id, sum_buffer, members: Vec::new(), unit_midi_members, unit_midi, pending: Vec::new()};
         self.reconcile_composite_children(&mut binding, track_sets, signal, invalidate);
         binding
@@ -762,6 +768,10 @@ impl Engine {
         let strip = Rc::new(RefCell::new(ChannelStripProcessor::new(params.clone(), automation.clone(), self.sample_rate)));
         strip.borrow_mut().set_audio_source(source.clone());
         let output = strip.borrow().audio_output();
+        if spec.cell_instrument_field != 0 {
+            let layer_meter = strip.borrow().meter_slot();
+            self.broadcasts.register(child_uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &layer_meter);
+        }
         let strip_id = self.context.register_processor(strip.clone());
         self.context.set_label(strip_id, alloc::string::String::from("slot-strip"));
         self.context.register_edge(source_node, strip_id);

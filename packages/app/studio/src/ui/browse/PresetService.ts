@@ -16,7 +16,7 @@ import {
 import {Promises} from "@opendaw/lib-runtime"
 import {Files} from "@opendaw/lib-dom"
 import {Box, IndexedBox} from "@opendaw/lib-box"
-import {DeviceBoxAdapter, DeviceBoxUtils, DeviceHost, Devices, EffectDeviceBoxAdapter, InstrumentFactories, PresetDecoder, PresetEncoder, PresetHeader} from "@opendaw/studio-adapters"
+import {DeviceBoxAdapter, DeviceBoxUtils, DeviceHost, Devices, EffectDeviceBoxAdapter, InstrumentCompositeCellBoxAdapter, InstrumentFactories, PresetDecoder, PresetEncoder, PresetHeader} from "@opendaw/studio-adapters"
 import {
     AudioEffectChainPresetMeta,
     AudioEffectPresetMeta,
@@ -66,8 +66,10 @@ export const deviceKeyOf = (entry: PresetMeta): string => {
 // (replaceAudioUnit / delete + insertEffectChain assign new box UUIDs but
 // keep the same slot).
 const cursorKeyFor = (adapter: DeviceBoxAdapter): string => {
-    const audioUnit = adapter.deviceHost().audioUnitBoxAdapter().box
-    const auKey = UUID.toString(audioUnit.address.uuid)
+    // A LAYER is its own slot: every layer of one unit hosts an instrument, they must not share a cursor.
+    const host = adapter.deviceHost()
+    const owner = host instanceof InstrumentCompositeCellBoxAdapter ? host.box : host.audioUnitBoxAdapter().box
+    const auKey = UUID.toString(owner.address.uuid)
     if (Devices.isEffect(adapter)) {
         return `${auKey}:${adapter.type}:${adapter.indexField.getValue()}`
     }
@@ -185,8 +187,25 @@ export class PresetService {
             return
         }
         const bytes = loaded.value
-        const audioUnitBox = adapter.deviceHost().audioUnitBoxAdapter().box
+        const host = adapter.deviceHost()
+        const audioUnitBox = host.audioUnitBoxAdapter().box
         const cursorKey = cursorKeyFor(adapter)
+        // Inside a LAYER only that layer's instrument is replaced, a whole-unit (rack) preset has no place there.
+        if (host instanceof InstrumentCompositeCellBoxAdapter && entry.category === "audio-unit") {
+            RuntimeNotifier.notify({message: "A rack preset cannot be loaded into a layer.", icon: "Warning"})
+            return
+        }
+        if (host instanceof InstrumentCompositeCellBoxAdapter && entry.category === "instrument") {
+            this.project.editing.modify(() => {
+                const attempt = PresetDecoder.replaceLayerInstrument(bytes, host.box)
+                if (attempt.isFailure()) {
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
+                }
+            })
+            this.project.loadScriptDevices()
+            this.#cursors.set(cursorKey, identityOf(entry))
+            return
+        }
         if (entry.category === "instrument") {
             this.project.editing.modify(() => {
                 const attempt = PresetDecoder.replaceAudioUnit(bytes, audioUnitBox, {
@@ -803,7 +822,14 @@ export class PresetService {
         if (boxOpt.isEmpty()) {return null}
         const box = boxOpt.unwrap()
         const adapter = this.project.boxAdapters.adapterFor(box, Devices.isAny)
-        return adapter.deviceHost().audioUnitBoxAdapter().box
+        const host = adapter.deviceHost()
+        // An instrument preset encodes its AUDIO UNIT. From inside a layer that is the whole composite, saved
+        // under the layer synth's name, so it is refused until a single layer instrument can be encoded.
+        if (!host.isAudioUnit) {
+            RuntimeNotifier.notify({message: "Saving a preset from inside a layer is not supported yet.", icon: "Warning"})
+            return null
+        }
+        return host.audioUnitBoxAdapter().box
     }
 
     async activatePreset(entry: PresetEntry): Promise<void> {

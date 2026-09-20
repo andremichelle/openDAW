@@ -28,7 +28,7 @@ const LEFT = code(0.3, 0.0)
 const RIGHT = code(0.0, 0.3)
 const BOTH = code(0.3, 0.3)
 
-type Steps = { left: number, right: number, peakLeft: number, peakRight: number }
+type Steps = { left: number, right: number, peakLeft: number, peakRight: number, lateLeft: number }
 
 const createApparat = (graph: BoxGraph<BoxIO.TypeMap>, host: AudioUnitBox["input"] | InstrumentCompositeCellBox["instrument"],
                        source: string): void => {
@@ -41,7 +41,9 @@ const createApparat = (graph: BoxGraph<BoxIO.TypeMap>, host: AudioUnitBox["input
         UUID.toString(apparat.address.uuid), 1, source))()
 }
 
-const countSteps = async (layers: ReadonlyArray<string>, arp: boolean = true, automatedRate?: number): Promise<Steps> => {
+const countSteps = async (layers: ReadonlyArray<string>, arp: boolean = true, automatedRate?: number,
+                          layerArp: boolean = false, live: boolean | "stopped" = false, lateArp: boolean = false): Promise<Steps> => {
+    const cells: Array<InstrumentCompositeCellBox> = []
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
         ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
     source.beginTransaction()
@@ -60,6 +62,14 @@ const countSteps = async (layers: ReadonlyArray<string>, arp: boolean = true, au
                 box.index.setValue(index)
             })
             createApparat(source, cell.instrument, layer)
+            cells.push(cell)
+            if (layerArp) {
+                ArpeggioDeviceBox.create(source, UUID.generate(), box => {
+                    box.host.refer(cell.midiEffects)
+                    box.rateIndex.setValue(9)
+                    box.gate.setValue(0.5)
+                })
+            }
         })
     }
     if (arp) {
@@ -102,11 +112,15 @@ const countSteps = async (layers: ReadonlyArray<string>, arp: boolean = true, au
         box.tracks.refer(unit.tracks)
     })
     const events = NoteEventCollectionBox.create(source, UUID.generate())
-    for (const pitch of [60, 64, 67]) {
+    // A late arp only sees notes that START after it joined, so that case plays one long note per bar.
+    const notes = live !== false ? [] : lateArp
+        ? Array.from({length: 8}, (_, bar) => ({position: bar * 3840, duration: 3600, pitch: 60}))
+        : [60, 64, 67].map(pitch => ({position: 0, duration: 200_000, pitch}))
+    for (const {position, duration, pitch} of notes) {
         NoteEventBox.create(source, UUID.generate(), box => {
             box.events.refer(events.events)
-            box.position.setValue(0)
-            box.duration.setValue(200_000)
+            box.position.setValue(position)
+            box.duration.setValue(duration)
             box.pitch.setValue(pitch)
             box.velocity.setValue(0.8)
             box.cent.setValue(0)
@@ -127,10 +141,33 @@ const countSteps = async (layers: ReadonlyArray<string>, arp: boolean = true, au
     const len = engine.output_len() >>> 0
     const half = len >>> 1
     const QUANTA = Math.ceil(4 * 48000 / half)
-    engine.stop(); engine.play()
+    engine.stop()
+    if (live !== "stopped") {engine.play()}
+    if (live !== false) {
+        // LIVE keys: the unit's uuid goes through the input scratch, like the worklet does.
+        for (const pitch of [60, 64, 67]) {
+            new Uint8Array(memory.buffer, engine.input_reserve(16), 16).set(unit.address.uuid)
+            engine.note_signal_on(pitch, 0.8)
+        }
+    }
+    if (lateArp) {
+        // The studio flow: the layers already run, THEN the arp is dropped into each layer's midi chain.
+        for (let quantum = 0; quantum < 50; quantum++) {engine.render()}
+        source.beginTransaction()
+        const hosts = cells.length === 0 ? [unit.midiEffects] : cells.map(cell => cell.midiEffects)
+        hosts.forEach(host => ArpeggioDeviceBox.create(source, UUID.generate(), box => {
+            box.host.refer(host)
+            box.index.setValue(0)
+            box.rateIndex.setValue(9)
+            box.gate.setValue(0.5)
+        }))
+        source.endTransaction()
+        await sync.settle()
+    }
     const left = new Float32Array(QUANTA * half)
     const right = new Float32Array(QUANTA * half)
     for (let quantum = 0; quantum < QUANTA; quantum++) {
+        if (process.env.ARP_STOP_HALFWAY === "1" && quantum === QUANTA >>> 1) {engine.stop()}
         engine.render()
         const enginePtr = engine.output_ptr()
         left.set(new Float32Array(memory.buffer, enginePtr, half), quantum * half)
@@ -144,7 +181,8 @@ const countSteps = async (layers: ReadonlyArray<string>, arp: boolean = true, au
         return steps
     }
     const peak = (channel: Float32Array): number => channel.reduce((max, value) => Math.max(max, Math.abs(value)), 0)
-    return {left: edges(left), right: edges(right), peakLeft: peak(left), peakRight: peak(right)}
+    const lateLeft = edges(left.subarray((left.length >>> 1) + 4800))
+    return {left: edges(left), right: edges(right), peakLeft: peak(left), peakRight: peak(right), lateLeft}
 }
 
 describe("instrument composite behind a unit-level arp", () => {
@@ -171,6 +209,53 @@ describe("instrument composite behind a unit-level arp", () => {
         expect(bare.left).toBeGreaterThan(2)
         expect(layered.left).toBe(bare.left)
         expect(layered.right).toBe(bare.right)
+    }, 60000)
+
+    it("an arp inside a layer's OWN midi chain steps like the bare unit's arp", async () => {
+        const bare = await countSteps([], true)
+        const layered = await countSteps([LEFT, RIGHT], false, undefined, true)
+        console.log(`bare=${bare.left} layer arps=${layered.left}/${layered.right} peaks=${layered.peakLeft}/${layered.peakRight}`)
+        expect(layered.left).toBe(bare.left)
+        expect(layered.right).toBe(bare.right)
+    }, 60000)
+
+    it("an arp ADDED to running layers takes over their notes", async () => {
+        const bare = await countSteps([], false, undefined, false, false, true)
+        const late = await countSteps([LEFT, RIGHT], false, undefined, false, false, true)
+        console.log(`late arp bare=${bare.left} layers=${late.left}/${late.right}`)
+        expect(bare.left).toBeGreaterThan(10)
+        expect([late.left, late.right]).toStrictEqual([bare.left, bare.right])
+    }, 60000)
+
+    it("stopping the transport silences an arp that was stepping SEQUENCED notes", async () => {
+        process.env.ARP_STOP_HALFWAY = "1"
+        const bare = await countSteps([], true)
+        const layered = await countSteps([LEFT, RIGHT], true)
+        delete process.env.ARP_STOP_HALFWAY
+        console.log(`stop halfway bare=${bare.left} late=${bare.lateLeft} layered late=${layered.lateLeft}`)
+        expect(bare.left).toBeGreaterThan(10)
+        expect(bare.lateLeft, "no step once the sequenced notes were released by the stop").toBe(0)
+        expect(layered.lateLeft).toBe(0)
+    }, 60000)
+
+    it("LIVE notes on a STOPPED transport are arpeggiated, plain unit and layers alike", async () => {
+        const bare = await countSteps([], true, undefined, false, "stopped")
+        const unitArp = await countSteps([LEFT, RIGHT], true, undefined, false, "stopped")
+        const layerArp = await countSteps([LEFT, RIGHT], false, undefined, true, "stopped")
+        console.log(`stopped bare=${bare.left} unitArp=${unitArp.left}/${unitArp.right} layerArp=${layerArp.left}/${layerArp.right}`)
+        expect(bare.left, "a held key steps on the free-running grid").toBeGreaterThan(20)
+        expect([unitArp.left, unitArp.right]).toStrictEqual([bare.left, bare.right])
+        expect([layerArp.left, layerArp.right]).toStrictEqual([bare.left, bare.right])
+    }, 60000)
+
+    it("LIVE notes while playing: an arp in front of or inside the layers steps like the bare unit's arp", async () => {
+        const bare = await countSteps([], true, undefined, false, true)
+        const unitArp = await countSteps([LEFT, RIGHT], true, undefined, false, true)
+        const layerArp = await countSteps([LEFT, RIGHT], false, undefined, true, true)
+        console.log(`live bare=${bare.left}/${bare.peakLeft} unitArp=${unitArp.left}/${unitArp.right} layerArp=${layerArp.left}/${layerArp.right} peaks=${layerArp.peakLeft}`)
+        expect(bare.left).toBeGreaterThan(20)
+        expect([unitArp.left, unitArp.right]).toStrictEqual([bare.left, bare.right])
+        expect([layerArp.left, layerArp.right]).toStrictEqual([bare.left, bare.right])
     }, 60000)
 
     it("two layers each get exactly the steps of the bare unit", async () => {

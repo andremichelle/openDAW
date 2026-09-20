@@ -21,7 +21,7 @@ const code = (left: number, right: number) => `class Processor {
 }`
 
 type Layers = [InstrumentCompositeCellBox, InstrumentCompositeCellBox]
-type Levels = { left: number, right: number }
+type Levels = { left: number, right: number, meters: {composite: number, layerA: number, layerB: number} }
 
 const levels = async (configure: Procedure<Layers>): Promise<Levels> => {
     const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
@@ -82,8 +82,27 @@ const levels = async (configure: Procedure<Layers>): Promise<Levels> => {
     const pointer = engine.output_ptr()
     const left = new Float32Array(memory.buffer, pointer, half)[half - 1]
     const right = new Float32Array(memory.buffer, pointer + half * 4, half)[half - 1]
+    // The editor's meters read a FLOAT broadcast at the BARE address of the composite and of each layer.
+    const meterPeak = (uuid: UUID.Bytes): number => {
+        const count = engine.broadcast_count() >>> 0
+        for (let index = 0; index < count; index++) {
+            const recordPtr = engine.input_reserve(48)
+            if (engine.broadcast_entry(index, recordPtr) === 0) {continue}
+            const record = new DataView(memory.buffer, recordPtr, 48)
+            const owner = new Uint8Array(memory.buffer, recordPtr, 16).slice() as UUID.Bytes
+            if (UUID.equals(owner, uuid) && record.getUint32(28, true) === 0) {
+                return Math.max(...new Float32Array(memory.buffer, record.getUint32(20, true), record.getUint32(24, true)))
+            }
+        }
+        return -1
+    }
+    const meters = {
+        composite: meterPeak(composite.address.uuid),
+        layerA: meterPeak(cells[0].address.uuid),
+        layerB: meterPeak(cells[1].address.uuid)
+    }
     sync.close()
-    return {left, right}
+    return {left, right, meters}
 }
 
 describe("instrument composite layer strip", () => {
@@ -91,6 +110,14 @@ describe("instrument composite layer strip", () => {
         const {left, right} = await levels(() => {})
         expect(left).toBeCloseTo(right, 5)
         expect(left).toBeGreaterThan(0.1)
+    }, 60000)
+
+    it("the composite and every layer broadcast a meter for the editor", async () => {
+        const {meters} = await levels(([layerA]) => layerA.mute.setValue(true))
+        expect(meters.composite, "the composite's own meter moves").toBeGreaterThan(0.1)
+        expect(meters.layerB, "a sounding layer's meter moves").toBeGreaterThan(0.1)
+        expect(meters.layerA, "a muted layer's meter is registered and rests").toBeGreaterThanOrEqual(0)
+        expect(meters.layerA).toBeLessThan(1e-3)
     }, 60000)
 
     it("gain scales one layer only", async () => {
