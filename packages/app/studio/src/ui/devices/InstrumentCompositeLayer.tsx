@@ -37,11 +37,16 @@ export const InstrumentCompositeLayer = ({lifecycle, service, layer}: Construct)
     const soloValue = new DefaultObservableValue(false)
     const remove: HTMLElement = <Icon symbol={IconSymbol.Close} className="remove"/>
     const iconsElement: HTMLElement = <div className="icons"/>
+    // The layer's chain in signal order. The class tints each icon's background by device type (see the sass).
     const rebuildIcons = () => {
         Html.empty(iconsElement)
-        iconsElement.appendChild(<Icon symbol={layer.input.icon}/>)
-        layer.audioEffects.ifSome(collection => collection.adapters()
-            .forEach(effect => iconsElement.appendChild(<Icon symbol={effectIcon(effect.box)}/>)))
+        layer.midiEffects.ifSome(collection => collection.adapters().forEach(effect => iconsElement.appendChild(
+            <Icon symbol={effectIcon(effect.box, EffectFactories.MidiNamed)} className="midi-effect"/>)))
+        if (layer.inputAdapter.nonEmpty()) {
+            iconsElement.appendChild(<Icon symbol={layer.input.icon} className="instrument"/>)
+        }
+        layer.audioEffects.ifSome(collection => collection.adapters().forEach(effect => iconsElement.appendChild(
+            <Icon symbol={effectIcon(effect.box, EffectFactories.AudioNamed)} className="audio-effect"/>)))
     }
     const indexLabel: HTMLElement = <div className="index"/>
     const element: HTMLElement = (
@@ -83,6 +88,9 @@ export const InstrumentCompositeLayer = ({lifecycle, service, layer}: Construct)
         layer.input.iconValue.catchupAndSubscribe(rebuildIcons),
         connectBoolean(muteValue, EditWrapper.forAutomatableParameter(editing, layer.namedParameter.mute)),
         connectBoolean(soloValue, EditWrapper.forAutomatableParameter(editing, layer.namedParameter.solo)),
+        layer.midiEffects.mapOr(collection => collection.subscribe({
+            onAdd: rebuildIcons, onRemove: rebuildIcons, onReorder: rebuildIcons
+        }), Terminable.Empty),
         layer.audioEffects.mapOr(collection => collection.subscribe({
             onAdd: rebuildIcons, onRemove: rebuildIcons, onReorder: rebuildIcons
         }), Terminable.Empty),
@@ -105,9 +113,8 @@ export const InstrumentCompositeLayer = ({lifecycle, service, layer}: Construct)
     return element
 }
 
-const effectIcon = (box: Box): IconSymbol => {
-    const key = box.name.replace(/DeviceBox$/, "").replace(/Box$/, "")
-    const factory: Optional<EffectFactory> = (EffectFactories.AudioNamed as Record<string, EffectFactory>)[key]
+const effectIcon = (box: Box, factories: Record<string, EffectFactory>): IconSymbol => {
+    const factory: Optional<EffectFactory> = factories[box.name.replace(/DeviceBox$/, "").replace(/Box$/, "")]
     return isDefined(factory) ? factory.defaultIcon : IconSymbol.Effects
 }
 
