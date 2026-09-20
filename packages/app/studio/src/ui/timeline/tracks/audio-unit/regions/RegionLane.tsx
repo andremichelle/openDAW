@@ -36,7 +36,7 @@ export const RegionLane = ({lifecycle, trackManager, range, adapter}: Construct)
         range.subscribe(requestUpdate),
         adapter.regions.subscribeChanges(requestUpdate),
         adapter.enabled.subscribe(requestUpdate),
-        trackManager.service.project.timelineBoxAdapter.catchupAndSubscribeSignature(requestUpdate),
+        trackManager.service.project.timelineBoxAdapter.signatureTrack.subscribe(requestUpdate),
         timelineFocus.track.catchupAndSubscribe(owner =>
             element.classList.toggle("focused", owner.contains(adapter))),
         Html.watchIntersection(element, entries => entries

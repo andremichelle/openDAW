@@ -295,6 +295,7 @@ export const PitchEditor = ({
         }),
         positioner.subscribe(renderer.requestUpdate),
         range.subscribe(renderer.requestUpdate),
+        reader.timelineBoxAdapter.signatureTrack.subscribe(renderer.requestUpdate),
         snapping.subscribe(renderer.requestUpdate),
         scale.subscribe(renderer.requestUpdate),
         reader.subscribeChange(renderer.requestUpdate),
