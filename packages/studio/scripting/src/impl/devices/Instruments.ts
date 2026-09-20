@@ -91,7 +91,6 @@ export abstract class InstrumentFacade<B extends InstrumentDeviceBox = Instrumen
 
     get audioUnit(): InstrumentAudioUnit {return Facades.audioUnitOf(this.context, this.box) as InstrumentAudioUnit}
 
-    // An instrument inside a LAYER belongs to that layer: removing it removes the layer, never the audio unit.
     remove(): void {
         const hostBox = this.box.host.targetVertex.unwrap("instrument has no host").box
         if (hostBox instanceof InstrumentCompositeCellBox) {
@@ -325,7 +324,7 @@ export class InstrumentCompositeImpl extends InstrumentFacade<InstrumentComposit
     get layers(): ReadonlyArray<InstrumentCompositeLayer> {
         return this.box.cells.pointerHub.incoming()
             .map(({box}) => InstrumentCompositeLayerImpl.wrap(this.context, asInstanceOf(box, InstrumentCompositeCellBox)))
-            .sort((a, b) => a.index - b.index)
+            .sort((left, right) => left.index - right.index)
     }
 
     addLayer<K extends keyof LayerInstruments>(key: K, props?: DeepPartial<LayerInstruments[K]>, layer?: LayerProps)

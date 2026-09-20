@@ -66,7 +66,7 @@ export const deviceKeyOf = (entry: PresetMeta): string => {
 // (replaceAudioUnit / delete + insertEffectChain assign new box UUIDs but
 // keep the same slot).
 const cursorKeyFor = (adapter: DeviceBoxAdapter): string => {
-    // A LAYER is its own slot: every layer of one unit hosts an instrument, they must not share a cursor.
+    // layers of one unit must not share a cursor
     const host = adapter.deviceHost()
     const owner = host instanceof InstrumentCompositeCellBoxAdapter ? host.box : host.audioUnitBoxAdapter().box
     const auKey = UUID.toString(owner.address.uuid)
@@ -190,7 +190,6 @@ export class PresetService {
         const host = adapter.deviceHost()
         const audioUnitBox = host.audioUnitBoxAdapter().box
         const cursorKey = cursorKeyFor(adapter)
-        // Inside a LAYER only that layer's instrument is replaced, a whole-unit (rack) preset has no place there.
         if (host instanceof InstrumentCompositeCellBoxAdapter && entry.category === "audio-unit") {
             RuntimeNotifier.notify({message: "A rack preset cannot be loaded into a layer.", icon: "Warning"})
             return
@@ -813,7 +812,6 @@ export class PresetService {
         }), arrayBuffer)
     }
 
-    // The instrument adapter behind `uuid` when it lives in a LAYER of an Instrument Composite.
     #layerInstrumentForUuid(uuid: UUID.String): Option<DeviceBoxAdapter> {
         return this.project.boxGraph.findBox(UUID.parse(uuid))
             .map(box => this.project.boxAdapters.adapterFor(box, Devices.isAny))
@@ -821,7 +819,6 @@ export class PresetService {
                 ? Option.wrap(adapter) : Option.None)
     }
 
-    // A layer's instrument saves as an ordinary instrument preset: the instrument alone, no layer, no timeline.
     async #saveLayerInstrumentPreset(deviceKey: InstrumentFactories.Keys, adapter: DeviceBoxAdapter): Promise<void> {
         const labeled = adapter.labelField.getValue()
         const dialog = await Promises.tryCatch(PresetDialogs.showSavePresetDialog({
@@ -853,7 +850,7 @@ export class PresetService {
         const box = boxOpt.unwrap()
         const adapter = this.project.boxAdapters.adapterFor(box, Devices.isAny)
         const host = adapter.deviceHost()
-        // A RACK preset encodes the AUDIO UNIT. From inside a layer that is the whole composite, not this device.
+        // a rack preset encodes the audio unit, from a layer that is the whole composite
         if (!host.isAudioUnit) {
             RuntimeNotifier.notify({message: "A rack preset cannot be saved from inside a layer.", icon: "Warning"})
             return null

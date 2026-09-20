@@ -55,7 +55,6 @@ export namespace MenuItems {
                         api.insertEffect(optAudioField.unwrap("audioEffectsField"), entry, 0))))
                 ))
         )
-        // An instrument inside a LAYER belongs to that layer: its menu deletes the layer, never the audio unit.
         if (deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
             populatePresetSubmenu(parent, service, deviceHost, {kind: "instrument-context"})
             parent.addMenuItem(MenuItem.default({label: "Duplicate layer", separatorBefore: true})
@@ -77,7 +76,6 @@ export namespace MenuItems {
         }).setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(audioUnit.box))))
     }
 
-    // Where the panel goes when a composite cell is left: the parent cell when nested, else the audio unit.
     export const backTargetOfCell = (cell: DeviceHost): Vertex<Pointers> => cell.deviceHost().asCompositeCell().match<Vertex<Pointers>>({
         none: () => cell.audioUnitBoxAdapter().box.editing,
         some: parent => parent.box
@@ -90,8 +88,6 @@ export namespace MenuItems {
         MenuItem.default({label, checked: primitive.getValue() === value})
             .setTriggerProcedure(() => editing.modify(() => primitive.setValue(value)))
 
-    // The hamburger of a composite CELL editor: the manual goes to the PARENT composite device, and each
-    // "Add ..." inserts into this cell's own chain of that kind (an FX entry hosts no midi chain).
     export const forCompositeCell = (parent: MenuItem,
                                      service: StudioService,
                                      host: DeviceHost,
@@ -187,10 +183,9 @@ export namespace MenuItems {
         | { kind: "instrument-context" }
         | { kind: "effect-context", device: EffectDeviceBoxAdapter }
 
-    // The instrument the HOST holds (a layer's own synth), else the audio unit's (an FX entry hosts none).
     const resolveInstrumentTarget = (host: DeviceHost): { key: InstrumentFactories.Keys, uuid: UUID.String } | null => {
         const inputBox = host.hostsInstrument
-            ? host.inputAdapter.unwrapOrNull()?.box
+            ? host.inputAdapter.map(adapter => adapter.box).unwrapOrUndefined()
             : host.audioUnitBoxAdapter().box.input.pointerHub.incoming().at(0)?.box
         if (!isDefined(inputBox)) {return null}
         const key = InstrumentFactories.keyOfBox(inputBox)
@@ -265,7 +260,6 @@ export namespace MenuItems {
                             .setTriggerProcedure(() => presets.saveAsSingleEffectPreset(
                                 effectKind, deviceKey, effectBox).catch(console.warn)))
                     }
-                    // A rack preset is the whole AUDIO UNIT, which a layer is not.
                     if (isDefined(instrumentTarget) && !(host instanceof InstrumentCompositeCellBoxAdapter)) {
                         submenu.addMenuItem(MenuItem.default({label: "Save Entire Audio-Unit Chain"})
                             .setTriggerProcedure(() => presets.saveAsRackPreset(instrumentTarget.uuid, [])

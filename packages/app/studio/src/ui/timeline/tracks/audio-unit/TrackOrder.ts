@@ -17,15 +17,16 @@ export namespace TrackOrder {
     const Unresolved: Key = {category: 9, path: Arrays.empty()}
 
     // A composite's nested chain host (FX Composite cell, Playfield slot) with its branch index and owning device.
-    const nestedHost = (host: DeviceHost): Option<{parent: DeviceBoxAdapter, index: int}> =>
-        host.asCompositeCell().match<Option<{parent: DeviceBoxAdapter, index: int}>>({
+    type NestedHost = {parent: DeviceBoxAdapter, index: int}
+
+    const nestedHost = (host: DeviceHost): Option<NestedHost> =>
+        host.asCompositeCell().match<Option<NestedHost>>({
             some: cell => Option.wrap({parent: cell.compositeDevice(), index: cell.indexField.getValue()}),
             none: () => host instanceof PlayfieldSampleBoxAdapter
                 ? Option.wrap({parent: host.device(), index: host.indexField.getValue()})
                 : Option.None
         })
 
-    // Inside an instrument LAYER the three device kinds share one host, so they rank like on an audio unit.
     const kindRank = (adapter: DeviceBoxAdapter): int =>
         Devices.isMidiEffect(adapter) ? 1 : Devices.isInstrument(adapter) ? 2 : Devices.isAudioEffect(adapter) ? 3 : 9
 
@@ -33,10 +34,7 @@ export namespace TrackOrder {
         const ownIndex = Devices.isEffect(adapter) ? adapter.indexField.getValue() : 0
         const host = adapter.deviceHost()
         if (host.isAudioUnit) {
-            const category = Devices.isMidiEffect(adapter) ? 1
-                : Devices.isInstrument(adapter) ? 2
-                    : Devices.isAudioEffect(adapter) ? 3 : 9
-            return {category, path: [ownIndex]}
+            return {category: kindRank(adapter), path: [ownIndex]}
         }
         return nestedHost(host).match({
             none: () => ({category: 9, path: [ownIndex]}),
@@ -66,7 +64,7 @@ export namespace TrackOrder {
             none: () => Unresolved,
             some: targetVertex => {
                 const box = targetVertex.box
-                // A LAYER's own strip (gain / pan / mute / solo) leads that layer's lanes.
+                // the layer's own strip leads its lanes
                 const layer = boxAdapters.optAdapter(box).flatMap(target =>
                     target instanceof InstrumentCompositeCellBoxAdapter ? Option.wrap(target) : Option.None)
                 if (layer.nonEmpty()) {

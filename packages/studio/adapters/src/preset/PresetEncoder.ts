@@ -44,8 +44,7 @@ export namespace PresetEncoder {
         return Arrays.concatArrayBuffers(header.toArrayBuffer(), boxGraph.toArrayBuffer())
     }
 
-    // An instrument that lives in a LAYER of an Instrument Composite, saved as an ordinary instrument preset: it is
-    // copied into a wrapper unit of its own, so the composite, the layer and the layer's effects stay behind.
+    // saved as an ordinary instrument preset, in a wrapper unit of its own
     export const encodeLayerInstrument = (instrument: Box): ArrayBufferLike => {
         const header = ByteArrayOutput.create()
         header.writeInt(PresetHeader.MAGIC_HEADER_OPEN)
@@ -61,23 +60,8 @@ export namespace PresetEncoder {
             box.type.setValue(AudioUnitType.Instrument)
             box.capture.refer(captureBox)
         })
-        const excludeBox = (box: Box): boolean =>
-            TransferUtils.shouldExclude(box)
-            || TransferUtils.excludeTimelinePredicate(box)
-            || box instanceof AudioUnitBox
-        const dependencies = TransferUtils.withModulators(Array.from(instrument.graph.dependenciesOf([instrument], {
-            alwaysFollowMandatory: true,
-            stopAtResources: true,
-            excludeBox
-        }).boxes).filter(box => box !== instrument))
-        const uuidMap = UUID.newSet<TransferUtils.UUIDMapper>(({source}) => source)
-        uuidMap.addMany([
-            {source: instrument.address.uuid, target: UUID.generate()},
-            ...dependencies.map(box => ({
-                source: box.address.uuid,
-                target: TransferUtils.keepsIdentity(box) ? box.address.uuid : UUID.generate()
-            }))
-        ])
+        const dependencies = TransferUtils.deviceDependencies(instrument)
+        const uuidMap = TransferUtils.mapUuids([instrument, ...dependencies])
         PointerField.decodeWith({
             map: (pointer, address) => {
                 const internal = address.flatMap(addr =>
@@ -92,13 +76,7 @@ export namespace PresetEncoder {
                 return address.flatMap(addr =>
                     boxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None)
             }
-        }, () => {
-            [instrument, ...dependencies].forEach(source => {
-                const input = new ByteArrayInput(source.toArrayBuffer())
-                const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
-                boxGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
-            })
-        })
+        }, () => TransferUtils.cloneBoxes([instrument, ...dependencies], uuidMap, boxGraph))
         boxGraph.endTransaction()
         return Arrays.concatArrayBuffers(header.toArrayBuffer(), boxGraph.toArrayBuffer())
     }

@@ -265,15 +265,13 @@ export namespace InstrumentFactories {
         }
     }
 
-    // Whether an instrument can live in a LAYER of an Instrument Composite: it must play notes, and it must be
-    // a device the engine builds inside a composite (MIDI Output is wired at unit level only).
+    // MIDI Output is wired at unit level only
     export const isLayerInstrument = (factory: InstrumentFactory<any, any>): boolean =>
         factory.trackType === TrackType.Notes && factory !== MIDIOutput
 
     export const Named = {Apparat, Cubed, InstrumentComposite, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
-    // The `Named` key of an instrument box. Most are `<Key>DeviceBox`, a composite is `<Key>Box`.
     export const keyOfBox = (box: Box): Optional<Keys> => {
         const stripped = box.name.replace(/DeviceBox$/, "").replace(/Box$/, "")
         return Object.hasOwn(Named, stripped) ? stripped as Keys : undefined

@@ -12,8 +12,6 @@ import {AudioUnitInputAdapter} from "../../../audio-unit/AudioUnitInputAdapter"
 import {AudioUnitBoxAdapter} from "../../../audio-unit/AudioUnitBoxAdapter"
 import {InstrumentCompositeBoxAdapter} from "../InstrumentCompositeBoxAdapter"
 
-// One LAYER of an InstrumentCompositeBox: a full DeviceHost, an audio unit minus tracks and sends. It hosts an
-// instrument plus both effect chains, and leads back to the host the owning composite sits in.
 export class InstrumentCompositeCellBoxAdapter implements CompositeCell, IndexedBoxAdapter {
     readonly class = "device-host"
     readonly cellKind = "instrument"
@@ -47,7 +45,6 @@ export class InstrumentCompositeCellBoxAdapter implements CompositeCell, Indexed
     get address(): Address {return this.#box.address}
     get indexField(): Int32Field {return this.#box.index}
     get minimizedField(): BooleanField {return this.#box.minimized}
-    // A layer has no name of its own, it goes by the instrument it hosts.
     get label(): string {return this.#input.label.unwrapOrElse(() => `Layer ${this.#box.index.getValue() + 1}`)}
     get input(): AudioUnitInput {return this.#input}
 

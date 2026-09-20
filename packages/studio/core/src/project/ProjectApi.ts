@@ -3,7 +3,6 @@ import {
     assert,
     Attempt,
     Attempts,
-    ByteArrayInput,
     clamp,
     float,
     int,
@@ -26,7 +25,6 @@ import {
     AudioClipBox,
     AudioRegionBox,
     AudioUnitBox,
-    BoxIO,
     CaptureAudioBox,
     CaptureMidiBox,
     InstrumentCompositeBox,
@@ -190,7 +188,6 @@ export class ProjectApi {
         return Attempts.ok(create(boxGraph, audioUnitBox.input, defaultName, defaultIcon, attachment))
     }
 
-    // `atIndex` inserts the layer there and shifts the layers behind it, the default appends.
     createCompositeLayer<A, INST extends InstrumentBox>(composite: InstrumentCompositeBox,
                                                         factory: InstrumentFactory<A, INST>,
                                                         attachment?: A,
@@ -210,7 +207,6 @@ export class ProjectApi {
         return Attempts.ok({cellBox, instrumentBox: create(boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment)})
     }
 
-    // Puts `factory`'s instrument into the layer, replacing the one it hosts (an emptied layer just gets it).
     setLayerInstrument<A>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A>, attachment?: A): Attempt<InstrumentBox, string> {
         if (!InstrumentFactories.isLayerInstrument(factory)) {
             return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
@@ -228,25 +224,12 @@ export class ProjectApi {
         layers.forEach((box, index) => box.index.setValue(index))
     }
 
-    // Copies the layer with everything it hosts (instrument, both chains, a nested composite) right behind it.
-    // Its automation lanes and the owning composite are not copied.
+    // automation lanes are not copied
     duplicateCompositeLayer(cellBox: InstrumentCompositeCellBox): InstrumentCompositeCellBox {
         const {boxGraph} = this.#project
         const composite = asInstanceOf(cellBox.composite.targetVertex.unwrap("composite.target").box, InstrumentCompositeBox)
-        const excludeBox = (box: Box): boolean => box === composite
-            || box instanceof AudioUnitBox
-            || TransferUtils.shouldExclude(box)
-            || TransferUtils.excludeTimelinePredicate(box)
-        const dependencies = TransferUtils.withModulators(Array.from(boxGraph.dependenciesOf([cellBox], {
-            alwaysFollowMandatory: true,
-            stopAtResources: true,
-            excludeBox
-        }).boxes).filter(box => box !== cellBox))
-        const uuidMap = UUID.newSet<TransferUtils.UUIDMapper>(({source}) => source)
-        uuidMap.addMany([cellBox, ...dependencies].map(box => ({
-            source: box.address.uuid,
-            target: TransferUtils.keepsIdentity(box) ? box.address.uuid : UUID.generate()
-        })))
+        const dependencies = TransferUtils.deviceDependencies(cellBox, box => box === composite)
+        const uuidMap = TransferUtils.mapUuids([cellBox, ...dependencies])
         const insertIndex = cellBox.index.getValue() + 1
         IndexedBox.collectIndexedBoxes(composite.cells)
             .filter(box => box.index.getValue() >= insertIndex)
@@ -254,13 +237,8 @@ export class ProjectApi {
         PointerField.decodeWith({
             map: (_pointer: PointerField, address: Option<Address>): Option<Address> =>
                 address.map(addr => uuidMap.opt(addr.uuid).mapOr(({target}) => addr.moveTo(target), addr))
-        }, () => [cellBox, ...dependencies]
-            .filter(source => !TransferUtils.keepsIdentity(source))
-            .forEach(source => {
-                const input = new ByteArrayInput(source.toArrayBuffer())
-                const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
-                boxGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
-            }))
+        }, () => TransferUtils.cloneBoxes([cellBox, ...dependencies]
+            .filter(source => !TransferUtils.keepsIdentity(source)), uuidMap, boxGraph))
         const copy = asInstanceOf(boxGraph.findBox(uuidMap.get(cellBox.address.uuid, "cell copy").target)
             .unwrap("cell copy"), InstrumentCompositeCellBox)
         copy.index.setValue(insertIndex)

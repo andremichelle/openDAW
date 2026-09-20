@@ -404,8 +404,7 @@ export class TracksManager implements Terminable {
         }))
     }
 
-    // An Instrument Composite is a host's INSTRUMENT, not a chain member: follow it (and whatever replaces it)
-    // into its layers, whose chains and nested composites re-sort the automation lanes too.
+    // a composite is the host's instrument, not a chain member, so its layers are followed separately
     #watchLayers(lifecycle: Terminator, instrument: ObservableOption<AudioUnitInputAdapter>): void {
         const instrumentLifecycle = lifecycle.own(new Terminator())
         lifecycle.own(instrument.catchupAndSubscribe(option => {

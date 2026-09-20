@@ -40,8 +40,7 @@ import {EffectFactory} from "./EffectFactory"
 import {EffectParameterDefaults} from "./EffectParameterDefaults"
 
 export namespace EffectFactories {
-    // The splits' FIXED entries, mapped BY INDEX by the engine's distributor (stereo: 0 = left, 1 = right). The
-    // UI offers no add / remove / reorder for them, their names come from the composite adapter.
+    // the engine's distributor maps the fixed entries by index
     const STEREO_ENTRY_COUNT = 2
     const FREQUENCY_SPLIT_ENTRY_COUNT = 4
 

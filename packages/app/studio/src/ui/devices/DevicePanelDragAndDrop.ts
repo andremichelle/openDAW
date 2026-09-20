@@ -73,7 +73,7 @@ export namespace DevicePanelDragAndDrop {
                     if (!DeviceHost.takesEffect(deviceHost, "midi")) {return false}
                     container = midiEffectsContainer
                 } else if (type === "instrument" && deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
-                    if (dragData.device === null) {return false}
+                    if (!isDefined(dragData.device)) {return false}
                     const factory: Optional<InstrumentFactory> = InstrumentFactories.Named[dragData.device]
                     if (!isDefined(factory) || !InstrumentFactories.isLayerInstrument(factory)) {return false}
                     instrumentContainer.style.opacity = "0.5"
@@ -125,7 +125,7 @@ export namespace DevicePanelDragAndDrop {
                     return
                 }
                 if (type === "instrument" && deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
-                    if (dragData.device === null) {return}
+                    if (!isDefined(dragData.device)) {return}
                     const factory = asDefined(InstrumentFactories.Named[dragData.device], `Unknown: '${dragData.device}'`) as InstrumentFactory
                     editing.modify(() => {
                         const attempt = project.api.setLayerInstrument(deviceHost.box, factory)

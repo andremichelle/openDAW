@@ -80,12 +80,9 @@ export interface DeviceHost extends BoxAdapter, LabeledAudioOutputsOwner {
 
     deviceHost(): DeviceHost
     audioUnitBoxAdapter(): AudioUnitBoxAdapter
-    // `Some` when this host is one CELL of a composite (an FX Composite entry, an Instrument Composite layer).
     asCompositeCell(): Option<CompositeCell>
 }
 
-// What every composite cell shares, whatever it hosts: its place among its siblings, its own strip, and the
-// composite device it belongs to. The editor of an entered cell is written against this, not a class.
 export interface CompositeCell extends DeviceHost {
     readonly cellKind: "audio-effect" | "instrument"
     readonly namedParameter: {

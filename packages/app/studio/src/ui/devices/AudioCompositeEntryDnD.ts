@@ -5,6 +5,7 @@ import {AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter} from "@openda
 import {AudioEffectCompositeCellBox} from "@opendaw/studio-boxes"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
+import {CompositeRows} from "@/ui/devices/CompositeRows"
 
 // All drag & drop of an AudioComposite's entries in one place:
 //   - REORDER: drag a branch by its label handle onto another to move it (order is the user's arrangement; the
@@ -52,23 +53,23 @@ export namespace AudioCompositeEntryDnD {
                         return false
                     }
                     // A downward move lands AFTER the target, an upward move BEFORE it.
-                    mark(element, data.index < getIndex() ? "insert-after" : "insert-before")
+                    CompositeRows.mark(element, data.index < getIndex() ? "insert-after" : "insert-before")
                     return true
                 }
                 if (isNewAudioEffect(data)) {
-                    const zone = branchable ? zoneOf(event, element) : "onto"
-                    mark(element, zone === "before" ? "insert-before" : zone === "after" ? "insert-after" : "drop-target")
+                    const zone = branchable ? CompositeRows.zoneOf(event, element) : "onto"
+                    CompositeRows.mark(element, zone === "before" ? "insert-before" : zone === "after" ? "insert-after" : "drop-target")
                     return true
                 }
                 if (isExistingAudioEffect(data) && acceptsExistingEffect(project, composite, data)) {
-                    const zone = branchable ? zoneOf(event, element) : "onto"
-                    mark(element, zone === "before" ? "insert-before" : zone === "after" ? "insert-after" : "drop-target")
+                    const zone = branchable ? CompositeRows.zoneOf(event, element) : "onto"
+                    CompositeRows.mark(element, zone === "before" ? "insert-before" : zone === "after" ? "insert-after" : "drop-target")
                     return true
                 }
                 return false
             },
             drop: (event: DragEvent, data: AnyDragData): void => {
-                mark(element, null)
+                CompositeRows.mark(element, null)
                 if (data.type === "composite-entry") {
                     if (!branchable) {return}
                     event.preventDefault()
@@ -77,7 +78,7 @@ export namespace AudioCompositeEntryDnD {
                     event.preventDefault()
                     const factory = EffectFactories.MergedNamed[data.device]
                     if (!isDefined(factory)) {return}
-                    const zone = branchable ? zoneOf(event, element) : "onto"
+                    const zone = branchable ? CompositeRows.zoneOf(event, element) : "onto"
                     if (zone === "onto") {
                         // Append to THIS branch's serial chain, as the device panel appends to a chain.
                         project.editing.modify(() => project.api.insertEffect(entry.box.audioEffects, factory,
@@ -87,8 +88,8 @@ export namespace AudioCompositeEntryDnD {
                     }
                 } else if (isExistingAudioEffect(data) && acceptsExistingEffect(project, composite, data)) {
                     event.preventDefault()
-                    const boxes = resolveAudioEffectBoxes(project, data.uuids)
-                    const zone = branchable ? zoneOf(event, element) : "onto"
+                    const boxes = CompositeRows.resolveEffectBoxes(project, data.uuids, "audio-effect")
+                    const zone = branchable ? CompositeRows.zoneOf(event, element) : "onto"
                     if (zone === "onto") {
                         // MOVE the dragged effects into THIS branch's serial chain (re-homing them out of their source).
                         const insertIndex = entry.box.audioEffects.pointerHub.incoming().length
@@ -99,7 +100,7 @@ export namespace AudioCompositeEntryDnD {
                 }
             },
             enter: () => {},
-            leave: () => mark(element, null)
+            leave: () => CompositeRows.mark(element, null)
         })
 
     type AppendConstruct = {
@@ -129,7 +130,7 @@ export namespace AudioCompositeEntryDnD {
                     insertBranch(project, composite, atIndex, factory)
                 } else if (isExistingAudioEffect(data) && acceptsExistingEffect(project, composite, data)) {
                     event.preventDefault()
-                    moveToNewBranch(project, composite, atIndex, resolveAudioEffectBoxes(project, data.uuids))
+                    moveToNewBranch(project, composite, atIndex, CompositeRows.resolveEffectBoxes(project, data.uuids, "audio-effect"))
                 }
             },
             enter: (allowDrop: boolean) => element.classList.toggle("drop-target", allowDrop),
@@ -160,11 +161,6 @@ export namespace AudioCompositeEntryDnD {
     const isExistingAudioEffect = (data: AnyDragData): data is ExistingAudioEffectDrag =>
         data.type === "audio-effect" && data.uuids !== null
 
-    const resolveAudioEffectBoxes = (project: Project, uuids: ReadonlyArray<UUID.String>): ReadonlyArray<EffectBox> =>
-        uuids.map(uuid => project.boxGraph.findBox(UUID.parse(uuid)).unwrapOrNull())
-            .filter(isDefined)
-            .filter((box): box is EffectBox => box.tags.deviceType === "audio-effect")
-
     // Walk up from a box through its host chain (an effect's `host`, a composite entry's `composite`) to its
     // owner. Stops at the audio unit (which has no such pointer).
     const ancestorOf = (box: Box): Optional<Box> => {
@@ -191,7 +187,7 @@ export namespace AudioCompositeEntryDnD {
 
     const acceptsExistingEffect = (project: Project, composite: AudioCompositeAdapter, data: AnyDragData): boolean =>
         isExistingAudioEffect(data)
-        && resolveAudioEffectBoxes(project, data.uuids).length > 0
+        && CompositeRows.resolveEffectBoxes(project, data.uuids, "audio-effect").length > 0
         && !wouldCycle(new Set(data.uuids), composite)
 
     // Move existing effect boxes into a NEW branch created at `atIndex`, shifting the branches at or after it down.
@@ -207,19 +203,6 @@ export namespace AudioCompositeEntryDnD {
             })
             project.api.moveEffects(cell.audioEffects, boxes, 0)
         })
-    }
-
-    const zoneOf = (event: DragEvent, element: HTMLElement): "before" | "onto" | "after" => {
-        const rect = element.getBoundingClientRect()
-        const fraction = (event.clientY - rect.top) / rect.height
-        return fraction < 0.25 ? "before" : fraction > 0.75 ? "after" : "onto"
-    }
-
-    const mark = (element: HTMLElement,
-                  cls: "insert-before" | "insert-after" | "drop-target" | null): void => {
-        element.classList.toggle("insert-before", cls === "insert-before")
-        element.classList.toggle("insert-after", cls === "insert-after")
-        element.classList.toggle("drop-target", cls === "drop-target")
     }
 
     const reorder = (project: Project, composite: AudioCompositeAdapter, fromIndex: int, toIndex: int): void => {

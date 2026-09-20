@@ -130,7 +130,6 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         noEffectPlaceholder.classList.toggle("hidden", optEditing.isEmpty())
         if (optEditing.isEmpty()) {return}
         const {deviceHost, instrument} = getContext(project, optEditing.unwrap().box)
-        // An instrument LAYER keeps its instrument slot for its synth, so its own cell sits at the far left.
         if (deviceHost.hostsInstrument && deviceHost.asCompositeCell().nonEmpty()) {
             appendChildren(cellContainer, <CompositeCellEditor lifecycle={chainLifecycle} service={service} host={deviceHost}/>)
         }
