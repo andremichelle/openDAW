@@ -3,6 +3,7 @@ import {
     assert,
     Attempt,
     Attempts,
+    ByteArrayInput,
     clamp,
     float,
     int,
@@ -19,12 +20,13 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioClipBox,
     AudioRegionBox,
     AudioUnitBox,
+    BoxIO,
     CaptureAudioBox,
     CaptureMidiBox,
     InstrumentCompositeBox,
@@ -61,6 +63,7 @@ import {
     NoteEventCollectionBoxAdapter,
     ProjectQueries,
     TrackBoxAdapter,
+    TransferUtils,
     TrackType
 } from "@opendaw/studio-adapters"
 import {Project} from "./Project"
@@ -224,6 +227,45 @@ export class ProjectApi {
         const [moved] = layers.splice(fromIndex, 1)
         layers.splice(toIndex, 0, moved)
         layers.forEach((box, index) => box.index.setValue(index))
+    }
+
+    // Copies the layer with everything it hosts (instrument, both chains, a nested composite) right behind it.
+    // Its automation lanes and the owning composite are not copied.
+    duplicateCompositeLayer(cellBox: InstrumentCompositeCellBox): InstrumentCompositeCellBox {
+        const {boxGraph} = this.#project
+        const composite = asInstanceOf(cellBox.composite.targetVertex.unwrap("composite.target").box, InstrumentCompositeBox)
+        const excludeBox = (box: Box): boolean => box === composite
+            || box instanceof AudioUnitBox
+            || TransferUtils.shouldExclude(box)
+            || TransferUtils.excludeTimelinePredicate(box)
+        const dependencies = TransferUtils.withModulators(Array.from(boxGraph.dependenciesOf([cellBox], {
+            alwaysFollowMandatory: true,
+            stopAtResources: true,
+            excludeBox
+        }).boxes).filter(box => box !== cellBox))
+        const uuidMap = UUID.newSet<TransferUtils.UUIDMapper>(({source}) => source)
+        uuidMap.addMany([cellBox, ...dependencies].map(box => ({
+            source: box.address.uuid,
+            target: TransferUtils.keepsIdentity(box) ? box.address.uuid : UUID.generate()
+        })))
+        const insertIndex = cellBox.index.getValue() + 1
+        IndexedBox.collectIndexedBoxes(composite.cells)
+            .filter(box => box.index.getValue() >= insertIndex)
+            .forEach(box => box.index.setValue(box.index.getValue() + 1))
+        PointerField.decodeWith({
+            map: (_pointer: PointerField, address: Option<Address>): Option<Address> =>
+                address.map(addr => uuidMap.opt(addr.uuid).mapOr(({target}) => addr.moveTo(target), addr))
+        }, () => [cellBox, ...dependencies]
+            .filter(source => !TransferUtils.keepsIdentity(source))
+            .forEach(source => {
+                const input = new ByteArrayInput(source.toArrayBuffer())
+                const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
+                boxGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
+            }))
+        const copy = asInstanceOf(boxGraph.findBox(uuidMap.get(cellBox.address.uuid, "cell copy").target)
+            .unwrap("cell copy"), InstrumentCompositeCellBox)
+        copy.index.setValue(insertIndex)
+        return copy
     }
 
     deleteCompositeLayer(cellBox: InstrumentCompositeCellBox): void {

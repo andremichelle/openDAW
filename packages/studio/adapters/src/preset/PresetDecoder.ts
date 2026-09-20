@@ -9,7 +9,6 @@ import {
     isDefined,
     isInstanceOf,
     Option,
-    Optional,
     RuntimeNotifier,
     tryCatch,
     UUID
@@ -34,7 +33,6 @@ import {PresetHeader} from "./PresetHeader"
 import {TrackType} from "../timeline/TrackType"
 import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
 import {InstrumentFactories} from "../factories/InstrumentFactories"
-import {InstrumentFactory} from "../factories/InstrumentFactory"
 
 export namespace PresetDecoder {
     export const decode = (bytes: ArrayBufferLike, target: ProjectSkeleton): ReadonlyArray<AudioUnitBox> => {
@@ -374,10 +372,9 @@ export namespace PresetDecoder {
         if (isAbsent(instrument) || instrument.tags.deviceType !== "instrument") {
             return Attempts.err("Preset contains no instrument")
         }
-        const factoryKey = instrument.name.replace(/DeviceBox$/, "").replace(/Box$/, "")
-        const factory: Optional<InstrumentFactory> = (InstrumentFactories.Named as Record<string, InstrumentFactory>)[factoryKey]
-        if (!isDefined(factory) || !InstrumentFactories.isLayerInstrument(factory)) {
-            return Attempts.err(`${factoryKey} cannot be used as a layer`)
+        const factoryKey = InstrumentFactories.keyOfBox(instrument)
+        if (!isDefined(factoryKey) || !InstrumentFactories.isLayerInstrument(InstrumentFactories.Named[factoryKey])) {
+            return Attempts.err(`${instrument.name} cannot be used as a layer`)
         }
         const targetGraph = cellBox.graph
         const targetFieldAddress = cellBox.instrument.address

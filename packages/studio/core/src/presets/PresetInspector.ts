@@ -78,9 +78,8 @@ export namespace PresetInspector {
             }
             return Option.None
         }
-        const stripped = inputBox.name.replace(/DeviceBox$/, "")
-        if (!Object.hasOwn(InstrumentFactories.Named, stripped)) {return Option.None}
-        const instrument = stripped as InstrumentFactories.Keys
+        const instrument = InstrumentFactories.keyOfBox(inputBox)
+        if (!isDefined(instrument)) {return Option.None}
         const labeled = DeviceBoxUtils.isInstrumentDeviceBox(inputBox) ? inputBox.label.getValue() : ""
         const name = labeled.length > 0 ? labeled : InstrumentFactories.Named[instrument].defaultName
         return Option.wrap({category: "audio-unit", name, instrument})

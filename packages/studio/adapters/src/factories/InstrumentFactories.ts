@@ -14,9 +14,9 @@ import {
     TapeDeviceBox,
     VaporisateurDeviceBox
 } from "@opendaw/studio-boxes"
-import {byte, isDefined, UUID} from "@opendaw/lib-std"
+import {byte, isDefined, Optional, UUID} from "@opendaw/lib-std"
 import {ClassicWaveform} from "@opendaw/lib-dsp"
-import {BoxGraph, Field} from "@opendaw/lib-box"
+import {Box, BoxGraph, Field} from "@opendaw/lib-box"
 import {IconSymbol, Pointers, VoicingMode} from "@opendaw/studio-enums"
 import {DeviceManualUrls} from "../DeviceManualUrls"
 import {InstrumentFactory} from "./InstrumentFactory"
@@ -272,6 +272,12 @@ export namespace InstrumentFactories {
 
     export const Named = {Apparat, Cubed, InstrumentComposite, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
+
+    // The `Named` key of an instrument box. Most are `<Key>DeviceBox`, a composite is `<Key>Box`.
+    export const keyOfBox = (box: Box): Optional<Keys> => {
+        const stripped = box.name.replace(/DeviceBox$/, "").replace(/Box$/, "")
+        return Object.hasOwn(Named, stripped) ? stripped as Keys : undefined
+    }
 
     const useAudioFile = (boxGraph: BoxGraph, fileUUID: UUID.Bytes, name: string, duration: number) =>
         boxGraph.findBox<AudioFileBox>(fileUUID)

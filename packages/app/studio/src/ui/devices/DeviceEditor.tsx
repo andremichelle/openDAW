@@ -14,7 +14,7 @@ import {createElement, Group, JsxValue} from "@opendaw/lib-jsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {ClipboardManager, DevicesClipboard, MenuItem} from "@opendaw/studio-core"
-import {DeviceBoxAdapter, DeviceHost, Devices, DeviceType} from "@opendaw/studio-adapters"
+import {DeviceBoxAdapter, DeviceHost, Devices, DeviceType, InstrumentFactories} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {DebugMenus} from "@/ui/menu/debug.ts"
 import {DeviceDragging} from "@/ui/devices/DeviceDragging"
@@ -79,7 +79,7 @@ export const DeviceEditor =
         const {editing} = project
         const {box, type, enabledField, minimizedField, labelField} = adapter
         const color = getColorFor(type)
-        const deviceKey = box.name.replace(/DeviceBox$/, "")
+        const deviceKey = InstrumentFactories.keyOfBox(box) ?? box.name.replace(/DeviceBox$/, "")
         const presetCategory = type === "instrument" || type === "audio-effect" || type === "midi-effect"
             ? type
             : null

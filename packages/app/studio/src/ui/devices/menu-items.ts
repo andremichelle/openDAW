@@ -57,7 +57,12 @@ export namespace MenuItems {
         )
         // An instrument inside a LAYER belongs to that layer: its menu deletes the layer, never the audio unit.
         if (deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
-            parent.addMenuItem(MenuItem.default({label: "Delete layer", separatorBefore: true})
+            populatePresetSubmenu(parent, service, deviceHost, {kind: "instrument-context"})
+            parent.addMenuItem(MenuItem.default({label: "Duplicate layer", separatorBefore: true})
+                .setTriggerProcedure(() => editing.modify(() => {
+                    project.userEditingManager.audioUnit.edit(api.duplicateCompositeLayer(deviceHost.box))
+                })))
+            parent.addMenuItem(MenuItem.default({label: "Delete layer"})
                 .setTriggerProcedure(() => editing.modify(() => {
                     project.userEditingManager.audioUnit.edit(backTargetOfCell(deviceHost))
                     api.deleteCompositeLayer(deviceHost.box)
@@ -182,12 +187,14 @@ export namespace MenuItems {
         | { kind: "instrument-context" }
         | { kind: "effect-context", device: EffectDeviceBoxAdapter }
 
+    // The instrument the HOST holds (a layer's own synth), else the audio unit's (an FX entry hosts none).
     const resolveInstrumentTarget = (host: DeviceHost): { key: InstrumentFactories.Keys, uuid: UUID.String } | null => {
-        const inputBox = host.audioUnitBoxAdapter().box.input.pointerHub.incoming().at(0)?.box
+        const inputBox = host.hostsInstrument
+            ? host.inputAdapter.unwrapOrNull()?.box
+            : host.audioUnitBoxAdapter().box.input.pointerHub.incoming().at(0)?.box
         if (!isDefined(inputBox)) {return null}
-        const stripped = inputBox.name.replace(/DeviceBox$/, "")
-        if (!Object.hasOwn(InstrumentFactories.Named, stripped)) {return null}
-        return {key: stripped as InstrumentFactories.Keys, uuid: UUID.toString(inputBox.address.uuid)}
+        const key = InstrumentFactories.keyOfBox(inputBox)
+        return isDefined(key) ? {key, uuid: UUID.toString(inputBox.address.uuid)} : null
     }
 
     const sameKindEffectsInHost = (service: StudioService,
@@ -258,7 +265,8 @@ export namespace MenuItems {
                             .setTriggerProcedure(() => presets.saveAsSingleEffectPreset(
                                 effectKind, deviceKey, effectBox).catch(console.warn)))
                     }
-                    if (isDefined(instrumentTarget)) {
+                    // A rack preset is the whole AUDIO UNIT, which a layer is not.
+                    if (isDefined(instrumentTarget) && !(host instanceof InstrumentCompositeCellBoxAdapter)) {
                         submenu.addMenuItem(MenuItem.default({label: "Save Entire Audio-Unit Chain"})
                             .setTriggerProcedure(() => presets.saveAsRackPreset(instrumentTarget.uuid, [])
                                 .catch(console.warn)))

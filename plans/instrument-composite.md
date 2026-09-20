@@ -421,6 +421,26 @@ as done on a manual check alone. The browser checkpoint in phase 3 is additional
     layer synth's name. All save paths go through `PresetService.#audioUnitBoxForInstrumentUuid`, which now
     refuses with a notice. Encoding a single layer instrument is phase 4.
 
+- COMMITTED 2026-09-20 (not pushed): `7675da8a0` arp on a stopped transport, `2c7eafae9` meters + layer
+  presets + lane order.
+- Phase 4 (copy paths) DONE 2026-09-20, uncommitted:
+  - Round trips need NO per-box code, as predicted: a composite unit as a preset (`decode` and
+    `replaceAudioUnit`) and `TransferAudioUnits.transfer` keep every layer, synth, chain and a nested composite
+    in place, and ONE effect copied out of a layer travels alone
+    (`PresetEncoder.instrumentComposite.test.ts`, `InstrumentCompositeCopyPaths.test.ts`).
+  - `PresetEncoder.encodeLayerInstrument`: a layer's synth saves as an ORDINARY instrument preset (wrapper unit
+    of its own, no composite, no layer, no layer effects, no timeline). It loads onto a plain unit and into a
+    layer. The save refusal from the preset fix is gone for instrument presets, a RACK preset from inside a
+    layer is still refused, and the layer synth's menu has its Preset submenu back (without "Save Entire
+    Audio-Unit Chain").
+  - `InstrumentFactories.keyOfBox`: SIX places derived an instrument's factory key by stripping `DeviceBox`
+    from the box name, which never matched `InstrumentCompositeBox`, so the composite had no preset actions
+    at all (save, rack save, pager, inspector, drag onto the browser). All six use the helper now, a test
+    walks every `Named` factory.
+  - `ProjectApi.duplicateCompositeLayer` (synth, both chains, nested composite, right behind the source, no
+    automation lanes) + "Duplicate layer" in the layer synth's menu.
+  - Not checked in the browser yet: preset load / save inside a layer, duplicate layer.
+
 ## Phases (each gated on green tests)
 
 0. Rename (decision 1). All existing cargo + vitest suites green, `test-files/all-boxes.od` regenerated

@@ -168,6 +168,47 @@ describe("Instrument Composite adapters", () => {
         project.terminate()
     })
 
+    it("duplicating a layer copies its synth, its effects and a nested composite right behind it", async () => {
+        const project = await createProject()
+        const {composite, first} = project.editing.modify(() => {
+            const composite = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite).instrumentBox as InstrumentCompositeBox
+            const first = project.api.createCompositeLayer(composite, InstrumentFactories.InstrumentComposite).result()
+            first.cellBox.label.setValue("Stack")
+            first.cellBox.gain.setValue(-9.0)
+            project.api.createCompositeLayer(first.instrumentBox, InstrumentFactories.Nano).result()
+            DelayDeviceBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(first.cellBox.audioEffects)
+                box.index.setValue(0)
+            })
+            PitchDeviceBox.create(project.boxGraph, UUID.generate(), box => {
+                box.host.refer(first.cellBox.midiEffects)
+                box.index.setValue(0)
+            })
+            project.api.createCompositeLayer(composite, InstrumentFactories.Vaporisateur).result()
+            return {composite, first}
+        }).unwrap()
+        const copy = project.editing.modify(() => project.api.duplicateCompositeLayer(first.cellBox)).unwrap()
+        const layers = project.boxAdapters.adapterFor(composite, InstrumentCompositeBoxAdapter).cells.adapters()
+        expect(layers.map(layer => [layer.label, layer.indexField.getValue()]))
+            .toStrictEqual([["Stack", 0], ["Stack", 1], ["Vaporisateur", 2]])
+        const duplicate = layers[1]
+        expect(duplicate.address.toString()).toBe(copy.address.toString())
+        expect(duplicate.address.toString()).not.toBe(first.cellBox.address.toString())
+        expect(duplicate.box.gain.getValue()).toBe(-9.0)
+        const original = layers[0]
+        const nestedOf = (layer: InstrumentCompositeCellBoxAdapter) =>
+            project.boxAdapters.adapterFor(layer.inputAdapter.unwrap("nested").box, InstrumentCompositeBoxAdapter)
+        expect(nestedOf(duplicate).address.toString(), "the nested composite is a COPY").not.toBe(nestedOf(original).address.toString())
+        expect(nestedOf(duplicate).cells.adapters().map(cell => cell.label)).toStrictEqual(["Nano"])
+        expect(nestedOf(duplicate).cells.adapters()[0].inputAdapter.unwrap("deep").address.toString())
+            .not.toBe(nestedOf(original).cells.adapters()[0].inputAdapter.unwrap("deep").address.toString())
+        expect(duplicate.audioEffects.unwrap("audio").adapters().length).toBe(1)
+        expect(duplicate.midiEffects.unwrap("midi").adapters().length).toBe(1)
+        expect(original.audioEffects.unwrap("audio").adapters().length, "the original keeps its own effect").toBe(1)
+        expect(project.rootBoxAdapter.audioUnits.adapters().filter(unit => !unit.isOutput).length, "no unit is copied").toBe(1)
+        project.terminate()
+    })
+
     it("a layer hosts an instrument plus both effect chains", async () => {
         const project = await createProject()
         const {composite, synth, pitch, delay, audioUnitBox} = project.editing.modify(() => {
