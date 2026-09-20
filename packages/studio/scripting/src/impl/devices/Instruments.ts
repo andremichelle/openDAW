@@ -2,6 +2,8 @@ import {
     ApparatDeviceBox,
     AudioFileBox,
     CubedDeviceBox,
+    InstrumentCompositeBox,
+    InstrumentCompositeCellBox,
     MIDIOutputDeviceBox,
     MIDIOutputParameterBox,
     NanoDeviceBox,
@@ -13,10 +15,10 @@ import {
     TapeDeviceBox,
     VaporisateurDeviceBox
 } from "@opendaw/studio-boxes"
-import {BooleanField, Box, Int32Field, PointerField, PointerTypes, StringField} from "@opendaw/lib-box"
+import {BooleanField, Box, IndexedBox, Int32Field, PointerField, PointerTypes, StringField} from "@opendaw/lib-box"
 import {ClassicWaveform} from "@opendaw/lib-dsp"
 import {VoicingMode} from "@opendaw/studio-enums"
-import {CubedStep as CubedStepCodec} from "@opendaw/studio-adapters"
+import {CubedStep as CubedStepCodec, InstrumentFactories} from "@opendaw/studio-adapters"
 import {asInstanceOf, bipolar, clamp, float, int, isDefined, isNull, Nullable, panic, unitValue, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioEffect,
@@ -28,7 +30,10 @@ import {
     CubedStep,
     DeepPartial,
     InstrumentAudioUnit,
+    InstrumentComposite,
+    InstrumentCompositeLayer,
     Instruments,
+    LayerInstruments,
     MIDIEffects,
     MIDIOutput,
     MIDIOutputParameter,
@@ -86,11 +91,20 @@ export abstract class InstrumentFacade<B extends InstrumentDeviceBox = Instrumen
 
     get audioUnit(): InstrumentAudioUnit {return Facades.audioUnitOf(this.context, this.box) as InstrumentAudioUnit}
 
-    remove(): void {this.audioUnit.remove()}
+    // An instrument inside a LAYER belongs to that layer: removing it removes the layer, never the audio unit.
+    remove(): void {
+        const hostBox = this.box.host.targetVertex.unwrap("instrument has no host").box
+        if (hostBox instanceof InstrumentCompositeCellBox) {
+            InstrumentCompositeLayerImpl.wrap(this.context, hostBox).remove()
+        } else {
+            this.audioUnit.remove()
+        }
+    }
 }
 
 export type AnyInstrumentImpl =
-    | VaporisateurImpl | PlayfieldImpl | NanoImpl | SoundfontImpl | MIDIOutputImpl | TapeImpl | NeonImpl | CubedImpl | ApparatImpl
+    | VaporisateurImpl | PlayfieldImpl | NanoImpl | SoundfontImpl | MIDIOutputImpl | TapeImpl | NeonImpl | CubedImpl
+    | ApparatImpl | InstrumentCompositeImpl
 
 export class VaporisateurImpl extends InstrumentFacade<VaporisateurDeviceBox> implements Vaporisateur {
     readonly key = "Vaporisateur" as const
@@ -226,6 +240,109 @@ export class PlayfieldImpl extends InstrumentFacade<PlayfieldDeviceBox> implemen
         for (let note = 60; note < 128; note++) {if (!taken.has(note)) {return note}}
         for (let note = 59; note >= 0; note--) {if (!taken.has(note)) {return note}}
         return panic("All 128 notes are taken")
+    }
+}
+
+type LayerProps = Partial<Pick<InstrumentCompositeLayer, "gain" | "pan" | "mute" | "solo" | "minimized">>
+
+const guardLayerInstrument = (key: string): keyof LayerInstruments => {
+    Guard.oneOf(key, Object.entries(InstrumentFactories.Named)
+        .filter(([, factory]) => InstrumentFactories.isLayerInstrument(factory)).map(([name]) => name), "key")
+    return key as keyof LayerInstruments
+}
+
+export class InstrumentCompositeLayerImpl extends Facade<InstrumentCompositeCellBox> implements InstrumentCompositeLayer {
+    static wrap(context: Context, box: InstrumentCompositeCellBox): InstrumentCompositeLayerImpl {
+        return context.facade(box, () => new InstrumentCompositeLayerImpl(context, box))
+    }
+
+    declare gain: float
+    declare pan: bipolar
+    declare mute: boolean
+    declare solo: boolean
+    declare minimized: boolean
+    readonly #midiChain: EffectChain<AnyMIDIEffectImpl>
+    readonly #audioChain: EffectChain<AnyAudioEffectImpl>
+
+    private constructor(context: Context, box: InstrumentCompositeCellBox) {
+        super(context, box)
+        this.bind({gain: box.gain, pan: box.pan, mute: box.mute, solo: box.solo, minimized: box.minimized})
+        this.#midiChain = new EffectChain<AnyMIDIEffectImpl>(context, box.midiEffects, box => MIDIEffectImpls.wrap(context, box))
+        this.#audioChain = new EffectChain<AnyAudioEffectImpl>(context, box.audioEffects, box => AudioEffectImpls.wrap(context, box))
+    }
+
+    get index(): int {return this.box.index.getValue()}
+    get composite(): InstrumentComposite {
+        const deviceBox = this.box.composite.targetVertex.unwrap("layer has no composite").box
+        return InstrumentImpls.wrap(this.context, deviceBox) as InstrumentCompositeImpl
+    }
+    get instrument(): LayerInstruments[keyof LayerInstruments] {
+        const instrumentBox = this.box.instrument.pointerHub.incoming().at(0)?.box ?? panic("Layer has no instrument")
+        return InstrumentImpls.wrap(this.context, instrumentBox) as unknown as LayerInstruments[keyof LayerInstruments]
+    }
+    get midiEffects(): ReadonlyArray<AnyMIDIEffect> {return this.#midiChain.list()}
+    get audioEffects(): ReadonlyArray<AnyAudioEffect> {return this.#audioChain.list()}
+
+    setInstrument<K extends keyof LayerInstruments>(key: K, props?: DeepPartial<LayerInstruments[K]>): LayerInstruments[K] {
+        const guarded = guardLayerInstrument(key)
+        return this.context.edit(() => {
+            const label = this.box.instrument.pointerHub.incoming().at(0)?.box
+            const previousLabel = isDefined(label) && InstrumentImpls.isBox(label) ? label.label.getValue() : undefined
+            this.box.instrument.pointerHub.incoming().forEach(({box}) => box.delete())
+            const instrumentBox = DeviceBoxes.createInstrument(this.context.boxGraph, guarded, this.box.instrument,
+                previousLabel ?? InstrumentFactories.Named[guarded].defaultName)
+            return Props.apply(InstrumentImpls.wrap(this.context, instrumentBox), props) as unknown as LayerInstruments[K]
+        })
+    }
+
+    addMIDIEffect<K extends keyof MIDIEffects>(key: K, props?: DeepPartial<MIDIEffects[K]>, index?: int): MIDIEffects[K] {
+        Guard.oneOf(key, Object.keys(DeviceBoxes.MIDIEffectLabels), "key")
+        return this.#midiChain.add(at => DeviceBoxes.createMIDIEffect(this.context.boxGraph, key, this.box.midiEffects, at),
+            props, index) as unknown as MIDIEffects[K]
+    }
+
+    addAudioEffect<K extends keyof AudioEffects>(key: K, props?: DeepPartial<AudioEffects[K]>, index?: int): AudioEffects[K] {
+        Guard.oneOf(key, Object.keys(DeviceBoxes.AudioEffectLabels), "key")
+        return this.#audioChain.add(at => DeviceBoxes.createAudioEffect(this.context.boxGraph, key, this.box.audioEffects, at),
+            props, index) as unknown as AudioEffects[K]
+    }
+
+    remove(): void {
+        this.context.edit(() => {
+            const compositeBox = asInstanceOf(this.box.composite.targetVertex.unwrap("layer has no composite").box, InstrumentCompositeBox)
+            const survivors = IndexedBox.collectIndexedBoxes(compositeBox.cells).filter(box => box !== this.box)
+            this.box.delete()
+            survivors.forEach((box, index) => box.index.setValue(index))
+        })
+    }
+}
+
+export class InstrumentCompositeImpl extends InstrumentFacade<InstrumentCompositeBox> implements InstrumentComposite {
+    readonly key = "InstrumentComposite" as const
+
+    constructor(context: Context, box: InstrumentCompositeBox) {super(context, box)}
+
+    get layers(): ReadonlyArray<InstrumentCompositeLayer> {
+        return this.box.cells.pointerHub.incoming()
+            .map(({box}) => InstrumentCompositeLayerImpl.wrap(this.context, asInstanceOf(box, InstrumentCompositeCellBox)))
+            .sort((a, b) => a.index - b.index)
+    }
+
+    addLayer<K extends keyof LayerInstruments>(key: K, props?: DeepPartial<LayerInstruments[K]>, layer?: LayerProps)
+        : InstrumentCompositeLayer & {readonly instrument: LayerInstruments[K]} {
+        const guarded = guardLayerInstrument(key)
+        return this.context.edit(() => {
+            const index = this.box.cells.pointerHub.incoming().length
+            const cellBox = InstrumentCompositeCellBox.create(this.context.boxGraph, UUID.generate(), box => {
+                box.composite.refer(this.box.cells)
+                box.index.setValue(index)
+            })
+            const instrumentBox = DeviceBoxes.createInstrument(this.context.boxGraph, guarded, cellBox.instrument,
+                InstrumentFactories.Named[guarded].defaultName)
+            Props.apply(InstrumentImpls.wrap(this.context, instrumentBox), props)
+            return Props.apply(InstrumentCompositeLayerImpl.wrap(this.context, cellBox), layer) as unknown as
+                InstrumentCompositeLayer & {readonly instrument: LayerInstruments[K]}
+        })
     }
 }
 
@@ -459,6 +576,7 @@ export namespace InstrumentImpls {
         if (box instanceof NeonDeviceBox) {return new NeonImpl(context, box)}
         if (box instanceof CubedDeviceBox) {return new CubedImpl(context, box)}
         if (box instanceof ApparatDeviceBox) {return new ApparatImpl(context, box)}
+        if (box instanceof InstrumentCompositeBox) {return new InstrumentCompositeImpl(context, box)}
         return panic(`${box.name} is not a supported instrument`)
     }) as AnyInstrumentImpl
 

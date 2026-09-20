@@ -197,10 +197,10 @@ export interface AudioEffect extends Effect {
 }
 
 /**
- * Anything the studio can tap as a sidechain source: a unit's channel strip, an instrument, an effect or a Playfield slot
+ * Anything the studio can tap as a sidechain source: a unit's channel strip, an instrument, an effect, a Playfield slot or a composite layer
  * @group Devices
  */
-export type SideChainSource = AnyAudioUnit | AnyInstrument | AnyAudioEffect | PlayfieldSlot | AudioEffectCompositeEntry
+export type SideChainSource = AnyAudioUnit | AnyInstrument | AnyAudioEffect | PlayfieldSlot | InstrumentCompositeLayer | AudioEffectCompositeEntry
 
 /**
  * Effects that can listen to an external detection source
@@ -865,7 +865,7 @@ export type AnyAudioEffect = AudioEffects[keyof AudioEffects]
 // ---- Effect hosts
 
 /**
- * Anything with a MIDI effect chain (units and Playfield slots)
+ * Anything with a MIDI effect chain (units, Playfield slots, instrument composite layers)
  * @group Devices
  */
 export interface MIDIEffectHost {
@@ -885,7 +885,7 @@ export interface MIDIEffectHost {
 }
 
 /**
- * Anything with an audio effect chain (units, Playfield slots, composite entries)
+ * Anything with an audio effect chain (units, Playfield slots, instrument composite layers, composite entries)
  * @group Devices
  */
 export interface AudioEffectHost {
@@ -966,7 +966,10 @@ export interface Instrument extends Device {
     readonly audioUnit: InstrumentAudioUnit
     /** Icon name (see IconSymbol) */
     icon: string
-    /** Removes the whole audio unit. Use {@link InstrumentAudioUnit.setInstrument} to swap the instrument */
+    /**
+     * Removes the whole audio unit. Use {@link InstrumentAudioUnit.setInstrument} to swap the instrument.
+     * An instrument inside an {@link InstrumentCompositeLayer} removes that layer instead
+     */
     remove(): void
 }
 
@@ -1132,6 +1135,73 @@ export interface Playfield extends Instrument {
      * ```
      */
     addSample(sample: Sample, props?: Partial<Omit<PlayfieldSlot, "uuid" | "playfield" | "sample" | "midiEffects" | "audioEffects" | "addMIDIEffect" | "addAudioEffect" | "remove">>): PlayfieldSlot
+}
+
+/**
+ * Instruments that can live in a layer of an {@link InstrumentComposite}: everything that plays notes inside the unit
+ * @group Instruments
+ */
+export type LayerInstruments = Omit<Instruments, "Tape" | "MIDIOutput">
+
+/**
+ * One layer of an {@link InstrumentComposite}: an instrument with its own MIDI and audio effect chains and its own strip
+ * @group Instrument Parts
+ */
+export interface InstrumentCompositeLayer extends MIDIEffectHost, AudioEffectHost {
+    /** Unique id */
+    readonly uuid: string
+    /** The composite this layer belongs to */
+    readonly composite: InstrumentComposite
+    /** Position in the composite */
+    readonly index: int
+    /** The instrument this layer plays */
+    readonly instrument: LayerInstruments[keyof LayerInstruments]
+    /** Layer gain in dB (default 0) */
+    gain: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    pan: bipolar
+    /** Mute the layer (it keeps running, unmuting is instant) */
+    mute: boolean
+    /** Solo the layer */
+    solo: boolean
+    /** Collapse the layer editor */
+    minimized: boolean
+    /**
+     * Replace the layer's instrument. The layer keeps its strip and its effect chains
+     * @param key - Instrument type
+     * @param props - Instrument settings
+     */
+    setInstrument<K extends keyof LayerInstruments>(key: K, props?: DeepPartial<LayerInstruments[K]>): LayerInstruments[K]
+    /** Remove the layer with its instrument and effects */
+    remove(): void
+}
+
+/**
+ * Plays several instruments at once from the same notes, each in its own layer
+ * @group Instruments
+ */
+export interface InstrumentComposite extends Instrument {
+    /** Always "InstrumentComposite" */
+    readonly key: "InstrumentComposite"
+    /** All layers ordered by index */
+    readonly layers: ReadonlyArray<InstrumentCompositeLayer>
+    /**
+     * Add a layer playing the given instrument
+     * @param key - Instrument type (everything except Tape and MIDIOutput)
+     * @param props - Instrument settings
+     * @param layer - Layer settings
+     * @example
+     * ```ts
+     * const stack = project.addInstrumentUnit("InstrumentComposite", {label: "Stack"}).instrument
+     * stack.addLayer("Vaporisateur", {label: "Pad"}).addAudioEffect("Reverb")
+     * stack.addLayer("Nano", undefined, {gain: -6, pan: -0.5})
+     * ```
+     */
+    addLayer<K extends keyof LayerInstruments>(key: K, props?: DeepPartial<LayerInstruments[K]>,
+                                               layer?: Partial<Pick<InstrumentCompositeLayer, "gain" | "pan" | "mute" | "solo" | "minimized">>): InstrumentCompositeLayer & {
+        /** The instrument this layer plays, typed by the given key */
+        readonly instrument: LayerInstruments[K]
+    }
 }
 
 /**
@@ -1422,6 +1492,8 @@ export interface Instruments {
     "Cubed": Cubed
     /** {@link Apparat} */
     "Apparat": Apparat
+    /** {@link InstrumentComposite} */
+    "InstrumentComposite": InstrumentComposite
 }
 
 /**
@@ -1445,6 +1517,7 @@ export type Automatable =
     | AnyAudioUnit
     | Send
     | PlayfieldSlot
+    | InstrumentCompositeLayer
     | AudioEffectCompositeEntry
     | ScriptParameter
     | MIDIOutputParameter

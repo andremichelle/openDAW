@@ -478,6 +478,21 @@ as done on a manual check alone. The browser checkpoint in phase 3 is additional
   scripts that used it. Seven existing tests identified entries by their stored label and now tag them by
   gain, a new test pins the frequency split's names following its band count.
 
+- COMMITTED 2026-09-20 (not pushed): `40ab271ca` phase 5 tests, `af318844f` head restyle + cell labels.
+- Phase 6 DONE 2026-09-20, uncommitted:
+  - Scripting: `InstrumentComposite` (`layers`, `addLayer(key, props?, layer?)`) and
+    `InstrumentCompositeLayer` (`index`, `composite`, `instrument`, `gain`, `pan`, `mute`, `solo`, `minimized`,
+    both effect chains, `setInstrument`, `remove`), `LayerInstruments` = everything except Tape and MIDIOutput.
+    A layer is an `Automatable` and a `SideChainSource`. `Instrument.remove()` on a layer's instrument removes
+    the LAYER, it used to mean "remove the audio unit". Before this, `addInstrumentUnit("InstrumentComposite")`
+    passed the key guard (the factory is in `Named`) and then panicked in `InstrumentImpls.wrap`.
+    Tests: one in `Devices.test.ts`, the composite and a layer in `Parity.test.ts` (70 green). The inventory
+    example walks layers at any depth.
+  - Manual: `devices/instruments/instrument-composite.md`, registered in `Manuals.ts`. NO screenshot yet
+    (`instrument-composite.webp` is missing, the page has no image line).
+- ALL SIX PHASES DONE. Open: the screenshot, whether a layer row shows its name, the scripting docs rebuild
+  happens in `npm run build`.
+
 ## Phases (each gated on green tests)
 
 0. Rename (decision 1). All existing cargo + vitest suites green, `test-files/all-boxes.od` regenerated

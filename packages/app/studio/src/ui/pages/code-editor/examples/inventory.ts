@@ -1,5 +1,5 @@
 import {InaccessibleProperty} from "@opendaw/lib-std"
-import {AnyAudioEffect, Api, AudioEffectCompositeEntry, AudioEffectHost, MIDIEffectHost} from "@opendaw/studio-scripting"
+import {AnyAudioEffect, AnyInstrument, Api, AudioEffectCompositeEntry, AudioEffectHost, MIDIEffectHost} from "@opendaw/studio-scripting"
 
 const openDAW: Api = InaccessibleProperty("Not to be executed.")
 
@@ -25,15 +25,24 @@ if (!await openDAW.hasProject()) {
         })
     }
 
+    // An instrument may hold more hosts: a Playfield its slots, an Instrument Composite its layers (any depth)
+    const countInstrument = (instrument: AnyInstrument) => {
+        add(`instrument ${instrument.key}`)
+        if (instrument.key === "Playfield") {
+            add("playfield slots", instrument.slots.length)
+            instrument.slots.forEach(slot => countHost("playfield slot", slot))
+        } else if (instrument.key === "InstrumentComposite") {
+            add("composite layers", instrument.layers.length)
+            instrument.layers.forEach(layer => {
+                countHost("layer", layer)
+                countInstrument(layer.instrument)
+            })
+        }
+    }
+
     project.audioUnits.forEach(unit => {
         add(`${unit.kind} units`)
-        if (unit.kind === "instrument") {
-            add(`instrument ${unit.instrument.key}`)
-            if (unit.instrument.key === "Playfield") {
-                add("playfield slots", unit.instrument.slots.length)
-                unit.instrument.slots.forEach(slot => countHost("playfield slot", slot))
-            }
-        }
+        if (unit.kind === "instrument") {countInstrument(unit.instrument)}
         if (unit.kind !== "output") {add("sends", unit.sends.length)}
         countHost("unit", unit)
         unit.tracks.forEach(track => {

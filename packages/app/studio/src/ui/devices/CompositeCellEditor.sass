@@ -7,7 +7,7 @@ component
   height: 100%
   outline: none
   border-radius: 0 0 3px 3px
-  background-color: rgba(black, 0.04)
+  background-color: rgba(white, 0.03)
   // Drawn over its container's own 1px top line, so the head reads cream in both placements.
   margin-top: -1px
   border-top: 1px var(--color-cream) solid
@@ -33,11 +33,11 @@ component
       border-radius: 10px
       cursor: pointer
       color: var(--color-shadow)
-      background-color: rgba(white, 0.04)
+      background-color: rgba(white, 0.08)
 
       &:hover
-        color: var(--color-blue)
-        background-color: rgba(white, 0.08)
+        color: rgba(black, 0.8)
+        background-color: var(--color-blue)
 
       > svg
         transform: translateY(-1px)
@@ -60,9 +60,9 @@ component
       place-items: center
       border-radius: 10px
       color: var(--color-shadow)
-      background-color: rgba(black, 0.08)
+      background-color: rgba(black, 0.2)
       cursor: pointer
-      box-shadow: 0 -0.5px 0.5px 0 rgba(white, 0.08) inset, 0 0.5px 0.5px 0 rgba(black, 0.08) inset
+      box-shadow: 0 0.5px 0.5px 0 rgba(white, 0.08), 0 -0.5px 0.5px 0 rgba(black, 0.08)
 
       &.current
         color: black

@@ -106,6 +106,7 @@ export namespace DeviceBoxes {
             case "NeonDeviceBox": return "Neon"
             case "CubedDeviceBox": return "Cubed"
             case "ApparatDeviceBox": return "Apparat"
+            case "InstrumentCompositeBox": return "InstrumentComposite"
             default: return panic(`Unknown instrument box '${boxName}'`)
         }
     }
@@ -123,7 +124,8 @@ export namespace DeviceBoxes {
 
     export const isInstrumentBox = (boxName: string): boolean =>
         ["VaporisateurDeviceBox", "PlayfieldDeviceBox", "NanoDeviceBox", "SoundfontDeviceBox",
-            "MIDIOutputDeviceBox", "TapeDeviceBox", "NeonDeviceBox", "CubedDeviceBox", "ApparatDeviceBox"]
+            "MIDIOutputDeviceBox", "TapeDeviceBox", "NeonDeviceBox", "CubedDeviceBox", "ApparatDeviceBox",
+            "InstrumentCompositeBox"]
             .includes(boxName)
 
     export const createInstrument = (boxGraph: BoxGraph,
