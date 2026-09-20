@@ -1,8 +1,20 @@
 component
   display: flex
   flex-direction: column
+  flex: 0 0 auto
+  box-sizing: border-box
+  width: 9rem
   height: 100%
   outline: none
+  border-radius: 0 0 3px 3px
+  background-color: rgba(black, 0.04)
+  // Drawn over its container's own 1px top line, so the head reads cream in both placements.
+  margin-top: -1px
+  border-top: 1px var(--color-cream) solid
+
+  &.instrument
+    .header, .entry-number.current, .back-button:hover
+      color: var(--color-cream)
 
   .navigation
     flex: 1
@@ -31,10 +43,13 @@ component
         transform: translateY(-1px)
 
   .entry-numbers
-    display: grid
-    grid-template-columns: repeat(4, min-content)
+    display: flex
+    flex-wrap: wrap
+    justify-content: center
+    box-sizing: border-box
+    width: 100%
     gap: 2px
-    padding: 0 0.25rem
+    padding: 0 0.5rem
 
     .entry-number
       flex: 0 0 20px
@@ -47,17 +62,18 @@ component
       color: var(--color-shadow)
       background-color: rgba(black, 0.08)
       cursor: pointer
+      box-shadow: 0 -0.5px 0.5px 0 rgba(white, 0.08) inset, 0 0.5px 0.5px 0 rgba(black, 0.08) inset
 
       &.current
-        color: var(--color-blue)
-        background-color: rgba(white, 0.08)
+        color: black
+        background-color: var(--color-blue)
 
   .header
     margin: 0
     height: 2rem
     display: flex
     align-items: center
-    padding: 0 0.25rem
+    padding: 0 0.25rem 0 0.5rem
     font-size: 11px
     color: var(--color-blue)
     outline: none
@@ -77,11 +93,17 @@ component
       margin: 0
 
   .controls
+    margin-top: 1em
     display: flex
+    align-self: center
     align-items: center
     justify-content: center
     column-gap: 0.3em
-    padding: 0.375em 0.25rem
+    padding: 0.375em 0.5rem
+    border-radius: 0.5em
+    background-color: rgba(black, 0.12)
+    width: fit-content
+    box-shadow: 0 0.5px 0.5px 0 rgba(white, 0.04)
 
     .channel-mix
       display: flex

@@ -173,7 +173,7 @@ describe("Instrument Composite adapters", () => {
         const {composite, first} = project.editing.modify(() => {
             const composite = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite).instrumentBox as InstrumentCompositeBox
             const first = project.api.createCompositeLayer(composite, InstrumentFactories.InstrumentComposite).result()
-            first.cellBox.label.setValue("Stack")
+            first.instrumentBox.label.setValue("Stack")
             first.cellBox.gain.setValue(-9.0)
             project.api.createCompositeLayer(first.instrumentBox, InstrumentFactories.Nano).result()
             DelayDeviceBox.create(project.boxGraph, UUID.generate(), box => {
@@ -286,14 +286,13 @@ describe("Instrument Composite adapters", () => {
             const {instrumentBox} = project.api.createAnyInstrument(InstrumentFactories.InstrumentComposite)
             const composite = instrumentBox as InstrumentCompositeBox
             const {cellBox, instrumentBox: synth} = project.api.createCompositeLayer(composite, InstrumentFactories.Vaporisateur).result()
-            cellBox.label.setValue("Bass")
-            synth.label.setValue("Layer synth")
+            synth.label.setValue("Bass")
             return {composite}
         }).unwrap()
         const outputs = Array.from(project.boxAdapters.adapterFor(composite, InstrumentCompositeBoxAdapter).labeledAudioOutputs())
         expect(outputs.map(output => output.label)).toStrictEqual(["Instrument Composite", "Bass"])
         const children = Array.from(outputs[1].children().unwrap("layer children"))
-        expect(children.map(output => output.label)).toContain("Layer synth")
+        expect(children.map(output => output.label), "the layer goes by its instrument").toContain("Bass")
         project.terminate()
     })
 

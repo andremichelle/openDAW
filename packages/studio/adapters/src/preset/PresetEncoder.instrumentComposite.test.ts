@@ -15,6 +15,10 @@ import {PresetDecoder} from "./PresetDecoder"
 // A unit whose instrument is an Instrument Composite must round-trip its whole subtree through a preset: the
 // layers, each layer's instrument, both of its effect chains, and a composite NESTED inside a layer. Every device
 // must stay hosted by ITS layer, never re-hosted onto the unit.
+const PAD = -1.0
+const STACK = -2.0
+const DEEP = -3.0
+
 describe("PresetEncoder / PresetDecoder (instrument composite subtree)", () => {
     const createUnit = (skeleton: ProjectSkeleton): AudioUnitBox =>
         AudioUnitFactory.create(skeleton, AudioUnitType.Instrument,
@@ -26,20 +30,20 @@ describe("PresetEncoder / PresetDecoder (instrument composite subtree)", () => {
         boxGraph.beginTransaction()
         const unit = createUnit(source)
         const composite = InstrumentFactories.InstrumentComposite.create(boxGraph, unit.input, "Layers", IconSymbol.Stack)
-        const layer = (owner: InstrumentCompositeBox, index: number, label: string) =>
+        // A layer has no name, so each one is tagged by a unique gain: Pad -1, Stack -2, Deep -3.
+        const layer = (owner: InstrumentCompositeBox, index: number, gain: number) =>
             InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
                 box.composite.refer(owner.cells)
                 box.index.setValue(index)
-                box.label.setValue(label)
-                box.gain.setValue(-3.0 * (index + 1))
+                box.gain.setValue(gain)
             })
-        const pad = layer(composite, 0, "Pad")
+        const pad = layer(composite, 0, PAD)
         InstrumentFactories.Vaporisateur.create(boxGraph, pad.instrument, "Pad synth", IconSymbol.Piano)
         PitchDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(pad.midiEffects); box.index.setValue(0)})
         DelayDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(pad.audioEffects); box.index.setValue(0)})
-        const stack = layer(composite, 1, "Stack")
+        const stack = layer(composite, 1, STACK)
         const inner = InstrumentFactories.InstrumentComposite.create(boxGraph, stack.instrument, "Inner", IconSymbol.Stack)
-        const deep = layer(inner, 0, "Deep")
+        const deep = layer(inner, 0, DEEP)
         InstrumentFactories.Nano.create(boxGraph, deep.instrument, "Deep nano", IconSymbol.Piano)
         DelayDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(unit.audioEffects); box.index.setValue(0)})
         boxGraph.endTransaction()
@@ -61,19 +65,19 @@ describe("PresetEncoder / PresetDecoder (instrument composite subtree)", () => {
         const inner = composites.find(box => box.label.getValue() === "Inner")!
         expect(hostOf(outer), "the outer composite is the unit's instrument").toBe(unit)
         const cells = boxes.filter(box => box instanceof InstrumentCompositeCellBox)
-        const cell = (label: string) => cells.find(box => box.label.getValue() === label)!
-        expect(cells.map(box => [box.label.getValue(), box.index.getValue(), box.gain.getValue()]).toSorted())
-            .toStrictEqual([["Deep", 0, -3.0], ["Pad", 0, -3.0], ["Stack", 1, -6.0]])
-        expect(cell("Pad").composite.targetVertex.unwrap("pad.composite").box).toBe(outer)
-        expect(cell("Stack").composite.targetVertex.unwrap("stack.composite").box).toBe(outer)
-        expect(cell("Deep").composite.targetVertex.unwrap("deep.composite").box).toBe(inner)
-        expect(hostOf(inner), "the nested composite stays inside its layer").toBe(cell("Stack"))
-        expect(hostOf(boxes.find(box => box instanceof VaporisateurDeviceBox)!)).toBe(cell("Pad"))
-        expect(hostOf(boxes.find(box => box instanceof PitchDeviceBox)!)).toBe(cell("Pad"))
-        expect(hostOf(boxes.find(box => box instanceof NanoDeviceBox)!)).toBe(cell("Deep"))
+        const cell = (gain: number) => cells.find(box => box.gain.getValue() === gain)!
+        expect(cells.map(box => [box.gain.getValue(), box.index.getValue()]).toSorted(([a], [b]) => b - a))
+            .toStrictEqual([[PAD, 0], [STACK, 1], [DEEP, 0]])
+        expect(cell(PAD).composite.targetVertex.unwrap("pad.composite").box).toBe(outer)
+        expect(cell(STACK).composite.targetVertex.unwrap("stack.composite").box).toBe(outer)
+        expect(cell(DEEP).composite.targetVertex.unwrap("deep.composite").box).toBe(inner)
+        expect(hostOf(inner), "the nested composite stays inside its layer").toBe(cell(STACK))
+        expect(hostOf(boxes.find(box => box instanceof VaporisateurDeviceBox)!)).toBe(cell(PAD))
+        expect(hostOf(boxes.find(box => box instanceof PitchDeviceBox)!)).toBe(cell(PAD))
+        expect(hostOf(boxes.find(box => box instanceof NanoDeviceBox)!)).toBe(cell(DEEP))
         const delayHosts = boxes.filter(box => box instanceof DelayDeviceBox).map(hostOf)
         expect(delayHosts.length).toBe(2)
-        expect(delayHosts).toContain(cell("Pad"))
+        expect(delayHosts).toContain(cell(PAD))
         expect(delayHosts, "the unit-level delay stays on the unit").toContain(unit)
     })
 

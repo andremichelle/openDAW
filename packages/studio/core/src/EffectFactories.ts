@@ -1,4 +1,4 @@
-import {Optional, UUID} from "@opendaw/lib-std"
+import {Arrays, Optional, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {
     ArpeggioDeviceBox,
@@ -40,11 +40,10 @@ import {EffectFactory} from "./EffectFactory"
 import {EffectParameterDefaults} from "./EffectParameterDefaults"
 
 export namespace EffectFactories {
-    // The stereo split's FIXED entries, in the order the engine's distributor maps them: index 0 = left,
-    // index 1 = right. The UI offers no add / remove / reorder for them (StereoCompositeBoxAdapter.entriesFixed).
-    export const STEREO_ENTRY_LABELS: ReadonlyArray<string> = ["L", "R"]
-
-    export const FREQUENCY_SPLIT_ENTRY_LABELS: ReadonlyArray<string> = ["Low", "Low Mid", "High Mid", "High"]
+    // The splits' FIXED entries, mapped BY INDEX by the engine's distributor (stereo: 0 = left, 1 = right). The
+    // UI offers no add / remove / reorder for them, their names come from the composite adapter.
+    const STEREO_ENTRY_COUNT = 2
+    const FREQUENCY_SPLIT_ENTRY_COUNT = 4
 
     export const Arpeggio: EffectFactory = {
         defaultName: "Arpeggio",
@@ -531,12 +530,10 @@ export namespace EffectFactories {
             })
             // Entry 0 = left, entry 1 = right: the distributor maps them BY INDEX, so both must exist and
             // keep their order. Their chains start empty, which sums back to the untouched input.
-            STEREO_ENTRY_LABELS.forEach((label, entryIndex) =>
-                AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
-                    box.composite.refer(composite.entries)
-                    box.index.setValue(entryIndex)
-                    box.label.setValue(label)
-                }))
+            Arrays.create(entryIndex => AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+                box.composite.refer(composite.entries)
+                box.index.setValue(entryIndex)
+            }), STEREO_ENTRY_COUNT)
             return composite
         }
     }
@@ -556,12 +553,10 @@ export namespace EffectFactories {
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })
-            FREQUENCY_SPLIT_ENTRY_LABELS.forEach((label, entryIndex) =>
-                AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
-                    box.composite.refer(composite.entries)
-                    box.index.setValue(entryIndex)
-                    box.label.setValue(label)
-                }))
+            Arrays.create(entryIndex => AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+                box.composite.refer(composite.entries)
+                box.index.setValue(entryIndex)
+            }), FREQUENCY_SPLIT_ENTRY_COUNT)
             return composite
         }
     }

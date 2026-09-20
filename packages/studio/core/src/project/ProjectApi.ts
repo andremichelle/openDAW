@@ -206,7 +206,6 @@ export class ProjectApi {
         const cellBox = InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(composite.cells)
             box.index.setValue(index)
-            box.label.setValue(defaultName)
         })
         return Attempts.ok({cellBox, instrumentBox: create(boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment)})
     }

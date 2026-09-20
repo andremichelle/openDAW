@@ -30,22 +30,14 @@ type Construct = {
     host: DeviceHost
 }
 
-// Shown while a composite CELL is edited (an FX entry in the instrument slot, an instrument layer at the far
-// left of the panel): the way BACK to the parent chain plus the cell's own gain / pan / mute / solo.
 export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
     const {editing, midiLearning, userEditingManager, deviceSelection} = service.project
-    // A composite CELL accepts the Editing pointer at the box level; an AUDIO UNIT only through its `editing`.
     const backTarget: Vertex<Pointers> = MenuItems.backTargetOfCell(host)
     const entry = host.asCompositeCell().unwrapOrNull()
-    // An FX entry has no name of its own and shows its composite's, a layer shows (and renames) its own.
-    const labelFieldOf = (cell: CompositeCell): StringField => cell.cellKind === "instrument"
-        ? cell.labelField : cell.compositeDevice().labelField
+    const labelFieldOf = (cell: CompositeCell): StringField => cell.compositeDevice().labelField
     const noun = entry?.cellKind === "instrument" ? "layer" : "entry"
     const muteValue = new DefaultObservableValue(false)
     const soloValue = new DefaultObservableValue(false)
-    // The parent composite's name as a NORMAL device-header label (scroller + dblclick rename, no pill):
-    // clicking SELECTS it (clearing the device selection), so a following paste lands at the start of this
-    // branch's chain — the instrument-header semantics. Going back moves to the button above the numbers.
     const name: HTMLElement = (
         <h1 onInit={element => {
             lifecycle.ownAll(
@@ -64,8 +56,6 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             )
         }}/>
     )
-    // The standard device-editor hamburger: the same menu as every input-slot editor. For a one-sided
-    // host it offers exactly the audio "Add ..." entries, targeting THIS branch's chain.
     const menu: HTMLElement = (
         <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => {
             if (entry === null) {
@@ -75,17 +65,17 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             }
             parent.addMenuItem(DebugMenus.debugBox(entry === null ? host.audioUnitBoxAdapter().box : entry.box))
         })} style={{minWidth: "0", fontSize: "14px", marginLeft: "auto"}}
-                    appearance={{color: Colors.shadow, activeColor: Colors.bright}}>
+                    appearance={{color: Colors.cream, activeColor: Colors.bright}}>
             <Icon symbol={IconSymbol.Menu}/>
         </MenuButton>
     )
-    const header: HTMLElement = <h1 className="header" tabIndex={0}>{name}{menu}</h1>
+    const header: HTMLElement = (<h1 className="header" tabIndex={0}>{name}{menu}</h1>)
     const backButton: HTMLElement = (
         <div className="back-button">
             <Icon symbol={IconSymbol.RoundUp}/>
         </div>
     )
-    const controls = entry === null ? <div/> : (
+    const controls = entry === null ? (<div/>) : (
         <div className="controls">
             <div className="channel-mix">
                 <AutomationControl lifecycle={lifecycle} editing={editing} midiLearning={midiLearning}
@@ -124,7 +114,11 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
             {numbers}
         </div>
     )
-    const element: HTMLElement = <div className={className}>{header}{controls}{navigation}</div>
+    const element: HTMLElement = (
+        <div className={Html.buildClassList(className, entry?.cellKind === "instrument" && "instrument")}>
+            {header}{controls}{navigation}
+        </div>
+    )
     lifecycle.ownAll(
         TextTooltip.default(backButton, () => "Back to the parent chain"),
         Events.subscribe(backButton, "click", () => userEditingManager.audioUnit.edit(backTarget)),

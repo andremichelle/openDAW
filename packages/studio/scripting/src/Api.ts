@@ -742,8 +742,6 @@ export interface AudioEffectCompositeEntry extends AudioEffectHost {
     readonly uuid: string
     /** The composite this entry belongs to */
     readonly composite: AudioEffectCompositeEffect | StereoSplitEffect | FrequencySplitEffect
-    /** Custom label */
-    label: string
     /** Position in the composite */
     readonly index: int
     /** Entry gain in dB (default 0) */
@@ -772,7 +770,7 @@ export interface AudioEffectCompositeEffect extends AudioEffect {
     /** All entries ordered by index */
     readonly entries: ReadonlyArray<AudioEffectCompositeEntry>
     /** Add a parallel entry */
-    addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "label" | "gain" | "mute" | "solo" | "pan">>): AudioEffectCompositeEntry
+    addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "gain" | "mute" | "solo" | "pan">>): AudioEffectCompositeEntry
 }
 
 /**

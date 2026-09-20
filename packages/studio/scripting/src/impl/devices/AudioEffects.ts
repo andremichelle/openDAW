@@ -442,7 +442,6 @@ export class AudioEffectCompositeEntryImpl extends Facade<AudioEffectCompositeCe
         return context.facade(box, () => new AudioEffectCompositeEntryImpl(context, box))
     }
 
-    declare label: string
     declare gain: float
     declare mute: boolean
     declare solo: boolean
@@ -451,7 +450,7 @@ export class AudioEffectCompositeEntryImpl extends Facade<AudioEffectCompositeCe
 
     private constructor(context: Context, box: AudioEffectCompositeCellBox) {
         super(context, box)
-        this.bind({label: box.label, gain: box.gain, mute: box.mute, solo: box.solo, pan: box.pan})
+        this.bind({gain: box.gain, mute: box.mute, solo: box.solo, pan: box.pan})
         this.#chain = new EffectChain<AnyAudioEffectImpl>(context, box.audioEffects, box => AudioEffectImpls.wrap(context, box))
     }
 
@@ -497,10 +496,10 @@ export class AudioEffectCompositeImpl extends AudioEffectFacade<AudioEffectCompo
 
     get entries(): ReadonlyArray<AudioEffectCompositeEntry> {return listEntries(this.context, this.box.entries)}
 
-    addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "label" | "gain" | "mute" | "solo" | "pan">>): AudioEffectCompositeEntry {
+    addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "gain" | "mute" | "solo" | "pan">>): AudioEffectCompositeEntry {
         return this.context.edit(() => {
             const index = this.box.entries.pointerHub.incoming().length
-            const box = DeviceBoxes.createCompositeEntry(this.context.boxGraph, this.box.entries, index, `Entry ${index + 1}`)
+            const box = DeviceBoxes.createCompositeEntry(this.context.boxGraph, this.box.entries, index)
             return Props.apply(AudioEffectCompositeEntryImpl.wrap(this.context, box), props)
         })
     }

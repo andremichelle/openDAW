@@ -1,7 +1,7 @@
 import {Pointers} from "@opendaw/studio-enums"
 import {InstrumentCompositeCellBox} from "@opendaw/studio-boxes"
 import {Exec, Option, StringMapping, Subscription, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
-import {Address, BooleanField, Field, Int32Field, StringField} from "@opendaw/lib-box"
+import {Address, BooleanField, Field, Int32Field} from "@opendaw/lib-box"
 import {AudioEffectDeviceAdapter, CompositeCell, DeviceHost, Devices, MidiEffectDeviceAdapter} from "../../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../../LabeledAudioOutputsOwner"
 import {IndexedBoxAdapter, IndexedBoxAdapterCollection} from "../../../IndexedBoxAdapterCollection"
@@ -46,9 +46,9 @@ export class InstrumentCompositeCellBoxAdapter implements CompositeCell, Indexed
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get indexField(): Int32Field {return this.#box.index}
-    get labelField(): StringField {return this.#box.label}
     get minimizedField(): BooleanField {return this.#box.minimized}
-    get label(): string {return this.#box.label.getValue()}
+    // A layer has no name of its own, it goes by the instrument it hosts.
+    get label(): string {return this.#input.label.unwrapOrElse(() => `Layer ${this.#box.index.getValue() + 1}`)}
     get input(): AudioUnitInput {return this.#input}
 
     get midiEffects(): Option<IndexedBoxAdapterCollection<MidiEffectDeviceAdapter, Pointers.MIDIEffectHost>> {

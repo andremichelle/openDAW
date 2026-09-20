@@ -97,7 +97,6 @@ export interface CompositeCell extends DeviceHost {
 
     get box(): Box<Pointers> // entered by pointing the Editing pointer at the cell box itself
     get indexField(): Int32Field
-    get labelField(): StringField
 
     compositeDevice(): DeviceBoxAdapter
     siblings(): ReadonlyArray<CompositeCell>

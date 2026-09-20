@@ -1,4 +1,4 @@
-import {Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {int, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Field, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {AudioEffectCompositeBox, FrequencySplitBox, StereoCompositeBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
@@ -24,6 +24,8 @@ export abstract class AudioCompositeAdapter implements AudioEffectDeviceAdapter 
     // Whether the ENTRY set is fixed by the device (a stereo split owns exactly its L / R entries and the UI
     // offers no add / remove / reorder), as opposed to a user-managed stack.
     abstract get entriesFixed(): boolean
+    // An entry has no name of its own, its composite names it by position: "Entry 2", "L", "Low Mid".
+    abstract entryLabelAt(index: int): string
     abstract get manualUrl(): string
 
     readonly #terminator = new Terminator()

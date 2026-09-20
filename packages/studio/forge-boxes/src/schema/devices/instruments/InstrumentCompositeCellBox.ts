@@ -17,7 +17,6 @@ export const InstrumentCompositeCellBox: BoxSchema<Pointers> = {
             3: {type: "field", name: "midi-effects", pointerRules: {accepts: [Pointers.MIDIEffectHost], mandatory: false}},
             4: {type: "field", name: "audio-effects", pointerRules: {accepts: [Pointers.AudioEffectHost], mandatory: false}},
             5: {type: "int32", name: "index", constraints: "index", unit: ""}, // position in the composite (UI order)
-            6: {type: "string", name: "label"},
             7: {type: "boolean", name: "minimized", value: false},
             40: {
                 type: "float32", name: "gain", pointerRules: ParameterPointerRules,

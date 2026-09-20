@@ -68,7 +68,7 @@ Still open:
 Keys 4 and 5 are taken on the instrument cell, so label / minimized cannot sit where the FX entry has them.
 The strip block reuses the FX entry's numbers so both cells read alike.
 
-- 6 `label` string
+- 6 unused (was `label`, removed 2026-09-20, a layer goes by its instrument's name)
 - 7 `minimized` boolean
 - 40 `gain` float32 dB, `ParameterPointerRules`
 - 41 `mute` boolean, `ParameterPointerRules`
@@ -440,6 +440,43 @@ as done on a manual check alone. The browser checkpoint in phase 3 is additional
   - `ProjectApi.duplicateCompositeLayer` (synth, both chains, nested composite, right behind the source, no
     automation lanes) + "Duplicate layer" in the layer synth's menu.
   - Not checked in the browser yet: preset load / save inside a layer, duplicate layer.
+
+- Phase 4 COMMITTED (`528e692cd`, not pushed).
+- Phase 5 (wasm end to end) DONE 2026-09-20, uncommitted: `instrument-composite-e2e.test.ts`, 7 tests, no
+  engine change needed:
+  - one layer renders SAMPLE FOR SAMPLE what the bare instrument renders (200 quanta, the 0 dB strip is
+    transparent),
+  - a layer's audio effect, and a layer's midi effect (Pitch +12), reach that layer only,
+  - an FX Composite inside a layer processes that layer,
+  - a layer joins and leaves while playing, the other layer never drops out,
+  - a launched clip hands over ONCE and at the same bar for a straight layer and a layer with its own Zeitgeist
+    (one `Started`), through the real engine,
+  - stems of a composite unit equal a plain unit's for all four flag sets (default, no fx, instrument output,
+    skip strip). Freeze is the skip-strip stem render, so it is covered by that tap, a frozen composite was not
+    played back in a test.
+  Together with the earlier files (`-unit-arp`, `-layer-zeitgeist`, `-layer-strip`, `-nesting`) the plan's
+  phase 5 list is covered.
+- LEFT: phase 6 (scripting facade, manual page), the question whether a layer row shows its name.
+
+- 2026-09-20, uncommitted, on the user's request:
+  - The cell HEAD (`CompositeCellEditor` + its own sass, ONE component for the FX entry head and the layer
+    head) is restyled: fixed width 9rem, darker background, the layer kind in green, centred numbers, the
+    layer's `.cell-container` with a green top line and hidden when empty.
+  - The head names and renames the PARENT COMPOSITE for a layer too, like the FX entry (it had renamed the
+    layer's own label).
+  - The cell's `label` field (key 6) is REMOVED from the schema. Safe for saved projects: `Serializer.readFields`
+    skips a key the box no longer has. A layer now goes by its instrument's name (`Layer n` when empty), in
+    the row tooltip and the sidechain source list. Key 7 (`minimized`) keeps its number, key 6 stays unused.
+
+- 2026-09-20, uncommitted, on the user's request: the FX entry's `label` (key 4 on
+  `AudioEffectCompositeCellBox`) is DEPRECATED, not removed. A deprecated field still reads from old projects,
+  is no longer written, and is dropped from the Rust registry. An entry is named by its composite:
+  `AudioCompositeAdapter.entryLabelAt(index)` = "Entry n" (FX), "L" / "R" (stereo), the band names by band
+  count (frequency, `FrequencySplitBoxAdapter.BAND_LABELS`, the editor's `relabel` is gone). The factories write
+  no labels, the engine spec's `labelKey` is 0 (it only named a node in a graph dump), and `label` is REMOVED
+  from the scripting API (`AudioEffectCompositeEntry.label`, `addEntry({label})`), a breaking change for
+  scripts that used it. Seven existing tests identified entries by their stored label and now tag them by
+  gain, a new test pins the frequency split's names following its band count.
 
 ## Phases (each gated on green tests)
 

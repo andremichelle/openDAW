@@ -1,3 +1,4 @@
+import {int} from "@opendaw/lib-std"
 import {AudioEffectCompositeBox} from "@opendaw/studio-boxes"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
@@ -11,5 +12,6 @@ export class AudioEffectCompositeBoxAdapter extends AudioCompositeAdapter {
     }
 
     get entriesFixed(): boolean {return false}
+    entryLabelAt(index: int): string {return `Entry ${index + 1}`}
     get manualUrl(): string {return DeviceManualUrls.AudioEffectComposite}
 }

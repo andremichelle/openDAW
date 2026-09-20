@@ -11,6 +11,10 @@ import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
 
 // The copy paths carry no per-box code, they walk the graph's dependencies. These tests pin what that walk
 // does with an Instrument Composite: a whole unit travels complete, ONE effect out of a layer travels alone.
+const PAD = -1.0
+const STACK = -2.0
+const DEEP = -3.0
+
 describe("Instrument Composite copy paths", () => {
     const build = () => {
         const skeleton = ProjectSkeleton.empty({createDefaultUser: false, createOutputMaximizer: false})
@@ -19,19 +23,20 @@ describe("Instrument Composite copy paths", () => {
         const unit = AudioUnitFactory.create(skeleton, AudioUnitType.Instrument,
             Option.wrap(CaptureMidiBox.create(boxGraph, UUID.generate())))
         const composite = InstrumentFactories.InstrumentComposite.create(boxGraph, unit.input, "Layers", IconSymbol.Stack)
-        const layer = (owner: InstrumentCompositeBox, index: number, label: string) =>
+        // A layer has no name, so each one is tagged by a unique gain.
+        const layer = (owner: InstrumentCompositeBox, index: number, gain: number) =>
             InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
                 box.composite.refer(owner.cells)
                 box.index.setValue(index)
-                box.label.setValue(label)
+                box.gain.setValue(gain)
             })
-        const pad = layer(composite, 0, "Pad")
+        const pad = layer(composite, 0, PAD)
         InstrumentFactories.Vaporisateur.create(boxGraph, pad.instrument, "Pad synth", IconSymbol.Piano)
         const padDelay = DelayDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(pad.audioEffects); box.index.setValue(0)})
         PitchDeviceBox.create(boxGraph, UUID.generate(), box => {box.host.refer(pad.midiEffects); box.index.setValue(0)})
-        const stack = layer(composite, 1, "Stack")
+        const stack = layer(composite, 1, STACK)
         const inner = InstrumentFactories.InstrumentComposite.create(boxGraph, stack.instrument, "Inner", IconSymbol.Stack)
-        InstrumentFactories.Nano.create(boxGraph, layer(inner, 0, "Deep").instrument, "Deep nano", IconSymbol.Piano)
+        InstrumentFactories.Nano.create(boxGraph, layer(inner, 0, DEEP).instrument, "Deep nano", IconSymbol.Piano)
         boxGraph.endTransaction()
         return {skeleton, unit, padDelay}
     }
@@ -46,17 +51,17 @@ describe("Instrument Composite copy paths", () => {
         target.boxGraph.endTransaction()
         const boxes = target.boxGraph.boxes()
         const cells = boxes.filter(box => box instanceof InstrumentCompositeCellBox)
-        const cell = (label: string) => cells.find(box => box.label.getValue() === label)!
-        expect(cells.map(box => box.label.getValue()).toSorted()).toStrictEqual(["Deep", "Pad", "Stack"])
+        const cell = (gain: number) => cells.find(box => box.gain.getValue() === gain)!
+        expect(cells.map(box => box.gain.getValue()).toSorted((a, b) => b - a)).toStrictEqual([PAD, STACK, DEEP])
         const composites = boxes.filter(box => box instanceof InstrumentCompositeBox)
         const outer = composites.find(box => box.label.getValue() === "Layers")!
         const inner = composites.find(box => box.label.getValue() === "Inner")!
         expect(hostOf(outer)).toBe(copied)
-        expect(hostOf(inner)).toBe(cell("Stack"))
-        expect(hostOf(boxes.find(box => box instanceof VaporisateurDeviceBox)!)).toBe(cell("Pad"))
-        expect(hostOf(boxes.find(box => box instanceof DelayDeviceBox)!)).toBe(cell("Pad"))
-        expect(hostOf(boxes.find(box => box instanceof PitchDeviceBox)!)).toBe(cell("Pad"))
-        expect(hostOf(boxes.find(box => box instanceof NanoDeviceBox)!)).toBe(cell("Deep"))
+        expect(hostOf(inner)).toBe(cell(STACK))
+        expect(hostOf(boxes.find(box => box instanceof VaporisateurDeviceBox)!)).toBe(cell(PAD))
+        expect(hostOf(boxes.find(box => box instanceof DelayDeviceBox)!)).toBe(cell(PAD))
+        expect(hostOf(boxes.find(box => box instanceof PitchDeviceBox)!)).toBe(cell(PAD))
+        expect(hostOf(boxes.find(box => box instanceof NanoDeviceBox)!)).toBe(cell(DEEP))
         expect(boxes.filter(box => box instanceof AudioUnitBox && box.type.getValue() !== AudioUnitType.Output).length).toBe(1)
     })
 

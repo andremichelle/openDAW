@@ -36,7 +36,7 @@ export type EffectCompositeSpec = {
     entriesField: number    // the composite's entry collection (host field)
     indexKey: number        // the entry box's `index` (UI + sum / merge order)
     chainField: number      // the entry box's fx-host collection (audio or midi, per `kind`)
-    labelKey: number        // the entry box's `label`
+    labelKey: number        // the entry box's `label` (0 = none, only names the node in a graph dump)
     gainKey: number         // the entry's gain (dB); 0 for a midi composite
     panKey: number          // the entry's pan (bipolar); 0 = none
     muteKey: number         // the entry's mute (automatable; an entry has no `enabled`)
@@ -123,7 +123,7 @@ export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
 ]
 
 // The EFFECT composite box types (parallel fx / midi stacks). Each hosts its ENTRIES at field 10, ordered by the
-// entry's own `index` (3); an entry holds its chain at field 2, its label at 4, and its gain / mute / solo at
+// entry's own `index` (3); an entry holds its chain at field 2 (its label at 4 is deprecated, labelKey 0), and its gain / mute / solo at
 // 40 / 41 / 42. An audio composite additionally has its input tap at 11 and dry / wet at 12 / 13. The entry
 // boxes are NOT plugins — the engine realizes them itself, so nothing is added to DEVICES for them.
 export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
@@ -131,7 +131,7 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
     {
         boxType: "AudioEffectCompositeBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Broadcast,
-        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
+        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
         gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
         crossoverKeys: [0, 0, 0]
     },
@@ -139,7 +139,7 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
     {
         boxType: "StereoCompositeBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Stereo,
-        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
+        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
         gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
         crossoverKeys: [0, 0, 0]
     },
@@ -148,7 +148,7 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
     {
         boxType: "FrequencySplitBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Frequency,
-        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
+        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
         gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
         crossoverKeys: [14, 15, 16]
     }

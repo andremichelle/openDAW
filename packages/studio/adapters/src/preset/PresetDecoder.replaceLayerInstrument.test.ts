@@ -48,7 +48,6 @@ describe("PresetDecoder.replaceLayerInstrument", () => {
             const cell = InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
                 box.composite.refer(composite.cells)
                 box.index.setValue(index)
-                box.label.setValue(`Layer ${index + 1}`)
                 box.gain.setValue(-6.0)
             })
             factory.create(boxGraph, cell.instrument, factory.defaultName, factory.defaultIcon)
@@ -80,8 +79,8 @@ describe("PresetDecoder.replaceLayerInstrument", () => {
         expect(replaced).toBeInstanceOf(NeonDeviceBox)
         expect((replaced as NeonDeviceBox).label.getValue()).toBe("Glass Bells")
         expect(oldNeon.isAttached(), "the old instrument is gone").toBe(false)
-        expect([layers[0].label.getValue(), layers[0].gain.getValue()], "the layer keeps its name and strip")
-            .toStrictEqual(["Layer 1", -6.0])
+        expect([layers[0].index.getValue(), layers[0].gain.getValue()], "the layer keeps its place and strip")
+            .toStrictEqual([0, -6.0])
         expect(layers[0].audioEffects.pointerHub.incoming().map(pointer => pointer.box), "the layer keeps its effects")
             .toStrictEqual([layerDelay])
         expect(instrumentOf(layers[1])[0]).toBeInstanceOf(VaporisateurDeviceBox)

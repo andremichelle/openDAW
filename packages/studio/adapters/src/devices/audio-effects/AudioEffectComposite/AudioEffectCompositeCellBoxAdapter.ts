@@ -48,9 +48,8 @@ export class AudioEffectCompositeCellBoxAdapter implements CompositeCell, Indexe
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get indexField(): Int32Field {return this.#box.index}
-    get labelField(): StringField {return this.#box.label}
     get minimizedField(): BooleanField {return this.#box.minimized}
-    get label(): string {return this.#box.label.getValue()}
+    get label(): string {return this.compositeDevice().entryLabelAt(this.#box.index.getValue())}
 
     // An audio entry hosts an audio chain only: no midi chain, and no instrument to head it.
     get audioEffects(): Option<IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>> {
@@ -99,7 +98,6 @@ export class AudioEffectCompositeCellBoxAdapter implements CompositeCell, Indexe
         AudioEffectCompositeCellBox.create(this.#box.graph, UUID.generate(), box => {
             box.composite.refer(this.#box.composite.targetVertex.unwrap("composite.target"))
             box.index.setValue(index)
-            box.label.setValue(this.#box.label.getValue())
             box.gain.setValue(this.#box.gain.getValue())
             box.pan.setValue(this.#box.pan.getValue())
             box.mute.setValue(this.#box.mute.getValue())

@@ -1,3 +1,4 @@
+import {int} from "@opendaw/lib-std"
 import {StereoCompositeBox} from "@opendaw/studio-boxes"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
@@ -12,5 +13,6 @@ export class StereoCompositeBoxAdapter extends AudioCompositeAdapter {
     }
 
     get entriesFixed(): boolean {return true}
+    entryLabelAt(index: int): string {return index === 0 ? "L" : "R"}
     get manualUrl(): string {return DeviceManualUrls.StereoComposite}
 }

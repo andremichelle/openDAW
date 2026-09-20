@@ -215,7 +215,6 @@ describe("DevicesClipboardHandler", () => {
         entry = AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(composite.entries)
             box.index.setValue(0)
-            box.label.setValue("Branch")
         })
         nested = StereoToolDeviceBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(entry.audioEffects)

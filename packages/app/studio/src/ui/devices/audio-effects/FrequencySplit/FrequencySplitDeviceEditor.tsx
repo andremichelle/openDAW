@@ -1,6 +1,6 @@
 import css from "./FrequencySplitDeviceEditor.sass?inline"
 import {DeviceHost, FrequencySplitBoxAdapter} from "@opendaw/studio-adapters"
-import {clamp, int, isDefined, Lifecycle, MutableObservableValue, ObservableValue, Observer, Option, Subscription, UUID} from "@opendaw/lib-std"
+import {clamp, int, Lifecycle, MutableObservableValue, ObservableValue, Observer, Option, Subscription, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {AudioEffectCompositeCellBox} from "@opendaw/studio-boxes"
@@ -18,12 +18,6 @@ import {FrequencySplitGraph, GAP} from "./FrequencySplitGraph"
 
 const className = Html.adoptStyleSheet(css, "FrequencySplitDeviceEditor")
 
-const BAND_LABELS: Readonly<Record<number, ReadonlyArray<string>>> = {
-    2: ["Low", "High"],
-    3: ["Low", "Mid", "High"],
-    4: ["Low", "Low Mid", "High Mid", "High"]
-}
-
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
@@ -35,13 +29,6 @@ export const FrequencySplitDeviceEditor = ({lifecycle, service, adapter, deviceH
     const {project} = service
     const {editing, midiLearning} = project
     const bandCount = (): int => adapter.entries.adapters().length
-    const relabel = (count: int): void => {
-        const labels = BAND_LABELS[count] ?? []
-        adapter.entries.adapters().forEach(entry => {
-            const label = labels[entry.indexField.getValue()]
-            if (isDefined(label)) {entry.box.label.setValue(label)}
-        })
-    }
     const growTo = (from: int, to: int): void => {
         Array.from({length: to - from}, (_, step) => from + step).forEach(index => {
             const crossover = adapter.crossover[index - 1]
@@ -64,7 +51,6 @@ export const FrequencySplitDeviceEditor = ({lifecycle, service, adapter, deviceH
         if (clamped === count) {return}
         editing.modify(() => {
             if (clamped > count) {growTo(count, clamped)} else {shrinkTo(clamped)}
-            relabel(clamped)
         })
     }
     const rows = (rowLifecycle: Lifecycle): ReadonlyArray<Element> => adapter.entries.adapters()

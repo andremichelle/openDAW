@@ -1,5 +1,5 @@
 import {BoxGraph, Field} from "@opendaw/lib-box"
-import {INVERSE_SQRT_2, int, panic, Unhandled, UUID} from "@opendaw/lib-std"
+import {Arrays, INVERSE_SQRT_2, int, panic, Unhandled, UUID} from "@opendaw/lib-std"
 import {IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {
     ArpeggioDeviceBox,
@@ -43,8 +43,8 @@ export type AudioEffectBox =
     | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox | FrequencySplitBox
 
 export namespace DeviceBoxes {
-    export const STEREO_ENTRY_LABELS: ReadonlyArray<string> = ["L", "R"]
-    export const FREQUENCY_SPLIT_ENTRY_LABELS: ReadonlyArray<string> = ["Low", "Low Mid", "High Mid", "High"]
+    const STEREO_ENTRY_COUNT = 2
+    const FREQUENCY_SPLIT_ENTRY_COUNT = 4
 
     export const MIDIEffectLabels: Record<keyof MIDIEffects, string> = {
         Arpeggio: "Arpeggio", Pitch: "Pitch", Velocity: "Velocity", Zeitgeist: "Zeitgeist", Spielwerk: "Spielwerk"
@@ -324,7 +324,7 @@ export namespace DeviceBoxes {
                     box.index.setValue(index)
                     box.host.refer(host)
                 })
-                STEREO_ENTRY_LABELS.forEach((label, entryIndex) => createCompositeEntry(boxGraph, composite.entries, entryIndex, label))
+                Arrays.create(entryIndex => createCompositeEntry(boxGraph, composite.entries, entryIndex), STEREO_ENTRY_COUNT)
                 return composite
             }
             case "FrequencySplit": {
@@ -333,7 +333,7 @@ export namespace DeviceBoxes {
                     box.index.setValue(index)
                     box.host.refer(host)
                 })
-                FREQUENCY_SPLIT_ENTRY_LABELS.forEach((label, entryIndex) => createCompositeEntry(boxGraph, composite.entries, entryIndex, label))
+                Arrays.create(entryIndex => createCompositeEntry(boxGraph, composite.entries, entryIndex), FREQUENCY_SPLIT_ENTRY_COUNT)
                 return composite
             }
             default:
@@ -343,12 +343,10 @@ export namespace DeviceBoxes {
 
     export const createCompositeEntry = (boxGraph: BoxGraph,
                                          entries: Field<Pointers.AudioEffectCompositeCell>,
-                                         index: int,
-                                         label: string): AudioEffectCompositeCellBox =>
+                                         index: int): AudioEffectCompositeCellBox =>
         AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(entries)
             box.index.setValue(index)
-            box.label.setValue(label)
         })
 
     export const iconName = (symbol: IconSymbol): string => IconSymbol.toName(symbol)

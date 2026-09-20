@@ -33,12 +33,12 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         const entryA = AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(composite.entries)
             box.index.setValue(0)
-            box.label.setValue("A")
+            box.gain.setValue(-1.0) // an entry has no name, the tests tag entries by a unique gain
         })
         const entryB = AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(composite.entries)
             box.index.setValue(1)
-            box.label.setValue("B")
+            box.gain.setValue(-2.0)
         })
         StereoToolDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(entryA.audioEffects))
         CrusherDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(entryB.audioEffects))
@@ -73,8 +73,8 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         const crusherHost = crusher?.host.targetVertex.unwrap("crusher.host").box
         expect(stereoHost).toBeInstanceOf(AudioEffectCompositeCellBox)
         expect(crusherHost).toBeInstanceOf(AudioEffectCompositeCellBox)
-        expect((stereoHost as AudioEffectCompositeCellBox).label.getValue()).toBe("A")
-        expect((crusherHost as AudioEffectCompositeCellBox).label.getValue()).toBe("B")
+        expect((stereoHost as AudioEffectCompositeCellBox).gain.getValue()).toBe(-1.0)
+        expect((crusherHost as AudioEffectCompositeCellBox).gain.getValue()).toBe(-2.0)
     })
 
     // Decode a chain preset onto a fresh unit and return the target graph + unit.
@@ -105,7 +105,6 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(composite.entries)
             box.index.setValue(0)
-            box.label.setValue("A")
             box.gain.setValue(-4.5)
             box.pan.setValue(0.5)
             box.mute.setValue(true)
@@ -120,7 +119,6 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         expect(pastedComposite.wet.getValue()).toBe(-3.0)
         const pastedEntry = targetGraph.boxes()
             .find(box => box instanceof AudioEffectCompositeCellBox) as AudioEffectCompositeCellBox
-        expect(pastedEntry.label.getValue()).toBe("A")
         expect(pastedEntry.gain.getValue()).toBe(-4.5)
         expect(pastedEntry.pan.getValue()).toBe(0.5)
         expect(pastedEntry.mute.getValue()).toBe(true)
@@ -140,12 +138,10 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         const left = AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(split.entries)
             box.index.setValue(0)
-            box.label.setValue("L")
         })
         AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(split.entries)
             box.index.setValue(1)
-            box.label.setValue("R")
         })
         StereoToolDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(left.audioEffects))
         boxGraph.endTransaction()
@@ -156,11 +152,10 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         expect(splits[0].host.targetVertex.unwrap("split.host").address.toString()).toStrictEqual(targetUnit.audioEffects.address.toString())
         const entries = (targetGraph.boxes().filter(box => box instanceof AudioEffectCompositeCellBox) as AudioEffectCompositeCellBox[])
             .sort((a, b) => a.index.getValue() - b.index.getValue())
-        expect(entries.map(entry => entry.label.getValue())).toStrictEqual(["L", "R"])
         expect(entries.map(entry => entry.index.getValue())).toStrictEqual([0, 1])
         const stereoTool = targetGraph.boxes().find(box => box instanceof StereoToolDeviceBox) as StereoToolDeviceBox
         expect((stereoTool.host.targetVertex.unwrap("stereoTool.host").box as AudioEffectCompositeCellBox)
-            .label.getValue(), "the nested effect stays hosted by the L branch").toBe("L")
+            .index.getValue(), "the nested effect stays hosted by the LEFT branch (index 0)").toBe(0)
     })
 
     it("round-trips a composite NESTED inside another composite's entry", () => {
@@ -176,7 +171,7 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         const outerEntry = AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(outer.entries)
             box.index.setValue(0)
-            box.label.setValue("outer")
+            box.gain.setValue(-1.0)
         })
         const inner = AudioEffectCompositeBox.create(boxGraph, UUID.generate(), box => {
             box.host.refer(outerEntry.audioEffects)
@@ -185,7 +180,7 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         const innerEntry = AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(inner.entries)
             box.index.setValue(0)
-            box.label.setValue("inner")
+            box.gain.setValue(-2.0)
         })
         StereoToolDeviceBox.create(boxGraph, UUID.generate(), box => box.host.refer(innerEntry.audioEffects))
         boxGraph.endTransaction()
@@ -198,13 +193,13 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         expect(pastedOuter, "exactly one composite sits on the unit chain").toBeDefined()
         const pastedOuterEntry = targetGraph.boxes()
             .find(box => box instanceof AudioEffectCompositeCellBox
-                && box.label.getValue() === "outer") as AudioEffectCompositeCellBox
+                && box.gain.getValue() === -1.0) as AudioEffectCompositeCellBox
         const pastedInner = composites.find(box => box !== pastedOuter)!
         expect(pastedInner.host.targetVertex.unwrap("inner.host").box,
             "the inner composite stays hosted by the outer entry").toBe(pastedOuterEntry)
         const stereoTool = targetGraph.boxes().find(box => box instanceof StereoToolDeviceBox) as StereoToolDeviceBox
         expect((stereoTool.host.targetVertex.unwrap("stereoTool.host").box as AudioEffectCompositeCellBox)
-            .label.getValue(), "the deepest effect stays hosted by the inner entry").toBe("inner")
+            .gain.getValue(), "the deepest effect stays hosted by the inner entry").toBe(-2.0)
     })
 
     // The reported bug: applying / dropping an effect preset onto a device that lives INSIDE a composite branch
@@ -233,7 +228,6 @@ describe("PresetEncoder / PresetDecoder (composite subtree)", () => {
         const cell = AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(composite.entries)
             box.index.setValue(0)
-            box.label.setValue("A")
         })
         const attempt = PresetDecoder.insertEffectChain(bytes, cell.audioEffects, 0, PresetHeader.ChainKind.Audio)
         boxGraph.endTransaction()

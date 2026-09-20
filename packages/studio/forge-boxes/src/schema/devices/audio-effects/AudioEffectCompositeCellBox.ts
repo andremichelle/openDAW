@@ -1,4 +1,4 @@
-import {BoxSchema} from "@opendaw/lib-box-forge"
+import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
 import {ParameterPointerRules} from "../../std/Defaults"
 
@@ -19,7 +19,7 @@ export const AudioEffectCompositeCellBox: BoxSchema<Pointers> = {
                 pointerRules: {accepts: [Pointers.AudioEffectHost], mandatory: false}
             },
             3: {type: "int32", name: "index", constraints: "index", unit: ""}, // position in the composite (UI order + sum order)
-            4: {type: "string", name: "label"},
+            4: {type: "string", name: "label", deprecated}, // an entry is named by its composite, see `entryLabelAt`
             5: {type: "boolean", name: "minimized", value: false},
             40: {
                 type: "float32", name: "gain", pointerRules: ParameterPointerRules,

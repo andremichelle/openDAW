@@ -4,6 +4,7 @@ import {
     DeviceHost,
     Devices,
     AudioEffectCompositeBoxAdapter,
+    FrequencySplitBoxAdapter,
     StereoCompositeBoxAdapter,
     AudioEffectCompositeCellBoxAdapter,
     InstrumentFactories,
@@ -13,6 +14,7 @@ import {
     CrusherDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
+    FrequencySplitBox,
     PitchDeviceBox,
     StereoCompositeBox,
     StereoToolDeviceBox
@@ -57,12 +59,10 @@ describe("Composite adapters", () => {
             const entryA = AudioEffectCompositeCellBox.create(project.boxGraph, UUID.generate(), box => {
                 box.composite.refer(composite.entries)
                 box.index.setValue(0)
-                box.label.setValue("A")
             })
             const entryB = AudioEffectCompositeCellBox.create(project.boxGraph, UUID.generate(), box => {
                 box.composite.refer(composite.entries)
                 box.index.setValue(1)
-                box.label.setValue("B")
             })
             const nested = StereoToolDeviceBox.create(project.boxGraph, UUID.generate(), box => {
                 box.host.refer(entryA.audioEffects)
@@ -71,7 +71,8 @@ describe("Composite adapters", () => {
             return {composite, entryA, entryB, nested}
         }).unwrap()
         const compositeAdapter = project.boxAdapters.adapterFor(composite, AudioEffectCompositeBoxAdapter)
-        expect(compositeAdapter.entries.adapters().map(entry => entry.label)).toStrictEqual(["A", "B"])
+        expect(compositeAdapter.entries.adapters().map(entry => entry.label), "an entry is named by its position")
+            .toStrictEqual(["Entry 1", "Entry 2"])
         expect(compositeAdapter.entriesFixed, "a user-built stack manages its own entries").toBe(false)
         const entryAdapter = project.boxAdapters.adapterFor(entryA, AudioEffectCompositeCellBoxAdapter)
         // One-sided: an audio chain (holding the nested effect), and NO midi chain at all.
@@ -263,6 +264,25 @@ describe("Stereo split factory", () => {
         }
         project.terminate()
     })
+
+    it("a frequency split names its bands by how many there are", async () => {
+        const {Project} = await import("./Project")
+        const project = Project.fromSkeleton(createEnv(),
+            ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false}))
+        const {EffectFactories} = await import("../EffectFactories")
+        const box = project.editing.modify(() => {
+            const product = project.api.createAnyInstrument(InstrumentFactories.Vaporisateur)
+            return EffectFactories.FrequencySplit.create(project, product.audioUnitBox.audioEffects, 0)
+        }).unwrap()
+        const adapter = project.boxAdapters.adapterFor(box as FrequencySplitBox, FrequencySplitBoxAdapter)
+        const names = () => adapter.entries.adapters().map(entry => entry.label)
+        expect(names()).toStrictEqual(["Low", "Low Mid", "High Mid", "High"])
+        project.editing.modify(() => adapter.entries.adapters().at(-1)?.box.delete())
+        expect(names(), "the names follow the band count, nothing is stored").toStrictEqual(["Low", "Mid", "High"])
+        project.editing.modify(() => adapter.entries.adapters().at(-1)?.box.delete())
+        expect(names()).toStrictEqual(["Low", "High"])
+        project.terminate()
+    })
 })
 
 // "Add Entry" creates a cell box; the editor's list only shows it because the entries collection NOTIFIES.
@@ -318,15 +338,16 @@ describe("Deleting a composite entry", () => {
                 box.host.refer(product.audioUnitBox.audioEffects)
                 box.index.setValue(0)
             })
-            const make = (index: number, label: string) =>
+            // An entry has no name, so A / B / C are tagged by a unique gain: -1 / -2 / -3.
+            const make = (index: number, gain: number) =>
                 AudioEffectCompositeCellBox.create(project.boxGraph, UUID.generate(), box => {
                     box.composite.refer(composite.entries)
                     box.index.setValue(index)
-                    box.label.setValue(label)
+                    box.gain.setValue(gain)
                 })
-            const entryA = make(0, "A")
-            make(1, "B")
-            make(2, "C")
+            const entryA = make(0, -1.0)
+            make(1, -2.0)
+            make(2, -3.0)
             const nestedInA = StereoToolDeviceBox.create(project.boxGraph, UUID.generate(), box => {
                 box.host.refer(entryA.audioEffects)
                 box.index.setValue(0)
@@ -334,7 +355,7 @@ describe("Deleting a composite entry", () => {
             return {composite, entryA, nestedInA}
         }).unwrap()
         const adapter = project.boxAdapters.adapterFor(composite, AudioEffectCompositeBoxAdapter)
-        expect(adapter.entries.adapters().map(entry => entry.label)).toStrictEqual(["A", "B", "C"])
+        expect(adapter.entries.adapters().map(entry => entry.box.gain.getValue())).toStrictEqual([-1.0, -2.0, -3.0])
         expect(nestedInA.isAttached(), "A holds an effect").toBe(true)
         // Exactly what the delete button runs: capture the survivors first, delete, then reindex.
         const survivors = adapter.entries.adapters().filter(other => other.box !== entryA)
@@ -342,7 +363,9 @@ describe("Deleting a composite entry", () => {
             entryA.box.delete()
             survivors.forEach((other, index) => other.indexField.setValue(index))
         })
-        expect(adapter.entries.adapters().map(entry => entry.label), "A is gone").toStrictEqual(["B", "C"])
+        expect(adapter.entries.adapters().map(entry => entry.box.gain.getValue()), "A is gone").toStrictEqual([-2.0, -3.0])
+        expect(adapter.entries.adapters().map(entry => entry.label), "and the survivors are renamed by position")
+            .toStrictEqual(["Entry 1", "Entry 2"])
         expect(adapter.entries.adapters().map(entry => entry.indexField.getValue()),
             "and the survivors closed the hole").toStrictEqual([0, 1])
         expect(nestedInA.isAttached(), "A's chain went with it — no dangling effect").toBe(false)
@@ -364,15 +387,16 @@ describe("Deleting an entry while the list re-renders", () => {
                 box.host.refer(product.audioUnitBox.audioEffects)
                 box.index.setValue(0)
             })
-            const make = (index: number, label: string) =>
+            // An entry has no name, so A / B / C are tagged by a unique gain: -1 / -2 / -3.
+            const make = (index: number, gain: number) =>
                 AudioEffectCompositeCellBox.create(project.boxGraph, UUID.generate(), box => {
                     box.composite.refer(composite.entries)
                     box.index.setValue(index)
-                    box.label.setValue(label)
+                    box.gain.setValue(gain)
                 })
-            const entryA = make(0, "A")
-            make(1, "B")
-            make(2, "C")
+            const entryA = make(0, -1.0)
+            make(1, -2.0)
+            make(2, -3.0)
             StereoToolDeviceBox.create(project.boxGraph, UUID.generate(), box => {
                 box.host.refer(entryA.audioEffects)
                 box.index.setValue(0)
@@ -392,7 +416,7 @@ describe("Deleting an entry while the list re-renders", () => {
             entryA.box.delete()
             survivors.forEach((other, index) => other.indexField.setValue(index))
         }), "the delete button must not crash the reactive list").not.toThrow()
-        expect(adapter.entries.adapters().map(entry => entry.label)).toStrictEqual(["B", "C"])
+        expect(adapter.entries.adapters().map(entry => entry.box.gain.getValue())).toStrictEqual([-2.0, -3.0])
         subscription.terminate()
         project.terminate()
     })
