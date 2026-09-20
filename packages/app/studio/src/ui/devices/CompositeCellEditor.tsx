@@ -56,7 +56,7 @@ export const CompositeCellEditor = ({lifecycle, service, host}: Construct) => {
                 some: entry => MenuItems.forCompositeCell(parent, service, host, entry.compositeDevice())
             })
             parent.addMenuItem(DebugMenus.debugBox(cell.mapOr<Box>(entry => entry.box, host.audioUnitBoxAdapter().box)))
-        })} style={{minWidth: "0", fontSize: "14px", marginLeft: "auto"}}
+        })} style={{minWidth: "0", fontSize: "0.75em", marginLeft: "auto"}}
                     appearance={{color: Colors.cream, activeColor: Colors.bright}}>
             <Icon symbol={IconSymbol.Menu}/>
         </MenuButton>
