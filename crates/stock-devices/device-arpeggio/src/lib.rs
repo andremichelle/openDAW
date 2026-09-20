@@ -242,7 +242,6 @@ pub fn process(state: &mut ArpState, from: f64, to: f64, flags: u32, input: &[Ev
     let mut events = [blank; EMIT_MAX];
     let mut count = 0;
     let discontinuous = flags & abi::BlockFlags::DISCONTINUOUS != 0;
-    let transporting = flags & abi::BlockFlags::TRANSPORTING != 0;
     if discontinuous {
         let mut index = 0;
         while index < state.retained_count as usize {
@@ -257,9 +256,9 @@ pub fn process(state: &mut ArpState, from: f64, to: f64, flags: u32, input: &[Ev
     }
     prune_source(state, from);
     ingest(state, input);
-    // onlyExternal (= !transporting) yields no sequenced notes in the TS source, so the arp emits nothing while
-    // the transport is not moving.
-    if transporting && state.rate > 0.0 && state.source_count > 0 {
+    // TS `onlyExternal = !transporting`: a stopped transport arpeggiates the LIVE notes. The sequencer hands over
+    // live notes only while stopped (it releases the sequenced ones), so the source holds exactly those.
+    if state.rate > 0.0 && state.source_count > 0 {
         let repeat = if state.repeat < 1 { 1 } else { state.repeat as i64 };
         let step_len = state.rate * state.gate.max(0.0) as f64;
         let duration = if step_len < 1.0 { 1.0 } else { (step_len as i64) as f64 };
@@ -544,11 +543,18 @@ mod tests {
     }
 
     #[test]
-    fn not_transporting_emits_nothing() {
+    fn a_stopped_transport_arpeggiates_the_held_live_notes() {
+        // TS `onlyExternal = !transporting`: while stopped the arp steps over the EXTERNAL (live) notes. The
+        // engine's paused block keeps a free-running position, and the sequencer hands over live notes only.
         let mut state = state();
-        let input = [note_on(0.0, 4000.0, 60, 0.8)];
+        let held = [note_on(0.0, f64::INFINITY, 60, 0.8)];
         let mut out = [note_on(0.0, 0.0, 0, 0.0); 64];
-        let written = process(&mut state, 0.0, 4000.0, 0, &input, &mut out);
-        assert_eq!(written, 0, "no output while the transport is not moving");
+        let written = process(&mut state, 0.0, 960.0, 0, &held, &mut out);
+        assert_eq!(on_count(&out[..written]), 4, "a held key steps on the 1/16 grid while stopped");
+        // The key is released: its note-off ends the span, no further step starts.
+        let release = [EventRecord {position: 1000.0, offset: 0, kind: EVENT_NOTE_OFF, id: 1, pitch: 60, velocity: 0.0, cent: 0.0, duration: 0.0}];
+        process(&mut state, 960.0, 1200.0, 0, &release, &mut out);
+        let written = process(&mut state, 1200.0, 2160.0, 0, &[], &mut out);
+        assert_eq!(on_count(&out[..written]), 0, "no step after the key went up");
     }
 }
