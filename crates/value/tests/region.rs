@@ -169,3 +169,17 @@ fn a_zero_loop_duration_yields_nothing_instead_of_hanging() {
     assert!(cycles(0.0, 4.0 * BAR, 0.0, -1.0, 0.0, 4.0 * BAR).is_empty());
     assert!(cycles(0.0, 4.0 * BAR, 0.0, f64::NAN, 0.0, 4.0 * BAR).is_empty());
 }
+
+// Live 1140 layout: a long region reaching over later ones. Documents what the engine actually plays.
+#[test]
+fn a_long_region_under_later_regions_is_found_only_until_the_next_one_starts() {
+    let mut collection = RegionCollection::new();
+    collection.add(region(0, 0.0, 1000.0));  // [0, 1000) reaches over both below
+    collection.add(region(1, 100.0, 100.0)); // [100, 200)
+    collection.add(region(2, 300.0, 100.0)); // [300, 400)
+    assert_eq!(ids(&collection, 10.0, 20.0), vec![0], "alone before the next region starts");
+    assert_eq!(ids(&collection, 90.0, 110.0), vec![0, 1], "both in the block where the next one starts");
+    assert_eq!(ids(&collection, 120.0, 180.0), vec![1], "gone once the next one has started");
+    assert_eq!(ids(&collection, 220.0, 280.0), Vec::<u32>::new(), "and it does not come back in the gap");
+    assert_eq!(ids(&collection, 500.0, 600.0), Vec::<u32>::new(), "nor after the last region");
+}

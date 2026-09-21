@@ -60,6 +60,8 @@ import {
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
     ProjectQueries,
+    RegionAdapters,
+    RegionOverlap,
     TrackBoxAdapter,
     TransferUtils,
     TrackType
@@ -303,20 +305,12 @@ export class ProjectApi {
             .filter(track => track.type === targetType)
             .toSorted((a, b) => a.indexField.getValue() - b.indexField.getValue())
         if (tracks.length < 2) {return}
-        const fits = (track: TrackBoxAdapter, position: ppqn, complete: ppqn): boolean => {
-            // Read regions live from the pointerHub (not from track.regions.collection),
-            // because the cached collection isn't updated within the running transaction
-            // and would miss regions just moved here in a previous iteration.
-            const regions = track.box.regions.pointerHub.incoming()
-                .map(({box}) => box as AnyRegionBox)
-                .toSorted((a, b) => a.position.getValue() - b.position.getValue())
-            for (const existing of regions) {
-                const existingPosition = existing.position.getValue()
-                if (existingPosition >= complete) {return true}
-                if (existingPosition + existing.duration.getValue() > position) {return false}
-            }
-            return true
-        }
+        // Reads regions live from the pointerHub (not from track.regions.collection),
+        // because the cached collection isn't updated within the running transaction
+        // and would miss regions just moved here in a previous iteration.
+        const {boxAdapters} = this.#project
+        const fits = (track: TrackBoxAdapter, position: ppqn, complete: ppqn): boolean =>
+            RegionOverlap.hasSpace(boxAdapters, track.box, position, complete)
         for (let i = 1; i < tracks.length; i++) {
             // Snapshot the region list before mutating; moving via `refer` will
             // remove the region from this track's collection mid-iteration.
@@ -324,7 +318,7 @@ export class ProjectApi {
             for (const region of regions) {
                 for (let j = 0; j < i; j++) {
                     const position = region.position.getValue()
-                    const complete = position + region.duration.getValue()
+                    const complete = RegionAdapters.for(boxAdapters, region).resolveComplete(position)
                     if (fits(tracks[j], position, complete)) {
                         region.regions.refer(tracks[j].box.regions)
                         break

@@ -1,6 +1,6 @@
 import {Exec, int} from "@opendaw/lib-std"
 import {ppqn} from "@opendaw/lib-dsp"
-import {AnyRegionBoxAdapter, BoxAdapters, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
+import {AnyRegionBoxAdapter, BoxAdapters, RegionOverlap, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {TrackBox} from "@opendaw/studio-boxes"
 import {RegionModifyStrategies} from "./RegionModifyStrategies"
 import {ProjectApi} from "../../project"
@@ -150,7 +150,7 @@ export class RegionKeepExistingResolver {
         // Look for existing track below with space
         for (const trackBox of siblingTracks) {
             if (trackBox.index.getValue() <= sourceIndex) {continue}
-            if (RegionKeepExistingResolver.#hasSpace(trackBox, position, complete)) {
+            if (RegionOverlap.hasSpace(boxAdapters, trackBox, position, complete)) {
                 return boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
             }
         }
@@ -161,17 +161,5 @@ export class RegionKeepExistingResolver {
             ? projectApi.createAudioTrack(audioUnit, insertIndex)
             : projectApi.createNoteTrack(audioUnit, insertIndex)
         return boxAdapters.adapterFor(newTrackBox, TrackBoxAdapter)
-    }
-
-    static #hasSpace(trackBox: TrackBox, position: ppqn, complete: ppqn): boolean {
-        for (const vertex of trackBox.regions.pointerHub.incoming()) {
-            const regionPosition = (vertex.box as any).position.getValue() as ppqn
-            const regionDuration = (vertex.box as any).duration.getValue() as ppqn
-            const regionComplete = regionPosition + regionDuration
-            if (regionComplete <= position) {continue}
-            if (regionPosition >= complete) {continue}
-            return false
-        }
-        return true
     }
 }

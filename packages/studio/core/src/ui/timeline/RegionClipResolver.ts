@@ -1,9 +1,9 @@
 import {asDefined, Exec, int, mod, panic, UUID} from "@opendaw/lib-std"
-import {Event, EventCollection, ppqn, TimeBase} from "@opendaw/lib-dsp"
+import {Event, EventCollection, ppqn} from "@opendaw/lib-dsp"
 import {
     AnyRegionBoxAdapter,
-    AudioRegionBoxAdapter,
     RegionEditing,
+    RegionOverlap,
     TrackBoxAdapter,
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
@@ -30,19 +30,13 @@ export type ClipTask = {
 
 export interface Mask extends Event {complete: ppqn}
 
-// AudioRegions in absolute time-domain are allowed to overlap. Their duration changes when the tempo changes,
-// but we do not truncate them to keep the original durations.
-const allowOverlap = (region: AnyRegionBoxAdapter) =>
-    region instanceof AudioRegionBoxAdapter && region.timeBase !== TimeBase.Musical
-
 // A region's duration is stored as float32, and seconds-based audio regions carry double-precision
 // ppqn drift (their ppqn is derived from seconds via the tempo map, e.g. complete = mask.complete + 2e-12).
 // So a clip whose remainder falls below ~one float32 ulp truncates to duration 0, and later trips
 // validateTrack / createTasksFromMasks (#1003). Treat a region within this tolerance of a mask boundary
 // as touching it, so it is deleted rather than clipped to a zero-width sliver. The tolerance tracks
 // float32 precision at the boundary magnitude (so it scales with project length) and is musically nil.
-const Float32RelativeEpsilon = 2 ** -23 // float32 has 23 mantissa bits
-const boundaryTolerance = (value: ppqn): ppqn => Math.abs(value) * Float32RelativeEpsilon + 1e-3
+const {boundaryTolerance} = RegionOverlap
 
 export class RegionClipResolver {
     static fromSelection(tracks: ReadonlyArray<TrackBoxAdapter>,
@@ -82,7 +76,8 @@ export class RegionClipResolver {
         for (let i = 1; i < array.length; i++) {
             const next = array[i]
             if (next.duration <= 0) {return panic(`duration(${next.duration}) must be positive`)}
-            const overlaps = !allowOverlap(prev) && prev.complete > next.position + boundaryTolerance(next.position)
+            const overlaps = !RegionOverlap.endsAtSuccessor(prev.box)
+                && prev.complete > next.position + boundaryTolerance(next.position)
             if (overlaps) {
                 RegionClipResolver.#reportOverlap(track, array, i)
                 return panic(`regions overlap: prev.complete(${prev.complete}) > next.position(${next.position})`)

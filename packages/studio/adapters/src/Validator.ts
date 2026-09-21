@@ -1,8 +1,7 @@
 import {BoxGraph} from "@opendaw/lib-box"
-import {AudioRegionBox, BoxVisitor, TrackBox} from "@opendaw/studio-boxes"
-import {Arrays, Attempt, Attempts, clamp, int} from "@opendaw/lib-std"
-import {UnionBoxTypes} from "./unions"
-import {TimeBase} from "@opendaw/lib-dsp"
+import {TrackBox} from "@opendaw/studio-boxes"
+import {Attempt, Attempts, clamp, int} from "@opendaw/lib-std"
+import {RegionOverlap} from "./timeline/RegionOverlap"
 import {TempoRange} from "./TempoRange"
 import {BaseFrequencyRange} from "./BaseFrequencyRange"
 
@@ -26,19 +25,5 @@ export namespace Validator {
         : BaseFrequencyRange.default
 
     export const hasOverlappingRegions = (boxGraph: BoxGraph): boolean => boxGraph.boxes()
-        .some(box => box.accept<BoxVisitor<boolean>>({
-            visitTrackBox: (box: TrackBox): boolean => {
-                for (const [current, next] of Arrays.iterateAdjacent(box.regions.pointerHub.incoming()
-                    .map(({box}) => UnionBoxTypes.asRegionBox(box))
-                    .sort(({position: a}, {position: b}) => a.getValue() - b.getValue()))) {
-                    if (current instanceof AudioRegionBox && current.timeBase.getValue() === TimeBase.Seconds) {
-                        return false
-                    }
-                    if (current.position.getValue() + current.duration.getValue() > next.position.getValue()) {
-                        return true
-                    }
-                }
-                return false
-            }
-        }) ?? false)
+        .some(box => box instanceof TrackBox && RegionOverlap.find(RegionOverlap.sortedRegions(box)).nonEmpty())
 }

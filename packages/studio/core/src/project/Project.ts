@@ -1,5 +1,4 @@
 import {
-    Arrays,
     asInstanceOf,
     Editing,
     Func,
@@ -25,7 +24,6 @@ import {
     ApparatDeviceBox,
     AudioBusBox,
     AudioFileBox,
-    AudioRegionBox,
     AudioUnitBox,
     BoxIO,
     BoxVisitor,
@@ -70,6 +68,7 @@ import {
     TrackType,
     UnionBoxTypes,
     UserEditingManager,
+    Validator,
     VaryingTempoMap,
     VertexSelection
 } from "@opendaw/studio-adapters"
@@ -85,7 +84,7 @@ import {EngineFacade} from "../EngineFacade"
 import {EngineWorklet} from "../EngineWorklet"
 import {MidiDevices, MIDILearning} from "../midi"
 import {ProjectValidation} from "./ProjectValidation"
-import {ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
+import {ppqn, TempoMap} from "@opendaw/lib-dsp"
 import {MidiData} from "@opendaw/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
 import {RegionOverlapResolver, TimelineFocus} from "../ui"
@@ -517,21 +516,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
 
     invalid(): boolean {
         const now = performance.now()
-        const result = this.boxGraph.boxes().some(box => box.accept<BoxVisitor<boolean>>({
-            visitTrackBox: (box: TrackBox): boolean => {
-                for (const [current, next] of Arrays.iterateAdjacent(box.regions.pointerHub.incoming()
-                    .map(({box}) => UnionBoxTypes.asRegionBox(box))
-                    .sort(({position: a}, {position: b}) => a.getValue() - b.getValue()))) {
-                    if (current instanceof AudioRegionBox && current.timeBase.getValue() === TimeBase.Seconds) {
-                        return false
-                    }
-                    if (current.position.getValue() + current.duration.getValue() > next.position.getValue()) {
-                        return true
-                    }
-                }
-                return false
-            }
-        }) ?? false)
+        const result = Validator.hasOverlappingRegions(this.boxGraph)
         if (performance.now() - now > 5) {
             console.warn("Evaluation of invalid project takes more than 5ms")
         }

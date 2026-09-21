@@ -1,6 +1,6 @@
 import {asDefined, asInstanceOf, Color, ifDefined, isInstanceOf, Maybe, Option, Optional, UUID} from "@opendaw/lib-std"
 import {Xml} from "@opendaw/lib-xml"
-import {dbToGain, PPQN} from "@opendaw/lib-dsp"
+import {dbToGain, PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {AddressIdEncoder, BooleanField, Field} from "@opendaw/lib-box"
 import {Html} from "@opendaw/lib-dom"
 import {
@@ -194,7 +194,10 @@ export namespace DawProjectExporter {
                         external: false
                     }, FileReferenceSchema)
                 }, AudioSchema))
-            const duration = region.duration.getValue() / PPQN.Quarter
+            const toBeats = (value: number): number => (region.timeBase.getValue() === TimeBase.Seconds
+                ? PPQN.secondsToPulses(value, timelineBox.bpm.getValue())
+                : value) / PPQN.Quarter
+            const duration = toBeats(region.duration.getValue())
             return Xml.element({
                 clips: [Xml.element({
                     time: region.position.getValue() / PPQN.Quarter,
@@ -202,7 +205,7 @@ export namespace DawProjectExporter {
                     contentTimeUnit: TimeUnit.BEATS,
                     playStart: 0.0,
                     loopStart: 0.0,
-                    loopEnd: region.loopDuration.getValue() / PPQN.Quarter,
+                    loopEnd: toBeats(region.loopDuration.getValue()),
                     enable: !region.mute.getValue(),
                     name: region.label.getValue(),
                     color: Color.hslToHex(region.hue.getValue(), 1.0, 0.60),
