@@ -159,6 +159,11 @@ export namespace AudioContentModifier {
         }, Number.POSITIVE_INFINITY)
     }
 
+    const clampToGap = (adapter: AudioContentBoxAdapter, pulses: ppqn): ppqn => {
+        const available = availablePulses(adapter)
+        return available > 0.0 ? Math.min(pulses, available) : pulses
+    }
+
     // Move the warp markers of the previous play-mode (if any) onto the new play-mode box, so switching between
     // Pitch / Grain / Signalsmith preserves the user's warp edits; delete the old box if nothing else points at
     // it (else clone the markers). With no previous stretch (was NoWarp), seed default markers instead.
@@ -223,7 +228,7 @@ export namespace AudioContentModifier {
             // The span the user set is already what the region reads at the project tempo, so carrying the
             // converted values over keeps it exactly where it was.
             none: () => {
-                box.duration.setValue(adapter.duration)
+                box.duration.setValue(clampToGap(adapter, adapter.duration))
                 if (isInstanceOf(adapter, AudioRegionBoxAdapter)) {
                     const {box: {loopDuration, loopOffset}} = adapter
                     loopOffset.setValue(adapter.loopOffset)
@@ -241,10 +246,9 @@ export namespace AudioContentModifier {
                 // Scale by the same factor so a region looping its content twice still loops it twice.
                 const scale = loopSeconds > 0.0 ? measured / loopSeconds : 0.0
                 const scaled = durationSeconds === loopSeconds ? measured : durationSeconds * scale
-                const available = availablePulses(adapter)
                 loopOffset.setValue(loopOffset.getValue() * scale)
                 loopDuration.setValue(measured)
-                duration.setValue(available > 0.0 ? Math.min(scaled, available) : scaled)
+                duration.setValue(clampToGap(adapter, scaled))
             }
         })
         box.timeBase.setValue(TimeBase.Musical)
