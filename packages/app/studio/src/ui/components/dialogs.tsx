@@ -156,6 +156,34 @@ export namespace Dialogs {
             return promise
         }
 
+    export type Choice<T> = { text: string, value: T }
+
+    // resolves None when dismissed
+    export const choose = <T,>({headline, message, choices, origin}: {
+        headline: string, message: string, choices: ReadonlyArray<Choice<T>>, origin?: Element
+    }): Promise<Option<T>> => {
+        const {resolve, promise} = Promise.withResolvers<Option<T>>()
+        const buttons: ReadonlyArray<Button> = choices.map(({text, value}, index) => ({
+            text,
+            primary: index === choices.length - 1,
+            onClick: handler => {
+                handler.close()
+                resolve(Option.wrap(value))
+            }
+        }))
+        const dialog: HTMLDialogElement = (
+            <Dialog headline={headline} icon={IconSymbol.System} cancelable={true} buttons={buttons}>
+                <div style={{padding: "1em 0"}}>
+                    <p style={{whiteSpace: "pre-line"}}>{message}</p>
+                </div>
+            </Dialog>
+        )
+        dialog.addEventListener("close", () => resolve(Option.None), {once: true})
+        Surface.get(origin).body.appendChild(dialog)
+        dialog.showModal()
+        return promise
+    }
+
     export const progress = ({
                                  headline, message, progress, cancel, origin
                              }: RuntimeNotification.ProgressRequest): RuntimeNotification.ProgressUpdater => {

@@ -40,16 +40,21 @@ export namespace BoxGraphCopy {
         keepUuid?: Predicate<Box>
     }
 
-    export const deserializeBoxes = <T extends Box = Box>(data: ArrayBufferLike,
-                                                          targetGraph: BoxGraph,
-                                                          options: Options<T>): ReadonlyArray<T> => {
+    export const readGraph = (data: ArrayBufferLike): BoxGraph<BoxIO.TypeMap> => {
         const input = new ByteArrayInput(data)
         input.skip(input.readInt())
         const graphDataLength = input.readInt()
         const graphData = new Int8Array(graphDataLength)
         input.readBytes(graphData)
-        const clipboardGraph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
-        clipboardGraph.fromArrayBuffer(graphData.buffer, false)
+        const graph = new BoxGraph<BoxIO.TypeMap>(Option.wrap(BoxIO.create))
+        graph.fromArrayBuffer(graphData.buffer, false)
+        return graph
+    }
+
+    export const deserializeBoxes = <T extends Box = Box>(data: ArrayBufferLike,
+                                                          targetGraph: BoxGraph,
+                                                          options: Options<T>): ReadonlyArray<T> => {
+        const clipboardGraph = readGraph(data)
         const skippedExternalUuids = UUID.newSet<UUID.Bytes>(uuid => uuid)
         clipboardGraph.boxes().forEach(box => {
             if (box.resource === "preserved" && targetGraph.findBox(box.address.uuid).nonEmpty()) {

@@ -1,4 +1,5 @@
 export * from "./audio"
+export * from "./AudioUnitAsLayer"
 export * from "./AudioWavExport"
 export * from "./NestedHostExit"
 export * from "./NoteMidiExport"

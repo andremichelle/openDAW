@@ -64,6 +64,7 @@ type Session = {
     // Launches the unit's note clip (pitch 72, one bar long) and reports how many clip transitions are queued.
     launchClip: () => void
     clipChanges: () => number
+    restart: () => void
     close: () => void
 }
 
@@ -158,6 +159,7 @@ const open = async (populate: Procedure<Scene>, stemFlags?: number): Promise<Ses
             engine.schedule_clip_play()
         },
         clipChanges: () => engine.clip_changes_count() >>> 0,
+        restart: () => {engine.stop(); engine.play()},
         close: () => sync.close()
     }
 }
@@ -256,6 +258,30 @@ describe("instrument composite end to end", () => {
         const left = session.render(200)
         expect(Math.min(...left.right), "and through the leave").toBeCloseTo(0.25, 5)
         expect(Math.max(...left.left.subarray(left.left.length >>> 1).map(Math.abs))).toBeLessThan(1e-4)
+        session.close()
+    }, 60000)
+
+    it("wrapping the playing instrument into a Composite: the held note ends, the next note sounds", async () => {
+        const session = await open(({graph, unit}) => createSynth(graph, unit.input, "right"))
+        const before = session.render(100)
+        expect(Math.min(...before.right)).toBeCloseTo(0.25, 5)
+        const synth = session.unit.input.pointerHub.incoming()[0].box as ApparatDeviceBox
+        session.graph.beginTransaction()
+        synth.host.defer()
+        const composite = compositeOf(session)
+        const cell = InstrumentCompositeCellBox.create(session.graph, UUID.generate(), box => {
+            box.composite.refer(composite.cells)
+            box.index.setValue(0)
+        })
+        synth.host.refer(cell.instrument)
+        session.graph.endTransaction()
+        await session.settle()
+        const after = session.render(100)
+        // like a joining layer, the re-hosted synth never saw the running note's start
+        expect(Math.max(...after.right.subarray(after.right.length >>> 1).map(Math.abs))).toBeLessThan(1e-4)
+        session.restart()
+        const restarted = session.render(100)
+        expect(Math.min(...restarted.right.subarray(restarted.right.length >>> 1)), "the wrapped synth sounds again").toBeCloseTo(0.25, 5)
         session.close()
     }, 60000)
 

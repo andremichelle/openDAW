@@ -1,16 +1,23 @@
 import {
+    AudioUnitBoxAdapter,
     DeviceBoxAdapter,
     DeviceHost,
     Devices,
     EffectDeviceBoxAdapter,
+    InstrumentCompositeBoxAdapter,
     InstrumentCompositeCellBoxAdapter,
     InstrumentFactories,
     PresetHeader
 } from "@opendaw/studio-adapters"
-import {DevicesClipboard, EffectFactories, MenuItem, NestedHostExit} from "@opendaw/studio-core"
+import {
+    AudioUnitAsLayer, AudioUnitsClipboard, ClipboardManager, DevicesClipboard, EffectFactories, MenuItem, NestedHostExit
+} from "@opendaw/studio-core"
+import {Dialogs} from "@/ui/components/dialogs"
 import {IndexedBox, PrimitiveField, PrimitiveValues, Vertex} from "@opendaw/lib-box"
-import {Editing, isDefined, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Editing, isDefined, isInstanceOf, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
+import {Clipboard} from "@opendaw/lib-dom"
+import {InstrumentCompositeBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {openManual} from "@/ui/manuals"
@@ -57,6 +64,7 @@ export namespace MenuItems {
         )
         if (deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
             populatePresetSubmenu(parent, service, deviceHost, {kind: "instrument-context"})
+            parent.addMenuItem(copyAudioUnit(audioUnit, {separatorBefore: true}))
             parent.addMenuItem(MenuItem.default({label: "Duplicate layer", separatorBefore: true})
                 .setTriggerProcedure(() => editing.modify(() => {
                     project.userEditingManager.audioUnit.edit(api.duplicateCompositeLayer(deviceHost.box))
@@ -69,12 +77,53 @@ export namespace MenuItems {
             return
         }
         populatePresetSubmenu(parent, service, deviceHost, {kind: "instrument-context"})
+        parent.addMenuItem(copyAudioUnit(audioUnit, {separatorBefore: true}))
+        deviceHost.inputAdapter.ifSome(input => {
+            if (isInstanceOf(input.box, InstrumentCompositeBox)) {parent.addMenuItem(pasteAudioUnitAsLayer(service, input.box))}
+        })
         parent.addMenuItem(MenuItem.default({
             label: `Delete '${audioUnit.label}'`,
             hidden: audioUnit.isOutput,
             separatorBefore: true
         }).setTriggerProcedure(() => editing.modify(() => project.api.deleteAudioUnit(audioUnit.box))))
     }
+
+    export const copyAudioUnit = (audioUnit: AudioUnitBoxAdapter, options?: { separatorBefore?: boolean }): MenuItem =>
+        MenuItem.default({label: "Copy AudioUnit", hidden: audioUnit.isOutput, separatorBefore: options?.separatorBefore})
+            .setTriggerProcedure(() => AudioUnitsClipboard.copyEntry(audioUnit).ifSome(ClipboardManager.write))
+
+    // the system clipboard is async, so the item is enabled by this session's last copy and reads the system
+    // clipboard first when triggered
+    export const pasteAudioUnitAsLayer = (service: StudioService, composite: InstrumentCompositeBox): MenuItem =>
+        MenuItem.default({
+            label: "Paste AudioUnit as Layer",
+            selectable: ClipboardManager.peek().mapOr(entry => entry.type === "audio-units", false)
+        }).setTriggerProcedure(async () => {
+            const {editing, api, userEditingManager} = service.project
+            const system = (await Option.async(Clipboard.readText())).flatMap(ClipboardManager.decode)
+            const entry = system.nonEmpty() ? system : ClipboardManager.peek()
+            if (entry.mapOr(entry => entry.type !== "audio-units", true) || !composite.isAttached()) {return}
+            const {data} = entry.unwrap()
+            const targetUnit = service.project.boxAdapters.adapterFor(composite, InstrumentCompositeBoxAdapter).audioUnitBoxAdapter().box
+            const notes: Option<AudioUnitAsLayer.Notes> = AudioUnitAsLayer.clipboardHasNotes(data) && AudioUnitAsLayer.hasNotes(targetUnit)
+                ? await Dialogs.choose<AudioUnitAsLayer.Notes>({
+                    headline: "Both have notes",
+                    message: "The copied audio unit and this track both hold notes. What should happen to the copied notes?",
+                    choices: [
+                        {text: "Drop copied notes", value: "keep"},
+                        {text: "Replace existing notes", value: "replace"},
+                        {text: "Append", value: "append"}
+                    ]
+                })
+                : Option.wrap("append")
+            if (notes.isEmpty() || !composite.isAttached()) {return}
+            const attempt = editing.modify(() => api.pasteAudioUnitAsLayer(composite, data, notes.unwrap())).unwrap()
+            if (attempt.isFailure()) {
+                RuntimeNotifier.notify({message: attempt.failureReason(), icon: "Warning"})
+            } else {
+                userEditingManager.audioUnit.edit(attempt.result().cellBox)
+            }
+        })
 
     export const backTargetOfCell = (cell: DeviceHost): Vertex<Pointers> => NestedHostExit.targetsOf(cell)[0]
 
@@ -117,7 +166,8 @@ export namespace MenuItems {
                     separatorBefore: entry.separatorBefore
                 }).setTriggerProcedure(() => editing.modify(() =>
                     api.insertEffect(optAudioField.unwrap("audioEffectsField"), entry, 0))))
-            ))
+            )),
+            copyAudioUnit(host.audioUnitBoxAdapter(), {separatorBefore: true})
         )
     }
 
@@ -133,7 +183,8 @@ export namespace MenuItems {
         )
         populatePresetSubmenu(parent, service, host, {kind: "effect-context", device})
         parent.addMenuItem(
-            populateMenuItemToDuplicateDevice(service, host, device, {separatorBefore: true}),
+            copyAudioUnit(host.audioUnitBoxAdapter(), {separatorBefore: true}),
+            populateMenuItemToDuplicateDevice(service, host, device),
             populateMenuItemToDeleteDevice(editing, device)
         )
     }

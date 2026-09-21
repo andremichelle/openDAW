@@ -73,6 +73,7 @@ import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
 import {NoteMidiExport} from "./NoteMidiExport"
 import {AudioWavExport} from "./AudioWavExport"
+import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
 
 export type CompositeLayerProduct<INST extends InstrumentBox> = {
     cellBox: InstrumentCompositeCellBox
@@ -224,6 +225,35 @@ export class ProjectApi {
         const [moved] = layers.splice(fromIndex, 1)
         layers.splice(toIndex, 0, moved)
         layers.forEach((box, index) => box.index.setValue(index))
+    }
+
+    // re-hosts by pointer, nothing is copied: automation lanes keep their targets
+    wrapInstrumentIntoComposite(instrumentBox: InstrumentBox): Attempt<CompositeLayerProduct<InstrumentBox>, string> {
+        const factoryKey = InstrumentFactories.keyOfBox(instrumentBox)
+        if (!isDefined(factoryKey) || !InstrumentFactories.isLayerInstrument(InstrumentFactories.Named[factoryKey])) {
+            return Attempts.err(`${instrumentBox.name} cannot be used as a layer`)
+        }
+        const hostBox = instrumentBox.host.targetVertex.unwrap("instrument.host").box
+        if (!isInstanceOf(hostBox, AudioUnitBox)) {return Attempts.err("The instrument is not hosted by an audio unit")}
+        const {boxGraph} = this.#project
+        const {create, defaultIcon, defaultName} = InstrumentFactories.InstrumentComposite
+        const midiEffects = IndexedBox.collectIndexedBoxes(hostBox.midiEffects) as ReadonlyArray<EffectBox>
+        const audioEffects = IndexedBox.collectIndexedBoxes(hostBox.audioEffects) as ReadonlyArray<EffectBox>
+        instrumentBox.host.defer()
+        const composite = create(boxGraph, hostBox.input, defaultName, defaultIcon)
+        const cellBox = InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+            box.composite.refer(composite.cells)
+            box.index.setValue(0)
+        })
+        instrumentBox.host.refer(cellBox.instrument)
+        this.moveEffects(cellBox.midiEffects, midiEffects, 0)
+        this.moveEffects(cellBox.audioEffects, audioEffects, 0)
+        return Attempts.ok({cellBox, instrumentBox})
+    }
+
+    pasteAudioUnitAsLayer(composite: InstrumentCompositeBox, data: ArrayBufferLike,
+                          notes: AudioUnitAsLayer.Notes = "append"): Attempt<CompositeLayerProduct<InstrumentBox>, string> {
+        return AudioUnitAsLayer.paste(this.#project, composite, data, notes)
     }
 
     // automation lanes are not copied

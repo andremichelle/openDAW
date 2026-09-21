@@ -119,7 +119,10 @@ export namespace DevicePanelDragAndDrop {
                     const namedElement = InstrumentFactories.Named[dragData.device]
                     const factory = asDefined(namedElement, `Unknown: '${dragData.device}'`) as InstrumentFactory
                     editing.modify(() => {
-                        const attempt = project.api.replaceMIDIInstrument(inputBox as InstrumentBox, factory)
+                        // a new Composite wraps the chain it lands on instead of replacing its instrument
+                        const attempt = factory === InstrumentFactories.InstrumentComposite
+                            ? project.api.wrapInstrumentIntoComposite(inputBox as InstrumentBox)
+                            : project.api.replaceMIDIInstrument(inputBox as InstrumentBox, factory)
                         if (attempt.isFailure()) {console.debug(attempt.failureReason())}
                     })
                     return
