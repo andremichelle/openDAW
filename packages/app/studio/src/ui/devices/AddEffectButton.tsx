@@ -12,13 +12,12 @@ const className = Html.adoptStyleSheet(css, "AddEffectButton")
 type Construct = {
     // What to do with the chosen effect: insert it into a chain, or spin up a new composite branch holding it.
     select: Procedure<EffectFactory>
-    onInit?: Procedure<HTMLElement>
     label?: string
 }
 
 // A dropdown "Add Effect" button styled like the timeline header's "Add instrument" button. The list is the
 // stock audio effects; the caller decides what a pick does.
-export const AddEffectButton = ({select, onInit, label = "Add Effect"}: Construct) => (
+export const AddEffectButton = ({select, label = "Add Effect"}: Construct) => (
     <div className={className}>
         <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
             .addMenuItem(...EffectFactories.AudioList.map(factory => MenuItem.default({
@@ -26,8 +25,7 @@ export const AddEffectButton = ({select, onInit, label = "Add Effect"}: Construc
                 icon: factory.defaultIcon,
                 separatorBefore: factory.separatorBefore
             }).setTriggerProcedure(() => select(factory)))))}
-                    appearance={{color: Colors.shadow}}
-                    onInit={onInit}>
+                    appearance={{color: Colors.shadow}}>
             <span>{label}</span> <Icon symbol={IconSymbol.Add}/>
         </MenuButton>
     </div>

@@ -53,6 +53,7 @@ export const CompositeEntryList = ({lifecycle, rows, watch, footer}: Construct) 
     }
     update()
     element.appendChild(scroll)
+    element.appendChild(<div className="append-line"/>)
     footer.ifSome(node => element.appendChild(node))
     lifecycle.own(watch(update))
     return element

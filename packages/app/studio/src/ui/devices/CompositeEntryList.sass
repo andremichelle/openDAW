@@ -12,10 +12,15 @@ component
   &.empty
     align-self: stretch
 
-  &.drop-target
-    outline: 0.5px dashed var(--color-blue)
-    outline-offset: -0.5px
-    background-color: rgba(255, 255, 255, 0.06)
+  // the append line: a drop anywhere below the rows (or on an empty list) inserts a row here
+  > .append-line
+    height: 2px
+    margin: 0 0 -2px 0
+    background-color: var(--color-blue)
+    visibility: hidden
+
+  &.insert-append > .append-line
+    visibility: visible
 
   .scroll
     display: flex
@@ -30,7 +35,7 @@ component
     -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 1.5em * var(--fade-bottom, 0)), transparent)
 
   // The footer (Add Effect button) is the only non-scroll child; center it below the list.
-  > :not(.scroll)
+  > :not(.scroll):not(.append-line)
     flex: 0 0 auto
     align-self: center
     margin-top: calc(0.25em + 2px)

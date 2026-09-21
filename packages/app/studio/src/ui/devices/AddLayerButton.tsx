@@ -12,18 +12,16 @@ const className = Html.adoptStyleSheet(css, "AddEffectButton")
 
 type Construct = {
     select: Procedure<InstrumentFactory>
-    onInit?: Procedure<HTMLElement>
 }
 
-export const AddLayerButton = ({select, onInit}: Construct) => (
+export const AddLayerButton = ({select}: Construct) => (
     <div className={className}>
         <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
             .addMenuItem(...Object.values(InstrumentFactories.Named)
                 .filter(factory => InstrumentFactories.isLayerInstrument(factory))
                 .map(factory => MenuItem.default({label: factory.defaultName, icon: factory.defaultIcon})
                     .setTriggerProcedure(() => select(factory)))))}
-                    appearance={{color: Colors.shadow}}
-                    onInit={onInit}>
+                    appearance={{color: Colors.shadow}}>
             <span>Add Layer</span> <Icon symbol={IconSymbol.Add}/>
         </MenuButton>
     </div>

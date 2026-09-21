@@ -1,4 +1,4 @@
-import {int, isDefined, Nullable, Optional, Provider, Subscription, UUID} from "@opendaw/lib-std"
+import {int, isDefined, Nullable, Optional, Subscription, UUID} from "@opendaw/lib-std"
 import {Box} from "@opendaw/lib-box"
 import {EffectBox, EffectFactories, EffectFactory, Project} from "@opendaw/studio-core"
 import {AudioCompositeAdapter, AudioEffectCompositeCellBoxAdapter} from "@opendaw/studio-adapters"
@@ -107,21 +107,20 @@ export namespace AudioCompositeEntryDnD {
         element: HTMLElement
         project: Project
         composite: AudioCompositeAdapter
-        // Gate the whole target (e.g. the entry-list body only accepts when the list is EMPTY, so it never
-        // fights the per-row targets). Defaults to always-on for the Add-Effect footer button.
-        active?: Provider<boolean>
     }
 
-    // A drop target that APPENDS a branch: a new effect creates one holding it, an existing effect is moved into
-    // one. Used by the Add Effect footer button and by the entry list's empty body.
-    export const installAppendTarget = ({element, project, composite, active}: AppendConstruct): Subscription =>
+    // The whole entry list appends a branch, except over a row, which is that row's own target.
+    export const installAppendTarget = ({element, project, composite}: AppendConstruct): Subscription =>
         DragAndDrop.installTarget(element, {
-            drag: (_event: DragEvent, data: AnyDragData): boolean =>
-                (active?.() ?? true)
-                && (isNewAudioEffect(data) || acceptsExistingEffect(project, composite, data)),
+            drag: (event: DragEvent, data: AnyDragData): boolean => {
+                const accepts = !CompositeRows.overRow(event)
+                    && (isNewAudioEffect(data) || acceptsExistingEffect(project, composite, data))
+                element.classList.toggle("insert-append", accepts)
+                return accepts
+            },
             drop: (event: DragEvent, data: AnyDragData): void => {
-                element.classList.remove("drop-target")
-                if (active?.() === false) {return}
+                element.classList.remove("insert-append")
+                if (CompositeRows.overRow(event)) {return}
                 const atIndex = composite.entries.adapters().length
                 if (isNewAudioEffect(data)) {
                     const factory = EffectFactories.MergedNamed[data.device]
@@ -133,8 +132,8 @@ export namespace AudioCompositeEntryDnD {
                     moveToNewBranch(project, composite, atIndex, CompositeRows.resolveEffectBoxes(project, data.uuids, "audio-effect"))
                 }
             },
-            enter: (allowDrop: boolean) => element.classList.toggle("drop-target", allowDrop),
-            leave: () => element.classList.remove("drop-target")
+            enter: () => {},
+            leave: () => element.classList.remove("insert-append")
         })
 
     // Create a new branch at `atIndex` holding just `factory`, shifting the branches at or after it down by one.

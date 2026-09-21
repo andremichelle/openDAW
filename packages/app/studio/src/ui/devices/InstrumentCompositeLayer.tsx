@@ -40,7 +40,7 @@ export const InstrumentCompositeLayer = ({lifecycle, service, layer}: Construct)
     }
     const indexLabel: HTMLElement = <div className="index"/>
     const element: HTMLElement = (
-        <div className={className}>
+        <div className={className} data-composite-row="">
             {indexLabel}
             {iconsElement}
             <EntryPeakMeter lifecycle={lifecycle} receiver={project.liveStreamReceiver} address={layer.address}/>

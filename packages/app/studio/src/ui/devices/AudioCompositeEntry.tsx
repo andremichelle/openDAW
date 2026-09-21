@@ -38,7 +38,7 @@ export const AudioCompositeEntry = ({lifecycle, service, entry, fixed}: Construc
     rebuildIcons()
     const indexLabel: HTMLElement = <div className="index"/>
     const element: HTMLElement = (
-        <div className={Html.buildClassList(className, fixed && "fixed")}>
+        <div className={Html.buildClassList(className, fixed && "fixed")} data-composite-row="">
             {indexLabel}
             {iconsElement}
             <EntryPeakMeter lifecycle={lifecycle} receiver={project.liveStreamReceiver} address={entry.address}/>

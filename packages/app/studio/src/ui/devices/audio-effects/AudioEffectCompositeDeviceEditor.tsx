@@ -37,10 +37,7 @@ export const AudioEffectCompositeDeviceEditor = ({lifecycle, service, adapter, d
         ))
     const footer: Option<HTMLElement> = adapter.entriesFixed ? Option.None : Option.wrap(
         <AddEffectButton
-            select={factory => AudioCompositeEntryDnD.insertBranch(project, adapter, adapter.entries.adapters().length, factory)}
-            onInit={button => lifecycle.own(AudioCompositeEntryDnD.installAppendTarget({
-                element: button, project, composite: adapter
-            }))}/>
+            select={factory => AudioCompositeEntryDnD.insertBranch(project, adapter, adapter.entries.adapters().length, factory)}/>
     )
     return (
         <DeviceEditor lifecycle={lifecycle}
@@ -57,12 +54,7 @@ export const AudioEffectCompositeDeviceEditor = ({lifecycle, service, adapter, d
                                                   footer={footer}/>
                           )
                           if (!adapter.entriesFixed) {
-                              // With no branches there are no per-row targets, so let the WHOLE list body accept a
-                              // drop (dropping on the tiny + button is tedious); once a branch exists the rows take over.
-                              lifecycle.own(AudioCompositeEntryDnD.installAppendTarget({
-                                  element: list, project, composite: adapter,
-                                  active: () => adapter.entries.adapters().length === 0
-                              }))
+                              lifecycle.own(AudioCompositeEntryDnD.installAppendTarget({element: list, project, composite: adapter}))
                           }
                           return (
                           <div className={className}>

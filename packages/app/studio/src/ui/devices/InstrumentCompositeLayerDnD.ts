@@ -88,21 +88,24 @@ export namespace InstrumentCompositeLayerDnD {
         element: HTMLElement
         project: Project
         composite: InstrumentCompositeBoxAdapter
-        active?: Provider<boolean>
     }
 
-    export const installAppendTarget = ({element, project, composite, active = () => true}: AppendConstruct): Subscription =>
+    export const installAppendTarget = ({element, project, composite}: AppendConstruct): Subscription =>
         DragAndDrop.installTarget(element, {
-            drag: (_event: DragEvent, data: AnyDragData): boolean => active() && isDefined(layerFactoryOf(data)),
+            drag: (event: DragEvent, data: AnyDragData): boolean => {
+                const accepts = !CompositeRows.overRow(event) && isDefined(layerFactoryOf(data))
+                element.classList.toggle("insert-append", accepts)
+                return accepts
+            },
             drop: (event: DragEvent, data: AnyDragData): void => {
-                element.classList.remove("drop-target")
+                element.classList.remove("insert-append")
                 const factory = layerFactoryOf(data)
-                if (!active() || !isDefined(factory)) {return}
+                if (CompositeRows.overRow(event) || !isDefined(factory)) {return}
                 event.preventDefault()
                 project.editing.modify(() => project.api.createCompositeLayer(composite.box, factory))
             },
-            enter: (allowDrop: boolean) => element.classList.toggle("drop-target", allowDrop),
-            leave: () => element.classList.remove("drop-target")
+            enter: () => {},
+            leave: () => element.classList.remove("insert-append")
         })
 
     const layerFactoryOf = (data: AnyDragData): Optional<InstrumentFactory> => {

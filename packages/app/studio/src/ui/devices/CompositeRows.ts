@@ -28,6 +28,10 @@ export namespace CompositeRows {
             some: box => [box]
         })).filter((box): box is EffectBox => box.tags.deviceType === deviceType)
 
+    // rows carry data-composite-row: over one, the row's own target decides, not the list's append target
+    export const overRow = (event: DragEvent): boolean =>
+        event.target instanceof Element && isDefined(event.target.closest("[data-composite-row]"))
+
     export const zoneOf = (event: DragEvent, element: HTMLElement): Zone => {
         const rect = element.getBoundingClientRect()
         const fraction = (event.clientY - rect.top) / rect.height

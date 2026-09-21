@@ -31,9 +31,7 @@ export const InstrumentCompositeDeviceEditor = ({lifecycle, service, adapter, de
         <AddLayerButton select={factory => editing.modify(() => {
             const attempt = api.createCompositeLayer(adapter.box, factory)
             if (attempt.isFailure()) {console.debug(attempt.failureReason())}
-        })} onInit={button => lifecycle.own(InstrumentCompositeLayerDnD.installAppendTarget({
-            element: button, project, composite: adapter
-        }))}/>
+        })}/>
     )
     return (
         <DeviceEditor lifecycle={lifecycle}
@@ -49,10 +47,7 @@ export const InstrumentCompositeDeviceEditor = ({lifecycle, service, adapter, de
                                                   })}
                                                   footer={footer}/>
                           )
-                          lifecycle.own(InstrumentCompositeLayerDnD.installAppendTarget({
-                              element: list, project, composite: adapter,
-                              active: () => adapter.cells.adapters().length === 0
-                          }))
+                          lifecycle.own(InstrumentCompositeLayerDnD.installAppendTarget({element: list, project, composite: adapter}))
                           return <div className={className}>{list}</div>
                       }}
                       populateMeter={() => (
