@@ -187,52 +187,6 @@ export class StudioService implements ProjectEnv {
 
     panicEngine(): void {this.runIfProject(({engine}) => engine.panic())}
 
-    // Tear down the running worklet and boot a fresh one for the current project (e.g. after switching the
-    // engine variant). The screen is re-mounted so views subscribe to the new broadcaster instances, and the
-    // transport state (position, playing) carries over to the new engine.
-    restartEngine(): void {
-        this.runIfProject(project => {
-            const screen = this.layout.screen.getValue()
-            const wasPlaying = this.engine.isPlaying.getValue()
-            const position = this.engine.position.getValue()
-            this.switchScreen(null)
-            this.engine.releaseWorklet()
-            const restart: RestartWorklet = {
-                unload: async (event: unknown) => {
-                    this.switchScreen(null)
-                    this.engine.releaseWorklet()
-                    return Dialogs.info({
-                        headline: "Audio-Engine Error",
-                        message: String(safeRead(event, "error", "message") ?? "Unknown error"),
-                        okText: "Restart Engine",
-                        cancelable: false
-                    })
-                },
-                load: (engine: EngineWorklet) => {
-                    if (!this.optProject.contains(project)) {return}
-                    this.engine.setWorklet(engine)
-                    this.switchScreen(screen)
-                }
-            }
-            const {status, value: worklet, error} = tryCatch(() => project.startAudioWorklet(restart, {}))
-            if (status === "failure") {
-                Dialogs.info({
-                    headline: "Audio-Engine Error",
-                    message: `Could not start the audio engine. (${Errors.toString(error)})`,
-                    okText: "OK",
-                    cancelable: false
-                }).finally()
-                return
-            }
-            this.engine.setWorklet(worklet)
-            this.switchScreen(screen)
-            worklet.isReady().then(() => {
-                this.engine.setPosition(position)
-                if (wasPlaying) {this.engine.play()}
-            })
-        })
-    }
-
     async newProject() {
         if (!await this.#projectProfileService.approveLosingChanges()) {return}
         this.#projectProfileService.setValue(Option.wrap(
