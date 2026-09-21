@@ -207,13 +207,20 @@ describe("paste an audio unit as a layer", () => {
         project.terminate()
     })
 
-    it("both sides have notes: replace swaps the composite's notes for the clipboard's", async () => {
+    it("both sides have notes: replace swaps the composite's notes for the clipboard's, lanes stay gapless", async () => {
         const {project, entry, composite, compositeUnit, regions, clips} = await withNotes()
+        const lane = project.editing.modify(() => TrackBox.create(project.boxGraph, UUID.generate(), box => {
+            box.tracks.refer(compositeUnit.tracks)
+            box.type.setValue(TrackType.Value)
+            box.target.refer(compositeUnit.volume)
+            box.index.setValue(1)
+        })).unwrap()
         project.editing.modify(() => project.api.pasteAudioUnitAsLayer(composite, entry.data, "replace").result()).unwrap()
         const tracks = tracksOf(compositeUnit)
-        expect(tracks.length).toBe(1)
-        expect(tracks[0].regions.pointerHub.incoming().map(pointer => (pointer.box as NoteRegionBox).position.getValue())).toStrictEqual([0])
-        expect(tracks[0].clips.pointerHub.incoming().length).toBe(1)
+        expect(tracks.map(track => track.index.getValue()), "the surviving lane closed the gap, the pasted note track follows").toStrictEqual([0, 1])
+        expect(tracks[0].address.toString()).toBe(lane.address.toString())
+        expect(tracks[1].regions.pointerHub.incoming().map(pointer => (pointer.box as NoteRegionBox).position.getValue())).toStrictEqual([0])
+        expect(tracks[1].clips.pointerHub.incoming().length).toBe(1)
         expect(regions(), "source region + pasted region").toBe(2)
         expect(clips()).toBe(2)
         project.terminate()

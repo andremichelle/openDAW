@@ -92,7 +92,10 @@ export namespace AudioUnitAsLayer {
             && !isInstanceOf(box, CaptureMidiBox) && !isInstanceOf(box, CaptureAudioBox))
         const sources = notes === "keep" ? withoutContent(complete, sourceUnit)
             : notes === "append" ? withoutEmptyContent(complete, sourceUnit) : complete
-        if (notes === "replace") {contentTracks(targetUnit).forEach(track => track.delete())}
+        if (notes === "replace") {
+            contentTracks(targetUnit).forEach(track => track.delete())
+            IndexedBox.collectIndexedBoxes(targetUnit.tracks).forEach((track, index) => track.index.setValue(index))
+        }
         const uuidMap = TransferUtils.mapUuids(sources)
         const fresh = sources.filter(source =>
             !TransferUtils.keepsIdentity(source) || boxGraph.findBox(source.address.uuid).isEmpty())
