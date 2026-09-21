@@ -19,6 +19,7 @@ const RENDER_QUANTUM = 128
 // ~1 second of render calls (128-frame quanta at 48k) before a scriptless device is reported — long enough to
 // cover a script still compiling / addModule-ing async, short enough to surface a genuine misconfiguration.
 const MISSING_GRACE_CALLS = 375
+const STALE_UPDATE = -2
 
 // Device kinds (mirror abi DEVICE_KIND_*) and their script registries.
 const KIND_INSTRUMENT = 0
@@ -248,8 +249,13 @@ export class ScriptBridges {
 
     #reset(handle: number): void {
         const bridge = this.#bridges.get(handle)
-        bridge?.proc?.reset?.()
-        bridge?.spielwerk?.reset()
+        if (bridge === undefined) {return}
+        if (bridge.kind === KIND_AUDIO_EFFECT && !bridge.silenced && typeof bridge.proc?.reset !== "function") {
+            bridge.currentUpdate = STALE_UPDATE // no reset() in the script: the next pull rebuilds the Processor
+        } else {
+            bridge.proc?.reset?.()
+        }
+        bridge.spielwerk?.reset()
     }
 
     #param(handle: number, index: number, kind: number, value: number, modulation: number): void {

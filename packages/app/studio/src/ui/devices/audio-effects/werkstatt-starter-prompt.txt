@@ -6,6 +6,7 @@ The code MUST define a class called `Processor` with the following interface:
 class Processor {
     process(io, block) { }       // required
     paramChanged(label, value) { } // optional
+    reset() { }                  // optional, called on transport stop
 }
 
 ## process(io, block)
@@ -34,6 +35,11 @@ You MUST only read/write indices from s0 to s1 (exclusive). Do NOT assume the ar
 start at index 0 or that the full length is available.
 Use block.bpm and block.p0/p1 for tempo-synced effects. Use block.flags to detect
 transport state changes (e.g. reset phase on discontinuous).
+
+## reset()
+Optional. Called when the transport stops. Use it to clear buffers and tails (delay lines,
+filter state). Without a reset() the Processor instance is rebuilt on stop, so all state in
+class fields starts fresh.
 
 ## paramChanged(label, value)
 Called when a parameter knob changes value.
