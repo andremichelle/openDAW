@@ -131,6 +131,7 @@ Feature framing (Composite)
   not change. Any track can be copied (Copy AudioUnit) and pasted into a Composite as a layer with
   its effects, mix settings and notes.
 • No key or velocity split inside the device, that is separate MIDI effects (not announced yet).
-• Education angle: sounds are built from parts, students add a layer and hear what it contributes,
-  mute and solo take a sound apart, a group can assemble one sound from each student's track.
+• Education angle: complex sounds are built from many sources, students add a layer and hear what
+  it contributes, mute and solo take a sound apart. No "class assembles one sound from each
+  student" angle, that makes no sense.
 • Manual: https://opendaw.studio/manuals/devices/instruments/composite
