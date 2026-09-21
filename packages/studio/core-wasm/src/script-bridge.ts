@@ -72,7 +72,7 @@ class Bridge {
     missingCalls = 0
     warnedMissing = false
 
-    constructor(readonly uuid: string, readonly kind: number, readonly registryName: string) {}
+    constructor(readonly uuid: string, readonly kind: number, readonly registryName: string, readonly key: string) {}
 }
 
 const resolveMapping = (declaration: ParamDecl): ValueMapping<number> => {
@@ -108,7 +108,9 @@ export class ScriptBridges {
     readonly #sampleRate: number
     readonly #onMessage: (uuid: string, message: string) => void
     readonly #bridges = new Map<number, Bridge>()
-    readonly #byUuid = new Map<string, number>()
+    // uuid + state pointer: a composite's replicas of one unit-level device share the box uuid but are separate
+    // instances, each with its own Processor
+    readonly #byInstance = new Map<string, number>()
     #nextHandle = 1
 
     constructor(memory: WebAssembly.Memory, engine: ScriptEngine, sampleRate: number,
@@ -137,16 +139,17 @@ export class ScriptBridges {
         }
     }
 
-    // A `create` for a uuid that already has a live bridge REPLACES it: release the old one first (its
+    // A `create` for an instance that already has a live bridge REPLACES it: release the old one first (its
     // Processor + limiter + runtime), so a rebind the engine's `terminate` hasn't (yet, or ever) reached for
     // never orphans the previous bridge — the dedup a bare `#nextHandle++` per call was missing entirely.
-    #create(uuidPtr: number, kind: number, _statePtr: number): number {
+    #create(uuidPtr: number, kind: number, statePtr: number): number {
         const uuid = UUID.toString(new Uint8Array(this.#memory.buffer, uuidPtr, 16).slice() as UUID.Bytes)
-        const existingHandle = this.#byUuid.get(uuid)
+        const key = `${uuid}:${statePtr}`
+        const existingHandle = this.#byInstance.get(key)
         if (isDefined(existingHandle)) {this.#release(existingHandle)}
         const handle = this.#nextHandle++
-        this.#bridges.set(handle, new Bridge(uuid, kind, REGISTRY_BY_KIND[kind] ?? "werkstattProcessors"))
-        this.#byUuid.set(uuid, handle)
+        this.#bridges.set(handle, new Bridge(uuid, kind, REGISTRY_BY_KIND[kind] ?? "werkstattProcessors", key))
+        this.#byInstance.set(key, handle)
         return handle
     }
 
@@ -338,7 +341,7 @@ export class ScriptBridges {
         const bridge = this.#bridges.get(handle)
         if (!isDefined(bridge)) {return}
         this.#bridges.delete(handle)
-        if (this.#byUuid.get(bridge.uuid) === handle) {this.#byUuid.delete(bridge.uuid)}
+        if (this.#byInstance.get(bridge.key) === handle) {this.#byInstance.delete(bridge.key)}
     }
 
     /// Test-only introspection: how many bridges are currently live, proving a rebind's `#create` dedup

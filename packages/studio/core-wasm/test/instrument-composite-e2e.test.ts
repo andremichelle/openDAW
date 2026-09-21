@@ -7,7 +7,7 @@ import {BoxGraph} from "@opendaw/lib-box"
 import {
     ApparatDeviceBox, AudioEffectCompositeBox, AudioEffectCompositeCellBox, AudioUnitBox, BoxIO, CaptureMidiBox,
     GrooveShuffleBox, InstrumentCompositeBox, InstrumentCompositeCellBox, NoteClipBox, NoteEventBox,
-    NoteEventCollectionBox, NoteRegionBox, PitchDeviceBox, StereoToolDeviceBox, TrackBox, ZeitgeistDeviceBox
+    NoteEventCollectionBox, NoteRegionBox, PitchDeviceBox, SpielwerkDeviceBox, StereoToolDeviceBox, TrackBox, ZeitgeistDeviceBox
 } from "@opendaw/studio-boxes"
 import {ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
 import {loadFullEngine} from "./helpers/load-full-engine"
@@ -282,6 +282,26 @@ describe("instrument composite end to end", () => {
         session.restart()
         const restarted = session.render(100)
         expect(Math.min(...restarted.right.subarray(restarted.right.length >>> 1)), "the wrapped synth sounds again").toBeCloseTo(0.25, 5)
+        session.close()
+    }, 60000)
+
+    it("a unit-level Spielwerk in front of two layers feeds both (issue 395)", async () => {
+        const session = await open(scene => {
+            const {graph, unit} = scene
+            const spielwerk = SpielwerkDeviceBox.create(graph, UUID.generate(), box => {
+                box.host.refer(unit.midiEffects)
+                box.index.setValue(0)
+                box.code.setValue("// @spielwerk js 1 1\nclass Processor { * process(block, events) {} }")
+            })
+            new Function(ScriptCompiler.wrap({headerTag: "spielwerk", registryName: "spielwerkProcessors", functionName: "spielwerk"},
+                UUID.toString(spielwerk.address.uuid), 1, "class Processor { * process(block, events) {} }"))()
+            const composite = compositeOf(scene)
+            createLayer(graph, composite, 0, "left")
+            createLayer(graph, composite, 1, "right")
+        })
+        const {left, right} = session.render(200)
+        expect(Math.max(...left), "layer 1 behind the pass-through script sounds").toBeGreaterThan(0.2)
+        expect(Math.max(...right), "layer 2 behind the pass-through script sounds").toBeGreaterThan(0.2)
         session.close()
     }, 60000)
 
