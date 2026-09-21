@@ -1,6 +1,6 @@
 import css from "./PresetItem.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {isDefined, Lifecycle, Nullable, StringComparator} from "@opendaw/lib-std"
 import {MenuItem, PresetEntry} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -65,7 +65,7 @@ export const PresetItem = ({entry, presetService, lifecycle}: Construct): HTMLEl
     if (entry.description.length > 0) {
         lifecycle.own(TextTooltip.default(item, () => entry.description))
     }
-    item.onclick = () => presetService.activatePreset(entry)
+    lifecycle.own(Events.subscribeSingleClick(item, () => presetService.activatePreset(entry)))
     DragAndDrop.installSource(item, () => ({
         type: "preset",
         category: entry.category,
