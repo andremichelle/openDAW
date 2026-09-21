@@ -3045,6 +3045,122 @@ fn update_positions_gate_on_transporting_blocks() {
     }
 }
 
+// #393: a locate while the transport stands still opens the update clock for exactly ONE quantum, so an
+// automated device parameter follows the playhead instead of holding the value it had when playback paused.
+#[test]
+fn a_paused_locate_opens_the_update_clock_for_one_quantum() {
+    let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
+        p0: 503.0, p1: 508.12, s0: 0, s1: 128, bpm: 120.0}];
+    {
+        let pull = unsafe { crate::PULL.get() };
+        pull.clock_armed = true;
+        pull.blocks = paused.as_ptr();
+        pull.block_count = 1;
+    }
+    let mut engine = engine_with_devices();
+    assert!(!engine.begin_quantum_position(), "nothing was located");
+    assert!(crate::host_first_update_position(503.0).is_infinite(), "a paused quantum without a locate holds");
+    engine.set_position(1920.0);
+    assert!(engine.begin_quantum_position(), "a locate on a standing transport arms the next quantum");
+    // The seed is the block start itself: the 10-pulse grid would miss a free-running block that holds no grid point.
+    assert_eq!(crate::host_first_update_position(503.0), 503.0, "the located quantum fires at its block start");
+    assert!(crate::host_next_update_position(503.0).is_infinite(), "and fires only once");
+    assert!(!engine.begin_quantum_position(), "the following quantum holds again");
+    assert!(crate::host_first_update_position(503.0).is_infinite(), "one quantum only");
+    {
+        let pull = unsafe { crate::PULL.get() };
+        pull.clock_armed = false;
+        pull.blocks = core::ptr::null();
+        pull.block_count = 0;
+    }
+}
+
+#[test]
+fn a_locate_while_playing_does_not_arm_the_paused_update() {
+    let mut engine = engine_with_devices();
+    engine.play();
+    engine.set_position(1920.0);
+    assert!(!engine.begin_quantum_position(), "a running transport already ticks the update clock");
+    engine.pause();
+    engine.set_position(960.0);
+    engine.play();
+    assert!(!engine.begin_quantum_position(), "a locate overtaken by PLAY is dropped");
+    engine.pause();
+}
+
+#[test]
+fn a_paused_locate_delivers_the_automated_value_at_the_new_song_position() {
+    const DEV: Uuid = [190u8; 16];
+    const VTRACK: Uuid = [191u8; 16];
+    const VREGION: Uuid = [192u8; 16];
+    const VCOLL: Uuid = [193u8; 16];
+    const VEVENT: Uuid = [194u8; 16];
+    const VEVENT2: Uuid = [195u8; 16];
+    const PATH: u16 = 11;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(VTRACK, "TrackBox", &[
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(VREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(VEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+        ]),
+        graph_box(VEVENT2, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(1920)), (13, FieldValue::Float32(0.75))
+        ])
+    ]);
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let (handles, ..) = engine.observe_params(DEV, &[alloc::vec![PATH]], &invalidate);
+    let paused = [engine_env::block::Block {index: 0, flags: engine_env::block_flags::BlockFlags::create(false, false, false, false),
+        p0: 503.0, p1: 508.12, s0: 0, s1: 128, bpm: 120.0}];
+    {
+        let pull = unsafe { crate::PULL.get() };
+        pull.params = handles;
+        pull.clock_armed = true;
+        pull.blocks = paused.as_ptr();
+        pull.block_count = 1;
+    }
+    let mut changes = [crate::ParamChange {id: 0, kind: 0, value: 0.0, modulation: 0.0}; 4];
+    // What a device's fragment loop does with the quantum: pull the changes at every update position it is given.
+    let mut quantum = |engine: &mut Engine| -> Option<f32> {
+        engine.begin_quantum_position();
+        let position = crate::host_first_update_position(503.0);
+        if position.is_infinite() {
+            return None;
+        }
+        let count = crate::update_parameters(position, &mut changes);
+        (count > 0).then(|| changes[0].value)
+    };
+    engine.set_position(960.0);
+    let before = quantum(&mut engine).expect("the first locate delivers the curve's value");
+    assert!((before - 0.5).abs() < 1.0e-6, "halfway up the ramp the lane reads 0.5, got {before}");
+    assert!(quantum(&mut engine).is_none(), "a standing playhead delivers nothing more");
+    engine.set_position(2880.0);
+    let after = quantum(&mut engine).expect("locating past the ramp delivers the new value");
+    assert!((after - 0.75).abs() < 1.0e-6, "past the ramp the lane reads 0.75, got {after}");
+    {
+        let pull = unsafe { crate::PULL.get() };
+        pull.params = Vec::new();
+        pull.clock_armed = false;
+        pull.blocks = core::ptr::null();
+        pull.block_count = 0;
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // EFFECT COMPOSITES: a parallel FX stack as ONE member of an audio chain.
 // ─────────────────────────────────────────────────────────────────────────────

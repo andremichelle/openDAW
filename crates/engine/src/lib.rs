@@ -543,6 +543,10 @@ shared_static! {
 shared_static! {
     static SONG_POSITION: f64 = 0.0;
 }
+// #393: the CURRENT quantum follows a locate made while the transport stood still, so the update clock opens once.
+shared_static! {
+    static PAUSED_LOCATE: bool = false;
+}
 // The sample-observe recorder the `host_observe_sample` export appends to: each device's sample pointer-field
 // path (e.g. Nano's `file` at `[15]`). After `init`, the engine REACTIVELY tracks each pointer (catch-up +
 // subscribe), resolving its target to the AudioFileBox, requesting its frames, and delivering the handle (or
@@ -811,6 +815,10 @@ pub(crate) fn song_position() -> f64 {
     unsafe { *SONG_POSITION.get() }
 }
 
+fn paused_locate() -> bool {
+    unsafe { *PAUSED_LOCATE.get() }
+}
+
 fn quantum_transporting() -> bool {
     let pull = unsafe { PULL.get() };
     if pull.blocks.is_null() {
@@ -833,10 +841,14 @@ fn modulation_armed(pull: &PullContext) -> bool {
 #[no_mangle]
 pub extern "C" fn host_first_update_position(at: f64) -> f64 {
     let pull = unsafe { PULL.get() };
-    if !pull.clock_armed || !(quantum_transporting() || modulation_armed(pull)) {
+    if !pull.clock_armed {
         return f64::INFINITY;
     }
-    first_update_position(at)
+    if quantum_transporting() || modulation_armed(pull) {
+        return first_update_position(at);
+    }
+    // A free-running block may hold no grid point, so the located quantum fires at its block start.
+    if paused_locate() {at} else {f64::INFINITY}
 }
 
 /// Host import a render template calls to ADVANCE its fragment loop: the next update position STRICTLY after
@@ -1005,8 +1017,12 @@ pub extern "C" fn host_base_frequency() -> f32 {
 /// `PULL` (the current device's params, swapped in by its node), so it is safe to call from inside `process`.
 #[no_mangle]
 pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) -> u32 {
-    let pull = unsafe { PULL.get() };
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut ParamChange, max as usize) };
+    update_parameters(position, out)
+}
+
+fn update_parameters(position: f64, out: &mut [ParamChange]) -> u32 {
+    let pull = unsafe { PULL.get() };
     let mut count = 0;
     // While PAUSED the caller's `position` is free-running; the automation reads the frozen song position.
     let automation_position = if quantum_transporting() {position} else {song_position()};
@@ -1193,6 +1209,7 @@ struct Engine {
     // reaching `recording_start` flips to recording and restores the metronome preference.
     is_recording: bool,
     is_counting_in: bool,
+    paused_locate: bool,
     recording_start: f64,
     recording_denominator: i32, // the signature denominator at the recording start (the count-in remaining unit)
     metronome_pref: bool,
@@ -1294,6 +1311,7 @@ impl Engine {
             metronome: Metronome::new(sample_rate),
             is_recording: false,
             is_counting_in: false,
+            paused_locate: false,
             recording_start: 0.0,
             recording_denominator: 4,
             metronome_pref: false,
@@ -1488,10 +1506,10 @@ impl Engine {
         // per-block automation like volume / mute. Resolve it once at this quantum's start position and re-run the
         // solo walk before the graph processes; only while transporting, so a paused block HOLDS the last solo
         // (TS `UpdateClock` gates updates on `transporting`).
-        if self.transport.is_playing() {
+        let located = self.begin_quantum_position();
+        if self.transport.is_playing() || located {
             self.resolve_automated_solo(self.transport.position());
         }
-        unsafe { *SONG_POSITION.get() = self.transport.position(); }
         self.advance_modulation();
         let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
@@ -1607,6 +1625,15 @@ impl Engine {
         write_engine_state(transport, state, *is_recording, *is_counting_in, recording_start, denominator);
     }
 
+    fn begin_quantum_position(&mut self) -> bool {
+        let located = core::mem::take(&mut self.paused_locate) && !self.transport.is_playing();
+        unsafe {
+            *SONG_POSITION.get() = self.transport.position();
+            *PAUSED_LOCATE.get() = located;
+        }
+        located
+    }
+
     fn play(&mut self) {
         // TS `#play` schedules MidiData.Start (the timestamp SongPosition is scheduled by `set_position`,
         // which the worklet's play command issues first when timestamp playback is enabled).
@@ -1711,6 +1738,7 @@ impl Engine {
             return; // TS `#setPosition` ignores seeks while recording
         }
         self.transport.seek(position);
+        self.paused_locate = !self.transport.is_playing();
         self.schedule_midi_transport(midi_output::position_message(position)) // TS schedules SongPosition
     }
 
