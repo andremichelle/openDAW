@@ -500,7 +500,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     toArrayBuffer(): ArrayBufferLike {return ProjectSkeleton.encode(this.boxGraph)}
 
     copy(env?: Partial<ProjectEnv>): Project {
-        return Project.load({...this.#env, ...env}, this.toArrayBuffer() as ArrayBuffer)
+        return Project.load(this.#mergeEnv(env), this.toArrayBuffer() as ArrayBuffer)
     }
 
     copyWithNewIdentities(env?: Partial<ProjectEnv>): Project {
@@ -510,7 +510,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         BoxGraphCopy.deserializeBoxes(data, boxGraph, {mapPointer: (_pointer, address) => address})
         boxGraph.endTransaction()
         boxGraph.verifyPointers()
-        return Project.fromSkeleton({...this.#env, ...env},
+        return Project.fromSkeleton(this.#mergeEnv(env),
             {boxGraph, mandatoryBoxes: ProjectSkeleton.findMandatoryBoxes(boxGraph)})
     }
 
@@ -539,6 +539,18 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.#sampleRegistrations.forEach(({terminable}) => terminable.terminate())
         this.#sampleRegistrations.clear()
         this.#terminator.terminate()
+    }
+
+    #mergeEnv(env?: Partial<ProjectEnv>): ProjectEnv {
+        return {
+            audioContext: env?.audioContext ?? this.#env.audioContext,
+            audioWorklets: env?.audioWorklets ?? this.#env.audioWorklets,
+            sampleManager: env?.sampleManager ?? this.#env.sampleManager,
+            soundfontManager: env?.soundfontManager ?? this.#env.soundfontManager,
+            sampleService: env?.sampleService ?? this.#env.sampleService,
+            soundfontService: env?.soundfontService ?? this.#env.soundfontService,
+            createEditing: env?.createEditing ?? this.#env.createEditing
+        }
     }
 
     #registerSample(uuid: UUID.Bytes): void {
