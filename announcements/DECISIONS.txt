@@ -121,3 +121,16 @@ Feature framing (Nano)
 • Credit SynthsBack-lab (https://github.com/SynthsBack-lab) for root key, octave, region, loop and
   attack. Tune was added by us, do not credit it to them.
 • Manual: https://opendaw.studio/manuals/devices/instruments/nano
+
+Feature framing (Composite)
+• An instrument that holds other instruments as layers. Every note reaches all layers, each layer
+  has its own effects, volume, pan, mute and solo. Layers nest (a layer can hold a Composite).
+• Call it "Composite", not "Instrument Composite". Do not confuse it with the FX Composite.
+• Effects inside a layer touch that layer only, effects in front of the Composite apply to all layers.
+• Dropping a Composite onto an existing instrument wraps the whole chain as layer 1, the sound does
+  not change. Any track can be copied (Copy AudioUnit) and pasted into a Composite as a layer with
+  its effects, mix settings and notes.
+• No key or velocity split inside the device, that is separate MIDI effects (not announced yet).
+• Education angle: sounds are built from parts, students add a layer and hear what it contributes,
+  mute and solo take a sound apart, a group can assemble one sound from each student's track.
+• Manual: https://opendaw.studio/manuals/devices/instruments/composite
