@@ -83,6 +83,7 @@ export const installRegionContextMenu =
                         editing.modify(() => {
                             timelineBox.loopArea.from.setValue(min)
                             timelineBox.loopArea.to.setValue(max)
+                            timelineBox.loopArea.enabled.setValue(true)
                         })
                     }),
                 MenuItem.default({label: "Zoom Selection"})
