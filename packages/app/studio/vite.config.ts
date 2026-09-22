@@ -13,6 +13,7 @@ export default defineConfig(({command}) => {
     const env = process.env.NODE_ENV as BuildInfo["env"]
     const date = Date.now()
     const certsExist = existsSync(resolve(__dirname, "../../../certs/localhost-key.pem"))
+        && existsSync(resolve(__dirname, "../../../certs/localhost.pem"))
 
     // Determine base path for production CI builds
     const isCI = process.env.CI === "true"
@@ -58,7 +59,9 @@ export default defineConfig(({command}) => {
         clearScreen: false,
         server: {
             port: 8080,
-            host: "localhost",
+            // Only reachable from the network when serving HTTPS. The bare --host CLI flag
+            // would otherwise override this to bind 0.0.0.0 even for the plaintext fallback.
+            host: certsExist ? true : "localhost",
             https: command === "serve" && certsExist ? {
                 key: readFileSync(resolve(__dirname, "../../../certs/localhost-key.pem")),
                 cert: readFileSync(resolve(__dirname, "../../../certs/localhost.pem"))

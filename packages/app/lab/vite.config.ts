@@ -4,6 +4,7 @@ import {existsSync, readFileSync} from "fs"
 import {resolve} from "path"
 
 const certsExist = existsSync(resolve(__dirname, "../../../certs/localhost-key.pem"))
+    && existsSync(resolve(__dirname, "../../../certs/localhost.pem"))
 
 export default defineConfig(({command}) => ({
     server: {
