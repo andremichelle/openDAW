@@ -20,6 +20,7 @@ import {
     AudioFileBox,
     AudioPitchStretchBox,
     AudioSignalsmithBox,
+    AudioSinkDeviceBox,
     AudioRegionBox,
     AudioTimeStretchBox,
     AudioUnitBox,
@@ -139,6 +140,7 @@ import {PlayfieldDeviceBoxAdapter} from "./devices/instruments/PlayfieldDeviceBo
 import {InstrumentCompositeBoxAdapter} from "./devices/instruments/InstrumentCompositeBoxAdapter"
 import {InstrumentCompositeCellBoxAdapter} from "./devices/instruments/InstrumentComposite/InstrumentCompositeCellBoxAdapter"
 import {StereoToolDeviceBoxAdapter} from "./devices/audio-effects/StereoToolDeviceBoxAdapter"
+import {AudioSinkDeviceBoxAdapter} from "./devices/audio-effects/AudioSinkDeviceBoxAdapter"
 import {PlayfieldSampleBoxAdapter} from "./devices/instruments/Playfield/PlayfieldSampleBoxAdapter"
 import {AudioEffectCompositeBoxAdapter} from "./devices/audio-effects/AudioEffectCompositeBoxAdapter"
 import {StereoCompositeBoxAdapter} from "./devices/audio-effects/StereoCompositeBoxAdapter"
@@ -299,6 +301,7 @@ export class BoxAdapters implements Terminable {
             visitSoundfontFileBox: (box: SoundfontFileBox) => new SoundfontFileBoxAdapter(this.#context, box),
             visitSpielwerkDeviceBox: (box: SpielwerkDeviceBox) => new SpielwerkDeviceBoxAdapter(this.#context, box),
             visitStereoToolDeviceBox: (box: StereoToolDeviceBox) => new StereoToolDeviceBoxAdapter(this.#context, box),
+            visitAudioSinkDeviceBox: (box: AudioSinkDeviceBox) => new AudioSinkDeviceBoxAdapter(this.#context, box),
             visitTapeDeviceBox: (box: TapeDeviceBox) => new TapeDeviceBoxAdapter(this.#context, box),
             visitTimelineBox: (box: TimelineBox) => new TimelineBoxAdapter(this.#context, box),
             visitTrackBox: (box: TrackBox) => new TrackBoxAdapter(this.#context, box),

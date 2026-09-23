@@ -143,6 +143,7 @@ impl Engine {
                 ProcHandle::Audio(node) => node.borrow_mut().set_audio_source(source.clone()),
                 // An effect composite takes its input at its DISTRIBUTOR and hands the chain on from its MIX.
                 ProcHandle::EffectComposite(binding) => binding.set_audio_source(source.clone()),
+                ProcHandle::Sink(binding) => binding.proc.borrow_mut().set_audio_source(source.clone()),
                 _ => {}
             }
             let node_id = member.node_id.expect("member.node_id");
@@ -299,6 +300,7 @@ impl Engine {
                 ProcHandle::Audio(node) => node.borrow_mut().set_audio_source(output.clone()),
                 // An effect composite takes its input at its DISTRIBUTOR and hands the chain on from its MIX.
                 ProcHandle::EffectComposite(binding) => binding.set_audio_source(output.clone()),
+                ProcHandle::Sink(binding) => binding.proc.borrow_mut().set_audio_source(output.clone()),
                 _ => {}
             }
             let node_id = member.node_id.expect("member.node_id");
@@ -500,6 +502,7 @@ impl Engine {
                 ProcHandle::Audio(fx_node) => fx_node.borrow_mut().set_audio_source(output.clone()),
                 // An effect composite takes its input at its DISTRIBUTOR and hands the chain on from its MIX.
                 ProcHandle::EffectComposite(binding) => binding.set_audio_source(output.clone()),
+                ProcHandle::Sink(binding) => binding.proc.borrow_mut().set_audio_source(output.clone()),
                 _ => {}
             }
             let fx_id = member.node_id.expect("member.node_id");
@@ -651,6 +654,7 @@ impl Engine {
                 ProcHandle::Audio(node) => node.borrow_mut().set_audio_source(output.clone()),
                 // An effect composite takes its input at its DISTRIBUTOR and hands the chain on from its MIX.
                 ProcHandle::EffectComposite(binding) => binding.set_audio_source(output.clone()),
+                ProcHandle::Sink(binding) => binding.proc.borrow_mut().set_audio_source(output.clone()),
                 _ => {}
             }
             let node_id = member.node_id.expect("member.node_id");
@@ -910,6 +914,42 @@ impl Engine {
         Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain, enabled_sub}
     }
 
+    /// Reuse the pooled audio sink (its target binding survives, `resolve_sinks` diffs it) or build a fresh one:
+    /// an engine-owned chain member, no plugin, no device params. Its `targetBus` pointer monitor enqueues the
+    /// unit so the sink pass re-resolves; its `pass` (dB) static observer + automation binding drive the
+    /// processor live (no rewire), like an aux send's gain.
+    pub(crate) fn take_or_build_sink(&mut self, pool: &mut BTreeMap<Uuid, Member>, uuid: Uuid,
+                                     signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> Member {
+        if let Some(existing) = pool.remove(&uuid) {
+            if matches!(existing.proc, ProcHandle::Sink(_)) {
+                return existing;
+            }
+            self.terminate_member(existing);
+        }
+        let params = Rc::new(SendParams::new());
+        let automation = Rc::new(StripAutomation::new());
+        let node = Rc::new(RefCell::new(AudioSinkProcessor::new(params.clone(), automation.clone(), self.sample_rate)));
+        let output = node.borrow().audio_output();
+        let node_id = self.context.register_processor(node.clone());
+        self.context.set_label(node_id, device_label(&self.graph, &uuid));
+        self.output_registry.register(Address::of(uuid, vec![]), output.clone(), node_id);
+        // Live telemetry: the tap's peaks (what the bus receives), under the device address like any effect.
+        let meter_slot = node.borrow().meter_slot();
+        self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
+        let pointer_signal = signal.clone();
+        let pointer_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, vec![SINK_TARGET_KEY]),
+            Box::new(move |_graph, _update| pointer_signal()));
+        let pass = params.clone();
+        let pass_sub = self.graph.catchup_and_subscribe(Address::of(uuid, vec![SINK_PASS_KEY]), move |value| {
+            if let Some(value) = value.as_float32() { pass.gain_db.set(value) }
+        });
+        let enabled_sub = self.subscribe_enabled(uuid, rewire);
+        let mut binding = SinkBinding {device_uuid: uuid, proc: node, node_id, target: None, subs: vec![pointer_sub, pass_sub],
+            params, automation, param_subs: Vec::new(), param_collections: Vec::new()};
+        self.bind_sink_automation(&mut binding, invalidate);
+        Member {uuid, proc: ProcHandle::Sink(Box::new(binding)), node_id: Some(node_id), input_node: None, output: Some(output), params: None, sidechain: None, enabled_sub}
+    }
+
     /// Wire a cluster's persistent members edge-only (shared by a leaf unit and a composite slot): fold the
     /// midi-fx PULL chain onto the note source (choke-routed for a slot), GATE + set the instrument's pull chain,
     /// then chain the audio fx (instrument -> fx0 -> fx1 -> ...). Every step SKIPS a disabled device (bypassed,
@@ -969,6 +1009,7 @@ impl Engine {
                 // An EFFECT COMPOSITE takes its input at its DISTRIBUTOR (which owns the copy its entries and
                 // its dry path read) and hands the chain on from its MIX.
                 ProcHandle::EffectComposite(binding) => binding.set_audio_source(output.clone()),
+                ProcHandle::Sink(binding) => binding.proc.borrow_mut().set_audio_source(output.clone()),
                 _ => {}
             }
             let node_id = member.node_id.expect("member.node_id");

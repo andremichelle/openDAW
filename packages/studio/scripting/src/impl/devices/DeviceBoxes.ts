@@ -5,6 +5,7 @@ import {
     ArpeggioDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
+    AudioSinkDeviceBox,
     AutotuneDeviceBox,
     CompressorDeviceBox,
     ConvolverDeviceBox,
@@ -40,7 +41,7 @@ export type AudioEffectBox =
     | AutotuneDeviceBox | CompressorDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | DattorroReverbDeviceBox
     | DelayDeviceBox | FoldDeviceBox | GateDeviceBox | MaximizerDeviceBox | NeuralAmpDeviceBox | RevampDeviceBox
     | ReverbDeviceBox | StereoToolDeviceBox | TidalDeviceBox | VocoderDeviceBox | WaveshaperDeviceBox
-    | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox | FrequencySplitBox
+    | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox | FrequencySplitBox | AudioSinkDeviceBox
 
 export namespace DeviceBoxes {
     const STEREO_ENTRY_COUNT = 2
@@ -55,7 +56,7 @@ export namespace DeviceBoxes {
         DattorroReverb: "Dattorro Reverb", Delay: "Delay", Fold: "Fold", Gate: "Gate", Maximizer: "Maximizer",
         NeuralAmp: "Tone3000", Revamp: "Revamp", Reverb: "Reverb", StereoTool: "Stereo Tool", Tidal: "Tidal",
         Vocoder: "Vocoder", Waveshaper: "Waveshaper", Werkstatt: "Werkstatt", Composite: "FX Composite",
-        StereoSplit: "Stereo Split", FrequencySplit: "Frequency Split"
+        StereoSplit: "Stereo Split", FrequencySplit: "Frequency Split", Sink: "Sink"
     }
 
     export const midiEffectKeyOf = (boxName: string): keyof MIDIEffects => {
@@ -91,6 +92,7 @@ export namespace DeviceBoxes {
             case "AudioEffectCompositeBox": return "Composite"
             case "StereoCompositeBox": return "StereoSplit"
             case "FrequencySplitBox": return "FrequencySplit"
+            case "AudioSinkDeviceBox": return "Sink"
             default: return panic(`Unknown audio-effect box '${boxName}'`)
         }
     }
@@ -120,7 +122,7 @@ export namespace DeviceBoxes {
             "DattorroReverbDeviceBox", "DelayDeviceBox", "FoldDeviceBox", "GateDeviceBox", "MaximizerDeviceBox",
             "NeuralAmpDeviceBox", "RevampDeviceBox", "ReverbDeviceBox", "StereoToolDeviceBox", "TidalDeviceBox",
             "VocoderDeviceBox", "WaveshaperDeviceBox", "WerkstattDeviceBox", "AudioEffectCompositeBox",
-            "StereoCompositeBox", "FrequencySplitBox"].includes(boxName)
+            "StereoCompositeBox", "FrequencySplitBox", "AudioSinkDeviceBox"].includes(boxName)
 
     export const isInstrumentBox = (boxName: string): boolean =>
         ["VaporisateurDeviceBox", "PlayfieldDeviceBox", "NanoDeviceBox", "SoundfontDeviceBox",
@@ -304,6 +306,12 @@ export namespace DeviceBoxes {
                 })
             case "Waveshaper":
                 return WaveshaperDeviceBox.create(boxGraph, UUID.generate(), box => {
+                    box.label.setValue(label)
+                    box.index.setValue(index)
+                    box.host.refer(host)
+                })
+            case "Sink":
+                return AudioSinkDeviceBox.create(boxGraph, UUID.generate(), box => {
                     box.label.setValue(label)
                     box.index.setValue(index)
                     box.host.refer(host)

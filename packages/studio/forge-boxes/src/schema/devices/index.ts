@@ -43,6 +43,7 @@ import {AudioEffectCompositeCellBox} from "./audio-effects/AudioEffectCompositeC
 import {StereoCompositeBox} from "./audio-effects/StereoCompositeBox"
 import {FrequencySplitBox} from "./audio-effects/FrequencySplitBox"
 import {ConvolverDeviceBox} from "./audio-effects/ConvolverDeviceBox"
+import {AudioSinkDeviceBox} from "./audio-effects/AudioSinkDeviceBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -91,5 +92,6 @@ export const DeviceDefinitions = [
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
     StereoCompositeBox,
-    FrequencySplitBox
+    FrequencySplitBox,
+    AudioSinkDeviceBox
 ]

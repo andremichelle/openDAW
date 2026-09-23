@@ -35,7 +35,7 @@ use engine_env::engine_context::NodeId;
 use engine_env::note_event_instrument::SharedNoteEventSource;
 use math::value_mapping::{Decibel, Linear};
 use crate::audio_unit::{host_bool, host_float};
-use crate::audio_unit::{DeviceParams, Member, SharedTrackSets, SidechainBinding, SlotCluster};
+use crate::audio_unit::{visit_member_sinks, DeviceParams, Member, SharedTrackSets, SidechainBinding, SinkBinding, SlotCluster};
 use crate::plugin_midi_effect::PluginMidiEffect;
 use crate::{CompositeSpec, DeviceReg, Engine, EFFECT_INDEX_KEY};
 
@@ -292,6 +292,21 @@ impl CompositeBinding {
                     for member in audio.iter_mut() {
                         if let Some(sidechain) = &mut member.sidechain { visit(sidechain); }
                     }
+                }
+            }
+        }
+    }
+
+    /// Visit every audio sink in the cascade (slot chains, nested composites, cell chains), for the unit's
+    /// sink re-resolve.
+    pub(crate) fn for_each_sink(&mut self, visit: &mut dyn FnMut(&mut SinkBinding)) {
+        for child in &mut self.members {
+            match &mut child.body {
+                ChildBody::Slot {cluster, ..} => cluster.for_each_sink(visit),
+                ChildBody::Nested {binding} => binding.for_each_sink(visit),
+                ChildBody::NestedCell {binding, audio, ..} => {
+                    binding.for_each_sink(visit);
+                    for member in audio.iter_mut() { visit_member_sinks(member, visit); }
                 }
             }
         }
@@ -954,6 +969,7 @@ impl Engine {
             match &member.proc {
                 crate::audio_unit::ProcHandle::Audio(node) => node.borrow_mut().set_audio_source(output.clone()),
                 crate::audio_unit::ProcHandle::EffectComposite(effect_binding) => effect_binding.set_audio_source(output.clone()),
+                crate::audio_unit::ProcHandle::Sink(sink) => sink.proc.borrow_mut().set_audio_source(output.clone()),
                 _ => {}
             }
             let node_id = member.node_id.expect("member.node_id");

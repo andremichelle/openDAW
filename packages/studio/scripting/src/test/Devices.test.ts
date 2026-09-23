@@ -25,7 +25,7 @@ describe("Devices", () => {
         const keys: ReadonlyArray<keyof AudioEffects> = [
             "Autotune", "Compressor", "Convolver", "Crusher", "DattorroReverb", "Delay", "Fold", "Gate", "Maximizer",
             "NeuralAmp", "Revamp", "Reverb", "StereoTool", "Tidal", "Vocoder", "Waveshaper", "Werkstatt",
-            "Composite", "StereoSplit", "FrequencySplit"
+            "Composite", "StereoSplit", "FrequencySplit", "Sink"
         ]
         keys.forEach((key, index) => {
             const effect = unit.addAudioEffect(key)
@@ -86,6 +86,17 @@ describe("Devices", () => {
         fold.overSampling = 2
         expect(fold.overSampling).toBe(2)
         expect(() => fold.overSampling = 3 as any).toThrow(RangeError)
+        const sink = unit.addAudioEffect("Sink")
+        expect(sink.pass).toBe(Number.NEGATIVE_INFINITY)
+        expect(sink.target).toBeNull()
+        const group = project.addGroupUnit()
+        sink.target = group
+        expect(sink.target?.uuid).toBe(group.uuid)
+        sink.pass = -6
+        expect(sink.pass).toBe(-6)
+        expect(() => sink.target = unit as any).toThrow(TypeError)
+        sink.target = null
+        expect(sink.target).toBeNull()
         const stereo = unit.addAudioEffect("StereoTool", {panningMixing: Mixing.EqualPower})
         expect(stereo.panningMixing).toBe(Mixing.EqualPower)
         expect(() => stereo.panningMixing = 5 as Mixing).toThrow(RangeError)

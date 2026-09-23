@@ -75,14 +75,15 @@ describe("Schema parity", () => {
         const keys: ReadonlyArray<keyof AudioEffects> = [
             "Autotune", "Compressor", "Convolver", "Crusher", "DattorroReverb", "Delay", "Fold", "Gate", "Maximizer",
             "NeuralAmp", "Revamp", "Reverb", "StereoTool", "Tidal", "Vocoder", "Waveshaper", "Werkstatt",
-            "Composite", "StereoSplit", "FrequencySplit"
+            "Composite", "StereoSplit", "FrequencySplit", "Sink"
         ]
         const plain: Record<string, ReadonlyArray<string>> = {}
         keys.forEach(key => {plain[key] = assertMirrored(unit.addAudioEffect(key))})
         expect(plain).toEqual({
             Autotune: [], Compressor: [], Convolver: [], Crusher: [], DattorroReverb: [], Delay: [], Fold: [],
             Gate: [], Maximizer: [], NeuralAmp: [], Revamp: [], Reverb: [], StereoTool: [], Tidal: [],
-            Vocoder: ["modulatorSource"], Waveshaper: [], Werkstatt: [], Composite: [], StereoSplit: [], FrequencySplit: []
+            Vocoder: ["modulatorSource"], Waveshaper: [], Werkstatt: [], Composite: [], StereoSplit: [], FrequencySplit: [],
+            Sink: []
         })
     })
 

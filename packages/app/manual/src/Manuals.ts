@@ -84,7 +84,8 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Tone3000", path: "/manuals/devices/audio/neural-amp", icon: IconSymbol.Tone3000},
                     {type: "page", label: "Vocoder", path: "/manuals/devices/audio/vocoder", icon: IconSymbol.Vocoder},
                     {type: "page", label: "Waveshaper", path: "/manuals/devices/audio/waveshaper", icon: IconSymbol.Curve},
-                    {type: "page", label: "Werkstatt", path: "/manuals/devices/audio/werkstatt", icon: IconSymbol.Code}
+                    {type: "page", label: "Werkstatt", path: "/manuals/devices/audio/werkstatt", icon: IconSymbol.Code},
+                    {type: "page", label: "Sink", path: "/manuals/devices/audio/sink", icon: IconSymbol.AudioBus}
                 ]
             },
             {

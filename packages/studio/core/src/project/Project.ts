@@ -238,7 +238,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.midiLearning = this.#terminator.own(new MIDILearning(this))
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
         this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
-        this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits)
+        this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters)
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
         this.audioUnitFreeze = this.#terminator.own(new AudioUnitFreeze(this))

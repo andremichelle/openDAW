@@ -4909,3 +4909,318 @@ fn a_paused_transport_moves_the_modulation_but_not_the_automation() {
     let (playing, ..) = handle.resolve_split(BAR * 0.5, BAR * 0.5);
     assert!(playing > frozen, "the automation ramp advances once the song position moves");
 }
+
+// ---- Audio sink -------------------------------------------------------------------------------------------
+// An `AudioSinkDeviceBox` is an engine-owned chain member: its tap is summed into its target bus by
+// `resolve_sinks` (registered bus + enabled device only, no master fallback), the chain continues from its
+// own output. These tests cover the routing state machine; the audio itself is covered by the engine-env
+// processor tests and the core-wasm e2e renders.
+const SINK_UNIT: Uuid = [90u8; 16];
+const SINK_INSTR: Uuid = [91u8; 16];
+const SINK: Uuid = [92u8; 16];
+const SINK_BUS_UNIT: Uuid = [93u8; 16];
+const SINK_BUS_BOX: Uuid = [94u8; 16];
+const SINK_OTHER_UNIT: Uuid = [95u8; 16];
+const SINK_OTHER_INSTR: Uuid = [96u8; 16];
+const BUS_INPUT_KEY: u16 = 3; // AudioBusBox.input (the sink's `targetBus` points at it)
+const SLOT_AUDIO_FIELD: u16 = 40; // the test slot instrument's audio-fx hub (a Playfield slot mirror)
+
+fn sink_unit_fields() -> Vec<(u16, FieldValue)> {
+    alloc::vec![
+        (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+        (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook),
+        (UNIT_SOLO_KEY, FieldValue::Boolean(false))
+    ]
+}
+
+fn sink_box(uuid: Uuid, host: Address, target: Option<Address>) -> GraphBox {
+    graph_box(uuid, SINK_BOX_TYPE, &[
+        (HOST_KEY, FieldValue::Pointer(Some(host))),
+        (EFFECT_INDEX_KEY, FieldValue::Int32(0)),
+        (DEVICE_ENABLED_KEY, FieldValue::Boolean(true)),
+        (SINK_PASS_KEY, FieldValue::Float32(f32::NEG_INFINITY)),
+        (SINK_TARGET_KEY, FieldValue::Pointer(target))
+    ])
+}
+
+fn sink_bus_boxes() -> Vec<GraphBox> {
+    alloc::vec![
+        graph_box(SINK_BUS_UNIT, "AudioUnitBox", &sink_unit_fields()),
+        graph_box(SINK_BUS_BOX, "AudioBusBox", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(SINK_BUS_UNIT, vec![UNIT_INPUT_KEY])))),
+            (BUS_INPUT_KEY, FieldValue::Hook),
+            (BUS_ENABLED_KEY, FieldValue::Boolean(true))
+        ])
+    ]
+}
+
+fn bus_input() -> Address {
+    Address::of(SINK_BUS_BOX, vec![BUS_INPUT_KEY])
+}
+
+// A leaf unit (instrument + one sink at chain index 0) next to a bus unit, the bus built first so it is
+// registered when the sink resolves.
+fn sink_leaf_engine(target: Option<Address>) -> Engine {
+    sink_leaf_engine_with(target, Vec::new(), &[])
+}
+
+fn sink_leaf_engine_with(target: Option<Address>, extra_boxes: Vec<GraphBox>, extra_units: &[Uuid]) -> Engine {
+    let mut engine = engine_with_devices();
+    let mut boxes = sink_bus_boxes();
+    boxes.extend(alloc::vec![
+        graph_box(SINK_UNIT, "AudioUnitBox", &sink_unit_fields()),
+        graph_box(SINK_INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(SINK_UNIT, vec![UNIT_INPUT_KEY]))))]),
+        sink_box(SINK, Address::of(SINK_UNIT, vec![UNIT_AUDIO_KEY]), target)
+    ]);
+    boxes.extend(extra_boxes);
+    engine.graph = BoxGraph::from_boxes(boxes);
+    for uuid in [SINK_BUS_UNIT, SINK_UNIT].iter().chain(extra_units.iter()).copied() {
+        let mut unit = engine.build_unit(uuid);
+        engine.reconcile_one(&mut unit);
+        engine.audio_units.push(unit);
+    }
+    engine.resolve_outputs();
+    engine.resolve_sinks();
+    engine
+}
+
+// Every sink a unit holds: (node, resolved target bus).
+fn sinks_of(engine: &mut Engine, unit: Uuid) -> Vec<(NodeId, Option<Uuid>)> {
+    let binding = engine.audio_units.iter_mut().find(|binding| binding.unit == unit).expect("unit");
+    let mut found = Vec::new();
+    for_each_sink_in_wired(&mut binding.wired, &mut |sink| found.push((sink.node_id, sink.target.map(|(bus, _)| bus))));
+    found
+}
+
+// Whether every sink of the unit got its chain input wired (a wire loop that skips the Sink variant leaves it a
+// silent identity: the e2e stack-entry case caught exactly that).
+fn sinks_have_sources(engine: &mut Engine, unit: Uuid) -> bool {
+    let binding = engine.audio_units.iter_mut().find(|binding| binding.unit == unit).expect("unit");
+    let mut all = true;
+    for_each_sink_in_wired(&mut binding.wired, &mut |sink| all &= sink.proc.borrow().has_audio_source());
+    all
+}
+
+fn bus_sources(engine: &Engine, bus: Uuid) -> usize {
+    engine.bus_registry.get(&bus).map_or(0, |(sum, _)| sum.borrow().audio_source_count())
+}
+
+fn edges_of(engine: &Engine, unit: Uuid) -> Vec<(NodeId, NodeId)> {
+    let binding = engine.audio_units.iter().find(|binding| binding.unit == unit).expect("unit");
+    leaf_edges(binding)
+}
+
+fn edit(engine: &mut Engine, update: Update) {
+    engine.graph.transaction(&[update], &engine.registry).expect("edit");
+    engine.reconcile_units();
+}
+
+#[test]
+fn a_sink_in_a_leaf_chain_taps_into_its_target_bus() {
+    let mut engine = sink_leaf_engine(Some(bus_input()));
+    let sinks = sinks_of(&mut engine, SINK_UNIT);
+    assert_eq!(sinks.len(), 1, "the sink is ONE chain member");
+    let (sink_node, target) = sinks[0];
+    assert_eq!(target, Some(SINK_BUS_BOX), "resolved to the registered bus");
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 1, "the bus sums the sink's tap");
+    assert!(node_in_path(&edges_of(&engine, SINK_UNIT), sink_node), "the sink sits in the unit chain");
+    assert!(sinks_have_sources(&mut engine, SINK_UNIT), "the leaf wire loop feeds the sink its input");
+    let (_, audio) = leaf_nodes(engine.audio_units.iter().find(|binding| binding.unit == SINK_UNIT).unwrap());
+    assert_eq!(audio, alloc::vec![sink_node], "the chain continues from the sink's own node");
+}
+
+#[test]
+fn a_sink_without_a_target_or_with_an_unregistered_one_stays_unwired() {
+    let mut engine = sink_leaf_engine(None);
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT)[0].1, None, "no target: no route (and no master fallback)");
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 0);
+    // Point it at a uuid that is not a registered bus (the primary bus is never registered): still unwired.
+    let stray = Address::of([99u8; 16], vec![BUS_INPUT_KEY]);
+    edit(&mut engine, Update::Pointer {address: Address::of(SINK, vec![SINK_TARGET_KEY]), old: None, new: Some(stray.clone())});
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT)[0].1, None, "an unregistered target is silence, not the master");
+    // Now the real bus: the pointer monitor enqueues the unit, the pass wires it.
+    edit(&mut engine, Update::Pointer {address: Address::of(SINK, vec![SINK_TARGET_KEY]), old: Some(stray), new: Some(bus_input())});
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT)[0].1, Some(SINK_BUS_BOX));
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 1);
+    // And back to none: detached, the bus sums nothing again.
+    edit(&mut engine, Update::Pointer {address: Address::of(SINK, vec![SINK_TARGET_KEY]), old: Some(bus_input()), new: None});
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT)[0].1, None);
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 0, "a re-point away removes the tap from the old sum");
+}
+
+#[test]
+fn a_disabled_sink_is_bypassed_and_detached_and_re_enabling_restores_both() {
+    let mut engine = sink_leaf_engine(Some(bus_input()));
+    let (sink_node, _) = sinks_of(&mut engine, SINK_UNIT)[0];
+    edit(&mut engine, Update::Primitive {address: Address::of(SINK, vec![DEVICE_ENABLED_KEY]), old: FieldValue::Boolean(true), new: FieldValue::Boolean(false)});
+    let (node_after, target_after) = sinks_of(&mut engine, SINK_UNIT)[0];
+    assert_eq!(node_after, sink_node, "the processor persists across the toggle (edge-only)");
+    assert_eq!(target_after, None, "disabled: the tap is detached (it is never processed, so never summed stale)");
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 0);
+    assert!(!node_in_path(&edges_of(&engine, SINK_UNIT), sink_node), "bypassed in the chain");
+    edit(&mut engine, Update::Primitive {address: Address::of(SINK, vec![DEVICE_ENABLED_KEY]), old: FieldValue::Boolean(false), new: FieldValue::Boolean(true)});
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT)[0], (sink_node, Some(SINK_BUS_BOX)));
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 1);
+    assert!(node_in_path(&edges_of(&engine, SINK_UNIT), sink_node));
+}
+
+#[test]
+fn the_pass_level_reaches_the_processor_live_without_a_rewire() {
+    let mut engine = sink_leaf_engine(Some(bus_input()));
+    let params_of = |engine: &mut Engine| {
+        let binding = engine.audio_units.iter_mut().find(|binding| binding.unit == SINK_UNIT).unwrap();
+        let mut found = None;
+        for_each_sink_in_wired(&mut binding.wired, &mut |sink| found = Some(sink.params.clone()));
+        found.expect("sink")
+    };
+    assert_eq!(params_of(&mut engine).gain_db.get(), f32::NEG_INFINITY, "the box default (-inf dB) was caught up");
+    engine.dirty_units.borrow_mut().clear(); // the build itself enqueued; only the edit below is under test
+    engine.graph.transaction(&[Update::Primitive {address: Address::of(SINK, vec![SINK_PASS_KEY]), old: FieldValue::Float32(f32::NEG_INFINITY), new: FieldValue::Float32(-6.0)}], &engine.registry).expect("edit");
+    // The automation observer enqueues the unit for a params refresh (like any knob drag), but the value is
+    // already live before any reconcile runs.
+    assert_eq!(params_of(&mut engine).gain_db.get(), -6.0, "set by the field observer, no reconcile needed");
+}
+
+#[test]
+fn removing_a_sink_detaches_it_and_releases_its_observations() {
+    let mut engine = sink_leaf_engine(Some(bus_input()));
+    let (sink_node, _) = sinks_of(&mut engine, SINK_UNIT)[0];
+    let before = engine.graph.subscription_count();
+    edit(&mut engine, Update::Pointer {address: Address::of(SINK, vec![HOST_KEY]), old: Some(Address::of(SINK_UNIT, vec![UNIT_AUDIO_KEY])), new: None});
+    assert!(sinks_of(&mut engine, SINK_UNIT).is_empty(), "the member left the chain");
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 0, "its tap left the bus sum");
+    assert!(!engine.context.has_node(sink_node), "its node is gone");
+    // 3 sink observations (targetBus monitor, pass observer, enabled monitor) + the pass automation observation
+    // (2, see `observe_param`) + the chain collection's per-member index observer.
+    assert_eq!(engine.graph.subscription_count(), before - 6, "every observation of the removed sink is released");
+}
+
+#[test]
+fn removing_the_target_bus_detaches_the_sink() {
+    let mut engine = sink_leaf_engine(Some(bus_input()));
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 1);
+    let index = engine.audio_units.iter().position(|binding| binding.unit == SINK_BUS_UNIT).unwrap();
+    let bus_unit = engine.audio_units.remove(index);
+    engine.teardown_unit(bus_unit);
+    engine.resolve_sinks();
+    assert!(!engine.bus_registry.contains_key(&SINK_BUS_BOX), "the bus left the registry");
+    assert_eq!(sinks_of(&mut engine, SINK_UNIT)[0].1, None, "the sink no longer claims the vanished bus");
+}
+
+#[test]
+fn a_sink_targeting_its_own_bus_is_left_unrouted() {
+    // The sink sits in the BUS unit's own chain and points at that bus: sum -> ... -> sink -> sum is a cycle.
+    let mut engine = engine_with_devices();
+    let mut boxes = sink_bus_boxes();
+    boxes.push(sink_box(SINK, Address::of(SINK_BUS_UNIT, vec![UNIT_AUDIO_KEY]), Some(bus_input())));
+    engine.graph = BoxGraph::from_boxes(boxes);
+    let mut unit = engine.build_unit(SINK_BUS_UNIT);
+    engine.reconcile_one(&mut unit);
+    engine.audio_units.push(unit);
+    engine.resolve_outputs();
+    engine.resolve_sinks();
+    let sinks = sinks_of(&mut engine, SINK_BUS_UNIT);
+    assert_eq!(sinks.len(), 1, "a bus unit's chain builds the sink like any other");
+    assert_eq!(sinks[0].1, None, "a feedback loop is left unrouted");
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 0);
+}
+
+#[test]
+fn a_sink_counts_like_a_send_for_solo() {
+    let mut engine = sink_leaf_engine_with(Some(bus_input()), alloc::vec![
+        graph_box(SINK_OTHER_UNIT, "AudioUnitBox", &sink_unit_fields()),
+        graph_box(SINK_OTHER_INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(SINK_OTHER_UNIT, vec![UNIT_INPUT_KEY]))))])
+    ], &[SINK_OTHER_UNIT]);
+    let params_of = |engine: &Engine, uuid: Uuid| engine.audio_units.iter().find(|unit| unit.unit == uuid).expect("unit").strip_params.clone();
+    let set_solo = |engine: &mut Engine, uuid: Uuid, from: bool, to: bool| engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(uuid, vec![UNIT_SOLO_KEY]), old: FieldValue::Boolean(from), new: FieldValue::Boolean(to)
+    }], &engine.registry).expect("toggle solo");
+    // Soloing the sink's unit keeps the bus it feeds audible.
+    set_solo(&mut engine, SINK_UNIT, false, true);
+    engine.update_solo();
+    assert!(!params_of(&engine, SINK_UNIT).forced_silent.get());
+    assert!(!params_of(&engine, SINK_BUS_UNIT).forced_silent.get(), "the sink's target bus stays audible");
+    assert!(params_of(&engine, SINK_OTHER_UNIT).forced_silent.get(), "an unrelated unit is forced silent");
+    set_solo(&mut engine, SINK_UNIT, true, false);
+    // Soloing the bus keeps its sink feeder audible.
+    set_solo(&mut engine, SINK_BUS_UNIT, false, true);
+    engine.update_solo();
+    assert!(!params_of(&engine, SINK_BUS_UNIT).forced_silent.get());
+    assert!(!params_of(&engine, SINK_UNIT).forced_silent.get(), "the sink feeder stays audible (virtual solo)");
+    assert!(params_of(&engine, SINK_OTHER_UNIT).forced_silent.get());
+}
+
+#[test]
+fn a_sink_inside_a_composite_slot_chain_taps_into_the_bus() {
+    // The #350 case: a Playfield-style slot's own audio chain carries the sink.
+    let mut engine = composite_engine();
+    engine.devices[0].audio_effects_field = SLOT_AUDIO_FIELD;
+    let mut boxes = sink_bus_boxes();
+    boxes.extend(alloc::vec![
+        graph_box(UNIT, "AudioUnitBox", &sink_unit_fields()),
+        graph_box(COMPOSITE, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))),
+            (CHILDREN_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CHILD_A, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))),
+            (CHILD_ENABLED_KEY, FieldValue::Boolean(true)),
+            (SLOT_AUDIO_FIELD, FieldValue::Hook)
+        ]),
+        sink_box(SINK, Address::of(CHILD_A, vec![SLOT_AUDIO_FIELD]), Some(bus_input()))
+    ]);
+    engine.graph = BoxGraph::from_boxes(boxes);
+    for uuid in [SINK_BUS_UNIT, UNIT] {
+        let mut unit = engine.build_unit(uuid);
+        engine.reconcile_one(&mut unit);
+        engine.audio_units.push(unit);
+    }
+    engine.resolve_outputs();
+    engine.resolve_sinks();
+    let sinks = sinks_of(&mut engine, UNIT);
+    assert_eq!(sinks.len(), 1, "the slot chain's sink is reached through the composite cascade");
+    assert_eq!(sinks[0].1, Some(SINK_BUS_BOX));
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 1);
+    let binding = engine.audio_units.iter().find(|binding| binding.unit == UNIT).unwrap();
+    assert_eq!(child_audio_members(binding, CHILD_A), Some(1), "the sink is the slot's one audio member");
+    assert_eq!(child_wired_audio(binding, CHILD_A), Some(1), "and it is wired into the slot chain");
+    assert!(sinks_have_sources(&mut engine, UNIT), "the slot wire loop feeds the sink its input");
+}
+
+#[test]
+fn a_sink_inside_an_effect_composite_entry_taps_into_the_bus() {
+    let mut engine = engine_with_composite();
+    let mut boxes = sink_bus_boxes();
+    boxes.extend(alloc::vec![
+        graph_box(UNIT, "AudioUnitBox", &sink_unit_fields()),
+        graph_box(INSTR, "TestInstrument", &[(HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY]))))]),
+        graph_box(COMP, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))),
+            (EFFECT_INDEX_KEY, FieldValue::Int32(0)),
+            (DEVICE_ENABLED_KEY, FieldValue::Boolean(true)),
+            (ENTRIES_FIELD, FieldValue::Hook),
+            (INPUT_TAP_FIELD, FieldValue::Hook),
+            (DRY_KEY, FieldValue::Float32(f32::NEG_INFINITY)),
+            (WET_KEY, FieldValue::Float32(0.0))
+        ]),
+        entry_box(ENTRY_A, 0, "A"),
+        sink_box(SINK, Address::of(ENTRY_A, vec![ENTRY_CHAIN_FIELD]), Some(bus_input()))
+    ]);
+    engine.graph = BoxGraph::from_boxes(boxes);
+    for uuid in [SINK_BUS_UNIT, UNIT] {
+        let mut unit = engine.build_unit(uuid);
+        engine.reconcile_one(&mut unit);
+        engine.audio_units.push(unit);
+    }
+    engine.resolve_outputs();
+    engine.resolve_sinks();
+    let sinks = sinks_of(&mut engine, UNIT);
+    assert_eq!(sinks.len(), 1, "the entry chain's sink is reached through the effect composite");
+    assert_eq!(sinks[0].1, Some(SINK_BUS_BOX));
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 1);
+    assert!(sinks_have_sources(&mut engine, UNIT), "the entry wire loop feeds the sink its input");
+    // Removing the whole composite tears the nested sink down with it.
+    edit(&mut engine, Update::Pointer {address: Address::of(COMP, vec![HOST_KEY]), old: Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])), new: None});
+    assert!(sinks_of(&mut engine, UNIT).is_empty());
+    assert_eq!(bus_sources(&engine, SINK_BUS_BOX), 0, "no stale tap survives the composite teardown");
+}

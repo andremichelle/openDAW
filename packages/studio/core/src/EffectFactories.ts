@@ -26,6 +26,7 @@ import {
     ReverbDeviceBox,
     StereoCompositeBox,
     StereoToolDeviceBox,
+    AudioSinkDeviceBox,
     TidalDeviceBox,
     SpielwerkDeviceBox,
     VelocityDeviceBox,
@@ -438,6 +439,23 @@ export namespace EffectFactories {
             })
     }
 
+    export const Sink: EffectFactory = {
+        defaultName: "Sink",
+        defaultIcon: IconSymbol.AudioBus,
+        briefDescription: "Route to Bus",
+        description: "Routes the signal at this position into an audio bus. Pass sets the level it continues down the chain at.",
+        manualPage: DeviceManualUrls.Sink,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        create: ({boxGraph}, hostField, index): AudioSinkDeviceBox =>
+            AudioSinkDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("Sink")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
+
     export const Modular: EffectFactory = {
         defaultName: "🔇 Create New Modular Audio Effect (inaudible yet)",
         defaultIcon: IconSymbol.Box,
@@ -588,7 +606,8 @@ export namespace EffectFactories {
         NeuralAmp,       // Tone3000
         Vocoder,
         Waveshaper,
-        Werkstatt
+        Werkstatt,
+        Sink
     }
     export const MidiList: ReadonlyArray<Readonly<EffectFactory>> =
         Object.values(MidiNamed)

@@ -654,6 +654,21 @@ export interface StereoToolEffect extends AudioEffect {
 }
 
 /**
+ * Routes the signal at its chain position into a group or auxiliary bus (a 1:1 cable, unity into the bus).
+ * `pass` is the level the chain continues at: -inf (default) means the unit sounds only through the bus,
+ * 0 dB keeps a full copy on the chain. No target, or a disabled sink, sends nothing.
+ * @group Audio Effects
+ */
+export interface SinkEffect extends AudioEffect {
+    /** Always "Sink" */
+    readonly key: "Sink"
+    /** The bus receiving the signal, null = nothing is sent */
+    target: Nullable<GroupAudioUnit | AuxAudioUnit>
+    /** Level the signal continues down the chain at, in dB (-inf to 0, default -inf) */
+    pass: float
+}
+
+/**
  * Tremolo and auto-pan
  * @group Audio Effects
  */
@@ -848,6 +863,8 @@ export interface AudioEffects {
     "Waveshaper": WaveshaperEffect
     /** {@link WerkstattEffect} */
     "Werkstatt": WerkstattEffect
+    /** {@link SinkEffect} */
+    "Sink": SinkEffect
     /** {@link AudioEffectCompositeEffect} */
     "Composite": AudioEffectCompositeEffect
     /** {@link StereoSplitEffect} */

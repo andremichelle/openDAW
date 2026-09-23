@@ -40,7 +40,7 @@ use engine_env::engine_context::NodeId;
 use bindings::value_collection::ValueCollection;
 use math::value_mapping::Decibel;
 use crate::audio_unit::{host_float, host_bool};
-use crate::audio_unit::{DeviceParams, Member, ProcHandle, SidechainBinding};
+use crate::audio_unit::{visit_member_sinks, DeviceParams, Member, ProcHandle, SidechainBinding, SinkBinding, SINK_BOX_TYPE};
 use crate::{Distributor, EffectCompositeSpec, Engine, EFFECT_INDEX_KEY};
 
 /// The gain mapping an entry's `gain` / a composite's `dry` / `wet` automation curve resolves through: the
@@ -135,6 +135,13 @@ impl EffectCompositeBinding {
                     nested.for_each_sidechain(visit);
                 }
             }
+        }
+    }
+
+    /// Visit every audio sink in the entries (recursing into nested composites).
+    pub(crate) fn for_each_sink(&mut self, visit: &mut dyn FnMut(&mut SinkBinding)) {
+        for entry in &mut self.members {
+            for member in &mut entry.audio { visit_member_sinks(member, visit); }
         }
     }
 
@@ -606,6 +613,7 @@ impl Engine {
             match &member.proc {
                 ProcHandle::Audio(node) => node.borrow_mut().set_audio_source(output.clone()),
                 ProcHandle::EffectComposite(nested) => nested.set_audio_source(output.clone()),
+                ProcHandle::Sink(sink) => sink.proc.borrow_mut().set_audio_source(output.clone()),
                 _ => continue
             }
             // A composite member's upstream feeds its DISTRIBUTOR while its exit is its mix.
@@ -710,6 +718,9 @@ impl Engine {
                                              signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>,
                                              rewire: &Rc<dyn Fn()>) -> Option<Member> {
         let name = self.graph.find_box(&uuid)?.name.clone();
+        if name == SINK_BOX_TYPE {
+            return Some(self.take_or_build_sink(pool, uuid, signal, invalidate, rewire));
+        }
         if let Some(device) = self.device_for_type(&name) {
             if device.kind != DEVICE_KIND_AUDIO_EFFECT {
                 return None;
