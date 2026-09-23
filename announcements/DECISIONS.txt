@@ -135,3 +135,14 @@ Feature framing (Composite)
   it contributes, mute and solo take a sound apart. No "class assembles one sound from each
   student" angle, that makes no sense.
 • Manual: https://opendaw.studio/manuals/devices/instruments/composite
+
+Feature framing (Sink)
+• An audio effect that sends the signal at its position in the chain to a bus of your choice. It sits
+  in any effect chain: a track, a Playfield pad, a Composite layer, an FX Composite entry.
+• The story is grouping single Playfield pads on their own bus. Do not say "grouping a layer", a
+  Composite already picks its output bus in the channel strip.
+• Pass Through is a level, not a switch: all the way down the track goes quiet and sounds only through
+  the bus, up keeps the dry signal as well. Do not call it wet/dry.
+• Discord only so far, very brief, no education angle.
+• Manual: https://opendaw.studio/manuals/devices/audio/sink
+• Sink post: one sentence per subline. "The rest is too elaborative" was the correction, keep it that short.
