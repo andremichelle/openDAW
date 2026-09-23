@@ -59,7 +59,7 @@ export class AudioSinkDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     #wrapParameters(box: AudioSinkDeviceBox) {
         return {
             pass: this.#parametric.createParameter(box.pass, ValueMapping.DefaultDecibel,
-                StringMapping.numeric({unit: "dB", fractionDigits: 1}), "Pass")
+                StringMapping.numeric({unit: "dB", fractionDigits: 1}), "Pass Through")
         } as const
     }
 }

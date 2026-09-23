@@ -48,7 +48,7 @@ export const AudioSinkDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                   midiLearning,
                                   adapter,
                                   parameter: pass,
-                                  color: Colors.dark,
+                                  color: Colors.black,
                                   options: SnapCommonDecibel
                               })}
                           </div>)}

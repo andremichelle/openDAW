@@ -26,7 +26,7 @@ With no bus assigned, nothing is sent.
 
 ---
 
-## 2. Pass
+## 2. Pass Through
 
 The level at which the signal continues down the chain after the Sink. The bus always receives the full signal.
 
