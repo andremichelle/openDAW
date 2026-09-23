@@ -4,6 +4,10 @@ A routing device that sends the signal at its position in the chain into an audi
 
 ---
 
+![screenshot](sink.webp)
+
+---
+
 ## 0. Overview
 
 _Sink_ is a 1:1 cable. Whatever arrives at the Sink is summed into the bus you pick, at unity gain. The bus's own channel strip does the mixing.
@@ -13,7 +17,7 @@ Because it is an ordinary audio effect, it works anywhere an effect chain exists
 Example uses:
 
 - Sending one Playfield pad (the kick, the snare) to its own bus for separate processing
-- Grouping a layer of a composite instrument
+- Pulling a single layer out of an Instrument Composite onto another bus while the other layers keep the track's output
 - Splitting a chain at a chosen point: everything before the Sink goes to the bus, everything after it stays on the track
 
 ---
