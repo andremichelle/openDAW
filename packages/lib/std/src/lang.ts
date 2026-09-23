@@ -97,7 +97,8 @@ export const isSameClass = (a: object, b: object): boolean => a.constructor === 
 export const tryProvide = <T>(provider: Provider<T>): T => {
     try {return provider()} catch (reason) {return panic(String(reason))}
 }
-export const getOrProvide = <T>(value: ValueOrProvider<T>): T => value instanceof Function ? value() : value
+export const isProvider = <T>(value: ValueOrProvider<T>): value is Provider<T> => typeof value === "function"
+export const getOrProvide = <T>(value: ValueOrProvider<T>): T => isProvider(value) ? value() : value
 export const safeWrite = (object: any, property: string, value: any): void =>
     property in object ? object[property] = value : undefined
 export const safeExecute = <F extends AnyFunc>(func: Maybe<F>, ...args: Parameters<F>): Maybe<ReturnType<F>> =>
@@ -137,7 +138,7 @@ export const canWrite = <T>(obj: T, key: keyof any): obj is T & Record<typeof ke
 }
 export const requireProperty = <T extends {}>(object: T, key: keyof T): void => {
     if (isAbsent(object)) {throw `${String(key)}'s owner not available`}
-    const {status, value} = tryCatch(() => object instanceof Function ? object.name : object.constructor.name)
+    const {status, value} = tryCatch(() => typeof object === "function" ? object.name : object.constructor.name)
     const feature = status === "failure" ? `${object}.${String(key)}` : `${value}.${String(key)}`
     if (!(key in object)) {throw `${feature} not available`}
     console.debug(`%c${feature}%c available`, "color: hsl(200, 83%, 60%)", "color: inherit")
