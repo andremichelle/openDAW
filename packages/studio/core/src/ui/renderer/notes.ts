@@ -23,7 +23,7 @@ export namespace NotesRenderer {
             if (position < regionStart) {continue}
             const complete = Math.min(rawStart + note.complete, resultEnd)
             const x0 = Math.floor(range.unitToX(position) * dpr)
-            const x1 = Math.floor(range.unitToX(complete) * dpr)
+            const x1 = Math.floor((range.unitToX(complete) - 1) * dpr)
             const y = actualTop + padding + Math.floor(note.normalizedPitch() * (height - (padding * 2 + noteHeight)))
             context.fillRect(x0, y, Math.max(1, x1 - x0), noteHeight)
         }
