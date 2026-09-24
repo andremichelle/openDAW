@@ -3,6 +3,15 @@ name: Deploy openDAW studio
 
 on:
   workflow_dispatch:
+    inputs:
+      to_dev:
+        description: "Deploy this branch to DEV (dev.opendaw.studio), e.g. to mirror main"
+        required: false
+        default: false
+        type: boolean
+
+env:
+  DEPLOY_ENV: ${{ inputs.to_dev && 'dev' || '' }}
 
 jobs:
   build-and-deploy:

@@ -17,9 +17,9 @@ const docsDistDir = "./packages/studio/docs"
 const docsOnly = process.env.DOCS_ONLY === "true"
 const buildInfoPath = "./packages/app/studio/public/build-info.json"
 const branchName = process.env.BRANCH_NAME || "main"
-const isMainBranch = branchName === "main"
-const domain = isMainBranch ? "opendaw.studio" : "dev.opendaw.studio"
-const envFolder = isMainBranch ? "main" : "dev"
+const envFolder = process.env.DEPLOY_ENV || (branchName === "main" ? "main" : "dev")
+const isMainEnv = envFolder === "main"
+const domain = isMainEnv ? "opendaw.studio" : "dev.opendaw.studio"
 const readBuildInfo = () => JSON.parse(fs.readFileSync(buildInfoPath, "utf8"))
 const lastCommitFile = `/${envFolder}/last-deployed-commit.txt`
 const readCommitLog = (previousCommit: string): string | null => {
@@ -207,7 +207,7 @@ const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> =
 
     // Update the appropriate release directory
     if (newReleaseDir !== null) {
-        if (isMainBranch) {
+        if (isMainEnv) {
             mainReleaseDir = newReleaseDir
         } else {
             devReleaseDir = newReleaseDir
@@ -263,7 +263,7 @@ const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> =
         const commitLog = previousCommit && previousCommit !== currentCommit ? readCommitLog(previousCommit) : null
         const summary = commitLog ? await generateSummary(commitLog) : null
         const now = Math.floor(Date.now() / 1000)
-        const branchInfo = isMainBranch ? "" : ` (\`${branchName}\`)`
+        const branchInfo = isMainEnv ? "" : ` (\`${branchName}\`)`
         const content =
             `🚀 **openDAW** deployed <https://${domain}>${branchInfo} using release \`${uuid}\` <t:${now}:R>.`
             + (summary ? `\n\nwhat's new:\n${summary}` : "")
