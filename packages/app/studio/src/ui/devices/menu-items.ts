@@ -21,7 +21,7 @@ import {InstrumentCompositeBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {openManual} from "@/ui/manuals"
-import {PresetService, PresetEffectKind} from "@/ui/browse/PresetService"
+import {effectKeyOf, PresetEffectKind, PresetService} from "@/ui/browse/PresetService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 export namespace MenuItems {
@@ -276,8 +276,7 @@ export namespace MenuItems {
         if (choice.value) {
             await actions.saveAsChainPreset(chainKind, [effectBox])
         } else {
-            const deviceKey = effect.box.name.replace(/DeviceBox$/, "")
-            await actions.saveAsSingleEffectPreset(kind, deviceKey, effectBox)
+            await actions.saveAsSingleEffectPreset(kind, effectKeyOf(effectBox), effectBox)
         }
     }
 
@@ -300,8 +299,8 @@ export namespace MenuItems {
                     } else if (context.kind === "effect-context") {
                         const effectKind: PresetEffectKind = context.device.type === "audio-effect"
                             ? "audio-effect" : "midi-effect"
-                        const deviceKey = context.device.box.name.replace(/DeviceBox$/, "")
                         const effectBox = context.device.box as IndexedBox
+                        const deviceKey = effectKeyOf(effectBox)
                         const labeled = context.device.labelField.getValue()
                         const deviceName = labeled.length > 0 ? labeled : deviceKey
                         submenu.addMenuItem(MenuItem.default({label: `Save '${deviceName}' as Preset`})

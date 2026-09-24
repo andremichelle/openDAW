@@ -82,6 +82,9 @@ const cursorKeyFor = (adapter: DeviceBoxAdapter): string => {
 type PresetIdentity = string
 const identityOf = (entry: PresetEntry): PresetIdentity => `${entry.source}:${entry.uuid}`
 
+export const effectKeyOf = (box: Box): string =>
+    EffectFactories.keyOfBox(box) ?? panic(`${box.name} is not a registered effect`)
+
 export class PresetService {
     readonly #cloudIndex = new DefaultObservableValue<ReadonlyArray<PresetMeta>>([])
     readonly #cloudReady: Promise<void>
@@ -333,12 +336,10 @@ export class PresetService {
         return InstrumentFactories.keyOfBox(boxOpt.unwrap()) ?? null
     }
 
-    #effectKeyFromBox(box: IndexedBox): string {return box.name.replace(/DeviceBox$/, "")}
-
     #effectLabelFromBox(box: IndexedBox): string {
         const adapter = this.project.boxAdapters.adapterFor(box, Devices.isAny)
         const value = adapter.labelField.getValue()
-        return value.length > 0 ? value : this.#effectKeyFromBox(box)
+        return value.length > 0 ? value : effectKeyOf(box)
     }
 
     async saveAsSingleEffectPreset(category: PresetEffectKind,
@@ -558,7 +559,7 @@ export class PresetService {
         if (entry.category === "audio-effect" || entry.category === "midi-effect") {
             if (rackIntentEffect) {return false}
             const effects = this.resolveEffectBoxesFromDrag(entry.category, dragData)
-            return effects.length === 1 && effects[0].name.replace(/DeviceBox$/, "") === entry.device
+            return effects.length === 1 && EffectFactories.keyOfBox(effects[0]) === entry.device
         }
         if (entry.category === "audio-effect-chain") {
             if (rackIntentEffect) {return false}
