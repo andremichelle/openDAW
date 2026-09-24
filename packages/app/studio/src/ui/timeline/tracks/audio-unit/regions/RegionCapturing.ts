@@ -17,7 +17,6 @@ export type RegionCaptureTarget =
     | { type: "region", part: "start", region: AnyLoopableRegionBoxAdapter }
     | { type: "region", part: "complete", region: AnyRegionBoxAdapter }
     | { type: "region", part: "content-start", region: AnyRegionBoxAdapter }
-    | { type: "region", part: "content-complete", region: AnyRegionBoxAdapter }
     | { type: "region", part: "loop-duration", region: AnyRegionBoxAdapter }
     | { type: "region", part: "fading-in", region: AudioRegionBoxAdapter }
     | { type: "region", part: "fading-out", region: AudioRegionBoxAdapter }
@@ -74,13 +73,20 @@ export namespace RegionCapturing {
                             distance < PointerRadiusDistance
                             && (cursorInside && !edgeIsInside
                                 || cursorInside === edgeIsInside && distance < edgeDistance)
+                        // loop line first: on a tie with the region edge the loop handle wins
+                        if (bottomEdge) {
+                            const loopDistance = Math.abs(x - range.unitToX(region.offset + region.loopDuration))
+                            if (isBetter(loopDistance)) {
+                                edgeDistance = loopDistance
+                                edgeIsInside = cursorInside
+                                edgeCapture = {type: "region", part: "loop-duration", region}
+                            }
+                        }
                         const completeDistance = Math.abs(x - x1)
                         if (isBetter(completeDistance)) {
                             edgeDistance = completeDistance
                             edgeIsInside = cursorInside
-                            edgeCapture = bottomEdge
-                                ? {type: "region", part: "content-complete", region}
-                                : {type: "region", part: "complete", region}
+                            edgeCapture = {type: "region", part: "complete", region}
                         }
                         const startDistance = Math.abs(x - x0)
                         if (isBetter(startDistance)) {
@@ -89,14 +95,6 @@ export namespace RegionCapturing {
                             edgeCapture = bottomEdge
                                 ? {type: "region", part: "content-start", region}
                                 : {type: "region", part: "start", region}
-                        }
-                        if (bottomEdge) {
-                            const loopDistance = Math.abs(x - range.unitToX(region.offset + region.loopDuration))
-                            if (isBetter(loopDistance)) {
-                                edgeDistance = loopDistance
-                                edgeIsInside = cursorInside
-                                edgeCapture = {type: "region", part: "loop-duration", region}
-                            }
                         }
                     }
                     bodyRegion = region

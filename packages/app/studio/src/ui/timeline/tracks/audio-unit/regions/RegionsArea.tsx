@@ -40,7 +40,6 @@ const CursorMap = Object.freeze({
     "complete": Cursor.LoopEnd,
     "loop-duration": Cursor.ExpandWidth,
     "content-start": Cursor.ExpandWidth,
-    "content-complete": Cursor.ExpandWidth,
     "fading-in": "ew-resize",
     "fading-out": "ew-resize"
 }) satisfies Record<string, CssUtils.Cursor | Cursor>
@@ -303,12 +302,8 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                         return manager.startRegionModifier(RegionContentStartModifier.create(regionSelection.selected(),
                             {project, element, snapping, pointerPulse, reference}))
                     case "loop-duration":
-                    case "content-complete":
                         return manager.startRegionModifier(RegionLoopDurationModifier.create(regionSelection.selected(),
-                            {
-                                project, element, snapping, pointerPulse, reference,
-                                resize: target.part === "content-complete"
-                            }))
+                            {project, element, snapping, pointerPulse, reference}))
                     case "fading-in":
                     case "fading-out": {
                         const audioRegion = target.region
