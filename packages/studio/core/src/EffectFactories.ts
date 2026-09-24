@@ -54,6 +54,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "midi",
+        boxName: "ArpeggioDeviceBox",
         create: ({boxGraph}, hostField, index) =>
             ArpeggioDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Arpeggio")
@@ -71,6 +72,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "midi",
+        boxName: "PitchDeviceBox",
         create: ({boxGraph}, hostField, index) =>
             PitchDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Pitch")
@@ -88,6 +90,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "midi",
+        boxName: "VelocityDeviceBox",
         create: ({boxGraph}, hostField, index) =>
             VelocityDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Velocity")
@@ -105,6 +108,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "midi",
+        boxName: "ZeitgeistDeviceBox",
         create: (
             {boxGraph, rootBoxAdapter},
             hostField,
@@ -139,6 +143,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "midi",
+        boxName: "SpielwerkDeviceBox",
         create: ({boxGraph}, hostField, index) =>
             SpielwerkDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Spielwerk")
@@ -156,6 +161,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "StereoToolDeviceBox",
         create: ({boxGraph}, hostField, index): StereoToolDeviceBox =>
             StereoToolDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Stereo Tool")
@@ -173,6 +179,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "DelayDeviceBox",
         create: ({boxGraph}, hostField, index): DelayDeviceBox =>
             DelayDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Delay")
@@ -191,6 +198,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "ConvolverDeviceBox",
         create: ({boxGraph}, hostField, index): ConvolverDeviceBox =>
             ConvolverDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Convolver")
@@ -208,6 +216,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "DattorroReverbDeviceBox",
         create: ({boxGraph}, hostField, index): DattorroReverbDeviceBox =>
             DattorroReverbDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Dattorro Reverb")
@@ -225,6 +234,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "MaximizerDeviceBox",
         create: ({boxGraph}, hostField, index): MaximizerDeviceBox =>
             MaximizerDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Maximizer")
@@ -242,6 +252,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "CompressorDeviceBox",
         create: ({boxGraph}, hostField, index): CompressorDeviceBox =>
             CompressorDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Compressor")
@@ -259,6 +270,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "GateDeviceBox",
         create: ({boxGraph}, hostField, index): GateDeviceBox =>
             GateDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Gate")
@@ -276,6 +288,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "ReverbDeviceBox",
         create: ({boxGraph}, hostField, index): ReverbDeviceBox =>
             ReverbDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Reverb")
@@ -294,6 +307,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "AutotuneDeviceBox",
         create: ({boxGraph}, hostField, index): AutotuneDeviceBox =>
             AutotuneDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Autotune")
@@ -311,6 +325,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "CrusherDeviceBox",
         create: ({boxGraph}, hostField, index): CrusherDeviceBox =>
             CrusherDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Crusher")
@@ -328,6 +343,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "FoldDeviceBox",
         create: ({boxGraph}, hostField, index): FoldDeviceBox =>
             FoldDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Fold")
@@ -345,6 +361,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "WaveshaperDeviceBox",
         create: ({boxGraph}, hostField, index): WaveshaperDeviceBox =>
             WaveshaperDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Waveshaper")
@@ -362,6 +379,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "TidalDeviceBox",
         create: ({boxGraph}, hostField, index): TidalDeviceBox =>
             TidalDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Tidal")
@@ -380,6 +398,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "RevampDeviceBox",
         create: ({boxGraph}, hostField, index): RevampDeviceBox =>
             RevampDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 EffectParameterDefaults.defaultRevampDeviceBox(box)
@@ -397,6 +416,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: true,
         type: "audio",
+        boxName: "NeuralAmpDeviceBox",
         create: ({boxGraph}, hostField, index): NeuralAmpDeviceBox =>
             NeuralAmpDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Tone3000")
@@ -414,6 +434,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "VocoderDeviceBox",
         create: ({boxGraph}, hostField, index): VocoderDeviceBox =>
             VocoderDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Vocoder")
@@ -431,6 +452,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "WerkstattDeviceBox",
         create: ({boxGraph}, hostField, index): WerkstattDeviceBox =>
             WerkstattDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Werkstatt")
@@ -448,6 +470,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "AudioSinkDeviceBox",
         create: ({boxGraph}, hostField, index): AudioSinkDeviceBox =>
             AudioSinkDeviceBox.create(boxGraph, UUID.generate(), (box) => {
                 box.label.setValue("Sink")
@@ -465,6 +488,7 @@ export namespace EffectFactories {
         separatorBefore: true,
         external: false,
         type: "audio",
+        boxName: "ModularDeviceBox",
         create: ({boxGraph, rootBox, userEditingManager}, hostField, index): ModularDeviceBox => {
             const moduleSetupBox = ModularBox.create(
                 boxGraph,
@@ -520,6 +544,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "AudioEffectCompositeBox",
         create: ({boxGraph}, hostField, index) =>
             AudioEffectCompositeBox.create(boxGraph, UUID.generate(), box => {
                 box.label.setValue("FX Composite")
@@ -539,6 +564,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "StereoCompositeBox",
         create: ({boxGraph}, hostField, index) => {
             const composite = StereoCompositeBox.create(boxGraph, UUID.generate(), box => {
                 box.label.setValue("Stereo Split")
@@ -564,6 +590,7 @@ export namespace EffectFactories {
         separatorBefore: false,
         external: false,
         type: "audio",
+        boxName: "FrequencySplitBox",
         create: ({boxGraph}, hostField, index) => {
             const composite = FrequencySplitBox.create(boxGraph, UUID.generate(), box => {
                 box.label.setValue("Frequency Split")
@@ -619,5 +646,5 @@ export namespace EffectFactories {
 
     export const keyOfBox = (box: Box): Optional<MidiEffectKeys | AudioEffectKeys> =>
         (Object.keys(MergedNamed) as Array<MidiEffectKeys | AudioEffectKeys>)
-            .find(key => box.name === `${key}DeviceBox` || box.name === `${key}Box`)
+            .find(key => MergedNamed[key].boxName === box.name)
 }
