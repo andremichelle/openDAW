@@ -24,7 +24,7 @@ export type PackMeta = {
     models: ReadonlyArray<Model>
 }
 
-const ClientId = "t3k_pub_txvY3hFE8w6GJYvSW69eMOeBioJRZWKk"
+const ClientId = "t3k_pub_hn6j1JnZzRBChkwkEElVZSsLlKOLQSNO"
 const ApiBase = "https://www.tone3000.com/api/v1"
 const AuthorizeEndpoint = `${ApiBase}/oauth/authorize`
 const TokenEndpoint = `${ApiBase}/oauth/token`
@@ -100,15 +100,26 @@ const apiFetch = async (url: string, signal?: AbortSignal): Promise<Response> =>
 const fetchTone = async (toneId: string): Promise<Tone> =>
     (await apiFetch(`${ApiBase}/tones/${toneId}?architecture=${Architecture}`)).json()
 
-const fetchModels = async (toneId: string): Promise<ReadonlyArray<Model>> => {
+const fetchModelsPages = async (toneId: string, query: string): Promise<ReadonlyArray<Model>> => {
     const models: Array<Model> = []
     for (let page = 1, totalPages = 1; page <= totalPages; page++) {
-        const url = `${ApiBase}/models?tone_id=${toneId}&page=${page}&page_size=${ModelsPageSize}&architecture=${Architecture}`
+        const url = `${ApiBase}/models?tone_id=${toneId}&page=${page}&page_size=${ModelsPageSize}${query}`
         const response: PaginatedResponse<Model> = await (await apiFetch(url)).json()
         models.push(...response.data)
         totalPages = response.total_pages
     }
     return models
+}
+
+// architecture filter is exclusive: omitted = A1 + custom, "2" = A2 only
+const fetchModels = async (toneId: string): Promise<ReadonlyArray<Model>> => {
+    const [a2, legacy] = await Promise.all([
+        fetchModelsPages(toneId, `&architecture=${Architecture}`),
+        fetchModelsPages(toneId, "")
+    ])
+    const merged = new Map<number, Model>()
+    for (const model of [...a2, ...legacy]) {if (!merged.has(model.id)) {merged.set(model.id, model)}}
+    return Array.from(merged.values())
 }
 
 const downloadModel = async (modelUrl: string, signal?: AbortSignal): Promise<string> =>
@@ -135,12 +146,11 @@ const selectTone = async (): Promise<string> => {
     if (isNull(authWindow)) {return Errors.warn("Failed to open TONE3000 window. Please check popup blockers.")}
     const {resolve, reject, promise} = Promise.withResolvers<string>()
     const channel = new BroadcastChannel(ChannelName)
-    let handled = false
+    const flow = {handled: false}
     channel.onmessage = async (event: MessageEvent<CallbackMessage>) => {
         const message = event.data
-        if (handled || message.type === "closed") {return}
-        handled = true
-        if (message.state !== state) {return reject(new Error("TONE3000 state mismatch"))}
+        if (flow.handled || message.type === "closed" || message.state !== state) {return}
+        flow.handled = true
         if (message.canceled) {return reject(Errors.AbortError)}
         if (isDefined(message.error)) {
             return reject(new Error(`TONE3000 authorization failed: ${message.error} — ${message.errorDescription ?? ""}`))
