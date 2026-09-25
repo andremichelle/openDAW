@@ -59,9 +59,7 @@ export default defineConfig(({command}) => {
         clearScreen: false,
         server: {
             port: 8080,
-            // Only reachable from the network when serving HTTPS. The bare --host CLI flag
-            // would otherwise override this to bind 0.0.0.0 even for the plaintext fallback.
-            host: certsExist ? true : "localhost",
+            host: certsExist ? true : "localhost", // network-reachable only over HTTPS
             https: command === "serve" && certsExist ? {
                 key: readFileSync(resolve(__dirname, "../../../certs/localhost-key.pem")),
                 cert: readFileSync(resolve(__dirname, "../../../certs/localhost.pem"))
