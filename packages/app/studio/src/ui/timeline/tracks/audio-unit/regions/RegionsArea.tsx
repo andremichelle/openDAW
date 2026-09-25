@@ -4,7 +4,7 @@ import {firstTrackRect} from "@/ui/timeline/tracks/audio-unit/FirstTrackRect"
 import {clamp, DefaultObservableValue, EmptyExec, Lifecycle, Nullable, Option, Unhandled} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@opendaw/lib-dsp"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
@@ -31,6 +31,7 @@ import {Dialogs} from "@/ui/components/dialogs"
 import {ClipboardManager, ElementCapturing, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
+import {moveByWheelPixels} from "@/ui/timeline/editors/WheelScroll"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
 
@@ -254,7 +255,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             } else if (event.altKey) {
                 event.preventDefault()
                 event.stopPropagation()
-                range.moveUnitBy(Math.sign(event.deltaY) * PPQN.SemiQuaver * 2)
+                moveByWheelPixels(range, event)
             } else {
                 const deltaX = event.deltaX
                 const threshold = 5.0

@@ -12,8 +12,11 @@ export namespace WheelScaling {
     // magnitude (decaying between gestures) and express any event as a fraction of it.
     const calibration = {quantum: 0.0, time: 0.0}
 
+    export const pixelsOf = (event: WheelEvent): number =>
+        event.deltaY * (DeltaModeToPixels.at(event.deltaMode) ?? 1.0)
+
     export const scaleOf = (event: WheelEvent): number => {
-        const delta = event.deltaY * (DeltaModeToPixels.at(event.deltaMode) ?? 1.0)
+        const delta = pixelsOf(event)
         if (delta === 0.0) {return 0.0}
         const time = performance.now()
         const decayed = calibration.quantum * Math.exp((calibration.time - time) / QuantumDecayMs)
