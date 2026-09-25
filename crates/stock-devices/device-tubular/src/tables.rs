@@ -14,7 +14,9 @@ const MAX_LOGFREQ_INT: i32 = 20;
 pub struct Tables {
     pub sin: [i32; SIN_N_SAMPLES << 1],
     pub exp2: [i32; EXP2_N_SAMPLES << 1],
-    pub freq: [i32; FREQ_N_SAMPLES + 1]
+    pub freq: [i32; FREQ_N_SAMPLES + 1],
+    pub sin_log: [u16; crate::mki::SINLOG_TABLESIZE],
+    pub sin_exp: [u16; crate::mki::SINEXP_TABLESIZE]
 }
 
 impl Tables {
@@ -22,6 +24,7 @@ impl Tables {
         self.init_sin();
         self.init_exp2();
         self.init_freq(sample_rate);
+        crate::mki::init_tables(&mut self.sin_log, &mut self.sin_exp);
     }
 
     fn init_sin(&mut self) {

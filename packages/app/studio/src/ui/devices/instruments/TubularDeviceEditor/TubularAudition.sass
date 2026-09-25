@@ -1,0 +1,53 @@
+component
+  display: flex
+  flex-direction: column
+  row-gap: 0.5em
+  width: 32em
+  outline: none
+
+  > div.status
+    font-size: 0.875em
+    color: var(--color-cream)
+
+  > ol.voices
+    display: grid
+    grid-template-columns: repeat(2, 1fr)
+    gap: 2px 1em
+    max-height: 22em
+    overflow-y: auto
+    margin: 0
+    padding: 0
+    list-style: none
+    font-size: 0.8125em
+
+    > li.voice
+      display: grid
+      grid-template-columns: 2em 1fr 1.5em
+      align-items: center
+      padding: 0.125em 0.375em
+      border-radius: 0.25em
+      cursor: pointer
+
+      &:hover
+        background: rgba(white, 0.06)
+
+      &.current
+        background: rgba(white, 0.14)
+        color: var(--color-cream)
+
+      &.keeper > span.star
+        color: var(--color-yellow)
+
+      > span.index
+        opacity: 0.5
+
+      > span.star
+        text-align: center
+        opacity: 0.8
+
+        &:hover
+          opacity: 1
+
+  > div.help
+    font-size: 0.6875em
+    opacity: 0.5

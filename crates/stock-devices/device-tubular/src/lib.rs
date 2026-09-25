@@ -5,7 +5,8 @@
 //! behind a small ring, so note events snap to the frame grid exactly like the plugin.
 //!
 //! Exports: `kind()` (instrument), `state_size()`, `process(desc_ptr)`, `init(state_ptr, sample_rate)`,
-//! `parameter_changed`, `field_changed`, `map_parameter`, `reset`.
+//! `parameter_changed`, `field_changed`, `map_parameter`, `reset`. Operator kernel: Dexed's Mark I by
+//! default, msfa's Modern on request (plain `engine` field).
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -20,6 +21,7 @@ mod fx;
 #[cfg(not(target_family = "wasm"))]
 pub mod harness;
 mod lfo;
+mod mki;
 mod note;
 pub mod params;
 pub mod patch;
@@ -51,10 +53,12 @@ pub struct TubularState {
     ids: [u32; params::COUNT],
     load_id: u32,
     load_count: i32,
+    engine_id: u32,
     base_frequency: f32
 }
 
 const VOICE_LOAD_FIELD: [u16; 1] = [50];
+const ENGINE_FIELD: [u16; 1] = [51];
 
 /// openDAW's per-note pitch offset in Q24-per-octave: the event's cents plus the A4 base tuning.
 fn note_offset(cent: f32, base_frequency: f32) -> i32 {
@@ -101,6 +105,7 @@ impl Instrument for Tubular {
             state.ids[index] = abi::bind_parameter(&spec.path[..spec.path_len]);
         }
         state.load_id = abi::observe_field(&VOICE_LOAD_FIELD);
+        state.engine_id = abi::observe_field(&ENGINE_FIELD);
     }
 
     fn handle_event(state: &mut TubularState, event: &EventRecord) {
@@ -137,8 +142,16 @@ impl Instrument for Tubular {
         apply(state, index, value);
     }
 
-    /// The voice-load counter: a new value is a program change (the catch-up delivery at init is not).
+    /// The voice-load counter (a new value is a program change, the catch-up delivery at init is not) and
+    /// the engine selector.
     fn field_changed(state: &mut TubularState, id: u32, value: FieldValue) {
+        if id == state.engine_id {
+            let FieldValue::Int(index) = value else {
+                panic!("Tubular engine field kind mismatch");
+            };
+            state.synth.engine = fm::Engine::from_index(index);
+            return;
+        }
         if id != state.load_id {
             return;
         }

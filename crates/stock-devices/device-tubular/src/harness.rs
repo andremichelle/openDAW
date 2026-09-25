@@ -29,6 +29,7 @@ pub fn render_case(bank: &[u8], voice: usize, sample_rate: f32, frames: usize, s
     for (key, value) in settings {
         match *key {
             "mono" => state.synth.set_mono_mode(*value != "0"),
+            "engine" => state.synth.engine = if *value == "modern" {crate::fm::Engine::Modern} else {crate::fm::Engine::MarkI},
             "cutoff" => state.synth.fx.ui_cutoff = value.parse().expect("cutoff"),
             "reso" => state.synth.fx.ui_reso = value.parse().expect("reso"),
             "gain" => state.synth.fx.ui_gain = value.parse().expect("gain"),

@@ -4,7 +4,7 @@
 //! A4 base tuning in Q24-per-octave, zero for a stock MIDI note.
 
 use crate::env::{scaleoutlevel, Env};
-use crate::fm::{is_carrier, FmCore, FmOpParams};
+use crate::fm::{is_carrier, Engine, FmCore, FmOpParams};
 use crate::pitchenv::PitchEnv;
 use crate::porta::Porta;
 use crate::tables::Tables;
@@ -194,7 +194,7 @@ impl Dx7Note {
         self.porta_curpitch = src.porta_curpitch;
     }
 
-    pub fn compute(&mut self, buf: &mut [i32; N], lfo_val: i32, lfo_delay: i32, ctrls: &Controllers, tables: &Tables, porta: &Porta, core: &mut FmCore) {
+    pub fn compute(&mut self, buf: &mut [i32; N], lfo_val: i32, lfo_delay: i32, ctrls: &Controllers, tables: &Tables, porta: &Porta, core: &mut FmCore, engine: Engine) {
         let pmd: u32 = (self.pitchmoddepth as u32).wrapping_mul(lfo_delay as u32);
         let senslfo = self.pitchmodsens.wrapping_mul(lfo_val - (1 << 23));
         let pmod_1 = (((pmd as i64) * (senslfo as i64)) >> 39) as i32;
@@ -264,7 +264,7 @@ impl Dx7Note {
                 self.params[op].level_in = level;
             }
         }
-        core.render(tables, buf, &mut self.params, self.algorithm as usize, &mut self.fb_buf, self.fb_shift);
+        core.render(engine, tables, buf, &mut self.params, self.algorithm as usize, &mut self.fb_buf, self.fb_shift);
     }
 
     pub fn keyup(&mut self) {

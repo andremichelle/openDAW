@@ -1,6 +1,6 @@
 # Tubular (Dexed / DX7 port into openDAW)
 
-**Status 2026-09-25 (evening)**: phases 1 to 3 implemented, UNCOMMITTED. Device name **Tubular** ("DX7" is a
+**Status 2026-09-25 (evening)**: phases 1 to 3 committed (017593cc9). Device name **Tubular** ("DX7" is a
 Yamaha trademark and "Dexed" is Pascal Gauthier's, both only mentioned descriptively).
 
 - Engine `crates/stock-devices/device-tubular`: Rust port of Dexed's msfa + host layer + output filter.
@@ -9,7 +9,17 @@ Yamaha trademark and "Dexed" is Pascal Gauthier's, both only mentioned descripti
 - Schema `TubularDeviceBox` (156 automatable params), adapter, factory, scripting facade, editor v1
   (cartridge menu, voice prev/next, credits, Load .syx…), 37 bundled cartridges in
   `packages/app/studio/public/tubular/` with `index.json` credits. Browser-verified: plays, meter moves.
-- Open: phase 4 full editor, sysex export, Mark I engine. Deviation from Dexed: loading a voice does not
+- Audition tool (uncommitted): cartridge menu → "Audition cartridges…": arrows step voices / banks,
+  space plays a phrase, K keeps; keepers persist in localStorage; "Save keepers as presets" writes each
+  voice as a Tubular instrument preset (user storage, credits in the description), "Upload keepers as
+  stock" appears with an access key, "Export list" downloads the keeper JSON. Licence research: no
+  redistributable pack beyond Dexed's built-ins + YM2612 exists (Legowelt and Soundplantage need the
+  authors' permission), so curation from the 1184 bundled voices is the way.
+- Mark I engine ported (uncommitted): Dexed's default kernel, incl. its dedicated feedback chains for
+  algorithms 4, 6 and 32; sample-exact against the real Dexed 1.0.1 VST3 (hosted headless via pedalboard)
+  and the oracle (1232 fixture cases: all voices Mark I, edge cases in both engines). Plain `engine`
+  field (0 Mark I default, 1 Modern), switch in the device menu.
+- Open: phase 4 full editor, sysex export. Deviation from Dexed: loading a voice does not
   cut sounding notes (Dexed panics), events snap to the 64-sample frame like the plugin.
 
 ## Sources evaluated

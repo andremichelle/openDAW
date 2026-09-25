@@ -17,6 +17,7 @@ export namespace Tubular {
     export const Detunes = Array.from({length: 15}, (_, index) => index === 7 ? "0" : index > 7 ? `+${index - 7}` : String(index - 7))
     export const LfoWaves = ["Triangle", "Saw Down", "Saw Up", "Square", "Sine", "S&H"]
     export const Switch = ["Off", "On"]
+    export const Engines = ["Mark I", "Modern"]
     // Transpose 0..48 around 24 = C3 (the DX7 panel's key display)
     export const Transposes = Array.from({length: 49}, (_, index) => {
         const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]

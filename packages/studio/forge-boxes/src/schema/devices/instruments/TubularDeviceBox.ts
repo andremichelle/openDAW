@@ -62,6 +62,8 @@ export const TubularDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrum
     // Bumped by every voice load: the device cuts all notes and restarts the LFO, as Dexed does on a
     // program change (plain field, not automatable).
     50: {type: "int32", name: "voice-load", value: 0, constraints: "index", unit: ""},
+    // Operator kernel: 0 = Mark I (Dexed's default, hardware-like tables), 1 = Modern (msfa). Plain field.
+    51: {type: "int32", name: "engine", value: 0, constraints: {min: 0, max: 1}, unit: ""},
     // Panel order OP1..OP6 (the sysex stores OP6 first; the adapter and the DSP map the index).
     40: {
         type: "array", name: "operators", length: 6, element: {

@@ -36,6 +36,12 @@ found online load this way.
 All 156 voice and output parameters are automatable. The values are the hardware's own: rates and levels 0 to
 99, algorithm 1 to 32, feedback 0 to 7, detune -7 to +7, transpose around C3.
 
+## 4. Engine
+
+The device menu offers two operator kernels. _Mark I_ (default, as in Dexed) reads 10-bit log-sine and
+exponent tables like the original hardware, which adds its characteristic grit. _Modern_ is the
+interpolated 24-bit msfa kernel, cleaner and a little quieter in the top end.
+
 ## Credits
 
 Engine: Google's music-synthesizer-for-android (Apache-2.0) as maintained in Dexed by Pascal Gauthier, with

@@ -2,7 +2,7 @@
 //! scored voice choice, mono mode with state transfer, the shared LFO, patch refresh on edits, and the
 //! N-sample render frame summed to float with the plugin's clip quirk.
 
-use crate::fm::FmCore;
+use crate::fm::{Engine, FmCore};
 use crate::fx::PluginFx;
 use crate::lfo::Lfo;
 use crate::note::{Controllers, Dx7Note, NoteRates};
@@ -37,6 +37,7 @@ pub struct Synth {
     sustain: bool,
     refresh_voice: bool,
     pub fx: PluginFx,
+    pub engine: Engine,
     tables: Tables,
     porta: Porta,
     rates: NoteRates
@@ -52,6 +53,7 @@ impl Synth {
         self.rates = NoteRates {sr_multiplier: env::sr_multiplier(sample_rate), pitchenv_unit: pitchenv::unit(sample_rate)};
         self.controllers = Controllers::default();
         self.core = FmCore::default();
+        self.engine = Engine::MarkI;
         for voice in self.voices.iter_mut() {
             *voice = ProcessorVoice {midi_note: -1, keydown_seq: -1, ..ProcessorVoice::default()};
         }
@@ -248,10 +250,10 @@ impl Synth {
         *out = [0.0; N];
         let lfovalue = self.lfo.getsample(&self.tables);
         let lfodelay = self.lfo.getdelay();
-        let Synth {voices, controllers, core, tables, porta, ..} = self;
+        let Synth {voices, controllers, core, tables, porta, engine, ..} = self;
         for voice in voices.iter_mut() {
             if voice.live {
-                voice.note.compute(&mut audiobuf, lfovalue, lfodelay, controllers, tables, porta, core);
+                voice.note.compute(&mut audiobuf, lfovalue, lfodelay, controllers, tables, porta, core, *engine);
                 for j in 0..N {
                     let val = audiobuf[j] >> 4;
                     // Dexed's clip: a negative overflow lands on +0x8000 (= +1.0), kept as is

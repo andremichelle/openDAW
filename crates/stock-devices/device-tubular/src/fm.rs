@@ -13,9 +13,24 @@ pub struct FmOpParams {
     pub phase: i32
 }
 
-const OUT_BUS_ADD: u8 = 1 << 2;
-const FB_IN: u8 = 1 << 6;
-const FB_OUT: u8 = 1 << 7;
+pub const OUT_BUS_ADD: u8 = 1 << 2;
+pub const FB_IN: u8 = 1 << 6;
+pub const FB_OUT: u8 = 1 << 7;
+
+/// The operator kernel: Dexed's Mark I (its default, hardware-like 10-bit log tables) or the msfa
+/// "Modern" kernel (interpolated 24-bit tables).
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum Engine {
+    #[default]
+    MarkI,
+    Modern
+}
+
+impl Engine {
+    pub fn from_index(index: i32) -> Self {
+        if index == 1 {Engine::Modern} else {Engine::MarkI}
+    }
+}
 
 pub const ALGORITHMS: [[u8; 6]; 32] = [
     [0xc1, 0x11, 0x11, 0x14, 0x01, 0x14], // 1
@@ -126,7 +141,14 @@ impl Default for FmCore {
 }
 
 impl FmCore {
-    pub fn render(&mut self, tables: &Tables, output: &mut [i32; N], params: &mut [FmOpParams; 6], algorithm: usize, fb_buf: &mut [i32; 2], feedback_shift: i32) {
+    pub fn render(&mut self, engine: Engine, tables: &Tables, output: &mut [i32; N], params: &mut [FmOpParams; 6], algorithm: usize, fb_buf: &mut [i32; 2], feedback_shift: i32) {
+        match engine {
+            Engine::MarkI => crate::mki::render(&mut self.buf, tables, output, params, algorithm, fb_buf, feedback_shift),
+            Engine::Modern => self.render_modern(tables, output, params, algorithm, fb_buf, feedback_shift)
+        }
+    }
+
+    fn render_modern(&mut self, tables: &Tables, output: &mut [i32; N], params: &mut [FmOpParams; 6], algorithm: usize, fb_buf: &mut [i32; 2], feedback_shift: i32) {
         const LEVEL_THRESH: i32 = 1120;
         let alg = ALGORITHMS[algorithm & 31];
         let mut has_contents = [true, false, false];

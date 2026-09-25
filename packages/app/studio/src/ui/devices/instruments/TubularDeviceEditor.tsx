@@ -6,7 +6,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {DeviceHost, Dx7Sysex, Dx7Voice, InstrumentFactories, TubularDeviceBoxAdapter, TubularPreset} from "@opendaw/studio-adapters"
+import {DeviceHost, Dx7Sysex, Dx7Voice, InstrumentFactories, Tubular, TubularDeviceBoxAdapter, TubularPreset} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {MenuItem} from "@opendaw/studio-core"
 import {MenuButton} from "@/ui/components/MenuButton"
@@ -15,6 +15,7 @@ import {FlexSpacer} from "@/ui/components/FlexSpacer"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {TubularCartridge, TubularCartridges} from "@/ui/devices/instruments/TubularDeviceEditor/TubularCartridges"
+import {TubularAudition} from "@/ui/devices/instruments/TubularDeviceEditor/TubularAudition"
 
 const className = Html.adoptStyleSheet(css, "TubularDeviceEditor")
 
@@ -65,6 +66,16 @@ export const TubularDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         some: ({bank, index}) => applyVoice(bank, (index + delta + bank.voices.length) % bank.voices.length)
     })
     cartridges.load().catch(console.warn)
+    const audition = (): void => cartridges.loaded.ifSome(list => {
+        const start = selection.getValue().match({
+            none: () => ({bank: 0, index: 0}),
+            some: ({bank, index}) => ({bank: Math.max(0, list.findIndex(cartridge => cartridge.name === bank.name)), index})
+        })
+        TubularAudition.open({
+            service, adapter, cartridges: list, start,
+            applyVoice: (cartridge, index) => applyVoice(bankOf(cartridge), index)
+        }).catch(console.warn)
+    })
     const loadFile = async (): Promise<void> => {
         const opened = await Promises.tryCatch(Files.open({
             types: [{description: "DX7 SysEx", accept: {"application/octet-stream": [".syx"]}}]
@@ -116,7 +127,9 @@ export const TubularDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                     MenuItem.default({label: bank.name})
                         .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...voiceItems(bank)))))))
         }
-        parent.addMenuItem(MenuItem.default({label: "Load DX7 .syx…", separatorBefore: true})
+        parent.addMenuItem(MenuItem.default({label: "Audition cartridges…", separatorBefore: true, selectable: cartridges.loaded.nonEmpty()})
+            .setTriggerProcedure(audition))
+        parent.addMenuItem(MenuItem.default({label: "Load DX7 .syx…"})
             .setTriggerProcedure(() => {loadFile().catch(console.warn)}))
     }
     const previous: HTMLElement = <button className="step" onclick={() => step(-1)}><Icon symbol={IconSymbol.ArrowLeft}/></button>
@@ -131,7 +144,13 @@ export const TubularDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                       adapter={adapter}
                       populateMenu={parent => {
                           MenuItems.forAudioUnitInput(parent, service, deviceHost)
-                          parent.addMenuItem(MenuItem.default({label: "Load DX7 .syx…", separatorBefore: true})
+                          parent.addMenuItem(MenuItem.default({label: "Engine", separatorBefore: true})
+                              .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...Tubular.Engines.map((label, index) =>
+                                  MenuItem.default({label, checked: box.engine.getValue() === index})
+                                      .setTriggerProcedure(() => editing.modify(() => box.engine.setValue(index)))))))
+                          parent.addMenuItem(MenuItem.default({label: "Audition cartridges…", separatorBefore: true, selectable: cartridges.loaded.nonEmpty()})
+                              .setTriggerProcedure(audition))
+                          parent.addMenuItem(MenuItem.default({label: "Load DX7 .syx…"})
                               .setTriggerProcedure(() => {loadFile().catch(console.warn)}))
                       }}
                       populateControls={() => (
