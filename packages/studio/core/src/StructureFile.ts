@@ -1,5 +1,5 @@
 import {z} from "zod"
-import {Option, tryCatch, UUID} from "@opendaw/lib-std"
+import {Option, RuntimeNotifier, tryCatch, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Workers} from "./Workers"
 
@@ -60,6 +60,12 @@ export class StructureFile {
 
     async save(structure: ResourceStructure): Promise<void> {
         const json = JSON.stringify({...structure, updatedAt: new Date().toISOString()})
-        return Workers.Opfs.write(this.#path, new TextEncoder().encode(json))
+        const {status, error} = await Promises.tryCatch(Workers.Opfs.write(this.#path, new TextEncoder().encode(json)))
+        if (status === "rejected") {
+            await RuntimeNotifier.info({
+                headline: "Storage Unavailable",
+                message: `The folder structure could not be saved to local storage (${String(error)}). Your changes will be lost when you close the tab.`
+            })
+        }
     }
 }

@@ -28,6 +28,8 @@ Per channel
   under a subline.
 • LinkedIn: professional. Hashtags at the end.
 • Newsletter: focus on the schools angle. No greeting line (no "Hi ..."). No beta or pilot note.
+• Newsletter follow-ups (second mail on the same event) read as a reminder in the body, but the
+  subject line never says "Reminder".
 
 Links
 • openDAW: https://opendaw.studio
