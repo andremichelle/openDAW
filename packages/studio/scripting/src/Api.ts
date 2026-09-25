@@ -1421,6 +1421,134 @@ export interface Neon extends Instrument {
 }
 
 /**
+ * One Tubular operator (DX7 panel values, hardware ranges)
+ * @group Instrument Parts
+ */
+export interface TubularOperator {
+    /** Envelope rate 1 (0 to 99) */
+    rate1: int
+    /** Envelope rate 2 (0 to 99) */
+    rate2: int
+    /** Envelope rate 3 (0 to 99) */
+    rate3: int
+    /** Envelope rate 4 (0 to 99) */
+    rate4: int
+    /** Envelope level 1 (0 to 99) */
+    level1: int
+    /** Envelope level 2 (0 to 99) */
+    level2: int
+    /** Envelope level 3 (0 to 99) */
+    level3: int
+    /** Envelope level 4 (0 to 99) */
+    level4: int
+    /** Keyboard level scaling break point (0 to 99, 0 = A-1) */
+    breakPoint: int
+    /** Level scaling depth left of the break point (0 to 99) */
+    leftDepth: int
+    /** Level scaling depth right of the break point (0 to 99) */
+    rightDepth: int
+    /** Left curve: 0 = -LIN, 1 = -EXP, 2 = +EXP, 3 = +LIN */
+    leftCurve: 0 | 1 | 2 | 3
+    /** Right curve: 0 = -LIN, 1 = -EXP, 2 = +EXP, 3 = +LIN */
+    rightCurve: 0 | 1 | 2 | 3
+    /** Keyboard rate scaling (0 to 7) */
+    rateScaling: int
+    /** Amplitude modulation sensitivity (0 to 3) */
+    ampModSens: int
+    /** Key velocity sensitivity (0 to 7) */
+    velocitySens: int
+    /** Output level (0 to 99) */
+    outputLevel: int
+    /** Oscillator mode: 0 = ratio, 1 = fixed */
+    mode: 0 | 1
+    /** Frequency coarse (0 to 31) */
+    coarse: int
+    /** Frequency fine (0 to 99) */
+    fine: int
+    /** Detune (0 to 14, 7 = centre) */
+    detune: int
+    /** Operator switch: 0 = off, 1 = on */
+    enabled: 0 | 1
+}
+
+/**
+ * The Tubular LFO
+ * @group Instrument Parts
+ */
+export interface TubularLfo {
+    /** Speed (0 to 99) */
+    speed: int
+    /** Delay (0 to 99) */
+    delay: int
+    /** Pitch modulation depth (0 to 99) */
+    pmDepth: int
+    /** Amplitude modulation depth (0 to 99) */
+    amDepth: int
+    /** Key sync: 0 = off, 1 = on */
+    sync: 0 | 1
+    /** Waveform: 0 = triangle, 1 = saw down, 2 = saw up, 3 = square, 4 = sine, 5 = sample & hold */
+    wave: 0 | 1 | 2 | 3 | 4 | 5
+}
+
+/**
+ * The Tubular pitch envelope
+ * @group Instrument Parts
+ */
+export interface TubularPitchEnvelope {
+    /** Rate 1 (0 to 99) */
+    rate1: int
+    /** Rate 2 (0 to 99) */
+    rate2: int
+    /** Rate 3 (0 to 99) */
+    rate3: int
+    /** Rate 4 (0 to 99) */
+    rate4: int
+    /** Level 1 (0 to 99, 50 = no shift) */
+    level1: int
+    /** Level 2 (0 to 99, 50 = no shift) */
+    level2: int
+    /** Level 3 (0 to 99, 50 = no shift) */
+    level3: int
+    /** Level 4 (0 to 99, 50 = no shift) */
+    level4: int
+}
+
+/**
+ * Six-operator FM synthesizer, DX7 compatible
+ * @group Instruments
+ */
+export interface Tubular extends Instrument {
+    /** Always "Tubular" */
+    readonly key: "Tubular"
+    /** Low-pass cutoff (0.0 to 1.0, 1.0 = bypassed) */
+    cutoff: unitValue
+    /** Low-pass resonance (0.0 to 1.0) */
+    resonance: unitValue
+    /** Output gain (0.0 to 1.0) */
+    output: unitValue
+    /** Monophonic or polyphonic */
+    voicingMode: VoicingMode
+    /** Master tune in cents (-100 to 100) */
+    tune: float
+    /** Algorithm (0 to 31, the panel shows 1 to 32) */
+    algorithm: int
+    /** Feedback (0 to 7) */
+    feedback: int
+    /** Oscillator key sync: 0 = off, 1 = on */
+    oscKeySync: 0 | 1
+    /** The LFO */
+    readonly lfo: TubularLfo
+    /** Pitch modulation sensitivity (0 to 7) */
+    pitchModSens: int
+    /** Transpose (0 to 48, 24 = C3) */
+    transpose: int
+    /** The pitch envelope */
+    readonly pitchEnvelope: TubularPitchEnvelope
+    /** Six operators in panel order OP1..OP6 */
+    readonly operators: ReadonlyArray<TubularOperator>
+}
+
+/**
  * One step of a Cubed pattern
  * @group Instrument Parts
  */
@@ -1505,6 +1633,8 @@ export interface Instruments {
     "Tape": Tape
     /** {@link Neon} */
     "Neon": Neon
+    /** {@link Tubular} */
+    "Tubular": Tubular
     /** {@link Cubed} */
     "Cubed": Cubed
     /** {@link Apparat} */

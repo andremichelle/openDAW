@@ -76,6 +76,7 @@ export const createEngineMemory = (): WebAssembly.Memory => new WebAssembly.Memo
 export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_vaporisateur.wasm", boxType: "VaporisateurDeviceBox"}, // instrument
     {url: "/wasm/plugins/device_neon.wasm", boxType: "NeonDeviceBox"},   // instrument (phase distortion)
+    {url: "/wasm/plugins/device_tubular.wasm", boxType: "TubularDeviceBox"}, // instrument (six-operator FM)
     {url: "/wasm/plugins/device_nano.wasm", boxType: "NanoDeviceBox"},         // instrument (sampler)
     {url: "/wasm/plugins/device_revamp.wasm", boxType: "RevampDeviceBox"},     // audio effect
     {url: "/wasm/plugins/device_tidal.wasm", boxType: "TidalDeviceBox"},       // audio effect

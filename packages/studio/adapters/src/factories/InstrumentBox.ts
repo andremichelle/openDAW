@@ -2,6 +2,7 @@ import {
     ApparatDeviceBox,
     CubedDeviceBox,
     NeonDeviceBox,
+    TubularDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     InstrumentCompositeBox,
@@ -17,6 +18,7 @@ export type InstrumentBox =
     | TapeDeviceBox
     | VaporisateurDeviceBox
     | NeonDeviceBox
+    | TubularDeviceBox
     | NanoDeviceBox
     | PlayfieldDeviceBox
     | InstrumentCompositeBox

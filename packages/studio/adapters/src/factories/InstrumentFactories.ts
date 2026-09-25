@@ -4,6 +4,7 @@ import {
     BoxIO,
     CubedDeviceBox,
     NeonDeviceBox,
+    TubularDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
     InstrumentCompositeBox,
@@ -269,7 +270,28 @@ export namespace InstrumentFactories {
     export const isLayerInstrument = (factory: InstrumentFactory<any, any>): boolean =>
         factory.trackType === TrackType.Notes && factory !== MIDIOutput
 
-    export const Named = {Apparat, Cubed, InstrumentComposite, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
+    export const Tubular: InstrumentFactory<void, TubularDeviceBox> = {
+        defaultName: "Tubular",
+        defaultIcon: IconSymbol.Tubular,
+        briefDescription: "6-op FM Synth",
+        description: "Six-operator FM synthesizer, DX7 compatible",
+        manualPage: DeviceManualUrls.Tubular,
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): TubularDeviceBox =>
+            TubularDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                // The INIT VOICE: OP1 is the only sounding carrier (operators are OP1..OP6 in panel order).
+                box.operators.fields()[0].outputLevel.setInitValue(99)
+                box.host.refer(host)
+            })
+    }
+
+    export const Named = {Apparat, Cubed, InstrumentComposite, Neon, Tubular, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
     export const keyOfBox = (box: Box): Optional<Keys> => {

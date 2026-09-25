@@ -31,7 +31,7 @@ describe("Audio units", () => {
 
     it("creates every instrument type", () => {
         const {project} = createFixture()
-        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Soundfont", "MIDIOutput", "Tape", "Neon", "Cubed", "Apparat"]
+        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Soundfont", "MIDIOutput", "Tape", "Neon", "Tubular", "Cubed", "Apparat"]
         keys.forEach(key => {
             const unit = project.addInstrumentUnit(key)
             expect(unit.instrument.key).toBe(key)

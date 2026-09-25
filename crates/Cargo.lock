@@ -438,6 +438,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-tubular"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "dsp",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-vaporisateur"
 version = "0.0.0"
 dependencies = [

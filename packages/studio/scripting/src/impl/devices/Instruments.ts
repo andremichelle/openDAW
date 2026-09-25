@@ -8,6 +8,7 @@ import {
     MIDIOutputParameterBox,
     NanoDeviceBox,
     NeonDeviceBox,
+    TubularDeviceBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
     SoundfontDeviceBox,
@@ -42,6 +43,10 @@ import {
     NeonEnvelope,
     NeonLine,
     NeonVibrato,
+    Tubular,
+    TubularLfo,
+    TubularOperator,
+    TubularPitchEnvelope,
     Playfield,
     PlayfieldSlot,
     Sample,
@@ -102,7 +107,7 @@ export abstract class InstrumentFacade<B extends InstrumentDeviceBox = Instrumen
 }
 
 export type AnyInstrumentImpl =
-    | VaporisateurImpl | PlayfieldImpl | NanoImpl | SoundfontImpl | MIDIOutputImpl | TapeImpl | NeonImpl | CubedImpl
+    | VaporisateurImpl | PlayfieldImpl | NanoImpl | SoundfontImpl | MIDIOutputImpl | TapeImpl | NeonImpl | TubularImpl | CubedImpl
     | ApparatImpl | InstrumentCompositeImpl
 
 export class VaporisateurImpl extends InstrumentFacade<VaporisateurDeviceBox> implements Vaporisateur {
@@ -492,6 +497,45 @@ export class NeonImpl extends InstrumentFacade<NeonDeviceBox> implements Neon {
     }
 }
 
+export class TubularImpl extends InstrumentFacade<TubularDeviceBox> implements Tubular {
+    readonly key = "Tubular" as const
+    declare cutoff: unitValue
+    declare resonance: unitValue
+    declare output: unitValue
+    declare voicingMode: VoicingMode
+    declare tune: float
+    declare algorithm: int
+    declare feedback: int
+    declare oscKeySync: 0 | 1
+    declare readonly lfo: TubularLfo
+    declare pitchModSens: int
+    declare transpose: int
+    declare readonly pitchEnvelope: TubularPitchEnvelope
+    declare readonly operators: ReadonlyArray<TubularOperator>
+
+    constructor(context: Context, box: TubularDeviceBox) {
+        super(context, box)
+        this.bind({
+            cutoff: box.cutoff, resonance: box.resonance, output: box.output, voicingMode: box.voicingMode, tune: box.tune,
+            algorithm: box.algorithm, feedback: box.feedback, oscKeySync: box.oscKeySync,
+            lfo: {speed: box.lfo.speed, delay: box.lfo.delay, pmDepth: box.lfo.pmDepth, amDepth: box.lfo.amDepth, sync: box.lfo.sync, wave: box.lfo.wave},
+            pitchModSens: box.pitchModSens, transpose: box.transpose,
+            pitchEnvelope: {
+                rate1: box.pitchEnvelope.rate1, rate2: box.pitchEnvelope.rate2, rate3: box.pitchEnvelope.rate3, rate4: box.pitchEnvelope.rate4,
+                level1: box.pitchEnvelope.level1, level2: box.pitchEnvelope.level2, level3: box.pitchEnvelope.level3, level4: box.pitchEnvelope.level4
+            },
+            operators: box.operators.fields().map(operator => ({
+                rate1: operator.rate1, rate2: operator.rate2, rate3: operator.rate3, rate4: operator.rate4,
+                level1: operator.level1, level2: operator.level2, level3: operator.level3, level4: operator.level4,
+                breakPoint: operator.breakPoint, leftDepth: operator.leftDepth, rightDepth: operator.rightDepth,
+                leftCurve: operator.leftCurve, rightCurve: operator.rightCurve, rateScaling: operator.rateScaling,
+                ampModSens: operator.ampModSens, velocitySens: operator.velocitySens, outputLevel: operator.outputLevel,
+                mode: operator.mode, coarse: operator.coarse, fine: operator.fine, detune: operator.detune, enabled: operator.enabled
+            }))
+        })
+    }
+}
+
 const createCubedStep = (context: Context, field: Int32Field, name: string): CubedStep => {
     const read = () => CubedStepCodec.unpack(field.getValue())
     const write = (step: CubedStep) => context.edit(() => field.setValue(CubedStepCodec.pack(step)))
@@ -573,6 +617,7 @@ export namespace InstrumentImpls {
         if (box instanceof MIDIOutputDeviceBox) {return new MIDIOutputImpl(context, box)}
         if (box instanceof TapeDeviceBox) {return new TapeImpl(context, box)}
         if (box instanceof NeonDeviceBox) {return new NeonImpl(context, box)}
+        if (box instanceof TubularDeviceBox) {return new TubularImpl(context, box)}
         if (box instanceof CubedDeviceBox) {return new CubedImpl(context, box)}
         if (box instanceof ApparatDeviceBox) {return new ApparatImpl(context, box)}
         if (box instanceof InstrumentCompositeBox) {return new InstrumentCompositeImpl(context, box)}
