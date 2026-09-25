@@ -152,8 +152,28 @@ export class EngineHost {
             worker.addEventListener("error", (event: ErrorEvent) =>
                 reject(new Error(`Worker error: ${event.message}`)))
         })
+        // Without this, a crash after init leaves #pending unsettled and #ready resolved forever.
+        const onWorkerDeath = (reason: string): void => {
+            if (this.#worker.unwrapOrUndefined() === worker) {
+                this.#worker = Option.None
+                this.#ready = Option.None
+                this.#loadedTasks.clear()
+                this.#names.clear()
+            }
+            this.#rejectAllPending(new Error(reason))
+        }
+        worker.addEventListener("error", (event: ErrorEvent) =>
+            onWorkerDeath(`Inference worker crashed: ${event.message}`))
+        worker.addEventListener("messageerror", () =>
+            onWorkerDeath("Inference worker sent an undeserialisable message"))
         this.#ready = Option.wrap(promise)
         return promise
+    }
+
+    #rejectAllPending(error: Error): void {
+        const pending = Array.from(this.#pending.values())
+        this.#pending.clear()
+        pending.forEach(entry => entry.reject(error))
     }
 
     readonly #onMessage = (event: MessageEvent<WorkerToMain>): void => {

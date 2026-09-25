@@ -1,4 +1,5 @@
 import {beforeEach, describe, expect, it, vi} from "vitest"
+import {Option} from "@opendaw/lib-std"
 import {OpfsProtocol} from "@opendaw/lib-fusion"
 import {installInferenceConfig} from "./InferenceConfig"
 import {EngineHost, splitProgress} from "./EngineHost"
@@ -55,6 +56,14 @@ class FakeWorker {
     emit(message: WorkerToMain): void {
         const event = new MessageEvent<WorkerToMain>("message", {data: message})
         const listeners = this.#listeners.get("message")
+        if (listeners === undefined) {return}
+        for (const listener of [...listeners]) {listener(event)}
+    }
+
+    emitError(message: string): void {
+        // ErrorEvent isn't a Node global; a plain object is all EngineHost reads from it.
+        const event = {message} as unknown as Event
+        const listeners = this.#listeners.get("error")
         if (listeners === undefined) {return}
         for (const listener of [...listeners]) {listener(event)}
     }
@@ -183,6 +192,53 @@ describe("EngineHost", () => {
         }, [])
         await host.shutdown()
         expect(terminateSpy).toHaveBeenCalled()
+    })
+
+    it("rejects in-flight calls when the worker crashes instead of hanging forever", async () => {
+        const worker = new FakeWorker()
+        const originalRespondTo = worker.respondTo.bind(worker)
+        worker.respondTo = message => message.kind === "run" ? undefined : originalRespondTo(message)
+        const {host} = makeHost(worker)
+        const {bytes, sha} = await oneByteWithKnownSha()
+        opfs.files.set("inference/models/t/v1/model.onnx", bytes)
+        opfs.files.set("inference/models/t/v1/meta.json",
+            new TextEncoder().encode(JSON.stringify({
+                sha256: sha, bytes: 1, version: "v1", downloadedAt: 0
+            })))
+        await host.ensureLoaded("t", {
+            url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"
+        }, [])
+        const run = host.sessionRunFor("t", Option.None)
+        const pending = run({})
+        await Promise.resolve() // let #dispatch register the call and post it before crashing
+        worker.emitError("boom")
+        await expect(pending).rejects.toThrow(/crashed/)
+    })
+
+    it("respawns a worker after a crash instead of hanging forever", async () => {
+        const workers: Array<FakeWorker> = []
+        const host = new EngineHost({
+            workerFactory: () => {
+                const worker = new FakeWorker()
+                workers.push(worker)
+                return worker as unknown as Worker
+            }
+        })
+        const {bytes, sha} = await oneByteWithKnownSha()
+        opfs.files.set("inference/models/t/v1/model.onnx", bytes)
+        opfs.files.set("inference/models/t/v1/meta.json",
+            new TextEncoder().encode(JSON.stringify({
+                sha256: sha, bytes: 1, version: "v1", downloadedAt: 0
+            })))
+        await host.ensureLoaded("t", {
+            url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"
+        }, [])
+        expect(workers).toHaveLength(1)
+        workers[0].emitError("boom")
+        await expect(host.ensureLoaded("t", {
+            url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"
+        }, [])).resolves.toBeUndefined()
+        expect(workers).toHaveLength(2)
     })
 })
 
