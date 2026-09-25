@@ -9,6 +9,7 @@ import {UUID} from "@opendaw/lib-std"
 import {ApparatDeviceBox, AudioBusBox, AudioUnitBox, AuxSendBox, NoteEventBox, NoteEventCollectionBox, NoteRegionBox, TrackBox} from "@opendaw/studio-boxes"
 import type {BoxGraph} from "@opendaw/lib-box"
 import {ProjectSkeleton, ScriptCompiler, TrackType} from "@opendaw/studio-adapters"
+import {AudioSendRouting} from "@opendaw/studio-enums"
 import {loadFullEngine} from "./helpers/load-full-engine"
 import {connectSyncToEngine} from "./helpers/connect-sync"
 
@@ -189,5 +190,50 @@ describe("send / return routing", () => {
         const quietSendPeak = await renderPeak(build(true, -24.0))
         expect(quietSendPeak).toBeLessThan(wetPeak)
         expect(quietSendPeak).toBeGreaterThan(dryPeak * 0.9) // still at least the dry level
+    }, 60000)
+
+    it("Phase 3: routing picks the tap: a Pre send ignores the unit's strip, a Post send follows it", async () => {
+        // The instrument unit is MUTED, so the master only hears what the send carries into the FX bus.
+        const build = (routing: AudioSendRouting) => {
+            const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
+                ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
+            source.beginTransaction()
+            const instrumentUnit = AudioUnitBox.create(source, UUID.generate(), box => {
+                box.collection.refer(rootBox.audioUnits)
+                box.output.refer(primaryAudioBusBox.input)
+                box.index.setValue(1)
+                box.mute.setValue(true)
+            })
+            const bus = AudioBusBox.create(source, UUID.generate(), box => {
+                box.collection.refer(rootBox.audioBusses)
+                box.output.refer(primaryAudioBusBox.input)
+                box.label.setValue("FX")
+            })
+            const busUnit = AudioUnitBox.create(source, UUID.generate(), box => {
+                box.collection.refer(rootBox.audioUnits)
+                box.type.setValue("bus")
+                box.output.refer(primaryAudioBusBox.input)
+                box.index.setValue(2)
+            })
+            bus.output.refer(busUnit.input)
+            AuxSendBox.create(source, UUID.generate(), box => {
+                box.audioUnit.refer(instrumentUnit.auxSends)
+                box.targetBus.refer(bus.input)
+                box.index.setValue(0)
+                box.routing.setValue(routing)
+                box.sendGain.setValue(0.0)
+                box.sendPan.setValue(0.0)
+            })
+            const apparat = addSineInstrument(source, instrumentUnit)
+            source.endTransaction()
+            registerApparat(apparat)
+            return source
+        }
+        // Pre-fader: the send taps BEFORE mute, so the wet path still reaches the master.
+        const prePeak = await renderPeak(build(AudioSendRouting.Pre))
+        expect(prePeak).toBeGreaterThan(0.05)
+        // Post-fader: the send taps the strip output, so the mute silences the wet path too.
+        const postPeak = await renderPeak(build(AudioSendRouting.Post))
+        expect(postPeak).toBeLessThan(prePeak / 100)
     }, 60000)
 })

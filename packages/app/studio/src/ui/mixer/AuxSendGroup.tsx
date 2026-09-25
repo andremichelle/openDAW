@@ -1,7 +1,7 @@
 import css from "./AuxSendGroup.sass?inline"
 import {Lifecycle, SortedSet, StringComparator, Terminator, UUID} from "@opendaw/lib-std"
 import {AudioBusFactory, AudioUnitBoxAdapter, AuxSendBoxAdapter} from "@opendaw/studio-adapters"
-import {AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
+import {AudioSendRouting, AudioUnitType, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AuxSend} from "@/ui/mixer/AuxSend.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {MenuItem, Project} from "@opendaw/studio-core"
@@ -45,7 +45,7 @@ export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter}: Construct) 
                 }).setTriggerProcedure(() => project.editing.modify(() => {
                     AuxSendBox.create(project.boxGraph, UUID.generate(), box => {
                         box.audioUnit.refer(audioUnitAdapter.box.auxSends)
-                        box.routing.setValue(0)
+                        box.routing.setValue(AudioSendRouting.Post)
                         box.sendGain.setValue(-6.0)
                         box.targetBus.refer(auxSendAdapter.box.input)
                         box.index.setValue(currentAuxSends.length)
@@ -66,7 +66,7 @@ export const AuxSendGroup = ({lifecycle, project, audioUnitAdapter}: Construct) 
                             AuxSendBox.create(project.boxGraph, UUID.generate(), box => {
                                 box.audioUnit.refer(audioUnitAdapter.box.auxSends)
                                 box.targetBus.refer(audioBusBox.input)
-                                box.routing.setValue(0)
+                                box.routing.setValue(AudioSendRouting.Post)
                                 box.sendGain.setValue(-6.0)
                                 box.index.setValue(currentAuxSends.length)
                             })

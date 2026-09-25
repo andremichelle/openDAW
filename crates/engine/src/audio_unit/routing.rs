@@ -166,7 +166,7 @@ impl Engine {
 
     /// Reconcile a unit's parallel AUX SENDS against its `auxSends` (24) collection: build joiners, terminate
     /// leavers, in collection order. Only the send PROCESSORS + their param subscriptions are (de)allocated
-    /// here; their source (pre-fader tap) + target-bus edges are wired by `resolve_sends`.
+    /// here; their source (pre-strip or post-strip tap, per `routing`) + target-bus edges are wired by `resolve_sends`.
     pub(crate) fn reconcile_sends(&mut self, unit: &mut AudioUnitBinding) {
         let desired = unit.aux_sends.sorted();
         let existing = core::mem::take(&mut unit.sends);
@@ -205,11 +205,24 @@ impl Engine {
         let target_mark = mark.clone();
         subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(send_uuid, vec![SEND_TARGET_KEY]),
             Box::new(move |_graph, _update| target_mark.mark())));
+        let routing_address = Address::of(send_uuid, vec![SEND_ROUTING_KEY]);
+        let routing = Rc::new(Cell::new(self.graph.field_value(&routing_address)
+            .and_then(|value| value.as_int32()).unwrap_or(SEND_ROUTING_POST)));
+        let routing_cell = routing.clone();
+        let routing_mark = mark.clone();
+        subs.push(self.graph.subscribe_vertex(Propagation::This, routing_address, Box::new(move |_graph, update| {
+            if let Update::Primitive {new, ..} = update {
+                if let Some(value) = new.as_int32() {
+                    routing_cell.set(value);
+                    routing_mark.mark();
+                }
+            }
+        })));
         let automation = Rc::new(StripAutomation::new());
         let proc = Rc::new(RefCell::new(AuxSendProcessor::new(params, automation.clone(), self.sample_rate)));
         let node_id = self.context.register_processor(proc.clone());
         self.context.set_label(node_id, format!("aux-send {:02x}{:02x}", send_uuid[0], send_uuid[1]));
-        let mut send = SendBinding {send_uuid, proc, node_id, source: None, target: None, subs, automation,
+        let mut send = SendBinding {send_uuid, proc, node_id, source: None, target: None, routing, subs, automation,
             param_subs: Vec::new(), param_collections: Vec::new()};
         self.bind_send_automation(&mut send, invalidate);
         send
@@ -352,13 +365,14 @@ impl Engine {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
             // A STEM export with includeSends=false leaves this unit's aux sends unwired (TS skips them).
-            let tap = if self.unit_options(&unit.unit).include_sends {
-                unit.wired.as_ref().map(|wired| wired.pre_strip())
-            } else {
-                None
-            };
+            let include_sends = self.unit_options(&unit.unit).include_sends;
             let mut sends = core::mem::take(&mut unit.sends);
             for send in &mut sends {
+                let tap = match (&unit.wired, include_sends) {
+                    (Some(wired), true) if send.routing.get() == SEND_ROUTING_POST => Some(wired.strip()),
+                    (Some(wired), true) => Some(wired.pre_strip()),
+                    _ => None
+                };
                 self.resolve_one_send(send, &tap);
             }
             unit.sends = sends;
@@ -366,7 +380,7 @@ impl Engine {
         self.audio_units = units;
     }
 
-    /// Resolve ONE aux send: wire its PRE-fader tap node as source, and its `targetBus` (registered bus sum, or
+    /// Resolve ONE aux send: wire its tap node (pre-strip or strip output, per `routing`) as source, and its `targetBus` (registered bus sum, or
     /// the master fallback) as the destination it sums into. Both diffed so a re-point / strip rebuild re-wires
     /// once; a feedback loop is left unrouted.
     pub(crate) fn resolve_one_send(&mut self, send: &mut SendBinding, tap: &Option<(NodeId, SharedAudioBuffer)>) {

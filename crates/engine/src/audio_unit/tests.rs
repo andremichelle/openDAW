@@ -2921,6 +2921,47 @@ fn an_unwired_send_goes_silent_instead_of_looping_the_stale_buffer() {
 }
 
 #[test]
+fn a_send_reads_its_routing_and_marks_the_unit_on_change() {
+    // routing (4) decides the tap: Pre = the unit's pre-strip buffer, Post = its strip output. The binding
+    // catches the stored value up on build and an edit re-enqueues the owning unit so `resolve_sends` rewires.
+    const SEND_PRE: Uuid = [31u8; 16];
+    const SEND_POST: Uuid = [32u8; 16];
+    const SEND_DEFAULT: Uuid = [33u8; 16];
+    let mut engine = engine_with_devices();
+    let send_box = |uuid: Uuid, routing: Option<i32>| {
+        let mut fields = vec![
+            (super::SEND_TARGET_KEY, FieldValue::Pointer(None)),
+            (super::SEND_GAIN_KEY, FieldValue::Float32(0.0)),
+            (super::SEND_PAN_KEY, FieldValue::Float32(0.0))
+        ];
+        if let Some(routing) = routing {
+            fields.push((super::SEND_ROUTING_KEY, FieldValue::Int32(routing)));
+        }
+        graph_box(uuid, "AuxSendBox", &fields)
+    };
+    engine.graph = BoxGraph::from_boxes(vec![send_box(SEND_PRE, Some(0)), send_box(SEND_POST, Some(1)), send_box(SEND_DEFAULT, None)]);
+    let units = Rc::new(RefCell::new(Vec::new()));
+    let mark = super::DirtyMark {units: units.clone(), unit: UNIT};
+    let invalidate: Rc<dyn Fn()> = Rc::new(|| {});
+    let pre = engine.build_send(SEND_PRE, &mark, &invalidate);
+    let post = engine.build_send(SEND_POST, &mark, &invalidate);
+    let default = engine.build_send(SEND_DEFAULT, &mark, &invalidate);
+    assert_eq!(pre.routing.get(), 0, "a stored Pre is caught up");
+    assert_eq!(post.routing.get(), super::SEND_ROUTING_POST, "a stored Post is caught up");
+    assert_eq!(default.routing.get(), super::SEND_ROUTING_POST, "a missing field defaults to Post (the schema default)");
+    assert!(units.borrow().is_empty(), "the build itself enqueues nothing");
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(SEND_PRE, vec![super::SEND_ROUTING_KEY]),
+        old: FieldValue::Int32(0), new: FieldValue::Int32(1)
+    }], &engine.registry).expect("edit routing");
+    assert_eq!(pre.routing.get(), super::SEND_ROUTING_POST, "an edit updates the binding");
+    assert_eq!(*units.borrow(), vec![UNIT], "an edit enqueues the owning unit for a rewire");
+    engine.teardown_send(pre);
+    engine.teardown_send(post);
+    engine.teardown_send(default);
+}
+
+#[test]
 fn rebinding_strip_automation_does_not_leak_subscriptions() {
     // A Value track automates the UNIT's volume (key 12). `bind_strip_automation` re-runs on every real
     // automation change; each pass must terminate the previous pass's ValueCollections, else their hub /

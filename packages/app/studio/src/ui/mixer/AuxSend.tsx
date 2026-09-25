@@ -2,7 +2,7 @@ import css from "./AuxSend.sass?inline"
 import {DefaultObservableValue, Editing, Lifecycle} from "@opendaw/lib-std"
 import {createElement, DomElement, Inject} from "@opendaw/lib-jsx"
 import {AuxSendBoxAdapter} from "@opendaw/studio-adapters"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {AudioSendRouting, Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Knob, TinyDesign} from "@/ui/components/Knob.tsx"
 import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging.tsx"
 import {MenuItem} from "@opendaw/studio-core"
@@ -53,11 +53,15 @@ export const AuxSend = ({lifecycle, editing, adapter}: Construct) => {
             </RelativeUnitValueDragging>
             <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
                 .addMenuItem(MenuItem.default({label: "Routing"})
-                    .setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-                        MenuItem.default({label: "Post Pan"}),
-                        MenuItem.default({label: "Post Fader"}),
-                        MenuItem.default({label: "Pre Fader", checked: true})
-                    )))
+                    .setRuntimeChildrenProcedure(parent => {
+                        const routing = adapter.routingField.getValue()
+                        const item = (label: string, value: AudioSendRouting) => MenuItem.default({label, checked: routing === value})
+                            .setTriggerProcedure(() => editing.modify(() => adapter.routingField.setValue(value)))
+                        parent.addMenuItem(
+                            item("Pre Fader", AudioSendRouting.Pre),
+                            item("Post Fader", AudioSendRouting.Post)
+                        )
+                    }))
                 .addMenuItem(MenuItem.default({label: `Remove Send '${adapter.targetBus.labelField.getValue()}'`})
                     .setTriggerProcedure(() => editing.modify(() => adapter.delete()))))}
                         style={{flex: "0 1 auto"}}

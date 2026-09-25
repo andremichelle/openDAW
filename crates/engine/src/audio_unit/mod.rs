@@ -117,10 +117,13 @@ const MIDI_OUT_PARAMETERS_KEY: u16 = 13;
 const MIDI_OUT_DEVICE_KEY: u16 = 14;
 const MIDI_OUT_PARAM_CONTROLLER_KEY: u16 = 3;
 const MIDI_OUT_PARAM_VALUE_KEY: u16 = 4;
-// AuxSendBox fields: targetBus (2, pointer -> the bus's `input`), sendGain (5, dB), sendPan (6, bipolar).
+// AuxSendBox fields: targetBus (2, pointer -> the bus's `input`), routing (4, Int32: AudioSendRouting Pre=0 /
+// Post=1), sendGain (5, dB), sendPan (6, bipolar).
 const SEND_TARGET_KEY: u16 = 2;
+const SEND_ROUTING_KEY: u16 = 4;
 const SEND_GAIN_KEY: u16 = 5;
 const SEND_PAN_KEY: u16 = 6;
+const SEND_ROUTING_POST: i32 = 1; // WASM CONTRACT: mirrors TS AudioSendRouting.Post
 // WASM CONTRACT: AudioSinkDeviceBox (an engine-side audio-fx chain member, no plugin): pass (10, dB, the level
 // the chain continues at), targetBus (11, pointer -> the bus's `input`).
 pub(crate) const SINK_BOX_TYPE: &str = "AudioSinkDeviceBox";
@@ -280,7 +283,8 @@ pub(crate) struct SendBinding {
     pub(crate) node_id: NodeId,
     pub(crate) source: Option<NodeId>,
     pub(crate) target: Option<(Option<Uuid>, NodeId)>,
-    pub(crate) subs: Vec<SubscriptionId>, // targetBus (2) pointer monitor + sendGain (5) / sendPan (6) field observers
+    pub(crate) routing: Rc<Cell<i32>>, // routing (4): Pre taps the unit's pre-strip buffer, Post its strip output
+    pub(crate) subs: Vec<SubscriptionId>, // targetBus (2) + routing (4) monitors + sendGain (5) / sendPan (6) field observers
     pub(crate) automation: Rc<StripAutomation>, // sendGain / sendPan automation overrides (volume = gain dB, panning = pan)
     pub(crate) param_subs: Vec<SubscriptionId>, // the automation observers, re-observed on a real automation change
     pub(crate) param_collections: Vec<ValueCollection> // keep the send curves' region collections alive (terminated on rebind)
