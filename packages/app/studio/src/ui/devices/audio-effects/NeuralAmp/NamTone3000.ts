@@ -24,7 +24,7 @@ export type PackMeta = {
     models: ReadonlyArray<Model>
 }
 
-const ClientId = "YOUR_TONE3000_PUBLISHABLE_KEY_HERE"
+const ClientId = "t3k_pub_txvY3hFE8w6GJYvSW69eMOeBioJRZWKk"
 const ApiBase = "https://www.tone3000.com/api/v1"
 const AuthorizeEndpoint = `${ApiBase}/oauth/authorize`
 const TokenEndpoint = `${ApiBase}/oauth/token`
@@ -34,6 +34,7 @@ const RefreshTokenKey = "tone3000_refresh_token"
 const ExpiresAtKey = "tone3000_expires_at"
 const ExpiryMargin = 60_000
 const ModelsPageSize = 300
+const Architecture = "2"
 
 const packPath = (toneId: number): string => `tone3000/${toneId}`
 const packMetaPath = (toneId: number): string => `${packPath(toneId)}/pack.json`
@@ -96,12 +97,13 @@ const apiFetch = async (url: string, signal?: AbortSignal): Promise<Response> =>
     return response
 }
 
-const fetchTone = async (toneId: string): Promise<Tone> => (await apiFetch(`${ApiBase}/tones/${toneId}`)).json()
+const fetchTone = async (toneId: string): Promise<Tone> =>
+    (await apiFetch(`${ApiBase}/tones/${toneId}?architecture=${Architecture}`)).json()
 
 const fetchModels = async (toneId: string): Promise<ReadonlyArray<Model>> => {
     const models: Array<Model> = []
     for (let page = 1, totalPages = 1; page <= totalPages; page++) {
-        const url = `${ApiBase}/models?tone_id=${toneId}&page=${page}&page_size=${ModelsPageSize}`
+        const url = `${ApiBase}/models?tone_id=${toneId}&page=${page}&page_size=${ModelsPageSize}&architecture=${Architecture}`
         const response: PaginatedResponse<Model> = await (await apiFetch(url)).json()
         models.push(...response.data)
         totalPages = response.total_pages
@@ -125,6 +127,7 @@ const selectTone = async (): Promise<string> => {
         state,
         prompt: "select_tone",
         format: "nam",
+        architecture: Architecture,
         menubar: "true",
         preview: "true"
     })
