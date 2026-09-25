@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Tone 3000</title>
+    <title>TONE3000</title>
     <style>
         body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center;
             height: 100vh; margin: 0; background: #1a1a1a; color: #ccc; }
@@ -13,21 +13,34 @@
 <p id="status">Receiving tone...</p>
 <script>
     const status = document.getElementById("status")
-    const toneUrl = new URLSearchParams(window.location.search).get("tone_url")
-    if (toneUrl) {
-        status.textContent = "Sending NAM to device..."
-        localStorage.setItem("tone3000_tone_url", toneUrl)
-        window.addEventListener("storage", (event) => {
-            if (event.key === "tone3000_done") {
-                status.textContent = "Done!"
-                localStorage.removeItem("tone3000_tone_url")
-                localStorage.removeItem("tone3000_done")
-                window.close()
-            }
-        })
-    } else {
-        status.textContent = "Error: No tone selected."
+    const params = new URLSearchParams(window.location.search)
+    const channel = new BroadcastChannel("tone3000-callback")
+    window.onbeforeunload = () => channel.postMessage({type: "closed"})
+    const message = {
+        type: "callback",
+        code: params.get("code"),
+        state: params.get("state"),
+        toneId: params.get("tone_id"),
+        canceled: params.get("canceled") === "true",
+        error: params.get("error"),
+        errorDescription: params.get("error_description")
     }
+    let failed = false
+    if (message.canceled) {
+        status.textContent = "Canceled."
+    } else if (message.error !== null) {
+        failed = true
+        status.textContent = `Error: ${message.error}${message.errorDescription ? ` — ${message.errorDescription}` : ""}`
+    } else if (message.code === null || message.toneId === null) {
+        failed = true
+        status.textContent = "Error: No tone selected."
+    } else {
+        status.textContent = "Sending NAM to device..."
+    }
+    channel.postMessage(message)
+    channel.close()
+    window.onbeforeunload = null
+    if (!failed) {window.close()}
 </script>
 </body>
 </html>

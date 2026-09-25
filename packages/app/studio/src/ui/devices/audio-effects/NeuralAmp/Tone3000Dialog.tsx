@@ -7,27 +7,24 @@ const className = Html.adoptStyleSheet(css, "Tone3000Dialog")
 
 export const showTone3000Dialog = (): Promise<void> => {
     return Dialogs.show({
-        headline: "Tone 3000",
-        okText: "Open Tone 3000",
+        headline: "TONE3000",
+        okText: "Continue",
         cancelable: true,
         growWidth: true,
         buttons: [{text: "Cancel", onClick: handler => handler.close()}],
         content: (
             <div className={className}>
                 <p>
-                    openDAW partners with <strong>Tone 3000</strong> for NAM models.
-                </p>
-                <p>
-                    <strong>Tone 3000</strong> is an online platform for sharing and downloading
-                    NAM captures.<br/>
-                    Browse thousands of amp, pedal, and full-rig tones from the community.
+                    openDAW has partnered with <strong>TONE3000</strong> to give you access to a massive library
+                    of Neural Amp Modeler (NAM) captures of real analog gear, created by a global community of
+                    musicians.
                 </p>
                 <div>
                     <strong>How it works:</strong>
                     <ol>
                         <li>Sign in with your email (one-time passcode, no password needed)</li>
-                        <li>Browse or search for a tone</li>
-                        <li>Click the <strong>Download</strong> button to send it back to your device</li>
+                        <li>Browse or search for a tone, and audition it with the preview player</li>
+                        <li>Select the tone to send it back to your device</li>
                     </ol>
                 </div>
                 <p className="hint">

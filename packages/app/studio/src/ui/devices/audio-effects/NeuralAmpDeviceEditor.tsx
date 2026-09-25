@@ -41,7 +41,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     const packMeta = new MutableObservableOption<PackMeta>()
     const cachedModelIds = new SortedSet<number, number>(id => id, (a, b) => a - b)
     const isDownloading = new DefaultObservableValue<boolean>(false)
-    const urlsExpired = new DefaultObservableValue<boolean>(false)
+    const downloadFailed = new DefaultObservableValue<boolean>(false)
     let switchController: Nullable<AbortController> = null
     const updateModel = () => {
         const modelJson = adapter.getModelJson()
@@ -85,7 +85,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
     lifecycle.own(model)
     lifecycle.own(packMeta)
     lifecycle.own(isDownloading)
-    lifecycle.own(urlsExpired)
+    lifecycle.own(downloadFailed)
     lifecycle.own(adapter.modelField.subscribe(() => {
         updateModel()
         updatePackMeta()
@@ -123,7 +123,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         const controller = new AbortController()
         switchController = controller
         isDownloading.setValue(true)
-        urlsExpired.setValue(false)
+        downloadFailed.setValue(false)
         try {
             await NamTone3000.loadModelFromPack(
                 meta.toneId.toString(), entry.id, entry.name,
@@ -133,7 +133,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
         } catch (error) {
             if (Errors.isAbort(error)) {return}
             console.error("Failed to switch model:", error)
-            urlsExpired.setValue(true)
+            downloadFailed.setValue(true)
         } finally {
             if (switchController === controller) {
                 isDownloading.setValue(false)
@@ -254,8 +254,8 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                               if (isDownloading.getValue()) {
                                                   element.textContent = "Downloading…"
                                                   element.classList.toggle("empty", false)
-                                              } else if (urlsExpired.getValue()) {
-                                                  element.textContent = "URLs expired — re-select pack"
+                                              } else if (downloadFailed.getValue()) {
+                                                  element.textContent = "Download failed — re-select pack"
                                                   element.classList.toggle("empty", true)
                                               } else {
                                                   const current = model.getValue()
@@ -270,7 +270,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                                           }
                                           lifecycle.own(model.subscribe(updateLabel))
                                           lifecycle.own(isDownloading.subscribe(updateLabel))
-                                          lifecycle.own(urlsExpired.subscribe(updateLabel))
+                                          lifecycle.own(downloadFailed.subscribe(updateLabel))
                                           updateLabel()
                                       }}/>
                                   </MenuButton>
