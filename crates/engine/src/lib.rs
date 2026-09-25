@@ -1187,6 +1187,15 @@ impl Controls {
     }
 }
 
+/// Everything a seconds-based audio span's ppqn size depends on: the nominal bpm, whether tempo automation
+/// applies, and the automation collection's edit version. Compared after each transaction.
+#[derive(Clone, Copy, PartialEq)]
+struct TempoStamp {
+    bpm: f32,
+    enabled: bool,
+    version: u64
+}
+
 /// The sample offset within the quantum for a note at pulse `position`, clamped to the block.
 fn sample_offset(position: f64, block: &Block, sample_rate: f32) -> usize {
     let pulses = position - block.p0;
@@ -1249,6 +1258,7 @@ struct Engine {
     // state), feeding the switchMarkerState back-channel (the clip-changes pattern).
     marker_changes: Vec<(Uuid, i32, bool)>,
     tempo_map: SharedTempoMap, // ppqn -> real-seconds map (tempo-automation aware), read by the audio-region player
+    tempo_stamp: TempoStamp,   // the tempo state the seconds-based audio spans were last sized with
 
     context: EngineContext,
     output_bus: Option<SharedAudioBuffer>,
@@ -1330,6 +1340,7 @@ impl Engine {
             marker_track: None,
             marker_changes: Vec::with_capacity(16), // drained every quantum; pre-reserved so render never reallocs
             tempo_map: Rc::new(RefCell::new(TempoMap::new())),
+            tempo_stamp: TempoStamp {bpm: 120.0, enabled: true, version: 0},
             context: EngineContext::new(),
             output_bus: None,
             master: None,
@@ -1449,8 +1460,43 @@ impl Engine {
                 }
             }
         }
-        self.graph.transaction(&updates, &self.registry).map_err(|_| ())?;
+        self.transact(&updates)
+    }
+
+    /// Apply a transaction, then re-size the seconds-based audio spans if it changed the tempo (bpm field,
+    /// automation on/off, or any tempo-automation event / curve edit): their ppqn spans were converted at
+    /// bind and are otherwise only re-read on a region field edit.
+    fn transact(&mut self, updates: &[Update]) -> Result<(), ()> {
+        self.graph.transaction(updates, &self.registry).map_err(|_| ())?;
+        let stamp = self.tempo_stamp_now();
+        if stamp != self.tempo_stamp {
+            self.tempo_stamp = stamp;
+            self.refresh_tempo_map();
+            let tempo_map = self.tempo_map.borrow();
+            for unit in &self.audio_units {
+                audio_unit::reread_seconds_based(&self.graph, &unit.audio_track_sets, &tempo_map);
+            }
+        }
         Ok(())
+    }
+
+    fn tempo_stamp_now(&self) -> TempoStamp {
+        TempoStamp {
+            bpm: self.controls.bpm.get(),
+            enabled: self.controls.tempo_automation_enabled.get(),
+            version: self.tempo.as_ref().map_or(0, |collection| collection.version())
+        }
+    }
+
+    /// Refresh the tempo map the audio-region player reads: the live automation curve under the same
+    /// condition the transport uses it (enabled + non-empty), else a constant tempo at the configured bpm.
+    fn refresh_tempo_map(&mut self) {
+        let tempo_curve = if self.controls.tempo_automation_enabled.get() {
+            self.tempo.as_ref().filter(|collection| !collection.is_empty()).map(|collection| collection.curve())
+        } else {
+            None
+        };
+        self.tempo_map.borrow_mut().update(self.controls.bpm.get(), tempo_curve);
     }
 
     /// The rolling graph checksum, computed on demand (a full-graph field walk, O(all boxes)). Only the
@@ -1480,14 +1526,7 @@ impl Engine {
         self.transport.set_loop_pause(self.pause_on_loop_disabled);
         self.transport.set_loop_from(self.controls.loop_from.get());
         self.transport.set_loop_to(self.controls.loop_to.get());
-        // refresh the tempo map the audio-region player reads: the live automation curve under the same
-        // condition the transport uses it (enabled + non-empty), else a constant tempo at the configured bpm.
-        let tempo_curve = if self.controls.tempo_automation_enabled.get() {
-            self.tempo.as_ref().filter(|collection| !collection.is_empty()).map(|collection| collection.curve())
-        } else {
-            None
-        };
-        self.tempo_map.borrow_mut().update(self.controls.bpm.get(), tempo_curve);
+        self.refresh_tempo_map();
         // The count-in flip (TS `renderer.setCallback(recordingStartTime, ...)`): once the playhead reaches
         // the recording start, counting-in becomes recording and the metronome returns to its preference.
         // Quantum-granular (TS splits the block at the exact position; one quantum ≈ 2.7 ms).
@@ -1917,12 +1956,8 @@ impl Engine {
         // Populate the tempo map BEFORE reconcile reads region spans: a seconds-based audio region's duration /
         // loop-duration are converted tempo-aware at the region position, so the map must reflect the loaded
         // tempo (nominal bpm + automation curve) already at bind, not only from the first render.
-        let tempo_curve = if self.controls.tempo_automation_enabled.get() {
-            self.tempo.as_ref().filter(|collection| !collection.is_empty()).map(|collection| collection.curve())
-        } else {
-            None
-        };
-        self.tempo_map.borrow_mut().update(self.controls.bpm.get(), tempo_curve);
+        self.refresh_tempo_map();
+        self.tempo_stamp = self.tempo_stamp_now();
         // Master summing bus: every audio unit's channel strip sums into it (`sum_of(None)`). It is the SUM of
         // THE output audio unit, which reconciles like any bus (`reconcile_bus`): master-sum -> its fx chain ->
         // its strip, whose output it republishes to `output_bus` (what `render` reads) on every rebuild.

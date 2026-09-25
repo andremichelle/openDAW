@@ -890,6 +890,89 @@ fn read_audio_region_converts_seconds_time_base_to_ppqn() {
 }
 
 #[test]
+fn a_tempo_change_resizes_seconds_based_regions_and_clips_live() {
+    // Bug: a no-stretch (seconds time-base) region's ppqn span was converted ONCE at bind. Changing the project
+    // bpm (or a tempo-automation event) refreshed the tempo map (read offset) but never re-read the region, so
+    // at a faster tempo the cached (too short) span stopped playback early — until any region field edit
+    // (e.g. waveform offset) re-read it. The engine now re-sizes every seconds-based span after a transaction
+    // that changed the tempo: an automation event edit, the bpm field, or the automation on/off toggle.
+    use bindings::value_collection::ValueCollection;
+    const TIMELINE: Uuid = [60u8; 16];
+    const REGION: Uuid = [61u8; 16];
+    const CLIP: Uuid = [62u8; 16];
+    const FILE: Uuid = [63u8; 16];
+    const TRACK: Uuid = [64u8; 16];
+    const TEMPO_COLLECTION: Uuid = [65u8; 16];
+    const TEMPO_EVENT: Uuid = [66u8; 16];
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(TIMELINE, "TimelineBox", &[(31, FieldValue::Float32(120.0))]),
+        graph_box(TEMPO_COLLECTION, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(TEMPO_EVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(TEMPO_COLLECTION, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(120.0)) // a constant 120 bpm automation
+        ]),
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(TRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_TRACKS_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(TRACK_TYPE_AUDIO)), (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook), (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(FILE, "AudioFileBox", &[]),
+        graph_box(REGION, "AudioRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::box_of(FILE)))),
+            (4, FieldValue::String("seconds".to_string())),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Float32(2.0)), (13, FieldValue::Float32(2.0))
+        ]),
+        graph_box(CLIP, "AudioClipBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(TRACK, vec![super::TRACK_CLIPS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::box_of(FILE)))),
+            (21, FieldValue::String("seconds".to_string())),
+            (10, FieldValue::Float32(2.0))
+        ])
+    ]);
+    // The slice of `bind` this needs: the bpm control + the tempo collection, then the map + stamp primed.
+    let bpm = engine.controls.clone();
+    engine.graph.catchup_and_subscribe(Address::of(TIMELINE, vec![31]), move |value| {
+        if let Some(value) = value.as_float32() { bpm.bpm.set(value) }
+    });
+    engine.tempo = Some(ValueCollection::observe(&mut engine.graph, TEMPO_COLLECTION));
+    engine.refresh_tempo_map();
+    engine.tempo_stamp = engine.tempo_stamp_now();
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    engine.audio_units.push(unit);
+    // The grid-walk integration under a curve lands within float noise of the exact span, so compare rounded.
+    let spans = |engine: &Engine| {
+        let sets = engine.audio_units[0].audio_track_sets.borrow();
+        let content = sets[0].borrow();
+        let region = content.regions.iter().next().expect("one region");
+        (region.duration.round(), region.loop_duration.round(), content.clips[0].region.loop_duration.round())
+    };
+    assert_eq!(spans(&engine), (3840.0, 3840.0, 3840.0), "2 s at 120 bpm");
+    // A tempo-automation event edit: 120 -> 140 bpm.
+    engine.transact(&[Update::Primitive {
+        address: Address::of(TEMPO_EVENT, vec![13]),
+        old: FieldValue::Float32(120.0), new: FieldValue::Float32(140.0)
+    }]).expect("edit tempo event");
+    assert_eq!(spans(&engine), (4480.0, 4480.0, 4480.0), "2 s at 140 bpm -> 4480 ppqn: an automation edit re-sizes region + clip");
+    // Automation OFF falls back to the bpm field (still 120).
+    engine.controls.tempo_automation_enabled.set(false);
+    engine.transact(&[]).expect("empty transaction");
+    assert_eq!(spans(&engine), (3840.0, 3840.0, 3840.0), "automation off -> the nominal bpm sizes the spans again");
+    // The bpm field: 120 -> 150.
+    engine.transact(&[Update::Primitive {
+        address: Address::of(TIMELINE, vec![31]),
+        old: FieldValue::Float32(120.0), new: FieldValue::Float32(150.0)
+    }]).expect("change bpm");
+    assert_eq!(spans(&engine), (4800.0, 4800.0, 4800.0), "2 s at 150 bpm -> 4800 ppqn: the bpm change re-sizes region + clip");
+}
+
+#[test]
 fn an_audio_track_feeds_its_regions_to_the_audio_player_set() {
     const TRACK: Uuid = [52u8; 16];
     const REGION: Uuid = [53u8; 16];

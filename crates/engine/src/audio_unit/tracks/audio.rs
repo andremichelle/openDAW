@@ -152,6 +152,11 @@ pub(crate) fn region_float(graph: &BoxGraph, uuid: Uuid, path: &[u16]) -> f32 {
     graph.field_value(&Address::of(uuid, path.to_vec())).and_then(|value| value.as_float32()).unwrap_or(0.0)
 }
 
+/// Whether the box's time-base field (region key 4 / clip key 21) is "seconds" (the no-stretch import).
+pub(crate) fn seconds_time_base(graph: &BoxGraph, uuid: Uuid, key: u16) -> bool {
+    graph.field_value(&Address::of(uuid, vec![key])).and_then(|value| value.as_str()).is_some_and(|base| base == "seconds")
+}
+
 /// Read an `AudioRegionBox`'s span + playback fields. `None` when it has no `file` pointer (an unresolved /
 /// half-built region is skipped, never played). The loopable span is normalized to PPQN: in a `Seconds`
 /// time-base (the no-stretch / NoWarp default) `duration` + `loop-duration` are stored in SECONDS and converted
@@ -160,8 +165,7 @@ pub(crate) fn region_float(graph: &BoxGraph, uuid: Uuid, path: &[u16]) -> f32 {
 /// are always ppqn.
 pub(crate) fn read_audio_region(graph: &BoxGraph, region_uuid: Uuid, tempo_map: &TempoMap) -> Option<AudioRegion> {
     let file = graph.target_of(&Address::of(region_uuid, vec![AUDIO_REGION_FILE_KEY]))?.uuid;
-    let seconds_base = graph.field_value(&Address::of(region_uuid, vec![AUDIO_REGION_TIMEBASE_KEY]))
-        .and_then(|value| value.as_str()).is_some_and(|base| base == "seconds");
+    let seconds_base = seconds_time_base(graph, region_uuid, AUDIO_REGION_TIMEBASE_KEY);
     let position = region_pulses(graph, region_uuid, 10);
     let to_ppqn = |value: f64| if seconds_base { tempo_map.seconds_span_to_ppqn(position, value) } else { value };
     let time_stretch = read_time_stretch(graph, region_uuid);
@@ -374,8 +378,7 @@ pub(crate) fn read_audio_clip(graph: &BoxGraph, clip_uuid: Uuid, tempo_map: &Tem
     let looped = graph.field_value(&Address::of(clip_uuid, vec![4, 1])).and_then(|value| value.as_bool()).unwrap_or(true);
     // The not-stretched import stores the clip duration in SECONDS (timeBase "seconds"); convert at the
     // virtual region's position 0 (TS `TimeBaseConverter.toPPQN(0)`).
-    let seconds_base = graph.field_value(&Address::of(clip_uuid, vec![AUDIO_CLIP_TIMEBASE_KEY]))
-        .and_then(|value| value.as_str()).is_some_and(|base| base == "seconds");
+    let seconds_base = seconds_time_base(graph, clip_uuid, AUDIO_CLIP_TIMEBASE_KEY);
     let duration_raw = region_float(graph, clip_uuid, &[AUDIO_CLIP_DURATION_KEY]) as f64;
     let region = AudioRegion {
         region_uuid: clip_uuid,
@@ -516,6 +519,33 @@ pub(crate) fn build_audio_region(graph: &mut BoxGraph, content: &SharedAudioTrac
         }));
     Some(AudioRegionBinding {region_uuid, edit_sub, playmode_sub, marker_subs, warp_hub_sub,
         transient_subs, transient_hub_sub, playmode_pointer_sub})
+}
+
+/// Re-read every SECONDS time-base region and clip of `sets` against the (just refreshed) `tempo_map`: their
+/// ppqn spans are tempo-derived, so a bpm / tempo-automation change must re-size them (a musical region is
+/// tempo-invariant and left alone). The engine calls this after any transaction that changed the tempo.
+pub(crate) fn reread_seconds_based(graph: &BoxGraph, sets: &SharedAudioTrackSets, tempo_map: &TempoMap) {
+    for track in sets.borrow().iter() {
+        let mut content = track.borrow_mut();
+        let mut moved = false;
+        for bound in content.regions.iter_mut() {
+            if !seconds_time_base(graph, bound.region_uuid, AUDIO_REGION_TIMEBASE_KEY) { continue; }
+            if let Some(updated) = read_audio_region(graph, bound.region_uuid, tempo_map) {
+                *bound = updated;
+                moved = true;
+            }
+        }
+        if moved {
+            content.regions.resort();
+        }
+        for bound in content.clips.iter_mut() {
+            if !seconds_time_base(graph, bound.clip_uuid, AUDIO_CLIP_TIMEBASE_KEY) { continue; }
+            if let Some((region, looped)) = read_audio_clip(graph, bound.clip_uuid, tempo_map) {
+                bound.region = region;
+                bound.looped = looped;
+            }
+        }
+    }
 }
 
 /// A re-read observer: when a watched box changes, re-read THIS region and re-sort the track's collection. Built

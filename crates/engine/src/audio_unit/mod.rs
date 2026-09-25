@@ -75,7 +75,7 @@ pub(crate) mod params;
 mod tests;
 
 pub(crate) use tracks::{AudioRegion, SignalsmithConfig, BoundAudioClip, BoundNoteTracks, SharedAudioTrackSets, SharedTrackSets,
-    TrackBinding, AudioTrackBinding, CollectionCache, reconcile_tracks, teardown_track, teardown_audio_track};
+    TrackBinding, AudioTrackBinding, CollectionCache, reconcile_tracks, teardown_track, teardown_audio_track, reread_seconds_based};
 pub(crate) use params::{resolve_and_deliver_sample, NoteSignal, set_params_signal,
     params_invalidate, automation_invalidate, host_float, host_bool};
 pub(crate) use wiring::tape_region_counts;
