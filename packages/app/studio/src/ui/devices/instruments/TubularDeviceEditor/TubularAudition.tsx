@@ -140,7 +140,7 @@ export namespace TubularAudition {
                     uuid: UUID.toString(UUID.generate()),
                     name: voice.name,
                     device: "Tubular",
-                    description: `${cartridge.name} #${index + 1} · ${cartridge.author} · ${cartridge.license}`,
+                    description: cartridge.credit ?? "",
                     created: now,
                     modified: now
                 }

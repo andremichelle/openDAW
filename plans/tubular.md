@@ -19,6 +19,11 @@ Yamaha trademark and "Dexed" is Pascal Gauthier's, both only mentioned descripti
   algorithms 4, 6 and 32; sample-exact against the real Dexed 1.0.1 VST3 (hosted headless via pedalboard)
   and the oracle (1232 fixture cases: all voices Mark I, edge cases in both engines). Plain `engine`
   field (0 Mark I default, 1 Modern), switch in the device menu.
+- Tubular Classics (uncommitted): `packages/studio/adapters/scripts/tubular-classics.mts` writes 32 original voices
+  (3 EPs, 6 bells/mallets, 4 basses, 6 brass/strings/winds, 6 keys/organs/plucks, 4 leads, 3 drums) into
+  `public/tubular/cartridges/Tubular_Classics.syx` + index entry (CC0, first in the menu). Rate scale
+  measured on the engine: R3 30/40/50/60/70 = 8.5/3/0.9/0.3/0.12 s to -60 dB, attack R30/40/50/60 =
+  1.5/0.5/0.17/0.05 s. First pass by numbers, needs his ear; iterate in the script and rerun it.
 - Open: phase 4 full editor, sysex export. Deviation from Dexed: loading a voice does not
   cut sounding notes (Dexed panics), events snap to the 64-sample frame like the plugin.
 

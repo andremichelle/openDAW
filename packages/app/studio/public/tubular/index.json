@@ -1,6 +1,48 @@
 {
   "cartridges": [
     {
+      "name": "Tubular Classics",
+      "file": "Tubular_Classics.syx",
+      "author": "openDAW",
+      "credit": "openDAW",
+      "license": "CC0",
+      "source": "https://github.com/andremichelle/openDAW/blob/main/packages/studio/adapters/scripts/tubular-classics.mts",
+      "voices": [
+        "Rhodes",
+        "Soft Rhds",
+        "Brite Rhds",
+        "Tubular",
+        "Glass Bell",
+        "Celesta",
+        "Marimba",
+        "Vibes",
+        "Steel Drum",
+        "Slap Bass",
+        "Solid Bass",
+        "Synth Bass",
+        "Fretless",
+        "Brass Sect",
+        "Strings",
+        "Analog Pad",
+        "Choir",
+        "Flute",
+        "Harmonica",
+        "Clav",
+        "Harpsichrd",
+        "Drawbars",
+        "Pipe Organ",
+        "Harp",
+        "Nylon Gtr",
+        "Square Ld",
+        "Bright Ld",
+        "FM Lead",
+        "Bell Pad",
+        "Bass Drum",
+        "Snare",
+        "Timpani"
+      ]
+    },
+    {
       "name": "Dexed 01",
       "file": "Dexed_01.syx",
       "author": "Dexed built-in cartridge, DX7 program compilation by Jean-Marc Desprez (SynprezFM)",
@@ -583,7 +625,7 @@
       "voices": [
         "THE  FIX",
         "Bill Bell",
-        "BUSH\u007fRINGS",
+        "BUSHRINGS",
         "DX-ENSEMBE",
         "Drip.Etc",
         "R CYMBAL B",
@@ -725,7 +767,7 @@
         ">SCRATCH<",
         "Harp-1  MS",
         "CELTIC HRP",
-        "FI\u007fDLE   1",
+        "FIDLE   1",
         "HOHNER  1",
         "EPiano B",
         "GUIT PHAS2",
@@ -970,7 +1012,7 @@
         "RHODES PAD",
         "FazeGuit.3",
         "WATERFALL2",
-        "<Pluk>   \u007f",
+        "<Pluk>   ",
         "MOTORCYCLE",
         "ACCORDEON",
         "AnalogSqr1",
@@ -1392,7 +1434,8 @@
         "Brass_20",
         "Brass_21",
         "Brass_22"
-      ]
+      ],
+      "credit": "Nick Culbertson"
     },
     {
       "name": "YM2612 ROM2 Keys Bells",
@@ -1433,7 +1476,8 @@
         "Organ_03",
         "Organ_04",
         "Organ_05"
-      ]
+      ],
+      "credit": "Nick Culbertson"
     },
     {
       "name": "YM2612 ROM3 Morph",
@@ -1474,7 +1518,8 @@
         "Morph_30",
         "Morph_31",
         "Morph_32"
-      ]
+      ],
+      "credit": "Nick Culbertson"
     },
     {
       "name": "YM2612 ROM4 Synth",
@@ -1515,7 +1560,8 @@
         "Synth_30",
         "Synth_31",
         "Synth_32"
-      ]
+      ],
+      "credit": "Nick Culbertson"
     }
   ]
 }

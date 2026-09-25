@@ -9,6 +9,7 @@ export type TubularCartridge = {
     readonly file: string
     readonly author: string
     readonly license: string
+    readonly credit?: string
     readonly source: string
     readonly voices: ReadonlyArray<Dx7Voice>
 }

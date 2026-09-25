@@ -28,7 +28,7 @@ describe("Dx7Sysex", () => {
 
     it("decodes every bundled cartridge with valid checksums and 32 named voices", () => {
         const files = readdirSync(cartridges).filter(file => file.endsWith(".syx"))
-        expect(files.length).toBe(37)
+        expect(files.length).toBe(38)
         for (const file of files) {
             const voices = Dx7Sysex.decode(new Uint8Array(readFileSync(join(cartridges, file))))
             expect(voices.length, file).toBe(32)

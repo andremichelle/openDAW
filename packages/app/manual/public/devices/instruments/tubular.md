@@ -21,6 +21,8 @@ of the current bank.
 
 Bundled banks and their credits:
 
+- Tubular Classics, 32 original voices in the classic styles (tine pianos, bells, mallets, basses, brass,
+  strings, organs, leads, drums), written for openDAW, CC0.
 - Dexed 01 and SynprezFM 01 to 32, the cartridges shipped with Dexed, DX7 programs compiled by Jean-Marc
   Desprez (SynprezFM), GPL-3.0.
 - YM2612 ROM 1 to 4 by Nick Culbertson, Sega Genesis style instruments, MIT.
