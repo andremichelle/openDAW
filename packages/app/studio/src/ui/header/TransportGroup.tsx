@@ -3,7 +3,7 @@ import {Icon} from "@/ui/components/Icon.tsx"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {Button} from "@/ui/components/Button.tsx"
-import {DefaultObservableValue, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Lifecycle, Option, Terminator} from "@opendaw/lib-std"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Surface} from "@/ui/surface/Surface"
@@ -12,6 +12,12 @@ import {Html} from "@opendaw/lib-dom"
 import {ContextMenu, MenuItem, ProjectProfile} from "@opendaw/studio-core"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 import {ShortcutTooltip} from "@/ui/shortcuts/ShortcutTooltip"
+import {RejoinGrid} from "@/service/transport-sync/TransportSyncService"
+
+const RejoinGridLabels: ReadonlyArray<{ grid: RejoinGrid, label: string }> = [
+    {grid: "bar", label: "Bar"},
+    {grid: "beat", label: "Beat"}
+]
 
 const className = Html.adoptStyleSheet(css, "TransportGroup")
 
@@ -24,6 +30,8 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
     const {engine, projectProfileService} = service
     const {preferences: {settings: {playback}}} = engine
     const loop = new DefaultObservableValue(false)
+    const notInRoom = new DefaultObservableValue(true)
+    lifecycle.own(service.roomAwareness.catchupAndSubscribe(owner => notInRoom.setValue(!isDefined(owner.getValue()))))
     const recordButton: HTMLElement = (
         <Button lifecycle={lifecycle}
                 appearance={{
@@ -51,10 +59,24 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                 onClick={() => {
                     if (engine.isPlaying.getValue()) {
                         engine.stop()
+                        service.transportSync.publishLocal(false)
                     } else {
                         engine.play()
+                        service.transportSync.publishLocal(true)
                     }
                 }}><Icon symbol={IconSymbol.Play}/></Button>
+    )
+    const followCheckbox: HTMLElement = (
+        <Checkbox lifecycle={lifecycle}
+                  model={service.transportSync.follow}
+                  disabled={notInRoom}
+                  appearance={{
+                      color: Colors.shadow,
+                      activeColor: Colors.blue,
+                      tooltip: "Follow Room Playback"
+                  }}>
+            <Icon symbol={IconSymbol.Headphone}/>
+        </Checkbox>
     )
     const loopLifecycle = lifecycle.own(new Terminator())
     const countInLifecycle = lifecycle.own(new Terminator())
@@ -82,6 +104,14 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                     checked: playback.pauseOnLoopDisabled
                 }).setTriggerProcedure(() => playback.pauseOnLoopDisabled = !playback.pauseOnLoopDisabled)
             )),
+        ContextMenu.subscribe(followCheckbox, collector => collector
+            .addItems(
+                MenuItem.header({label: "Rejoin Quantization", icon: IconSymbol.Headphone, color: Colors.blue}),
+                ...RejoinGridLabels.map(({grid, label}) => MenuItem.default({
+                    label,
+                    checked: service.transportSync.rejoinGrid.getValue() === grid
+                }).setTriggerProcedure(() => service.transportSync.rejoinGrid.setValue(grid)))
+            )),
         projectProfileService.catchupAndSubscribe((optProfile: Option<ProjectProfile>) => {
             loopLifecycle.terminate()
             optProfile.match({
@@ -104,7 +134,10 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
             {recordButton}
             {playButton}
             <Button lifecycle={lifecycle}
-                    onClick={() => {engine.stop(true)}}
+                    onClick={() => {
+                        engine.stop(true)
+                        service.transportSync.publishLocal(false)
+                    }}
                     appearance={{
                         color: Colors.shadow,
                         activeColor: Colors.bright,
@@ -121,6 +154,7 @@ export const TransportGroup = ({lifecycle, service}: Construct) => {
                       }}>
                 <Icon symbol={IconSymbol.Loop}/>
             </Checkbox>
+            {followCheckbox}
         </div>
     )
 }
