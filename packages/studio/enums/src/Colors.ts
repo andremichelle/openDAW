@@ -18,6 +18,7 @@ export const Colors = {
     orange: new Color(31, 100, 73),
     red: new Color(354, 100, 65),
     purple: new Color(314, 100, 78),
+    menuActive: new Color(210, 90, 40),
     get bright(): Color {return neutral(5, 100)},
     get gray(): Color {return neutral(31, 91)},
     get dark(): Color {return neutral(15, 84)},
