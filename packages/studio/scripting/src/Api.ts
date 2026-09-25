@@ -403,7 +403,7 @@ export interface CrusherEffect extends AudioEffect {
     bits: int
     /** Boost in dB (0 to 24, default 0) */
     boost: float
-    /** Dry/wet mix (0.001 to 1.0, default 1.0) */
+    /** Dry/wet mix (0.0 to 1.0, default 1.0) */
     mix: float
 }
 

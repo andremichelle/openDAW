@@ -29,7 +29,7 @@ Sample rate reduction amount. Range: **0% to 100%**.
 - **0%**: No sample rate reduction (full quality)
 - **100%**: Maximum reduction (down to 20 Hz effective sample rate)
 
-The effective sample rate scales exponentially from the native rate down to 20 Hz. Higher values create more aliasing and the characteristic "stair-step" waveform of low sample rates.
+The effective sample rate scales exponentially from Nyquist (half the native rate) down to 20 Hz. Higher values create more aliasing and the characteristic "stair-step" waveform of low sample rates.
 
 An anti-aliasing lowpass filter (minimum 1000 Hz cutoff) is applied before downsampling to control the harshness of the aliasing artifacts.
 
@@ -64,13 +64,11 @@ Useful for:
 
 ## 4. Mix
 
-Dry/wet blend. Range: **0.1% to 100%** (exponential scaling).
+Dry/wet blend. Range: **0% to 100%** (linear).
 
-- **0.1%**: Nearly all dry signal
+- **0%**: Dry signal only
 - **50%**: Equal blend of clean and crushed
 - **100%**: Fully crushed signal
-
-The exponential scaling provides fine control at low mix values, useful for subtle parallel crushing that adds texture without overwhelming the original signal.
 
 ---
 
