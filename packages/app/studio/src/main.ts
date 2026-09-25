@@ -9,6 +9,8 @@ import {initializeColors} from "@opendaw/studio-enums"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {Browser, Html} from "@opendaw/lib-dom"
 
+initializeColors(document.documentElement)
+DisplayPaint.initialize(document.documentElement)
 if (Browser.isMobile()) {
     const className = Html.adoptStyleSheet(mobileCss, "Mobile")
     document.body.innerHTML = `<div class="${className}">
@@ -28,8 +30,6 @@ if (Browser.isMobile()) {
     </div>`
 } else if (window.crossOriginIsolated) {
     const now = Date.now()
-    initializeColors(document.documentElement)
-    DisplayPaint.initialize(document.documentElement)
     boot({
         workersUrl,
         workletsUrl,

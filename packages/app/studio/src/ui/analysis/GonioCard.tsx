@@ -2,6 +2,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {Lifecycle, TAU} from "@opendaw/lib-std"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {EngineAddresses} from "@opendaw/studio-adapters"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {StudioService} from "@/service/StudioService"
 import {card, radio} from "./AnalysisControls.tsx"
 import {AnalysisSettings} from "./AnalysisSettings.ts"
@@ -21,7 +22,7 @@ const drawGonio = (painter: CanvasPainter, pairs: Float32Array, mode: string): v
     const midSide = mode === "M/S"
     const count = pairs.length >> 1
     const dot = Math.max(1.0, devicePixelRatio)
-    context.fillStyle = "rgba(150,205,255,0.5)"
+    context.fillStyle = DisplayPaint.strokeStyle(0.5)
     for (let k = 0; k < count; k++) {
         const l = pairs[k * 2]
         const r = pairs[k * 2 + 1]
