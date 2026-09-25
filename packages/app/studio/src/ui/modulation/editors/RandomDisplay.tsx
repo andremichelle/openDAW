@@ -65,11 +65,11 @@ export const RandomDisplay = ({lifecycle, receiver, modulator}: Construct): HTML
         context.beginPath()
         context.moveTo(0, baseY)
         context.lineTo(actualWidth, baseY)
-        context.strokeStyle = "hsl(200, 83%, 60%, 0.1)"
+        context.strokeStyle = DisplayPaint.strokeStyle(0.1)
         context.stroke()
         context.beginPath()
         context.arc((playhead - page) * stepWidth, outputToY(output), devicePixelRatio * 2.0, 0.0, TAU)
-        context.fillStyle = "hsl(200, 83%, 75%)"
+        context.fillStyle = DisplayPaint.fillStyle()
         context.fill()
     }))
     lifecycle.ownAll(

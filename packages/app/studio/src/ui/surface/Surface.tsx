@@ -25,6 +25,7 @@ import {TextTooltip} from "./TextTooltip"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {AnimationFrame, CssUtils, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {IconSymbol, initializeColors} from "@opendaw/studio-enums"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {StudioPreferences} from "@opendaw/studio-core"
 import {Toast} from "./Toast"
 
@@ -267,6 +268,7 @@ export class Surface implements TerminableOwner {
             target.head.appendChild(styleElement)
         }
         initializeColors(target.documentElement)
+        DisplayPaint.initialize(target.documentElement)
     }
 
     #listen(): void {

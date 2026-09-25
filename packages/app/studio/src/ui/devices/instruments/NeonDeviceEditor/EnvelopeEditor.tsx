@@ -216,7 +216,7 @@ export const EnvelopeEditor = ({lifecycle, editing, envelopes, lineIndex, receiv
             const y = levelToY(playheads[base + envelopeOffset + 1] * 99.0)
             context.beginPath()
             context.arc(x, y, devicePixelRatio * 1.5, 0.0, Math.PI * 2)
-            context.fillStyle = "hsl(200, 83%, 75%)"
+            context.fillStyle = DisplayPaint.fillStyle()
             context.fill()
         }
     }))

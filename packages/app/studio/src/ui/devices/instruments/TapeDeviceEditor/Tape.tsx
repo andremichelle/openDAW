@@ -8,7 +8,6 @@ import {Colors} from "@opendaw/studio-enums"
 const tapeVelocity = 13.0 / PPQN.Bar // TapeDeviceEditor speed 4.76 cm/s converted into svg coordinates
 const rEmpty = 15
 const rFull = 40
-const stroke = Colors.dark
 const mapping = ValueMapping.linear(rEmpty, rFull)
 const reels: ReadonlyArray<Circle> = [{x: 56, y: 44, r: 0}, {x: 152, y: 44, r: 0}]
 const pins: ReadonlyArray<Readonly<Circle>> = [{x: 8, y: 104, r: 6}, {x: 200, y: 104, r: 6}]
@@ -36,11 +35,11 @@ export type Construct = {
 export const Tape = ({lifecycle, position, durationInPulses, tracks}: Construct) => {
     const reelHubs: ReadonlyArray<SVGGraphicsElement> = [tapeReelHub(), tapeReelHub()]
     const reelElements: ReadonlyArray<SVGCircleElement> = reels.map(reel =>
-        (<circle cx={reel.x} cy={reel.y} r={0} fill="rgba(0,0,0,0.08)" stroke={stroke}/>))
+        (<circle cx={reel.x} cy={reel.y} r={0} fill="rgba(0,0,0,0.08)" stroke={Colors.dark}/>))
     const head: SVGElement = (
         <rect x={100} y={106} width={8} height={2} stroke="none"/>
     )
-    const tape: ReadonlyArray<SVGLineElement> = Arrays.create(() => <line stroke={stroke}/>, 3)
+    const tape: ReadonlyArray<SVGLineElement> = Arrays.create(() => <line stroke={Colors.dark}/>, 3)
     const headerUpdater = deferNextFrame(() => {
         const ppqn = position.getValue()
         const playingRegion = tracks.collection.adapters().some(track => {
@@ -96,7 +95,7 @@ export const Tape = ({lifecycle, position, durationInPulses, tracks}: Construct)
             ))}
             {reelElements}
             {reelHubs}
-            {pins.map(({x, y, r}) => (<circle cx={x} cy={y} r={r} fill="none" stroke={stroke}/>))}
+            {pins.map(({x, y, r}) => (<circle cx={x} cy={y} r={r} fill="none" stroke={Colors.dark}/>))}
             {head}
             {tape}
         </svg>

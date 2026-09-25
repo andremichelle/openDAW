@@ -13,7 +13,7 @@ component
     z-index: 1
 
     input:checked + label
-      color: hsl(200, 83%, 60%)
+      color: var(--display-stroke)
 
     > span.line-label
       font-size: 8px
@@ -26,7 +26,7 @@ component
       padding: 0 4px
       border-radius: 2px
       color: black
-      background: hsl(200, 83%, 60%)
+      background: var(--display-stroke)
 
     > div.readout
       margin-left: auto
@@ -40,7 +40,7 @@ component
 
       > span.editable
         color: var(--color-bright)
-        outline: 0.5px solid hsla(200, 40%, 70%, 0.15)
+        outline: 0.5px solid hsl(from var(--display-grid) h s l / 0.15)
         outline-offset: 1px
         border-radius: 1px
         padding: 0 2px
@@ -55,7 +55,7 @@ component
     height: 100%
     min-height: 0
     border-radius: 3px
-    box-shadow: 0 0 4px 0 hsla(200, 83%, 60%, 0.04) inset, 0 0 1px 0 hsla(200, 83%, 60%, 0.04) inset
+    box-shadow: 0 0 4px 0 hsl(from var(--display-stroke) h s l / 0.04) inset, 0 0 1px 0 hsl(from var(--display-stroke) h s l / 0.04) inset
 
   > div.lane
     display: grid
@@ -95,8 +95,8 @@ component
 
     > span.slot.end
       color: black
-      background: hsl(200, 83%, 60%)
+      background: var(--display-stroke)
       margin: 0 4px
 
     > span.slot.sustain.end
-      background: linear-gradient(90deg, var(--color-orange) 50%, hsl(200, 83%, 60%) 50%)
+      background: linear-gradient(90deg, var(--color-orange) 50%, var(--display-stroke) 50%)

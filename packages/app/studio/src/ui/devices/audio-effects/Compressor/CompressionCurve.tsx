@@ -21,7 +21,7 @@ export const CompressionCurve = ({lifecycle, adapter, values}: Construct) => {
     const {threshold, ratio, knee} = adapter.namedParameter
     const numSegments = 7
     const segmentSize = size / numSegments
-    const gridColor = "hsla(200, 40%, 70%, 0.12)"
+    const gridColor = DisplayPaint.gridStyle(0.12)
     const computer = new GainComputer()
     return (
         <div className={className}>
@@ -88,7 +88,7 @@ export const CompressionCurve = ({lifecycle, adapter, values}: Construct) => {
                         const y = Math.min(scale.unitToNorm(-cp) * size, size)
                         context.beginPath()
                         context.arc(x, y, 3, 0.0, TAU)
-                        context.fillStyle = "hsla(200, 83%, 60%, 0.80)"
+                        context.fillStyle = DisplayPaint.strokeStyle(0.80)
                         context.fill()
                         context.restore()
                     }))

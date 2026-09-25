@@ -42,7 +42,7 @@ export const WaveformDisplay = ({lifecycle, adapter}: Construct) => {
                 context.beginPath()
                 context.moveTo(0, centerY)
                 context.lineTo(actualWidth, centerY)
-                context.strokeStyle = "hsla(200, 83%, 60%, 0.25)"
+                context.strokeStyle = DisplayPaint.strokeStyle(0.25)
                 context.stroke()
             }))
             lifecycle.own(adapter.catchupAndSubscribe(painter.requestUpdate))

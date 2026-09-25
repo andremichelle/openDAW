@@ -7,6 +7,7 @@ import {CanvasPainter, LinearScale, LogScale} from "@opendaw/studio-core"
 import {int, linear} from "@opendaw/lib-std"
 import {VocoderDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
 const className = Html.adoptStyleSheet(css, "VocoderTransform")
 
@@ -106,7 +107,7 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                     const car0dB = H - curveRange
                     const carMinus9 = H - curveRange * 0.5
                     context.lineWidth = 1
-                    context.strokeStyle = "hsla(200, 40%, 70%, 0.10)"
+                    context.strokeStyle = DisplayPaint.gridStyle(0.10)
                     context.beginPath()
                     context.moveTo(0, mod0dB); context.lineTo(W, mod0dB)
                     context.moveTo(0, modMinus9); context.lineTo(W, modMinus9)
@@ -146,12 +147,12 @@ export const VocoderTransform = ({lifecycle, service, adapter, displayMode, spec
                             x0 = x1
                         }
                         context.lineWidth = 0
-                        context.strokeStyle = "hsla(200, 83%, 60%, 0.80)"
+                        context.strokeStyle = DisplayPaint.strokeStyle(0.80)
                         context.stroke(spectrumPath)
                         spectrumPath.lineTo(W, H)
                         spectrumPath.lineTo(0, H)
                         spectrumPath.closePath()
-                        context.fillStyle = "hsla(200, 83%, 60%, 0.04)"
+                        context.fillStyle = DisplayPaint.strokeStyle(0.04)
                         context.fill(spectrumPath)
                     }
                     const curveAlpha = mode === DisplayMode.Transform ? 1.0 : 0.3

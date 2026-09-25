@@ -1,4 +1,13 @@
-import {Color} from "@opendaw/lib-std"
+import {Color, unitValue} from "@opendaw/lib-std"
+
+export type ColorScheme = {hue: number, saturation: unitValue}
+
+export const DefaultColorScheme: ColorScheme = {hue: 197, saturation: 1.0}
+
+const scheme: ColorScheme = {...DefaultColorScheme}
+
+const neutral = (saturation: number, lightness: number): Color =>
+    new Color(scheme.hue, saturation * scheme.saturation, lightness)
 
 export const Colors = {
     white: new Color(0, 0, 100),
@@ -9,15 +18,22 @@ export const Colors = {
     orange: new Color(31, 100, 73),
     red: new Color(354, 100, 65),
     purple: new Color(314, 100, 78),
-    bright: new Color(197, 5, 100),
-    gray: new Color(197, 31, 91),
-    dark: new Color(197, 15, 84),
-    shadow: new Color(197, 10, 60),
-    black: new Color(197, 10, 30),
-    background: new Color(197, 8, 9),
-    panelBackground: new Color(197, 14, 12),
-    panelBackgroundBright: new Color(197, 13, 16),
-    panelBackgroundDark: new Color(197, 14, 11)
+    get bright(): Color {return neutral(5, 100)},
+    get gray(): Color {return neutral(31, 91)},
+    get dark(): Color {return neutral(15, 84)},
+    get shadow(): Color {return neutral(10, 60)},
+    get black(): Color {return neutral(10, 30)},
+    get background(): Color {return neutral(8, 9)},
+    get panelBackground(): Color {return neutral(14, 12)},
+    get panelBackgroundBright(): Color {return neutral(13, 16)},
+    get panelBackgroundDark(): Color {return neutral(14, 11)},
+    get headerBackground(): Color {return neutral(14, 3)},
+    get footerBackground(): Color {return neutral(14, 9)}
+}
+
+export const setColorScheme = ({hue, saturation}: ColorScheme): void => {
+    scheme.hue = hue
+    scheme.saturation = saturation
 }
 
 export const initializeColors = (root: { style: { setProperty: (name: string, value: string) => void } }) => {

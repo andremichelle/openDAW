@@ -16,6 +16,13 @@ export namespace PreferencesPageLabels {
                 "offer-studio-tour": "Offer the studio tour when a project opens"
             }
         },
+        "appearance": {
+            label: "Appearance",
+            fields: {
+                "neutral-hue": "Neutral hue (0-360)",
+                "neutral-saturation": "Neutral saturation (%)"
+            }
+        },
         "time-display": {
             label: "Time Display",
             fields: {

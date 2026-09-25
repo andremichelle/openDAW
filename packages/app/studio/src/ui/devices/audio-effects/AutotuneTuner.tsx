@@ -8,11 +8,6 @@ import {Colors} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "AutotuneTuner")
 
-const GREEN = Colors.green.toString()
-const YELLOW = Colors.yellow.toString()
-const RED = Colors.red.toString()
-const GRAY = Colors.gray.toString()
-const BRIGHT = Colors.bright.toString()
 
 // A real-time tuner for the autotune device. It reads the live telemetry the device broadcasts —
 // [detectedMidi, targetNote, voiced] — and shows the note you are singing plus a needle at that pitch's
@@ -42,7 +37,7 @@ export const AutotuneTuner = ({lifecycle, receiver, address}: Construct) => {
         <div className={className}>
             <svg viewBox="0 0 120 36" preserveAspectRatio="xMidYMid meet">
                 <rect x={`${CENTRE - 10 / 50 * HALF_WIDTH}`} y="21" width={`${2 * 10 / 50 * HALF_WIDTH}`}
-                      height="10" rx="1" fill={GREEN} opacity="0.14"/>
+                      height="10" rx="1" fill={Colors.green} opacity="0.14"/>
                 <line x1="12" y1="26" x2="108" y2="26" className="scale"/>
                 <line x1={`${CENTRE}`} y1="21" x2={`${CENTRE}`} y2="31" className="tick-centre"/>
                 <line x1={`${CENTRE - HALF_WIDTH / 2}`} y1="23" x2={`${CENTRE - HALF_WIDTH / 2}`} y2="29" className="tick"/>
@@ -59,20 +54,20 @@ export const AutotuneTuner = ({lifecycle, receiver, address}: Construct) => {
         const detected = values[0], voiced = values[2] > 0.5
         if (!voiced || detected <= 0.0) {
             note.textContent = "—"
-            note.setAttribute("fill", GRAY)
+            note.setAttribute("fill", Colors.gray.toString())
             cents.textContent = ""
             needle.setAttribute("x1", `${CENTRE}`)
             needle.setAttribute("x2", `${CENTRE}`)
-            needle.setAttribute("stroke", GRAY)
+            needle.setAttribute("stroke", Colors.gray.toString())
             needle.setAttribute("opacity", "0.35")
             return
         }
         note.textContent = noteName(detected)
-        note.setAttribute("fill", BRIGHT)
+        note.setAttribute("fill", Colors.bright.toString())
         const offset = (detected - Math.round(detected)) * 100.0 // cents from the nearest note, in [-50, 50]
         const x = CENTRE + offset / 50.0 * HALF_WIDTH
         const magnitude = Math.abs(offset)
-        const color = magnitude < 10.0 ? GREEN : magnitude < 30.0 ? YELLOW : RED
+        const color = (magnitude < 10.0 ? Colors.green : magnitude < 30.0 ? Colors.yellow : Colors.red).toString()
         needle.setAttribute("x1", `${x}`)
         needle.setAttribute("x2", `${x}`)
         needle.setAttribute("stroke", color)

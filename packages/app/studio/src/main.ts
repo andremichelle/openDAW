@@ -6,6 +6,7 @@ import wasmProcessorUrl from "@opendaw/studio-core-wasm/wasm-processor.js?url"
 import wasmOfflineWorkerUrl from "@opendaw/studio-core-wasm/wasm-offline-worker.js?worker&url"
 import {boot} from "@/boot"
 import {initializeColors} from "@opendaw/studio-enums"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {Browser, Html} from "@opendaw/lib-dom"
 
 if (Browser.isMobile()) {
@@ -28,6 +29,7 @@ if (Browser.isMobile()) {
 } else if (window.crossOriginIsolated) {
     const now = Date.now()
     initializeColors(document.documentElement)
+    DisplayPaint.initialize(document.documentElement)
     boot({
         workersUrl,
         workletsUrl,

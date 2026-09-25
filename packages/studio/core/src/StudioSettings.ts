@@ -21,6 +21,13 @@ export const StudioSettingsSchema = z.object({
         "show-output-track": false,
         "offer-studio-tour": true
     }),
+    "appearance": z.object({
+        "neutral-hue": z.number().catch(197),
+        "neutral-saturation": z.number().catch(100)
+    }).default({
+        "neutral-hue": 197,
+        "neutral-saturation": 100
+    }),
     "time-display": z.object({
         "musical": z.boolean(),
         "absolute": z.boolean(),

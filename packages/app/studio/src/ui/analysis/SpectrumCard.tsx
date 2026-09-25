@@ -8,8 +8,7 @@ import {card, dropdown, toggle} from "./AnalysisControls.tsx"
 import {AnalysisSettings} from "./AnalysisSettings.ts"
 import {observeProject} from "./AnalysisSource.ts"
 import {clearBg, FREQ_TICKS, SPEC_X_LIN, SPEC_X_LOG, SPEC_Y, unitLabel} from "./AnalysisCommon.ts"
-
-const SPEC_HUE = "hsla(200, 83%, 60%"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 const SPEC_TOP_MARGIN = 11.0
 
 const drawSpectrum = (painter: CanvasPainter, spectrum: Float32Array, sampleRate: number,
@@ -38,9 +37,9 @@ const drawSpectrum = (painter: CanvasPainter, spectrum: Float32Array, sampleRate
     for (let i = firstBin; i <= lastBin; i++) {context.lineTo(xOf(i * freqStep), yOf(spectrum[i], i * freqStep))}
     context.lineTo(lastX, h)
     context.closePath()
-    context.fillStyle = `${SPEC_HUE}, 0.06)`
+    context.fillStyle = DisplayPaint.strokeStyle(0.06)
     context.fill()
-    context.strokeStyle = `${SPEC_HUE}, 0.8)`
+    context.strokeStyle = DisplayPaint.strokeStyle(0.8)
     context.lineWidth = 1.5
     context.beginPath()
     context.moveTo(0, y0)
