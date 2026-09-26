@@ -1,0 +1,31 @@
+@use "./section"
+
+component
+  @include section.grid(9)
+  @include section.cells
+
+  > div.diagram
+    grid-area: 2 / 1 / 4 / 4
+    position: relative
+
+    > canvas
+      width: 100%
+      height: 100%
+      border-radius: 3px
+      box-shadow: 0 0 4px 0 hsl(from var(--display-stroke) h s l / 0.04) inset, 0 0 1px 0 hsl(from var(--display-stroke) h s l / 0.04) inset
+
+  > div.cell.jump
+    > span.jump
+      grid-row: 2 / 4
+      font-size: 9px
+      font-weight: 700
+      letter-spacing: 0.5px
+      padding: 2px 6px
+      border-radius: 2px
+      cursor: pointer
+      color: var(--color-bright)
+      outline: 0.5px solid hsl(from var(--display-grid) h s l / 0.15)
+
+      &:hover
+        color: black
+        background: var(--color-blue)

@@ -15,6 +15,7 @@ const TRANSPOSE_CENTRE: i32 = 24;
 
 #[derive(Clone, Copy, Default)]
 struct ProcessorVoice {
+    key: i32,
     midi_note: i32,
     velocity: i32,
     keydown: bool,
@@ -55,7 +56,7 @@ impl Synth {
         self.core = FmCore::default();
         self.engine = Engine::MarkI;
         for voice in self.voices.iter_mut() {
-            *voice = ProcessorVoice {midi_note: -1, keydown_seq: -1, ..ProcessorVoice::default()};
+            *voice = ProcessorVoice {key: -1, midi_note: -1, keydown_seq: -1, ..ProcessorVoice::default()};
         }
         self.current_note = 0;
         self.next_keydown_seq = 0;
@@ -124,13 +125,16 @@ impl Synth {
     }
 
     /// Push pending patch edits into the sounding voices and the LFO. Dexed does this at the top of every
-    /// block, ahead of that block's MIDI, so it runs before any key event and before each frame.
+    /// block, ahead of that block's MIDI, so it runs before any key event and before each frame. Unlike
+    /// Dexed, a transpose edit retunes the held voices too (they keep their played key).
     fn flush_refresh(&mut self) {
         if !self.refresh_voice {
             return;
         }
+        let shift = self.data[144] as i32 - TRANSPOSE_CENTRE;
         for voice in self.voices.iter_mut() {
             if voice.live {
+                voice.midi_note = (voice.key as u8).wrapping_add(shift as u8) as i32;
                 voice.note.update(&self.data, voice.midi_note, voice.velocity);
             }
         }
@@ -144,6 +148,7 @@ impl Synth {
             return;
         }
         self.flush_refresh();
+        let key = pitch as i32;
         let pitch = self.transposed(pitch) as i32;
         if !self.voices.iter().any(|voice| voice.keydown) {
             self.lfo.keydown();
@@ -153,6 +158,7 @@ impl Synth {
         let voice_steal = self.voices[note].note.is_playing();
         {
             let voice = &mut self.voices[note];
+            voice.key = key;
             voice.midi_note = pitch;
             voice.velocity = velo as i32;
             voice.sustained = self.sustain;
@@ -199,10 +205,11 @@ impl Synth {
         self.last_active_voice = note;
     }
 
+    /// Release by the PLAYED key, so a transpose edit between key-down and key-up cannot orphan the voice.
     pub fn keyup(&mut self, pitch: u8) {
         self.flush_refresh();
-        let pitch = self.transposed(pitch) as i32;
-        let Some(note) = (0..MAX_ACTIVE_NOTES).find(|&index| self.voices[index].midi_note == pitch && self.voices[index].keydown) else {
+        let key = pitch as i32;
+        let Some(note) = (0..MAX_ACTIVE_NOTES).find(|&index| self.voices[index].key == key && self.voices[index].keydown) else {
             return;
         };
         self.voices[note].keydown = false;

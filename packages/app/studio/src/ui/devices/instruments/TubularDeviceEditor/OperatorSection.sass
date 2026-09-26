@@ -1,0 +1,8 @@
+@use "./section"
+
+component
+  @include section.grid(9)
+  @include section.cells
+
+  > div.envelope
+    grid-area: 1 / 1 / 4 / 5

@@ -16,7 +16,7 @@ use abi::{float_value, int_value, Block, EventRecord, FieldValue, Instrument, Pa
 use math::value_mapping::{Linear, LinearInteger, Values};
 
 mod env;
-mod fm;
+pub mod fm;
 mod fx;
 #[cfg(not(target_family = "wasm"))]
 pub mod harness;
@@ -310,6 +310,26 @@ mod tests {
         <Tubular as Instrument>::field_changed(&mut state, load_id, FieldValue::Int(1));
         render(&mut state, &[note_on(2, 64)], &mut left, &mut right);
         assert!(peak(&left) > 0.05, "the same counter again is not a program change, got {}", peak(&left));
+    }
+
+    #[test]
+    fn transpose_while_held_retunes_and_still_releases() {
+        let zero_crossings = |samples: &[f32]| samples.windows(2).filter(|pair| pair[0] <= 0.0 && pair[1] > 0.0).count();
+        let mut state = create_state(SR);
+        let (mut left, mut right) = (vec![0.0f32; 4800], vec![0.0f32; 4800]);
+        render(&mut state, &[note_on(1, 60)], &mut left, &mut right);
+        render(&mut state, &[], &mut left, &mut right);
+        let before = zero_crossings(&left);
+        state.synth.set_byte(144, 36); // one octave up
+        render(&mut state, &[], &mut left, &mut right);
+        render(&mut state, &[], &mut left, &mut right);
+        let after = zero_crossings(&left);
+        assert!(after > before * 3 / 2, "held note follows transpose: {before} -> {after} crossings");
+        render(&mut state, &[note_off(1, 60)], &mut left, &mut right);
+        for _ in 0..20 {
+            render(&mut state, &[], &mut left, &mut right);
+        }
+        assert!(peak(&left) < 1.0e-3, "released after the transpose change, got {}", peak(&left));
     }
 
     #[test]

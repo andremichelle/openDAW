@@ -18,6 +18,52 @@ export namespace Tubular {
     export const LfoWaves = ["Triangle", "Saw Down", "Saw Up", "Square", "Sine", "S&H"]
     export const Switch = ["Off", "On"]
     export const Engines = ["Mark I", "Modern"]
+    // The 32 algorithms as msfa bus flags per operator in SYSEX order (OP6 first): bits 0-1 out bus (0 =
+    // output), bit 2 add to bus, bits 4-5 in bus, bits 6-7 feedback. Mirrors `ALGORITHMS` in fm.rs.
+    const ALGORITHMS: ReadonlyArray<ReadonlyArray<number>> = [
+        [0xc1, 0x11, 0x11, 0x14, 0x01, 0x14], [0x01, 0x11, 0x11, 0x14, 0xc1, 0x14], [0xc1, 0x11, 0x14, 0x01, 0x11, 0x14],
+        [0xc1, 0x11, 0x94, 0x01, 0x11, 0x14], [0xc1, 0x14, 0x01, 0x14, 0x01, 0x14], [0xc1, 0x94, 0x01, 0x14, 0x01, 0x14],
+        [0xc1, 0x11, 0x05, 0x14, 0x01, 0x14], [0x01, 0x11, 0xc5, 0x14, 0x01, 0x14], [0x01, 0x11, 0x05, 0x14, 0xc1, 0x14],
+        [0x01, 0x05, 0x14, 0xc1, 0x11, 0x14], [0xc1, 0x05, 0x14, 0x01, 0x11, 0x14], [0x01, 0x05, 0x05, 0x14, 0xc1, 0x14],
+        [0xc1, 0x05, 0x05, 0x14, 0x01, 0x14], [0xc1, 0x05, 0x11, 0x14, 0x01, 0x14], [0x01, 0x05, 0x11, 0x14, 0xc1, 0x14],
+        [0xc1, 0x11, 0x02, 0x25, 0x05, 0x14], [0x01, 0x11, 0x02, 0x25, 0xc5, 0x14], [0x01, 0x11, 0x11, 0xc5, 0x05, 0x14],
+        [0xc1, 0x14, 0x14, 0x01, 0x11, 0x14], [0x01, 0x05, 0x14, 0xc1, 0x14, 0x14], [0x01, 0x14, 0x14, 0xc1, 0x14, 0x14],
+        [0xc1, 0x14, 0x14, 0x14, 0x01, 0x14], [0xc1, 0x14, 0x14, 0x01, 0x14, 0x04], [0xc1, 0x14, 0x14, 0x14, 0x04, 0x04],
+        [0xc1, 0x14, 0x14, 0x04, 0x04, 0x04], [0xc1, 0x05, 0x14, 0x01, 0x14, 0x04], [0x01, 0x05, 0x14, 0xc1, 0x14, 0x04],
+        [0x04, 0xc1, 0x11, 0x14, 0x01, 0x14], [0xc1, 0x14, 0x01, 0x14, 0x04, 0x04], [0x04, 0xc1, 0x11, 0x14, 0x04, 0x04],
+        [0xc1, 0x14, 0x04, 0x04, 0x04, 0x04], [0xc4, 0x04, 0x04, 0x04, 0x04, 0x04]
+    ]
+
+    export type OperatorRole = {carrier: boolean, targets: ReadonlyArray<number>, feedback: boolean}
+
+    // Each operator's role in `algorithm` (0-based), indexed by PANEL operator (0 = OP1): what it modulates
+    // (panel numbers 1-6), whether it reaches the output, whether it feeds back into itself. Follows the
+    // engine's bus walk: an operator writing a bus replaces (or adds to) its content, a reader takes all
+    // current writers.
+    export const roles = (algorithm: number): ReadonlyArray<OperatorRole> => {
+        const flags = ALGORITHMS[Math.max(0, Math.min(31, algorithm))]
+        const result: Array<{carrier: boolean, targets: Array<number>, feedback: boolean}> =
+            Array.from({length: 6}, () => ({carrier: false, targets: [], feedback: false}))
+        const writers: [Array<number>, Array<number>] = [[], []]
+        flags.forEach((flag, index) => {
+            const panel = 5 - index
+            const outBus = flag & 3
+            const add = (flag & 4) !== 0
+            const inBus = (flag >> 4) & 3
+            result[panel].feedback = (flag & 0xc0) === 0xc0
+            if (inBus > 0) {writers[inBus - 1].forEach(writer => result[writer].targets.push(panel + 1))}
+            if (outBus === 0) {
+                result[panel].carrier = true
+            } else if (add) {
+                writers[outBus - 1].push(panel)
+            } else {
+                writers[outBus - 1] = [panel]
+            }
+        })
+        result.forEach(role => role.targets.sort((a, b) => a - b))
+        return result
+    }
+
     // Transpose 0..48 around 24 = C3 (the DX7 panel's key display)
     export const Transposes = Array.from({length: 49}, (_, index) => {
         const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -110,8 +156,8 @@ export class TubularDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
                 box.cutoff, ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Cutoff", 1.0),
             resonance: this.#parametric.createParameter(
                 box.resonance, ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Resonance"),
-            output: this.#parametric.createParameter(
-                box.output, ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Output", 1.0),
+            volume: this.#parametric.createParameter(
+                box.volume, ValueMapping.unipolar(), StringMapping.percent({fractionDigits: 0}), "Volume", 1.0),
             voicingMode: this.#parametric.createParameter(
                 box.voicingMode, ValueMapping.values(VoiceModes),
                 StringMapping.values("", VoiceModes, ["mono", "poly"]), "Play Mode", 0.5),

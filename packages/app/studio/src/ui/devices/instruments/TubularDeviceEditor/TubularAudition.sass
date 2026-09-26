@@ -5,9 +5,21 @@ component
   width: 32em
   outline: none
 
-  > div.status
+  > div.bank
+    display: flex
+    align-items: center
+    column-gap: 1em
     font-size: 0.875em
-    color: var(--color-cream)
+
+    > button
+      padding: 0.25em 0.5em
+      border-radius: 0.25em
+      outline: 0.5px rgba(white, 0.1) solid
+      background-color: rgba(black, 0.5)
+      color: var(--color-cream)
+
+    > span.status
+      opacity: 0.6
 
   > ol.voices
     display: grid

@@ -23,7 +23,7 @@ const OperatorFields = {
 export const TubularDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("TubularDeviceBox", "notes", {
     10: {type: "float32", name: "cutoff", pointerRules: ParameterPointerRules, value: 1.0, ...UnipolarConstraints},
     11: {type: "float32", name: "resonance", pointerRules: ParameterPointerRules, value: 0.0, ...UnipolarConstraints},
-    12: {type: "float32", name: "output", pointerRules: ParameterPointerRules, value: 1.0, ...UnipolarConstraints},
+    12: {type: "float32", name: "volume", pointerRules: ParameterPointerRules, value: 1.0, ...UnipolarConstraints},
     13: {
         type: "int32", name: "voicing-mode", pointerRules: ParameterPointerRules,
         value: VoicingMode.Polyphonic, constraints: {values: [VoicingMode.Monophonic, VoicingMode.Polyphonic]}, unit: ""

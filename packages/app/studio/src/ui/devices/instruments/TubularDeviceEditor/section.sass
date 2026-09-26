@@ -1,0 +1,34 @@
+// Shared by the Tubular section components: the 3.5em control grid and Neon's radio cell metrics.
+@mixin grid($columns)
+  display: grid
+  grid-template: repeat(3, 3.5em) / repeat($columns, 3.5em)
+  gap: 0.25em
+
+@mixin cells
+  div.cell
+    display: grid
+    grid-template-rows: 0.625em 2em 0.625em
+    justify-items: center
+    align-items: center
+    align-content: center
+    min-width: 0
+    margin: 0 1px
+
+    > h5
+      font-size: 8px
+      line-height: 12px
+      letter-spacing: 0.08em
+      text-align: center
+      color: var(--color-cream)
+      white-space: nowrap
+      position: relative
+      top: 1px
+
+    > .radios
+      display: flex
+      flex-wrap: nowrap
+      justify-content: center
+      align-items: center
+      white-space: nowrap
+      grid-row: 2 / 4
+      align-self: center

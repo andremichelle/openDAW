@@ -501,7 +501,7 @@ export class TubularImpl extends InstrumentFacade<TubularDeviceBox> implements T
     readonly key = "Tubular" as const
     declare cutoff: unitValue
     declare resonance: unitValue
-    declare output: unitValue
+    declare volume: unitValue
     declare voicingMode: VoicingMode
     declare tune: float
     declare algorithm: int
@@ -516,7 +516,7 @@ export class TubularImpl extends InstrumentFacade<TubularDeviceBox> implements T
     constructor(context: Context, box: TubularDeviceBox) {
         super(context, box)
         this.bind({
-            cutoff: box.cutoff, resonance: box.resonance, output: box.output, voicingMode: box.voicingMode, tune: box.tune,
+            cutoff: box.cutoff, resonance: box.resonance, volume: box.volume, voicingMode: box.voicingMode, tune: box.tune,
             algorithm: box.algorithm, feedback: box.feedback, oscKeySync: box.oscKeySync,
             lfo: {speed: box.lfo.speed, delay: box.lfo.delay, pmDepth: box.lfo.pmDepth, amDepth: box.lfo.amDepth, sync: box.lfo.sync, wave: box.lfo.wave},
             pitchModSens: box.pitchModSens, transpose: box.transpose,

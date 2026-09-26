@@ -1524,8 +1524,8 @@ export interface Tubular extends Instrument {
     cutoff: unitValue
     /** Low-pass resonance (0.0 to 1.0) */
     resonance: unitValue
-    /** Output gain (0.0 to 1.0) */
-    output: unitValue
+    /** Volume (0.0 to 1.0) */
+    volume: unitValue
     /** Monophonic or polyphonic */
     voicingMode: VoicingMode
     /** Master tune in cents (-100 to 100) */

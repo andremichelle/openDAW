@@ -9,7 +9,7 @@ Yamaha trademark and "Dexed" is Pascal Gauthier's, both only mentioned descripti
 - Schema `TubularDeviceBox` (156 automatable params), adapter, factory, scripting facade, editor v1
   (cartridge menu, voice prev/next, credits, Load .syx…), 37 bundled cartridges in
   `packages/app/studio/public/tubular/` with `index.json` credits. Browser-verified: plays, meter moves.
-- Audition tool (uncommitted): cartridge menu → "Audition cartridges…": arrows step voices / banks,
+- Audition tool: cartridge or device menu → "Audition cartridges…": own bank menu (all bundled banks + Load DX7 .syx… into the dialog), arrows step voices / banks,
   space plays a phrase, K keeps; keepers persist in localStorage; "Save keepers as presets" writes each
   voice as a Tubular instrument preset (user storage, credits in the description), "Upload keepers as
   stock" appears with an access key, "Export list" downloads the keeper JSON. Licence research: no
@@ -24,7 +24,7 @@ Yamaha trademark and "Dexed" is Pascal Gauthier's, both only mentioned descripti
   `public/tubular/cartridges/Tubular_Classics.syx` + index entry (CC0, first in the menu). Rate scale
   measured on the engine: R3 30/40/50/60/70 = 8.5/3/0.9/0.3/0.12 s to -60 dB, attack R30/40/50/60 =
   1.5/0.5/0.17/0.05 s. First pass by numbers, needs his ear; iterate in the script and rerun it.
-- Open: phase 4 full editor, sysex export. Deviation from Dexed: loading a voice does not
+- Open: phase 4 full editor (plan: plans/tubular-editor.md), sysex export. Deviation from Dexed: loading a voice does not
   cut sounding notes (Dexed panics), events snap to the 64-sample frame like the plugin.
 
 ## Sources evaluated
