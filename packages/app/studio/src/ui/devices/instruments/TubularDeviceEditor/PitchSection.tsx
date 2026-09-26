@@ -6,7 +6,7 @@ import {DxEnvelopeEditor} from "./DxEnvelopeEditor"
 
 const className = Html.adoptStyleSheet(css, "PitchSection")
 
-// The pitch envelope: the widget (level 50 = no shift) beside its rate and level knobs.
+// The pitch envelope (level 50 = no shift) beside its rate and level knobs.
 export const PitchSection = (construct: SectionConstruct) => {
     const {lifecycle, service, adapter} = construct
     const {editing} = service.project
@@ -15,7 +15,8 @@ export const PitchSection = (construct: SectionConstruct) => {
     const levels = [pitchEnvelope.level1, pitchEnvelope.level2, pitchEnvelope.level3, pitchEnvelope.level4]
     return (
         <div className={className}>
-            <div className="envelope">
+            <div className="display">
+                <header><span className="title">PITCH EG</span><span className="role">50 = no shift</span></header>
                 <DxEnvelopeEditor lifecycle={lifecycle} editing={editing} rates={rates} levels={levels} centred={true}/>
             </div>
             {rates.map((rate, index) => sectionKnob(construct, rate, `Rate ${index + 1}`))}

@@ -1,7 +1,5 @@
 component
   display: grid
-  grid-template-rows: 1fr 12px
-  row-gap: 2px
   min-width: 0
   height: 100%
 
@@ -11,18 +9,3 @@ component
     min-height: 0
     border-radius: 3px
     box-shadow: 0 0 4px 0 hsl(from var(--display-stroke) h s l / 0.04) inset, 0 0 1px 0 hsl(from var(--display-stroke) h s l / 0.04) inset
-
-  > div.readout
-    display: grid
-    grid-template-columns: repeat(4, 1fr)
-    font-size: 8px
-    color: var(--color-shadow)
-    white-space: nowrap
-    text-align: center
-    user-select: none
-
-    > span.stage
-      border-radius: 2px
-
-      &.selected
-        color: var(--color-bright)

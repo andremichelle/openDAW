@@ -1,8 +1,55 @@
-// Shared by the Tubular section components: the 3.5em control grid and Neon's radio cell metrics.
-@mixin grid($columns)
+// Shared by the Tubular section components: every section is the 7-column control grid with a display
+// (header + canvas widget) in the first three columns and four columns of controls beside it.
+@mixin grid
   display: grid
-  grid-template: repeat(3, 3.5em) / repeat($columns, 3.5em)
+  grid-template: repeat(3, 3.5em) / repeat(7, 3.5em)
   gap: 0.25em
+  align-content: start
+
+@mixin display
+  > div.display
+    grid-area: 1 / 1 / 4 / 4
+    display: grid
+    grid-template-rows: 14px minmax(0, 1fr)
+    row-gap: 3px
+    min-width: 0
+    min-height: 0
+
+    > header
+      display: flex
+      align-items: center
+      column-gap: 6px
+      padding: 0 3px
+      font-size: 8px
+      letter-spacing: 0.08em
+      white-space: nowrap
+      color: var(--color-cream)
+
+      > span.title
+        font-weight: 700
+
+      > span.role
+        color: var(--color-shadow)
+
+      > .toggle
+        display: flex
+        column-gap: 4px
+        font-size: 8px
+        margin-left: auto
+
+      > .switch
+        font-size: 10px
+
+        > label
+          padding: 0
+          min-width: 0
+
+    > canvas
+      width: 100%
+      height: 100%
+      min-height: 0
+      border-radius: 3px
+      box-shadow: 0 0 4px 0 hsl(from var(--display-stroke) h s l / 0.04) inset, 0 0 1px 0 hsl(from var(--display-stroke) h s l / 0.04) inset
 
 @mixin cells
   div.cell

@@ -1,7 +1,10 @@
 # Tubular editor (phase 4 of plans/tubular.md)
 
-**Status 2026-09-26**: all five sections built and committed, he checks each in his studio (no browser rounds
-for small UI). Components under `TubularDeviceEditor/`: frame + round 2×5 tab grid in `TubularDeviceEditor.tsx`,
+**Status 2026-09-26**: all five sections on one fixed 7-column grid (uncommitted): a display block in columns
+1-3 (header line + canvas: envelope / algorithm diagram / LFO shape / filter curve) and four columns of
+controls. OP header shows the role (CARRIER or MOD → targets, FB), the RATIO/FIXED toggle and a power
+switch. ALGO has a six-operator strip (name = jump, Level, power). Envelope readout row dropped (knobs show
+the values). Components under `TubularDeviceEditor/`: frame + round 2×5 tab grid in `TubularDeviceEditor.tsx`,
 `section.sass` (grid/cell mixins), `SectionControls.tsx` (knob, radioCell, SectionConstruct with selectTab),
 `OutSection`, `LfoSection`, `PitchSection`, `OperatorSection`, `AlgorithmSection`, `DxEnvelopeEditor` (4-stage
 widget, rate-proportional widths, drag = rate/level). Roles per algorithm: `Tubular.roles()` in the adapter

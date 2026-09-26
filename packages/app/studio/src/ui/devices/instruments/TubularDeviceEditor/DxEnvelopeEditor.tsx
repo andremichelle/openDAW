@@ -28,9 +28,6 @@ type Construct = {
 export const DxEnvelopeEditor = ({lifecycle, editing, rates, levels, centred}: Construct) => {
     const canvas: HTMLCanvasElement = <canvas/>
     const selectedStage = lifecycle.own(new DefaultObservableValue<int>(0))
-    const stageSpans: ReadonlyArray<HTMLElement> = Array.from({length: STAGES}, (_, stage) =>
-        <span className="stage" onclick={() => selectedStage.setValue(stage)}/>)
-    const readout: HTMLElement = <div className="readout">{stageSpans}</div>
     // Segment widths as fractions of the canvas: each stage grows as its rate slows, the sustain hold after
     // stage 3 keeps a fixed share, all normalised to the full width.
     const layout = (rateValues: ReadonlyArray<number>): {widths: ReadonlyArray<number>, hold: number, xs: ReadonlyArray<number>} => {
@@ -47,13 +44,6 @@ export const DxEnvelopeEditor = ({lifecycle, editing, rates, levels, centred}: C
         return {widths, hold, xs}
     }
     const startLevel = (levelValues: ReadonlyArray<number>): number => centred === true ? levelValues[3] : 0.0
-    const updateReadout = (): void => {
-        const selected = selectedStage.getValue()
-        stageSpans.forEach((span, stage) => {
-            span.textContent = `R${stage + 1} ${Math.round(rates[stage].getValue())} L${stage + 1} ${Math.round(levels[stage].getValue())}`
-            span.classList.toggle("selected", stage === selected)
-        })
-    }
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const {context, actualWidth, actualHeight, devicePixelRatio} = painter
         const rateValues = rates.map(parameter => parameter.getValue())
@@ -105,18 +95,9 @@ export const DxEnvelopeEditor = ({lifecycle, editing, rates, levels, centred}: C
         }
     }))
     lifecycle.ownAll(
-        ...rates.map(parameter => parameter.subscribe(() => {
-            painter.requestUpdate()
-            updateReadout()
-        })),
-        ...levels.map(parameter => parameter.subscribe(() => {
-            painter.requestUpdate()
-            updateReadout()
-        })),
-        selectedStage.subscribe(() => {
-            painter.requestUpdate()
-            updateReadout()
-        }),
+        ...rates.map(parameter => parameter.subscribe(() => painter.requestUpdate())),
+        ...levels.map(parameter => parameter.subscribe(() => painter.requestUpdate())),
+        selectedStage.subscribe(() => painter.requestUpdate()),
         Events.subscribe(canvas, "pointerdown", (event: PointerEvent) => {
             canvas.setPointerCapture(event.pointerId)
             const rect = canvas.getBoundingClientRect()
@@ -150,11 +131,9 @@ export const DxEnvelopeEditor = ({lifecycle, editing, rates, levels, centred}: C
             canvas.addEventListener("pointerup", up)
         })
     )
-    updateReadout()
     return (
         <div className={className}>
             {canvas}
-            {readout}
         </div>
     )
 }

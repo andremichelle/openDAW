@@ -5,7 +5,9 @@ import {CanvasPainter} from "@opendaw/studio-core"
 import {Tubular} from "@opendaw/studio-adapters"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
-import {radioCell, SectionConstruct, sectionKnob} from "./SectionControls"
+import {headerToggle, SectionConstruct, sectionKnob, switchCheckbox} from "./SectionControls"
+import {AutomationControl} from "@/ui/components/AutomationControl"
+import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob"
 
 const className = Html.adoptStyleSheet(css, "AlgorithmSection")
 
@@ -42,12 +44,14 @@ const place = (roles: ReadonlyArray<Tubular.OperatorRole>): ReadonlyArray<Placed
     return roles.map((_, op) => ({x: x[op], depth: depth[op]}))
 }
 
-// The algorithm as a drawn diagram (from Tubular.roles), Feedback and Osc key sync, and an overview of all
-// six operators (jump, Level, Switch) so carriers and modulators balance without tab hopping.
+// The algorithm as a drawn diagram (from Tubular.roles) with Osc key sync in its header, Algorithm and
+// Feedback, and a strip of all six operators (name = jump to its tab, Level, Switch) so carriers and
+// modulators balance without tab hopping.
 export const AlgorithmSection = (construct: SectionConstruct) => {
     const {lifecycle, service, adapter, selectTab} = construct
-    const {editing} = service.project
+    const {editing, midiLearning} = service.project
     const {algorithm, feedback, oscKeySync, operators} = adapter.namedParameter
+    const tracks = adapter.deviceHost().audioUnitBoxAdapter().tracks
     const canvas: HTMLCanvasElement = <canvas/>
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const {context, actualWidth, actualHeight, devicePixelRatio} = painter
@@ -55,8 +59,8 @@ export const AlgorithmSection = (construct: SectionConstruct) => {
         const placed = place(roles)
         const columns = Math.max(...placed.map(entry => entry.x)) + 1
         const rows = Math.max(...placed.map(entry => entry.depth)) + 1
-        const box = devicePixelRatio * 14
-        const padding = devicePixelRatio * 8
+        const box = devicePixelRatio * 13
+        const padding = devicePixelRatio * 6
         const slotX = (actualWidth - padding * 2) / Math.max(columns, 3)
         const slotY = (actualHeight - padding * 2) / Math.max(rows, 3)
         const centre = (op: number): [number, number] => [
@@ -86,7 +90,7 @@ export const AlgorithmSection = (construct: SectionConstruct) => {
         context.moveTo(padding * 0.5, actualHeight - padding * 0.5)
         context.lineTo(actualWidth - padding * 0.5, actualHeight - padding * 0.5)
         context.stroke()
-        context.font = `${devicePixelRatio * 9}px sans-serif`
+        context.font = `${devicePixelRatio * 8}px sans-serif`
         context.textAlign = "center"
         context.textBaseline = "middle"
         roles.forEach((role, op) => {
@@ -99,22 +103,41 @@ export const AlgorithmSection = (construct: SectionConstruct) => {
             context.fillText(String(op + 1), x, y + devicePixelRatio * 0.5)
         })
     }))
-    lifecycle.own(algorithm.subscribe(() => painter.requestUpdate()))
-    const jumpCell = (index: number): HTMLElement => (
-        <div className="cell jump">
-            <h5>{`OP ${index + 1}`}</h5>
-            <span className="jump" onclick={() => selectTab(index)}>EDIT</span>
-        </div>
-    )
+    const title: HTMLElement = <span className="title"/>
+    lifecycle.own(algorithm.catchupAndSubscribe(() => {
+        painter.requestUpdate()
+        title.textContent = `ALGORITHM ${algorithm.getValue() + 1}`
+    }))
     return (
         <div className={className}>
+            <div className="display">
+                <header>
+                    {title}
+                    <span className="role">OSC SYNC</span>
+                    {headerToggle(lifecycle, EditWrapper.forAutomatableParameter(editing, oscKeySync), ["OFF", "ON"])}
+                </header>
+                {canvas}
+            </div>
             {sectionKnob(construct, algorithm)}
             {sectionKnob(construct, feedback)}
-            {radioCell(lifecycle, "Osc Sync", EditWrapper.forAutomatableParameter(editing, oscKeySync), ["OFF", "ON"])}
-            {operators.map((_, index) => jumpCell(index))}
-            <div className="diagram">{canvas}</div>
-            {operators.map((operator, index) => sectionKnob(construct, operator.outputLevel, `OP ${index + 1} Level`))}
-            {operators.map(operator => radioCell(lifecycle, "Switch", EditWrapper.forAutomatableParameter(editing, operator.enabled), ["OFF", "ON"]))}
+            <div/>
+            <div/>
+            <div className="strip">
+                {operators.map((operator, index) => (
+                    <div className="operator">
+                        <h5 onclick={() => selectTab(index)}>{`OP ${index + 1}`}</h5>
+                        <AutomationControl lifecycle={lifecycle}
+                                           editing={editing}
+                                           midiLearning={midiLearning}
+                                           tracks={tracks}
+                                           parameter={operator.outputLevel}>
+                            <ParameterLabelKnob lifecycle={lifecycle} editing={editing} parameter={operator.outputLevel}/>
+                        </AutomationControl>
+                        <div/>
+                        {switchCheckbox(lifecycle, EditWrapper.forAutomatableParameter(editing, operator.enabled), `Operator ${index + 1} on/off`)}
+                    </div>
+                ))}
+            </div>
         </div>
     )
 }
