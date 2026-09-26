@@ -1,12 +1,9 @@
-import css from "./DxEnvelopeEditor.sass?inline"
 import {clamp, DefaultObservableValue, Editing, int, Lifecycle} from "@opendaw/lib-std"
-import {Events, Html} from "@opendaw/lib-dom"
+import {Events} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {AutomatableParameterFieldAdapter} from "@opendaw/studio-adapters"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
-
-const className = Html.adoptStyleSheet(css, "DxEnvelopeEditor")
 
 const STAGES = 4
 const HOLD = 0.4 // the sustain hold between stage 3 and the release, in stage slots
@@ -49,9 +46,10 @@ export const DxEnvelopeEditor = ({lifecycle, editing, rates, levels, centred}: C
         const rateValues = rates.map(parameter => parameter.getValue())
         const levelValues = levels.map(parameter => parameter.getValue())
         const {xs, hold} = layout(rateValues)
-        const padding = devicePixelRatio * 3
+        const padding = devicePixelRatio * 4
         const top = padding
         const bottom = actualHeight - padding
+        const stageX = (x: number) => padding + x * (actualWidth - padding * 2)
         const levelToY = (level: number) => bottom + (top - bottom) * (level / 99.0)
         const baseline = levelToY(centred === true ? 50.0 : 0.0)
         context.clearRect(0, 0, actualWidth, actualHeight)
@@ -60,8 +58,8 @@ export const DxEnvelopeEditor = ({lifecycle, editing, rates, levels, centred}: C
         context.strokeStyle = "rgba(255, 255, 255, 0.08)"
         context.beginPath()
         for (let stage = 0; stage < STAGES; stage++) {
-            context.moveTo(xs[stage] * actualWidth, top)
-            context.lineTo(xs[stage] * actualWidth, bottom)
+            context.moveTo(stageX(xs[stage]), top)
+            context.lineTo(stageX(xs[stage]), bottom)
         }
         if (centred === true) {
             context.moveTo(0, baseline)
@@ -70,17 +68,17 @@ export const DxEnvelopeEditor = ({lifecycle, editing, rates, levels, centred}: C
         context.stroke()
         context.setLineDash([])
         const path = new Path2D()
-        path.moveTo(0, levelToY(startLevel(levelValues)))
+        path.moveTo(stageX(0.0), levelToY(startLevel(levelValues)))
         for (let stage = 0; stage < STAGES; stage++) {
-            path.lineTo(xs[stage] * actualWidth, levelToY(levelValues[stage]))
+            path.lineTo(stageX(xs[stage]), levelToY(levelValues[stage]))
             if (stage === 2) {
-                path.lineTo((xs[2] + hold) * actualWidth, levelToY(levelValues[2]))
+                path.lineTo(stageX(xs[2] + hold), levelToY(levelValues[2]))
             }
         }
         context.strokeStyle = DisplayPaint.strokeStyle(0.75)
         context.stroke(path)
-        path.lineTo(xs[3] * actualWidth, baseline)
-        path.lineTo(0, baseline)
+        path.lineTo(stageX(xs[3]), baseline)
+        path.lineTo(stageX(0.0), baseline)
         const gradient = context.createLinearGradient(0, top, 0, bottom)
         gradient.addColorStop(0.0, DisplayPaint.strokeStyle(0.12))
         gradient.addColorStop(1.0, DisplayPaint.strokeStyle(0.0))
@@ -89,7 +87,7 @@ export const DxEnvelopeEditor = ({lifecycle, editing, rates, levels, centred}: C
         const selected = selectedStage.getValue()
         for (let stage = 0; stage < STAGES; stage++) {
             context.beginPath()
-            context.arc(xs[stage] * actualWidth, levelToY(levelValues[stage]), devicePixelRatio * (stage === selected ? 3.0 : 2.5), 0.0, Math.PI * 2)
+            context.arc(stageX(xs[stage]), levelToY(levelValues[stage]), devicePixelRatio * (stage === selected ? 3.0 : 2.5), 0.0, Math.PI * 2)
             context.fillStyle = DisplayPaint.strokeStyle(stage === selected ? 1.0 : 0.7)
             context.fill()
         }
@@ -104,9 +102,10 @@ export const DxEnvelopeEditor = ({lifecycle, editing, rates, levels, centred}: C
             const {xs} = layout(rates.map(parameter => parameter.getValue()))
             const downX = event.clientX
             const downY = event.clientY
+            const inset = 4
             const distances = xs.map((x, stage) => Math.hypot(
-                rect.left + x * rect.width - downX,
-                rect.top + rect.height * (1.0 - levels[stage].getValue() / 99.0) - downY))
+                rect.left + inset + x * (rect.width - inset * 2) - downX,
+                rect.top + inset + (rect.height - inset * 2) * (1.0 - levels[stage].getValue() / 99.0) - downY))
             const stage = distances.indexOf(Math.min(...distances))
             const startRate = rates[stage].getValue()
             const startLevelValue = levels[stage].getValue()
@@ -131,9 +130,5 @@ export const DxEnvelopeEditor = ({lifecycle, editing, rates, levels, centred}: C
             canvas.addEventListener("pointerup", up)
         })
     )
-    return (
-        <div className={className}>
-            {canvas}
-        </div>
-    )
+    return canvas
 }

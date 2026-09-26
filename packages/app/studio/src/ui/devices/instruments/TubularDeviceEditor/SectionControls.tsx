@@ -1,12 +1,14 @@
-import {int, Lifecycle, MutableObservableValue, ObservableValue, Observer, Procedure} from "@opendaw/lib-std"
+import {Color, int, Lifecycle, MutableObservableValue, ObservableValue, Observer, Procedure} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AutomatableParameterFieldAdapter, TubularDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
-import {ControlBuilder} from "@/ui/devices/ControlBuilder.tsx"
+import {AutomationControl} from "@/ui/components/AutomationControl"
+import {RelativeUnitValueDragging} from "@/ui/wrapper/RelativeUnitValueDragging"
+import {ParameterLabel} from "@/ui/components/ParameterLabel"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Checkbox} from "@/ui/components/Checkbox"
 import {Icon} from "@/ui/components/Icon"
-import {IconSymbol} from "@opendaw/studio-enums"
 
 export type SectionConstruct = {
     lifecycle: Lifecycle
@@ -15,19 +17,41 @@ export type SectionConstruct = {
     selectTab: Procedure<int>
 }
 
-export const sectionKnob = ({lifecycle, service, adapter}: SectionConstruct,
-                            parameter: AutomatableParameterFieldAdapter<number>, label?: string) => {
+// Vaporisateur's label control: caption over a framed, draggable value.
+export const labelControl = ({lifecycle, service, adapter}: SectionConstruct,
+                             parameter: AutomatableParameterFieldAdapter<number>, name?: string, span = 1) => {
     const {editing, midiLearning} = service.project
-    return ControlBuilder.createKnob({lifecycle, editing, midiLearning, adapter, parameter, label})
+    return (
+        <div className="control" style={{gridColumn: `span ${span}`}}>
+            <h3>{name ?? parameter.name}</h3>
+            <AutomationControl lifecycle={lifecycle}
+                               editing={editing}
+                               midiLearning={midiLearning}
+                               tracks={adapter.deviceHost().audioUnitBoxAdapter().tracks}
+                               parameter={parameter}>
+                <RelativeUnitValueDragging lifecycle={lifecycle}
+                                           editing={editing}
+                                           parameter={parameter}
+                                           supressValueFlyout={true}>
+                    <ParameterLabel lifecycle={lifecycle} parameter={parameter} classList={["center"]} framed={true}/>
+                </RelativeUnitValueDragging>
+            </AutomationControl>
+        </div>
+    )
 }
 
 export type RadioElement = {value: number, tooltip?: string, element: HTMLElement | SVGSVGElement}
 
-export const headerToggle = (lifecycle: Lifecycle, model: MutableObservableValue<number>, labels: ReadonlyArray<string>) => (
-    <RadioGroup lifecycle={lifecycle}
-                model={model}
-                className="toggle"
-                elements={labels.map((label, value) => ({value, element: <span>{label}</span>}))}/>
+export const labelRadio = (lifecycle: Lifecycle, title: string, model: MutableObservableValue<number>,
+                           elements: ReadonlyArray<string> | ReadonlyArray<RadioElement>, span = 1, fontSize = "9px") => (
+    <div className="control" style={{gridColumn: `span ${span}`}}>
+        <h3>{title}</h3>
+        <RadioGroup lifecycle={lifecycle}
+                    model={model}
+                    style={{fontSize}}
+                    elements={elements.map((entry, value) =>
+                        typeof entry === "string" ? {value, element: <span>{entry}</span>} : entry)}/>
+    </div>
 )
 
 // A 0/1 choice parameter (the DX7 switches) as a boolean model.
@@ -42,24 +66,64 @@ const booleanModel = (model: MutableObservableValue<number>): MutableObservableV
         }
     }
 
-export const switchCheckbox = (lifecycle: Lifecycle, model: MutableObservableValue<number>, tooltip: string) => (
-    <Checkbox lifecycle={lifecycle}
-              model={booleanModel(model)}
-              className="switch"
-              appearance={{cursor: "pointer", tooltip}}>
-        <Icon symbol={IconSymbol.Shutdown}/>
-    </Checkbox>
+export const labelSwitch = (lifecycle: Lifecycle, title: string, model: MutableObservableValue<number>, tooltip: string) => (
+    <div className="control">
+        <h3>{title}</h3>
+        <Checkbox lifecycle={lifecycle}
+                  model={booleanModel(model)}
+                  style={{fontSize: "10px"}}
+                  appearance={{cursor: "pointer", tooltip}}>
+            <Icon symbol={IconSymbol.Shutdown}/>
+        </Checkbox>
+    </div>
 )
 
-export const radioCell = (lifecycle: Lifecycle, title: string, model: MutableObservableValue<number>,
-                          elements: ReadonlyArray<string> | ReadonlyArray<RadioElement>, span = 1, fontSize = "8px") => (
-    <div className="cell" style={{gridColumn: `span ${span}`}}>
-        <h5>{title}</h5>
-        <RadioGroup lifecycle={lifecycle}
-                    model={model}
-                    className="radios"
-                    style={{fontSize}}
-                    elements={elements.map((entry, value) =>
-                        typeof entry === "string" ? {value, element: <span>{entry}</span>} : entry)}/>
+// Gate/Delay's tinted, bordered section behind a group of controls and, when it reaches the trailing
+// column, Delay's rotated title flush with its right edge.
+export const band = (color: Color, rows: [int, int], columns: [int, int], title?: string) => [
+    <div className="label" style={{gridArea: `${rows[0]} / ${columns[0]} / ${rows[1]} / ${title === undefined ? columns[1] : 9}`, "--color": color.toString()}}/>,
+    title === undefined ? null
+        : <h3 className="rotated" style={{gridArea: `${rows[0]} / 8 / ${rows[1]} / 9`, "--color": color.toString()}}>{title}</h3>
+]
+
+// An operator in the ALGO overview: name, level and switch stacked in one control.
+export const labelStack = ({lifecycle, service, adapter}: SectionConstruct, title: string,
+                           parameter: AutomatableParameterFieldAdapter<number>,
+                           model: MutableObservableValue<number>, tooltip: string) => {
+    const {editing, midiLearning} = service.project
+    return (
+        <div className="control">
+            <h3>{title}</h3>
+            <AutomationControl lifecycle={lifecycle}
+                               editing={editing}
+                               midiLearning={midiLearning}
+                               tracks={adapter.deviceHost().audioUnitBoxAdapter().tracks}
+                               parameter={parameter}>
+                <RelativeUnitValueDragging lifecycle={lifecycle}
+                                           editing={editing}
+                                           parameter={parameter}
+                                           supressValueFlyout={true}>
+                    <ParameterLabel lifecycle={lifecycle} parameter={parameter} classList={["center"]} framed={true}/>
+                </RelativeUnitValueDragging>
+            </AutomationControl>
+            <Checkbox lifecycle={lifecycle}
+                      model={booleanModel(model)}
+                      style={{fontSize: "10px"}}
+                      appearance={{cursor: "pointer", tooltip}}>
+                <Icon symbol={IconSymbol.Shutdown}/>
+            </Checkbox>
+        </div>
+    )
+}
+
+// Icons only, spread over the control's width.
+export const iconRadio = (lifecycle: Lifecycle, model: MutableObservableValue<number>,
+                          elements: ReadonlyArray<RadioElement>, span: int, fontSize: string) => (
+    <div className="control spread" style={{gridColumn: `span ${span}`}}>
+        <RadioGroup lifecycle={lifecycle} model={model} className="spread" style={{fontSize}} elements={elements}/>
     </div>
+)
+
+export const display = (rows: [int, int], columns: [int, int], content: HTMLElement) => (
+    <div className="display" style={{gridArea: `${rows[0]} / ${columns[0]} / ${rows[1]} / ${columns[1]}`}}>{content}</div>
 )

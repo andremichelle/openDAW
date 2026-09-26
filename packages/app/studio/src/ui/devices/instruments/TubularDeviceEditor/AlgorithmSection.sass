@@ -2,36 +2,3 @@
 
 component
   @include section.grid
-  @include section.display
-  @include section.cells
-
-  > div.strip
-    grid-area: 2 / 4 / 4 / 8
-    display: grid
-    grid-template-columns: repeat(6, 1fr)
-    align-content: center
-    row-gap: 0.25em
-
-    > div.operator
-      display: grid
-      grid-template-rows: 0.625em 2em 0.625em 1em
-      justify-items: center
-      align-items: center
-      min-width: 0
-      color: var(--color-cream)
-
-      > h5
-        font-size: 8px
-        line-height: 12px
-        letter-spacing: 0.08em
-        cursor: pointer
-
-        &:hover
-          color: var(--color-bright)
-
-      > .switch
-        font-size: 10px
-
-        > label
-          padding: 0
-          min-width: 0

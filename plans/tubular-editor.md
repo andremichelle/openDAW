@@ -1,15 +1,11 @@
 # Tubular editor (phase 4 of plans/tubular.md)
 
-**Status 2026-09-26**: all five sections on one fixed 7-column grid (uncommitted): a display block in columns
-1-3 (header line + canvas: envelope / algorithm diagram / LFO shape / filter curve) and four columns of
-controls. OP header shows the role (CARRIER or MOD → targets, FB), the RATIO/FIXED toggle and a power
-switch. ALGO has a six-operator strip (name = jump, Level, power). Envelope readout row dropped (knobs show
-the values). Components under `TubularDeviceEditor/`: frame + round 2×5 tab grid in `TubularDeviceEditor.tsx`,
-`section.sass` (grid/cell mixins), `SectionControls.tsx` (knob, radioCell, SectionConstruct with selectTab),
-`OutSection`, `LfoSection`, `PitchSection`, `OperatorSection`, `AlgorithmSection`, `DxEnvelopeEditor` (4-stage
-widget, rate-proportional widths, drag = rate/level). Roles per algorithm: `Tubular.roles()` in the adapter
-(bus walk mirrored from fm.rs, tested). ALGO diagram: canvas placed by `place()` (carriers bottom row,
-modulators centred over targets, no overlaps in all 32).
+**Status 2026-09-26**: all five sections on one Vaporisateur-style label-control grid (uncommitted,
+`section.sass`): display column (7.5em, Vaporisateur header frame) + six 3.75em columns of framed
+ParameterLabels with 9px captions, groups as Vaporisateur tinted bands with Delay's rotated titles in a
+trailing 12px column (`SectionControls.band()`), Delay `h3.head` for the operator role. OP = OSC / ENV
+(rates, levels beside the envelope) + SENS / SCALING (beside a key scaling curve, `TubularScalingDisplay`).
+ALGO = ALGO / OPS (six levels, six switches). Knob version and titled-group version were rejected.
 
 ## Frame
 

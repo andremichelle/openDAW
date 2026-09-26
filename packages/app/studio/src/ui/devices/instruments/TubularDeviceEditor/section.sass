@@ -1,81 +1,113 @@
-// Shared by the Tubular section components: every section is the 7-column control grid with a display
-// (header + canvas widget) in the first three columns and four columns of controls beside it.
+// Shared by the Tubular sections: Vaporisateur's label-control rows (display column, six 3.75em control
+// columns), its tinted group bands, and Delay's rotated group titles in the trailing column.
 @mixin grid
   display: grid
-  grid-template: repeat(3, 3.5em) / repeat(7, 3.5em)
-  gap: 0.25em
-  align-content: start
+  grid-template-columns: 7.5em repeat(6, 3.75em) 12px
+  column-gap: 2px
+  row-gap: 2px
+  height: 100%
+  position: relative
 
-@mixin display
+  &.rows-3
+    grid-template-rows: repeat(3, 1fr)
+
+  &.rows-4
+    grid-template-rows: repeat(4, 1fr)
+
+  > div.label
+    position: absolute
+    width: 100%
+    height: 100%
+    pointer-events: none
+    border-radius: 2px
+    border: 1px color-mix(in srgb, var(--color) 6%, transparent) solid
+    background-color: color-mix(in srgb, var(--color) 5%, transparent)
+    z-index: 0
+
+  > h3.rotated
+    font-size: 9px
+    font-weight: 400
+    letter-spacing: 0.2px
+    padding: 0 1px
+    text-align: center
+    white-space: nowrap
+    writing-mode: vertical-rl
+    justify-self: end
+    border-radius: 0 2px 2px 0
+    color: rgba(black, 0.8)
+    background-color: color-mix(in srgb, var(--color) 66%, black)
+
   > div.display
-    grid-area: 1 / 1 / 4 / 4
     display: grid
-    grid-template-rows: 14px minmax(0, 1fr)
-    row-gap: 3px
+    grid-template-rows: minmax(0, 1fr)
+    padding: 1px
     min-width: 0
     min-height: 0
-
-    > header
-      display: flex
-      align-items: center
-      column-gap: 6px
-      padding: 0 3px
-      font-size: 8px
-      letter-spacing: 0.08em
-      white-space: nowrap
-      color: var(--color-cream)
-
-      > span.title
-        font-weight: 700
-
-      > span.role
-        color: var(--color-shadow)
-
-      > .toggle
-        display: flex
-        column-gap: 4px
-        font-size: 8px
-        margin-left: auto
-
-      > .switch
-        font-size: 10px
-
-        > label
-          padding: 0
-          min-width: 0
 
     > canvas
       width: 100%
       height: 100%
       min-height: 0
-      border-radius: 3px
+      border-radius: 2px
       box-shadow: 0 0 4px 0 hsl(from var(--display-stroke) h s l / 0.04) inset, 0 0 1px 0 hsl(from var(--display-stroke) h s l / 0.04) inset
 
-@mixin cells
-  div.cell
+  > div.title
     display: grid
-    grid-template-rows: 0.625em 2em 0.625em
+    grid-template-rows: auto auto
+    align-content: start
+
+    > h3.caption
+      font-size: 9px
+      height: 12px
+      margin: 9px 0 3px
+      padding: 0 4px
+      letter-spacing: 0.5px
+      text-align: left
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+      color: var(--color-shadow)
+
+
+  h3.head
+    font-size: 9px
+    font-weight: 400
+    letter-spacing: 0.2px
+    padding: 1px 4px
+    white-space: nowrap
+    overflow: hidden
+    text-overflow: ellipsis
+    border-radius: 2px
+    color: rgba(black, 0.8)
+    background-color: color-mix(in srgb, var(--color) 66%, black)
+
+  > div.control
+    display: grid
+    grid-auto-rows: auto
+    row-gap: 1px
+    white-space: nowrap
+    justify-content: center
     justify-items: center
-    align-items: center
-    align-content: center
-    min-width: 0
-    margin: 0 1px
+    align-self: center
+    position: relative
 
-    > h5
-      font-size: 8px
-      line-height: 12px
-      letter-spacing: 0.08em
+    > h3
+      font-size: 9px
+      height: 12px
+      letter-spacing: 0.5px
       text-align: center
-      color: var(--color-cream)
-      white-space: nowrap
-      position: relative
-      top: 1px
+      color: var(--color-shadow)
+      z-index: 1
 
-    > .radios
+    > *:not(h3)
+      min-height: 18px
       display: flex
-      flex-wrap: nowrap
-      justify-content: center
       align-items: center
-      white-space: nowrap
-      grid-row: 2 / 4
-      align-self: center
+
+    > .spread
+      width: 100%
+      justify-content: space-evenly
+
+    &.spread
+      justify-content: stretch
+      justify-items: stretch

@@ -5,9 +5,8 @@ import {CanvasPainter} from "@opendaw/studio-core"
 import {Tubular} from "@opendaw/studio-adapters"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
-import {headerToggle, SectionConstruct, sectionKnob, switchCheckbox} from "./SectionControls"
-import {AutomationControl} from "@/ui/components/AutomationControl"
-import {ParameterLabelKnob} from "@/ui/devices/ParameterLabelKnob"
+import {Colors} from "@opendaw/studio-enums"
+import {band, display, labelControl, labelRadio, labelStack, SectionConstruct} from "./SectionControls"
 
 const className = Html.adoptStyleSheet(css, "AlgorithmSection")
 
@@ -48,10 +47,9 @@ const place = (roles: ReadonlyArray<Tubular.OperatorRole>): ReadonlyArray<Placed
 // Feedback, and a strip of all six operators (name = jump to its tab, Level, Switch) so carriers and
 // modulators balance without tab hopping.
 export const AlgorithmSection = (construct: SectionConstruct) => {
-    const {lifecycle, service, adapter, selectTab} = construct
-    const {editing, midiLearning} = service.project
+    const {lifecycle, service, adapter} = construct
+    const {editing} = service.project
     const {algorithm, feedback, oscKeySync, operators} = adapter.namedParameter
-    const tracks = adapter.deviceHost().audioUnitBoxAdapter().tracks
     const canvas: HTMLCanvasElement = <canvas/>
     const painter = lifecycle.own(new CanvasPainter(canvas, painter => {
         const {context, actualWidth, actualHeight, devicePixelRatio} = painter
@@ -103,41 +101,17 @@ export const AlgorithmSection = (construct: SectionConstruct) => {
             context.fillText(String(op + 1), x, y + devicePixelRatio * 0.5)
         })
     }))
-    const title: HTMLElement = <span className="title"/>
-    lifecycle.own(algorithm.catchupAndSubscribe(() => {
-        painter.requestUpdate()
-        title.textContent = `ALGORITHM ${algorithm.getValue() + 1}`
-    }))
+    lifecycle.own(algorithm.subscribe(() => painter.requestUpdate()))
     return (
-        <div className={className}>
-            <div className="display">
-                <header>
-                    {title}
-                    <span className="role">OSC SYNC</span>
-                    {headerToggle(lifecycle, EditWrapper.forAutomatableParameter(editing, oscKeySync), ["OFF", "ON"])}
-                </header>
-                {canvas}
-            </div>
-            {sectionKnob(construct, algorithm)}
-            {sectionKnob(construct, feedback)}
-            <div/>
-            <div/>
-            <div className="strip">
-                {operators.map((operator, index) => (
-                    <div className="operator">
-                        <h5 onclick={() => selectTab(index)}>{`OP ${index + 1}`}</h5>
-                        <AutomationControl lifecycle={lifecycle}
-                                           editing={editing}
-                                           midiLearning={midiLearning}
-                                           tracks={tracks}
-                                           parameter={operator.outputLevel}>
-                            <ParameterLabelKnob lifecycle={lifecycle} editing={editing} parameter={operator.outputLevel}/>
-                        </AutomationControl>
-                        <div/>
-                        {switchCheckbox(lifecycle, EditWrapper.forAutomatableParameter(editing, operator.enabled), `Operator ${index + 1} on/off`)}
-                    </div>
-                ))}
-            </div>
+        <div className={`${className} rows-3`}>
+            {band(Colors.orange, [1, 2], [5, 8], "ALGO")}
+            {band(Colors.blue, [2, 4], [5, 8], "LEVELS")}
+            {display([1, 4], [1, 5], canvas)}
+            {labelControl(construct, algorithm)}
+            {labelControl(construct, feedback)}
+            {labelRadio(lifecycle, "Osc Sync", EditWrapper.forAutomatableParameter(editing, oscKeySync), ["OFF", "ON"])}
+            {operators.map((operator, index) => labelStack(construct, `OP ${index + 1}`, operator.outputLevel,
+                EditWrapper.forAutomatableParameter(editing, operator.enabled), `Operator ${index + 1} on/off`))}
         </div>
     )
 }
