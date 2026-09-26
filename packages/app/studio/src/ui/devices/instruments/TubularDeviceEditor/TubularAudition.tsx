@@ -175,7 +175,7 @@ export namespace TubularAudition {
                 const now = Date.now()
                 const meta: InstrumentPresetMeta = {
                     category: "instrument",
-                    uuid: UUID.toString(UUID.generate()),
+                    uuid: UUID.toString(await UUID.sha256(voice.data.slice().buffer)),
                     name: voice.name,
                     device: "Tubular",
                     description: cartridge.credit ?? "",
@@ -190,14 +190,17 @@ export namespace TubularAudition {
                     RuntimeNotifier.notify({message: `Failed at ${voice.name}: ${result.error}`, icon: "Warning"})
                     break
                 }
+                keepers.delete(keeperKey(cartridge, index))
                 count++
                 progressValue.setValue(count / entries.length)
             }
+            storeKeepers(keepers)
             editing.modify(() => {
                 TubularPreset.apply(adapter.box, restore)
                 adapter.box.voiceLoad.setValue(restoreLoad + 1)
             }, false)
             progress.terminate()
+            render()
             RuntimeNotifier.notify({message: `${count} preset(s) ${upload ? "uploaded" : "saved"}.`, icon: "Checkbox"})
         }
         const exportList = async (): Promise<void> => {
