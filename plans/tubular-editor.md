@@ -1,6 +1,6 @@
 # Tubular editor (phase 4 of plans/tubular.md)
 
-**Status 2026-09-26**: all five sections built (uncommitted), he checks each in his studio (no browser rounds
+**Status 2026-09-26**: all five sections built and committed, he checks each in his studio (no browser rounds
 for small UI). Components under `TubularDeviceEditor/`: frame + round 2×5 tab grid in `TubularDeviceEditor.tsx`,
 `section.sass` (grid/cell mixins), `SectionControls.tsx` (knob, radioCell, SectionConstruct with selectTab),
 `OutSection`, `LfoSection`, `PitchSection`, `OperatorSection`, `AlgorithmSection`, `DxEnvelopeEditor` (4-stage
