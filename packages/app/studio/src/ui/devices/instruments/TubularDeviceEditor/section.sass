@@ -81,7 +81,12 @@
     color: rgba(black, 0.8)
     background-color: color-mix(in srgb, var(--color) 66%, black)
 
-  > div.control
+  > div.centered
+    display: flex
+    justify-content: space-evenly
+    align-items: center
+
+  div.control
     display: grid
     grid-auto-rows: auto
     row-gap: 1px

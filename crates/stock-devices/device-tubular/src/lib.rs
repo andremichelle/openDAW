@@ -13,6 +13,7 @@
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
 use abi::{float_value, int_value, Block, EventRecord, FieldValue, Instrument, ParamValue, Ports, EVENT_NOTE_ON};
+use dsp::analyser::{AudioAnalyser, NUM_BINS};
 use math::value_mapping::{Linear, LinearInteger, Values};
 
 mod env;
@@ -54,11 +55,16 @@ pub struct TubularState {
     load_id: u32,
     load_count: i32,
     engine_id: u32,
-    base_frequency: f32
+    base_frequency: f32,
+    // The editor's output spectrum (TS `adapter.spectrum` at `[0xFFF]`), computed only while subscribed.
+    analyser: AudioAnalyser,
+    spectrum_id: u32,
+    spectrum_ptr: u32
 }
 
 const VOICE_LOAD_FIELD: [u16; 1] = [50];
 const ENGINE_FIELD: [u16; 1] = [51];
+const SPECTRUM_FIELD: [u16; 1] = [0xFFF];
 
 /// openDAW's per-note pitch offset in Q24-per-octave: the event's cents plus the A4 base tuning.
 fn note_offset(cent: f32, base_frequency: f32) -> i32 {
@@ -106,6 +112,8 @@ impl Instrument for Tubular {
         }
         state.load_id = abi::observe_field(&VOICE_LOAD_FIELD);
         state.engine_id = abi::observe_field(&ENGINE_FIELD);
+        state.analyser.init(0.90);
+        state.spectrum_id = abi::bind_broadcast(&SPECTRUM_FIELD, NUM_BINS as u32);
     }
 
     fn handle_event(state: &mut TubularState, event: &EventRecord) {
@@ -133,6 +141,17 @@ impl Instrument for Tubular {
         }
         state.synth.fx.process(out_left);
         out_right.copy_from_slice(out_left);
+        if abi::broadcast_active(state.spectrum_id) {
+            state.analyser.process(out_left, out_right);
+            if state.spectrum_ptr == 0 {
+                state.spectrum_ptr = abi::broadcast_ptr(state.spectrum_id);
+            }
+            if state.spectrum_ptr != 0 {
+                let spectrum = unsafe { core::slice::from_raw_parts_mut(state.spectrum_ptr as *mut f32, NUM_BINS) };
+                spectrum.copy_from_slice(state.analyser.bins());
+                state.analyser.decay = true;
+            }
+        }
     }
 
     fn parameter_changed(state: &mut TubularState, id: u32, value: ParamValue) {

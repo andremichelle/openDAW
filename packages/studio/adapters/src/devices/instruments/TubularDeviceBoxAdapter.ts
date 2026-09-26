@@ -94,6 +94,7 @@ export class TubularDeviceBoxAdapter implements InstrumentDeviceBoxAdapter {
     get box(): TubularDeviceBox {return this.#box}
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
+    get spectrum(): Address {return this.#box.address.append(0xFFF)}
     get labelField(): StringField {return this.#box.label}
     get iconField(): StringField {return this.#box.icon}
     get defaultTrackType(): TrackType {return TrackType.Notes}
