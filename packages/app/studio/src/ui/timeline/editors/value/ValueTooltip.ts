@@ -1,4 +1,4 @@
-import {Curve, Nullable, Option, StringMapping, Terminable, ValueAxis, ValueMapping} from "@opendaw/lib-std"
+import {Curve, Nullable, Option, Terminable, ValueAxis, ValueMapping} from "@opendaw/lib-std"
 import {ValueCaptureTarget} from "@/ui/timeline/editors/value/ValueEventCapturing"
 import {Surface} from "@/ui/surface/Surface"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies"
@@ -9,6 +9,7 @@ import {ValueModifier} from "@/ui/timeline/editors/value/ValueModifier"
 import {ValueEvent} from "@opendaw/lib-dsp"
 import {ElementCapturing, TimelineRange} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
+import {SlopeStringMapping} from "@/ui/timeline/editors/value/Constants"
 
 export namespace ValueTooltip {
     type Creation = {
@@ -21,8 +22,6 @@ export namespace ValueTooltip {
         eventMapping: ValueMapping<number>
         modifyContext: ObservableModifyContext<ValueModifier>
     }
-
-    const stringMapping = StringMapping.percent({unit: "bend", bipolar: true, fractionDigits: 1})
 
     export const install = (
         {element, capturing, range, valueAxis, reader, context, eventMapping, modifyContext}: Creation): Terminable =>
@@ -60,7 +59,7 @@ export namespace ValueTooltip {
                         const clientRect = element.getBoundingClientRect()
                         const clientX = range.unitToX(midPosition + reader.offset) + clientRect.left + 8
                         const clientY = midY + clientRect.top + 8
-                        return ({...stringMapping.x(slope), clientX, clientY})
+                        return ({...SlopeStringMapping.x(slope), clientX, clientY})
                     })
                 } else {
                     Surface.get(element).valueTooltip.hide()
