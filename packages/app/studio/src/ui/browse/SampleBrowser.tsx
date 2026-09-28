@@ -77,6 +77,7 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
         resolveEntryUuid: (sample: Sample) => sample.uuid,
         createSelection: (svc: StudioService, htmlSelection: HTMLSelection) => new SampleSelection(svc, htmlSelection),
         importSignal: "import-sample",
+        importFiles: files => service.sampleService.importFiles(files),
         footer: ({lifecycle: footerLifecycle}) => (
             <div className="footer">
                 <label>Volume:</label>

@@ -6,17 +6,17 @@ import {
     panic,
     Procedure,
     RuntimeNotifier,
-    TimeSpan,
     tryCatch,
     unitValue,
     UUID
 } from "@opendaw/lib-std"
-import {IntervalRetryOption, network, Promises} from "@opendaw/lib-runtime"
+import {network, Promises} from "@opendaw/lib-runtime"
 import {Sample, SampleMetaData} from "@opendaw/studio-adapters"
 import {SampleAPI} from "@opendaw/studio-core"
 import {AccessKey} from "./AccessKey"
 import {base64Credentials, OpenDAWHeaders} from "./OpenDAWHeaders"
 import {SampleIndex} from "./SampleIndex"
+import {fetchIndex} from "./IndexFetch"
 import {z} from "zod"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
 
@@ -31,16 +31,8 @@ export class OpenSampleAPI implements SampleAPI {
     @Lazy
     static get(): OpenSampleAPI {return new OpenSampleAPI()}
 
-    // A publish must reach users on their next load, and nothing about that may depend on how a browser
-    // interprets caching: the query makes every load a distinct URL, `no-cache` covers the rest.
-    readonly #headers: RequestInit = {...OpenDAWHeaders, cache: "no-cache"}
-    // The published index is the catalogue. A failure rejects rather than degrading to something emptier,
-    // so the browser shows its retry instead of an empty list, and `memoizeAsync` drops the rejection.
     readonly #memoized: () => Promise<SampleIndex> = Promises.memoizeAsync(() =>
-        Promises.retry(() => network.limitFetch(`${OpenSampleAPI.IndexFile}?v=${Date.now()}`, this.#headers),
-            new IntervalRetryOption(3, TimeSpan.seconds(1)))
-            .then(response => response.ok ? response.json() : panic(`${response.status} ${response.statusText}`))
-            .then(json => SampleIndex.schema.parse(json)))
+        fetchIndex(OpenSampleAPI.IndexFile, OpenDAWHeaders).then(json => SampleIndex.schema.parse(json)))
 
     private constructor() {}
 

@@ -1,7 +1,8 @@
-import {DefaultObservableValue, Errors, Notifier, Observer, Option, RuntimeNotifier, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, isInstanceOf, Notifier, Observer, Option, RuntimeNotifier, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
-import {AudioUnitBoxAdapter, ExportConfiguration} from "@opendaw/studio-adapters"
+import {AudioSinkDeviceBoxAdapter, AudioUnitBoxAdapter, ExportConfiguration} from "@opendaw/studio-adapters"
+import {AudioSinkDeviceBox} from "@opendaw/studio-boxes"
 import {Engine} from "./Engine"
 import {OfflineEngineRenderer} from "./OfflineEngineRenderer"
 import {Address} from "@opendaw/lib-box"
@@ -64,12 +65,25 @@ export class AudioUnitFreeze implements Terminable {
         return false
     }
 
+    hasSink(audioUnitBoxAdapter: AudioUnitBoxAdapter): boolean {
+        const {boxGraph, boxAdapters} = this.#project
+        return boxGraph.boxes().some(box => isInstanceOf(box, AudioSinkDeviceBox)
+            && UUID.equals(boxAdapters.adapterFor(box, AudioSinkDeviceBoxAdapter).audioUnitBoxAdapter().uuid, audioUnitBoxAdapter.uuid))
+    }
+
     async freeze(audioUnitBoxAdapter: AudioUnitBoxAdapter): Promise<void> {
         const {engine} = this.#project
         if (this.hasSidechainDependents(audioUnitBoxAdapter)) {
             await RuntimeNotifier.info({
                 headline: "Cannot Freeze",
                 message: "This audio unit is used as a sidechain source by another device."
+            })
+            return
+        }
+        if (this.hasSink(audioUnitBoxAdapter)) {
+            await RuntimeNotifier.info({
+                headline: "Cannot Freeze",
+                message: "This audio unit contains a Sink. A frozen unit plays a rendered file, so its Sink could no longer feed its bus."
             })
             return
         }

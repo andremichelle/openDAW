@@ -25,6 +25,7 @@ import {TextTooltip} from "./TextTooltip"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {AnimationFrame, CssUtils, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {IconSymbol, initializeColors} from "@opendaw/studio-enums"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {StudioPreferences} from "@opendaw/studio-core"
 import {Toast} from "./Toast"
 
@@ -267,6 +268,7 @@ export class Surface implements TerminableOwner {
             target.head.appendChild(styleElement)
         }
         initializeColors(target.documentElement)
+        DisplayPaint.initialize(target.documentElement)
     }
 
     #listen(): void {
@@ -337,9 +339,9 @@ export class Surface implements TerminableOwner {
                 Surface.dispatchGlobalKey("keyup", event)),
             // Seems to reset the custom cursor faithfully when leaving and re-entering the studio (blur did not)
             Events.subscribe(this.#owner, "focus", () => AnimationFrame.once(() => CssUtils.setCursor("auto"))),
-            // Ctrl + scroll on Linux can affect web UI elements because it typically triggers zoom in most browsers.
+            // Ctrl + scroll triggers browser zoom, Alt + scroll triggers history navigation in Firefox on Windows/Linux (#410).
             Events.subscribe(this.#owner, "wheel", (event) => {
-                if (event.ctrlKey) {event.preventDefault()}
+                if (event.ctrlKey || event.altKey) {event.preventDefault()}
             }, {passive: false}),
             Events.subscribe(this.#owner, "contextmenu", (event) => {
                 event.preventDefault()

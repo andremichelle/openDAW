@@ -1,4 +1,4 @@
-import {asDefined, isAbsent, isDefined, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
+import {asDefined, isAbsent, isDefined, Optional, RuntimeNotifier, Terminable, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
@@ -8,6 +8,7 @@ import {
     DeviceHost,
     Devices,
     InstrumentBox,
+    InstrumentCompositeCellBoxAdapter,
     InstrumentFactories,
     InstrumentFactory,
     PresetDecoder,
@@ -71,6 +72,12 @@ export namespace DevicePanelDragAndDrop {
                 } else if (type === "midi-effect") {
                     if (!DeviceHost.takesEffect(deviceHost, "midi")) {return false}
                     container = midiEffectsContainer
+                } else if (type === "instrument" && deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
+                    if (!isDefined(dragData.device)) {return false}
+                    const factory: Optional<InstrumentFactory> = InstrumentFactories.Named[dragData.device]
+                    if (!isDefined(factory) || !InstrumentFactories.isLayerInstrument(factory)) {return false}
+                    instrumentContainer.style.opacity = "0.5"
+                    return true
                 } else if (type === "instrument" && deviceHost.isAudioUnit) {
                     if (dragData.device === null) {return false}
                     if (deviceHost.inputAdapter.mapOr(input => input instanceof AudioBusBoxAdapter, false)) {
@@ -112,12 +119,24 @@ export namespace DevicePanelDragAndDrop {
                     const namedElement = InstrumentFactories.Named[dragData.device]
                     const factory = asDefined(namedElement, `Unknown: '${dragData.device}'`) as InstrumentFactory
                     editing.modify(() => {
-                        const attempt = project.api.replaceMIDIInstrument(inputBox as InstrumentBox, factory)
+                        // a new Composite wraps the chain it lands on instead of replacing its instrument
+                        const attempt = factory === InstrumentFactories.InstrumentComposite
+                            ? project.api.wrapInstrumentIntoComposite(inputBox as InstrumentBox)
+                            : project.api.replaceMIDIInstrument(inputBox as InstrumentBox, factory)
                         if (attempt.isFailure()) {console.debug(attempt.failureReason())}
                     })
                     return
                 }
-                if (type === "instrument") {return} // an instrument drop onto a non-audio-unit host: nothing to do
+                if (type === "instrument" && deviceHost instanceof InstrumentCompositeCellBoxAdapter) {
+                    if (!isDefined(dragData.device)) {return}
+                    const factory = asDefined(InstrumentFactories.Named[dragData.device], `Unknown: '${dragData.device}'`) as InstrumentFactory
+                    editing.modify(() => {
+                        const attempt = project.api.setLayerInstrument(deviceHost.box, factory)
+                        if (attempt.isFailure()) {console.debug(attempt.failureReason())}
+                    })
+                    return
+                }
+                if (type === "instrument") {return} // an instrument drop onto any other host: nothing to do
                 const accepts = type === "audio-effect" ? "audio" : "midi"
                 // The `drag` gate already refused a host that takes no chain of this kind; re-checked here
                 // because `drop` is reachable on its own.
@@ -140,6 +159,10 @@ export namespace DevicePanelDragAndDrop {
                         .filter(isDefined)
                         .filter((box): box is EffectBox => box.tags.deviceType === deviceType)
                     if (boxes.length === 0) {return}
+                    if (DragAndDrop.isCopy(event, dragData)) {
+                        editing.modify(() => project.api.copyEffects(field, boxes, index))
+                        return
+                    }
                     const sameChain = boxes.every(box => box.host.targetVertex.mapOr(vertex => vertex === field, false))
                     if (sameChain) {
                         // A plain reorder WITHIN this chain: keep the slot-shuffling semantics.
@@ -186,6 +209,21 @@ export namespace DevicePanelDragAndDrop {
         if (load.status === "rejected") {
             console.warn(load.error)
             RuntimeNotifier.notify({message: "Cannot load preset.", icon: "Warning"})
+            return
+        }
+        if (host instanceof InstrumentCompositeCellBoxAdapter
+            && (dragData.category === "audio-unit" || dragData.category === "instrument")) {
+            if (dragData.category === "audio-unit") {
+                RuntimeNotifier.notify({message: "A rack preset cannot be loaded into a layer.", icon: "Warning"})
+                return
+            }
+            project.editing.modify(() => {
+                const attempt = PresetDecoder.replaceLayerInstrument(load.value, host.box)
+                if (attempt.isFailure()) {
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
+                }
+            })
+            project.loadScriptDevices()
             return
         }
         if (dragData.category === "audio-unit") {

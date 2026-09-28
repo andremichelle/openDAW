@@ -1,24 +1,28 @@
 import {
     Arrays,
     DefaultObservableValue,
+    EmptyExec,
     EmptyProcedure,
     Func,
     isDefined,
     Lifecycle,
     MutableObservableOption,
+    Nullable,
     Option,
     Optional,
+    panic,
     Predicate,
     Procedure,
     RuntimeSignal,
     StringComparator,
+    Strings,
     Terminable,
     Terminator,
     UUID
 } from "@opendaw/lib-std"
 import {Await, createElement, Hotspot, HotspotUpdater, Inject, replaceChildren} from "@opendaw/lib-jsx"
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
-import {Runtime} from "@opendaw/lib-runtime"
+import {Promises, Runtime} from "@opendaw/lib-runtime"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {ContextMenu, ProjectSignals} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService.ts"
@@ -36,6 +40,7 @@ import {LocalTree} from "@/ui/browse/LocalTree"
 import {ResourceMenus} from "@/ui/browse/ResourceMenus"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
+import {Surface} from "@/ui/surface/Surface"
 
 type Construct<T> = {
     lifecycle: Lifecycle
@@ -85,8 +90,14 @@ export const ResourceBrowser = <T, >({
     }
     const expandedKeys = config.expandedKeys ?? new Set<string>()
     const entriesLifeSpan = lifecycle.own(new Terminator())
+    const renderLifeSpan = lifecycle.own(new Terminator())
     const reload = Inject.ref<HotspotUpdater>()
     const filter = new DefaultObservableValue("")
+    const importing = new DefaultObservableValue(false)
+    const debounceSetLocation = Runtime.debounce(() => {
+        location.setValue(AssetLocation.Local)
+        reload.get().update()
+    }, 500)
     const searchInput: HTMLElement = <SearchInput lifecycle={lifecycle} model={filter} style={{gridColumn: "1 / -1"}}/>
     const element: Element = (
         <div className={Html.buildClassList(className, background && "background")} tabIndex={-1} style={{fontSize}}>
@@ -116,6 +127,7 @@ export const ResourceBrowser = <T, >({
                 <Hotspot ref={reload} render={() => {
                     config.onReload?.()
                     entriesLifeSpan.terminate()
+                    renderLifeSpan.terminate()
                     return (
                         <Await
                             factory={async (): Promise<Loaded<T>> => {
@@ -147,19 +159,35 @@ export const ResourceBrowser = <T, >({
                                     const selected = resourceSelection.selected().map(config.resolveEntryUuid)
                                     return selected.includes(uuid) ? selected : [uuid]
                                 }
-                                const installDropTarget = (target: HTMLElement,
-                                                           accepts: Predicate<ReadonlyArray<UUID.String>>,
-                                                           apply: Func<ReadonlyArray<UUID.String>, Promise<void>>,
-                                                           within: Predicate<DragEvent> = () => true): Terminable => {
+                                const importInto = async (local: LocalTree<T>,
+                                                          files: ReadonlyArray<File>,
+                                                          path: string): Promise<void> => {
+                                    importing.setValue(true)
+                                    const result = await Promises.tryCatch(config.importFiles(files))
+                                    importing.setValue(false)
+                                    if (result.status === "rejected") {return panic(result.error)}
+                                    return local.move(result.value.map(config.resolveEntryUuid), path)
+                                }
+                                const installDropTarget = (target: HTMLElement, {accepts, apply, importTo, within = () => true}: {
+                                    accepts: Predicate<ReadonlyArray<UUID.String>>
+                                    apply: Func<ReadonlyArray<UUID.String>, Promise<void>>
+                                    importTo: Option<Func<ReadonlyArray<File>, Promise<void>>>
+                                    within?: Predicate<DragEvent>
+                                }): Terminable => {
                                     const clear = () => target.classList.remove("drag-over")
                                     return Terminable.many(
                                         DragAndDrop.installTarget(target, {
-                                            drag: (event, data) => data.type === config.dragType
-                                                && within(event) && accepts(draggedUuids(data)),
+                                            drag: (event, data) => within(event) && (data.type === "file"
+                                                ? importTo.nonEmpty()
+                                                : data.type === config.dragType && accepts(draggedUuids(data))),
                                             drop: (event, data) => {
                                                 event.stopPropagation()
                                                 clear()
-                                                apply(draggedUuids(data)).then(refresh)
+                                                if (data.type === "file") {
+                                                    importTo.ifSome(importer => importer(data.files).then(refresh))
+                                                } else {
+                                                    apply(draggedUuids(data)).then(refresh)
+                                                }
                                             },
                                             enter: allowDrop => {
                                                 if (allowDrop) {target.classList.add("drag-over")}
@@ -172,6 +200,18 @@ export const ResourceBrowser = <T, >({
                                         Events.subscribe(window, "drop", clear, {capture: true})
                                     )
                                 }
+                                const rejectFiles = (target: HTMLElement): Terminable =>
+                                    DragAndDrop.installTarget(target, {
+                                        drag: (_event, data) => data.type === "file",
+                                        drop: event => {
+                                            event.stopPropagation()
+                                            Surface.get(target).toast(
+                                                `${Strings.capitalize(config.name)} can only be stored in the user folder`,
+                                                IconSymbol.UserFolder)
+                                        },
+                                        enter: EmptyProcedure,
+                                        leave: EmptyExec
+                                    })
                                 const renderEntry = (item: T) => config.renderEntry({
                                     lifecycle: entriesLifeSpan,
                                     service,
@@ -184,27 +224,33 @@ export const ResourceBrowser = <T, >({
                                 const installTrash = (local: LocalTree<T>,
                                                       folder: ResourceFolder<T>): Procedure<HTMLElement> =>
                                     header => entriesLifeSpan.ownAll(
-                                        installDropTarget(header,
-                                            uuids => uuids.some(uuid => !local.isTrashed(uuid)),
-                                            uuids => local.trash(uuids)),
+                                        installDropTarget(header, {
+                                            accepts: uuids => uuids.some(uuid => !local.isTrashed(uuid)),
+                                            apply: uuids => local.trash(uuids),
+                                            importTo: Option.None
+                                        }),
                                         ContextMenu.subscribe(header, collector =>
                                             collector.addItems(...ResourceMenus.trashFolder(
                                                 local, resourceSelection, folder.items, config.resolveEntryUuid, refresh)))
                                     )
                                 const installFolder = (local: LocalTree<T>, path: string): Procedure<HTMLElement> =>
                                     header => entriesLifeSpan.ownAll(
-                                        installDropTarget(header,
-                                            uuids => uuids.some(uuid => local.isTrashed(uuid)
+                                        installDropTarget(header, {
+                                            accepts: uuids => uuids.some(uuid => local.isTrashed(uuid)
                                                 || local.pathOf(uuid) !== path),
-                                            uuids => local.move(uuids, path)),
+                                            apply: uuids => local.move(uuids, path),
+                                            importTo: Option.wrap(files => importInto(local, files, path))
+                                        }),
                                         ContextMenu.subscribe(header, collector =>
                                             collector.addItems(...ResourceMenus.folder(local, path, refresh)))
                                     )
                                 const renderContent = (folder: ResourceFolder<T>, path: string, depth: number): Array<HTMLElement> => [
                                     ...folder.folders.map(sub => {
                                         const subPath = LocalTree.path(path, sub.name)
+                                        const isTrash = subPath === LocalTree.TrashName
                                         return ResourceFolderItem({
                                             label: sub.name,
+                                            symbols: isTrash ? [IconSymbol.FolderTrash, IconSymbol.FolderTrash] : undefined,
                                             count: ResourceFolder.countItems(sub),
                                             depth,
                                             expandKey: subPath,
@@ -213,7 +259,7 @@ export const ResourceBrowser = <T, >({
                                             // Not `mapOr`: a function fallback would be called as a provider.
                                             install: tree.match<Procedure<HTMLElement>>({
                                                 none: () => EmptyProcedure,
-                                                some: local => subPath === LocalTree.TrashName
+                                                some: local => isTrash
                                                     ? installTrash(local, sub)
                                                     : installFolder(local, subPath)
                                             })
@@ -230,23 +276,34 @@ export const ResourceBrowser = <T, >({
                                 const update = () => {
                                     entriesLifeSpan.terminate()
                                     selection.clear()
-                                    tree.ifSome(local => entriesLifeSpan.own(installDropTarget(entries,
-                                        uuids => uuids.some(uuid => local.isTrashed(uuid)
-                                            || local.pathOf(uuid).length > 0),
-                                        uuids => local.move(uuids, ""),
-                                        event => !(event.target instanceof Element)
-                                            || !isDefined(event.target.closest("[data-selection], .folder-header")))))
+                                    const isBlank = (element: Nullable<Element>): boolean =>
+                                        !isDefined(element) || !isDefined(element.closest("[data-selection], .folder-header"))
+                                    tree.match({
+                                        none: () => {entriesLifeSpan.own(rejectFiles(entries))},
+                                        some: local => entriesLifeSpan.ownAll(
+                                            installDropTarget(entries, {
+                                                accepts: uuids => uuids.some(uuid => local.isTrashed(uuid)
+                                                    || local.pathOf(uuid).length > 0),
+                                                apply: uuids => local.move(uuids, ""),
+                                                importTo: Option.wrap(files => importInto(local, files, "")),
+                                                within: event => !(event.target instanceof Element) || isBlank(event.target)
+                                            }),
+                                            ContextMenu.subscribe(entries, collector => {
+                                                const {clientX, clientY} = collector.client
+                                                if (!isBlank(document.elementFromPoint(clientX, clientY))) {return}
+                                                collector.addItems(...ResourceMenus.root(local, refresh))
+                                            }))
+                                    })
                                     const query = filter.getValue().toLowerCase()
                                     replaceChildren(entries, query.length === 0
                                         ? renderContent(root, "", 0)
                                         : renderSearch(query))
                                 }
-                                const debounceSetLocation = Runtime.debounce(() => {
-                                    location.setValue(AssetLocation.Local)
-                                    reload.get().update()
-                                }, 500)
-                                lifecycle.own(filter.catchupAndSubscribe(update))
-                                lifecycle.own(service.subscribeSignal(debounceSetLocation, config.importSignal))
+                                renderLifeSpan.ownAll(
+                                    filter.catchupAndSubscribe(update),
+                                    service.subscribeSignal(() => {
+                                        if (!importing.getValue()) {debounceSetLocation()}
+                                    }, config.importSignal))
                                 searchInput.focus()
                                 return entries
                             }}/>

@@ -9,10 +9,27 @@ export namespace PreferencesPageLabels {
             fields: {
                 "visible-help-hints": "Visible Help & Hints",
                 "enable-history-buttons": "Show Undo/Redo buttons",
-                "auto-open-clips": "Always open clip view",
                 "base-frequency": "Show base frequency",
                 "toasts": "Show notifications",
-                "show-output-track": "Always show the output track"
+                "show-output-track": "Always show the output track",
+                "offer-studio-tour": "Offer the studio tour when a project opens"
+            }
+        },
+        "timeline": {
+            label: "Timeline",
+            fields: {
+                "markers": "Show markers track",
+                "tempo": "Show tempo track",
+                "signature": "Show signature track",
+                "clips": "Show clips",
+                "follow-cursor": "Follow cursor"
+            }
+        },
+        "appearance": {
+            label: "Appearance",
+            fields: {
+                "neutral-hue": "Neutral hue (0-360)",
+                "neutral-saturation": "Neutral saturation (%)"
             }
         },
         "time-display": {

@@ -1,7 +1,7 @@
 import css from "./CompoundItem.sass?inline"
 import {isDefined, Lifecycle, Nullable, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {IndexedBox} from "@opendaw/lib-box"
 import {PresetEntry} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -71,11 +71,11 @@ export const CompoundItem = ({
         item.classList.add("expanded")
     }
     if (!empty) {
-        header.onclick = () => {
+        lifecycle.own(Events.subscribeSingleClick(header, () => {
             const open = !presetList.classList.toggle("hidden")
             item.classList.toggle("expanded", open)
             if (open) {expandedKeys.add(expandKey)} else {expandedKeys.delete(expandKey)}
-        }
+        }))
     }
     const acceptsEffectChain = isDefined(dropKind) && isDefined(onDrop)
     const acceptsRack = isDefined(onRackDrop)

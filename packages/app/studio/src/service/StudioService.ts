@@ -28,6 +28,7 @@ import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {createPanelFactory} from "@/ui/workspace/PanelFactory.tsx"
 import {SpotlightDataSupplier} from "@/ui/spotlight/SpotlightDataSupplier.ts"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
+import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {ModulatorReveal} from "@/ui/modulation/ModulatorReveal.ts"
 import {PanelType} from "@/ui/workspace/PanelType.ts"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
@@ -100,20 +101,21 @@ const STRETCH_WASM_URL = `${import.meta.env.BASE_URL}wasm-engine/wasm/stretch_wa
 
 export class StudioService implements ProjectEnv {
     readonly layout = {
-        screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default")
+        screen: new DefaultObservableValue<Nullable<Workspace.ScreenKeys>>("default"),
+        browseScope: new DefaultObservableValue<BrowseScope>(BrowseScope.Presets)
     } as const
     readonly timeline = {
         range,
         snapping,
         clips: {
             count: new DefaultObservableValue(3),
-            visible: new DefaultObservableValue(true)
+            visible: StudioPreferences.createMutableObservableValue("timeline", "clips")
         },
-        followCursor: new DefaultObservableValue(false),
+        followCursor: StudioPreferences.createMutableObservableValue("timeline", "follow-cursor"),
         primaryVisibility: {
-            markers: new DefaultObservableValue(true),
-            tempo: new DefaultObservableValue(false),
-            signature: new DefaultObservableValue(false)
+            markers: StudioPreferences.createMutableObservableValue("timeline", "markers"),
+            tempo: StudioPreferences.createMutableObservableValue("timeline", "tempo"),
+            signature: StudioPreferences.createMutableObservableValue("timeline", "signature")
         }
     } as const
     readonly menu = populateStudioMenu(this)
@@ -184,52 +186,6 @@ export class StudioService implements ProjectEnv {
     get projectProfileService(): ProjectProfileService {return this.#projectProfileService}
 
     panicEngine(): void {this.runIfProject(({engine}) => engine.panic())}
-
-    // Tear down the running worklet and boot a fresh one for the current project (e.g. after switching the
-    // engine variant). The screen is re-mounted so views subscribe to the new broadcaster instances, and the
-    // transport state (position, playing) carries over to the new engine.
-    restartEngine(): void {
-        this.runIfProject(project => {
-            const screen = this.layout.screen.getValue()
-            const wasPlaying = this.engine.isPlaying.getValue()
-            const position = this.engine.position.getValue()
-            this.switchScreen(null)
-            this.engine.releaseWorklet()
-            const restart: RestartWorklet = {
-                unload: async (event: unknown) => {
-                    this.switchScreen(null)
-                    this.engine.releaseWorklet()
-                    return Dialogs.info({
-                        headline: "Audio-Engine Error",
-                        message: String(safeRead(event, "error", "message") ?? "Unknown error"),
-                        okText: "Restart Engine",
-                        cancelable: false
-                    })
-                },
-                load: (engine: EngineWorklet) => {
-                    if (!this.optProject.contains(project)) {return}
-                    this.engine.setWorklet(engine)
-                    this.switchScreen(screen)
-                }
-            }
-            const {status, value: worklet, error} = tryCatch(() => project.startAudioWorklet(restart, {}))
-            if (status === "failure") {
-                Dialogs.info({
-                    headline: "Audio-Engine Error",
-                    message: `Could not start the audio engine. (${Errors.toString(error)})`,
-                    okText: "OK",
-                    cancelable: false
-                }).finally()
-                return
-            }
-            this.engine.setWorklet(worklet)
-            this.switchScreen(screen)
-            worklet.isReady().then(() => {
-                this.engine.setPosition(position)
-                if (wasPlaying) {this.engine.play()}
-            })
-        })
-    }
 
     async newProject() {
         if (!await this.#projectProfileService.approveLosingChanges()) {return}
@@ -493,24 +449,24 @@ export class StudioService implements ProjectEnv {
                 // Show views if content available
                 // -------------------------------
                 //
-                // Markers
-                this.timeline.primaryVisibility.markers.setValue(true)
                 // Tempo
-                this.timeline.primaryVisibility.tempo.setValue(timelineBoxAdapter
-                    .tempoTrackEvents.mapOr(collection => !collection.events.isEmpty(), false))
+                if (timelineBoxAdapter.tempoTrackEvents.mapOr(collection => !collection.events.isEmpty(), false)) {
+                    this.timeline.primaryVisibility.tempo.setValue(true)
+                }
                 // Signature
-                this.timeline.primaryVisibility.signature.setValue(timelineBoxAdapter.signatureTrack.size > 0)
+                if (timelineBoxAdapter.signatureTrack.size > 0) {
+                    this.timeline.primaryVisibility.signature.setValue(true)
+                }
                 // Clips
                 const maxClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()
                     .reduce((max, unit) => Math.max(max, unit.tracks.values()
                         .reduce((max, track) => Math.max(max, track.clips.collection
                             .getMinFreeIndex()), 0)), 0)
-                if (maxClipIndex > 0 || StudioPreferences.settings.visibility["auto-open-clips"]) {
+                if (maxClipIndex > 0) {
                     this.timeline.clips.count.setValue(Math.max(maxClipIndex + 1, 3))
                     this.timeline.clips.visible.setValue(true)
                 } else {
                     this.timeline.clips.count.setValue(3)
-                    this.timeline.clips.visible.setValue(false)
                 }
                 let screen: Nullable<Workspace.ScreenKeys> = null
                 const restart: RestartWorklet = {
@@ -598,12 +554,13 @@ export class StudioService implements ProjectEnv {
     }
 
     #configBeforeUnload(): void {
-        /*window.addEventListener("beforeunload", (event: Event) => {
+        if (Browser.isLocalHost()) {return}
+        window.addEventListener("beforeunload", (event: Event) => {
             if (!navigator.onLine) {event.preventDefault()}
             if (this.hasProfile && this.profile.hasUnsavedChanges()) {
                 event.preventDefault()
             }
-        })*/
+        })
     }
 
     #checkRecovery(): void {

@@ -67,6 +67,7 @@ export class AuxSendBoxAdapter implements BoxAdapter {
     get address(): Address {return this.#box.address}
     get box(): Box {return this.#box}
     get indexField(): Int32Field {return this.#box.index}
+    get routingField(): Int32Field {return this.#box.routing}
     get sendPan(): AutomatableParameterFieldAdapter<float> {return this.#sendPan}
     get sendGain(): AutomatableParameterFieldAdapter<float> {return this.#sendGain}
     get targetBus(): AudioBusBoxAdapter {

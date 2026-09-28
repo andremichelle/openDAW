@@ -1,10 +1,11 @@
 import {BoxGraph, Field} from "@opendaw/lib-box"
-import {INVERSE_SQRT_2, int, panic, Unhandled, UUID} from "@opendaw/lib-std"
+import {Arrays, INVERSE_SQRT_2, int, panic, Unhandled, UUID} from "@opendaw/lib-std"
 import {IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {
     ArpeggioDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
+    AudioSinkDeviceBox,
     AutotuneDeviceBox,
     CompressorDeviceBox,
     ConvolverDeviceBox,
@@ -40,11 +41,11 @@ export type AudioEffectBox =
     | AutotuneDeviceBox | CompressorDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | DattorroReverbDeviceBox
     | DelayDeviceBox | FoldDeviceBox | GateDeviceBox | MaximizerDeviceBox | NeuralAmpDeviceBox | RevampDeviceBox
     | ReverbDeviceBox | StereoToolDeviceBox | TidalDeviceBox | VocoderDeviceBox | WaveshaperDeviceBox
-    | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox | FrequencySplitBox
+    | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox | FrequencySplitBox | AudioSinkDeviceBox
 
 export namespace DeviceBoxes {
-    export const STEREO_ENTRY_LABELS: ReadonlyArray<string> = ["L", "R"]
-    export const FREQUENCY_SPLIT_ENTRY_LABELS: ReadonlyArray<string> = ["Low", "Low Mid", "High Mid", "High"]
+    const STEREO_ENTRY_COUNT = 2
+    const FREQUENCY_SPLIT_ENTRY_COUNT = 4
 
     export const MIDIEffectLabels: Record<keyof MIDIEffects, string> = {
         Arpeggio: "Arpeggio", Pitch: "Pitch", Velocity: "Velocity", Zeitgeist: "Zeitgeist", Spielwerk: "Spielwerk"
@@ -55,7 +56,7 @@ export namespace DeviceBoxes {
         DattorroReverb: "Dattorro Reverb", Delay: "Delay", Fold: "Fold", Gate: "Gate", Maximizer: "Maximizer",
         NeuralAmp: "Tone3000", Revamp: "Revamp", Reverb: "Reverb", StereoTool: "Stereo Tool", Tidal: "Tidal",
         Vocoder: "Vocoder", Waveshaper: "Waveshaper", Werkstatt: "Werkstatt", Composite: "FX Composite",
-        StereoSplit: "Stereo Split", FrequencySplit: "Frequency Split"
+        StereoSplit: "Stereo Split", FrequencySplit: "Frequency Split", Sink: "Sink"
     }
 
     export const midiEffectKeyOf = (boxName: string): keyof MIDIEffects => {
@@ -91,6 +92,7 @@ export namespace DeviceBoxes {
             case "AudioEffectCompositeBox": return "Composite"
             case "StereoCompositeBox": return "StereoSplit"
             case "FrequencySplitBox": return "FrequencySplit"
+            case "AudioSinkDeviceBox": return "Sink"
             default: return panic(`Unknown audio-effect box '${boxName}'`)
         }
     }
@@ -106,6 +108,7 @@ export namespace DeviceBoxes {
             case "NeonDeviceBox": return "Neon"
             case "CubedDeviceBox": return "Cubed"
             case "ApparatDeviceBox": return "Apparat"
+            case "InstrumentCompositeBox": return "InstrumentComposite"
             default: return panic(`Unknown instrument box '${boxName}'`)
         }
     }
@@ -119,11 +122,12 @@ export namespace DeviceBoxes {
             "DattorroReverbDeviceBox", "DelayDeviceBox", "FoldDeviceBox", "GateDeviceBox", "MaximizerDeviceBox",
             "NeuralAmpDeviceBox", "RevampDeviceBox", "ReverbDeviceBox", "StereoToolDeviceBox", "TidalDeviceBox",
             "VocoderDeviceBox", "WaveshaperDeviceBox", "WerkstattDeviceBox", "AudioEffectCompositeBox",
-            "StereoCompositeBox", "FrequencySplitBox"].includes(boxName)
+            "StereoCompositeBox", "FrequencySplitBox", "AudioSinkDeviceBox"].includes(boxName)
 
     export const isInstrumentBox = (boxName: string): boolean =>
         ["VaporisateurDeviceBox", "PlayfieldDeviceBox", "NanoDeviceBox", "SoundfontDeviceBox",
-            "MIDIOutputDeviceBox", "TapeDeviceBox", "NeonDeviceBox", "CubedDeviceBox", "ApparatDeviceBox"]
+            "MIDIOutputDeviceBox", "TapeDeviceBox", "NeonDeviceBox", "CubedDeviceBox", "ApparatDeviceBox",
+            "InstrumentCompositeBox"]
             .includes(boxName)
 
     export const createInstrument = (boxGraph: BoxGraph,
@@ -306,6 +310,12 @@ export namespace DeviceBoxes {
                     box.index.setValue(index)
                     box.host.refer(host)
                 })
+            case "Sink":
+                return AudioSinkDeviceBox.create(boxGraph, UUID.generate(), box => {
+                    box.label.setValue(label)
+                    box.index.setValue(index)
+                    box.host.refer(host)
+                })
             case "Werkstatt":
                 return WerkstattDeviceBox.create(boxGraph, UUID.generate(), box => {
                     box.label.setValue(label)
@@ -324,7 +334,7 @@ export namespace DeviceBoxes {
                     box.index.setValue(index)
                     box.host.refer(host)
                 })
-                STEREO_ENTRY_LABELS.forEach((label, entryIndex) => createCompositeEntry(boxGraph, composite.entries, entryIndex, label))
+                Arrays.create(entryIndex => createCompositeEntry(boxGraph, composite.entries, entryIndex), STEREO_ENTRY_COUNT)
                 return composite
             }
             case "FrequencySplit": {
@@ -333,7 +343,7 @@ export namespace DeviceBoxes {
                     box.index.setValue(index)
                     box.host.refer(host)
                 })
-                FREQUENCY_SPLIT_ENTRY_LABELS.forEach((label, entryIndex) => createCompositeEntry(boxGraph, composite.entries, entryIndex, label))
+                Arrays.create(entryIndex => createCompositeEntry(boxGraph, composite.entries, entryIndex), FREQUENCY_SPLIT_ENTRY_COUNT)
                 return composite
             }
             default:
@@ -343,12 +353,10 @@ export namespace DeviceBoxes {
 
     export const createCompositeEntry = (boxGraph: BoxGraph,
                                          entries: Field<Pointers.AudioEffectCompositeCell>,
-                                         index: int,
-                                         label: string): AudioEffectCompositeCellBox =>
+                                         index: int): AudioEffectCompositeCellBox =>
         AudioEffectCompositeCellBox.create(boxGraph, UUID.generate(), box => {
             box.composite.refer(entries)
             box.index.setValue(index)
-            box.label.setValue(label)
         })
 
     export const iconName = (symbol: IconSymbol): string => IconSymbol.toName(symbol)

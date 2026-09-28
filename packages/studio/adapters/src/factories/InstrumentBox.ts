@@ -5,6 +5,7 @@ import {
     NeonDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
+    InstrumentCompositeBox,
     PlayfieldDeviceBox,
     SoundfontDeviceBox,
     TapeDeviceBox,
@@ -20,5 +21,6 @@ export type InstrumentBox =
     | NeonDeviceBox
     | NanoDeviceBox
     | PlayfieldDeviceBox
+    | InstrumentCompositeBox
     | SoundfontDeviceBox
     | MIDIOutputDeviceBox

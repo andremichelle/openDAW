@@ -166,7 +166,7 @@ impl Engine {
 
     /// Reconcile a unit's parallel AUX SENDS against its `auxSends` (24) collection: build joiners, terminate
     /// leavers, in collection order. Only the send PROCESSORS + their param subscriptions are (de)allocated
-    /// here; their source (pre-fader tap) + target-bus edges are wired by `resolve_sends`.
+    /// here; their source (pre-strip or post-strip tap, per `routing`) + target-bus edges are wired by `resolve_sends`.
     pub(crate) fn reconcile_sends(&mut self, unit: &mut AudioUnitBinding) {
         let desired = unit.aux_sends.sorted();
         let existing = core::mem::take(&mut unit.sends);
@@ -205,11 +205,24 @@ impl Engine {
         let target_mark = mark.clone();
         subs.push(self.graph.subscribe_vertex(Propagation::This, Address::of(send_uuid, vec![SEND_TARGET_KEY]),
             Box::new(move |_graph, _update| target_mark.mark())));
+        let routing_address = Address::of(send_uuid, vec![SEND_ROUTING_KEY]);
+        let routing = Rc::new(Cell::new(self.graph.field_value(&routing_address)
+            .and_then(|value| value.as_int32()).unwrap_or(SEND_ROUTING_POST)));
+        let routing_cell = routing.clone();
+        let routing_mark = mark.clone();
+        subs.push(self.graph.subscribe_vertex(Propagation::This, routing_address, Box::new(move |_graph, update| {
+            if let Update::Primitive {new, ..} = update {
+                if let Some(value) = new.as_int32() {
+                    routing_cell.set(value);
+                    routing_mark.mark();
+                }
+            }
+        })));
         let automation = Rc::new(StripAutomation::new());
         let proc = Rc::new(RefCell::new(AuxSendProcessor::new(params, automation.clone(), self.sample_rate)));
         let node_id = self.context.register_processor(proc.clone());
         self.context.set_label(node_id, format!("aux-send {:02x}{:02x}", send_uuid[0], send_uuid[1]));
-        let mut send = SendBinding {send_uuid, proc, node_id, source: None, target: None, subs, automation,
+        let mut send = SendBinding {send_uuid, proc, node_id, source: None, target: None, routing, subs, automation,
             param_subs: Vec::new(), param_collections: Vec::new()};
         self.bind_send_automation(&mut send, invalidate);
         send
@@ -261,19 +274,105 @@ impl Engine {
         }
     }
 
+    /// Re-resolve EVERY audio sink in every unit's chains against the current graph (target bus + device
+    /// `enabled`), diff-based. Runs after `resolve_sends` in `reconcile_units`.
+    pub(crate) fn resolve_sinks(&mut self) {
+        let mut units = core::mem::take(&mut self.audio_units);
+        for unit in &mut units {
+            for_each_sink_in_wired(&mut unit.wired, &mut |binding| self.resolve_one_sink(binding));
+        }
+        self.audio_units = units;
+    }
+
+    /// Resolve ONE audio sink: its `targetBus` must be a REGISTERED (non-primary) bus and the device enabled,
+    /// otherwise the tap stays unwired (no master fallback, unlike an output route or a send: an unassigned
+    /// sink is silent by design). A disabled sink is bypassed in the chain (never processed), so its tap is
+    /// detached here rather than summed stale. A feedback loop is left unrouted.
+    pub(crate) fn resolve_one_sink(&mut self, sink: &mut SinkBinding) {
+        let wanted = if self.device_enabled(sink.device_uuid) {
+            self.graph.target_of(&Address::of(sink.device_uuid, vec![SINK_TARGET_KEY]))
+                .map(|target| target.uuid)
+                .filter(|uuid| self.bus_registry.contains_key(uuid))
+                .and_then(|uuid| self.sum_of(Some(uuid)).map(|(sum, sum_id)| (uuid, sum, sum_id)))
+        } else {
+            None
+        };
+        let new_target = wanted.as_ref().map(|(uuid, _, sum_id)| (*uuid, *sum_id));
+        if sink.target == new_target {
+            return;
+        }
+        if let Some((old_bus, old_sum)) = sink.target.take() {
+            if let Some((sum, _)) = self.sum_of(Some(old_bus)) {
+                sum.borrow_mut().remove_audio_source(&sink.proc.borrow().tap_output());
+            }
+            if self.context.has_node(old_sum) {
+                self.context.remove_edge(sink.node_id, old_sum);
+            }
+        }
+        let Some((bus, sum, sum_id)) = wanted else { return };
+        if self.context.would_cycle(sink.node_id, sum_id) {
+            return;
+        }
+        sum.borrow_mut().add_audio_source(sink.proc.borrow().tap_output());
+        self.context.register_edge(sink.node_id, sum_id);
+        sink.target = Some((bus, sum_id));
+    }
+
+    /// Bind a sink's `pass` (10) to its AUTOMATION (mirrors `bind_send_automation` for one field): a Value track
+    /// targeting it drives the chain level at the update clock. Re-observed on a real automation change; without
+    /// a track the override stays `None` and the processor keeps using the static `SendParams.gain_db`. Maps the
+    /// 0..1 curve through the adapter's `ValueMapping.DefaultDecibel`.
+    pub(crate) fn bind_sink_automation(&mut self, sink: &mut SinkBinding, invalidate: &Rc<dyn Fn()>) {
+        const PASS: Decibel = Decibel::default_volume(); // TS AudioSinkDeviceBoxAdapter ValueMapping.DefaultDecibel
+        *sink.automation.volume.borrow_mut() = None;
+        for sub in core::mem::take(&mut sink.param_subs) {
+            self.graph.unsubscribe(sub);
+        }
+        for collection in core::mem::take(&mut sink.param_collections) {
+            collection.terminate(&mut self.graph);
+        }
+        let (_, resolver) = self.observe_field_automation(sink.device_uuid, &[SINK_PASS_KEY], 0, &mut sink.param_subs,
+            &mut sink.param_collections, invalidate, |value, kind, modulation| host_float(value, kind, modulation, &PASS));
+        *sink.automation.volume.borrow_mut() = resolver;
+    }
+
+    /// Tear down one audio sink (its chain member left or the chain was torn down): detach the tap from its
+    /// bus, drop the edge, its observers, its automation observations and its node.
+    pub(crate) fn teardown_sink(&mut self, sink: SinkBinding) {
+        if let Some((bus, sum_id)) = sink.target {
+            if let Some((sum, _)) = self.sum_of(Some(bus)) {
+                sum.borrow_mut().remove_audio_source(&sink.proc.borrow().tap_output());
+            }
+            if self.context.has_node(sum_id) {
+                self.context.remove_edge(sink.node_id, sum_id);
+            }
+        }
+        for sub in sink.subs {
+            self.graph.unsubscribe(sub);
+        }
+        for sub in sink.param_subs {
+            self.graph.unsubscribe(sub);
+        }
+        for collection in sink.param_collections {
+            collection.terminate(&mut self.graph);
+        }
+        self.context.remove_processor(sink.node_id);
+    }
+
     /// Re-resolve EVERY unit's aux sends against the current graph (source tap + target bus), diff-based. Run
     /// with `resolve_outputs` at the end of a working `reconcile_units`.
     pub(crate) fn resolve_sends(&mut self) {
         let mut units = core::mem::take(&mut self.audio_units);
         for unit in &mut units {
             // A STEM export with includeSends=false leaves this unit's aux sends unwired (TS skips them).
-            let tap = if self.unit_options(&unit.unit).include_sends {
-                unit.wired.as_ref().map(|wired| wired.pre_strip())
-            } else {
-                None
-            };
+            let include_sends = self.unit_options(&unit.unit).include_sends;
             let mut sends = core::mem::take(&mut unit.sends);
             for send in &mut sends {
+                let tap = match (&unit.wired, include_sends) {
+                    (Some(wired), true) if send.routing.get() == SEND_ROUTING_POST => Some(wired.strip()),
+                    (Some(wired), true) => Some(wired.pre_strip()),
+                    _ => None
+                };
                 self.resolve_one_send(send, &tap);
             }
             unit.sends = sends;
@@ -281,7 +380,7 @@ impl Engine {
         self.audio_units = units;
     }
 
-    /// Resolve ONE aux send: wire its PRE-fader tap node as source, and its `targetBus` (registered bus sum, or
+    /// Resolve ONE aux send: wire its tap node (pre-strip or strip output, per `routing`) as source, and its `targetBus` (registered bus sum, or
     /// the master fallback) as the destination it sums into. Both diffed so a re-point / strip rebuild re-wires
     /// once; a feedback loop is left unrouted.
     pub(crate) fn resolve_one_send(&mut self, send: &mut SendBinding, tap: &Option<(NodeId, SharedAudioBuffer)>) {

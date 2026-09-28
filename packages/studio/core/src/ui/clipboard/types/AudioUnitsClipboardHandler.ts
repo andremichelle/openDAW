@@ -24,7 +24,7 @@ import {ClipboardUtils} from "../ClipboardUtils"
 import {BoxGraphCopy} from "../../../BoxGraphCopy"
 import {DevicesClipboard} from "./DevicesClipboardHandler"
 
-type ClipboardAudioUnits = ClipboardEntry<"audio-units">
+export type ClipboardAudioUnits = ClipboardEntry<"audio-units">
 
 type AudioUnitMetadata = {
     readonly type: AudioUnitType
@@ -80,6 +80,15 @@ export namespace AudioUnitsClipboard {
             }
         }).boxes))
 
+    export const copyEntry = (audioUnitAdapter: AudioUnitBoxAdapter): Option<ClipboardAudioUnits> => {
+        if (audioUnitAdapter.type === AudioUnitType.Output) {return Option.None}
+        const audioUnitBox = audioUnitAdapter.box
+        const dependencies = collectDependencies(audioUnitBox, false)
+        const metadata: AudioUnitMetadata = {type: audioUnitAdapter.type}
+        const data = ClipboardUtils.serializeBoxes([audioUnitBox, ...dependencies], encodeMetadata(metadata))
+        return Option.wrap({type: "audio-units", data, count: 1})
+    }
+
     export const newAudioUnitPasteOptions = (rootBox: RootBox, primaryBusUuid: UUID.Bytes): BoxGraphCopy.Options => ({
         mapPointer: (pointer, address) => {
             if (address.isEmpty()) {return Option.None}
@@ -106,19 +115,7 @@ export namespace AudioUnitsClipboard {
                                       audioUnitEditing,
                                       getEditedAudioUnit
                                   }: Context): ClipboardHandler<ClipboardAudioUnits> => {
-        const copyAudioUnit = (): Option<ClipboardAudioUnits> => {
-            const optAudioUnit = getEditedAudioUnit()
-            if (optAudioUnit.isEmpty()) {return Option.None}
-            const audioUnitAdapter = optAudioUnit.unwrap()
-            const audioUnitBox = audioUnitAdapter.box
-            const isOutput = audioUnitAdapter.type === AudioUnitType.Output
-            if (isOutput) {return Option.None}
-            const dependencies = collectDependencies(audioUnitBox, isOutput)
-            const metadata: AudioUnitMetadata = {type: audioUnitAdapter.type}
-            const allBoxes = [audioUnitBox, ...dependencies]
-            const data = ClipboardUtils.serializeBoxes(allBoxes, encodeMetadata(metadata))
-            return Option.wrap({type: "audio-units", data, count: 1})
-        }
+        const copyAudioUnit = (): Option<ClipboardAudioUnits> => getEditedAudioUnit().flatMap(copyEntry)
         return {
             canCopy: (): boolean => {
                 if (!getEnabled()) {return false}

@@ -1,7 +1,7 @@
 import {Arrays, asDefined, EmptyExec, panic, SortedSet, Subscription, Terminable, Terminator, UUID} from "@opendaw/lib-std"
 import {Pointers} from "@opendaw/studio-enums"
-import {AudioUnitBox, AuxSendBox, BoxVisitor} from "@opendaw/studio-boxes"
-import {AudioUnitBoxAdapter, IndexedBoxAdapterCollection} from "@opendaw/studio-adapters"
+import {AudioSinkDeviceBox, AudioUnitBox, AuxSendBox, BoxVisitor} from "@opendaw/studio-boxes"
+import {AudioSinkDeviceBoxAdapter, AudioUnitBoxAdapter, BoxAdapters, IndexedBoxAdapterCollection} from "@opendaw/studio-adapters"
 import {DeferExec, deferNextFrame} from "@opendaw/lib-dom"
 import {Box} from "@opendaw/lib-box"
 
@@ -18,13 +18,15 @@ interface ChannelStripState {
 export class Mixer implements Terminable {
     readonly #terminator: Terminator = new Terminator()
     readonly #audioUnits: IndexedBoxAdapterCollection<AudioUnitBoxAdapter, Pointers.AudioUnits>
+    readonly #boxAdapters: BoxAdapters
     readonly #states: SortedSet<UUID.Bytes, ChannelStripState>
     readonly #solo: Set<AudioUnitBoxAdapter>
     readonly #virtualSolo: Set<AudioUnitBoxAdapter>
     readonly #deferUpdate: DeferExec
 
-    constructor(audioUnits: IndexedBoxAdapterCollection<AudioUnitBoxAdapter, Pointers.AudioUnits>) {
+    constructor(audioUnits: IndexedBoxAdapterCollection<AudioUnitBoxAdapter, Pointers.AudioUnits>, boxAdapters: BoxAdapters) {
         this.#audioUnits = audioUnits
+        this.#boxAdapters = boxAdapters
         this.#states = UUID.newSet(({adapter: {uuid}}) => uuid)
         this.#solo = new Set()
         this.#virtualSolo = new Set()
@@ -128,7 +130,9 @@ export class Mixer implements Terminable {
             visitAudioUnitBox: ({address: {uuid}}: AudioUnitBox) =>
                 this.#states.get(uuid, "channel-strip state").adapter,
             visitAuxSendBox: ({audioUnit: {targetVertex}}: AuxSendBox) =>
-                this.#states.get(targetVertex.unwrap("auxSend.target").address.uuid, "channel-strip state").adapter
+                this.#states.get(targetVertex.unwrap("auxSend.target").address.uuid, "channel-strip state").adapter,
+            visitAudioSinkDeviceBox: (box: AudioSinkDeviceBox) => this.#states.get(this.#boxAdapters
+                .adapterFor(box, AudioSinkDeviceBoxAdapter).audioUnitBoxAdapter().uuid, "channel-strip state").adapter
         }), "Could not resolve entry")
     }
 

@@ -20,6 +20,7 @@ import {
     AudioFileBox,
     AudioPitchStretchBox,
     AudioSignalsmithBox,
+    AudioSinkDeviceBox,
     AudioRegionBox,
     AudioTimeStretchBox,
     AudioUnitBox,
@@ -62,6 +63,8 @@ import {
     PitchDeviceBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
+    InstrumentCompositeBox,
+    InstrumentCompositeCellBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
     StereoCompositeBox,
@@ -136,7 +139,10 @@ import {KorpusDeviceBoxAdapter} from "./devices/instruments/KorpusDeviceBoxAdapt
 import {NeonDeviceBoxAdapter} from "./devices/instruments/NeonDeviceBoxAdapter"
 import {NanoDeviceBoxAdapter} from "./devices/instruments/NanoDeviceBoxAdapter"
 import {PlayfieldDeviceBoxAdapter} from "./devices/instruments/PlayfieldDeviceBoxAdapter"
+import {InstrumentCompositeBoxAdapter} from "./devices/instruments/InstrumentCompositeBoxAdapter"
+import {InstrumentCompositeCellBoxAdapter} from "./devices/instruments/InstrumentComposite/InstrumentCompositeCellBoxAdapter"
 import {StereoToolDeviceBoxAdapter} from "./devices/audio-effects/StereoToolDeviceBoxAdapter"
+import {AudioSinkDeviceBoxAdapter} from "./devices/audio-effects/AudioSinkDeviceBoxAdapter"
 import {PlayfieldSampleBoxAdapter} from "./devices/instruments/Playfield/PlayfieldSampleBoxAdapter"
 import {AudioEffectCompositeBoxAdapter} from "./devices/audio-effects/AudioEffectCompositeBoxAdapter"
 import {StereoCompositeBoxAdapter} from "./devices/audio-effects/StereoCompositeBoxAdapter"
@@ -284,6 +290,8 @@ export class BoxAdapters implements Terminable {
             visitNoteRegionBox: (box: NoteRegionBox) => new NoteRegionBoxAdapter(this.#context, box),
             visitPitchDeviceBox: (box: PitchDeviceBox) => new PitchDeviceBoxAdapter(this.#context, box),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox) => new PlayfieldDeviceBoxAdapter(this.#context, box),
+            visitInstrumentCompositeBox: (box: InstrumentCompositeBox) => new InstrumentCompositeBoxAdapter(this.#context, box),
+            visitInstrumentCompositeCellBox: (box: InstrumentCompositeCellBox) => new InstrumentCompositeCellBoxAdapter(this.#context, box),
             visitPlayfieldSampleBox: (box: PlayfieldSampleBox) => new PlayfieldSampleBoxAdapter(this.#context, box),
             visitAudioEffectCompositeBox: (box: AudioEffectCompositeBox) => new AudioEffectCompositeBoxAdapter(this.#context, box),
             visitAudioEffectCompositeCellBox: (box: AudioEffectCompositeCellBox) => new AudioEffectCompositeCellBoxAdapter(this.#context, box),
@@ -296,6 +304,7 @@ export class BoxAdapters implements Terminable {
             visitSoundfontFileBox: (box: SoundfontFileBox) => new SoundfontFileBoxAdapter(this.#context, box),
             visitSpielwerkDeviceBox: (box: SpielwerkDeviceBox) => new SpielwerkDeviceBoxAdapter(this.#context, box),
             visitStereoToolDeviceBox: (box: StereoToolDeviceBox) => new StereoToolDeviceBoxAdapter(this.#context, box),
+            visitAudioSinkDeviceBox: (box: AudioSinkDeviceBox) => new AudioSinkDeviceBoxAdapter(this.#context, box),
             visitTapeDeviceBox: (box: TapeDeviceBox) => new TapeDeviceBoxAdapter(this.#context, box),
             visitTimelineBox: (box: TimelineBox) => new TimelineBoxAdapter(this.#context, box),
             visitTrackBox: (box: TrackBox) => new TrackBoxAdapter(this.#context, box),

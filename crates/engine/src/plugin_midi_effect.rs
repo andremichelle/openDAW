@@ -44,6 +44,7 @@ pub(crate) struct PluginMidiEffect {
     // The fx's note-bits slot (TS midi effects own a `NoteBroadcaster` at the DEVICE address): the note
     // starts/completes this fx EMITS set/clear pitch bits, so its editor's note indicator mirrors TS.
     note_bits: engine_env::telemetry::BroadcastSlot,
+    box_uuid: Cell<[u8; 16]>
 }
 
 impl PluginMidiEffect {
@@ -53,8 +54,23 @@ impl PluginMidiEffect {
             state: DeviceState::new(device.state_size as usize),
             params: RefCell::new(Vec::new()),
             clock_armed: Cell::new(false),
-            note_bits: engine_env::telemetry::broadcast_slot(4)
+            note_bits: engine_env::telemetry::broadcast_slot(4),
+            box_uuid: Cell::new([0; 16])
         }
+    }
+
+    /// A composite cell's OWN instance of the unit-level effect `original`: fresh device state, the SAME
+    /// device box and note-bits slot (the editor's indicator keeps showing the unit-level device).
+    pub(crate) fn replica(device: DeviceReg, original: &PluginMidiEffect) -> Self {
+        Self {note_bits: original.note_bits.clone(), box_uuid: Cell::new(original.box_uuid.get()), ..Self::new(device)}
+    }
+
+    pub(crate) fn set_box_uuid(&self, uuid: [u8; 16]) {
+        self.box_uuid.set(uuid);
+    }
+
+    pub(crate) fn box_uuid(&self) -> [u8; 16] {
+        self.box_uuid.get()
     }
 
     /// The note-bits broadcast slot (see the field docs).

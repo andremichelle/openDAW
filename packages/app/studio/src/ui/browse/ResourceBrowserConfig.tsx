@@ -29,6 +29,7 @@ export type ResourceBrowserConfig<T> = {
     resolveEntryUuid: (entry: T) => UUID.String
     createSelection: (service: StudioService, htmlSelection: HTMLSelection) => ResourceSelection<T>
     importSignal: StudioSignal["type"]
+    importFiles: (files: ReadonlyArray<File>) => Promise<ReadonlyArray<T>>
     headers: ReadonlyArray<ResourceHeader>
     footer?: (props: { lifecycle: Lifecycle, service: StudioService }) => HTMLElement | null
     onReload?: Exec

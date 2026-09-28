@@ -7,7 +7,8 @@ import {StudioService} from "@/service/StudioService"
 import {card, radio} from "./AnalysisControls.tsx"
 import {AnalysisSettings} from "./AnalysisSettings.ts"
 import {observeProject} from "./AnalysisSource.ts"
-import {clearBg, unitLabel, UNIT_COLOR_DIM} from "./AnalysisCommon.ts"
+import {clearBg, unitLabel} from "./AnalysisCommon.ts"
+import {Colors} from "@opendaw/studio-enums"
 
 type LevelValues = { peakL: number, peakR: number, rmsL: number, rmsR: number, lufs: number }
 
@@ -68,10 +69,10 @@ const drawLevel = (painter: CanvasPainter, level: LevelValues, scale: string): v
         (1.0 - (db - LEVEL_FLOOR) / (LEVEL_CEIL - LEVEL_FLOOR)) * plotH
     spec.ticks.forEach((tick, index) =>
         unitLabel(context, index === 0 ? `${tick} ${spec.unit}` : `${tick}`, pad, yAt(tick), "left", "top",
-            UNIT_COLOR_DIM))
-    unitLabel(context, "peak L R", (peakL + peakR + barWidth) / 2, h - dpr, "center", "bottom", UNIT_COLOR_DIM)
-    unitLabel(context, "rms L R", (rmsL + rmsR + barWidth) / 2, h - dpr, "center", "bottom", UNIT_COLOR_DIM)
-    unitLabel(context, "LUFS M", lufsX + barWidth / 2, h - dpr, "center", "bottom", UNIT_COLOR_DIM)
+            Colors.shadow.toString()))
+    unitLabel(context, "peak L R", (peakL + peakR + barWidth) / 2, h - dpr, "center", "bottom", Colors.shadow.toString())
+    unitLabel(context, "rms L R", (rmsL + rmsR + barWidth) / 2, h - dpr, "center", "bottom", Colors.shadow.toString())
+    unitLabel(context, "LUFS M", lufsX + barWidth / 2, h - dpr, "center", "bottom", Colors.shadow.toString())
 }
 
 type Construct = { lifecycle: Lifecycle, service: StudioService }

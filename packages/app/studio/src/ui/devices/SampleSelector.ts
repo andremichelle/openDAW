@@ -1,6 +1,5 @@
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {isDefined, Option, Procedure, Terminable, UUID} from "@opendaw/lib-std"
-import {Dialogs} from "@/ui/components/dialogs"
 import {Events, Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {StudioService} from "@/service/StudioService"
@@ -131,39 +130,22 @@ export class SampleSelector {
         return ContextMenu.subscribe(button, collector => collector.addItems(this.createRemoveMenuData()))
     }
 
+    async #importDropped(files: ReadonlyArray<File>): Promise<Option<Sample>> {
+        const imported = await this.#service.sampleService.importFiles(files)
+        imported.forEach(entry => this.#service.project.trackUserCreatedSample(UUID.parse(entry.uuid)))
+        return Option.wrap(imported.at(0))
+    }
+
     configureDrop(dropZone: HTMLElement, onShiftDrop?: Procedure<Sample>): Terminable {
         return DragAndDrop.installTarget(dropZone, {
             drag: (_event: DragEvent, data: AnyDragData): boolean => data.type === "sample" || data.type === "file",
             drop: async (event: DragEvent, data: AnyDragData): Promise<void> => {
                 if (!(data.type === "sample" || data.type === "file")) {return}
                 const shift = event.shiftKey
-                const dialog = Dialogs.processMonolog("Import Sample")
-                let sample: Sample
-                if (data.type === "sample") {
-                    sample = data.sample
-                } else if (data.type === "file") {
-                    if (!isDefined(data.file)) {return}
-                    const {status, value, error} = await Promises.tryCatch(this.#service.sampleService.importFile({
-                        name: data.file.name,
-                        arrayBuffer: await data.file.arrayBuffer()
-                    }))
-                    if (status === "rejected") {
-                        console.warn(error)
-                        dialog.close()
-                        return
-                    }
-                    this.#service.project.trackUserCreatedSample(UUID.parse(value.uuid))
-                    sample = value
-                } else {
-                    dialog.close()
-                    return
-                }
-                dialog.close()
-                if (shift && isDefined(onShiftDrop)) {
-                    onShiftDrop(sample)
-                } else {
-                    this.newSample(sample)
-                }
+                const optSample = data.type === "sample"
+                    ? Option.wrap(data.sample)
+                    : await this.#importDropped(data.files)
+                optSample.ifSome(sample => shift && isDefined(onShiftDrop) ? onShiftDrop(sample) : this.newSample(sample))
             },
             enter: (allowDrop: boolean) => dropZone.classList.toggle("accept", allowDrop),
             leave: () => dropZone.classList.remove("accept")

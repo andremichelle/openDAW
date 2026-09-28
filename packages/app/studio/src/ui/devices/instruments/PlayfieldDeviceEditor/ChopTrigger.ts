@@ -51,14 +51,9 @@ export namespace ChopTrigger {
     export const resolveSample = async (service: StudioService, data: AnyDragData): Promise<Option<Sample>> => {
         if (data.type === "sample") {return Option.wrap(data.sample)}
         if (data.type === "file") {
-            if (!isDefined(data.file)) {return Option.None}
-            const {status, value, error} = await Promises.tryCatch(service.sampleService.importFile({
-                name: data.file.name,
-                arrayBuffer: await data.file.arrayBuffer()
-            }))
-            if (status === "rejected") {console.warn(error); return Option.None}
-            service.project.trackUserCreatedSample(UUID.parse(value.uuid))
-            return Option.wrap(value)
+            const imported = await service.sampleService.importFiles(data.files)
+            imported.forEach(sample => service.project.trackUserCreatedSample(UUID.parse(sample.uuid)))
+            return Option.wrap(imported.at(0))
         }
         return Option.None
     }

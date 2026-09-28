@@ -34,6 +34,12 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
     protected abstract readonly boxType: Class<AudioFileBox | SoundfontFileBox>
     protected abstract readonly filePickerOptions: FilePickerOptions
 
+    static extensionOf(file: File): string {
+        return file.name.slice(file.name.lastIndexOf(".") + 1).toLowerCase()
+    }
+
+    abstract acceptsFile(file: File): boolean
+
     protected readonly notifier: Notifier<[T, RAW]> = new Notifier<[T, RAW]>()
 
     subscribe(observer: Observer<[T, RAW]>): Subscription {return this.notifier.subscribe(observer)}
@@ -110,6 +116,12 @@ export abstract class AssetService<T extends Sample | Soundfont, RAW = void> {
             RuntimeNotifier.notify({message: "File access error.", icon: "Warning"})
             return []
         }
+        return this.importFiles(files)
+    }
+
+    async importFiles(dropped: ReadonlyArray<File>): Promise<ReadonlyArray<T>> {
+        const files = dropped.filter(file => this.acceptsFile(file))
+        if (files.length === 0) {return []}
         const progress = new DefaultObservableValue(0.0)
         const dialog = RuntimeNotifier.progress({
             headline: `Importing ${files.length === 1 ? this.nameSingular : this.namePlural}...`, progress

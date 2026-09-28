@@ -49,12 +49,12 @@ export const CubedDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrumen
                 fields: {
                     1: {type: "int32", name: "length", value: 16, constraints: {min: 1, max: 64}, unit: ""},
                     // each int32 packs midi-note (7 bits), on/off (1), slide (1), accent (1). adapter packs/unpacks.
-                    // 60 = note 60 with all flags off, the born-default step.
+                    // 36 = note 36 (C1) with all flags off, the born-default step.
                     2: {
                         type: "array",
                         name: "steps",
                         length: 64,
-                        element: {type: "int32", value: 60, constraints: "any", unit: ""}
+                        element: {type: "int32", value: 36, constraints: "any", unit: ""}
                     }
                 }
             }

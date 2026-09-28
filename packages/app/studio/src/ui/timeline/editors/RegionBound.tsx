@@ -152,7 +152,7 @@ export const RegionBound = ({lifecycle, service, range, snapping, modifyContext}
                             bounds: [region.position, region.complete]
                         })
                     case "loop-duration":
-                        return RegionLoopDurationModifier.create([region], {...construct, resize: false})
+                        return RegionLoopDurationModifier.create([region], construct)
                     case "region-position":
                         return RegionMoveInTrackModifier.create([region], construct)
                     default:

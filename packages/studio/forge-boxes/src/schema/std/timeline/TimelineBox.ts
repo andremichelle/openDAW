@@ -22,7 +22,7 @@ export const TimelineBox: BoxSchema<Pointers> = {
                 type: "object", name: "loop-area", class: {
                     name: "LoopArea",
                     fields: {
-                        1: {type: "boolean", name: "enabled", value: true},
+                        1: {type: "boolean", name: "enabled", value: false},
                         2: {
                             type: "int32", name: "from",
                             value: 0, ...PPQNPositionConstraints

@@ -13,13 +13,13 @@ export namespace RegionPaintBucket {
     }, selected: boolean, forceMute: boolean): RegionPaintBucket => {
         const saturationFactor = mute || forceMute ? 0.05 : 1.0
         const fullSat = 100 * saturationFactor
-        const normSat = 60 * saturationFactor
-        const lessSat = 45 * saturationFactor
-        const labelColor = selected ? `hsl(${hue}, ${normSat}%, 10%)` : `hsl(${hue}, ${normSat}%, 60%)`
-        const labelBackground = selected ? `hsla(${hue}, ${fullSat}%, 60%, 0.75)` : `hsla(${hue}, ${lessSat}%, 60%, 0.15)`
-        const contentColor = `hsl(${hue}, ${normSat}%, 45%)`
-        const contentBackground = selected ? `hsla(${hue}, ${normSat}%, 60%, 0.06)` : `hsla(${hue}, ${normSat}%, 60%, 0.03)`
-        const loopStrokeColor = `hsl(${hue}, ${normSat}%, 50%)`
+        const normSat = 75 * saturationFactor
+        const lessSat = 60 * saturationFactor
+        const labelColor = selected ? `hsl(${hue}, ${normSat}%, 10%)` : `hsl(${hue}, ${normSat}%, 68%)`
+        const labelBackground = selected ? `hsla(${hue}, ${fullSat}%, 60%, 0.85)` : `hsla(${hue}, ${lessSat}%, 60%, 0.28)`
+        const contentColor = `hsl(${hue}, ${normSat}%, 55%)`
+        const contentBackground = selected ? `hsla(${hue}, ${normSat}%, 60%, 0.12)` : `hsla(${hue}, ${normSat}%, 60%, 0.07)`
+        const loopStrokeColor = `hsl(${hue}, ${normSat}%, 58%)`
         return {labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor}
     }
 }

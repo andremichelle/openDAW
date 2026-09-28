@@ -8,6 +8,7 @@ import type {RecordingStart} from "../Engine"
 import type {RecordingWorklet} from "../RecordingWorklet"
 import {InputLatency} from "./InputLatency"
 import type {Capture} from "./Capture"
+import {RegionClipResolver} from "../ui/timeline/RegionClipResolver"
 
 // An audio take is placed from two audio-thread reports: the engine's `recordingStart` (context time and
 // playhead position at the end of the quantum recording began in) and the recording processor's
@@ -91,6 +92,7 @@ const setup = async ({outputLatency = 0.020, inputLatency = 0.010}:
     const regions = (): ReadonlyArray<AudioRegionBoxAdapter> => audioUnit.tracks.values()
         .flatMap(track => track.regions.collection.asArray())
         .filter(region => region.isAudioRegion())
+    const validate = () => audioUnit.tracks.values().forEach(track => RegionClipResolver.validateTrack(track))
     const tick = (position: ppqn) => worklet.position.setValue(position)
     const record = () => worklet.isRecording.setValue(true)
     const startAt = (contextTime: number, position: ppqn) => worklet.recordingStart.wrap({contextTime, position})
@@ -108,8 +110,8 @@ const setup = async ({outputLatency = 0.020, inputLatency = 0.010}:
     })
     const reportOutputLatency = (seconds: number) => reportedOutputLatency = seconds
     return {
-        project, audioContext, recordingWorklet, regions, tick, record, startAt, firstQuantumAt, deliver, stop, loop,
-        reportOutputLatency
+        project, audioContext, recordingWorklet, regions, validate, tick, record, startAt, firstQuantumAt, deliver,
+        stop, loop, reportOutputLatency
     }
 }
 
@@ -305,7 +307,7 @@ describe("RecordAudio", () => {
         })
 
         it("aborts a recording whose only take never grew past zero and removes its file box", async () => {
-            const {project, regions, recordingWorklet, tick, record, startAt, firstQuantumAt, deliver, stop} =
+            const {project, regions, validate, recordingWorklet, tick, record, startAt, firstQuantumAt, deliver, stop} =
                 await setup()
             firstQuantumAt(1.0)
             startAt(1.5, 0)
@@ -313,6 +315,8 @@ describe("RecordAudio", () => {
             record()
             tick(40)
             expect(regions().length).toBe(1)
+            expect(regions()[0].duration).toBeGreaterThan(0)
+            expect(() => validate()).not.toThrow()
             expect(project.boxGraph.findBox(recordingWorklet.uuid).nonEmpty()).toBe(true)
             stop()
             expect(regions().length).toBe(0)
@@ -321,7 +325,7 @@ describe("RecordAudio", () => {
         })
 
         it("finalizes the earlier takes when the stop drops a take that never grew past zero", async () => {
-            const {regions, recordingWorklet, tick, record, startAt, firstQuantumAt, deliver, stop, loop} =
+            const {regions, validate, recordingWorklet, tick, record, startAt, firstQuantumAt, deliver, stop, loop} =
                 await setup()
             loop(0, PPQN.Bar) // 2 s at 120 bpm
             firstQuantumAt(1.0)
@@ -332,10 +336,12 @@ describe("RecordAudio", () => {
             deliver(2.4)
             tick(PPQN.Bar - 40)
             // the wrap closes take 1 at the loop end and opens take 2, whose window starts 0.53 + 2 s
-            // into the buffer, ahead of what the ring has delivered so far
+            // into the buffer, ahead of what the ring has delivered so far. The live take still holds a
+            // positive placeholder duration (#1129: a zero-duration region trips validateTrack on any edit)
             tick(20)
             expect(regions().length).toBe(2)
-            expect(regions().map(region => region.box.duration.getValue() > 0)).toEqual([true, false])
+            expect(regions().map(region => region.box.duration.getValue() > 0)).toEqual([true, true])
+            expect(() => validate()).not.toThrow()
             stop()
             expect(regions().length).toBe(1)
             expect(recordingWorklet.limits).toEqual([recordingWorklet.numberOfFrames])

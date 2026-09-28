@@ -41,7 +41,7 @@ const assertMirrored = (facade: object) => {
 describe("Schema parity", () => {
     it("mirrors every automatable instrument parameter", () => {
         const {project} = createFixture()
-        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Soundfont", "MIDIOutput", "Tape", "Neon", "Cubed", "Apparat"]
+        const keys: ReadonlyArray<keyof Instruments> = ["Vaporisateur", "Playfield", "Nano", "Soundfont", "MIDIOutput", "Tape", "Neon", "Cubed", "Apparat", "InstrumentComposite"]
         const plain: Record<string, ReadonlyArray<string>> = {}
         keys.forEach(key => {plain[key] = assertMirrored(project.addInstrumentUnit(key).instrument)})
         expect(plain).toEqual({
@@ -57,7 +57,8 @@ describe("Schema parity", () => {
                 `patterns.${pattern}.length`,
                 ...Array.from({length: 64}, (_, step) => `patterns.${pattern}.steps.${step}`)
             ]).flat(),
-            Apparat: []
+            Apparat: [],
+            InstrumentComposite: []
         })
     })
 
@@ -74,14 +75,15 @@ describe("Schema parity", () => {
         const keys: ReadonlyArray<keyof AudioEffects> = [
             "Autotune", "Compressor", "Convolver", "Crusher", "DattorroReverb", "Delay", "Fold", "Gate", "Maximizer",
             "NeuralAmp", "Revamp", "Reverb", "StereoTool", "Tidal", "Vocoder", "Waveshaper", "Werkstatt",
-            "Composite", "StereoSplit", "FrequencySplit"
+            "Composite", "StereoSplit", "FrequencySplit", "Sink"
         ]
         const plain: Record<string, ReadonlyArray<string>> = {}
         keys.forEach(key => {plain[key] = assertMirrored(unit.addAudioEffect(key))})
         expect(plain).toEqual({
             Autotune: [], Compressor: [], Convolver: [], Crusher: [], DattorroReverb: [], Delay: [], Fold: [],
             Gate: [], Maximizer: [], NeuralAmp: [], Revamp: [], Reverb: [], StereoTool: [], Tidal: [],
-            Vocoder: ["modulatorSource"], Waveshaper: [], Werkstatt: [], Composite: [], StereoSplit: [], FrequencySplit: []
+            Vocoder: ["modulatorSource"], Waveshaper: [], Werkstatt: [], Composite: [], StereoSplit: [], FrequencySplit: [],
+            Sink: []
         })
     })
 
@@ -92,6 +94,8 @@ describe("Schema parity", () => {
         expect(assertMirrored(slot)).toEqual([])
         const entry = unit.addAudioEffect("Composite").addEntry()
         expect(assertMirrored(entry)).toEqual([])
+        const layer = project.addInstrumentUnit("InstrumentComposite").instrument.addLayer("Nano")
+        expect(assertMirrored(layer)).toEqual([])
         const send = unit.addSend(project.addAuxUnit())
         expect(assertMirrored(send)).toEqual(["routing"])
         expect(assertMirrored(unit)).toEqual(["type", "userInterface.automationCollapsed"])

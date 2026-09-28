@@ -5,6 +5,7 @@ import {
     AudioUnitBox,
     AuxSendBox,
     GrooveShuffleBox,
+    InstrumentCompositeCellBox,
     LfoModulatorBox,
     MacroModulatorBox,
     MarkerBox,
@@ -25,7 +26,7 @@ import {Facade} from "./Common"
 import {AnyAudioUnit} from "../Api"
 import {AudioEffectCompositeEntryImpl, AudioEffectImpls, CompositeBox} from "./devices/AudioEffects"
 import {MIDIEffectImpls} from "./devices/MIDIEffects"
-import {InstrumentImpls, MIDIOutputParameterImpl, PlayfieldSlotImpl} from "./devices/Instruments"
+import {InstrumentCompositeLayerImpl, InstrumentImpls, MIDIOutputParameterImpl, PlayfieldSlotImpl} from "./devices/Instruments"
 import {ScriptParameterImpl, ScriptSampleImpl} from "./devices/ScriptDevices"
 import {AudioUnitImpls} from "./AudioUnits"
 import {SendImpl} from "./Sends"
@@ -68,6 +69,7 @@ export namespace Facades {
         if (MIDIEffectImpls.isBox(box)) {return MIDIEffectImpls.wrap(context, box)}
         if (AudioEffectImpls.isBox(box)) {return AudioEffectImpls.wrap(context, box)}
         if (box instanceof PlayfieldSampleBox) {return PlayfieldSlotImpl.wrap(context, box)}
+        if (box instanceof InstrumentCompositeCellBox) {return InstrumentCompositeLayerImpl.wrap(context, box)}
         if (box instanceof AudioEffectCompositeCellBox) {return AudioEffectCompositeEntryImpl.wrap(context, box)}
         if (box instanceof AuxSendBox) {return SendImpl.wrap(context, box)}
         if (box instanceof WerkstattParameterBox) {return ScriptParameterImpl.wrap(context, box)}

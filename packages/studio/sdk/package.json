@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-sdk",
-  "version": "0.0.171",
+  "version": "0.0.172",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "publishConfig": {
@@ -52,11 +52,11 @@
     "@opendaw/lib-runtime": "^0.0.86",
     "@opendaw/lib-std": "^0.0.85",
     "@opendaw/lib-xml": "^0.0.71",
-    "@opendaw/studio-adapters": "^0.3.3",
-    "@opendaw/studio-boxes": "^0.0.109",
-    "@opendaw/studio-core": "^0.2.5",
-    "@opendaw/studio-core-wasm": "^0.0.16",
-    "@opendaw/studio-enums": "^0.1.2"
+    "@opendaw/studio-adapters": "^0.3.4",
+    "@opendaw/studio-boxes": "^0.0.110",
+    "@opendaw/studio-core": "^0.2.6",
+    "@opendaw/studio-core-wasm": "^0.0.17",
+    "@opendaw/studio-enums": "^0.1.3"
   },
   "gitHead": "8350421e29d38c9f31e88def06e1f2e6d174acff"
 }

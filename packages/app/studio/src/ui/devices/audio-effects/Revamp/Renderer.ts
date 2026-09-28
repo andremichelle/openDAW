@@ -4,6 +4,7 @@ import {RevampDeviceBoxAdapter} from "@opendaw/studio-adapters"
 import {Bell, CurveRenderer, HighPass, HighShelf, LowPass, LowShelf} from "@/ui/devices/audio-effects/Revamp/Curves.ts"
 import {ColorSets, curveSampleRate} from "./constants.ts"
 import {gainToDb} from "@opendaw/lib-dsp"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
 export const plotSpectrum = (context: CanvasRenderingContext2D,
                              xAxis: Scale,
@@ -44,8 +45,8 @@ export const plotSpectrum = (context: CanvasRenderingContext2D,
         x0 = x1
     }
     context.lineWidth = 0.0
-    context.fillStyle = "hsla(200, 83%, 60%, 0.04)"
-    context.strokeStyle = "hsla(200, 83%, 60%, 0.80)"
+    context.fillStyle = DisplayPaint.strokeStyle(0.04)
+    context.strokeStyle = DisplayPaint.strokeStyle(0.80)
     context.stroke(path2D)
     path2D.lineTo(width, height)
     path2D.lineTo(0, height)

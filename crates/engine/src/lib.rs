@@ -543,6 +543,10 @@ shared_static! {
 shared_static! {
     static SONG_POSITION: f64 = 0.0;
 }
+// #393: the CURRENT quantum follows a locate made while the transport stood still, so the update clock opens once.
+shared_static! {
+    static PAUSED_LOCATE: bool = false;
+}
 // The sample-observe recorder the `host_observe_sample` export appends to: each device's sample pointer-field
 // path (e.g. Nano's `file` at `[15]`). After `init`, the engine REACTIVELY tracks each pointer (catch-up +
 // subscribe), resolving its target to the AudioFileBox, requesting its frames, and delivering the handle (or
@@ -811,6 +815,10 @@ pub(crate) fn song_position() -> f64 {
     unsafe { *SONG_POSITION.get() }
 }
 
+fn paused_locate() -> bool {
+    unsafe { *PAUSED_LOCATE.get() }
+}
+
 fn quantum_transporting() -> bool {
     let pull = unsafe { PULL.get() };
     if pull.blocks.is_null() {
@@ -833,10 +841,14 @@ fn modulation_armed(pull: &PullContext) -> bool {
 #[no_mangle]
 pub extern "C" fn host_first_update_position(at: f64) -> f64 {
     let pull = unsafe { PULL.get() };
-    if !pull.clock_armed || !(quantum_transporting() || modulation_armed(pull)) {
+    if !pull.clock_armed {
         return f64::INFINITY;
     }
-    first_update_position(at)
+    if quantum_transporting() || modulation_armed(pull) {
+        return first_update_position(at);
+    }
+    // A free-running block may hold no grid point, so the located quantum fires at its block start.
+    if paused_locate() {at} else {f64::INFINITY}
 }
 
 /// Host import a render template calls to ADVANCE its fragment loop: the next update position STRICTLY after
@@ -1005,8 +1017,12 @@ pub extern "C" fn host_base_frequency() -> f32 {
 /// `PULL` (the current device's params, swapped in by its node), so it is safe to call from inside `process`.
 #[no_mangle]
 pub extern "C" fn host_update_parameters(position: f64, out_ptr: u32, max: u32) -> u32 {
-    let pull = unsafe { PULL.get() };
     let out = unsafe { core::slice::from_raw_parts_mut(out_ptr as *mut ParamChange, max as usize) };
+    update_parameters(position, out)
+}
+
+fn update_parameters(position: f64, out: &mut [ParamChange]) -> u32 {
+    let pull = unsafe { PULL.get() };
     let mut count = 0;
     // While PAUSED the caller's `position` is free-running; the automation reads the frozen song position.
     let automation_position = if quantum_transporting() {position} else {song_position()};
@@ -1106,7 +1122,7 @@ fn pull_from_slot_route(upstream: &SharedNoteEventSource, choke: &[i32], gate: &
             break;
         }
         match *event {
-            Event::NoteStart {id, position, pitch, cent, velocity, ..} => {
+            Event::NoteStart {id, position, duration, pitch, cent, velocity} => {
                 if choke.contains(&(pitch as i32)) {
                     out[count] = EventRecord {position, offset: 0, kind: EVENT_CHOKE, id: 0, pitch: 0, velocity: 0.0, cent: 0.0, duration: 0.0};
                     count += 1;
@@ -1117,7 +1133,7 @@ fn pull_from_slot_route(upstream: &SharedNoteEventSource, choke: &[i32], gate: &
                 if gate.get() {
                     continue; // silent (muted / not soloed): the start never reaches the device (TS mirror)
                 }
-                out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_ON, id: id as u32, pitch: pitch as u32, velocity, cent, duration: 0.0};
+                out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_ON, id: id as u32, pitch: pitch as u32, velocity, cent, duration};
             }
             Event::NoteComplete {id, position, pitch} => {
                 out[count] = EventRecord {position, offset: 0, kind: EVENT_NOTE_OFF, id: id as u32, pitch: pitch as u32, velocity: 0.0, cent: 0.0, duration: 0.0};
@@ -1171,6 +1187,15 @@ impl Controls {
     }
 }
 
+/// Everything a seconds-based audio span's ppqn size depends on: the nominal bpm, whether tempo automation
+/// applies, and the automation collection's edit version. Compared after each transaction.
+#[derive(Clone, Copy, PartialEq)]
+struct TempoStamp {
+    bpm: f32,
+    enabled: bool,
+    version: u64
+}
+
 /// The sample offset within the quantum for a note at pulse `position`, clamped to the block.
 fn sample_offset(position: f64, block: &Block, sample_rate: f32) -> usize {
     let pulses = position - block.p0;
@@ -1193,6 +1218,7 @@ struct Engine {
     // reaching `recording_start` flips to recording and restores the metronome preference.
     is_recording: bool,
     is_counting_in: bool,
+    paused_locate: bool,
     recording_start: f64,
     recording_denominator: i32, // the signature denominator at the recording start (the count-in remaining unit)
     metronome_pref: bool,
@@ -1232,6 +1258,7 @@ struct Engine {
     // state), feeding the switchMarkerState back-channel (the clip-changes pattern).
     marker_changes: Vec<(Uuid, i32, bool)>,
     tempo_map: SharedTempoMap, // ppqn -> real-seconds map (tempo-automation aware), read by the audio-region player
+    tempo_stamp: TempoStamp,   // the tempo state the seconds-based audio spans were last sized with
 
     context: EngineContext,
     output_bus: Option<SharedAudioBuffer>,
@@ -1241,6 +1268,8 @@ struct Engine {
     // The clip-launch state machine (TS ClipSequencingAudioContext), shared with every unit's note
     // sequencer(s); its change queue feeds the notifyClipSequenceChanges back-channel.
     clip_sequencer: Rc<RefCell<engine_env::clip_sequencer::ClipSequencer>>,
+    // How the sequencers built RIGHT NOW read launched clips: `Shared` while a cell composite's cascade builds.
+    pub(crate) clip_read: engine_env::note_sequencer::ClipRead,
     // The `playback.truncateNotesAtRegionEnd` preference (TS reads it live per block), shared with
     // every note sequencer via `bind_truncate_preference`.
     pub(crate) truncate_pref: Rc<Cell<bool>>,
@@ -1292,6 +1321,7 @@ impl Engine {
             metronome: Metronome::new(sample_rate),
             is_recording: false,
             is_counting_in: false,
+            paused_locate: false,
             recording_start: 0.0,
             recording_denominator: 4,
             metronome_pref: false,
@@ -1310,12 +1340,14 @@ impl Engine {
             marker_track: None,
             marker_changes: Vec::with_capacity(16), // drained every quantum; pre-reserved so render never reallocs
             tempo_map: Rc::new(RefCell::new(TempoMap::new())),
+            tempo_stamp: TempoStamp {bpm: 120.0, enabled: true, version: 0},
             context: EngineContext::new(),
             output_bus: None,
             master: None,
             master_id: 0,
             audio_units: Vec::new(),
             clip_sequencer: Rc::new(RefCell::new(engine_env::clip_sequencer::ClipSequencer::new())),
+            clip_read: engine_env::note_sequencer::ClipRead::Advance,
             truncate_pref: Rc::new(Cell::new(false)),
             solo_dirty: Rc::new(Cell::new(false)),
             unit_changes: Rc::new(RefCell::new(Members::default())),
@@ -1428,8 +1460,43 @@ impl Engine {
                 }
             }
         }
-        self.graph.transaction(&updates, &self.registry).map_err(|_| ())?;
+        self.transact(&updates)
+    }
+
+    /// Apply a transaction, then re-size the seconds-based audio spans if it changed the tempo (bpm field,
+    /// automation on/off, or any tempo-automation event / curve edit): their ppqn spans were converted at
+    /// bind and are otherwise only re-read on a region field edit.
+    fn transact(&mut self, updates: &[Update]) -> Result<(), ()> {
+        self.graph.transaction(updates, &self.registry).map_err(|_| ())?;
+        let stamp = self.tempo_stamp_now();
+        if stamp != self.tempo_stamp {
+            self.tempo_stamp = stamp;
+            self.refresh_tempo_map();
+            let tempo_map = self.tempo_map.borrow();
+            for unit in &self.audio_units {
+                audio_unit::reread_seconds_based(&self.graph, &unit.audio_track_sets, &tempo_map);
+            }
+        }
         Ok(())
+    }
+
+    fn tempo_stamp_now(&self) -> TempoStamp {
+        TempoStamp {
+            bpm: self.controls.bpm.get(),
+            enabled: self.controls.tempo_automation_enabled.get(),
+            version: self.tempo.as_ref().map_or(0, |collection| collection.version())
+        }
+    }
+
+    /// Refresh the tempo map the audio-region player reads: the live automation curve under the same
+    /// condition the transport uses it (enabled + non-empty), else a constant tempo at the configured bpm.
+    fn refresh_tempo_map(&mut self) {
+        let tempo_curve = if self.controls.tempo_automation_enabled.get() {
+            self.tempo.as_ref().filter(|collection| !collection.is_empty()).map(|collection| collection.curve())
+        } else {
+            None
+        };
+        self.tempo_map.borrow_mut().update(self.controls.bpm.get(), tempo_curve);
     }
 
     /// The rolling graph checksum, computed on demand (a full-graph field walk, O(all boxes)). Only the
@@ -1437,6 +1504,11 @@ impl Engine {
     /// fires dozens of transactions per second, and hashing the whole graph each time dropped audio.
     fn checksum(&self) -> [u8; 32] {
         self.graph.checksum()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn advance_shared_clips(&self, blocks: &[Block]) {
+        audio_unit::advance_shared_clips(&self.audio_units, &self.clip_sequencer, blocks);
     }
 
     /// Render one quantum into `output` (planar L|R) and write the transport state into `state`.
@@ -1454,14 +1526,7 @@ impl Engine {
         self.transport.set_loop_pause(self.pause_on_loop_disabled);
         self.transport.set_loop_from(self.controls.loop_from.get());
         self.transport.set_loop_to(self.controls.loop_to.get());
-        // refresh the tempo map the audio-region player reads: the live automation curve under the same
-        // condition the transport uses it (enabled + non-empty), else a constant tempo at the configured bpm.
-        let tempo_curve = if self.controls.tempo_automation_enabled.get() {
-            self.tempo.as_ref().filter(|collection| !collection.is_empty()).map(|collection| collection.curve())
-        } else {
-            None
-        };
-        self.tempo_map.borrow_mut().update(self.controls.bpm.get(), tempo_curve);
+        self.refresh_tempo_map();
         // The count-in flip (TS `renderer.setCallback(recordingStartTime, ...)`): once the playhead reaches
         // the recording start, counting-in becomes recording and the metronome returns to its preference.
         // Quantum-granular (TS splits the block at the exact position; one quantum ≈ 2.7 ms).
@@ -1480,14 +1545,14 @@ impl Engine {
         // per-block automation like volume / mute. Resolve it once at this quantum's start position and re-run the
         // solo walk before the graph processes; only while transporting, so a paused block HOLDS the last solo
         // (TS `UpdateClock` gates updates on `transporting`).
-        if self.transport.is_playing() {
+        let located = self.begin_quantum_position();
+        if self.transport.is_playing() || located {
             self.resolve_automated_solo(self.transport.position());
         }
-        unsafe { *SONG_POSITION.get() = self.transport.position(); }
         self.advance_modulation();
         let Engine {transport, metronome, metronome_staging, context, output_bus, blocks, tempo, tempo_map: _,
             controls, signature, marker_track, marker_changes, midi_out, is_recording, is_counting_in,
-            metronome_pref, ..} = self;
+            metronome_pref, audio_units, clip_sequencer, ..} = self;
         // `Metronome::process` mixes ADDITIVELY, so its buffer starts cleared every quantum, exactly like
         // `output` above.
         metronome_staging.fill(0.0);
@@ -1586,6 +1651,7 @@ impl Engine {
         for index in 0..RENDER_QUANTUM * 2 {
             output[index] += metronome_staging[index];
         }
+        audio_unit::advance_shared_clips(audio_units, clip_sequencer, blocks.as_slice());
         // drive the processor graph over the quantum's blocks (advancing or static), then mix the output bus in
         context.process(&ProcessInfo {blocks: blocks.as_slice()});
         if let Some(buffer) = output_bus.as_ref() {
@@ -1596,6 +1662,15 @@ impl Engine {
             }
         }
         write_engine_state(transport, state, *is_recording, *is_counting_in, recording_start, denominator);
+    }
+
+    fn begin_quantum_position(&mut self) -> bool {
+        let located = core::mem::take(&mut self.paused_locate) && !self.transport.is_playing();
+        unsafe {
+            *SONG_POSITION.get() = self.transport.position();
+            *PAUSED_LOCATE.get() = located;
+        }
+        located
     }
 
     fn play(&mut self) {
@@ -1702,6 +1777,7 @@ impl Engine {
             return; // TS `#setPosition` ignores seeks while recording
         }
         self.transport.seek(position);
+        self.paused_locate = !self.transport.is_playing();
         self.schedule_midi_transport(midi_output::position_message(position)) // TS schedules SongPosition
     }
 
@@ -1880,12 +1956,8 @@ impl Engine {
         // Populate the tempo map BEFORE reconcile reads region spans: a seconds-based audio region's duration /
         // loop-duration are converted tempo-aware at the region position, so the map must reflect the loaded
         // tempo (nominal bpm + automation curve) already at bind, not only from the first render.
-        let tempo_curve = if self.controls.tempo_automation_enabled.get() {
-            self.tempo.as_ref().filter(|collection| !collection.is_empty()).map(|collection| collection.curve())
-        } else {
-            None
-        };
-        self.tempo_map.borrow_mut().update(self.controls.bpm.get(), tempo_curve);
+        self.refresh_tempo_map();
+        self.tempo_stamp = self.tempo_stamp_now();
         // Master summing bus: every audio unit's channel strip sums into it (`sum_of(None)`). It is the SUM of
         // THE output audio unit, which reconciles like any bus (`reconcile_bus`): master-sum -> its fx chain ->
         // its strip, whose output it republishes to `output_bus` (what `render` reads) on every rebuild.
@@ -1958,6 +2030,7 @@ impl Engine {
 
     fn sync_modulators(&mut self) {
         let (added, removed, rebind) = self.modulators.borrow_mut().take_pending();
+        let mut bound: Vec<Uuid> = Vec::new();
         for uuid in removed {
             let (subs, collections) = self.modulators.borrow_mut().remove(&uuid);
             self.release_modulator_bindings(subs, collections);
@@ -1974,6 +2047,7 @@ impl Engine {
             let (subs, params, collections) = self.bind_modulator(uuid, &name, &state);
             self.modulators.borrow_mut().attach(&uuid, subs, params, collections);
             self.modulation_dirty.set(true);
+            bound.push(uuid);
         }
         for uuid in added {
             if self.modulators.borrow().resolve(&uuid).is_some() {
@@ -1994,6 +2068,12 @@ impl Engine {
             *state.broadcast.borrow_mut() = Some(slot);
             self.modulators.borrow_mut().add(uuid, state, subs, params, collections);
             self.modulation_dirty.set(true);
+            bound.push(uuid);
+        }
+        // a bind's own catch-ups run the invalidate closure: without this every transaction rebinds (#415)
+        if !bound.is_empty() {
+            self.graph.apply_deferred();
+            self.modulators.borrow_mut().discard_rebinds(&bound);
         }
         // A field edit reaches the state through the handles, so it lands with the transaction rather than
         // waiting for the next quantum's refresh.

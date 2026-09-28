@@ -95,6 +95,7 @@ export const runSpielwerk = (runtime: SpielwerkRuntime, proc: any, memory: Array
     if ((flags & FLAG_DISCONTINUOUS) !== 0) {
         for (const note of runtime.retained) {emit(KIND_NOTE_OFF, from, note.id, note.pitch, 0, 0, 0)}
         runtime.reset()
+        proc.reset?.()
     }
 
     // Release retained notes whose span completed within this range, emitting their note-off.

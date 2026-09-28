@@ -1,9 +1,9 @@
 import {asDefined, Exec, int, mod, panic, UUID} from "@opendaw/lib-std"
-import {Event, EventCollection, ppqn, TimeBase} from "@opendaw/lib-dsp"
+import {Event, EventCollection, ppqn} from "@opendaw/lib-dsp"
 import {
     AnyRegionBoxAdapter,
-    AudioRegionBoxAdapter,
     RegionEditing,
+    RegionOverlap,
     TrackBoxAdapter,
     UnionAdapterTypes
 } from "@opendaw/studio-adapters"
@@ -30,19 +30,13 @@ export type ClipTask = {
 
 export interface Mask extends Event {complete: ppqn}
 
-// AudioRegions in absolute time-domain are allowed to overlap. Their duration changes when the tempo changes,
-// but we do not truncate them to keep the original durations.
-const allowOverlap = (region: AnyRegionBoxAdapter) =>
-    region instanceof AudioRegionBoxAdapter && region.timeBase !== TimeBase.Musical
-
 // A region's duration is stored as float32, and seconds-based audio regions carry double-precision
 // ppqn drift (their ppqn is derived from seconds via the tempo map, e.g. complete = mask.complete + 2e-12).
 // So a clip whose remainder falls below ~one float32 ulp truncates to duration 0, and later trips
 // validateTrack / createTasksFromMasks (#1003). Treat a region within this tolerance of a mask boundary
 // as touching it, so it is deleted rather than clipped to a zero-width sliver. The tolerance tracks
 // float32 precision at the boundary magnitude (so it scales with project length) and is musically nil.
-const Float32RelativeEpsilon = 2 ** -23 // float32 has 23 mantissa bits
-const boundaryTolerance = (value: ppqn): ppqn => Math.abs(value) * Float32RelativeEpsilon + 1e-3
+const {boundaryTolerance} = RegionOverlap
 
 export class RegionClipResolver {
     static fromSelection(tracks: ReadonlyArray<TrackBoxAdapter>,
@@ -74,32 +68,22 @@ export class RegionClipResolver {
         for (const track of tracks) {this.validateTrack(track)}
     }
 
-    // Fatal (throwing) by default so tests and dev builds fail loudly on a resolver invariant break; the shipped
-    // studio app flips this off at boot (see boot.ts) so a stray overlap — or a project SAVED with a pre-existing
-    // one — logs and continues instead of crashing the whole session.
-    static fatal: boolean = true
-
     static validateTrack(track: TrackBoxAdapter): void {
         const array = track.regions.collection.asArray()
         if (array.length === 0) {return}
         let prev = array[0]
-        if (prev.duration <= 0) {RegionClipResolver.#violation(`duration(${prev.duration}) must be positive`)}
+        if (prev.duration <= 0) {return panic(`duration(${prev.duration}) must be positive`)}
         for (let i = 1; i < array.length; i++) {
             const next = array[i]
-            if (next.duration <= 0) {RegionClipResolver.#violation(`duration(${next.duration}) must be positive`)}
-            const overlaps = !allowOverlap(prev) && prev.complete > next.position + boundaryTolerance(next.position)
+            if (next.duration <= 0) {return panic(`duration(${next.duration}) must be positive`)}
+            const overlaps = !RegionOverlap.endsAtSuccessor(prev.box)
+                && prev.complete > next.position + boundaryTolerance(next.position)
             if (overlaps) {
                 RegionClipResolver.#reportOverlap(track, array, i)
-                RegionClipResolver.#violation(
-                    `regions overlap: prev.complete(${prev.complete}) > next.position(${next.position})`)
+                return panic(`regions overlap: prev.complete(${prev.complete}) > next.position(${next.position})`)
             }
             prev = next
         }
-    }
-
-    static #violation(message: string): void {
-        if (RegionClipResolver.fatal) {return panic(message)}
-        console.warn(`[RegionClipResolver] ${message}`)
     }
 
     // Diagnostic only (#1054 family): the overlap panic below is unreproducible from a single geometry, so on
@@ -157,6 +141,17 @@ export class RegionClipResolver {
             }
         }
         return tasks
+    }
+
+    // Fold a within-tolerance remainder into the empty side so RegionEditing.clip never carves a degenerate part.
+    static classifySeparation(region: AnyRegionBoxAdapter, begin: ppqn, end: ppqn):
+        "delete" | "start" | "complete" | "clip" {
+        const leftEmpty = begin <= region.position // position is an Int32 box field, so the left edge never drifts
+        const rightEmpty = end >= region.complete - boundaryTolerance(region.complete)
+        if (leftEmpty && rightEmpty) {return "delete"}
+        if (leftEmpty) {return "start"}
+        if (rightEmpty) {return "complete"}
+        return "clip"
     }
 
     static sortAndJoinMasks(masks: ReadonlyArray<Mask>): ReadonlyArray<Mask> {
@@ -243,12 +238,12 @@ export class RegionClipResolver {
                 case "separate": {
                     const begin = Math.floor(task.begin)
                     const end = Math.ceil(task.end)
-                    const leftEmpty = begin <= region.position
-                    const rightEmpty = end >= region.complete
-                    if (leftEmpty && rightEmpty) {region.box.delete()}
-                    else if (leftEmpty) {this.#trimStart(region, end)}
-                    else if (rightEmpty) {this.#trimComplete(region, begin)}
-                    else {RegionEditing.clip(region, begin, end)}
+                    switch (RegionClipResolver.classifySeparation(region, begin, end)) {
+                        case "delete": region.box.delete(); break
+                        case "start": this.#trimStart(region, end); break
+                        case "complete": this.#trimComplete(region, begin); break
+                        case "clip": RegionEditing.clip(region, begin, end); break
+                    }
                     break
                 }
             }
@@ -257,7 +252,7 @@ export class RegionClipResolver {
 
     #trimStart(region: AnyRegionBoxAdapter, position: ppqn): void {
         if (!UnionAdapterTypes.isLoopableRegion(region)) {return panic("Not yet implemented")}
-        if (position >= region.complete) {return region.box.delete()}
+        if (position >= region.complete - boundaryTolerance(region.complete)) {return region.box.delete()}
         const delta = position - region.position
         const oldDuration = region.duration
         const oldLoopOffset = region.loopOffset

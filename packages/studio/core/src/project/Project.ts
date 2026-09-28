@@ -1,5 +1,4 @@
 import {
-    Arrays,
     asInstanceOf,
     Editing,
     Func,
@@ -25,7 +24,6 @@ import {
     ApparatDeviceBox,
     AudioBusBox,
     AudioFileBox,
-    AudioRegionBox,
     AudioUnitBox,
     BoxIO,
     BoxVisitor,
@@ -70,6 +68,7 @@ import {
     TrackType,
     UnionBoxTypes,
     UserEditingManager,
+    Validator,
     VaryingTempoMap,
     VertexSelection
 } from "@opendaw/studio-adapters"
@@ -78,13 +77,14 @@ import {ProjectEnv} from "./ProjectEnv"
 import {BoxGraphCopy} from "../BoxGraphCopy"
 import {Mixer} from "../Mixer"
 import {ProjectApi} from "./ProjectApi"
+import {NestedHostExit} from "./NestedHostExit"
 import {ProjectMigration} from "./ProjectMigration"
 import {CaptureDevices, CaptureMidi, Recording, ResolvedNote} from "../capture"
 import {EngineFacade} from "../EngineFacade"
 import {EngineWorklet} from "../EngineWorklet"
 import {MidiDevices, MIDILearning} from "../midi"
 import {ProjectValidation} from "./ProjectValidation"
-import {ppqn, TempoMap, TimeBase} from "@opendaw/lib-dsp"
+import {ppqn, TempoMap} from "@opendaw/lib-dsp"
 import {MidiData} from "@opendaw/lib-midi"
 import {StudioPreferences} from "../StudioPreferences"
 import {RegionOverlapResolver, TimelineFocus} from "../ui"
@@ -234,10 +234,11 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
             }
         ))
         this.userEditingManager = new UserEditingManager(this.editing)
+        this.#terminator.own(new NestedHostExit(this.boxAdapters, this.userEditingManager.audioUnit))
         this.midiLearning = this.#terminator.own(new MIDILearning(this))
         this.captureDevices = this.#terminator.own(new CaptureDevices(this))
         this.#rootBoxAdapter = this.boxAdapters.adapterFor(this.rootBox, RootBoxAdapter)
-        this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits)
+        this.mixer = new Mixer(this.#rootBoxAdapter.audioUnits, this.boxAdapters)
         this.overlapResolver = new RegionOverlapResolver(this.editing, this.api, this.boxAdapters)
         this.timelineFocus = this.#terminator.own(new TimelineFocus())
         this.audioUnitFreeze = this.#terminator.own(new AudioUnitFreeze(this))
@@ -499,7 +500,7 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
     toArrayBuffer(): ArrayBufferLike {return ProjectSkeleton.encode(this.boxGraph)}
 
     copy(env?: Partial<ProjectEnv>): Project {
-        return Project.load({...this.#env, ...env}, this.toArrayBuffer() as ArrayBuffer)
+        return Project.load(this.#mergeEnv(env), this.toArrayBuffer() as ArrayBuffer)
     }
 
     copyWithNewIdentities(env?: Partial<ProjectEnv>): Project {
@@ -509,27 +510,13 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         BoxGraphCopy.deserializeBoxes(data, boxGraph, {mapPointer: (_pointer, address) => address})
         boxGraph.endTransaction()
         boxGraph.verifyPointers()
-        return Project.fromSkeleton({...this.#env, ...env},
+        return Project.fromSkeleton(this.#mergeEnv(env),
             {boxGraph, mandatoryBoxes: ProjectSkeleton.findMandatoryBoxes(boxGraph)})
     }
 
     invalid(): boolean {
         const now = performance.now()
-        const result = this.boxGraph.boxes().some(box => box.accept<BoxVisitor<boolean>>({
-            visitTrackBox: (box: TrackBox): boolean => {
-                for (const [current, next] of Arrays.iterateAdjacent(box.regions.pointerHub.incoming()
-                    .map(({box}) => UnionBoxTypes.asRegionBox(box))
-                    .sort(({position: a}, {position: b}) => a.getValue() - b.getValue()))) {
-                    if (current instanceof AudioRegionBox && current.timeBase.getValue() === TimeBase.Seconds) {
-                        return false
-                    }
-                    if (current.position.getValue() + current.duration.getValue() > next.position.getValue()) {
-                        return true
-                    }
-                }
-                return false
-            }
-        }) ?? false)
+        const result = Validator.hasOverlappingRegions(this.boxGraph)
         if (performance.now() - now > 5) {
             console.warn("Evaluation of invalid project takes more than 5ms")
         }
@@ -552,6 +539,18 @@ export class Project implements BoxAdaptersContext, Terminable, TerminableOwner 
         this.#sampleRegistrations.forEach(({terminable}) => terminable.terminate())
         this.#sampleRegistrations.clear()
         this.#terminator.terminate()
+    }
+
+    #mergeEnv(env?: Partial<ProjectEnv>): ProjectEnv {
+        return {
+            audioContext: env?.audioContext ?? this.#env.audioContext,
+            audioWorklets: env?.audioWorklets ?? this.#env.audioWorklets,
+            sampleManager: env?.sampleManager ?? this.#env.sampleManager,
+            soundfontManager: env?.soundfontManager ?? this.#env.soundfontManager,
+            sampleService: env?.sampleService ?? this.#env.sampleService,
+            soundfontService: env?.soundfontService ?? this.#env.soundfontService,
+            createEditing: env?.createEditing ?? this.#env.createEditing
+        }
     }
 
     #registerSample(uuid: UUID.Bytes): void {

@@ -48,12 +48,13 @@ struct EventSubs {
 struct State {
     events: EventCollection<ValueEvent>,
     index: BTreeMap<Uuid, ValueEvent>, // event uuid -> its current ValueEvent (for remove / replace by uuid)
-    subs: BTreeMap<Uuid, EventSubs>
+    subs: BTreeMap<Uuid, EventSubs>,
+    version: u64 // bumped on every cache change, so a reader can detect an edited curve by comparison
 }
 
 impl State {
     fn new() -> Self {
-        Self {events: EventCollection::new(), index: BTreeMap::new(), subs: BTreeMap::new()}
+        Self {events: EventCollection::new(), index: BTreeMap::new(), subs: BTreeMap::new(), version: 0}
     }
 
     /// Read `event_uuid` from the graph and (re)place it in both structures. `read_value_event` reads the
@@ -71,11 +72,13 @@ impl State {
             self.events.remove(&previous);
         }
         self.events.add(value_event);
+        self.version += 1;
     }
 
     fn remove(&mut self, event_uuid: Uuid) {
         if let Some(previous) = self.index.remove(&event_uuid) {
             self.events.remove(&previous);
+            self.version += 1;
         }
     }
 }
@@ -121,6 +124,11 @@ impl ValueCollection {
 
     pub fn is_empty(&self) -> bool {
         self.state.borrow().events.is_empty()
+    }
+
+    /// A counter bumped on every cached-event change (edit / add / remove / curve attach), for change detection.
+    pub fn version(&self) -> u64 {
+        self.state.borrow().version
     }
 
     /// Unsubscribe the observers from `graph` (mirrors the TS adapter's `terminate`). Required for

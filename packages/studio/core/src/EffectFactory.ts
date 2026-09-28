@@ -1,6 +1,7 @@
 import {DeviceFactory, EffectPointerType} from "@opendaw/studio-adapters"
 import {Field} from "@opendaw/lib-box"
 import {int} from "@opendaw/lib-std"
+import {BoxIO} from "@opendaw/studio-boxes"
 import {Project} from "./project"
 import {EffectBox} from "./EffectBox"
 
@@ -8,6 +9,7 @@ export interface EffectFactory extends DeviceFactory {
     readonly separatorBefore: boolean
     readonly external: boolean
     readonly type: "audio" | "midi"
+    readonly boxName: keyof BoxIO.TypeMap
 
     create(project: Project, host: Field<EffectPointerType>, index: int): EffectBox
 }

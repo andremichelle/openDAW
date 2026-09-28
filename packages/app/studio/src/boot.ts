@@ -23,7 +23,6 @@ import {
     FactoryCatalog,
     GlobalSampleLoaderManager,
     GlobalSoundfontLoaderManager,
-    RegionClipResolver,
     Workers
 } from "@opendaw/studio-core"
 import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI} from "@/opendaw-api"
@@ -39,8 +38,10 @@ import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {AudioData} from "@opendaw/lib-dsp"
 import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
-import {IconSymbol} from "@opendaw/studio-enums"
+import {IconSymbol, initializeColors, setColorScheme} from "@opendaw/studio-enums"
+import {StudioPreferences} from "@opendaw/studio-core"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
 import {TouchContextMenu} from "@/ui/TouchContextMenu"
 import {WasmEngine} from "@opendaw/studio-core-wasm"
@@ -63,9 +64,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         return
     }
     console.debug("buildInfo", JSON.stringify(buildInfo, null, 2))
-    // A residual region overlap must never crash a user's session: log-and-continue in production, keep the
-    // fail-fast throw in dev so resolver bugs surface. See RegionClipResolver.validateTrack.
-    RegionClipResolver.fatal = buildInfo.env !== "production"
     await FontLoader.load()
     await Workers.install(workersUrl)
     AudioWorklets.install(workletsUrl)
@@ -153,8 +151,13 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
             TouchContextMenu.install(surface.owner))
     }, errorHandler)
     Surface.subscribeKeyboard("keydown", event => ShortcutManager.get().handleEvent(event), Number.MAX_SAFE_INTEGER)
+    StudioPreferences.catchupAndSubscribe(({"neutral-hue": hue, "neutral-saturation": saturation}) => {
+        setColorScheme({hue, saturation: saturation / 100.0})
+        Surface.forEach(surface => initializeColors(surface.owner.document.documentElement))
+    }, "appearance")
     document.querySelector("#preloader")?.remove()
     replaceChildren(surface.ground, App(service))
+    Tour.install(service)
     AnimationFrame.start(window)
     installCursors()
     RuntimeNotifier.install({

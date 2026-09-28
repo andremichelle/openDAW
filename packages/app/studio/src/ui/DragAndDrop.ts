@@ -7,13 +7,17 @@ import {
     Nullable,
     Option,
     Provider,
-    Terminable
+    Terminable,
+    Terminator
 } from "@opendaw/lib-std"
 import {AnyDragData, DragFile} from "@/ui/AnyDragData"
 import {Events} from "@opendaw/lib-dom"
 
 export namespace DragAndDrop {
     let dragging: Option<AnyDragData> = Option.None
+    // One drag at a time: document-level listeners that end it even when the source left the DOM meanwhile
+    // (Chrome fires no dragend on a removed source, e.g. a device editor rebuilt by the hover switch).
+    const session = new Terminator()
 
     const hasFiles = (event: DragEvent): boolean => {
         const type = event.dataTransfer?.types?.at(0)
@@ -37,15 +41,17 @@ export namespace DragAndDrop {
         classReceiver ??= element
         element.draggable = true
         let activeImage: Nullable<HTMLElement> = null
+        const end = () => {
+            classReceiver.classList.remove("dragging")
+            dragging = Option.None
+            if (isDefined(activeImage)) {
+                activeImage.remove()
+                activeImage = null
+            }
+            session.terminate()
+        }
         return Terminable.many(
-            Events.subscribe(element, "dragend", () => {
-                classReceiver.classList.remove("dragging")
-                dragging = Option.None
-                if (isDefined(activeImage)) {
-                    activeImage.remove()
-                    activeImage = null
-                }
-            }),
+            Events.subscribe(element, "dragend", end),
             Events.subscribe(element, "dragstart",
                 (event: DragEvent) => {
                     const dataTransfer = event.dataTransfer
@@ -59,6 +65,16 @@ export namespace DragAndDrop {
                     dataTransfer.effectAllowed = "copyMove"
                     classReceiver.classList.add("dragging")
                     dragging = Option.wrap(data)
+                    const owner = element.ownerDocument
+                    let begun = false // no pointer event reaches the page while a drag runs, so one after means it ended
+                    session.terminate()
+                    session.ownAll(
+                        Events.subscribe(owner, "dragover", () => begun = true, {capture: true}),
+                        Events.subscribe(owner, "dragend", end, {capture: true}),
+                        Events.subscribe(owner, "drop", end),
+                        Events.subscribe(owner, "pointermove", () => {if (begun) {end()}}, {capture: true}),
+                        Events.subscribe(owner, "pointerdown", () => {if (begun) {end()}}, {capture: true})
+                    )
                     if (isDefined(dragImage)) {
                         const ghost = dragImage()
                         ghost.style.position = "fixed"
@@ -72,6 +88,8 @@ export namespace DragAndDrop {
                 })
         )
     }
+
+    export const isCopy = (event: DragEvent, data: AnyDragData): boolean => event.altKey || data.copy === true
 
     export interface Process {
         drag(event: DragEvent, dragData: AnyDragData): boolean
@@ -88,7 +106,7 @@ export namespace DragAndDrop {
                     process.enter(dragging.match({
                         none: () => hasFiles(event) && process.drag(event, {
                             type: "file",
-                            file: InaccessibleProperty("Cannot access file while dragging")
+                            files: InaccessibleProperty("Cannot access files while dragging")
                         }),
                         some: data => process.drag(event, data)
                     }))
@@ -101,7 +119,7 @@ export namespace DragAndDrop {
                     none: () => {
                         if (hasFiles(event) && process.drag(event, {
                             type: "file",
-                            file: InaccessibleProperty("Cannot access file while dragging")
+                            files: InaccessibleProperty("Cannot access files while dragging")
                         })) {
                             event.preventDefault()
                             dataTransfer.dropEffect = "copy"
@@ -110,7 +128,7 @@ export namespace DragAndDrop {
                     some: data => {
                         if (process.drag(event, data)) {
                             event.preventDefault()
-                            dataTransfer.dropEffect = event.altKey || data.copy === true ? "copy" : "move"
+                            dataTransfer.dropEffect = isCopy(event, data) ? "copy" : "move"
                         }
                     }
                 })
@@ -123,7 +141,7 @@ export namespace DragAndDrop {
                     none: () => {
                         const files = extractFiles(event)
                         if (files.length === 0) {return}
-                        const data: DragFile = {type: "file", file: files[0]}
+                        const data: DragFile = {type: "file", files}
                         if (process.drag(event, data)) {
                             event.preventDefault()
                             process.drop(event, data)

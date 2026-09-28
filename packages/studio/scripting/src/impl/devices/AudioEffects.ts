@@ -1,7 +1,10 @@
 import {
+    AudioBusBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
     AudioFileBox,
+    AudioSinkDeviceBox,
+    AudioUnitBox,
     AutotuneDeviceBox,
     CompressorDeviceBox,
     ConvolverDeviceBox,
@@ -33,6 +36,7 @@ import {
     AudioEffectCompositeEntry,
     AudioEffects,
     AutotuneEffect,
+    AuxAudioUnit,
     CompressorEffect,
     ConvolverEffect,
     CrusherEffect,
@@ -42,6 +46,7 @@ import {
     FoldEffect,
     FrequencySplitEffect,
     GateEffect,
+    GroupAudioUnit,
     MaximizerEffect,
     NeuralAmpEffect,
     RevampBell,
@@ -53,6 +58,7 @@ import {
     ScriptParameter,
     ScriptSample,
     SideChainSource,
+    SinkEffect,
     StereoSplitEffect,
     StereoToolEffect,
     TidalEffect,
@@ -68,6 +74,8 @@ import {ScriptSupport} from "./ScriptDevices"
 import {AudioFiles} from "../AudioFiles"
 import {AudioEffectBox, DeviceBoxes} from "./DeviceBoxes"
 import {Guard} from "../Guard"
+import {AudioUnitImpls} from "../AudioUnits"
+import {Sends} from "../Sends"
 
 export abstract class AudioEffectFacade<B extends EffectDeviceBox = EffectDeviceBox> extends EffectFacade<B> {
     abstract readonly key: keyof AudioEffects
@@ -103,7 +111,7 @@ export abstract class SideChainableEffect<B extends SideChainBox> extends AudioE
 export type AnyAudioEffectImpl =
     | AutotuneEffectImpl | CompressorEffectImpl | ConvolverEffectImpl | CrusherEffectImpl | DattorroReverbEffectImpl
     | DelayEffectImpl | FoldEffectImpl | GateEffectImpl | MaximizerEffectImpl | NeuralAmpEffectImpl | RevampEffectImpl
-    | ReverbEffectImpl | StereoToolEffectImpl | TidalEffectImpl | VocoderEffectImpl | WaveshaperEffectImpl
+    | ReverbEffectImpl | StereoToolEffectImpl | SinkEffectImpl | TidalEffectImpl | VocoderEffectImpl | WaveshaperEffectImpl
     | WerkstattEffectImpl | AudioEffectCompositeImpl | StereoSplitEffectImpl | FrequencySplitEffectImpl
 
 export class AutotuneEffectImpl extends AudioEffectFacade<AutotuneDeviceBox> implements AutotuneEffect {
@@ -352,6 +360,33 @@ export class StereoToolEffectImpl extends AudioEffectFacade<StereoToolDeviceBox>
     }
 }
 
+export class SinkEffectImpl extends AudioEffectFacade<AudioSinkDeviceBox> implements SinkEffect {
+    readonly key = "Sink" as const
+    declare pass: float
+
+    constructor(context: Context, box: AudioSinkDeviceBox) {
+        super(context, box)
+        this.bind({pass: box.pass})
+    }
+
+    get target(): Nullable<GroupAudioUnit | AuxAudioUnit> {
+        return this.box.targetBus.targetVertex.mapOr(vertex => {
+            const busBox = asInstanceOf(vertex.box, AudioBusBox)
+            const unitField = busBox.output.targetVertex.unwrap("bus has no audio unit")
+            return AudioUnitImpls.wrap(this.context, asInstanceOf(unitField.box, AudioUnitBox)) as GroupAudioUnit | AuxAudioUnit
+        }, null)
+    }
+    set target(target: Nullable<GroupAudioUnit | AuxAudioUnit>) {
+        this.context.edit(() => {
+            if (isNull(target)) {
+                this.box.targetBus.defer()
+                return
+            }
+            this.box.targetBus.refer(Sends.validateTarget(target).input)
+        })
+    }
+}
+
 export class TidalEffectImpl extends AudioEffectFacade<TidalDeviceBox> implements TidalEffect {
     readonly key = "Tidal" as const
     declare slope: bipolar
@@ -442,7 +477,6 @@ export class AudioEffectCompositeEntryImpl extends Facade<AudioEffectCompositeCe
         return context.facade(box, () => new AudioEffectCompositeEntryImpl(context, box))
     }
 
-    declare label: string
     declare gain: float
     declare mute: boolean
     declare solo: boolean
@@ -451,7 +485,7 @@ export class AudioEffectCompositeEntryImpl extends Facade<AudioEffectCompositeCe
 
     private constructor(context: Context, box: AudioEffectCompositeCellBox) {
         super(context, box)
-        this.bind({label: box.label, gain: box.gain, mute: box.mute, solo: box.solo, pan: box.pan})
+        this.bind({gain: box.gain, mute: box.mute, solo: box.solo, pan: box.pan})
         this.#chain = new EffectChain<AnyAudioEffectImpl>(context, box.audioEffects, box => AudioEffectImpls.wrap(context, box))
     }
 
@@ -497,10 +531,10 @@ export class AudioEffectCompositeImpl extends AudioEffectFacade<AudioEffectCompo
 
     get entries(): ReadonlyArray<AudioEffectCompositeEntry> {return listEntries(this.context, this.box.entries)}
 
-    addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "label" | "gain" | "mute" | "solo" | "pan">>): AudioEffectCompositeEntry {
+    addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "gain" | "mute" | "solo" | "pan">>): AudioEffectCompositeEntry {
         return this.context.edit(() => {
             const index = this.box.entries.pointerHub.incoming().length
-            const box = DeviceBoxes.createCompositeEntry(this.context.boxGraph, this.box.entries, index, `Entry ${index + 1}`)
+            const box = DeviceBoxes.createCompositeEntry(this.context.boxGraph, this.box.entries, index)
             return Props.apply(AudioEffectCompositeEntryImpl.wrap(this.context, box), props)
         })
     }
@@ -550,6 +584,7 @@ export namespace AudioEffectImpls {
         if (box instanceof RevampDeviceBox) {return new RevampEffectImpl(context, box)}
         if (box instanceof ReverbDeviceBox) {return new ReverbEffectImpl(context, box)}
         if (box instanceof StereoToolDeviceBox) {return new StereoToolEffectImpl(context, box)}
+        if (box instanceof AudioSinkDeviceBox) {return new SinkEffectImpl(context, box)}
         if (box instanceof TidalDeviceBox) {return new TidalEffectImpl(context, box)}
         if (box instanceof VocoderDeviceBox) {return new VocoderEffectImpl(context, box)}
         if (box instanceof WaveshaperDeviceBox) {return new WaveshaperEffectImpl(context, box)}

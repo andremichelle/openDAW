@@ -17,8 +17,7 @@ export default defineConfig(({command}) => {
     // Determine base path for production CI builds
     const isCI = process.env.CI === "true"
     const branchName = process.env.BRANCH_NAME || "main"
-    const isMainBranch = branchName === "main"
-    const envFolder = isMainBranch ? "main" : "dev"
+    const envFolder = process.env.DEPLOY_ENV || (branchName === "main" ? "main" : "dev")
     const base = (command === "build" && isCI) ? `/${envFolder}/releases/${uuid}/` : "/"
 
     return {

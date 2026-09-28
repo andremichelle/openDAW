@@ -44,6 +44,43 @@ export namespace PresetEncoder {
         return Arrays.concatArrayBuffers(header.toArrayBuffer(), boxGraph.toArrayBuffer())
     }
 
+    // saved as an ordinary instrument preset, in a wrapper unit of its own
+    export const encodeLayerInstrument = (instrument: Box): ArrayBufferLike => {
+        const header = ByteArrayOutput.create()
+        header.writeInt(PresetHeader.MAGIC_HEADER_OPEN)
+        header.writeInt(PresetHeader.FORMAT_VERSION)
+        const preset = ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
+        const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = preset
+        boxGraph.beginTransaction()
+        const captureBox = CaptureMidiBox.create(boxGraph, UUID.generate())
+        const wrapperAudioUnit = AudioUnitBox.create(boxGraph, UUID.generate(), box => {
+            box.collection.refer(rootBox.audioUnits)
+            box.output.refer(primaryAudioBusBox.input)
+            box.index.setValue(0)
+            box.type.setValue(AudioUnitType.Instrument)
+            box.capture.refer(captureBox)
+        })
+        const dependencies = TransferUtils.deviceDependencies(instrument)
+        const uuidMap = TransferUtils.mapUuids([instrument, ...dependencies])
+        PointerField.decodeWith({
+            map: (pointer, address) => {
+                const internal = address.flatMap(addr =>
+                    uuidMap.opt(addr.uuid).map(({target}) => addr.moveTo(target)))
+                if (internal.nonEmpty()) {return internal}
+                if (pointer.pointerType === Pointers.InstrumentHost) {
+                    return Option.wrap(wrapperAudioUnit.input.address)
+                }
+                if (pointer.pointerType === Pointers.ModulatorCollection) {
+                    return Option.wrap(rootBox.modulators.address)
+                }
+                return address.flatMap(addr =>
+                    boxGraph.findBox(addr.uuid).nonEmpty() ? Option.wrap(addr) : Option.None)
+            }
+        }, () => TransferUtils.cloneBoxes([instrument, ...dependencies], uuidMap, boxGraph))
+        boxGraph.endTransaction()
+        return Arrays.concatArrayBuffers(header.toArrayBuffer(), boxGraph.toArrayBuffer())
+    }
+
     export const encodeEffects = (
         effects: ReadonlyArray<Box>,
         kind: PresetHeader.ChainKind

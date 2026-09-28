@@ -84,7 +84,8 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Tone3000", path: "/manuals/devices/audio/neural-amp", icon: IconSymbol.Tone3000},
                     {type: "page", label: "Vocoder", path: "/manuals/devices/audio/vocoder", icon: IconSymbol.Vocoder},
                     {type: "page", label: "Waveshaper", path: "/manuals/devices/audio/waveshaper", icon: IconSymbol.Curve},
-                    {type: "page", label: "Werkstatt", path: "/manuals/devices/audio/werkstatt", icon: IconSymbol.Code}
+                    {type: "page", label: "Werkstatt", path: "/manuals/devices/audio/werkstatt", icon: IconSymbol.Code},
+                    {type: "page", label: "Sink", path: "/manuals/devices/audio/sink", icon: IconSymbol.AudioBus}
                 ]
             },
             {
@@ -93,6 +94,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                 files: [
                     {type: "page", label: "Apparat", path: "/manuals/devices/instruments/apparat", icon: IconSymbol.Code},
                     {type: "page", label: "Cubed", path: "/manuals/devices/instruments/cubed", icon: IconSymbol.Cube},
+                    {type: "page", label: "Composite", path: "/manuals/devices/instruments/composite", icon: IconSymbol.Stack},
                     {type: "page", label: "Korpus", path: "/manuals/devices/instruments/korpus", icon: IconSymbol.DrumSet},
                     {type: "page", label: "MIDIOutput", path: "/manuals/devices/instruments/midioutput", icon: IconSymbol.Midi},
                     {type: "page", label: "Nano", path: "/manuals/devices/instruments/nano", icon: IconSymbol.NanoWave},

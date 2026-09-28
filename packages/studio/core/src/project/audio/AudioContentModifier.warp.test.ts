@@ -4,6 +4,7 @@ import {PPQN, TimeBase} from "@opendaw/lib-dsp"
 import {AudioRegionBoxAdapter, ProjectSkeleton, SampleMetaData, TrackType} from "@opendaw/studio-adapters"
 import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {AudioContentModifier} from "./AudioContentModifier"
+import {RegionClipResolver} from "../../ui/timeline/RegionClipResolver"
 import type {ProjectEnv} from "../ProjectEnv"
 
 // Converting a not-stretched region to a stretched play-mode used to seed the last warp marker from the
@@ -39,7 +40,7 @@ const createEnv = (meta: Option<SampleMetaData>): ProjectEnv => ({
     }
 }) as unknown as ProjectEnv
 
-const setup = async (contentSeconds: number, meta: Option<SampleMetaData>) => {
+const setup = async (contentSeconds: number, meta: Option<SampleMetaData>, neighbours: ReadonlyArray<number> = []) => {
     const {Project} = await import("../Project")
     const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
     const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox}} = skeleton
@@ -63,9 +64,23 @@ const setup = async (contentSeconds: number, meta: Option<SampleMetaData>) => {
         box.file.refer(audioFileBox)
         box.events.refer(events.owners)
     })
+    // Musical neighbours further down the track, one bar each.
+    neighbours.forEach(position => {
+        const neighbourEvents = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+        AudioRegionBox.create(boxGraph, UUID.generate(), box => {
+            box.position.setValue(position)
+            box.duration.setValue(PPQN.Bar)
+            box.loopDuration.setValue(PPQN.Bar)
+            box.timeBase.setValue(TimeBase.Musical)
+            box.regions.refer(trackBox.regions)
+            box.file.refer(audioFileBox)
+            box.events.refer(neighbourEvents.owners)
+        })
+    })
     boxGraph.endTransaction()
     const project = Project.fromSkeleton(createEnv(meta), skeleton)
-    return {project, adapter: project.boxAdapters.adapterFor(regionBox, AudioRegionBoxAdapter)}
+    const adapter = project.boxAdapters.adapterFor(regionBox, AudioRegionBoxAdapter)
+    return {project, adapter, track: adapter.trackBoxAdapter.unwrap("track")}
 }
 
 const sampleMeta = (bpm: number): Option<SampleMetaData> => Option.wrap({
@@ -133,6 +148,50 @@ describe("converting to a stretched play-mode warps the AUDIO, not the region's 
         expect(marker.seconds).toBeCloseTo(AUDIO_SECONDS, 6)
         // AUDIO_SECONDS read at the project tempo, i.e. what the region already occupied.
         expect(marker.position).toBe(PPQN.secondsToPulses(AUDIO_SECONDS, PROJECT_BPM))
+        project.terminate()
+    })
+})
+
+// Live 1140. A seconds region may legally reach over its musical neighbours (validateTrack exempts it, and a
+// tempo change alone can stretch it that far). Switching it to a stretched play-mode drops the exemption, so
+// the conversion must never leave it reaching past the next region: nothing validates the track until some
+// unrelated edit detonates it minutes later.
+describe("converting to a stretched play-mode never reaches into the next region", () => {
+    it("clamps to the gap when the sample's tempo is unknown", async () => {
+        const {project, adapter, track} = await setup(AUDIO_SECONDS, Option.None, [PPQN.Bar, PPQN.Bar * 2])
+        expect(adapter.complete, "the seconds region legally covers both neighbours").toBeGreaterThan(PPQN.Bar * 3)
+        RegionClipResolver.validateTrack(track)
+        project.editing.modify(await AudioContentModifier.toPitchStretch([adapter]))
+        expect(adapter.timeBase).toBe(TimeBase.Musical)
+        expect(adapter.duration).toBe(PPQN.Bar)
+        expect(() => RegionClipResolver.validateTrack(track)).not.toThrow()
+        project.terminate()
+    })
+
+    it("clamps to the gap when the user resized the region", async () => {
+        const enlarged = 4.0 * 4.0 * 60.0 / PROJECT_BPM
+        const {project, adapter, track} = await setup(enlarged, sampleMeta(SAMPLE_BPM), [PPQN.Bar * 2])
+        project.editing.modify(await AudioContentModifier.toSignalsmith([adapter]))
+        expect(adapter.duration).toBe(PPQN.Bar * 2)
+        expect(lastMarker(adapter).position, "the warp mapping is untouched by the clamp").toBe(FOUR_BARS)
+        expect(() => RegionClipResolver.validateTrack(track)).not.toThrow()
+        project.terminate()
+    })
+
+    it("clamps to the gap when the region takes the sample's own tempo", async () => {
+        const {project, adapter, track} = await setup(AUDIO_SECONDS, sampleMeta(SAMPLE_BPM), [PPQN.Bar])
+        project.editing.modify(await AudioContentModifier.toPitchStretch([adapter]))
+        expect(adapter.duration).toBe(PPQN.Bar)
+        expect(adapter.loopDuration).toBe(FOUR_BARS)
+        expect(() => RegionClipResolver.validateTrack(track)).not.toThrow()
+        project.terminate()
+    })
+
+    it("leaves a region with room untouched", async () => {
+        const {project, adapter, track} = await setup(AUDIO_SECONDS, Option.None, [PPQN.Bar * 8])
+        project.editing.modify(await AudioContentModifier.toPitchStretch([adapter]))
+        expect(adapter.duration).toBeCloseTo(PPQN.secondsToPulses(AUDIO_SECONDS, PROJECT_BPM), 3)
+        expect(() => RegionClipResolver.validateTrack(track)).not.toThrow()
         project.terminate()
     })
 })

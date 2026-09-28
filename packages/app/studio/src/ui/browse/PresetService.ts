@@ -16,7 +16,7 @@ import {
 import {Promises} from "@opendaw/lib-runtime"
 import {Files} from "@opendaw/lib-dom"
 import {Box, IndexedBox} from "@opendaw/lib-box"
-import {DeviceBoxAdapter, DeviceBoxUtils, DeviceHost, Devices, EffectDeviceBoxAdapter, InstrumentFactories, PresetDecoder, PresetEncoder, PresetHeader} from "@opendaw/studio-adapters"
+import {DeviceBoxAdapter, DeviceBoxUtils, DeviceHost, Devices, EffectDeviceBoxAdapter, InstrumentCompositeCellBoxAdapter, InstrumentFactories, PresetDecoder, PresetEncoder, PresetHeader} from "@opendaw/studio-adapters"
 import {
     AudioEffectChainPresetMeta,
     AudioEffectPresetMeta,
@@ -66,8 +66,10 @@ export const deviceKeyOf = (entry: PresetMeta): string => {
 // (replaceAudioUnit / delete + insertEffectChain assign new box UUIDs but
 // keep the same slot).
 const cursorKeyFor = (adapter: DeviceBoxAdapter): string => {
-    const audioUnit = adapter.deviceHost().audioUnitBoxAdapter().box
-    const auKey = UUID.toString(audioUnit.address.uuid)
+    // layers of one unit must not share a cursor
+    const host = adapter.deviceHost()
+    const owner = host instanceof InstrumentCompositeCellBoxAdapter ? host.box : host.audioUnitBoxAdapter().box
+    const auKey = UUID.toString(owner.address.uuid)
     if (Devices.isEffect(adapter)) {
         return `${auKey}:${adapter.type}:${adapter.indexField.getValue()}`
     }
@@ -79,6 +81,9 @@ const cursorKeyFor = (adapter: DeviceBoxAdapter): string => {
 // by source ensures findIndex lands on the actual entry we just applied.
 type PresetIdentity = string
 const identityOf = (entry: PresetEntry): PresetIdentity => `${entry.source}:${entry.uuid}`
+
+export const effectKeyOf = (box: Box): string =>
+    EffectFactories.keyOfBox(box) ?? panic(`${box.name} is not a registered effect`)
 
 export class PresetService {
     readonly #cloudIndex = new DefaultObservableValue<ReadonlyArray<PresetMeta>>([])
@@ -185,8 +190,24 @@ export class PresetService {
             return
         }
         const bytes = loaded.value
-        const audioUnitBox = adapter.deviceHost().audioUnitBoxAdapter().box
+        const host = adapter.deviceHost()
+        const audioUnitBox = host.audioUnitBoxAdapter().box
         const cursorKey = cursorKeyFor(adapter)
+        if (host instanceof InstrumentCompositeCellBoxAdapter && entry.category === "audio-unit") {
+            RuntimeNotifier.notify({message: "A rack preset cannot be loaded into a layer.", icon: "Warning"})
+            return
+        }
+        if (host instanceof InstrumentCompositeCellBoxAdapter && entry.category === "instrument") {
+            this.project.editing.modify(() => {
+                const attempt = PresetDecoder.replaceLayerInstrument(bytes, host.box)
+                if (attempt.isFailure()) {
+                    RuntimeNotifier.notify({message: "Cannot apply preset.", icon: "Warning"})
+                }
+            })
+            this.project.loadScriptDevices()
+            this.#cursors.set(cursorKey, identityOf(entry))
+            return
+        }
         if (entry.category === "instrument") {
             this.project.editing.modify(() => {
                 const attempt = PresetDecoder.replaceAudioUnit(bytes, audioUnitBox, {
@@ -312,18 +333,13 @@ export class PresetService {
         if (dragData.type !== "instrument" || dragData.device !== null) {return null}
         const boxOpt = this.project.boxGraph.findBox(UUID.parse(dragData.uuid))
         if (boxOpt.isEmpty()) {return null}
-        const stripped = boxOpt.unwrap().name.replace(/DeviceBox$/, "")
-        return Object.hasOwn(InstrumentFactories.Named, stripped)
-            ? stripped as InstrumentFactories.Keys
-            : null
+        return InstrumentFactories.keyOfBox(boxOpt.unwrap()) ?? null
     }
-
-    #effectKeyFromBox(box: IndexedBox): string {return box.name.replace(/DeviceBox$/, "")}
 
     #effectLabelFromBox(box: IndexedBox): string {
         const adapter = this.project.boxAdapters.adapterFor(box, Devices.isAny)
         const value = adapter.labelField.getValue()
-        return value.length > 0 ? value : this.#effectKeyFromBox(box)
+        return value.length > 0 ? value : effectKeyOf(box)
     }
 
     async saveAsSingleEffectPreset(category: PresetEffectKind,
@@ -404,6 +420,8 @@ export class PresetService {
     async saveAsInstrumentPreset(deviceKey: InstrumentFactories.Keys,
                                  sourceUuid: UUID.String,
                                  options?: {excludeEffects?: boolean}): Promise<void> {
+        const layerInstrument = this.#layerInstrumentForUuid(sourceUuid)
+        if (layerInstrument.nonEmpty()) {return this.#saveLayerInstrumentPreset(deviceKey, layerInstrument.unwrap())}
         const audioUnitBox = this.#audioUnitBoxForInstrumentUuid(sourceUuid)
         if (isAbsent(audioUnitBox)) {return}
         const inputBox = audioUnitBox.input.pointerHub.incoming().at(0)?.box
@@ -466,9 +484,7 @@ export class PresetService {
     #instrumentKeyForUuid(uuid: UUID.String): Nullable<InstrumentFactories.Keys> {
         const boxOpt = this.project.boxGraph.findBox(UUID.parse(uuid))
         if (boxOpt.isEmpty()) {return null}
-        const stripped = boxOpt.unwrap().name.replace(/DeviceBox$/, "")
-        return Object.hasOwn(InstrumentFactories.Named, stripped)
-            ? stripped as InstrumentFactories.Keys : null
+        return InstrumentFactories.keyOfBox(boxOpt.unwrap()) ?? null
     }
 
     async saveAsRackPreset(instrumentUuid: UUID.String,
@@ -477,9 +493,8 @@ export class PresetService {
         if (isAbsent(audioUnitBox)) {return}
         const inputBox = audioUnitBox.input.pointerHub.incoming().at(0)?.box
         if (isAbsent(inputBox)) {return}
-        const stripped = inputBox.name.replace(/DeviceBox$/, "")
-        if (!Object.hasOwn(InstrumentFactories.Named, stripped)) {return}
-        const instrument = stripped as InstrumentFactories.Keys
+        const instrument = InstrumentFactories.keyOfBox(inputBox)
+        if (!isDefined(instrument)) {return}
         const adapter = this.project.boxAdapters.adapterFor(inputBox, Devices.isAny)
         const labeled = adapter.labelField.getValue()
         const suggestedName = labeled.length > 0 ? labeled : instrument
@@ -544,7 +559,7 @@ export class PresetService {
         if (entry.category === "audio-effect" || entry.category === "midi-effect") {
             if (rackIntentEffect) {return false}
             const effects = this.resolveEffectBoxesFromDrag(entry.category, dragData)
-            return effects.length === 1 && effects[0].name.replace(/DeviceBox$/, "") === entry.device
+            return effects.length === 1 && EffectFactories.keyOfBox(effects[0]) === entry.device
         }
         if (entry.category === "audio-effect-chain") {
             if (rackIntentEffect) {return false}
@@ -798,12 +813,50 @@ export class PresetService {
         }), arrayBuffer)
     }
 
+    #layerInstrumentForUuid(uuid: UUID.String): Option<DeviceBoxAdapter> {
+        return this.project.boxGraph.findBox(UUID.parse(uuid))
+            .map(box => this.project.boxAdapters.adapterFor(box, Devices.isAny))
+            .flatMap(adapter => Devices.isInstrument(adapter) && adapter.deviceHost() instanceof InstrumentCompositeCellBoxAdapter
+                ? Option.wrap(adapter) : Option.None)
+    }
+
+    async #saveLayerInstrumentPreset(deviceKey: InstrumentFactories.Keys, adapter: DeviceBoxAdapter): Promise<void> {
+        const labeled = adapter.labelField.getValue()
+        const dialog = await Promises.tryCatch(PresetDialogs.showSavePresetDialog({
+            headline: `Save ${deviceKey} Preset`,
+            suggestedName: labeled.length > 0 ? labeled : deviceKey,
+            suggestedDescription: ""
+        }))
+        if (dialog.status === "rejected") {
+            if (Errors.isAbort(dialog.error)) {return}
+            throw dialog.error
+        }
+        const now = Date.now()
+        const meta: InstrumentPresetMeta = {
+            category: "instrument",
+            uuid: UUID.toString(UUID.generate()),
+            name: dialog.value.name,
+            device: deviceKey,
+            description: dialog.value.description,
+            created: now,
+            modified: now,
+            hasTimeline: false
+        }
+        await PresetStorage.save(meta, PresetEncoder.encodeLayerInstrument(adapter.box))
+    }
+
     #audioUnitBoxForInstrumentUuid(uuid: UUID.String): Nullable<AudioUnitBox> {
         const boxOpt = this.project.boxGraph.findBox(UUID.parse(uuid))
         if (boxOpt.isEmpty()) {return null}
         const box = boxOpt.unwrap()
         const adapter = this.project.boxAdapters.adapterFor(box, Devices.isAny)
-        return adapter.deviceHost().audioUnitBoxAdapter().box
+        const host = adapter.deviceHost()
+        // a rack preset encodes the audio unit, from a layer that is the whole composite
+        if (!host.isAudioUnit) {
+            RuntimeNotifier.notify({message: "A rack preset cannot be saved from inside a layer.", icon: "Warning"})
+            return null
+        }
+        return host.audioUnitBoxAdapter().box
     }
 
     async activatePreset(entry: PresetEntry): Promise<void> {

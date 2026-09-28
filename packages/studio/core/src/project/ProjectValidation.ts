@@ -1,12 +1,13 @@
 import {AudioRegionBox, BoxVisitor, NoteRegionBox, TrackBox, ValueRegionBox} from "@opendaw/studio-boxes"
-import {Arrays, asDefined, EmptyExec, RuntimeNotifier} from "@opendaw/lib-std"
-import {ProjectSkeleton} from "@opendaw/studio-adapters"
+import {Arrays, asDefined, EmptyExec, Exec, RuntimeNotifier} from "@opendaw/lib-std"
+import {ProjectSkeleton, RegionOverlap} from "@opendaw/studio-adapters"
 import {Box} from "@opendaw/lib-box"
 
 export namespace ProjectValidation {
     export const validate = (skeleton: ProjectSkeleton): void => {
         const {boxGraph} = skeleton
         const invalidBoxes = new Set<Box>()
+        const trims: Array<Exec> = []
         const validateRegion = (box: AudioRegionBox | ValueRegionBox | NoteRegionBox): void => {
             if (box.position.getValue() < 0) {
                 console.warn(box, "must have a position greater equal 0")
@@ -30,22 +31,27 @@ export namespace ProjectValidation {
                     }), "Box must be a NoteRegionBox, ValueRegionBox or AudioRegionBox"))
                     .sort((a, b) => a.position.getValue() - b.position.getValue())
                 for (const [left, right] of Arrays.iterateAdjacent(regions)) {
-                    if (right.position.getValue() < left.position.getValue() + left.duration.getValue()) {
-                        console.warn(left, right, "Overlapping regions")
+                    if (RegionOverlap.find([left, right]).isEmpty()) {continue}
+                    console.warn(left, right, "Overlapping regions")
+                    const gap = right.position.getValue() - left.position.getValue()
+                    if (gap > 0) {
+                        trims.push(() => left.duration.setValue(gap))
+                    } else {
                         invalidBoxes.add(left)
                         invalidBoxes.add(right)
                     }
                 }
             }
         }))
-        if (invalidBoxes.size === 0) {return}
-        console.warn(`Deleting ${invalidBoxes.size} invalid boxes:`)
+        if (invalidBoxes.size === 0 && trims.length === 0) {return}
+        console.warn(`Deleting ${invalidBoxes.size} invalid boxes, trimming ${trims.length} overlapping regions:`)
         boxGraph.beginTransaction()
+        trims.forEach(trim => trim())
         invalidBoxes.forEach(box => box.delete())
         boxGraph.endTransaction()
         RuntimeNotifier.info({
             headline: "Some data is corrupt",
-            message: `The project contains ${invalidBoxes.size} invalid boxes. 
+            message: `The project contains ${invalidBoxes.size + trims.length} invalid boxes. 
             We fixed them as good as possible. This probably happend because there was a bug that we hopefully fixed. 
             Please send this file to the developers.`
         }).then(EmptyExec, EmptyExec)

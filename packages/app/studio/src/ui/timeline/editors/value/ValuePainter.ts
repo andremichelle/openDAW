@@ -4,6 +4,7 @@ import {
     Func,
     isNotNull,
     Nullable,
+    ObservableOption,
     Option,
     Procedure,
     Provider,
@@ -19,7 +20,7 @@ import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {ValueModifier} from "./ValueModifier"
 import {ValueModifyStrategy} from "@/ui/timeline/editors/value/ValueModifyStrategies.ts"
 import {ValueEventOwnerReader} from "@/ui/timeline/editors/EventOwnerReader.ts"
-import {SelectableValueEvent} from "@opendaw/studio-adapters"
+import {SelectableValueEvent, ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 import {CanvasPainter, TimelineRange, ValueStreamRenderer} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 
@@ -31,10 +32,11 @@ export type Construct = {
     snapping: Snapping
     valueEditing: ValueContext
     reader: ValueEventOwnerReader
+    segment: ObservableOption<ValueEventBoxAdapter>
 }
 
 export const createValuePainter =
-    ({range, valueToPixel, eventMapping, modifyContext, snapping, valueEditing, reader}: Construct)
+    ({range, valueToPixel, eventMapping, modifyContext, snapping, valueEditing, reader, segment}: Construct)
         : Procedure<CanvasPainter> => (painter: CanvasPainter) => {
         const modifier: Option<ValueModifyStrategy> = modifyContext.modifier
         const context = painter.context
@@ -116,6 +118,7 @@ export const createValuePainter =
                 resultStartValue: 0.0,
                 resultEndValue: 1.0
             })
+        const marked: Nullable<ValueEventBoxAdapter> = segment.unwrapOrNull()
         let prevEvent: Nullable<SelectableValueEvent> = null
         for (const event of createIterator()) {
             if (isNotNull(prevEvent) && prevEvent.interpolation.type !== "none") {
@@ -124,7 +127,9 @@ export const createValuePainter =
                 const y0 = valueToPixel(prevEvent.value)
                 const y1 = valueToPixel(event.value)
                 const midY = Curve.normalizedAt(0.5, slope) * (y1 - y0) + y0
-                context.fillStyle = contentColor
+                const isMarked = isNotNull(marked)
+                    && marked.position === prevEvent.position && marked.index === prevEvent.index
+                context.fillStyle = isMarked ? "white" : contentColor
                 context.beginPath()
                 context.arc(midX, midY, MidPointRadius * devicePixelRatio, 0.0, TAU)
                 context.fill()

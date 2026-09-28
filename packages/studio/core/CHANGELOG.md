@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.6](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.5...@opendaw/studio-core@0.2.6) (2026-09-18)
+
+### Bug Fixes
+
+- **timeline:** fold a sub-tolerance clip remainder in the resolver separate branch ([c589be2](https://github.com/andremichelle/openDAW/commit/c589be203b05371b66b2e64ad60627b37e13405c)), closes [#1025-1027](https://github.com/andremichelle/openDAW/issues/1025-1027) [#1027](https://github.com/andremichelle/openDAW/issues/1027)
+- **timeline:** fold a sub-tolerance remainder in #trimStart as well ([b47191c](https://github.com/andremichelle/openDAW/commit/b47191c323b0692af2070039ef5c6894b911371b))
+
 ## [0.2.5](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.4...@opendaw/studio-core@0.2.5) (2026-09-14)
 
 ### Bug Fixes

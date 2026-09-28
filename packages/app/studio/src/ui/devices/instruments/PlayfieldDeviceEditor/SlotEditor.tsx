@@ -58,17 +58,10 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
             </RelativeUnitValueDragging>
         </AutomationControl>
     )
-    const createParameterLabel = (parameter: AutomatableParameterFieldAdapter) => (
-        <div className="parameter-label">
-            <div className="label">{parameter.name}</div>
-            {createParameterInput(parameter)}
-        </div>
-    )
-    const createParameterStack = (heading: string, upper: AutomatableParameterFieldAdapter, lower: AutomatableParameterFieldAdapter) => (
+    const createParameterStack = (heading: string, ...parameters: ReadonlyArray<AutomatableParameterFieldAdapter>) => (
         <div className="parameter-stack">
             <div className="label">{heading}</div>
-            {createParameterInput(upper)}
-            {createParameterInput(lower)}
+            {parameters.map(parameter => createParameterInput(parameter))}
         </div>
     )
     lifecycle.ownAll(
@@ -208,7 +201,7 @@ export const SlotEditor = ({lifecycle, service, adapter}: Construct) => {
                 {createParameterStack("Waveform", sampleStart, sampleEnd)}
                 {createParameterStack("Envelope", attack, release)}
                 {createParameterStack("Mix", volume, panning)}
-                {createParameterLabel(pitch)}
+                {createParameterStack(pitch.name, pitch)}
             </div>
         </div>
     )

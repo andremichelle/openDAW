@@ -7,6 +7,7 @@ import {
     NeonDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
+    InstrumentCompositeBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
     SoundfontDeviceBox,
@@ -14,9 +15,9 @@ import {
     TapeDeviceBox,
     VaporisateurDeviceBox
 } from "@opendaw/studio-boxes"
-import {byte, isDefined, UUID} from "@opendaw/lib-std"
+import {byte, isDefined, Optional, UUID} from "@opendaw/lib-std"
 import {ClassicWaveform} from "@opendaw/lib-dsp"
-import {BoxGraph, Field} from "@opendaw/lib-box"
+import {Box, BoxGraph, Field} from "@opendaw/lib-box"
 import {IconSymbol, Pointers, VoicingMode} from "@opendaw/studio-enums"
 import {DeviceManualUrls} from "../DeviceManualUrls"
 import {InstrumentFactory} from "./InstrumentFactory"
@@ -48,8 +49,8 @@ export namespace InstrumentFactories {
     export const Nano: InstrumentFactory<AudioFileBox, NanoDeviceBox> = {
         defaultName: "Nano",
         defaultIcon: IconSymbol.NanoWave,
-        briefDescription: "Simple Sampler",
-        description: "Simple sampler",
+        briefDescription: "Polyphonic Sampler",
+        description: "Polyphonic sampler with root key, region, crossfade loop and envelope",
         manualPage: DeviceManualUrls.Nano,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph,
@@ -266,8 +267,36 @@ export namespace InstrumentFactories {
         })
     }
 
-    export const Named = {Apparat, Cubed, Korpus, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
+    export const InstrumentComposite: InstrumentFactory<void, InstrumentCompositeBox> = {
+        defaultName: "Composite",
+        defaultIcon: IconSymbol.Stack,
+        briefDescription: "Layered instruments",
+        description: "Plays several instruments at once, each layer with its own effects, volume and panning",
+        manualPage: DeviceManualUrls.InstrumentComposite,
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol): InstrumentCompositeBox => {
+            return InstrumentCompositeBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                box.host.refer(host)
+            })
+        }
+    }
+
+    // MIDI Output is wired at unit level only
+    export const isLayerInstrument = (factory: InstrumentFactory<any, any>): boolean =>
+        factory.trackType === TrackType.Notes && factory !== MIDIOutput
+
+    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
+
+    export const keyOfBox = (box: Box): Optional<Keys> => {
+        const stripped = box.name.replace(/DeviceBox$/, "").replace(/Box$/, "")
+        return Object.hasOwn(Named, stripped) ? stripped as Keys : undefined
+    }
 
     const useAudioFile = (boxGraph: BoxGraph, fileUUID: UUID.Bytes, name: string, duration: number) =>
         boxGraph.findBox<AudioFileBox>(fileUUID)

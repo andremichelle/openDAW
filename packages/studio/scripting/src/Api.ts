@@ -197,10 +197,10 @@ export interface AudioEffect extends Effect {
 }
 
 /**
- * Anything the studio can tap as a sidechain source: a unit's channel strip, an instrument, an effect or a Playfield slot
+ * Anything the studio can tap as a sidechain source: a unit's channel strip, an instrument, an effect, a Playfield slot or a composite layer
  * @group Devices
  */
-export type SideChainSource = AnyAudioUnit | AnyInstrument | AnyAudioEffect | PlayfieldSlot | AudioEffectCompositeEntry
+export type SideChainSource = AnyAudioUnit | AnyInstrument | AnyAudioEffect | PlayfieldSlot | InstrumentCompositeLayer | AudioEffectCompositeEntry
 
 /**
  * Effects that can listen to an external detection source
@@ -403,7 +403,7 @@ export interface CrusherEffect extends AudioEffect {
     bits: int
     /** Boost in dB (0 to 24, default 0) */
     boost: float
-    /** Dry/wet mix (0.001 to 1.0, default 1.0) */
+    /** Dry/wet mix (0.0 to 1.0, default 1.0) */
     mix: float
 }
 
@@ -654,6 +654,21 @@ export interface StereoToolEffect extends AudioEffect {
 }
 
 /**
+ * Routes the signal at its chain position into a group or auxiliary bus (a 1:1 cable, unity into the bus).
+ * `pass` is the level the chain continues at: -inf (default) means the unit sounds only through the bus,
+ * 0 dB keeps a full copy on the chain. No target, or a disabled sink, sends nothing.
+ * @group Audio Effects
+ */
+export interface SinkEffect extends AudioEffect {
+    /** Always "Sink" */
+    readonly key: "Sink"
+    /** The bus receiving the signal, null = nothing is sent */
+    target: Nullable<GroupAudioUnit | AuxAudioUnit>
+    /** Level the signal continues down the chain at, in dB (-inf to 0, default -inf) */
+    pass: float
+}
+
+/**
  * Tremolo and auto-pan
  * @group Audio Effects
  */
@@ -742,8 +757,6 @@ export interface AudioEffectCompositeEntry extends AudioEffectHost {
     readonly uuid: string
     /** The composite this entry belongs to */
     readonly composite: AudioEffectCompositeEffect | StereoSplitEffect | FrequencySplitEffect
-    /** Custom label */
-    label: string
     /** Position in the composite */
     readonly index: int
     /** Entry gain in dB (default 0) */
@@ -772,7 +785,7 @@ export interface AudioEffectCompositeEffect extends AudioEffect {
     /** All entries ordered by index */
     readonly entries: ReadonlyArray<AudioEffectCompositeEntry>
     /** Add a parallel entry */
-    addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "label" | "gain" | "mute" | "solo" | "pan">>): AudioEffectCompositeEntry
+    addEntry(props?: Partial<Pick<AudioEffectCompositeEntry, "gain" | "mute" | "solo" | "pan">>): AudioEffectCompositeEntry
 }
 
 /**
@@ -850,6 +863,8 @@ export interface AudioEffects {
     "Waveshaper": WaveshaperEffect
     /** {@link WerkstattEffect} */
     "Werkstatt": WerkstattEffect
+    /** {@link SinkEffect} */
+    "Sink": SinkEffect
     /** {@link AudioEffectCompositeEffect} */
     "Composite": AudioEffectCompositeEffect
     /** {@link StereoSplitEffect} */
@@ -867,7 +882,7 @@ export type AnyAudioEffect = AudioEffects[keyof AudioEffects]
 // ---- Effect hosts
 
 /**
- * Anything with a MIDI effect chain (units and Playfield slots)
+ * Anything with a MIDI effect chain (units, Playfield slots, instrument composite layers)
  * @group Devices
  */
 export interface MIDIEffectHost {
@@ -887,7 +902,7 @@ export interface MIDIEffectHost {
 }
 
 /**
- * Anything with an audio effect chain (units, Playfield slots, composite entries)
+ * Anything with an audio effect chain (units, Playfield slots, instrument composite layers, composite entries)
  * @group Devices
  */
 export interface AudioEffectHost {
@@ -968,7 +983,10 @@ export interface Instrument extends Device {
     readonly audioUnit: InstrumentAudioUnit
     /** Icon name (see IconSymbol) */
     icon: string
-    /** Removes the whole audio unit. Use {@link InstrumentAudioUnit.setInstrument} to swap the instrument */
+    /**
+     * Removes the whole audio unit. Use {@link InstrumentAudioUnit.setInstrument} to swap the instrument.
+     * An instrument inside an {@link InstrumentCompositeLayer} removes that layer instead
+     */
     remove(): void
 }
 
@@ -1137,6 +1155,73 @@ export interface Playfield extends Instrument {
 }
 
 /**
+ * Instruments that can live in a layer of an {@link InstrumentComposite}: everything that plays notes inside the unit
+ * @group Instruments
+ */
+export type LayerInstruments = Omit<Instruments, "Tape" | "MIDIOutput">
+
+/**
+ * One layer of an {@link InstrumentComposite}: an instrument with its own MIDI and audio effect chains and its own strip
+ * @group Instrument Parts
+ */
+export interface InstrumentCompositeLayer extends MIDIEffectHost, AudioEffectHost {
+    /** Unique id */
+    readonly uuid: string
+    /** The composite this layer belongs to */
+    readonly composite: InstrumentComposite
+    /** Position in the composite */
+    readonly index: int
+    /** The instrument this layer plays */
+    readonly instrument: LayerInstruments[keyof LayerInstruments]
+    /** Layer gain in dB (default 0) */
+    gain: float
+    /** Pan (-1.0 to 1.0, default 0.0) */
+    pan: bipolar
+    /** Mute the layer (it keeps running, unmuting is instant) */
+    mute: boolean
+    /** Solo the layer */
+    solo: boolean
+    /** Collapse the layer editor */
+    minimized: boolean
+    /**
+     * Replace the layer's instrument. The layer keeps its strip and its effect chains
+     * @param key - Instrument type
+     * @param props - Instrument settings
+     */
+    setInstrument<K extends keyof LayerInstruments>(key: K, props?: DeepPartial<LayerInstruments[K]>): LayerInstruments[K]
+    /** Remove the layer with its instrument and effects */
+    remove(): void
+}
+
+/**
+ * Plays several instruments at once from the same notes, each in its own layer
+ * @group Instruments
+ */
+export interface InstrumentComposite extends Instrument {
+    /** Always "InstrumentComposite" */
+    readonly key: "InstrumentComposite"
+    /** All layers ordered by index */
+    readonly layers: ReadonlyArray<InstrumentCompositeLayer>
+    /**
+     * Add a layer playing the given instrument
+     * @param key - Instrument type (everything except Tape and MIDIOutput)
+     * @param props - Instrument settings
+     * @param layer - Layer settings
+     * @example
+     * ```ts
+     * const stack = project.addInstrumentUnit("InstrumentComposite", {label: "Stack"}).instrument
+     * stack.addLayer("Vaporisateur", {label: "Pad"}).addAudioEffect("Reverb")
+     * stack.addLayer("Nano", undefined, {gain: -6, pan: -0.5})
+     * ```
+     */
+    addLayer<K extends keyof LayerInstruments>(key: K, props?: DeepPartial<LayerInstruments[K]>,
+                                               layer?: Partial<Pick<InstrumentCompositeLayer, "gain" | "pan" | "mute" | "solo" | "minimized">>): InstrumentCompositeLayer & {
+        /** The instrument this layer plays, typed by the given key */
+        readonly instrument: LayerInstruments[K]
+    }
+}
+
+/**
  * Minimal sampler
  * @group Instruments
  */
@@ -1147,8 +1232,28 @@ export interface Nano extends Instrument {
     sample: Nullable<Sample>
     /** Volume in dB (default -3) */
     volume: float
+    /** Octave shift (-3 to 3, default 0) */
+    octave: int
+    /** Fine tune in cents (-1200 to 1200, default 0) */
+    tune: float
+    /** The MIDI note that plays the sample at its native rate (0 to 127, default 60) */
+    rootKey: int
+    /** Attack in seconds (0.001 to 5, default 0.003) */
+    attack: float
     /** Release in seconds (0.001 to 8, default 0.1) */
     release: float
+    /** Region start as a fraction of the sample (default 0). A start past the end plays backwards. */
+    sampleStart: unitValue
+    /** Region end as a fraction of the sample (default 1) */
+    sampleEnd: unitValue
+    /** Cycle the loop range while a note holds (default false) */
+    loop: boolean
+    /** Loop crossfade in seconds (0.001 to 1, default 0.05) */
+    loopFade: float
+    /** Loop start as a fraction of the sample, clamped inside the region (default 0) */
+    loopStart: unitValue
+    /** Loop end as a fraction of the sample, clamped inside the region (default 1) */
+    loopEnd: unitValue
 }
 
 /**
@@ -1404,6 +1509,8 @@ export interface Instruments {
     "Cubed": Cubed
     /** {@link Apparat} */
     "Apparat": Apparat
+    /** {@link InstrumentComposite} */
+    "InstrumentComposite": InstrumentComposite
 }
 
 /**
@@ -1427,6 +1534,7 @@ export type Automatable =
     | AnyAudioUnit
     | Send
     | PlayfieldSlot
+    | InstrumentCompositeLayer
     | AudioEffectCompositeEntry
     | ScriptParameter
     | MIDIOutputParameter

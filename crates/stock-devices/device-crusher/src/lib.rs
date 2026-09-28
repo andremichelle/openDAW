@@ -2,7 +2,7 @@
 //! the `CrusherDeviceBox` parameters to the `dsp::crusher::Crusher` bit-crusher / sample-rate reducer.
 //!
 //! Parameters (`CrusherDeviceBox`): crush `[10]` (unipolar; the DSP receives `1 - crush`), bits `[11]`
-//! (linear-integer 1..16), boost `[12]` (linear 0..24 dB), mix `[13]` (exponential 0.001..1). The device owns
+//! (linear-integer 1..16), boost `[12]` (linear 0..24 dB), mix `[13]` (unipolar). The device owns
 //! the mappings; the host is mapping-agnostic.
 //!
 //! Exports: `kind()` (audio effect), `state_size()`, `process(desc_ptr)`, `init(state_ptr, sample_rate)`,
@@ -14,7 +14,7 @@
 use core::panic::PanicInfo;
 use abi::{float_value, int_value, AudioEffect, Block, ParamValue, Ports};
 use dsp::crusher::Crusher;
-use math::value_mapping::{Exponential, Linear, LinearInteger};
+use math::value_mapping::{Linear, LinearInteger};
 
 #[cfg(target_family = "wasm")]
 #[panic_handler]
@@ -32,7 +32,7 @@ const MIX_FIELD: [u16; 1] = [13];
 const CRUSH_MAPPING: Linear = Linear::unipolar();
 const BITS_MAPPING: LinearInteger = LinearInteger {min: 1, max: 16};
 const BOOST_MAPPING: Linear = Linear {min: 0.0, max: 24.0};
-const MIX_MAPPING: Exponential = Exponential {min: 0.001, max: 1.0};
+const MIX_MAPPING: Linear = Linear::unipolar();
 
 /// The effect's per-instance state (engine-allocated, zeroed): the DSP (built in `init`) and the parameter ids.
 pub struct CrusherState {

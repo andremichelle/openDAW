@@ -28,6 +28,7 @@ export namespace Dialogs {
         content: JsxValue,
         okText?: string,
         buttons?: ReadonlyArray<Button>
+        leading?: JsxValue
         origin?: Element
         abortSignal?: AbortSignal
         excludeOk?: boolean
@@ -47,7 +48,7 @@ export namespace Dialogs {
 
     export const show = async (
         {
-            headline, content, okText, buttons, origin,
+            headline, content, okText, buttons, leading, origin,
             abortSignal, excludeOk, cancelable, growWidth
         }: Default): Promise<void> => {
         const actualButtons: Array<Button> = isDefined(buttons) ? [...buttons] : []
@@ -70,6 +71,7 @@ export namespace Dialogs {
                     icon={IconSymbol.System}
                     cancelable={cancelable !== false}
                     buttons={actualButtons}
+                    leading={leading}
                     growWidth={growWidth}>
                 <div style={{padding: "1em 0", color: Colors.dark.toString(), overflowY: "auto", minHeight: "0"}}
                      onConnect={element => scrollbars.own(installScrollbars(element))}>{content}</div>
@@ -153,6 +155,34 @@ export namespace Dialogs {
             dialog.showModal()
             return promise
         }
+
+    export type Choice<T> = { text: string, value: T }
+
+    // resolves None when dismissed
+    export const choose = <T,>({headline, message, choices, origin}: {
+        headline: string, message: string, choices: ReadonlyArray<Choice<T>>, origin?: Element
+    }): Promise<Option<T>> => {
+        const {resolve, promise} = Promise.withResolvers<Option<T>>()
+        const buttons: ReadonlyArray<Button> = choices.map(({text, value}, index) => ({
+            text,
+            primary: index === choices.length - 1,
+            onClick: handler => {
+                handler.close()
+                resolve(Option.wrap(value))
+            }
+        }))
+        const dialog: HTMLDialogElement = (
+            <Dialog headline={headline} icon={IconSymbol.System} cancelable={true} buttons={buttons}>
+                <div style={{padding: "1em 0"}}>
+                    <p style={{whiteSpace: "pre-line"}}>{message}</p>
+                </div>
+            </Dialog>
+        )
+        dialog.addEventListener("close", () => resolve(Option.None), {once: true})
+        Surface.get(origin).body.appendChild(dialog)
+        dialog.showModal()
+        return promise
+    }
 
     export const progress = ({
                                  headline, message, progress, cancel, origin

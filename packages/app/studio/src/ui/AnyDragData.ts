@@ -5,7 +5,7 @@ import {EffectFactories, PresetCategory, PresetSource} from "@opendaw/studio-cor
 export type DragCopyHint = { copy?: boolean }
 export type DragSample = { type: "sample", sample: Sample } & DragCopyHint
 export type DragSoundfont = { type: "soundfont", soundfont: Soundfont } & DragCopyHint
-export type DragFile = { type: "file", file: File /* This cannot be accessed while dragging! */ } & DragCopyHint
+export type DragFile = { type: "file", files: ReadonlyArray<File> /* Not accessible while dragging! */ } & DragCopyHint
 export type DragDevice = (
     {
         type: "midi-effect" | "audio-effect"

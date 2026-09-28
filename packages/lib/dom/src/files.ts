@@ -1,4 +1,4 @@
-import {Arrays, asDefined, Errors, isDefined, panic, RuntimeNotifier} from "@opendaw/lib-std"
+import {Arrays, asDefined, Errors, isDefined, MutableObservableOption, panic, RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace Files {
@@ -60,7 +60,17 @@ export namespace Files {
         return options?.suggestedName ?? "Unknown"
     }
 
-    export const open = async (options?: OpenFilePickerOptions): Promise<ReadonlyArray<File>> => {
+    const pendingOpen = new MutableObservableOption<Promise<ReadonlyArray<File>>>()
+
+    // browsers allow one native picker at a time; a re-entrant call is an abort, not an error
+    export const open = (options?: OpenFilePickerOptions): Promise<ReadonlyArray<File>> => {
+        if (pendingOpen.nonEmpty()) {return Promise.reject(Errors.AbortError)}
+        const promise = openPicker(options).finally(() => pendingOpen.clear())
+        pendingOpen.wrap(promise)
+        return promise
+    }
+
+    const openPicker = async (options?: OpenFilePickerOptions): Promise<ReadonlyArray<File>> => {
         if (isDefined(window.showOpenFilePicker)) {
             const {status, value: fileHandles, error} = await Promises.tryCatch(window.showOpenFilePicker(options))
             if (status === "rejected") {return Promise.reject(error)}

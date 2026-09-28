@@ -8,7 +8,7 @@ export type CubedStep = {
 }
 
 export namespace CubedStep {
-    export const DefaultNote: int = 60
+    export const DefaultNote: int = 36
 
     // one int32 per step: midi-note 0..6, active 7, slide 8, accent 9
     export const pack = (step: CubedStep): int =>

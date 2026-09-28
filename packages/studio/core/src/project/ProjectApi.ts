@@ -1,4 +1,5 @@
 import {
+    Arrays,
     asInstanceOf,
     assert,
     Attempt,
@@ -19,7 +20,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
-import {Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
 import {AudioUnitType, Pointers} from "@opendaw/studio-enums"
 import {
     AudioClipBox,
@@ -27,6 +28,8 @@ import {
     AudioUnitBox,
     CaptureAudioBox,
     CaptureMidiBox,
+    InstrumentCompositeBox,
+    InstrumentCompositeCellBox,
     NoteClipBox,
     NoteEventBox,
     NoteEventCollectionBox,
@@ -47,18 +50,24 @@ import {
     CaptureBox,
     ColorCodes,
     DeviceAccepts,
+    DeviceBoxUtils,
     EffectPointerType,
     IndexedAdapterCollectionListener,
     InstrumentBox,
+    InstrumentFactories,
     InstrumentFactory,
     InstrumentOptions,
     InstrumentProduct,
     InterpolationFieldAdapter,
+    isModulatorBox,
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
     ProjectQueries,
+    RegionAdapters,
+    RegionOverlap,
     TrackBoxAdapter,
-    TrackType
+    TrackType,
+    TransferUtils
 } from "@opendaw/studio-adapters"
 import {Project} from "./Project"
 import {ProjectModulation} from "./ProjectModulation"
@@ -67,6 +76,14 @@ import {EffectBox} from "../EffectBox"
 import {AudioContentFactory} from "./audio"
 import {NoteMidiExport} from "./NoteMidiExport"
 import {AudioWavExport} from "./AudioWavExport"
+import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
+import {BoxGraphCopy} from "../BoxGraphCopy"
+import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
+
+export type CompositeLayerProduct<INST extends InstrumentBox> = {
+    cellBox: InstrumentCompositeCellBox
+    instrumentBox: INST
+}
 
 export type ClipRegionOptions = {
     name?: string
@@ -156,6 +173,24 @@ export class ProjectApi {
         return this.createInstrument(factory)
     }
 
+    // Moves a unit to `slot`, an index among the units BEFORE the move (as a drop between two units names it).
+    placeAudioUnit(audioUnitBox: AudioUnitBox, slot: int): void {
+        const start = audioUnitBox.index.getValue()
+        const delta = slot - start
+        if (delta < 0 || delta > 1) {IndexedBox.moveIndex(this.#project.rootBox.audioUnits, start, delta)}
+    }
+
+    // A drop names the unit it lands BEFORE, not an index: resolved when the new unit exists, which may be after
+    // an async load. No anchor, or one deleted meanwhile, leaves the unit where it was created.
+    placeAudioUnitBefore(audioUnitBox: AudioUnitBox, anchor: Option<UUID.Bytes>): void {
+        anchor.flatMap(uuid => this.audioUnitIndex(uuid)).ifSome(slot => this.placeAudioUnit(audioUnitBox, slot))
+    }
+
+    audioUnitIndex(uuid: UUID.Bytes): Option<int> {
+        return this.#project.boxGraph.findBox(uuid)
+            .map(box => asInstanceOf(box, AudioUnitBox).index.getValue())
+    }
+
     replaceMIDIInstrument<A>(target: InstrumentBox,
                              fromFactory: InstrumentFactory<A>,
                              attachment?: A): Attempt<InstrumentBox, string> {
@@ -179,8 +214,131 @@ export class ProjectApi {
         return Attempts.ok(create(boxGraph, audioUnitBox.input, defaultName, defaultIcon, attachment))
     }
 
+    createCompositeLayer<A, INST extends InstrumentBox>(composite: InstrumentCompositeBox,
+                                                        factory: InstrumentFactory<A, INST>,
+                                                        attachment?: A,
+                                                        atIndex: int = Number.MAX_SAFE_INTEGER): Attempt<CompositeLayerProduct<INST>, string> {
+        if (!InstrumentFactories.isLayerInstrument(factory)) {
+            return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
+        }
+        const {boxGraph} = this.#project
+        const {create, defaultIcon, defaultName} = factory
+        const layers = IndexedBox.collectIndexedBoxes(composite.cells)
+        const index = clamp(atIndex, 0, layers.length)
+        layers.slice(index).forEach((box, offset) => box.index.setValue(index + offset + 1))
+        const cellBox = InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+            box.composite.refer(composite.cells)
+            box.index.setValue(index)
+        })
+        return Attempts.ok({cellBox, instrumentBox: create(boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment)})
+    }
+
+    setLayerInstrument<A>(cellBox: InstrumentCompositeCellBox, factory: InstrumentFactory<A>, attachment?: A): Attempt<InstrumentBox, string> {
+        if (!InstrumentFactories.isLayerInstrument(factory)) {
+            return Attempts.err(`${factory.defaultName} cannot be used as a layer`)
+        }
+        cellBox.instrument.pointerHub.incoming().forEach(pointer => pointer.box.delete())
+        const {create, defaultIcon, defaultName}: InstrumentFactory = factory
+        return Attempts.ok(create(this.#project.boxGraph, cellBox.instrument, defaultName, defaultIcon, attachment))
+    }
+
+    moveCompositeLayer(composite: InstrumentCompositeBox, fromIndex: int, toIndex: int): void {
+        const layers = IndexedBox.collectIndexedBoxes(composite.cells).slice()
+        if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= layers.length || toIndex >= layers.length) {return}
+        const [moved] = layers.splice(fromIndex, 1)
+        layers.splice(toIndex, 0, moved)
+        layers.forEach((box, index) => box.index.setValue(index))
+    }
+
+    // re-hosts by pointer, nothing is copied: automation lanes keep their targets
+    wrapInstrumentIntoComposite(instrumentBox: InstrumentBox): Attempt<CompositeLayerProduct<InstrumentBox>, string> {
+        const factoryKey = InstrumentFactories.keyOfBox(instrumentBox)
+        if (!isDefined(factoryKey) || !InstrumentFactories.isLayerInstrument(InstrumentFactories.Named[factoryKey])) {
+            return Attempts.err(`${instrumentBox.name} cannot be used as a layer`)
+        }
+        const hostBox = instrumentBox.host.targetVertex.unwrap("instrument.host").box
+        if (!isInstanceOf(hostBox, AudioUnitBox)) {return Attempts.err("The instrument is not hosted by an audio unit")}
+        const {boxGraph} = this.#project
+        const {create, defaultIcon, defaultName} = InstrumentFactories.InstrumentComposite
+        const midiEffects = IndexedBox.collectIndexedBoxes(hostBox.midiEffects) as ReadonlyArray<EffectBox>
+        const audioEffects = IndexedBox.collectIndexedBoxes(hostBox.audioEffects) as ReadonlyArray<EffectBox>
+        instrumentBox.host.defer()
+        const composite = create(boxGraph, hostBox.input, defaultName, defaultIcon)
+        const cellBox = InstrumentCompositeCellBox.create(boxGraph, UUID.generate(), box => {
+            box.composite.refer(composite.cells)
+            box.index.setValue(0)
+        })
+        instrumentBox.host.refer(cellBox.instrument)
+        this.moveEffects(cellBox.midiEffects, midiEffects, 0)
+        this.moveEffects(cellBox.audioEffects, audioEffects, 0)
+        return Attempts.ok({cellBox, instrumentBox})
+    }
+
+    pasteAudioUnitAsLayer(composite: InstrumentCompositeBox, data: ArrayBufferLike,
+                          notes: AudioUnitAsLayer.Notes = "append"): Attempt<CompositeLayerProduct<InstrumentBox>, string> {
+        return AudioUnitAsLayer.paste(this.#project, composite, data, notes)
+    }
+
+    // automation lanes are not copied
+    duplicateCompositeLayer(cellBox: InstrumentCompositeCellBox): InstrumentCompositeCellBox {
+        const {boxGraph} = this.#project
+        const composite = asInstanceOf(cellBox.composite.targetVertex.unwrap("composite.target").box, InstrumentCompositeBox)
+        const dependencies = TransferUtils.deviceDependencies(cellBox, box => box === composite)
+        const uuidMap = TransferUtils.mapUuids([cellBox, ...dependencies])
+        const insertIndex = cellBox.index.getValue() + 1
+        IndexedBox.collectIndexedBoxes(composite.cells)
+            .filter(box => box.index.getValue() >= insertIndex)
+            .forEach(box => box.index.setValue(box.index.getValue() + 1))
+        PointerField.decodeWith({
+            map: (_pointer: PointerField, address: Option<Address>): Option<Address> =>
+                address.map(addr => uuidMap.opt(addr.uuid).mapOr(({target}) => addr.moveTo(target), addr))
+        }, () => TransferUtils.cloneBoxes([cellBox, ...dependencies]
+            .filter(source => !TransferUtils.keepsIdentity(source)), uuidMap, boxGraph))
+        const copy = asInstanceOf(boxGraph.findBox(uuidMap.get(cellBox.address.uuid, "cell copy").target)
+            .unwrap("cell copy"), InstrumentCompositeCellBox)
+        copy.index.setValue(insertIndex)
+        return copy
+    }
+
+    deleteCompositeLayer(cellBox: InstrumentCompositeCellBox): void {
+        const composite = asInstanceOf(cellBox.composite.targetVertex.unwrap("composite.target").box, InstrumentCompositeBox)
+        const survivors = IndexedBox.collectIndexedBoxes(composite.cells).filter(box => box !== cellBox)
+        cellBox.delete()
+        survivors.forEach((box, index) => box.index.setValue(index))
+    }
+
     insertEffect(field: Field<EffectPointerType>, factory: EffectFactory, insertIndex: int = Number.MAX_SAFE_INTEGER): EffectBox {
         return factory.create(this.#project, field, IndexedBox.insertOrder(field, insertIndex))
+    }
+
+    // Copies of the effects (with everything they own) placed in the target chain at the insert index.
+    copyEffects(targetField: Field<EffectPointerType>, boxes: ReadonlyArray<EffectBox>, insertIndex: int): ReadonlyArray<EffectBox> {
+        if (boxes.length === 0) {return Arrays.empty()}
+        const {boxGraph} = this.#project
+        const sorted = boxes.toSorted((left, right) => left.index.getValue() - right.index.getValue())
+        const data = BoxGraphCopy.serializeBoxes([...sorted, ...DevicesClipboard.collectDeviceDependencies(sorted, boxGraph)])
+        const existing = IndexedBox.collectIndexedBoxes(targetField)
+        const at = clamp(insertIndex, 0, existing.length)
+        existing.forEach(box => {
+            if (box.index.getValue() >= at) {box.index.setValue(box.index.getValue() + sorted.length)}
+        })
+        const copies = BoxGraphCopy.deserializeBoxes(data, boxGraph, {
+            mapPointer: (pointer, address) => {
+                if (address.isEmpty()) {return Option.None}
+                if (pointer.pointerType === Pointers.MIDIEffectHost || pointer.pointerType === Pointers.AudioEffectHost) {
+                    return Option.wrap(targetField.address)
+                }
+                return DevicesClipboard.mapModulationPointer(pointer, address, boxGraph)
+            },
+            keepUuid: isModulatorBox,
+            excludeBox: box => DevicesClipboard.excludeExistingModulator(box, boxGraph)
+        })
+        const topLevel = copies
+            .filter((box): box is EffectBox => DeviceBoxUtils.isEffectDeviceBox(box)
+                && box.host.targetVertex.mapOr(vertex => vertex === targetField, false))
+            .toSorted((left, right) => left.index.getValue() - right.index.getValue())
+        topLevel.forEach((box, index) => box.index.setValue(at + index))
+        return topLevel
     }
 
     moveEffects(targetField: Field<EffectPointerType>, boxes: ReadonlyArray<EffectBox>, insertIndex: int): void {
@@ -230,20 +388,12 @@ export class ProjectApi {
             .filter(track => track.type === targetType)
             .toSorted((a, b) => a.indexField.getValue() - b.indexField.getValue())
         if (tracks.length < 2) {return}
-        const fits = (track: TrackBoxAdapter, position: ppqn, complete: ppqn): boolean => {
-            // Read regions live from the pointerHub (not from track.regions.collection),
-            // because the cached collection isn't updated within the running transaction
-            // and would miss regions just moved here in a previous iteration.
-            const regions = track.box.regions.pointerHub.incoming()
-                .map(({box}) => box as AnyRegionBox)
-                .toSorted((a, b) => a.position.getValue() - b.position.getValue())
-            for (const existing of regions) {
-                const existingPosition = existing.position.getValue()
-                if (existingPosition >= complete) {return true}
-                if (existingPosition + existing.duration.getValue() > position) {return false}
-            }
-            return true
-        }
+        // Reads regions live from the pointerHub (not from track.regions.collection),
+        // because the cached collection isn't updated within the running transaction
+        // and would miss regions just moved here in a previous iteration.
+        const {boxAdapters} = this.#project
+        const fits = (track: TrackBoxAdapter, position: ppqn, complete: ppqn): boolean =>
+            RegionOverlap.hasSpace(boxAdapters, track.box, position, complete)
         for (let i = 1; i < tracks.length; i++) {
             // Snapshot the region list before mutating; moving via `refer` will
             // remove the region from this track's collection mid-iteration.
@@ -251,7 +401,7 @@ export class ProjectApi {
             for (const region of regions) {
                 for (let j = 0; j < i; j++) {
                     const position = region.position.getValue()
-                    const complete = position + region.duration.getValue()
+                    const complete = RegionAdapters.for(boxAdapters, region).resolveComplete(position)
                     if (fits(tracks[j], position, complete)) {
                         region.regions.refer(tracks[j].box.regions)
                         break

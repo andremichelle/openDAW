@@ -10,6 +10,7 @@ import {Html} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {CanvasPainter, EffectFactories} from "@opendaw/studio-core"
 import {Icon} from "@/ui/components/Icon"
+import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 
 const className = Html.adoptStyleSheet(css, "VelocityDeviceEditor")
@@ -52,8 +53,8 @@ export const VelocityDeviceEditor = ({lifecycle, service, adapter, deviceHost}: 
                                               context.lineTo(right, bottom)
 
                                               const gradient = context.createLinearGradient(pad, 0, right, 0)
-                                              gradient.addColorStop(0.0, "hsla(200, 40%, 70%, 0.1)")
-                                              gradient.addColorStop(1.0, "hsla(200, 40%, 70%, 0.3)")
+                                              gradient.addColorStop(0.0, DisplayPaint.gridStyle(0.1))
+                                              gradient.addColorStop(1.0, DisplayPaint.gridStyle(0.3))
 
                                               context.strokeStyle = gradient
 

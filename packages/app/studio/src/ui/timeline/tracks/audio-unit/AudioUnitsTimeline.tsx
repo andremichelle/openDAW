@@ -1,5 +1,5 @@
 import css from "./AudioUnitsTimeline.sass?inline"
-import {clamp, DefaultObservableValue, int, isDefined, Lifecycle, Option, UUID} from "@opendaw/lib-std"
+import {clamp, DefaultObservableValue, int, isDefined, isNotNull, Lifecycle, Option, UUID} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Scroller} from "@/ui/components/Scroller.tsx"
@@ -28,6 +28,8 @@ import {IndexedBox} from "@opendaw/lib-box"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
 import {installAutoScroll} from "@/ui/AutoScroll"
+import {UnitInsertion} from "./UnitInsertion"
+import {PresetApplication} from "@/ui/browse/PresetApplication"
 
 const className = Html.adoptStyleSheet(css, "AudioUnitsTimeline")
 
@@ -38,7 +40,7 @@ type Construct = {
 
 export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
     const {range} = service.timeline
-    const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters} = service.project
+    const {editing, boxGraph, rootBoxAdapter, userEditingManager, boxAdapters, api} = service.project
     const scrollModel = new ScrollModel()
     const scrollContainer: HTMLElement = (
         <div className="scrollable">
@@ -118,7 +120,39 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
             <Scroller lifecycle={lifecycle} model={scrollModel} floating/>
         </div>
     )
+    const unitInsertion = new UnitInsertion(element, manager, rootBoxAdapter)
+    const isNewUnit = (dragData: AnyDragData): boolean =>
+        (dragData.type === "instrument" && dragData.device !== null)
+        || (dragData.type === "preset" && (dragData.category === "instrument" || dragData.category === "audio-unit"))
     lifecycle.ownAll(
+        // The root sees drags over headers, lanes, gaps and the empty band alike, so a new unit can land
+        // between any two units. The inner targets (effects onto a header, samples onto a lane) keep theirs.
+        DragAndDrop.installTarget(element, {
+            drag: (event: DragEvent, dragData: AnyDragData): boolean => {
+                if (!isNewUnit(dragData)) {return false}
+                unitInsertion.show(event.clientY)
+                return true
+            },
+            drop: (event: DragEvent, dragData: AnyDragData) => {
+                unitInsertion.hide()
+                if (!isNewUnit(dragData)) {return}
+                const anchor = unitInsertion.anchorAt(event.clientY)
+                if (dragData.type === "instrument" && dragData.device !== null) {
+                    const factory = InstrumentFactories[dragData.device]
+                    editing.modify(() => api.placeAudioUnitBefore(api.createAnyInstrument(factory).audioUnitBox, anchor))
+                } else if (dragData.type === "preset") {
+                    if (dragData.category === "audio-unit") {
+                        PresetApplication.createNewAudioUnitFromRack(service.project, dragData.uuid, dragData.source, anchor)
+                            .catch(console.warn)
+                    } else if (isNotNull(dragData.device)) {
+                        PresetApplication.createNewAudioUnitFromInstrument(
+                            service.project, dragData.uuid, dragData.device, dragData.source, anchor).catch(console.warn)
+                    }
+                }
+            },
+            enter: () => {},
+            leave: () => unitInsertion.hide()
+        }),
         DragAndDrop.installTarget(scrollContainer, {
             drag: (event: DragEvent, dragData: AnyDragData): boolean => {
                 if (dragData.type === "track") {

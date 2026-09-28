@@ -1,14 +1,16 @@
 import css from "./RegionsArea.sass?inline"
+import {TourAnchors} from "@/ui/tour/TourAnchors"
+import {firstTrackRect} from "@/ui/timeline/tracks/audio-unit/FirstTrackRect"
 import {clamp, DefaultObservableValue, EmptyExec, Lifecycle, Nullable, Option, Unhandled} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {CutCursor} from "@/ui/timeline/CutCursor.tsx"
-import {PPQN, ppqn} from "@opendaw/lib-dsp"
+import {ppqn} from "@opendaw/lib-dsp"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
 import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {AnyRegionBoxAdapter, RegionEditing} from "@opendaw/studio-adapters"
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
-import {installRegionContextMenu} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
+import {installRegionContextMenu, loopRegionSelection} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
 import {RegionCaptureTarget, RegionCapturing} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {StudioService} from "@/service/StudioService.ts"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
@@ -29,6 +31,7 @@ import {Dialogs} from "@/ui/components/dialogs"
 import {ClipboardManager, ElementCapturing, RegionsClipboard, TimelineRange} from "@opendaw/studio-core"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
 import {WheelScaling} from "@/ui/timeline/WheelScaling"
+import {moveByWheelPixels} from "@/ui/timeline/editors/WheelScroll"
 
 const className = Html.adoptStyleSheet(css, "RegionsArea")
 
@@ -38,7 +41,6 @@ const CursorMap = Object.freeze({
     "complete": Cursor.LoopEnd,
     "loop-duration": Cursor.ExpandWidth,
     "content-start": Cursor.ExpandWidth,
-    "content-complete": Cursor.ExpandWidth,
     "fading-in": "ew-resize",
     "fading-out": "ew-resize"
 }) satisfies Record<string, CssUtils.Cursor | Cursor>
@@ -69,6 +71,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             <CutCursor lifecycle={lifecycle} position={markerPosition} range={range}/>
         </div>
     )
+    TourAnchors.registerRect(lifecycle, element, () => firstTrackRect(element, manager), "regions")
     const capturing: ElementCapturing<RegionCaptureTarget> = RegionCapturing.create(element, manager, range, project.audioUnitFreeze)
     const {audioUnitFreeze} = project
     const regionLocator = createRegionLocator(manager, range, regionSelection, audioUnitFreeze)
@@ -113,6 +116,8 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             editing.modify(() => selected.forEach(({box: {mute}}) => mute.toggle()))
             return true
         }),
+        shortcuts.register(RegionsShortcuts["loop-selection"].shortcut, () =>
+            loopRegionSelection(editing, timelineBox, regionSelection)),
         shortcuts.register(RegionsShortcuts["snapping-finer"].shortcut, () => snapping.stepFiner(), {allowRepeat: true}),
         shortcuts.register(RegionsShortcuts["snapping-coarser"].shortcut, () => snapping.stepCoarser(), {allowRepeat: true}),
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
@@ -219,7 +224,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 const {left, right} = element.getBoundingClientRect()
                 const {top, bottom} = scrollContainer.getBoundingClientRect()
                 return ({xMin: left, xMax: right, yMin: top, yMax: bottom})
-            }, padding: Config.AutoScrollPadding
+            }, padding: Config.AutoScrollPadding, dragPadding: Config.AutoScrollDragPadding
         }),
         DragAndDrop.installTarget(element, {
             drag: (event: DragEvent, data: AnyDragData): boolean => {
@@ -227,10 +232,6 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 if (option.isEmpty()) {
                     markerPosition.setValue(null)
                     return false
-                }
-                if (data.type === "instrument") {
-                    markerPosition.setValue(null)
-                    return true
                 }
                 const rect = element.getBoundingClientRect()
                 const position = snapping.xToUnitFloor(event.clientX - rect.left)
@@ -252,7 +253,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             } else if (event.altKey) {
                 event.preventDefault()
                 event.stopPropagation()
-                range.moveUnitBy(Math.sign(event.deltaY) * PPQN.SemiQuaver * 2)
+                moveByWheelPixels(range, event)
             } else {
                 const deltaX = event.deltaX
                 const threshold = 5.0
@@ -300,12 +301,8 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                         return manager.startRegionModifier(RegionContentStartModifier.create(regionSelection.selected(),
                             {project, element, snapping, pointerPulse, reference}))
                     case "loop-duration":
-                    case "content-complete":
                         return manager.startRegionModifier(RegionLoopDurationModifier.create(regionSelection.selected(),
-                            {
-                                project, element, snapping, pointerPulse, reference,
-                                resize: target.part === "content-complete"
-                            }))
+                            {project, element, snapping, pointerPulse, reference}))
                     case "fading-in":
                     case "fading-out": {
                         const audioRegion = target.region

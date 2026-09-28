@@ -7,17 +7,37 @@ export const StudioSettingsSchema = z.object({
     "visibility": z.object({
         "visible-help-hints": z.boolean(),
         "enable-history-buttons": z.boolean(),
-        "auto-open-clips": z.boolean(),
         "base-frequency": z.boolean(),
         "toasts": z.boolean(),
-        "show-output-track": z.boolean()
+        "show-output-track": z.boolean(),
+        "offer-studio-tour": z.boolean()
     }).default({
         "visible-help-hints": true,
         "enable-history-buttons": navigator.maxTouchPoints > 0,
-        "auto-open-clips": true,
         "base-frequency": false,
         "toasts": true,
-        "show-output-track": false
+        "show-output-track": false,
+        "offer-studio-tour": true
+    }),
+    "timeline": z.object({
+        "markers": z.boolean(),
+        "tempo": z.boolean(),
+        "signature": z.boolean(),
+        "clips": z.boolean(),
+        "follow-cursor": z.boolean()
+    }).default({
+        "markers": true,
+        "tempo": false,
+        "signature": false,
+        "clips": true,
+        "follow-cursor": false
+    }),
+    "appearance": z.object({
+        "neutral-hue": z.number().catch(197),
+        "neutral-saturation": z.number().catch(100)
+    }).default({
+        "neutral-hue": 197,
+        "neutral-saturation": 100
     }),
     "time-display": z.object({
         "musical": z.boolean(),

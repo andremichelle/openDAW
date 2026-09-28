@@ -711,15 +711,6 @@ impl Engine {
         if bound.is_empty() {None} else {Some(Rc::from(bound))}
     }
 
-    /// Push the initial parameter values of freshly built devices (JOINERS) to them. Survivors are NEVER passed
-    /// here — a chain edit (reorder / add / remove) must leave every existing plugin's parameters untouched.
-    pub(crate) fn refresh_joiner_params(&self, device_params: &[DeviceParams]) {
-        let position = self.transport.position();
-        for params in device_params {
-            refresh_params(&params.handles, params.reg, params.state_ptr, position);
-        }
-    }
-
     /// Unsubscribe each device's field observers and terminate its curve collections (a rewire / teardown).
     /// Called ONLY on a genuine device-instance death (a leaver via `terminate_member`, or a wholesale bus
     /// teardown) — never for a chain-edit survivor — so this is also the single place that fires the

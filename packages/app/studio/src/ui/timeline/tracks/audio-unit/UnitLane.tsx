@@ -2,7 +2,7 @@ import {Arrays, DefaultObservableValue, Lifecycle, Option, Terminator, UUID} fro
 import {Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {createElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
-import {AudioUnitBoxAdapter, TrackType} from "@opendaw/studio-adapters"
+import {AudioUnitBoxAdapter, InstrumentFactories, TrackType} from "@opendaw/studio-adapters"
 import {TrackBox} from "@opendaw/studio-boxes"
 import {Colors, IconSymbol, TransientPlayMode} from "@opendaw/studio-enums"
 import {Icon} from "@/ui/components/Icon.tsx"
@@ -89,32 +89,33 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
             drop: (event: DragEvent, data: AnyDragData) => {
                 if (!isSampleDrag(data) || !acceptsAudio()) {return}
                 const pointerX = event.clientX - regionArea.getBoundingClientRect().left
-                TimelineDragAndDrop.resolveSample(service, data).then(option =>
-                    option.ifSome(({sample, type, audioFileBoxFactory}) => {
-                        // The sample resolved asynchronously; the unit may have been deleted meanwhile.
-                        if (!audioUnitBoxAdapter.box.isAttached()) {return}
-                        const {editing, boxGraph} = project
-                        const position = Math.max(Math.floor(service.timeline.range.xToUnit(pointerX)), 0)
-                        editing.modify(() => {
-                            const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+                TimelineDragAndDrop.resolveSamples(service, data).then(resolved => {
+                    // The samples resolved asynchronously; the unit may have been deleted meanwhile.
+                    if (resolved.length === 0 || !audioUnitBoxAdapter.box.isAttached()) {return}
+                    const {editing, boxGraph, api} = project
+                    const position = Math.max(Math.floor(service.timeline.range.xToUnit(pointerX)), 0)
+                    editing.modify(() => resolved.forEach(({sample, type, audioFileBoxFactory}, index) => {
+                        const targetTrack = index === 0
+                            ? TrackBox.create(boxGraph, UUID.generate(), box => {
                                 box.type.setValue(TrackType.Audio)
                                 box.tracks.refer(audioUnitBoxAdapter.box.tracks)
                                 box.index.setValue(audioUnitBoxAdapter.tracks.collection.getMinFreeIndex())
                                 box.target.refer(audioUnitBoxAdapter.box)
                             })
-                            const audioFileBox = audioFileBoxFactory()
-                            if (type === "file" || sample.bpm === 0) {
-                                AudioContentFactory.createNotStretchedRegion({
-                                    boxGraph, targetTrack: trackBox, audioFileBox, sample, position
-                                })
-                            } else {
-                                AudioContentFactory.createTimeStretchedRegion({
-                                    boxGraph, targetTrack: trackBox, audioFileBox, sample, position,
-                                    playbackRate: 1.0, transientPlayMode: TransientPlayMode.Pingpong
-                                })
-                            }
-                        })
+                            : api.createInstrument(InstrumentFactories.Tape).trackBox
+                        const audioFileBox = audioFileBoxFactory()
+                        if (type === "file" || sample.bpm === 0) {
+                            AudioContentFactory.createNotStretchedRegion({
+                                boxGraph, targetTrack, audioFileBox, sample, position
+                            })
+                        } else {
+                            AudioContentFactory.createTimeStretchedRegion({
+                                boxGraph, targetTrack, audioFileBox, sample, position,
+                                playbackRate: 1.0, transientPlayMode: TransientPlayMode.Pingpong
+                            })
+                        }
                     }))
+                })
             },
             enter: (allowDrop: boolean) => header.classList.toggle("accept-drop", allowDrop),
             leave: () => header.classList.remove("accept-drop")

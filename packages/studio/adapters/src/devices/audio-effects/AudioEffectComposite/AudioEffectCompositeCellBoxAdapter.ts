@@ -1,9 +1,10 @@
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioEffectCompositeCellBox} from "@opendaw/studio-boxes"
-import {int, Option, StringMapping, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
+import {int, Option, Procedure, StringMapping, Subscription, Terminator, UUID, ValueMapping} from "@opendaw/lib-std"
 import {Address, BooleanField, Field, Int32Field, StringField} from "@opendaw/lib-box"
 import {
     AudioEffectDeviceAdapter,
+    CompositeCell,
     DeviceHost,
     Devices,
     MidiEffectDeviceAdapter
@@ -20,8 +21,9 @@ import {AudioCompositeAdapter} from "./AudioCompositeAdapter"
 // (`midiEffects` / `midiEffectsField` are `None`), and no instrument — the composite hands it a signal. Being a
 // DeviceHost is what lets the device panel be ENTERED on this cell (userEditingManager.audioUnit.edit(cellBox)),
 // exactly as a Playfield slot is entered.
-export class AudioEffectCompositeCellBoxAdapter implements DeviceHost, IndexedBoxAdapter {
+export class AudioEffectCompositeCellBoxAdapter implements CompositeCell, IndexedBoxAdapter {
     readonly class = "device-host"
+    readonly cellKind = "audio-effect"
 
     readonly #terminator = new Terminator()
 
@@ -46,9 +48,8 @@ export class AudioEffectCompositeCellBoxAdapter implements DeviceHost, IndexedBo
     get uuid(): UUID.Bytes {return this.#box.address.uuid}
     get address(): Address {return this.#box.address}
     get indexField(): Int32Field {return this.#box.index}
-    get labelField(): StringField {return this.#box.label}
     get minimizedField(): BooleanField {return this.#box.minimized}
-    get label(): string {return this.#box.label.getValue()}
+    get label(): string {return this.compositeDevice().entryLabelAt(this.#box.index.getValue())}
 
     // An audio entry hosts an audio chain only: no midi chain, and no instrument to head it.
     get audioEffects(): Option<IndexedBoxAdapterCollection<AudioEffectDeviceAdapter, Pointers.AudioEffectHost>> {
@@ -77,6 +78,13 @@ export class AudioEffectCompositeCellBoxAdapter implements DeviceHost, IndexedBo
     // The host the OWNING COMPOSITE lives in — where the panel returns to when leaving this entry. NOT the
     // composite itself (see `compositeDevice`): an entry's host is where its composite sits in a chain.
     deviceHost(): DeviceHost {return this.compositeDevice().deviceHost()}
+    asCompositeCell(): Option<CompositeCell> {return Option.wrap(this)}
+    siblings(): ReadonlyArray<CompositeCell> {return this.compositeDevice().entries.adapters()}
+    subscribeSiblings(observer: Procedure<ReadonlyArray<CompositeCell>>): Subscription {
+        const {entries} = this.compositeDevice()
+        const notify = () => observer(entries.adapters())
+        return entries.subscribe({onAdd: notify, onRemove: notify, onReorder: notify})
+    }
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
     * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {
@@ -92,7 +100,6 @@ export class AudioEffectCompositeCellBoxAdapter implements DeviceHost, IndexedBo
         AudioEffectCompositeCellBox.create(this.#box.graph, UUID.generate(), box => {
             box.composite.refer(this.#box.composite.targetVertex.unwrap("composite.target"))
             box.index.setValue(index)
-            box.label.setValue(this.#box.label.getValue())
             box.gain.setValue(this.#box.gain.getValue())
             box.pan.setValue(this.#box.pan.getValue())
             box.mute.setValue(this.#box.mute.getValue())

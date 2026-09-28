@@ -4,6 +4,7 @@ import {asInstanceOf, int, Option, StringMapping, Terminator, UUID, ValueMapping
 import {Address, BooleanField, Field, Int32Field, StringField} from "@opendaw/lib-box"
 import {
     AudioEffectDeviceAdapter,
+    CompositeCell,
     DeviceAccepts,
     DeviceHost,
     Devices,
@@ -141,6 +142,7 @@ export class PlayfieldSampleBoxAdapter implements DeviceHost, InstrumentDeviceBo
     }
 
     deviceHost(): DeviceHost {return this.device().deviceHost()}
+    asCompositeCell(): Option<CompositeCell> {return Option.None}
     audioUnitBoxAdapter(): AudioUnitBoxAdapter {return this.deviceHost().audioUnitBoxAdapter()}
 
     * labeledAudioOutputs(): Iterable<LabeledAudioOutput> {

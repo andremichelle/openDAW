@@ -47,6 +47,11 @@ export class Events {
         }, {capture: true})
     }
 
+    // ignores the second click of a double click (event.detail counts the clicks of the sequence)
+    static subscribeSingleClick(eventTarget: EventTarget, listener: (event: MouseEvent) => void): Subscription {
+        return this.subscribe(eventTarget, "click", event => {if (event.detail <= 1) {listener(event)}})
+    }
+
     static readonly PreventDefault: Procedure<Event> = event => event.preventDefault()
 
     static readonly isTextInput = (target: Nullable<EventTarget>): boolean => {

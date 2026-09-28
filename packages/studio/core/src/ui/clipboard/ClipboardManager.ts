@@ -55,6 +55,14 @@ export namespace ClipboardManager {
         RuntimeNotifier.notify({message: `${label} ${verb} to clipboard`, icon: IconSymbol.toName(icon)})
     }
 
+    export const peek = (): Option<AnyEntry> => fallbackEntry
+
+    export const write = (entry: AnyEntry): void => {
+        fallbackEntry = Option.wrap(entry)
+        Clipboard.writeText(encode(entry))
+        notify(entry, "copied", IconSymbol.Copy)
+    }
+
     export const decode = (text: string): Option<AnyEntry> => {
         const parts = text.split(":")
         if (parts.length < 4 || parts[0] !== CLIPBOARD_HEADER) {return Option.None}

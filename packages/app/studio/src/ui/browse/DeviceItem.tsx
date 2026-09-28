@@ -1,7 +1,7 @@
 import css from "./DeviceItem.sass?inline"
 import {isDefined, Lifecycle, Nullable} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Events, Html} from "@opendaw/lib-dom"
 import {IndexedBox} from "@opendaw/lib-box"
 import {InstrumentFactories} from "@opendaw/studio-adapters"
 import {EffectFactories, PresetEntry} from "@opendaw/studio-core"
@@ -73,7 +73,7 @@ export const DeviceItem = ({
         item.classList.toggle("expanded", open)
         if (open) {expandedKeys.add(expandKey)} else {expandedKeys.delete(expandKey)}
     }
-    header.onclick = () => onCreate()
+    lifecycle.own(Events.subscribeSingleClick(header, onCreate))
     if (dropKind === "audio-effect") {
         DragAndDrop.installSource(header, () => ({
             type: "audio-effect",

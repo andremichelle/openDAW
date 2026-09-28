@@ -23,6 +23,7 @@ import {
     BoxVisitor,
     CaptureAudioBox,
     CaptureMidiBox,
+    InstrumentCompositeCellBox,
     SoundfontFileBox,
     TrackBox
 } from "@opendaw/studio-boxes"
@@ -31,9 +32,12 @@ import {TransferUtils} from "../transfer"
 import {PresetHeader} from "./PresetHeader"
 import {TrackType} from "../timeline/TrackType"
 import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
+import {InstrumentFactories} from "../factories/InstrumentFactories"
 
 export namespace PresetDecoder {
-    export const decode = (bytes: ArrayBufferLike, target: ProjectSkeleton): ReadonlyArray<AudioUnitBox> => {
+    export const decode = (bytes: ArrayBufferLike,
+                           target: ProjectSkeleton,
+                           insertIndex?: int): ReadonlyArray<AudioUnitBox> => {
         const header = new ByteArrayInput(bytes.slice(0, 8))
         if (header.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {
             RuntimeNotifier.notify({message: "Invalid preset file.", icon: "Warning"})
@@ -71,7 +75,9 @@ export namespace PresetDecoder {
         const uuidMap = TransferUtils.generateMap(
             sourceAudioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
         TransferUtils.copyBoxes(uuidMap, target.boxGraph, sourceAudioUnitBoxes, dependencies)
-        TransferUtils.reorderAudioUnits(uuidMap, sourceAudioUnitBoxes, rootBox)
+        // A slot is a place among the instruments; a rack that carries buses keeps the by-type placement.
+        const allInstruments = sourceAudioUnitBoxes.every(box => box.type.getValue() === AudioUnitType.Instrument)
+        TransferUtils.reorderAudioUnits(uuidMap, sourceAudioUnitBoxes, rootBox, allInstruments ? insertIndex : undefined)
         const importedAudioUnits = sourceAudioUnitBoxes
             .map(source => asInstanceOf(rootBox.graph
                 .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
@@ -233,12 +239,7 @@ export namespace PresetDecoder {
         return Attempts.Ok
     }
 
-    export const insertEffectChain = (
-        bytes: ArrayBufferLike,
-        targetField: Field<EffectPointerType>,
-        insertIndex: int,
-        kind: PresetHeader.ChainKind
-    ): Attempt<void, string> => {
+    const readSourceUnit = (bytes: ArrayBufferLike): Attempt<AudioUnitBox, string> => {
         if (bytes.byteLength < 8) {return Attempts.err("Invalid preset header")}
         const headerInput = new ByteArrayInput(bytes.slice(0, 8))
         if (headerInput.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {
@@ -258,9 +259,18 @@ export namespace PresetDecoder {
             .filter(box => isInstanceOf(box, AudioUnitBox))
             .map(box => asInstanceOf(box, AudioUnitBox))
             .find(box => box.type.getValue() !== AudioUnitType.Output)
-        if (isAbsent(sourceAudioUnit)) {
-            return Attempts.err("Preset contains no audio unit")
-        }
+        return isAbsent(sourceAudioUnit) ? Attempts.err("Preset contains no audio unit") : Attempts.ok(sourceAudioUnit)
+    }
+
+    export const insertEffectChain = (
+        bytes: ArrayBufferLike,
+        targetField: Field<EffectPointerType>,
+        insertIndex: int,
+        kind: PresetHeader.ChainKind
+    ): Attempt<void, string> => {
+        const source = readSourceUnit(bytes)
+        if (source.isFailure()) {return Attempts.err(source.failureReason())}
+        const sourceAudioUnit = source.result()
         const sourceField = kind === PresetHeader.ChainKind.Audio
             ? sourceAudioUnit.audioEffects
             : sourceAudioUnit.midiEffects
@@ -285,7 +295,7 @@ export namespace PresetDecoder {
             || TransferUtils.excludeTimelinePredicate(box)
             || box instanceof AudioUnitBox
         const effectSet = new Set<Box>(effects)
-        const dependencies = TransferUtils.withModulators(Array.from(sourceGraph.dependenciesOf(effects, {
+        const dependencies = TransferUtils.withModulators(Array.from(sourceAudioUnit.graph.dependenciesOf(effects, {
             alwaysFollowMandatory: true,
             stopAtResources: true,
             excludeBox
@@ -338,6 +348,43 @@ export namespace PresetDecoder {
                 targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
             })
         })
+        return Attempts.Ok
+    }
+
+    // only the instrument travels: the layer keeps its strip and chains
+    export const replaceLayerInstrument = (bytes: ArrayBufferLike, cellBox: InstrumentCompositeCellBox): Attempt<void, string> => {
+        const source = readSourceUnit(bytes)
+        if (source.isFailure()) {return Attempts.err(source.failureReason())}
+        const sourceAudioUnit = source.result()
+        const instrument = sourceAudioUnit.input.pointerHub.incoming().at(0)?.box
+        if (isAbsent(instrument) || instrument.tags.deviceType !== "instrument") {
+            return Attempts.err("Preset contains no instrument")
+        }
+        const factoryKey = InstrumentFactories.keyOfBox(instrument)
+        if (!isDefined(factoryKey) || !InstrumentFactories.isLayerInstrument(InstrumentFactories.Named[factoryKey])) {
+            return Attempts.err(`${instrument.name} cannot be used as a layer`)
+        }
+        const targetGraph = cellBox.graph
+        const targetFieldAddress = cellBox.instrument.address
+        const dependencies = TransferUtils.deviceDependencies(instrument)
+        const uuidMap = TransferUtils.mapUuids([instrument, ...dependencies])
+        const fresh = dependencies.filter(source =>
+            !TransferUtils.keepsIdentity(source) || targetGraph.findBox(source.address.uuid).isEmpty())
+        cellBox.instrument.pointerHub.incoming().forEach(({box}) => box.delete())
+        PointerField.decodeWith({
+            map: (pointer: PointerField, address: Option<Address>): Option<Address> => {
+                const internal = address.flatMap(addr =>
+                    uuidMap.opt(addr.uuid).map(({target}) => addr.moveTo(target)))
+                if (internal.nonEmpty()) {return internal}
+                if (pointer.pointerType === Pointers.InstrumentHost) {
+                    return Option.wrap(targetFieldAddress)
+                }
+                return address.flatMap(addr =>
+                    targetGraph.findBox(addr.uuid).nonEmpty()
+                        ? Option.wrap(addr)
+                        : TransferUtils.mapModulatorCollection(pointer, targetGraph))
+            }
+        }, () => TransferUtils.cloneBoxes([instrument, ...fresh], uuidMap, targetGraph))
         return Attempts.Ok
     }
 }

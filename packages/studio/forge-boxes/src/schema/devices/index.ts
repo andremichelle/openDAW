@@ -37,13 +37,14 @@ import {ApparatDeviceBox} from "./instruments/ApparatDeviceBox"
 import {CubedDeviceBox} from "./instruments/CubedDeviceBox"
 import {KorpusDeviceBox} from "./instruments/KorpusDeviceBox"
 import {NoopInstrumentBox} from "./instruments/NoopInstrumentBox"
-import {CompositeDeviceBox} from "./instruments/CompositeDeviceBox"
-import {CompositeCellBox} from "./instruments/CompositeCellBox"
+import {InstrumentCompositeBox} from "./instruments/InstrumentCompositeBox"
+import {InstrumentCompositeCellBox} from "./instruments/InstrumentCompositeCellBox"
 import {AudioEffectCompositeBox} from "./audio-effects/AudioEffectCompositeBox"
 import {AudioEffectCompositeCellBox} from "./audio-effects/AudioEffectCompositeCellBox"
 import {StereoCompositeBox} from "./audio-effects/StereoCompositeBox"
 import {FrequencySplitBox} from "./audio-effects/FrequencySplitBox"
 import {ConvolverDeviceBox} from "./audio-effects/ConvolverDeviceBox"
+import {AudioSinkDeviceBox} from "./audio-effects/AudioSinkDeviceBox"
 
 export const DeviceDefinitions = [
     UnknownAudioEffectDevice,
@@ -88,10 +89,11 @@ export const DeviceDefinitions = [
     CubedDeviceBox,
     KorpusDeviceBox,
     NoopInstrumentBox,
-    CompositeDeviceBox,
-    CompositeCellBox,
+    InstrumentCompositeBox,
+    InstrumentCompositeCellBox,
     AudioEffectCompositeBox,
     AudioEffectCompositeCellBox,
     StereoCompositeBox,
-    FrequencySplitBox
+    FrequencySplitBox,
+    AudioSinkDeviceBox
 ]

@@ -48,6 +48,31 @@ export namespace TransferUtils {
         return [...boxes, ...modulators]
     }
 
+    export const deviceDependencies = (root: Box, exclude: Predicate<Box> = () => false): ReadonlyArray<Box> =>
+        withModulators(Array.from(root.graph.dependenciesOf([root], {
+            alwaysFollowMandatory: true,
+            stopAtResources: true,
+            excludeBox: box => exclude(box) || shouldExclude(box) || excludeTimelinePredicate(box) || box instanceof AudioUnitBox
+        }).boxes).filter(box => box !== root))
+
+    export const mapUuids = (boxes: ReadonlyArray<Box>): SortedSet<UUID.Bytes, UUIDMapper> => {
+        const uuidMap = UUID.newSet<UUIDMapper>(({source}) => source)
+        uuidMap.addMany(boxes.map(box => ({
+            source: box.address.uuid,
+            target: keepsIdentity(box) ? box.address.uuid : UUID.generate()
+        })))
+        return uuidMap
+    }
+
+    export const cloneBoxes = (sources: ReadonlyArray<Box>,
+                               uuidMap: SortedSet<UUID.Bytes, UUIDMapper>,
+                               targetGraph: BoxGraph): void =>
+        sources.forEach(source => {
+            const input = new ByteArrayInput(source.toArrayBuffer())
+            const uuid = uuidMap.get(source.address.uuid, "uuid mapping").target
+            targetGraph.createBox(source.name as keyof BoxIO.TypeMap, uuid, box => box.read(input))
+        })
+
     export const mapModulatorCollection = (pointer: PointerField, targetGraph: BoxGraph): Option<Address> =>
         pointer.pointerType === Pointers.ModulatorCollection
             ? Option.wrap(targetGraph.boxes().find(box => isInstanceOf(box, RootBox)))

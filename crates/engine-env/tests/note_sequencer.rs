@@ -243,3 +243,50 @@ fn a_launched_clip_replaces_the_timeline_at_the_handover() {
     assert!(events.iter().any(|event| matches!(event, Event::NoteStart {pitch: 72, position, ..} if *position == 4800.0)),
         "the clip loops at its own duration: {events:?}");
 }
+
+fn chance_region() -> (NoteRegion, Vec<NoteEvent>) {
+    let region = NoteRegion {position: 0.0, duration: 9600.0, loop_offset: 0.0, loop_duration: 9600.0, mute: false};
+    let notes = (0..96).map(|step| {
+        let mut note = NoteEvent::new(step as f64 * 100.0, 300.0, 60, 0.0, 1.0);
+        note.chance = 50.0;
+        note
+    }).collect();
+    (region, notes)
+}
+
+fn kept_positions(sequencer: &mut NoteSequencer, shift: f64) -> Vec<f64> {
+    let mut kept = Vec::new();
+    let mut position = 0.0;
+    while position < 9600.0 {
+        for event in pull(sequencer, (position + shift).max(0.0), position + 64.0 + shift) {
+            if let Event::NoteStart {position, ..} = event {
+                kept.push(position)
+            }
+        }
+        position += 64.0;
+    }
+    kept
+}
+
+#[test]
+fn layers_pulling_identical_windows_resolve_chance_identically() {
+    // Composite layers each own a sequencer with the SAME seed: identical windows, identical keep / drop.
+    let (region, notes) = chance_region();
+    let first = kept_positions(&mut sequencer(region, &notes), 0.0);
+    let (region, notes) = chance_region();
+    let second = kept_positions(&mut sequencer(region, &notes), 0.0);
+    assert!(first.len() > 20 && first.len() < 76, "chance 50 keeps about half: {}", first.len());
+    assert_eq!(first, second);
+}
+
+#[test]
+fn known_limit_a_layer_with_shifted_windows_may_resolve_chance_differently() {
+    // DOCUMENTS a limit, not a wish: the roll stream is sequential, so a layer whose windows are shifted (its
+    // own Zeitgeist) consumes it in another order. If this ever starts to match, the limit is gone: update
+    // plans/instrument-composite.md and the manual page.
+    let (region, notes) = chance_region();
+    let straight = kept_positions(&mut sequencer(region, &notes), 0.0);
+    let (region, notes) = chance_region();
+    let shifted = kept_positions(&mut sequencer(region, &notes), 45.0);
+    assert_ne!(straight, shifted);
+}

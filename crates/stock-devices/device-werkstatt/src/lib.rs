@@ -7,7 +7,7 @@
 //! collection and drives `parameter_changed` with each child's declaration index as the id.
 //!
 //! Exports: `kind()` (audio effect), `state_size()`, `process(desc_ptr)`, `init(state_ptr, sample_rate)`,
-//! `parameter_changed(...)`, `observe_param_collection_field() -> 11`.
+//! `parameter_changed(...)`, `reset(...)`, `observe_param_collection_field() -> 11`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -70,6 +70,12 @@ pub extern "C" fn parameter_changed(state_ptr: u32, id: u32, kind: u32, value: f
             forward_param(state, id, ParamValue::from_wire(kind, value, modulation));
         })
     }
+}
+
+/// Transport STOP: tell the user `Processor` to reset (drop its buffers).
+#[no_mangle]
+pub extern "C" fn reset(state_ptr: u32) {
+    unsafe { abi::with_state::<WerkstattState>(state_ptr, |state| abi::script_reset(state.handle)) }
 }
 
 /// This device's INSTANCE is dying (a genuine removal, never a chain-edit survivor): release the JS-side

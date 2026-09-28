@@ -1,5 +1,5 @@
 import css from "./BrowserPanel.sass?inline"
-import {DefaultObservableValue, Lifecycle, Terminator} from "@opendaw/lib-std"
+import {Lifecycle, Terminator} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
 import {createElement, DomElement, Group, replaceChildren} from "@opendaw/lib-jsx"
 import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
@@ -8,6 +8,7 @@ import {PresetBrowser} from "@/ui/browse/PresetBrowser.tsx"
 import {BrowseScope} from "@/ui/browse/BrowseScope"
 import {Html} from "@opendaw/lib-dom"
 import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
+import {TourAnchors} from "@/ui/tour/TourAnchors"
 
 const className = Html.adoptStyleSheet(css, "BrowserPanel")
 
@@ -17,7 +18,7 @@ type Construct = {
 }
 
 export const BrowserPanel = ({lifecycle, service}: Construct) => {
-    const scope = new DefaultObservableValue(BrowseScope.Presets)
+    const scope = service.layout.browseScope
     const placeholder: DomElement = <Group/>
     const contentLifecycle = lifecycle.own(new Terminator())
     lifecycle.own(scope.catchupAndSubscribe(owner => {
@@ -42,13 +43,17 @@ export const BrowserPanel = ({lifecycle, service}: Construct) => {
             }
         })())
     }))
+    const tabs: HTMLElement = (
+        <RadioGroup lifecycle={lifecycle} elements={[
+            {value: BrowseScope.Presets, element: <span>Presets</span>},
+            {value: BrowseScope.Samples, element: <span>Samples</span>},
+            {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>}
+        ]} model={scope} style={{fontSize: "11px", columnGap: "8px", padding: "0.5em 0.75em"}}/>
+    )
+    TourAnchors.register(lifecycle, tabs, "presets", "samples", "soundfonts")
     return (
         <div className={className}>
-            <RadioGroup lifecycle={lifecycle} elements={[
-                {value: BrowseScope.Presets, element: <span>Presets</span>},
-                {value: BrowseScope.Samples, element: <span>Samples</span>},
-                {value: BrowseScope.Soundfonts, element: <span>Soundfonts</span>}
-            ]} model={scope} style={{fontSize: "11px", columnGap: "8px", padding: "0.5em 0.75em"}}/>
+            {tabs}
             {placeholder}
         </div>
     )

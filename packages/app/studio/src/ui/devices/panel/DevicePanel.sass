@@ -37,6 +37,12 @@ component
           *
             pointer-events: none !important
 
+        > div.cell-container
+          border-top: 1px var(--color-green) solid
+
+          &:empty
+            display: none
+
         > div.midi-container
           border-top: 1px var(--color-orange) solid
           background: linear-gradient(to bottom, var(--color-orange) -500%, transparent 20%)

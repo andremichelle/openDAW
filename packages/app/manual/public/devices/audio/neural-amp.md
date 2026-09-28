@@ -23,15 +23,15 @@ Example uses:
 
 ## 1. Loading Models
 
-### 1.1 Tone 3000 (Recommended)
+### 1.1 TONE3000 (Recommended)
 
-Click the T3K button to browse and load models directly from [Tone 3000](https://tone3000.com). A dialog will guide you through the process:
+Click the T3K button to browse and load models directly from [TONE3000](https://tone3000.com). A dialog will guide you through the process:
 
 1. Sign in with your email (one-time passcode, no password needed)
-2. Browse or search for a tone
-3. Click the **Download** button to send it back to your device
+2. Browse or search for a tone, and audition it with the preview player
+3. Select the tone to send it back to your device
 
-The selected model is automatically loaded into the Neural Amp. Make sure popups are enabled for this site.
+The selected model is automatically loaded into the Neural Amp. Your TONE3000 sign-in is remembered, so switching between models of a pack later downloads them without signing in again. Make sure popups are enabled for this site.
 
 ### 1.2 Local Browse
 

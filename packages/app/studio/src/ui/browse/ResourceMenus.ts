@@ -89,7 +89,7 @@ export namespace ResourceMenus {
                                    items: ReadonlyArray<T>,
                                    uuidOf: Func<T, UUID.String>,
                                    refresh: Exec): ReadonlyArray<MenuItem> => [
-        MenuItem.header({label: LocalTree.TrashName, icon: IconSymbol.Delete, color: Colors.orange}),
+        MenuItem.header({label: LocalTree.TrashName, icon: IconSymbol.FolderTrash, color: Colors.orange}),
         MenuItem.default({label: "Empty Trash…", icon: IconSymbol.Delete, selectable: items.length > 0})
             .setTriggerProcedure(() => deleteForever(tree, selection, items, uuidOf, refresh))
     ]
@@ -101,6 +101,11 @@ export namespace ResourceMenus {
         await tree.createFolder(parentPath, name)
         refresh()
     }
+
+    export const root = <T>(tree: LocalTree<T>, refresh: Exec): ReadonlyArray<MenuItem> => [
+        MenuItem.default({label: "New Folder…", icon: IconSymbol.FolderAdd})
+            .setTriggerProcedure(() => createFolder(tree, "", refresh))
+    ]
 
     export const folder = <T>(tree: LocalTree<T>, path: string, refresh: Exec): ReadonlyArray<MenuItem> => {
         const name = LocalTree.nameOf(path)

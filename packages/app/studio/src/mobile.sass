@@ -1,0 +1,68 @@
+@font-face
+  font-family: Rubik
+  font-weight: 300
+  src: url(/fonts/rubik-300.woff2)
+
+@font-face
+  font-family: Rubik
+  font-weight: 400
+  src: url(/fonts/rubik-400.woff2)
+
+component
+  display: flex
+  height: 100dvh
+  box-sizing: border-box
+  padding: 1.5em
+  text-align: center
+  font-family: Rubik, sans-serif
+  font-weight: 300
+  font-size: clamp(12px, 2.2dvh, 16px)
+  line-height: 1.4
+  color: var(--color-dark)
+  background: var(--color-background)
+  overflow: hidden
+
+  > div
+    display: flex
+    flex-direction: column
+    align-items: center
+    justify-content: center
+    gap: 0.75em
+    width: 100%
+    max-width: 32em
+    max-height: 100%
+    margin: auto
+
+  h1
+    margin: 0
+    font-weight: 400
+
+  .logo
+    width: 3.5em
+
+  .claim
+    margin: 0
+    font-size: 1.25em
+    color: var(--color-blue)
+
+  .screenshot
+    width: 100%
+    min-height: 0
+    object-fit: contain
+    border-radius: 2px
+
+  p
+    margin: 0
+
+  .instagram
+    display: inline-flex
+    align-items: center
+    gap: 0.5em
+    margin-top: 0.5em
+    color: var(--color-blue)
+    text-decoration: none
+
+    svg
+      width: 1.5em
+      height: 1.5em
+      flex-shrink: 0

@@ -23,6 +23,7 @@ export const ValueEditorHeader = ({lifecycle, context}: Construct) => {
                 {Shift} click on segment to cut.<br/>
                 {Cmd} + drag to paint events.<br/>
                 Drag + {Cmd} to copy events.<br/>
+                Select a node or segment and press Enter to type its value.<br/>
                 Optional hold {Shift} to disable value snapping or hold {Opt} to contrain movement to time.
             </p>
         </div>

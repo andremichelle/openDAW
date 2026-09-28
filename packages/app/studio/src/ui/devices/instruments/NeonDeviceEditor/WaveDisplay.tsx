@@ -95,7 +95,7 @@ export const WaveDisplay = ({lifecycle, parameter, offValue}: Construct) => {
         context.beginPath()
         context.moveTo(0, middle)
         context.lineTo(actualWidth, middle)
-        context.strokeStyle = "hsla(200, 83%, 60%, 0.25)"
+        context.strokeStyle = DisplayPaint.strokeStyle(0.25)
         context.stroke()
     }))
     lifecycle.own(parameter.subscribe(() => painter.requestUpdate()))

@@ -1,4 +1,6 @@
 import css from "./ClipsArea.sass?inline"
+import {TourAnchors} from "@/ui/tour/TourAnchors"
+import {firstTrackRect} from "@/ui/timeline/tracks/audio-unit/FirstTrackRect"
 import {
     clamp,
     int,
@@ -22,6 +24,7 @@ import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
 import {ClipMoveModifier} from "@/ui/timeline/tracks/audio-unit/clips/ClipMoveModifier.ts"
 import {ClipWidth} from "@/ui/timeline/tracks/audio-unit/clips/constants.ts"
 import {installAutoScroll} from "@/ui/AutoScroll.ts"
+import {Config} from "@/ui/timeline/Config"
 import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 import {installClipContextMenu} from "@/ui/timeline/tracks/audio-unit/clips/ClipContextMenu.ts"
 import {PanelType} from "@/ui/workspace/PanelType"
@@ -47,6 +50,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
     const {selection, boxAdapters, editing, userEditingManager} = project
     const dropPreview: HTMLElement = (<div className="drop-target" tabIndex={-1}/>)
     const element: HTMLElement = (<div className={className} tabIndex={-1}>{dropPreview}</div>)
+    TourAnchors.registerRect(lifecycle, element, () => firstTrackRect(element, manager), "clips")
     const clipSelection: Selection<AnyClipBoxAdapter> = lifecycle.own(selection
         .createFilteredSelection(isVertexOfBox(UnionBoxTypes.isClipBox), {
             fx: (adapter: AnyClipBoxAdapter) => adapter.box,
@@ -126,7 +130,8 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
             enter: (_allowDrop: boolean) => {},
             leave: () => style.display = "none"
         }),
-        installAutoScroll(element, (_deltaX, deltaY) => {if (deltaY !== 0) {scrollModel.moveBy(deltaY)}}),
+        installAutoScroll(element, (_deltaX, deltaY) => {if (deltaY !== 0) {scrollModel.moveBy(deltaY)}},
+            {dragPadding: Config.AutoScrollDragPaddingVertical}),
         clipSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyClipBoxAdapter) => selectable.onSelected(),
             onDeselected: (selectable: AnyClipBoxAdapter) => selectable.onDeselected()

@@ -15,6 +15,7 @@ import {CaptureMidiBox} from "@opendaw/studio-boxes"
 import {StudioService} from "@/service/StudioService"
 import {MenuCapture} from "@/ui/timeline/tracks/audio-unit/menu/capture"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
+import {MenuItems} from "@/ui/devices/menu-items"
 
 // The unit's menu. `optTrackBoxAdapter` is empty on the synthetic unit lane (a unit without a notes/audio
 // track), where only the track-scoped entries drop out — everything else acts on the unit and stays reachable.
@@ -91,6 +92,7 @@ export const installTrackHeaderMenu = (service: StudioService,
                 }), false).unwrap("copyUnit")
             Option.wrap(copies.at(0)).ifSome(copy => userEditingManager.audioUnit.edit(copy.editing))
         })),
+        MenuItems.copyAudioUnit(audioUnitBoxAdapter),
         MenuItem.default({
             label: "Freeze AudioUnit",
             hidden: !audioUnitBoxAdapter.isInstrument || isFrozen

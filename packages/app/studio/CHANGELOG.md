@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.4](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.2.3...@opendaw/app-studio@0.2.4) (2026-09-18)
+
+### Reverts
+
+- Revert "design update" ([30834d6](https://github.com/andremichelle/openDAW/commit/30834d6ad0c55395a893a9d86164247ec0789e50))
+
 ## [0.2.3](https://github.com/andremichelle/openDAW/compare/@opendaw/app-studio@0.2.2...@opendaw/app-studio@0.2.3) (2026-09-14)
 
 ### Bug Fixes

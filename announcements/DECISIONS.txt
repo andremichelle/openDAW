@@ -28,6 +28,8 @@ Per channel
   under a subline.
 • LinkedIn: professional. Hashtags at the end.
 • Newsletter: focus on the schools angle. No greeting line (no "Hi ..."). No beta or pilot note.
+• Newsletter follow-ups (second mail on the same event) read as a reminder in the body, but the
+  subject line never says "Reminder".
 
 Links
 • openDAW: https://opendaw.studio
@@ -114,3 +116,35 @@ Still open (see the questions at the bottom of nextcloud.txt)
 • Release status and whether to call for pilot schools.
 • Discord channel name for the post.
 • Newsletter subject line (currently a general blast, no greeting).
+
+Feature framing (Nano)
+• Nano is not new. The update adds root key, octave, tune, a sample region with reverse by swapping
+  start and end, a crossfade loop and an attack. Projects made with the old Nano sound exactly as before.
+• Credit SynthsBack-lab (https://github.com/SynthsBack-lab) for root key, octave, region, loop and
+  attack. Tune was added by us, do not credit it to them.
+• Manual: https://opendaw.studio/manuals/devices/instruments/nano
+
+Feature framing (Composite)
+• An instrument that holds other instruments as layers. Every note reaches all layers, each layer
+  has its own effects, volume, pan, mute and solo. Layers nest (a layer can hold a Composite).
+• Call it "Composite", not "Instrument Composite". Do not confuse it with the FX Composite.
+• Effects inside a layer touch that layer only, effects in front of the Composite apply to all layers.
+• Dropping a Composite onto an existing instrument wraps the whole chain as layer 1, the sound does
+  not change. Any track can be copied (Copy AudioUnit) and pasted into a Composite as a layer with
+  its effects, mix settings and notes.
+• No key or velocity split inside the device, that is separate MIDI effects (not announced yet).
+• Education angle: complex sounds are built from many sources, students add a layer and hear what
+  it contributes, mute and solo take a sound apart. No "class assembles one sound from each
+  student" angle, that makes no sense.
+• Manual: https://opendaw.studio/manuals/devices/instruments/composite
+
+Feature framing (Sink)
+• An audio effect that sends the signal at its position in the chain to a bus of your choice. It sits
+  in any effect chain: a track, a Playfield pad, a Composite layer, an FX Composite entry.
+• The story is grouping single Playfield pads on their own bus. Do not say "grouping a layer", a
+  Composite already picks its output bus in the channel strip.
+• Pass Through is a level, not a switch: all the way down the track goes quiet and sounds only through
+  the bus, up keeps the dry signal as well. Do not call it wet/dry.
+• Discord only so far, very brief, no education angle.
+• Manual: https://opendaw.studio/manuals/devices/audio/sink
+• Sink post: one sentence per subline. "The rest is too elaborative" was the correction, keep it that short.

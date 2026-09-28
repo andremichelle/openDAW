@@ -1,8 +1,8 @@
 @use "@/mixins"
 @use "@/colors"
 
-$ACTIVE: hsl(210, 90%, 30%)
-$PARENT: hsla(210, 90%, 30%, 0.5)
+$ACTIVE: var(--color-menu-active)
+$PARENT: hsl(from var(--color-menu-active) h s l / 0.5)
 
 component
   @include mixins.floating

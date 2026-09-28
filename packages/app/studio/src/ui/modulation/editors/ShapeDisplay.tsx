@@ -69,14 +69,14 @@ export const ShapeDisplay = ({lifecycle, receiver, modulator}: Construct): HTMLE
         context.beginPath()
         context.moveTo(0, centerY)
         context.lineTo(actualWidth, centerY)
-        context.strokeStyle = "hsla(200, 83%, 60%, 0.25)"
+        context.strokeStyle = DisplayPaint.strokeStyle(0.25)
         context.stroke()
         const turn = playhead - phase - Math.floor(playhead - phase)
         context.beginPath()
         context.arc(turn * actualWidth,
             bottom + (top - bottom) * (bipolar ? 0.5 * (output + 1.0) : output),
             devicePixelRatio * 2.0, 0.0, TAU)
-        context.fillStyle = "hsl(200, 83%, 75%)"
+        context.fillStyle = DisplayPaint.fillStyle()
         context.fill()
     }))
     lifecycle.ownAll(

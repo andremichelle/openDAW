@@ -66,4 +66,84 @@ describe("RegionClipResolver producer: fractional boundary quantization (#287)",
         expect(position).toBeGreaterThanOrEqual(clipComplete) // does not overlap the clip footprint
         project.terminate()
     })
+
+    it("does not leave a sub-ulp sliver when a mask end ceils within float drift of a seconds-based complete", async () => {
+        const {Project} = await import("../../project/Project")
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox}} = skeleton
+        boxGraph.beginTransaction()
+        const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+            box.type.setValue(TrackType.Audio)
+            box.tracks.refer(primaryAudioUnitBox.tracks)
+            box.target.refer(primaryAudioUnitBox)
+        })
+        const fileBox = AudioFileBox.create(boxGraph, UUID.generate(), box => box.endInSeconds.setValue(60))
+        const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+        // A seconds-based region whose ppqn complete drifts a float32 ulp ABOVE an integer: 2003 pulses stored
+        // as float32 seconds reads back as complete = 2003.0001068… A mask that ends fractionally below 2003
+        // ceils (in #executeTasks) to 2003, so the exact compare sent it to RegionEditing.clip and carved a
+        // ~1e-4-duration second part [2003, 2003.0001] — a sliver the fold now trims away.
+        AudioRegionBox.create(boxGraph, UUID.generate(), box => {
+            box.timeBase.setValue(TimeBase.Seconds)
+            box.position.setValue(0)
+            box.duration.setValue(PPQN.pulsesToSeconds(2003, 120))
+            box.loopDuration.setValue(PPQN.pulsesToSeconds(2003, 120))
+            box.loopOffset.setValue(0)
+            box.regions.refer(trackBox.regions)
+            box.file.refer(fileBox)
+            box.events.refer(events.owners)
+        })
+        boxGraph.endTransaction()
+        const project = Project.fromSkeleton(createEnv(), skeleton)
+        const trackAdapter = project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
+        expect(trackAdapter.regions.collection.asArray()[0].complete).toBeGreaterThan(2003) // drift is above the integer
+        const exec = RegionClipResolver.fromRange(trackAdapter, 100, 2002.5)
+        boxGraph.beginTransaction()
+        exec()
+        boxGraph.endTransaction()
+        // On the exact compare this leaves TWO regions: [0, ~100] and the sliver [2003, 2003.0001]. The fold
+        // yields the single trimmed region and no sub-ulp remainder.
+        const regions = trackAdapter.regions.collection.asArray()
+        expect(regions).toHaveLength(1)
+        expect(regions[0].duration).toBeGreaterThan(1) // a real region, not a sliver
+        expect(() => RegionClipResolver.validateTrack(trackAdapter)).not.toThrow()
+        project.terminate()
+    })
+
+    it("deletes instead of leaving a sub-ulp sliver when a START task's end ceils within float drift of a seconds-based complete", async () => {
+        const {Project} = await import("../../project/Project")
+        const skeleton = ProjectSkeleton.empty({createDefaultUser: true, createOutputMaximizer: false})
+        const {boxGraph, mandatoryBoxes: {primaryAudioUnitBox}} = skeleton
+        boxGraph.beginTransaction()
+        const trackBox = TrackBox.create(boxGraph, UUID.generate(), box => {
+            box.type.setValue(TrackType.Audio)
+            box.tracks.refer(primaryAudioUnitBox.tracks)
+            box.target.refer(primaryAudioUnitBox)
+        })
+        const fileBox = AudioFileBox.create(boxGraph, UUID.generate(), box => box.endInSeconds.setValue(60))
+        const events = ValueEventCollectionBox.create(boxGraph, UUID.generate())
+        // Same drifted region as above (complete = 2103.0001068…), but the mask covers the region's START, so
+        // createTasksFromMasks emits a plain "start" task (not "separate") and #executeTasks calls #trimStart
+        // with the ceiled end 2103. Without the tolerance in #trimStart the region survives as [2103, 2103.0001].
+        AudioRegionBox.create(boxGraph, UUID.generate(), box => {
+            box.timeBase.setValue(TimeBase.Seconds)
+            box.position.setValue(100)
+            box.duration.setValue(PPQN.pulsesToSeconds(2003, 120))
+            box.loopDuration.setValue(PPQN.pulsesToSeconds(2003, 120))
+            box.loopOffset.setValue(0)
+            box.regions.refer(trackBox.regions)
+            box.file.refer(fileBox)
+            box.events.refer(events.owners)
+        })
+        boxGraph.endTransaction()
+        const project = Project.fromSkeleton(createEnv(), skeleton)
+        const trackAdapter = project.boxAdapters.adapterFor(trackBox, TrackBoxAdapter)
+        expect(trackAdapter.regions.collection.asArray()[0].complete).toBeGreaterThan(2103)
+        const exec = RegionClipResolver.fromRange(trackAdapter, 50, 2102.5)
+        boxGraph.beginTransaction()
+        exec()
+        boxGraph.endTransaction()
+        expect(trackAdapter.regions.collection.asArray()).toHaveLength(0)
+        project.terminate()
+    })
 })

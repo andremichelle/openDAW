@@ -69,11 +69,11 @@ export const StepsDisplay = ({lifecycle, editing, receiver, modulator}: Construc
         context.beginPath()
         context.moveTo(0, baseY)
         context.lineTo(actualWidth, baseY)
-        context.strokeStyle = "hsl(200, 83%, 60%, 0.1)"
+        context.strokeStyle = DisplayPaint.strokeStyle(0.1)
         context.stroke()
         context.beginPath()
         context.arc(playhead * stepWidth, outputToY(output), devicePixelRatio * 2.0, 0.0, TAU)
-        context.fillStyle = "hsl(200, 83%, 75%)"
+        context.fillStyle = DisplayPaint.fillStyle()
         context.fill()
     }))
     const stepAt = (clientX: number): int => {

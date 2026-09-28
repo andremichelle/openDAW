@@ -36,7 +36,7 @@ export type EffectCompositeSpec = {
     entriesField: number    // the composite's entry collection (host field)
     indexKey: number        // the entry box's `index` (UI + sum / merge order)
     chainField: number      // the entry box's fx-host collection (audio or midi, per `kind`)
-    labelKey: number        // the entry box's `label`
+    labelKey: number        // the entry box's `label` (0 = none, only names the node in a graph dump)
     gainKey: number         // the entry's gain (dB); 0 for a midi composite
     panKey: number          // the entry's pan (bipolar); 0 = none
     muteKey: number         // the entry's mute (automatable; an entry has no `enabled`)
@@ -114,16 +114,17 @@ export const COMPOSITES: ReadonlyArray<CompositeSpec> = [
     {boxType: "PlayfieldDeviceBox", childrenField: 10, indexKey: 15, excludeKey: 42,
         cellInstrumentField: 0, cellMidiField: 0, cellAudioField: 0, childEnabledKey: 22,
         childMuteKey: 40, childSoloKey: 41, childVolumeKey: 50, childPanKey: 51},
-    // A generic instrument bundle: children are CELLS (CompositeCellBox) at field 10, each wrapping one
+    // A generic instrument bundle: children are CELLS (InstrumentCompositeCellBox) at field 10, each wrapping one
     // instrument (field 2) plus its midi-fx (3) and audio-fx (4) chains, ordered by the cell's own `index`
-    // (field 5, UI position + engine sort). No note routing, no choke.
-    {boxType: "CompositeDeviceBox", childrenField: 10, indexKey: 5, excludeKey: 0,
+    // (field 5, UI position + engine sort). No note routing, no choke. A cell has its own strip: gain 40,
+    // pan 43, and mute 41 / solo 42 silence at the STRIP (the layer keeps running), unlike a Playfield pad.
+    {boxType: "InstrumentCompositeBox", childrenField: 10, indexKey: 5, excludeKey: 0,
         cellInstrumentField: 2, cellMidiField: 3, cellAudioField: 4, childEnabledKey: 0,
-        childMuteKey: 0, childSoloKey: 0, childVolumeKey: 0, childPanKey: 0}
+        childMuteKey: 41, childSoloKey: 42, childVolumeKey: 40, childPanKey: 43}
 ]
 
 // The EFFECT composite box types (parallel fx / midi stacks). Each hosts its ENTRIES at field 10, ordered by the
-// entry's own `index` (3); an entry holds its chain at field 2, its label at 4, and its gain / mute / solo at
+// entry's own `index` (3); an entry holds its chain at field 2 (its label at 4 is deprecated, labelKey 0), and its gain / mute / solo at
 // 40 / 41 / 42. An audio composite additionally has its input tap at 11 and dry / wet at 12 / 13. The entry
 // boxes are NOT plugins — the engine realizes them itself, so nothing is added to DEVICES for them.
 export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
@@ -131,7 +132,7 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
     {
         boxType: "AudioEffectCompositeBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Broadcast,
-        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
+        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
         gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
         crossoverKeys: [0, 0, 0]
     },
@@ -139,7 +140,7 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
     {
         boxType: "StereoCompositeBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Stereo,
-        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
+        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
         gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
         crossoverKeys: [0, 0, 0]
     },
@@ -148,7 +149,7 @@ export const EFFECT_COMPOSITES: ReadonlyArray<EffectCompositeSpec> = [
     {
         boxType: "FrequencySplitBox", kind: EffectCompositeKind.AudioEffect,
         distributor: EffectCompositeDistributor.Frequency,
-        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 4,
+        entriesField: 10, indexKey: 3, chainField: 2, labelKey: 0,
         gainKey: 40, panKey: 43, muteKey: 41, soloKey: 42, dryKey: 12, wetKey: 13, inputTapField: 11,
         crossoverKeys: [14, 15, 16]
     }

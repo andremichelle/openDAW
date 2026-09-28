@@ -174,7 +174,7 @@ When silenced, the device outputs silence until the next successful compile.
 
 ## 6. API Reference
 
-Your code must define a `class Processor` with a `process` method. Optionally implement `paramChanged` to receive parameter updates.
+Your code must define a `class Processor` with a `process` method. Optionally implement `paramChanged` to receive parameter updates and `reset` to clear state on transport stop.
 
 ### Globals
 
@@ -206,8 +206,13 @@ class Processor {
         // label — string matching the @param name
         // value — number between 0.0 and 1.0
     }
+    reset() {
+        // optional, called when the transport stops: clear buffers and tails
+    }
 }
 ```
+
+Pressing Stop silences the device. If your script has no `reset`, the Processor is rebuilt on stop and all state in class fields starts fresh.
 
 ---
 

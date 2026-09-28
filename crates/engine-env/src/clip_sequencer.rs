@@ -40,7 +40,58 @@ struct TrackState {
     // several sequencers can pull the same track per block (composite slots), so a repeated `iterate`
     // over the same range must replay without re-advancing the state machine.
     cached_range: Option<(f64, f64)>,
-    cached_sections: [Option<(Option<ClipKey>, f64, f64)>; 3]
+    cached_sections: [Option<(Option<ClipKey>, f64, f64)>; 3],
+    shared: SharedRead
+}
+
+type CachedSections = [Option<(Option<ClipKey>, f64, f64)>; 3];
+
+const SHARED_BLOCKS: usize = 8;
+const SHARED_TRANSITIONS: usize = 8;
+const SHARED_POINTS: usize = SHARED_TRANSITIONS + 4;
+
+#[derive(Clone, Copy)]
+struct Transition {
+    position: f64,
+    before: Option<ClipKey>
+}
+
+// What `advance` records for the pure `sections_shared` readers: the canonical blocks (exact replay), the
+// clip handovers behind `cursor` (positions ascend, a discontinuity clears them) and how far it advanced.
+#[derive(Clone, Copy)]
+struct SharedRead {
+    blocks: [Option<(f64, f64, CachedSections)>; SHARED_BLOCKS],
+    block_write: usize,
+    transitions: [Option<Transition>; SHARED_TRANSITIONS],
+    cursor: Option<f64>
+}
+
+impl SharedRead {
+    const fn new() -> Self {
+        Self {blocks: [None; SHARED_BLOCKS], block_write: 0, transitions: [None; SHARED_TRANSITIONS], cursor: None}
+    }
+
+    fn push_block(&mut self, p0: f64, p1: f64, sections: CachedSections) {
+        self.blocks[self.block_write] = Some((p0, p1, sections));
+        self.block_write = (self.block_write + 1) % SHARED_BLOCKS;
+    }
+
+    fn find_block(&self, p0: f64, p1: f64) -> Option<&CachedSections> {
+        (1..=SHARED_BLOCKS)
+            .filter_map(|age| self.blocks[(self.block_write + SHARED_BLOCKS - age) % SHARED_BLOCKS].as_ref())
+            .find(|(from, to, _)| *from == p0 && *to == p1)
+            .map(|(_, _, sections)| sections)
+    }
+
+    fn push_transition(&mut self, transition: Transition) {
+        if self.transitions[SHARED_TRANSITIONS - 1].is_some() {
+            self.transitions.copy_within(1.., 0);
+            self.transitions[SHARED_TRANSITIONS - 1] = None;
+        }
+        if let Some(slot) = self.transitions.iter_mut().find(|slot| slot.is_none()) {
+            *slot = Some(transition);
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -125,11 +176,13 @@ impl ClipSequencer {
             if state.playing.as_ref() == Some(uuid) {
                 state.playing = None;
                 state.cached_range = None;
+                state.shared = SharedRead::new();
                 changes.push((*uuid, Change::Stopped));
             }
             if matches!(state.waiting.as_ref(), Some(Some(waiting)) if waiting == uuid) {
                 state.waiting = None;
                 state.cached_range = None;
+                state.shared = SharedRead::new();
             }
             true
         });
@@ -212,6 +265,121 @@ impl ClipSequencer {
         state.cached_sections = sections;
     }
 
+    /// The ONE advance of a track whose readers are pure (`sections_shared`): runs `iterate` over the canonical
+    /// block and records the block, the handovers and the cursor. A `discontinuous` block drops the handovers.
+    pub fn advance(&mut self, track: &TrackKey, p0: f64, p1: f64, discontinuous: bool, info: &dyn ClipInfo) {
+        let Some(state) = self.states.iter_mut().find(|state| &state.uuid == track) else { return };
+        if discontinuous {
+            state.cached_range = None; // a wrapped loop may repeat the previous window, it must still advance
+        }
+        let before = state.playing;
+        let mut sections: CachedSections = [None; 3];
+        let mut count = 0;
+        self.iterate(track, p0, p1, info, &mut |section| {
+            if count < sections.len() {
+                sections[count] = Some((section.clip, section.from, section.to));
+                count += 1;
+            }
+        });
+        let Some(state) = self.states.iter_mut().find(|state| &state.uuid == track) else { return };
+        if discontinuous {
+            state.shared.transitions = [None; SHARED_TRANSITIONS];
+        }
+        let mut current = before;
+        for (clip, from, _) in sections.iter().flatten() {
+            if *clip != current {
+                state.shared.push_transition(Transition {position: *from, before: current});
+                current = *clip;
+            }
+        }
+        if state.playing != current {
+            state.shared.push_transition(Transition {position: p1, before: current});
+        }
+        state.shared.push_block(p0, p1, sections);
+        state.shared.cursor = Some(p1);
+    }
+
+    /// The PURE read of a track driven by `advance`: never transitions, any window, any number of readers.
+    /// A canonical block replays exactly. Otherwise the part behind the cursor resolves from the recorded
+    /// handovers, the part ahead by the handover rule on a COPY of the live state.
+    pub fn sections_shared(&self, track: &TrackKey, p0: f64, p1: f64, info: &dyn ClipInfo, visit: &mut dyn FnMut(Section)) {
+        let Some(state) = self.states.iter().find(|state| &state.uuid == track) else {
+            visit(Section {clip: None, from: p0, to: p1});
+            return;
+        };
+        if let Some(sections) = state.shared.find_block(p0, p1) {
+            for (clip, from, to) in sections.iter().flatten() {
+                visit(Section {clip: *clip, from: *from, to: *to});
+            }
+            return;
+        }
+        let mut points: [(f64, Option<ClipKey>); SHARED_POINTS] = [(0.0, None); SHARED_POINTS];
+        let mut count = 0;
+        let mut push = |position: f64, clip: Option<ClipKey>| {
+            if count < SHARED_POINTS {
+                points[count] = (position, clip);
+                count += 1;
+            }
+        };
+        let behind_end = state.shared.cursor.map_or(p0, |cursor| cursor.min(p1));
+        if p0 < behind_end {
+            let mut clip = state.playing;
+            for transition in state.shared.transitions.iter().rev().flatten() {
+                if transition.position > p0 { clip = transition.before } else { break }
+            }
+            push(p0, clip);
+            let mut index = 0;
+            while index < SHARED_TRANSITIONS {
+                if let Some(transition) = state.shared.transitions[index] {
+                    if transition.position > p0 && transition.position < behind_end {
+                        let after = state.shared.transitions.get(index + 1).copied().flatten()
+                            .map_or(state.playing, |next| next.before);
+                        push(transition.position, after);
+                    }
+                }
+                index += 1;
+            }
+        }
+        let ahead_start = behind_end.max(p0);
+        if ahead_start < p1 {
+            Self::predict(state.playing, state.waiting, ahead_start, p1, info, &mut push);
+        }
+        let mut index = 0;
+        while index < count {
+            let (from, clip) = points[index];
+            let mut next = index + 1;
+            while next < count && points[next].1 == clip {
+                next += 1;
+            }
+            let to = if next < count { points[next].0 } else { p1 };
+            if from < to {
+                visit(Section {clip, from, to});
+            }
+            index = next;
+        }
+    }
+
+    // The handover rule of `iterate` on a copy of `(playing, waiting)`: no transition, no change queued.
+    fn predict(playing: Option<ClipKey>, waiting: Option<Option<ClipKey>>, p0: f64, p1: f64, info: &dyn ClipInfo,
+               push: &mut dyn FnMut(f64, Option<ClipKey>)) {
+        push(p0, playing);
+        if let Some(next) = waiting {
+            let schedule_duration = playing.and_then(|clip| info.resolve(&clip)).map_or(BAR, |(duration, _)| duration);
+            let schedule_end = quantize_floor(p1, schedule_duration);
+            if schedule_end >= p0 {
+                push(schedule_end, next);
+            }
+        } else if let Some(clip) = playing {
+            let (duration, looped) = info.resolve(&clip).unwrap_or((BAR, true));
+            if !looped {
+                let schedule_end = quantize_floor(p0, duration) + duration;
+                if schedule_end <= p1 {
+                    push(schedule_end, None);
+                }
+            }
+        }
+    }
+
     /// Drain the queued transitions for the UI back-channel (TS `changes()`).
     pub fn take_changes(&mut self, visit: &mut dyn FnMut(&ClipKey, Change)) {
         for (key, change) in self.changes.drain(..) {
@@ -233,7 +401,8 @@ impl ClipSequencer {
             state.cached_range = None; // a schedule op invalidates the replay cache
             return state;
         }
-        states.push(TrackState {uuid: track, waiting: None, playing: None, cached_range: None, cached_sections: [None; 3]});
+        states.push(TrackState {uuid: track, waiting: None, playing: None, cached_range: None, cached_sections: [None; 3],
+            shared: SharedRead::new()});
         states.last_mut().expect("just pushed")
     }
 }
@@ -358,6 +527,153 @@ mod tests {
         let second = sections(&mut sequencer, BAR - 50.0, BAR + 50.0, &info);
         assert_eq!(first, second, "a second sequencer pulling the same block sees identical sections");
         assert_eq!(changes(&mut sequencer), [(CLIP_A, Change::Started)], "the transition fires exactly once");
+    }
+
+    fn shared(sequencer: &ClipSequencer, p0: f64, p1: f64, info: &Info) -> Vec<(Option<ClipKey>, f64, f64)> {
+        let mut out = Vec::new();
+        sequencer.sections_shared(&TRACK, p0, p1, info, &mut |section| out.push((section.clip, section.from, section.to)));
+        out
+    }
+
+    #[test]
+    fn shared_read_without_state_yields_the_timeline() {
+        let sequencer = ClipSequencer::new();
+        let info = Info(Vec::new());
+        assert_eq!(shared(&sequencer, 0.0, 128.0, &info), [(None, 0.0, 128.0)]);
+    }
+
+    #[test]
+    fn shared_read_replays_the_canonical_block_without_transitions() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, BAR, true)]);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        sequencer.advance(&TRACK, BAR - 50.0, BAR + 50.0, false, &info);
+        let expected = [(None, BAR - 50.0, BAR), (Some(CLIP_A), BAR, BAR + 50.0)];
+        assert_eq!(shared(&sequencer, BAR - 50.0, BAR + 50.0, &info), expected);
+        assert_eq!(shared(&sequencer, BAR - 50.0, BAR + 50.0, &info), expected, "a second layer sees the same");
+        assert_eq!(changes(&mut sequencer), [(CLIP_A, Change::Started)], "only the canonical advance transitions");
+    }
+
+    #[test]
+    fn shared_read_matches_iterate_for_every_canonical_block() {
+        // The unwarped layer must see EXACTLY what a leaf unit's `iterate` yields, block by block.
+        let info = Info(alloc::vec![(CLIP_A, 960.0, false), (CLIP_B, BAR, true)]);
+        let mut leaf = ClipSequencer::new();
+        let mut canonical = ClipSequencer::new();
+        for sequencer in [&mut leaf, &mut canonical] {
+            sequencer.schedule_play(TRACK, CLIP_A);
+        }
+        let mut position = 0.0;
+        while position < 2.0 * BAR {
+            let next = position + 37.0;
+            if position > 1000.0 && position < 1040.0 {
+                leaf.schedule_play(TRACK, CLIP_B);
+                canonical.schedule_play(TRACK, CLIP_B);
+            }
+            let want = sections(&mut leaf, position, next, &info);
+            canonical.advance(&TRACK, position, next, false, &info);
+            assert_eq!(shared(&canonical, position, next, &info), want, "block at {position}");
+            position = next;
+        }
+        assert_eq!(changes(&mut canonical), changes(&mut leaf));
+    }
+
+    #[test]
+    fn shared_read_behind_the_cursor_resolves_from_the_log() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, BAR, true)]);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        sequencer.advance(&TRACK, BAR - 50.0, BAR + 50.0, false, &info);
+        sequencer.advance(&TRACK, BAR + 50.0, BAR + 150.0, false, &info);
+        assert_eq!(shared(&sequencer, BAR - 80.0, BAR + 20.0, &info),
+            [(None, BAR - 80.0, BAR), (Some(CLIP_A), BAR, BAR + 20.0)]);
+        assert_eq!(shared(&sequencer, BAR - 100.0, BAR - 60.0, &info), [(None, BAR - 100.0, BAR - 60.0)]);
+        assert_eq!(shared(&sequencer, BAR + 10.0, BAR + 90.0, &info), [(Some(CLIP_A), BAR + 10.0, BAR + 90.0)]);
+    }
+
+    #[test]
+    fn shared_read_ahead_of_the_cursor_predicts_the_handover_without_mutating() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, BAR, true)]);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        sequencer.advance(&TRACK, BAR - 100.0, BAR - 50.0, false, &info);
+        let ahead = shared(&sequencer, BAR - 60.0, BAR + 40.0, &info);
+        assert_eq!(ahead, [(None, BAR - 60.0, BAR), (Some(CLIP_A), BAR, BAR + 40.0)]);
+        assert!(changes(&mut sequencer).is_empty(), "a prediction never transitions");
+        sequencer.advance(&TRACK, BAR - 50.0, BAR + 50.0, false, &info);
+        assert_eq!(changes(&mut sequencer), [(CLIP_A, Change::Started)]);
+        assert_eq!(shared(&sequencer, BAR - 60.0, BAR + 40.0, &info), ahead, "the later advance records what was predicted");
+    }
+
+    #[test]
+    fn shared_read_before_any_advance_predicts_from_the_live_state() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, BAR, true)]);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        assert_eq!(shared(&sequencer, BAR - 10.0, BAR + 10.0, &info),
+            [(None, BAR - 10.0, BAR), (Some(CLIP_A), BAR, BAR + 10.0)]);
+    }
+
+    #[test]
+    fn shared_read_sees_a_non_looping_clip_end_ahead_and_behind() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, 960.0, false)]);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        sequencer.advance(&TRACK, 0.0, 1.0, false, &info);
+        sequencer.advance(&TRACK, 1.0, 900.0, false, &info);
+        changes(&mut sequencer);
+        let expected = [(Some(CLIP_A), 880.0, 960.0), (None, 960.0, 1000.0)];
+        assert_eq!(shared(&sequencer, 880.0, 1000.0, &info), expected, "ahead");
+        sequencer.advance(&TRACK, 900.0, 1100.0, false, &info);
+        assert_eq!(changes(&mut sequencer), [(CLIP_A, Change::Stopped)]);
+        assert_eq!(shared(&sequencer, 880.0, 1000.0, &info), expected, "behind");
+    }
+
+    #[test]
+    fn shared_read_sees_a_clip_end_exactly_at_the_block_end() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, 960.0, false)]);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        sequencer.advance(&TRACK, 0.0, 1.0, false, &info);
+        sequencer.advance(&TRACK, 1.0, 960.0, false, &info);
+        sequencer.advance(&TRACK, 960.0, 1000.0, false, &info);
+        assert_eq!(shared(&sequencer, 940.0, 980.0, &info), [(Some(CLIP_A), 940.0, 960.0), (None, 960.0, 980.0)]);
+    }
+
+    #[test]
+    fn shared_read_sees_a_scheduled_stop() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, 960.0, true)]);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        sequencer.advance(&TRACK, 0.0, 1.0, false, &info);
+        sequencer.schedule_stop(TRACK);
+        let expected = [(Some(CLIP_A), 900.0, 960.0), (None, 960.0, 1000.0)];
+        assert_eq!(shared(&sequencer, 900.0, 1000.0, &info), expected, "ahead");
+        sequencer.advance(&TRACK, 1.0, 1000.0, false, &info);
+        assert_eq!(shared(&sequencer, 900.0, 1000.0, &info), expected, "behind");
+    }
+
+    #[test]
+    fn a_discontinuity_drops_the_log_but_keeps_the_quantums_blocks() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, BAR, true)]);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        sequencer.advance(&TRACK, BAR - 50.0, BAR + 50.0, false, &info);
+        sequencer.advance(&TRACK, 0.0, 50.0, true, &info); // the loop wrapped inside the quantum
+        assert_eq!(shared(&sequencer, BAR - 50.0, BAR + 50.0, &info),
+            [(None, BAR - 50.0, BAR), (Some(CLIP_A), BAR, BAR + 50.0)], "the pre-wrap block still replays exactly");
+        assert_eq!(shared(&sequencer, 0.0, 50.0, &info), [(Some(CLIP_A), 0.0, 50.0)]);
+        assert_eq!(shared(&sequencer, 10.0, 40.0, &info), [(Some(CLIP_A), 10.0, 40.0)], "no stale handover after the wrap");
+    }
+
+    #[test]
+    fn a_recurring_block_window_replays_the_newest_pass() {
+        let mut sequencer = ClipSequencer::new();
+        let info = Info(alloc::vec![(CLIP_A, BAR, true)]);
+        sequencer.advance(&TRACK, 0.0, 50.0, false, &info);
+        sequencer.schedule_play(TRACK, CLIP_A);
+        sequencer.advance(&TRACK, 0.0, 50.0, true, &info);
+        assert_eq!(shared(&sequencer, 0.0, 50.0, &info), [(Some(CLIP_A), 0.0, 50.0)]);
     }
 
     #[test]

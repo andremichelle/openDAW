@@ -53,7 +53,6 @@ type Construct = Readonly<{
     snapping: Snapping
     pointerPulse: ppqn
     reference: AnyRegionBoxAdapter
-    resize: boolean
 }>
 
 type BeforeState = { region: AnyLoopableRegionBoxAdapter, duration: ppqn, loopDuration: ppqn }
@@ -69,20 +68,18 @@ export class RegionLoopDurationModifier implements RegionModifier {
     readonly #snapping: Snapping
     readonly #pointerPulse: ppqn
     readonly #reference: AnyRegionBoxAdapter
-    readonly #resize: boolean
     readonly #adapters: ReadonlyArray<AnyLoopableRegionBoxAdapter>
     readonly #selectedModifyStrategy: SelectedModifyStrategy
 
     #deltaLoopDuration: int
 
-    private constructor({project, element, snapping, pointerPulse, reference, resize}: Construct,
+    private constructor({project, element, snapping, pointerPulse, reference}: Construct,
                         adapter: ReadonlyArray<AnyLoopableRegionBoxAdapter>) {
         this.#project = project
         this.#element = element
         this.#snapping = snapping
         this.#pointerPulse = pointerPulse
         this.#reference = reference
-        this.#resize = resize
         this.#adapters = adapter
         this.#selectedModifyStrategy = new SelectedModifyStrategy(this)
 
@@ -99,11 +96,10 @@ export class RegionLoopDurationModifier implements RegionModifier {
     unselectedModifyStrategy(): RegionModifyStrategy {return RegionModifyStrategy.Identity}
 
     update({clientX}: Dragging.Event): void {
-        const {position, complete, loopOffset, loopDuration} = this.#reference
-        const delta = this.#resize ? complete - (position + loopDuration - loopOffset) : 0
+        const {loopDuration} = this.#reference
         const clientRect = this.#element.getBoundingClientRect()
         const deltaDuration = this.#snapping.computeDelta(
-            this.#pointerPulse - delta, clientX - clientRect.left, loopDuration)
+            this.#pointerPulse, clientX - clientRect.left, loopDuration)
         let change = false
         if (this.#deltaLoopDuration !== deltaDuration) {
             this.#deltaLoopDuration = deltaDuration

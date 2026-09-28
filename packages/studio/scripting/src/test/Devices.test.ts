@@ -25,7 +25,7 @@ describe("Devices", () => {
         const keys: ReadonlyArray<keyof AudioEffects> = [
             "Autotune", "Compressor", "Convolver", "Crusher", "DattorroReverb", "Delay", "Fold", "Gate", "Maximizer",
             "NeuralAmp", "Revamp", "Reverb", "StereoTool", "Tidal", "Vocoder", "Waveshaper", "Werkstatt",
-            "Composite", "StereoSplit", "FrequencySplit"
+            "Composite", "StereoSplit", "FrequencySplit", "Sink"
         ]
         keys.forEach((key, index) => {
             const effect = unit.addAudioEffect(key)
@@ -86,6 +86,17 @@ describe("Devices", () => {
         fold.overSampling = 2
         expect(fold.overSampling).toBe(2)
         expect(() => fold.overSampling = 3 as any).toThrow(RangeError)
+        const sink = unit.addAudioEffect("Sink")
+        expect(sink.pass).toBe(Number.NEGATIVE_INFINITY)
+        expect(sink.target).toBeNull()
+        const group = project.addGroupUnit()
+        sink.target = group
+        expect(sink.target?.uuid).toBe(group.uuid)
+        sink.pass = -6
+        expect(sink.pass).toBe(-6)
+        expect(() => sink.target = unit as any).toThrow(TypeError)
+        sink.target = null
+        expect(sink.target).toBeNull()
         const stereo = unit.addAudioEffect("StereoTool", {panningMixing: Mixing.EqualPower})
         expect(stereo.panningMixing).toBe(Mixing.EqualPower)
         expect(() => stereo.panningMixing = 5 as Mixing).toThrow(RangeError)
@@ -158,13 +169,12 @@ describe("Devices", () => {
         expect(composite.dry).toBe(-6)
         expect(composite.wet).toBe(0)
         expect(composite.entries.length).toBe(0)
-        const wet = composite.addEntry({label: "Wet", gain: -3, pan: 0.5})
+        const wet = composite.addEntry({gain: -3, pan: 0.5})
         const dry = composite.addEntry()
         expect(composite.entries).toEqual([wet, dry])
-        expect(wet.label).toBe("Wet")
         expect(wet.gain).toBe(-3)
         expect(wet.pan).toBe(0.5)
-        expect(dry.label).toBe("Entry 2")
+        expect(dry.index).toBe(1)
         expect(wet.composite).toBe(composite)
         const reverb = wet.addAudioEffect("Reverb")
         expect(wet.audioEffects).toEqual([reverb])
@@ -173,10 +183,10 @@ describe("Devices", () => {
         expect(composite.entries).toEqual([dry])
         expect(dry.index).toBe(0)
         const stereo = unit.addAudioEffect("StereoSplit")
-        expect(stereo.entries.map(entry => entry.label)).toEqual(["L", "R"])
+        expect(stereo.entries.map(entry => entry.index)).toEqual([0, 1])
         expect(() => stereo.entries[0].remove()).toThrow()
         const split = unit.addAudioEffect("FrequencySplit", {crossover1: 100})
-        expect(split.entries.map(entry => entry.label)).toEqual(["Low", "Low Mid", "High Mid", "High"])
+        expect(split.entries.map(entry => entry.index)).toEqual([0, 1, 2, 3])
         expect(split.crossover1).toBe(100)
         split.entries[3].addAudioEffect("Crusher")
         expect(split.entries[3].audioEffects[0].key).toBe("Crusher")
@@ -276,6 +286,45 @@ describe("Devices", () => {
         expect(convolver.impulse?.name).toBe("Hall")
     })
 
+    it("builds an Instrument Composite with layers, their chains and a nested composite", () => {
+        const {project} = createFixture()
+        const unit = project.addInstrumentUnit("InstrumentComposite", {label: "Stack"})
+        const composite = unit.instrument
+        expect(composite.key).toBe("InstrumentComposite")
+        expect(composite.layers).toEqual([])
+        const pad = composite.addLayer("Vaporisateur", {label: "Pad"})
+        const bass = composite.addLayer("Nano", undefined, {gain: -6, pan: -0.5, mute: true})
+        expect(composite.layers).toEqual([pad, bass])
+        expect([pad.index, bass.index]).toEqual([0, 1])
+        expect(pad.composite).toBe(composite)
+        expect(pad.instrument.key).toBe("Vaporisateur")
+        expect(pad.instrument.label).toBe("Pad")
+        expect([bass.gain, bass.pan, bass.mute, bass.solo]).toEqual([-6, -0.5, true, false])
+        expect(pad.instrument.audioUnit, "a layer's instrument still belongs to the unit").toBe(unit)
+        const arp = pad.addMIDIEffect("Arpeggio")
+        const delay = pad.addAudioEffect("Delay")
+        expect(pad.midiEffects).toEqual([arp])
+        expect(pad.audioEffects).toEqual([delay])
+        expect(delay.audioUnit).toBe(unit)
+        expect(unit.audioEffects, "a layer's effect is not the unit's").toEqual([])
+        const neon = pad.setInstrument("Neon")
+        expect(pad.instrument).toBe(neon)
+        expect(pad.audioEffects, "the layer keeps its effects when its instrument changes").toEqual([delay])
+        const inner = composite.addLayer("InstrumentComposite")
+        const deep = inner.instrument.addLayer("Nano")
+        expect(deep.composite).toBe(inner.instrument)
+        expect(deep.instrument.audioUnit).toBe(unit)
+        expect(() => composite.addLayer("Tape" as "Nano")).toThrow()
+        expect(() => composite.addLayer("MIDIOutput" as "Nano")).toThrow()
+        expect(composite.layers.length).toBe(3)
+        bass.remove()
+        expect(composite.layers).toEqual([pad, inner])
+        expect([pad.index, inner.index], "the order stays gapless").toEqual([0, 1])
+        neon.remove()
+        expect(composite.layers, "removing a layer's instrument removes the layer, never the unit").toEqual([inner])
+        expect(project.audioUnits).toContain(unit)
+    })
+
     it("configures Cubed, Neon and MIDI output", () => {
         const {project} = createFixture()
         const cubed = project.addInstrumentUnit("Cubed").instrument
@@ -283,7 +332,7 @@ describe("Devices", () => {
         expect(cubed.patterns[0].steps.length).toBe(64)
         expect(cubed.patterns[0].length).toBe(16)
         const step = cubed.patterns[0].steps[0]
-        expect(step.note).toBe(60)
+        expect(step.note).toBe(36)
         expect(step.active).toBe(false)
         step.note = 48
         step.active = true

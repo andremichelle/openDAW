@@ -18,6 +18,8 @@ export class SoundfontService extends AssetService<Soundfont, void> {
     #local: Option<Array<Soundfont>> = Option.None
     #remote: Option<ReadonlyArray<Soundfont>> = Option.None
 
+    acceptsFile(file: File): boolean {return AssetService.extensionOf(file) === "sf2"}
+
     constructor() {
         super()
         Promise.all([

@@ -1,4 +1,4 @@
-import {StringMapping, ValueMapping} from "@opendaw/lib-std"
+import {int, StringMapping, ValueMapping} from "@opendaw/lib-std"
 import {Address} from "@opendaw/lib-box"
 import {FrequencySplitBox} from "@opendaw/studio-boxes"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
@@ -12,6 +12,11 @@ const CrossoverString = StringMapping.numeric({unit: "Hz", fractionDigits: 0})
 
 export class FrequencySplitBoxAdapter extends AudioCompositeAdapter {
     static readonly MAX_BANDS = 4
+    static readonly BAND_LABELS: Readonly<Record<number, ReadonlyArray<string>>> = {
+        2: ["Low", "High"],
+        3: ["Low", "Mid", "High"],
+        4: ["Low", "Low Mid", "High Mid", "High"]
+    }
 
     readonly #crossoverParametric: ParameterAdapterSet
     readonly crossover: ReadonlyArray<AutomatableParameterFieldAdapter<number>>
@@ -31,5 +36,8 @@ export class FrequencySplitBoxAdapter extends AudioCompositeAdapter {
     get spectrum(): Address {return this.address.append(0xFFF)}
 
     get entriesFixed(): boolean {return true}
+    entryLabelAt(index: int): string {
+        return FrequencySplitBoxAdapter.BAND_LABELS[this.entries.adapters().length]?.at(index) ?? `Band ${index + 1}`
+    }
     get manualUrl(): string {return DeviceManualUrls.FrequencySplit}
 }

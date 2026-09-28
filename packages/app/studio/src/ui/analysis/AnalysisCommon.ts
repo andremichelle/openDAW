@@ -1,7 +1,6 @@
 import {CanvasPainter, LinearScale, LogScale, Scale} from "@opendaw/studio-core"
 
 export const UNIT_COLOR = "rgba(255,255,255,0.3)"
-export const UNIT_COLOR_DIM = "hsl(197, 10%, 55%)" // matches --color-shadow
 
 export const clearBg = ({context, actualWidth, actualHeight}: CanvasPainter): void =>
     context.clearRect(0, 0, actualWidth, actualHeight)

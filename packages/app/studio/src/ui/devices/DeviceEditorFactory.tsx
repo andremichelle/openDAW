@@ -4,6 +4,7 @@ import {
     ArpeggioDeviceBox,
     AudioBusBox,
     AudioEffectCompositeBox,
+    AudioSinkDeviceBox,
     AutotuneDeviceBox,
     FrequencySplitBox,
     StereoCompositeBox,
@@ -21,6 +22,7 @@ import {
     NanoDeviceBox,
     NeuralAmpDeviceBox,
     PitchDeviceBox,
+    InstrumentCompositeBox,
     PlayfieldDeviceBox,
     PlayfieldSampleBox,
     RevampDeviceBox,
@@ -51,6 +53,7 @@ import {
     ArpeggioDeviceBoxAdapter,
     AudioBusBoxAdapter,
     AudioEffectCompositeBoxAdapter,
+    AudioSinkDeviceBoxAdapter,
     AutotuneDeviceBoxAdapter,
     FrequencySplitBoxAdapter,
     StereoCompositeBoxAdapter,
@@ -68,6 +71,7 @@ import {
     NanoDeviceBoxAdapter,
     NeuralAmpDeviceBoxAdapter,
     PitchDeviceBoxAdapter,
+    InstrumentCompositeBoxAdapter,
     PlayfieldDeviceBoxAdapter,
     PlayfieldSampleBoxAdapter,
     RevampDeviceBoxAdapter,
@@ -105,7 +109,9 @@ import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
 import {ApparatDeviceEditor} from "./instruments/ApparatDeviceEditor"
 import {NanoDeviceEditor} from "./instruments/NanoDeviceEditor"
 import {PlayfieldDeviceEditor} from "./instruments/PlayfieldDeviceEditor"
+import {InstrumentCompositeDeviceEditor} from "./instruments/InstrumentCompositeDeviceEditor"
 import {StereoToolDeviceEditor} from "./audio-effects/StereoToolDeviceEditor"
+import {AudioSinkDeviceEditor} from "./audio-effects/AudioSinkDeviceEditor"
 import {PlayfieldSampleEditor} from "./instruments/PlayfieldSampleEditor"
 import {ZeitgeistDeviceEditor} from "@/ui/devices/midi-effects/ZeitgeistDeviceEditor"
 import {UnknownEffectDeviceEditor} from "@/ui/devices/UnknownEffectDeviceEditor"
@@ -229,6 +235,12 @@ export namespace DeviceEditorFactory {
                                   adapter={service.project.boxAdapters.adapterFor(box, NanoDeviceBoxAdapter)}
                                   deviceHost={deviceHost}/>
             ),
+            visitInstrumentCompositeBox: (box: InstrumentCompositeBox): JsxValue => (
+                <InstrumentCompositeDeviceEditor lifecycle={lifecycle}
+                                                 service={service}
+                                                 adapter={service.project.boxAdapters.adapterFor(box, InstrumentCompositeBoxAdapter)}
+                                                 deviceHost={deviceHost}/>
+            ),
             visitPlayfieldDeviceBox: (box: PlayfieldDeviceBox): JsxValue => (
                 <PlayfieldDeviceEditor lifecycle={lifecycle}
                                        service={service}
@@ -285,6 +297,12 @@ export namespace DeviceEditorFactory {
                                         service={service}
                                         adapter={service.project.boxAdapters.adapterFor(box, StereoToolDeviceBoxAdapter)}
                                         deviceHost={deviceHost}/>
+            ),
+            visitAudioSinkDeviceBox: (box: AudioSinkDeviceBox) => (
+                <AudioSinkDeviceEditor lifecycle={lifecycle}
+                                       service={service}
+                                       adapter={service.project.boxAdapters.adapterFor(box, AudioSinkDeviceBoxAdapter)}
+                                       deviceHost={deviceHost}/>
             ),
             visitMaximizerDeviceBox: (box: MaximizerDeviceBox) => (
                 <MaximizerDeviceEditor lifecycle={lifecycle}

@@ -784,3 +784,38 @@ describe("RegionClipResolver.createTasksFromMasks", () => {
         })
     })
 })
+
+describe("RegionClipResolver.classifySeparation (separate-branch right-edge tolerance)", () => {
+    // #executeTasks rounds a separate task's mask to integer begin/end, then re-classifies against the
+    // region's own edges. A seconds-based region's `complete` (position + a float32 duration) carries ppqn
+    // drift, so a rounded mask end can land a float32 ulp inside it; the old exact compare then sent that to
+    // RegionEditing.clip, which carves a sub-ulp second part. Fold a within-tolerance right edge to a
+    // complete-trim instead. Only the right edge drifts: `position` is an Int32 box field.
+    const classify = (region: AnyRegionBoxAdapter, begin: number, end: number) =>
+        RegionClipResolver.classifySeparation(region, begin, end)
+    const boundaryTolerance = (value: number) => Math.abs(value) * 2 ** -23 + 1e-3 // mirrors the resolver's constant
+
+    it("clips a region whose hole leaves two genuinely positive parts", () => {
+        expect(classify(createRegion(0, 100), 20, 40)).toBe("clip")
+    })
+
+    it("folds a right edge within tolerance of complete into a complete-trim, not a sliver clip", () => {
+        // complete = 15520.000000001, mask end ceils to 15520: remainder ~1e-9 -> a sub-ulp second part.
+        const region = createRegion(0, 15520 + 1e-9)
+        expect(classify(region, 5000, 15520)).toBe("complete")
+    })
+
+    it("pins the fold edge: a remainder exactly at tolerance folds, one step beyond clips", () => {
+        const complete = 15520
+        const region = createRegion(0, complete)
+        const tolerance = boundaryTolerance(complete)
+        expect(classify(region, 5000, complete - tolerance)).toBe("complete") // remainder == tolerance -> fold
+        expect(classify(region, 5000, complete - tolerance - 1e-6)).toBe("clip") // remainder > tolerance -> real part
+    })
+
+    it("still clips a region that genuinely extends past the mask on the right", () => {
+        // Right part 5 ppqn is real (>> tolerance), must remain a clip (mirrors #1003 'still trims').
+        const region = createRegion(0, 15525)
+        expect(classify(region, 5000, 15520)).toBe("clip")
+    })
+})

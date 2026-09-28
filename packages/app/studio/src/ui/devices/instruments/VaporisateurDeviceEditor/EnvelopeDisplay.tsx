@@ -65,7 +65,7 @@ export const EnvelopeDisplay = ({lifecycle, sustain, receiver, address}: Constru
                     if (envValue === -1) {break}
                     context.beginPath()
                     context.arc(envValue * actualWidth, valueToY(adsr(envValue, s)), devicePixelRatio, 0.0, TAU)
-                    context.fillStyle = "hsl(200, 83%, 75%)"
+                    context.fillStyle = DisplayPaint.fillStyle()
                     context.fill()
                 }
             }))

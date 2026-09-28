@@ -9,7 +9,7 @@ import {
     tryCatch,
     UUID
 } from "@opendaw/lib-std"
-import {ppqn, PPQN, TimeBase} from "@opendaw/lib-dsp"
+import {ppqn, PPQN, RenderQuantum, TimeBase} from "@opendaw/lib-dsp"
 import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {Project} from "../project"
@@ -46,7 +46,6 @@ export namespace RecordAudio {
         const startLatency = readLatency()
         console.debug("[RecordAudio] start", startLatency)
         const terminator = new Terminator()
-        const beats = PPQN.fromSignature(1, project.timelineBox.signature.denominator.getValue())
         const {editing, engine, boxGraph, timelineBox, tempoMap} = project
         const fileUuid = recordingWorklet.uuid
         // Note: sampleManager.record() and sourceNode.connect() are called in prepareRecording
@@ -60,6 +59,7 @@ export namespace RecordAudio {
         const {env: {audioContext}, engine: {preferences: {settings: {recording}}}} = project
         const {sampleRate} = audioContext
         const {loopArea} = timelineBox
+        const minTakeSeconds = RenderQuantum / sampleRate
 
         const createFileBox = () => {
             const fileDateString = new Date()
@@ -86,6 +86,8 @@ export namespace RecordAudio {
                 box.timeBase.setValue(TimeBase.Seconds)
                 box.label.setValue(`Take ${takeNumber}`)
                 box.waveformOffset.setValue(waveformOffset)
+                box.duration.setValue(minTakeSeconds)
+                box.loopDuration.setValue(minTakeSeconds)
             })
             capture.addRecordedRegion(regionBox)
             project.selection.select(regionBox)
@@ -211,7 +213,7 @@ export namespace RecordAudio {
                     const loopTo = loopArea.to.getValue()
                     editing.modify(() => {
                         currentTake.ifSome(take => {
-                            if (take.regionBox.duration.getValue() <= 0) {
+                            if (recordingWorklet.numberOfFrames / sampleRate - currentWaveformOffset <= 0) {
                                 take.regionBox.delete()
                                 currentTake = Option.None
                                 return
@@ -289,7 +291,7 @@ export namespace RecordAudio {
                     if (regionBox.isAttached()) {
                         const {duration, loopDuration} = regionBox
                         const totalSeconds = recordingWorklet.numberOfFrames / sampleRate
-                        const takeSeconds = totalSeconds - currentWaveformOffset
+                        const takeSeconds = Math.max(minTakeSeconds, totalSeconds - currentWaveformOffset)
                         duration.setValue(takeSeconds)
                         loopDuration.setValue(takeSeconds)
                         recordingWorklet.setFillLength(recordingWorklet.numberOfFrames)

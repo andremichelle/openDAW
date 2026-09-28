@@ -34,6 +34,8 @@ class TestSampleService extends AssetService<Sample, void> {
 
     constructor(readonly catalog: () => Promise<ReadonlyArray<Sample>>) {super()}
 
+    acceptsFile(): boolean {return true}
+
     async importFile(): Promise<Sample> {return Promise.reject("not expected")}
 
     protected async collectAllFiles(): Promise<ReadonlyArray<Sample>> {return this.catalog()}
