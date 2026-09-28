@@ -75,6 +75,7 @@ export const MarkerTrackBody = ({lifecycle, service}: Construct) => {
                 return Option.None
             }
             const oldPosition = adapter.position
+            engine.setPosition(oldPosition)
             return Option.wrap({
                 update: (event: Dragging.Event) => {
                     const rect = canvas.getBoundingClientRect()
