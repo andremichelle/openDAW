@@ -1,11 +1,10 @@
-import {isNotNull, Nullable, Option, panic, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Nullable, Option, panic, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, Sample, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
 import {AudioFileBoxFactory, ElementCapturing, Project, Workers} from "@opendaw/studio-core"
 import {ClipCaptureTarget} from "@/ui/timeline/tracks/audio-unit/clips/ClipCapturing.ts"
 import {AnyDragData} from "@/ui/AnyDragData.ts"
-import {PresetApplication} from "@/ui/browse/PresetApplication"
 import {StudioService} from "@/service/StudioService"
 import {RegionCaptureTarget} from "./regions/RegionCapturing"
 
@@ -35,7 +34,10 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
     get project(): Project {return this.#service.project}
     get capturing(): ElementCapturing<T> {return this.#capturing}
 
+    // Instruments and unit presets are the timeline root's business (see AudioUnitsTimeline): a new unit
+    // lands at the pointer's slot no matter which lane is under it.
     canDrop(event: DragEvent, data: AnyDragData): Option<T | "instrument"> {
+        if (data.type !== "sample" && data.type !== "file") {return Option.None}
         const target: Nullable<T> = this.#capturing.captureEvent(event)
         if (target?.type === "track" && target.track.trackBoxAdapter.type !== TrackType.Audio) {
             return Option.None
@@ -47,13 +49,6 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         if (target?.type === "region") {
             const adapter = target.region.trackBoxAdapter
             if (adapter.isEmpty() || adapter.unwrap().type !== TrackType.Audio) {return Option.None}
-        }
-        if (data.type !== "sample" && data.type !== "instrument" && data.type !== "file") {
-            if (data.type === "preset"
-                && (data.category === "instrument" || data.category === "audio-unit")) {
-                return Option.wrap(target ?? "instrument")
-            }
-            return Option.None
         }
         return Option.wrap(target ?? "instrument")
     }
@@ -111,23 +106,6 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         const drop = optDrop.unwrap()
         const project = this.project
         const {boxAdapters, editing, api} = project
-        if (data.type === "instrument") {
-            const factoryKey = data.device
-            if (factoryKey !== null) {
-                editing.modify(() => api.createAnyInstrument(InstrumentFactories[factoryKey]))
-            }
-            return
-        }
-        if (data.type === "preset") {
-            if (data.category === "audio-unit") {
-                PresetApplication.createNewAudioUnitFromRack(project, data.uuid, data.source)
-                    .catch(console.warn)
-            } else if (data.category === "instrument" && isNotNull(data.device)) {
-                PresetApplication.createNewAudioUnitFromInstrument(
-                    project, data.uuid, data.device, data.source).catch(console.warn)
-            }
-            return
-        }
         const resolved = await TimelineDragAndDrop.resolveSamples(this.#service, data)
         if (resolved.length === 0) {return}
         const createTapeTrack = (): TrackBoxAdapter => boxAdapters

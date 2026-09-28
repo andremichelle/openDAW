@@ -43,6 +43,7 @@ import {Pointers} from "@opendaw/studio-enums"
 import {DevicesClipboard, Project, ProjectProfile} from "@opendaw/studio-core"
 import {ShadertoyPreview} from "@/ui/devices/panel/ShadertoyPreview"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
+import {WheelScaling} from "@/ui/timeline/WheelScaling"
 
 const className = Html.adoptStyleSheet(css, "DevicePanel")
 
@@ -325,8 +326,17 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         }),
         Html.watchResize(element, updateScroller),
         scrollModel.subscribe(() => devices.scrollLeft = scrollModel.position),
-        Events.subscribe(element, "wheel", (event: WheelEvent) => scrollModel.moveBy(event.deltaX), {passive: true}),
-        installAutoScroll(devices, (deltaX, _deltaY) => scrollModel.position += deltaX, {padding: [0, 32, 0, 0]}),
+        Events.subscribe(element, "wheel", (event: WheelEvent) => {
+            if (event.altKey) {
+                event.preventDefault()
+                event.stopPropagation()
+                scrollModel.moveBy(WheelScaling.pixelsOf(event))
+                return
+            }
+            scrollModel.moveBy(event.deltaX)
+        }, {passive: false}),
+        installAutoScroll(devices, (deltaX, _deltaY) => scrollModel.position += deltaX,
+            {padding: [0, 32, 0, 0], dragPadding: [0, 32, 0, 32]}),
         DevicePanelDragAndDrop.install(service.project, devices, midiEffectsContainer, instrumentContainer, audioEffectsContainer),
         Events.subscribe(devices, "pointerdown", (event: PointerEvent) => {
             const target = event.target

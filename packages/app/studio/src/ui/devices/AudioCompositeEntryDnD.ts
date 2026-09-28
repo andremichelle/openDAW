@@ -90,12 +90,15 @@ export namespace AudioCompositeEntryDnD {
                     event.preventDefault()
                     const boxes = CompositeRows.resolveEffectBoxes(project, data.uuids, "audio-effect")
                     const zone = branchable ? CompositeRows.zoneOf(event, element) : "onto"
+                    const copy = DragAndDrop.isCopy(event, data)
                     if (zone === "onto") {
                         // MOVE the dragged effects into THIS branch's serial chain (re-homing them out of their source).
                         const insertIndex = entry.box.audioEffects.pointerHub.incoming().length
-                        project.editing.modify(() => project.api.moveEffects(entry.box.audioEffects, boxes, insertIndex))
+                        project.editing.modify(() => copy
+                            ? project.api.copyEffects(entry.box.audioEffects, boxes, insertIndex)
+                            : project.api.moveEffects(entry.box.audioEffects, boxes, insertIndex))
                     } else {
-                        moveToNewBranch(project, composite, zone === "before" ? getIndex() : getIndex() + 1, boxes)
+                        moveToNewBranch(project, composite, zone === "before" ? getIndex() : getIndex() + 1, boxes, copy)
                     }
                 }
             },
@@ -129,7 +132,8 @@ export namespace AudioCompositeEntryDnD {
                     insertBranch(project, composite, atIndex, factory)
                 } else if (isExistingAudioEffect(data) && acceptsExistingEffect(project, composite, data)) {
                     event.preventDefault()
-                    moveToNewBranch(project, composite, atIndex, CompositeRows.resolveEffectBoxes(project, data.uuids, "audio-effect"))
+                    moveToNewBranch(project, composite, atIndex,
+                        CompositeRows.resolveEffectBoxes(project, data.uuids, "audio-effect"), DragAndDrop.isCopy(event, data))
                 }
             },
             enter: () => {},
@@ -191,7 +195,7 @@ export namespace AudioCompositeEntryDnD {
 
     // Move existing effect boxes into a NEW branch created at `atIndex`, shifting the branches at or after it down.
     const moveToNewBranch = (project: Project, composite: AudioCompositeAdapter,
-                             atIndex: int, boxes: ReadonlyArray<EffectBox>): void => {
+                             atIndex: int, boxes: ReadonlyArray<EffectBox>, copy: boolean = false): void => {
         project.editing.modify(() => {
             composite.entries.adapters()
                 .filter(other => other.indexField.getValue() >= atIndex)
@@ -200,7 +204,11 @@ export namespace AudioCompositeEntryDnD {
                 box.composite.refer(composite.box.entries)
                 box.index.setValue(atIndex)
             })
-            project.api.moveEffects(cell.audioEffects, boxes, 0)
+            if (copy) {
+                project.api.copyEffects(cell.audioEffects, boxes, 0)
+            } else {
+                project.api.moveEffects(cell.audioEffects, boxes, 0)
+            }
         })
     }
 

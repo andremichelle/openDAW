@@ -159,6 +159,10 @@ export namespace DevicePanelDragAndDrop {
                         .filter(isDefined)
                         .filter((box): box is EffectBox => box.tags.deviceType === deviceType)
                     if (boxes.length === 0) {return}
+                    if (DragAndDrop.isCopy(event, dragData)) {
+                        editing.modify(() => project.api.copyEffects(field, boxes, index))
+                        return
+                    }
                     const sameChain = boxes.every(box => box.host.targetVertex.mapOr(vertex => vertex === field, false))
                     if (sameChain) {
                         // A plain reorder WITHIN this chain: keep the slot-shuffling semantics.

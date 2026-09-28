@@ -1,3 +1,6 @@
+import {StringMapping} from "@opendaw/lib-std"
+
+export const SlopeStringMapping = StringMapping.percent({bipolar: true, fractionDigits: 1})
 export const EventRadius = 4
 export const MidPointRadius = 2.5
 export const RangePadding = 8

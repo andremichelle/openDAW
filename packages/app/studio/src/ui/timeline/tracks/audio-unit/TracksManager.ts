@@ -164,6 +164,8 @@ export class TracksManager implements Terminable {
 
     get scrollableContainer(): Element {return this.#scrollContainer}
 
+    unitTracks(uuid: UUID.Bytes): Option<HTMLElement> {return this.#audioUnits.opt(uuid).map(({unitTracks}) => unitTracks)}
+
     getByIndex(index: number): Option<TrackContext> {return Option.wrap(this.tracks()[index])}
 
     tracks(): ReadonlyArray<TrackContext> {

@@ -77,7 +77,9 @@ export namespace InstrumentCompositeLayerDnD {
                     if (isDefined(effectFactory)) {editing.modify(() => api.insertEffect(field, effectFactory, insertIndex))}
                 } else {
                     const boxes = CompositeRows.resolveEffectBoxes(project, data.uuids, data.type)
-                    editing.modify(() => api.moveEffects(field, boxes, insertIndex))
+                    editing.modify(() => DragAndDrop.isCopy(event, data)
+                        ? api.copyEffects(field, boxes, insertIndex)
+                        : api.moveEffects(field, boxes, insertIndex))
                 }
             },
             enter: () => {},

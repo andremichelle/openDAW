@@ -1,11 +1,14 @@
 import css from "./ValueEditor.sass?inline"
 import {
+    clampUnit,
     EmptyExec,
     Func,
     isDefined,
     Lifecycle,
+    MutableObservableOption,
     Nullable,
     Option,
+    Point,
     Selection,
     unitValue,
     ValueAxis,
@@ -14,7 +17,7 @@ import {
 import {StudioService} from "@/service/StudioService.ts"
 import {ValueEventBoxAdapter} from "@opendaw/studio-adapters"
 import {ValueEventBox} from "@opendaw/studio-boxes"
-import {RangePadding} from "@/ui/timeline/editors/value/Constants.ts"
+import {RangePadding, SlopeStringMapping} from "@/ui/timeline/editors/value/Constants.ts"
 import {ObservableModifyContext} from "@/ui/timeline/ObservableModifyContext.ts"
 import {ValueModifier} from "@/ui/timeline/editors/value/ValueModifier.ts"
 import {createValuePainter} from "@/ui/timeline/editors/value/ValuePainter.ts"
@@ -41,6 +44,8 @@ import {createValueMenu} from "./ValueMenu"
 import {CanvasPainter, ClipboardManager, MenuItem, MenuRootData, TimelineRange, ValuesClipboard} from "@opendaw/studio-core"
 import {ValueContext} from "@/ui/timeline/editors/value/ValueContext"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
+import {Surface} from "@/ui/surface/Surface.tsx"
+import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 
 const className = Html.adoptStyleSheet(css, "ValueEditor")
 
@@ -81,6 +86,7 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
     }
     const valueToPixel: Func<unitValue, number> = value => valueAxis.valueToAxis(value) * devicePixelRatio
     const modifyContext = new ObservableModifyContext<ValueModifier>()
+    const segment = lifecycle.own(new MutableObservableOption<ValueEventBoxAdapter>())
     const paintValues = createValuePainter({
         range,
         valueToPixel,
@@ -88,7 +94,8 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         modifyContext,
         snapping,
         valueEditing: context,
-        reader
+        reader,
+        segment
     })
     const painter = lifecycle.own(new CanvasPainter(canvas, paintValues))
     const capturing = createValueEventCapturing(canvas, range, valueAxis.valueToAxis, reader)
@@ -116,6 +123,11 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 const now = Date.now()
                 const dblclck = now - lastDownTime < Events.DOUBLE_DOWN_THRESHOLD
                 lastDownTime = now
+                if ((target?.type === "midpoint" || target?.type === "curve") && !event.shiftKey) {
+                    segment.wrap(target.event)
+                } else {
+                    segment.clear()
+                }
                 if (dblclck && !event.shiftKey) {
                     if (target === null || target.type === "loop-duration") {
                         const rect = canvas.getBoundingClientRect()
@@ -290,6 +302,10 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
         reader.timelineBoxAdapter.signatureTrack.subscribe(painter.requestUpdate),
         snapping.subscribe(painter.requestUpdate),
         reader.subscribeChange(painter.requestUpdate),
+        reader.subscribeChange(() => segment.ifSome(adapter => {
+            if (!reader.hasContent || !reader.content.events.contains(adapter)) {segment.clear()}
+        })),
+        segment.subscribe(painter.requestUpdate),
         context.anchorModel.subscribe(painter.requestUpdate),
         modifyContext.subscribeUpdate(painter.requestUpdate),
         installCursor(canvas, capturing, {
@@ -312,6 +328,26 @@ export const ValueEditor = ({lifecycle, service, range, snapping, eventMapping, 
                 return null
             },
             leave: EmptyExec
+        }),
+        Events.subscribe(canvas, "keydown", event => {
+            if (event.key !== "Enter" || segment.isEmpty()) {return}
+            event.stopImmediatePropagation()
+            const adapter = segment.unwrap()
+            const interpolation = adapter.interpolation
+            const slope = interpolation.type === "curve" ? interpolation.slope : 0.5
+            const resolvers = Promise.withResolvers<string>()
+            const surface = Surface.get(canvas)
+            surface.flyout.appendChild(FloatingTextInput({
+                numeric: true,
+                position: Point.add(surface.pointer, {x: 0, y: 16}),
+                value: SlopeStringMapping.x(slope).value,
+                resolvers
+            }))
+            resolvers.promise.then(text => {
+                const bend = parseFloat(text)
+                if (isNaN(bend)) {return}
+                editing.modify(() => {adapter.interpolation = Interpolation.Curve(clampUnit(bend / 200.0 + 0.5))})
+            }, EmptyExec)
         }),
         installValueInput({
             element: canvas,

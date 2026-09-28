@@ -349,48 +349,53 @@ impl Autotune {
             energy += sample * sample;
         }
         let rms = libm::sqrt(energy / SPAN as f64);
-        let mut running = 0.0f64;
-        self.dprime[0] = 1.0;
-        for tau in 1..=TAU_MAX {
-            let mut acc = 0.0f64;
-            for index in 0..WINDOW {
-                let difference = self.scratch[index] as f64 - self.scratch[index + tau] as f64;
-                acc += difference * difference;
+        // below the floor the frame is unvoiced whatever YIN would find: skip the O(WINDOW × TAU_MAX) pass
+        let (in_band, clarity, f0) = if rms > RMS_FLOOR {
+            let mut running = 0.0f64;
+            self.dprime[0] = 1.0;
+            for tau in 1..=TAU_MAX {
+                let mut acc = 0.0f64;
+                for index in 0..WINDOW {
+                    let difference = self.scratch[index] as f64 - self.scratch[index + tau] as f64;
+                    acc += difference * difference;
+                }
+                running += acc;
+                self.dprime[tau] = if running > 0.0 {acc * tau as f64 / running} else {1.0};
             }
-            running += acc;
-            self.dprime[tau] = if running > 0.0 {acc * tau as f64 / running} else {1.0};
-        }
-        let mut best_tau = 0usize;
-        for tau in self.tau_min..TAU_MAX {
-            if self.dprime[tau] < YIN_THRESHOLD
-                && self.dprime[tau] <= self.dprime[tau - 1]
-                && self.dprime[tau] <= self.dprime[tau + 1] {
-                best_tau = tau;
-                break;
-            }
-        }
-        if best_tau == 0 {
-            let mut minimum = f64::INFINITY;
+            let mut best_tau = 0usize;
             for tau in self.tau_min..TAU_MAX {
-                if self.dprime[tau] < minimum {
-                    minimum = self.dprime[tau];
+                if self.dprime[tau] < YIN_THRESHOLD
+                    && self.dprime[tau] <= self.dprime[tau - 1]
+                    && self.dprime[tau] <= self.dprime[tau + 1] {
                     best_tau = tau;
+                    break;
                 }
             }
-        }
-        let clarity = self.dprime[best_tau];
-        let below = self.dprime[best_tau - 1];
-        let above = self.dprime[best_tau + 1];
-        let denominator = below - 2.0 * clarity + above;
-        let delta = if libm::fabs(denominator) > 1.0e-12 {
-            math::clamp(0.5 * (below - above) / denominator, -0.5, 0.5)
+            if best_tau == 0 {
+                let mut minimum = f64::INFINITY;
+                for tau in self.tau_min..TAU_MAX {
+                    if self.dprime[tau] < minimum {
+                        minimum = self.dprime[tau];
+                        best_tau = tau;
+                    }
+                }
+            }
+            let clarity = self.dprime[best_tau];
+            let below = self.dprime[best_tau - 1];
+            let above = self.dprime[best_tau + 1];
+            let denominator = below - 2.0 * clarity + above;
+            let delta = if libm::fabs(denominator) > 1.0e-12 {
+                math::clamp(0.5 * (below - above) / denominator, -0.5, 0.5)
+            } else {
+                0.0
+            };
+            let period = best_tau as f64 + delta;
+            let f0 = self.detect_rate / period;
+            self.last_f0 = f0;
+            (f0.is_finite() && f0 >= F0_MIN_HZ && f0 <= F0_MAX_HZ, clarity, f0)
         } else {
-            0.0
+            (false, 1.0, 0.0)
         };
-        let period = best_tau as f64 + delta;
-        let f0 = self.detect_rate / period;
-        self.last_f0 = f0;
-        let in_band = f0.is_finite() && f0 >= F0_MIN_HZ && f0 <= F0_MAX_HZ && rms > RMS_FLOOR;
         self.frame_voiced = in_band && clarity < TUNER_CLARITY_MAX;
         let voiced = in_band && clarity < CLARITY_MAX;
         let mut deviation_now = 0.0f64;

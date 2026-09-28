@@ -519,7 +519,8 @@ impl Engine {
                 } else {
                     (cluster, output, output_node, summed)
                 };
-                if let Some(slot_strip) = strip.as_mut() {
+                // a re-bind's catch-up re-enqueues the unit: every transaction would reconcile every composite (#415)
+                if let Some(slot_strip) = strip.as_mut().filter(|slot_strip| slot_strip.param_subs.is_empty()) {
                     self.bind_slot_strip_params(uuid, slot_strip, spec, invalidate);
                 }
                 let summed = sync_sum(&binding.sum, &output, summed, self.child_enabled(uuid, spec.child_enabled_key));
@@ -566,7 +567,7 @@ impl Engine {
                 } else {
                     (audio, edges, output, output_node, summed)
                 };
-                if let Some(slot_strip) = strip.as_mut() {
+                if let Some(slot_strip) = strip.as_mut().filter(|slot_strip| slot_strip.param_subs.is_empty()) {
                     self.bind_slot_strip_params(uuid, slot_strip, spec, invalidate);
                 }
                 let summed = sync_sum(&binding.sum, &output, summed, self.child_enabled(uuid, spec.child_enabled_key));
@@ -595,7 +596,7 @@ impl Engine {
             self.teardown_child(child);
             return self.build_one_child(binding.sum.clone(), binding.sum_id, &mut binding.pending, track_sets, uuid, choke, spec, unit_midi, signal, invalidate);
         }
-        if let Some(slot_strip) = child.strip.as_mut() {
+        if let Some(slot_strip) = child.strip.as_mut().filter(|slot_strip| slot_strip.param_subs.is_empty()) {
             self.bind_slot_strip_params(child.uuid, slot_strip, spec, invalidate);
         }
         child.summed = sync_sum(&binding.sum, &child.output, child.summed, self.child_enabled(child.uuid, spec.child_enabled_key));
@@ -803,6 +804,13 @@ impl Engine {
             field_subs.push(self.graph.catchup_and_subscribe(Address::of(child_uuid, vec![spec.child_pan_key]),
                 move |value| {
                     if let Some(value) = value.as_float32() { cells.panning.set(value) }
+                }));
+        }
+        if spec.cell_instrument_field != 0 && spec.child_mute_key != 0 {
+            let cells = params.clone();
+            field_subs.push(self.graph.catchup_and_subscribe(Address::of(child_uuid, vec![spec.child_mute_key]),
+                move |value| {
+                    if let Some(value) = value.as_bool() { cells.mute.set(value) }
                 }));
         }
         SlotStrip {strip, strip_id, params, automation, output, source_node, field_subs, param_subs: Vec::new(), param_collections: Vec::new()}

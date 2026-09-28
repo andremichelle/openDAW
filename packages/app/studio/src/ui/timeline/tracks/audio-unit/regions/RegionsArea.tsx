@@ -10,7 +10,7 @@ import {Config} from "@/ui/timeline/Config.ts"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {AnyRegionBoxAdapter, RegionEditing} from "@opendaw/studio-adapters"
 import {createRegionLocator} from "@/ui/timeline/tracks/audio-unit/regions/RegionSelectionLocator.ts"
-import {installRegionContextMenu} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
+import {installRegionContextMenu, loopRegionSelection} from "@/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts"
 import {RegionCaptureTarget, RegionCapturing} from "@/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"
 import {StudioService} from "@/service/StudioService.ts"
 import {SelectionRectangle} from "@/ui/timeline/SelectionRectangle.tsx"
@@ -116,6 +116,8 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
             editing.modify(() => selected.forEach(({box: {mute}}) => mute.toggle()))
             return true
         }),
+        shortcuts.register(RegionsShortcuts["loop-selection"].shortcut, () =>
+            loopRegionSelection(editing, timelineBox, regionSelection)),
         shortcuts.register(RegionsShortcuts["snapping-finer"].shortcut, () => snapping.stepFiner(), {allowRepeat: true}),
         shortcuts.register(RegionsShortcuts["snapping-coarser"].shortcut, () => snapping.stepCoarser(), {allowRepeat: true}),
         installRegionContextMenu({timelineBox, element, service, capturing, selection: regionSelection, range}),
@@ -222,7 +224,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 const {left, right} = element.getBoundingClientRect()
                 const {top, bottom} = scrollContainer.getBoundingClientRect()
                 return ({xMin: left, xMax: right, yMin: top, yMax: bottom})
-            }, padding: Config.AutoScrollPadding
+            }, padding: Config.AutoScrollPadding, dragPadding: Config.AutoScrollDragPadding
         }),
         DragAndDrop.installTarget(element, {
             drag: (event: DragEvent, data: AnyDragData): boolean => {
@@ -230,10 +232,6 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 if (option.isEmpty()) {
                     markerPosition.setValue(null)
                     return false
-                }
-                if (data.type === "instrument") {
-                    markerPosition.setValue(null)
-                    return true
                 }
                 const rect = element.getBoundingClientRect()
                 const position = snapping.xToUnitFloor(event.clientX - rect.left)

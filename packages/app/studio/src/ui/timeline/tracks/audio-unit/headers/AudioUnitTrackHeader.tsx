@@ -17,6 +17,7 @@ import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {DragAndDrop} from "@/ui/DragAndDrop"
 import {AnyDragData} from "@/ui/AnyDragData"
+import {createHoverEditSwitch, isDeviceDrag} from "./HoverEditSwitch"
 
 type Construct = {
     lifecycle: Lifecycle
@@ -89,6 +90,7 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
         </div>
     )
     const audioUnitEditing = project.userEditingManager.audioUnit
+    const hoverSwitch = createHoverEditSwitch(lifecycle, project, audioUnitBoxAdapter)
     // The unit's head lane doubles as the unit reorder handle: dragging its icon carries the same
     // payload as a mixer channel strip, so timeline and mixer drops interoperate.
     const dragLifecycle = lifecycle.own(new Terminator())
@@ -132,9 +134,12 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
             project.editing.modify(() => audioUnitBoxAdapter.deleteTrack(trackBoxAdapter))
         }),
         DragAndDrop.installTarget(element, {
-            drag: (_event: DragEvent, data: AnyDragData): boolean =>
-                (data.type === "midi-effect" || data.type === "audio-effect") && data.uuids === null,
+            drag: (_event: DragEvent, data: AnyDragData): boolean => {
+                if (isDeviceDrag(data)) {hoverSwitch.hover()}
+                return (data.type === "midi-effect" || data.type === "audio-effect") && data.uuids === null
+            },
             drop: (_event: DragEvent, data: AnyDragData) => {
+                hoverSwitch.cancel()
                 if (data.type === "midi-effect") {
                     if (data.uuids !== null) {return}
                     const factory = EffectFactories.MidiNamed[data.device]
@@ -153,7 +158,10 @@ export const AudioUnitTrackHeader = ({lifecycle, service, trackManager, trackBox
                 }
             },
             enter: (allowDrop: boolean) => element.classList.toggle("accept-drop", allowDrop),
-            leave: () => element.classList.remove("accept-drop")
+            leave: () => {
+                element.classList.remove("accept-drop")
+                hoverSwitch.cancel()
+            }
         })
     )
     return element

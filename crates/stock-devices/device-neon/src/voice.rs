@@ -229,6 +229,12 @@ impl NeonVoice {
         // Measured: key follow tracks the OCTAVE-SHIFTED pitch (note 72 at octave 0 ≡ note 60 at +1).
         let kf_note = self.note + libm::log2f(shared.octave_multiplier) * 12.0;
         let velocity_gain = velocity_to_gain(self.velocity);
+        let mut dca_dts = [0.0f32; 2];
+        for (slot, (config_index, _)) in route.iter().enumerate() {
+            if *config_index == usize::MAX {continue}
+            let config = &shared.lines[*config_index];
+            dca_dts[slot] = dt * libm::exp2f(config.dca_key_follow / 9.0 * (kf_note - 36.0).max(0.0) * 0.026);
+        }
         for index in 0..len {
             self.age_seconds += dt;
             let ramp = if vibrato.depth_cents <= 0.0 {0.0} else {
@@ -264,8 +270,7 @@ impl NeonVoice {
                 let dcw_raw = line.dcw_env.process_dcw(&config.dcw_env, dt);
                 // Measured on the VirtualCZ kf-dca decay ladder: the follow REFERENCES C2 (note 36) — at
                 // kf 9 a C4 decay already runs 1.5× and C6 3.3×, while C2 matches kf 0 exactly.
-                let dca_dt = dt * libm::exp2f(config.dca_key_follow / 9.0 * (kf_note - 36.0).max(0.0) * 0.026);
-                let dca_raw = line.dca_env.process(&config.dca_env, dca_dt);
+                let dca_raw = line.dca_env.process(&config.dca_env, dca_dts[slot]);
                 finished &= line.dca_env.finished();
                 // Measured on the VirtualCZ vibrato-scope probe (detuned pair + vibrato): the beat rate
                 // stays CONSTANT — the LFO bends both lines together, on top of the detune.

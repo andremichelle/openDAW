@@ -109,13 +109,13 @@ export class StudioService implements ProjectEnv {
         snapping,
         clips: {
             count: new DefaultObservableValue(3),
-            visible: new DefaultObservableValue(true)
+            visible: StudioPreferences.createMutableObservableValue("timeline", "clips")
         },
-        followCursor: new DefaultObservableValue(false),
+        followCursor: StudioPreferences.createMutableObservableValue("timeline", "follow-cursor"),
         primaryVisibility: {
-            markers: new DefaultObservableValue(true),
-            tempo: new DefaultObservableValue(false),
-            signature: new DefaultObservableValue(false)
+            markers: StudioPreferences.createMutableObservableValue("timeline", "markers"),
+            tempo: StudioPreferences.createMutableObservableValue("timeline", "tempo"),
+            signature: StudioPreferences.createMutableObservableValue("timeline", "signature")
         }
     } as const
     readonly menu = populateStudioMenu(this)
@@ -449,24 +449,24 @@ export class StudioService implements ProjectEnv {
                 // Show views if content available
                 // -------------------------------
                 //
-                // Markers
-                this.timeline.primaryVisibility.markers.setValue(true)
                 // Tempo
-                this.timeline.primaryVisibility.tempo.setValue(timelineBoxAdapter
-                    .tempoTrackEvents.mapOr(collection => !collection.events.isEmpty(), false))
+                if (timelineBoxAdapter.tempoTrackEvents.mapOr(collection => !collection.events.isEmpty(), false)) {
+                    this.timeline.primaryVisibility.tempo.setValue(true)
+                }
                 // Signature
-                this.timeline.primaryVisibility.signature.setValue(timelineBoxAdapter.signatureTrack.size > 0)
+                if (timelineBoxAdapter.signatureTrack.size > 0) {
+                    this.timeline.primaryVisibility.signature.setValue(true)
+                }
                 // Clips
                 const maxClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()
                     .reduce((max, unit) => Math.max(max, unit.tracks.values()
                         .reduce((max, track) => Math.max(max, track.clips.collection
                             .getMinFreeIndex()), 0)), 0)
-                if (maxClipIndex > 0 || StudioPreferences.settings.visibility["auto-open-clips"]) {
+                if (maxClipIndex > 0) {
                     this.timeline.clips.count.setValue(Math.max(maxClipIndex + 1, 3))
                     this.timeline.clips.visible.setValue(true)
                 } else {
                     this.timeline.clips.count.setValue(3)
-                    this.timeline.clips.visible.setValue(false)
                 }
                 let screen: Nullable<Workspace.ScreenKeys> = null
                 const restart: RestartWorklet = {

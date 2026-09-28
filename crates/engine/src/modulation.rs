@@ -507,6 +507,17 @@ impl ModulatorTable {
             core::mem::take(&mut self.pending_rebind))
     }
 
+    /// Drop the rebinds a bind pass recorded for the modulators it bound itself: their subscriptions' catch-ups
+    /// fire the invalidate closure without any edit behind it.
+    pub(crate) fn discard_rebinds(&mut self, bound: &[Uuid]) {
+        self.pending_rebind.retain(|uuid| !bound.contains(uuid));
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pending_rebind_count(&self) -> usize {
+        self.pending_rebind.len()
+    }
+
     pub(crate) fn resolve(&self, uuid: &Uuid) -> Option<Rc<ModulatorState>> {
         self.entries.iter().find(|entry| &entry.uuid == uuid).map(|entry| entry.state.clone())
     }
