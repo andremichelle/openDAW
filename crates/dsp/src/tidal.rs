@@ -39,6 +39,7 @@ impl TidalComputer {
 
     /// The unit gain at `input` (its fractional part is taken, as in the TS). Mirrors `TidalComputer.compute`.
     pub fn compute(&self, input: f64) -> f64 {
+        if self.depth == 0.0 {return 1.0}
         let p = input - libm::floor(input);
         let (x, sym, inv_s0, inv_s1) = if self.slope < 0.0 {
             (1.0 - p, 1.0 - self.symmetry, self.inv_s1, self.inv_s0)
