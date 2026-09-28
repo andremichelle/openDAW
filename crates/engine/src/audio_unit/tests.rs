@@ -1218,6 +1218,51 @@ fn a_cell_composite_builds_its_hosted_instrument_and_keeps_it_across_reconcile()
     assert_eq!(child_instrument(&unit, CELL), Some(node), "the cell child survives an idle reconcile (same processor)");
 }
 
+// #415: a composite reconciles its children on EVERY reconcile, and re-binding a surviving child's strip
+// automation fires the value catch-up, which re-enqueues the unit through the params signal. Every transaction
+// then reconciled every composite (the per-transaction milliseconds that starved the render thread). An idle
+// reconcile must leave the unit un-enqueued; the strip binds once and only a real automation change re-binds it.
+#[test]
+fn an_idle_composite_reconcile_does_not_enqueue_its_unit() {
+    const CELL: Uuid = [40u8; 16];
+    const CELL_INSTRUMENT_FIELD: u16 = 50;
+    const CELL_VOLUME_KEY: u16 = 51;
+    const CELL_PAN_KEY: u16 = 52;
+    let mut engine = engine_with_devices();
+    engine.composites = vec![CompositeSpec {
+        box_type: "TestComposite".to_string(), children_field: CHILDREN_FIELD, index_key: 0, exclude_key: 0,
+        cell_instrument_field: CELL_INSTRUMENT_FIELD, cell_midi_field: 0, cell_audio_field: 0,
+        child_enabled_key: 0, child_mute_key: 0, child_solo_key: 0, child_volume_key: CELL_VOLUME_KEY, child_pan_key: CELL_PAN_KEY
+    }];
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(COMPOSITE, "TestComposite", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (CHILDREN_FIELD, FieldValue::Hook)
+        ]),
+        graph_box(CELL, "TestCell", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(COMPOSITE, vec![CHILDREN_FIELD])))), (CELL_INSTRUMENT_FIELD, FieldValue::Hook),
+            (CELL_VOLUME_KEY, FieldValue::Float32(0.0)), (CELL_PAN_KEY, FieldValue::Float32(0.0))
+        ]),
+        graph_box(CHILD_A, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(CELL, vec![CELL_INSTRUMENT_FIELD]))))
+        ])
+    ]);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    // The build's own catch-ups may enqueue once; drain that, then an IDLE reconcile must stay quiet.
+    engine.reconcile_one(&mut unit);
+    engine.dirty_units.borrow_mut().clear();
+    let subscriptions = engine.graph.subscription_count();
+    engine.reconcile_one(&mut unit);
+    assert!(engine.dirty_units.borrow().is_empty(), "an idle composite reconcile re-enqueued its unit");
+    assert!(!unit.params_dirty.get(), "an idle composite reconcile flagged the params dirty");
+    assert_eq!(engine.graph.subscription_count(), subscriptions, "an idle composite reconcile re-subscribed");
+    assert_eq!(composite_sum_sources(&unit), 1, "the cell still feeds the sum");
+}
+
 #[test]
 fn cell_composite_layers_share_one_clip_advance() {
     // Two layers read the unit's launched clip with DIFFERENT windows (one has its own Zeitgeist). The layers
@@ -4599,6 +4644,85 @@ fn an_automated_modulator_parameter_follows_its_curve() {
     engine.transport.stop(false);
     engine.sync_modulators();
     assert!((sum_at(0.0) - 0.75).abs() < 1.0e-6, "a paused transport holds the automated amount");
+}
+
+// #415: binding a modulator fires its own subscriptions' catch-ups, which run the invalidate closure. Those
+// must NOT queue the modulator for another rebind, or every following transaction rebinds it, flags the
+// modulation dirty and re-reconciles every unit (the ~10 ms per transaction that starved the render thread).
+// A REAL edit on a bound region still queues exactly one rebind, and that rebind clears itself the same way.
+#[test]
+fn binding_a_modulator_does_not_queue_its_own_rebind() {
+    const DEV: Uuid = [140u8; 16];
+    const ROOT: Uuid = [141u8; 16];
+    const LFO: Uuid = [142u8; 16];
+    const ASSIGN: Uuid = [143u8; 16];
+    const VTRACK: Uuid = [144u8; 16];
+    const VREGION: Uuid = [145u8; 16];
+    const VCOLL: Uuid = [146u8; 16];
+    const VEVENT: Uuid = [147u8; 16];
+    const PATH: u16 = 11;
+    const AMOUNT_KEY: u16 = 8;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(ROOT, "RootBox", &[(11, FieldValue::Hook)]),
+        graph_box(DEV, "RevampDeviceBox", &[]),
+        graph_box(LFO, "LfoModulatorBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(ROOT, vec![11])))),
+            (2, FieldValue::Hook), (4, FieldValue::Boolean(true)), (7, FieldValue::Boolean(true)), (6, FieldValue::Hook),
+            (10, FieldValue::Int32(crate::modulation::SHAPE_SQUARE)), (11, FieldValue::Int32(4)),
+            (12, FieldValue::Float32(0.0)), (13, FieldValue::Float32(0.0)), (8, FieldValue::Float32(1.0)),
+            (15, FieldValue::Float32(0.0))
+        ]),
+        graph_box(ASSIGN, "ModulationBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![2])))),
+            (2, FieldValue::Pointer(Some(Address::of(DEV, vec![PATH])))),
+            (3, FieldValue::Float32(1.0)), (4, FieldValue::Boolean(true))
+        ]),
+        // Automation on the modulator's OWN amount: the worst case, its bind also subscribes the track's hubs.
+        graph_box(VTRACK, "TrackBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(LFO, vec![6])))),
+            (2, FieldValue::Pointer(Some(Address::of(LFO, vec![AMOUNT_KEY])))),
+            (TRACK_TYPE_KEY, FieldValue::Int32(2)),
+            (TRACK_REGIONS_KEY, FieldValue::Hook),
+            (super::TRACK_CLIPS_KEY, FieldValue::Hook),
+            (TRACK_ENABLED_KEY, FieldValue::Boolean(true))
+        ]),
+        graph_box(VREGION, "ValueRegionBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VTRACK, vec![TRACK_REGIONS_KEY])))),
+            (2, FieldValue::Pointer(Some(Address::of(VCOLL, vec![2])))),
+            (10, FieldValue::Int32(0)), (11, FieldValue::Int32(3840)),
+            (12, FieldValue::Int32(0)), (13, FieldValue::Int32(3840))
+        ]),
+        graph_box(VCOLL, "ValueEventCollectionBox", &[(1, FieldValue::Hook), (2, FieldValue::Hook)]),
+        graph_box(VEVENT, "ValueEventBox", &[
+            (1, FieldValue::Pointer(Some(Address::of(VCOLL, vec![1])))),
+            (10, FieldValue::Int32(0)), (13, FieldValue::Float32(0.25))
+        ])
+    ]);
+    engine.transport.play();
+    engine.observe_modulators();
+    assert_eq!(engine.modulators.borrow().pending_rebind_count(), 0, "the initial bind queued its own rebind");
+    engine.modulation_dirty.set(false);
+    // An empty transaction (a selection, a knob at its limit) must leave the modulators untouched.
+    let subscriptions = engine.graph.subscription_count();
+    engine.graph.transaction(&[], &engine.registry).expect("empty transaction");
+    engine.sync_modulators();
+    assert_eq!(engine.modulators.borrow().pending_rebind_count(), 0, "an empty transaction queued a rebind");
+    assert!(!engine.modulation_dirty.get(), "an empty transaction flagged the modulation dirty");
+    assert_eq!(engine.graph.subscription_count(), subscriptions, "an empty transaction re-subscribed");
+    // A real edit on the bound region queues ONE rebind, which binds once and clears itself.
+    engine.graph.transaction(&[Update::Primitive {
+        address: Address::of(VREGION, vec![10]), old: FieldValue::Int32(0), new: FieldValue::Int32(960)
+    }], &engine.registry).expect("move the region");
+    assert_eq!(engine.modulators.borrow().pending_rebind_count(), 1, "a region edit must queue a rebind");
+    engine.sync_modulators();
+    assert!(engine.modulation_dirty.get(), "a rebind refreshes the units once");
+    assert_eq!(engine.modulators.borrow().pending_rebind_count(), 0, "the rebind queued itself again");
+    engine.modulation_dirty.set(false);
+    engine.graph.transaction(&[], &engine.registry).expect("empty transaction");
+    engine.sync_modulators();
+    assert_eq!(engine.modulators.borrow().pending_rebind_count(), 0, "the rebind kept the loop alive");
+    assert!(!engine.modulation_dirty.get(), "the rebind kept flagging the modulation dirty");
 }
 
 // An assignment's DEPTH is a parameter like any other: a Value track on it drives how much of the

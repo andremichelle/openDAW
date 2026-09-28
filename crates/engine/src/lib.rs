@@ -2030,6 +2030,7 @@ impl Engine {
 
     fn sync_modulators(&mut self) {
         let (added, removed, rebind) = self.modulators.borrow_mut().take_pending();
+        let mut bound: Vec<Uuid> = Vec::new();
         for uuid in removed {
             let (subs, collections) = self.modulators.borrow_mut().remove(&uuid);
             self.release_modulator_bindings(subs, collections);
@@ -2046,6 +2047,7 @@ impl Engine {
             let (subs, params, collections) = self.bind_modulator(uuid, &name, &state);
             self.modulators.borrow_mut().attach(&uuid, subs, params, collections);
             self.modulation_dirty.set(true);
+            bound.push(uuid);
         }
         for uuid in added {
             if self.modulators.borrow().resolve(&uuid).is_some() {
@@ -2066,6 +2068,12 @@ impl Engine {
             *state.broadcast.borrow_mut() = Some(slot);
             self.modulators.borrow_mut().add(uuid, state, subs, params, collections);
             self.modulation_dirty.set(true);
+            bound.push(uuid);
+        }
+        // a bind's own catch-ups run the invalidate closure: without this every transaction rebinds (#415)
+        if !bound.is_empty() {
+            self.graph.apply_deferred();
+            self.modulators.borrow_mut().discard_rebinds(&bound);
         }
         // A field edit reaches the state through the handles, so it lands with the transaction rather than
         // waiting for the next quantum's refresh.
