@@ -176,10 +176,10 @@ export namespace NeuralDemux {
                 await Inference.releaseTask(model.key)
             }
             const cached = await Inference.isCached(model.key)
+            const sizeLabel = Bytes.toString(Inference.modelDescriptor(model.key).bytes)
             if (!cached) {
                 const dlProgress = new DefaultObservableValue<number>(0)
                 const dlController = new AbortController()
-                const sizeLabel = Bytes.toString(Inference.modelDescriptor(model.key).bytes)
                 const dlDialog = RuntimeNotifier.progress({
                     headline: "Downloading model",
                     message: `${sizeLabel}, one-time`,
@@ -203,6 +203,7 @@ export namespace NeuralDemux {
                 const loadController = new AbortController()
                 const loadDialog = RuntimeNotifier.progress({
                     headline: "Loading model",
+                    message: `${sizeLabel}, from cache`,
                     cancel: () => loadController.abort(Errors.AbortError)
                 })
                 const sessionResult = await Promises.tryCatch(Promise.race([
