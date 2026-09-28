@@ -621,3 +621,22 @@ fn predelay_automation_does_not_click() {
     let max_step = actual[0].windows(2).map(|pair| (pair[1] - pair[0]).abs()).fold(0.0f32, f32::max);
     assert!(max_step < 0.08, "pre-delay automation click: max sample step {max_step}");
 }
+
+// #415: instances built back to back (one boot transaction) must not share a heavy FFT quantum: every ordinal
+// gets its own L3 phase (period 64 quanta) and, within a group of eight, its own L2 phase (period 8).
+#[test]
+fn consecutive_instances_never_share_a_partition_phase() {
+    let phases: Vec<usize> = (0..64).map(dsp::convolution::Convolver::stagger_for_ordinal).collect();
+    for (left, phase) in phases.iter().enumerate() {
+        assert!(*phase < 64, "a stagger past the L3 period");
+        for (right, other) in phases.iter().enumerate().skip(left + 1) {
+            assert_ne!(phase, other, "instances {left} and {right} share L3 phase {phase}");
+        }
+    }
+    for group in phases.chunks(8) {
+        let mut l2: Vec<usize> = group.iter().map(|phase| phase % 8).collect();
+        l2.sort_unstable();
+        l2.dedup();
+        assert_eq!(l2.len(), 8, "eight consecutive instances share an L2 phase: {group:?}");
+    }
+}
