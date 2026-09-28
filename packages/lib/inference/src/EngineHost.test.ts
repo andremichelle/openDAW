@@ -28,11 +28,13 @@ class FakeWorker {
     readonly received: Array<MainToWorker> = []
     #readyEmitted = false
 
+    constructor(private readonly autoReady: boolean = true) {}
+
     addEventListener(type: string, listener: (event: Event) => void): void {
         let set = this.#listeners.get(type)
         if (set === undefined) {set = new Set(); this.#listeners.set(type, set)}
         set.add(listener)
-        if (type === "message" && !this.#readyEmitted) {
+        if (type === "message" && !this.#readyEmitted && this.autoReady) {
             this.#readyEmitted = true
             queueMicrotask(() => this.emit({kind: "ready"}))
         }
@@ -64,6 +66,13 @@ class FakeWorker {
         // ErrorEvent isn't a Node global; a plain object is all EngineHost reads from it.
         const event = {message} as unknown as Event
         const listeners = this.#listeners.get("error")
+        if (listeners === undefined) {return}
+        for (const listener of [...listeners]) {listener(event)}
+    }
+
+    emitMessageError(): void {
+        const event = {} as Event
+        const listeners = this.#listeners.get("messageerror")
         if (listeners === undefined) {return}
         for (const listener of [...listeners]) {listener(event)}
     }
@@ -239,6 +248,76 @@ describe("EngineHost", () => {
             url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"
         }, [])).resolves.toBeUndefined()
         expect(workers).toHaveLength(2)
+    })
+
+    it("terminates a crashed worker so it cannot leak", async () => {
+        const worker = new FakeWorker()
+        const terminateSpy = vi.spyOn(worker, "terminate")
+        const {host} = makeHost(worker)
+        const {bytes, sha} = await oneByteWithKnownSha()
+        opfs.files.set("inference/models/t/v1/model.onnx", bytes)
+        opfs.files.set("inference/models/t/v1/meta.json",
+            new TextEncoder().encode(JSON.stringify({
+                sha256: sha, bytes: 1, version: "v1", downloadedAt: 0
+            })))
+        await host.ensureLoaded("t", {
+            url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"
+        }, [])
+        worker.emitError("boom")
+        expect(terminateSpy).toHaveBeenCalled()
+    })
+
+    it("ignores a late error from a worker that is no longer current", async () => {
+        const workers: Array<FakeWorker> = []
+        const host = new EngineHost({
+            workerFactory: () => {
+                // Real terminate() may not cancel an event already queued for delivery; a no-op
+                // here models that race instead of relying on the fake's own listener cleanup.
+                const worker = new FakeWorker()
+                worker.terminate = () => {}
+                workers.push(worker)
+                return worker as unknown as Worker
+            }
+        })
+        const {bytes, sha} = await oneByteWithKnownSha()
+        opfs.files.set("inference/models/t/v1/model.onnx", bytes)
+        opfs.files.set("inference/models/t/v1/meta.json",
+            new TextEncoder().encode(JSON.stringify({
+                sha256: sha, bytes: 1, version: "v1", downloadedAt: 0
+            })))
+        await host.ensureLoaded("t", {
+            url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"
+        }, [])
+        const stale = workers[0]
+        stale.emitError("first crash")
+        await host.ensureLoaded("t", {
+            url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"
+        }, [])
+        expect(workers).toHaveLength(2)
+        const pending = host.sessionRunFor("t", Option.None)({})
+        await Promise.resolve() // let #dispatch register the call against the current worker first
+        stale.emitError("late error from the now-dead worker")
+        await expect(pending).resolves.toBeDefined()
+        expect(workers).toHaveLength(2)
+    })
+
+    it("rejects ensureLoaded on an undeserialisable message during the handshake", async () => {
+        const worker = new FakeWorker(false)
+        const {host} = makeHost(worker)
+        const {bytes, sha} = await oneByteWithKnownSha()
+        opfs.files.set("inference/models/t/v1/model.onnx", bytes)
+        opfs.files.set("inference/models/t/v1/meta.json",
+            new TextEncoder().encode(JSON.stringify({
+                sha256: sha, bytes: 1, version: "v1", downloadedAt: 0
+            })))
+        const loading = host.ensureLoaded("t", {
+            url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"
+        }, [])
+        // Let ensureLoaded's cache lookup (a few microtask hops through FakeOpfs) finish and
+        // #ensureWorker() actually register its listeners before the handshake "fails".
+        await new Promise(resolve => setTimeout(resolve, 0))
+        worker.emitMessageError()
+        await expect(loading).rejects.toThrow(/undeserialisable/)
     })
 })
 

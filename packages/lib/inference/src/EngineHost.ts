@@ -151,15 +151,17 @@ export class EngineHost {
             worker.addEventListener("message", onMessage as EventListener)
             worker.addEventListener("error", (event: ErrorEvent) =>
                 reject(new Error(`Worker error: ${event.message}`)))
+            worker.addEventListener("messageerror", () =>
+                reject(new Error("Worker sent an undeserialisable message during initialization")))
         })
         // Without this, a crash after init leaves #pending unsettled and #ready resolved forever.
         const onWorkerDeath = (reason: string): void => {
-            if (this.#worker.unwrapOrUndefined() === worker) {
-                this.#worker = Option.None
-                this.#ready = Option.None
-                this.#loadedTasks.clear()
-                this.#names.clear()
-            }
+            if (this.#worker.unwrapOrUndefined() !== worker) {return}
+            worker.terminate()
+            this.#worker = Option.None
+            this.#ready = Option.None
+            this.#loadedTasks.clear()
+            this.#names.clear()
             this.#rejectAllPending(new Error(reason))
         }
         worker.addEventListener("error", (event: ErrorEvent) =>
