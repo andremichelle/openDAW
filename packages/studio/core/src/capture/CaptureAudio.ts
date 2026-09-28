@@ -9,7 +9,8 @@ import {
     RuntimeNotifier,
     Terminable,
     tryCatch,
-    UUID
+    UUID,
+    VitalSigns
 } from "@opendaw/lib-std"
 import {dbToGain} from "@opendaw/lib-dsp"
 import {Promises} from "@opendaw/lib-runtime"
@@ -30,6 +31,7 @@ const RecordingRingChunks = 1024
 export class CaptureAudio extends Capture<CaptureAudioBox> {
     readonly #stream: MutableObservableOption<MediaStream>
     readonly #streamGenerator: Func<void, Promise<void>>
+    readonly #vitalSigns: VitalSigns
     readonly #monitorGainNode: GainNode
     readonly #monitorPanNode: StereoPannerNode
 
@@ -61,8 +63,10 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         this.#monitorGainNode.connect(this.#monitorPanNode)
         this.#stream = new MutableObservableOption<MediaStream>()
         this.#streamGenerator = Promises.sequentialize(() => this.#updateStream())
+        this.#vitalSigns = this.own(new VitalSigns())
         this.ownAll(
             Terminable.create(() => {
+                this.#discardPreparedWorklet()
                 this.#stopStream()
                 if (isDefined(this.#monitorAudioElement)) {
                     this.#monitorAudioElement.pause()
@@ -257,11 +261,12 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
 
     async #updateStream(): Promise<void> {
+        if (!this.#wantsStream()) {return}
         const namedDeviceId = this.deviceId.getValue().unwrapOrUndefined()
         if (this.#stream.nonEmpty()) {
-            const stream = this.#stream.unwrap()
-            const settings = stream.getAudioTracks().at(0)?.getSettings()
-            if (isDefined(settings)) {
+            const openTrack = this.#stream.unwrap().getAudioTracks().at(0)
+            const settings = openTrack?.getSettings()
+            if (isDefined(openTrack) && openTrack.readyState === "live" && isDefined(settings)) {
                 // an unnamed device never equals the reported id, so compare the request instead
                 const unchanged = isUndefined(namedDeviceId)
                     ? isUndefined(this.#streamNamedDeviceId)
@@ -284,14 +289,20 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         // device is gone (USB unplug, OS swap, ...), getUserMedia rejects.
         // Fall back to a stream without a deviceId constraint, so recording
         // still works on the default input rather than failing outright.
-        const stream = await AudioDevices.requestStream({
+        const stream: Nullable<MediaStream> = await AudioDevices.requestStream({
             ...baseConstraints,
             deviceId: isDefined(deviceId) ? {exact: deviceId} : undefined
         }).catch(error => {
             if (!isDefined(deviceId)) {throw error}
+            if (!this.#wantsStream()) {return null}
             console.warn(`Requested audio device '${deviceId}' unavailable (${String(error)}); using default input`)
             return AudioDevices.requestStream(baseConstraints)
         })
+        if (!isDefined(stream)) {return}
+        if (!this.#wantsStream() || namedDeviceId !== this.deviceId.getValue().unwrapOrUndefined()) {
+            stream.getAudioTracks().forEach(track => track.stop())
+            return
+        }
         const tracks = stream.getAudioTracks()
         const track = tracks.at(0)
         const settings = track?.getSettings()
@@ -301,6 +312,9 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         this.#streamNamedDeviceId = namedDeviceId
         this.#stream.wrap(stream)
     }
+
+    // getUserMedia cannot be cancelled, so this is checked when an update starts and, with the device, when it resolves
+    #wantsStream(): boolean {return this.armed.getValue() && !this.#vitalSigns.isTerminated}
 
     #stopStream(): void {
         this.#disconnectMonitoring()

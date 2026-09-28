@@ -1,4 +1,4 @@
-import {describe, expect, it} from "vitest"
+import {describe, expect, it, vi} from "vitest"
 import {int, isDefined, Option, UUID} from "@opendaw/lib-std"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {CaptureAudioBox} from "@opendaw/studio-boxes"
@@ -44,34 +44,46 @@ const keepAliveSinkOf = (sourceNode: FakeNode): FakeNode => {
     return sinks[0]
 }
 
-type FakeTrack = {label: string, stopped: boolean, getSettings: () => MediaTrackSettings, stop: () => void}
+type FakeTrack = {
+    label: string, stopped: boolean, readyState: MediaStreamTrackState,
+    getSettings: () => MediaTrackSettings, stop: () => void
+}
 
 // One track object per stream, kept across `getAudioTracks()` calls so `stop()` is observable.
 const createFakeStream = (deviceId: string, tracks: Array<FakeTrack>) => {
     const track: FakeTrack = {
         label: "Fake Input",
         stopped: false,
+        readyState: "live",
         getSettings: () => ({deviceId, channelCount: 2, latency: 0.005}) as MediaTrackSettings,
-        stop() {track.stopped = true}
+        stop() {
+            track.stopped = true
+            track.readyState = "ended"
+        }
     }
     tracks.push(track)
     return {getAudioTracks: () => [track]}
 }
 
+type FakeHold = {resolve: () => void, reject: (reason: Error) => void}
+type FakeMediaDevices = {calls: int, tracks: Array<FakeTrack>, holds: Array<FakeHold>}
+
 // `AudioDevices.requestStream` goes through `navigator.mediaDevices`; nothing else in these tests does.
 // The counter tells a reused stream from a re-opened one: every re-open is one more `getUserMedia`.
-const installFakeMediaDevices = (deviceId: string): {calls: int, tracks: Array<FakeTrack>} => {
-    const counter = {calls: 0, tracks: new Array<FakeTrack>()}
+// A held `getUserMedia` settles only once its hold is released or rejected, so a test can act while it is pending.
+const installFakeMediaDevices = (deviceId: string, holdStreams: boolean): FakeMediaDevices => {
+    const devices: FakeMediaDevices = {calls: 0, tracks: new Array<FakeTrack>(), holds: []}
     Reflect.set(globalThis, "navigator", {
         mediaDevices: {
             getUserMedia: async () => {
-                counter.calls++
-                return createFakeStream(deviceId, counter.tracks)
+                devices.calls++
+                if (holdStreams) {await new Promise<void>((resolve, reject) => devices.holds.push({resolve, reject}))}
+                return createFakeStream(deviceId, devices.tracks)
             },
             enumerateDevices: async () => []
         }
     })
-    return counter
+    return devices
 }
 
 const createFakeRecordingWorklet = () => ({
@@ -82,9 +94,10 @@ const createFakeRecordingWorklet = () => ({
     terminate(): void {this.terminated = true}
 })
 
-const setup = async ({state = "running", resumesTo = "running", deviceId = "fake-device"}:
-                     {state?: AudioContextState, resumesTo?: AudioContextState, deviceId?: string} = {}) => {
-    const getUserMediaCounter = installFakeMediaDevices(deviceId)
+const setup = async ({state = "running", resumesTo = "running", deviceId = "fake-device", holdStreams = false}: {
+    state?: AudioContextState, resumesTo?: AudioContextState, deviceId?: string, holdStreams?: boolean
+} = {}) => {
+    const mediaDevices = installFakeMediaDevices(deviceId, holdStreams)
     const {Project} = await import("../project/Project")
     const {CaptureAudio} = await import("./CaptureAudio")
     const destination = createFakeNode()
@@ -137,11 +150,14 @@ const setup = async ({state = "running", resumesTo = "running", deviceId = "fake
     const capture = new CaptureAudio(manager, primaryAudioUnitBox, captureBox)
     // The record gain node is the one the audio chain holds; the monitor nodes come from the same factory.
     const recordGainNode = (): FakeNode => capture.outputNode.unwrap("no audio chain") as unknown as FakeNode
-    const getUserMediaCalls = (): int => getUserMediaCounter.calls
-    const openedTracks = (): ReadonlyArray<FakeTrack> => getUserMediaCounter.tracks
+    const getUserMediaCalls = (): int => mediaDevices.calls
+    const openedTracks = (): ReadonlyArray<FakeTrack> => mediaDevices.tracks
+    const releaseStreams = (): void => mediaDevices.holds.splice(0).forEach(hold => hold.resolve())
+    const rejectStreams = (): void =>
+        mediaDevices.holds.splice(0).forEach(hold => hold.reject(new Error("NotFoundError")))
     return {
         capture, project, audioContext, preparedWorklets, removedFromSampleManager, recordGainNode,
-        destination, createdSourceNodes, getUserMediaCalls, openedTracks
+        destination, createdSourceNodes, getUserMediaCalls, openedTracks, releaseStreams, rejectStreams
     }
 }
 
@@ -163,6 +179,7 @@ describe("CaptureAudio", () => {
     describe("preparing a recording", () => {
         it("prepares on a running context", async () => {
             const {capture, audioContext, preparedWorklets} = await setup()
+            capture.armed.setValue(true)
             await expect(capture.prepareRecording()).resolves.toBeUndefined()
             expect(audioContext.resumeCalls).toBe(0)
             expect(preparedWorklets.length).toBe(1)
@@ -171,6 +188,7 @@ describe("CaptureAudio", () => {
 
         it("resumes a suspended context and prepares once it is running", async () => {
             const {capture, audioContext, preparedWorklets} = await setup({state: "suspended"})
+            capture.armed.setValue(true)
             await expect(capture.prepareRecording()).resolves.toBeUndefined()
             expect(audioContext.resumeCalls).toBe(1)
             expect(audioContext.state).toBe("running")
@@ -187,6 +205,7 @@ describe("CaptureAudio", () => {
 
         it("discards a worklet the previous prepare left behind", async () => {
             const {capture, preparedWorklets, removedFromSampleManager, recordGainNode} = await setup()
+            capture.armed.setValue(true)
             await capture.prepareRecording()
             const orphan = preparedWorklets[0]
             const gainNode = recordGainNode()
@@ -197,17 +216,34 @@ describe("CaptureAudio", () => {
             expect(gainNode.disconnected).toContain(orphan)
             expect(preparedWorklets[1].terminated).toBe(false)
         })
+
+        it("opens no stream for a capture that is not armed", async () => {
+            const {capture, preparedWorklets, getUserMediaCalls} = await setup()
+            await expect(capture.prepareRecording()).rejects.toBeDefined()
+            expect(getUserMediaCalls()).toBe(0)
+            expect(preparedWorklets.length).toBe(0)
+        })
     })
 
     describe("starting a recording", () => {
         it("discards the prepared worklet when the audio chain is gone", async () => {
             const {capture, preparedWorklets, removedFromSampleManager} = await setup()
+            capture.armed.setValue(true)
             await capture.prepareRecording()
             const worklet = preparedWorklets[0]
-            capture.armed.setValue(true)
             capture.armed.setValue(false) // tears the audio chain down behind the prepared worklet
             expect(capture.outputNode).toEqual(Option.None)
             expect(capture.startRecording()).toBeDefined()
+            expect(worklet.terminated).toBe(true)
+            expect(removedFromSampleManager).toEqual([worklet.uuid])
+        })
+
+        it("discards the prepared worklet when the capture is terminated", async () => {
+            const {capture, preparedWorklets, removedFromSampleManager} = await setup()
+            capture.armed.setValue(true)
+            await capture.prepareRecording()
+            const worklet = preparedWorklets[0]
+            capture.terminate()
             expect(worklet.terminated).toBe(true)
             expect(removedFromSampleManager).toEqual([worklet.uuid])
         })
@@ -243,6 +279,140 @@ describe("CaptureAudio", () => {
             expect(openedTracks()[0].stopped).toBe(true)
         })
 
+        it("stops a stream that arrives after the capture was terminated, without building a chain", async () => {
+            const {capture, createdSourceNodes, openedTracks, getUserMediaCalls, releaseStreams} =
+                await setup({holdStreams: true})
+            capture.armed.setValue(true)
+            await flushMicrotasks()
+            expect(getUserMediaCalls()).toBe(1)
+            expect(openedTracks().length).toBe(0)
+            capture.terminate()
+            releaseStreams()
+            await flushMicrotasks()
+            expect(openedTracks().length).toBe(1)
+            expect(openedTracks()[0].stopped).toBe(true)
+            expect(createdSourceNodes.length).toBe(0)
+            expect(capture.outputNode).toEqual(Option.None)
+            expect(capture.stream.isEmpty()).toBe(true)
+        })
+
+        it("stops a stream that arrives after disarming, without building a chain", async () => {
+            const {capture, createdSourceNodes, openedTracks, getUserMediaCalls, releaseStreams} =
+                await setup({holdStreams: true})
+            capture.armed.setValue(true)
+            await flushMicrotasks()
+            expect(getUserMediaCalls()).toBe(1)
+            capture.armed.setValue(false)
+            releaseStreams()
+            await flushMicrotasks()
+            expect(openedTracks().length).toBe(1)
+            expect(openedTracks()[0].stopped).toBe(true)
+            expect(createdSourceNodes.length).toBe(0)
+            expect(capture.outputNode).toEqual(Option.None)
+            expect(capture.stream.isEmpty()).toBe(true)
+        })
+
+        it("requests no stream for an update queued before the capture was terminated", async () => {
+            const {capture, createdSourceNodes, openedTracks, getUserMediaCalls, releaseStreams} =
+                await setup({holdStreams: true})
+            capture.armed.setValue(true)
+            await flushMicrotasks()
+            capture.armed.setValue(false)
+            capture.armed.setValue(true) // queued behind the pending request
+            capture.terminate()
+            releaseStreams()
+            await flushMicrotasks()
+            releaseStreams()
+            await flushMicrotasks()
+            expect(getUserMediaCalls()).toBe(1)
+            expect(openedTracks().map(track => track.stopped)).toEqual([true])
+            expect(createdSourceNodes.length).toBe(0)
+            expect(capture.stream.isEmpty()).toBe(true)
+        })
+
+        it("requests no stream for a device change queued before the capture was disarmed", async () => {
+            const {capture, project, createdSourceNodes, openedTracks, getUserMediaCalls, releaseStreams} =
+                await setup({holdStreams: true})
+            capture.armed.setValue(true)
+            await flushMicrotasks()
+            project.editing.modify(() => capture.deviceId.setValue(Option.wrap("other-device")))
+            await flushMicrotasks() // queued behind the pending request
+            capture.armed.setValue(false)
+            releaseStreams()
+            await flushMicrotasks()
+            releaseStreams()
+            await flushMicrotasks()
+            expect(getUserMediaCalls()).toBe(1)
+            expect(openedTracks().map(track => track.stopped)).toEqual([true])
+            expect(createdSourceNodes.length).toBe(0)
+            expect(capture.stream.isEmpty()).toBe(true)
+        })
+
+        it("discards a stream whose device was changed while its request was pending", async () => {
+            const {capture, project, createdSourceNodes, openedTracks, getUserMediaCalls, releaseStreams} =
+                await setup({holdStreams: true, deviceId: "other-device"})
+            capture.armed.setValue(true)
+            await flushMicrotasks()
+            project.editing.modify(() => capture.deviceId.setValue(Option.wrap("other-device")))
+            await flushMicrotasks() // queued behind the pending request
+            releaseStreams()
+            await flushMicrotasks()
+            releaseStreams()
+            await flushMicrotasks()
+            expect(getUserMediaCalls()).toBe(2)
+            expect(openedTracks().map(track => track.stopped)).toEqual([true, false])
+            expect(createdSourceNodes.length).toBe(1) // the stale stream never became a chain
+            expect(capture.outputNode.nonEmpty()).toBe(true)
+        })
+
+        it("falls back to the default input when the named device is unavailable", async () => {
+            const {capture, project, createdSourceNodes, getUserMediaCalls, releaseStreams, rejectStreams} =
+                await setup({holdStreams: true})
+            project.editing.modify(() => capture.deviceId.setValue(Option.wrap("unplugged-device")))
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            capture.armed.setValue(true)
+            await flushMicrotasks()
+            rejectStreams()
+            await flushMicrotasks()
+            releaseStreams()
+            await flushMicrotasks()
+            warn.mockRestore()
+            expect(getUserMediaCalls()).toBe(2)
+            expect(createdSourceNodes.length).toBe(1)
+            expect(capture.outputNode.nonEmpty()).toBe(true)
+        })
+
+        it("requests no fallback for a named device that fails after the capture was disarmed", async () => {
+            const {capture, project, createdSourceNodes, getUserMediaCalls, rejectStreams} =
+                await setup({holdStreams: true})
+            project.editing.modify(() => capture.deviceId.setValue(Option.wrap("unplugged-device")))
+            capture.armed.setValue(true)
+            await flushMicrotasks()
+            capture.armed.setValue(false)
+            rejectStreams()
+            await flushMicrotasks()
+            expect(getUserMediaCalls()).toBe(1)
+            expect(createdSourceNodes.length).toBe(0)
+            expect(capture.stream.isEmpty()).toBe(true)
+        })
+
+        it("keeps the stream of a request that was pending across a disarm and re-arm", async () => {
+            const {capture, createdSourceNodes, openedTracks, getUserMediaCalls, releaseStreams} =
+                await setup({holdStreams: true})
+            capture.armed.setValue(true)
+            await flushMicrotasks()
+            capture.armed.setValue(false)
+            capture.armed.setValue(true) // queued behind the pending request, which it then reuses
+            releaseStreams()
+            await flushMicrotasks()
+            releaseStreams()
+            await flushMicrotasks()
+            expect(getUserMediaCalls()).toBe(1)
+            expect(openedTracks().map(track => track.stopped)).toEqual([false])
+            expect(createdSourceNodes.length).toBe(1)
+            expect(capture.outputNode.nonEmpty()).toBe(true)
+        })
+
         it("leaves the silent sink in place while monitoring is switched on and off", async () => {
             const {capture, createdSourceNodes} = await setup()
             await armAndAwaitChain(capture)
@@ -276,6 +446,16 @@ describe("CaptureAudio", () => {
             await capture.prepareRecording()
             expect(getUserMediaCalls()).toBe(callsWhileArming)
             expect(createdSourceNodes).toEqual([sourceNode])
+        })
+
+        it("re-opens when the open track has ended, even though nothing else changed", async () => {
+            const {capture, createdSourceNodes, getUserMediaCalls, openedTracks} = await setup()
+            await armAndAwaitChain(capture)
+            const callsWhileArming = getUserMediaCalls()
+            openedTracks()[0].readyState = "ended" // the device was unplugged
+            await capture.prepareRecording()
+            expect(getUserMediaCalls()).toBe(callsWhileArming + 1)
+            expect(createdSourceNodes.length).toBe(2)
         })
 
         it("re-opens when the box names a device the open stream does not report", async () => {
