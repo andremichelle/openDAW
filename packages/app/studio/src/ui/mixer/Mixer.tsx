@@ -15,6 +15,7 @@ import {InsertMarker} from "@/ui/components/InsertMarker"
 import {deferNextFrame, Events, Html} from "@opendaw/lib-dom"
 import {AudioUnitsClipboard, ClipboardManager} from "@opendaw/studio-core"
 import {AudioUnitBox} from "@opendaw/studio-boxes"
+import {WheelScaling} from "@/ui/timeline/WheelScaling"
 
 const className = Html.adoptStyleSheet(css, "mixer")
 
@@ -139,7 +140,15 @@ export const Mixer = ({lifecycle, service}: Construct) => {
         })),
         Html.watchResize(element, updateScroller),
         Events.subscribe(headers, "pointerdown", () => project.userEditingManager.audioUnit.clear()),
-        Events.subscribe(element, "wheel", (event: WheelEvent) => scrollModel.position += event.deltaX, {passive: false}),
+        Events.subscribe(element, "wheel", (event: WheelEvent) => {
+            if (event.altKey) {
+                event.preventDefault()
+                event.stopPropagation()
+                scrollModel.position += WheelScaling.pixelsOf(event)
+                return
+            }
+            scrollModel.position += event.deltaX
+        }, {passive: false}),
         (() => {
             let ignore = false
             return Terminable.many(
