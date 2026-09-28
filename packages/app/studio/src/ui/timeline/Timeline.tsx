@@ -21,7 +21,7 @@ type Construct = {
 export const Timeline = ({lifecycle, service}: Construct) => {
     const {project, timeline} = service
     const {engine} = project
-    const {snapping, clips, followCursor, primaryVisibility: {markers, tempo}} = timeline
+    const {snapping, clips, followCursor, primaryVisibility: {markers, tempo, signature}} = timeline
     const snappingName = Inject.value(snapping.unit.name)
     lifecycle.own(snapping.subscribe(snapping => {snappingName.value = snapping.unit.name}))
     const timelineHeader = <TimelineHeader lifecycle={lifecycle} service={service}/>
@@ -39,7 +39,7 @@ export const Timeline = ({lifecycle, service}: Construct) => {
     const updateRecordingState = () =>
         element.classList.toggle("recording", engine.isRecording.getValue() || engine.isCountingIn.getValue())
     const {request} = lifecycle.own(deferNextFrame(() =>
-        element.classList.toggle("primary-tracks-visible", markers.getValue() || tempo.getValue())))
+        element.classList.toggle("primary-tracks-visible", markers.getValue() || tempo.getValue() || signature.getValue())))
     lifecycle.ownAll(
         Html.watchResize(element, () => {
             const cursorHeight = element.clientHeight
@@ -75,7 +75,8 @@ export const Timeline = ({lifecycle, service}: Construct) => {
         clips.visible.catchupAndSubscribe(owner => { return element.classList.toggle("clips-visible", owner.getValue()) }),
         clips.count.catchupAndSubscribe(owner => element.style.setProperty("--clips-count", String(owner.getValue()))),
         markers.catchupAndSubscribe(request),
-        tempo.catchupAndSubscribe(request)
+        tempo.catchupAndSubscribe(request),
+        signature.catchupAndSubscribe(request)
     )
     return element
 }
