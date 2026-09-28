@@ -1,4 +1,5 @@
-import {EmptyExec, isInstanceOf, isNull, RuntimeNotifier, Selection, Terminable} from "@opendaw/lib-std"
+import {Editing, EmptyExec, isInstanceOf, isNull, RuntimeNotifier, Selection, Terminable} from "@opendaw/lib-std"
+import {ppqn} from "@opendaw/lib-dsp"
 import {
     AudioConsolidation,
     AudioContentModifier,
@@ -32,15 +33,29 @@ type Construct = {
     range: TimelineRange
 }
 
+const computeSelectionRange = (selection: Selection<AnyRegionBoxAdapter>): [ppqn, ppqn] =>
+    selection.selected().reduce<[ppqn, ppqn]>((range, region) => {
+        range[0] = Math.min(region.position, range[0])
+        range[1] = Math.max(region.complete, range[1])
+        return range
+    }, [Number.MAX_VALUE, -Number.MAX_VALUE])
+
+export const loopRegionSelection = (editing: Editing, timelineBox: TimelineBox,
+                                    selection: Selection<AnyRegionBoxAdapter>): boolean => {
+    if (selection.isEmpty()) {return false}
+    const [min, max] = computeSelectionRange(selection)
+    editing.modify(() => {
+        timelineBox.loopArea.from.setValue(min)
+        timelineBox.loopArea.to.setValue(max)
+        timelineBox.loopArea.enabled.setValue(true)
+    })
+    return true
+}
+
 export const installRegionContextMenu =
     ({element, service, capturing, selection, timelineBox, range}: Construct): Terminable => {
         const {project} = service
         const {editing, selection: vertexSelection} = project
-        const computeSelectionRange = () => selection.selected().reduce((range, region) => {
-            range[0] = Math.min(region.position, range[0])
-            range[1] = Math.max(region.complete, range[1])
-            return range
-        }, [Number.MAX_VALUE, -Number.MAX_VALUE])
         return ContextMenu.subscribe(element, ({addItems, client}: ContextMenu.Collector) => {
             const target = capturing.captureEvent(client)
             if (target === null || target.type === "track") {return}
@@ -77,18 +92,13 @@ export const installRegionContextMenu =
                             success: name => editing.modify(() => selection.selected()
                                 .forEach(adapter => adapter.box.label.setValue(name)))
                         }), EmptyExec)),
-                MenuItem.default({label: "Loop Selection"})
-                    .setTriggerProcedure(() => {
-                        const [min, max] = computeSelectionRange()
-                        editing.modify(() => {
-                            timelineBox.loopArea.from.setValue(min)
-                            timelineBox.loopArea.to.setValue(max)
-                            timelineBox.loopArea.enabled.setValue(true)
-                        })
-                    }),
+                MenuItem.default({
+                    label: "Loop Selection",
+                    shortcut: RegionsShortcuts["loop-selection"].shortcut.format()
+                }).setTriggerProcedure(() => loopRegionSelection(editing, timelineBox, selection)),
                 MenuItem.default({label: "Zoom Selection"})
                     .setTriggerProcedure(() => {
-                        const [min, max] = computeSelectionRange()
+                        const [min, max] = computeSelectionRange(selection)
                         range.zoomRange(min, max)
                     }),
                 MenuItem.default({
