@@ -326,7 +326,8 @@ export const DevicePanel = ({lifecycle, service}: Construct) => {
         Html.watchResize(element, updateScroller),
         scrollModel.subscribe(() => devices.scrollLeft = scrollModel.position),
         Events.subscribe(element, "wheel", (event: WheelEvent) => scrollModel.moveBy(event.deltaX), {passive: true}),
-        installAutoScroll(devices, (deltaX, _deltaY) => scrollModel.position += deltaX, {padding: [0, 32, 0, 0]}),
+        installAutoScroll(devices, (deltaX, _deltaY) => scrollModel.position += deltaX,
+            {padding: [0, 32, 0, 0], dragPadding: [0, 32, 0, 32]}),
         DevicePanelDragAndDrop.install(service.project, devices, midiEffectsContainer, instrumentContainer, audioEffectsContainer),
         Events.subscribe(devices, "pointerdown", (event: PointerEvent) => {
             const target = event.target

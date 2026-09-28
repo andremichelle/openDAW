@@ -1,4 +1,5 @@
 import {
+    Arrays,
     asInstanceOf,
     assert,
     Attempt,
@@ -49,6 +50,7 @@ import {
     CaptureBox,
     ColorCodes,
     DeviceAccepts,
+    DeviceBoxUtils,
     EffectPointerType,
     IndexedAdapterCollectionListener,
     InstrumentBox,
@@ -57,14 +59,15 @@ import {
     InstrumentOptions,
     InstrumentProduct,
     InterpolationFieldAdapter,
+    isModulatorBox,
     NoteEventBoxAdapter,
     NoteEventCollectionBoxAdapter,
     ProjectQueries,
     RegionAdapters,
     RegionOverlap,
     TrackBoxAdapter,
-    TransferUtils,
-    TrackType
+    TrackType,
+    TransferUtils
 } from "@opendaw/studio-adapters"
 import {Project} from "./Project"
 import {ProjectModulation} from "./ProjectModulation"
@@ -74,6 +77,8 @@ import {AudioContentFactory} from "./audio"
 import {NoteMidiExport} from "./NoteMidiExport"
 import {AudioWavExport} from "./AudioWavExport"
 import {AudioUnitAsLayer} from "./AudioUnitAsLayer"
+import {BoxGraphCopy} from "../BoxGraphCopy"
+import {DevicesClipboard} from "../ui/clipboard/types/DevicesClipboardHandler"
 
 export type CompositeLayerProduct<INST extends InstrumentBox> = {
     cellBox: InstrumentCompositeCellBox
@@ -166,6 +171,24 @@ export class ProjectApi {
 
     createAnyInstrument(factory: InstrumentFactory<any, any>): InstrumentProduct<InstrumentBox> {
         return this.createInstrument(factory)
+    }
+
+    // Moves a unit to `slot`, an index among the units BEFORE the move (as a drop between two units names it).
+    placeAudioUnit(audioUnitBox: AudioUnitBox, slot: int): void {
+        const start = audioUnitBox.index.getValue()
+        const delta = slot - start
+        if (delta < 0 || delta > 1) {IndexedBox.moveIndex(this.#project.rootBox.audioUnits, start, delta)}
+    }
+
+    // A drop names the unit it lands BEFORE, not an index: resolved when the new unit exists, which may be after
+    // an async load. No anchor, or one deleted meanwhile, leaves the unit where it was created.
+    placeAudioUnitBefore(audioUnitBox: AudioUnitBox, anchor: Option<UUID.Bytes>): void {
+        anchor.flatMap(uuid => this.audioUnitIndex(uuid)).ifSome(slot => this.placeAudioUnit(audioUnitBox, slot))
+    }
+
+    audioUnitIndex(uuid: UUID.Bytes): Option<int> {
+        return this.#project.boxGraph.findBox(uuid)
+            .map(box => asInstanceOf(box, AudioUnitBox).index.getValue())
     }
 
     replaceMIDIInstrument<A>(target: InstrumentBox,
@@ -286,6 +309,36 @@ export class ProjectApi {
 
     insertEffect(field: Field<EffectPointerType>, factory: EffectFactory, insertIndex: int = Number.MAX_SAFE_INTEGER): EffectBox {
         return factory.create(this.#project, field, IndexedBox.insertOrder(field, insertIndex))
+    }
+
+    // Copies of the effects (with everything they own) placed in the target chain at the insert index.
+    copyEffects(targetField: Field<EffectPointerType>, boxes: ReadonlyArray<EffectBox>, insertIndex: int): ReadonlyArray<EffectBox> {
+        if (boxes.length === 0) {return Arrays.empty()}
+        const {boxGraph} = this.#project
+        const sorted = boxes.toSorted((left, right) => left.index.getValue() - right.index.getValue())
+        const data = BoxGraphCopy.serializeBoxes([...sorted, ...DevicesClipboard.collectDeviceDependencies(sorted, boxGraph)])
+        const existing = IndexedBox.collectIndexedBoxes(targetField)
+        const at = clamp(insertIndex, 0, existing.length)
+        existing.forEach(box => {
+            if (box.index.getValue() >= at) {box.index.setValue(box.index.getValue() + sorted.length)}
+        })
+        const copies = BoxGraphCopy.deserializeBoxes(data, boxGraph, {
+            mapPointer: (pointer, address) => {
+                if (address.isEmpty()) {return Option.None}
+                if (pointer.pointerType === Pointers.MIDIEffectHost || pointer.pointerType === Pointers.AudioEffectHost) {
+                    return Option.wrap(targetField.address)
+                }
+                return DevicesClipboard.mapModulationPointer(pointer, address, boxGraph)
+            },
+            keepUuid: isModulatorBox,
+            excludeBox: box => DevicesClipboard.excludeExistingModulator(box, boxGraph)
+        })
+        const topLevel = copies
+            .filter((box): box is EffectBox => DeviceBoxUtils.isEffectDeviceBox(box)
+                && box.host.targetVertex.mapOr(vertex => vertex === targetField, false))
+            .toSorted((left, right) => left.index.getValue() - right.index.getValue())
+        topLevel.forEach((box, index) => box.index.setValue(at + index))
+        return topLevel
     }
 
     moveEffects(targetField: Field<EffectPointerType>, boxes: ReadonlyArray<EffectBox>, insertIndex: int): void {

@@ -222,7 +222,7 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 const {left, right} = element.getBoundingClientRect()
                 const {top, bottom} = scrollContainer.getBoundingClientRect()
                 return ({xMin: left, xMax: right, yMin: top, yMax: bottom})
-            }, padding: Config.AutoScrollPadding
+            }, padding: Config.AutoScrollPadding, dragPadding: Config.AutoScrollDragPadding
         }),
         DragAndDrop.installTarget(element, {
             drag: (event: DragEvent, data: AnyDragData): boolean => {
@@ -230,10 +230,6 @@ export const RegionsArea = ({lifecycle, service, manager, scrollModel, scrollCon
                 if (option.isEmpty()) {
                     markerPosition.setValue(null)
                     return false
-                }
-                if (data.type === "instrument") {
-                    markerPosition.setValue(null)
-                    return true
                 }
                 const rect = element.getBoundingClientRect()
                 const position = snapping.xToUnitFloor(event.clientX - rect.left)

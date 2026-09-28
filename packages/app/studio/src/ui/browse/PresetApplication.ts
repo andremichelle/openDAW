@@ -1,4 +1,4 @@
-import {DefaultObservableValue, isDefined, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Option, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {InstrumentFactories, PresetDecoder} from "@opendaw/studio-adapters"
 import {PresetSource, PresetStorage, Project} from "@opendaw/studio-core"
 import {OpenPresetAPI} from "@/opendaw-api"
@@ -19,10 +19,12 @@ export namespace PresetApplication {
 
     export const createNewAudioUnitFromRack = async (project: Project,
                                                      uuid: UUID.String,
-                                                     source: PresetSource): Promise<void> => {
+                                                     source: PresetSource,
+                                                     anchor: Option<UUID.Bytes> = Option.None): Promise<void> => {
         const bytes = await loadBytes(uuid, source)
         project.editing.modify(() => {
-            const imported = PresetDecoder.decode(bytes, project.skeleton)
+            const insertIndex = anchor.flatMap(unit => project.api.audioUnitIndex(unit)).unwrapOrUndefined()
+            const imported = PresetDecoder.decode(bytes, project.skeleton, insertIndex)
             const first = imported.at(0)
             if (isDefined(first)) {
                 project.userEditingManager.audioUnit.edit(first.editing)
@@ -34,11 +36,13 @@ export namespace PresetApplication {
     export const createNewAudioUnitFromInstrument = async (project: Project,
                                                            uuid: UUID.String,
                                                            deviceKey: InstrumentFactories.Keys,
-                                                           source: PresetSource): Promise<void> => {
+                                                           source: PresetSource,
+                                                           anchor: Option<UUID.Bytes> = Option.None): Promise<void> => {
         const bytes = await loadBytes(uuid, source)
         const factory = InstrumentFactories.Named[deviceKey]
         project.editing.modify(() => {
             const product = project.api.createAnyInstrument(factory)
+            project.api.placeAudioUnitBefore(product.audioUnitBox, anchor)
             const attempt = PresetDecoder.replaceAudioUnit(
                 bytes, product.audioUnitBox,
                 {keepMIDIEffects: true, keepAudioEffects: true})

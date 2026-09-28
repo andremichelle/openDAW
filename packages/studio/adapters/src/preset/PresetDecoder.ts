@@ -35,7 +35,9 @@ import {isModulatorBox} from "../modulation/ModulatorBoxAdapter"
 import {InstrumentFactories} from "../factories/InstrumentFactories"
 
 export namespace PresetDecoder {
-    export const decode = (bytes: ArrayBufferLike, target: ProjectSkeleton): ReadonlyArray<AudioUnitBox> => {
+    export const decode = (bytes: ArrayBufferLike,
+                           target: ProjectSkeleton,
+                           insertIndex?: int): ReadonlyArray<AudioUnitBox> => {
         const header = new ByteArrayInput(bytes.slice(0, 8))
         if (header.readInt() !== PresetHeader.MAGIC_HEADER_OPEN) {
             RuntimeNotifier.notify({message: "Invalid preset file.", icon: "Warning"})
@@ -73,7 +75,9 @@ export namespace PresetDecoder {
         const uuidMap = TransferUtils.generateMap(
             sourceAudioUnitBoxes, dependencies, rootBox.audioUnits.address.uuid, primaryAudioBusBox.address.uuid)
         TransferUtils.copyBoxes(uuidMap, target.boxGraph, sourceAudioUnitBoxes, dependencies)
-        TransferUtils.reorderAudioUnits(uuidMap, sourceAudioUnitBoxes, rootBox)
+        // A slot is a place among the instruments; a rack that carries buses keeps the by-type placement.
+        const allInstruments = sourceAudioUnitBoxes.every(box => box.type.getValue() === AudioUnitType.Instrument)
+        TransferUtils.reorderAudioUnits(uuidMap, sourceAudioUnitBoxes, rootBox, allInstruments ? insertIndex : undefined)
         const importedAudioUnits = sourceAudioUnitBoxes
             .map(source => asInstanceOf(rootBox.graph
                 .findBox(uuidMap.get(source.address.uuid, "uuid mapping").target)
