@@ -46,5 +46,6 @@ interpolated 24-bit msfa kernel, cleaner and a little quieter in the top end.
 
 ## Credits
 
-Engine: Google's music-synthesizer-for-android (Apache-2.0) as maintained in Dexed by Pascal Gauthier, with
-Dexed's voice handling and output filter (GPL-3.0). Tubular is not affiliated with Yamaha or Dexed.
+Engine: the msfa core of music-synthesizer-for-android (Apache-2.0), written by Raph Levien during his time at
+Google, as maintained in Dexed by Pascal Gauthier, with Dexed's voice handling and output filter (GPL-3.0).
+Tubular is not affiliated with Yamaha or Dexed.

@@ -33,13 +33,14 @@ type Construct = {
 // the selected section on the right. The tab state is shared across instances and starts on OUT.
 type Tab = {label: string, group: string, glyph: () => HTMLElement | SVGSVGElement}
 const TABS: ReadonlyArray<Tab> = [
-    ...Array.from({length: 6}, (_, index): Tab => ({label: `Operator ${index + 1}`, group: "op", glyph: () => <span>{String(index + 1)}</span>})),
-    {label: "Algorithm", group: "algo", glyph: () => <Icon symbol={IconSymbol.Chain}/>},
+    {label: "Output", group: "out", glyph: () => <Icon symbol={IconSymbol.Volume}/>},
+    {label: "Algorithm", group: "algo", glyph: () => <Icon symbol={IconSymbol.Algorithm}/>},
     {label: "LFO", group: "lfo", glyph: () => <Icon symbol={IconSymbol.Sine}/>},
     {label: "Pitch Envelope", group: "pitch", glyph: () => <Icon symbol={IconSymbol.Adsr}/>},
-    {label: "Output", group: "out", glyph: () => <Icon symbol={IconSymbol.Volume}/>}
+    ...Array.from({length: 6}, (_, index): Tab => ({label: `Operator ${index + 1}`, group: "op", glyph: () => <span>{String(index + 1)}</span>}))
 ]
-const DEFAULT_TAB = TABS.length - 1
+const FIRST_OPERATOR_TAB = 4
+const DEFAULT_TAB = 0
 // Shared by every Tubular editor instance: a preset load replaces the device box (and its editor), the
 // selected tab must survive that.
 const selectedTab = new DefaultObservableValue<int>(DEFAULT_TAB)
@@ -55,9 +56,9 @@ export const TubularDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
         editing.modify(() => TubularPreset.apply(box, voice.data))
     }
     const sectionLifecycle = lifecycle.own(new Terminator())
-    const sectionConstruct = () => ({lifecycle: sectionLifecycle, service, adapter, selectTab: (index: int) => tab.setValue(index)})
+    const sectionConstruct = () => ({lifecycle: sectionLifecycle, service, adapter, selectTab: (index: int) => tab.setValue(FIRST_OPERATOR_TAB + index)})
     const SECTIONS: Record<string, (index: int) => JsxValue> = {
-        op: index => OperatorSection(sectionConstruct(), index),
+        op: index => OperatorSection(sectionConstruct(), index - FIRST_OPERATOR_TAB),
         algo: () => AlgorithmSection(sectionConstruct()),
         lfo: () => LfoSection(sectionConstruct()),
         pitch: () => PitchSection(sectionConstruct()),
