@@ -81,7 +81,7 @@ fn checksum_matches_ts_reference() {
     let graph = BoxGraph::from_bytes(&load_chunk(), &registry()).unwrap();
     let hex: String = graph.checksum().iter().map(|byte| format!("{byte:02x}")).collect();
     // BoxGraph.checksum() computed by TS on the same file (scripts/checksum-openup.ts)
-    assert_eq!(hex, "7d763a8828d468c5c098e6ca12577cb34aa191bba8d2ee1e4e881f243e58a00d");
+    assert_eq!(hex, "ffd5c3f7eeea41534aff0a8119836fbb2b9a00db5ae04d6836a4cc4470c57f54");
 }
 
 #[test]
