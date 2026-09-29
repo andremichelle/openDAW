@@ -319,6 +319,40 @@ describe("EngineHost", () => {
         worker.emitMessageError()
         await expect(loading).rejects.toThrow(/undeserialisable/)
     })
+
+    it("reloads the session when the execution provider changes", async () => {
+        const {bytes, sha} = await oneByteWithKnownSha()
+        opfs.files.set("inference/models/t/v1/model.onnx", bytes)
+        opfs.files.set("inference/models/t/v1/meta.json",
+            new TextEncoder().encode(JSON.stringify({
+                sha256: sha, bytes: 1, version: "v1", downloadedAt: 0
+            })))
+        const {host, worker} = makeHost()
+        const model = {url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"}
+        await host.ensureLoaded("t", model, ["wasm"])
+        await host.ensureLoaded("t", model, ["webgpu"])
+        const loads = worker.received.filter(message => message.kind === "load")
+        const releases = worker.received.filter(message => message.kind === "release")
+        expect(loads).toHaveLength(2)
+        expect(releases).toHaveLength(1)
+    })
+
+    it("does not reload the session when the execution provider is unchanged", async () => {
+        const {bytes, sha} = await oneByteWithKnownSha()
+        opfs.files.set("inference/models/t/v1/model.onnx", bytes)
+        opfs.files.set("inference/models/t/v1/meta.json",
+            new TextEncoder().encode(JSON.stringify({
+                sha256: sha, bytes: 1, version: "v1", downloadedAt: 0
+            })))
+        const {host, worker} = makeHost()
+        const model = {url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"}
+        await host.ensureLoaded("t", model, ["wasm"])
+        await host.ensureLoaded("t", model, ["wasm"])
+        const loads = worker.received.filter(message => message.kind === "load")
+        const releases = worker.received.filter(message => message.kind === "release")
+        expect(loads).toHaveLength(1)
+        expect(releases).toHaveLength(0)
+    })
 })
 
 describe("splitProgress", () => {
