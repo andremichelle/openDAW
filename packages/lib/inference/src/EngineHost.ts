@@ -29,7 +29,7 @@ export interface SessionNames {
 export class EngineHost {
     readonly #workerFactory: Provider<Worker>
     readonly #pending = new Map<WorkerCallId, PendingCall>()
-    readonly #loadedTasks = new Set<string>()
+    readonly #loadedTasks = new Map<string, string>() // taskKey -> providers it was loaded with
     readonly #names = new Map<string, SessionNames>()
     readonly #queue: Array<QueueEntry> = []
 
@@ -46,10 +46,13 @@ export class EngineHost {
                        model: ModelDescriptor,
                        executionProviders: ReadonlyArray<ExecutionProvider>,
                        options?: {progress?: Procedure<unitValue>, signal?: AbortSignal}): Promise<void> {
-        if (this.#loadedTasks.has(taskKey)) {
+        const providerKey = executionProviders.join(",")
+        const loadedWith = this.#loadedTasks.get(taskKey)
+        if (loadedWith === providerKey) {
             options?.progress?.(1.0)
             return
         }
+        if (isDefined(loadedWith)) {await this.releaseTask(taskKey)}
         const modelBytes = await ModelStore.ensure(taskKey, model, options)
         await this.#ensureWorker()
         this.#throwIfAborted(options?.signal)
@@ -62,7 +65,7 @@ export class EngineHost {
             executionProviders
         })
         this.#names.set(taskKey, {inputs: ack.inputs, outputs: ack.outputs})
-        this.#loadedTasks.add(taskKey)
+        this.#loadedTasks.set(taskKey, providerKey)
     }
 
     namesFor(taskKey: string): SessionNames {
