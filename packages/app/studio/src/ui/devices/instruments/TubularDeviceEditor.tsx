@@ -1,6 +1,6 @@
 import css from "./TubularDeviceEditor.sass?inline"
 import {DefaultObservableValue, int, Lifecycle, Terminator, tryCatch} from "@opendaw/lib-std"
-import {Files, Html} from "@opendaw/lib-dom"
+import {Browser, Files, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {createElement, JsxValue, replaceChildren} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -106,9 +106,11 @@ export const TubularDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                               .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...Tubular.Engines.map((label, index) =>
                                   MenuItem.default({label, checked: box.engine.getValue() === index})
                                       .setTriggerProcedure(() => editing.modify(() => box.engine.setValue(index)))))))
-                          parent.addMenuItem(MenuItem.default({label: "Audition cartridges…", separatorBefore: true, selectable: cartridges.loaded.nonEmpty()})
-                              .setTriggerProcedure(audition))
-                          parent.addMenuItem(MenuItem.default({label: "Load DX7 .syx…"})
+                          if (Browser.isLocalHost() || location.origin.includes("dev.opendaw.studio")) {
+                              parent.addMenuItem(MenuItem.default({label: "Audition cartridges…", separatorBefore: true, selectable: cartridges.loaded.nonEmpty()})
+                                  .setTriggerProcedure(audition))
+                          }
+                          parent.addMenuItem(MenuItem.default({label: "Load DX7 .syx…", separatorBefore: true})
                               .setTriggerProcedure(() => {loadFile().catch(console.warn)}))
                       }}
                       populateControls={() => (
