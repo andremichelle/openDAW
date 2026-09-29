@@ -21,6 +21,7 @@ import {TimelineLabels} from "@/ui/timeline/TimelineLabels"
 export namespace RegionRenderer {
     let audioRenderStrategy: AudioRenderer.Strategy = AudioRenderer.DefaultStrategy
 
+    // noinspection JSUnusedGlobalSymbols
     export const setAudioRenderStrategy = (strategy: AudioRenderer.Strategy): void => {audioRenderStrategy = strategy}
 
     export const render = (context: CanvasRenderingContext2D,
@@ -39,7 +40,7 @@ export namespace RegionRenderer {
         const cssLabelHeight = RegionLabel.labelHeight()
         const fontSize = RegionLabel.fontSize() * dpr
         const labelHeight = cssLabelHeight * dpr
-        const bound: RegionBound = {top: cssLabelHeight + 1, bottom: canvas.clientHeight - 2}
+        const bound: RegionBound = {top: cssLabelHeight + 1, bottom: canvas.clientHeight}
 
         context.clearRect(0, 0, width, height)
         context.textBaseline = "middle"
@@ -73,11 +74,14 @@ export namespace RegionRenderer {
                     ? actualComplete
                     : // for no-stretched audio region
                     Math.min(actualComplete, next?.position ?? Number.POSITIVE_INFINITY)
-                const x0Int = Math.floor(range.unitToX(Math.max(position, unitMin))) * dpr
-                const x1Int = Math.max(Math.floor(range.unitToX(Math.min(complete, unitMax))) * dpr, x0Int + dpr)
+                const x0Raw = Math.floor(range.unitToX(Math.max(position, unitMin))) * dpr
+                const x1Int = Math.max(Math.floor(range.unitToX(Math.min(complete, unitMax))) * dpr, x0Raw + dpr)
+                // start one pixel late to let the grid line through
+                const x0Int = x1Int - x0Raw < 2 * dpr ? x0Raw : x0Raw + dpr
                 const xnInt = x1Int - x0Int
+                const selected = region.isSelected && !filterSelected
                 const {labelColor, labelBackground, contentColor, contentBackground, loopStrokeColor} =
-                    RegionPaintBucket.create(region, region.isSelected && !filterSelected, trackDisabled)
+                    RegionPaintBucket.create(region, selected, trackDisabled)
                 context.clearRect(x0Int, 0, xnInt, height)
                 context.fillStyle = labelBackground
                 context.fillRect(x0Int, 0, xnInt, labelHeight)
@@ -92,86 +96,53 @@ export namespace RegionRenderer {
                 }
                 const text = TimelineLabels.forRegion(region)
                 context.fillText(Context2d.truncateText(context, text, maxTextWidth).text, x0Int + 3 * dpr, 1 + labelHeight / 2)
-                if (!region.hasCollection) {continue}
-                context.fillStyle = contentColor
-                region.accept({
-                    visitNoteRegionBoxAdapter: (region: NoteRegionBoxAdapter): void => {
-                        const optCollection = region.optCollection
-                        if (optCollection.isEmpty()) {return}
-                        for (const pass of LoopableRegion.locateLoops({
-                            position, complete,
-                            loopOffset: strategy.readLoopOffset(region),
-                            loopDuration: strategy.readLoopDuration(region)
-                        }, unitMin, unitMax)) {
-                            if (pass.index > 0) {
-                                const x = Math.floor(range.unitToX(pass.resultStart) * dpr)
-                                context.fillStyle = loopStrokeColor
-                                context.fillRect(x, labelHeight, 1, height - labelHeight)
-                            }
-                            NotesRenderer.render(context, range, optCollection.unwrap(), bound, contentColor, pass)
+                if (region.hasCollection) {
+                    const loops = Array.from(LoopableRegion.locateLoops({
+                        position, complete,
+                        loopOffset: strategy.readLoopOffset(region),
+                        loopDuration: strategy.readLoopDuration(region)
+                    }, unitMin, unitMax))
+                    context.fillStyle = loopStrokeColor
+                    loops.filter(pass => pass.index > 0).forEach(pass =>
+                        context.fillRect(Math.floor(range.unitToX(pass.resultStart) * dpr), labelHeight, 1, height - labelHeight))
+                    context.fillStyle = contentColor
+                    context.save()
+                    context.beginPath()
+                    context.rect(x0Int, labelHeight, xnInt, height - labelHeight)
+                    context.clip()
+                    region.accept({
+                        visitNoteRegionBoxAdapter: (region: NoteRegionBoxAdapter): void =>
+                            region.optCollection.ifSome(collection => loops.forEach(pass =>
+                                NotesRenderer.render(context, range, collection, bound, contentColor, pass))),
+                        visitAudioRegionBoxAdapter: (region: AudioRegionBoxAdapter): void =>
+                            region.optFile.ifSome(file => {
+                                const tempoMap = region.trackBoxAdapter.unwrap("trackBoxAdapter").context.tempoMap
+                                loops.forEach(pass => AudioRenderer.render(context, range, file, tempoMap,
+                                    region.observableOptPlayMode, region.waveformOffset.getValue(),
+                                    region.gain.getValue(), bound, contentColor, pass, true, audioRenderStrategy))
+                                AudioFadingRenderer.render(context, range, region.fading, bound, position, complete, labelBackground)
+                            }),
+                        visitValueRegionBoxAdapter: (region: ValueRegionBoxAdapter): void => {
+                            const top = bound.top * dpr
+                            const bottom = bound.bottom * dpr
+                            const valueToY = (value: unitValue): number => bottom + value * (top - bottom)
+                            const events = region.events.unwrap("events")
+                            loops.forEach(pass => {
+                                const adapters = ValueEvent.iterateWindow(events,
+                                    pass.resultStart - pass.rawStart, pass.resultEnd - pass.rawStart)
+                                context.beginPath()
+                                ValueStreamRenderer.render(context, range, adapters, valueToY, contentColor, 0.2, 0.0, pass)
+                                context.stroke()
+                            })
                         }
-                    },
-                    visitAudioRegionBoxAdapter: (region: AudioRegionBoxAdapter): void => {
-                        if (region.optFile.isEmpty()) {return}
-                        const file = region.optFile.unwrap()
-                        for (const pass of LoopableRegion.locateLoops({
-                            position, complete,
-                            loopOffset: strategy.readLoopOffset(region),
-                            loopDuration: strategy.readLoopDuration(region)
-                        }, unitMin, unitMax)) {
-                            if (pass.index > 0) {
-                                const x = Math.floor(range.unitToX(pass.resultStart) * dpr)
-                                context.fillStyle = loopStrokeColor
-                                context.fillRect(x, labelHeight, 1, height - labelHeight)
-                            }
-                            const tempoMap = region.trackBoxAdapter.unwrap("trackBoxAdapter").context.tempoMap
-                            AudioRenderer.render(context, range, file, tempoMap,
-                                region.observableOptPlayMode, region.waveformOffset.getValue(),
-                                region.gain.getValue(), bound, contentColor, pass,
-                                true, audioRenderStrategy
-                            )
-                        }
-                        AudioFadingRenderer.render(context, range, region.fading, bound, position, complete, labelBackground)
-                        const isRecording = file.getOrCreateLoader().state.type === "record"
-                        if (isRecording) {}
-                    },
-                    visitValueRegionBoxAdapter: (region: ValueRegionBoxAdapter) => {
-                        const padding = dpr
-                        const top = labelHeight + padding
-                        const bottom = height - padding * 2
-                        context.save()
-                        context.beginPath()
-                        context.rect(x0Int + padding, top, x1Int - x0Int - padding, bottom - top + padding)
-                        context.clip()
-                        const valueToY = (value: unitValue): number => bottom + value * (top - bottom)
-                        const events = region.events.unwrap("events")
-                        for (const pass of LoopableRegion.locateLoops({
-                            position, complete,
-                            loopOffset: strategy.readLoopOffset(region),
-                            loopDuration: strategy.readLoopDuration(region)
-                        }, unitMin, unitMax)) {
-                            if (pass.index > 0) {
-                                const x = Math.floor(range.unitToX(pass.resultStart) * dpr)
-                                context.fillStyle = loopStrokeColor
-                                context.fillRect(x, labelHeight, 1, height - labelHeight)
-                            }
-                            const windowMin = pass.resultStart - pass.rawStart
-                            const windowMax = pass.resultEnd - pass.rawStart
-                            context.strokeStyle = contentColor
-                            context.beginPath()
-                            const adapters = ValueEvent.iterateWindow(events, windowMin, windowMax)
-                            ValueStreamRenderer.render(context, range, adapters, valueToY, contentColor, 0.2, 0.0, pass)
-                            context.stroke()
-                        }
-                        context.restore()
-                    }
-                })
-                const isEditing = tracks.service.project.userEditingManager.timeline.isEditing(region.box)
-                if (isEditing) {
+                    })
+                    context.restore()
+                }
+                if (selected) {
                     context.fillStyle = labelBackground
-                    context.fillRect(x1Int - dpr, labelHeight, dpr, height - labelHeight - dpr)
-                    context.fillRect(x0Int, labelHeight, dpr, height - labelHeight - dpr)
-                    context.fillRect(x0Int, height - dpr, xnInt, height - dpr)
+                    context.fillRect(x0Int, labelHeight, dpr, height - labelHeight)
+                    context.fillRect(x1Int - dpr, labelHeight, dpr, height - labelHeight)
+                    context.fillRect(x0Int, height - dpr, xnInt, dpr)
                 }
             }
         }
