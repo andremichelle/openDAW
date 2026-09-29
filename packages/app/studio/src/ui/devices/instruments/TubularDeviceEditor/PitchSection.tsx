@@ -16,8 +16,14 @@ export const PitchSection = (construct: SectionConstruct) => {
     const levels = [pitchEnvelope.level1, pitchEnvelope.level2, pitchEnvelope.level3, pitchEnvelope.level4]
     return (
         <div className={`${className} rows-4`}>
-            {band(Colors.yellow, [1, 5], [6, 8], "STAGES")}
-            {display([1, 5], [1, 6], <DxEnvelopeEditor lifecycle={lifecycle} editing={editing} rates={rates} levels={levels} centred={true}/>)}
+            {band(Colors.blue, [1, 5], [6, 8], "STAGES")}
+            {display([1, 5], [1, 6], (
+                <DxEnvelopeEditor lifecycle={lifecycle}
+                                  editing={editing}
+                                  rates={rates}
+                                  levels={levels}
+                                  centred={true}/>
+            ))}
             {rates.flatMap((rate, index) => [
                 labelControl(construct, rate, `Rate ${index + 1}`),
                 labelControl(construct, levels[index], `Level ${index + 1}`)

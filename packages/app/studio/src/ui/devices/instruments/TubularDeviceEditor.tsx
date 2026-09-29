@@ -14,6 +14,7 @@ import {Icon} from "@/ui/components/Icon"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 import {OutSection} from "@/ui/devices/instruments/TubularDeviceEditor/OutSection"
 import {OperatorSection} from "@/ui/devices/instruments/TubularDeviceEditor/OperatorSection"
+import {TubularAlgorithmDisplay} from "./TubularDeviceEditor/TubularAlgorithmDisplay"
 import {AlgorithmSection} from "@/ui/devices/instruments/TubularDeviceEditor/AlgorithmSection"
 import {LfoSection} from "@/ui/devices/instruments/TubularDeviceEditor/LfoSection"
 import {PitchSection} from "@/ui/devices/instruments/TubularDeviceEditor/PitchSection"
@@ -39,6 +40,7 @@ const TABS: ReadonlyArray<Tab> = [
     {label: "Pitch Envelope", group: "pitch", glyph: () => <Icon symbol={IconSymbol.Adsr}/>},
     ...Array.from({length: 6}, (_, index): Tab => ({label: `Operator ${index + 1}`, group: "op", glyph: () => <span>{String(index + 1)}</span>}))
 ]
+const ALGORITHM_TAB = 1
 const FIRST_OPERATOR_TAB = 4
 const DEFAULT_TAB = 0
 // Shared by every Tubular editor instance: a preset load replaces the device box (and its editor), the
@@ -111,7 +113,14 @@ export const TubularDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                       }}
                       populateControls={() => (
                           <div className={className}>
-                              <nav>{tabs}</nav>
+                              <nav>
+                                  {tabs}
+                                  <div className="algorithm" onclick={() => tab.setValue(ALGORITHM_TAB)}>
+                                      <TubularAlgorithmDisplay lifecycle={lifecycle}
+                                                               algorithm={adapter.namedParameter.algorithm}
+                                                               box={6} padding={0} labels={false}/>
+                                  </div>
+                              </nav>
                               {section}
                           </div>
                       )}

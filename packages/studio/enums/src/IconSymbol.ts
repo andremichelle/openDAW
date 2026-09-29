@@ -187,6 +187,7 @@ export enum IconSymbol {
     Convolver,
     StereoSplit,
     Tubular,
+    Algorithm,
 }
 
 export namespace IconSymbol {
