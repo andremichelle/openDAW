@@ -210,6 +210,24 @@ describe("wclap bridge", () => {
         expect(process(host, handle)).toBe(0)
     })
 
+    it("never reports a host value back, so a folded modulation cannot drift the base", async () => {
+        const host = createHost()
+        const handle = load(host)
+        await ready(host, handle)
+        const dry = param(host, "dry")
+        expect(dry.flags & (1 << 10)).toBe(0) // not modulatable: the modulation is folded into the value
+        host.reported.length = 0
+        // a page message makes the bridge poll the plugin's values on the next chunk (Cmajor emits no events)
+        const poke = new TextEncoder().encode("{}").buffer
+        Array.from({length: 8}).forEach((_, index) => {
+            host.imports.host_wclap_param(handle, dry.id | 0, UNIT, 0.5, index % 2 === 0 ? 0.25 : -0.25)
+            process(host, handle)
+            host.bridges.receive("01020304-0506-0708-090a-0b0c0d0e0f10", poke)
+            process(host, handle)
+        })
+        expect(host.reported.filter(([id]) => id === dry.id)).toEqual([])
+    })
+
     it("renders sub-quantum chunks", async () => {
         const host = createHost()
         const handle = load(host)
