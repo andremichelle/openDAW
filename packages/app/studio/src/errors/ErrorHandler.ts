@@ -166,6 +166,11 @@ export class ErrorHandler {
         }
         if (!(event instanceof PromiseRejectionEvent)) {return false}
         const {reason} = event
+        if (ErrorInfo.isForeignRealmError(reason)) {
+            event.preventDefault()
+            this.#notifyBrowserInternal(`foreign realm rejection: ${ErrorInfo.extract(event).message}`)
+            return true
+        }
         const reasonMessage = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : undefined
         if (isDefined(reasonMessage) && IgnoredErrors.some(ignored => reasonMessage.includes(ignored))) {
             console.warn(reasonMessage)
