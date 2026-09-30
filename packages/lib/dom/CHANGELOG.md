@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.91](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dom@0.0.90...@opendaw/lib-dom@0.0.91) (2026-09-30)
+
+**Note:** Version bump only for package @opendaw/lib-dom
+
 ## [0.0.90](https://github.com/andremichelle/openDAW/compare/@opendaw/lib-dom@0.0.89...@opendaw/lib-dom@0.0.90) (2026-09-14)
 
 **Note:** Version bump only for package @opendaw/lib-dom

@@ -1727,6 +1727,7 @@ impl Engine {
         self.is_recording = false;
         self.is_counting_in = false;
         self.apply_metronome();
+        self.metronome.clear();
         self.transport.stop(false);
         unsafe { IGNORED_REGIONS.get() }.clear();
         unsafe { SUSPENDED_AUTOMATION.get() }.clear();
@@ -1739,6 +1740,7 @@ impl Engine {
         self.is_recording = false;
         self.is_counting_in = false;
         self.apply_metronome();
+        self.metronome.clear();
         unsafe { IGNORED_REGIONS.get() }.clear();
         unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         // TS `#stop` schedules ONE MidiData.Stop per stop command; the worklet's stop command always runs
@@ -1754,6 +1756,7 @@ impl Engine {
         self.is_recording = false;
         self.is_counting_in = false;
         self.apply_metronome();
+        self.metronome.clear();
         unsafe { IGNORED_REGIONS.get() }.clear();
         unsafe { SUSPENDED_AUTOMATION.get() }.clear();
         self.transport.stop(true);

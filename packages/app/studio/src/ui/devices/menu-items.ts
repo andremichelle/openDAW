@@ -21,7 +21,7 @@ import {InstrumentCompositeBox} from "@opendaw/studio-boxes"
 import {Pointers} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService"
 import {openManual} from "@/ui/manuals"
-import {effectKeyOf, PresetEffectKind, PresetService} from "@/ui/browse/PresetService"
+import {PresetEffectKind, PresetService} from "@/ui/browse/PresetService"
 import {GlobalShortcuts} from "@/ui/shortcuts/GlobalShortcuts"
 
 export namespace MenuItems {
@@ -264,6 +264,8 @@ export namespace MenuItems {
                                      chainKind: PresetHeader.ChainKind,
                                      kindLabel: string,
                                      effect: EffectDeviceBoxAdapter): Promise<void> => {
+        const deviceKey = EffectFactories.keyOfBox(effect.box)
+        if (!isDefined(deviceKey)) {return actions.saveAsChainPreset(chainKind, [effect.box as IndexedBox])}
         const choice = await Promises.tryCatch(RuntimeNotifier.approve({
             headline: "Save as Effect Chain or Device Preset?",
             message: `Only one ${kindLabel} effect on this audio unit. `
@@ -276,7 +278,7 @@ export namespace MenuItems {
         if (choice.value) {
             await actions.saveAsChainPreset(chainKind, [effectBox])
         } else {
-            await actions.saveAsSingleEffectPreset(kind, effectKeyOf(effectBox), effectBox)
+            await actions.saveAsSingleEffectPreset(kind, deviceKey, effectBox)
         }
     }
 
@@ -300,12 +302,14 @@ export namespace MenuItems {
                         const effectKind: PresetEffectKind = context.device.type === "audio-effect"
                             ? "audio-effect" : "midi-effect"
                         const effectBox = context.device.box as IndexedBox
-                        const deviceKey = effectKeyOf(effectBox)
-                        const labeled = context.device.labelField.getValue()
-                        const deviceName = labeled.length > 0 ? labeled : deviceKey
-                        submenu.addMenuItem(MenuItem.default({label: `Save '${deviceName}' as Preset`})
-                            .setTriggerProcedure(() => presets.saveAsSingleEffectPreset(
-                                effectKind, deviceKey, effectBox).catch(console.warn)))
+                        const deviceKey = EffectFactories.keyOfBox(effectBox)
+                        if (isDefined(deviceKey)) {
+                            const labeled = context.device.labelField.getValue()
+                            const deviceName = labeled.length > 0 ? labeled : deviceKey
+                            submenu.addMenuItem(MenuItem.default({label: `Save '${deviceName}' as Preset`})
+                                .setTriggerProcedure(() => presets.saveAsSingleEffectPreset(
+                                    effectKind, deviceKey, effectBox).catch(console.warn)))
+                        }
                     }
                     if (isDefined(instrumentTarget) && !(host instanceof InstrumentCompositeCellBoxAdapter)) {
                         submenu.addMenuItem(MenuItem.default({label: "Save Entire Audio-Unit Chain"})

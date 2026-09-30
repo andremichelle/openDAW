@@ -16,6 +16,7 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use abi::{float_value, AudioEffect, Block, FieldValue, ParamValue, Ports};
 use dsp::convolution::Convolver;
 use dsp::db_to_gain;
@@ -164,13 +165,15 @@ pub extern "C" fn process(desc_ptr: u32) {
     abi::render_effect::<ConvolverDevice>(ports);
 }
 
+static INSTANCES: AtomicUsize = AtomicUsize::new(0);
+
 #[no_mangle]
 pub extern "C" fn init(state_ptr: u32, sample_rate: f32) {
     unsafe {
         abi::with_state(state_ptr, |state: &mut ConvolverState| {
             <ConvolverDevice as AudioEffect>::init(state, sample_rate);
-            // per-instance period phase from the state address: heavy FFT quanta never align across instances
-            state.convolver.set_stagger((state_ptr >> 6) as usize);
+            // per-instance period phase: heavy FFT quanta never align across instances
+            state.convolver.set_stagger(Convolver::stagger_for_ordinal(INSTANCES.fetch_add(1, Ordering::Relaxed)));
         })
     }
 }

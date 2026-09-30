@@ -203,7 +203,7 @@ export const NeuralAmpDeviceEditor = ({lifecycle, service, adapter, deviceHost}:
                               <canvas className="spectrum"
                                       onInit={(canvas: HTMLCanvasElement) => {
                                           lifecycle.own(createSpectrumRenderer(
-                                              canvas, adapter, project.liveStreamReceiver, project.engine.sampleRate))
+                                              canvas, adapter.spectrum, project.liveStreamReceiver, project.engine.sampleRate))
                                       }}/>
                               <div className="browse-row">
                                   <Button lifecycle={lifecycle}

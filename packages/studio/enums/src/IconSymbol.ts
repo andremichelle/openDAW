@@ -186,6 +186,8 @@ export enum IconSymbol {
     Bipolar,
     Convolver,
     StereoSplit,
+    Tubular,
+    Algorithm,
 }
 
 export namespace IconSymbol {

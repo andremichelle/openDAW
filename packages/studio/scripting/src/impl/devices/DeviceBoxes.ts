@@ -106,6 +106,7 @@ export namespace DeviceBoxes {
             case "MIDIOutputDeviceBox": return "MIDIOutput"
             case "TapeDeviceBox": return "Tape"
             case "NeonDeviceBox": return "Neon"
+            case "TubularDeviceBox": return "Tubular"
             case "CubedDeviceBox": return "Cubed"
             case "ApparatDeviceBox": return "Apparat"
             case "InstrumentCompositeBox": return "InstrumentComposite"
@@ -126,7 +127,7 @@ export namespace DeviceBoxes {
 
     export const isInstrumentBox = (boxName: string): boolean =>
         ["VaporisateurDeviceBox", "PlayfieldDeviceBox", "NanoDeviceBox", "SoundfontDeviceBox",
-            "MIDIOutputDeviceBox", "TapeDeviceBox", "NeonDeviceBox", "CubedDeviceBox", "ApparatDeviceBox",
+            "MIDIOutputDeviceBox", "TapeDeviceBox", "NeonDeviceBox", "TubularDeviceBox", "CubedDeviceBox", "ApparatDeviceBox",
             "InstrumentCompositeBox"]
             .includes(boxName)
 

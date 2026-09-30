@@ -68,6 +68,8 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.device-neon]
 opt-level = 3
+[profile.release.package.device-tubular]
+opt-level = 3
 [profile.release.package.device-playfield-sample]
 opt-level = 3
 [profile.release.package.device-sine]

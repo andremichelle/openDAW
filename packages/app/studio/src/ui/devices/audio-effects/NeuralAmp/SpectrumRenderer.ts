@@ -1,12 +1,12 @@
 import {int, linear, Nullable, Terminable, Terminator} from "@opendaw/lib-std"
 import {gainToDb} from "@opendaw/lib-dsp"
-import {NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
+import {Address} from "@opendaw/lib-box"
 import {LiveStreamReceiver} from "@opendaw/lib-fusion"
 import {CanvasPainter} from "@opendaw/studio-core"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
 
 export const createSpectrumRenderer = (canvas: HTMLCanvasElement,
-                                       adapter: NeuralAmpDeviceBoxAdapter,
+                                       address: Address,
                                        receiver: LiveStreamReceiver,
                                        sampleRate: number): Terminable => {
     const terminator = new Terminator()
@@ -75,7 +75,7 @@ export const createSpectrumRenderer = (canvas: HTMLCanvasElement,
         context.fillStyle = gradient
         context.fill(path2D)
     }))
-    terminator.own(receiver.subscribeFloats(adapter.spectrum, values => {
+    terminator.own(receiver.subscribeFloats(address, values => {
         spectrum = values
         painter.requestUpdate()
     }))

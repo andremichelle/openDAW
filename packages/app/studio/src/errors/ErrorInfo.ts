@@ -7,6 +7,11 @@ export type ErrorInfo = {
 }
 
 export namespace ErrorInfo {
+    // An Error born in another JS world (extension content script, browser user script) fails this realm's
+    // instanceof while its toString tag still says Error. Nothing in our code rejects with one (#1157).
+    export const isForeignRealmError = (value: unknown): boolean =>
+        !(value instanceof Error) && Object.prototype.toString.call(value) === "[object Error]"
+
     const fromError = (error: Error, fallbackName: string = "Error"): ErrorInfo => ({
         name: error.name || fallbackName,
         message: error.message,

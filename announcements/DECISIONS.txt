@@ -148,3 +148,20 @@ Feature framing (Sink)
 • Discord only so far, very brief, no education angle.
 • Manual: https://opendaw.studio/manuals/devices/audio/sink
 • Sink post: one sentence per subline. "The rest is too elaborative" was the correction, keep it that short.
+
+Feature framing (Tubular)
+• A six operator FM synthesizer compatible with the Yamaha DX7. Say "compatible with", do not claim
+  to be a Yamaha product. Dexed may be named and linked (https://github.com/asb2m10/dexed), the
+  engine is based on it (msfa core by Raph Levien, maintained by Pascal Gauthier).
+• The story: any DX7 .syx loads directly, single voices and 32 voice banks, decades of published
+  cartridges become playable. Voices sound as they did on the hardware.
+• Bundled: Tubular Classics (32 original voices, ours, CC0), the Dexed banks (SynprezFM), four
+  YM2612 sets by Nick Culbertson. Do not list licences in announcements.
+• Editor: one tab per operator plus algorithm, LFO, pitch envelope, output. The algorithm is drawn,
+  envelopes are dragged in the display.
+• Education angle: FM is the synthesis where the rules are the lesson. Change one ratio or one
+  envelope and hear a bell become a bass. Never say FM is "easy".
+• Do not mention the audition tool, the engine selector (Mark I / Modern) or parameter counts.
+• Manual: https://opendaw.studio/manuals/devices/instruments/tubular
+• Never say a device "runs in the browser like every other device". openDAW runs in the browser,
+  that is understood.

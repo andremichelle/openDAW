@@ -81,6 +81,11 @@ export namespace BoxGraphCopy {
             uuidMap.add({source: box.address.uuid, target: keepsIdentity ? box.address.uuid : UUID.generate()})
         })
         skippedExternalUuids.forEach(uuid => uuidMap.add({source: uuid, target: uuid}))
+        // A skipped identity box the target already holds is shared: pointers at it keep their address.
+        clipboardGraph.boxes()
+            .filter(box => options.keepUuid?.(box) === true && !uuidMap.hasKey(box.address.uuid)
+                && targetGraph.findBox(box.address.uuid).nonEmpty())
+            .forEach(box => uuidMap.add({source: box.address.uuid, target: box.address.uuid}))
         const result: Array<T> = []
         PointerField.decodeWith({
             map: (pointer, address) => {

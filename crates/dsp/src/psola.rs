@@ -16,11 +16,14 @@ const LATENCY: i64 = 2 * MAX_PERIOD; // output lags input so a grain's full ±P 
 const MARKS: usize = 64; // recent analysis marks kept for nearest-mark lookup
 const MIN_RATIO: f64 = 0.5; // clamp: below this, 2P grains leave gaps in the overlap-add
 const MAX_RATIO: f64 = 2.0;
+const WINDOW_CACHE: usize = 2 * MAX_PERIOD as usize + 1; // one Hann window over ±MAX_PERIOD
 
 pub struct Psola {
     input: [[f32; RING_SIZE]; 2],
     output: [[f32; RING_SIZE]; 2],
     window_sum: [f32; RING_SIZE], // running Σ of grain windows, for amplitude normalisation
+    window_cache: [f32; WINDOW_CACHE], // the grain window for `window_half`, rebuilt only when the period changes
+    window_half: i64,
     marks: [i64; MARKS],
     mark_head: usize,
     mark_count: usize,
@@ -53,6 +56,7 @@ impl Psola {
         for channel in self.input.iter_mut() {channel.fill(0.0);}
         for channel in self.output.iter_mut() {channel.fill(0.0);}
         self.window_sum.fill(0.0);
+        self.window_half = 0;
         self.marks.fill(0);
         self.mark_head = 0;
         self.mark_count = 0;
@@ -161,9 +165,15 @@ impl Psola {
     /// `center`, accumulating the window into `window_sum` for later normalisation.
     fn overlap_add(&mut self, analysis: i64, center: i64) {
         let half = libm::round(self.period) as i64;
+        if self.window_half != half {
+            for offset in -half..=half {
+                let window = 0.5 + 0.5 * libm::cos(core::f64::consts::PI * offset as f64 / half as f64);
+                self.window_cache[(offset + half) as usize] = window as f32;
+            }
+            self.window_half = half;
+        }
         for offset in -half..=half {
-            let window = 0.5 + 0.5 * libm::cos(core::f64::consts::PI * offset as f64 / half as f64);
-            let window = window as f32;
+            let window = self.window_cache[(offset + half) as usize];
             let source = ((analysis + offset) & RING_MASK) as usize;
             let target = ((center + offset) & RING_MASK) as usize;
             self.output[0][target] += self.input[0][source] * window;

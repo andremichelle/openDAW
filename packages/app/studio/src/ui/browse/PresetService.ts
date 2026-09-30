@@ -82,9 +82,6 @@ const cursorKeyFor = (adapter: DeviceBoxAdapter): string => {
 type PresetIdentity = string
 const identityOf = (entry: PresetEntry): PresetIdentity => `${entry.source}:${entry.uuid}`
 
-export const effectKeyOf = (box: Box): string =>
-    EffectFactories.keyOfBox(box) ?? panic(`${box.name} is not a registered effect`)
-
 export class PresetService {
     readonly #cloudIndex = new DefaultObservableValue<ReadonlyArray<PresetMeta>>([])
     readonly #cloudReady: Promise<void>
@@ -339,7 +336,7 @@ export class PresetService {
     #effectLabelFromBox(box: IndexedBox): string {
         const adapter = this.project.boxAdapters.adapterFor(box, Devices.isAny)
         const value = adapter.labelField.getValue()
-        return value.length > 0 ? value : effectKeyOf(box)
+        return value.length > 0 ? value : EffectFactories.keyOfBox(box) ?? box.name
     }
 
     async saveAsSingleEffectPreset(category: PresetEffectKind,

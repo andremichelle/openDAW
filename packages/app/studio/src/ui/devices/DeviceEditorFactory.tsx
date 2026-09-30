@@ -35,6 +35,7 @@ import {
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
     NeonDeviceBox,
+    TubularDeviceBox,
     CubedDeviceBox,
     KorpusDeviceBox,
     VaporisateurDeviceBox,
@@ -84,6 +85,7 @@ import {
     UnknownAudioEffectDeviceBoxAdapter,
     UnknownMidiEffectDeviceBoxAdapter,
     NeonDeviceBoxAdapter,
+    TubularDeviceBoxAdapter,
     CubedDeviceBoxAdapter,
     KorpusDeviceBoxAdapter,
     VaporisateurDeviceBoxAdapter,
@@ -105,6 +107,7 @@ import {VaporisateurDeviceEditor} from "@/ui/devices/instruments/VaporisateurDev
 import {CubedDeviceEditor} from "@/ui/devices/instruments/CubedDeviceEditor.tsx"
 import {KorpusDeviceEditor} from "@/ui/devices/instruments/KorpusDeviceEditor.tsx"
 import {NeonDeviceEditor} from "@/ui/devices/instruments/NeonDeviceEditor.tsx"
+import {TubularDeviceEditor} from "@/ui/devices/instruments/TubularDeviceEditor.tsx"
 import {AudioBusEditor} from "@/ui/devices/AudioBusEditor.tsx"
 import {ApparatDeviceEditor} from "./instruments/ApparatDeviceEditor"
 import {NanoDeviceEditor} from "./instruments/NanoDeviceEditor"
@@ -215,6 +218,12 @@ export namespace DeviceEditorFactory {
                 <NeonDeviceEditor lifecycle={lifecycle}
                                      service={service}
                                      adapter={service.project.boxAdapters.adapterFor(box, NeonDeviceBoxAdapter)}
+                                     deviceHost={deviceHost}/>
+            ),
+            visitTubularDeviceBox: (box: TubularDeviceBox): JsxValue => (
+                <TubularDeviceEditor lifecycle={lifecycle}
+                                     service={service}
+                                     adapter={service.project.boxAdapters.adapterFor(box, TubularDeviceBoxAdapter)}
                                      deviceHost={deviceHost}/>
             ),
             visitMIDIOutputDeviceBox: (box: MIDIOutputDeviceBox): JsxValue => (

@@ -354,6 +354,13 @@ impl Convolver {
         self.quantum = self.stagger;
     }
 
+    /// The stagger for the `ordinal`-th instance: 11 is coprime with the L3 period (64) and the L2 period
+    /// (8), so consecutive instances never share a heavy quantum. Deriving it from the state ADDRESS made
+    /// instances built in one boot transaction (back-to-back allocations) share a phase (#415).
+    pub fn stagger_for_ordinal(ordinal: usize) -> usize {
+        (ordinal * 11) % (8192 / BLOCK)
+    }
+
     /// Start loading a new IR (`stereo` = distinct right channel; mono duplicates left).
     /// `normalize` scales the wet path so the IR's peak |H(f)| is 0 dB (the wet signal is never
     /// louder than the input at any frequency); `ratio` = IR rate / engine rate (the IR is
