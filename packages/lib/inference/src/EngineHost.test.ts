@@ -353,6 +353,39 @@ describe("EngineHost", () => {
         expect(loads).toHaveLength(1)
         expect(releases).toHaveLength(0)
     })
+
+    it("serializes overlapping ensureLoaded calls for the same task", async () => {
+        const {bytes, sha} = await oneByteWithKnownSha()
+        opfs.files.set("inference/models/t/v1/model.onnx", bytes)
+        opfs.files.set("inference/models/t/v1/meta.json",
+            new TextEncoder().encode(JSON.stringify({
+                sha256: sha, bytes: 1, version: "v1", downloadedAt: 0
+            })))
+        const {host, worker} = makeHost()
+        const model = {url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"}
+        const first = host.ensureLoaded("t", model, ["wasm"])
+        const second = host.ensureLoaded("t", model, ["webgpu"])
+        await Promise.all([first, second])
+        const kinds = worker.received.map(message => message.kind)
+        expect(kinds).toEqual(["load", "release", "load"])
+    })
+
+    it("does not release the existing session if the signal is already aborted", async () => {
+        const {bytes, sha} = await oneByteWithKnownSha()
+        opfs.files.set("inference/models/t/v1/model.onnx", bytes)
+        opfs.files.set("inference/models/t/v1/meta.json",
+            new TextEncoder().encode(JSON.stringify({
+                sha256: sha, bytes: 1, version: "v1", downloadedAt: 0
+            })))
+        const {host, worker} = makeHost()
+        const model = {url: "https://example.com/m.onnx", sha256: sha, bytes: 1, version: "v1"}
+        await host.ensureLoaded("t", model, ["wasm"])
+        const controller = new AbortController()
+        controller.abort()
+        await expect(host.ensureLoaded("t", model, ["webgpu"], {signal: controller.signal})).rejects.toThrow()
+        const releases = worker.received.filter(message => message.kind === "release")
+        expect(releases).toHaveLength(0)
+    })
 })
 
 describe("splitProgress", () => {
