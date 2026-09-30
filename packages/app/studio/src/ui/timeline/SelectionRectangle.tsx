@@ -2,7 +2,7 @@ import css from "./SelectionRectangle.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
 import {EmptyExec, Lifecycle, Option, Selection, SortedSet, UUID, ValueAxis} from "@opendaw/lib-std"
 import {TimelineSelectableLocator} from "@/ui/timeline/TimelineSelectableLocator.ts"
-import {Dragging, Html, PointerCaptureTarget} from "@opendaw/lib-dom"
+import {Dragging, Events, Html, PointerCaptureTarget} from "@opendaw/lib-dom"
 import {BoxAdapter} from "@opendaw/studio-adapters"
 import {Colors} from "@opendaw/studio-enums"
 
@@ -19,6 +19,39 @@ type Construct<T extends BoxAdapter> = {
 
 export const SelectionRectangle =
     <T extends BoxAdapter, >({lifecycle, target, selection, locator, xAxis, yAxis}: Construct<T>) => {
+        const ClickMovementThreshold = 5.0
+        let pendingDeselect: Option<{
+            pointerId: number
+            clientX: number
+            clientY: number
+            candidates: ReadonlyArray<T>
+            moved: boolean
+        }> = Option.None
+        const updatePendingDeselect = (event: PointerEvent): void => {
+            if (pendingDeselect.isEmpty()) {return}
+            const pending = pendingDeselect.unwrap()
+            if (event.pointerId !== pending.pointerId) {return}
+            const dx = event.clientX - pending.clientX
+            const dy = event.clientY - pending.clientY
+            if (dx * dx + dy * dy > ClickMovementThreshold * ClickMovementThreshold) {
+                pending.moved = true
+            }
+        }
+        const settlePendingDeselect = (event: PointerEvent): void => {
+            updatePendingDeselect(event)
+            if (pendingDeselect.isEmpty()) {return}
+            const pending = pendingDeselect.unwrap()
+            if (event.pointerId !== pending.pointerId) {return}
+            if (!pending.moved) {
+                selection.deselect(...pending.candidates)
+            }
+            pendingDeselect = Option.None
+        }
+        const cancelPendingDeselect = (event: PointerEvent): void => {
+            pendingDeselect.ifSome(pending => {
+                if (pending.pointerId === event.pointerId) {pendingDeselect = Option.None}
+            })
+        }
         const svgRect: SVGRectElement = (
             <rect x="0" y="0" width="0" height="0"
                   stroke={Colors.cream}
@@ -45,6 +78,7 @@ export const SelectionRectangle =
                 const numSelected = selection.count()
                 const someSelected = captured.some(item => selection.isSelected(item))
                 if (!event.shiftKey) {
+                    pendingDeselect = Option.None
                     if (numSelected === 1 && captured.length === 1 && someSelected) {
                         // we clicked an already selected selectable
                         return Option.None
@@ -52,11 +86,16 @@ export const SelectionRectangle =
                         selection.deselectAll()
                     }
                 }
+                if (event.shiftKey) {
+                    const candidates = captured.filter(selectable => selection.isSelected(selectable))
+                    pendingDeselect = candidates.length === 0
+                        ? Option.None
+                        : Option.wrap({pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, candidates, moved: false})
+                }
                 for (const selectable of captured) {
                     if (selection.isSelected(selectable)) {
-                        if (event.shiftKey) {
-                            selection.deselect(selectable)
-                        }
+                        // A shift-click on a selected item is only a deselect if the
+                        // pointer is released without turning the gesture into a drag.
                     } else {
                         selection.select(selectable)
                     }
@@ -111,6 +150,9 @@ export const SelectionRectangle =
                     finally: () => updateSvgRect(0, 0, 0, 0)
                 })
             }, {permanentUpdates: true}),
+            Events.subscribe(target, "pointermove", updatePendingDeselect),
+            Events.subscribe(target, "pointerup", settlePendingDeselect),
+            Events.subscribe(target, "pointercancel", cancelPendingDeselect),
             {terminate: () => svg.remove()}
         )
         return svg
