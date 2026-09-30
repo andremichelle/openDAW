@@ -93,24 +93,7 @@ the pitch envelope.
 
 ---
 
-## 6. Cartridges
-
-Bundled banks (32 voices each) and their credits:
-
-- Tubular Classics, 32 original voices in the classic styles (tine pianos, bells, mallets, basses, brass,
-  strings, organs, leads, drums), written for openDAW, CC0.
-- Dexed 01 and SynprezFM 01 to 32, the cartridges shipped with Dexed, DX7 programs compiled by Jean-Marc
-  Desprez (SynprezFM), GPL-3.0.
-- YM2612 ROM 1 to 4 by Nick Culbertson, Sega Genesis style instruments, MIT.
-
-The device menu offers _Load DX7 .syx…_ for a 32-voice bulk dump (4104 or 4096 bytes),
-a single voice dump (163 bytes) or a stream of dumps. The Yamaha factory ROMs and the many community banks
-found online load this way.
-
-All 156 voice and output parameters are automatable. The values are the hardware's own: rates and levels 0 to
-99, algorithm 1 to 32, feedback 0 to 7, detune -7 to +7, transpose around C3.
-
-## 7. Engine
+## 6. Engine
 
 The device menu offers two operator kernels. _Modern_ (default) is the interpolated 24-bit msfa kernel,
 clean and a little quieter in the top end. _Mark I_ (Dexed's default) reads 10-bit log-sine and exponent
