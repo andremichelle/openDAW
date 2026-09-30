@@ -549,7 +549,7 @@ export class ProjectApi {
             box.hue.setValue(hue ?? ColorCodes.forTrackType(trackBox.type.getValue()))
             box.mute.setValue(mute ?? false)
             box.duration.setValue(duration)
-            box.loopDuration.setValue(loopOffset ?? 0)
+            box.loopOffset.setValue(loopOffset ?? 0)
             box.loopDuration.setValue(loopDuration ?? duration)
             box.events.refer(events.owners)
             box.regions.refer(trackBox.regions)
