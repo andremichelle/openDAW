@@ -95,12 +95,7 @@ the pitch envelope.
 
 ## 6. Cartridges
 
-_Audition cartridges…_ in the device menu opens the bundled banks (32 voices each) and any `.syx` you loaded.
-Arrow keys step through voices and banks, space plays a phrase, K marks a keeper. Keepers can be saved as
-openDAW presets. Picking a voice writes it into the device, so a project never depends on the cartridge
-afterwards.
-
-Bundled banks and their credits:
+Bundled banks (32 voices each) and their credits:
 
 - Tubular Classics, 32 original voices in the classic styles (tine pianos, bells, mallets, basses, brass,
   strings, organs, leads, drums), written for openDAW, CC0.
@@ -108,7 +103,7 @@ Bundled banks and their credits:
   Desprez (SynprezFM), GPL-3.0.
 - YM2612 ROM 1 to 4 by Nick Culbertson, Sega Genesis style instruments, MIT.
 
-The device menu and the audition dialog offer _Load DX7 .syx…_ for a 32-voice bulk dump (4104 or 4096 bytes),
+The device menu offers _Load DX7 .syx…_ for a 32-voice bulk dump (4104 or 4096 bytes),
 a single voice dump (163 bytes) or a stream of dumps. The Yamaha factory ROMs and the many community banks
 found online load this way.
 
