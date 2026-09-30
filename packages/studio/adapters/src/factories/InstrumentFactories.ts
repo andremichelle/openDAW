@@ -107,10 +107,10 @@ export namespace InstrumentFactories {
     }
 
     export const Wclap: InstrumentFactory<void, WclapInstrumentBox> = {
-        defaultName: "WCLAP",
+        defaultName: "WebCLAP",
         defaultIcon: IconSymbol.WebClap,
-        briefDescription: "CLAP Plugin",
-        description: "Hosts a CLAP instrument compiled to WebAssembly (WCLAP bundle)",
+        briefDescription: "WebCLAP Plugin",
+        description: "Hosts a CLAP instrument compiled to WebAssembly (WebCLAP bundle)",
         manualPage: DeviceManualUrls.Wclap,
         trackType: TrackType.Notes,
         create: (boxGraph: BoxGraph<BoxIO.TypeMap>,

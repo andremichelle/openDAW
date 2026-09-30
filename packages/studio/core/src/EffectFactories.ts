@@ -426,18 +426,18 @@ export namespace EffectFactories {
             })
     }
     export const Wclap: EffectFactory = {
-        defaultName: "WCLAP",
+        defaultName: "WebCLAP",
         defaultIcon: IconSymbol.WebClap,
-        briefDescription: "CLAP Plugin",
-        description: "Hosts a CLAP plugin compiled to WebAssembly (WCLAP bundle).",
+        briefDescription: "WebCLAP Plugin",
+        description: "Hosts a CLAP plugin compiled to WebAssembly (WebCLAP bundle).",
         manualPage: DeviceManualUrls.Wclap,
         separatorBefore: false,
-        external: true,
+        external: false,
         type: "audio",
         boxName: "WclapDeviceBox",
         create: ({boxGraph}, hostField, index): WclapDeviceBox =>
             WclapDeviceBox.create(boxGraph, UUID.generate(), (box) => {
-                box.label.setValue("WCLAP")
+                box.label.setValue("WebCLAP")
                 box.index.setValue(index)
                 box.host.refer(hostField)
             })

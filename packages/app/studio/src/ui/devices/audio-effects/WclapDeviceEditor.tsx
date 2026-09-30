@@ -107,7 +107,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }
     const browse = async (): Promise<void> => {
         const files = await Files.open({
-            types: [{description: "WCLAP bundle", accept: {"application/gzip": [".gz", ".tgz"]}}], multiple: false
+            types: [{description: "WebCLAP bundle", accept: {"application/gzip": [".gz", ".tgz"]}}], multiple: false
         }).catch(() => [])
         if (files.length === 0) {return}
         const file = files[0]
