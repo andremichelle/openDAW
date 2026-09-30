@@ -649,9 +649,9 @@ export namespace EffectFactories {
         StereoTool,      // Stereo Tool
         Tidal,
         NeuralAmp,       // Tone3000
-        Wclap,
         Vocoder,
         Waveshaper,
+        Wclap,           // WebCLAP
         Werkstatt,
         Sink
     }
