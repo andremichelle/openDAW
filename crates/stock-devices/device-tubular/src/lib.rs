@@ -5,8 +5,8 @@
 //! behind a small ring, so note events snap to the frame grid exactly like the plugin.
 //!
 //! Exports: `kind()` (instrument), `state_size()`, `process(desc_ptr)`, `init(state_ptr, sample_rate)`,
-//! `parameter_changed`, `field_changed`, `map_parameter`, `reset`. Operator kernel: Dexed's Mark I by
-//! default, msfa's Modern on request (plain `engine` field).
+//! `parameter_changed`, `field_changed`, `map_parameter`, `reset`. Operator kernel: msfa's Modern by
+//! default, Dexed's Mark I on request (plain `engine` field).
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
