@@ -12,7 +12,7 @@ import {
     RuntimeNotifier,
     UUID
 } from "@opendaw/lib-std"
-import {Address, Box, BoxGraph, PointerField} from "@opendaw/lib-box"
+import {Address, Box, BoxGraph, PointerField, Vertex} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {
     ModulationBox,
@@ -183,6 +183,26 @@ export namespace DevicesClipboard {
             return findRootBox(boxGraph).map(rootBox => rootBox.modulators.address)
         }
         return Option.None
+    }
+
+    // A pasted lane that joined an EXISTING modulator's collection still carries its copied index (#1155).
+    export const reindexModulatorLanes = (pastedBoxes: ReadonlyArray<Box>): void => {
+        const pasted = new Set<Box>(pastedBoxes)
+        const collections = new Set<Vertex>()
+        pastedBoxes.forEach(box => {
+            if (!isInstanceOf(box, TrackBox)) {return}
+            box.tracks.targetVertex.ifSome(vertex => {
+                if (isModulatorBox(vertex.box)) {collections.add(vertex)}
+            })
+        })
+        collections.forEach(field => field.pointerHub.filter(Pointers.TrackCollection)
+            .map(pointer => pointer.box)
+            .filter((box): box is TrackBox => isInstanceOf(box, TrackBox))
+            .sort((laneA, laneB) => {
+                const pastedDiff = Number(pasted.has(laneA)) - Number(pasted.has(laneB))
+                return pastedDiff !== 0 ? pastedDiff : laneA.index.getValue() - laneB.index.getValue()
+            })
+            .forEach((lane, index) => lane.index.setValue(index)))
     }
 
     // Place the freshly pasted effects into the destination chain at the insert index. ONLY top-level effects

@@ -19,6 +19,7 @@ import {AudioUnitType} from "@opendaw/studio-enums"
 import {ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {ClipboardUtils} from "../ClipboardUtils"
 import {AudioUnitsClipboard} from "./AudioUnitsClipboardHandler"
+import {DevicesClipboard} from "./DevicesClipboardHandler"
 
 describe("AudioUnitsClipboardHandler", () => {
     let source: ProjectSkeleton
@@ -314,6 +315,82 @@ describe("AudioUnitsClipboardHandler", () => {
             const modulations = modulationsOf(source)
             expect(modulations.length).toBe(2)
             modulations.forEach(modulation => expect(modulation.source.targetVertex.unwrap().box).toBe(modulator))
+        })
+
+        // #1155: an assignment's depth lane lives in the MODULATOR's tracks (ModulationBoxAdapter registers the
+        // modulator as lane owner). It rides into the unit copy through the ModulationBox's mandatory `target`,
+        // but a same-project paste skipped the existing modulator WITHOUT mapping its uuid, so the lane's
+        // `tracks` pointer fell to the mapper, which answered None: "Pointer (tracks) …/1 requires an edge".
+        describe("depth automation lane on a shared modulator (#1155)", () => {
+            const addDepthLane = (skeleton: ProjectSkeleton, modulator: StepsModulatorBox,
+                                  modulation: ModulationBox, index: number): TrackBox => {
+                const {boxGraph} = skeleton
+                boxGraph.beginTransaction()
+                const lane = TrackBox.create(boxGraph, UUID.generate(), box => {
+                    box.type.setValue(TrackType.Value)
+                    box.tracks.refer(modulator.tracks)
+                    box.target.refer(modulation.depth)
+                    box.index.setValue(index)
+                })
+                boxGraph.endTransaction()
+                return lane
+            }
+            const lanesOf = (modulator: StepsModulatorBox): ReadonlyArray<TrackBox> =>
+                modulator.tracks.pointerHub.incoming().map(({box}) => box as TrackBox)
+            const pasteAndReindex = (skeleton: ProjectSkeleton, data: ArrayBufferLike): ReadonlyArray<Box> => {
+                const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} = skeleton
+                return new BoxEditing(boxGraph).modify(() => {
+                    const boxes = ClipboardUtils.deserializeBoxes(
+                        data, boxGraph, makePasteMapper(rootBox, primaryAudioBusBox.address.uuid))
+                    DevicesClipboard.reindexModulatorLanes(boxes)
+                    return boxes
+                }).unwrap()
+            }
+            const bundleWithDepthLane = () => {
+                const audioUnit = createAudioUnit(source)
+                const crusher = addCrusher(source, audioUnit)
+                const modulator = addModulator(source)
+                const modulation = assign(source, modulator, crusher.crush)
+                const lane = addDepthLane(source, modulator, modulation, 0)
+                const data = ClipboardUtils.serializeBoxes([audioUnit, ...collectAudioUnitDependencies(audioUnit)])
+                return {audioUnit, modulator, modulation, lane, data}
+            }
+
+            it("collects the depth lane through the assignment", () => {
+                const {audioUnit, lane} = bundleWithDepthLane()
+                expect(collectAudioUnitDependencies(audioUnit)).toContain(lane)
+            })
+
+            it("paste into the same project attaches the lane to the existing modulator", () => {
+                const {modulator, modulation, lane, data} = bundleWithDepthLane()
+                expect(() => pasteAndReindex(source, data)).not.toThrow()
+                expect(modulatorsOf(source)).toEqual([modulator])
+                const lanes = lanesOf(modulator)
+                expect(lanes.length).toBe(2)
+                const pastedLane = lanes.find(candidate => candidate !== lane)!
+                const pastedModulation = modulationsOf(source).find(candidate => candidate !== modulation)!
+                expect(pastedLane.target.targetVertex.unwrap()).toBe(pastedModulation.depth)
+                expect(lane.target.targetVertex.unwrap()).toBe(modulation.depth)
+                expect(new Set(lanes.map(candidate => candidate.index.getValue())).size).toBe(2)
+            })
+
+            it("pasting twice into the same project keeps every lane index unique", () => {
+                const {modulator, data} = bundleWithDepthLane()
+                pasteAndReindex(source, data)
+                pasteAndReindex(source, data)
+                const indices = lanesOf(modulator).map(candidate => candidate.index.getValue()).sort()
+                expect(indices).toEqual([0, 1, 2])
+            })
+
+            it("paste into another project carries the lane with the modulator", () => {
+                const {data} = bundleWithDepthLane()
+                expect(() => pasteAndReindex(target, data)).not.toThrow()
+                const [pastedModulator] = modulatorsOf(target) as ReadonlyArray<StepsModulatorBox>
+                const lanes = lanesOf(pastedModulator)
+                expect(lanes.length).toBe(1)
+                const [pastedModulation] = modulationsOf(target)
+                expect(lanes[0].target.targetVertex.unwrap()).toBe(pastedModulation.depth)
+            })
         })
     })
 })

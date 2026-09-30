@@ -187,7 +187,7 @@ export namespace AudioUnitsClipboard {
         const outputBox = outputAdapter.box
         const primaryBusAddress = rootBoxAdapter.audioBusses.adapters().at(0)?.address
         if (!primaryBusAddress) {return}
-        ClipboardUtils.deserializeBoxes(
+        const boxes = ClipboardUtils.deserializeBoxes(
             data,
             boxGraph,
             {
@@ -220,6 +220,7 @@ export namespace AudioUnitsClipboard {
                     || DevicesClipboard.excludeExistingModulator(box, boxGraph)
             }
         )
+        DevicesClipboard.reindexModulatorLanes(boxes)
     }
 
     const pasteNewAudioUnit = (data: ArrayBufferLike,
@@ -233,6 +234,7 @@ export namespace AudioUnitsClipboard {
             data, boxGraph, newAudioUnitPasteOptions(rootBox, primaryBusAddress.uuid))
         const pastedAudioUnit = boxes.find(box => box.name === AudioUnitBox.ClassName) as AudioUnitBox | undefined
         if (!pastedAudioUnit) {return undefined}
+        DevicesClipboard.reindexModulatorLanes(boxes)
         const insertAfterIndex = currentAudioUnit
             .map(adapter => adapter.indexField.getValue())
             .unwrapOrElse(() => -1)
