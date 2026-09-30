@@ -148,6 +148,11 @@ impl Metronome {
         self.enabled = enabled
     }
 
+    /// Drop the in-flight clicks (transport stop): a click cut by a pause must not resume at the next play.
+    pub fn clear(&mut self) {
+        self.clicks.clear()
+    }
+
     pub fn set_click_ceiling(&mut self, pulse: f64) {
         self.click_ceiling = pulse
     }
@@ -426,6 +431,33 @@ mod tests {
         let mut polyphonic = overlap_metronome(false);
         let poly = render_impulses(&mut polyphonic, &signature, 0.0, quanta_for(1920.0));
         assert!((value_at(&poly, probe) - 2.0).abs() < 1.0e-6, "polyphonic clicks sum");
+    }
+
+    /// Issue #419: a click in flight when the transport stops must not resume at the next play. One block at
+    /// pulse 0 starts a long click; a pause renders nothing; the next block at pulse 0 starts a new click.
+    fn stale_click_sample0(clear_on_pause: bool) -> (usize, f32) {
+        let signature = [storage(4, 4)];
+        let mut metronome = overlap_metronome(false);
+        render_impulses(&mut metronome, &signature, 0.0, 1);
+        if clear_on_pause {
+            metronome.clear();
+        }
+        let restart = render_impulses(&mut metronome, &signature, 0.0, 1);
+        (metronome.clicks.len(), restart.iter().find(|(index, _)| *index == 0).map_or(0.0, |(_, value)| *value))
+    }
+
+    #[test]
+    fn a_click_cut_by_a_pause_does_not_survive_without_clear() {
+        let (count, sample0) = stale_click_sample0(false);
+        assert_eq!(count, 2, "the paused click is still in flight");
+        assert!((sample0 - 2.0).abs() < 1.0e-6, "stale click sums under the restart's downbeat");
+    }
+
+    #[test]
+    fn clear_drops_the_click_cut_by_a_pause() {
+        let (count, sample0) = stale_click_sample0(true);
+        assert_eq!(count, 1, "only the restart's click is in flight");
+        assert!((sample0 - 1.0).abs() < 1.0e-6, "the restart's downbeat sounds alone");
     }
 
     #[test]
