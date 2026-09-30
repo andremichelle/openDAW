@@ -1,5 +1,5 @@
 import css from "./FloatingWindow.sass?inline"
-import {clamp, Exec, int, Option, Point, safeExecute, Terminator} from "@opendaw/lib-std"
+import {clamp, Exec, int, isDefined, Option, Point, safeExecute, Terminator} from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Dragging, Events, Html} from "@opendaw/lib-dom"
 import {Button} from "@/ui/components/Button.tsx"
@@ -12,6 +12,7 @@ const className = Html.adoptStyleSheet(css, "FloatingWindow")
 
 type Construct = {
     title: string
+    icon?: IconSymbol
     width: int
     height: int
     position?: Point
@@ -22,12 +23,13 @@ export interface FloatingWindowHandle {
     close(): void
 }
 
-export const FloatingWindow = ({title, width, height, position, onClose}: Construct, children: JsxValue): FloatingWindowHandle => {
+export const FloatingWindow = ({title, icon, width, height, position, onClose}: Construct, children: JsxValue): FloatingWindowHandle => {
     const lifecycle = new Terminator()
     const surface = Surface.get()
     const origin = position ?? {x: (window.innerWidth - width) * 0.5, y: (window.innerHeight - height) * 0.5}
     const header: HTMLElement = (
         <header>
+            {isDefined(icon) && <Icon symbol={icon}/>}
             <span>{title}</span>
             <Button lifecycle={lifecycle} onClick={() => close()} appearance={{color: Colors.shadow, tooltip: "Close"}}>
                 <Icon symbol={IconSymbol.Close}/>

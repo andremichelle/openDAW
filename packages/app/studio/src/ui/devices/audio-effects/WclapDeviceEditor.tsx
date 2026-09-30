@@ -176,6 +176,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         iframe.src = WclapResources.pageUrl(uuidString, page)
         const handle = FloatingWindow({
             title: nameLabel.textContent ?? adapter.labelField.getValue(),
+            icon: IconSymbol.WebClap,
             width: gui.width > 0 ? gui.width : DEFAULT_SIZE.width,
             height: gui.height > 0 ? gui.height : DEFAULT_SIZE.height,
             onClose: () => session.terminate()

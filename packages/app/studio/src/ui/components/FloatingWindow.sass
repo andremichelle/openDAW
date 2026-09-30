@@ -1,4 +1,5 @@
 @use "@/mixins"
+@use "@/colors"
 
 component
   @include mixins.floating(false)
@@ -6,20 +7,28 @@ component
   flex-direction: column
   padding: 0
 
+  // the panel placeholder header (PanelPlaceholder.sass), so a floating window reads like a panel; rem because
+  // mixins.floating already scales the window to 0.75rem, em would shrink the header a second time
   > header
+    font-size: 0.75rem
+    min-height: 1.5em
+    max-height: 1.5em
+    padding: 0 0 0 0.25em
+    margin-bottom: 1px
     display: flex
-    flex-direction: row
     align-items: center
-    column-gap: 0.5em
-    padding: 0.25em 0.25em 0.25em 0.75em
+    gap: 0.375em
+    color: var(--color-gray)
     border-radius: 0.5em 0.5em 0 0
-    background-color: var(--color-panel-background)
     cursor: grab
     user-select: none
     touch-action: none
+    outline: none // Dragging.attach focuses the target, no focus ring on the header
+    @include colors.panel-background-bright
 
     > span
       flex: 1
+      font-size: 0.875em
       white-space: nowrap
       overflow: hidden
       text-overflow: ellipsis
