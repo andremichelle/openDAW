@@ -1,6 +1,6 @@
 {
   "name": "@opendaw/studio-p2p",
-  "version": "0.0.35",
+  "version": "0.0.36",
   "license": "AGPL-3.0-or-later",
   "publishConfig": {
     "access": "public"
@@ -22,10 +22,10 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@opendaw/lib-dsp": "^0.0.93",
-    "@opendaw/lib-runtime": "^0.0.86",
-    "@opendaw/lib-std": "^0.0.85",
-    "@opendaw/studio-adapters": "^0.3.4",
+    "@opendaw/lib-dsp": "^0.0.94",
+    "@opendaw/lib-runtime": "^0.0.87",
+    "@opendaw/lib-std": "^0.0.86",
+    "@opendaw/studio-adapters": "^0.3.5",
     "jszip": "^3.10.1"
   },
   "devDependencies": {
