@@ -1,4 +1,4 @@
-import {BoxSchema} from "@opendaw/lib-box-forge"
+import {BoxSchema, deprecated} from "@opendaw/lib-box-forge"
 import {Pointers} from "@opendaw/studio-enums"
 import {DeviceFactory} from "../../std/DeviceFactory"
 import {ParameterPointerRules, UnipolarConstraints} from "../../std/Defaults"
@@ -27,12 +27,12 @@ export const KorpusDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrume
     },
     19: {type: "float32", name: "damping-b", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
     20: {
-        type: "int32", name: "tune-b", pointerRules: ParameterPointerRules,
-        value: 0, constraints: {min: -24, max: 24}, unit: "st"
+        type: "int32", name: "deprecated-tune-b", pointerRules: ParameterPointerRules,
+        value: 0, constraints: {min: -24, max: 24}, unit: "st", deprecated
     },
     21: {
-        type: "float32", name: "detune-b", pointerRules: ParameterPointerRules,
-        value: 0.0, constraints: {min: -25.0, max: 25.0, scaling: "linear"}, unit: "ct"
+        type: "float32", name: "deprecated-detune-b", pointerRules: ParameterPointerRules,
+        value: 0.0, constraints: {min: -25.0, max: 25.0, scaling: "linear"}, unit: "ct", deprecated
     },
     22: {type: "float32", name: "width-b", pointerRules: ParameterPointerRules, value: 0.8, ...UnipolarConstraints},
     23: {type: "float32", name: "level-b", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
@@ -45,5 +45,12 @@ export const KorpusDeviceBox: BoxSchema<Pointers> = DeviceFactory.createInstrume
         type: "float32", name: "volume", pointerRules: ParameterPointerRules,
         value: -9.0, constraints: "decibel", unit: "dB"
     },
-    27: {type: "int32", name: "preset-epoch", value: 0, constraints: "any", unit: ""}
+    27: {type: "int32", name: "preset-epoch", value: 0, constraints: "any", unit: ""},
+    28: {type: "float32", name: "air", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
+    29: {
+        type: "float32", name: "tune-b", pointerRules: ParameterPointerRules,
+        value: 0.0, constraints: {min: -24.0, max: 24.0, scaling: "linear"}, unit: "st"
+    },
+    30: {type: "float32", name: "level-a", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints},
+    31: {type: "float32", name: "stroke", pointerRules: ParameterPointerRules, value: 0.5, ...UnipolarConstraints}
 })

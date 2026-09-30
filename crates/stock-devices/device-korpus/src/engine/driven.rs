@@ -17,11 +17,12 @@ pub struct DrivenSpec {
     pub t60: f32,
     pub gain_in: f32,
     pub gain_out: f32,
+    pub gain_out_a: f32, // the part of gain_out that is object A's, scaled by Level A
     pub pan_offset: f32,
 }
 
 pub const SILENT_SPEC: DrivenSpec =
-    DrivenSpec {frequency: 0.0, t60: 0.1, gain_in: 0.0, gain_out: 0.0, pan_offset: 0.0};
+    DrivenSpec {frequency: 0.0, t60: 0.1, gain_in: 0.0, gain_out: 0.0, gain_out_a: 0.0, pan_offset: 0.0};
 
 /// The damping knob's T60 law. The live path bends by ratios of this, so note-on and live must
 /// share one definition.
@@ -53,6 +54,7 @@ pub fn build_specs(material: Material, f0: f32, damping: f32, position: f32,
             t60,
             gain_in: 0.25 + 0.75 * position_gain,
             gain_out: mode.amp,
+            gain_out_a: 0.0,
             pan_offset: side * (0.12 + 0.38 * rand),
         };
         count += 1;
@@ -95,6 +97,7 @@ pub fn eigensplit(a: &mut [DrivenSpec], a_count: usize, b: &mut [DrivenSpec], b_
         let (sin_t, cos_t) = (sinf(theta), cosf(theta));
         let (gh_in, gl_in) = (high.gain_in, low.gain_in);
         let (gh_out, gl_out) = (high.gain_out, low.gain_out);
+        let (gh_out_a, gl_out_a) = (high.gain_out_a, low.gain_out_a);
         let (decay_h, decay_l) = (1.0 / high.t60, 1.0 / low.t60);
         high.frequency = mean + split;
         low.frequency = mean - split;
@@ -102,6 +105,8 @@ pub fn eigensplit(a: &mut [DrivenSpec], a_count: usize, b: &mut [DrivenSpec], b_
         low.gain_in = cos_t * gl_in - sin_t * gh_in;
         high.gain_out = cos_t * gh_out + sin_t * gl_out;
         low.gain_out = cos_t * gl_out - sin_t * gh_out;
+        high.gain_out_a = cos_t * gh_out_a + sin_t * gl_out_a;
+        low.gain_out_a = cos_t * gl_out_a - sin_t * gh_out_a;
         let (weight, cross_weight) = (cos_t * cos_t, sin_t * sin_t);
         let offset_h = high.pan_offset;
         high.pan_offset = weight * offset_h + cross_weight * low.pan_offset;
@@ -118,11 +123,40 @@ pub fn eigensplit(a: &mut [DrivenSpec], a_count: usize, b: &mut [DrivenSpec], b_
     }
 }
 
+/// One-sided eigensplit: B modes within `reach` of fixed partials land at the coupled gap √(Δ² + 4k²).
+pub fn repel(b: &mut [DrivenSpec], b_count: usize, partials: &[f32], k: f32, reach: f32) {
+    if k <= 0.0 {
+        return;
+    }
+    for (index, mode) in b[..b_count].iter_mut().enumerate() {
+        let mut nearest = f32::INFINITY;
+        for partial in partials {
+            let delta = mode.frequency - partial;
+            if fabsf(delta) < fabsf(nearest) {
+                nearest = delta;
+            }
+        }
+        if fabsf(nearest) > reach {
+            continue;
+        }
+        let side = if nearest > 0.0 || (nearest == 0.0 && index % 2 == 0) {1.0} else {-1.0};
+        mode.frequency += side * sqrtf(nearest * nearest + 4.0 * k * k) - nearest;
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Injection {
     Strike,
     Noise,
     Tonal,
+}
+
+// How much of a bank's output Level A scales: none (object B), all (object A), or per mode after Couple mixed them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LevelShare {
+    None,
+    Whole,
+    Mixed,
 }
 
 #[derive(Clone, Copy)]
@@ -132,6 +166,8 @@ struct DrivenMode {
     inject: f32,
     tap_l: f32,
     tap_r: f32,
+    tap_l_a: f32,
+    tap_r_a: f32,
     inv_a0: f32,
     shim_state: f32,
     shim: f32,
@@ -141,7 +177,7 @@ struct DrivenMode {
 }
 
 const SILENT_MODE: DrivenMode = DrivenMode {a1: 0.0, a2: 0.0, inject: 0.0, tap_l: 0.0,
-    tap_r: 0.0, inv_a0: 1.0, shim_state: 0.0, shim: 1.0, y1: 0.0, y2: 0.0, spec: SILENT_SPEC};
+    tap_r: 0.0, tap_l_a: 0.0, tap_r_a: 0.0, inv_a0: 1.0, shim_state: 0.0, shim: 1.0, y1: 0.0, y2: 0.0, spec: SILENT_SPEC};
 
 /// Derives every coefficient from the note-on spec scaled by the live ratios (width is the
 /// absolute knob value); ring state and the shimmer walk are untouched, so a sounding mode
@@ -166,12 +202,15 @@ fn shape(mode: &mut DrivenMode, kind: Injection, sample_rate: f32, freq_ratio: f
     mode.inject = injection * spec.gain_in * send * inv_a0;
     mode.tap_l = spec.gain_out * sqrtf(1.0 - pan);
     mode.tap_r = spec.gain_out * sqrtf(pan);
+    mode.tap_l_a = spec.gain_out_a * sqrtf(1.0 - pan);
+    mode.tap_r_a = spec.gain_out_a * sqrtf(pan);
 }
 
 pub struct DrivenBank {
     modes: [DrivenMode; MAX_MODES],
     count: usize,
     kind: Injection,
+    level_share: LevelShare,
     sample_rate: f32,
     noise_state: u32,
     x1: f32,
@@ -181,7 +220,7 @@ pub struct DrivenBank {
 impl DrivenBank {
     pub const fn silent() -> Self {
         Self {modes: [SILENT_MODE; MAX_MODES], count: 0, kind: Injection::Strike,
-            sample_rate: 48_000.0, noise_state: 0x51f15eed, x1: 0.0, x2: 0.0}
+            level_share: LevelShare::None, sample_rate: 48_000.0, noise_state: 0x51f15eed, x1: 0.0, x2: 0.0}
     }
 
     /// Injection normalization per drive type: an impulse through a unity-peak mode rings at
@@ -196,6 +235,14 @@ impl DrivenBank {
         self.sample_rate = sample_rate;
         self.x1 = 0.0;
         self.x2 = 0.0;
+        let specs = &specs[..count];
+        self.level_share = if specs.iter().all(|spec| spec.gain_out_a == 0.0) {
+            LevelShare::None
+        } else if specs.iter().all(|spec| spec.gain_out_a == spec.gain_out) {
+            LevelShare::Whole
+        } else {
+            LevelShare::Mixed
+        };
         for index in 0..count {
             self.modes[index] = DrivenMode {spec: specs[index], ..SILENT_MODE};
             shape(&mut self.modes[index], injection_kind, sample_rate, 1.0, 1.0, width, 1.0);
@@ -211,9 +258,10 @@ impl DrivenBank {
     }
 
     /// Adds the stereo render into the output slices and writes the mono sum (for serial
-    /// routing) into `mono_out`. Returns the chunk peak for voice-freeing.
+    /// routing) into `mono_out`. Level A ramps linearly from `level_from` to `level_to` over the
+    /// chunk and never reaches `mono_out`. Returns the chunk peak for voice-freeing.
     pub fn render(&mut self, excitation: &[f32], out_l: &mut [f32], out_r: &mut [f32],
-                  mono_out: &mut [f32], gain: f32) -> f32 {
+                  mono_out: &mut [f32], gain: f32, level_from: f32, level_to: f32) -> f32 {
         let mut peak = 0.0f32;
         // Per-mode slow gain wobble (~0.35dB RMS, decorrelated, chunk-rate walk).
         for mode in self.modes[..self.count].iter_mut() {
@@ -222,6 +270,9 @@ impl DrivenBank {
             mode.shim_state += 0.02 * (noise - mode.shim_state);
             mode.shim = (1.0 + mode.shim_state * 0.4).clamp(0.6, 1.5);
         }
+        let unity = self.level_share == LevelShare::None || (level_from == 1.0 && level_to == 1.0);
+        let mixed = !unity && self.level_share == LevelShare::Mixed;
+        let level_step = (level_to - level_from) / excitation.len() as f32;
         for index in 0..excitation.len() {
             let x = excitation[index];
             let drive = x - self.x2;
@@ -229,6 +280,8 @@ impl DrivenBank {
             self.x1 = x;
             let mut left = 0.0f32;
             let mut right = 0.0f32;
+            let mut left_a = 0.0f32;
+            let mut right_a = 0.0f32;
             let mut mono = 0.0f32;
             for mode in self.modes[..self.count].iter_mut() {
                 let y = mode.inject * drive - (mode.a1 * mode.y1 + mode.a2 * mode.y2) * mode.inv_a0;
@@ -237,9 +290,23 @@ impl DrivenBank {
                 let shimmed = y * mode.shim;
                 left += shimmed * mode.tap_l;
                 right += shimmed * mode.tap_r;
+                if mixed {
+                    left_a += shimmed * mode.tap_l_a;
+                    right_a += shimmed * mode.tap_r_a;
+                }
                 mono += y * (mode.tap_l + mode.tap_r);
             }
             mono_out[index] = mono * gain * 0.5;
+            if !unity {
+                let level = level_from + level_step * (index + 1) as f32;
+                if mixed {
+                    left += (level - 1.0) * left_a;
+                    right += (level - 1.0) * right_a;
+                } else {
+                    left *= level;
+                    right *= level;
+                }
+            }
             out_l[index] += left * gain;
             out_r[index] += right * gain;
             peak = peak.max(fabsf(left * gain)).max(fabsf(right * gain));

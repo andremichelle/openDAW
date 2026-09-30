@@ -66,6 +66,9 @@ component
         grid-template-columns: repeat(2, 2.625em)
         gap: 0.25em 2px
 
+        &.three
+          grid-template-columns: repeat(3, 2.625em)
+
       > .rows
         display: flex
         flex-direction: column
@@ -94,7 +97,11 @@ component
     justify-content: start
     gap: 0.25em 2px
 
-    // Object B off: everything but the object selector fades until it is switched back on.
-    &.bypassed > *:not(:first-child)
+    // Object B off: fade the knob cells (the direct children are display: contents wrappers).
+    &.bypassed > *:not(:first-child) > *
       opacity: 0.3
       transition: opacity 120ms
+
+  .inactive > *
+    opacity: 0.3
+    transition: opacity 120ms

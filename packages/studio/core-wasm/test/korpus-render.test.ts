@@ -11,6 +11,7 @@ import {connectSyncToEngine} from "./helpers/connect-sync"
 type Config = {
     name: string
     apply: (box: KorpusDeviceBox) => void
+    silent?: boolean
 }
 
 const CONFIGS: ReadonlyArray<Config> = [
@@ -18,7 +19,7 @@ const CONFIGS: ReadonlyArray<Config> = [
     {name: "gamelan pair (coupled)", apply: box => {
         box.objectB.setValue(1)
         box.dampingB.setValue(0.75)
-        box.detuneB.setValue(7.0)
+        box.tuneB.setValue(0.07)
         box.couple.setValue(0.25)
     }},
     {name: "bar into skin (serial)", apply: box => {
@@ -56,10 +57,54 @@ const CONFIGS: ReadonlyArray<Config> = [
         box.dampingA.setValue(0.5)
         box.vibrato.setValue(0.15)
     }},
+    {name: "bowed wire into a plate (serial)", apply: box => {
+        box.exciter.setValue(2)
+        box.intensity.setValue(0.55)
+        box.position.setValue(0.12)
+        box.objectA.setValue(5)
+        box.dampingA.setValue(0.7)
+        box.air.setValue(0.7)
+        box.objectB.setValue(4)
+        box.routing.setValue(1)
+    }},
+    {name: "picked banjo over a marimba (coupled)", apply: box => {
+        box.exciter.setValue(3)
+        box.objectA.setValue(3)
+        box.vibrato.setValue(0.4)
+        box.objectB.setValue(0)
+        box.tuneB.setValue(-12)
+        box.couple.setValue(0.5)
+    }},
+    {name: "wind over a bell", apply: box => {
+        box.exciter.setValue(4)
+        box.intensity.setValue(0.55)
+        box.objectB.setValue(2)
+        box.tuneB.setValue(12)
+    }},
+    {name: "heavy mallet, fast bow, deep pick (stroke)", apply: box => {
+        box.stroke.setValue(1.0)
+    }},
+    {name: "struck vibraphone tremolo", apply: box => {
+        box.objectA.setValue(1)
+        box.dampingA.setValue(0.8)
+        box.vibrato.setValue(0.5)
+        box.air.setValue(0.8)
+    }},
+    {name: "bell ringing a wire with Level A off (serial)", apply: box => {
+        box.intensity.setValue(0.7)
+        box.objectA.setValue(2)
+        box.dampingA.setValue(0.8)
+        box.levelA.setValue(0.0)
+        box.objectB.setValue(5)
+        box.dampingB.setValue(0.9)
+        box.tuneB.setValue(12.0)
+        box.routing.setValue(1)
+    }},
+    {name: "object A alone with Level A off", apply: box => box.levelA.setValue(0.0), silent: true},
 ]
 
 describe("korpus 2 configs through the wasm engine", () => {
-    CONFIGS.forEach(({name, apply}) => it(`${name} is audible`, async () => {
+    CONFIGS.forEach(({name, apply, silent}) => it(`${name} is ${silent === true ? "silent" : "audible"}`, async () => {
         const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
             ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
         source.beginTransaction()
@@ -119,6 +164,10 @@ describe("korpus 2 configs through the wasm engine", () => {
             }
         }
         expect(finite, `${name}: non-finite output`).toBe(true)
+        if (silent === true) {
+            expect(peak, `${name}: must not sound (peak ${peak})`).toBeLessThan(1e-6)
+            return
+        }
         expect(peak, `${name}: silent through the engine (peak ${peak})`).toBeGreaterThan(1e-3)
         expect(peak, `${name}: blowing up (peak ${peak})`).toBeLessThan(4.0)
     }), 30_000)
@@ -191,6 +240,73 @@ describe("korpus 2 configs through the wasm engine", () => {
         engine.stop(); engine.play()
         const bowPeak = renderPeak(500)
         expect(bowPeak, `bow after the live switch (peak ${bowPeak})`).toBeGreaterThan(1e-3)
+    }, 30_000)
+
+    it("the stroke wire reaches the engine", async () => {
+        const {boxGraph: source, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
+            ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})
+        source.beginTransaction()
+        const unit = AudioUnitBox.create(source, UUID.generate(), box => {
+            box.collection.refer(rootBox.audioUnits)
+            box.output.refer(primaryAudioBusBox.input)
+            box.index.setValue(1)
+        })
+        const korpus = KorpusDeviceBox.create(source, UUID.generate(), box => {
+            box.host.refer(unit.input)
+            box.stroke.setValue(0.0)
+        })
+        const track = TrackBox.create(source, UUID.generate(), box => {
+            box.type.setValue(TrackType.Notes)
+            box.enabled.setValue(true)
+            box.index.setValue(0)
+            box.target.refer(unit)
+            box.tracks.refer(unit.tracks)
+        })
+        const events = NoteEventCollectionBox.create(source, UUID.generate())
+        NoteEventBox.create(source, UUID.generate(), box => {
+            box.events.refer(events.events)
+            box.position.setValue(0)
+            box.duration.setValue(1920)
+            box.pitch.setValue(45)
+            box.velocity.setValue(0.9)
+            box.cent.setValue(0)
+        })
+        NoteRegionBox.create(source, UUID.generate(), box => {
+            box.regions.refer(track.regions)
+            box.events.refer(events.owners)
+            box.position.setValue(0)
+            box.duration.setValue(3840)
+            box.loopDuration.setValue(3840)
+        })
+        source.endTransaction()
+
+        const {engine, memory} = await loadFullEngine()
+        const sync = connectSyncToEngine(engine, memory, source)
+        await sync.settle(); engine.bind(); await sync.settle()
+        engine.set_metronome_enabled(0)
+
+        const half = (engine.output_len() >>> 0) / 2
+        const renderRms = (quanta: number) => {
+            let sum = 0
+            for (let quantum = 0; quantum < quanta; quantum++) {
+                engine.render()
+                const left = new Float32Array(memory.buffer, engine.output_ptr(), half)
+                for (let index = 0; index < half; index++) {sum += left[index] * left[index]}
+            }
+            return Math.sqrt(sum / (quanta * half))
+        }
+        engine.stop(); engine.play()
+        const light = renderRms(200)
+        expect(light, `the light head must speak (rms ${light})`).toBeGreaterThan(1e-4)
+        source.beginTransaction()
+        korpus.stroke.setValue(1.0)
+        source.endTransaction()
+        await sync.settle()
+        engine.stop(); engine.play()
+        const heavy = renderRms(200)
+        // The native mallet-weight law puts ~6dB between the extremes; a dead or crossed wire gives ~0dB.
+        expect(heavy, `field 31 must reach the mallet (light rms ${light}, heavy ${heavy})`)
+            .toBeGreaterThan(light * 1.3)
     }, 30_000)
 
     it("the damping knob chokes a ringing note live", async () => {
@@ -338,7 +454,14 @@ describe("korpus 2 configs through the wasm engine", () => {
             .toBeGreaterThan(blowing * 0.3)
         // The note is still held and the transport never stops — only the preset loads.
         source.beginTransaction()
-        KorpusPresets.apply(korpus, KorpusPresets.Factory[0])
+        // The factory list may be empty; any preset load must cut, so the test brings its own.
+        const preset: KorpusPresets.Preset = {
+            name: "Test Gamelan", exciter: 0, intensity: 0.45, position: 0.42, vibrato: 0.0, air: 0.5,
+            stroke: 0.5, objectA: 0, dampingA: 0.55, tuneA: 0, widthA: 0.35, levelA: 0.5,
+            objectB: 1, dampingB: 0.75, tuneB: 0.07, widthB: 0.8, levelB: 0.7,
+            routing: 0, couple: 0.22, volume: -9.0
+        }
+        KorpusPresets.apply(korpus, preset)
         source.endTransaction()
         await sync.settle()
         renderRms(8) // ~20ms: the ~1.5ms declick decays to nothing in here

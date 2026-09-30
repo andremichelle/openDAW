@@ -116,6 +116,7 @@ pub struct BowState {
     anchor_prev: f32,
     admittance: f32,
     bow_velocity: f32,
+    bow_base: f32,
     bow_target: f32,
     slope: f32,
     force_scale: f32,
@@ -146,6 +147,7 @@ pub struct BowState {
     force_floor: f32,
     released_damped: bool,
     grit: f32,
+    grit_b: f32,
     halo_gain: f32,
     jitter_walk: f32,
     rate_walk: f32,
@@ -162,6 +164,20 @@ pub struct BowState {
     live_width: f32,
     live_freq_ratio: f32,
     last_retune: f32,
+    air: f32,
+    live_stroke: f32,
+    speed: f32,
+    drive_gain: f32,
+}
+
+// Air 0.5 is the natural rosin; the grit steers the lock, so only the hiss halo gets the breath's air² law.
+fn rosin(pressure: f32, air: f32) -> (f32, f32) {
+    ((0.6 + 1.1 * pressure) * (0.5 + air), 0.06 * (0.5 + 1.4 * pressure) * 4.0 * air * air)
+}
+
+// Exactly 1.0 at Stroke 0.5, so the default bow renders bit for bit.
+fn bow_speed(stroke: f32) -> f32 {
+    0.75 + stroke * (0.25 + 0.5 * stroke)
 }
 
 impl BowState {
@@ -169,22 +185,24 @@ impl BowState {
         Self {modes: [SILENT_MODE; MAX_BOW_MODES], count: 0, anchor_slot: 0, f0: 220.0,
             sample_rate: 48_000.0, tune_ratio: 1.0, servo_error_lp: 0.0, cross_age: 0,
             period_sum: 0.0, period_count: 0, anchor_prev: 0.0, admittance: 1.0e-5,
-            bow_velocity: 0.0, bow_target: 0.0, slope: 4.0, force_scale: 0.0, force_max: 0.0,
+            bow_velocity: 0.0, bow_base: 0.0, bow_target: 0.0, slope: 4.0, force_scale: 0.0, force_max: 0.0,
             attack_coefficient: 0.001, release_coefficient: 0.001, gate: false, contact: 0.0,
             drift_state: 0.0, tremor_sin: 0.0, tremor_cos: 1.0, tremor_rot: (0.0, 1.0),
             noise_state: 0x3c6ef372, rosin_lp: 0.0, rosin_hp: 0.0, rosin_lp2: 0.0, rosin_hp2: 0.0,
             tone_env: 0.0, attack_boost: 1.0, vibrato_depth: 0.0, vib_sin: 0.0, vib_cos: 1.0,
             vib_rot: (0.0, 1.0), vib_ramp: 0.0, servo_locked: false, servo_stable: 0,
-            sub_lock_count: 0, force_floor: 0.0, released_damped: false, grit: 1.0,
+            sub_lock_count: 0, force_floor: 0.0, released_damped: false, grit: 1.0, grit_b: 1.0,
             halo_gain: 0.0, jitter_walk: 0.0, rate_walk: 0.0, stroke_timer: 2.4, stroke_dip: 0.0,
             age: 0.0, dc_l: (0.0, 0.0), dc_r: (0.0, 0.0), out_gain: 1.0, admittance_full: 1.0e-5,
             force_trim: 1.0, live_pressure: 0.5, live_t60_ratio: 1.0, live_width: 1.0,
-            live_freq_ratio: 1.0, last_retune: 1.0}
+            live_freq_ratio: 1.0, last_retune: 1.0, air: 0.5, live_stroke: 0.5, speed: 1.0,
+            drive_gain: 1.0}
     }
 
     #[allow(clippy::too_many_arguments)]
     pub fn start(&mut self, material: Material, f0: f32, velocity: f32, pressure: f32,
-                 position_knob: f32, damping: f32, width: f32, vibrato: f32, sample_rate: f32) {
+                 position_knob: f32, damping: f32, width: f32, vibrato: f32, air: f32,
+                 stroke: f32, sample_rate: f32) {
         // Pitch anchor: the table ratio nearest 1.0 sits exactly at the played note.
         let mut anchor = 1.0f32;
         let mut anchor_error = f32::INFINITY;
@@ -311,8 +329,10 @@ impl BowState {
         self.anchor_prev = 0.0;
         self.admittance = admittance;
         self.bow_velocity = 0.0;
-        self.bow_target = 0.06 + 0.10 * velocity;
-        self.slope = 5.5 - 3.0 * pressure;
+        self.bow_base = 0.06 + 0.10 * velocity;
+        self.set_speed(stroke);
+        // Rosin warmth sets friction's slip scale: √speed on a slow bow, speed on a fast one.
+        self.slope = (5.5 - 3.0 * pressure) * sqrtf(self.speed.min(1.0)) / self.speed;
         self.admittance_full = admittance_full.max(1.0e-9);
         self.force_trim = 1.0;
         self.force_scale = pressure_gain / self.admittance_full;
@@ -349,8 +369,8 @@ impl BowState {
         self.servo_stable = 0;
         self.sub_lock_count = 0;
         self.released_damped = false;
-        self.grit = 0.6 + 1.1 * pressure;
-        self.halo_gain = 0.06 * (0.5 + 1.4 * pressure);
+        self.air = air;
+        self.set_rosin(pressure, air);
         self.jitter_walk = 0.0;
         self.rate_walk = 0.0;
         self.stroke_timer = 2.4;
@@ -390,18 +410,25 @@ impl BowState {
         }
     }
 
-    /// Live knob feedback on a sounding bow: pressure, damping, width, tune and vibrato act on
+    /// Live knob feedback on a sounding bow: pressure, stroke, damping, width, tune and vibrato act on
     /// the note in flight. Scalars are cheap; per-mode loops run only while a knob is moving.
     /// The caller hands in already-smoothed values (freq/t60 as ratios, width absolute).
     pub fn refresh(&mut self, pressure: f32, t60_ratio: f32, width: f32, freq_ratio: f32,
-                   vibrato: f32) {
+                   vibrato: f32, air: f32, stroke: f32) {
         self.vibrato_depth = vibrato * 0.009;
-        if fabsf(pressure - self.live_pressure) > 1.0e-4 {
+        let stroke_moved = fabsf(stroke - self.live_stroke) > 1.0e-4;
+        if stroke_moved {
+            self.set_speed(stroke);
+        }
+        if fabsf(air - self.air) > 1.0e-4 {
+            self.air = air;
+            self.set_rosin(self.live_pressure, air);
+        }
+        if stroke_moved || fabsf(pressure - self.live_pressure) > 1.0e-4 {
             self.live_pressure = pressure;
             let pressure_gain = 0.2 + 0.5 * pressure;
-            self.slope = 5.5 - 3.0 * pressure;
-            self.grit = 0.6 + 1.1 * pressure;
-            self.halo_gain = 0.06 * (0.5 + 1.4 * pressure);
+            self.slope = (5.5 - 3.0 * pressure) * sqrtf(self.speed.min(1.0)) / self.speed;
+            self.set_rosin(pressure, self.air);
             let base_scale = pressure_gain / self.admittance_full;
             self.force_scale = base_scale * self.force_trim;
             self.force_floor = 0.22 * base_scale;
@@ -435,6 +462,22 @@ impl BowState {
                 mode.tap_r = mode.amp * sqrtf(pan);
             }
         }
+    }
+
+    fn set_speed(&mut self, stroke: f32) {
+        self.live_stroke = stroke;
+        self.speed = bow_speed(stroke);
+        self.bow_target = self.bow_base * self.speed;
+        // B takes a slow bow's power (force × speed) but only part of a fast bow's surplus.
+        self.drive_gain = if self.speed < 1.0 {self.speed * self.speed} else {sqrtf(self.speed)};
+    }
+
+    // Schelleng: pressure fixed, a slower bow presses into grit and a faster one hisses.
+    fn set_rosin(&mut self, pressure: f32, air: f32) {
+        let slow = self.speed.min(1.0);
+        (self.grit_b, self.halo_gain) = rosin(pressure, air);
+        self.grit = self.grit_b / (slow * slow);
+        self.halo_gain *= self.speed;
     }
 
     /// Re-derives b1/b2/cv from the current theta, r and gamma — needed outside the servo's own
@@ -531,8 +574,8 @@ impl BowState {
         }
     }
 
-    /// Renders additively; returns the chunk peak so the caller can free silent voices.
-    pub fn render(&mut self, out_l: &mut [f32], out_r: &mut [f32]) -> f32 {
+    /// Renders additively and writes the bow force and its rosin noise into `drive`; returns the chunk peak.
+    pub fn render(&mut self, out_l: &mut [f32], out_r: &mut [f32], drive: &mut [f32]) -> f32 {
         let mut peak = 0.0f32;
         for index in 0..out_l.len() {
             let coefficient = if self.gate {self.attack_coefficient} else {self.release_coefficient};
@@ -550,7 +593,7 @@ impl BowState {
             self.attack_boost += (1.0 - self.attack_boost) * 8.0 * (1.0 - expf(-1.0))
                 / (0.18 * self.sample_rate);
             self.age += 1.0 / self.sample_rate;
-            self.stroke_timer -= 1.0 / self.sample_rate;
+            self.stroke_timer -= self.speed / self.sample_rate;
             if self.stroke_timer <= 0.0 && self.gate {
                 self.stroke_dip = 1.0;
                 self.noise_state = self.noise_state.wrapping_mul(1664525).wrapping_add(1013904223);
@@ -584,10 +627,16 @@ impl BowState {
             self.rosin_lp += 0.48 * (raw - self.rosin_lp);
             self.rosin_hp += 0.11 * (self.rosin_lp - self.rosin_hp);
             let band = self.rosin_lp - self.rosin_hp;
-            force += band * fabsf(force) * (0.25 + 0.7 * (1.0 - lambda)) * self.grit;
+            let rasp = band * fabsf(force) * (0.25 + 0.7 * (1.0 - lambda));
+            // A slow bow's extra crunch stays at A's contact, out of object B's drive.
+            let felt = (force + rasp * self.grit_b).clamp(-self.force_max, self.force_max);
+            force += rasp * self.grit;
             // The contact envelope lifts the hair off on release — the stick region (λ = 1 at
             // small delta) otherwise clamps released modes into a limit cycle.
             force = force.clamp(-self.force_max, self.force_max) * self.contact * self.contact;
+            // Rosin noise riding the force lets object B ring where A's overtones never land.
+            let unit = felt * self.contact * self.contact / self.force_max.max(1.0e-12) * self.drive_gain;
+            drive[index] = unit + 8.0 * self.rosin_lp * fabsf(unit);
             // 3. inject; velocity output blended with displacement for warmth.
             let mut left = 0.0f32;
             let mut right = 0.0f32;

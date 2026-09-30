@@ -8,6 +8,7 @@ import {
     BoxVisitor,
     DelayDeviceBox,
     GrooveShuffleBox,
+    KorpusDeviceBox,
     MIDIOutputDeviceBox,
     NeuralAmpDeviceBox,
     RevampDeviceBox,
@@ -31,6 +32,7 @@ import {
     migrateCaptureTrackMismatch,
     migrateDefaultLabels,
     migrateDelayDeviceBox,
+    migrateKorpusDeviceBox,
     migrateMIDIOutputDeviceBox,
     migrateNeuralAmpDeviceBox,
     migrateRevampDeviceBox,
@@ -127,7 +129,8 @@ export class ProjectMigration {
             visitRevampDeviceBox: (box: RevampDeviceBox) => migrateRevampDeviceBox(boxGraph, box),
             visitVaporisateurDeviceBox: (box: VaporisateurDeviceBox) => migrateVaporisateurDeviceBox(boxGraph, box),
             visitValueEventCollectionBox: (box: ValueEventCollectionBox) => migrateValueEventCollection(boxGraph, box),
-            visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box)
+            visitDelayDeviceBox: (box: DelayDeviceBox) => migrateDelayDeviceBox(boxGraph, box),
+            visitKorpusDeviceBox: (box: KorpusDeviceBox) => migrateKorpusDeviceBox(boxGraph, box)
         }))
         // 3rd pass. Drop content tracks whose type no longer matches their unit's capture device (a MIDI
         // instrument swapped for a Tape leaves note tracks on an audio-capture unit, and vice versa) — they

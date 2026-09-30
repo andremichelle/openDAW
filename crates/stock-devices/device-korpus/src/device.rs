@@ -1,5 +1,6 @@
 //! The Korpus 2 device: parameter binding/mapping and the `Instrument` wiring around the voice
-//! pool. Fields 10..26 per the frozen Korpus 2 table (exciter / object A / object B / out).
+//! pool. Parameters are fields 10..19 and 22..26 (exciter / object A / object B / out) plus 28..31
+//! (air, tune B, level A, stroke).
 
 use abi::{float_value, int_value, Block, EventRecord, FieldValue, Instrument, ParamValue, EVENT_NOTE_ON};
 use dsp::midi_to_hz_base;
@@ -9,7 +10,7 @@ use voicing::{Voicing, VoicingMode};
 use crate::engine::pluck::build_body;
 use crate::voice::{Exciter, KorpusShared, KorpusVoice};
 
-const POLY_VOICES: usize = 8;
+const POLY_VOICES: usize = 16;
 const MONO_STACK: usize = 16;
 const PRESET_EPOCH_FIELD: [u16; 1] = [27];
 const DECLICK_DECAY: f32 = 0.985; // ~1.5ms at 48k: the cut's step eases to zero instead of popping
@@ -19,7 +20,7 @@ const OBJECT_A_MAPPING: LinearInteger = LinearInteger {min: 0, max: 5};
 const OBJECT_B_MAPPING: LinearInteger = LinearInteger {min: 0, max: 6};
 const TUNE_MAPPING: LinearInteger = LinearInteger {min: -24, max: 24};
 const ROUTING_MAPPING: LinearInteger = LinearInteger {min: 0, max: 1};
-const DETUNE_MAPPING: Linear = Linear {min: -25.0, max: 25.0};
+const TUNE_B_MAPPING: Linear = Linear {min: -24.0, max: 24.0};
 const UNIPOLAR: Linear = Linear::unipolar();
 const VOLUME_MAPPING: Decibel = Decibel::default_volume();
 
@@ -35,14 +36,19 @@ pub mod param {
     pub const OBJECT_B: usize = 8;
     pub const DAMPING_B: usize = 9;
     pub const TUNE_B: usize = 10;
-    pub const DETUNE_B: usize = 11;
-    pub const WIDTH_B: usize = 12;
-    pub const LEVEL_B: usize = 13;
-    pub const ROUTING: usize = 14;
-    pub const COUPLE: usize = 15;
-    pub const VOLUME: usize = 16;
-    pub const COUNT: usize = 17;
+    pub const WIDTH_B: usize = 11;
+    pub const LEVEL_B: usize = 12;
+    pub const ROUTING: usize = 13;
+    pub const COUPLE: usize = 14;
+    pub const VOLUME: usize = 15;
+    pub const AIR: usize = 16;
+    pub const LEVEL_A: usize = 17;
+    pub const STROKE: usize = 18;
+    pub const COUNT: usize = 19;
 }
+
+const PARAM_FIELDS: [u16; param::COUNT] =
+    [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 29, 22, 23, 24, 25, 26, 28, 30, 31];
 
 pub struct State {
     voicing: Voicing<KorpusVoice, POLY_VOICES, MONO_STACK>,
@@ -68,7 +74,7 @@ impl Instrument for Device {
         build_body(&mut state.shared.body, sample_rate);
         state.gain = dsp::db_to_gain(-9.0);
         for index in 0..param::COUNT {
-            state.ids[index] = abi::bind_parameter(&[10 + index as u16]);
+            state.ids[index] = abi::bind_parameter(&[PARAM_FIELDS[index]]);
         }
         state.preset_epoch = i32::MIN;
         state.preset_epoch_id = abi::observe_field(&PRESET_EPOCH_FIELD);
@@ -86,6 +92,7 @@ impl Instrument for Device {
     fn process_audio(state: &mut State, output: [&mut [f32]; 2], block: &Block) {
         let [out_left, out_right] = output;
         state.voicing.process([&mut *out_left, &mut *out_right], block, &state.shared);
+        state.shared.advance_motor(out_left.len());
         let (mut declick_l, mut declick_r) = state.declick;
         for index in 0..out_left.len() {
             out_left[index] = out_left[index] * state.gain + declick_l;
@@ -129,13 +136,15 @@ impl Instrument for Device {
             param::WIDTH_A => state.shared.width_a = float_value(value, &UNIPOLAR),
             param::OBJECT_B => state.shared.object_b = int_value(value, &OBJECT_B_MAPPING),
             param::DAMPING_B => state.shared.damping_b = float_value(value, &UNIPOLAR),
-            param::TUNE_B => state.shared.tune_b = int_value(value, &TUNE_MAPPING),
-            param::DETUNE_B => state.shared.detune_b = float_value(value, &DETUNE_MAPPING),
+            param::TUNE_B => state.shared.tune_b = float_value(value, &TUNE_B_MAPPING),
             param::WIDTH_B => state.shared.width_b = float_value(value, &UNIPOLAR),
             param::LEVEL_B => state.shared.level_b = float_value(value, &UNIPOLAR),
             param::ROUTING => state.shared.routing = int_value(value, &ROUTING_MAPPING),
             param::COUPLE => state.shared.couple = float_value(value, &UNIPOLAR),
             param::VOLUME => state.gain = dsp::db_to_gain(float_value(value, &VOLUME_MAPPING)),
+            param::AIR => state.shared.air = float_value(value, &UNIPOLAR),
+            param::LEVEL_A => state.shared.level_a = float_value(value, &UNIPOLAR),
+            param::STROKE => state.shared.stroke = float_value(value, &UNIPOLAR),
             _ => {}
         }
     }

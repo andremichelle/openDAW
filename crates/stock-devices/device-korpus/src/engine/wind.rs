@@ -89,6 +89,9 @@ pub struct WindState {
     live_pressure: f32,
     live_damping: f32,
     live_freq_ratio: f32,
+    air_halo: f32,
+    air_inner: f32,
+    halo_lp: f32,
     dc: (f32, f32),
     sample_rate: f32,
 }
@@ -110,7 +113,8 @@ impl WindState {
             servo_trim: 1.0, servo_locked: false, servo_stable: 0, servo_miss: 0,
             cross_prev: 0.0, cross_age: 0,
             period_sum: 0.0, period_count: 0, material: Material::Marimba, live_pressure: 0.5,
-            live_damping: 0.5, live_freq_ratio: 1.0, dc: (0.0, 0.0), sample_rate: 48_000.0}
+            live_damping: 0.5, live_freq_ratio: 1.0, air_halo: 1.0, air_inner: 1.0, halo_lp: 0.3,
+            dc: (0.0, 0.0), sample_rate: 48_000.0}
     }
 
     // Exact phase delay (samples) of the reflection one-pole at the fundamental — the flat
@@ -135,10 +139,19 @@ impl WindState {
             1.0 - expf(-1.0 / ((0.025 + 0.3 * damping) * self.sample_rate));
     }
 
+    // Air 0.5 is the pipe's natural breath. The outside halo scales with air³ (+18 dB at full);
+    // noise inside the jet and bore stays linear, since it steers the oscillation.
+    fn set_air(&mut self, air: f32) {
+        self.air_halo = 8.0 * air * air * air;
+        self.air_inner = 2.0 * air;
+        self.halo_lp = 0.3 * (0.6 + 0.8 * air);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn blow(&mut self, material: Material, frequency: f32, velocity: f32, pressure: f32,
-                position: f32, damping: f32, width: f32, vibrato: f32, sample_rate: f32) {
-        let (_, air, jet, turbulence, scoop) = pipe_color(material);
+                position: f32, damping: f32, width: f32, vibrato: f32, air: f32,
+                sample_rate: f32) {
+        let (_, pipe_air, jet, turbulence, scoop) = pipe_color(material);
         self.jet.fill(0.0);
         self.bore.fill(0.0);
         self.jet_write = 0;
@@ -155,7 +168,7 @@ impl WindState {
         self.jet_ratio = (0.36 + 0.24 * position).min(0.47); // capped below the octave-regime boundary
         self.jet_len = (self.bore_len * self.jet_ratio).clamp(2.0, (MAX_JET - 4) as f32);
         self.jet_gain = jet;
-        self.air_gain = air;
+        self.air_gain = pipe_air;
         self.loop_state = 0.0;
         self.breath = 0.0;
         self.breath_target = (0.62 + 0.3 * velocity) * (0.82 + 0.36 * pressure);
@@ -174,6 +187,7 @@ impl WindState {
         self.pulse_timer = 2.6;
         self.pulse_dip = 0.0;
         self.vibrato_depth = vibrato;
+        self.set_air(air);
         self.vib_sin = 0.0;
         self.vib_cos = 1.0;
         let vib_angle = 2.0 * PI * 5.1 / sample_rate;
@@ -214,12 +228,13 @@ impl WindState {
         self.gate = false;
     }
 
-    /// Live knob feedback on a sounding pipe: pressure, bore damping, width, tune and vibrato.
-    /// Values arrive already smoothed.
+    /// Live knob feedback on a sounding pipe: pressure, bore damping, width, tune, vibrato and
+    /// air. Values arrive already smoothed.
     pub fn refresh(&mut self, pressure: f32, damping: f32, width: f32, freq_ratio: f32,
-                   vibrato: f32) {
+                   vibrato: f32, air: f32) {
         self.vibrato_depth = vibrato;
         self.width = width;
+        self.set_air(air);
         if fabsf(pressure - self.live_pressure) > 1.0e-4 {
             let scale = (0.82 + 0.36 * pressure) / (0.82 + 0.36 * self.live_pressure);
             self.live_pressure = pressure;
@@ -306,8 +321,8 @@ impl WindState {
         a + (b - a) * frac
     }
 
-    /// Renders additively; returns the chunk peak so the caller can free silent voices.
-    pub fn render(&mut self, out_l: &mut [f32], out_r: &mut [f32]) -> f32 {
+    /// Renders additively and writes the breath turbulence into `drive`; returns the chunk peak.
+    pub fn render(&mut self, out_l: &mut [f32], out_r: &mut [f32], drive: &mut [f32]) -> f32 {
         // Wandering vibrato rate, updated at chunk rate like the bow's.
         self.rate_walk = (self.rate_walk + 0.04 * (self.noise() - self.rate_walk)).clamp(-1.0, 1.0);
         let vib_rate = 5.1 * (1.0 + 0.07 * self.rate_walk);
@@ -349,7 +364,8 @@ impl WindState {
             // speaks — the noise lives inside the tone, not next to it.
             let raw_noise = self.noise();
             self.noise_lp_state += self.noise_lp * (raw_noise - self.noise_lp_state);
-            let turbulence = self.noise_lp_state * (0.05 + 0.32 * self.chiff);
+            let turbulence = self.noise_lp_state * (0.05 + 0.32 * self.chiff) * self.air_inner;
+            drive[index] = self.noise_lp_state * self.breath * (0.35 + 2.5 * self.chiff);
             let pressure = self.breath * self.overshoot
                 * (1.0 + vib * 0.55 + turbulence + self.drift_state * 4.0);
             // Pitch: bore glide toward target plus the decaying scoop, vibrato cents and
@@ -384,7 +400,7 @@ impl WindState {
             // Breath noise blown INTO the bore: air filtered by the pipe's own resonances is
             // the shakuhachi airiness — hiss beside the tone never fuses with it.
             let breath_air = self.noise_lp_state * self.breath
-                * (0.055 + 0.085 * self.live_pressure) * self.air_gain;
+                * (0.055 + 0.085 * self.live_pressure) * self.air_gain * self.air_inner;
             let mut seed = 0.0;
             if self.seed_amp > 1.0e-4 {
                 let (ss, sc) = (self.seed_sin, self.seed_cos);
@@ -400,11 +416,11 @@ impl WindState {
             self.dc.0 = bore_out;
             self.dc.1 = blocked;
             // Stereo air halo: decorrelated breath noise, width-spread, riding the pressure.
-            self.noise_l += 0.3 * (self.noise() - self.noise_l);
-            self.noise_r += 0.3 * (self.noise() - self.noise_r);
+            self.noise_l += self.halo_lp * (self.noise() - self.noise_l);
+            self.noise_r += self.halo_lp * (self.noise() - self.noise_r);
             // Direct air rides the vibrato and tremor — the breath wavers, not just the pitch.
             let air = self.breath * (0.019 + 0.02 * self.live_pressure) * self.air_gain
-                * (1.0 + vib * 1.2 + self.tremor_sin * 0.25 + 0.6 * self.chiff);
+                * self.air_halo * (1.0 + vib * 1.2 + self.tremor_sin * 0.25 + 0.6 * self.chiff);
             let spread = self.width * air;
             let center = self.noise_lp_state * air * 0.7;
             let tone = blocked * self.out_gain;

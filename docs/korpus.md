@@ -12,18 +12,19 @@ This document covers the engine end to end: the architecture, each DSP block
 and the reasoning behind it, the parameter surface, and how the device is wired
 through openDAW's Rust→WASM engine (per `manuals/creating-a-device.md`). The
 user-facing manual lives at
-`packages/app/studio/public/manuals/devices/instruments/korpus.md`.
+`packages/app/manual/public/devices/instruments/korpus.md`.
 
 ![The Korpus device editor](korpus-device.png)
 
 ## Architecture
 
 ```
-                        ┌──────────── OBJECT A (modal bank) ───────────┐
+                        ┌──────────── OBJECT A ────────────────────────┐
   EXCITER ──────────────┤     parallel │ serial │ sympathetic coupling  ├──► OUT
-  Strike | Breath       └──────────── OBJECT B (modal bank, opt.) ─────┘
-  Bow | Pick | Wind            │ Bow → bowed modal bank (object A material)
-                               │ Pick → dual-polarization waveguide string
+  Strike | Breath       └──────────── OBJECT B (driven modal bank, opt.)┘
+  Bow | Pick | Wind            │ Strike/Breath → driven modal bank
+                               │ Bow → bowed modal bank (object A material)
+                               │ Pick → dual-polarization waveguide string (object A = string type)
                                │ Wind → self-oscillating jet + bore pipe (object A = pipe color)
 ```
 
@@ -34,6 +35,12 @@ user-facing manual lives at
   exciter × object.
 - **Pick** routes to the dual-polarization plucked string with a commuted
   instrument body (`engine/pluck.rs`).
+- **Object B** is a `DrivenBank` for every exciter, owned by the voice. In
+  Parallel the exciter plays it: Strike and Breath with their excitation, and
+  the self-contained engines with a drive signal from inside their loop (the
+  bow force plus rosin noise, the pick excitation, the breath turbulence). In
+  Serial, A's rendered sound plays it. B never feeds back into A, so a bowed or
+  blown A cannot run away.
 - Material mode tables (ratios, per-mode amplitude and base-T60 laws) are
   shared by the driven and bowed banks (`engine/tables.rs`): Marimba,
   Vibraphone, Bell, Membrane (Bessel), Plate (stretched + jitter), PianoWire
@@ -86,6 +93,30 @@ Pairs are ordered by frequency so θ→0 as k→0 (no mode swap at weak coupling
 and send levels are folded into the drive vector *before* the rotation.
 `k = couple² · 8 Hz`; beat period at degeneracy is `1/(2k)`.
 
+Eigensplit needs both objects as driven banks, so it covers Strike and Breath
+in Parallel. Everywhere else — Bow, Pick and Wind, and Serial routing for any
+exciter — Couple uses the one-sided form (`repel`): A's partials cannot move (a
+sounding engine, or the bank already driving B), so each B mode within reach of
+one lands at the same coupled gap `√(Δ² + 4k²)` from it. The engines' partials
+are their harmonic series; a driven A offers its mode frequencies. In Parallel
+the exciter rings B at the moved frequency, beating against A; in Serial, where
+B only hears A, moving it off A's partials also thins its sympathetic ring.
+
+### Object B behind the engines
+
+Level contracts follow the driven pairs: a make-up trim on A when B is on
+(0.8 Serial, 0.62 Parallel; 0.72 for the bow, whose near-sine tone lends B less
+energy) and per-engine B gains measured with B isolated exactly (A's render is
+deterministic, so B = pair − trim·A alone). The pick's excitation is a burst
+(`Injection::Strike`); the bow force and the breath turbulence are
+noise-normalized. The bow force alone is too tonal to reach modes off its
+harmonics, so rosin noise riding `|force|` is added to its drive. In Serial, a
+held bow or wind tone only reaches B's modes that coincide with its overtones
+(a 6 s vibraphone mode is ~0.4 Hz wide), so their Serial feed adds the rosin or
+breath drive to A's sound through the noise injection, at a tenth of the struck
+Serial gain; the pick keeps the struck path. Damping B then trades
+sympathetic selectivity (high) for a broad body (low).
+
 ## The bowed bank (`engine/bow.rs`)
 
 McIntyre–Schumacher–Woodhouse friction against impulse-invariant
@@ -113,6 +144,8 @@ force→displacement modes:
   plus a direct envelope-tracked noise halo at the output, delayed vibrato with
   a wandering rate and per-mode AM phases, per-mode shimmer. These
   micro-motions are the difference between an organ and an instrument.
+- **Air** scales the rosin: the grit in the force gently (`0.5 + air`, since it
+  steers the lock) and the noise halo with the breath's `4·air²` law.
 - On release the bank re-damps from its bowing Q (×3) back to natural T60 —
   the free ring is the instrument's own, and nothing sustains forever.
 - Output: velocity/displacement blend for warmth, keyboard-compensated
@@ -138,39 +171,91 @@ pressure-riding turbulence, an overpressure attack that relaxes, breath drift
 and tremor, re-breath dips every ~2.6–3.7 s, delayed wandering vibrato
 (pressure-dominant, a few cents of pitch), pitch micro-jitter, and a
 decorrelated stereo air halo. Object A selects the pipe color (loss, air,
-jet bite); object B, routing and couple are inactive.
+jet bite). The Air knob scales the
+breath: the outside halo with air³ (brightening as it rises, +18 dB at full)
+and the noise inside the jet and bore linearly, since that noise steers the
+oscillation. 0.5 is the calibrated natural balance.
+
+## The plucked string (`engine/pluck.rs`)
+
+Two detuned polarizations (vertical/horizontal waveguides, mixed across the
+channels by Width) with a four-stage stiffness allpass and a damping one-pole
+in the loop, excited by a synthetic body impulse response read through the
+pick filter (commuted synthesis) with a pick-position comb. Object A picks the
+string type — stiffness, polarization detune, T60 scale, loop and pick
+brightness, and the horizontal polarization's T60 relative to the vertical
+one: nylon (Marimba), steel (Vibraphone), chime (Bell), banjo (Membrane),
+steel-string acoustic guitar (Plate), stiff wire (Piano Wire). Every string but
+the guitar keeps the original 0.72 ratio, so the horizontal polarization dies
+first. The guitar reverses it (×2.5 on a shorter 0.9× vertical T60), so the
+vertical polarization falls away fast and the horizontal one rings on as a long
+quiet tail — the two-stage decay of a steel-string acoustic, where the vertical
+motion drains into the top (the model has no top coupling; the T60 ratio stands
+in for it). At damping 0.6, A2–A3, that measures about −20 dB/s, then −9 dB/s,
+against nylon's steady −21. Higher up the loop gain reaches its cap, the
+horizontal polarization first, so the ratio shrinks toward 1 and high guitar
+notes decay in one stage like the other strings (from about A4 at damping 0.6).
+Damping past 70% opens the string toward a free one — `t60_of` gains an
+`open²` term, the loop-gain cap rises from 0.998 toward 0.999 so long targets
+survive higher pitches, and the polarization ratio converges (an open string
+evens its polarizations). At 100% the guitar rings ~17 s at E2 and ~11 s at
+E4, nylon ~15 s, steel 20+ s; at and below 70% the old law holds bit for bit.
+Nylon and stiff wire are
+the original two; the body table's read rate stays fixed, because shifting the
+body resonances onto a note's harmonics swung the level ±8 dB across the
+keyboard. **Vibrato** bends both delay lines after the pluck (±20 cents at full,
+~5.4 Hz with a wandering rate), and **Air** past 0.5 adds a decaying pick-noise
+burst into the string and straight out.
 
 ## Exciters (`engine/exciter.rs`)
 
 - **Strike**: raised-cosine contact pulse with unit area across the hardness
   range (hardness = contact time, 9 ms felt → ~0.25 ms wood; velocity shortens
   contact — the Hertzian feel), plus contact noise gated by the same window
-  (an ungated first sample clicks).
+  (an ungated first sample clicks). **Air** past 0.5 adds the mallet's own
+  contact knock straight to the output: band-limited noise decaying in 2–13 ms,
+  shorter and brighter for harder mallets. **Vibrato** is a vibraphone motor
+  tremolo: one motor phase lives in `KorpusShared` and the device advances it
+  every chunk, so a chord pulses together instead of each note starting its own
+  cycle; the knob speeds the motor (3–8 Hz) and deepens it (full depth by 33 %).
 - **Breath**: one-pole breath envelope, low-passed turbulence riding the
   pressure, an attack chiff that outlives the envelope attack, and a sub-Hz
   drift random walk. Only the AC content drives the bank; a small direct bleed
-  keeps chiff and air audible through dark objects.
+  keeps chiff and air audible through dark objects. **Vibrato** pulses the
+  whole blown sound at ~5 Hz with a wandering rate, easing in 0.3 s after the
+  attack — the resonators' own T60 would smooth a pulse applied only to the
+  drive.
 
 ## Parameter surface
 
-Box fields 10–26 (`KorpusDeviceBox`), grouped as the editor shows them:
+Box fields 10–31 (`KorpusDeviceBox`), grouped as the editor shows them:
 
 | # | name | type | notes |
 |---|------|------|-------|
 | 10 | exciter | int 0–4 | Strike, Breath, Bow, Pick, Wind |
 | 11 | intensity | unipolar | hardness / breath brightness / bow pressure / pick color |
 | 12 | position | unipolar | strike/bow/pluck point (mode comb) |
-| 13 | vibrato | unipolar | Bow only; delayed, ≤ ±15 cents |
-| 14–17 | objectA, dampingA, tuneA, widthA | int 0–5, unipolar, ±24 st, unipolar | object A |
-| 18–23 | objectB, dampingB, tuneB, detuneB, widthB, levelB | as A + Off, ±25 ct, level | object B (6 = Off) |
-| 24 | routing | int 0–1 | Parallel, Serial (A's output drives B) |
-| 25 | couple | unipolar | eigensplit strength, k = value²·8 Hz |
+| 13 | vibrato | unipolar | every exciter: motor tremolo / breath pulse / bow pitch ≤ ±15 ct / string ≤ ±20 ct / pipe breath |
+| 14–17, 30 | objectA, dampingA, tuneA, widthA, levelA | int 0–5, unipolar, ±24 st, unipolar, unipolar | object A (Pick: string type, Wind: pipe — the knob then names the string or pipe); levelA 0.5 = unity |
+| 18, 19, 29, 22, 23 | objectB, dampingB, tuneB, widthB, levelB | as A + Off; tuneB float ±24 st | object B (6 = Off), every exciter; tuneB cents are its decimals |
+| 24 | routing | int 0–1 | Parallel (the exciter plays B), Serial (A's sound plays B) |
+| 25 | couple | unipolar | k = value²·8 Hz; eigensplit (Strike/Breath Parallel) or one-sided repel |
 | 26 | volume | decibel | default −9 dB |
 | 27 | preset-epoch | int (plain field) | bumped by every preset load; the device observes it and hard-cuts its voices (~1.5 ms declick) |
+| 28 | air | unipolar | every exciter; 0.5 = natural. Strike/Pick: contact or pick noise above 0.5 only |
+| 31 | stroke | unipolar | the stroke behind the note: mallet weight / bow speed / pluck depth; 0.5 = today's stroke, Breath and Wind ignore it |
+| 20, 21 | deprecatedTuneB, deprecatedDetuneB | int ±24 st, float ±25 ct | deprecated; `migrateKorpusDeviceBox` folds them into field 29 and moves Tune B automation there. The engine binds neither |
+
+With Object B Off, its row plus Routing and Couple have no effect and the
+editor dims exactly those; Stroke likewise dims when the exciter is Breath or
+Wind, which ignore it.
 
 Loudness is a contract, not an accident: every engine path is calibrated to a
-common momentary-RMS target at A3 and locked by test (±3 dB across the twelve
-reference configurations), with keyboard-flattening laws per engine.
+common momentary-RMS target at A3 and locked by test (±3 dB across the fourteen
+reference configurations), with keyboard-flattening laws per engine. Bow, pick
+and wind pairs are held within ±4.5 dB of the same patch with B off.
+Knob-neutral values keep the pre-existing sound bit for bit: vibrato 0, air
+0.5, Level A 0.5, Stroke 0.5, object B Off, couple 0 in Serial, and the nylon and stiff-wire strings.
 
 ### Live parameters
 
@@ -181,7 +266,7 @@ while a knob is actually moving:
 
 - **Driven banks**: every mode keeps its note-on `DrivenSpec` (pan stored as a
   width-independent unit offset); `retune()` rebuilds a₁/a₂/injection/taps —
-  damping through the shared `t60_scale` law, tune/detune as a frequency
+  damping through the shared `t60_scale` law, tune as a frequency
   ratio, width applied absolutely (so a note started at width 0 still
   spreads), Level B as a send scale (serial `18·level` directly). Injection
   normalization is re-derived per drive kind, so the loudness contract follows
@@ -191,16 +276,33 @@ while a knob is actually moving:
   keeps sub-lock lightening across pressure moves), damping scales per-mode γ,
   tune scales the stored `base_theta` exactly (clamping only at realization,
   so an up-down sweep returns home) with the servo lock intact, width re-pans
-  stored unit offsets, vibrato depth is direct. `resync_modes` re-derives
+  stored unit offsets, vibrato depth and air are direct. `resync_modes` re-derives
   b₁/b₂/cv outside the servo's gated pass using the servo's last full retune,
   so vibrato keeps running while a knob moves.
+- **Object B**: the B row is live for every exciter through the same
+  `retune()`; Level B is a send scale in Parallel and the Serial gain directly.
+- **Level A**: a gain of 2·level on A's share of the voice, ramped per sample
+  across each chunk toward the smoothed value (a chunk-rate step clicks) and
+  skipped at exactly unity. It never reaches a serial tap, so B always rings
+  from A's full sound; the mallet contact and the breath bleed follow it.
+  Eigensplit mixes A and B into shared modes, so every `DrivenSpec` carries
+  `gain_out_a`, A's part of its output gain, rotated with `gain_out`; a mixed
+  bank scales only that part (a mixed bank off unity costs ~25% more render).
+- **Stroke**: Bow only — a stroke move re-derives bow speed, target, slip
+  scale, grit, halo and force clamp through the pressure branch (force_trim
+  kept); the smoothed value rides the same approach() as the other knobs.
+  Strike's mallet weight (a momentum low shelf hinged at the head's release,
+  drive = pulse + (J−1)·LP_τ(pulse)) and Pick's pluck depth (level, a first-stage
+  bite fading over 120 ms, and a tension twang read through the vibrato bend
+  path) are note-on decisions, like Air's knock and scrape.
 - **Wind**: pressure scales the breath target, damping re-derives the loss
   filter and re-opens the pitch servo, tune retargets the bore (servo trim
-  carried), width scales the air halo, vibrato depth is direct. **Breath
+  carried), width scales the air halo, vibrato depth and air are direct; on
+  the Breath exciter, air scales the direct breath bleed. **Breath
   release**: on note-off a blown driven bank re-damps to 0.3x its T60 — the
   air stops and the player settles the bars; without it, blown pads rang
   their full struck T60 and stale voices choked the polyphony pool.
-- **Pluck**: tune glides the delay lines, interpolated per sample inside
+- **Pluck**: vibrato depth is direct; tune glides the delay lines, interpolated per sample inside
   `tick()` (a chunk-rate length step reads a distant tap and clicks); damping
   retargets loop gain at the shifted pitch; width re-blends the polarization
   mix. The delay length compensates the exact phase delay of the stiffness
@@ -218,15 +320,17 @@ Structural knobs — exciter, objects, routing, couple — stay note-on decision
 Standard device recipe (see `manuals/creating-a-device.md`): schema in
 `forge-boxes/.../instruments/KorpusDeviceBox.ts` → generated box → adapter
 (`KorpusDeviceBoxAdapter.ts`, value mappings + labeled enums) → Rust crate
-`crates/stock-devices/device-korpus` (no_std, `abi::Instrument`, 8-voice
+`crates/stock-devices/device-korpus` (no_std, `abi::Instrument`, 16-voice
 `voicing` pool) → editor (`KorpusDeviceEditor.tsx`, signal-flow layout
-EXCITER › OBJECTS › OUT with a state-aware Object-B row) → factory
+EXCITER › OBJECTS › OUT; Object B Off dims its row plus Routing and Couple) → factory
 registrations. Factory presets are in-code
 (`adapters/.../KorpusPresets.ts`), since the stock preset catalog is hosted
-outside the repository; they load from an on-panel preset strip (step
-arrows + dropdown, current patch matched field-by-field via
-`KorpusPresets.matches`) and from the device menu, each load one
-`editing.modify` transaction.
+outside the repository. The list is currently empty; the former set, a knob
+reference and restorable entries live in `docs/korpus-presets.md`. With
+entries present, presets load from an on-panel preset strip (step arrows +
+dropdown, current patch matched field-by-field via `KorpusPresets.matches`)
+and from the device menu, each load one `editing.modify` transaction; both
+controls are hidden while the list is empty.
 
 Engine-side cautions that are easy to trip:
 
@@ -240,13 +344,19 @@ Engine-side cautions that are easy to trip:
 
 ## Tests
 
-- `crates/stock-devices/device-korpus/tests/render.rs` — twelve reference
-  configurations: audibility/stereo/decay/onset, the loudness contract, a
-  pitch-range speak guard for sustained exciters at two velocities, and
-  release damping. `KORPUS_RENDER_DIR=<dir>` dumps fixed-gain WAVs.
-- `packages/studio/core-wasm/test/korpus-render.test.ts` — renders six
-  configurations plus a live exciter switch through the real engine +
-  `device_korpus.wasm`; native tests cannot catch engine-path or no_std-only
-  breaks.
+- `crates/stock-devices/device-korpus/tests/render.rs` — fourteen reference
+  configurations plus six bow/pick/wind pairs: audibility/stereo/decay/onset,
+  the loudness contract, a pitch-range speak guard for sustained exciters at
+  two velocities, release damping, live knobs and click-free sweeps, tuning,
+  and one test per newly active knob (object B isolated per engine, Couple,
+  Vibrato, the shared tremolo motor, Air, the pick strings, Level A exact against
+  B alone and through Couple, and twenty Stroke tests: bit-exact defaults per
+  engine, level windows, direction at every pitch, distinctness from Intensity
+  and velocity, live bow strokes, twang settle, extremes).
+  `KORPUS_RENDER_DIR=<dir>` dumps fixed-gain WAVs.
+- `packages/studio/core-wasm/test/korpus-render.test.ts` — renders thirteen
+  configurations, one Level A silence check, plus a live exciter switch, a live damping choke and a preset
+  cut through the real engine + `device_korpus.wasm`; native tests cannot catch
+  engine-path or no_std-only breaks.
 - `packages/studio/core-wasm/test/param-mapping-parity.test.ts` — TS↔Rust
-  value-mapping parity for all 17 parameters.
+  value-mapping parity for all 19 parameters.

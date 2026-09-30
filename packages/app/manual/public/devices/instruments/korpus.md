@@ -23,7 +23,10 @@ Example uses:
 - Breath-driven tones with chiff and air, from ocarina-like leads to breathing pads
 - Blown pipes: shakuhachi, pan and silver flutes that scoop into pitch and breathe
 - Struck hybrids: a bar exciting a drumhead, a bell ringing into a cloud of piano wires
-- Plucked strings from nylon warmth to stiff piano wire
+- Plucked strings from nylon warmth through steel, chime and banjo to a steel-string acoustic guitar and
+  stiff piano wire
+- Bowed, plucked and blown sounds ringing a second object: a glass tone with a vibraphone halo,
+  a steel string on a plate body, a pipe over a bell
 
 ---
 
@@ -61,19 +64,63 @@ embouchure: the jet's length against the pipe, from round and stable toward a br
 
 ### 1.4 Vibrato
 
-Delayed vibrato for the **Bow** and **Wind** exciters: after the note locks in tune, vibrato
-ramps in with a naturally wandering rate — bowed as pitch (±15 cents), blown mostly as breath.
-No effect on other exciters.
+A living movement for every exciter. At 0 % there is none.
+
+- **Strike**: a vibraphone motor tremolo. All notes share one motor, so a chord pulses together.
+  Turning it up spins the motor faster, from a slow 3 Hz swell toward 8 Hz.
+- **Breath**: a pulsing breath that eases in shortly after the attack.
+- **Bow**: pitch vibrato (up to ±15 cents) that ramps in once the note locks in tune.
+- **Pick**: finger vibrato (up to ±20 cents) that comes in after the pluck.
+- **Wind**: delayed vibrato, mostly in the breath, with a few cents of pitch.
+
+### 1.5 Air
+
+The noise of the playing itself. 50 % is the natural balance.
+
+- **Strike**: past 50 %, each hit gets the mallet's contact knock — shorter and brighter with
+  harder mallets. Below 50 % the strike stays clean.
+- **Breath**: more of the air itself over the resonance; 0 % is pure tone.
+- **Bow**: rosin hiss — quieter below 50 %, raspy toward 100 %.
+- **Pick**: past 50 %, a pick scrape at each pluck. Below 50 % the pluck stays clean.
+- **Wind**: breath blowing through the pipe and hissing around it, brighter as it rises; 0 % is
+  pure tone.
+
+### 1.6 Stroke
+
+The physical stroke behind the note — how the exciter moves, where Intensity sets what it is
+made of. 50 % is today's stroke; Breath and Wind ignore it, and the knob dims there.
+
+- **Strike**: mallet weight, a third of the default head to three times it. A heavy head hands
+  the bar more momentum and keeps pushing after the felt lets go — fuller, rounder, louder —
+  while the click on top of the note stays with Intensity. A light head sounds small and thin.
+  Applies from the next hit.
+- **Bow**: bow speed. A fast bow is louder, airier and smoother, changes direction sooner, and
+  speaks a touch earlier; a slow bow is quieter, grainier and sits more pressed. Live on a
+  sounding note, like bow pressure.
+- **Pick**: pluck depth. A deep pluck is louder, drives the body harder, and starts with a
+  tension twang — the note lands about 20 cents sharp and relaxes into tune within a few tens of
+  milliseconds, strongest on the steel, banjo and guitar strings. A shallow stroke brushes the
+  string: softer attack, flatter early decay. Applies from the next pluck.
 
 ---
 
 ## 2. Objects Section
 
-The resonators. Object **A** is always active; object **B** is optional (set its Object knob to
-**Off** for a single-object voice — the rest of the B row dims while off). The **Bow** plays
-object A only. For **Wind**, object A picks the pipe's construction instead — bamboo (Marimba),
-silver (Vibraphone), metal whistle (Bell), husky (Membrane), breath-forward (Plate), reedy
-(Piano Wire) — and object B is inactive.
+The resonators. Object **A** is always active; object **B** is optional for every exciter. Set
+its Object knob to **Off** for a single-object voice: the rest of the B row, Routing and Couple
+dim while it is off, because they only shape the pair.
+
+Object A changes meaning with two exciters:
+
+- **Pick**: object A picks the string, and the knob names it — **Nylon**, **Steel**, **Chime**,
+  **Banjo**, **Guitar** (steel-string acoustic) and **Wire** (stiff piano wire). Steel sustains
+  strongest, banjo is short and bright, chime shimmers, and the guitar speaks with a bright pick
+  attack, falls away quickly, then outlasts them all with a long ringing tail. High guitar notes
+  ring out in one stage, like the other strings.
+- **Wind**: object A picks the pipe, and the knob names it — **Bamboo**, **Silver**, **Whistle**
+  (metal), **Husky**, **Breathy** and **Reed**.
+
+Object B is always a resonating object, whatever the exciter.
 
 ### 2.1 Object
 
@@ -90,14 +137,20 @@ The material and geometry, each with its own mode ratios and frequency-dependent
 
 Overall decay time, scaled through each material's own decay-vs-frequency law: low values choke the
 object, high values let it ring. Bowing feeds on resonance — with the Bow exciter, higher damping
-values make the tone bloom more readily.
+values make the tone bloom more readily. With the **Pick** exciter, pushing Damping past 70 %
+opens the string toward a free one: at 100 % a low guitar note rings out for some fifteen
+seconds, like an undamped flat-top.
 
-### 2.3 Tune / Detune
+### 2.3 Tune
 
-- **Tune**: transposes the object in semitones (±24). Tune B an octave up for halo layers, or down
-  for body and weight.
-- **Detune** (B only): offsets object B in cents (±25). A few cents against object A produces slow,
-  musical beating — the heart of gamelan-style pairs.
+Transposes the object in semitones (±24). Tune B an octave up for halo layers, or down for body
+and weight.
+
+Tune B also reaches between the semitones: its value is semitones with cents as decimals, so
+0.07 st is 7 cents. A few cents against object A produces slow, musical beating — the heart of
+gamelan-style pairs. Dragging Tune B pauses at each whole semitone; hold Shift to drag without
+the pauses, or Alt for finer steps. MIDI controllers and the scroll wheel move it smoothly, so
+double-click it to type an exact value.
 
 ### 2.4 Width
 
@@ -105,10 +158,14 @@ Stereo spread of the object's modes. Each mode sits at its own place in the ster
 scales how far they spread. With the **Pick** exciter, Width spreads the string's two
 polarizations across the channels instead.
 
-### 2.5 Level (B only)
+### 2.5 Level
 
-How strongly the exciter drives object B (parallel routing), or the level of object B's response
-(serial routing).
+- **Level A**: how loud object A sits in the mix. 50 % is unity, 100 % doubles it, and 0 % leaves
+  only object B. In serial routing, object B still rings from A's full sound, so Level A mixes the
+  dry object against its resonance. With Couple, the objects share their resonances, and Level A
+  turns down A's part of them.
+- **Level B**: how strongly the exciter drives object B (parallel routing), or the level of object
+  B's response (serial routing).
 
 ---
 
@@ -116,15 +173,27 @@ How strongly the exciter drives object B (parallel routing), or the level of obj
 
 ### 3.1 Routing
 
-- **Parallel**: the exciter drives both objects side by side — layering.
-- **Serial**: the exciter drives object A, and A's vibration drives object B — like a string
-  mounted on a soundboard, or a bar over a drum. Object B rings on after A decays.
+- **Parallel**: the exciter plays both objects side by side — layering. The bow's rosin rings
+  object B at its own pitch, the same pick strikes it, and the breath blows across it.
+- **Serial**: the exciter plays object A, and A's sound plays object B — like a string mounted
+  on a soundboard, or a bar over a drum. Object B rings on after A decays. With held **Bow** and
+  **Wind** notes, B sings where its resonances meet the note: tune B to an interval of the note,
+  or lower B's Damping for a broader, body-like response.
 
 ### 3.2 Couple
 
-Sympathetic coupling between the two objects (parallel routing). Modes of A and B that are close in
-frequency repel and exchange character — pairs beat, decays become two-staged, doublets shimmer.
-Small amounts (10–25 %) give piano-like slow beating; larger amounts give gong-like split partials.
+Sympathetic coupling between the two objects. Resonances of B that sit close to A's overtones
+are pushed apart from them, so the pair beats instead of doubling.
+
+- **Strike** and **Breath** in Parallel: both objects move — pairs beat, decays become
+  two-staged, doublets shimmer. Small amounts (10–25 %) give piano-like slow beating; larger
+  amounts give gong-like split partials.
+- **Bow**, **Pick** and **Wind**, and **Serial** routing: object B moves away from A's
+  overtones (A stays in tune). In Parallel, B then beats against A; in Serial, B also rings
+  less in sympathy.
+
+The mallet knock and pick scrape belong to the attack, so Air sets them from the next hit; the
+mallet's weight and the pluck's depth apply from the next note the same way.
 
 ### 3.3 Volume
 
@@ -132,25 +201,21 @@ Output level in dB.
 
 ---
 
-## 4. Factory Presets
+## 4. Presets
 
-The preset strip on the panel browses eighteen factory patches covering every exciter and
-routing: step with the ◂ ▸ arrows, or click the name to pick from the full list (the current
-patch is checked). The same list lives in the device menu (⋮ in the device header) under
-**Presets**: _Velvet Gamelan_, _Log & Skin_, _Foundry Kit_, _Twin Nylon_, _Rosin & Ivory_,
-_Glass Chapel_, _Ocarina Moon_, _Cathedral of Wires_, _Seance Drum_ and _Vesper Choir_, the
-blown pipes _Pan Flute_, _Shakuhachi_ and _Silver Flute_, plus _Koto Steps_, _Tank Drum_,
-_Whistle Wind_, _Moon Bow_ and _First Frost_. Loading a preset is
-a single undoable edit that silences any sounding notes at once, and the strip reads _Custom_ as
-soon as any knob leaves the preset.
+Korpus has no built-in presets at the moment. When presets are available, a preset selector
+appears beside object A and under **Presets** in the device menu (⋮ in the device header).
+Loading a preset is a single undoable edit that silences any sounding notes at once.
 
 ---
 
 ## 5. Playing Tips
 
-- Knobs are live on sounding notes: Damping chokes or opens a ringing object, Tune and Detune
-  glide it, Width re-spreads it, Level rides object B, and Intensity changes the breath's air or
-  the bow's pressure mid-note. The exciter type, Objects, Routing and Couple set the instrument's
+- Knobs are live on sounding notes: Damping chokes or opens a ringing object, Tune glides
+  it, Width re-spreads it, Level rides it, Intensity changes the breath's air or
+  the bow's pressure mid-note, Stroke hurries or slows a sounding bow, Vibrato deepens or
+  stills the movement, and Air breathes a blown or bowed note up or down. The mallet knock
+  and pick scrape belong to the attack, so Air sets them from the next hit. The exciter type, Objects, Routing and Couple set the instrument's
   construction, so they apply from the next note.
 - Velocity morphs the exciter, not just the level: harder strikes shorten the mallet contact
   (brighter), faster bow strokes speak sooner.
