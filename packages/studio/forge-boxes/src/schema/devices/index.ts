@@ -7,6 +7,7 @@ import {VaporisateurDeviceBox} from "./instruments/VaporisateurDeviceBox"
 import {ArpeggioDeviceBox} from "./midi-effects/ArpeggioDeviceBox"
 import {PitchDeviceBox} from "./midi-effects/PitchDeviceBox"
 import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
+import {WclapInstrumentBox} from "./instruments/WclapInstrumentBox"
 import {TubularDeviceBox} from "./instruments/TubularDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
@@ -28,6 +29,7 @@ import {TidalDeviceBox} from "./audio-effects/TidalDeviceBox"
 import {DattorroReverbDeviceBox} from "./audio-effects/DattorroReverbDeviceBox"
 import {GateDeviceBox} from "./audio-effects/GateDeviceBox"
 import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
+import {WclapDeviceBox} from "./audio-effects/WclapDeviceBox"
 import {VocoderDeviceBox} from "./audio-effects/VocoderDeviceBox"
 import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
 import {WerkstattDeviceBox} from "./audio-effects/WerkstattDeviceBox"
@@ -71,6 +73,7 @@ export const DeviceDefinitions = [
     MIDIOutputParameterBox,
     SoundfontDeviceBox,
     NeonDeviceBox,
+    WclapInstrumentBox,
     TubularDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,
@@ -80,6 +83,7 @@ export const DeviceDefinitions = [
     PitchDeviceBox,
     ZeitgeistDeviceBox,
     NeuralAmpDeviceBox,
+    WclapDeviceBox,
     VocoderDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,

@@ -4,6 +4,7 @@ import {
     BoxIO,
     CubedDeviceBox,
     NeonDeviceBox,
+    WclapInstrumentBox,
     TubularDeviceBox,
     MIDIOutputDeviceBox,
     NanoDeviceBox,
@@ -105,6 +106,24 @@ export namespace InstrumentFactories {
         }
     }
 
+    export const Wclap: InstrumentFactory<void, WclapInstrumentBox> = {
+        defaultName: "WCLAP",
+        defaultIcon: IconSymbol.WebClap,
+        briefDescription: "CLAP Plugin",
+        description: "Hosts a CLAP instrument compiled to WebAssembly (WCLAP bundle)",
+        manualPage: DeviceManualUrls.Wclap,
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): WclapInstrumentBox =>
+            WclapInstrumentBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                box.host.refer(host)
+            })
+    }
     export const Neon: InstrumentFactory<void, NeonDeviceBox> = {
         defaultName: "Neon",
         defaultIcon: IconSymbol.Neon,
@@ -291,7 +310,7 @@ export namespace InstrumentFactories {
             })
     }
 
-    export const Named = {Apparat, Cubed, InstrumentComposite, Neon, Tubular, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
+    export const Named = {Apparat, Cubed, InstrumentComposite, Neon, Tubular, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur, Wclap}
     export type Keys = keyof typeof Named
 
     export const keyOfBox = (box: Box): Optional<Keys> => {

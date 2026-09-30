@@ -10,7 +10,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
-import {ClipNotification, EnginePreferences, NoteSignal} from "@opendaw/studio-adapters"
+import {ClipNotification, EnginePreferences, NoteSignal, WclapGuiInfo, WclapPluginInfo} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 
 export type RecordingStart = {readonly contextTime: number, readonly position: ppqn}
@@ -31,6 +31,11 @@ export interface Engine extends Terminable {
     wake(): void
     loadClickSound(index: 0 | 1, data: AudioData): void
     setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void
+    wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo>
+    wclapCloseGui(uuid: UUID.Bytes): void
+    wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void
+    wclapSaveState(uuid: UUID.Bytes): void
+    wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>>
     noteSignal(signal: NoteSignal): void
     subscribeNotes(observer: Observer<NoteSignal>): Subscription
     ignoreNoteRegion(uuid: UUID.Bytes): void

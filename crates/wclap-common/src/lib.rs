@@ -1,0 +1,101 @@
+//! Shared by the Wclap effect and instrument devices: the bridge handle, the observed `url` `[10]` and
+//! `clap-id` `[11]` string fields, and the per-chunk copy through the `host_wclap_*` bridge.
+
+#![no_std]
+
+use abi::FieldValue;
+
+pub const RENDER_QUANTUM: usize = 128;
+const URL_FIELD: [u16; 1] = [10];
+const CLAP_ID_FIELD: [u16; 1] = [11];
+const STATE_FIELD: [u16; 1] = [12];
+const URL_CAPACITY: usize = 1024;
+const CLAP_ID_CAPACITY: usize = 256;
+
+pub struct WclapLink {
+    pub bridge: u32,
+    url_field_id: u32,
+    clap_id_field_id: u32,
+    state_field_id: u32,
+    url: [u8; URL_CAPACITY],
+    url_len: usize,
+    clap_id: [u8; CLAP_ID_CAPACITY],
+    clap_id_len: usize,
+    scratch_in: [[f32; RENDER_QUANTUM]; 2],
+    scratch_out: [[f32; RENDER_QUANTUM]; 2]
+}
+
+impl WclapLink {
+    pub fn init(&mut self) {
+        self.bridge = abi::wclap_create(&abi::self_uuid());
+        self.url_field_id = abi::observe_field(&URL_FIELD);
+        self.clap_id_field_id = abi::observe_field(&CLAP_ID_FIELD);
+        self.state_field_id = abi::observe_field(&STATE_FIELD);
+    }
+
+    pub fn url(&self) -> &[u8] {&self.url[..self.url_len]}
+    pub fn clap_id(&self) -> &[u8] {&self.clap_id[..self.clap_id_len]}
+
+    /// Copy a string field into the state and hand both to the bridge, which reloads only on a change. The
+    /// state blob (base64) goes straight to the bridge, which applies it once the plugin is up.
+    pub fn apply_field(&mut self, id: u32, value: FieldValue) {
+        let FieldValue::String(text) = value else {return};
+        if id == self.state_field_id {
+            abi::wclap_state(self.bridge, text);
+            return;
+        }
+        if id == self.url_field_id {
+            self.url_len = copy_into(&mut self.url, text);
+        } else if id == self.clap_id_field_id {
+            self.clap_id_len = copy_into(&mut self.clap_id, text);
+        } else {
+            return;
+        }
+        let url = core::str::from_utf8(self.url()).unwrap_or("");
+        let clap_id = core::str::from_utf8(self.clap_id()).unwrap_or("");
+        abi::wclap_load(self.bridge, url, clap_id);
+    }
+
+    pub fn reset(&self) {abi::wclap_reset(self.bridge)}
+    pub fn release(&self) {abi::wclap_release(self.bridge)}
+
+    /// One chunk `[s0, s1)` of the effect: input through the plugin, or a passthrough while it is not ready.
+    pub fn process_effect(&mut self, in_left: &[f32], in_right: &[f32],
+                          out_left: &mut [f32], out_right: &mut [f32], s0: usize, s1: usize) {
+        let frames = s1 - s0;
+        self.scratch_in[0][..frames].copy_from_slice(&in_left[s0..s1]);
+        self.scratch_in[1][..frames].copy_from_slice(&in_right[s0..s1]);
+        if self.run(frames) {
+            out_left[s0..s1].copy_from_slice(&self.scratch_out[0][..frames]);
+            out_right[s0..s1].copy_from_slice(&self.scratch_out[1][..frames]);
+        } else {
+            out_left[s0..s1].copy_from_slice(&in_left[s0..s1]);
+            out_right[s0..s1].copy_from_slice(&in_right[s0..s1]);
+        }
+    }
+
+    /// One sub-chunk of the instrument: silence in, the plugin's output ADDED to `out` (the instrument contract).
+    pub fn process_instrument(&mut self, out_left: &mut [f32], out_right: &mut [f32]) {
+        let frames = out_left.len().min(RENDER_QUANTUM);
+        self.scratch_in[0][..frames].fill(0.0);
+        self.scratch_in[1][..frames].fill(0.0);
+        if !self.run(frames) {return}
+        for index in 0..frames {
+            out_left[index] += self.scratch_out[0][index];
+            out_right[index] += self.scratch_out[1][index];
+        }
+    }
+
+    fn run(&mut self, frames: usize) -> bool {
+        let [scratch_out_left, scratch_out_right] = &mut self.scratch_out;
+        abi::wclap_process(self.bridge, [&self.scratch_in[0], &self.scratch_in[1]],
+                           [scratch_out_left, scratch_out_right], frames)
+    }
+}
+
+fn copy_into(target: &mut [u8], text: &str) -> usize {
+    let bytes = text.as_bytes();
+    let len = bytes.len().min(target.len());
+    target[..len].copy_from_slice(&bytes[..len]);
+    len
+}

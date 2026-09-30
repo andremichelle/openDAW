@@ -35,15 +35,15 @@ export const FloatingWindow = ({title, width, height, position, onClose}: Constr
         </header>
     )
     const element: HTMLElement = (
-        <div className={className} style={{width: `${width}px`, height: `${height}px`}}>
+        <div className={className}>
             {header}
-            <div className="body">{children}</div>
+            <div className="body" style={{width: `${width}px`, height: `${height}px`}}>{children}</div>
         </div>
     )
     Layers.install(element)
     const move = (x: number, y: number) => {
-        origin.x = clamp(x, 0, window.innerWidth - width)
-        origin.y = clamp(y, 0, window.innerHeight - header.clientHeight)
+        origin.x = clamp(x, 0, Math.max(0, window.innerWidth - element.offsetWidth))
+        origin.y = clamp(y, 0, Math.max(0, window.innerHeight - header.offsetHeight))
         element.style.left = `${origin.x}px`
         element.style.top = `${origin.y}px`
     }
@@ -63,7 +63,7 @@ export const FloatingWindow = ({title, width, height, position, onClose}: Constr
         if (!onButton && surface.floating.lastElementChild !== element) {surface.floating.appendChild(element)}
     }, {capture: true}))
     lifecycle.own(Events.subscribe(window, "resize", () => move(origin.x, origin.y)))
-    move(origin.x, origin.y)
     surface.floating.appendChild(element)
+    move(origin.x, origin.y)
     return {close}
 }

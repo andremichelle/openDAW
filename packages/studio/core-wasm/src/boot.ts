@@ -8,6 +8,7 @@ import {CompositeSpec, EffectCompositeSpec} from "./engine-modules"
 import {linkDevice, registerComposite, registerEffectComposite} from "./device-linker"
 import {ScriptBridges, ScriptEngine} from "./script-bridge"
 import {NamBridges} from "./nam-bridge"
+import {WclapBridges} from "./wclap/wclap-bridge"
 import {simplifySoundfont} from "./soundfont-simplify"
 
 const ENGINE_TABLE_RESERVE = 512 // shared table slots reserved for the engine's own functions (it needs ~343)
@@ -29,8 +30,14 @@ export const describeEngineTrap = (engine: EngineExports, memory: WebAssembly.Me
     return new Error(`wasm panic: ${message.value}`, {cause: error})
 }
 
+export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: number, engineToClient: EngineToClient): WclapBridges =>
+    new WclapBridges(memory, url => engineToClient.fetchWclapBundle(url),
+        (uuid, bytes) => engineToClient.wclapSend(uuid, bytes),
+        (uuid, bytes) => engineToClient.wclapState(uuid, bytes), sampleRate)
+
 export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAssembly.Memory,
-                                      sampleRate: number, engineToClient: EngineToClient): EngineExports => {
+                                      sampleRate: number, engineToClient: EngineToClient,
+                                      wclapBridges: WclapBridges = createWclapBridges(memory, sampleRate, engineToClient)): EngineExports => {
     const table = new WebAssembly.Table({initial: ENGINE_TABLE_RESERVE, element: "anyfunc"})
     const now: Provider<number> = isDefined(globalThis.performance)
         ? () => performance.now() * 1000.0 : () => Date.now() * 1000.0
@@ -40,7 +47,7 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
     const scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
         (uuid, message) => engineToClient.deviceMessage(uuid, message))
     const namBridges = new NamBridges(memory, () => engineToClient.fetchNamWasm(), sampleRate)
-    const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports()}
+    const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}
     modules.deviceModules.forEach((deviceModule, index) =>
         linkDevice(engine, memory, table, deviceModule, modules.deviceBoxTypes[index], sampleRate, bridgeImports))
     modules.composites.forEach(composite => registerComposite(engine, memory, composite))

@@ -1,0 +1,65 @@
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: column
+  justify-content: center
+  row-gap: 0.75em
+  min-width: 16em
+  @include mixins.Control
+
+  > div.plugin
+    display: flex
+    flex-direction: column
+    row-gap: 0.125em
+    font-size: 10px
+    min-width: 0
+
+    > span.header
+      text-transform: uppercase
+      color: var(--color-blue)
+
+    // both lines keep their height when empty, the editor is vertically centred and must not shift
+    > span.name, > span.vendor
+      display: block
+      height: 1.4em
+      line-height: 1.4em
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+      max-width: 20em
+
+    > span.name
+      color: var(--color-bright)
+
+      &.empty
+        color: var(--color-dark)
+        font-style: italic
+
+    > span.vendor
+      opacity: 0.6
+
+  > div.buttons
+    display: flex
+    align-items: center
+    column-gap: 0.25em
+
+    span.button-label
+      display: block
+      font-size: 10px
+      padding: 0 0.5em
+      white-space: nowrap
+
+  > p.about
+    margin: 0
+    font-size: 9px
+    line-height: 1.4
+    opacity: 0.5
+    max-width: 22em
+
+    > a
+      color: var(--color-blue)
+      text-decoration: none
+
+      &:hover
+        text-decoration: underline

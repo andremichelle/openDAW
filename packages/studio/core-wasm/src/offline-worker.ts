@@ -35,7 +35,10 @@ import {
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig,
-    ProjectSkeleton
+    ProjectSkeleton,
+    WclapBundle,
+    WclapGuiInfo,
+    WclapPluginInfo
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
 import {EngineExports, takeReportMessage} from "./engine-exports"
@@ -122,6 +125,9 @@ Communicator.executor<OfflineEngineProtocol>(
                     fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
                     fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
                     fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
+                    fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
+                    wclapSend(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapSend, uuid, bytes)}
+                    wclapState(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapState, uuid, bytes)}
                     notifyClipSequenceChanges(changes: ClipSequencingUpdates): void {
                         dispatcher.dispatchAndForget(this.notifyClipSequenceChanges, changes)
                     }
@@ -262,6 +268,11 @@ Communicator.executor<OfflineEngineProtocol>(
                 scheduleClipPlay: (_clipIds: ReadonlyArray<UUID.Bytes>): void => {},
                 scheduleClipStop: (_trackIds: ReadonlyArray<UUID.Bytes>): void => {},
                 setupMIDI: (port: MessagePort, buffer: SharedArrayBuffer): void => midi.connect(port, buffer),
+                wclapOpenGui: (_uuid: UUID.Bytes): Promise<WclapGuiInfo> => Promise.resolve({uri: "", width: 0, height: 0}),
+                wclapCloseGui: (_uuid: UUID.Bytes): void => {},
+                wclapReceive: (_uuid: UUID.Bytes, _bytes: ArrayBuffer): void => {},
+                wclapSaveState: (_uuid: UUID.Bytes): void => {},
+                wclapDescribe: (_url: string): Promise<ReadonlyArray<WclapPluginInfo>> => Promise.resolve([]),
                 terminate: (): void => {}
             })
             enginePort.start()

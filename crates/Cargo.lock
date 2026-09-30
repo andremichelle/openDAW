@@ -485,6 +485,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-wclap"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "wclap-common",
+]
+
+[[package]]
+name = "device-wclap-instrument"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "wclap-common",
+]
+
+[[package]]
 name = "device-werkstatt"
 version = "0.0.0"
 dependencies = [
@@ -818,6 +834,13 @@ version = "0.0.0"
 dependencies = [
  "abi",
  "libm",
+]
+
+[[package]]
+name = "wclap-common"
+version = "0.0.0"
+dependencies = [
+ "abi",
 ]
 
 [[package]]

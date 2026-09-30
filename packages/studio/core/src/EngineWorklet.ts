@@ -36,7 +36,10 @@ import {
     NoteSignal,
     PERF_BUFFER_SIZE,
     PreferencesHost,
-    ProcessorOptions
+    ProcessorOptions,
+    WclapBundle,
+    WclapGuiInfo,
+    WclapPluginInfo
 } from "@opendaw/studio-adapters"
 import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
@@ -47,6 +50,7 @@ import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
 import {HRClockWorker} from "./HRClockWorker"
+import {WclapBundles, WclapGuis, WclapStates} from "./wclap"
 import type {SoundFont2} from "soundfont2"
 
 export class EngineWorklet extends AudioWorkletNode implements Engine {
@@ -176,6 +180,15 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void {
                         dispatcher.dispatchAndForget(this.updateMonitoringMap, map)
                     }
+                    wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {return dispatcher.dispatchAndReturn(this.wclapOpenGui, uuid)}
+                    wclapCloseGui(uuid: UUID.Bytes): void {dispatcher.dispatchAndForget(this.wclapCloseGui, uuid)}
+                    wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void {
+                        dispatcher.dispatchAndForget(this.wclapReceive, uuid, bytes)
+                    }
+                    wclapSaveState(uuid: UUID.Bytes): void {dispatcher.dispatchAndForget(this.wclapSaveState, uuid)}
+                    wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {
+                        return dispatcher.dispatchAndReturn(this.wclapDescribe, url)
+                    }
                     terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
                 }))
         this.#frozenAudioWriter = isDefined(variant.connectFrozenAudio)
@@ -230,6 +243,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     const response = await fetch(url)
                     return response.arrayBuffer()
                 },
+                fetchWclapBundle: (url: string): Promise<WclapBundle> => WclapBundles.fetch(url),
+                wclapSend: (uuid: string, bytes: ArrayBuffer): void => WclapGuis.deliver(uuid, bytes),
+                wclapState: (uuid: string, bytes: ArrayBuffer): void => WclapStates.store(project, uuid, bytes),
                 notifyClipSequenceChanges: (changes: ClipSequencingUpdates): void => {
                     changes.stopped.forEach(uuid => {
                         for (let i = 0; i < this.#playingClips.length; i++) {
@@ -279,6 +295,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     }
     wake(): void {Atomics.store(this.#controlFlags, 0, 0)}
     loadClickSound(index: 0 | 1, data: AudioData): void {this.#commands.loadClickSound(index, data)}
+    wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {return this.#commands.wclapOpenGui(uuid)}
+    wclapCloseGui(uuid: UUID.Bytes): void {this.#commands.wclapCloseGui(uuid)}
+    wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void {this.#commands.wclapReceive(uuid, bytes)}
+    wclapSaveState(uuid: UUID.Bytes): void {this.#commands.wclapSaveState(uuid)}
+    wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {return this.#commands.wclapDescribe(url)}
     setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
         if (isNull(this.#frozenAudioWriter)) {
             this.#commands.setFrozenAudio(uuid, audioData)
