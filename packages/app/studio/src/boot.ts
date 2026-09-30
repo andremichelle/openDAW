@@ -13,6 +13,7 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {installCursors} from "@/ui/Cursors.ts"
 import {BuildInfo} from "./BuildInfo"
 import {Surface} from "@/ui/surface/Surface.tsx"
+import {Layers} from "@/ui/surface/Layers.tsx"
 import {replaceChildren} from "@opendaw/lib-jsx"
 import {
     AudioContexts,
@@ -139,14 +140,14 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     const errorHandler = new ErrorHandler(buildInfo, () => service.recovery.createBackupCommand())
     const surface = Surface.main({
         config: (surface: Surface) => surface.ownAll(
-            ContextMenu.install(surface.owner, (menuItem, {clientX, clientY}) => {
+            ContextMenu.install(surface.owner, (menuItem, {clientX, clientY, target}) => {
                 Html.unfocus(surface.owner)
                 const offset = 2
                 const x: number = clientX - offset
                 const y: number = clientY
                 const menu = Menu.create(menuItem)
                 menu.moveTo(x, y)
-                menu.attach(Surface.get(surface.owner).flyout)
+                menu.attach(target instanceof Element ? Layers.get(target).flyout : surface.flyout)
             }),
             TouchContextMenu.install(surface.owner))
     }, errorHandler)

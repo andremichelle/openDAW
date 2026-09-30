@@ -4,6 +4,7 @@ import {createElement, Frag} from "@opendaw/lib-jsx"
 import {int, isDefined, Lifecycle, Nullable, Option, panic, Terminable, Terminator} from "@opendaw/lib-std"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Surface} from "@/ui/surface/Surface.tsx"
+import {Layers} from "@/ui/surface/Layers.tsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {AnimationFrame, Events, Html} from "@opendaw/lib-dom"
 
@@ -142,14 +143,14 @@ export class Menu implements Terminable, Lifecycle {
     }
 
     attach(parentElement: Element): void {
-        if (this.#parent.isEmpty() && parentElement.localName === "dialog") {
-            const rect = parentElement.getBoundingClientRect()
-            const style = getComputedStyle(parentElement)
-            this.#originX = (rect.left + parseFloat(style.borderLeftWidth)) | 0
-            this.#originY = (rect.top + parseFloat(style.borderTopWidth)) | 0
-            this.#element.style.position = "absolute"
-            this.#element.style.inset = "0 auto auto 0"
-            this.moveTo(this.#x, this.#y)
+        if (this.#parent.isEmpty()) {
+            Layers.nestedOrigin(parentElement).ifSome(({x, y}) => {
+                this.#originX = x | 0
+                this.#originY = y | 0
+                this.#element.style.position = "absolute"
+                this.#element.style.inset = "0 auto auto 0"
+                this.moveTo(this.#x, this.#y)
+            })
         }
         parentElement.appendChild(this.#element)
         const {right, bottom, width, height} = this.#element.getBoundingClientRect()

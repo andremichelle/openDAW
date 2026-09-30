@@ -23,6 +23,7 @@ import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {ValueTooltip} from "@/ui/surface/ValueTooltip.tsx"
 import {TextTooltip} from "./TextTooltip"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
+import {Layers} from "@/ui/surface/Layers.tsx"
 import {AnimationFrame, CssUtils, Events, Html, Keyboard} from "@opendaw/lib-dom"
 import {IconSymbol, initializeColors} from "@opendaw/studio-enums"
 import {DisplayPaint} from "@/ui/devices/DisplayPaint"
@@ -120,11 +121,9 @@ export class Surface implements TerminableOwner {
 
     readonly #terminator: Terminator
     readonly #ground: DomElement
-    readonly #flyout: DomElement
+    readonly #layers: Layers
     readonly #floating: DomElement
     readonly #toasts: DomElement
-    readonly #textTooltip: TextTooltip
-    readonly #valueTooltip: ValueTooltip
     readonly #pointer: Point
 
     private constructor(owner: WindowProxy, name: string, parent: Nullable<Surface>) {
@@ -136,19 +135,17 @@ export class Surface implements TerminableOwner {
         this.#terminator.own({terminate: () => owner.close()})
 
         this.#ground = <div className="ground"/>
-        this.#flyout = <div className="flyout"/>
+        this.#layers = Layers.root(this)
         this.#floating = <div className="flyout"/>
         this.#toasts = <div className="toasts"/>
-        this.#textTooltip = new TextTooltip(this)
-        this.#valueTooltip = new ValueTooltip(this)
         this.#pointer = Point.zero()
 
         owner.document.body.appendChild(
             <div className={className}>
                 <IconLibrary/>
                 {this.#ground}
-                {this.#flyout}
                 {this.#floating}
+                {this.#layers.flyout}
                 {this.#toasts}
             </div>
         )
@@ -163,26 +160,10 @@ export class Surface implements TerminableOwner {
     get name(): string {return this.#name}
     get pointer(): Readonly<Point> {return this.#pointer}
     get ground(): DomElement {return this.#ground}
-    get flyout(): DomElement {
-        const toRemove = Array.from(this.#flyout.children)
-        /**
-         * We need to postpone this due to an unexpected browser behavior.
-         * For some unknown reason <code>Html.empty(this.#flyout)</code> will lead to:
-         *
-         * NotFoundError: Failed to execute 'remove' on 'Element':
-         * The node to be removed is no longer a child of this node. Perhaps it was moved in a 'blur' event handler?
-         *
-         * If anybody can explain why this code thrown an error, I owe you a beer.
-         * The intention of this code is to allow only one flyout.
-         */
-        AnimationFrame.once(() => toRemove.forEach(element => {
-            const {status, error} = tryCatch(() => {if (element.isConnected) {element.remove()}})
-            if (status === "failure") {console.warn(error)}
-        }))
-        return this.#flyout
-    }
+    get layers(): Layers {return this.#layers}
+    get flyout(): DomElement {return this.#layers.flyout}
     get floating(): DomElement {return this.#floating}
-    get hasFlyout(): boolean {return this.#flyout.firstChild !== null}
+    get hasFlyout(): boolean {return this.#layers.hasFlyout}
     get owner(): Window {return this.#owner}
     get width(): number {
         // Firefox throws NS_ERROR_UNEXPECTED reading innerWidth off a stale WindowProxy (#1073), and the
@@ -196,8 +177,8 @@ export class Surface implements TerminableOwner {
         return value
     }
     get height(): number {return this.#owner.innerHeight}
-    get textTooltip(): TextTooltip {return this.#textTooltip}
-    get valueTooltip(): ValueTooltip {return this.#valueTooltip}
+    get textTooltip(): TextTooltip {return this.#layers.textTooltip}
+    get valueTooltip(): ValueTooltip {return this.#layers.valueTooltip}
     get body(): HTMLElement {return this.#owner.document.body}
 
     close(): void {

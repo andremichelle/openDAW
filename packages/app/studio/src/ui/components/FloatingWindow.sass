@@ -1,0 +1,35 @@
+@use "@/mixins"
+
+component
+  @include mixins.floating(false)
+  position: fixed
+  flex-direction: column
+  padding: 0
+
+  > header
+    display: flex
+    flex-direction: row
+    align-items: center
+    column-gap: 0.5em
+    padding: 0.25em 0.25em 0.25em 0.75em
+    border-radius: 0.5em 0.5em 0 0
+    background-color: var(--color-panel-background)
+    cursor: grab
+    user-select: none
+    touch-action: none
+
+    > span
+      flex: 1
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+
+  > div.body
+    flex: 1
+    display: flex
+    overflow: hidden
+    min-height: 0
+    border-radius: 0 0 0.5em 0.5em
+
+    > *
+      flex: 1

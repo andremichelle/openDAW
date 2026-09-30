@@ -1,7 +1,7 @@
 import {isDefined, panic, RuntimeNotifier, RuntimeSignal} from "@opendaw/lib-std"
 import {MenuItem, ProjectSignals, StudioPreferences, Workers} from "@opendaw/studio-core"
 import {Promises} from "@opendaw/lib-runtime"
-import {RouteLocation} from "@opendaw/lib-jsx"
+import {createElement, RouteLocation} from "@opendaw/lib-jsx"
 import {Browser} from "@opendaw/lib-dom"
 import {CodecsUtils} from "@/CodecsUtils"
 import {StudioService} from "@/service/StudioService"
@@ -9,6 +9,7 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import {SyncLogService} from "@/service/SyncLogService"
 import {Dialogs} from "@/ui/components/dialogs"
 import {NextcloudDebug} from "@/service/NextcloudDebug"
+import {FloatingWindow} from "@/ui/components/FloatingWindow.tsx"
 
 export const createDebugMenu = (service: StudioService) => MenuItem.default({
     label: "Debug",
@@ -31,6 +32,9 @@ export const createDebugMenu = (service: StudioService) => MenuItem.default({
     }).setTriggerProcedure(() => Dialogs.debugBoxes(service.project.boxGraph)),
     MenuItem.default({label: "Validate Project...", selectable: service.hasProfile})
         .setTriggerProcedure(() => service.verifyProject()),
+    MenuItem.default({label: "Show Floating Window..."})
+        .setTriggerProcedure(() => FloatingWindow({title: "Floating Window", width: 480, height: 320},
+            createElement("div", {style: {padding: "1em"}}, "Drag the header, close with the button."))),
     MenuItem.default({
         label: "Load file...",
         separatorBefore: true

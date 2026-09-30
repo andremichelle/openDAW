@@ -5,7 +5,7 @@ import {MenuItem, MenuRootData} from "../menu/MenuItems"
 export namespace ContextMenu {
     export const CONTEXT_MENU_EVENT_TYPE = "--context-menu" as const
 
-    export type MenuFactory = (menuItem: MenuItem, client: Client) => void
+    export type MenuFactory = (menuItem: MenuItem, event: MouseEvent) => void
 
     export interface Collector {
         addItems(...items: MenuItem[]): this
