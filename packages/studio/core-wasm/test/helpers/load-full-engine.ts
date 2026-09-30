@@ -55,8 +55,11 @@ export const loadFullEngine = async (sampleRate = 48000,
         return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
     }, sampleRate)
     // The wclap bridge hosts CLAP plugins; no test loads a bundle, so the loader rejects and the device passes through.
-    const wclapBridges = new WclapBridges(memory, () => Promise.reject(new Error("no wclap bundles in node tests")),
-        () => {}, () => {}, sampleRate)
+    const wclapBridges = new WclapBridges(memory, sampleRate, {
+        loadBundle: () => Promise.reject(new Error("no wclap bundles in node tests")),
+        sendGui: () => {}, sendState: () => {}, sendParams: () => {}, sendParam: () => {}, sendHovered: () => {},
+        sendStatus: () => {}, requestSave: () => {}, track: () => {}
+    })
     const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}
 
     for (const {file, boxType} of DEVICES) {

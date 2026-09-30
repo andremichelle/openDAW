@@ -20,6 +20,7 @@ export namespace WclapBundles {
         const promise = archive
             .then(bytes => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer())
             .then(buffer => ({files: stripRoot(untar(new Uint8Array(buffer)))}))
+        promise.catch(() => cache.delete(url))
         cache.set(url, promise)
         return promise
     }
@@ -38,6 +39,7 @@ export namespace WclapBundles {
         while (state.offset + BLOCK <= bytes.length && bytes[state.offset] !== 0) {
             const header = state.offset
             const size = parseInt(text(header + 124, 12).trim() || "0", 8)
+            if (!Number.isFinite(size) || size < 0) {throw new Error("malformed tar header")}
             const type = String.fromCharCode(bytes[header + 156])
             const prefix = text(header + 345, 155)
             const name = state.longName.length > 0 ? state.longName : (prefix.length > 0 ? `${prefix}/` : "") + text(header, 100)

@@ -10,7 +10,7 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {AudioData, bpm, ppqn} from "@opendaw/lib-dsp"
-import {ClipNotification, EnginePreferences, NoteSignal, WclapGuiInfo, WclapPluginInfo} from "@opendaw/studio-adapters"
+import {ClipNotification, EnginePreferences, NoteSignal, WclapGuiInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 
 export type RecordingStart = {readonly contextTime: number, readonly position: ppqn}
@@ -44,6 +44,7 @@ export interface Engine extends Terminable {
     scheduleClipStop(trackIds: ReadonlyArray<UUID.Bytes>): void
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription
     subscribeDeviceMessage(uuid: string, listener: Procedure<string>): Subscription
+    subscribeWclapStatus(uuid: string, listener: Procedure<WclapStatus>): Subscription
     registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2, destinationNode: AudioNode): void
     unregisterMonitoringSource(uuid: UUID.Bytes): void
 

@@ -30,6 +30,7 @@ import {DattorroReverbDeviceBox} from "./audio-effects/DattorroReverbDeviceBox"
 import {GateDeviceBox} from "./audio-effects/GateDeviceBox"
 import {NeuralAmpDeviceBox} from "./audio-effects/NeuralAmpDeviceBox"
 import {WclapDeviceBox} from "./audio-effects/WclapDeviceBox"
+import {WclapParameterBox} from "./audio-effects/WclapParameterBox"
 import {VocoderDeviceBox} from "./audio-effects/VocoderDeviceBox"
 import {WaveshaperDeviceBox} from "./audio-effects/WaveshaperDeviceBox"
 import {WerkstattDeviceBox} from "./audio-effects/WerkstattDeviceBox"
@@ -84,6 +85,7 @@ export const DeviceDefinitions = [
     ZeitgeistDeviceBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
+    WclapParameterBox,
     VocoderDeviceBox,
     WaveshaperDeviceBox,
     WerkstattDeviceBox,

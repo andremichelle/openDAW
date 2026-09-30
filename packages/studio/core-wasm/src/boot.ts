@@ -30,10 +30,20 @@ export const describeEngineTrap = (engine: EngineExports, memory: WebAssembly.Me
     return new Error(`wasm panic: ${message.value}`, {cause: error})
 }
 
-export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: number, engineToClient: EngineToClient): WclapBridges =>
-    new WclapBridges(memory, url => engineToClient.fetchWclapBundle(url),
-        (uuid, bytes) => engineToClient.wclapSend(uuid, bytes),
-        (uuid, bytes) => engineToClient.wclapState(uuid, bytes), sampleRate)
+// `track` receives every plugin load so the host's loading query waits for it (export, first render)
+export const createWclapBridges = (memory: WebAssembly.Memory, sampleRate: number, engineToClient: EngineToClient,
+                                   track: Procedure<Promise<unknown>> = () => {}): WclapBridges =>
+    new WclapBridges(memory, sampleRate, {
+        loadBundle: url => engineToClient.fetchWclapBundle(url),
+        sendGui: (uuid, bytes) => engineToClient.wclapSend(uuid, bytes),
+        sendState: (uuid, bytes) => engineToClient.wclapState(uuid, bytes),
+        sendParams: (uuid, params) => engineToClient.wclapParams(uuid, params),
+        sendParam: (uuid, paramId, value, gesture) => engineToClient.wclapParam(uuid, paramId, value, gesture),
+        sendHovered: (uuid, paramId) => engineToClient.wclapHovered(uuid, paramId),
+        sendStatus: (uuid, status) => engineToClient.wclapStatus(uuid, status),
+        requestSave: uuid => engineToClient.wclapRequestSave(uuid),
+        track
+    })
 
 export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAssembly.Memory,
                                       sampleRate: number, engineToClient: EngineToClient,

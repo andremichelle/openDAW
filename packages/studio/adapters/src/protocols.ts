@@ -12,6 +12,13 @@ export type WclapBundle = { files: ReadonlyArray<WclapBundleFile> }
 export type WclapGuiInfo = { uri: string, width: number, height: number }
 // one plugin of a bundle's factory, `features` as CLAP lists them ("instrument", "audio-effect", ...)
 export type WclapPluginInfo = { clapId: string, name: string, vendor: string, features: ReadonlyArray<string> }
+// one clap_param_info of a loaded plugin, values in plain CLAP units, `flags` the clap_param_info_flags bits
+export type WclapParamInfo = {
+    id: number, name: string, module: string, min: number, max: number, defaultValue: number, value: number, flags: number
+}
+export type WclapStatus = { state: "loading" | "ready" | "failed", message: string }
+// a parameter change the plugin reports (its GUI, a preset): 0 = value, 1 = gesture begin, 2 = gesture end
+export type WclapParamGesture = 0 | 1 | 2
 
 export interface EngineCommands extends Terminable {
     play(): void
@@ -57,6 +64,14 @@ export interface EngineToClient {
     fetchWclapBundle(url: string): Promise<WclapBundle>
     wclapSend(uuid: string, bytes: ArrayBuffer): void
     wclapState(uuid: string, bytes: ArrayBuffer): void
+    // the loaded plugin's parameter list (once per load) and its own parameter changes
+    wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void
+    wclapParam(uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void
+    // clap.param-hovered: the parameter under the pointer in the plugin's page, -1 when none
+    wclapHovered(uuid: string, paramId: number): void
+    wclapStatus(uuid: string, status: WclapStatus): void
+    // the plugin's state changed, the host answers with `wclapSaveState` between render quanta
+    wclapRequestSave(uuid: string): void
     notifyClipSequenceChanges(changes: ClipSequencingUpdates): void
     switchMarkerState(state: Nullable<[UUID.Bytes, int]>): void
     recordingStarted(contextTime: number, position: ppqn, generation: int): void

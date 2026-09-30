@@ -183,8 +183,10 @@ extern "C" {
     // WCLAP BRIDGE (Wclap only): a CLAP plugin instance hosted in JS next to the engine, see `wclap_*` below.
     fn host_wclap_create(uuid_ptr: u32) -> u32;
     fn host_wclap_load(handle: u32, url_ptr: u32, url_len: u32, id_ptr: u32, id_len: u32);
-    fn host_wclap_process(handle: u32, in0_ptr: u32, in1_ptr: u32, out0_ptr: u32, out1_ptr: u32, frames: u32) -> u32;
+    fn host_wclap_process(handle: u32, in0_ptr: u32, in1_ptr: u32, out0_ptr: u32, out1_ptr: u32, frames: u32,
+                          bpm: f32, position: f64, flags: u32) -> u32;
     fn host_wclap_note(handle: u32, on: u32, key: u32, velocity: f32);
+    fn host_wclap_param(handle: u32, clap_param_id: u32, kind: u32, value: f32, modulation: f32);
     fn host_wclap_state(handle: u32, base64_ptr: u32, base64_len: u32);
     fn host_wclap_reset(handle: u32);
     fn host_wclap_release(handle: u32);
@@ -1018,20 +1020,22 @@ pub fn wclap_load(handle: u32, url: &str, clap_id: &str) {
     { let _ = (handle, url, clap_id); }
 }
 
-/// Run `frames` stereo samples through the plugin. `false` = not ready, the device must pass its input through.
+/// Run `frames` stereo samples through the plugin with the block's transport (tempo, pulse position, playing).
+/// `false` = not ready, the device must pass its input through.
 #[inline]
-pub fn wclap_process(handle: u32, inputs: [&[f32]; 2], outputs: [&mut [f32]; 2], frames: usize) -> bool {
+pub fn wclap_process(handle: u32, inputs: [&[f32]; 2], outputs: [&mut [f32]; 2], frames: usize, block: &Block) -> bool {
     #[cfg(target_family = "wasm")]
     {
         let [in0, in1] = inputs;
         let [out0, out1] = outputs;
         unsafe {
             host_wclap_process(handle, in0.as_ptr() as u32, in1.as_ptr() as u32,
-                               out0.as_mut_ptr() as u32, out1.as_mut_ptr() as u32, frames as u32) != 0
+                               out0.as_mut_ptr() as u32, out1.as_mut_ptr() as u32, frames as u32,
+                               block.bpm, block.p0, block.flags.0) != 0
         }
     }
     #[cfg(not(target_family = "wasm"))]
-    { let _ = (handle, inputs, outputs, frames); false }
+    { let _ = (handle, inputs, outputs, frames, block); false }
 }
 
 /// Queue a note on/off for the plugin's next process call (the engine dispatches events at sub-chunk
@@ -1042,6 +1046,24 @@ pub fn wclap_note(handle: u32, on: bool, key: u32, velocity: f32) {
     { unsafe { host_wclap_note(handle, on as u32, key, velocity) } }
     #[cfg(not(target_family = "wasm"))]
     { let _ = (handle, on, key, velocity); }
+}
+
+/// Queue a resolved parameter change for the plugin's next process call, the last one per id wins within a
+/// chunk. The bridge maps it with the plugin's own `clap_param_info` range: a `Unit` value to `min..max`, a
+/// real value as is, the normalized modulation sum to a `clap_event_param_mod` amount. Native stub no-op.
+#[inline]
+pub fn wclap_param(handle: u32, clap_param_id: u32, value: ParamValue) {
+    let (kind, bits, modulation) = match value {
+        ParamValue::Unit(unit) => (PARAM_KIND_UNIT, unit, f32::NAN),
+        ParamValue::Int(int) => (PARAM_KIND_INT, int as f32, f32::NAN),
+        ParamValue::Float(float) => (PARAM_KIND_FLOAT, float, f32::NAN),
+        ParamValue::Bool(flag) => (PARAM_KIND_BOOL, if flag { 1.0 } else { 0.0 }, f32::NAN),
+        ParamValue::Modulated {base, kind, sum} => (kind, base, sum)
+    };
+    #[cfg(target_family = "wasm")]
+    { unsafe { host_wclap_param(handle, clap_param_id, kind, bits, modulation) } }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, clap_param_id, kind, bits, modulation); }
 }
 
 /// Hand the saved `clap_plugin_state` blob (base64, empty = none) to the bridge, which loads it into the

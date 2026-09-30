@@ -27,7 +27,9 @@ impl Instrument for WclapInstrument {
         state.link.init();
     }
 
-    fn parameter_changed(_state: &mut WclapInstrumentState, _id: u32, _value: ParamValue) {}
+    fn parameter_changed(state: &mut WclapInstrumentState, id: u32, value: ParamValue) {
+        abi::wclap_param(state.link.bridge, id, value);
+    }
 
     fn field_changed(state: &mut WclapInstrumentState, id: u32, value: FieldValue) {
         state.link.apply_field(id, value);
@@ -41,9 +43,9 @@ impl Instrument for WclapInstrument {
         }
     }
 
-    fn process_audio(state: &mut WclapInstrumentState, output: [&mut [f32]; 2], _block: &Block) {
+    fn process_audio(state: &mut WclapInstrumentState, output: [&mut [f32]; 2], block: &Block) {
         let [out_left, out_right] = output;
-        state.link.process_instrument(out_left, out_right);
+        state.link.process_instrument(out_left, out_right, block);
     }
 
     fn reset(state: &mut WclapInstrumentState) {
@@ -59,6 +61,13 @@ pub extern "C" fn kind() -> u32 {
 #[no_mangle]
 pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
     core::mem::size_of::<WclapInstrumentState>() as u32
+}
+
+/// The `parameters` hub (key 13): the engine binds each `WclapParameterBox` child's `value` (key 4) and drives
+/// `parameter_changed` with the child's `clap-id` (key 3) as the id.
+#[no_mangle]
+pub extern "C" fn observe_param_collection_field() -> u32 {
+    13
 }
 
 #[no_mangle]
@@ -95,14 +104,15 @@ pub extern "C" fn terminate(state_ptr: u32) {
 #[cfg(test)]
 mod tests {
     use super::{WclapInstrument, WclapInstrumentState};
-    use abi::Instrument;
+    use abi::{Block, Instrument};
 
     #[test]
     fn not_loaded_bridge_adds_nothing() {
         let mut state: WclapInstrumentState = unsafe { core::mem::zeroed() };
         WclapInstrument::init(&mut state, 48_000.0);
         let (mut out_left, mut out_right) = (vec![0.25f32; 128], vec![0.5f32; 128]);
-        state.link.process_instrument(&mut out_left, &mut out_right);
+        let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: 128, bpm: 120.0};
+        state.link.process_instrument(&mut out_left, &mut out_right, &block);
         assert!(out_left.iter().all(|&sample| sample == 0.25));
         assert!(out_right.iter().all(|&sample| sample == 0.5));
     }

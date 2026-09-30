@@ -1,5 +1,5 @@
 import {WclapDeviceBox} from "@opendaw/studio-boxes"
-import {Option, UUID} from "@opendaw/lib-std"
+import {Option, Terminator, UUID} from "@opendaw/lib-std"
 import {Address, BooleanField, Int32Field, PointerField, StringField} from "@opendaw/lib-box"
 import {Pointers} from "@opendaw/studio-enums"
 import {AudioEffectDeviceAdapter, DeviceHost, Devices} from "../../DeviceAdapter"
@@ -7,6 +7,7 @@ import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
 import {DeviceManualUrls} from "../../DeviceManualUrls"
 import {ParameterAdapterSet} from "../../ParameterAdapterSet"
+import {WclapParameterAdapters} from "../WclapParameterAdapters"
 import {AudioUnitBoxAdapter} from "../../audio-unit/AudioUnitBoxAdapter"
 
 export class WclapDeviceBoxAdapter implements AudioEffectDeviceAdapter {
@@ -16,13 +17,14 @@ export class WclapDeviceBoxAdapter implements AudioEffectDeviceAdapter {
 
     readonly #context: BoxAdaptersContext
     readonly #box: WclapDeviceBox
+    readonly #terminator = new Terminator()
     readonly #parametric: ParameterAdapterSet
-    readonly namedParameter = {} as const
 
     constructor(context: BoxAdaptersContext, box: WclapDeviceBox) {
         this.#context = context
         this.#box = box
-        this.#parametric = new ParameterAdapterSet(this.#context)
+        this.#parametric = this.#terminator.own(new ParameterAdapterSet(this.#context))
+        this.#terminator.own(WclapParameterAdapters.subscribe(this.#parametric, box.parameters))
     }
 
     get box(): WclapDeviceBox {return this.#box}
@@ -35,6 +37,7 @@ export class WclapDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     get host(): PointerField<Pointers.AudioEffectHost> {return this.#box.host}
     get urlField(): StringField {return this.#box.url}
     get clapIdField(): StringField {return this.#box.clapId}
+    get parameters(): ParameterAdapterSet {return this.#parametric}
 
     deviceHost(): DeviceHost {
         return this.#context.boxAdapters
@@ -47,7 +50,5 @@ export class WclapDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         yield {address: this.address, label: this.labelField.getValue(), children: () => Option.None}
     }
 
-    terminate(): void {
-        this.#parametric.terminate()
-    }
+    terminate(): void {this.#terminator.terminate()}
 }

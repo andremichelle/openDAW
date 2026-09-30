@@ -39,10 +39,19 @@ component
     > span.vendor
       opacity: 0.6
 
+      &.failed
+        opacity: 1
+        color: var(--color-red)
+
   > div.buttons
     display: flex
     align-items: center
-    column-gap: 0.25em
+    column-gap: 1em
+
+    > div.group
+      display: flex
+      align-items: center
+      column-gap: 0.25em
 
     span.button-label
       display: block

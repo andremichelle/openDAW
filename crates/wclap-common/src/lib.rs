@@ -3,7 +3,7 @@
 
 #![no_std]
 
-use abi::FieldValue;
+use abi::{Block, FieldValue};
 
 pub const RENDER_QUANTUM: usize = 128;
 const URL_FIELD: [u16; 1] = [10];
@@ -61,11 +61,11 @@ impl WclapLink {
 
     /// One chunk `[s0, s1)` of the effect: input through the plugin, or a passthrough while it is not ready.
     pub fn process_effect(&mut self, in_left: &[f32], in_right: &[f32],
-                          out_left: &mut [f32], out_right: &mut [f32], s0: usize, s1: usize) {
+                          out_left: &mut [f32], out_right: &mut [f32], s0: usize, s1: usize, block: &Block) {
         let frames = s1 - s0;
         self.scratch_in[0][..frames].copy_from_slice(&in_left[s0..s1]);
         self.scratch_in[1][..frames].copy_from_slice(&in_right[s0..s1]);
-        if self.run(frames) {
+        if self.run(frames, block) {
             out_left[s0..s1].copy_from_slice(&self.scratch_out[0][..frames]);
             out_right[s0..s1].copy_from_slice(&self.scratch_out[1][..frames]);
         } else {
@@ -75,21 +75,21 @@ impl WclapLink {
     }
 
     /// One sub-chunk of the instrument: silence in, the plugin's output ADDED to `out` (the instrument contract).
-    pub fn process_instrument(&mut self, out_left: &mut [f32], out_right: &mut [f32]) {
+    pub fn process_instrument(&mut self, out_left: &mut [f32], out_right: &mut [f32], block: &Block) {
         let frames = out_left.len().min(RENDER_QUANTUM);
         self.scratch_in[0][..frames].fill(0.0);
         self.scratch_in[1][..frames].fill(0.0);
-        if !self.run(frames) {return}
+        if !self.run(frames, block) {return}
         for index in 0..frames {
             out_left[index] += self.scratch_out[0][index];
             out_right[index] += self.scratch_out[1][index];
         }
     }
 
-    fn run(&mut self, frames: usize) -> bool {
+    fn run(&mut self, frames: usize, block: &Block) -> bool {
         let [scratch_out_left, scratch_out_right] = &mut self.scratch_out;
         abi::wclap_process(self.bridge, [&self.scratch_in[0], &self.scratch_in[1]],
-                           [scratch_out_left, scratch_out_right], frames)
+                           [scratch_out_left, scratch_out_right], frames, block)
     }
 }
 

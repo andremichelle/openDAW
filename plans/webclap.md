@@ -63,6 +63,13 @@ imports, the JS bridge marshals into the plugin memory. Per 128-frame chunk two 
 - Project load with a missing plugin: the device box carries `uuid`, `url`, `clapId`; the service
   re-fetches from `url`, else the device stays a silent placeholder (Unknown-device style) keeping its
   state blob and parameter boxes so nothing is lost.
+- Live rooms: a bundle travels between peers exactly like samples and soundfonts. `AssetServer` gets a
+  third asset type `wclap` (`hasWclap(sha256)` / `readWclap(sha256)` in the `AssetReader`, served from
+  `WclapStorage`), `ChainedWclapProvider` next to `ChainedSampleProvider` / `ChainedSoundfontProvider`
+  (local OPFS, then a peer, then the bundle's `url`), and `WclapBundles.fetch` resolves `opfs:<sha256>`
+  through that chain. Content addressing by `sha256(bundle.tar.gz)` makes the transfer idempotent and
+  keeps a peer's browsed-from-disk bundle usable by everyone in the room without a public url. Chunking,
+  traffic metering and zip framing are the existing `ChunkProtocol` / `AssetZip`, nothing new on the wire.
 
 ### Box model
 
@@ -174,11 +181,61 @@ deliverable. The canvas extension is a pure drawing contract either way, threadi
 4. Automation/modulation/gesture events, plugin param feedback into the box, `latency` field.
 5. Canvas GUI (tier 1): `opendaw.canvas-gui/1` header + Rust crate + widget kit, host replayer and input
    routing, a canvas build of Basics as the proof. Model B host (shared memory) if phase 0 said yes.
-6. Cloud backup, missing-plugin recovery, offline render + freeze parity (perf worker uses the same
-   bridge through `device-linker.ts`).
+6. Cloud backup, missing-plugin recovery, live-room bundle exchange (`wclap` asset type over the
+   sample/soundfont peer transfer), offline render + freeze parity (perf worker uses the same bridge
+   through `device-linker.ts`).
 7. Later: plugin delay compensation in the engine (does not exist for any device today), sidechain ports
    (`clap.audio-ports` aux -> `bind_sidechain`), note expressions beyond tuning, `clap.remote-controls`
    for macro pages, registry integration, `wasm64` when Basics ships one.
+
+## Production hardening (2026-09-30, after the review)
+
+- The plugin page runs in a host frame (`public/wclap-frame.html`) that owns the service worker and relays
+  messages, keys, right-clicks and double-clicks. Served from `VITE_WCLAP_ORIGIN` (a second domain such as
+  `plugins.opendaw.studio` pointing at the same deployment, CORP `cross-origin` is already set globally) a
+  third-party page is origin-isolated from the studio. Empty = the studio's origin, dev default.
+- Plugin faults are contained per instance (trap, throw, `proc_exit`, bad function pointers, oversized
+  streams): the instance is dropped, the device passes through, the editor shows the reason. Memory is
+  capped (256 MB initial, 1 GB maximum), console output is muted after 200 lines.
+- Loads join the host's pending resources, so exports and the first render wait for the plugin.
+- Parameter boxes are the host's truth: values queued before the plugin is up reach it with the first
+  process call, `reconcile` never overwrites them, range changes update mappings in place (links survive),
+  and after page traffic the bridge polls `get_value` once (Cmajor emits no parameter events).
+- `activate(1..128)` for the engine's sub-chunks, PARAM_MOD cleared when the sum returns to 0, params and
+  notes in separate event budgets, echo suppression in f32, transport event (tempo, beats, playing),
+  `clap.host-params` (rescan, request_flush), state save between quanta via `wclapRequestSave`, the
+  plugin's canonical serialisation as the known state, teardown keeps the state for a re-instantiation.
+- `opfs:` bundles travel in `.odb` project bundles and in the cloud backup (`wclaps/<sha256>.tar.gz`).
+- The window lives in `WclapWindows` (per device, survives editor rebuilds, closes with the device or the
+  project). Open UI toggles, the editor shows loading, ready (vendor) and failed (reason).
+- Tests: `core-wasm/test/wclap-bridge.test.ts` over the Basics fixture (`test/assets/basics.wclap.tar.gz`).
+- Open: the instantiate chain and `describe` still run on the audio thread (a worker would need its own
+  bridge instance), no `clap.latency`, no watchdog for an infinite loop inside a plugin.
+
+### Pointing at a control inside the page (self-enabling, inert with today's plugins)
+
+Right-click and double-click on a control INSIDE the plugin window open openDAW's parameter menu and value
+entry, exactly as on a stock device's knob — but ONLY for a plugin that says which control the pointer is
+on. The host cannot find that out by itself:
+
+- `clap.param-hovered/1` is the official answer and the bridge offers it as a host extension. No tested
+  plugin calls it (Basics, Slide, MNO, Tapa, Clap Saw Demo and Pro54 all carry the clap-helpers string and
+  never use it), so the host is told "nothing hovered" forever.
+- Reading the page's DOM instead does not work. A plugin's element ids are its own endpoint names while the
+  CLAP parameters carry display names: measured on Pro54, 20 of 68 ids match a parameter name exactly and
+  fuzzy matching picks confident wrong hits (`OscAPW` scores highest on "Oscillator B Triangle"). Learning a
+  binding from the parameter that changes after a click works but needs every control moved once first, and
+  an id shared with a container answers for every control. Both were tried and removed.
+
+So the plugin ENABLES it by proving support: the first `update(param_id)` it reports makes the studio hand
+right-click and double-click inside its page over to openDAW (`wclap-pointer-enable` to the host frame). A
+plugin that never reports keeps its page's own context menu and double-click, and nothing in openDAW is
+guessed. WebCLAP plugin authors: call `update(param_id)` on hover and `CLAP_INVALID_ID` on leave, that is
+the whole integration.
+
+The openDAW-side handles that always work are the device editor's "Parameters" dropdown (every parameter
+grouped by its CLAP module, with automate / modulate / MIDI learn / Enter Percentage) and the automation
+lanes.
 
 ## Risks
 

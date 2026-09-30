@@ -1,5 +1,5 @@
-// Minimal WASI preview1 for a CLAP plugin module: stdout/stderr to the console, a clock, random bytes, no
-// filesystem (every fd/path call answers EBADF/ENOENT). Unknown imports answer ENOSYS instead of trapping.
+// Minimal WASI preview1 for a CLAP plugin module: console output, clocks, random bytes, no filesystem
+import {isDefined, Optional, Procedure} from "@opendaw/lib-std"
 import {decodeUtf8} from "../utf8"
 
 const ERRNO_SUCCESS = 0
@@ -7,14 +7,17 @@ const ERRNO_BADF = 8
 const ERRNO_NOENT = 44
 const ERRNO_NOSYS = 52
 const FILETYPE_CHARACTER_DEVICE = 2
+const CLOCK_MONOTONIC = 1
 
-export type WasiImports = Record<string, Record<string, Function>>
+export type WasiImports = Record<string, Record<string, (...args: Array<never>) => unknown>>
+export type MemoryLimits = { initial: number, maximum: number, shared: boolean }
 
-export const createWasiImports = (module: WebAssembly.Module, memoryProvider: () => WebAssembly.Memory, label: string): WasiImports => {
+export const createWasiImports = (module: WebAssembly.Module, memoryProvider: () => WebAssembly.Memory,
+                                  label: string, log: Procedure<string>): WasiImports => {
     const view = () => new DataView(memoryProvider().buffer)
     const bytes = () => new Uint8Array(memoryProvider().buffer)
     const lines: Array<string> = ["", "", ""]
-    const shim: Record<string, Function> = {
+    const shim: Record<string, (...args: Array<never>) => unknown> = {
         args_get: () => ERRNO_SUCCESS,
         args_sizes_get: (countPtr: number, sizePtr: number) => {
             view().setUint32(countPtr, 0, true)
@@ -27,8 +30,11 @@ export const createWasiImports = (module: WebAssembly.Module, memoryProvider: ()
             view().setUint32(sizePtr, 0, true)
             return ERRNO_SUCCESS
         },
-        clock_time_get: (_id: number, _precision: bigint, timePtr: number) => {
-            view().setBigUint64(timePtr, BigInt(Date.now()) * 1_000_000n, true)
+        clock_time_get: (id: number, _precision: bigint, timePtr: number) => {
+            const nanos = id === CLOCK_MONOTONIC && isDefined(globalThis.performance)
+                ? BigInt(Math.round(performance.now() * 1_000_000))
+                : BigInt(Date.now()) * 1_000_000n
+            view().setBigUint64(timePtr, nanos, true)
             return ERRNO_SUCCESS
         },
         fd_close: () => ERRNO_BADF,
@@ -46,27 +52,31 @@ export const createWasiImports = (module: WebAssembly.Module, memoryProvider: ()
         fd_write: (fd: number, iovsPtr: number, iovsCount: number, writtenPtr: number) => {
             const memory = bytes()
             const dataView = view()
-            const chunks: Array<number> = []
-            for (let index = 0; index < iovsCount; index++) {
+            const chunks: Array<string> = []
+            const written = Array.from({length: iovsCount}, (_, index) => {
                 const bufferPtr = dataView.getUint32(iovsPtr + index * 8, true)
-                const length = dataView.getUint32(iovsPtr + index * 8 + 4, true)
-                for (let offset = 0; offset < length; offset++) {chunks.push(memory[bufferPtr + offset])}
-            }
-            dataView.setUint32(writtenPtr, chunks.length, true)
+                const length = Math.min(dataView.getUint32(iovsPtr + index * 8 + 4, true), memory.length - bufferPtr)
+                chunks.push(decodeUtf8(memory.subarray(bufferPtr, bufferPtr + length)))
+                return length
+            }).reduce((sum, length) => sum + length, 0)
+            dataView.setUint32(writtenPtr, written, true)
             if (fd === 1 || fd === 2) {
-                const text = lines[fd] + decodeUtf8(new Uint8Array(chunks))
-                const parts = text.split("\n")
+                const parts = (lines[fd] + chunks.join("")).split("\n")
                 lines[fd] = parts.pop() ?? ""
-                parts.forEach(line => console.log(`[wclap ${label}] ${line}`))
+                parts.forEach(log)
             }
             return ERRNO_SUCCESS
         },
         path_open: () => ERRNO_NOENT,
         poll_oneoff: () => ERRNO_NOSYS,
-        proc_exit: (code: number) => {throw new Error(`wclap ${label} exited with ${code}`)},
+        proc_exit: (code: number) => {throw new Error(`${label} exited with ${code}`)},
         random_get: (bufferPtr: number, length: number) => {
-            const memory = bytes()
-            for (let offset = 0; offset < length; offset++) {memory[bufferPtr + offset] = (Math.random() * 256) | 0}
+            const target = bytes().subarray(bufferPtr, bufferPtr + length)
+            if (isDefined(globalThis.crypto)) {
+                crypto.getRandomValues(target)
+            } else {
+                target.forEach((_, index) => target[index] = (Math.random() * 256) | 0)
+            }
             return ERRNO_SUCCESS
         },
         sched_yield: () => ERRNO_SUCCESS
@@ -76,24 +86,23 @@ export const createWasiImports = (module: WebAssembly.Module, memoryProvider: ()
         if (entry.kind !== "function" || entry.module === "env") {continue}
         const namespace = imports[entry.module] ?? (imports[entry.module] = {})
         namespace[entry.name] = shim[entry.name] ?? (() => {
-            console.warn(`[wclap ${label}] unsupported import ${entry.module}.${entry.name}`)
+            log(`unsupported import ${entry.module}.${entry.name}`)
             return ERRNO_NOSYS
         })
     }
     return imports
 }
 
-// The declared limits of the module's memory import (none = the module exports its own memory).
-export const readMemoryImportLimits = (bytes: Uint8Array): { initial: number, maximum: number, shared: boolean } | undefined => {
+// The declared limits of the module's memory import (none = the module exports its own memory)
+export const readMemoryImportLimits = (bytes: Uint8Array): Optional<MemoryLimits> => {
     const position = {index: 8}
     const readLeb = (): number => {
-        let result = 0
-        let shift = 0
-        while (true) {
+        const state = {result: 0, shift: 0}
+        for (; ;) {
             const byte = bytes[position.index++]
-            result |= (byte & 0x7F) << shift
-            if ((byte & 0x80) === 0) {return result >>> 0}
-            shift += 7
+            state.result |= (byte & 0x7F) << state.shift
+            if ((byte & 0x80) === 0) {return state.result >>> 0}
+            state.shift += 7
         }
     }
     const skipName = (): void => {
@@ -106,7 +115,7 @@ export const readMemoryImportLimits = (bytes: Uint8Array): { initial: number, ma
         const end = position.index + size
         if (id === 2) {
             const count = readLeb()
-            for (let entry = 0; entry < count; entry++) {
+            for (const _ of Array.from({length: count})) {
                 skipName()
                 skipName()
                 const kind = bytes[position.index++]

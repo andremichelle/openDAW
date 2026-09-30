@@ -5,5 +5,6 @@ import {DeviceFactory} from "../../std/DeviceFactory"
 export const WclapInstrumentBox: BoxSchema<Pointers> = DeviceFactory.createInstrument("WclapInstrumentBox", "notes", {
     10: {type: "string", name: "url"},
     11: {type: "string", name: "clap-id"},
-    12: {type: "string", name: "state"} // clap_plugin_state blob, base64
+    12: {type: "string", name: "state"}, // clap_plugin_state blob, base64
+    13: {type: "field", name: "parameters", pointerRules: {accepts: [Pointers.Parameter], mandatory: false}}
 })

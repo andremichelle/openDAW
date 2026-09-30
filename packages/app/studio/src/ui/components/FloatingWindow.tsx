@@ -26,7 +26,11 @@ export interface FloatingWindowHandle {
 export const FloatingWindow = ({title, icon, width, height, position, onClose}: Construct, children: JsxValue): FloatingWindowHandle => {
     const lifecycle = new Terminator()
     const surface = Surface.get()
-    const origin = position ?? {x: (window.innerWidth - width) * 0.5, y: (window.innerHeight - height) * 0.5}
+    const bodyWidth = Math.min(width, window.innerWidth - 32)
+    const bodyHeight = Math.min(height, window.innerHeight - 64)
+    const origin = isDefined(position)
+        ? {x: position.x, y: position.y}
+        : {x: (window.innerWidth - bodyWidth) * 0.5, y: (window.innerHeight - bodyHeight) * 0.5}
     const header: HTMLElement = (
         <header>
             {isDefined(icon) && <Icon symbol={icon}/>}
@@ -39,7 +43,7 @@ export const FloatingWindow = ({title, icon, width, height, position, onClose}: 
     const element: HTMLElement = (
         <div className={className}>
             {header}
-            <div className="body" style={{width: `${width}px`, height: `${height}px`}}>{children}</div>
+            <div className="body" style={{width: `${bodyWidth}px`, height: `${bodyHeight}px`}}>{children}</div>
         </div>
     )
     Layers.install(element)

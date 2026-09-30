@@ -28,7 +28,9 @@ impl AudioEffect for WclapDevice {
         state.link.init();
     }
 
-    fn parameter_changed(_state: &mut WclapState, _id: u32, _value: ParamValue) {}
+    fn parameter_changed(state: &mut WclapState, id: u32, value: ParamValue) {
+        abi::wclap_param(state.link.bridge, id, value);
+    }
 
     fn reset(state: &mut WclapState) {
         state.link.reset();
@@ -39,7 +41,7 @@ impl AudioEffect for WclapDevice {
         let [in_left, in_right] = input.channels();
         let [out_left, out_right] = output;
         let (s0, s1) = (block.s0 as usize, block.s1 as usize);
-        state.link.process_effect(in_left, in_right, out_left, out_right, s0, s1);
+        state.link.process_effect(in_left, in_right, out_left, out_right, s0, s1, block);
     }
 }
 
@@ -51,6 +53,13 @@ pub extern "C" fn kind() -> u32 {
 #[no_mangle]
 pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
     core::mem::size_of::<WclapState>() as u32
+}
+
+/// The `parameters` hub (key 13): the engine binds each `WclapParameterBox` child's `value` (key 4) and drives
+/// `parameter_changed` with the child's `clap-id` (key 3) as the id.
+#[no_mangle]
+pub extern "C" fn observe_param_collection_field() -> u32 {
+    13
 }
 
 #[no_mangle]
@@ -89,7 +98,7 @@ pub extern "C" fn terminate(state_ptr: u32) {
 #[cfg(test)]
 mod tests {
     use super::{WclapDevice, WclapState};
-    use abi::AudioEffect;
+    use abi::{AudioEffect, Block};
 
     #[test]
     fn not_loaded_bridge_passes_the_input_through() {
@@ -98,7 +107,8 @@ mod tests {
         let in_left: Vec<f32> = (0..128).map(|i| (i as f32 * 0.1).sin()).collect();
         let in_right: Vec<f32> = (0..128).map(|i| (i as f32 * 0.07).cos()).collect();
         let (mut out_left, mut out_right) = (vec![0.0f32; 128], vec![0.0f32; 128]);
-        state.link.process_effect(&in_left, &in_right, &mut out_left, &mut out_right, 32, 96);
+        let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, s0: 32, s1: 96, bpm: 120.0};
+        state.link.process_effect(&in_left, &in_right, &mut out_left, &mut out_right, 32, 96, &block);
         assert_eq!(&out_left[32..96], &in_left[32..96]);
         assert_eq!(&out_right[32..96], &in_right[32..96]);
         assert!(out_left[..32].iter().all(|&sample| sample == 0.0));

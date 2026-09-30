@@ -2,6 +2,7 @@
 // pointers are 4 bytes, doubles and i64 are 8-byte aligned. Verified against the spike over Signalsmith Basics.
 export namespace ClapAbi {
     export const VERSION = {major: 1, minor: 2, revision: 2}
+    export const INVALID_ID = 0xFFFFFFFF
 
     export namespace PluginEntry {
         export const INIT = 12
@@ -132,6 +133,8 @@ export namespace ClapAbi {
         export const WEBVIEW = "clap.webview/3"
         export const LOG = "clap.log"
         export const THREAD_CHECK = "clap.thread-check"
+        export const PARAM_HOVERED = "clap.param-hovered/1"
+        export const HOST_PARAMS = "clap.params"
     }
 
     export namespace AudioPorts {
@@ -146,6 +149,15 @@ export namespace ClapAbi {
         export const VALUE_TO_TEXT = 12
         export const TEXT_TO_VALUE = 16
         export const FLUSH = 20
+    }
+
+    export namespace ParamFlags {
+        export const IS_STEPPED = 1 << 0
+        export const IS_HIDDEN = 1 << 2
+        export const IS_READONLY = 1 << 3
+        export const IS_AUTOMATABLE = 1 << 5
+        export const IS_MODULATABLE = 1 << 10
+        export const IS_ENUM = 1 << 16
     }
 
     export namespace ParamInfo {
@@ -208,6 +220,40 @@ export namespace ClapAbi {
     export namespace HostLog {
         export const SIZE = 4
         export const LOG = 0
+    }
+
+    export namespace HostParams {
+        export const SIZE = 12
+        export const RESCAN = 0
+        export const CLEAR = 4
+        export const REQUEST_FLUSH = 8
+    }
+
+    // clap_event_transport, i64/f64 fields 8-aligned after the 16-byte header + flags
+    export namespace TransportEvent {
+        export const SIZE = 104
+        export const FLAGS = 16
+        export const SONG_POS_BEATS = 24
+        export const SONG_POS_SECONDS = 32
+        export const TEMPO = 40
+        export const TEMPO_INC = 48
+        export const LOOP_START_BEATS = 56
+        export const LOOP_END_BEATS = 64
+        export const LOOP_START_SECONDS = 72
+        export const LOOP_END_SECONDS = 80
+        export const BAR_START = 88
+        export const BAR_NUMBER = 96
+        export const TSIG_NUM = 100
+        export const TSIG_DENOM = 102
+        export const HAS_TEMPO = 1 << 0
+        export const HAS_BEATS_TIMELINE = 1 << 1
+        export const IS_PLAYING = 1 << 4
+        export const BEATTIME_FACTOR = 2 ** 31
+    }
+
+    export namespace HostParamHovered {
+        export const SIZE = 4
+        export const UPDATE = 0
     }
 
     export namespace HostThreadCheck {

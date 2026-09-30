@@ -21,7 +21,8 @@ import {
     NoteSignal,
     PreferencesFacade,
     WclapGuiInfo,
-    WclapPluginInfo
+    WclapPluginInfo,
+    WclapStatus
 } from "@opendaw/studio-adapters"
 import {AudioContexts} from "./AudioContexts"
 import {Engine, RecordingStart} from "./Engine"
@@ -159,6 +160,9 @@ export class EngineFacade implements Engine {
     }
     subscribeDeviceMessage(uuid: string, listener: Procedure<string>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeDeviceMessage").subscribeDeviceMessage(uuid, listener)
+    }
+    subscribeWclapStatus(uuid: string, listener: Procedure<WclapStatus>): Subscription {
+        return this.#worklet.unwrap("No worklet to subscribeWclapStatus").subscribeWclapStatus(uuid, listener)
     }
     registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2, destinationNode: AudioNode): void {
         this.#worklet.ifSome(worklet => worklet.registerMonitoringSource(uuid, node, numChannels, destinationNode))
