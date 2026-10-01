@@ -244,7 +244,7 @@ Box fields 10–31 (`KorpusDeviceBox`), grouped as the editor shows them:
 | 27 | preset-epoch | int (plain field) | bumped by every preset load; the device observes it and hard-cuts its voices (~1.5 ms declick) |
 | 28 | air | unipolar | every exciter; 0.5 = natural. Strike/Pick: contact or pick noise above 0.5 only |
 | 31 | stroke | unipolar | the stroke behind the note: mallet weight / bow speed / pluck depth; 0.5 = today's stroke, Breath and Wind ignore it |
-| 20, 21 | deprecatedTuneB, deprecatedDetuneB | int ±24 st, float ±25 ct | deprecated; `migrateKorpusDeviceBox` folds them into field 29 and moves Tune B automation there. The engine binds neither |
+| 20, 21 | deprecatedTuneB, deprecatedDetuneB | int ±24 st, float ±25 ct | deprecated; `migrateKorpusDeviceBox` folds them into field 29 and moves Tune B automation there. A lone Detune B lane converts onto field 29 (affine unit remap, static semitones folded in); with both lanes automated the semitone lane wins. The engine binds neither |
 
 With Object B Off, its row plus Routing and Couple have no effect and the
 editor dims exactly those; Stroke likewise dims when the exciter is Breath or

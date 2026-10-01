@@ -87,14 +87,27 @@ describe("migrateKorpusDeviceBox", () => {
         expect(-24.0 + 48.0 * event.value.getValue()).toBeCloseTo(12.07, 4)
     })
 
-    it("removes Detune B automation, which has no equivalent on Tune B", () => {
-        const {boxGraph, korpus, automate, commit} = setup(0, 0.0)
-        const {track, event} = automate(korpus.deprecatedDetuneB, 0.6)
+    it("converts a lone Detune B lane onto Tune B, folding the static semitones", () => {
+        const {boxGraph, korpus, automate, commit} = setup(7, 0.0)
+        const {track, event} = automate(korpus.deprecatedDetuneB, 0.8)
         commit()
         migrateKorpusDeviceBox(boxGraph, korpus)
-        expect(track.isAttached()).toBe(false)
-        expect(event.isAttached()).toBe(false)
-        expect(korpus.deprecatedDetuneB.pointerHub.incoming().length).toBe(0)
+        expect(track.isAttached()).toBe(true)
+        expect(track.target.targetVertex.unwrap().address.equals(korpus.tuneB.address)).toBe(true)
+        // unit 0.8 on ±25 ct is +15 ct; with the folded +7 st the lane must play +7.15 st.
+        expect(-24.0 + 48.0 * event.value.getValue()).toBeCloseTo(7.15, 4)
+    })
+
+    it("keeps the semitone lane and drops the cents lane when both are automated", () => {
+        const {boxGraph, korpus, automate, commit} = setup(0, 7.0)
+        const tune = automate(korpus.deprecatedTuneB, 0.75)
+        const detune = automate(korpus.deprecatedDetuneB, 0.8)
+        commit()
+        migrateKorpusDeviceBox(boxGraph, korpus)
+        expect(tune.track.target.targetVertex.unwrap().address.equals(korpus.tuneB.address)).toBe(true)
+        expect(-24.0 + 48.0 * tune.event.value.getValue()).toBeCloseTo(12.07, 4)
+        expect(detune.track.isAttached()).toBe(false)
+        expect(detune.event.isAttached()).toBe(false)
     })
 
     it("leaves a fresh Korpus untouched", () => {
