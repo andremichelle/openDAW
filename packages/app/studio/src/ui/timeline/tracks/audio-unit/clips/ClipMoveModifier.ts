@@ -5,6 +5,7 @@ import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipModifyStrategy} from "@/ui/timeline/tracks/audio-unit/clips/ClipModifyStrategy.ts"
 import {Dragging} from "@opendaw/lib-dom"
 import {Project} from "@opendaw/studio-core"
+import {ClipsView} from "@/ui/timeline/ClipsView"
 
 class UnselectedModifyStrategy implements ClipModifyStrategy {
     readonly #tool: ClipMoveModifier
@@ -31,6 +32,7 @@ class SelectedModifyStrategy implements ClipModifyStrategy {
 export type Creation = {
     project: Project
     manager: TracksManager
+    clips: ClipsView
     selection: Selection<AnyClipBoxAdapter>
     xAxis: ValueAxis
     yAxis: ValueAxis
@@ -45,6 +47,7 @@ export class ClipMoveModifier implements ClipModifier {
 
     readonly #project: Project
     readonly #manager: TracksManager
+    readonly #clips: ClipsView
     readonly #selection: Selection<AnyClipBoxAdapter>
     readonly #xAxis: ValueAxis
     readonly #yAxis: ValueAxis
@@ -59,9 +62,10 @@ export class ClipMoveModifier implements ClipModifier {
     #copy: boolean = false
     #mirroredCopy: boolean = false
 
-    private constructor({project, manager, selection, xAxis, yAxis, pointerClipIndex, pointerTrackIndex}: Creation) {
+    private constructor({project, manager, clips, selection, xAxis, yAxis, pointerClipIndex, pointerTrackIndex}: Creation) {
         this.#project = project
         this.#manager = manager
+        this.#clips = clips
         this.#selection = selection
         this.#xAxis = xAxis
         this.#yAxis = yAxis
@@ -85,10 +89,11 @@ export class ClipMoveModifier implements ClipModifier {
         const clipIndex: int = this.#xAxis.axisToValue(clientX)
         const trackIndex: int = this.#yAxis.axisToValue(clientY)
         const maxTrackIndex = this.#manager.numTracks() - 1
+        const maxClipIndex = this.#clips.columns.getValue() - 1
         const adapters = this.#selection.selected()
         const clipDelta = adapters.reduce((delta, adapter) => {
             const listIndex = adapter.indexField.getValue()
-            return clamp(delta, -listIndex, this.#manager.maxClipsIndex.getValue() + 1)
+            return clamp(delta, -listIndex, maxClipIndex - listIndex)
         }, clipIndex - this.#pointerClipIndex)
         const trackDelta = adapters.reduce((delta, adapter) => {
             const listIndex = adapter.trackBoxAdapter.unwrap("trackBoxAdapter").listIndex
@@ -185,6 +190,7 @@ export class ClipMoveModifier implements ClipModifier {
                 userEditingManager.timeline.edit(editedAdapter.box)
             }
         })
+        this.#clips.ensureColumn(Math.max(...moveTasks.map(({newClipIndex}) => newClipIndex)))
     }
 
     cancel(): void {this.#dispatchChange()}

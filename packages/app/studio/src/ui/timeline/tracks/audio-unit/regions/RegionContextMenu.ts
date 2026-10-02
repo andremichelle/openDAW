@@ -124,6 +124,8 @@ export const installRegionContextMenu =
                     .setTriggerProcedure(() => region.trackBoxAdapter.ifSome(() => editing.modify(() => {
                         service.timeline.clips.visible.setValue(true)
                         const clip = RegionTransformer.toClip(region)
+                        service.timeline.clips.ensureColumn(clip.index.getValue())
+                        service.timeline.clips.reveal(clip.index.getValue())
                         vertexSelection.select(clip)
                         project.userEditingManager.timeline.edit(clip)
                     }))),

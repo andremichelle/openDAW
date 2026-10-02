@@ -1,5 +1,5 @@
 import {AnyClipBoxAdapter} from "@opendaw/studio-adapters"
-import {BinarySearch, int, Nullable, NumberComparator} from "@opendaw/lib-std"
+import {BinarySearch, int, Nullable, NumberComparator, ObservableValue} from "@opendaw/lib-std"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
 import {ClipWidth} from "@/ui/timeline/tracks/audio-unit/clips/constants.ts"
 import {TrackContext} from "@/ui/timeline/tracks/audio-unit/TrackContext.ts"
@@ -11,7 +11,7 @@ export type ClipCaptureTarget =
     | { type: "track", track: TrackContext, clipIndex: int }
 
 export namespace ClipCapturing {
-    export const create = (element: Element, manager: TracksManager) =>
+    export const create = (element: Element, manager: TracksManager, scroll: ObservableValue<int>) =>
         new ElementCapturing<ClipCaptureTarget>(element, {
             capture: (x: number, y: number): Nullable<ClipCaptureTarget> => {
                 y += manager.scrollableContainer.scrollTop
@@ -24,7 +24,7 @@ export namespace ClipCapturing {
                 // A y outside the resolved lane's own bounds sits in a band no TrackContext covers (the
                 // synthetic unit lane): capture nothing there.
                 if (y >= track.position + track.size) {return null}
-                const clipIndex = Math.floor(x / ClipWidth)
+                const clipIndex = Math.floor(x / ClipWidth) + scroll.getValue()
                 return track.trackBoxAdapter.clips.collection.getAdapterByIndex(clipIndex)
                     .match<ClipCaptureTarget>({
                         none: () => ({type: "track", track, clipIndex}),

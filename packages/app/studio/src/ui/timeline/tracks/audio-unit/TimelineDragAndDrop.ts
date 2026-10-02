@@ -1,4 +1,4 @@
-import {Nullable, Option, panic, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {Nullable, Option, panic, Procedure, Provider, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioFileBox} from "@opendaw/studio-boxes"
 import {InstrumentFactories, Sample, TrackBoxAdapter, TrackType} from "@opendaw/studio-adapters"
@@ -100,7 +100,8 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         return Option.wrap({sample, type: sampleType, audioFileBoxFactory: audioFileBoxResult.value})
     }
 
-    async drop(event: DragEvent, data: AnyDragData) {
+    async drop(event: DragEvent, data: AnyDragData,
+               handleSample: Procedure<CreateParameters> = parameters => this.handleSample(parameters)) {
         const optDrop = this.canDrop(event, data)
         if (optDrop.isEmpty()) {return}
         const drop = optDrop.unwrap()
@@ -119,7 +120,7 @@ export abstract class TimelineDragAndDrop<T extends (ClipCaptureTarget | RegionC
         }
         editing.modify(() => resolved.forEach(({sample, type: sampleType, audioFileBoxFactory}, index) =>
             (index === 0 ? targetTrack() : Option.wrap(createTapeTrack())).ifSome(trackBoxAdapter =>
-                this.handleSample({event, trackBoxAdapter, audioFileBox: audioFileBoxFactory(), sample, type: sampleType}))))
+                handleSample({event, trackBoxAdapter, audioFileBox: audioFileBoxFactory(), sample, type: sampleType}))))
     }
 
     abstract handleSample({event, trackBoxAdapter, audioFileBox, sample}: CreateParameters): void
