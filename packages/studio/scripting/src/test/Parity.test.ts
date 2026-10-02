@@ -83,7 +83,7 @@ describe("Schema parity", () => {
         expect(plain).toEqual({
             Autotune: [], Compressor: [], Convolver: [], Crusher: [], DattorroReverb: [], Delay: [], Fold: [],
             Gate: [], Maximizer: [], NeuralAmp: [], Revamp: [], Reverb: [], StereoTool: [], Tidal: [],
-            Vocoder: ["modulatorSource"], Waveshaper: [], Werkstatt: [], Composite: [], StereoSplit: [], FrequencySplit: [],
+            Vocoder: ["modulatorSource"], Waveshaper: ["equation"], Werkstatt: [], Composite: [], StereoSplit: [], FrequencySplit: [],
             Sink: []
         })
     })
