@@ -69,4 +69,41 @@ describe("VertexSelection", () => {
         expect(boxGraph.inTransaction()).toBe(false)
         expect(selection.isSelected(selectable)).toBe(false)
     })
+
+    // Live error #1159: "SelectionBox <uuid> could not be found to unstage" on deselect.
+    // A transaction deletes a selected SelectionBox, then rolls back. The rollback recreates the box as a NEW
+    // instance with the same uuid. The deferred onRemoved for the old instance is discarded by the rollback, so the
+    // catchupAndSubscribe `added` set still holds the pointer address and swallows the onAdded of the new instance.
+    // VertexSelection keeps the stale instance and a later deselect tries to unstage a box the graph no longer holds.
+    it("tracks the restored SelectionBox instance after an aborted transaction (#1159)", () => {
+        const editing = new BoxEditing(boxGraph)
+        const selection = new VertexSelection(editing, boxGraph)
+        selection.switch(userA.selection)
+        const selectable = createSelectable()
+        const selectionBox = selectDirect(selectable)
+        boxGraph.beginTransaction()
+        selectionBox.delete()
+        boxGraph.abortTransaction()
+        const restored = boxGraph.findBox(selectionBox.address.uuid).unwrap()
+        expect(restored).not.toBe(selectionBox)
+        expect(selection.isSelected(selectable)).toBe(true)
+        expect(() => selection.deselect(selectable)).not.toThrow()
+        expect(selection.isSelected(selectable)).toBe(false)
+        expect(boxGraph.findBox(selectionBox.address.uuid).isEmpty()).toBe(true)
+    })
+
+    it("tracks the restored SelectionBox instance after a failed modify (#1159)", () => {
+        const editing = new BoxEditing(boxGraph)
+        const selection = new VertexSelection(editing, boxGraph)
+        selection.switch(userA.selection)
+        const selectable = createSelectable()
+        const selectionBox = selectDirect(selectable)
+        expect(() => editing.modify(() => {
+            selectionBox.delete()
+            throw new Error("modifier failed")
+        })).toThrow("modifier failed")
+        expect(selection.isSelected(selectable)).toBe(true)
+        expect(() => selection.deselect(selectable)).not.toThrow()
+        expect(selection.isSelected(selectable)).toBe(false)
+    })
 })

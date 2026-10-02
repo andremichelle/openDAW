@@ -96,6 +96,8 @@ export class BoxEditing implements Editing {
         for (const step of reversed) {
             const result = tryCatch(() => step.inverse(this.#graph))
             if (result.status === "failure") {
+                console.warn(`[BoxEditing] undo step failed and was rolled back`,
+                    result.error instanceof Error ? result.error.stack : result.error)
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
                 applied.toReversed().forEach(completed => completed.forward(this.#graph))
                 this.#historyIndex++
@@ -116,6 +118,8 @@ export class BoxEditing implements Editing {
         for (const step of modifications) {
             const result = tryCatch(() => step.forward(this.#graph))
             if (result.status === "failure") {
+                console.warn(`[BoxEditing] redo step failed and was rolled back`,
+                    result.error instanceof Error ? result.error.stack : result.error)
                 if (this.#graph.inTransaction()) {this.#graph.abortTransaction()}
                 applied.toReversed().forEach(completed => completed.inverse(this.#graph))
                 this.#historyIndex--
