@@ -1,7 +1,4 @@
-// The Analysis-panel LoudnessMeter against the "minimum requirements" test signals of EBU Tech 3341
-// (loudness cases 1-5, true-peak cases 15-18) and EBU Tech 3342 (loudness range cases 1-4), and against
-// the ITU-R BS.1770 pre-filter. Every signal is a stereo sine, the same on both channels, between two
-// silences, fed one render quantum at a time the way the realtime processor feeds it.
+// EBU Tech 3341 / 3342 minimum-requirements signals against LoudnessMeter
 import {describe, expect, it} from "vitest"
 import {LoudnessMeter} from "../src/analysis-dsp"
 
@@ -14,7 +11,6 @@ const HALF_SCALE_DB = 20.0 * Math.log10(0.5)
 type Segment = { db: number, seconds: number, hz?: number, rateDivisor?: number, phaseDeg?: number }
 type Reading = { momentaryMax: number, shortTermMax: number, shortTerm: number, integrated: number, range: number, truePeak: number }
 
-// Phase runs on through segments of the same frequency, so a level change is not a click.
 const synthesize = (sampleRate: number, segments: ReadonlyArray<Segment>, taperSeconds: number = 0.0): Float32Array => {
     const total = segments.reduce((sum, segment) => sum + Math.round(segment.seconds * sampleRate), 0)
     const signal = new Float32Array(total)
@@ -90,7 +86,6 @@ describe.each(RATES)("LoudnessMeter at %i Hz", sampleRate => {
     })
 
     describe("EBU Tech 3341 true peak, -6.0 dBTP +0.2 / -0.4", () => {
-        // A half-scale sine whose samples miss its crests: the highest sample is below the true peak.
         it.each([[15, 4, 0.0], [16, 4, 45.0], [17, 6, 60.0], [18, 8, 67.5]])(
             "case %i: fs/%i at %f degrees", (_case, rateDivisor, phaseDeg) => {
                 const signal = synthesize(sampleRate, [{db: HALF_SCALE_DB, seconds: 5.0, rateDivisor, phaseDeg}], 0.010)
@@ -101,7 +96,6 @@ describe.each(RATES)("LoudnessMeter at %i Hz", sampleRate => {
     })
 
     describe("ITU-R BS.1770 pre-filter", () => {
-        // Gain of the standard's two stages at `hz`: its analog prototypes, transformed at the running rate.
         const kWeightingDb = (hz: number): number => {
             const w = 2.0 * Math.PI * hz / sampleRate
             const magnitude = (b: ReadonlyArray<number>, a: ReadonlyArray<number>): number =>
@@ -132,7 +126,7 @@ describe.each(RATES)("LoudnessMeter at %i Hz", sampleRate => {
 
 describe("the pre-filter reference used above", () => {
     it("is the filter ITU-R BS.1770 prints for 48 kHz: +0.691 dB at 997 Hz", () => {
-        // A 0 dBFS, 997 Hz sine on one channel reads -3.01 LKFS in the standard: -0.691 + K(997) - 3.01 = -3.01.
+        // BS.1770: a 0 dBFS 997 Hz sine on one channel reads -3.01 LKFS
         const meter = new LoudnessMeter(48000)
         const values = new Float32Array(5)
         const signal = synthesize(48000, [{db: 0.0, seconds: 6.0, hz: 997.0}])

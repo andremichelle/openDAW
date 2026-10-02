@@ -60,7 +60,7 @@ export class GonioCapture {
     }
 }
 
-// The 4x interpolating FIR of ITU-R BS.1770 Annex 2 (order 48): one row of 12 taps per output phase.
+// ITU-R BS.1770 Annex 2 true-peak FIR: 4 phases of 12 taps
 const TRUE_PEAK_TAPS = 12
 const TRUE_PEAK_FIR = new Float32Array([
     0.0017089843750, 0.0109863281250, -0.0196533203125, 0.0332031250000, -0.0594482421875, 0.1373291015625,
@@ -95,8 +95,6 @@ export class LoudnessMeter {
     readonly #shortHist: Float32Array = new Float32Array(LoudnessMeter.#HIST_BINS)
 
     readonly #blockSamples: number
-    // The last 12 samples of each channel, newest first from #historyWrite. Every sample is written
-    // twice, 12 apart, so the 12 behind any write position are contiguous.
     readonly #historyL: Float32Array = new Float32Array(TRUE_PEAK_TAPS * 2)
     readonly #historyR: Float32Array = new Float32Array(TRUE_PEAK_TAPS * 2)
 
@@ -140,8 +138,6 @@ export class LoudnessMeter {
         out[4] = this.#truePeak > 1e-7 ? 20.0 * Math.log10(this.#truePeak) : -120.0
     }
 
-    // The highest magnitude of the two channels around this sample: the sample itself and the four
-    // points the BS.1770 interpolator places between it and its neighbours.
     #interpolatedPeak(l: number, r: number): number {
         const historyL = this.#historyL
         const historyR = this.#historyR
@@ -195,9 +191,7 @@ export class LoudnessMeter {
         return Math.max(0.0, high - low)
     }
 
-    // ITU-R BS.1770 prints its two pre-filter stages for 48 kHz only. These are the same two stages as
-    // analog prototypes, transformed at the running rate; at 48 kHz they are the printed coefficients.
-    // The general shelf and high-pass of lib-dsp have a different shape: up to 0.5 dB low around 1.5 kHz.
+    // ITU-R BS.1770 pre-filter at any sample rate (its printed coefficients at 48 kHz)
     static #setPreFilter(sampleRate: number, shelf: BiquadCoeff, highpass: BiquadCoeff): void {
         const shelfK = Math.tan(Math.PI * 1681.974450955533 / sampleRate)
         const shelfQ = 0.7071752369554196
@@ -213,7 +207,6 @@ export class LoudnessMeter {
         const highpassK = Math.tan(Math.PI * 38.13547087602444 / sampleRate)
         const highpassQ = 0.5003270373238773
         const a0 = 1.0 + highpassK / highpassQ + highpassK * highpassK
-        // The standard leaves this stage's numerator at 1, -2, 1 (a passband gain of +0.04 dB).
         highpass.setNormalizedCoefficients(
             a0, -2.0 * a0, a0,
             a0, 2.0 * (highpassK * highpassK - 1.0), 1.0 - highpassK / highpassQ + highpassK * highpassK)
