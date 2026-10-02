@@ -29,9 +29,10 @@ export interface SessionNames {
 export class EngineHost {
     readonly #workerFactory: Provider<Worker>
     readonly #pending = new Map<WorkerCallId, PendingCall>()
-    readonly #loadedTasks = new Set<string>()
+    readonly #loadedTasks = new Map<string, string>() // taskKey -> providers it was loaded with
     readonly #names = new Map<string, SessionNames>()
     readonly #queue: Array<QueueEntry> = []
+    readonly #loadTransitions = new Map<string, Promise<void>>()
 
     #worker: Option<Worker> = Option.None
     #ready: Option<Promise<void>> = Option.None
@@ -42,14 +43,30 @@ export class EngineHost {
         this.#workerFactory = options.workerFactory
     }
 
-    async ensureLoaded(taskKey: string,
-                       model: ModelDescriptor,
-                       executionProviders: ReadonlyArray<ExecutionProvider>,
-                       options?: {progress?: Procedure<unitValue>, signal?: AbortSignal}): Promise<void> {
-        if (this.#loadedTasks.has(taskKey)) {
+    // preload/acquire/releaseTask call this directly, bypassing #queue (only run() goes through
+    // it), so two calls for the same task can otherwise interleave their check-release-load steps.
+    ensureLoaded(taskKey: string,
+                model: ModelDescriptor,
+                executionProviders: ReadonlyArray<ExecutionProvider>,
+                options?: {progress?: Procedure<unitValue>, signal?: AbortSignal}): Promise<void> {
+        const previous = this.#loadTransitions.get(taskKey) ?? Promise.resolve()
+        const current = previous.then(() => this.#ensureLoadedExclusive(taskKey, model, executionProviders, options))
+        this.#loadTransitions.set(taskKey, current.catch(() => {}))
+        return current
+    }
+
+    async #ensureLoadedExclusive(taskKey: string,
+                                 model: ModelDescriptor,
+                                 executionProviders: ReadonlyArray<ExecutionProvider>,
+                                 options?: {progress?: Procedure<unitValue>, signal?: AbortSignal}): Promise<void> {
+        this.#throwIfAborted(options?.signal)
+        const providerKey = executionProviders.join(",")
+        const loadedWith = this.#loadedTasks.get(taskKey)
+        if (loadedWith === providerKey) {
             options?.progress?.(1.0)
             return
         }
+        if (isDefined(loadedWith)) {await this.#releaseTaskExclusive(taskKey)}
         const modelBytes = await ModelStore.ensure(taskKey, model, options)
         await this.#ensureWorker()
         this.#throwIfAborted(options?.signal)
@@ -62,7 +79,7 @@ export class EngineHost {
             executionProviders
         })
         this.#names.set(taskKey, {inputs: ack.inputs, outputs: ack.outputs})
-        this.#loadedTasks.add(taskKey)
+        this.#loadedTasks.set(taskKey, providerKey)
     }
 
     namesFor(taskKey: string): SessionNames {
@@ -104,7 +121,14 @@ export class EngineHost {
         })
     }
 
-    async releaseTask(taskKey: string): Promise<void> {
+    releaseTask(taskKey: string): Promise<void> {
+        const previous = this.#loadTransitions.get(taskKey) ?? Promise.resolve()
+        const current = previous.then(() => this.#releaseTaskExclusive(taskKey))
+        this.#loadTransitions.set(taskKey, current.catch(() => {}))
+        return current
+    }
+
+    async #releaseTaskExclusive(taskKey: string): Promise<void> {
         if (!this.#loadedTasks.has(taskKey)) {return}
         await this.#dispatch<Extract<WorkerToMain, {kind: "ok"}>>({kind: "release", id: this.#nextId(), taskKey})
         this.#loadedTasks.delete(taskKey)
