@@ -68,6 +68,7 @@ export const ClipLane = ({lifecycle, service, trackManager, adapter}: Construct)
         }
     }
     const populatePlaceholder = (): void => {
+        const scroll = clips.scroll.getValue()
         const updates: Array<Nullable<{
             clip: AnyClipBoxAdapter,
             selected: boolean,
@@ -81,11 +82,11 @@ export const ClipLane = ({lifecycle, service, trackManager, adapter}: Construct)
             const clips = optTrack.unwrap().trackBoxAdapter.clips.collection.adapters()
             for (const clip of clips) {
                 if (clip.isSelected ? hideSelected : !filterSelected) {continue}
-                const index = strategy.readClipIndex(clip)
-                if (index < cells.length) {
+                const cell = strategy.readClipIndex(clip) - scroll
+                if (cell >= 0 && cell < cells.length) {
                     const selected = clip.isSelected && !filterSelected
                     const mirrored = strategy.readMirror(clip)
-                    updates[index] = {clip, selected, mirrored}
+                    updates[cell] = {clip, selected, mirrored}
                 }
             }
         }
@@ -114,19 +115,21 @@ export const ClipLane = ({lifecycle, service, trackManager, adapter}: Construct)
             placeholder.remove()
             terminator.terminate()
         })
-    const clipsCount = clips.count
-    const {request: requestRebuild} = deferNextFrame(() => {
-        const count = clipsCount.getValue()
+    const rebuild = lifecycle.own(deferNextFrame(() => {
+        const count = clips.count.getValue()
         restockPlaceholders(count)
         populatePlaceholder()
         depletePlaceholders(count)
-    })
+    }))
+    const {request: requestRebuild} = rebuild
     lifecycle.own(
         clips.visible.catchupAndSubscribe(owner => {
+            rebuild.cancel()
             runtime.terminate()
             if (owner.getValue()) {
                 runtime.ownAll(
-                    clipsCount.catchupAndSubscribe(requestRebuild),
+                    clips.count.catchupAndSubscribe(requestRebuild),
+                    clips.scroll.subscribe(requestRebuild),
                     adapter.clips.subscribeChanges(requestRebuild),
                     adapter.clips.collection.catchupAndSubscribe({
                         onAdd: (_adapter: NoteClipBoxAdapter) => requestRebuild(),
