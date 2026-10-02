@@ -3,6 +3,7 @@ import {
     AudioFileBox,
     BoxIO,
     CubedDeviceBox,
+    KorpusDeviceBox,
     NeonDeviceBox,
     TubularDeviceBox,
     MIDIOutputDeviceBox,
@@ -159,6 +160,26 @@ export namespace InstrumentFactories {
             })
     }
 
+
+    export const Korpus: InstrumentFactory<void, KorpusDeviceBox> = {
+        defaultName: "Korpus",
+        defaultIcon: IconSymbol.DrumSet,
+        briefDescription: "Physical Modelling",
+        description: "Struck, plucked, blown and bowed physical models",
+        manualPage: "manuals/devices/instruments/korpus",
+        trackType: TrackType.Notes,
+        create: (boxGraph: BoxGraph<BoxIO.TypeMap>,
+                 host: Field<Pointers.InstrumentHost | Pointers.AudioOutput>,
+                 name: string,
+                 icon: IconSymbol,
+                 _attachment?: void): KorpusDeviceBox =>
+            KorpusDeviceBox.create(boxGraph, UUID.generate(), box => {
+                box.label.setValue(name)
+                box.icon.setValue(IconSymbol.toName(icon))
+                box.host.refer(host)
+            })
+    }
+
     export const Vaporisateur: InstrumentFactory<void, VaporisateurDeviceBox> = {
         defaultName: "Vaporisateur",
         defaultIcon: IconSymbol.Vaporisateur,
@@ -291,7 +312,7 @@ export namespace InstrumentFactories {
             })
     }
 
-    export const Named = {Apparat, Cubed, InstrumentComposite, Neon, Tubular, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
+    export const Named = {Apparat, Cubed, InstrumentComposite, Korpus, Neon, Tubular, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur}
     export type Keys = keyof typeof Named
 
     export const keyOfBox = (box: Box): Optional<Keys> => {

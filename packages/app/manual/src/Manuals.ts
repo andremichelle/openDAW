@@ -95,6 +95,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Apparat", path: "/manuals/devices/instruments/apparat", icon: IconSymbol.Code},
                     {type: "page", label: "Cubed", path: "/manuals/devices/instruments/cubed", icon: IconSymbol.Cube},
                     {type: "page", label: "Composite", path: "/manuals/devices/instruments/composite", icon: IconSymbol.Stack},
+                    {type: "page", label: "Korpus", path: "/manuals/devices/instruments/korpus", icon: IconSymbol.DrumSet},
                     {type: "page", label: "MIDIOutput", path: "/manuals/devices/instruments/midioutput", icon: IconSymbol.Midi},
                     {type: "page", label: "Nano", path: "/manuals/devices/instruments/nano", icon: IconSymbol.NanoWave},
                     {type: "page", label: "Neon", path: "/manuals/devices/instruments/neon", icon: IconSymbol.Neon},
