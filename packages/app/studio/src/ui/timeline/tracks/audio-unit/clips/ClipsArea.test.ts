@@ -58,11 +58,16 @@ const setup = () => {
 }
 
 describe("clip move scrolling", () => {
-    it("updates the preview and commits beneath a stationary pointer after scrolling", () => {
+    it("updates the preview and commits beneath a stationary pointer after a horizontal wheel", () => {
         const {lifecycle, clips, index, dispatchChange, process, pointer} = setup()
         process.update(pointer)
         const changesBeforeScroll = dispatchChange.mock.calls.length
-        clips.scrollBy(4)
+        const wheel = harness.subscribe.mock.calls.find(([, type]) => type === "wheel")![2] as
+            (event: WheelEvent) => void
+        const event = {deltaX: 4 * ClipWidth, deltaY: 0, deltaMode: 0, altKey: false,
+            preventDefault: vi.fn(), stopPropagation: vi.fn()}
+        vi.stubGlobal("WheelEvent", {DOM_DELTA_LINE: 1, DOM_DELTA_PAGE: 2})
+        wheel(event as unknown as WheelEvent)
         expect(clips.scroll.getValue()).toBe(4)
         expect(dispatchChange.mock.calls.length).toBeGreaterThan(changesBeforeScroll)
         process.approve?.()

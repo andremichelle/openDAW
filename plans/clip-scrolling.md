@@ -18,7 +18,10 @@ arranger with its own horizontal scrollbar, unlimited scenes, and edge auto scro
 
 ## Design
 
-Column snapped scrolling. The grid stays a CSS grid of `visible` fixed width cells. Scrolling only changes which
+This PR fixes both reported issues together: navigation and offset-aware editing must agree so that actions
+operate on the displayed column. Horizontal drag edge scrolling is an optional follow-up, outside this PR.
+
+Column snapped scrolling. The grid stays a CSS grid of `count` fixed width cells. Scrolling only changes which
 model column a cell shows. No scroll containers, no transforms, no changes to the subgrid layout.
 
 Three numbers replace the one:
@@ -26,18 +29,20 @@ Three numbers replace the one:
 | name       | meaning                                   | invariant                                  |
 |------------|-------------------------------------------|--------------------------------------------|
 | `columns`  | scene count (model)                       | `>= 16`, `> highest occupied index`        |
-| `visible`  | cells shown (resizer)                     | `1 <= visible <= min(columns, fit)`        |
-| `scroll`   | model index shown in the first cell       | `0 <= scroll <= columns - visible`         |
+| `count`    | cells shown (resizer)                     | `1 <= count <= min(columns, max(1, fit))`   |
+| `scroll`   | model index shown in the first cell       | `0 <= scroll <= columns - count`           |
 
 `fit` = columns that leave the region view at least `MinRegionsWidth` (say 320px):
-`floor((timelineWidth - headerWidth - MinRegionsWidth) / ClipWidth)`.
+`floor((timelineWidth - headerWidth - MinRegionsWidth - 1) / ClipWidth)`.
+Keep one visible column if the window is too narrow. Shrinking reduces the launcher width; widening does
+not restore its previous width. The implementation uses `ClipWidth = 49` and `MinRegionsWidth = 320`.
 
 Cell `i` shows column `scroll + i`. Every place that maps between pixels and column index adds or subtracts
-`scroll`. Everything that spans the grid uses `visible`.
+`scroll`. Everything that spans the grid uses `count`. The existing `visible` boolean remains the launcher toggle.
 
 `columns` grows only on commit, never during a drag: when a move is approved, a clip is dropped, or a clip is
 created in column `columns - 1`, columns becomes `index + 2` so there is always one free column after the last
-clip. During a drag the delta is clamped to `columns - 1 - index` and the view auto scrolls at the edges.
+clip. During a drag the delta is clamped to `columns - 1 - index`. Undo retains the added empty columns.
 
 ## Model
 
@@ -45,11 +50,12 @@ clip. During a drag the delta is clamped to `columns - 1 - index` and the view a
 
 ```ts
 class ClipsView {
-    readonly enabled: DefaultObservableValue<boolean>   // today's `visible` toggle (header checkbox, shortcut)
+    readonly visible: MutableObservableValue<boolean>   // existing toggle (header checkbox, shortcut)
     readonly columns: ObservableValue<int>
-    readonly visible: ObservableValue<int>
+    readonly count: ObservableValue<int>
     readonly scroll: ObservableValue<int>
-    setVisible(count: int, fit: int): void    // clamps, then re-clamps scroll
+    setCount(count: int, fit: int): void      // clamps, then re-clamps scroll
+    scrollTo(index: int): void                // clamps
     scrollBy(delta: int): void                // clamps
     ensureColumn(index: int): void            // columns = max(columns, index + 2)
     reveal(index: int): void                  // scroll so the column is inside the view
@@ -60,65 +66,95 @@ class ClipsView {
 Setters live in the class so the invariants hold in one place. Pure, no DOM, unit tested.
 
 Boot (StudioService): replace the `getMinFreeIndex` reduce with the highest `indexField` over all clips, call
-`reset`, keep `visible` at 3 (or the previous value) and the auto open preference as is.
+`reset`, keep `count` at 3 (or the previous value), and open the launcher when clips are present.
 
 ## Rendering with an offset
 
-- `Timeline.tsx` sets `--clips-visible` from `visible` (rename of `--clips-count`, all 10 sass consumers).
-- `ClipLane`: cells count = `visible`. `populatePlaceholder` maps `cell = index - scroll`, skips outside
+- `Timeline.tsx` retains `--clips-count` from `count`; existing CSS consumers are unchanged.
+- `ClipLane`: cells count = `count`. `populatePlaceholder` maps `cell = index - scroll`, skips outside
   `0..cells.length`. Rebuild on `scroll` change too. `gridColumn` stays cell based.
-- `ClipsHeader`: labels show `scroll + index + 1`. Play and stop schedule column `scroll + index`. Rebuild
-  labels on `scroll` change.
-- `UnitLane` and `ModulatorsLane` placeholder cells: `visible` instead of `count`, no index semantics.
+- `ClipsHeader`: labels show `scroll + index + 1`. Play schedules column `scroll + index`; stop remains track-wide.
+  Rebuild labels on `scroll` change.
+- `UnitLane` and `ModulatorsLane` retain their existing `count` placeholder cells, no index semantics.
 - `ClipsArea` xAxis: `valueToAxis(index) = (index - scroll) * ClipWidth + left`,
-  `axisToValue(x) = floor((x - left) / ClipWidth) + scroll`. Drop preview x uses `index - scroll`.
+  `axisToValue(x)` clamps the local column to the visible range, then adds `scroll`.
+  Drop preview x uses `index - scroll`.
 - `ClipCapturing`: `clipIndex = floor(x / ClipWidth) + scroll`.
-- `ClipSelectableLocator.selectablesBetween`: both `floor(u / ClipWidth)` get `+ scroll`.
-- `ClipDragAndDrop`: `floor(x / ClipWidth) + scroll`.
+- Rectangle selection stores its anchor in model pixels, adding `scroll * ClipWidth`.
+  `ClipSelectableLocator.selectablesBetween` uses those model coordinates; point capture subtracts the offset.
+- `ClipDragAndDrop`: `floor(x / ClipWidth) + scroll`, captured before sample loading starts.
+  Replacement stays inside the same edit transaction so one undo restores both clips.
 - `ClipMoveModifier.update`: clamp each clip to `[0, columns - 1]`. `approve`: after the edit,
   `ensureColumn(highest new index)`. `cancel` unchanged. Same in the double click create path (`ClipsArea`)
-  and the external drop path.
+  and the external drop path. Region-to-clip conversion grows and reveals the resulting clip.
+- Cancel queued lane/header rebuilds when hiding or disposing the launcher.
 
 ## Input
 
 - Resizer (`ClipsHeader`): compute `fit` once at drag begin from the timeline element and header width, then
-  `setVisible(begin + steps, fit)`. Dragging to zero still sets `enabled` false as today.
-- Wheel over `ClipsArea`: `shiftKey ? deltaY : deltaX`, accumulate, step one column per `ClipWidth` px.
-  The vertical wheel handler in `AudioUnitsTimeline` keeps working for `deltaY` without shift.
-- Horizontal scrollbar: `Scroller` with `Orientation.horizontal` from `@opendaw/studio-scrollbars`, placed in the
+  `setCount(begin + steps, fit)`. Dragging to zero still sets `visible` false as today.
+  The timeline resize observer also clamps `count` when the window shrinks.
+- Wheel over `ClipsArea`: `altKey ? deltaY : deltaX`, accumulate, step one column per `ClipWidth` px.
+  The vertical wheel handler in `AudioUnitsTimeline` keeps working for ordinary vertical wheel input.
+- Horizontal scrollbar: `Scroller` with `Orientation.horizontal` from `@/ui/components/Scroller.tsx`, placed in the
   `TracksFooter` row spanning the clip columns. Its `ScrollModel` is fed in pixel units
-  (`contentSize = columns * ClipWidth`, `visibleSize = visible * ClipWidth`, `position = scroll * ClipWidth`)
-  and writes back `round(position / ClipWidth)`. Hidden when `columns <= visible`.
-- Auto scroll: `installAutoScroll(clipsArea, (deltaX) => ...)` already reports `deltaX`, which
-  `AudioUnitsTimeline` ignores today. Step one column per ~150 ms while the pointer is outside, direction from
-  the sign. Covers clip moves and external drops. The modifier reads the current `scroll` in `update`, so the
-  preview follows the scroll without extra wiring.
+  (`contentSize = columns * ClipWidth`, `visibleSize = count * ClipWidth`, `position = scroll * ClipWidth`)
+  and writes back `round(position / ClipWidth)`. Hidden when `columns <= count`.
+- Existing vertical edge scrolling remains. Horizontal drag edge scrolling is deferred.
+  Clip move previews refresh when the scroll offset changes, including with a stationary pointer.
 
-## Phases (browser checkpoint after each, all dists rebuilt)
+## Phases (incremental commits within one PR)
 
-1. **Model only.** `ClipsView` with tests, boot uses the highest index, `--clips-visible` rename, `visible`
-   wired where `count` was. `scroll` stays 0. Behaviour identical except the boot fix.
-2. **Offset rendering and capture.** Every mapping above takes `scroll` into account. Verify by setting
-   `scroll` from the console: labels, clips, selection, move preview, drop preview all shift together.
-3. **Input.** Resizer clamp with `fit`, wheel, horizontal scrollbar. Issue point 2 closes here.
-4. **Growth and auto scroll.** `ensureColumn` on approve, drop and create. Edge auto scroll during a drag.
-   Issue point 1 closes here.
+1. **Model only.** `ClipsView` with tests, without changing existing callers.
+2. **Offset rendering and capture.** Wire boot, rendering, editing, growth, and lifecycle handling together.
+   Labels, clips, selection, move previews, and drop previews use the same offset.
+3. **Input.** Resizer clamp with `fit`, wheel, horizontal scrollbar, and window resize bounds.
+   Both reported issues are addressed by the completed PR.
 
 ## Tests
 
 - `ClipsView.test.ts`: every clamp and invariant, boot reset with 0, 3, 15, 40 occupied columns, `reveal`
-  from both sides, `setVisible` shrinking past the current scroll.
-- Manual checklist per phase in the browser: move a clip from column 0 to 20 with auto scroll, undo, resize to
-  one column and back, wheel and scrollbar agree, region view never narrower than `MinRegionsWidth`.
+  from both sides, `setCount` shrinking past the current scroll.
+- Regression tests cover selection coordinates, asynchronous drop destinations, replacement/undo,
+  cell lifetime, and moving while scrolling beneath a stationary pointer.
+- Manual checklist: scroll to off-screen clips and check playback/editing; compare scrollbar, horizontal
+  wheel, and Option/Alt+wheel; check ordinary vertical wheel input; resize to one column, hide/reopen,
+  and shrink the window; check last-column growth, replacement/undo, sample placement while loading,
+  and off-screen region-to-clip reveal. Check the arrangement reservation where the window permits it.
 
 ## Out of scope
 
 - Pixel smooth scrolling. Column snapping matches a launcher grid and keeps the subgrid layout.
-- Persisting `visible` and `scroll` per project. Boot resets them.
+- Persisting launcher width and `scroll` per project.
+- Horizontal edge scrolling during drags.
 - Merging the duplicated placeholder cell code in `UnitLane` and `ModulatorsLane` into `ClipLane`.
 
 ## Open decisions
 
 - Minimum `columns`: 16.
-- `MinRegionsWidth`: 320px, or derive from the header width.
-- Whether the scrollbar sits in the footer row or as a floating overlay like the vertical one.
+- `MinRegionsWidth`: 320px. Both numeric values are proposed UX choices, open to maintainer adjustment.
+- Scrollbar placement: this implementation uses the existing footer row.
+
+## Implementation validation
+
+On 2026-10-02, the current implementation passed 72 studio tests in 18 files and the studio type check.
+These are local automated results, not CI or full browser coverage.
+
+```sh
+npm run test -w @opendaw/app-studio -- --silent
+npm exec -- tsc --noEmit -p packages/app/studio/tsconfig.json
+git diff origin/main --check
+npm run build
+npm run dev:studio
+```
+
+The contributor reported build/startup, off-screen playback/editing, and both issue symptoms working.
+Option/Alt+wheel was corrected after feedback; browser retesting and the remaining manual checks
+are pending. A short scrolling/resizing recording is also pending.
+
+## AI assistance
+
+Codex helped inspect and scope the implementation, retain existing property/CSS names, separate
+optional drag edge scrolling, correct the wheel modifier, prepare incremental commits, and run tests
+and type checks. This plan retains the original structure, with implementation details and validation
+added. Automated checks do not replace the contributor's code review or browser validation.

@@ -89,6 +89,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
         axisToValue: (axis: number): int => manager.globalToIndex(axis)
     }
     const {style} = dropPreview
+    let wheelAccumulator = 0.0
     lifecycle.ownAll(
         DragAndDrop.installTarget(element, {
             drag: (event: DragEvent, data: AnyDragData): boolean => {
@@ -136,6 +137,19 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
         }),
         installAutoScroll(element, (_deltaX, deltaY) => {if (deltaY !== 0) {scrollModel.moveBy(deltaY)}},
             {dragPadding: Config.AutoScrollDragPaddingVertical}),
+        Events.subscribe(element, "wheel", (event: WheelEvent) => {
+            const delta = event.altKey ? event.deltaY : event.deltaX
+            if (delta === 0) {return}
+            event.preventDefault()
+            event.stopPropagation()
+            const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? ClipWidth
+                : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? element.clientWidth : 1
+            wheelAccumulator += delta * unit
+            const steps = Math.trunc(wheelAccumulator / ClipWidth)
+            if (steps === 0) {return}
+            wheelAccumulator -= steps * ClipWidth
+            clips.scrollBy(steps)
+        }, {passive: false}),
         clipSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyClipBoxAdapter) => selectable.onSelected(),
             onDeselected: (selectable: AnyClipBoxAdapter) => selectable.onDeselected()

@@ -1,11 +1,12 @@
 import css from "./ClipsHeader.sass?inline"
-import {DefaultObservableValue, Lifecycle, ObservableValue, Option, Terminator, UUID} from "@opendaw/lib-std"
+import {DefaultObservableValue, isDefined, Lifecycle, ObservableValue, Option, Terminator, UUID} from "@opendaw/lib-std"
 import {createElement, DomElement} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService.ts"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {deferNextFrame, Dragging, Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
+import {ClipWidth, getClipColumnFit} from "@/ui/timeline/tracks/audio-unit/clips/constants"
 
 const className = Html.adoptStyleSheet(css, "ClipsHeader")
 
@@ -101,11 +102,15 @@ export const ClipsHeader = ({lifecycle, service}: Construct) => {
         }),
         Dragging.attach(resizer, ({clientX: beginPosition}) => {
             const beginValue = clips.count.getValue()
-            const cellSize = parseInt(window.getComputedStyle(element).getPropertyValue("--clips-width")) + 1 // gaps
+            const timeline = element.parentElement
+            const available = isDefined(timeline)
+                ? timeline.getBoundingClientRect().right - element.getBoundingClientRect().left
+                : Number.POSITIVE_INFINITY
+            const fit = getClipColumnFit(available)
             return Option.wrap({
                 update: ({clientX: newPosition}) => {
-                    const newValue = Math.max(0, beginValue + Math.round((newPosition - beginPosition) / cellSize))
-                    clips.setCount(newValue, Number.POSITIVE_INFINITY)
+                    const newValue = Math.max(0, beginValue + Math.round((newPosition - beginPosition) / ClipWidth))
+                    clips.setCount(newValue, fit)
                     clips.visible.setValue(newValue > 0)
                 },
                 cancel: () => {}
