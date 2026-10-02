@@ -60,9 +60,22 @@ export class GonioCapture {
     }
 }
 
-// ITU-R BS.1770-4 loudness: momentary (400 ms), short-term (3 s), gated integrated, and EBU R128
-// loudness range. Values are LUFS (LU for LRA); truePeak is dBTP (4x oversampled). Approximated on
-// 100 ms non-overlapping blocks.
+// ITU-R BS.1770 Annex 2 true-peak FIR: 4 phases of 12 taps
+const TRUE_PEAK_TAPS = 12
+const TRUE_PEAK_FIR = new Float32Array([
+    0.0017089843750, 0.0109863281250, -0.0196533203125, 0.0332031250000, -0.0594482421875, 0.1373291015625,
+    0.9721679687500, -0.1022949218750, 0.0476074218750, -0.0266113281250, 0.0148925781250, -0.0083007812500,
+    -0.0291748046875, 0.0292968750000, -0.0517578125000, 0.0891113281250, -0.1665039062500, 0.4650878906250,
+    0.7797851562500, -0.2003173828125, 0.1015625000000, -0.0582275390625, 0.0330810546875, -0.0189208984375,
+    -0.0189208984375, 0.0330810546875, -0.0582275390625, 0.1015625000000, -0.2003173828125, 0.7797851562500,
+    0.4650878906250, -0.1665039062500, 0.0891113281250, -0.0517578125000, 0.0292968750000, -0.0291748046875,
+    -0.0083007812500, 0.0148925781250, -0.0266113281250, 0.0476074218750, -0.1022949218750, 0.9721679687500,
+    0.1373291015625, -0.0594482421875, 0.0332031250000, -0.0196533203125, 0.0109863281250, 0.0017089843750
+])
+
+// ITU-R BS.1770 loudness: momentary (400 ms), short-term (3 s), gated integrated, and EBU R128
+// loudness range. Values are LUFS (LU for LRA); truePeak is dBTP (4x oversampled, BS.1770 Annex 2).
+// Approximated on 100 ms non-overlapping blocks.
 export class LoudnessMeter {
     static readonly #ABSOLUTE_GATE = -70.0
     static readonly #HIST_MIN = -70.0
@@ -82,16 +95,18 @@ export class LoudnessMeter {
     readonly #shortHist: Float32Array = new Float32Array(LoudnessMeter.#HIST_BINS)
 
     readonly #blockSamples: number
+    readonly #historyL: Float32Array = new Float32Array(TRUE_PEAK_TAPS * 2)
+    readonly #historyR: Float32Array = new Float32Array(TRUE_PEAK_TAPS * 2)
 
     #momentaryWrite = 0
     #shortWrite = 0
     #accum = 0.0
     #accumCount = 0
     #truePeak = 0.0
+    #historyWrite = 0
 
     constructor(sampleRate: number) {
-        this.#shelfCoeff.setHighShelfParams(1681.974450955533 / sampleRate, 3.999843853973347)
-        this.#hpCoeff.setHighpassParams(38.13547087602444 / sampleRate, 0.5003270373238773)
+        LoudnessMeter.#setPreFilter(sampleRate, this.#shelfCoeff, this.#hpCoeff)
         this.#blockSamples = Math.max(1, Math.round(sampleRate * 0.1))
         this.#momentaryMs = new Float32Array(4)
         this.#shortMs = new Float32Array(30)
@@ -105,7 +120,7 @@ export class LoudnessMeter {
             const kl = this.#hpL.processFrame(this.#hpCoeff, this.#shelfL.processFrame(this.#shelfCoeff, l))
             const kr = this.#hpR.processFrame(this.#hpCoeff, this.#shelfR.processFrame(this.#shelfCoeff, r))
             this.#accum += kl * kl + kr * kr
-            const peak = Math.max(Math.abs(l), Math.abs(r))
+            const peak = this.#interpolatedPeak(l, r)
             if (peak > this.#truePeak) {this.#truePeak = peak}
             if (++this.#accumCount >= this.#blockSamples) {
                 this.#pushBlock(this.#accum / this.#accumCount)
@@ -121,6 +136,27 @@ export class LoudnessMeter {
         out[2] = this.#integrated()
         out[3] = this.#loudnessRange()
         out[4] = this.#truePeak > 1e-7 ? 20.0 * Math.log10(this.#truePeak) : -120.0
+    }
+
+    #interpolatedPeak(l: number, r: number): number {
+        const historyL = this.#historyL
+        const historyR = this.#historyR
+        const write = this.#historyWrite
+        historyL[write] = historyL[write + TRUE_PEAK_TAPS] = l
+        historyR[write] = historyR[write + TRUE_PEAK_TAPS] = r
+        this.#historyWrite = write === 0 ? TRUE_PEAK_TAPS - 1 : write - 1
+        let peak = Math.max(Math.abs(l), Math.abs(r))
+        for (let phase = 0; phase < TRUE_PEAK_FIR.length; phase += TRUE_PEAK_TAPS) {
+            let sumL = 0.0
+            let sumR = 0.0
+            for (let tap = 0; tap < TRUE_PEAK_TAPS; tap++) {
+                const coefficient = TRUE_PEAK_FIR[phase + tap]
+                sumL += coefficient * historyL[write + tap]
+                sumR += coefficient * historyR[write + tap]
+            }
+            peak = Math.max(peak, Math.abs(sumL), Math.abs(sumR))
+        }
+        return peak
     }
 
     #pushBlock(meanSquare: number): void {
@@ -153,6 +189,27 @@ export class LoudnessMeter {
         const low = LoudnessMeter.#histPercentile(this.#shortHist, relThreshold, 0.1)
         const high = LoudnessMeter.#histPercentile(this.#shortHist, relThreshold, 0.95)
         return Math.max(0.0, high - low)
+    }
+
+    // ITU-R BS.1770 pre-filter at any sample rate (its printed coefficients at 48 kHz)
+    static #setPreFilter(sampleRate: number, shelf: BiquadCoeff, highpass: BiquadCoeff): void {
+        const shelfK = Math.tan(Math.PI * 1681.974450955533 / sampleRate)
+        const shelfQ = 0.7071752369554196
+        const vh = Math.pow(10.0, 3.999843853973347 / 20.0)
+        const vb = Math.pow(vh, 0.4996667741545416)
+        shelf.setNormalizedCoefficients(
+            vh + vb * shelfK / shelfQ + shelfK * shelfK,
+            2.0 * (shelfK * shelfK - vh),
+            vh - vb * shelfK / shelfQ + shelfK * shelfK,
+            1.0 + shelfK / shelfQ + shelfK * shelfK,
+            2.0 * (shelfK * shelfK - 1.0),
+            1.0 - shelfK / shelfQ + shelfK * shelfK)
+        const highpassK = Math.tan(Math.PI * 38.13547087602444 / sampleRate)
+        const highpassQ = 0.5003270373238773
+        const a0 = 1.0 + highpassK / highpassQ + highpassK * highpassK
+        highpass.setNormalizedCoefficients(
+            a0, -2.0 * a0, a0,
+            a0, 2.0 * (highpassK * highpassK - 1.0), 1.0 - highpassK / highpassQ + highpassK * highpassK)
     }
 
     static #mean(values: Float32Array): number {
