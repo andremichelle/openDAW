@@ -1,5 +1,5 @@
-import {NestedLabels} from "@/ui/PreferencePanel"
-import {FpsOptions, OverlappingRegionsBehaviourOptions, StudioSettings} from "@opendaw/studio-core"
+import {NestedLabels, ValueGuards} from "@/ui/PreferencePanel"
+import {FpsOptions, InputLatency, OverlappingRegionsBehaviourOptions, StudioSettings} from "@opendaw/studio-core"
 import {EngineSettings} from "@opendaw/studio-adapters"
 
 export namespace PreferencesPageLabels {
@@ -152,6 +152,15 @@ export namespace PreferencesPageLabels {
                 value,
                 label: value === "all" ? "All takes" : value === "previous-only" ? "Previous only" : "None"
             }))
+        }
+    }
+
+    export const EngineSettingsGuards: ValueGuards<EngineSettings> = {
+        metronome: {
+            gain: {guard: value => Math.min(0, value)}
+        },
+        recording: {
+            inputLatency: {guard: value => Math.max(InputLatency.EqualsOutput, value)}
         }
     }
 }
