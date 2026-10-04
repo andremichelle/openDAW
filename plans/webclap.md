@@ -1,9 +1,13 @@
 # WCLAP (WebCLAP) hosting in openDAW
 
-**Status 2026-09-30**: plan only, nothing implemented. Goal: the user browses WCLAP plugins (online
-registry, URL, local file), the bundle is cached in OPFS and included in the cloud backup, and the plugin
-runs as an instrument or audio effect with automation, modulation, presets and a canvas GUI drawn from a
-plugin command buffer (no iframe, decision 2026-09-30, see "GUI: three tiers").
+**Status 2026-10-04**: implemented on branch `webclap` (effect + instrument, webview GUI in a floating
+window, state, parameters, automation, modulation, OPFS bundles, cloud backup, `.odb`). NOT production ready,
+see "PROD readiness review (2026-10-04)" at the end. The GUI was re-scoped on 2026-09-30 to the webview
+iframe (tier 3) in its own window, the canvas tiers below are the long-term direction, not the current state.
+
+Original goal: the user browses WCLAP plugins (online registry, URL, local file), the bundle is cached in OPFS
+and included in the cloud backup, and the plugin runs as an instrument or audio effect with automation,
+modulation, presets and a canvas GUI drawn from a plugin command buffer.
 
 ## What a WCLAP is
 
@@ -112,6 +116,9 @@ imports, the JS bridge marshals into the plugin memory. Per 128-frame chunk two 
   message. Plugin memory maximum from the module's own declared limit.
 
 ### GUI: three tiers, decided 2026-09-30
+
+Superseded the same day: the webview iframe ships first, in its own floating window (see "Production
+hardening"). The text below is kept as the long-term direction.
 
 Decision: no iframe. CLAP plugins must tolerate a host that does not offer an extension, so a host that
 never answers `clap.webview/3` still loads, plays, automates and saves every WCLAP, only its web page is not
@@ -275,3 +282,60 @@ process calls in the worklet". Kept here so the tier 3 decision can be revisited
 - Surge XT is not a WCLAP today (surge issue #8581 explores it, `process()` locks and spawns a patch
   thread). Model B (shared memory + threads) is what a Surge build would need, another reason to answer
   it in phase 0.
+
+## PROD readiness review (2026-10-04)
+
+Verdict: not ready. `npm run build` and `npm test` green (52 tasks). `npm run lint` fails in `lib-jsx`
+(eslint parses `dist/*.d.ts`, not touched by this branch) and stops before the other packages, this branch
+included, so they are unlinted. No browser check in this review.
+
+### Blockers
+
+1. Plugin page isolation is not deployed. `VITE_WCLAP_ORIGIN` is set nowhere (no `.env`, nothing in
+   `deploy/run.ts`), so a PROD build runs every plugin page on the studio origin with full access to its
+   storage, OPFS and cloud session. Needs the second domain (e.g. `plugins.opendaw.studio`) on the same
+   deployment with COOP/COEP/CORP headers, `wclap-frame.html` + `wclap-sw.js` served from it, and the env
+   variable in the build.
+2. No watchdog. Plugin code runs on the audio thread without a time limit, an infinite loop silences the
+   whole studio until reload. The instantiate chain (`init`, `activate`, state load) and `describe` also run
+   on the audio thread, a heavy plugin drops out the audio while loading.
+3. Examples load from mutable upstream urls (`raw.githubusercontent.com/.../main/...`). A changed bundle
+   silently alters saved projects, a removed repo breaks them. Pin to commit hashes or mirror on
+   `assets.opendaw.studio`.
+
+### Bugs
+
+4. Shared projects (YSync), likely, needs a repro test. Every client's engine runs
+   `WclapParameters.reconcile`, which creates `WclapParameterBox`es with `UUID.generate()`, so peers create
+   duplicates. Every client also writes `state` via `WclapStates.store` ~100 ms after a change, so peers
+   overwrite each other. Only one client (the owner or the editing client) should write.
+5. `opfs:` bundles exist only on the machine that browsed them. Without a cloud backup or `.odb` the plugin
+   fails elsewhere. The live-room bundle transfer (phase 6, `wclap` asset type) is not built.
+6. Browse stores the file in OPFS before `describe` validates it, a non-bundle file stays and cloud backup
+   uploads it. Validate first, store after.
+7. `pendingParams` is capped at `MAX_PARAM_EVENTS` (128) distinct ids per chunk, including the values queued
+   before the plugin is up. A plugin with more than 128 parameters loses the rest at project load (the state
+   blob probably restores them).
+8. After a contained fault the instance does not retry: `#load` returns early while url and clapId are
+   unchanged, recovery needs a url/clapId change or a project reload.
+
+### Plan items not done
+
+Re-scoped on purpose: canvas GUI tiers 1/2 (webview window instead), generic knob editor (Parameters menu
+instead), model B shared-memory threading.
+
+Missing:
+- `clap.latency`, the `latency` field and delay compensation
+- plugin browser (`WclapService`, `WclapBrowser`, `BrowseScope.Plugins`), `FactoryCatalog.plugins()`
+  `index.json`, "Add from URL...", drag onto a track
+- bundle presets (`clap.preset-load`)
+- `EVENT_CHOKE` and `cent` tuning note expressions
+- a missing-plugin placeholder (today the device passes through and the editor shows "Failed")
+- cloud backup tombstones (deleting a bundle does not sync)
+
+### Housekeeping
+
+- Commit `16d9ea995` ("fix tests") carries an unrelated rollup bump in `package-lock.json`.
+- Multi-line comments in `WclapWindows.tsx`, `wclap-bridge.ts` and `WclapDeviceEditor.tsx` break the
+  CLAUDE.md comment rule.
+- `main` is 3 commits ahead, merge before the PR.
