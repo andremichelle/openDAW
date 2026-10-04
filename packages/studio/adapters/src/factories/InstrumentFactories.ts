@@ -314,7 +314,7 @@ export namespace InstrumentFactories {
     export type Keys = keyof typeof Named
 
     export const keyOfBox = (box: Box): Optional<Keys> => {
-        const stripped = box.name.replace(/DeviceBox$/, "").replace(/Box$/, "")
+        const stripped = box.name.replace(/(Device|Instrument)?Box$/, "")
         return Object.hasOwn(Named, stripped) ? stripped as Keys : undefined
     }
 
