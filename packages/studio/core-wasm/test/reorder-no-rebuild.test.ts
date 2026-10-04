@@ -35,8 +35,8 @@ describe("reorder does not rebuild devices", () => {
         const a = new BroadcastChannel("reorder"); const b = new BroadcastChannel("reorder")
         Communicator.executor<Synchronization<BoxIO.TypeMap>>(Messenger.for(b), target)
         const sync = new SyncSource(source, Messenger.for(a), true)
-        const tick = () => new Promise(resolve => setTimeout(resolve)) // drain the async ship before mutating source again
-        await tick()
+        const settle = () => sync.checksum(source.checksum()) // round trip lands after every update shipped before it
+        await settle()
         engine.bind()
 
         // The reorder is step 117 (PRIMITIVE on both DelayDeviceBox and GateDeviceBox `index`, field 2). Drive
@@ -45,7 +45,7 @@ describe("reorder does not rebuild devices", () => {
         const applied: Array<ReadonlyArray<Update>> = []
         for (let at = 0; at < REORDER; at++) {
             applied[at] = stepForward(source, steps[at])
-            await tick()
+            await settle()
         }
         const buildsBeforeReorder = deviceBuilds()
         expect(buildsBeforeReorder).toBeGreaterThan(0) // the real devices (delay, gate, …) were built
@@ -55,9 +55,9 @@ describe("reorder does not rebuild devices", () => {
         const at = REORDER
         for (let round = 0; round < 6; round++) {
             applied[at] = stepForward(source, steps[at]) // apply the reorder (117 -> 118)
-            await tick()
+            await settle()
             stepBackward(source, applied[at])            // invert it (118 -> 117)
-            await tick()
+            await settle()
         }
         expect(deviceBuilds()).toBe(buildsBeforeReorder) // NO device was rebuilt by the reorder
     })

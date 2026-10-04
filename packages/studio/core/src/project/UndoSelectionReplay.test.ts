@@ -83,7 +83,8 @@ const setup = async () => {
         return {audioUnitBox, trackBox}
     }
     const addAutomation = (audioUnitBox: AudioUnitBox): TrackBox => {
-        const trackBox = editing.modify(() => api.createAutomationTrack(audioUnitBox, audioUnitBox.volume)).unwrap()
+        const trackBox = editing.modify(() =>
+            unitAdapter(audioUnitBox).tracks.create(TrackType.Value, live(audioUnitBox).volume)).unwrap()
         editing.modify(() => api.createTrackRegion(trackBox, 0, PPQN.Bar))
         return trackBox
     }
