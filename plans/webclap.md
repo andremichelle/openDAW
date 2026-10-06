@@ -291,7 +291,15 @@ included, so they are unlinted. No browser check in this review.
 
 ### Blockers
 
-1. Plugin page isolation is not deployed. `VITE_WCLAP_ORIGIN` is set nowhere (no `.env`, nothing in
+1. IN PROGRESS 2026-10-06. Code ready: `VITE_WCLAP_ORIGIN=https://opendaw-plugins.studio` in the
+   `deploy.yml` build step (declared in `turbo.json` `globalEnv`, else turbo filters it), and the root
+   `.htaccess` (`deploy/run.ts`) answers 403 on that host for anything but `wclap-frame.html`, `wclap-sw.js`
+   and `wclap/` inside a release folder. Release paths are versioned (`BASE_URL` = `/<env>/releases/<uuid>/`),
+   so main and dev need no extra routing. Hosting DONE 2026-10-06: the domain serves from the studio's
+   webspace (it had to move into the hosting package before STRATO could assign the certificate), HTTPS live
+   with a Sectigo certificate for `opendaw-plugins.studio` + `www`, valid until 2027-04-04. Open: a dev
+   deploy of this branch to test the plugin window on the new origin.
+   Original finding: plugin page isolation is not deployed. `VITE_WCLAP_ORIGIN` is set nowhere (no `.env`, nothing in
    `deploy/run.ts`), so a PROD build runs every plugin page on the studio origin with full access to its
    storage, OPFS and cloud session. Needs the second domain (e.g. `plugins.opendaw.studio`) on the same
    deployment with COOP/COEP/CORP headers, `wclap-frame.html` + `wclap-sw.js` served from it, and the env

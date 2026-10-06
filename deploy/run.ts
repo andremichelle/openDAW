@@ -75,6 +75,12 @@ RewriteCond %{HTTP:Origin} ^(https://opendaw\\.studio|https://dev\\.opendaw\\.st
 RewriteRule .* - [E=ORIGIN_ALLOWED:%{HTTP:Origin}]
 
 # --------------------------------------------------
+# WebCLAP plugin origin: only the host frame and its service worker scope inside a release, nothing else
+RewriteCond %{HTTP_HOST} ^opendaw-plugins\\.studio$ [NC]
+RewriteCond %{REQUEST_URI} !^/\\.well-known/acme-challenge/ [NC]
+RewriteCond %{REQUEST_URI} !^/(main|dev)/releases/[^/]+/(wclap-frame\\.html|wclap-sw\\.js|wclap/) [NC]
+RewriteRule ^ - [F,L]
+
 # Allow extract.php to execute (don't redirect it)
 RewriteRule ^extract\\.php$ - [L]
 

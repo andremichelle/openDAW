@@ -53,6 +53,7 @@ jobs:
         env:
           CI: true
           BRANCH_NAME: ${{ github.ref_name }}
+          VITE_WCLAP_ORIGIN: https://opendaw-plugins.studio
         run: |
           npm run build
 
