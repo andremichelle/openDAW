@@ -1,12 +1,12 @@
 @use "./ResourceBrowser" as *
 
 component
-  @include resource-browser("1fr auto auto minmax(4px, auto)", false)
+  @include resource-browser("1fr auto auto auto minmax(4px, auto)", false)
 
   div.entry
     display: grid
     grid-template-columns: subgrid
-    grid-column: span 3
+    grid-column: span 4
     padding-left: 6px
     color: var(--color-dark)
     align-items: center

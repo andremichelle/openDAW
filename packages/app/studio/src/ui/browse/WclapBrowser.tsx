@@ -3,9 +3,9 @@ import {Bytes, DefaultObservableValue, Lifecycle, RuntimeNotifier, StringCompara
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
-import {ContextMenu, MenuItem, WclapBundles, WclapStorage} from "@opendaw/studio-core"
-import {createWclapDescriber} from "@opendaw/studio-core-wasm"
+import {ContextMenu, MenuItem, WclapStorage} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
+import {WclapDescriber} from "@/service/WclapDescriber"
 import {Icon} from "@/ui/components/Icon"
 import {SearchInput} from "@/ui/components/SearchInput"
 import {installScrollbars} from "@/ui/components/Scrollbars"
@@ -17,9 +17,9 @@ type Construct = {
     service: StudioService
 }
 
-type Entry = { id: string, name: string, vendor: string, size: number }
+type Entry = { id: string, name: string, type: string, vendor: string, size: number }
 
-const describe = createWclapDescriber(WclapBundles.fetch)
+const {describe, kindOf, shortKind} = WclapDescriber
 
 const loadEntries = async (): Promise<ReadonlyArray<Entry>> => {
     const ids = await WclapStorage.list()
@@ -31,6 +31,7 @@ const loadEntries = async (): Promise<ReadonlyArray<Entry>> => {
         return {
             id, size: archive.byteLength,
             name: plugins.length === 0 ? `Unknown bundle ${id.substring(0, 8)}` : plugins.map(({name}) => name).join(", "),
+            type: Array.from(new Set(plugins.map(plugin => shortKind(kindOf(plugin))))).join("/"),
             vendor: plugins.at(0)?.vendor ?? ""
         }
     }))
@@ -59,6 +60,7 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
         const element: HTMLElement = (
             <div className="entry">
                 <span className="name"><Icon symbol={IconSymbol.WebClap}/>{entry.name}</span>
+                <span>{entry.type}</span>
                 <span>{entry.vendor}</span>
                 <span className="right">{Bytes.toString(entry.size)}</span>
             </div>
@@ -92,6 +94,7 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
             </div>
             <header>
                 <span>Plugins</span>
+                <span>Type</span>
                 <span>Vendor</span>
                 <span className="right">Size</span>
             </header>

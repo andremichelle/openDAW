@@ -1,7 +1,7 @@
 import css from "./WclapDeviceEditor.sass?inline"
 import {AutomatableParameterFieldAdapter, DeviceHost, InstrumentFactories, WclapPluginInfo} from "@opendaw/studio-adapters"
 import {
-    asInstanceOf, clamp, EmptyExec, isDefined, Lifecycle, Option, Optional, RuntimeNotifier, UUID
+    asInstanceOf, clamp, EmptyExec, isDefined, Lifecycle, Option, Optional, RuntimeNotifier, StringComparator, UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Events, Files, Html} from "@opendaw/lib-dom"
@@ -20,6 +20,7 @@ import {Icon} from "@/ui/components/Icon.tsx"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
 import {WclapAdapter, WclapWindows} from "@/service/WclapWindows"
+import {StoredWclapPlugin, WclapDescriber} from "@/service/WclapDescriber"
 
 const className = Html.adoptStyleSheet(css, "WclapDeviceEditor")
 
@@ -52,8 +53,7 @@ const EXAMPLES: ReadonlyArray<Example> = [
     {label: "Clap Saw Demo (Surge Synth Team)", url: `${CHAR_URL}/clap-saw-demo-imgui.wclap.tar.gz`, clapId: "org.surge-synth-team.clap-saw-demo", kind: "instrument"}
 ]
 
-const kindOf = ({features}: WclapPluginInfo): Kind | "note-effect" =>
-    features.includes("instrument") ? "instrument" : features.includes("note-effect") ? "note-effect" : "audio-effect"
+const {kindOf} = WclapDescriber
 
 export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project, engine} = service
@@ -96,7 +96,10 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         fetch(url)
             .then(response => response.ok ? response.arrayBuffer() : Promise.reject(new Error(`${response.status}`)))
             .then(archive => WclapStorage.store(archive))
-            .then(local => select(local, clapId),
+            .then(local => {
+                select(local, clapId)
+                refreshStored()
+            },
                 error => RuntimeNotifier.notify({message: `Could not download ${label}: ${error}`, icon: "Warning"}))
     }
     const browse = async (): Promise<void> => {
@@ -127,6 +130,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             })
         if (chosen.isEmpty()) {return}
         await WclapStorage.store(archive)
+        refreshStored()
         select(url, chosen.unwrap().clapId)
     }
     // The hub notifies per child, so an earlier child's notification sees later children without an adapter yet
@@ -193,6 +197,25 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const examplesMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(...examples.map(example =>
         MenuItem.default({label: example.label, checked: example.clapId === adapter.clapIdField.getValue()})
             .setTriggerProcedure(() => useExample(example)))))
+    const stored: { plugins: ReadonlyArray<StoredWclapPlugin> } = {plugins: []}
+    const refreshStored = (): void => {
+        WclapDescriber.stored().then(plugins => {
+            stored.plugins = plugins
+                .filter(({info}) => kindOf(info) === adapter.type)
+                .toSorted((a, b) => StringComparator(a.info.name.toLowerCase(), b.info.name.toLowerCase()))
+        }, EmptyExec)
+    }
+    const storedMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+        if (stored.plugins.length === 0) {
+            parent.addMenuItem(MenuItem.default({label: "No stored plugins", selectable: false}))
+        } else {
+            parent.addMenuItem(...stored.plugins.map(({url, info}) => MenuItem.default({
+                label: info.vendor.length > 0 ? `${info.name} (${info.vendor})` : info.name,
+                checked: url === adapter.urlField.getValue() && info.clapId === adapter.clapIdField.getValue()
+            }).setTriggerProcedure(() => select(url, info.clapId))))
+        }
+        refreshStored()
+    })
     const openLabel: HTMLElement = <span>Open UI</span>
     const openButton: HTMLElement = (
         <Button lifecycle={lifecycle} onClick={() => WclapWindows.toggle(service, adapter, state.info?.name ?? adapter.labelField.getValue())}
@@ -238,6 +261,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         WclapWindows.subscribe(uuidString, showStatus)
     )
     showStatus()
+    refreshStored()
     return (
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
@@ -268,6 +292,13 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                       <MenuButton root={examplesMenu}
                                                   appearance={{framed: true, color: Colors.shadow, activeColor: Colors.white}}>
                                           <span className="button-label">Examples</span>
+                                      </MenuButton>
+                                      <MenuButton root={storedMenu}
+                                                  appearance={{
+                                                      framed: true, color: Colors.shadow, activeColor: Colors.white,
+                                                      tooltip: "Plugins already stored on this device"
+                                                  }}>
+                                          <Icon symbol={IconSymbol.UserFolder}/>
                                       </MenuButton>
                                   </div>
                                   {pluginButtons}
