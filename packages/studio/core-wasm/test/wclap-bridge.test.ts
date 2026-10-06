@@ -7,6 +7,7 @@ import {readFileSync} from "node:fs"
 import {gunzipSync} from "node:zlib"
 import {WclapBundle, WclapBundleFile, WclapParamInfo, WclapStatus} from "@opendaw/studio-adapters"
 import {WclapBridges, WclapHostCallbacks} from "../src/wclap/wclap-bridge"
+import {createWclapDescriber} from "../src/wclap/wclap-describer"
 
 const BASICS = path.resolve(__dirname, "assets", "basics.wclap.tar.gz")
 const REVERB = "uk.co.signalsmith.basics.reverb"
@@ -268,6 +269,13 @@ describe("wclap bridge", () => {
             process(host, handle)
         })
         expect(host.reported.filter(([id]) => id === dry.id)).toEqual([])
+    })
+
+    it("describes a bundle without an engine (main-thread describer)", async () => {
+        const describe = createWclapDescriber(() => Promise.resolve(basics))
+        const plugins = await describe("basics")
+        expect(plugins).toHaveLength(6)
+        expect(plugins.find(({clapId}) => clapId === REVERB)?.vendor.length).toBeGreaterThan(0)
     })
 
     it("renders sub-quantum chunks", async () => {

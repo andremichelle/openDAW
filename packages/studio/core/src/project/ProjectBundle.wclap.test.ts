@@ -71,6 +71,19 @@ describe("ProjectBundle with WebCLAP bundles", () => {
         expect(await wclapEntries(bundle)).toStrictEqual([`${WclapStorage.pathOf(WclapStorage.idOf(url))}`])
     })
 
+    it("imports a bundle from an .odb as freshly stored", async () => {
+        vi.useFakeTimers({toFake: ["Date"], now: 5000})
+        const url = await WclapStorage.store(new Uint8Array(64).fill(7).buffer)
+        const bundle = await ProjectBundle.encode(await profileWithWclaps([url]), () => {})
+        files.clear()
+        vi.setSystemTime(9000)
+        await ProjectBundle.decode(createEnv(), bundle)
+        const id = WclapStorage.idOf(url)
+        expect(await WclapStorage.exists(id)).toBe(true)
+        expect(await WclapStorage.storedAt(id)).toBe(9000)
+        vi.useRealTimers()
+    })
+
     it("exports the project without a bundle that is not stored", async () => {
         const stored = await WclapStorage.store(new Uint8Array(64).fill(7).buffer)
         const missing = await WclapStorage.urlFor(new Uint8Array(64).fill(9).buffer)

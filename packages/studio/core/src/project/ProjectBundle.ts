@@ -122,10 +122,11 @@ export namespace ProjectBundle {
         const wclaps = zip.folder(WclapStorage.Folder)
         if (isDefined(wclaps)) {
             wclaps.forEach((path, file) => {
-                if (file.dir) {return}
-                promises.push(file.async("arraybuffer")
-                    .then(arrayBuffer => Workers.Opfs
-                        .write(`${WclapStorage.Folder}/${path}`, new Uint8Array(arrayBuffer))))
+                const [id, name] = path.split("/")
+                if (file.dir || name !== WclapStorage.FileName) {return}
+                promises.push(file.async("arraybuffer").then(async archive => {
+                    if (await WclapStorage.urlFor(archive) === WclapStorage.urlOf(id)) {await WclapStorage.save(id, archive)}
+                }))
             })
         }
         await Promise.all(promises)

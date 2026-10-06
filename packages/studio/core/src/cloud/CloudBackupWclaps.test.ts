@@ -13,10 +13,14 @@ vi.mock("../Workers", () => ({
                 return bytes
             },
             write: async (path: string, bytes: Uint8Array) => {files.set(path, bytes.slice())},
-            list: async (folder: string) => Array.from(new Set(Array.from(files.keys())
+            delete: async (path: string) => {
+                Array.from(files.keys()).filter(key => key === path || key.startsWith(`${path}/`)).forEach(key => files.delete(key))
+            },
+            list: async (folder: string) => Array.from(files.keys())
                 .filter(path => path.startsWith(`${folder}/`))
-                .map(path => path.split("/")[1])))
-                .map(name => ({name, kind: "directory"}))
+                .map(path => path.substring(folder.length + 1).split("/"))
+                .map(segments => ({name: segments[0], kind: segments.length > 1 ? "directory" : "file"}))
+                .filter((entry, index, all) => all.findIndex(other => other.name === entry.name) === index)
         }
     }
 }))
@@ -43,10 +47,18 @@ class FakeCloud implements CloudHandler {
     async alive(): Promise<void> {}
     catalog(): Array<string> {
         const data = this.store.get(CloudBackupWclaps.RemoteCatalogPath)
-        return data === undefined ? [] : JSON.parse(new TextDecoder().decode(data))
+        return data === undefined ? [] : Object.keys(JSON.parse(new TextDecoder().decode(data)))
     }
-    seed(ids: ReadonlyArray<string>): void {
-        this.store.set(CloudBackupWclaps.RemoteCatalogPath, new TextEncoder().encode(JSON.stringify(ids)).buffer)
+    // a plain id array is the catalog format before deletions existed
+    seed(catalog: ReadonlyArray<string> | Record<string, number>): void {
+        this.store.set(CloudBackupWclaps.RemoteCatalogPath, new TextEncoder().encode(JSON.stringify(catalog)).buffer)
+    }
+    tombstones(): Record<string, number> {
+        const data = this.store.get(CloudBackupWclaps.RemoteTombstonesPath)
+        return data === undefined ? {} : JSON.parse(new TextDecoder().decode(data))
+    }
+    seedTombstones(tombstones: Record<string, number>): void {
+        this.store.set(CloudBackupWclaps.RemoteTombstonesPath, new TextEncoder().encode(JSON.stringify(tombstones)).buffer)
     }
 }
 
@@ -71,12 +83,13 @@ describe("CloudBackupWclaps", () => {
         expect(cloud.catalog()).toStrictEqual([id])
     })
 
-    it("does not upload a bundle the catalog already lists", async () => {
+    it("does not upload a bundle the catalog already lists (old id-array catalog)", async () => {
         const id = WclapStorage.idOf(await WclapStorage.store(archive(3)))
         const cloud = new FakeCloud()
         cloud.seed([id])
         await sync(cloud)
-        expect(cloud.uploads).toStrictEqual([])
+        expect(cloud.uploads).not.toContain(CloudBackupWclaps.pathFor(id))
+        expect(cloud.catalog()).toStrictEqual([id])
     })
 
     it("restores a bundle from the cloud into storage", async () => {
@@ -93,6 +106,55 @@ describe("CloudBackupWclaps", () => {
         const cloud = new FakeCloud()
         cloud.seed([id])
         cloud.store.set(CloudBackupWclaps.pathFor(id), archive(7))
+        await sync(cloud)
+        expect(await WclapStorage.exists(id)).toBe(false)
+    })
+
+    it("removes the cloud copy of a bundle deleted on this device and shares the tombstone", async () => {
+        vi.useFakeTimers({toFake: ["Date"], now: 1000})
+        const id = WclapStorage.idOf(await WclapStorage.store(archive(3)))
+        const cloud = new FakeCloud()
+        await sync(cloud)
+        vi.setSystemTime(2000)
+        await WclapStorage.remove(id)
+        await sync(cloud)
+        expect(cloud.store.has(CloudBackupWclaps.pathFor(id))).toBe(false)
+        expect(cloud.catalog()).toStrictEqual([])
+        expect(cloud.tombstones()).toStrictEqual({[id]: 2000})
+        vi.useRealTimers()
+    })
+
+    it("drops the local copy of a bundle another device deleted later than it was stored here", async () => {
+        vi.useFakeTimers({toFake: ["Date"], now: 1000})
+        const id = WclapStorage.idOf(await WclapStorage.store(archive(3)))
+        const cloud = new FakeCloud()
+        cloud.seed({[id]: 1000})
+        cloud.store.set(CloudBackupWclaps.pathFor(id), archive(3))
+        cloud.seedTombstones({[id]: 2000})
+        await sync(cloud)
+        expect(await WclapStorage.exists(id)).toBe(false)
+        expect(cloud.store.has(CloudBackupWclaps.pathFor(id))).toBe(false)
+        vi.useRealTimers()
+    })
+
+    it("keeps and uploads a bundle added again after its deletion", async () => {
+        vi.useFakeTimers({toFake: ["Date"], now: 3000})
+        const id = WclapStorage.idOf(await WclapStorage.store(archive(3)))
+        const cloud = new FakeCloud()
+        cloud.seedTombstones({[id]: 2000})
+        await sync(cloud)
+        expect(await WclapStorage.exists(id)).toBe(true)
+        expect(cloud.catalog()).toStrictEqual([id])
+        expect(cloud.store.has(CloudBackupWclaps.pathFor(id))).toBe(true)
+        vi.useRealTimers()
+    })
+
+    it("does not restore a cloud bundle that is deleted", async () => {
+        const id = WclapStorage.idOf(await WclapStorage.urlFor(archive(5)))
+        const cloud = new FakeCloud()
+        cloud.seed({[id]: 1000})
+        cloud.store.set(CloudBackupWclaps.pathFor(id), archive(5))
+        cloud.seedTombstones({[id]: 2000})
         await sync(cloud)
         expect(await WclapStorage.exists(id)).toBe(false)
     })

@@ -344,8 +344,24 @@ included, so they are unlinted. No browser check in this review.
 - `.odb` export failed as a whole on a bundle missing from OPFS. It now leaves missing bundles out and
   toasts how many. Test `core/src/project/ProjectBundle.wclap.test.ts`.
 - Cloud backup: every bundle in OPFS (examples and peer-received ones included) is uploaded and restored.
-  A downloaded bundle is now stored only if its sha256 matches its id. Tests `CloudBackupWclaps.test.ts`
-  (upload + catalog, no re-upload, restore, hash mismatch). Still no tombstones.
+  A downloaded bundle is now stored only if its sha256 matches its id. Tests `CloudBackupWclaps.test.ts`.
+
+### Bundle library + deletion (2026-10-06)
+
+- Dashboard tab "WebCLAP" (`ui/browse/WclapBrowser.tsx`, in `dashboard/Resources.tsx`): every stored
+  bundle with its plugin names and vendor, size, a search field (same filter row as the other browsers),
+  right-click "Delete Forever…" with a confirm that warns projects will pass through. Names come from
+  `createWclapDescriber` (exported by `studio-core-wasm`), a bridge on the main thread that runs only entry
+  init and the descriptor walk, since the dashboard has no engine.
+- Delete is for good, no trash. Newest action wins: `wclap/<id>/meta.json` holds `storedAt` (store, peer
+  receive, `.odb` import, cloud restore keeps the cloud time), `wclap/tombstones.json` holds `deletedAt` per
+  id (`WclapStorage.remove`). Backup merges local and remote tombstones (`wclaps/tombstones.json`, max per
+  id), the catalog `wclaps/index.json` is now `{id: storedAt}` (an old id array reads as stored at 0), and a
+  bundle is dead where `deletedAt >= storedAt`: dropped locally (`discard`), deleted in the cloud, never
+  restored. Re-adding the same file later revives it everywhere.
+- `.odb` import now verifies each bundle's sha256 before storing it.
+- Tests: `WclapStorage.test.ts`, `CloudBackupWclaps.test.ts`, `ProjectBundle.wclap.test.ts`. The tab itself
+  is untested in the browser.
 
 ### Plan items not done
 
@@ -359,7 +375,6 @@ Missing:
 - bundle presets (`clap.preset-load`)
 - `EVENT_CHOKE` and `cent` tuning note expressions
 - a missing-plugin placeholder (today the device passes through and the editor shows "Failed")
-- cloud backup tombstones (deleting a bundle does not sync)
 
 ### Plugin origin (blocker 1)
 

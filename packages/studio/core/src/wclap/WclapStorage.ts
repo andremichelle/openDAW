@@ -1,4 +1,4 @@
-import {isDefined, Optional, UUID} from "@opendaw/lib-std"
+import {isDefined, Optional, tryCatch, UUID} from "@opendaw/lib-std"
 import {Workers} from "../Workers"
 
 // Locally imported bundles live in OPFS `wclap/<sha256>/bundle.tar.gz`, addressed by an `opfs:<sha256>` url
@@ -14,14 +14,52 @@ export namespace WclapStorage {
 
     export const urlFor = async (archive: ArrayBuffer): Promise<string> => urlOf(UUID.toString(await UUID.sha256(archive)))
 
+    export const MetaFileName = "meta.json"
+    export const TombstonesPath = `${Folder}/tombstones.json`
+
+    // deletion time per id, a bundle stored later than its deletion is alive again
+    export type Tombstones = Record<string, number>
+
     export const store = async (archive: ArrayBuffer): Promise<string> => {
         const url = await urlFor(archive)
-        await Workers.Opfs.write(pathOf(idOf(url)), new Uint8Array(archive))
+        await save(idOf(url), archive)
         return url
     }
 
-    export const save = (id: string, archive: ArrayBuffer): Promise<void> =>
-        Workers.Opfs.write(pathOf(id), new Uint8Array(archive))
+    export const save = async (id: string, archive: ArrayBuffer, storedAt: number = Date.now()): Promise<void> => {
+        await Workers.Opfs.write(pathOf(id), new Uint8Array(archive))
+        await Workers.Opfs.write(`${Folder}/${id}/${MetaFileName}`, new TextEncoder().encode(JSON.stringify({storedAt})))
+    }
+
+    export const storedAt = (id: string): Promise<number> => Workers.Opfs.read(`${Folder}/${id}/${MetaFileName}`)
+        .then(bytes => {
+            const parsed = tryCatch(() => JSON.parse(new TextDecoder().decode(bytes)) as { storedAt?: unknown })
+            return parsed.status === "success" && typeof parsed.value.storedAt === "number" ? parsed.value.storedAt : 0
+        }, () => 0)
+
+    export const remove = async (id: string): Promise<void> => {
+        await Workers.Opfs.delete(`${Folder}/${id}`)
+        await writeTombstones(mergeTombstones(await tombstones(), {[id]: Date.now()}))
+    }
+
+    // drops the local copy only, for a deletion that happened on another device
+    export const discard = (id: string): Promise<void> => Workers.Opfs.delete(`${Folder}/${id}`)
+
+    export const tombstones = (): Promise<Tombstones> => Workers.Opfs.read(TombstonesPath)
+        .then(bytes => parseTombstones(new TextDecoder().decode(bytes)), () => ({}))
+
+    export const writeTombstones = (value: Tombstones): Promise<void> =>
+        Workers.Opfs.write(TombstonesPath, new TextEncoder().encode(JSON.stringify(value)))
+
+    export const mergeTombstones = (a: Tombstones, b: Tombstones): Tombstones =>
+        Object.fromEntries(Array.from(new Set([...Object.keys(a), ...Object.keys(b)]))
+            .map(id => [id, Math.max(a[id] ?? 0, b[id] ?? 0)]))
+
+    export const parseTombstones = (text: string): Tombstones => {
+        const parsed = tryCatch(() => JSON.parse(text) as unknown)
+        if (parsed.status === "failure" || typeof parsed.value !== "object" || parsed.value === null || Array.isArray(parsed.value)) {return {}}
+        return Object.fromEntries(Object.entries(parsed.value).filter(([, time]) => typeof time === "number"))
+    }
 
     export const exists = (id: string): Promise<boolean> => Workers.Opfs.exists(pathOf(id))
 
