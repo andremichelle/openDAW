@@ -5,9 +5,7 @@ import {WclapDeviceBox, WclapInstrumentBox, WclapParameterBox} from "@opendaw/st
 import {WclapParamGesture, WclapParamInfo} from "@opendaw/studio-adapters"
 import {Project} from "../project"
 
-// The device's `WclapParameterBox` children mirror the loaded plugin's automatable parameters, keyed by clap id.
-// An existing box keeps its value (the host is the source of truth, the bridge pushes it into the plugin) and
-// keeps its automation, modulation and MIDI links when the plugin's range changed.
+// existing boxes keep their value and links, the host is the source of truth
 export namespace WclapParameters {
     export const reconcile = (project: Project, uuid: string, params: ReadonlyArray<WclapParamInfo>): void => {
         const hub = parametersOf(project, uuid)

@@ -1,6 +1,4 @@
-//! The Wclap AUDIO-EFFECT device: a CLAP plugin compiled to wasm32, hosted as its own instance next to the
-//! engine through the `host_wclap_*` JS bridge (see `packages/studio/core-wasm/src/wclap/wclap-bridge.ts`).
-//! The shared field/bridge logic lives in `wclap-common`, the instrument twin is `device-wclap-instrument`.
+//! The Wclap audio-effect device, hosted through the `host_wclap_*` JS bridge.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -55,8 +53,7 @@ pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
     core::mem::size_of::<WclapState>() as u32
 }
 
-/// The `parameters` hub (key 13): the engine binds each `WclapParameterBox` child's `value` (key 4) and drives
-/// `parameter_changed` with the child's `clap-id` (key 3) as the id.
+/// WASM CONTRACT: `parameters` hub key 13, children bind `value` (4) and pass `clap-id` (3) as id.
 #[no_mangle]
 pub extern "C" fn observe_param_collection_field() -> u32 {
     13

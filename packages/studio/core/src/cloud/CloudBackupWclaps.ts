@@ -3,8 +3,7 @@ import {network, Promises} from "@opendaw/lib-runtime"
 import {CloudHandler} from "./CloudHandler"
 import {WclapStorage} from "../wclap/WclapStorage"
 
-// Bundles content addressed by sha256, mirrored as `wclaps/<sha256>.tar.gz`. The catalog keeps each bundle's
-// storage time and the tombstones its deletion time, the later of both decides whether it lives.
+// a bundle lives when its storage time is later than its deletion time
 export class CloudBackupWclaps {
     static readonly RemotePath = "wclaps"
     static readonly RemoteCatalogPath = `${this.RemotePath}/index.json`

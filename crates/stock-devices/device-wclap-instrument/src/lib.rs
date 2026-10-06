@@ -1,5 +1,4 @@
-//! The Wclap INSTRUMENT device: the instrument twin of `device-wclap`. Note events are queued into the
-//! bridge (`wclap_note`) and the plugin's output is added into the sub-chunk, the instrument contract.
+//! The Wclap instrument device, the instrument twin of `device-wclap`.
 
 #![cfg_attr(target_family = "wasm", no_std)]
 
@@ -63,8 +62,7 @@ pub extern "C" fn state_size(_sample_rate: f32) -> u32 {
     core::mem::size_of::<WclapInstrumentState>() as u32
 }
 
-/// The `parameters` hub (key 13): the engine binds each `WclapParameterBox` child's `value` (key 4) and drives
-/// `parameter_changed` with the child's `clap-id` (key 3) as the id.
+/// WASM CONTRACT: `parameters` hub key 13, children bind `value` (4) and pass `clap-id` (3) as id.
 #[no_mangle]
 pub extern "C" fn observe_param_collection_field() -> u32 {
     13

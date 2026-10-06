@@ -1,5 +1,4 @@
-// Serves open WCLAP plugin pages under <base>/wclap/<uuid>/<path>, answered by the host frame holding that
-// plugin's bundle in memory (see wclap-frame.html). Host frames announce themselves with "wclap-host".
+// serves <base>/wclap/<uuid>/<path> from the host frame holding the bundle (see wclap-frame.html)
 const PREFIX = /\/wclap\/([^/]+)\/(.*)$/
 const ASK_TIMEOUT_MS = 1000
 const hosts = new Set()

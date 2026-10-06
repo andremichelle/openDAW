@@ -17,8 +17,7 @@ export namespace WclapGuis {
 
     export const deliver = (uuid: string, bytes: ArrayBuffer): void => guis.get(uuid)?.(bytes)
 
-    // clap.param-hovered: the parameter under the pointer in the plugin's page, -1 when none. A plugin that
-    // reports one proves it implements the extension, which is what unlocks the in-window menu and value entry.
+    // clap.param-hovered per device, -1 = none
     const hovered = new Map<string, number>()
     const notifier = new Notifier<{ uuid: string, paramId: number }>()
     export const hover = (uuid: string, paramId: number): void => {

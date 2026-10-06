@@ -132,9 +132,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     // The hub notifies per child, so an earlier child's notification sees later children without an adapter yet
     const parameterOf = (paramBox: WclapParameterBox): Optional<AutomatableParameterFieldAdapter> =>
         adapter.parameters.parameters().find(parameter => parameter.address.equals(paramBox.value.address))
-    // The plugin's own window is the only place to drag these, so the menu carries the numeric entry. The menu
-    // lives in the same flyout and restores the previous focus while it closes, so the input waits for it, and
-    // it opens where the pointer is, the menu is gone by then.
+    // the input waits for the closing menu, which restores focus and would swallow the typed text
     const pointer = {x: 0, y: 0}
     const enterPercentage = (parameter: AutomatableParameterFieldAdapter): void => {
         const layers = Layers.get(parametersButton)

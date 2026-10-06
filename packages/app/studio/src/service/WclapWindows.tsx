@@ -20,9 +20,7 @@ export type WclapAdapter = WclapDeviceBoxAdapter | WclapInstrumentBoxAdapter
 const DEFAULT_SIZE = {width: 640, height: 480}
 const SAVE_DELAY_MS = 250
 const MAX_MESSAGE_BYTES = 16 << 20
-// The plugin page runs inside a host frame (public/wclap-frame.html). Served from its own origin
-// (VITE_WCLAP_ORIGIN, e.g. https://plugins.opendaw.studio) a third-party page cannot reach the studio's
-// documents, storage or session; empty means the studio's origin, which only a trusted bundle should get.
+// separate plugin origin isolates third-party pages from the studio, empty = studio origin (dev only)
 const FRAME_ORIGIN: string = import.meta.env.VITE_WCLAP_ORIGIN ?? ""
 const FRAME_URL = `${FRAME_ORIGIN}${import.meta.env.BASE_URL}wclap-frame.html`
 
@@ -91,9 +89,7 @@ export namespace WclapWindows {
             saveTimer.id = setTimeout(() => engine.wclapSaveState(uuid), SAVE_DELAY_MS)
         }
         const post = (message: object): void => iframe.contentWindow?.postMessage(message, frameOrigin)
-        // Only a plugin that implements `clap.param-hovered` can say which control the pointer is on. The first
-        // hover it reports hands right-click and double-click inside its page over to the studio; a plugin that
-        // never reports keeps its own behaviour and openDAW's handles stay in the editor's Parameters menu.
+        // in-page right-click and double-click are enabled by the plugin's first clap.param-hovered report
         const menuParameter: { parameter: Optional<AutomatableParameterFieldAdapter> } = {parameter: undefined}
         const hoveredParameter = (): Optional<AutomatableParameterFieldAdapter> => {
             const paramId = WclapGuis.hoveredParam(uuidString)

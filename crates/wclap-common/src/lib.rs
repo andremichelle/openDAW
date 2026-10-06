@@ -1,5 +1,4 @@
-//! Shared by the Wclap effect and instrument devices: the bridge handle, the observed `url` `[10]` and
-//! `clap-id` `[11]` string fields, and the per-chunk copy through the `host_wclap_*` bridge.
+//! Shared by the Wclap effect and instrument devices.
 
 #![no_std]
 
@@ -36,8 +35,7 @@ impl WclapLink {
     pub fn url(&self) -> &[u8] {&self.url[..self.url_len]}
     pub fn clap_id(&self) -> &[u8] {&self.clap_id[..self.clap_id_len]}
 
-    /// Copy a string field into the state and hand both to the bridge, which reloads only on a change. The
-    /// state blob (base64) goes straight to the bridge, which applies it once the plugin is up.
+    /// The bridge reloads only when url or clap id changed.
     pub fn apply_field(&mut self, id: u32, value: FieldValue) {
         let FieldValue::String(text) = value else {return};
         if id == self.state_field_id {

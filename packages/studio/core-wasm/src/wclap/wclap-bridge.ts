@@ -661,8 +661,7 @@ export class WclapBridges {
         })
     }
 
-    // Not every plugin emits events for its page's edits (Cmajor does not), so after page traffic the values
-    // are read back once and the changed ones reported as if the plugin had sent them
+    // Cmajor emits no parameter events for page edits
     #pollParams(plugin: Plugin, loaded: Loaded): void {
         if (loaded.params === 0) {return}
         const view = this.#view(loaded)
@@ -726,8 +725,7 @@ export class WclapBridges {
             return ptr
         }
         const paramEvent = (type: number, id: number, amount: number): void => {
-            // a value the host pushes is not a change the plugin made: remember it, `#pollParams` reports the
-            // rest, otherwise a folded modulation comes back as a new base and the parameter drifts with it
+            // a host value is no plugin change, else a folded modulation drifts the base
             if (type === ClapAbi.EventType.PARAM_VALUE) {loaded.reported.set(id, Math.fround(amount))}
             const ptr = header(type, ClapAbi.ParamValueEvent.SIZE)
             view.setUint32(ptr + ClapAbi.ParamValueEvent.PARAM_ID, id, true)

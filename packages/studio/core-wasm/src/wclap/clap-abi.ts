@@ -1,5 +1,4 @@
-// CLAP C ABI on wasm32 (ILP32): byte offsets of every struct field the host touches. Pointers and function
-// pointers are 4 bytes, doubles and i64 are 8-byte aligned. Verified against the spike over Signalsmith Basics.
+// CLAP struct offsets on wasm32 (ILP32): 4-byte pointers, 8-byte aligned doubles and i64
 export namespace ClapAbi {
     export const VERSION = {major: 1, minor: 2, revision: 2}
     export const INVALID_ID = 0xFFFFFFFF

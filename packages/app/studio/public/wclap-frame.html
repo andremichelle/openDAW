@@ -11,9 +11,7 @@
 </head>
 <body>
 <script>
-    // The plugin page's host frame, served from the plugin origin (see WclapWindows.tsx): it owns the
-    // service worker answering /wclap/<uuid>/<path> from the bundle the studio hands over, embeds the page
-    // and relays its messages plus the studio's keyboard shortcuts.
+    // host frame on the plugin origin: owns the service worker, embeds the page, relays messages and keys
     const MIME = {
         html: "text/html", js: "text/javascript", mjs: "text/javascript", css: "text/css", json: "application/json",
         wasm: "application/wasm", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
@@ -58,8 +56,7 @@
         worker.postMessage({type: "wclap-host"})
     }
 
-    // Only for a plugin that reports `clap.param-hovered`: right-click and double-click then belong to the
-    // studio, which knows the parameter under the pointer. Everyone else keeps their page's own behaviour.
+    // only once the plugin reported clap.param-hovered, otherwise the page keeps its own behaviour
     const forwardPointer = () => {
         const target = state.inner?.contentWindow
         if (!state.pointer || !target || target.__wclapPointer) {return}
