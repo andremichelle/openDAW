@@ -31,11 +31,23 @@ const settled = (promise: Promise<unknown>): { state: "pending" | "resolved" | "
     return result
 }
 
+class MockRTCPeerConnection {
+    onicecandidate: unknown = null
+    oniceconnectionstatechange: unknown = null
+    onconnectionstatechange: unknown = null
+    ondatachannel: unknown = null
+    close() {}
+}
+
 describe("WebCLAP discovery timeout", () => {
-    beforeEach(() => {vi.useFakeTimers()})
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.stubGlobal("RTCPeerConnection", MockRTCPeerConnection)
+    })
     afterEach(() => {
         vi.useRealTimers()
         vi.restoreAllMocks()
+        vi.unstubAllGlobals()
     })
 
     it("rejects a bundle request when no peer reports holding it", async () => {
