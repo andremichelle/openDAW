@@ -333,6 +333,20 @@ included, so they are unlinted. No browser check in this review.
    re-sends its fields) reloads it. Tests in `wclap-bridge.test.ts`. A "Reload" button in the editor's
    failed state would need a new engine command, not done.
 
+### Failure handling (FIXED 2026-10-06)
+
+- A failed load showed only in the device editor. `WclapFailures.report` (called from `EngineWorklet` on every
+  status) now toasts once per failure with device label, clap id and reason. Test `WclapFailures.test.ts`.
+- In a live room a bundle no peer holds kept the request pending forever, the device stayed "loading" and
+  `queryLoadingComplete` (export, offline render) never resolved. `wclap` requests now fail after
+  `WCLAP_DISCOVERY_TIMEOUT_MS` (5 s) without an inventory answer, re-armed on retry, other asset types
+  unchanged. Test `p2p/src/__tests__/WclapDiscoveryTimeout.test.ts`.
+- `.odb` export failed as a whole on a bundle missing from OPFS. It now leaves missing bundles out and
+  toasts how many. Test `core/src/project/ProjectBundle.wclap.test.ts`.
+- Cloud backup: every bundle in OPFS (examples and peer-received ones included) is uploaded and restored.
+  A downloaded bundle is now stored only if its sha256 matches its id. Tests `CloudBackupWclaps.test.ts`
+  (upload + catalog, no re-upload, restore, hash mismatch). Still no tombstones.
+
 ### Plan items not done
 
 Re-scoped on purpose: canvas GUI tiers 1/2 (webview window instead), generic knob editor (Parameters menu

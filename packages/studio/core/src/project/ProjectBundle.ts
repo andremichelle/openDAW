@@ -1,6 +1,7 @@
 import {asDefined, Exec, isDefined, Option, panic, Progress, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {AudioFileBox, SoundfontFileBox, WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
 import {SampleLoader, SoundfontLoader} from "@opendaw/studio-adapters"
+import {Promises} from "@opendaw/lib-runtime"
 import {Project} from "./Project"
 import {ProjectEnv} from "./ProjectEnv"
 import {ProjectPaths} from "./ProjectPaths"
@@ -38,10 +39,16 @@ export namespace ProjectBundle {
             .map(box => box.url.getValue())
             .filter(WclapStorage.isLocal)
             .map(WclapStorage.idOf)))
+        const missingWclaps: Array<string> = []
         const blob = await Promise.all([
             ...wclapIds.map(async id => {
+                const archive = await Promises.tryCatch(WclapStorage.load(WclapStorage.urlOf(id)))
+                if (archive.status === "rejected") {
+                    missingWclaps.push(id)
+                    return
+                }
                 const folder = asDefined(wclaps.folder(id), "Could not create folder for wclap bundle")
-                folder.file(WclapStorage.FileName, await WclapStorage.load(WclapStorage.urlOf(id)), {binary: true})
+                folder.file(WclapStorage.FileName, archive.value, {binary: true})
             }),
             ...audioFileBoxes
                 .map(async ({address: {uuid}}, index) => {
@@ -65,6 +72,12 @@ export namespace ProjectBundle {
             compressionOptions: {level: 6}
         }))
         progress(1.0)
+        if (missingWclaps.length > 0) {
+            RuntimeNotifier.notify({
+                message: `${missingWclaps.length} WebCLAP bundle(s) are not on this device and were left out of the export.`,
+                icon: "Warning"
+            })
+        }
         return blob.arrayBuffer()
     }
 

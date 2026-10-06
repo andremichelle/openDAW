@@ -1,4 +1,5 @@
 export * from "./WclapBundles"
+export * from "./WclapFailures"
 export * from "./WclapGuis"
 export * from "./WclapStates"
 export * from "./WclapParameters"

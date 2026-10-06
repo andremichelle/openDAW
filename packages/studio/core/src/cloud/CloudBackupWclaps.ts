@@ -72,6 +72,10 @@ export class CloudBackupWclaps {
             progress((index + 1) / length)
             this.#log(`Downloading WebCLAP bundle ${id.substring(0, 8)}`)
             const archive = await Promises.guardedRetry(() => this.#cloudHandler.download(CloudBackupWclaps.pathFor(id)), network.defaultRetry)
+            if (await WclapStorage.urlFor(archive) !== WclapStorage.urlOf(id)) {
+                this.#log(`Skipped WebCLAP bundle ${id.substring(0, 8)}, its content does not match its id`)
+                return
+            }
             await WclapStorage.save(id, archive)
         }))
         progress(1.0)

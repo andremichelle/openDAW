@@ -53,7 +53,7 @@ import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
 import {HRClockWorker} from "./HRClockWorker"
-import {WclapBundles, WclapGuis, WclapParameters, WclapStates} from "./wclap"
+import {WclapBundles, WclapFailures, WclapGuis, WclapParameters, WclapStates} from "./wclap"
 import type {SoundFont2} from "soundfont2"
 
 export class EngineWorklet extends AudioWorkletNode implements Engine {
@@ -257,6 +257,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     WclapParameters.apply(project, uuid, paramId, value, gesture),
                 wclapHovered: (uuid: string, paramId: number): void => WclapGuis.hover(uuid, paramId),
                 wclapStatus: (uuid: string, status: WclapStatus): void => {
+                    WclapFailures.report(project, uuid, this.#wclapStatus.get(uuid), status)
                     this.#wclapStatus.set(uuid, status)
                     for (const listener of this.#wclapStatusListeners.get(uuid)) {listener(status)}
                 },
