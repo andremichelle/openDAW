@@ -1,4 +1,4 @@
-import {UUID} from "@opendaw/lib-std"
+import {isDefined, Optional, UUID} from "@opendaw/lib-std"
 import {Workers} from "../Workers"
 
 // Locally imported bundles live in OPFS `wclap/<sha256>/bundle.tar.gz`, addressed by an `opfs:<sha256>` url
@@ -25,7 +25,22 @@ export namespace WclapStorage {
 
     export const exists = (id: string): Promise<boolean> => Workers.Opfs.exists(pathOf(id))
 
-    export const load = (url: string): Promise<ArrayBuffer> => loadId(idOf(url))
+    export type RemoteFetcher = (id: string) => Promise<ArrayBuffer>
+
+    const remote: { fetch: Optional<RemoteFetcher> } = {fetch: undefined}
+
+    // a peer in a live room serves bundles this user does not hold, see ChainedWclapProvider
+    export const installRemote = (fetcher: Optional<RemoteFetcher>): void => {remote.fetch = fetcher}
+
+    export const load = async (url: string): Promise<ArrayBuffer> => {
+        const id = idOf(url)
+        if (await exists(id)) {return loadId(id)}
+        if (!isDefined(remote.fetch)) {throw new Error(`WebCLAP bundle ${id} is not stored`)}
+        const archive = await remote.fetch(id)
+        if (await urlFor(archive) !== url) {throw new Error(`WebCLAP bundle ${id} arrived with a different hash`)}
+        await save(id, archive)
+        return archive
+    }
 
     export const loadId = (id: string): Promise<ArrayBuffer> => Workers.Opfs.read(pathOf(id))
         .then(bytes => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)

@@ -38,9 +38,9 @@ import {reportVisitor} from "@/VisitorReporter"
 import {FontLoader} from "@/ui/FontLoader"
 import {ErrorHandler} from "@/errors/ErrorHandler.ts"
 import {AudioData} from "@opendaw/lib-dsp"
-import {ChainedSampleProvider, ChainedSoundfontProvider} from "@opendaw/studio-p2p"
+import {ChainedSampleProvider, ChainedSoundfontProvider, ChainedWclapProvider} from "@opendaw/studio-p2p"
 import {IconSymbol, initializeColors, setColorScheme} from "@opendaw/studio-enums"
-import {StudioPreferences} from "@opendaw/studio-core"
+import {StudioPreferences, WclapStorage} from "@opendaw/studio-core"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
 import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
@@ -124,6 +124,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[ArrayBuffer, SoundfontMetaData]> =>
             OpenSoundfontAPI.get().load(uuid, progress)
     })
+    const chainedWclapProvider = new ChainedWclapProvider()
+    WclapStorage.installRemote(id => chainedWclapProvider.fetch(UUID.parse(id), Progress.Empty))
     const sampleManager = new GlobalSampleLoaderManager(chainedSampleProvider)
     const soundfontManager = new GlobalSoundfontLoaderManager(chainedSoundfontProvider)
     const cloudAuthManager = CloudAuthManager.create({
@@ -131,7 +133,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         GoogleDrive: "628747153367-gt1oqcn3trr9l9a7jhigja6l1t3f1oik.apps.googleusercontent.com"
     })
     const service: StudioService = new StudioService(context, audioWorklets.value, audioDevices,
-        sampleManager, soundfontManager, chainedSampleProvider, chainedSoundfontProvider,
+        sampleManager, soundfontManager, chainedSampleProvider, chainedSoundfontProvider, chainedWclapProvider,
         cloudAuthManager, buildInfo)
     StudioShortcutManager.install(service)
     if (isDefined(context.playbackStats)) {

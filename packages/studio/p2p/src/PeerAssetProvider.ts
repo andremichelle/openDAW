@@ -10,10 +10,12 @@ import {TrafficMeter} from "./TrafficMeter"
 export const STALL_TIMEOUT_MS = 10_000
 export const MAX_RETRIES = 3
 
+type AssetType = "sample" | "soundfont" | "cover" | "wclap"
+
 type PendingRequest = {
     readonly uuid: UUID.Bytes
     readonly uuidString: string
-    readonly assetType: "sample" | "soundfont" | "cover"
+    readonly assetType: AssetType
     readonly progress: Progress.Handler
     readonly resolve: (zipBytes: ArrayBuffer) => void
     readonly reject: (error: Error) => void
@@ -62,7 +64,12 @@ export class PeerAssetProvider {
         return this.#requestAsset(uuid, "cover", progress)
     }
 
-    #requestAsset(uuid: UUID.Bytes, assetType: "sample" | "soundfont" | "cover", progress: Progress.Handler): Promise<ArrayBuffer> {
+    fetchWclap(uuid: UUID.Bytes, progress: Progress.Handler): Promise<ArrayBuffer> {
+        console.debug("[P2P:Provider] fetchWclap", UUID.toString(uuid))
+        return this.#requestAsset(uuid, "wclap", progress)
+    }
+
+    #requestAsset(uuid: UUID.Bytes, assetType: AssetType, progress: Progress.Handler): Promise<ArrayBuffer> {
         const uuidString = UUID.toString(uuid)
         const {promise, resolve, reject} = Promise.withResolvers<ArrayBuffer>()
         this.#pendingRequests.set(uuidString, {

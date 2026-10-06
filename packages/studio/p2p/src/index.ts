@@ -7,6 +7,7 @@ export {AssetSignaling, type SignalingMessage, type SignalingSocket} from "./Ass
 export {AssetZip} from "./AssetZip"
 export {ChainedSampleProvider, type SampleFetcher} from "./ChainedSampleProvider"
 export {ChainedSoundfontProvider, type SoundfontFetcher} from "./ChainedSoundfontProvider"
+export {ChainedWclapProvider, type WclapFetcher} from "./ChainedWclapProvider"
 export {type Fetcher, type ChainedProvider} from "./ChainedProvider"
 export {AssetPeerConnection} from "./AssetPeerConnection"
 export {AssetServer, type AssetReader} from "./AssetServer"

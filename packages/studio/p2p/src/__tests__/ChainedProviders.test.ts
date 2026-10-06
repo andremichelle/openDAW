@@ -4,6 +4,7 @@ import {AudioData} from "@opendaw/lib-dsp"
 import {SampleMetaData, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {ChainedSampleProvider, type SampleProvider} from "../ChainedSampleProvider"
 import {ChainedSoundfontProvider, type SoundfontProvider} from "../ChainedSoundfontProvider"
+import {ChainedWclapProvider} from "../ChainedWclapProvider"
 
 const testUuid = UUID.generate()
 const noopProgress = () => {}
@@ -117,5 +118,26 @@ describe("ChainedSoundfontProvider", () => {
         chained.attachPeer({fetch: async () => [testSf2, testSoundfontMeta]})
         chained.detachPeer()
         await expect(chained.fetch(testUuid, noopProgress)).rejects.toThrow("404")
+    })
+})
+
+describe("ChainedWclapProvider", () => {
+    const archive = new ArrayBuffer(256)
+
+    it("throws when no peer is attached (bundles have no cloud source)", async () => {
+        await expect(new ChainedWclapProvider().fetch(testUuid, noopProgress)).rejects.toThrow()
+    })
+    it("fetches from the attached peer with the progress handler", async () => {
+        const chained = new ChainedWclapProvider()
+        const seen: Array<unknown> = []
+        chained.attachPeer({fetch: async (uuid, progress) => {seen.push(uuid, progress); return archive}})
+        await expect(chained.fetch(testUuid, noopProgress)).resolves.toBe(archive)
+        expect(seen).toStrictEqual([testUuid, noopProgress])
+    })
+    it("throws after detachPeer", async () => {
+        const chained = new ChainedWclapProvider()
+        chained.attachPeer({fetch: async () => archive})
+        chained.detachPeer()
+        await expect(chained.fetch(testUuid, noopProgress)).rejects.toThrow()
     })
 })

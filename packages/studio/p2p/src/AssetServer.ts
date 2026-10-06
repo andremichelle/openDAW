@@ -11,9 +11,11 @@ export type AssetReader = {
     readonly hasSample: (uuid: UUID.Bytes) => Promise<boolean>
     readonly hasSoundfont: (uuid: UUID.Bytes) => Promise<boolean>
     readonly hasCover: (uuid: UUID.Bytes) => Promise<boolean>
+    readonly hasWclap: (uuid: UUID.Bytes) => Promise<boolean>
     readonly readSample: (uuid: UUID.Bytes) => Promise<[ArrayBuffer, SampleMetaData]>
     readonly readSoundfont: (uuid: UUID.Bytes) => Promise<[ArrayBuffer, SoundfontMetaData]>
     readonly readCover: (uuid: UUID.Bytes) => Promise<ArrayBuffer>
+    readonly readWclap: (uuid: UUID.Bytes) => Promise<ArrayBuffer>
 }
 
 export class AssetServer {
@@ -64,6 +66,9 @@ export class AssetServer {
                     have.push(asset.uuid)
                 } else if (asset.assetType === "cover" && await this.#assetReader.hasCover(uuid)) {
                     console.debug("[P2P:Server] have cover", asset.uuid)
+                    have.push(asset.uuid)
+                } else if (asset.assetType === "wclap" && await this.#assetReader.hasWclap(uuid)) {
+                    console.debug("[P2P:Server] have wclap", asset.uuid)
                     have.push(asset.uuid)
                 } else {
                     console.debug("[P2P:Server] do NOT have", asset.assetType, asset.uuid)
@@ -160,6 +165,10 @@ export class AssetServer {
             const [sf2Bytes, meta] = await this.#assetReader.readSoundfont(uuid)
             console.debug("[P2P:Server] soundfont read, sf2 size:", sf2Bytes.byteLength, "packing zip...")
             return AssetZip.packSoundfont(sf2Bytes, meta)
+        }
+        if (assetType === "wclap") {
+            console.debug("[P2P:Server] reading wclap bundle from OPFS...")
+            return this.#assetReader.readWclap(uuid)
         }
         console.debug("[P2P:Server] reading cover...")
         return this.#assetReader.readCover(uuid)

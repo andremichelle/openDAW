@@ -313,8 +313,14 @@ included, so they are unlinted. No browser check in this review.
    `WclapParameterBox` twice (`UUID.generate()`). Parameter box uuids are now derived from the device uuid
    XOR the clap id, so peers create the same box. Concurrent `state` writes were fine (last write wins, the
    bridge does not echo a loaded state). Test: `core/src/wclap/WclapParameters.collab.test.ts`.
-5. `opfs:` bundles exist only on the machine that browsed them. Without a cloud backup or `.odb` the plugin
-   fails elsewhere. The live-room bundle transfer (phase 6, `wclap` asset type) is not built.
+5. FIXED 2026-10-06 for live rooms. `opfs:` bundles existed only on the machine that stored them. The p2p
+   asset path now carries a fourth type `wclap` (raw `.tar.gz`, no zip): `AssetReader.hasWclap/readWclap`,
+   `PeerAssetProvider.fetchWclap`, `ChainedWclapProvider` (peer only, no cloud source), attached in
+   `P2PSession`. `WclapStorage.load` reads OPFS, else asks the installed remote (`installRemote`, wired in
+   `boot.ts`), accepts the archive only if its sha256 url matches and stores it. `.odb` export loads through
+   the same path. Outside a room a missing bundle still fails (no cloud source). Tests:
+   `p2p/src/__tests__/AssetServer.test.ts`, `ChainedProviders.test.ts`, `core/src/wclap/WclapStorage.test.ts`.
+   Not tried between two browsers.
 6. FIXED 2026-10-06. Browse stored the file in OPFS before `describe` validated it. Now the archive is
    registered in memory under its `opfs:<sha256>` url (`WclapBundles.register`), described, and written to
    OPFS only once a plugin of the device's kind was chosen.
@@ -374,6 +380,8 @@ engine bridge, `WclapBundles`, `WclapStorage`, the `wclap*` calls on `EngineFaca
    request arbitrary urls (tracking beacon).
 6. The `wclap*` `EngineFacade` methods and the RPC types in `protocols.ts` become public API on the next
    publish. Mark them experimental or hold them back from that release.
+7. `@opendaw/studio-p2p` is published: `AssetReader` (`hasWclap`, `readWclap`) and `P2PSessionContext`
+   (`chainedWclapProvider`) gained required members, a breaking change for SDK code that builds a session.
 
 ### Housekeeping
 

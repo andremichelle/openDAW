@@ -111,13 +111,15 @@ const createMockAssetReader = (sf2Size: number): AssetReader => ({
     hasSample: async () => false,
     hasSoundfont: async () => true,
     hasCover: async () => false,
+    hasWclap: async () => false,
     readSample: async () => {throw new Error("not used")},
     readSoundfont: async (uuid: UUID.Bytes) => [new ArrayBuffer(sf2Size), {
         uuid: UUID.toString(uuid),
         name: "test-font",
         type: "soundfont" as const
     } as never],
-    readCover: async () => {throw new Error("not used")}
+    readCover: async () => {throw new Error("not used")},
+    readWclap: async () => {throw new Error("not used")}
 })
 
 const openConnection = async (
@@ -273,6 +275,59 @@ describe("AssetServer channel-close safety", () => {
         for (let tick = 0; tick < 50; tick++) {await Promise.resolve()}
         // Fixed behavior: zero attempts. Current buggy behavior: attempts once and throws.
         expect(sendAttempts).toBe(0)
+        server.terminate()
+    })
+})
+
+describe("AssetServer WebCLAP bundles", () => {
+    beforeEach(() => {lastIncomingChannel = null})
+    afterEach(() => {vi.restoreAllMocks()})
+
+    const bundle = new Uint8Array(3 * 65_536 + 17).map((_, index) => index * 7)
+
+    const createWclapReader = (owned: string): AssetReader => ({
+        ...createMockAssetReader(0),
+        hasSoundfont: async () => false,
+        hasWclap: async (uuid: UUID.Bytes) => UUID.toString(uuid) === owned,
+        readWclap: async () => bundle.slice().buffer
+    })
+
+    it("answers an asset-request for a bundle it holds with its inventory", async () => {
+        const uuid = UUID.toString(UUID.generate())
+        const socket = createMockSocket()
+        const signaling = new AssetSignaling(socket, "assets:room")
+        const server = new AssetServer(signaling, "peer-local", createWclapReader(uuid))
+        socket.simulateMessage(publishEnvelope("assets:room", {
+            type: "asset-request",
+            peerId: "peer-remote",
+            assets: [{uuid, assetType: "wclap"}, {uuid: UUID.toString(UUID.generate()), assetType: "wclap"}]
+        }))
+        for (let tick = 0; tick < 20; tick++) {await Promise.resolve()}
+        const inventory = socket.sent.map(text => JSON.parse(text).data).find(message => message?.type === "asset-inventory")
+        expect(inventory).toEqual({type: "asset-inventory", peerId: "peer-local", targetPeerId: "peer-remote", have: [uuid]})
+        server.terminate()
+    })
+
+    it("transfers the bundle archive as raw bytes", async () => {
+        const uuid = UUID.generate()
+        const sent: Array<ArrayBuffer> = []
+        const {promise: completed, resolve: complete} = Promise.withResolvers<void>()
+        vi.spyOn(AssetPeerConnection.prototype, "sendWithBackpressure")
+            .mockImplementation(async (_channel, buffer: ArrayBuffer) => {
+                sent.push(buffer)
+                if (ChunkProtocol.decode(buffer).msgType === ChunkProtocol.MsgType.TransferComplete) {complete()}
+                return true
+            })
+        const socket = createMockSocket()
+        const signaling = new AssetSignaling(socket, "assets:room")
+        const server = new AssetServer(signaling, "peer-local", createWclapReader(UUID.toString(uuid)))
+        const channel = await openConnection(socket, "peer-remote", "peer-local")
+        channel.onmessage!({data: JSON.stringify({type: "transfer-request", uuid: UUID.toString(uuid), assetType: "wclap"})})
+        await completed
+        const chunks = sent.map(buffer => ChunkProtocol.decode(buffer))
+            .filter(frame => frame.msgType === ChunkProtocol.MsgType.ChunkData)
+            .map(frame => frame.payload)
+        expect(new Uint8Array(ChunkProtocol.reassemble(chunks))).toStrictEqual(bundle)
         server.terminate()
     })
 })
