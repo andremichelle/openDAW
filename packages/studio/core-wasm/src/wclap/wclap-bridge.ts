@@ -240,7 +240,7 @@ export class WclapBridges {
         if (!isDefined(plugin)) {return}
         const url = decodeUtf8(new Uint8Array(this.#memory.buffer, urlPtr, urlLen).slice())
         const clapId = decodeUtf8(new Uint8Array(this.#memory.buffer, idPtr, idLen).slice())
-        if (plugin.url === url && plugin.clapId === clapId) {return}
+        if (plugin.url === url && plugin.clapId === clapId && (isNotNull(plugin.loaded) || plugin.loading)) {return}
         plugin.url = url
         plugin.clapId = clapId
         this.#destroy(plugin)

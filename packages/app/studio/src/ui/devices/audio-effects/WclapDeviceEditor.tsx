@@ -7,7 +7,7 @@ import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Events, Files, Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {WclapParameterBox} from "@opendaw/studio-boxes"
-import {EffectFactories, MenuItem, WclapStorage} from "@opendaw/studio-core"
+import {EffectFactories, MenuItem, WclapBundles, WclapStorage} from "@opendaw/studio-core"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {parameterContextItems} from "@/ui/menu/automation.ts"
@@ -92,13 +92,22 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             if (isDefined(state.info) && state.ready) {vendorLabel.textContent = state.info.vendor}
         }, () => {})
     }
+    const useExample = ({label, url, clapId}: Example): void => {
+        fetch(url)
+            .then(response => response.ok ? response.arrayBuffer() : Promise.reject(new Error(`${response.status}`)))
+            .then(archive => WclapStorage.store(archive))
+            .then(local => select(local, clapId),
+                error => RuntimeNotifier.notify({message: `Could not download ${label}: ${error}`, icon: "Warning"}))
+    }
     const browse = async (): Promise<void> => {
         const files = await Files.open({
             types: [{description: "WebCLAP bundle", accept: {"application/gzip": [".gz", ".tgz"]}}], multiple: false
         }).catch(() => [])
         if (files.length === 0) {return}
         const file = files[0]
-        const url = await WclapStorage.store(await file.arrayBuffer())
+        const archive = await file.arrayBuffer()
+        const url = await WclapStorage.urlFor(archive)
+        WclapBundles.register(url, archive).catch(EmptyExec)
         const described = await describe(url).catch(error => {
             RuntimeNotifier.notify({message: `${file.name} is not a WebCLAP bundle: ${error}`, icon: "Warning"})
             return []
@@ -116,7 +125,9 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 headline: "Choose Plugin", message: file.name,
                 choices: plugins.map(plugin => ({text: plugin.name, value: plugin}))
             })
-        chosen.ifSome(plugin => select(url, plugin.clapId))
+        if (chosen.isEmpty()) {return}
+        await WclapStorage.store(archive)
+        select(url, chosen.unwrap().clapId)
     }
     // The hub notifies per child, so an earlier child's notification sees later children without an adapter yet
     const parameterOf = (paramBox: WclapParameterBox): Optional<AutomatableParameterFieldAdapter> =>
@@ -183,7 +194,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const examples = EXAMPLES.filter(example => example.kind === adapter.type)
     const examplesMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(...examples.map(example =>
         MenuItem.default({label: example.label, checked: example.clapId === adapter.clapIdField.getValue()})
-            .setTriggerProcedure(() => select(example.url, example.clapId)))))
+            .setTriggerProcedure(() => useExample(example)))))
     const openLabel: HTMLElement = <span>Open UI</span>
     const openButton: HTMLElement = (
         <Button lifecycle={lifecycle} onClick={() => WclapWindows.toggle(service, adapter, state.info?.name ?? adapter.labelField.getValue())}

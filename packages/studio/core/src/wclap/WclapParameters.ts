@@ -33,7 +33,7 @@ export namespace WclapParameters {
             }
             for (const info of wanted.values()) {
                 if (existing.has(info.id)) {continue}
-                WclapParameterBox.create(project.boxGraph, UUID.generate(), paramBox => {
+                WclapParameterBox.create(project.boxGraph, parameterUuid(hub.box.address.uuid, info.id), paramBox => {
                     paramBox.owner.refer(hub)
                     paramBox.label.setValue(info.name)
                     paramBox.module.setValue(info.module)
@@ -63,7 +63,14 @@ export namespace WclapParameters {
     const IS_READONLY = 1 << 3
     const isAutomatable = ({flags}: WclapParamInfo): boolean => (flags & (IS_HIDDEN | IS_READONLY)) === 0
 
-    const parametersOf = (project: Project, uuid: string): Optional<Field<Pointers.Parameter>> => {
+    // every client derives the same uuid, so engines reporting at once in a live room create one box
+    const parameterUuid = (deviceUuid: UUID.Bytes, clapId: number): UUID.Bytes => {
+        const bytes = new Uint8Array(deviceUuid)
+        new DataView(bytes.buffer).setUint32(0, new DataView(bytes.buffer).getUint32(0) ^ clapId)
+        return bytes
+    }
+
+    const parametersOf =(project: Project, uuid: string): Optional<Field<Pointers.Parameter>> => {
         const box = project.boxGraph.findBox(UUID.parse(uuid)).unwrapOrNull()
         if (box instanceof WclapDeviceBox || box instanceof WclapInstrumentBox) {return box.parameters}
         return undefined

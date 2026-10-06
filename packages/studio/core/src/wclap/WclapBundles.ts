@@ -17,6 +17,14 @@ export namespace WclapBundles {
                 if (!response.ok) {throw new Error(`${url}: ${response.status}`)}
                 return response.arrayBuffer()
             })
+        return unpack(url, archive)
+    }
+
+    // makes an archive that is not stored yet resolvable under its url, so it can be described before storing
+    export const register = (url: string, archive: ArrayBuffer): Promise<WclapBundle> =>
+        unpack(url, Promise.resolve(archive))
+
+    const unpack = (url: string, archive: Promise<ArrayBuffer>): Promise<WclapBundle> => {
         const promise = archive
             .then(bytes => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer())
             .then(buffer => ({files: stripRoot(untar(new Uint8Array(buffer)))}))

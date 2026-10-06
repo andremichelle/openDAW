@@ -12,10 +12,12 @@ export namespace WclapStorage {
     export const urlOf = (id: string): string => `${Scheme}${id}`
     export const pathOf = (id: string): string => `${Folder}/${id}/${FileName}`
 
+    export const urlFor = async (archive: ArrayBuffer): Promise<string> => urlOf(UUID.toString(await UUID.sha256(archive)))
+
     export const store = async (archive: ArrayBuffer): Promise<string> => {
-        const id = UUID.toString(await UUID.sha256(archive))
-        await Workers.Opfs.write(pathOf(id), new Uint8Array(archive))
-        return urlOf(id)
+        const url = await urlFor(archive)
+        await Workers.Opfs.write(pathOf(idOf(url)), new Uint8Array(archive))
+        return url
     }
 
     export const save = (id: string, archive: ArrayBuffer): Promise<void> =>

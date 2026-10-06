@@ -210,6 +210,31 @@ describe("wclap bridge", () => {
         expect(process(host, handle)).toBe(0)
     })
 
+    it("reloads a failed plugin when the same url and id arrive again (rebind)", async () => {
+        const attempts = {count: 0}
+        const host = createHost(() => {
+            attempts.count++
+            return attempts.count === 1 ? Promise.reject(new Error("offline")) : Promise.resolve(basics)
+        })
+        const handle = load(host)
+        await Promise.all(host.loads)
+        expect(host.statuses.at(-1)?.state).toBe("failed")
+        expect(load(host)).toBe(handle)
+        await ready(host, handle)
+        expect(attempts.count).toBe(2)
+    })
+
+    it("keeps a loaded plugin when the same url and id arrive again", async () => {
+        const host = createHost()
+        const handle = load(host)
+        await ready(host, handle)
+        const statuses = host.statuses.length
+        load(host)
+        await Promise.all(host.loads)
+        expect(host.statuses.length).toBe(statuses)
+        expect(process(host, handle)).toBe(1)
+    })
+
     it("never reports a host value back, so a folded modulation cannot drift the base", async () => {
         const host = createHost()
         const handle = load(host)

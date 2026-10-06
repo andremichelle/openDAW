@@ -299,25 +299,28 @@ included, so they are unlinted. No browser check in this review.
 2. No watchdog. Plugin code runs on the audio thread without a time limit, an infinite loop silences the
    whole studio until reload. The instantiate chain (`init`, `activate`, state load) and `describe` also run
    on the audio thread, a heavy plugin drops out the audio while loading.
-3. Examples load from mutable upstream urls (`raw.githubusercontent.com/.../main/...`). A changed bundle
-   silently alters saved projects, a removed repo breaks them. Pin to commit hashes or mirror on
-   `assets.opendaw.studio`.
+3. FIXED 2026-10-06. Examples saved the mutable upstream url (`raw.githubusercontent.com/.../main/...`)
+   in the box. Picking an example now downloads the archive once, stores it with `WclapStorage.store` and
+   saves `opfs:<sha256>`, like Browse. Another machine needs the bundle via backup, `.odb` or live room (bug 5).
 
 ### Bugs
 
-4. Shared projects (YSync), likely, needs a repro test. Every client's engine runs
-   `WclapParameters.reconcile`, which creates `WclapParameterBox`es with `UUID.generate()`, so peers create
-   duplicates. Every client also writes `state` via `WclapStates.store` ~100 ms after a change, so peers
-   overwrite each other. Only one client (the owner or the editing client) should write.
+4. FIXED 2026-10-06. Shared projects (YSync): engines reporting the parameters at once created every
+   `WclapParameterBox` twice (`UUID.generate()`). Parameter box uuids are now derived from the device uuid
+   XOR the clap id, so peers create the same box. Concurrent `state` writes were fine (last write wins, the
+   bridge does not echo a loaded state). Test: `core/src/wclap/WclapParameters.collab.test.ts`.
 5. `opfs:` bundles exist only on the machine that browsed them. Without a cloud backup or `.odb` the plugin
    fails elsewhere. The live-room bundle transfer (phase 6, `wclap` asset type) is not built.
-6. Browse stores the file in OPFS before `describe` validates it, a non-bundle file stays and cloud backup
-   uploads it. Validate first, store after.
+6. FIXED 2026-10-06. Browse stored the file in OPFS before `describe` validated it. Now the archive is
+   registered in memory under its `opfs:<sha256>` url (`WclapBundles.register`), described, and written to
+   OPFS only once a plugin of the device's kind was chosen.
 7. `pendingParams` is capped at `MAX_PARAM_EVENTS` (128) distinct ids per chunk, including the values queued
    before the plugin is up. A plugin with more than 128 parameters loses the rest at project load (the state
    blob probably restores them).
-8. After a contained fault the instance does not retry: `#load` returns early while url and clapId are
-   unchanged, recovery needs a url/clapId change or a project reload.
+8. FIXED 2026-10-06. After a failed load or a contained fault, `#load` returned early while url and clapId
+   were unchanged. It now returns early only while the plugin is loaded or loading, so a rebind (the device
+   re-sends its fields) reloads it. Tests in `wclap-bridge.test.ts`. A "Reload" button in the editor's
+   failed state would need a new engine command, not done.
 
 ### Plan items not done
 
@@ -332,6 +335,40 @@ Missing:
 - `EVENT_CHOKE` and `cent` tuning note expressions
 - a missing-plugin placeholder (today the device passes through and the editor shows "Failed")
 - cloud backup tombstones (deleting a bundle does not sync)
+
+### Plugin origin (blocker 1)
+
+Use a separate registrable domain, not a subdomain of `opendaw.studio`, `opendaw-plugins.studio` (the
+`githubusercontent.com` / `googleusercontent.com` pattern, the name itself is free):
+- Chrome's site isolation is per site (eTLD+1). A subdomain shares the studio's renderer process, and since
+  the studio is cross-origin isolated (SharedArrayBuffer, precise timers), a hostile page next to it is the
+  worst case for Spectre-style reads.
+- A subdomain can set cookies for `.opendaw.studio` (cookie tossing) and counts as same-site, so
+  `SameSite` does not protect against it.
+- The name tells users and reviewers the code there is third-party, not openDAW's.
+- Do not reuse `assets.opendaw.studio`.
+The domain needs the same COOP/COEP/CORP headers, serves only `wclap-frame.html` and `wclap-sw.js`, and the
+build sets `VITE_WCLAP_ORIGIN`. A subdomain is still far better than today's same origin if a second domain
+is not possible.
+
+### SDK impact
+
+`studio-core`, `studio-core-wasm` and `studio-adapters` are published and carry the whole audio side (boxes,
+engine bridge, `WclapBundles`, `WclapStorage`, the `wclap*` calls on `EngineFacade`). The window
+(`WclapWindows.tsx`, `wclap-frame.html`, `wclap-sw.js`, `VITE_WCLAP_ORIGIN`) lives in the private
+`app-studio`.
+1. Headless audio is unaffected by blocker 1. The plugin runs in the worklet in its own memory and only
+   reaches the WASI shim (console, random, clock) and our host callbacks: no DOM, network or storage.
+2. Blocker 2 applies to SDK users as well: a hanging plugin freezes their audio thread, loading can drop out.
+3. A plugin window means rebuilding `WclapWindows`, the frame and the service worker. Served from their own
+   origin they inherit blocker 1. To support it, publish frame + worker as package assets and document that
+   a separate plugin origin is required.
+4. `EngineWorklet` writes `WclapParameterBox`es and the `state` field into the box graph by itself (no undo
+   mark). Code observing or syncing the graph sees writes it did not make, bug 4 hits SDK sync too.
+5. Loading a project fetches the bundle urls in its device boxes, an untrusted project can make the app
+   request arbitrary urls (tracking beacon).
+6. The `wclap*` `EngineFacade` methods and the RPC types in `protocols.ts` become public API on the next
+   publish. Mark them experimental or hold them back from that release.
 
 ### Housekeeping
 
