@@ -707,7 +707,7 @@ export class WclapBridges {
             pending.kind = kind
             pending.value = value
             pending.modulation = modulation
-        } else if (plugin.pendingParams.size < MAX_PARAM_EVENTS) {
+        } else {
             plugin.pendingParams.set(id, {kind, value, modulation})
         }
         plugin.receivedSinceProcess = true
@@ -738,7 +738,10 @@ export class WclapBridges {
             view.setInt16(ptr + ClapAbi.ParamValueEvent.KEY, -1, true)
             view.setFloat64(ptr + ClapAbi.ParamValueEvent.VALUE, amount, true)
         }
+        const written = {params: 0}
         for (const [id, {kind, value: raw, modulation: sum}] of plugin.pendingParams) {
+            if (written.params === MAX_PARAM_EVENTS) {break}
+            plugin.pendingParams.delete(id)
             const info = loaded.paramInfos.get(id)
             if (!isDefined(info) || loaded.gestures.has(id)) {continue}
             const range = info.max - info.min
@@ -747,6 +750,7 @@ export class WclapBridges {
             const modulatable = (info.flags & ClapAbi.ParamFlags.IS_MODULATABLE) !== 0
             const last = loaded.lastModulation.get(id) ?? 0
             if (modulation === 0 && last === 0 && loaded.reported.get(id) === Math.fround(value)) {continue}
+            written.params++
             if (modulatable) {
                 paramEvent(ClapAbi.EventType.PARAM_VALUE, id, value)
                 if (modulation !== 0 || last !== 0) {paramEvent(ClapAbi.EventType.PARAM_MOD, id, modulation)}
@@ -755,7 +759,6 @@ export class WclapBridges {
                 paramEvent(ClapAbi.EventType.PARAM_VALUE, id, Math.min(info.max, Math.max(info.min, value + modulation)))
             }
         }
-        plugin.pendingParams.clear()
         this.#writeNotes(loaded, view, state)
         loaded.eventCount = state.count
     }

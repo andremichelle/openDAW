@@ -296,9 +296,13 @@ included, so they are unlinted. No browser check in this review.
    storage, OPFS and cloud session. Needs the second domain (e.g. `plugins.opendaw.studio`) on the same
    deployment with COOP/COEP/CORP headers, `wclap-frame.html` + `wclap-sw.js` served from it, and the env
    variable in the build.
-2. No watchdog. Plugin code runs on the audio thread without a time limit, an infinite loop silences the
-   whole studio until reload. The instantiate chain (`init`, `activate`, state load) and `describe` also run
-   on the audio thread, a heavy plugin drops out the audio while loading.
+2. NOT YET DONE, skipped 2026-10-06. No watchdog. Plugin code runs on the audio thread without a time
+   limit, an infinite loop silences the whole studio until reload. The instantiate chain (`init`, `activate`,
+   state load) and `describe` also run on the audio thread, a heavy plugin drops out the audio while loading.
+   Ruled out: a plugin worker behind a SharedArrayBuffer (output must arrive in the same block, no latency).
+   Candidates if picked up: fuel metering (rewrite `module.wasm` at load so loops and function entries
+   decrement a budget and trap, caught by `#contain`, overhead to be measured in node on Basics + Pro54), or
+   main-thread hang detection that offers a reload with the device disabled.
 3. FIXED 2026-10-06. Examples saved the mutable upstream url (`raw.githubusercontent.com/.../main/...`)
    in the box. Picking an example now downloads the archive once, stores it with `WclapStorage.store` and
    saves `opfs:<sha256>`, like Browse. Another machine needs the bundle via backup, `.odb` or live room (bug 5).
@@ -314,9 +318,10 @@ included, so they are unlinted. No browser check in this review.
 6. FIXED 2026-10-06. Browse stored the file in OPFS before `describe` validated it. Now the archive is
    registered in memory under its `opfs:<sha256>` url (`WclapBundles.register`), described, and written to
    OPFS only once a plugin of the device's kind was chosen.
-7. `pendingParams` is capped at `MAX_PARAM_EVENTS` (128) distinct ids per chunk, including the values queued
-   before the plugin is up. A plugin with more than 128 parameters loses the rest at project load (the state
-   blob probably restores them).
+7. FIXED 2026-10-06. `pendingParams` dropped every id beyond 128, including the values queued before the
+   plugin is up. The queue is now unbounded (one entry per id), each chunk writes at most `MAX_PARAM_EVENTS`
+   parameters and the rest go out in the next chunks, unknown ids do not count. Test in
+   `wclap-bridge.test.ts` (the carry-over across chunks is untested, Basics has too few parameters).
 8. FIXED 2026-10-06. After a failed load or a contained fault, `#load` returned early while url and clapId
    were unchanged. It now returns early only while the plugin is loaded or loading, so a rebind (the device
    re-sends its fields) reloads it. Tests in `wclap-bridge.test.ts`. A "Reload" button in the editor's

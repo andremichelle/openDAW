@@ -164,6 +164,23 @@ describe("wclap bridge", () => {
         expect(rms(host, handle, 100)).toBeLessThan(0.15)
     })
 
+    it("keeps every queued host value, however many ids arrive before the plugin is up", async () => {
+        const probe = createHost()
+        const probeHandle = load(probe)
+        await ready(probe, probeHandle)
+        const wet = param(probe, "wet")
+        const dry = param(probe, "dry")
+        const known = new Set(probe.params.map(({id}) => id))
+        const unknown = Array.from({length: 1000}, (_, index) => 0x10000 + index).filter(id => !known.has(id)).slice(0, 200)
+        const host = createHost()
+        const handle = load(host)
+        unknown.forEach(id => host.imports.host_wclap_param(handle, id, UNIT, 0.5, NaN))
+        host.imports.host_wclap_param(handle, wet.id | 0, UNIT, 0, NaN)
+        host.imports.host_wclap_param(handle, dry.id | 0, UNIT, 0, NaN)
+        await ready(host, handle)
+        expect(rms(host, handle, 100)).toBeLessThan(0.15)
+    })
+
     it("round-trips the plugin state through save and load", async () => {
         const host = createHost()
         const handle = load(host)
