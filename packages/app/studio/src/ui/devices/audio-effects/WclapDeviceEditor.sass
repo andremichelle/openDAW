@@ -11,13 +11,14 @@ component
   > div.plugin
     display: flex
     flex-direction: column
-    row-gap: 0.125em
+    row-gap: 0.25em
     font-size: 10px
     min-width: 0
-
-    > span.header
-      text-transform: uppercase
-      color: var(--color-blue)
+    padding: 1em
+    background-color: rgba(black, 0.25)
+    border-radius: 3px
+    outline: 0.5px solid rgba(white, 0.2)
+    box-shadow: 0 0 3px -1px rgba(white, 0.2)
 
     // both lines keep their height when empty, the editor is vertically centred and must not shift
     > span.name, > span.vendor
