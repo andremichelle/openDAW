@@ -58,6 +58,7 @@ export const loadFullEngine = async (sampleRate = 48000,
     const wclapBridges = new WclapBridges(memory, sampleRate, {
         loadBundle: () => Promise.reject(new Error("no wclap bundles in node tests")),
         sendGui: () => {}, sendState: () => {}, sendParams: () => {}, sendParam: () => {}, sendHovered: () => {},
+        requestGuiResize: () => {},
         sendStatus: () => {}, requestSave: () => {}, track: () => {}
     })
     const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}

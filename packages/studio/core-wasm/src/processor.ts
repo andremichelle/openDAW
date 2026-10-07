@@ -119,6 +119,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     dispatcher.dispatchAndForget(this.wclapParam, uuid, paramId, value, gesture)
                 }
                 wclapHovered(uuid: string, paramId: number): void {dispatcher.dispatchAndForget(this.wclapHovered, uuid, paramId)}
+                wclapResizeGui(uuid: string, width: number, height: number): void {
+                    dispatcher.dispatchAndForget(this.wclapResizeGui, uuid, width, height)
+                }
                 wclapStatus(uuid: string, status: WclapStatus): void {dispatcher.dispatchAndForget(this.wclapStatus, uuid, status)}
                 wclapRequestSave(uuid: string): void {dispatcher.dispatchAndForget(this.wclapRequestSave, uuid)}
                 notifyClipSequenceChanges(changes: ClipSequencingUpdates): void {

@@ -73,6 +73,8 @@ export interface EngineToClient {
     wclapParam(uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void
     // clap.param-hovered: the parameter under the pointer in the plugin's page, -1 when none
     wclapHovered(uuid: string, paramId: number): void
+    // clap.gui request_resize: the plugin asks for another window size (logical pixels)
+    wclapResizeGui(uuid: string, width: number, height: number): void
     wclapStatus(uuid: string, status: WclapStatus): void
     // the plugin's state changed, the host answers with `wclapSaveState` between render quanta
     wclapRequestSave(uuid: string): void

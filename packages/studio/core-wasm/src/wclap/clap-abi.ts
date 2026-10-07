@@ -262,6 +262,15 @@ export namespace ClapAbi {
         export const BEATTIME_FACTOR = 2 ** 31
     }
 
+    export namespace HostGui {
+        export const SIZE = 20
+        export const RESIZE_HINTS_CHANGED = 0
+        export const REQUEST_RESIZE = 4
+        export const REQUEST_SHOW = 8
+        export const REQUEST_HIDE = 12
+        export const CLOSED = 16
+    }
+
     export namespace HostParamHovered {
         export const SIZE = 4
         export const UPDATE = 0

@@ -15,6 +15,8 @@ export type WclapHostCallbacks = {
     sendParams: (uuid: string, params: ReadonlyArray<WclapParamInfo>) => void
     sendParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture) => void
     sendHovered: (uuid: string, paramId: number) => void
+    // clap.gui request_resize: the plugin's page wants another window size (logical pixels)
+    requestGuiResize: (uuid: string, width: number, height: number) => void
     sendStatus: (uuid: string, status: WclapStatus) => void
     requestSave: (uuid: string) => void
     track: Procedure<Promise<unknown>>
@@ -530,14 +532,25 @@ export class WclapBridges {
         const threadCheckExt = malloc(ClapAbi.HostThreadCheck.SIZE)
         const stateExt = malloc(ClapAbi.HostState.SIZE)
         const hoveredExt = malloc(ClapAbi.HostParamHovered.SIZE)
+        const guiExt = malloc(ClapAbi.HostGui.SIZE)
         const paramsExt = malloc(ClapAbi.HostParams.SIZE)
         const extensions = new Map<string, number>([
             [ClapAbi.Ext.WEBVIEW, webviewExt], [ClapAbi.Ext.LOG, logExt],
             [ClapAbi.Ext.THREAD_CHECK, threadCheckExt], [ClapAbi.Ext.STATE, stateExt],
-            [ClapAbi.Ext.PARAM_HOVERED, hoveredExt], [ClapAbi.Ext.HOST_PARAMS, paramsExt]
+            [ClapAbi.Ext.PARAM_HOVERED, hoveredExt], [ClapAbi.Ext.HOST_PARAMS, paramsExt], [ClapAbi.Ext.GUI, guiExt]
         ])
         this.#setFn(loaded, hoveredExt + ClapAbi.HostParamHovered.UPDATE, trampoline(["i32", "i32"], [],
             (_host: number, paramId: number) => this.#host.sendHovered(plugin.uuid, paramId === ClapAbi.INVALID_ID ? -1 : paramId)))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.RESIZE_HINTS_CHANGED, trampoline(["i32"], [], () => {}))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_RESIZE, trampoline(["i32", "i32", "i32"], ["i32"],
+            (_host: number, width: number, height: number) => {
+                if (!plugin.guiOpen || width <= 0 || height <= 0) {return 0}
+                this.#host.requestGuiResize(plugin.uuid, width, height)
+                return 1
+            }))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_SHOW, trampoline(["i32"], ["i32"], () => 0))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.REQUEST_HIDE, trampoline(["i32"], ["i32"], () => 0))
+        this.#setFn(loaded, guiExt + ClapAbi.HostGui.CLOSED, trampoline(["i32", "i32"], [], () => {}))
         this.#setFn(loaded, stateExt + ClapAbi.HostState.MARK_DIRTY, trampoline(["i32"], [],
             () => {plugin.dirtyCountdown = SAVE_DELAY_CHUNKS}))
         this.#setFn(loaded, paramsExt + ClapAbi.HostParams.RESCAN, trampoline(["i32", "i32"], [],

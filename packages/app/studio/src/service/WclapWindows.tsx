@@ -177,6 +177,7 @@ export namespace WclapWindows {
             scale: clamp(StudioPreferences.settings.webclap["default-zoom"], 25, 200) / 100, resizable: gui.resizable, keepAspectRatio: true,
             adjust: ({width, height}) => engine.wclapResizeGui(uuid, width, height), onClose: () => session.terminate()
         }, iframe)
+        session.own(WclapGuis.subscribeResize(uuidString, ({width, height}) => handle.requestSize(width, height)))
         windows.set(uuidString, {handle, session})
         changes.notify(uuidString)
     }

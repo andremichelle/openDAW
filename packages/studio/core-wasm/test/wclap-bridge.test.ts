@@ -62,6 +62,7 @@ const createHost = (bundle: WclapBundle | (() => Promise<WclapBundle>) = basics)
         sendParams: (_uuid, list) => {host.params = [...list]},
         sendParam: (_uuid, id, value, gesture) => host.reported.push([id, value, gesture]),
         sendHovered: () => {},
+        requestGuiResize: () => {},
         sendStatus: (_uuid, status) => host.statuses.push(status),
         requestSave: () => {},
         track: promise => host.loads.push(promise)

@@ -6,6 +6,7 @@ export const createWclapDescriber = (loadBundle: WclapBundleLoader): (url: strin
     const bridges = new WclapBridges(new WebAssembly.Memory({initial: 1}), 48000, {
         loadBundle,
         sendGui: () => {}, sendState: () => {}, sendParams: () => {}, sendParam: () => {}, sendHovered: () => {},
+        requestGuiResize: () => {},
         sendStatus: () => {}, requestSave: () => {}, track: () => {}
     })
     return url => bridges.describe(url)

@@ -260,6 +260,7 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                 wclapParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void =>
                     WclapParameters.apply(project, uuid, paramId, value, gesture),
                 wclapHovered: (uuid: string, paramId: number): void => WclapGuis.hover(uuid, paramId),
+                wclapResizeGui: (uuid: string, width: number, height: number): void => WclapGuis.resize(uuid, width, height),
                 wclapStatus: (uuid: string, status: WclapStatus): void => {
                     WclapFailures.report(project, uuid, this.#wclapStatus.get(uuid), status)
                     this.#wclapStatus.set(uuid, status)

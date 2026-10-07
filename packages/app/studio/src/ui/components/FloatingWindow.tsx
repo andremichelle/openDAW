@@ -30,6 +30,8 @@ type Construct = {
 export interface FloatingWindowHandle {
     readonly size: ObservableValue<Size>
     resetSize(): void
+    // the content asks for a size (a plugin zooming its editor): taken as is, only kept on screen
+    requestSize(width: int, height: int): void
     toFront(): void
     close(): void
 }
@@ -52,7 +54,7 @@ export const FloatingWindow = ({
                                }: Construct, children: JsxValue): FloatingWindowHandle => {
     const lifecycle = new Terminator()
     const surface = Surface.get()
-    const ratio: Optional<number> = keepAspectRatio === true ? width / height : undefined
+    let ratio: Optional<number> = keepAspectRatio === true ? width / height : undefined
     const minimum: Size = {width: minWidth ?? 120, height: minHeight ?? 80}
     const adjusting: Adjusting = {busy: false, closed: false, next: null}
     const initialScale = scale ?? 1
@@ -145,6 +147,14 @@ export const FloatingWindow = ({
             Math.min(origin.y, window.innerHeight - target.height - header.offsetHeight))
         resize(target.width, target.height)
     }
+    const requestSize = (width: int, height: int) => {
+        if (isDefined(ratio)) {ratio = width / height}
+        move(Math.min(origin.x, window.innerWidth - width), Math.min(origin.y, window.innerHeight - height - header.offsetHeight))
+        apply({
+            width: Math.round(clamp(width, minimum.width, Math.max(minimum.width, window.innerWidth - origin.x))),
+            height: Math.round(clamp(height, minimum.height, Math.max(minimum.height, window.innerHeight - origin.y - header.offsetHeight)))
+        })
+    }
     const toFront = () => {
         if (stack.at(-1) === element) {return}
         const index = stack.indexOf(element)
@@ -188,5 +198,5 @@ export const FloatingWindow = ({
     toFront()
     move(origin.x, origin.y)
     if (isDefined(adjust)) {resize(bodyWidth, bodyHeight)}
-    return {size, resetSize, toFront, close}
+    return {size, resetSize, requestSize, toFront, close}
 }

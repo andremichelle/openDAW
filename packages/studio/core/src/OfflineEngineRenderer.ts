@@ -124,6 +124,7 @@ export class OfflineEngineRenderer {
             wclapParams: (): void => {},
             wclapParam: (): void => {},
             wclapHovered: (): void => {},
+            wclapResizeGui: (): void => {},
             wclapStatus: (): void => {},
             wclapRequestSave: (): void => {},
             notifyClipSequenceChanges: (): void => {},

@@ -1,4 +1,4 @@
-import {Notifier, Procedure, Subscription, Terminable} from "@opendaw/lib-std"
+import {Notifier, Procedure, Size, Subscription, Terminable} from "@opendaw/lib-std"
 
 // Open plugin webviews by device uuid: the engine's `wclapSend` lands in the registered receiver
 export namespace WclapGuis {
@@ -27,4 +27,10 @@ export namespace WclapGuis {
     export const hoveredParam = (uuid: string): number => hovered.get(uuid) ?? -1
     export const subscribeHovered = (uuid: string, procedure: Procedure<number>): Subscription =>
         notifier.subscribe(event => {if (event.uuid === uuid) {procedure(event.paramId)}})
+
+    // clap.gui request_resize per device
+    const resizes = new Notifier<{ uuid: string, size: Size }>()
+    export const resize = (uuid: string, width: number, height: number): void => resizes.notify({uuid, size: {width, height}})
+    export const subscribeResize = (uuid: string, procedure: Procedure<Size>): Subscription =>
+        resizes.subscribe(event => {if (event.uuid === uuid) {procedure(event.size)}})
 }
