@@ -874,6 +874,11 @@ export const IconLibrary = () => (
                 <path
                     d="M23.3,17.9c-0.8,1.8-2.6,3-4.7,3h-1.1c0.1-0.5,0.2-1,0.2-1.5v-1.5h0.9c1.2,0,2.1-1,2.1-2.1c0-1.2-1-2.1-2.1-2.1c-1.2,0-2.1,1-2.1,2.1l0,3.7c0,2.9-2.3,5.2-5.2,5.2c-2.1,0-3.9-1.2-4.7-3L4,26h24L23.3,17.9z"/>
             </symbol>
+            <symbol id={IconSymbol.toName(IconSymbol.ZoomFit)} viewBox="0 0 32 32" fill="none" stroke="currentColor"
+                    stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+                <circle cx="14" cy="14" r="12"/>
+                <path d="m23 23l7 7M9 12V9h3m4 0h3v3M9 16v3h3m7-3v3h-3"/>
+            </symbol>
             <symbol id={IconSymbol.toName(IconSymbol.Copy)} viewBox="0 0 24 24" fill="currentColor">
                 <path
                     d="M6 4V8H18V4H20.0066C20.5552 4 21 4.44495 21 4.9934V21.0066C21 21.5552 20.5551 22 20.0066 22H3.9934C3.44476 22 3 21.5551 3 21.0066V4.9934C3 4.44476 3.44495 4 3.9934 4H6ZM8 2H16V6H8V2Z"/>

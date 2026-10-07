@@ -61,7 +61,7 @@ export const FloatingWindow = ({
             {resizable !== false && (
                 <Button lifecycle={lifecycle} onClick={() => resetSize()}
                         appearance={{color: Colors.shadow, tooltip: "Original size"}}>
-                    <span className="reset">100%</span>
+                    <Icon symbol={IconSymbol.ZoomFit}/>
                 </Button>
             )}
             <Button lifecycle={lifecycle} onClick={() => close()} appearance={{color: Colors.shadow, tooltip: "Close"}}>

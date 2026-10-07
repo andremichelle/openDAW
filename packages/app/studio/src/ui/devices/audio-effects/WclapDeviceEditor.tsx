@@ -49,7 +49,7 @@ type Construct = {
 
 const {kindOf} = WclapDescriber
 
-type CloudPlugin = { uuid: string, info: WclapPluginInfo }
+type CloudPlugin = { uuid: string, label: string, info: WclapPluginInfo }
 type CloudFolder = { name: string, folders: ReadonlyArray<CloudFolder>, plugins: ReadonlyArray<CloudPlugin> }
 
 const EmptyCloudFolder: CloudFolder = {name: "", folders: [], plugins: []}
@@ -223,9 +223,10 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             name,
             folders: (folders ?? []).map(toFolder).filter(folder => folder.folders.length > 0 || folder.plugins.length > 0),
             plugins: (wclaps ?? [])
-                .flatMap(({uuid, plugins}) => plugins.map(info => ({uuid, info})))
+                .flatMap(({uuid, name, plugins}) => plugins.map(info =>
+                    ({uuid, label: plugins.length > 1 ? `${name}: ${info.name}` : name, info})))
                 .filter(({info}) => kindOf(info) === adapter.type)
-                .toSorted((a, b) => byName(a.info, b.info))
+                .toSorted((a, b) => StringComparator(a.label.toLowerCase(), b.label.toLowerCase()))
         })
         cloud.root = toFolder({name: "", folders})
         const collect = ({folders, plugins}: CloudFolder): ReadonlyArray<CloudPlugin> => [...plugins, ...folders.flatMap(collect)]
@@ -234,8 +235,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const populateCloud = (parent: MenuItem, {folders, plugins}: CloudFolder): void => {
         parent.addMenuItem(...folders.map(folder => MenuItem.default({label: folder.name, icon: IconSymbol.Folder})
             .setRuntimeChildrenProcedure(sub => populateCloud(sub, folder))))
-        parent.addMenuItem(...plugins.map(({uuid, info}) =>
-            MenuItem.default({label: labelOf(info), checked: isCurrent(WclapStorage.urlOf(uuid), info)})
+        parent.addMenuItem(...plugins.map(({uuid, label, info}) =>
+            MenuItem.default({label, checked: isCurrent(WclapStorage.urlOf(uuid), info)})
                 .setTriggerProcedure(() => useCloud(uuid, info))))
     }
     const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
