@@ -34,6 +34,7 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
 import {WclapAdapter, WclapWindows} from "@/service/WclapWindows"
 import {StoredWclapPlugin, WclapDescriber} from "@/service/WclapDescriber"
+import {WclapNames} from "@/service/WclapNames"
 import {OpenWclapAPI, WclapIndexFolder} from "@/opendaw-api"
 import {ParameterTree, WclapParameterTree} from "@/ui/devices/audio-effects/WclapParameterTree"
 
@@ -49,6 +50,7 @@ type Construct = {
 
 const {kindOf} = WclapDescriber
 
+type LabeledStoredPlugin = StoredWclapPlugin & { label: string }
 type CloudPlugin = { uuid: string, label: string, info: WclapPluginInfo }
 type CloudFolder = { name: string, folders: ReadonlyArray<CloudFolder>, plugins: ReadonlyArray<CloudPlugin> }
 
@@ -205,16 +207,25 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         }
         populate(parent, WclapParameterTree.build(entries))
     })
-    const byName = (a: WclapPluginInfo, b: WclapPluginInfo): number => StringComparator(a.name.toLowerCase(), b.name.toLowerCase())
-    const labelOf = ({name, vendor}: WclapPluginInfo): string => vendor.length > 0 ? `${name} (${vendor})` : name
+    const byLabel = (a: { label: string }, b: { label: string }): number =>
+        StringComparator(a.label.toLowerCase(), b.label.toLowerCase())
     const isCurrent = (url: string, {clapId}: WclapPluginInfo): boolean =>
         url === adapter.urlField.getValue() && clapId === adapter.clapIdField.getValue()
-    const stored: { plugins: ReadonlyArray<StoredWclapPlugin> } = {plugins: []}
+    const stored: { plugins: ReadonlyArray<LabeledStoredPlugin> } = {plugins: []}
     const refreshStored = (): void => {
         WclapDescriber.stored().then(plugins => {
-            stored.plugins = plugins
+            const urls = Array.from(new Set(plugins.map(({url}) => url)))
+            stored.plugins = urls
+                .flatMap(url => {
+                    const bundle = plugins.filter(plugin => plugin.url === url)
+                    const shortNames = WclapNames.distinct(bundle.map(({info}) => info.name))
+                    return bundle.map((plugin, index) => {
+                        const {vendor} = plugin.info
+                        return {...plugin, label: vendor.length > 0 ? `${shortNames[index]} (${vendor})` : shortNames[index]}
+                    })
+                })
                 .filter(({info}) => kindOf(info) === adapter.type)
-                .toSorted((a, b) => byName(a.info, b.info))
+                .toSorted(byLabel)
         }, EmptyExec)
     }
     const cloud: { root: CloudFolder, plugins: ReadonlyArray<CloudPlugin> } = {root: EmptyCloudFolder, plugins: []}
@@ -223,10 +234,12 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             name,
             folders: (folders ?? []).map(toFolder).filter(folder => folder.folders.length > 0 || folder.plugins.length > 0),
             plugins: (wclaps ?? [])
-                .flatMap(({uuid, name, plugins}) => plugins.map(info =>
-                    ({uuid, label: plugins.length > 1 ? `${name}: ${info.name}` : name, info})))
+                .flatMap(({uuid, name, plugins}) => {
+                    const shortNames = WclapNames.distinct(plugins.map(info => info.name))
+                    return plugins.map((info, index) => ({uuid, label: plugins.length > 1 ? shortNames[index] : name, info}))
+                })
                 .filter(({info}) => kindOf(info) === adapter.type)
-                .toSorted((a, b) => StringComparator(a.label.toLowerCase(), b.label.toLowerCase()))
+                .toSorted(byLabel)
         })
         cloud.root = toFolder({name: "", folders})
         const collect = ({folders, plugins}: CloudFolder): ReadonlyArray<CloudPlugin> => [...plugins, ...folders.flatMap(collect)]
@@ -247,8 +260,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             MenuItem.default({label: "Cloud", icon: IconSymbol.CloudFolder, selectable: cloud.plugins.length > 0})
                 .setRuntimeChildrenProcedure(sub => populateCloud(sub, cloud.root)),
             MenuItem.default({label: "Local", icon: IconSymbol.UserFolder, selectable: local.length > 0})
-                .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...local.map(({url, info}) =>
-                    MenuItem.default({label: labelOf(info), checked: isCurrent(url, info)})
+                .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...local.map(({url, label, info}) =>
+                    MenuItem.default({label, checked: isCurrent(url, info)})
                         .setTriggerProcedure(() => {
                             pick.generation++
                             select(url, info.clapId)
