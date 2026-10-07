@@ -2,7 +2,7 @@
 # crate compiling to a focused .wasm (one entry point per feature). Add a member per feature.
 [workspace]
 resolver = "2"
-members = ["math", "dsp", "abi", "boxgraph", "studio-boxes", "transport", "value", "bindings", "processors", "engine-env", "voicing", "stock-devices/*", "engine", "sine", "stretch", "stretch-wasm", "signalsmith"]
+members = ["math", "dsp", "abi", "boxgraph", "studio-boxes", "transport", "value", "bindings", "processors", "engine-env", "voicing", "wclap-common", "stock-devices/*", "engine", "sine", "stretch", "stretch-wasm", "signalsmith"]
 # stretch-lab is a LOCAL research harness: it path-depends on a sibling checkout (../../../audio-analyzer-rs)
 # that does not exist in CI, and cargo loads every member's manifest for any workspace command. Excluding it
 # keeps the engine/wasm build (and CI) self-contained; build it directly from crates/stretch-lab when the
@@ -47,6 +47,12 @@ opt-level = 3
 [profile.release.package.device-maximizer]
 opt-level = 3
 [profile.release.package.device-neural-amp]
+opt-level = 3
+
+[profile.release.package.device-wclap]
+opt-level = 3
+
+[profile.release.package.device-wclap-instrument]
 opt-level = 3
 [profile.release.package.device-revamp]
 opt-level = 3

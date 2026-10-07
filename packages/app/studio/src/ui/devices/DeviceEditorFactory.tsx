@@ -21,6 +21,8 @@ import {
     ModularDeviceBox,
     NanoDeviceBox,
     NeuralAmpDeviceBox,
+    WclapDeviceBox,
+    WclapInstrumentBox,
     PitchDeviceBox,
     InstrumentCompositeBox,
     PlayfieldDeviceBox,
@@ -71,6 +73,8 @@ import {
     ModularDeviceBoxAdapter,
     NanoDeviceBoxAdapter,
     NeuralAmpDeviceBoxAdapter,
+    WclapDeviceBoxAdapter,
+    WclapInstrumentBoxAdapter,
     PitchDeviceBoxAdapter,
     InstrumentCompositeBoxAdapter,
     PlayfieldDeviceBoxAdapter,
@@ -132,6 +136,7 @@ import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
 import {ConvolverDeviceEditor} from "@/ui/devices/audio-effects/ConvolverDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
 import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"
+import {WclapDeviceEditor} from "@/ui/devices/audio-effects/WclapDeviceEditor"
 import {VocoderDeviceEditor} from "@/ui/devices/audio-effects/VocoderDeviceEditor"
 import {WaveshaperDeviceEditor} from "@/ui/devices/audio-effects/WaveshaperDeviceEditor"
 import {SpielwerkDeviceEditor} from "@/ui/devices/midi-effects/SpielwerkDeviceEditor"
@@ -219,6 +224,12 @@ export namespace DeviceEditorFactory {
                                      service={service}
                                      adapter={service.project.boxAdapters.adapterFor(box, NeonDeviceBoxAdapter)}
                                      deviceHost={deviceHost}/>
+            ),
+            visitWclapInstrumentBox: (box: WclapInstrumentBox): JsxValue => (
+                <WclapDeviceEditor lifecycle={lifecycle}
+                                   service={service}
+                                   adapter={service.project.boxAdapters.adapterFor(box, WclapInstrumentBoxAdapter)}
+                                   deviceHost={deviceHost}/>
             ),
             visitTubularDeviceBox: (box: TubularDeviceBox): JsxValue => (
                 <TubularDeviceEditor lifecycle={lifecycle}
@@ -396,6 +407,12 @@ export namespace DeviceEditorFactory {
                                        service={service}
                                        adapter={service.project.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter)}
                                        deviceHost={deviceHost}/>
+            ),
+            visitWclapDeviceBox: (box: WclapDeviceBox) => (
+                <WclapDeviceEditor lifecycle={lifecycle}
+                                   service={service}
+                                   adapter={service.project.boxAdapters.adapterFor(box, WclapDeviceBoxAdapter)}
+                                   deviceHost={deviceHost}/>
             ),
             visitVocoderDeviceBox: (box: VocoderDeviceBox) => (
                 <VocoderDeviceEditor lifecycle={lifecycle}

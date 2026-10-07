@@ -35,14 +35,20 @@ import {
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig,
-    ProjectSkeleton
+    ProjectSkeleton,
+    WclapBundle,
+    WclapGuiInfo,
+    WclapParamGesture,
+    WclapParamInfo,
+    WclapPluginInfo,
+    WclapStatus
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
 import {EngineExports, takeReportMessage} from "./engine-exports"
 import {createEngineMemory, loadEngineModules} from "./engine-modules"
 import {serializeUpdateTasks} from "./sync/serialize-update-tasks"
 import {WasmMidiDrain} from "./midi-drain"
-import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
+import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
 // TYPE-ONLY: the module computes its peak decay and RMS window from the `sampleRate` global when it is
 // EVALUATED, which only holds after `initialize` has set it. It is pulled in dynamically down there.
 import type {PeakBroadcaster} from "../../core-processors/src/PeakBroadcaster"
@@ -122,6 +128,18 @@ Communicator.executor<OfflineEngineProtocol>(
                     fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
                     fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
                     fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
+                    fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
+                    wclapSend(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapSend, uuid, bytes)}
+                    wclapState(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapState, uuid, bytes)}
+                    wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void {
+                        dispatcher.dispatchAndForget(this.wclapParams, uuid, params)
+                    }
+                    wclapParam(uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void {
+                        dispatcher.dispatchAndForget(this.wclapParam, uuid, paramId, value, gesture)
+                    }
+                    wclapHovered(uuid: string, paramId: number): void {dispatcher.dispatchAndForget(this.wclapHovered, uuid, paramId)}
+                    wclapStatus(uuid: string, status: WclapStatus): void {dispatcher.dispatchAndForget(this.wclapStatus, uuid, status)}
+                    wclapRequestSave(uuid: string): void {dispatcher.dispatchAndForget(this.wclapRequestSave, uuid)}
                     notifyClipSequenceChanges(changes: ClipSequencingUpdates): void {
                         dispatcher.dispatchAndForget(this.notifyClipSequenceChanges, changes)
                     }
@@ -133,7 +151,14 @@ Communicator.executor<OfflineEngineProtocol>(
                     }
                     ready() {dispatcher.dispatchAndForget(this.ready)}
                 })
-            const engine = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient)
+            const pending: Set<Promise<unknown>> = new Set()
+            const track = (promise: Promise<unknown>): void => {
+                const guarded = promise.catch(() => {})
+                pending.add(guarded)
+                guarded.finally(() => pending.delete(guarded))
+            }
+            const engine = instantiateWasmEngine(modules, memory, config.sampleRate, engineToClient,
+                createWclapBridges(memory, config.sampleRate, engineToClient, track))
             // The metronome is OFF unless the export configuration asks for it: a mixdown must never pick up a
             // click by accident. The LIVE engine takes these off the "engine-preferences" channel, which an
             // offline render has no host for, so they are settled once here (TS ExportMetronomeConfiguration).
@@ -228,7 +253,6 @@ Communicator.executor<OfflineEngineProtocol>(
                     waveform.set(analyser.waveform())
                 })
             ]
-            const pending: Set<Promise<unknown>> = new Set()
             drainResourceRequests(engine, memory, engineToClient, pending, config.sampleRate,
                 reason => engineToClient.error(describeEngineTrap(engine, memory, reason)))
             const stateSender = SyncStream.writer(EngineStateSchema(), config.syncStreamBuffer, engineState => {
@@ -262,6 +286,11 @@ Communicator.executor<OfflineEngineProtocol>(
                 scheduleClipPlay: (_clipIds: ReadonlyArray<UUID.Bytes>): void => {},
                 scheduleClipStop: (_trackIds: ReadonlyArray<UUID.Bytes>): void => {},
                 setupMIDI: (port: MessagePort, buffer: SharedArrayBuffer): void => midi.connect(port, buffer),
+                wclapOpenGui: (_uuid: UUID.Bytes): Promise<WclapGuiInfo> => Promise.resolve({uri: "", width: 0, height: 0}),
+                wclapCloseGui: (_uuid: UUID.Bytes): void => {},
+                wclapReceive: (_uuid: UUID.Bytes, _bytes: ArrayBuffer): void => {},
+                wclapSaveState: (_uuid: UUID.Bytes): void => {},
+                wclapDescribe: (_url: string): Promise<ReadonlyArray<WclapPluginInfo>> => Promise.resolve([]),
                 terminate: (): void => {}
             })
             enginePort.start()

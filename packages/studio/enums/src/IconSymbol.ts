@@ -188,6 +188,7 @@ export enum IconSymbol {
     StereoSplit,
     Tubular,
     Algorithm,
+    WebClap,
 }
 
 export namespace IconSymbol {

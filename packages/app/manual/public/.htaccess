@@ -9,11 +9,11 @@ RewriteRule ^(.*)$ $1.br [QSA,L]
     Header set Content-Encoding br
 </FilesMatch>
 
-<Files "index.html">
+<FilesMatch "\.html(\.br)?$">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires "0"
-</Files>
+</FilesMatch>
 
 # Vite hashes the bundled assets (index-By6hfIGF.js), so they can be cached forever
 <FilesMatch "-[A-Za-z0-9_-]{8}\.(js|css)(\.br)?$">
@@ -23,6 +23,11 @@ RewriteRule ^(.*)$ $1.br [QSA,L]
 # A page path can also be a content folder (devices/audio). mod_dir would redirect it to the internal
 # /<env>/manuals path before the fallback below runs, so the redirect is switched off.
 DirectorySlash Off
+
+# A page path loads its prerendered file (own title, description, canonical), the URL stays as it is
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.+)$ $1.html [L]
 
 # SPA fallback: the root .htaccess rewrites /manuals/* into this folder, every non-file path loads the app
 RewriteCond %{REQUEST_FILENAME} !-f

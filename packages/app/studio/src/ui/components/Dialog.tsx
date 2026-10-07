@@ -5,6 +5,7 @@ import {Button} from "@/ui/components/Button.tsx"
 import {Icon} from "@/ui/components/Icon.tsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Events, Html} from "@opendaw/lib-dom"
+import {Layers} from "@/ui/surface/Layers.tsx"
 
 const className = Html.adoptStyleSheet(css, "Dialog")
 
@@ -52,6 +53,7 @@ export const Dialog = (
             </footer>
         </dialog>
     )
+    Layers.install(dialog)
     if (cancelable === false) {
         dialog.oncancel = (event) => event.preventDefault()
     }

@@ -17,3 +17,21 @@ export const decodeUtf8 = (bytes: Uint8Array): string => {
     }
     return result
 }
+
+// Encode a string to UTF-8 bytes WITHOUT TextEncoder (same worklet constraint as above).
+export const encodeUtf8 = (text: string): Uint8Array => {
+    const bytes: Array<number> = []
+    for (const char of text) {
+        const codePoint = char.codePointAt(0) ?? 0
+        if (codePoint < 0x80) {
+            bytes.push(codePoint)
+        } else if (codePoint < 0x800) {
+            bytes.push(0xC0 | (codePoint >> 6), 0x80 | (codePoint & 0x3F))
+        } else if (codePoint < 0x10000) {
+            bytes.push(0xE0 | (codePoint >> 12), 0x80 | ((codePoint >> 6) & 0x3F), 0x80 | (codePoint & 0x3F))
+        } else {
+            bytes.push(0xF0 | (codePoint >> 18), 0x80 | ((codePoint >> 12) & 0x3F), 0x80 | ((codePoint >> 6) & 0x3F), 0x80 | (codePoint & 0x3F))
+        }
+    }
+    return new Uint8Array(bytes)
+}

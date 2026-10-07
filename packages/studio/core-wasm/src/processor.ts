@@ -24,7 +24,13 @@ import {
     EngineToClient,
     MonitoringMapEntry,
     NoteSignal,
-    PreferencesClient
+    PreferencesClient,
+    WclapBundle,
+    WclapGuiInfo,
+    WclapParamGesture,
+    WclapParamInfo,
+    WclapPluginInfo,
+    WclapStatus
 } from "@opendaw/studio-adapters"
 import type {SoundFont2} from "soundfont2"
 import {HRClock} from "../../core-processors/src/HRClock"
@@ -33,7 +39,8 @@ import {GonioCapture, LoudnessMeter, StereoAnalyser} from "./analysis-dsp"
 import {EngineExports, takeReportMessage} from "./engine-exports"
 import {WasmMidiDrain} from "./midi-drain"
 import {RecordingStartEdge} from "./recording-start-edge"
-import {describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
+import {createWclapBridges, describeEngineTrap, drainResourceRequests, instantiateWasmEngine} from "./boot"
+import {WclapBridges} from "./wclap/wclap-bridge"
 import {
     WASM_ENGINE_PROCESSOR_NAME,
     WASM_SYNC_CHANNEL,
@@ -70,6 +77,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #gonioActive: boolean = false
     #loudnessActive: boolean = false
     readonly #midi: WasmMidiDrain = new WasmMidiDrain()
+    readonly #wclap: WclapBridges
     readonly #pendingResources: Set<Promise<unknown>> = new Set()
 
     #broadcastGeneration: int = -1
@@ -100,6 +108,18 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 fetchAudio(uuid: UUID.Bytes): Promise<AudioData> {return dispatcher.dispatchAndReturn(this.fetchAudio, uuid)}
                 fetchSoundfont(uuid: UUID.Bytes): Promise<SoundFont2> {return dispatcher.dispatchAndReturn(this.fetchSoundfont, uuid)}
                 fetchNamWasm(): Promise<ArrayBuffer> {return dispatcher.dispatchAndReturn(this.fetchNamWasm)}
+                fetchWclapBundle(url: string): Promise<WclapBundle> {return dispatcher.dispatchAndReturn(this.fetchWclapBundle, url)}
+                wclapSend(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapSend, uuid, bytes)}
+                wclapState(uuid: string, bytes: ArrayBuffer): void {dispatcher.dispatchAndForget(this.wclapState, uuid, bytes)}
+                wclapParams(uuid: string, params: ReadonlyArray<WclapParamInfo>): void {
+                    dispatcher.dispatchAndForget(this.wclapParams, uuid, params)
+                }
+                wclapParam(uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void {
+                    dispatcher.dispatchAndForget(this.wclapParam, uuid, paramId, value, gesture)
+                }
+                wclapHovered(uuid: string, paramId: number): void {dispatcher.dispatchAndForget(this.wclapHovered, uuid, paramId)}
+                wclapStatus(uuid: string, status: WclapStatus): void {dispatcher.dispatchAndForget(this.wclapStatus, uuid, status)}
+                wclapRequestSave(uuid: string): void {dispatcher.dispatchAndForget(this.wclapRequestSave, uuid)}
                 notifyClipSequenceChanges(changes: ClipSequencingUpdates): void {
                     dispatcher.dispatchAndForget(this.notifyClipSequenceChanges, changes)
                 }
@@ -111,8 +131,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 }
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
+        this.#wclap = createWclapBridges(this.#memory, sampleRate, this.#engineToClient, promise => this.#trackResource(promise))
         const engine = instantiateWasmEngine({engineModule, deviceModules, deviceBoxTypes, composites, effectComposites},
-            this.#memory, sampleRate, this.#engineToClient)
+            this.#memory, sampleRate, this.#engineToClient, this.#wclap)
         this.#engine = engine
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)
         this.#hrClock = new HRClock(hrClockBuffer)
@@ -208,6 +229,12 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 queryLoadingComplete: (): Promise<boolean> =>
                     Promise.all(this.#pendingResources).then(() => true),
                 panic: (): void => {this.#panic = true},
+                wclapOpenGui: (uuid: UUID.Bytes): Promise<WclapGuiInfo> => Promise.resolve(this.#wclap.openGui(UUID.toString(uuid))),
+                wclapCloseGui: (uuid: UUID.Bytes): void => this.#wclap.closeGui(UUID.toString(uuid)),
+                wclapReceive: (uuid: UUID.Bytes, bytes: ArrayBuffer): void =>
+                    this.#guarded(() => this.#wclap.receive(UUID.toString(uuid), bytes)),
+                wclapSaveState: (uuid: UUID.Bytes): void => this.#guarded(() => this.#wclap.saveState(UUID.toString(uuid))),
+                wclapDescribe: (url: string): Promise<ReadonlyArray<WclapPluginInfo>> => this.#wclap.describe(url),
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#guarded(() => {
                     // Tiny PCM (<1s), so the worklet copies it directly (no main-thread staging like frozen).
                     const {frames, numberOfFrames, numberOfChannels, sampleRate} = data
@@ -301,6 +328,12 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#valid = false
         this.#engineToClient.error(describeEngineTrap(this.#engine, this.#memory, error))
         this.#terminator.terminate()
+    }
+
+    #trackResource(promise: Promise<unknown>): void {
+        const guarded = promise.catch(() => {})
+        this.#pendingResources.add(guarded)
+        guarded.finally(() => this.#pendingResources.delete(guarded))
     }
 
     #guarded(exec: Exec): void {

@@ -36,7 +36,13 @@ import {
     NoteSignal,
     PERF_BUFFER_SIZE,
     PreferencesHost,
-    ProcessorOptions
+    ProcessorOptions,
+    WclapBundle,
+    WclapParamGesture,
+    WclapParamInfo,
+    WclapGuiInfo,
+    WclapPluginInfo,
+    WclapStatus
 } from "@opendaw/studio-adapters"
 import {SyncSource} from "@opendaw/lib-box"
 import {AnimationFrame} from "@opendaw/lib-dom"
@@ -47,6 +53,7 @@ import {MonitoringRouter} from "./MonitoringRouter"
 import {Project} from "./project"
 import {MIDIReceiver} from "./midi"
 import {HRClockWorker} from "./HRClockWorker"
+import {WclapBundles, WclapFailures, WclapGuis, WclapParameters, WclapStates} from "./wclap"
 import type {SoundFont2} from "soundfont2"
 
 export class EngineWorklet extends AudioWorkletNode implements Engine {
@@ -75,6 +82,8 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     readonly #notifyNoteSignals: Notifier<NoteSignal>
     readonly #playingClips: Array<UUID.Bytes>
     readonly #deviceMessageListeners: SetMultimap<string, Procedure<string>> = new SetMultimap()
+    readonly #wclapStatusListeners: SetMultimap<string, Procedure<WclapStatus>> = new SetMultimap()
+    readonly #wclapStatus = new Map<string, WclapStatus>()
     readonly #commands: EngineCommands
     readonly #frozenAudioWriter: Nullable<FrozenAudioWriter>
     readonly #isReady: Promise<void>
@@ -176,6 +185,15 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void {
                         dispatcher.dispatchAndForget(this.updateMonitoringMap, map)
                     }
+                    wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {return dispatcher.dispatchAndReturn(this.wclapOpenGui, uuid)}
+                    wclapCloseGui(uuid: UUID.Bytes): void {dispatcher.dispatchAndForget(this.wclapCloseGui, uuid)}
+                    wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void {
+                        dispatcher.dispatchAndForget(this.wclapReceive, uuid, bytes)
+                    }
+                    wclapSaveState(uuid: UUID.Bytes): void {dispatcher.dispatchAndForget(this.wclapSaveState, uuid)}
+                    wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {
+                        return dispatcher.dispatchAndReturn(this.wclapDescribe, url)
+                    }
                     terminate(): void {dispatcher.dispatchAndForget(this.terminate)}
                 }))
         this.#frozenAudioWriter = isDefined(variant.connectFrozenAudio)
@@ -230,6 +248,20 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     const response = await fetch(url)
                     return response.arrayBuffer()
                 },
+                fetchWclapBundle: (url: string): Promise<WclapBundle> => WclapBundles.fetch(url),
+                wclapSend: (uuid: string, bytes: ArrayBuffer): void => WclapGuis.deliver(uuid, bytes),
+                wclapState: (uuid: string, bytes: ArrayBuffer): void => WclapStates.store(project, uuid, bytes),
+                wclapParams: (uuid: string, params: ReadonlyArray<WclapParamInfo>): void =>
+                    WclapParameters.reconcile(project, uuid, params),
+                wclapParam: (uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void =>
+                    WclapParameters.apply(project, uuid, paramId, value, gesture),
+                wclapHovered: (uuid: string, paramId: number): void => WclapGuis.hover(uuid, paramId),
+                wclapStatus: (uuid: string, status: WclapStatus): void => {
+                    WclapFailures.report(project, uuid, this.#wclapStatus.get(uuid), status)
+                    this.#wclapStatus.set(uuid, status)
+                    for (const listener of this.#wclapStatusListeners.get(uuid)) {listener(status)}
+                },
+                wclapRequestSave: (uuid: string): void => this.wclapSaveState(UUID.parse(uuid)),
                 notifyClipSequenceChanges: (changes: ClipSequencingUpdates): void => {
                     changes.stopped.forEach(uuid => {
                         for (let i = 0; i < this.#playingClips.length; i++) {
@@ -279,6 +311,11 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     }
     wake(): void {Atomics.store(this.#controlFlags, 0, 0)}
     loadClickSound(index: 0 | 1, data: AudioData): void {this.#commands.loadClickSound(index, data)}
+    wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {return this.#commands.wclapOpenGui(uuid)}
+    wclapCloseGui(uuid: UUID.Bytes): void {this.#commands.wclapCloseGui(uuid)}
+    wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void {this.#commands.wclapReceive(uuid, bytes)}
+    wclapSaveState(uuid: UUID.Bytes): void {this.#commands.wclapSaveState(uuid)}
+    wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {return this.#commands.wclapDescribe(url)}
     setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
         if (isNull(this.#frozenAudioWriter)) {
             this.#commands.setFrozenAudio(uuid, audioData)
@@ -326,6 +363,14 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     subscribeDeviceMessage(uuid: string, listener: Procedure<string>): Subscription {
         this.#deviceMessageListeners.add(uuid, listener)
         return {terminate: () => this.#deviceMessageListeners.remove(uuid, listener)}
+    }
+
+    // The plugin's load status, the last one replayed on subscribe
+    subscribeWclapStatus(uuid: string, listener: Procedure<WclapStatus>): Subscription {
+        this.#wclapStatusListeners.add(uuid, listener)
+        const current = this.#wclapStatus.get(uuid)
+        if (isDefined(current)) {listener(current)}
+        return {terminate: () => this.#wclapStatusListeners.remove(uuid, listener)}
     }
 
     registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2, destinationNode: AudioNode): void {

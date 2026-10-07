@@ -1,0 +1,77 @@
+@use "@/mixins"
+
+component
+  display: flex
+  flex-direction: column
+  justify-content: center
+  row-gap: 0.75em
+  min-width: 16em
+  @include mixins.Control
+
+  > div.plugin
+    display: flex
+    flex-direction: column
+    row-gap: 0.25em
+    font-size: 10px
+    min-width: 0
+    padding: 1em
+    background-color: rgba(black, 0.25)
+    border-radius: 3px
+    outline: 0.5px solid rgba(white, 0.2)
+    box-shadow: 0 0 3px -1px rgba(white, 0.2)
+
+    > span.name, > span.vendor
+      display: block
+      height: 1.4em
+      line-height: 1.4em
+      white-space: nowrap
+      overflow: hidden
+      text-overflow: ellipsis
+      max-width: 20em
+
+    > span.name
+      color: var(--color-bright)
+
+      &.empty
+        color: var(--color-dark)
+        font-style: italic
+
+    > span.vendor
+      opacity: 0.6
+
+      &.failed
+        opacity: 1
+        color: var(--color-red)
+
+  > div.buttons
+    display: flex
+    align-items: center
+    column-gap: 1em
+
+    > div.group
+      display: flex
+      align-items: center
+      column-gap: 0.25em
+
+      &.plugin
+        margin-left: auto
+
+    span.button-label
+      display: block
+      font-size: 10px
+      padding: 0 0.5em
+      white-space: nowrap
+
+  > p.about
+    margin: 0
+    font-size: 9px
+    line-height: 1.4
+    opacity: 0.5
+    max-width: 22em
+
+    > a
+      color: var(--color-blue)
+      text-decoration: none
+
+      &:hover
+        text-decoration: underline

@@ -1,7 +1,33 @@
-import {existsSync, readFileSync} from "node:fs"
-import {resolve} from "node:path"
-import {defineConfig} from "vite"
+import {existsSync, readdirSync, readFileSync, statSync, writeFileSync} from "node:fs"
+import {relative, resolve} from "node:path"
+import {defineConfig, Plugin} from "vite"
 import viteCompression from "vite-plugin-compression"
+import markdownit from "markdown-it"
+import {markdownItTable} from "markdown-it-table"
+import {Prerender} from "./src/Prerender"
+
+const markdownFiles = (directory: string): ReadonlyArray<string> => readdirSync(directory).flatMap(name => {
+    const path = resolve(directory, name)
+    return statSync(path).isDirectory() ? markdownFiles(path) : name.endsWith(".md") ? [path] : []
+})
+
+// writeBundle runs before the compression plugin's closeBundle, so every page also gets its .br
+const prerenderPages = (): Plugin => ({
+    name: "opendaw-prerender-manuals",
+    apply: "build",
+    writeBundle: () => {
+        const source = resolve(__dirname, "public")
+        const target = resolve(__dirname, "dist")
+        const template = readFileSync(resolve(target, "index.html"), "utf8")
+        const markdown = markdownit({html: false, linkify: true}).use(markdownItTable)
+        markdownFiles(source).forEach(file => {
+            const path = relative(source, file).replaceAll("\\", "/").replace(/\.md$/, "")
+            const page = path === "index" ? "" : path
+            const html = Prerender.page(template, {path: page, markdown: readFileSync(file, "utf8")}, text => markdown.render(text))
+            writeFileSync(resolve(target, page === "" ? "index.html" : `${page}.html`), html)
+        })
+    }
+})
 
 export default defineConfig(({command}) => ({
     base: "/manuals/",
@@ -34,6 +60,7 @@ export default defineConfig(({command}) => ({
         host: "localhost"
     },
     plugins: [
+        prerenderPages(),
         viteCompression({algorithm: "brotliCompress"})
     ]
 }))

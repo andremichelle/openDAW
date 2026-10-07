@@ -1,19 +1,19 @@
 import {AnimationFrame} from "@opendaw/lib-dom"
-import {Surface} from "./Surface"
+import {Layers} from "./Layers"
 import {int, Option, Provider, Terminable} from "@opendaw/lib-std"
 
 export type ClientPosition = { clientX: number, clientY: number }
 
 export abstract class AbstractTooltip<DATA extends ClientPosition> {
-    readonly #surface: Surface
+    readonly #layers: Layers
 
     readonly #element: HTMLElement
 
     #current: Option<{ updater: Terminable, provider: Provider<DATA> }> = Option.None
     #stopDelay: Option<Terminable> = Option.None
 
-    protected constructor(surface: Surface) {
-        this.#surface = surface
+    protected constructor(layers: Layers) {
+        this.#layers = layers
 
         this.#element = this.createElement()
     }
@@ -31,7 +31,7 @@ export abstract class AbstractTooltip<DATA extends ClientPosition> {
         } else if (this.#current.unwrap().provider === provider) {
             if (this.#element.isConnected) {
                 return
-            } else if (!this.#surface.hasFlyout) {
+            } else if (!this.#layers.hasFlyout) {
                 this.#attach()
                 this.#current.ifSome(({updater}) => updater.terminate())
                 this.#current = Option.wrap({updater: this.#start(provider), provider})
@@ -74,7 +74,7 @@ export abstract class AbstractTooltip<DATA extends ClientPosition> {
             let frame = 0
             return () => {
                 if (++frame === this.showDelayInFrames()) {
-                    if (this.#surface.hasFlyout) {
+                    if (this.#layers.hasFlyout) {
                         this.#stop()
                     } else {
                         this.#attach()
@@ -89,14 +89,9 @@ export abstract class AbstractTooltip<DATA extends ClientPosition> {
 
     #update(data: DATA): void {
         this.update(data)
-        let clientX = data.clientX
-        let clientY = data.clientY
-        if (clientX + this.#element.clientWidth > this.#surface.width) {
-            clientX = this.#surface.width - this.#element.clientWidth
-        }
-        if (clientY + this.#element.clientHeight > this.#surface.height) {
-            clientY = this.#surface.height - this.#element.clientHeight
-        }
+        const origin = this.#layers.origin
+        const clientX = Math.min(data.clientX - origin.x, this.#layers.width - this.#element.clientWidth)
+        const clientY = Math.min(data.clientY - origin.y, this.#layers.height - this.#element.clientHeight)
         this.#element.style.transform = `translate(${clientX}px, ${clientY}px)`
     }
 
@@ -109,7 +104,7 @@ export abstract class AbstractTooltip<DATA extends ClientPosition> {
     }
 
     #attach(): void {
-        this.#surface.flyout.appendChild(this.#element)
+        this.#layers.flyout.appendChild(this.#element)
         this.#element.focus()
     }
 

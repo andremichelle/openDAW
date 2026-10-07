@@ -1,0 +1,60 @@
+@use "./ResourceBrowser" as *
+
+component
+  @include resource-browser("1fr auto auto auto auto minmax(4px, auto)", false)
+  column-gap: 5px
+
+  div.entry
+    display: grid
+    grid-template-columns: subgrid
+    grid-column: span 5
+    padding-left: calc(6px + var(--indent, 0px))
+    color: var(--color-dark)
+    align-items: center
+
+    &:hover
+      color: var(--color-gray)
+
+    > span
+      overflow: hidden
+      white-space: nowrap
+      text-overflow: ellipsis
+
+      &.name
+        display: flex
+        align-items: center
+        column-gap: 0.4em
+
+        > svg
+          flex: 0 0 auto
+          width: 1em
+          height: 1em
+          color: var(--color-shadow)
+
+      &.right
+        text-align: right
+
+  div.folder-header
+    &::before, &::after
+      content: "-"
+      grid-row: 1
+
+    &::before
+      grid-column: 4
+
+    &::after
+      grid-column: 3
+
+    > span.right
+      grid-row: 1
+      grid-column: 2
+      text-align: left
+
+      &:last-child
+        grid-column: 5
+        text-align: right
+
+  div.empty
+    grid-column: 1 / -1
+    padding-left: 6px
+    color: var(--color-shadow)

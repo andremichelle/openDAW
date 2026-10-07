@@ -9,16 +9,20 @@ import {TrafficMeter} from "./TrafficMeter"
 
 export const STALL_TIMEOUT_MS = 10_000
 export const MAX_RETRIES = 3
+export const WCLAP_DISCOVERY_TIMEOUT_MS = 5_000 // bundles have no cloud fallback, a request nobody answers must fail
+
+type AssetType = "sample" | "soundfont" | "cover" | "wclap"
 
 type PendingRequest = {
     readonly uuid: UUID.Bytes
     readonly uuidString: string
-    readonly assetType: "sample" | "soundfont" | "cover"
+    readonly assetType: AssetType
     readonly progress: Progress.Handler
     readonly resolve: (zipBytes: ArrayBuffer) => void
     readonly reject: (error: Error) => void
     retryCount: number
     stallTimer: ReturnType<typeof setTimeout> | null
+    discoveryTimer: ReturnType<typeof setTimeout> | null
 }
 
 export class PeerAssetProvider {
@@ -62,15 +66,40 @@ export class PeerAssetProvider {
         return this.#requestAsset(uuid, "cover", progress)
     }
 
-    #requestAsset(uuid: UUID.Bytes, assetType: "sample" | "soundfont" | "cover", progress: Progress.Handler): Promise<ArrayBuffer> {
+    fetchWclap(uuid: UUID.Bytes, progress: Progress.Handler): Promise<ArrayBuffer> {
+        console.debug("[P2P:Provider] fetchWclap", UUID.toString(uuid))
+        return this.#requestAsset(uuid, "wclap", progress)
+    }
+
+    #requestAsset(uuid: UUID.Bytes, assetType: AssetType, progress: Progress.Handler): Promise<ArrayBuffer> {
         const uuidString = UUID.toString(uuid)
         const {promise, resolve, reject} = Promise.withResolvers<ArrayBuffer>()
-        this.#pendingRequests.set(uuidString, {
+        const pending: PendingRequest = {
             uuid, uuidString, assetType, progress, resolve, reject,
-            retryCount: 0, stallTimer: null
-        })
+            retryCount: 0, stallTimer: null, discoveryTimer: null
+        }
+        this.#pendingRequests.set(uuidString, pending)
+        this.#armDiscovery(pending)
         this.#broadcastRequest(uuidString, assetType)
         return promise
+    }
+
+    #armDiscovery(pending: PendingRequest): void {
+        if (pending.assetType !== "wclap") {return}
+        this.#clearDiscovery(pending)
+        pending.discoveryTimer = setTimeout(() => {
+            pending.discoveryTimer = null
+            if (this.#pendingRequests.get(pending.uuidString) !== pending || this.#transferringAssets.has(pending.uuidString)) {return}
+            console.warn("[P2P:Provider] no peer holds", pending.uuidString)
+            this.#pendingRequests.delete(pending.uuidString)
+            pending.reject(new Error(`No peer in the room holds ${pending.assetType} ${pending.uuidString}`))
+        }, WCLAP_DISCOVERY_TIMEOUT_MS)
+    }
+
+    #clearDiscovery(pending: PendingRequest): void {
+        if (pending.discoveryTimer === null) {return}
+        clearTimeout(pending.discoveryTimer)
+        pending.discoveryTimer = null
     }
 
     #broadcastRequest(uuidString: string, assetType: string): void {
@@ -101,6 +130,7 @@ export class PeerAssetProvider {
             return
         }
         console.debug("[P2P:Provider] retrying transfer for", uuidString, `(attempt ${pending.retryCount + 1}/${MAX_RETRIES}, reason: ${reason})`)
+        this.#armDiscovery(pending)
         this.#broadcastRequest(uuidString, pending.assetType)
     }
 
@@ -192,6 +222,7 @@ export class PeerAssetProvider {
     }
 
     async #initiateTransfer(pending: PendingRequest, remotePeerId: string): Promise<void> {
+        this.#clearDiscovery(pending)
         this.#transferringAssets.set(pending.uuidString, remotePeerId)
         this.#activePeerTransfers.set(remotePeerId, pending.uuidString)
         const connection = new AssetPeerConnection(this.#signaling, this.#localPeerId, remotePeerId)
@@ -324,6 +355,7 @@ export class PeerAssetProvider {
             if (pending.stallTimer !== null) {
                 clearTimeout(pending.stallTimer)
             }
+            this.#clearDiscovery(pending)
             pending.reject(new Error("P2P session terminated"))
         }
         for (const connection of this.#connections.values()) {

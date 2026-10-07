@@ -1,5 +1,5 @@
 import css from "./TextTooltip.sass?inline"
-import {Surface} from "./Surface"
+import {Layers} from "./Layers"
 import {createElement} from "@opendaw/lib-jsx"
 import {getOrProvide, Provider, Terminable, ValueOrProvider} from "@opendaw/lib-std"
 import {AbstractTooltip} from "@/ui/surface/AbstractTooltip.ts"
@@ -16,17 +16,17 @@ export class TextTooltip extends AbstractTooltip<Data> {
         return Terminable.many(
             Events.subscribe(element, "pointerdown", () => {
                 if (!this.enabled) {return}
-                const surface = Surface.get(element)
-                surface.textTooltip.show(provider)
-                Events.subscribe(element, "pointerleave", () => surface.textTooltip.hide(), {once: true})
+                const layers = Layers.get(element)
+                layers.textTooltip.show(provider)
+                Events.subscribe(element, "pointerleave", () => layers.textTooltip.hide(), {once: true})
             }, {capture: true}),
             Events.subscribe(element, "pointerover", () => {
                 if (!this.enabled) {return}
-                const surface = Surface.get(element)
-                surface.textTooltip.show(provider)
-                Events.subscribe(element, "pointerleave", () => surface.textTooltip.hide(), {once: true})
+                const layers = Layers.get(element)
+                layers.textTooltip.show(provider)
+                Events.subscribe(element, "pointerleave", () => layers.textTooltip.hide(), {once: true})
             }, {capture: true}),
-            Terminable.create(() => Surface.get(element).textTooltip.forceHide())
+            Terminable.create(() => Layers.get(element).textTooltip.forceHide())
         )
     }
 
@@ -46,8 +46,8 @@ export class TextTooltip extends AbstractTooltip<Data> {
     // DO NOT INLINE: This sheet needs to be initialized upfront to be copied over to new documents
     static readonly #CLASS_NAME = Html.adoptStyleSheet(css, "TextTooltip")
 
-    constructor(surface: Surface) {
-        super(surface)
+    constructor(layers: Layers) {
+        super(layers)
     }
 
     protected createElement(): HTMLElement {return (<div className={TextTooltip.#CLASS_NAME}/>)}

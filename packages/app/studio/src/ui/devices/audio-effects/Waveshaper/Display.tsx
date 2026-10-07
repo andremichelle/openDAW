@@ -40,7 +40,9 @@ export const Display = ({lifecycle, editing, adapter}: Construct) => {
                     const {devicePixelRatio, context, actualWidth, actualHeight} = painter
                     const range = 1.5
                     const inputGainValue = dbToGain(inputGain.getControlledValue())
-                    const equation = (adapter.box.equation.getValue()) as Waveshaper.Equation
+                    const name = adapter.box.equation.getValue()
+                    // unknown names play as tanh in the engine (Equation::from_name)
+                    const equation = Waveshaper.Equations.find(entry => entry === name) ?? "tanh"
                     const toX = (value: number) => ((value + range) / (2.0 * range)) * actualWidth
                     const toY = (value: number) => ((range - value) / (2.0 * range)) * actualHeight
                     context.save()

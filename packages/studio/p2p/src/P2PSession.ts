@@ -4,11 +4,13 @@ import {AssetServer, type AssetReader} from "./AssetServer"
 import {PeerAssetProvider} from "./PeerAssetProvider"
 import {ChainedSampleProvider} from "./ChainedSampleProvider"
 import {ChainedSoundfontProvider} from "./ChainedSoundfontProvider"
+import {ChainedWclapProvider} from "./ChainedWclapProvider"
 import {TrafficMeter} from "./TrafficMeter"
 
 export type P2PSessionContext = {
     readonly chainedSampleProvider: ChainedSampleProvider
     readonly chainedSoundfontProvider: ChainedSoundfontProvider
+    readonly chainedWclapProvider: ChainedWclapProvider
     readonly createSocket: (url: string) => SignalingSocket
     readonly assetReader: AssetReader
     readonly localPeerId: string
@@ -35,6 +37,9 @@ export class P2PSession implements Terminable {
         context.chainedSoundfontProvider.attachPeer({
             fetch: (uuid, progress) => this.#provider.fetchSoundfont(uuid, progress)
         })
+        context.chainedWclapProvider.attachPeer({
+            fetch: (uuid, progress) => this.#provider.fetchWclap(uuid, progress)
+        })
     }
 
     get signaling(): AssetSignaling {return this.#signaling}
@@ -49,6 +54,7 @@ export class P2PSession implements Terminable {
         this.#terminated = true
         this.#context.chainedSampleProvider.detachPeer()
         this.#context.chainedSoundfontProvider.detachPeer()
+        this.#context.chainedWclapProvider.detachPeer()
         this.#provider.terminate()
         this.#server.terminate()
         this.#signaling.terminate()

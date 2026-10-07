@@ -1,6 +1,6 @@
 import {Errors, Option, Optional, panic, Progress, RuntimeNotifier, Terminator, TimeSpan, UUID} from "@opendaw/lib-std"
 import {Promises, Wait} from "@opendaw/lib-runtime"
-import {SampleStorage, SoundfontStorage, Workers, YService} from "@opendaw/studio-core"
+import {SampleStorage, SoundfontStorage, WclapStorage, Workers, YService} from "@opendaw/studio-core"
 import {P2PSession, type SignalingSocket} from "@opendaw/studio-p2p"
 import {StudioService} from "@/service/StudioService"
 import {showConnectRoomDialog} from "@/service/StudioLiveRoomDialog.tsx"
@@ -40,6 +40,7 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
         const p2pSession = new P2PSession({
             chainedSampleProvider: service.chainedSampleProvider,
             chainedSoundfontProvider: service.chainedSoundfontProvider,
+            chainedWclapProvider: service.chainedWclapProvider,
             createSocket: url => new WebSocket(url) as SignalingSocket,
             localPeerId: UUID.toString(UUID.generate()),
             assetReader: {
@@ -52,6 +53,8 @@ export const connectRoom = async (service: StudioService, prefillRoomName?: Opti
                     return audio && meta
                 },
                 hasSoundfont: uuid => Workers.Opfs.exists(`${SoundfontStorage.Folder}/${UUID.toString(uuid)}`),
+                hasWclap: uuid => WclapStorage.exists(UUID.toString(uuid)),
+                readWclap: uuid => WclapStorage.loadId(UUID.toString(uuid)),
                 hasCover: async uuid => service.projectProfileService.getValue()
                     .mapOr(profile => profile.coverId === UUID.toString(uuid) && profile.cover.nonEmpty(), false),
                 readSample: async uuid => {

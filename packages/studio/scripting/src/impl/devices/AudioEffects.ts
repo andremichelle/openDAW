@@ -26,7 +26,7 @@ import {
     WerkstattDeviceBox
 } from "@opendaw/studio-boxes"
 import {Box, Field, IndexedBox, PointerField} from "@opendaw/lib-box"
-import {Mixing} from "@opendaw/lib-dsp"
+import {Mixing, Waveshaper} from "@opendaw/lib-dsp"
 import {Pointers} from "@opendaw/studio-enums"
 import {asInstanceOf, bipolar, float, int, isNull, Nullable, panic, unitValue} from "@opendaw/lib-std"
 import {
@@ -440,14 +440,19 @@ export class VocoderEffectImpl extends SideChainableEffect<VocoderDeviceBox> imp
 
 export class WaveshaperEffectImpl extends AudioEffectFacade<WaveshaperDeviceBox> implements WaveshaperEffect {
     readonly key = "Waveshaper" as const
-    declare equation: string
     declare inputGain: float
     declare outputGain: float
     declare mix: unitValue
 
     constructor(context: Context, box: WaveshaperDeviceBox) {
         super(context, box)
-        this.bind({equation: box.equation, inputGain: box.inputGain, outputGain: box.outputGain, mix: box.mix})
+        this.bind({inputGain: box.inputGain, outputGain: box.outputGain, mix: box.mix})
+    }
+
+    get equation(): Waveshaper.Equation {return this.box.equation.getValue() as Waveshaper.Equation}
+    set equation(value: Waveshaper.Equation) {
+        const validated = Guard.oneOf(Guard.string(value, "equation"), Waveshaper.Equations, "equation")
+        this.context.edit(() => this.box.equation.setValue(validated))
     }
 }
 

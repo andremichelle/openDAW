@@ -729,8 +729,8 @@ export interface VocoderEffect extends AudioEffect, SideChainable {
 export interface WaveshaperEffect extends AudioEffect {
     /** Always "Waveshaper" */
     readonly key: "Waveshaper"
-    /** Transfer function preset name or custom equation (default "hardclip") */
-    equation: string
+    /** Transfer function (default "hardclip") */
+    equation: "hardclip" | "cubicSoft" | "tanh" | "sigmoid" | "arctan" | "asymmetric"
     /** Input gain in dB (0 to 40, default 0) */
     inputGain: float
     /** Output gain in dB (-24 to 24, default 0) */

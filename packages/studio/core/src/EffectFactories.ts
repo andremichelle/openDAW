@@ -21,6 +21,7 @@ import {
     ModularDeviceBox,
     ModuleConnectionBox,
     NeuralAmpDeviceBox,
+    WclapDeviceBox,
     PitchDeviceBox,
     RevampDeviceBox,
     ReverbDeviceBox,
@@ -424,6 +425,23 @@ export namespace EffectFactories {
                 box.host.refer(hostField)
             })
     }
+    export const Wclap: EffectFactory = {
+        defaultName: "WebCLAP",
+        defaultIcon: IconSymbol.WebClap,
+        briefDescription: "WebCLAP Plugin",
+        description: "Hosts a CLAP plugin compiled to WebAssembly (WebCLAP bundle).",
+        manualPage: DeviceManualUrls.Wclap,
+        separatorBefore: false,
+        external: false,
+        type: "audio",
+        boxName: "WclapDeviceBox",
+        create: ({boxGraph}, hostField, index): WclapDeviceBox =>
+            WclapDeviceBox.create(boxGraph, UUID.generate(), (box) => {
+                box.label.setValue("WebCLAP")
+                box.index.setValue(index)
+                box.host.refer(hostField)
+            })
+    }
 
     export const Vocoder: EffectFactory = {
         defaultName: "Vocoder",
@@ -633,6 +651,7 @@ export namespace EffectFactories {
         NeuralAmp,       // Tone3000
         Vocoder,
         Waveshaper,
+        Wclap,           // WebCLAP
         Werkstatt,
         Sink
     }

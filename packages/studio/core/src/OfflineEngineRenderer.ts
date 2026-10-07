@@ -27,8 +27,9 @@ import {
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig
-, ScriptCompiler} from "@opendaw/studio-adapters"
+, ScriptCompiler, WclapBundle, WclapGuiInfo, WclapPluginInfo} from "@opendaw/studio-adapters"
 import {Project} from "./project"
+import {WclapBundles} from "./wclap"
 import {AudioWorklets} from "./AudioWorklets"
 import {MIDIReceiver} from "./midi"
 import type {SoundFont2} from "soundfont2"
@@ -117,6 +118,14 @@ export class OfflineEngineRenderer {
                 const response = await fetch(url)
                 return response.arrayBuffer()
             },
+            fetchWclapBundle: (url: string): Promise<WclapBundle> => WclapBundles.fetch(url),
+            wclapSend: (): void => {},
+            wclapState: (): void => {},
+            wclapParams: (): void => {},
+            wclapParam: (): void => {},
+            wclapHovered: (): void => {},
+            wclapStatus: (): void => {},
+            wclapRequestSave: (): void => {},
             notifyClipSequenceChanges: (): void => {},
             switchMarkerState: (): void => {},
             recordingStarted: (): void => {},
@@ -144,6 +153,11 @@ export class OfflineEngineRenderer {
                 updateMonitoringMap(map: ReadonlyArray<MonitoringMapEntry>): void { dispatcher.dispatchAndForget(this.updateMonitoringMap, map) }
                 loadClickSound(index: 0 | 1, data: AudioData): void { dispatcher.dispatchAndForget(this.loadClickSound, index, data) }
                 setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void { dispatcher.dispatchAndForget(this.setFrozenAudio, uuid, audioData) }
+                wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> { return dispatcher.dispatchAndReturn(this.wclapOpenGui, uuid) }
+                wclapCloseGui(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.wclapCloseGui, uuid) }
+                wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void { dispatcher.dispatchAndForget(this.wclapReceive, uuid, bytes) }
+                wclapSaveState(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.wclapSaveState, uuid) }
+                wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> { return dispatcher.dispatchAndReturn(this.wclapDescribe, url) }
                 terminate(): void { dispatcher.dispatchAndForget(this.terminate) }
             }
         )
