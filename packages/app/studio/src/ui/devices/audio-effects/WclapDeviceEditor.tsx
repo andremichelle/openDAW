@@ -34,7 +34,7 @@ import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
 import {WclapAdapter, WclapWindows} from "@/service/WclapWindows"
 import {StoredWclapPlugin, WclapDescriber} from "@/service/WclapDescriber"
-import {OpenWclapAPI} from "@/opendaw-api"
+import {OpenWclapAPI, WclapIndexFolder} from "@/opendaw-api"
 import {ParameterTree, WclapParameterTree} from "@/ui/devices/audio-effects/WclapParameterTree"
 
 const className = Html.adoptStyleSheet(css, "WclapDeviceEditor")
@@ -48,6 +48,11 @@ type Construct = {
 }
 
 const {kindOf} = WclapDescriber
+
+type CloudPlugin = { uuid: string, info: WclapPluginInfo }
+type CloudFolder = { name: string, folders: ReadonlyArray<CloudFolder>, plugins: ReadonlyArray<CloudPlugin> }
+
+const EmptyCloudFolder: CloudFolder = {name: "", folders: [], plugins: []}
 
 export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project, engine} = service
@@ -212,22 +217,34 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 .toSorted((a, b) => byName(a.info, b.info))
         }, EmptyExec)
     }
-    const cloud: { plugins: ReadonlyArray<{ uuid: string, info: WclapPluginInfo }> } = {plugins: []}
-    OpenWclapAPI.get().all().then(entries => {
-        cloud.plugins = entries
-            .flatMap(({uuid, plugins}) => plugins.map(info => ({uuid, info})))
-            .filter(({info}) => kindOf(info) === adapter.type)
-            .toSorted((a, b) => byName(a.info, b.info))
+    const cloud: { root: CloudFolder, plugins: ReadonlyArray<CloudPlugin> } = {root: EmptyCloudFolder, plugins: []}
+    OpenWclapAPI.get().tree().then(({folders}) => {
+        const toFolder = ({name, folders, wclaps}: WclapIndexFolder): CloudFolder => ({
+            name,
+            folders: (folders ?? []).map(toFolder).filter(folder => folder.folders.length > 0 || folder.plugins.length > 0),
+            plugins: (wclaps ?? [])
+                .flatMap(({uuid, plugins}) => plugins.map(info => ({uuid, info})))
+                .filter(({info}) => kindOf(info) === adapter.type)
+                .toSorted((a, b) => byName(a.info, b.info))
+        })
+        cloud.root = toFolder({name: "", folders})
+        const collect = ({folders, plugins}: CloudFolder): ReadonlyArray<CloudPlugin> => [...plugins, ...folders.flatMap(collect)]
+        cloud.plugins = collect(cloud.root)
     }, EmptyExec)
+    const populateCloud = (parent: MenuItem, {folders, plugins}: CloudFolder): void => {
+        parent.addMenuItem(...folders.map(folder => MenuItem.default({label: folder.name, icon: IconSymbol.Folder})
+            .setRuntimeChildrenProcedure(sub => populateCloud(sub, folder))))
+        parent.addMenuItem(...plugins.map(({uuid, info}) =>
+            MenuItem.default({label: labelOf(info), checked: isCurrent(WclapStorage.urlOf(uuid), info)})
+                .setTriggerProcedure(() => useCloud(uuid, info))))
+    }
     const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
         // a cloud plugin picked once is stored too, it stays listed under Cloud only
         const cloudUrls = new Set(cloud.plugins.map(({uuid}) => WclapStorage.urlOf(uuid)))
         const local = stored.plugins.filter(({url}) => !cloudUrls.has(url))
         parent.addMenuItem(
             MenuItem.default({label: "Cloud", icon: IconSymbol.CloudFolder, selectable: cloud.plugins.length > 0})
-                .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...cloud.plugins.map(({uuid, info}) =>
-                    MenuItem.default({label: labelOf(info), checked: isCurrent(WclapStorage.urlOf(uuid), info)})
-                        .setTriggerProcedure(() => useCloud(uuid, info))))),
+                .setRuntimeChildrenProcedure(sub => populateCloud(sub, cloud.root)),
             MenuItem.default({label: "Local", icon: IconSymbol.UserFolder, selectable: local.length > 0})
                 .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...local.map(({url, info}) =>
                     MenuItem.default({label: labelOf(info), checked: isCurrent(url, info)})
