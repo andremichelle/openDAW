@@ -1,5 +1,5 @@
-import {Lazy, Option} from "@opendaw/lib-std"
-import {Promises} from "@opendaw/lib-runtime"
+import {Lazy, Option, Progress} from "@opendaw/lib-std"
+import {network, Promises} from "@opendaw/lib-runtime"
 import {OpenDAWHeaders} from "./OpenDAWHeaders"
 import {WclapIndex, WclapIndexEntry} from "./WclapIndex"
 
@@ -29,9 +29,11 @@ export class OpenWclapAPI {
     }
 
     // the body is read inside the attempt, a stream the host breaks halfway (HTTP/2 protocol error) is retried too
-    load(uuid: string): Promise<ArrayBuffer> {
+    load(uuid: string, progress: Progress.Handler = Progress.Empty): Promise<ArrayBuffer> {
         return retryTransient(() => fetch(`${OpenWclapAPI.FileRoot}/${uuid}.wclap`, OpenDAWHeaders)
-            .then(response => response.ok ? response.arrayBuffer() : Promise.reject(new HttpStatus(response.status))), 4)
+            .then(response => response.ok
+                ? network.progress(progress)(response).arrayBuffer()
+                : Promise.reject(new HttpStatus(response.status))), 4)
     }
 }
 

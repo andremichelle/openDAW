@@ -86,15 +86,35 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             if (isDefined(state.info) && state.ready) {vendorLabel.textContent = state.info.vendor}
         }, () => {})
     }
+    // the latest pick wins, a download that finishes after another choice is dropped
+    const pick = {generation: 0}
     const useCloud = (uuid: string, info: WclapPluginInfo): void => {
-        OpenWclapAPI.get().load(uuid)
+        const generation = ++pick.generation
+        const current = (): boolean => generation === pick.generation
+        nameLabel.classList.remove("empty")
+        nameLabel.textContent = info.name
+        vendorLabel.classList.remove("failed")
+        vendorLabel.textContent = "Downloading…"
+        OpenWclapAPI.get().load(uuid, progress => {
+            if (current()) {vendorLabel.textContent = `Downloading… ${Math.round(progress * 100)}%`}
+        })
             .then(archive => WclapStorage.store(archive))
             .then(local => {
                 if (local !== WclapStorage.urlOf(uuid)) {throw new Error("the download does not match its id")}
+                if (!current()) {return}
+                if (isCurrent(local, info)) {
+                    showPlugin()
+                    return
+                }
                 select(local, info.clapId)
                 refreshStored()
             })
-            .catch(error => RuntimeNotifier.notify({message: `Could not download ${info.name}: ${error}`, icon: "Warning"}))
+            .catch(error => {
+                if (!current()) {return}
+                vendorLabel.classList.add("failed")
+                vendorLabel.textContent = `Failed: ${error}`
+                RuntimeNotifier.notify({message: `Could not download ${info.name}: ${error}`, icon: "Warning"})
+            })
     }
     const browse = async (): Promise<void> => {
         const files = await Files.open({
@@ -211,9 +231,15 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             MenuItem.default({label: "Local", icon: IconSymbol.UserFolder, selectable: local.length > 0})
                 .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...local.map(({url, info}) =>
                     MenuItem.default({label: labelOf(info), checked: isCurrent(url, info)})
-                        .setTriggerProcedure(() => select(url, info.clapId))))),
+                        .setTriggerProcedure(() => {
+                            pick.generation++
+                            select(url, info.clapId)
+                        })))),
             MenuItem.default({label: "Import WebCLAP...", separatorBefore: true})
-                .setTriggerProcedure(() => browse())
+                .setTriggerProcedure(() => {
+                    pick.generation++
+                    browse()
+                })
         )
         refreshStored()
     })
