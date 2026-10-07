@@ -176,9 +176,21 @@ export namespace ClapAbi {
         export const CREATE = 8
         export const DESTROY = 12
         export const GET_SIZE = 20
+        export const CAN_RESIZE = 24
+        export const GET_RESIZE_HINTS = 28
+        export const ADJUST_SIZE = 32
+        export const SET_SIZE = 36
         export const SET_PARENT = 40
         export const SHOW = 52
         export const HIDE = 56
+    }
+
+    // clap_gui_resize_hints: three bools, then the aspect ratio as two u32
+    export namespace ResizeHints {
+        export const SIZE = 12
+        export const PRESERVE_ASPECT_RATIO = 2
+        export const ASPECT_RATIO_WIDTH = 4
+        export const ASPECT_RATIO_HEIGHT = 8
     }
 
     // clap_window: api string pointer, then the native handle (NULL for a webview)

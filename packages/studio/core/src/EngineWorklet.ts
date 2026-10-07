@@ -41,6 +41,7 @@ import {
     WclapParamGesture,
     WclapParamInfo,
     WclapGuiInfo,
+    WclapGuiSize,
     WclapPluginInfo,
     WclapStatus
 } from "@opendaw/studio-adapters"
@@ -187,6 +188,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
                     }
                     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {return dispatcher.dispatchAndReturn(this.wclapOpenGui, uuid)}
                     wclapCloseGui(uuid: UUID.Bytes): void {dispatcher.dispatchAndForget(this.wclapCloseGui, uuid)}
+                    wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
+                        return dispatcher.dispatchAndReturn(this.wclapResizeGui, uuid, width, height)
+                    }
                     wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void {
                         dispatcher.dispatchAndForget(this.wclapReceive, uuid, bytes)
                     }
@@ -313,6 +317,9 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
     loadClickSound(index: 0 | 1, data: AudioData): void {this.#commands.loadClickSound(index, data)}
     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {return this.#commands.wclapOpenGui(uuid)}
     wclapCloseGui(uuid: UUID.Bytes): void {this.#commands.wclapCloseGui(uuid)}
+    wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
+        return this.#commands.wclapResizeGui(uuid, width, height)
+    }
     wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void {this.#commands.wclapReceive(uuid, bytes)}
     wclapSaveState(uuid: UUID.Bytes): void {this.#commands.wclapSaveState(uuid)}
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {return this.#commands.wclapDescribe(url)}

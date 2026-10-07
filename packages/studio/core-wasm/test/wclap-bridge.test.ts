@@ -5,6 +5,7 @@ import {describe, expect, it} from "vitest"
 import * as path from "node:path"
 import {readFileSync} from "node:fs"
 import {gunzipSync} from "node:zlib"
+import {UUID} from "@opendaw/lib-std"
 import {WclapBundle, WclapBundleFile, WclapParamInfo, WclapStatus} from "@opendaw/studio-adapters"
 import {WclapBridges, WclapHostCallbacks} from "../src/wclap/wclap-bridge"
 import {createWclapDescriber} from "../src/wclap/wclap-describer"
@@ -284,5 +285,20 @@ describe("wclap bridge", () => {
         await ready(host, handle)
         expect(process(host, handle, 1)).toBe(1)
         expect(process(host, handle, 37)).toBe(1)
+    })
+
+    it("opens the gui with its resize answers and passes sizes through when the plugin cannot resize", async () => {
+        const host = createHost()
+        const handle = load(host)
+        await ready(host, handle)
+        const uuid = UUID.toString(new Uint8Array(16).map((_, index) => index + 1) as UUID.Bytes)
+        expect(host.bridges.resizeGui(uuid, 320, 200)).toEqual({width: 320, height: 200})
+        const gui = host.bridges.openGui(uuid)
+        expect(gui.width).toBeGreaterThan(0)
+        expect(gui.aspectRatio).toBeGreaterThanOrEqual(0)
+        const resized = host.bridges.resizeGui(uuid, 320, 200)
+        expect(resized.width).toBeGreaterThan(0)
+        expect(host.statuses.at(-1)?.state).toBe("ready")
+        expect(process(host, handle)).toBe(1)
     })
 })

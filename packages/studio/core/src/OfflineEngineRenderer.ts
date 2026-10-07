@@ -27,7 +27,7 @@ import {
     OfflineEngineInitializeConfig,
     OfflineEngineProtocol,
     OfflineEngineRenderConfig
-, ScriptCompiler, WclapBundle, WclapGuiInfo, WclapPluginInfo} from "@opendaw/studio-adapters"
+, ScriptCompiler, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapPluginInfo} from "@opendaw/studio-adapters"
 import {Project} from "./project"
 import {WclapBundles} from "./wclap"
 import {AudioWorklets} from "./AudioWorklets"
@@ -155,6 +155,9 @@ export class OfflineEngineRenderer {
                 setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void { dispatcher.dispatchAndForget(this.setFrozenAudio, uuid, audioData) }
                 wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> { return dispatcher.dispatchAndReturn(this.wclapOpenGui, uuid) }
                 wclapCloseGui(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.wclapCloseGui, uuid) }
+                wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
+                    return dispatcher.dispatchAndReturn(this.wclapResizeGui, uuid, width, height)
+                }
                 wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void { dispatcher.dispatchAndForget(this.wclapReceive, uuid, bytes) }
                 wclapSaveState(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.wclapSaveState, uuid) }
                 wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> { return dispatcher.dispatchAndReturn(this.wclapDescribe, url) }

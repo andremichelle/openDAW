@@ -1,6 +1,6 @@
 // The JS host of a WCLAP plugin: a wasm32 CLAP module with its own memory, run next to the engine per device
 import {isDefined, isNotNull, isNull, Nullable, Optional, Procedure, tryCatch, UUID} from "@opendaw/lib-std"
-import {WclapBundle, WclapGuiInfo, WclapParamGesture, WclapParamInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
+import {WclapBundle, WclapGuiInfo, WclapGuiSize, WclapParamGesture, WclapParamInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
 import {decodeUtf8, encodeUtf8} from "../utf8"
 import {ClapAbi} from "./clap-abi"
 import {trampoline, TrampolineFn} from "./trampoline"
@@ -156,7 +156,7 @@ export class WclapBridges {
 
     // The webview's start page and the size the plugin asks for (clap.gui: create, get_size, set_parent, show)
     openGui(uuid: string): WclapGuiInfo {
-        const none: WclapGuiInfo = {uri: "", width: 0, height: 0}
+        const none: WclapGuiInfo = {uri: "", width: 0, height: 0, resizable: false, aspectRatio: 0}
         const plugin = this.#pluginByUuid(uuid)
         if (!isDefined(plugin) || isNull(plugin.loaded) || plugin.loaded.webview === 0) {return none}
         const loaded = plugin.loaded
@@ -164,7 +164,7 @@ export class WclapBridges {
             const length = this.#call(loaded, loaded.webview + ClapAbi.Webview.GET_URI, loaded.plugin, loaded.uriPtr, URI_CAPACITY)
             if (length <= 0) {return none}
             const uri = this.#cstr(loaded.memory, loaded.uriPtr)
-            const size = {width: 0, height: 0}
+            const size = {width: 0, height: 0, resizable: false, aspectRatio: 0}
             if (loaded.gui !== 0 && !loaded.guiCreated) {
                 const api = this.#alloc(loaded, ClapAbi.Gui.WINDOW_API_WEBVIEW)
                 if (this.#call(loaded, loaded.gui + ClapAbi.Gui.CREATE, loaded.plugin, api, 0) !== 0) {
@@ -173,6 +173,9 @@ export class WclapBridges {
                         size.width = this.#u32(loaded.memory, loaded.sizePtr)
                         size.height = this.#u32(loaded.memory, loaded.sizePtr + 4)
                     }
+                    size.resizable = this.#hasFunction(loaded, loaded.gui + ClapAbi.Gui.CAN_RESIZE)
+                        && this.#call(loaded, loaded.gui + ClapAbi.Gui.CAN_RESIZE, loaded.plugin) !== 0
+                    size.aspectRatio = size.resizable ? this.#aspectRatio(loaded) : 0
                     this.#view(loaded).setUint32(loaded.windowPtr + ClapAbi.Window.API, api, true)
                     this.#view(loaded).setUint32(loaded.windowPtr + ClapAbi.Window.PTR, 0, true)
                     this.#call(loaded, loaded.gui + ClapAbi.Gui.SET_PARENT, loaded.plugin, loaded.windowPtr)
@@ -182,6 +185,39 @@ export class WclapBridges {
             plugin.guiOpen = true
             return {uri, ...size}
         })
+    }
+
+    // clap.gui adjust_size then set_size, answers the size the plugin accepted
+    resizeGui(uuid: string, width: number, height: number): WclapGuiSize {
+        const requested: WclapGuiSize = {width, height}
+        const plugin = this.#pluginByUuid(uuid)
+        if (!isDefined(plugin) || isNull(plugin.loaded) || !plugin.loaded.guiCreated) {return requested}
+        const loaded = plugin.loaded
+        return this.#contain(plugin, requested, () => {
+            const {gui, sizePtr} = loaded
+            if (!this.#hasFunction(loaded, gui + ClapAbi.Gui.SET_SIZE)) {return requested}
+            const view = this.#view(loaded)
+            view.setUint32(sizePtr, Math.max(1, Math.round(width)), true)
+            view.setUint32(sizePtr + 4, Math.max(1, Math.round(height)), true)
+            if (this.#hasFunction(loaded, gui + ClapAbi.Gui.ADJUST_SIZE)) {
+                this.#call(loaded, gui + ClapAbi.Gui.ADJUST_SIZE, loaded.plugin, sizePtr, sizePtr + 4)
+            }
+            const adjusted: WclapGuiSize = {width: this.#u32(loaded.memory, sizePtr), height: this.#u32(loaded.memory, sizePtr + 4)}
+            if (this.#call(loaded, gui + ClapAbi.Gui.SET_SIZE, loaded.plugin, adjusted.width, adjusted.height) !== 0) {return adjusted}
+            if (this.#call(loaded, gui + ClapAbi.Gui.GET_SIZE, loaded.plugin, sizePtr, sizePtr + 4) === 0) {return adjusted}
+            return {width: this.#u32(loaded.memory, sizePtr), height: this.#u32(loaded.memory, sizePtr + 4)}
+        })
+    }
+
+    #aspectRatio(loaded: Loaded): number {
+        const {gui, sizePtr} = loaded
+        if (!this.#hasFunction(loaded, gui + ClapAbi.Gui.GET_RESIZE_HINTS)) {return 0}
+        if (this.#call(loaded, gui + ClapAbi.Gui.GET_RESIZE_HINTS, loaded.plugin, sizePtr) === 0) {return 0}
+        const view = this.#view(loaded)
+        if (view.getUint8(sizePtr + ClapAbi.ResizeHints.PRESERVE_ASPECT_RATIO) === 0) {return 0}
+        const width = view.getUint32(sizePtr + ClapAbi.ResizeHints.ASPECT_RATIO_WIDTH, true)
+        const height = view.getUint32(sizePtr + ClapAbi.ResizeHints.ASPECT_RATIO_HEIGHT, true)
+        return width > 0 && height > 0 ? width / height : 0
     }
 
     // A plugin applies page messages only in process or flush, so flush first when nothing rendered since
@@ -453,7 +489,7 @@ export class WclapBridges {
         loaded.state = this.#extension(loaded, ClapAbi.Ext.STATE)
         loaded.params = this.#extension(loaded, ClapAbi.Ext.PARAMS)
         loaded.uriPtr = malloc(URI_CAPACITY)
-        loaded.sizePtr = malloc(8)
+        loaded.sizePtr = malloc(ClapAbi.ResizeHints.SIZE)
         loaded.windowPtr = malloc(ClapAbi.Window.SIZE)
         this.#loadState(plugin, loaded)
         const audioPorts = this.#extension(loaded, ClapAbi.Ext.AUDIO_PORTS)
@@ -863,6 +899,11 @@ export class WclapBridges {
     }
 
     // `slotPtr` addresses a function-pointer field in plugin memory, its value is an index into the plugin's table
+    #hasFunction(loaded: Loaded, slotPtr: number): boolean {
+        const index = this.#u32(loaded.memory, slotPtr)
+        return index !== 0 && index < loaded.table.length && typeof loaded.table.get(index) === "function"
+    }
+
     #call(loaded: Loaded, slotPtr: number, ...args: Array<number | bigint>): number {
         const index = this.#u32(loaded.memory, slotPtr)
         const fn: unknown = index < loaded.table.length ? loaded.table.get(index) : null

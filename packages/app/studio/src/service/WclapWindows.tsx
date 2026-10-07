@@ -36,6 +36,7 @@ type FrameMessage =
     | { type: "wclap-key", kind: "keydown" | "keyup", init: KeyboardEventInit }
     | { type: "wclap-error", message: string }
 
+
 const isFrameMessage = (data: unknown): data is FrameMessage =>
     typeof data === "object" && data !== null && typeof Object(data).type === "string" && String(Object(data).type).startsWith("wclap-")
 
@@ -80,7 +81,7 @@ export namespace WclapWindows {
         const page = pagePath(gui.uri)
         const width = gui.width > 0 ? gui.width : DEFAULT_SIZE.width
         const height = gui.height > 0 ? gui.height : DEFAULT_SIZE.height
-        const iframe: HTMLIFrameElement = <iframe style={{border: "none", width: `${width}px`, height: `${height}px`}}/>
+        const iframe: HTMLIFrameElement = <iframe style={{border: "none"}}/>
         const frameOrigin = new URL(FRAME_URL, location.href).origin
         const session = new Terminator()
         const saveTimer: { id: Optional<ReturnType<typeof setTimeout>> } = {id: undefined}
@@ -173,7 +174,8 @@ export namespace WclapWindows {
         )
         iframe.src = FRAME_URL
         const handle = FloatingWindow({
-            title, icon: IconSymbol.WebClap, width, height, onClose: () => session.terminate()
+            title, icon: IconSymbol.WebClap, width, height, resizable: gui.resizable, keepAspectRatio: true,
+            adjust: ({width, height}) => engine.wclapResizeGui(uuid, width, height), onClose: () => session.terminate()
         }, iframe)
         windows.set(uuidString, {handle, session})
         changes.notify(uuidString)

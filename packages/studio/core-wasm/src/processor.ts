@@ -27,6 +27,7 @@ import {
     PreferencesClient,
     WclapBundle,
     WclapGuiInfo,
+    WclapGuiSize,
     WclapParamGesture,
     WclapParamInfo,
     WclapPluginInfo,
@@ -231,6 +232,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 panic: (): void => {this.#panic = true},
                 wclapOpenGui: (uuid: UUID.Bytes): Promise<WclapGuiInfo> => Promise.resolve(this.#wclap.openGui(UUID.toString(uuid))),
                 wclapCloseGui: (uuid: UUID.Bytes): void => this.#wclap.closeGui(UUID.toString(uuid)),
+                wclapResizeGui: (uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> =>
+                    Promise.resolve(this.#wclap.resizeGui(UUID.toString(uuid), width, height)),
                 wclapReceive: (uuid: UUID.Bytes, bytes: ArrayBuffer): void =>
                     this.#guarded(() => this.#wclap.receive(UUID.toString(uuid), bytes)),
                 wclapSaveState: (uuid: UUID.Bytes): void => this.#guarded(() => this.#wclap.saveState(UUID.toString(uuid))),

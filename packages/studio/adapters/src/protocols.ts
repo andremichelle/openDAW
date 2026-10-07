@@ -9,7 +9,10 @@ export type MonitoringMapEntry = { uuid: UUID.Bytes, channels: ReadonlyArray<int
 export type WclapBundleFile = { path: string, bytes: Uint8Array<ArrayBuffer> }
 export type WclapBundle = { files: ReadonlyArray<WclapBundleFile> }
 // uri "" = plugin not ready, width/height 0 = the plugin names no size
-export type WclapGuiInfo = { uri: string, width: number, height: number }
+// aspectRatio 0 = free
+export type WclapGuiInfo = { uri: string, width: number, height: number, resizable: boolean, aspectRatio: number }
+// the size the plugin's clap.gui adjust_size accepted
+export type WclapGuiSize = { width: number, height: number }
 // one plugin of a bundle's factory, `features` as CLAP lists them ("instrument", "audio-effect", ...)
 export type WclapPluginInfo = { clapId: string, name: string, vendor: string, features: ReadonlyArray<string> }
 // one clap_param_info of a loaded plugin, values in plain CLAP units, `flags` the clap_param_info_flags bits
@@ -47,6 +50,7 @@ export interface EngineCommands extends Terminable {
     // WCLAP webview relay
     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo>
     wclapCloseGui(uuid: UUID.Bytes): void
+    wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize>
     wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void
     // save the plugin's state now (answered through EngineToClient.wclapState when it changed)
     wclapSaveState(uuid: UUID.Bytes): void

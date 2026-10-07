@@ -34,6 +34,10 @@ component
       overflow: hidden
       text-overflow: ellipsis
 
+    span.reset
+      font-size: 0.75em
+      padding: 0 0.25em
+
   > div.body
     flex: 0 0 auto
     display: flex
@@ -42,3 +46,30 @@ component
 
     > *
       flex: 1
+      min-width: 0
+      min-height: 0
+
+  > div.grip
+    position: absolute
+    touch-action: none
+
+    &.right
+      top: 0
+      right: -3px
+      bottom: 6px
+      width: 6px
+      cursor: ew-resize
+
+    &.bottom
+      left: 0
+      right: 6px
+      bottom: -3px
+      height: 6px
+      cursor: ns-resize
+
+    &.corner
+      right: -3px
+      bottom: -3px
+      width: 9px
+      height: 9px
+      cursor: nwse-resize

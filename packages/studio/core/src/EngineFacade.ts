@@ -21,6 +21,7 @@ import {
     NoteSignal,
     PreferencesFacade,
     WclapGuiInfo,
+    WclapGuiSize,
     WclapPluginInfo,
     WclapStatus
 } from "@opendaw/studio-adapters"
@@ -127,9 +128,12 @@ export class EngineFacade implements Engine {
         this.#worklet.ifSome(worklet => worklet.setFrozenAudio(uuid, audioData))
     }
     wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {
-        return this.#worklet.mapOr(worklet => worklet.wclapOpenGui(uuid), Promise.resolve({uri: "", width: 0, height: 0}))
+        return this.#worklet.mapOr(worklet => worklet.wclapOpenGui(uuid), Promise.resolve({uri: "", width: 0, height: 0, resizable: false, aspectRatio: 0}))
     }
     wclapCloseGui(uuid: UUID.Bytes): void {this.#worklet.ifSome(worklet => worklet.wclapCloseGui(uuid))}
+    wclapResizeGui(uuid: UUID.Bytes, width: number, height: number): Promise<WclapGuiSize> {
+        return this.#worklet.mapOr(worklet => worklet.wclapResizeGui(uuid, width, height), Promise.resolve({width, height}))
+    }
     wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void {
         this.#worklet.ifSome(worklet => worklet.wclapReceive(uuid, bytes))
     }
