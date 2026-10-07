@@ -73,6 +73,11 @@ export const StudioSettingsSchema = z.object({
         "overlapping-regions-behaviour": "clip",
         "show-clipboard-menu": false
     }),
+    "webclap": z.object({
+        "default-zoom": z.number().catch(75)
+    }).default({
+        "default-zoom": 75
+    }),
     "debug": z.object({
         "footer-show-fps-meter": z.boolean(),
         "footer-show-samples-memory": z.boolean(),

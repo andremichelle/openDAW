@@ -66,6 +66,12 @@ export namespace PreferencesPageLabels {
                 "show-clipboard-menu": "Show clipboard menu (Cut, Copy, Paste)"
             }
         },
+        "webclap": {
+            label: "WebCLAP",
+            fields: {
+                "default-zoom": "Default plugin window zoom (25-200%)"
+            }
+        },
         "debug": {
             label: "Debug",
             fields: {

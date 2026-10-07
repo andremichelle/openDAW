@@ -18,6 +18,7 @@ type Construct = {
     width: int
     height: int
     position?: Point
+    scale?: number
     resizable?: boolean
     keepAspectRatio?: boolean
     minWidth?: int
@@ -36,7 +37,7 @@ type ResizeAxis = { x: boolean, y: boolean }
 type Adjusting = { busy: boolean, closed: boolean, next: Nullable<Size> }
 
 export const FloatingWindow = ({
-                                   title, icon, width, height, position, resizable, keepAspectRatio, minWidth, minHeight, adjust,
+                                   title, icon, width, height, position, scale, resizable, keepAspectRatio, minWidth, minHeight, adjust,
                                    onClose
                                }: Construct, children: JsxValue): FloatingWindowHandle => {
     const lifecycle = new Terminator()
@@ -44,12 +45,13 @@ export const FloatingWindow = ({
     const ratio: Optional<number> = keepAspectRatio === true ? width / height : undefined
     const minimum: Size = {width: minWidth ?? 120, height: minHeight ?? 80}
     const adjusting: Adjusting = {busy: false, closed: false, next: null}
-    const fitScale = Math.max(Math.min(1, (window.innerWidth - 32) / width, (window.innerHeight - 64) / height),
+    const initialScale = scale ?? 1
+    const fitScale = Math.max(Math.min(initialScale, (window.innerWidth - 32) / width, (window.innerHeight - 64) / height),
         minimum.width / width, minimum.height / height)
-    const bodyWidth = isDefined(ratio)
-        ? Math.round(width * fitScale) : Math.max(minimum.width, Math.min(width, window.innerWidth - 32))
-    const bodyHeight = isDefined(ratio)
-        ? Math.round(height * fitScale) : Math.max(minimum.height, Math.min(height, window.innerHeight - 64))
+    const bodyWidth = isDefined(ratio) ? Math.round(width * fitScale)
+        : Math.max(minimum.width, Math.min(Math.round(width * initialScale), window.innerWidth - 32))
+    const bodyHeight = isDefined(ratio) ? Math.round(height * fitScale)
+        : Math.max(minimum.height, Math.min(Math.round(height * initialScale), window.innerHeight - 64))
     const size = lifecycle.own(new DefaultObservableValue<Size>({width: bodyWidth, height: bodyHeight}))
     const origin = isDefined(position)
         ? {x: position.x, y: position.y}
@@ -164,5 +166,6 @@ export const FloatingWindow = ({
     body.style.height = `${bodyHeight}px`
     surface.floating.appendChild(element)
     move(origin.x, origin.y)
+    if (isDefined(adjust)) {resize(bodyWidth, bodyHeight)}
     return {size, resetSize, close}
 }
