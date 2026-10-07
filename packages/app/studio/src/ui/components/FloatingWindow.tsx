@@ -41,7 +41,10 @@ type Adjusting = { busy: boolean, closed: boolean, next: Nullable<Size> }
 const stack: Array<HTMLElement> = []
 // below the tour ring (9998), above the chat overlay (5000)
 const STACK_BASE = 9000
-const restack = () => stack.forEach((entry, index) => entry.style.zIndex = `${STACK_BASE + index}`)
+const restack = () => stack.forEach((entry, index) => {
+    entry.style.zIndex = `${STACK_BASE + index}`
+    entry.classList.toggle("inactive", index < stack.length - 1)
+})
 
 export const FloatingWindow = ({
                                    title, icon, width, height, position, scale, resizable, keepAspectRatio, minWidth, minHeight, adjust,
@@ -78,7 +81,7 @@ export const FloatingWindow = ({
             </Button>
         </header>
     )
-    const body: HTMLElement = <div className="body">{children}</div>
+    const body: HTMLElement = <div className="body">{children}<div className="shield"/></div>
     const grips: ReadonlyArray<[HTMLElement, ResizeAxis]> = resizable === false ? [] : [
         [<div className="grip right"/>, {x: true, y: false}],
         [<div className="grip bottom"/>, {x: false, y: true}],

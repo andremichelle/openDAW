@@ -35,8 +35,6 @@ type FrameMessage =
     | { type: "wclap-dblclick", x: number, y: number }
     | { type: "wclap-key", kind: "keydown" | "keyup", init: KeyboardEventInit }
     | { type: "wclap-error", message: string }
-    | { type: "wclap-pointerdown" }
-
 
 const isFrameMessage = (data: unknown): data is FrameMessage =>
     typeof data === "object" && data !== null && typeof Object(data).type === "string" && String(Object(data).type).startsWith("wclap-")
@@ -139,8 +137,6 @@ export namespace WclapWindows {
                 if (isDefined(parameter)) {enterValue(parameter, message.x, message.y)}
             } else if (message.type === "wclap-key") {
                 globalThis.dispatchEvent(new KeyboardEvent(message.kind, message.init))
-            } else if (message.type === "wclap-pointerdown") {
-                windows.get(uuidString)?.handle.toFront()
             } else if (message.type === "wclap-error") {
                 RuntimeNotifier.notify({message: message.message, icon: "Warning"})
             }
