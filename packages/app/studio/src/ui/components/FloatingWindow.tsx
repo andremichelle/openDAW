@@ -30,11 +30,18 @@ type Construct = {
 export interface FloatingWindowHandle {
     readonly size: ObservableValue<Size>
     resetSize(): void
+    toFront(): void
     close(): void
 }
 
 type ResizeAxis = { x: boolean, y: boolean }
 type Adjusting = { busy: boolean, closed: boolean, next: Nullable<Size> }
+
+// z-order by index, never by moving the element (that reloads an embedded iframe)
+const stack: Array<HTMLElement> = []
+// below the tour ring (9998), above the chat overlay (5000)
+const STACK_BASE = 9000
+const restack = () => stack.forEach((entry, index) => entry.style.zIndex = `${STACK_BASE + index}`)
 
 export const FloatingWindow = ({
                                    title, icon, width, height, position, scale, resizable, keepAspectRatio, minWidth, minHeight, adjust,
@@ -62,7 +69,7 @@ export const FloatingWindow = ({
             <span>{title}</span>
             {resizable !== false && (
                 <Button lifecycle={lifecycle} onClick={() => resetSize()}
-                        appearance={{color: Colors.shadow, tooltip: "Original size"}}>
+                        appearance={{color: Colors.shadow, tooltip: "Default size"}}>
                     <Icon symbol={IconSymbol.ZoomFit}/>
                 </Button>
             )}
@@ -130,11 +137,23 @@ export const FloatingWindow = ({
         }, () => adjusting.busy = false)
     }
     const resetSize = () => {
-        move(Math.min(origin.x, window.innerWidth - width), Math.min(origin.y, window.innerHeight - height - header.offsetHeight))
-        resize(width, height)
+        const target: Size = {width: Math.round(width * initialScale), height: Math.round(height * initialScale)}
+        move(Math.min(origin.x, window.innerWidth - target.width),
+            Math.min(origin.y, window.innerHeight - target.height - header.offsetHeight))
+        resize(target.width, target.height)
+    }
+    const toFront = () => {
+        if (stack.at(-1) === element) {return}
+        const index = stack.indexOf(element)
+        if (index !== -1) {stack.splice(index, 1)}
+        stack.push(element)
+        restack()
     }
     const close = () => {
         adjusting.closed = true
+        const index = stack.indexOf(element)
+        if (index !== -1) {stack.splice(index, 1)}
+        restack()
         lifecycle.terminate()
         element.remove()
         safeExecute(onClose)
@@ -157,15 +176,14 @@ export const FloatingWindow = ({
             }
         })
     })))
-    lifecycle.own(Events.subscribe(element, "pointerdown", (event: PointerEvent) => {
-        const onButton = event.target instanceof Element && event.target.closest("[data-class='button']") !== null
-        if (!onButton && surface.floating.lastElementChild !== element) {surface.floating.appendChild(element)}
-    }, {capture: true}))
+    lifecycle.own(Events.subscribe(element, "pointerdown", toFront, {capture: true}))
+    lifecycle.own(Events.subscribe(element, "focusin", toFront))
     lifecycle.own(Events.subscribe(window, "resize", () => move(origin.x, origin.y)))
     body.style.width = `${bodyWidth}px`
     body.style.height = `${bodyHeight}px`
     surface.floating.appendChild(element)
+    toFront()
     move(origin.x, origin.y)
     if (isDefined(adjust)) {resize(bodyWidth, bodyHeight)}
-    return {size, resetSize, close}
+    return {size, resetSize, toFront, close}
 }

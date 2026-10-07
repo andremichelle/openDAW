@@ -76,6 +76,7 @@
     const forwardInput = inner => {
         const target = inner.contentWindow
         if (target === null) {return}
+        target.addEventListener("pointerdown", () => post({type: "wclap-pointerdown"}), {capture: true})
         for (const kind of ["keydown", "keyup"]) {
             target.addEventListener(kind, event => {
                 const element = event.target
@@ -133,6 +134,7 @@
             forwardPointer()
         }
     })
+    window.addEventListener("pointerdown", () => post({type: "wclap-pointerdown"}), {capture: true})
     window.parent.postMessage({type: "wclap-frame-ready"}, "*")
 </script>
 </body>
