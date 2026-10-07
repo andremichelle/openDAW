@@ -17,6 +17,7 @@ import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Icon} from "@/ui/components/Icon"
 import {SearchInput} from "@/ui/components/SearchInput"
 import {installScrollbars} from "@/ui/components/Scrollbars"
+import {ThreeDots} from "@/ui/spinner/ThreeDots.tsx"
 
 const className = Html.adoptStyleSheet(css, "WclapBrowser")
 
@@ -130,12 +131,20 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
                 .map(renderRow))
         }
     }
+    const loads = {generation: 0}
     const refresh = (): void => {
+        const generation = ++loads.generation
+        rows.terminate()
+        replaceChildren(entries, <div><ThreeDots/></div>)
         const load = location.getValue() === AssetLocation.Local ? loadLocal() : loadCloud()
         load.then(root => {
+            if (generation !== loads.generation) {return}
             loaded.root = root
             render()
-        }, reason => replaceChildren(entries, <div className="error">{String(reason)}</div>))
+        }, reason => {
+            if (generation !== loads.generation) {return}
+            replaceChildren(entries, <div className="error" onclick={refresh}>{String(reason)}</div>)
+        })
     }
     lifecycle.ownAll(filter.subscribe(render), location.subscribe(refresh))
     refresh()
