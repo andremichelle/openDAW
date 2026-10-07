@@ -59,7 +59,7 @@ component
         display: flex
 
       &:not(.selectable)
-        color: var(--color-dark)
+        color: color-mix(in srgb, var(--color) 25%, transparent)
         pointer-events: none
 
       > div.header
