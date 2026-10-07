@@ -78,11 +78,11 @@
         if (target === null) {return}
         for (const kind of ["keydown", "keyup"]) {
             target.addEventListener(kind, event => {
-                if (!(event.metaKey || event.ctrlKey)) {return}
                 const element = event.target
                 const tag = typeof element?.tagName === "string" ? element.tagName : ""
                 if (tag === "INPUT" || tag === "TEXTAREA" || element?.isContentEditable === true) {return}
-                event.preventDefault()
+                // plain keys reach the page as well (software keyboard notes play in both), shortcuts only the studio
+                if (event.metaKey || event.ctrlKey) {event.preventDefault()}
                 post({
                     type: "wclap-key", kind,
                     init: {

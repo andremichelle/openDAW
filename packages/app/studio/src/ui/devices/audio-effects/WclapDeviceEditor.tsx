@@ -200,13 +200,16 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             .toSorted((a, b) => byName(a.info, b.info))
     }, EmptyExec)
     const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+        // a cloud plugin picked once is stored too, it stays listed under Cloud only
+        const cloudUrls = new Set(cloud.plugins.map(({uuid}) => WclapStorage.urlOf(uuid)))
+        const local = stored.plugins.filter(({url}) => !cloudUrls.has(url))
         parent.addMenuItem(
             MenuItem.default({label: "Cloud", icon: IconSymbol.CloudFolder, selectable: cloud.plugins.length > 0})
                 .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...cloud.plugins.map(({uuid, info}) =>
                     MenuItem.default({label: labelOf(info), checked: isCurrent(WclapStorage.urlOf(uuid), info)})
                         .setTriggerProcedure(() => useCloud(uuid, info))))),
-            MenuItem.default({label: "Local", icon: IconSymbol.UserFolder, selectable: stored.plugins.length > 0})
-                .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...stored.plugins.map(({url, info}) =>
+            MenuItem.default({label: "Local", icon: IconSymbol.UserFolder, selectable: local.length > 0})
+                .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...local.map(({url, info}) =>
                     MenuItem.default({label: labelOf(info), checked: isCurrent(url, info)})
                         .setTriggerProcedure(() => select(url, info.clapId))))),
             MenuItem.default({label: "Import WebCLAP...", separatorBefore: true})

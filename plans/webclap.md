@@ -304,7 +304,7 @@ included, so they are unlinted. No browser check in this review.
    storage, OPFS and cloud session. Needs the second domain (e.g. `plugins.opendaw.studio`) on the same
    deployment with COOP/COEP/CORP headers, `wclap-frame.html` + `wclap-sw.js` served from it, and the env
    variable in the build.
-2. NOT YET DONE, skipped 2026-10-06. No watchdog. Plugin code runs on the audio thread without a time
+2. NOT YET DONE, skipped 2026-10-06, out of scope for PROD (decided 2026-10-07). No watchdog. Plugin code runs on the audio thread without a time
    limit, an infinite loop silences the whole studio until reload. The instantiate chain (`init`, `activate`,
    state load) and `describe` also run on the audio thread, a heavy plugin drops out the audio while loading.
    Ruled out: a plugin worker behind a SharedArrayBuffer (output must arrive in the same block, no latency).
@@ -400,7 +400,7 @@ The domain needs the same COOP/COEP/CORP headers, serves only `wclap-frame.html`
 build sets `VITE_WCLAP_ORIGIN`. A subdomain is still far better than today's same origin if a second domain
 is not possible.
 
-### To check: switching the plugin of a device with links (2026-10-07)
+### Switching the plugin of a device with links (2026-10-07, TESTED by André in the browser)
 
 Picking another plugin in a WebCLAP device that already has automation, modulation or MIDI learn on its
 parameters. `WclapParameters.reconcile` deletes every `WclapParameterBox` whose clap id the new plugin does

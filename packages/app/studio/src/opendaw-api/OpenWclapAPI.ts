@@ -13,8 +13,8 @@ export class OpenWclapAPI {
 
     // a missing or broken index is an empty catalogue, unlike samples nothing waits for it
     readonly #memoized: () => Promise<WclapIndex> = Promises.memoizeAsync(() =>
-        fetch(`${OpenWclapAPI.IndexFile}?v=${Date.now()}`, {...OpenDAWHeaders, cache: "no-cache"})
-            .then(response => response.ok ? response.json() : Promise.reject(new Error(`${response.status}`)))
+        retryTransient(() => fetch(`${OpenWclapAPI.IndexFile}?v=${Date.now()}`, {...OpenDAWHeaders, cache: "no-cache"})
+            .then(response => response.ok ? response.json() : Promise.reject(new HttpStatus(response.status))), 3)
             .then(json => WclapIndex.schema.parse(json))
             .catch(() => WclapIndex.Empty))
 
@@ -28,9 +28,18 @@ export class OpenWclapAPI {
         return Option.wrap((await this.all()).find(entry => entry.uuid === uuid))
     }
 
-    async load(uuid: string): Promise<ArrayBuffer> {
-        const response = await fetch(`${OpenWclapAPI.FileRoot}/${uuid}.wclap`, OpenDAWHeaders)
-        if (!response.ok) {throw new Error(`WebCLAP bundle ${uuid}: ${response.status}`)}
-        return response.arrayBuffer()
+    // the body is read inside the attempt, a stream the host breaks halfway (HTTP/2 protocol error) is retried too
+    load(uuid: string): Promise<ArrayBuffer> {
+        return retryTransient(() => fetch(`${OpenWclapAPI.FileRoot}/${uuid}.wclap`, OpenDAWHeaders)
+            .then(response => response.ok ? response.arrayBuffer() : Promise.reject(new HttpStatus(response.status))), 4)
     }
 }
+
+class HttpStatus extends Error {
+    constructor(readonly status: number) {super(`HTTP ${status}`)}
+}
+
+// network failures and 5xx are worth another attempt, a 4xx answer will not change
+const retryTransient = <T>(factory: () => Promise<T>, attempts: number): Promise<T> =>
+    Promises.guardedRetry(factory, (error, count) =>
+        count < attempts && !(error instanceof HttpStatus && error.status < 500))

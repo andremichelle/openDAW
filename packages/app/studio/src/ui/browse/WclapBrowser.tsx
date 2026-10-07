@@ -25,14 +25,15 @@ type Construct = {
     service: StudioService
 }
 
-type Entry = { id: string, name: string, type: string, vendor: string, size: number, local: boolean }
+type Entry = { id: string, name: string, type: string, vendor: string, license: string, size: number, local: boolean }
 
 const {describe, kindOf, shortKind} = WclapDescriber
 
 const location = new DefaultObservableValue(AssetLocation.OpenDAW)
 
-const toEntry = (id: string, size: number, local: boolean, plugins: ReadonlyArray<WclapPluginInfo>): Entry => ({
-    id, size, local,
+const toEntry = (id: string, size: number, local: boolean, license: string,
+                 plugins: ReadonlyArray<WclapPluginInfo>): Entry => ({
+    id, size, local, license,
     name: plugins.length === 0 ? `Unknown bundle ${id.substring(0, 8)}` : plugins.map(({name}) => name).join(", "),
     type: Array.from(new Set(plugins.map(plugin => shortKind(kindOf(plugin))))).join("/"),
     vendor: plugins.at(0)?.vendor ?? ""
@@ -43,13 +44,15 @@ const expandedKeys = new Set<string>()
 const byName = (a: Entry, b: Entry): number => StringComparator(a.name.toLowerCase(), b.name.toLowerCase())
 
 const loadLocal = async (): Promise<ResourceFolder<Entry>> => {
-    const ids = await WclapStorage.list()
+    const [ids, cloud] = await Promise.all([WclapStorage.list(), OpenWclapAPI.get().all()])
+    // a bundle imported from disk carries no license we know of, one from the cloud carries the published one
+    const licenses = new Map(cloud.map(({uuid, license}) => [uuid, license]))
     const items = await Promise.all(ids.map(async id => {
         const [archive, plugins] = await Promise.all([
             WclapStorage.loadId(id),
             describe(WclapStorage.urlOf(id)).catch(() => [])
         ])
-        return toEntry(id, archive.byteLength, true, plugins)
+        return toEntry(id, archive.byteLength, true, licenses.get(id) ?? "", plugins)
     }))
     return {name: "", folders: [], items: items.toSorted(byName)}
 }
@@ -59,7 +62,7 @@ const loadCloud = async (): Promise<ResourceFolder<Entry>> => {
     const toFolder = (folder: WclapIndexFolder): ResourceFolder<Entry> => ({
         name: folder.name,
         folders: folder.folders?.map(toFolder) ?? [],
-        items: folder.wclaps?.map(({uuid, size, plugins}) => toEntry(uuid, size, false, plugins)) ?? []
+        items: folder.wclaps?.map(({uuid, size, license, plugins}) => toEntry(uuid, size, false, license, plugins)) ?? []
     })
     return {name: "", folders: (await OpenWclapAPI.get().tree()).folders.map(toFolder), items: []}
 }
@@ -88,6 +91,7 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
                 <span className="name"><Icon symbol={IconSymbol.WebClap}/>{entry.name}</span>
                 <span>{entry.type}</span>
                 <span>{entry.vendor}</span>
+                <span>{entry.license.length > 0 ? entry.license : "-"}</span>
                 <span className="right">{Bytes.toString(entry.size)}</span>
             </div>
         )
@@ -148,6 +152,7 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
                 <span>Plugins</span>
                 <span>Type</span>
                 <span>Vendor</span>
+                <span>License</span>
                 <span className="right">Size</span>
             </header>
             <div className="content">{entries}</div>
