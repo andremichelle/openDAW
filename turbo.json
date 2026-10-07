@@ -3,7 +3,8 @@
   "globalEnv": [
     "CI",
     "BRANCH_NAME",
-    "DEPLOY_ENV"
+    "DEPLOY_ENV",
+    "VITE_WCLAP_ORIGIN"
   ],
   "tasks": {
     "build": {

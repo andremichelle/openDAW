@@ -8,6 +8,7 @@ import {TemplateBrowser} from "@/project/TemplateBrowser"
 import {Dialogs} from "@/ui/components/dialogs"
 import {SampleBrowser} from "@/ui/browse/SampleBrowser"
 import {SoundfontBrowser} from "@/ui/browse/SoundfontBrowser"
+import {WclapBrowser} from "@/ui/browse/WclapBrowser"
 import {StudioService} from "@/service/StudioService"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {Colors} from "@opendaw/studio-enums"
@@ -15,7 +16,7 @@ import {DemoProjectsList} from "@/ui/dashboard/DemoProjectsList"
 
 const className = Html.adoptStyleSheet(css, "Resources")
 
-const enum Scope { Projects, Templates, Demos, Samples, Soundfonts }
+const enum Scope { Projects, Templates, Demos, Samples, Soundfonts, WebClap }
 
 type Construct = {
     lifecycle: Lifecycle
@@ -35,7 +36,8 @@ export const Resources = ({lifecycle, service}: Construct) => {
                             {value: Scope.Templates, element: (<h3>Templates</h3>)},
                             {value: Scope.Demos, element: (<h3>Demos</h3>)},
                             {value: Scope.Samples, element: (<h3>Samples</h3>)},
-                            {value: Scope.Soundfonts, element: (<h3>Soundfonts</h3>)}
+                            {value: Scope.Soundfonts, element: (<h3>Soundfonts</h3>)},
+                            {value: Scope.WebClap, element: (<h3>WebCLAP</h3>)}
                         ]}/>
             <div className="content" onInit={element => {
                 const scopeLifeCycle = lifecycle.own(new Terminator())
@@ -96,6 +98,11 @@ export const Resources = ({lifecycle, service}: Construct) => {
                         case Scope.Soundfonts:
                             replaceChildren(element, (
                                 <SoundfontBrowser lifecycle={scopeLifeCycle} service={service}/>
+                            ))
+                            break
+                        case Scope.WebClap:
+                            replaceChildren(element, (
+                                <WclapBrowser lifecycle={scopeLifeCycle} service={service}/>
                             ))
                             break
                     }

@@ -26,6 +26,7 @@ export namespace DeviceManualUrls {
     export const Revamp = "manuals/devices/audio/revamp"
     export const Modular = "manuals/devices/audio/modular"
     export const NeuralAmp = "manuals/devices/audio/neural-amp"
+    export const Wclap = "manuals/devices/audio/wclap"
     export const Vocoder = "manuals/devices/audio/vocoder"
     export const Waveshaper = "manuals/devices/audio/waveshaper"
     export const Werkstatt = "manuals/devices/audio/werkstatt"

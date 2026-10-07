@@ -102,6 +102,8 @@ export const DEVICES: ReadonlyArray<{ url: string, boxType: string }> = [
     {url: "/wasm/plugins/device_cubed.wasm", boxType: "CubedDeviceBox"},   // instrument (303-style bassline)
     {url: "/wasm/plugins/device_vocoder.wasm", boxType: "VocoderDeviceBox"},   // audio effect (channel vocoder + sidechain)
     {url: "/wasm/plugins/device_neural_amp.wasm", boxType: "NeuralAmpDeviceBox"}, // audio effect (NAM, via the nam bridge)
+    {url: "/wasm/plugins/device_wclap.wasm", boxType: "WclapDeviceBox"}, // audio effect (CLAP plugin, via the wclap bridge)
+    {url: "/wasm/plugins/device_wclap_instrument.wasm", boxType: "WclapInstrumentBox"}, // instrument (CLAP plugin, via the wclap bridge)
     {url: "/wasm/plugins/device_autotune.wasm", boxType: "AutotuneDeviceBox"}, // audio effect (pitch correction, PSOLA)
     {url: "/wasm/plugins/device_playfield_sample.wasm", boxType: "PlayfieldSampleBox"} // composite child (one Playfield slot)
 ]

@@ -16,35 +16,42 @@ export const attachParameterContextMenu = <T extends PrimitiveValues>(editing: E
                                                                       parameter: AutomatableParameterFieldAdapter<T>,
                                                                       element: Element,
                                                                       disableAutomation?: boolean) =>
-    ContextMenu.subscribe(element, collector => {
-        const field = parameter.field
-        const automation = tracks.controls(field)
-        collector.addItems(
-            automation.isEmpty()
-                ? MenuItem.default({label: "Create Automation", hidden: disableAutomation})
-                    .setTriggerProcedure(() => editing.modify(() => {
-                        if (parameter.track.nonEmpty()) {return}
-                        tracks.create(TrackType.Value, field)
-                    }))
-                : MenuItem.default({label: "Remove Automation", hidden: disableAutomation})
-                    .setTriggerProcedure(() => editing.modify(() =>
-                        parameter.track.ifSome(track => tracks.delete(track)))),
-            modulationMenu(editing, parameter),
-            MenuItem.default({
-                label: midiDevices.hasMidiConnection(field.address)
-                    ? "Forget Midi"
-                    : "Learn Midi Control..."
-            }).setTriggerProcedure(() => {
-                if (midiDevices.hasMidiConnection(field.address)) {
-                    midiDevices.forgetMidiConnection(field.address)
-                } else {
-                    midiDevices.learnMIDIControls(field).then()
-                }
-            }),
-            MenuItem.default({label: "Reset Value", checked: field.getValue() === field.initValue})
-                .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
-        )
-    })
+    ContextMenu.subscribe(element, collector =>
+        collector.addItems(...parameterContextItems(editing, midiDevices, tracks, parameter, disableAutomation)))
+
+export const parameterContextItems = <T extends PrimitiveValues>(editing: Editing,
+                                                             midiDevices: MIDILearning,
+                                                             tracks: AudioUnitTracks,
+                                                             parameter: AutomatableParameterFieldAdapter<T>,
+                                                             disableAutomation?: boolean): ReadonlyArray<MenuItem> => {
+    const field = parameter.field
+    const automation = tracks.controls(field)
+    return [
+        automation.isEmpty()
+            ? MenuItem.default({label: "Create Automation", hidden: disableAutomation})
+                .setTriggerProcedure(() => editing.modify(() => {
+                    if (parameter.track.nonEmpty()) {return}
+                    tracks.create(TrackType.Value, field)
+                }))
+            : MenuItem.default({label: "Remove Automation", hidden: disableAutomation})
+                .setTriggerProcedure(() => editing.modify(() =>
+                    parameter.track.ifSome(track => tracks.delete(track)))),
+        modulationMenu(editing, parameter),
+        MenuItem.default({
+            label: midiDevices.hasMidiConnection(field.address)
+                ? "Forget Midi"
+                : "Learn Midi Control..."
+        }).setTriggerProcedure(() => {
+            if (midiDevices.hasMidiConnection(field.address)) {
+                midiDevices.forgetMidiConnection(field.address)
+            } else {
+                midiDevices.learnMIDIControls(field).then()
+            }
+        }),
+        MenuItem.default({label: "Reset Value", checked: field.getValue() === field.initValue})
+            .setTriggerProcedure(() => editing.modify(() => parameter.reset()))
+    ]
+}
 
 /// The lane owner is the modulator itself, registered when its parameters were created.
 const modulatorParameterItems = <T extends PrimitiveValues>(editing: Editing,

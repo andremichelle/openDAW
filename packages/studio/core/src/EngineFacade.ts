@@ -19,7 +19,10 @@ import {
     EngineSettings,
     EngineSettingsSchema,
     NoteSignal,
-    PreferencesFacade
+    PreferencesFacade,
+    WclapGuiInfo,
+    WclapPluginInfo,
+    WclapStatus
 } from "@opendaw/studio-adapters"
 import {AudioContexts} from "./AudioContexts"
 import {Engine, RecordingStart} from "./Engine"
@@ -123,6 +126,17 @@ export class EngineFacade implements Engine {
     setFrozenAudio(uuid: UUID.Bytes, audioData: Nullable<AudioData>): void {
         this.#worklet.ifSome(worklet => worklet.setFrozenAudio(uuid, audioData))
     }
+    wclapOpenGui(uuid: UUID.Bytes): Promise<WclapGuiInfo> {
+        return this.#worklet.mapOr(worklet => worklet.wclapOpenGui(uuid), Promise.resolve({uri: "", width: 0, height: 0}))
+    }
+    wclapCloseGui(uuid: UUID.Bytes): void {this.#worklet.ifSome(worklet => worklet.wclapCloseGui(uuid))}
+    wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void {
+        this.#worklet.ifSome(worklet => worklet.wclapReceive(uuid, bytes))
+    }
+    wclapSaveState(uuid: UUID.Bytes): void {this.#worklet.ifSome(worklet => worklet.wclapSaveState(uuid))}
+    wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {
+        return this.#worklet.mapOr(worklet => worklet.wclapDescribe(url), Promise.resolve([]))
+    }
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeClipNotification").subscribeClipNotification(observer)
     }
@@ -146,6 +160,9 @@ export class EngineFacade implements Engine {
     }
     subscribeDeviceMessage(uuid: string, listener: Procedure<string>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeDeviceMessage").subscribeDeviceMessage(uuid, listener)
+    }
+    subscribeWclapStatus(uuid: string, listener: Procedure<WclapStatus>): Subscription {
+        return this.#worklet.unwrap("No worklet to subscribeWclapStatus").subscribeWclapStatus(uuid, listener)
     }
     registerMonitoringSource(uuid: UUID.Bytes, node: AudioNode, numChannels: 1 | 2, destinationNode: AudioNode): void {
         this.#worklet.ifSome(worklet => worklet.registerMonitoringSource(uuid, node, numChannels, destinationNode))

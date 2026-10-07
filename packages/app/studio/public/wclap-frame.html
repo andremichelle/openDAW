@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebCLAP</title>
+    <style>
+        html, body {margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000}
+        iframe {display: block; border: none; width: 100%; height: 100%}
+        p {margin: 1em; color: #999; font: 12px sans-serif}
+    </style>
+</head>
+<body>
+<script>
+    // host frame on the plugin origin: owns the service worker, embeds the page, relays messages and keys
+    const MIME = {
+        html: "text/html", js: "text/javascript", mjs: "text/javascript", css: "text/css", json: "application/json",
+        wasm: "application/wasm", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+        svg: "image/svg+xml", webp: "image/webp", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", txt: "text/plain"
+    }
+    const files = new Map()
+    const state = {studio: null, origin: "*", uuid: "", pageDirectory: "", inner: null, pointer: false}
+
+    const post = message => {if (state.studio !== null) {state.studio.postMessage(message, state.origin)}}
+    const fail = message => {
+        document.body.replaceChildren(Object.assign(document.createElement("p"), {textContent: message}))
+        post({type: "wclap-error", message})
+    }
+
+    const resolve = path => {
+        const clean = path.split("?")[0].replace(/^\/+/, "")
+        const file = files.get(clean) ?? files.get(`${state.pageDirectory}${clean}`)
+        if (file === undefined) {return null}
+        const extension = clean.split(".").pop()?.toLowerCase() ?? ""
+        return {bytes: file.slice(), type: MIME[extension] ?? "application/octet-stream"}
+    }
+
+    const registerWorker = async () => {
+        if (!("serviceWorker" in navigator)) {throw new Error("service workers are not available")}
+        const registration = await navigator.serviceWorker.register("./wclap-sw.js", {scope: "./wclap/"})
+        const worker = registration.active ?? registration.waiting ?? registration.installing
+        if (worker === null) {throw new Error("service worker registration has no worker")}
+        await new Promise((resolve, reject) => {
+            if (worker.state === "activated") {resolve(); return}
+            worker.addEventListener("statechange", () => {
+                if (worker.state === "activated") {resolve()}
+                if (worker.state === "redundant") {reject(new Error("service worker became redundant"))}
+            })
+        })
+        navigator.serviceWorker.addEventListener("message", event => {
+            const data = event.data
+            const port = event.ports[0]
+            if (!port || data?.type !== "wclap-resource" || data.uuid !== state.uuid) {return}
+            const resource = resolve(data.path)
+            if (resource === null) {port.postMessage(null)} else {port.postMessage(resource, [resource.bytes.buffer])}
+        })
+        worker.postMessage({type: "wclap-host"})
+    }
+
+    // only once the plugin reported clap.param-hovered, otherwise the page keeps its own behaviour
+    const forwardPointer = () => {
+        const target = state.inner?.contentWindow
+        if (!state.pointer || !target || target.__wclapPointer) {return}
+        target.__wclapPointer = true
+        target.addEventListener("contextmenu", event => {
+            event.preventDefault()
+            event.stopPropagation()
+            post({type: "wclap-contextmenu", x: event.clientX, y: event.clientY})
+        }, {capture: true})
+        target.addEventListener("dblclick", event => {
+            event.preventDefault()
+            event.stopPropagation()
+            post({type: "wclap-dblclick", x: event.clientX, y: event.clientY})
+        }, {capture: true})
+    }
+
+    const forwardInput = inner => {
+        const target = inner.contentWindow
+        if (target === null) {return}
+        for (const kind of ["keydown", "keyup"]) {
+            target.addEventListener(kind, event => {
+                const element = event.target
+                const tag = typeof element?.tagName === "string" ? element.tagName : ""
+                if (tag === "INPUT" || tag === "TEXTAREA" || element?.isContentEditable === true) {return}
+                // plain keys reach the page as well (software keyboard notes play in both), shortcuts only the studio
+                if (event.metaKey || event.ctrlKey) {event.preventDefault()}
+                post({
+                    type: "wclap-key", kind,
+                    init: {
+                        key: event.key, code: event.code, metaKey: event.metaKey, ctrlKey: event.ctrlKey,
+                        shiftKey: event.shiftKey, altKey: event.altKey, repeat: event.repeat
+                    }
+                })
+            }, {capture: true})
+        }
+    }
+
+    const open = async ({uuid, page, files: list}) => {
+        state.uuid = uuid
+        const path = page.split("?")[0]
+        state.pageDirectory = path.includes("/") ? path.substring(0, path.lastIndexOf("/") + 1) : ""
+        files.clear()
+        for (const {path, bytes} of list) {files.set(path, bytes)}
+        await registerWorker()
+        const inner = document.createElement("iframe")
+        inner.addEventListener("load", () => {
+            forwardInput(inner)
+            forwardPointer()
+        })
+        inner.src = `./wclap/${uuid}/${page}`
+        state.inner = inner
+        document.body.replaceChildren(inner)
+    }
+
+    window.addEventListener("message", event => {
+        const inner = state.inner
+        if (inner !== null && event.source === inner.contentWindow) {
+            const data = event.data
+            const bytes = data instanceof ArrayBuffer ? data
+                : ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
+            if (bytes !== null) {post({type: "wclap-message", bytes})}
+            return
+        }
+        if (event.source !== window.parent) {return}
+        const data = event.data
+        if (data?.type === "wclap-open") {
+            state.studio = event.source
+            state.origin = event.origin
+            open(data).catch(error => fail(`The plugin page could not start: ${error.message ?? error}`))
+        } else if (data?.type === "wclap-message" && inner !== null && inner.contentWindow !== null) {
+            inner.contentWindow.postMessage(data.bytes, "*")
+        } else if (data?.type === "wclap-pointer-enable") {
+            state.pointer = true
+            forwardPointer()
+        }
+    })
+    window.parent.postMessage({type: "wclap-frame-ready"}, "*")
+</script>
+</body>
+</html>

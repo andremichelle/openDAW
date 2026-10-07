@@ -9,7 +9,8 @@ import {
     PlayfieldDeviceBox,
     SoundfontDeviceBox,
     TapeDeviceBox,
-    VaporisateurDeviceBox
+    VaporisateurDeviceBox,
+    WclapInstrumentBox
 } from "@opendaw/studio-boxes"
 
 export type InstrumentBox =
@@ -18,6 +19,7 @@ export type InstrumentBox =
     | TapeDeviceBox
     | VaporisateurDeviceBox
     | NeonDeviceBox
+    | WclapInstrumentBox
     | TubularDeviceBox
     | NanoDeviceBox
     | PlayfieldDeviceBox

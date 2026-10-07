@@ -1,5 +1,5 @@
 import css from "./FloatingWindow.sass?inline"
-import {clamp, Exec, int, Option, Point, safeExecute, Terminator} from "@opendaw/lib-std"
+import {clamp, Exec, int, isDefined, Option, Point, safeExecute, Terminator} from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Dragging, Events, Html} from "@opendaw/lib-dom"
 import {Button} from "@/ui/components/Button.tsx"
@@ -12,6 +12,7 @@ const className = Html.adoptStyleSheet(css, "FloatingWindow")
 
 type Construct = {
     title: string
+    icon?: IconSymbol
     width: int
     height: int
     position?: Point
@@ -22,12 +23,17 @@ export interface FloatingWindowHandle {
     close(): void
 }
 
-export const FloatingWindow = ({title, width, height, position, onClose}: Construct, children: JsxValue): FloatingWindowHandle => {
+export const FloatingWindow = ({title, icon, width, height, position, onClose}: Construct, children: JsxValue): FloatingWindowHandle => {
     const lifecycle = new Terminator()
     const surface = Surface.get()
-    const origin = position ?? {x: (window.innerWidth - width) * 0.5, y: (window.innerHeight - height) * 0.5}
+    const bodyWidth = Math.min(width, window.innerWidth - 32)
+    const bodyHeight = Math.min(height, window.innerHeight - 64)
+    const origin = isDefined(position)
+        ? {x: position.x, y: position.y}
+        : {x: (window.innerWidth - bodyWidth) * 0.5, y: (window.innerHeight - bodyHeight) * 0.5}
     const header: HTMLElement = (
         <header>
+            {isDefined(icon) && <Icon symbol={icon}/>}
             <span>{title}</span>
             <Button lifecycle={lifecycle} onClick={() => close()} appearance={{color: Colors.shadow, tooltip: "Close"}}>
                 <Icon symbol={IconSymbol.Close}/>
@@ -35,15 +41,15 @@ export const FloatingWindow = ({title, width, height, position, onClose}: Constr
         </header>
     )
     const element: HTMLElement = (
-        <div className={className} style={{width: `${width}px`, height: `${height}px`}}>
+        <div className={className}>
             {header}
-            <div className="body">{children}</div>
+            <div className="body" style={{width: `${bodyWidth}px`, height: `${bodyHeight}px`}}>{children}</div>
         </div>
     )
     Layers.install(element)
     const move = (x: number, y: number) => {
-        origin.x = clamp(x, 0, window.innerWidth - width)
-        origin.y = clamp(y, 0, window.innerHeight - header.clientHeight)
+        origin.x = clamp(x, 0, Math.max(0, window.innerWidth - element.offsetWidth))
+        origin.y = clamp(y, 0, Math.max(0, window.innerHeight - header.offsetHeight))
         element.style.left = `${origin.x}px`
         element.style.top = `${origin.y}px`
     }
@@ -63,7 +69,7 @@ export const FloatingWindow = ({title, width, height, position, onClose}: Constr
         if (!onButton && surface.floating.lastElementChild !== element) {surface.floating.appendChild(element)}
     }, {capture: true}))
     lifecycle.own(Events.subscribe(window, "resize", () => move(origin.x, origin.y)))
-    move(origin.x, origin.y)
     surface.floating.appendChild(element)
+    move(origin.x, origin.y)
     return {close}
 }

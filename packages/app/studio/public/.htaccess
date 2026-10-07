@@ -1,6 +1,12 @@
 # Enable Brotli Compression for supported files, only if they exist
 RewriteEngine On
 
+# The WebCLAP plugin origin serves the host frame and its service worker scope only, not the studio
+RewriteCond %{HTTP_HOST} ^(www\.)?opendaw-plugins\.studio$ [NC]
+RewriteCond %{REQUEST_URI} !/(wclap-frame\.html|wclap-sw\.js)$ [NC]
+RewriteCond %{REQUEST_URI} !/wclap/ [NC]
+RewriteRule ^ - [F,L]
+
 # Serve .br files if the client supports Brotli
 RewriteCond %{HTTP:Accept-Encoding} br
 RewriteCond %{REQUEST_FILENAME}.br -f
