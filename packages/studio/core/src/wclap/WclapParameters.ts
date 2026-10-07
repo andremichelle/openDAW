@@ -61,10 +61,12 @@ export namespace WclapParameters {
     const IS_READONLY = 1 << 3
     const isAutomatable = ({flags}: WclapParamInfo): boolean => (flags & (IS_HIDDEN | IS_READONLY)) === 0
 
-    // every client derives the same uuid, so engines reporting at once in a live room create one box
+    // every client derives the same uuid, so engines reporting at once in a live room create one box. The last
+    // byte is always flipped, else clap id 0 would hand out the device's own uuid.
     const parameterUuid = (deviceUuid: UUID.Bytes, clapId: number): UUID.Bytes => {
         const bytes = new Uint8Array(deviceUuid)
         new DataView(bytes.buffer).setUint32(0, new DataView(bytes.buffer).getUint32(0) ^ clapId)
+        bytes[15] ^= 0xA5
         return bytes
     }
 

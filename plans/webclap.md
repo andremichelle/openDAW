@@ -319,7 +319,8 @@ included, so they are unlinted. No browser check in this review.
 
 4. FIXED 2026-10-06. Shared projects (YSync): engines reporting the parameters at once created every
    `WclapParameterBox` twice (`UUID.generate()`). Parameter box uuids are now derived from the device uuid
-   XOR the clap id, so peers create the same box. Concurrent `state` writes were fine (last write wins, the
+   XOR the clap id, so peers create the same box. 2026-10-07: clap id 0 (Slide) produced the device's own
+   uuid ("already staged"), the last byte is now always flipped too. Concurrent `state` writes were fine (last write wins, the
    bridge does not echo a loaded state). Test: `core/src/wclap/WclapParameters.collab.test.ts`.
 5. FIXED 2026-10-06 for live rooms. `opfs:` bundles existed only on the machine that stored them. The p2p
    asset path now carries a fourth type `wclap` (raw `.tar.gz`, no zip): `AssetReader.hasWclap/readWclap`,
@@ -398,6 +399,82 @@ Use a separate registrable domain, not a subdomain of `opendaw.studio`, `opendaw
 The domain needs the same COOP/COEP/CORP headers, serves only `wclap-frame.html` and `wclap-sw.js`, and the
 build sets `VITE_WCLAP_ORIGIN`. A subdomain is still far better than today's same origin if a second domain
 is not possible.
+
+### To check: switching the plugin of a device with links (2026-10-07)
+
+Picking another plugin in a WebCLAP device that already has automation, modulation or MIDI learn on its
+parameters. `WclapParameters.reconcile` deletes every `WclapParameterBox` whose clap id the new plugin does
+not have, and those boxes are the targets of automation tracks, modulation and MIDI learn. Check with a
+test first, then decide:
+- whether deleting the parameter boxes takes the automation tracks, regions and modulation connections with
+  them, leaves them dangling (a validation panic), or keeps them pointing at nothing
+- whether undo of the plugin switch brings the parameter boxes and their links back intact
+- what the user should get: a confirm dialog naming what will be lost, keeping links for clap ids both
+  plugins share (same plugin, new version), or moving links to the new plugin where ids match
+- the same for a plugin update that drops or renumbers parameter ids (`params.rescan`)
+
+### openDAW cloud plugins (planned 2026-10-07)
+
+Goal: the WebCLAP bundles we may redistribute live in the openDAW cloud, next to the stock samples and
+soundfonts, instead of the mutable GitHub urls the Examples menu used.
+
+- Hosting: `assets.opendaw.studio/wclaps/<id>.tar.gz` plus `assets.opendaw.studio/wclaps/index.json`.
+  `<id>` is the same content id as everywhere else (`UUID.sha256` of the archive), so a cloud plugin picked
+  in a project is stored as `opfs:<id>` like any other bundle.
+- Index: the same folder tree as samples and soundfonts, `{version: 1, updatedAt, folders: [{name, folders?,
+  wclaps?: [{uuid, name, size, url, license, plugins: [{clapId, name, vendor, features}]}]}]}`. `uuid` is the
+  content id, `url` the source the bundle came from. Plugin names come from the describer at upload time, so
+  the studio lists them without downloading anything.
+- Only redistributable bundles (MIT/ISC, checked per bundle): Signalsmith Basics (6 plugins), Charlie
+  Culbert's Slide, MNO, Tapa (ISC, per the char-wclaps README, the repo's MIT covers only its metadata) and
+  the Surge team's Clap Saw Demo (MIT). Not hosted: Pro54 (Cmajor example, GPLv3/commercial, a port of
+  Native Instruments' Pro-53).
+- Uploading and curating happens in the admin tool (`admin.opendaw.studio`, its own repo), which gains two
+  catalogues beside Samples: Soundfonts and WebCLAP. Its `AdminApi` and PHP already take a `catalogue`
+  parameter. Per catalogue: an entry model, rows and columns, an upload path (WebCLAP: hash, describe with
+  `createWclapDescriber`, store `wclaps/<uuid>.tar.gz`), delete, and a header switch.
+- Loading: `WclapStorage.load` asks OPFS, then the cloud (when the index lists the id), then a peer in a live
+  room. A project with a cloud plugin opens on any machine, no backup needed.
+- Dashboard tab: a cloud / user filter like the sample and soundfont browsers. Cloud lists the index (no
+  delete), user lists OPFS (with "Delete Forever…").
+- Device editor: the Examples button and the user-folder button make way for one dropdown like the
+  soundfont editor: "Cloud" (cloud icon) and "Local" (user-folder icon) submenus with the plugins of the
+  device's kind, and "Import WebCLAP..." (the former Browse button).
+- Status 2026-10-07: studio side DONE (tsc + tests, not browser-verified): `opendaw-api/WclapIndex.ts` +
+  `OpenWclapAPI.ts` (a missing index is an empty catalogue, no endless retry), load chain OPFS → cloud →
+  peer in `boot.ts`, tab filter, editor dropdown "Select Plugin". Admin catalogues next (new `soundfonts` and
+  `wclaps` tables).
+- The live soundfont index (`assets.opendaw.studio/soundfonts/index.json`, read by every studio) must not
+  break. Rules for the admin work:
+  1. The published shape stays byte-compatible with `SoundfontIndex` in the studio: leaf key `soundfonts`,
+     entries `{uuid, name, size, url, license}`, nothing added or renamed.
+  2. The admin's boot reconcile drops every index entry the database does not know. With a new, empty
+     `soundfonts` table that would empty the catalogue on the next publish. So the table is seeded from the
+     live index first (a migration that reads `index.json` and inserts every entry), and reconcile refuses
+     to run, with a message, while the table is empty.
+  3. The soundfont files on the asset host are never moved or renamed, the table only describes them.
+  4. Before the first soundfont publish, the published file is compared against the live one: only the
+     intended differences, otherwise no publish. `publish-index.php` keeps the previous file as
+     `index.<timestamp>.json`, which is the rollback.
+- Status 2026-10-07: admin catalogues built, UNCOMMITTED in `admin.opendaw.studio` (tsc + vite build green,
+  not run against PHP or the database). `sql/catalogues.sql`, endpoints `list-catalogue.php`,
+  `upload-asset.php` (checks the content id), `update-asset.php`, `delete-asset.php`,
+  `seed-soundfonts.php`, `publish-index.php` with per-catalogue leaf keys, `src/model/Catalogue.ts`, header
+  switch, `AssetRow`, `AssetEditor`, `AssetUploadDialog`, `WclapDescribe` (copy). Verified: the live sample
+  index (1062 entries) + trash and the live soundfont index (7) round-trip identically through the new model.
+  The reconcile refuses to run on an empty table next to a published index and offers the soundfont seed.
+- FIXED 2026-10-07: cloud downloads failed "does not match its id". Apache served `.tar.gz` as
+  `Content-Type: application/x-tar` + `Content-Encoding: gzip`, so `fetch` unpacked it and the studio hashed
+  the raw tar. The host adds that encoding at server level (`RemoveEncoding` and `Header unset` in
+  `wclaps/.htaccess` had no effect), so bundles are now stored as `wclaps/<uuid>.wclap`: the admin uploads
+  under that name and renames old `*.tar.gz` on publish (`migrate_bundle_extension`), `OpenWclapAPI.load`
+  requests `.wclap`. The two `.htaccess` blocks on the server are dead, remove them by hand.
+- The admin carries a minimal copy of the describer (WASI shim + descriptor walk) because the published
+  `@opendaw/studio-core-wasm` (0.0.18) predates `createWclapDescriber`. TODO after the next SDK publish:
+  replace the copy with `createWclapDescriber` from the package and delete it.
+- WebCLAP ids in the admin use the lib-std rule (`UUID.sha256`: first 16 digest bytes with the version-4
+  and variant bits set). The admin's `SampleUpload.hashUuid` takes the raw digest, so its sample ids differ
+  from what the studio computes for the same file. Samples are left as they are, to be decided separately.
 
 ### SDK impact
 

@@ -7,7 +7,7 @@ component
     display: grid
     grid-template-columns: subgrid
     grid-column: span 4
-    padding-left: 6px
+    padding-left: calc(6px + var(--indent, 0px))
     color: var(--color-dark)
     align-items: center
 
@@ -31,6 +31,22 @@ component
           color: var(--color-shadow)
 
       &.right
+        text-align: right
+
+  // the folder rows carry two dashes for three-column lists, this one has four: Type, Vendor (added) and Size
+  div.folder-header
+    &::after
+      content: "-"
+      grid-row: 1
+      grid-column: 3
+
+    > span.right
+      grid-row: 1
+      grid-column: 2
+      text-align: left
+
+      &:last-child
+        grid-column: 4
         text-align: right
 
   div.empty

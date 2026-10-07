@@ -107,6 +107,17 @@ describe("WclapParameters in a live room", () => {
         expect(owner.project.boxGraph.checksum()).toStrictEqual(guest.project.boxGraph.checksum())
     })
 
+    // Slide numbers its parameters from 0, and a derivation that leaves id 0 unchanged hands out the device's uuid
+    it("creates a parameter with clap id 0 without colliding with the device", async () => {
+        const {peer: owner, deviceUuid} = await createOwner()
+        const params = [0, 1, 0xFFFFFFFF].map(id => ({...PARAMS[0], id, name: `p${id}`}))
+        WclapParameters.reconcile(owner.project, deviceUuid, params)
+        expect(parameterIds(owner, deviceUuid)).toStrictEqual([-1, 0, 1])
+        const uuids = owner.project.boxGraph.findBox<WclapDeviceBox>(UUID.parse(deviceUuid)).unwrap()
+            .parameters.pointerHub.incoming().map(({box}) => UUID.toString(box.address.uuid))
+        expect(uuids).not.toContain(deviceUuid)
+    })
+
     it("both engines storing a state at the same time converge to one blob", async () => {
         const {peer: owner, deviceUuid} = await createOwner()
         const guest = await join(owner)

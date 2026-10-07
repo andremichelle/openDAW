@@ -30,92 +30,22 @@ import {Button} from "@/ui/components/Button.tsx"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {Layers} from "@/ui/surface/Layers.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
-import {Icon} from "@/ui/components/Icon.tsx"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
 import {WclapAdapter, WclapWindows} from "@/service/WclapWindows"
 import {StoredWclapPlugin, WclapDescriber} from "@/service/WclapDescriber"
+import {OpenWclapAPI} from "@/opendaw-api"
 import {ParameterTree, WclapParameterTree} from "@/ui/devices/audio-effects/WclapParameterTree"
 
 const className = Html.adoptStyleSheet(css, "WclapDeviceEditor")
 
 // One editor for both device kinds, the window lives in WclapWindows
-type Kind = WclapAdapter["type"]
-
 type Construct = {
     lifecycle: Lifecycle
     service: StudioService
     adapter: WclapAdapter
     deviceHost: DeviceHost
 }
-
-type Example = { label: string, url: string, clapId: string, kind: Kind }
-
-// Only plugins whose licence allows us to redistribute them (MIT, ISC)
-const BASICS_URL = "https://raw.githubusercontent.com/WebCLAP/examples/main/signalsmith-basics/basics.wclap.tar.gz"
-const CHAR_URL = "https://raw.githubusercontent.com/charCulbert/char-wclaps/main"
-const EXAMPLES: ReadonlyArray<Example> = [
-    {
-        label: "Signalsmith Basics: Chorus",
-        url: BASICS_URL,
-        clapId: "uk.co.signalsmith.basics.chorus",
-        kind: "audio-effect"
-    },
-    {
-        label: "Signalsmith Basics: Crunch",
-        url: BASICS_URL,
-        clapId: "uk.co.signalsmith.basics.crunch",
-        kind: "audio-effect"
-    },
-    {
-        label: "Signalsmith Basics: Frequency Shifter",
-        url: BASICS_URL,
-        clapId: "uk.co.signalsmith.basics.freq-shifter",
-        kind: "audio-effect"
-    },
-    {
-        label: "Signalsmith Basics: Limiter",
-        url: BASICS_URL,
-        clapId: "uk.co.signalsmith.basics.limiter",
-        kind: "audio-effect"
-    },
-    {
-        label: "Signalsmith Basics: Reverb",
-        url: BASICS_URL,
-        clapId: "uk.co.signalsmith.basics.reverb",
-        kind: "audio-effect"
-    },
-    {
-        label: "Signalsmith Basics: Analyser",
-        url: BASICS_URL,
-        clapId: "uk.co.signalsmith.basics.analyser",
-        kind: "audio-effect"
-    },
-    {
-        label: "Slide (Charlie Culbert)",
-        url: `${CHAR_URL}/Slide.wclap.tar.gz`,
-        clapId: "com.charlieculbert.slide",
-        kind: "audio-effect"
-    },
-    {
-        label: "MNO (Charlie Culbert)",
-        url: `${CHAR_URL}/MNO.wclap.tar.gz`,
-        clapId: "com.charlieculbert.mno",
-        kind: "instrument"
-    },
-    {
-        label: "Tapa (Charlie Culbert)",
-        url: `${CHAR_URL}/tapa.wclap.tar.gz`,
-        clapId: "com.charlieculbert.tapa",
-        kind: "instrument"
-    },
-    {
-        label: "Clap Saw Demo (Surge Synth Team)",
-        url: `${CHAR_URL}/clap-saw-demo-imgui.wclap.tar.gz`,
-        clapId: "org.surge-synth-team.clap-saw-demo",
-        kind: "instrument"
-    }
-]
 
 const {kindOf} = WclapDescriber
 
@@ -156,15 +86,15 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             if (isDefined(state.info) && state.ready) {vendorLabel.textContent = state.info.vendor}
         }, () => {})
     }
-    const useExample = ({label, url, clapId}: Example): void => {
-        fetch(url)
-            .then(response => response.ok ? response.arrayBuffer() : Promise.reject(new Error(`${response.status}`)))
+    const useCloud = (uuid: string, info: WclapPluginInfo): void => {
+        OpenWclapAPI.get().load(uuid)
             .then(archive => WclapStorage.store(archive))
             .then(local => {
-                    select(local, clapId)
-                    refreshStored()
-                },
-                error => RuntimeNotifier.notify({message: `Could not download ${label}: ${error}`, icon: "Warning"}))
+                if (local !== WclapStorage.urlOf(uuid)) {throw new Error("the download does not match its id")}
+                select(local, info.clapId)
+                refreshStored()
+            })
+            .catch(error => RuntimeNotifier.notify({message: `Could not download ${info.name}: ${error}`, icon: "Warning"}))
     }
     const browse = async (): Promise<void> => {
         const files = await Files.open({
@@ -250,27 +180,38 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         }
         populate(parent, WclapParameterTree.build(entries))
     })
-    const examples = EXAMPLES.filter(example => example.kind === adapter.type)
-    const examplesMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(...examples.map(example =>
-        MenuItem.default({label: example.label, checked: example.clapId === adapter.clapIdField.getValue()})
-            .setTriggerProcedure(() => useExample(example)))))
+    const byName = (a: WclapPluginInfo, b: WclapPluginInfo): number => StringComparator(a.name.toLowerCase(), b.name.toLowerCase())
+    const labelOf = ({name, vendor}: WclapPluginInfo): string => vendor.length > 0 ? `${name} (${vendor})` : name
+    const isCurrent = (url: string, {clapId}: WclapPluginInfo): boolean =>
+        url === adapter.urlField.getValue() && clapId === adapter.clapIdField.getValue()
     const stored: { plugins: ReadonlyArray<StoredWclapPlugin> } = {plugins: []}
     const refreshStored = (): void => {
         WclapDescriber.stored().then(plugins => {
             stored.plugins = plugins
                 .filter(({info}) => kindOf(info) === adapter.type)
-                .toSorted((a, b) => StringComparator(a.info.name.toLowerCase(), b.info.name.toLowerCase()))
+                .toSorted((a, b) => byName(a.info, b.info))
         }, EmptyExec)
     }
-    const storedMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
-        if (stored.plugins.length === 0) {
-            parent.addMenuItem(MenuItem.default({label: "No stored plugins", selectable: false}))
-        } else {
-            parent.addMenuItem(...stored.plugins.map(({url, info}) => MenuItem.default({
-                label: info.vendor.length > 0 ? `${info.name} (${info.vendor})` : info.name,
-                checked: url === adapter.urlField.getValue() && info.clapId === adapter.clapIdField.getValue()
-            }).setTriggerProcedure(() => select(url, info.clapId))))
-        }
+    const cloud: { plugins: ReadonlyArray<{ uuid: string, info: WclapPluginInfo }> } = {plugins: []}
+    OpenWclapAPI.get().all().then(entries => {
+        cloud.plugins = entries
+            .flatMap(({uuid, plugins}) => plugins.map(info => ({uuid, info})))
+            .filter(({info}) => kindOf(info) === adapter.type)
+            .toSorted((a, b) => byName(a.info, b.info))
+    }, EmptyExec)
+    const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+        parent.addMenuItem(
+            MenuItem.default({label: "Cloud", icon: IconSymbol.CloudFolder, selectable: cloud.plugins.length > 0})
+                .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...cloud.plugins.map(({uuid, info}) =>
+                    MenuItem.default({label: labelOf(info), checked: isCurrent(WclapStorage.urlOf(uuid), info)})
+                        .setTriggerProcedure(() => useCloud(uuid, info))))),
+            MenuItem.default({label: "Local", icon: IconSymbol.UserFolder, selectable: stored.plugins.length > 0})
+                .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...stored.plugins.map(({url, info}) =>
+                    MenuItem.default({label: labelOf(info), checked: isCurrent(url, info)})
+                        .setTriggerProcedure(() => select(url, info.clapId))))),
+            MenuItem.default({label: "Import WebCLAP...", separatorBefore: true})
+                .setTriggerProcedure(() => browse())
+        )
         refreshStored()
     })
     const openLabel: HTMLElement = <span>Open UI</span>
@@ -297,7 +238,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             <span className="button-label">Parameters</span>
         </MenuButton>
     )
-    const pluginButtons: HTMLElement = <div className="group">{openButton}{parametersButton}</div>
+    const pluginButtons: HTMLElement = <div className="group plugin">{openButton}{parametersButton}</div>
     const showStatus = (): void => {
         openLabel.textContent = WclapWindows.isOpen(uuidString) ? "Close UI" : "Open UI"
         openButton.classList.toggle("disabled", !state.ready)
@@ -349,27 +290,12 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                               </div>
                               <div className="buttons">
                                   <div className="group">
-                                      <Button lifecycle={lifecycle} onClick={() => browse()}
-                                              appearance={{
-                                                  framed: true, cursor: "pointer", color: Colors.shadow,
-                                                  activeColor: Colors.white, tooltip: "Load a .wclap.tar.gz from disk"
-                                              }}>
-                                          <Icon symbol={IconSymbol.Browse}/>
-                                      </Button>
-                                      <MenuButton root={storedMenu}
+                                      <MenuButton root={pluginMenu}
                                                   appearance={{
                                                       framed: true, color: Colors.shadow, activeColor: Colors.white,
-                                                      tooltip: "Plugins already stored on this device"
+                                                      tooltip: "Pick a plugin from the openDAW cloud or this device, or import one"
                                                   }}>
-                                          <Icon symbol={IconSymbol.UserFolder}/>
-                                      </MenuButton>
-                                      <MenuButton root={examplesMenu}
-                                                  appearance={{
-                                                      framed: true,
-                                                      color: Colors.shadow,
-                                                      activeColor: Colors.white
-                                                  }}>
-                                          <span className="button-label">Examples</span>
+                                          <span className="button-label">Load Plugin</span>
                                       </MenuButton>
                                   </div>
                                   {pluginButtons}
@@ -377,8 +303,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                               <p className="about">
                                   Hosts a <a href="https://github.com/free-audio/web-clap" target="_blank"
                                              rel="noopener">WebCLAP</a> bundle,
-                                  a CLAP plugin compiled to WebAssembly. Load a .wclap.tar.gz from disk or pick an
-                                  example.
+                                  a CLAP plugin compiled to WebAssembly. Pick one from the openDAW cloud or import a
+                                  .wclap.tar.gz from disk.
                               </p>
                           </div>)}
                       populateMeter={() => (

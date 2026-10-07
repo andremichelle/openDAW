@@ -26,7 +26,7 @@ import {
     GlobalSoundfontLoaderManager,
     Workers
 } from "@opendaw/studio-core"
-import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI} from "@/opendaw-api"
+import {OpenPresetAPI, OpenSampleAPI, OpenSoundfontAPI, OpenWclapAPI} from "@/opendaw-api"
 import {testFeatures} from "@/features.ts"
 import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
@@ -125,7 +125,9 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
             OpenSoundfontAPI.get().load(uuid, progress)
     })
     const chainedWclapProvider = new ChainedWclapProvider()
-    WclapStorage.installRemote(id => chainedWclapProvider.fetch(UUID.parse(id), Progress.Empty))
+    WclapStorage.installRemote(async id => (await OpenWclapAPI.get().find(id)).nonEmpty()
+        ? OpenWclapAPI.get().load(id)
+        : chainedWclapProvider.fetch(UUID.parse(id), Progress.Empty))
     const sampleManager = new GlobalSampleLoaderManager(chainedSampleProvider)
     const soundfontManager = new GlobalSoundfontLoaderManager(chainedSoundfontProvider)
     const cloudAuthManager = CloudAuthManager.create({
