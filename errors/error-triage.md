@@ -11,7 +11,7 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 
 ## 2026-10 (id 1164)
 
-- [Timeline duplicate fractional position](P2-timeline-duplicate-fractional-position.md) — FIXED (code + tests; deploy pending) · **P2** · 1× · ids [1164]
+- [Timeline duplicate fractional position](P2-timeline-duplicate-fractional-position.md) — FIXED (code + tests; fixed=1) · **P2** · 1× · ids [1164]
 
 ## Open — 2026-09 (id 1130)
 
