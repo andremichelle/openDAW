@@ -462,18 +462,21 @@ export class ProjectApi {
         if (region.trackBoxAdapter.isEmpty()) {return Option.None}
         const track = region.trackBoxAdapter.unwrap()
         const explicitPosition = options?.position
+        // `position` is Int32, but `complete` is fractional for regions with a float32 duration (musical audio
+        // converted from seconds). Round UP, so the stored position is the one masked, never truncated into the
+        // region before it (#1164).
         if (!isDefined(explicitPosition) && options?.findFreeSpace === true) {
-            let insert = region.complete
+            let insert = Math.ceil(region.complete)
             for (const {position, complete} of track.regions.collection.iterateFrom(region.complete)) {
                 if (insert + region.duration <= position) {break}
-                insert = complete
+                insert = Math.ceil(complete)
             }
             return Option.wrap(region.copyTo({
                 position: insert,
                 consolidate: true
             }) as R)
         }
-        const position = explicitPosition ?? region.complete
+        const position = Math.ceil(explicitPosition ?? region.complete)
         const complete = position + region.duration
         const targetTrack = this.#project.overlapResolver.resolveTargetTrack(track, position, complete)
         const solver = this.#project.overlapResolver.fromRange(targetTrack, position, complete)

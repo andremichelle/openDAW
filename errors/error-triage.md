@@ -9,6 +9,10 @@ Each error-group has its own file in this folder. Priority: **P1** highest-value
 > **Cross-cutting fix (ErrorHandler):** `processError` no longer treats an unhandled **promise rejection** as fatal — previously ANY non-ignored rejection ran `AnimationFrame.terminate()` + the recovery dialog, killing the whole app over a single async failure (even a reason-less one). Rejections are now reported once and the session stays alive; only synchronous `error` events remain fatal. This is the root cause behind much of the rejection-based "crash" class below; the per-error `#tryIgnore` handlers (storage, monaco, file-picker, …) remain as defence-in-depth and for friendly messages.
 
 
+## 2026-10 (id 1164)
+
+- [Timeline duplicate fractional position](P2-timeline-duplicate-fractional-position.md) — FIXED (code + tests; deploy pending) · **P2** · 1× · ids [1164]
+
 ## Open — 2026-09 (id 1130)
 
 - [Value editor optCollection mid-drag](P2-value-editor-optcollection-mid-drag.md) — OPEN (crash site known, trigger not captured; no fix proposed, capture the trigger with a debug log first) · **P2** · 1× · ids [1130]
