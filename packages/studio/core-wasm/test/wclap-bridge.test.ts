@@ -273,6 +273,34 @@ describe("wclap bridge", () => {
         expect(host.reported.filter(([id]) => id === dry.id)).toEqual([])
     })
 
+    it("sweeps the values after a page message and reports a plugin-side change once", async () => {
+        const source = createHost()
+        const sourceHandle = load(source)
+        await ready(source, sourceHandle)
+        source.imports.host_wclap_param(sourceHandle, param(source, "dry").id | 0, FLOAT, 0.125, NaN)
+        rms(source, sourceHandle, 2)
+        source.bridges.saveState("01020304-0506-0708-090a-0b0c0d0e0f10")
+        const base64 = Buffer.from(source.states[0]).toString("base64")
+        const host = createHost()
+        const handle = load(host)
+        await ready(host, handle)
+        const dry = param(host, "dry")
+        // a state load changes values behind the host's back, like a page edit in a plugin without events
+        new Uint8Array(host.memory.buffer).set(new TextEncoder().encode(base64), 2048)
+        host.imports.host_wclap_state(handle, 2048, base64.length)
+        host.reported.length = 0
+        process(host, handle)
+        expect(host.reported).toEqual([])
+        const poke = new TextEncoder().encode("{}").buffer
+        host.bridges.receive("01020304-0506-0708-090a-0b0c0d0e0f10", poke)
+        rms(host, handle, 4)
+        host.bridges.receive("01020304-0506-0708-090a-0b0c0d0e0f10", poke)
+        rms(host, handle, 4)
+        const reports = host.reported.filter(([id]) => id === dry.id)
+        expect(reports.length).toBe(1)
+        expect(reports[0][1]).toBeCloseTo(0.125, 5)
+    })
+
     it("describes a bundle without an engine (main-thread describer)", async () => {
         const describe = createWclapDescriber(() => Promise.resolve(basics))
         const plugins = await describe("basics")

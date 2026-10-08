@@ -94,6 +94,30 @@
         }
     }
 
+    // Chrome may lose the release outside the frame, the next buttonless move delivers it to the page
+    const releaseLostButtons = inner => {
+        const target = inner.contentWindow
+        if (target === null) {return}
+        for (const [down, up, move, Event] of [
+            ["mousedown", "mouseup", "mousemove", target.MouseEvent],
+            ["pointerdown", "pointerup", "pointermove", target.PointerEvent]]) {
+            const pressed = {active: false}
+            target.addEventListener(down, event => {
+                if (event.pointerType === undefined || event.pointerType === "mouse") {pressed.active = true}
+            }, {capture: true})
+            target.addEventListener(up, () => {pressed.active = false}, {capture: true})
+            target.addEventListener(move, event => {
+                if (!pressed.active || event.buttons !== 0) {return}
+                pressed.active = false
+                event.stopImmediatePropagation()
+                const {clientX, clientY, screenX, screenY} = event
+                const pointer = up === "pointerup" ? {pointerId: event.pointerId, pointerType: "mouse", isPrimary: true} : {}
+                const init = {bubbles: true, cancelable: true, composed: true, clientX, clientY, screenX, screenY, button: 0, buttons: 0}
+                ;(event.target ?? target.document).dispatchEvent(new Event(up, {...init, ...pointer}))
+            }, {capture: true})
+        }
+    }
+
     const open = async ({uuid, page, files: list}) => {
         state.uuid = uuid
         const path = page.split("?")[0]
@@ -104,6 +128,7 @@
         const inner = document.createElement("iframe")
         inner.addEventListener("load", () => {
             forwardInput(inner)
+            releaseLostButtons(inner)
             forwardPointer()
         })
         inner.src = `./wclap/${uuid}/${page}`

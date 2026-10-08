@@ -30,6 +30,7 @@ const MAX_PAGES = 16384 // 1 GB, the most an untrusted module may grow to
 const SAVE_DELAY_CHUNKS = 40 // ~100 ms of quiet after the last change before the state is saved
 const MAX_PARAM_EVENTS = 128
 const MAX_NOTE_EVENTS = 128
+const POLL_PER_CHUNK = 16 // get_value calls per quantum, a plugin's get_value may cost tens of µs
 const EVENT_SLOT_SIZE = 48 // the largest record written (clap_event_param_value / param_mod)
 const EVENT_SLOTS = MAX_PARAM_EVENTS * 2 + MAX_NOTE_EVENTS
 const NOTE_EVENT_SIZE = 40
@@ -65,6 +66,10 @@ type Loaded = {
     eventCount: number
     pendingNotes: Array<PendingNote>
     paramInfos: Map<number, WclapParamInfo>
+    paramIds: Array<number>
+    pollCursor: number
+    pollRemaining: number
+    emitsParams: boolean // the plugin reported a PARAM_VALUE itself, polling is never needed
     reported: Map<number, number> // last value per id the plugin reported (its GUI, a preset), f32
     lastModulation: Map<number, number> // last PARAM_MOD amount per id, to clear it once the sum returns to 0
     gestures: Set<number> // ids the plugin's GUI is dragging
@@ -98,7 +103,6 @@ class Plugin {
     dirtyCountdown: number = -1
     receivedSinceProcess: boolean = false
     flushRequested: boolean = false
-    pollPending: boolean = false
     // host-side values per clap id, kept before the plugin is up and pushed with its first process call
     readonly pendingParams = new Map<number, PendingParam>()
 
@@ -152,7 +156,7 @@ export class WclapBridges {
             this.#call(loaded, loaded.webview + ClapAbi.Webview.RECEIVE, loaded.plugin, loaded.scratchPtr, source.length)
             plugin.dirtyCountdown = SAVE_DELAY_CHUNKS
             plugin.receivedSinceProcess = true
-            plugin.pollPending = true
+            if (!loaded.emitsParams) {loaded.pollRemaining = loaded.paramIds.length}
         })
     }
 
@@ -305,6 +309,9 @@ export class WclapBridges {
     #publishParams(plugin: Plugin, loaded: Loaded): void {
         const params = this.#readParams(loaded)
         loaded.paramInfos = new Map(params.map(param => [param.id, param]))
+        loaded.paramIds = params.map(({id}) => id)
+        loaded.pollCursor = 0
+        loaded.pollRemaining = 0
         this.#host.sendParams(plugin.uuid, params)
     }
 
@@ -455,7 +462,7 @@ export class WclapBridges {
             audio: [new Float32Array(0), new Float32Array(0), new Float32Array(0), new Float32Array(0)],
             plugin: 0, webview: 0, gui: 0, guiCreated: false, processPtr: 0, transportPtr: 0, uriPtr: 0, sizePtr: 0, windowPtr: 0,
             inputs: [0, 0], outputs: [0, 0], inputPorts: 0, scratchPtr: 0, scratchSize: 0, steadyTime: 0,
-            eventsPtr: 0, eventCount: 0, pendingNotes: [], paramInfos: new Map(), reported: new Map(), lastModulation: new Map(),
+            eventsPtr: 0, eventCount: 0, pendingNotes: [], paramInfos: new Map(), paramIds: [], pollCursor: 0, pollRemaining: 0, emitsParams: false, reported: new Map(), lastModulation: new Map(),
             gestures: new Set(), state: 0, params: 0, inEvents: 0, outEvents: 0, istream: 0, ostream: 0,
             readSource: null, writeChunks: [], logCount: 0
         }
@@ -648,6 +655,8 @@ export class WclapBridges {
                 const paramId = eventView.getUint32(eventPtr + ClapAbi.ParamValueEvent.PARAM_ID, true)
                 if (type === ClapAbi.EventType.PARAM_VALUE) {
                     plugin.dirtyCountdown = SAVE_DELAY_CHUNKS
+                    loaded.emitsParams = true
+                    loaded.pollRemaining = 0
                     const value = eventView.getFloat64(eventPtr + ClapAbi.ParamValueEvent.VALUE, true)
                     loaded.reported.set(paramId, Math.fround(value))
                     this.#host.sendParam(plugin.uuid, paramId, value, 0)
@@ -695,10 +704,7 @@ export class WclapBridges {
             loaded.eventCount = 0
             plugin.receivedSinceProcess = false
             plugin.flushRequested = false
-            if (plugin.pollPending) {
-                plugin.pollPending = false
-                this.#pollParams(plugin, loaded)
-            }
+            if (loaded.pollRemaining > 0) {this.#pollParams(plugin, loaded)}
             if (plugin.dirtyCountdown > 0 && --plugin.dirtyCountdown === 0) {
                 plugin.dirtyCountdown = -1
                 this.#host.requestSave(plugin.uuid)
@@ -710,16 +716,24 @@ export class WclapBridges {
         })
     }
 
-    // Cmajor emits no parameter events for page edits
+    // Cmajor emits no parameter events for page edits, so its values are swept a slice per quantum
     #pollParams(plugin: Plugin, loaded: Loaded): void {
-        if (loaded.params === 0) {return}
+        const {paramIds} = loaded
+        if (loaded.params === 0 || paramIds.length === 0) {
+            loaded.pollRemaining = 0
+            return
+        }
         const view = this.#view(loaded)
-        for (const info of loaded.paramInfos.values()) {
-            if (this.#call(loaded, loaded.params + ClapAbi.Params.GET_VALUE, loaded.plugin, info.id, loaded.sizePtr) === 0) {continue}
+        const count = Math.min(POLL_PER_CHUNK, loaded.pollRemaining)
+        loaded.pollRemaining -= count
+        for (let index = 0; index < count; index++) {
+            const id = paramIds[loaded.pollCursor]
+            loaded.pollCursor = (loaded.pollCursor + 1) % paramIds.length
+            if (this.#call(loaded, loaded.params + ClapAbi.Params.GET_VALUE, loaded.plugin, id, loaded.sizePtr) === 0) {continue}
             const value = view.getFloat64(loaded.sizePtr, true)
-            if (loaded.reported.get(info.id) === Math.fround(value)) {continue}
-            loaded.reported.set(info.id, Math.fround(value))
-            this.#host.sendParam(plugin.uuid, info.id, value, 0)
+            if (loaded.reported.get(id) === Math.fround(value)) {continue}
+            loaded.reported.set(id, Math.fround(value))
+            this.#host.sendParam(plugin.uuid, id, value, 0)
         }
     }
 

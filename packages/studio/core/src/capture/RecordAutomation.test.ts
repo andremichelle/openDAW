@@ -1,4 +1,4 @@
-import {describe, expect, it, vi} from "vitest"
+import {afterEach, describe, expect, it, vi} from "vitest"
 import {DefaultObservableValue, isDefined, MutableObservableOption, Option, Terminable, unitValue, UUID} from "@opendaw/lib-std"
 import {ppqn, PPQN} from "@opendaw/lib-dsp"
 import {
@@ -245,6 +245,65 @@ describe("RecordAutomation", () => {
             record(true)
             write(0.25)
             expect(events()[1].interpolation.type).toBe("linear")
+        })
+
+        // Issue #443: a preset change after a pause jumped every value, the recorded take ramped into the jump
+        describe("held pauses", () => {
+            afterEach(() => vi.restoreAllMocks())
+            const withClock = async (test: (advance: (millis: number) => void) => Promise<void>) => {
+                const clock = {now: 0}
+                vi.spyOn(performance, "now").mockImplementation(() => clock.now)
+                await test(millis => clock.now += millis)
+            }
+
+            it("records a jump after a held pause as a step, not a ramp", () => withClock(async advance => {
+                const {record, seek, write, stop, events} = await setup()
+                record(true)
+                write(0.25)
+                advance(500)
+                seek(PPQN.Bar)
+                write(0.75)
+                expect(events().map(({position, value}) => [position, value]))
+                    .toEqual([[0, expect.any(Number)], [0, 0.25], [PPQN.Bar, 0.25], [PPQN.Bar, 0.75]])
+                seek(PPQN.Bar * 2)
+                stop()
+                expect(events().map(({position, value}) => [position, value]))
+                    .toEqual([[0, expect.any(Number)], [0, 0.25], [PPQN.Bar, 0.25], [PPQN.Bar, 0.75], [PPQN.Bar * 2, 0.75]])
+            }))
+
+            it("keeps ramping between writes that follow each other closely", () => withClock(async advance => {
+                const {record, seek, write, positions} = await setup()
+                record(true)
+                write(0.25)
+                advance(16)
+                seek(PPQN.SemiQuaver)
+                write(0.5)
+                advance(16)
+                seek(PPQN.SemiQuaver * 2)
+                write(0.75)
+                expect(positions()).toEqual([0, 0, PPQN.SemiQuaver, PPQN.SemiQuaver * 2])
+            }))
+
+            it("adds no hold point when the value did not change", () => withClock(async advance => {
+                const {record, seek, write, positions} = await setup()
+                record(true)
+                write(0.25)
+                advance(500)
+                seek(PPQN.Bar)
+                write(0.5)
+                write(0.25)
+                expect(positions()).toEqual([0, 0, PPQN.Bar, PPQN.Bar])
+            }))
+
+            it("keeps a stepped parameter's single event per write", () => withClock(async advance => {
+                const {record, seek, write, positions} = await setup({target: "mute"})
+                record(true)
+                write(1.0)
+                advance(500)
+                seek(PPQN.Bar)
+                write(0.0)
+                expect(positions()).toEqual([0, 0, PPQN.Bar])
+            }))
         })
 
         it("records no interpolation for a stepped parameter", async () => {
