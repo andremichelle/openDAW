@@ -56,7 +56,7 @@ Lists every parameter the plugin publishes, grouped the way the plugin groups th
 Each plugin opens in its own floating window. You can open several at once.
 
 - **Move** the window by dragging its title bar.
-- **Resize** it by dragging the right edge, the bottom edge or the bottom right corner. The plugin decides which sizes it accepts. Many plugins keep their proportions and stop at a smallest size, the window follows whatever the plugin allows.
+- **Resize** it by dragging the right edge, the bottom edge or the bottom right corner. The plugin decides which sizes it accepts. Some plugins have a fixed size and cannot be resized at all, many keep their proportions and stop at a smallest size. The window follows whatever the plugin allows.
 - **Default size** (the magnifier button next to the close button) brings the window back to its default zoom.
 - **Bring to front** by clicking a window. The first click on a window in the background only brings it forward, so it never turns a knob by accident.
 - **Close** with the × button or with **Close UI** in the device.
