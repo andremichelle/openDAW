@@ -54,7 +54,12 @@ export namespace WclapParameters {
             .map(({box}) => asInstanceOf(box, WclapParameterBox))
             .find(paramBox => (paramBox.clapId.getValue() >>> 0) === paramId)
         if (!isDefined(paramBox) || paramBox.value.getValue() === Math.fround(value)) {return}
-        project.editing.modify(() => paramBox.value.setValue(value), false)
+        // through the adapter like a knob or MIDI learn, so automation recording and suspension see the write
+        const adapter = project.parameterFieldAdapters.opt(paramBox.value.address)
+        project.editing.modify(() => adapter.match({
+            none: () => paramBox.value.setValue(value),
+            some: adapter => adapter.setValue(value)
+        }), false)
     }
 
     const IS_HIDDEN = 1 << 2
