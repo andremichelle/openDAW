@@ -85,6 +85,7 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Vocoder", path: "/manuals/devices/audio/vocoder", icon: IconSymbol.Vocoder},
                     {type: "page", label: "Waveshaper", path: "/manuals/devices/audio/waveshaper", icon: IconSymbol.Curve},
                     {type: "page", label: "Werkstatt", path: "/manuals/devices/audio/werkstatt", icon: IconSymbol.Code},
+                    {type: "page", label: "WebCLAP", path: "/manuals/devices/audio/wclap", icon: IconSymbol.WebClap},
                     {type: "page", label: "Sink", path: "/manuals/devices/audio/sink", icon: IconSymbol.AudioBus}
                 ]
             },
@@ -102,7 +103,8 @@ export const Manuals: ReadonlyArray<Manual> = [
                     {type: "page", label: "Playfield", path: "/manuals/devices/instruments/playfield", icon: IconSymbol.Playfield},
                     {type: "page", label: "Soundfont", path: "/manuals/devices/instruments/soundfont", icon: IconSymbol.SoundFont},
                     {type: "page", label: "Tape", path: "/manuals/devices/instruments/tape", icon: IconSymbol.Tape},
-                    {type: "page", label: "Vaporisateur", path: "/manuals/devices/instruments/vaporisateur", icon: IconSymbol.Vaporisateur}
+                    {type: "page", label: "Vaporisateur", path: "/manuals/devices/instruments/vaporisateur", icon: IconSymbol.Vaporisateur},
+                    {type: "page", label: "WebCLAP", path: "/manuals/devices/audio/wclap", icon: IconSymbol.WebClap}
                 ]
             },
             {

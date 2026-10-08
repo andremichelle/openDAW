@@ -132,7 +132,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         const archive = await file.arrayBuffer()
         const url = await WclapStorage.urlFor(archive)
         WclapBundles.register(url, archive).catch(EmptyExec)
-        const described = await describe(url).catch(error => {
+        const described: ReadonlyArray<WclapPluginInfo> = await describe(url).catch(error => {
             RuntimeNotifier.notify({message: `${file.name} is not a WebCLAP bundle: ${error}`, icon: "Warning"})
             return []
         })
@@ -146,11 +146,12 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             }
             return
         }
+        const shortNames = WclapNames.distinct(described.map(({name}) => name))
         const chosen: Option<WclapPluginInfo> = plugins.length === 1
             ? Option.wrap(plugins[0])
-            : await Dialogs.choose({
-                headline: "Choose Plugin", message: file.name,
-                choices: plugins.map(plugin => ({text: plugin.name, value: plugin}))
+            : await Dialogs.select({
+                headline: "Choose Plugin", message: `${file.name} holds ${plugins.length} plugins.`, okText: "Load",
+                choices: plugins.map(plugin => ({text: shortNames[described.indexOf(plugin)], value: plugin}))
             })
         if (chosen.isEmpty()) {return}
         await WclapStorage.store(archive)
