@@ -34,6 +34,9 @@ component
       overflow: hidden
       text-overflow: ellipsis
 
+    span.zoom
+      font-size: 0.875em
+
   > div.body
     position: relative
     flex: 0 0 auto
@@ -53,6 +56,23 @@ component
 
   &.inactive > div.body > div.shield
     display: block
+
+  &.popout
+    inset: 0
+    border-radius: 0
+    box-shadow: none
+
+    > header
+      margin-bottom: 0
+      border-radius: 0
+      cursor: default
+
+    > div.body
+      margin: auto
+      border-radius: 0
+
+    > div.grip
+      display: none
 
   > div.grip
     position: absolute

@@ -1,5 +1,5 @@
 import {NestedLabels} from "@/ui/PreferencePanel"
-import {FpsOptions, OverlappingRegionsBehaviourOptions, StudioSettings} from "@opendaw/studio-core"
+import {FpsOptions, OverlappingRegionsBehaviourOptions, StudioSettings, WclapZoomOptions} from "@opendaw/studio-core"
 import {EngineSettings} from "@opendaw/studio-adapters"
 
 export namespace PreferencesPageLabels {
@@ -69,7 +69,7 @@ export namespace PreferencesPageLabels {
         "webclap": {
             label: "WebCLAP",
             fields: {
-                "default-zoom": "Default plugin window zoom (25-200%)"
+                "default-zoom": "Default plugin window zoom"
             }
         },
         "debug": {
@@ -104,6 +104,9 @@ export namespace PreferencesPageLabels {
                         ? "Push existing"
                         : "Keep existing"
             }))
+        },
+        "webclap": {
+            "default-zoom": WclapZoomOptions.map(value => ({value, label: `${value}%`}))
         }
     }
 

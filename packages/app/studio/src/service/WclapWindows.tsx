@@ -2,14 +2,14 @@ import {
     AutomatableParameterFieldAdapter, WclapDeviceBoxAdapter, WclapInstrumentBoxAdapter
 } from "@opendaw/studio-adapters"
 import {
-    asInstanceOf, clamp, EmptyExec, isDefined, Notifier, Option, Optional, Procedure, RuntimeNotifier, Subscription, Terminator, UUID,
+    asInstanceOf, EmptyExec, isDefined, Notifier, Option, Optional, Procedure, RuntimeNotifier, Subscription, Terminator, UUID,
     VitalSigns
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events} from "@opendaw/lib-dom"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {WclapParameterBox} from "@opendaw/studio-boxes"
-import {ContextMenu, MenuItem, StudioPreferences, WclapBundles, WclapGuis} from "@opendaw/studio-core"
+import {ContextMenu, MenuItem, StudioPreferences, WclapBundles, WclapGuis, WclapZoomOptions} from "@opendaw/studio-core"
 import {FloatingWindow, FloatingWindowHandle} from "@/ui/components/FloatingWindow.tsx"
 import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
 import {Layers} from "@/ui/surface/Layers.tsx"
@@ -208,7 +208,8 @@ export namespace WclapWindows {
         iframe.src = FRAME_URL
         const handle = FloatingWindow({
             title, icon: IconSymbol.WebClap, width, height,
-            scale: clamp(StudioPreferences.settings.webclap["default-zoom"], 25, 200) / 100, resizable: gui.resizable, keepAspectRatio: true,
+            scale: StudioPreferences.settings.webclap["default-zoom"] / 100, resizable: false,
+            zoomLevels: gui.resizable ? WclapZoomOptions.map(value => value / 100) : undefined,
             adjust: ({width, height}) => engine.wclapResizeGui(uuid, width, height), onClose: () => session.terminate()
         }, iframe)
         session.own(WclapGuis.subscribeResize(uuidString, ({width, height}) => handle.requestSize(width, height)))

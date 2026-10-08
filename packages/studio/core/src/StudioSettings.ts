@@ -2,6 +2,11 @@ import {z} from "zod"
 
 export const FpsOptions = [24, 25, 29.97, 30] as const
 export const OverlappingRegionsBehaviourOptions = ["clip", "push-existing", "keep-existing"] as const
+export const WclapZoomOptions = [50, 75, 100, 125] as const
+
+const nearestWclapZoom = (input: unknown): typeof WclapZoomOptions[number] => typeof input === "number"
+    ? WclapZoomOptions.reduce((best, value) => Math.abs(value - input) < Math.abs(best - input) ? value : best)
+    : 75
 
 export const StudioSettingsSchema = z.object({
     "visibility": z.object({
@@ -74,7 +79,7 @@ export const StudioSettingsSchema = z.object({
         "show-clipboard-menu": false
     }),
     "webclap": z.object({
-        "default-zoom": z.number().catch(75)
+        "default-zoom": z.union(WclapZoomOptions.map(value => z.literal(value))).catch(({input}) => nearestWclapZoom(input))
     }).default({
         "default-zoom": 75
     }),
