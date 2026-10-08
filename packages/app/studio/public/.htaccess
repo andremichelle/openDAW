@@ -13,8 +13,13 @@ RewriteCond %{REQUEST_FILENAME}.br -f
 RewriteRule ^(.*)$ $1.br [QSA,L]
 
 # Set Content-Encoding header only for actual Brotli-compressed files
-<FilesMatch "\.(js|css|html|json|svg|xml)\.br$">
+<FilesMatch "\.(js|css|html|json|svg|xml|wasm)\.br$">
     Header set Content-Encoding br
+</FilesMatch>
+
+# WebAssembly streaming compilation requires application/wasm
+<FilesMatch "\.wasm\.br$">
+    ForceType application/wasm
 </FilesMatch>
 
 # --------------------------------------------------

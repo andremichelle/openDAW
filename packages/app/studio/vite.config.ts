@@ -95,7 +95,9 @@ export default defineConfig(({command}) => {
         plugins: [
             crossOriginIsolation(),
             viteCompression({
-                algorithm: "brotliCompress"
+                algorithm: "brotliCompress",
+                // the onnx runtime (Neural Demux) is left out, too large to brotli at every build
+                filter: (file: string) => /\.(js|mjs|json|css|html|wasm)$/i.test(file) && !/ort-wasm.*\.wasm$/i.test(file)
             }),
             {
                 name: "generate-date-json",
