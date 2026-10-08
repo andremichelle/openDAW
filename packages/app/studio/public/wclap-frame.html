@@ -18,9 +18,11 @@
         svg: "image/svg+xml", webp: "image/webp", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", txt: "text/plain"
     }
     const files = new Map()
-    const state = {studio: null, origin: "*", uuid: "", pageDirectory: "", inner: null, pointer: false}
+    // the studio side of the channel arrives with wclap-frame-ready, only the embedding window receives it
+    const channel = new MessageChannel()
+    const state = {uuid: "", pageDirectory: "", inner: null, pointer: false}
 
-    const post = message => {if (state.studio !== null) {state.studio.postMessage(message, state.origin)}}
+    const post = message => channel.port1.postMessage(message)
     const fail = message => {
         document.body.replaceChildren(Object.assign(document.createElement("p"), {textContent: message}))
         post({type: "wclap-error", message})
@@ -138,18 +140,16 @@
 
     window.addEventListener("message", event => {
         const inner = state.inner
-        if (inner !== null && event.source === inner.contentWindow) {
-            const data = event.data
-            const bytes = data instanceof ArrayBuffer ? data
-                : ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
-            if (bytes !== null) {post({type: "wclap-message", bytes})}
-            return
-        }
-        if (event.source !== window.parent) {return}
+        if (inner === null || event.source !== inner.contentWindow) {return}
+        const data = event.data
+        const bytes = data instanceof ArrayBuffer ? data
+            : ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
+        if (bytes !== null) {post({type: "wclap-message", bytes})}
+    })
+    channel.port1.addEventListener("message", event => {
+        const inner = state.inner
         const data = event.data
         if (data?.type === "wclap-open") {
-            state.studio = event.source
-            state.origin = event.origin
             open(data).catch(error => fail(`The plugin page could not start: ${error.message ?? error}`))
         } else if (data?.type === "wclap-message" && inner !== null && inner.contentWindow !== null) {
             inner.contentWindow.postMessage(data.bytes, "*")
@@ -158,7 +158,8 @@
             forwardPointer()
         }
     })
-    window.parent.postMessage({type: "wclap-frame-ready"}, "*")
+    channel.port1.start()
+    window.parent.postMessage({type: "wclap-frame-ready"}, "*", [channel.port2])
 </script>
 </body>
 </html>

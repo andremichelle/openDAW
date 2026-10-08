@@ -189,13 +189,13 @@ export class Surface implements TerminableOwner {
         }
     }
 
-    new(width: int, height: int, id: string, name: string = "untitled"): Option<Surface> {
+    new(width: int, height: int, id: string, name: string = "untitled", position?: Point): Option<Surface> {
         const existing = Surface.#surfaceById.get(id)
         if (isDefined(existing)) {return panic(`${id} is already open`)}
         width = Math.min(this.#owner.innerWidth, width)
         height = Math.min(this.#owner.innerHeight, height)
-        const x = (this.#owner.innerWidth - width) >> 1
-        const y = (this.#owner.innerHeight - height) >> 1
+        const x = isDefined(position) ? position.x : (this.#owner.innerWidth - width) >> 1
+        const y = isDefined(position) ? position.y : (this.#owner.innerHeight - height) >> 1
         const features: WindowFeatures = {
             left: x, top: y, width, height,
             toolbar: 0, location: 0, directories: 0, status: 0,

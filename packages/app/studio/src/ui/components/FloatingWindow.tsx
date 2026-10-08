@@ -1,6 +1,8 @@
 import css from "./FloatingWindow.sass?inline"
+import popoutCss from "./FloatingWindowPopout.sass?inline"
 import {
-    clamp, DefaultObservableValue, Exec, Func, int, isDefined, isNull, Nullable, ObservableValue, Option, Optional, Point, safeExecute, Size, Terminator
+    clamp, DefaultObservableValue, Exec, Func, int, isDefined, isNull, MutableObservableOption, Nullable, ObservableValue, Option, Optional,
+    Point, safeExecute, Size, Terminator, UUID
 } from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Dragging, Events, Html} from "@opendaw/lib-dom"
@@ -9,8 +11,10 @@ import {Icon} from "@/ui/components/Icon.tsx"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {Layers} from "@/ui/surface/Layers.tsx"
+import {Dialogs} from "@/ui/components/dialogs.tsx"
 
 const className = Html.adoptStyleSheet(css, "FloatingWindow")
+const popoutClassName = Html.adoptStyleSheet(popoutCss, "FloatingWindowPopout")
 
 type Construct = {
     title: string
@@ -24,11 +28,15 @@ type Construct = {
     minWidth?: int
     minHeight?: int
     adjust?: Func<Size, Promise<Size>>
+    popoutable?: boolean
     onClose?: Exec
 }
 
 export interface FloatingWindowHandle {
     readonly size: ObservableValue<Size>
+    // the browser window the content lives in, listeners bound to a window must follow it
+    readonly owner: ObservableValue<Window>
+    togglePopout(): void
     resetSize(): void
     // the content asks for a size (a plugin zooming its editor): taken as is, only kept on screen
     requestSize(width: int, height: int): void
@@ -50,7 +58,7 @@ const restack = () => stack.forEach((entry, index) => {
 
 export const FloatingWindow = ({
                                    title, icon, width, height, position, scale, resizable, keepAspectRatio, minWidth, minHeight, adjust,
-                                   onClose
+                                   popoutable, onClose
                                }: Construct, children: JsxValue): FloatingWindowHandle => {
     const lifecycle = new Terminator()
     const surface = Surface.get()
@@ -65,6 +73,8 @@ export const FloatingWindow = ({
     const bodyHeight = isDefined(ratio) ? Math.round(height * fitScale)
         : Math.max(minimum.height, Math.min(Math.round(height * initialScale), window.innerHeight - 64))
     const size = lifecycle.own(new DefaultObservableValue<Size>({width: bodyWidth, height: bodyHeight}))
+    const owner = lifecycle.own(new DefaultObservableValue<Window>(window))
+    const popout = new MutableObservableOption<Surface>()
     const origin = isDefined(position)
         ? {x: position.x, y: position.y}
         : {x: (window.innerWidth - bodyWidth) * 0.5, y: (window.innerHeight - bodyHeight) * 0.5}
@@ -72,6 +82,12 @@ export const FloatingWindow = ({
         <header>
             {isDefined(icon) && <Icon symbol={icon}/>}
             <span>{title}</span>
+            {popoutable !== false && (
+                <Button lifecycle={lifecycle} onClick={() => togglePopout()}
+                        appearance={{color: Colors.shadow, tooltip: "Popout into new browser window"}}>
+                    <Icon symbol={IconSymbol.Popout}/>
+                </Button>
+            )}
             {resizable !== false && (
                 <Button lifecycle={lifecycle} onClick={() => resetSize()}
                         appearance={{color: Colors.shadow, tooltip: "Default size"}}>
@@ -84,6 +100,7 @@ export const FloatingWindow = ({
         </header>
     )
     const body: HTMLElement = <div className="body">{children}<div className="shield"/></div>
+    const popoutContainer: HTMLElement = <div className={popoutClassName}/>
     const grips: ReadonlyArray<[HTMLElement, ResizeAxis]> = resizable === false ? [] : [
         [<div className="grip right"/>, {x: true, y: false}],
         [<div className="grip bottom"/>, {x: false, y: true}],
@@ -98,6 +115,7 @@ export const FloatingWindow = ({
     )
     Layers.install(element)
     const move = (x: number, y: number) => {
+        if (popout.nonEmpty()) {return}
         origin.x = clamp(x, 0, Math.max(0, window.innerWidth - element.offsetWidth))
         origin.y = clamp(y, 0, Math.max(0, window.innerHeight - header.offsetHeight))
         element.style.left = `${origin.x}px`
@@ -109,9 +127,17 @@ export const FloatingWindow = ({
         const fitted = clamp(width, lower, upper)
         return {width: Math.round(fitted), height: Math.round(fitted / ratio)}
     }
+    const limits = (): Size => popout.match({
+        none: () => ({
+            width: Math.max(minimum.width, window.innerWidth - origin.x),
+            height: Math.max(minimum.height, window.innerHeight - origin.y - header.offsetHeight)
+        }),
+        some: ({owner}) => ({width: Math.max(minimum.width, owner.innerWidth), height: Math.max(minimum.height, owner.innerHeight)})
+    })
+    const resizeWindow = (width: number, height: number) =>
+        popout.ifSome(({owner}) => owner.resizeBy(width - owner.innerWidth, height - owner.innerHeight))
     const resize = (width: number, height: number) => {
-        const maxWidth = Math.max(minimum.width, window.innerWidth - origin.x)
-        const maxHeight = Math.max(minimum.height, window.innerHeight - origin.y - header.offsetHeight)
+        const {width: maxWidth, height: maxHeight} = limits()
         const next: Size = isDefined(ratio)
             ? fitRatio(width, ratio, maxWidth, maxHeight)
             : {
@@ -143,12 +169,21 @@ export const FloatingWindow = ({
     }
     const resetSize = () => {
         const target: Size = {width: Math.round(width * initialScale), height: Math.round(height * initialScale)}
+        if (popout.nonEmpty()) {
+            resizeWindow(target.width, target.height)
+            return
+        }
         move(Math.min(origin.x, window.innerWidth - target.width),
             Math.min(origin.y, window.innerHeight - target.height - header.offsetHeight))
         resize(target.width, target.height)
     }
     const requestSize = (width: int, height: int) => {
         if (isDefined(ratio)) {ratio = width / height}
+        if (popout.nonEmpty()) {
+            apply({width: Math.max(minimum.width, Math.round(width)), height: Math.max(minimum.height, Math.round(height))})
+            resizeWindow(width, height)
+            return
+        }
         move(Math.min(origin.x, window.innerWidth - width), Math.min(origin.y, window.innerHeight - height - header.offsetHeight))
         apply({
             width: Math.round(clamp(width, minimum.width, Math.max(minimum.width, window.innerWidth - origin.x))),
@@ -156,18 +191,60 @@ export const FloatingWindow = ({
         })
     }
     const toFront = () => {
-        if (stack.at(-1) === element) {return}
+        if (popout.nonEmpty() || stack.at(-1) === element) {return}
         const index = stack.indexOf(element)
         if (index !== -1) {stack.splice(index, 1)}
         stack.push(element)
         restack()
     }
-    const close = () => {
-        adjusting.closed = true
+    const removeFromStack = () => {
         const index = stack.indexOf(element)
         if (index !== -1) {stack.splice(index, 1)}
         restack()
+    }
+    const popOut = () => {
+        const {width, height} = size.getValue()
+        const {left, top} = body.getBoundingClientRect()
+        const position: Point = {x: window.screenX + left, y: window.screenY + window.outerHeight - window.innerHeight + top}
+        surface.new(width, height, UUID.toString(UUID.generate()), title, position).match({
+            none: () => {Dialogs.info({message: "Could not open window. Check popup blocker?"}).finally()},
+            some: popped => {
+                popout.wrap(popped)
+                removeFromStack()
+                element.classList.add("hidden")
+                popoutContainer.appendChild(body)
+                popped.ground.appendChild(popoutContainer)
+                owner.setValue(popped.owner)
+                popped.own({terminate: () => {if (popout.contains(popped)) {dockIn()}}})
+                if (resizable !== false) {
+                    popped.own(Events.subscribe(popped.owner, "resize", () => resize(popped.owner.innerWidth, popped.owner.innerHeight)))
+                }
+            }
+        })
+    }
+    const dockIn = () => popout.ifSome(popped => {
+        popout.clear()
+        header.after(body)
+        popoutContainer.remove()
+        element.classList.remove("hidden")
+        owner.setValue(window)
+        toFront()
+        move(origin.x, origin.y)
+        const {width, height} = size.getValue()
+        resize(width, height)
+        popped.close()
+    })
+    const togglePopout = () => popout.nonEmpty() ? dockIn() : popOut()
+    const close = () => {
+        adjusting.closed = true
+        removeFromStack()
+        popout.ifSome(popped => {
+            popout.clear()
+            popped.close()
+        })
         lifecycle.terminate()
+        body.remove()
+        popoutContainer.remove()
         element.remove()
         safeExecute(onClose)
     }
@@ -198,5 +275,5 @@ export const FloatingWindow = ({
     toFront()
     move(origin.x, origin.y)
     if (isDefined(adjust)) {resize(bodyWidth, bodyHeight)}
-    return {size, resetSize, requestSize, toFront, close}
+    return {size, owner, togglePopout, resetSize, requestSize, toFront, close}
 }

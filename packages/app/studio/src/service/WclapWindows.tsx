@@ -2,7 +2,8 @@ import {
     AutomatableParameterFieldAdapter, WclapDeviceBoxAdapter, WclapInstrumentBoxAdapter
 } from "@opendaw/studio-adapters"
 import {
-    asInstanceOf, clamp, EmptyExec, isDefined, Notifier, Optional, Procedure, RuntimeNotifier, Subscription, Terminator, UUID
+    asInstanceOf, clamp, EmptyExec, isDefined, Notifier, Option, Optional, Procedure, RuntimeNotifier, Subscription, Terminator, UUID,
+    VitalSigns
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {Events} from "@opendaw/lib-dom"
@@ -29,7 +30,6 @@ const pagePath = (uri: string): string =>
     uri.startsWith("file:") ? uri.replace(/^file:\/*/, "/").split("/").slice(2).join("/") : uri.replace(/^\//, "")
 
 type FrameMessage =
-    | { type: "wclap-frame-ready" }
     | { type: "wclap-message", bytes: ArrayBuffer }
     | { type: "wclap-contextmenu", x: number, y: number }
     | { type: "wclap-dblclick", x: number, y: number }
@@ -38,6 +38,9 @@ type FrameMessage =
 
 const isFrameMessage = (data: unknown): data is FrameMessage =>
     typeof data === "object" && data !== null && typeof Object(data).type === "string" && String(Object(data).type).startsWith("wclap-")
+
+const isFrameReady = (data: unknown): boolean =>
+    typeof data === "object" && data !== null && Object(data).type === "wclap-frame-ready"
 
 // The open plugin windows, one per device, living as long as the device and the project, not the editor
 export namespace WclapWindows {
@@ -88,7 +91,10 @@ export namespace WclapWindows {
             if (isDefined(saveTimer.id)) {clearTimeout(saveTimer.id)}
             saveTimer.id = setTimeout(() => engine.wclapSaveState(uuid), SAVE_DELAY_MS)
         }
-        const post = (message: object): void => iframe.contentWindow?.postMessage(message, frameOrigin)
+        const vitals = session.own(new VitalSigns())
+        const connection = session.own(new Terminator())
+        const link: { port: Option<MessagePort>, loads: number, pointer: boolean } = {port: Option.None, loads: 0, pointer: false}
+        const post = (message: object): void => link.port.ifSome(port => port.postMessage(message))
         // in-page right-click and double-click are enabled by the plugin's first clap.param-hovered report
         const menuParameter: { parameter: Optional<AutomatableParameterFieldAdapter> } = {parameter: undefined}
         const hoveredParameter = (): Optional<AutomatableParameterFieldAdapter> => {
@@ -119,9 +125,7 @@ export namespace WclapWindows {
             )
         }
         const onFrameMessage = (message: FrameMessage): void => {
-            if (message.type === "wclap-frame-ready") {
-                post({type: "wclap-open", uuid: uuidString, page, files: bundle.files})
-            } else if (message.type === "wclap-message") {
+            if (message.type === "wclap-message") {
                 if (message.bytes.byteLength > MAX_MESSAGE_BYTES) {return}
                 engine.wclapReceive(uuid, message.bytes)
                 scheduleSave()
@@ -141,9 +145,43 @@ export namespace WclapWindows {
                 RuntimeNotifier.notify({message: message.message, icon: "Warning"})
             }
         }
+        // a moved iframe reloads: the page gets a fresh gui session, sized to the window it now lives in
+        const reopen = async (port: MessagePort): Promise<void> => {
+            engine.wclapCloseGui(uuid)
+            const reopened = await engine.wclapOpenGui(uuid)
+            if (vitals.isTerminated) {return engine.wclapCloseGui(uuid)}
+            if (!link.port.contains(port)) {return}
+            if (reopened.uri.length === 0) {return close(uuidString)}
+            post({type: "wclap-open", uuid: uuidString, page: pagePath(reopened.uri), files: bundle.files})
+            if (link.pointer) {post({type: "wclap-pointer-enable"})}
+            const {width, height} = handle.size.getValue()
+            const accepted = await engine.wclapResizeGui(uuid, width, height)
+            if (!vitals.isTerminated && (accepted.width !== width || accepted.height !== height)) {
+                handle.requestSize(accepted.width, accepted.height)
+            }
+        }
+        const connect = (port: MessagePort): void => {
+            connection.terminate()
+            link.port = Option.wrap(port)
+            connection.ownAll(
+                Events.subscribe(port, "message", (event: MessageEvent) => {if (isFrameMessage(event.data)) {onFrameMessage(event.data)}}),
+                {terminate: () => {
+                    port.close()
+                    link.port = Option.None
+                }}
+            )
+            port.start()
+            if (link.loads++ === 0) {
+                post({type: "wclap-open", uuid: uuidString, page, files: bundle.files})
+            } else {
+                reopen(port).catch(error => RuntimeNotifier.notify({message: `Could not reconnect the plugin window: ${error}`, icon: "Warning"}))
+            }
+        }
         session.own(WclapGuis.register(uuidString, bytes => post({type: "wclap-message", bytes})))
         session.own(WclapGuis.subscribeHovered(uuidString, paramId => {
-            if (paramId >= 0) {post({type: "wclap-pointer-enable"})}
+            if (paramId < 0) {return}
+            link.pointer = true
+            post({type: "wclap-pointer-enable"})
         }))
         session.own(ContextMenu.subscribe(iframe, collector => {
             const parameter = menuParameter.parameter
@@ -151,10 +189,6 @@ export namespace WclapWindows {
             const tracks = adapter.deviceHost().audioUnitBoxAdapter().tracks
             collector.addItems(MenuItem.default({label: parameter.name, selectable: false}),
                 ...parameterContextItems(editing, midiLearning, tracks, parameter))
-        }))
-        session.own(Events.subscribe(globalThis, "message", (event: MessageEvent) => {
-            if (event.source !== iframe.contentWindow || event.origin !== frameOrigin || !isFrameMessage(event.data)) {return}
-            onFrameMessage(event.data)
         }))
         session.ownAll(
             adapter.urlField.subscribe(() => close(uuidString)),
@@ -178,6 +212,16 @@ export namespace WclapWindows {
             adjust: ({width, height}) => engine.wclapResizeGui(uuid, width, height), onClose: () => session.terminate()
         }, iframe)
         session.own(WclapGuis.subscribeResize(uuidString, ({width, height}) => handle.requestSize(width, height)))
+        const listener = session.own(new Terminator())
+        session.own(handle.owner.catchupAndSubscribe(owner => {
+            listener.terminate()
+            connection.terminate()
+            listener.own(Events.subscribe(owner.getValue(), "message", (event: MessageEvent) => {
+                if (event.source !== iframe.contentWindow || event.origin !== frameOrigin || !isFrameReady(event.data)) {return}
+                const port = event.ports.at(0)
+                if (isDefined(port)) {connect(port)}
+            }))
+        }))
         windows.set(uuidString, {handle, session})
         changes.notify(uuidString)
     }
