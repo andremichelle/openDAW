@@ -1,0 +1,14 @@
+@use "@/colors"
+
+component
+  flex: 1
+  padding: 2em
+  display: flex
+  justify-content: center
+  overflow: hidden auto
+  line-height: 1.5em
+  @include colors.panel-background
+
+  > div.content
+    flex: 0 1 48em
+    min-width: 0
