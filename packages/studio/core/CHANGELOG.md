@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.8](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.7...@opendaw/studio-core@0.2.8) (2026-10-09)
+
+### Bug Fixes
+
+- **capture:** a terminated capture tears its audio chain down ([d82837c](https://github.com/andremichelle/openDAW/commit/d82837c3e00f5c75a48791e31e3fcb1c86a03128))
+- **capture:** an unstamped capture reuses its audio chain across recordings ([868e97b](https://github.com/andremichelle/openDAW/commit/868e97b433e382afa41eac6643e10336952d80d6))
+- **capture:** close the stream lifecycle gaps the review found ([475ea5c](https://github.com/andremichelle/openDAW/commit/475ea5caae9eda231aab44389aa6390642767797))
+- **capture:** keep an armed capture's source node pulled between uses ([fa9627d](https://github.com/andremichelle/openDAW/commit/fa9627decc4e140cea508b5c5324819cedc2e1d1))
+
 ## [0.2.7](https://github.com/andremichelle/openDAW/compare/@opendaw/studio-core@0.2.6...@opendaw/studio-core@0.2.7) (2026-09-30)
 
 **Note:** Version bump only for package @opendaw/studio-core

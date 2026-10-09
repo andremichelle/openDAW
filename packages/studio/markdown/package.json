@@ -1,7 +1,7 @@
 {
   "name": "@opendaw/studio-markdown",
   "private": true,
-  "version": "0.0.3",
+  "version": "0.0.4",
   "type": "module",
   "license": "LGPL-3.0-or-later",
   "exports": {
@@ -20,8 +20,8 @@
     "@opendaw/lib-jsx": "^0.0.93",
     "@opendaw/lib-runtime": "^0.0.87",
     "@opendaw/lib-std": "^0.0.86",
-    "@opendaw/studio-enums": "^0.1.4",
-    "@opendaw/studio-icons": "^0.0.3",
+    "@opendaw/studio-enums": "^0.1.5",
+    "@opendaw/studio-icons": "^0.0.4",
     "markdown-it": "^14.1.0",
     "markdown-it-table": "^4.1.1"
   },
