@@ -3,6 +3,7 @@ import {
     AutomatableParameterFieldAdapter,
     DeviceHost,
     InstrumentFactories,
+    WclapAudioPort,
     WclapPluginInfo
 } from "@opendaw/studio-adapters"
 import {
@@ -19,7 +20,8 @@ import {
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {AnimationFrame, Events, Files, Html} from "@opendaw/lib-dom"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
+import {PointerField} from "@opendaw/lib-box"
 import {WclapParameterBox} from "@opendaw/studio-boxes"
 import {EffectFactories, MenuItem, WclapBundles, WclapStorage} from "@opendaw/studio-core"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -37,6 +39,7 @@ import {StoredWclapPlugin, WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
 import {OpenWclapAPI, WclapIndexFolder} from "@/opendaw-api"
 import {ParameterTree, WclapParameterTree} from "@/ui/devices/audio-effects/WclapParameterTree"
+import {populateSidechainMenu} from "@/ui/devices/SidechainButton"
 
 const className = Html.adoptStyleSheet(css, "WclapDeviceEditor")
 
@@ -64,7 +67,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const {parameters: parametersField} = adapter.box
     const nameLabel: HTMLElement = <span className="name"/>
     const vendorLabel: HTMLElement = <span className="vendor"/>
-    const state: { info: Optional<WclapPluginInfo>, ready: boolean } = {info: undefined, ready: false}
+    const state: { info: Optional<WclapPluginInfo>, ready: boolean, inputs: ReadonlyArray<WclapAudioPort> } =
+        {info: undefined, ready: false, inputs: []}
     const describe = (url: string): Promise<ReadonlyArray<WclapPluginInfo>> =>
         url.length === 0 ? Promise.resolve([]) : engine.wclapDescribe(url)
     const select = (url: string, clapId: string): void => {
@@ -300,6 +304,47 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         </MenuButton>
     )
     const pluginButtons: HTMLElement = <div className="group plugin">{openButton}{parametersButton}</div>
+    const audioInMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+        if (adapter.type !== "instrument") {return}
+        const fields = adapter.audioInputs
+        const count = Math.min(state.inputs.length, fields.length)
+        const menuOf = (sideChain: PointerField<Pointers.SideChain>) =>
+            ({sideChain, rootBoxAdapter: project.rootBoxAdapter, editing, deviceHost})
+        if (count === 1) {
+            populateSidechainMenu(parent, menuOf(fields[0]))
+            return
+        }
+        for (let index = 0; index < count; index++) {
+            const {name} = state.inputs[index]
+            parent.addMenuItem(MenuItem.default({
+                label: name.length > 0 ? name : `Input ${index + 1}`,
+                checked: fields[index].targetAddress.nonEmpty()
+            }).setRuntimeChildrenProcedure(sub => populateSidechainMenu(sub, menuOf(fields[index]))))
+        }
+    })
+    const audioInLabel: HTMLElement = <span className="button-label">Audio In</span>
+    const audioInGroup: HTMLElement = (
+        <div className="group hidden">
+            <MenuButton root={audioInMenu}
+                        appearance={{
+                            framed: true,
+                            color: Colors.shadow,
+                            activeColor: Colors.white,
+                            tooltip: "Route a track into the plugin's audio input"
+                        }}>
+                {audioInLabel}
+            </MenuButton>
+        </div>
+    )
+    const showAudioIn = (): void => {
+        const connected = adapter.type === "instrument"
+            && adapter.audioInputs.slice(0, state.inputs.length).some(field => field.targetAddress.nonEmpty())
+        audioInLabel.classList.toggle("has-source", connected)
+        audioInGroup.classList.toggle("hidden", adapter.type !== "instrument" || !state.ready || state.inputs.length === 0)
+    }
+    if (adapter.type === "instrument") {
+        lifecycle.ownAll(...adapter.audioInputs.map(field => field.subscribe(showAudioIn)))
+    }
     const showStatus = (): void => {
         openLabel.textContent = WclapWindows.isOpen(uuidString) ? "Close UI" : "Open UI"
         openButton.classList.toggle("disabled", !state.ready)
@@ -326,6 +371,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 ? state.info?.vendor ?? ""
                 : status.state === "failed" ? `Failed: ${status.message}` : status.message.length > 0 ? status.message : "Loading..."
             vendorLabel.title = status.message
+            state.inputs = status.inputs
+            showAudioIn()
             showStatus()
         }),
         WclapWindows.subscribe(uuidString, showStatus)
@@ -360,6 +407,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                       </MenuButton>
                                   </div>
                                   {pluginButtons}
+                                  {audioInGroup}
                               </div>
                               <p className="about">
                                   Hosts a <a href="https://github.com/free-audio/web-clap" target="_blank"

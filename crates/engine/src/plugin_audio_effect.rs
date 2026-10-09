@@ -22,6 +22,7 @@ use engine_env::process_info::ProcessInfo;
 use engine_env::processor::Processor;
 use transport::transport::RENDER_QUANTUM;
 use crate::param_automation::{ParamHandle, ParamSink};
+use crate::audio_unit::SidechainSink;
 use crate::{call_device_process, call_device_reset, DeviceReg, INPUTS, PULL};
 
 /// A graph node that runs an audio-EFFECT device after an upstream node (Route B). It reads the upstream's
@@ -149,13 +150,13 @@ impl AudioInput for PluginAudioEffect {
     }
 }
 
-impl PluginAudioEffect {
+impl SidechainSink for PluginAudioEffect {
     /// REPLACE this effect's resolved sidechains with `sources` (each `(port_id, buffer)`, the id
     /// `bind_sidechain` returned, 2+). Rebuilds from scratch: keeps the MAIN through-signal at index 0 and
     /// drops every previous sidechain, so a re-point / detach leaves no stale port — an unbound port simply
     /// vanishes, and `host_resolve_input(port_id)` returns 0 (the device falls back to MAIN). Source buffers
     /// are kept alive so their captured pointers stay valid. Called by the engine's sidechain-resolution pass.
-    pub(crate) fn set_sidechains(&mut self, sources: &[(u32, SharedAudioBuffer)]) {
+    fn set_sidechains(&mut self, sources: &[(u32, SharedAudioBuffer)]) {
         self.input_ports.truncate(1); // index 0 is MAIN (set by set_audio_source); drop the previous sidechains
         self.sidechain_buffers.clear();
         for (port_id, source) in sources {

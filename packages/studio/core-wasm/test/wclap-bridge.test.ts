@@ -220,7 +220,7 @@ describe("wclap bridge", () => {
         })
         const handle = load(host)
         await Promise.all(host.loads)
-        expect(host.statuses.at(-1)).toEqual({state: "failed", message: "offline"})
+        expect(host.statuses.at(-1)).toEqual({state: "failed", message: "offline", inputs: []})
         await expect(host.bridges.describe("basics")).resolves.toHaveLength(6)
         expect(attempts.count).toBe(2)
         const missing = load(host, "uk.co.signalsmith.basics.nope", "basics")

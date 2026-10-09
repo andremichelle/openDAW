@@ -1,6 +1,7 @@
 import {WclapInstrumentBox} from "@opendaw/studio-boxes"
 import {Option, Terminator, UUID} from "@opendaw/lib-std"
-import {Address, BooleanField, StringField} from "@opendaw/lib-box"
+import {Address, BooleanField, PointerField, StringField} from "@opendaw/lib-box"
+import {Pointers} from "@opendaw/studio-enums"
 import {DeviceHost, Devices, InstrumentDeviceBoxAdapter} from "../../DeviceAdapter"
 import {LabeledAudioOutput} from "../../LabeledAudioOutputsOwner"
 import {BoxAdaptersContext} from "../../BoxAdaptersContext"
@@ -38,6 +39,7 @@ export class WclapInstrumentBoxAdapter implements InstrumentDeviceBoxAdapter {
     get acceptsMidiEvents(): boolean {return true}
     get urlField(): StringField {return this.#box.url}
     get clapIdField(): StringField {return this.#box.clapId}
+    get audioInputs(): ReadonlyArray<PointerField<Pointers.SideChain>> {return this.#box.audioInputs.fields()}
     get parameters(): ParameterAdapterSet {return this.#parametric}
 
     deviceHost(): DeviceHost {

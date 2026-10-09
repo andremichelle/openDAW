@@ -467,6 +467,7 @@ impl SlotCluster {
 
     /// Visit every audio member's sidechain binding, for the unit's sidechain re-resolve.
     pub(crate) fn for_each_sidechain(&mut self, visit: &mut dyn FnMut(&mut SidechainBinding)) {
+        if let Some(binding) = &mut self.instrument.sidechain { visit(binding); }
         for member in &mut self.audio {
             if let Some(binding) = &mut member.sidechain { visit(binding); }
         }
@@ -531,7 +532,7 @@ pub(crate) struct DeviceParams {
     // `groove`): each cell holds the CURRENT target-field subscription, swapped by the pointer watcher (which
     // itself lives in `observe_subs`) on a repoint / clear. Unsubscribed by cell on teardown.
     pub(crate) pointer_field_subs: Vec<Rc<Cell<Option<SubscriptionId>>>>,
-    pub(crate) sidechain_paths: Vec<Vec<u16>>, // the audio effect's declared sidechain pointer paths (`bind_sidechain`), in order
+    pub(crate) sidechain_paths: Vec<Vec<u16>>, // the device's declared sidechain pointer paths (`bind_sidechain`), in order
     // SCRIPTABLE devices: membership subscriptions on the dynamic `parameters` / `samples` collection hubs (fire
     // the unit's automation invalidate on a child add / remove). Kept SEPARATE from `field_subs`, since they
     // survive a `rebind_one` (which tears down + rebuilds only the per-parameter subscriptions). `None` for a
@@ -543,12 +544,17 @@ pub(crate) struct DeviceParams {
     pub(crate) broadcast_slots: Vec<(u32, engine_env::telemetry::BroadcastSlot)>
 }
 
-/// A persistent sidechain binding kept by the owning unit: an audio effect that declared sidechain ports, the
+/// A device node that takes resolved sidechain buffers: an audio effect, or an instrument with an audio input.
+pub(crate) trait SidechainSink {
+    fn set_sidechains(&mut self, sources: &[(u32, SharedAudioBuffer)]);
+}
+
+/// A persistent sidechain binding kept by the owning unit: a device that declared sidechain ports, the
 /// node it became, and one `SidechainPort` per declared pointer. Unlike a one-shot resolve, this survives so
 /// the resolution pass can RE-resolve every reconcile that did work — handling re-pointing, detach, a source
 /// unit (re)building, and build order, all by diffing each port's current target against `resolved`.
 pub(crate) struct SidechainBinding {
-    pub(crate) effect: Rc<RefCell<PluginAudioEffect>>,
+    pub(crate) sink: Rc<RefCell<dyn SidechainSink>>,
     pub(crate) node_id: NodeId,
     pub(crate) device_uuid: Uuid,
     pub(crate) ports: Vec<SidechainPort>

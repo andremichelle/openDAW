@@ -1,6 +1,8 @@
 // The JS host of a WCLAP plugin: a wasm32 CLAP module with its own memory, run next to the engine per device
 import {isDefined, isNotNull, isNull, Nullable, Optional, Procedure, tryCatch, UUID} from "@opendaw/lib-std"
-import {WclapBundle, WclapGuiInfo, WclapGuiSize, WclapParamGesture, WclapParamInfo, WclapPluginInfo, WclapStatus} from "@opendaw/studio-adapters"
+import {
+    WclapAudioPort, WclapBundle, WclapGuiInfo, WclapGuiSize, WclapParamGesture, WclapParamInfo, WclapPluginInfo, WclapStatus
+} from "@opendaw/studio-adapters"
 import {decodeUtf8, encodeUtf8} from "../utf8"
 import {ClapAbi} from "./clap-abi"
 import {trampoline, TrampolineFn} from "./trampoline"
@@ -59,6 +61,10 @@ type Loaded = {
     inputs: [number, number]
     outputs: [number, number]
     inputPorts: number
+    inputPortInfos: Array<WclapAudioPort>
+    auxInputs: Array<[number, number]> // channel buffers of input ports 1+, index 0 unused (fed by in0/in1)
+    auxFed: Array<boolean> // the device fed this port for the coming process call
+    auxSilent: Array<boolean>
     scratchPtr: number
     scratchSize: number
     steadyTime: number
@@ -132,6 +138,7 @@ export class WclapBridges {
             host_wclap_load: (handle, urlPtr, urlLen, idPtr, idLen) => this.#load(handle, urlPtr, urlLen, idPtr, idLen),
             host_wclap_process: (handle, in0, in1, out0, out1, frames, bpm, position, flags) =>
                 this.#process(handle, in0, in1, out0, out1, frames, bpm, position, flags),
+            host_wclap_input: (handle, index, left, right, frames) => this.#input(handle, index, left, right, frames),
             host_wclap_note: (handle, on, key, velocity) => this.#note(handle, on !== 0, key, velocity),
             host_wclap_param: (handle, id, kind, value, modulation) => this.#param(handle, id >>> 0, kind, value, modulation), // u32 arrives signed
             host_wclap_state: (handle, ptr, len) => this.#state(handle, ptr, len),
@@ -289,7 +296,7 @@ export class WclapBridges {
         if (url.length === 0 || clapId.length === 0) {return}
         const generation = ++plugin.generation
         plugin.loading = true
-        this.#host.sendStatus(plugin.uuid, {state: "loading", message: ""})
+        this.#host.sendStatus(plugin.uuid, {state: "loading", message: "", inputs: []})
         const load = this.#module(url)
             .then(({module}) => this.#instantiate(plugin, module))
             .then(loaded => {
@@ -297,11 +304,11 @@ export class WclapBridges {
                 plugin.loaded = loaded
                 plugin.loading = false
                 this.#publishParams(plugin, loaded)
-                this.#host.sendStatus(plugin.uuid, {state: "ready", message: ""})
+                this.#host.sendStatus(plugin.uuid, {state: "ready", message: "", inputs: loaded.inputPortInfos})
             }, error => {
                 if (plugin.generation !== generation) {return}
                 plugin.loading = false
-                this.#host.sendStatus(plugin.uuid, {state: "failed", message: describeError(error)})
+                this.#host.sendStatus(plugin.uuid, {state: "failed", message: describeError(error), inputs: []})
             })
         this.#host.track(load)
     }
@@ -336,7 +343,7 @@ export class WclapBridges {
         loaded.readSource = null
         plugin.knownState = bytes
         if (ok === 0) {
-            this.#host.sendStatus(plugin.uuid, {state: "loading", message: `${plugin.clapId} rejected its saved state`})
+            this.#host.sendStatus(plugin.uuid, {state: "loading", message: `${plugin.clapId} rejected its saved state`, inputs: []})
             return
         }
         this.#saveState(plugin, loaded, true)
@@ -461,7 +468,7 @@ export class WclapBridges {
             memory, table, malloc, buffer: memory.buffer, view: new DataView(memory.buffer),
             audio: [new Float32Array(0), new Float32Array(0), new Float32Array(0), new Float32Array(0)],
             plugin: 0, webview: 0, gui: 0, guiCreated: false, processPtr: 0, transportPtr: 0, uriPtr: 0, sizePtr: 0, windowPtr: 0,
-            inputs: [0, 0], outputs: [0, 0], inputPorts: 0, scratchPtr: 0, scratchSize: 0, steadyTime: 0,
+            inputs: [0, 0], outputs: [0, 0], inputPorts: 0, inputPortInfos: [], auxInputs: [], auxFed: [], auxSilent: [], scratchPtr: 0, scratchSize: 0, steadyTime: 0,
             eventsPtr: 0, eventCount: 0, pendingNotes: [], paramInfos: new Map(), paramIds: [], pollCursor: 0, pollRemaining: 0, emitsParams: false, reported: new Map(), lastModulation: new Map(),
             gestures: new Set(), state: 0, params: 0, inEvents: 0, outEvents: 0, istream: 0, ostream: 0,
             readSource: null, writeChunks: [], logCount: 0
@@ -502,7 +509,8 @@ export class WclapBridges {
         loaded.windowPtr = malloc(ClapAbi.Window.SIZE)
         this.#loadState(plugin, loaded)
         const audioPorts = this.#extension(loaded, ClapAbi.Ext.AUDIO_PORTS)
-        loaded.inputPorts = audioPorts === 0 ? 1 : this.#call(loaded, audioPorts + ClapAbi.AudioPorts.COUNT, loaded.plugin, 1)
+        loaded.inputPortInfos = audioPorts === 0 ? [] : this.#readInputPorts(loaded, audioPorts)
+        loaded.inputPorts = audioPorts === 0 ? 1 : loaded.inputPortInfos.length
         this.#createProcess(plugin, loaded)
         // the engine splits blocks at events, so a chunk may hold any 1..128 frames
         if (this.#call(loaded, loaded.plugin + ClapAbi.Plugin.ACTIVATE, loaded.plugin, this.#sampleRate, 1, RENDER_QUANTUM) === 0) {
@@ -612,11 +620,27 @@ export class WclapBridges {
         return host
     }
 
-    // Allocate the clap_process block once: two stereo audio buffers, the event lists and a transport event
+    #readInputPorts(loaded: Loaded, audioPorts: number): Array<WclapAudioPort> {
+        const count = this.#call(loaded, audioPorts + ClapAbi.AudioPorts.COUNT, loaded.plugin, 1)
+        const info = loaded.malloc(ClapAbi.AudioPortInfo.SIZE)
+        const ports: Array<WclapAudioPort> = []
+        for (let index = 0; index < count; index++) {
+            const ok = this.#call(loaded, audioPorts + ClapAbi.AudioPorts.GET, loaded.plugin, index, 1, info) !== 0
+            ports.push(ok
+                ? {name: this.#cstr(loaded.memory, info + ClapAbi.AudioPortInfo.NAME),
+                    channels: this.#u32(loaded.memory, info + ClapAbi.AudioPortInfo.CHANNEL_COUNT)}
+                : {name: "", channels: 2})
+        }
+        return ports
+    }
+
+    // Allocate the clap_process block once: an audio buffer per input port, the stereo output, the event lists
+    // and a transport event
     #createProcess(plugin: Plugin, loaded: Loaded): void {
         const {malloc} = loaded
         const processPtr = malloc(ClapAbi.Process.SIZE)
-        const audioIn = malloc(ClapAbi.AudioBuffer.SIZE)
+        const inputCount = Math.max(1, loaded.inputPorts)
+        const audioIn = malloc(ClapAbi.AudioBuffer.SIZE * inputCount)
         const audioOut = malloc(ClapAbi.AudioBuffer.SIZE)
         const inData = malloc(8)
         const outData = malloc(8)
@@ -637,6 +661,27 @@ export class WclapBridges {
             view.setUint32(buffer + ClapAbi.AudioBuffer.LATENCY, 0, true)
             view.setBigUint64(buffer + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
         }
+        const channelsOf = (index: number): number => Math.min(2, Math.max(1, loaded.inputPortInfos[index]?.channels ?? 2))
+        view.setUint32(audioIn + ClapAbi.AudioBuffer.CHANNEL_COUNT, channelsOf(0), true)
+        loaded.auxInputs = [[0, 0]]
+        for (let index = 1; index < inputCount; index++) {
+            const buffer = audioIn + index * ClapAbi.AudioBuffer.SIZE
+            const data = malloc(8)
+            const channels: [number, number] = [malloc(RENDER_QUANTUM * 4), malloc(RENDER_QUANTUM * 4)]
+            new Float32Array(loaded.memory.buffer, channels[0], RENDER_QUANTUM).fill(0.0)
+            new Float32Array(loaded.memory.buffer, channels[1], RENDER_QUANTUM).fill(0.0)
+            const ports = new DataView(loaded.memory.buffer)
+            ports.setUint32(data, channels[0], true)
+            ports.setUint32(data + 4, channels[1], true)
+            ports.setUint32(buffer + ClapAbi.AudioBuffer.DATA32, data, true)
+            ports.setUint32(buffer + ClapAbi.AudioBuffer.DATA64, 0, true)
+            ports.setUint32(buffer + ClapAbi.AudioBuffer.CHANNEL_COUNT, channelsOf(index), true)
+            ports.setUint32(buffer + ClapAbi.AudioBuffer.LATENCY, 0, true)
+            ports.setBigUint64(buffer + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
+            loaded.auxInputs.push(channels)
+        }
+        loaded.auxFed = loaded.auxInputs.map(() => false)
+        loaded.auxSilent = loaded.auxInputs.map(() => true)
         new Uint8Array(loaded.memory.buffer, loaded.transportPtr, ClapAbi.TransportEvent.SIZE).fill(0)
         view.setUint32(loaded.transportPtr, ClapAbi.TransportEvent.SIZE, true)
         view.setUint16(loaded.transportPtr + ClapAbi.EventHeader.TYPE, ClapAbi.EventType.TRANSPORT, true)
@@ -674,13 +719,47 @@ export class WclapBridges {
         view.setUint32(processPtr + ClapAbi.Process.TRANSPORT, loaded.transportPtr, true)
         view.setUint32(processPtr + ClapAbi.Process.AUDIO_INPUTS, audioIn, true)
         view.setUint32(processPtr + ClapAbi.Process.AUDIO_OUTPUTS, audioOut, true)
-        view.setUint32(processPtr + ClapAbi.Process.AUDIO_INPUTS_COUNT, loaded.inputPorts > 0 ? 1 : 0, true)
+        view.setUint32(processPtr + ClapAbi.Process.AUDIO_INPUTS_COUNT, loaded.inputPorts, true)
         view.setUint32(processPtr + ClapAbi.Process.AUDIO_OUTPUTS_COUNT, 1, true)
         view.setUint32(processPtr + ClapAbi.Process.IN_EVENTS, inEvents, true)
         view.setUint32(processPtr + ClapAbi.Process.OUT_EVENTS, outEvents, true)
         loaded.processPtr = processPtr
         loaded.inEvents = inEvents
         loaded.outEvents = outEvents
+    }
+
+    // Input port `index` (1+) for the coming process call; port 0 arrives with the call itself
+    #input(handle: number, index: number, left: number, right: number, frames: number): void {
+        const plugin = this.#plugins.get(handle)
+        if (!isDefined(plugin) || isNull(plugin.loaded)) {return}
+        const loaded = plugin.loaded
+        if (index < 1 || index >= loaded.auxInputs.length) {return}
+        const engine = this.#memory.buffer
+        const [targetLeft, targetRight] = loaded.auxInputs[index]
+        const sourceLeft = new Float32Array(engine, left, frames)
+        const sourceRight = new Float32Array(engine, right, frames)
+        const outLeft = new Float32Array(loaded.memory.buffer, targetLeft, frames)
+        if (loaded.inputPortInfos[index]?.channels === 1) {
+            for (let frame = 0; frame < frames; frame++) {outLeft[frame] = (sourceLeft[frame] + sourceRight[frame]) * 0.5}
+        } else {
+            outLeft.set(sourceLeft)
+            new Float32Array(loaded.memory.buffer, targetRight, frames).set(sourceRight)
+        }
+        loaded.auxFed[index] = true
+        loaded.auxSilent[index] = false
+    }
+
+    // Ports the device did not feed this call play silence (cleared once, until fed again)
+    #silenceUnfedInputs(loaded: Loaded): void {
+        for (let index = 1; index < loaded.auxInputs.length; index++) {
+            if (!loaded.auxFed[index] && !loaded.auxSilent[index]) {
+                const [left, right] = loaded.auxInputs[index]
+                new Float32Array(loaded.memory.buffer, left, RENDER_QUANTUM).fill(0.0)
+                new Float32Array(loaded.memory.buffer, right, RENDER_QUANTUM).fill(0.0)
+                loaded.auxSilent[index] = true
+            }
+            loaded.auxFed[index] = false
+        }
     }
 
     // One chunk through the plugin, 0 = not ready (the device passes through)
@@ -700,6 +779,7 @@ export class WclapBridges {
             loaded.steadyTime += frames
             this.#writeTransport(loaded, view, bpm, position, flags)
             this.#writeEvents(plugin, loaded, view)
+            this.#silenceUnfedInputs(loaded)
             this.#onAudioThread(() => this.#call(loaded, loaded.plugin + ClapAbi.Plugin.PROCESS, loaded.plugin, loaded.processPtr))
             loaded.eventCount = 0
             plugin.receivedSinceProcess = false
@@ -888,7 +968,7 @@ export class WclapBridges {
         plugin.pendingState = plugin.knownState ?? plugin.pendingState
         plugin.knownState = null
         console.error(`[wclap ${plugin.clapId}]`, result.error)
-        this.#host.sendStatus(plugin.uuid, {state: "failed", message: describeError(result.error)})
+        this.#host.sendStatus(plugin.uuid, {state: "failed", message: describeError(result.error), inputs: []})
         return fallback
     }
 

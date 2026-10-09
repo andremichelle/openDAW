@@ -4,7 +4,7 @@
 
 #[cfg(target_family = "wasm")]
 use core::panic::PanicInfo;
-use abi::{Block, EventRecord, FieldValue, Instrument, ParamValue, Ports, EVENT_NOTE_OFF, EVENT_NOTE_ON};
+use abi::{AudioInputRef, Block, EventRecord, FieldValue, Instrument, ParamValue, Ports, EVENT_NOTE_OFF, EVENT_NOTE_ON};
 use wclap_common::WclapLink;
 
 #[cfg(target_family = "wasm")]
@@ -13,8 +13,19 @@ fn panic(info: &PanicInfo) -> ! {
     abi::panic_to_host(info)
 }
 
+const AUDIO_INPUTS_FIELD: u16 = 15;
+const AUDIO_INPUTS: usize = 8; // WASM CONTRACT: the `audio-inputs` array length of WclapInstrumentBox
+
 pub struct WclapInstrumentState {
-    link: WclapLink
+    link: WclapLink,
+    input_ids: [u32; AUDIO_INPUTS]
+}
+
+/// The current chunk's part of a resolved input (its buffers are in absolute quantum coordinates).
+fn chunk_of(input: &AudioInputRef, frames: usize) -> Option<[&[f32]; 2]> {
+    let range = abi::chunk_start()..abi::chunk_start() + frames;
+    let [left, right] = input.channels();
+    Some([left.get(range.clone())?, right.get(range)?])
 }
 
 pub struct WclapInstrument;
@@ -24,6 +35,9 @@ impl Instrument for WclapInstrument {
 
     fn init(state: &mut WclapInstrumentState, _sample_rate: f32) {
         state.link.init();
+        for (index, id) in state.input_ids.iter_mut().enumerate() {
+            *id = abi::bind_sidechain(&[AUDIO_INPUTS_FIELD, index as u16]);
+        }
     }
 
     fn parameter_changed(state: &mut WclapInstrumentState, id: u32, value: ParamValue) {
@@ -44,7 +58,15 @@ impl Instrument for WclapInstrument {
 
     fn process_audio(state: &mut WclapInstrumentState, output: [&mut [f32]; 2], block: &Block) {
         let [out_left, out_right] = output;
-        state.link.process_instrument(out_left, out_right, block);
+        let frames = out_left.len();
+        for index in 1..AUDIO_INPUTS {
+            let input = abi::resolve_input(state.input_ids[index]);
+            if let Some(chunk) = input.as_ref().and_then(|input| chunk_of(input, frames)) {
+                abi::wclap_input(state.link.bridge, index as u32, chunk);
+            }
+        }
+        let main = abi::resolve_input(state.input_ids[0]);
+        state.link.process_instrument(main.as_ref().and_then(|input| chunk_of(input, frames)), out_left, out_right, block);
     }
 
     fn reset(state: &mut WclapInstrumentState) {
@@ -110,7 +132,7 @@ mod tests {
         WclapInstrument::init(&mut state, 48_000.0);
         let (mut out_left, mut out_right) = (vec![0.25f32; 128], vec![0.5f32; 128]);
         let block = Block {index: 0, flags: abi::BlockFlags(0), p0: 0.0, p1: 0.0, s0: 0, s1: 128, bpm: 120.0};
-        state.link.process_instrument(&mut out_left, &mut out_right, &block);
+        state.link.process_instrument(None, &mut out_left, &mut out_right, &block);
         assert!(out_left.iter().all(|&sample| sample == 0.25));
         assert!(out_right.iter().all(|&sample| sample == 0.5));
     }

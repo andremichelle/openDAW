@@ -72,11 +72,19 @@ impl WclapLink {
         }
     }
 
-    /// One sub-chunk of the instrument: silence in, the plugin's output ADDED to `out` (the instrument contract).
-    pub fn process_instrument(&mut self, out_left: &mut [f32], out_right: &mut [f32], block: &Block) {
+    /// One sub-chunk of the instrument: the side-chain (or silence) in, the plugin's output ADDED to `out`.
+    pub fn process_instrument(&mut self, input: Option<[&[f32]; 2]>, out_left: &mut [f32], out_right: &mut [f32], block: &Block) {
         let frames = out_left.len().min(RENDER_QUANTUM);
-        self.scratch_in[0][..frames].fill(0.0);
-        self.scratch_in[1][..frames].fill(0.0);
+        match input {
+            Some([in_left, in_right]) if in_left.len() >= frames && in_right.len() >= frames => {
+                self.scratch_in[0][..frames].copy_from_slice(&in_left[..frames]);
+                self.scratch_in[1][..frames].copy_from_slice(&in_right[..frames]);
+            }
+            _ => {
+                self.scratch_in[0][..frames].fill(0.0);
+                self.scratch_in[1][..frames].fill(0.0);
+            }
+        }
         if !self.run(frames, block) {return}
         for index in 0..frames {
             out_left[index] += self.scratch_out[0][index];

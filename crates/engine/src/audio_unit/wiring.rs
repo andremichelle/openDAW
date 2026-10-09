@@ -720,7 +720,7 @@ impl Engine {
             None => {}
         }
         // Build the desired chain, reusing survivors from the pool (joiners are created + bound).
-        let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, instrument_device, invalidate, rewire);
+        let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, instrument_device, signal, invalidate, rewire);
         let mut midi_members: Vec<Member> = Vec::new();
         for uuid in unit.midi.sorted() {
             if let Some(device) = self.graph.find_box(&uuid).and_then(|device_box| self.device_for_type(&device_box.name)) {
@@ -805,7 +805,7 @@ impl Engine {
     }
 
     pub(crate) fn take_or_build_instrument(&mut self, pool: &mut BTreeMap<Uuid, Member>, uuid: Uuid, device: DeviceReg,
-                                invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> Member {
+                                signal: &Rc<dyn Fn()>, invalidate: &Rc<dyn Fn()>, rewire: &Rc<dyn Fn()>) -> Member {
         if let Some(existing) = pool.remove(&uuid) {
             if matches!(existing.proc, ProcHandle::Instrument(_)) {
                 return existing;
@@ -828,9 +828,9 @@ impl Engine {
         // 128-bit note set broadcasts separately (the binding's `note_bits`, marked from the pull path).
         let meter_slot = instrument.borrow().meter_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
-
+        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, node_id, instrument.clone(), signal);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
-        Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain: None, enabled_sub}
+        Member {uuid, proc: ProcHandle::Instrument(instrument), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain, enabled_sub}
     }
 
     /// Reuse the pooled midi-fx (a survivor) or build + bind a fresh one (a joiner). A midi-fx has no audio
@@ -898,20 +898,23 @@ impl Engine {
         // Live telemetry: the effect's output peaks (TS `PeakBroadcaster(adapter.address)`).
         let meter_slot = node.borrow().meter_slot();
         self.broadcasts.register(uuid, &[], crate::broadcast::PACKAGE_FLOAT_ARRAY, &meter_slot);
-        let sidechain = if params.sidechain_paths.is_empty() {
-            None
-        } else {
-            let mut ports = Vec::new();
-            for (index, path) in params.sidechain_paths.iter().cloned().enumerate() {
-                let port_signal = signal.clone();
-                let pointer_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, path.clone()),
-                    Box::new(move |_graph, _update| port_signal()));
-                ports.push(SidechainPort {port_id: index as u32 + 2, path, resolved: None, pointer_sub});
-            }
-            Some(SidechainBinding {effect: node.clone(), node_id, device_uuid: uuid, ports})
-        };
+        let sidechain = self.build_sidechain(uuid, &params.sidechain_paths, node_id, node.clone(), signal);
         let enabled_sub = self.subscribe_enabled(uuid, rewire);
         Member {uuid, proc: ProcHandle::Audio(node), node_id: Some(node_id), input_node: None, output: Some(output), params: Some(params), sidechain, enabled_sub}
+    }
+
+    /// The device's declared sidechain ports with their pointer monitors; the resolve pass wires the edges.
+    fn build_sidechain(&mut self, uuid: Uuid, paths: &[Vec<u16>], node_id: NodeId, sink: Rc<RefCell<dyn SidechainSink>>,
+                       signal: &Rc<dyn Fn()>) -> Option<SidechainBinding> {
+        if paths.is_empty() { return None; }
+        let mut ports = Vec::new();
+        for (index, path) in paths.iter().cloned().enumerate() {
+            let port_signal = signal.clone();
+            let pointer_sub = self.graph.subscribe_vertex(Propagation::This, Address::of(uuid, path.clone()),
+                Box::new(move |_graph, _update| port_signal()));
+            ports.push(SidechainPort {port_id: index as u32 + 2, path, resolved: None, pointer_sub});
+        }
+        Some(SidechainBinding {sink, node_id, device_uuid: uuid, ports})
     }
 
     /// Reuse the pooled audio sink (its target binding survives, `resolve_sinks` diffs it) or build a fresh one:
@@ -1045,7 +1048,7 @@ impl Engine {
             for member in prev.midi { pool.insert(member.uuid, member); }
             for member in prev.audio { pool.insert(member.uuid, member); }
         }
-        let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, device, invalidate, rewire);
+        let instrument = self.take_or_build_instrument(&mut pool, instrument_uuid, device, signal, invalidate, rewire);
         let unit_replicas: Vec<Member> = unit_midi.iter()
             .filter_map(|original| self.take_or_build_midi_replica(&mut pool, original, invalidate, rewire)).collect();
         let replica_handles: Vec<Rc<PluginMidiEffect>> = unit_replicas.iter().filter_map(|member| match &member.proc {

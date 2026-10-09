@@ -185,6 +185,7 @@ extern "C" {
     fn host_wclap_load(handle: u32, url_ptr: u32, url_len: u32, id_ptr: u32, id_len: u32);
     fn host_wclap_process(handle: u32, in0_ptr: u32, in1_ptr: u32, out0_ptr: u32, out1_ptr: u32, frames: u32,
                           bpm: f32, position: f64, flags: u32) -> u32;
+    fn host_wclap_input(handle: u32, index: u32, left_ptr: u32, right_ptr: u32, frames: u32);
     fn host_wclap_note(handle: u32, on: u32, key: u32, velocity: f32);
     fn host_wclap_param(handle: u32, clap_param_id: u32, kind: u32, value: f32, modulation: f32);
     fn host_wclap_state(handle: u32, base64_ptr: u32, base64_len: u32);
@@ -1020,6 +1021,19 @@ pub fn wclap_load(handle: u32, url: &str, clap_id: &str) {
     { let _ = (handle, url, clap_id); }
 }
 
+/// Feed the plugin's audio input port `index` (1+) for the next [`wclap_process`]; port 0 is its `inputs`.
+/// An unfed port plays silence. Native stub no-op.
+#[inline]
+pub fn wclap_input(handle: u32, index: u32, input: [&[f32]; 2]) {
+    #[cfg(target_family = "wasm")]
+    {
+        let [left, right] = input;
+        unsafe { host_wclap_input(handle, index, left.as_ptr() as u32, right.as_ptr() as u32, left.len().min(right.len()) as u32) }
+    }
+    #[cfg(not(target_family = "wasm"))]
+    { let _ = (handle, index, input); }
+}
+
 /// Run `frames` stereo samples through the plugin with the block's transport (tempo, pulse position, playing).
 /// `false` = not ready, the device must pass its input through.
 #[inline]
@@ -1386,6 +1400,15 @@ pub trait Instrument {
     }
 }
 
+static CHUNK_START: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// The quantum frame where the current instrument `process_audio` chunk starts (its slices are rebased to 0),
+/// for reading a [`resolve_input`] buffer, which is in absolute quantum coordinates.
+#[inline]
+pub fn chunk_start() -> usize {
+    CHUNK_START.load(core::sync::atomic::Ordering::Relaxed) as usize
+}
+
 /// Dispatch ONE block's `events` (offset-sorted, within `[block.s0, block.s1)`) over the stereo `output`:
 /// `process_audio` for each chunk between events, `handle_event` (or a Route-D param pull) at each offset.
 /// Each chunk gets a cloned `block` with `s0`/`s1` rebased to `0`/`len`, `p0`/`p1` the chunk's pulse range,
@@ -1404,6 +1427,7 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
         let offset = (event.offset as usize).clamp(s0, s1);
         if offset > cursor {
             let sub = Block {index: block.index, flags, p0: chunk_p0, p1: event.position, s0: 0, s1: (offset - cursor) as u32, bpm: block.bpm};
+            CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
             I::process_audio(state, [&mut out_left[cursor..offset], &mut out_right[cursor..offset]], &sub);
             cursor = offset;
             chunk_p0 = event.position;
@@ -1418,6 +1442,7 @@ pub fn dispatch_range<I: Instrument>(state: &mut I::State, output: [&mut [f32]; 
     }
     if cursor < s1 {
         let sub = Block {index: block.index, flags, p0: chunk_p0, p1: block.p1, s0: 0, s1: (s1 - cursor) as u32, bpm: block.bpm};
+        CHUNK_START.store(cursor as u32, core::sync::atomic::Ordering::Relaxed);
         I::process_audio(state, [&mut out_left[cursor..s1], &mut out_right[cursor..s1]], &sub);
     }
 }

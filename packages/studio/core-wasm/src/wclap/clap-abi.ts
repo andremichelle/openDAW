@@ -141,6 +141,12 @@ export namespace ClapAbi {
         export const GET = 4
     }
 
+    export namespace AudioPortInfo {
+        export const SIZE = 276
+        export const NAME = 4
+        export const CHANNEL_COUNT = 264
+    }
+
     export namespace Params {
         export const COUNT = 0
         export const GET_INFO = 4

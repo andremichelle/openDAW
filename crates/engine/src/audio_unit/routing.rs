@@ -16,6 +16,7 @@ impl Engine {
         for unit in &mut units {
             match &mut unit.wired {
                 Some(Wired::Leaf(chain)) => {
+                    if let Some(binding) = &mut chain.instrument.sidechain { self.resolve_one_sidechain(binding); }
                     // `visit_member_sidechains` recurses into an effect composite's entries, so a device
                     // nested inside a stack re-resolves exactly like a top-level one.
                     for member in &mut chain.audio {
@@ -97,7 +98,7 @@ impl Engine {
             }
         }
         if changed {
-            binding.effect.borrow_mut().set_sidechains(&sources);
+            binding.sink.borrow_mut().set_sidechains(&sources);
         }
     }
 
