@@ -26,7 +26,7 @@
     "build:api": "tsc --project tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.ts\"",
-    "test:rust": ". \"$HOME/.cargo/env\" && cargo test --manifest-path ../../../crates/Cargo.toml --workspace",
+    "test:rust": ". ./cargo-env.sh && cargo test --manifest-path ../../../crates/Cargo.toml --workspace",
     "test:vitest": "vitest run",
     "test": "npm run test:rust && npm run test:vitest",
     "clean": "rm -rf dist"

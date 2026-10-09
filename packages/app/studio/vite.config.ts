@@ -74,7 +74,7 @@ export default defineConfig(({command}) => {
                 allow: [resolve(__dirname, "../../../")]
             },
             proxy: {
-                "/manuals": {target: "https://localhost:8081", secure: false}
+                "/manuals": {target: `${certsExist ? "https" : "http"}://localhost:8081`, secure: false}
             },
             hmr: {
                 overlay: false

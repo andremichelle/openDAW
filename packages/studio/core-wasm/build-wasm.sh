@@ -11,13 +11,7 @@
 #                       of distinct devices coexist in the one memory with no fixed --global-base.
 #                       Same memory import as the engine.
 set -e
-# rustup writes .cargo/env on Unix only; on Windows it edits the registry PATH, which a
-# POSIX shell spawned by npm does not necessarily inherit. Fall back to the bin directory.
-if [ -f "$HOME/.cargo/env" ]; then
-    . "$HOME/.cargo/env"
-elif [ -d "$HOME/.cargo/bin" ]; then
-    PATH="$HOME/.cargo/bin:$PATH"
-fi
+. "$(dirname "$0")/cargo-env.sh"
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$ROOT/crates"
 TARGET=wasm32-unknown-unknown
