@@ -63,6 +63,13 @@ impl ByteWriter {
             self.write_short(unit as i16)
         }
     }
+
+    pub fn write_utf16(&mut self, units: &[u16]) {
+        self.write_int(units.len() as i32);
+        for unit in units {
+            self.write_short(*unit as i16)
+        }
+    }
 }
 
 impl Default for ByteWriter {
@@ -147,11 +154,15 @@ impl<'a> ByteReader<'a> {
     }
 
     pub fn read_string(&mut self) -> Result<String, ByteError> {
+        Ok(String::from_utf16_lossy(&self.read_utf16()?))
+    }
+
+    pub fn read_utf16(&mut self) -> Result<Vec<u16>, ByteError> {
         let count = self.read_int()? as usize;
         let mut units = Vec::with_capacity(count);
         for _ in 0..count {
             units.push(self.read_short()? as u16)
         }
-        Ok(String::from_utf16_lossy(&units))
+        Ok(units)
     }
 }

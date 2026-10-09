@@ -37,7 +37,7 @@ fn primitive_type_name(value: &FieldValue) -> &'static str {
         FieldValue::Int32(_) => "int32",
         FieldValue::Float32(_) => "float32",
         FieldValue::Boolean(_) => "boolean",
-        FieldValue::String(_) => "string",
+        FieldValue::String(_) | FieldValue::Utf16(_) => "string",
         FieldValue::Bytes(_) => "bytes",
         _ => "int32"
     }

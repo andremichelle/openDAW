@@ -38,6 +38,8 @@ pub enum FieldValue {
     Float32(f32),
     Boolean(bool),
     String(String),
+    /// Ill-formed UTF-16 (lone surrogates) kept verbatim, so the mirror re-serializes it byte-exact.
+    Utf16(Vec<u16>),
     Bytes(Vec<u8>),
     Pointer(Option<Address>),
     Hook,
@@ -73,6 +75,7 @@ pub(crate) fn write_value(writer: &mut ByteWriter, value: &FieldValue) {
         FieldValue::Float32(value) => writer.write_float(*value),
         FieldValue::Boolean(value) => writer.write_bool(*value),
         FieldValue::String(value) => writer.write_string(value),
+        FieldValue::Utf16(units) => writer.write_utf16(units),
         FieldValue::Bytes(value) => {
             writer.write_int(value.len() as i32);
             writer.write_raw(value)
@@ -95,7 +98,10 @@ pub(crate) fn read_value(reader: &mut ByteReader, field_type: &FieldType) -> Res
         FieldType::Int32 => Ok(FieldValue::Int32(reader.read_int()?)),
         FieldType::Float32 => Ok(FieldValue::Float32(reader.read_float()?)),
         FieldType::Boolean => Ok(FieldValue::Boolean(reader.read_bool()?)),
-        FieldType::String => Ok(FieldValue::String(reader.read_string()?)),
+        FieldType::String => {
+            let units = reader.read_utf16()?;
+            Ok(String::from_utf16(&units).map_or(FieldValue::Utf16(units), FieldValue::String))
+        }
         FieldType::Bytes => {
             let length = reader.read_int()? as usize;
             Ok(FieldValue::Bytes(reader.read_raw(length)?))
