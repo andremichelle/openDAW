@@ -1,5 +1,5 @@
-import {asDefined, isDefined, Option, panic, Procedure, Provider, unitValue} from "@opendaw/lib-std"
-import {ExecutionProvider, ModelDescriptor, TaskDefinition} from "./Task"
+import {asDefined, EmptyExec, isDefined, Option, panic, Procedure, Provider, unitValue} from "@opendaw/lib-std"
+import {ExecutionProvider, ModelDescriptor, TaskDefinition, WASM_FALLBACK_PROVIDER} from "./Task"
 import {SessionRun, TensorMap} from "./Tensor"
 import {InferenceCancelledError} from "./Errors"
 import {ModelStore} from "./ModelStore"
@@ -17,6 +17,9 @@ interface QueueEntry {
 
 const NO_PROGRESS: Procedure<unitValue> = () => {}
 
+const normalizeProviders = (executionProviders: ReadonlyArray<ExecutionProvider>): ReadonlyArray<ExecutionProvider> =>
+    executionProviders.includes(WASM_FALLBACK_PROVIDER) ? executionProviders : [...executionProviders, WASM_FALLBACK_PROVIDER]
+
 export interface EngineHostOptions {
     readonly workerFactory: Provider<Worker>
 }
@@ -29,7 +32,7 @@ export interface SessionNames {
 export class EngineHost {
     readonly #workerFactory: Provider<Worker>
     readonly #pending = new Map<WorkerCallId, PendingCall>()
-    readonly #loadedTasks = new Map<string, string>() // taskKey -> providers it was loaded with
+    readonly #loadedTasks = new Map<string, string>()
     readonly #names = new Map<string, SessionNames>()
     readonly #queue: Array<QueueEntry> = []
     readonly #loadTransitions = new Map<string, Promise<void>>()
@@ -43,15 +46,13 @@ export class EngineHost {
         this.#workerFactory = options.workerFactory
     }
 
-    // preload/acquire/releaseTask call this directly, bypassing #queue (only run() goes through
-    // it), so two calls for the same task can otherwise interleave their check-release-load steps.
     ensureLoaded(taskKey: string,
                 model: ModelDescriptor,
                 executionProviders: ReadonlyArray<ExecutionProvider>,
                 options?: {progress?: Procedure<unitValue>, signal?: AbortSignal}): Promise<void> {
         const previous = this.#loadTransitions.get(taskKey) ?? Promise.resolve()
         const current = previous.then(() => this.#ensureLoadedExclusive(taskKey, model, executionProviders, options))
-        this.#loadTransitions.set(taskKey, current.catch(() => {}))
+        this.#loadTransitions.set(taskKey, current.catch(EmptyExec))
         return current
     }
 
@@ -60,7 +61,7 @@ export class EngineHost {
                                  executionProviders: ReadonlyArray<ExecutionProvider>,
                                  options?: {progress?: Procedure<unitValue>, signal?: AbortSignal}): Promise<void> {
         this.#throwIfAborted(options?.signal)
-        const providerKey = executionProviders.join(",")
+        const providerKey = normalizeProviders(executionProviders).join(",")
         const loadedWith = this.#loadedTasks.get(taskKey)
         if (loadedWith === providerKey) {
             options?.progress?.(1.0)
@@ -124,7 +125,7 @@ export class EngineHost {
     releaseTask(taskKey: string): Promise<void> {
         const previous = this.#loadTransitions.get(taskKey) ?? Promise.resolve()
         const current = previous.then(() => this.#releaseTaskExclusive(taskKey))
-        this.#loadTransitions.set(taskKey, current.catch(() => {}))
+        this.#loadTransitions.set(taskKey, current.catch(EmptyExec))
         return current
     }
 
