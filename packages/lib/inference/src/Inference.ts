@@ -1,5 +1,6 @@
 import {
     asDefined,
+    EmptyExec,
     isAbsent,
     isDefined,
     Option,
@@ -31,6 +32,10 @@ export interface RunOptions {
 export interface PreloadOptions {
     readonly progress?: Procedure<unitValue>
     readonly signal?: AbortSignal
+    readonly executionProvider?: ExecutionProvider | "auto"
+}
+
+export interface AcquireOptions {
     readonly executionProvider?: ExecutionProvider | "auto"
 }
 
@@ -132,10 +137,11 @@ export namespace Inference {
         requireInferenceConfig()
         const engineHost = requireHost()
         const task = lookupTask(key)
-        await engineHost.ensureLoaded(task.key, task.model, resolveProviders(task.executionProviders, options?.executionProvider), {
-            progress: options?.progress,
-            signal: options?.signal
-        })
+        await engineHost.enqueue(() => engineHost.ensureLoaded(
+            task.key, task.model, resolveProviders(task.executionProviders, options?.executionProvider), {
+                progress: options?.progress,
+                signal: options?.signal
+            }))
     }
 
     /**
@@ -146,15 +152,16 @@ export namespace Inference {
     export const releaseTask = async <K extends TaskKey>(key: K): Promise<void> => {
         requireInferenceConfig()
         const engineHost = requireHost()
-        await engineHost.releaseTask(key as string)
+        await engineHost.enqueue(() => engineHost.releaseTask(key as string))
     }
 
-    export const acquire = <K extends TaskKey>(key: K): Promise<TaskHandle<K>> => {
+    export const acquire = <K extends TaskKey>(key: K, options?: AcquireOptions): Promise<TaskHandle<K>> => {
         requireInferenceConfig()
         const engineHost = requireHost()
         const task = lookupTask(key)
+        const executionProviders = resolveProviders(task.executionProviders, options?.executionProvider)
         return engineHost
-            .ensureLoaded(task.key, task.model, task.executionProviders)
+            .enqueue(() => engineHost.ensureLoaded(task.key, task.model, executionProviders))
             .then(() => new class implements TaskHandle<K> {
                 #released: boolean = false
                 run(input: TaskInput<K>, options?: RunOptions): Promise<TaskOutput<K>> {
@@ -175,7 +182,7 @@ export namespace Inference {
                 terminate(): void {
                     if (this.#released) {return}
                     this.#released = true
-                    engineHost.releaseTask(task.key).catch(() => {})
+                    engineHost.enqueue(() => engineHost.releaseTask(task.key)).catch(EmptyExec)
                 }
             })
     }
