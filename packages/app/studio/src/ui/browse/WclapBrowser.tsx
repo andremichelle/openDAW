@@ -9,6 +9,7 @@ import {ContextMenu, MenuItem, WclapStorage} from "@opendaw/studio-core"
 import {WclapPluginInfo} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {WclapDescriber} from "@/service/WclapDescriber"
+import {WclapNames} from "@/service/WclapNames"
 import {OpenWclapAPI, WclapIndexFolder} from "@/opendaw-api"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
@@ -26,19 +27,26 @@ type Construct = {
     service: StudioService
 }
 
-type Entry = { id: string, name: string, type: string, vendor: string, license: string, size: number, local: boolean }
+type Entry = {
+    id: string, name: string, bundle: string, type: string, vendor: string, license: string, size: number, local: boolean
+}
 
 const {describe, kindOf, shortKind} = WclapDescriber
 
 const location = new DefaultObservableValue(AssetLocation.OpenDAW)
 
-const toEntry = (id: string, size: number, local: boolean, license: string,
-                 plugins: ReadonlyArray<WclapPluginInfo>): Entry => ({
-    id, size, local, license,
-    name: plugins.length === 0 ? `Unknown bundle ${id.substring(0, 8)}` : plugins.map(({name}) => name).join(", "),
-    type: Array.from(new Set(plugins.map(plugin => shortKind(kindOf(plugin))))).join("/"),
-    vendor: plugins.at(0)?.vendor ?? ""
-})
+const toEntries = (id: string, size: number, local: boolean, license: string,
+                   plugins: ReadonlyArray<WclapPluginInfo>): ReadonlyArray<Entry> => {
+    if (plugins.length === 0) {
+        const name = `Unknown bundle ${id.substring(0, 8)}`
+        return [{id, size, local, license, name, bundle: name, type: "", vendor: ""}]
+    }
+    const bundle = plugins.map(({name}) => name).join(", ")
+    const shortNames = WclapNames.distinct(plugins.map(({name}) => name))
+    return plugins.map((plugin, index) => ({
+        id, size, local, license, bundle, name: shortNames[index], type: shortKind(kindOf(plugin)), vendor: plugin.vendor
+    }))
+}
 
 const expandedKeys = new Set<string>()
 
@@ -53,9 +61,9 @@ const loadLocal = async (): Promise<ResourceFolder<Entry>> => {
             WclapStorage.loadId(id),
             describe(WclapStorage.urlOf(id)).catch(() => [])
         ])
-        return toEntry(id, archive.byteLength, true, licenses.get(id) ?? "", plugins)
+        return toEntries(id, archive.byteLength, true, licenses.get(id) ?? "", plugins)
     }))
-    return {name: "", folders: [], items: items.toSorted(byName)}
+    return {name: "", folders: [], items: items.flat().toSorted(byName)}
 }
 
 // the published folder tree, in the order the admin tool arranged it
@@ -63,7 +71,7 @@ const loadCloud = async (): Promise<ResourceFolder<Entry>> => {
     const toFolder = (folder: WclapIndexFolder): ResourceFolder<Entry> => ({
         name: folder.name,
         folders: folder.folders?.map(toFolder) ?? [],
-        items: folder.wclaps?.map(({uuid, size, license, plugins}) => toEntry(uuid, size, false, license, plugins)) ?? []
+        items: folder.wclaps?.flatMap(({uuid, size, license, plugins}) => toEntries(uuid, size, false, license, plugins)) ?? []
     })
     return {name: "", folders: (await OpenWclapAPI.get().tree()).folders.map(toFolder), items: []}
 }
@@ -75,10 +83,10 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
     const rows = lifecycle.own(new Terminator())
     const filter = new DefaultObservableValue("")
     const loaded: { root: ResourceFolder<Entry> } = {root: {name: "", folders: [], items: []}}
-    const remove = async ({id, name}: Entry): Promise<void> => {
+    const remove = async ({id, bundle}: Entry): Promise<void> => {
         const approved = await RuntimeNotifier.approve({
             headline: "Delete WebCLAP Bundle",
-            message: `Delete "${name}" from this device and from your cloud backup? Projects using it will pass audio through.`,
+            message: `Delete "${bundle}" from this device and from your cloud backup? Projects using it will pass audio through.`,
             approveText: "Delete",
             cancelText: "Cancel"
         })
@@ -98,7 +106,7 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
         )
         if (entry.local) {
             rows.own(ContextMenu.subscribe(element, collector => collector.addItems(
-                MenuItem.header({label: entry.name, icon: IconSymbol.WebClap, color: Colors.blue}),
+                MenuItem.header({label: entry.bundle, icon: IconSymbol.WebClap, color: Colors.blue}),
                 MenuItem.default({label: "Delete Forever…", icon: IconSymbol.Delete})
                     .setTriggerProcedure(() => remove(entry)))))
         }
@@ -126,7 +134,7 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
             replaceChildren(entries, renderFolder(loaded.root, "", 0))
         } else {
             replaceChildren(entries, all
-                .filter(({name, vendor}) => `${name} ${vendor}`.toLowerCase().includes(query))
+                .filter(({bundle, vendor}) => `${bundle} ${vendor}`.toLowerCase().includes(query))
                 .toSorted(byName)
                 .map(renderRow))
         }
