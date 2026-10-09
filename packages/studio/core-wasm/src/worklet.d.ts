@@ -16,3 +16,4 @@ declare function registerProcessor(
 
 declare const sampleRate: number
 declare const currentTime: number
+declare const currentFrame: number

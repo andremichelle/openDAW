@@ -22,7 +22,7 @@ import {Lock} from "./Lock"
 import {Flags} from "./Flags"
 
 interface Package<T> extends Terminable {
-    dispatch(address: Address, input: ByteArrayInput): void
+    dispatch(address: Address, input: ByteArrayInput, flagged: boolean): void
     subscribe(address: Address, procedure: Procedure<T>): Subscription
     hasSubscribers(address: Address): boolean
 }
@@ -65,9 +65,15 @@ abstract class ArrayPackage<T extends ArrayTypes> implements Package<T> {
 
     abstract create(length: int): T
     abstract read(input: ByteArrayInput, array: T, length: int): void
+    abstract byteLength(length: int): int
 
-    dispatch(address: Address, input: ByteArrayInput): void {
+    // an unflagged packet was written before anyone subscribed: its array was never refreshed
+    dispatch(address: Address, input: ByteArrayInput, flagged: boolean): void {
         const length = input.readInt()
+        if (!flagged) {
+            input.skip(this.byteLength(length))
+            return
+        }
         const entry = this.#arrays.getOrNull(address)
         let array: T
         if (isDefined(entry)) {
@@ -98,6 +104,7 @@ abstract class ArrayPackage<T extends ArrayTypes> implements Package<T> {
 
 class FloatArrayPackage extends ArrayPackage<Float32Array> {
     create(length: number): Float32Array {return new Float32Array(length)}
+    byteLength(length: int): int {return length << 2}
     read(input: ByteArrayInput, array: Float32Array, length: number): void {
         for (let i = 0; i < length; i++) {array[i] = input.readFloat()}
     }
@@ -105,6 +112,7 @@ class FloatArrayPackage extends ArrayPackage<Float32Array> {
 
 class IntegerArrayPackage extends ArrayPackage<Int32Array> {
     create(length: number): Int32Array {return new Int32Array(length)}
+    byteLength(length: int): int {return length << 2}
     read(input: ByteArrayInput, array: Int32Array, length: number): void {
         for (let i = 0; i < length; i++) {array[i] = input.readInt()}
     }
@@ -112,6 +120,7 @@ class IntegerArrayPackage extends ArrayPackage<Int32Array> {
 
 class ByteArrayPackage extends ArrayPackage<Int8Array> {
     create(length: number): Int8Array {return new Int8Array(length)}
+    byteLength(length: int): int {return length}
     read(input: ByteArrayInput, array: Int8Array, _length: number): void {
         input.readBytes(array)
     }
@@ -128,7 +137,7 @@ export class LiveStreamReceiver implements Terminable {
     readonly #integers = new IntegerArrayPackage()
     readonly #bytes = new ByteArrayPackage()
     readonly #packages: Array<Package<unknown>> = []
-    readonly #procedures: Array<Procedure<ByteArrayInput>> = []
+    readonly #procedures: Array<(input: ByteArrayInput, flagged: boolean) => void> = []
     readonly #structure: Array<StructureEntry> = []
     readonly #id: int
 
@@ -263,7 +272,8 @@ export class LiveStreamReceiver implements Terminable {
             return false
         }
         if (input.readInt() !== Flags.START) {throw new Error("stream is broken (no start flag)")}
-        for (const procedure of this.#procedures) {procedure(input)}
+        const flags = this.#subscriptionFlags
+        this.#procedures.forEach((procedure, index) => procedure(input, flags.nonEmpty() && flags.unwrap()[index] !== 0))
         if (input.readInt() !== Flags.END) {throw new Error("stream is broken (no end flag)")}
         return true
     }
@@ -280,7 +290,7 @@ export class LiveStreamReceiver implements Terminable {
             const address = Address.read(input)
             const pkg = this.#packages[input.readByte() as PackageType]
             this.#structure.push({address, package: pkg})
-            this.#procedures.push(input => pkg.dispatch(address, input))
+            this.#procedures.push((input, flagged) => pkg.dispatch(address, input, flagged))
         }
     }
 }

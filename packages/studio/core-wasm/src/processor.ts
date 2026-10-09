@@ -8,7 +8,7 @@
 // honest no-ops for now — the transport state simply never reports them active.
 import "./worklet-scope" // MUST be first: shims `self`/`location` for inlined worker glue
 import {Exec, int, Nullable, panic, SyncStream, Terminable, Terminator, tryCatch, UUID} from "@opendaw/lib-std"
-import {AudioAnalyser, AudioData, ppqn, RenderQuantum} from "@opendaw/lib-dsp"
+import {AudioAnalyser, AudioData, ppqn, QuantumClock, RenderQuantum} from "@opendaw/lib-dsp"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {Address} from "@opendaw/lib-box"
 import {LiveStreamBroadcaster} from "@opendaw/lib-fusion"
@@ -92,6 +92,8 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     #perfWriteIndex: int = 0
     #playbackTimestamp: ppqn = 0.0 // this is where we start playing again (after paused)
     readonly #recordingStartEdge: RecordingStartEdge = new RecordingStartEdge()
+    readonly #quantumClock: QuantumClock = new QuantumClock()
+    #quantumFrame: number = 0
     #recordingGeneration: int = -1 // the client counts from 1, so a report before any prepare never matches
 
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
@@ -181,6 +183,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 (hasSubscribers) => {this.#gonioActive = hasSubscribers}),
             this.#broadcaster.broadcastFloats(EngineAddresses.LOUDNESS, this.#loudnessValues,
                 (hasSubscribers) => {
+                    if (hasSubscribers && !this.#loudnessActive) {this.#loudness.reset()}
                     this.#loudnessActive = hasSubscribers
                     if (hasSubscribers) {this.#loudness.fill(this.#loudnessValues)}
                 }),
@@ -314,6 +317,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
 
     process(inputs: Array<Array<Float32Array>>, outputs: Array<Array<Float32Array>>): boolean {
         if (!this.#valid) {return false} // will not revive
+        this.#quantumFrame = this.#quantumClock.advance(currentFrame)
         if (Atomics.load(this.#controlFlags, 0) === 1) {
             this.#stateSender.tryWrite() // keep the UI in sync (stopped transport) while asleep, no DSP
             return true
@@ -425,11 +429,11 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         this.#midi.drain(engine, this.#memory)
     }
 
-    // currentTime is the quantum start, the state position is post-render: report the quantum end
+    // the quantum frame is the quantum start, the state position is post-render: report the quantum end
     #announceRecordingStart(engine: EngineExports): void {
         const view = new DataView(this.#memory.buffer, engine.engine_state_ptr(), engine.engine_state_len())
         if (this.#recordingStartEdge.observe(view.getUint8(18) === 1)) {
-            this.#engineToClient.recordingStarted(currentTime + RenderQuantum / sampleRate, view.getFloat32(0),
+            this.#engineToClient.recordingStarted((this.#quantumFrame + RenderQuantum) / sampleRate, view.getFloat32(0),
                 this.#recordingGeneration)
         }
     }
