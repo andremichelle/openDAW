@@ -35,6 +35,7 @@ type FrameMessage =
     | { type: "wclap-dblclick", x: number, y: number }
     | { type: "wclap-key", kind: "keydown" | "keyup", init: KeyboardEventInit }
     | { type: "wclap-error", message: string }
+    | { type: "wclap-wheel", deltaX: number, deltaY: number, deltaMode: number }
 
 const isFrameMessage = (data: unknown): data is FrameMessage =>
     typeof data === "object" && data !== null && typeof Object(data).type === "string" && String(Object(data).type).startsWith("wclap-")
@@ -143,6 +144,10 @@ export namespace WclapWindows {
                 globalThis.dispatchEvent(new KeyboardEvent(message.kind, message.init))
             } else if (message.type === "wclap-error") {
                 RuntimeNotifier.notify({message: message.message, icon: "Warning"})
+            } else if (message.type === "wclap-wheel") {
+                // WheelEvent.deltaMode: 0 pixels, 1 lines, 2 pages
+                const unit = message.deltaMode === 1 ? 16 : message.deltaMode === 2 ? handle.size.getValue().height : 1
+                handle.scrollBy(message.deltaX * unit, message.deltaY * unit)
             }
         }
         // a moved iframe reloads: the page gets a fresh gui session, sized to the window it now lives in

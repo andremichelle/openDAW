@@ -145,6 +145,12 @@
         const bytes = data instanceof ArrayBuffer ? data
             : ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
         if (bytes !== null) {post({type: "wclap-message", bytes})}
+        // a wheel event the page did not use (juce-webclap-plugins pages send them): the window may scroll
+        const wheel = data?.webclapWheel
+        if (bytes === null && typeof wheel === "object" && wheel !== null
+            && Number.isFinite(wheel.deltaX) && Number.isFinite(wheel.deltaY) && Number.isFinite(wheel.deltaMode)) {
+            post({type: "wclap-wheel", deltaX: wheel.deltaX, deltaY: wheel.deltaY, deltaMode: wheel.deltaMode})
+        }
     })
     channel.port1.addEventListener("message", event => {
         const inner = state.inner

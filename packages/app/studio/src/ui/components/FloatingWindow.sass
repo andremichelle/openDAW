@@ -54,6 +54,31 @@ component
       inset: 0
       display: none
 
+    // content larger than the space on screen keeps its size and scrolls (layout in FloatingWindow.tsx). The
+    // scrollbars always show, so a clipped plugin editor reads as one; main.sass hides native bars everywhere else.
+    &.scrolling
+      // overflow-x/-y are set per axis by layout
+      // auto: Chrome draws the ::-webkit-scrollbar styles below only while the standard properties are auto
+      scrollbar-width: auto
+      scrollbar-color: auto
+
+      &::-webkit-scrollbar
+        display: block
+        width: 8px
+        height: 8px
+
+      &::-webkit-scrollbar-thumb
+        border-radius: 4px
+        background-color: rgba(white, 0.3)
+
+      &::-webkit-scrollbar-track, &::-webkit-scrollbar-corner
+        background-color: transparent
+
+      > :not(.shield)
+        flex: none
+        width: var(--content-width)
+        height: var(--content-height)
+
   &.inactive > div.body > div.shield
     display: block
 

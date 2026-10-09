@@ -39,14 +39,21 @@ export interface FloatingWindowHandle {
     readonly owner: ObservableValue<Window>
     togglePopout(): void
     resetSize(): void
-    // the content asks for a size (a plugin zooming its editor): taken as is, only kept on screen
+    // the content asks for a size (a plugin zooming its editor): taken as is, the body scrolls what does not fit
     requestSize(width: int, height: int): void
+    // scrolls the body when the content is larger than the space on screen (wheel events the content did not use)
+    scrollBy(deltaX: number, deltaY: number): void
     toFront(): void
     close(): void
 }
 
 type ResizeAxis = { x: boolean, y: boolean }
 type Adjusting = { busy: boolean, closed: boolean, next: Nullable<Size> }
+
+// FloatingWindow.sass: div.body.scrolling scrollbars
+const SCROLLBAR = 8
+// the share of a window that always stays inside the browser
+const VISIBLE_SHARE = 0.1
 
 // z-order by index, never by moving the element (that reloads an embedded iframe)
 const stack: Array<HTMLElement> = []
@@ -69,11 +76,12 @@ export const FloatingWindow = ({
     const initialScale = scale ?? 1
     const fitScale = Math.max(Math.min(initialScale, (window.innerWidth - 32) / width, (window.innerHeight - 64) / height),
         minimum.width / width, minimum.height / height)
-    const bodyWidth = zoomable ? Math.round(width * fitScale)
-        : Math.max(minimum.width, Math.min(Math.round(width * initialScale), window.innerWidth - 32))
-    const bodyHeight = zoomable ? Math.round(height * fitScale)
-        : Math.max(minimum.height, Math.min(Math.round(height * initialScale), window.innerHeight - 64))
-    const size = lifecycle.own(new DefaultObservableValue<Size>({width: bodyWidth, height: bodyHeight}))
+    // the content's size; the body shows as much of it as fits on screen and scrolls the rest (see layout)
+    const contentWidth = Math.max(minimum.width, Math.round(width * (zoomable ? fitScale : initialScale)))
+    const contentHeight = Math.max(minimum.height, Math.round(height * (zoomable ? fitScale : initialScale)))
+    const bodyWidth = Math.min(contentWidth, window.innerWidth - 32)
+    const bodyHeight = Math.min(contentHeight, window.innerHeight - 64)
+    const size = lifecycle.own(new DefaultObservableValue<Size>({width: contentWidth, height: contentHeight}))
     const zoom = lifecycle.own(new DefaultObservableValue<number>(fitScale))
     const owner = lifecycle.own(new DefaultObservableValue<Window>(window))
     const popout = new MutableObservableOption<Surface>()
@@ -126,17 +134,24 @@ export const FloatingWindow = ({
         </div>
     )
     Layers.install(element)
+    // the window may hang out of the browser, but keeps VISIBLE_SHARE of it inside (on the right and bottom at
+    // least its header), so it can always be dragged back. The top stays inside: the header is the handle.
     const move = (x: number, y: number) => {
         if (popout.nonEmpty()) {return}
-        origin.x = clamp(x, 0, Math.max(0, window.innerWidth - element.offsetWidth))
-        origin.y = clamp(y, 0, Math.max(0, window.innerHeight - header.offsetHeight))
+        const {offsetWidth, offsetHeight} = element
+        const visibleWidth = Math.min(offsetWidth, Math.max(header.offsetHeight, offsetWidth * VISIBLE_SHARE))
+        const visibleHeight = Math.min(offsetHeight, Math.max(header.offsetHeight, offsetHeight * VISIBLE_SHARE))
+        origin.x = clamp(x, visibleWidth - offsetWidth, Math.max(0, window.innerWidth - visibleWidth))
+        origin.y = clamp(y, 0, Math.max(0, window.innerHeight - visibleHeight))
         element.style.left = `${origin.x}px`
         element.style.top = `${origin.y}px`
+        layout()
     }
     const limits = (): Size => popout.match({
+        // the browser window, not the space right of and below the window: moving it out does not shrink it
         none: () => ({
-            width: Math.max(minimum.width, window.innerWidth - origin.x),
-            height: Math.max(minimum.height, window.innerHeight - origin.y - header.offsetHeight)
+            width: Math.max(minimum.width, window.innerWidth),
+            height: Math.max(minimum.height, window.innerHeight - header.offsetHeight)
         }),
         some: ({owner}) => ({
             width: Math.max(minimum.width, owner.innerWidth),
@@ -158,12 +173,31 @@ export const FloatingWindow = ({
         adjusting.next = next
         negotiate()
     }
+    // the body takes the content's size up to the space left on screen, larger content scrolls in it with a
+    // scrollbar on each axis that does not fit (FloatingWindow.sass draws them always, SCROLLBAR wide)
+    const layout = () => {
+        const {width: contentWidth, height: contentHeight} = size.getValue()
+        const {width: maxWidth, height: maxHeight} = limits()
+        let scrollX = contentWidth > maxWidth
+        let scrollY = contentHeight > maxHeight
+        // a bar takes room from the other axis, which may then not fit either
+        scrollX ||= scrollY && contentWidth + SCROLLBAR > maxWidth
+        scrollY ||= scrollX && contentHeight + SCROLLBAR > maxHeight
+        const visibleWidth = Math.min(contentWidth + (scrollY ? SCROLLBAR : 0), maxWidth)
+        const visibleHeight = Math.min(contentHeight + (scrollX ? SCROLLBAR : 0), maxHeight)
+        body.style.width = `${visibleWidth}px`
+        body.style.height = `${visibleHeight}px`
+        body.style.overflowX = scrollX ? "scroll" : "hidden"
+        body.style.overflowY = scrollY ? "scroll" : "hidden"
+        body.style.setProperty("--content-width", `${contentWidth}px`)
+        body.style.setProperty("--content-height", `${contentHeight}px`)
+        body.classList.toggle("scrolling", scrollX || scrollY)
+    }
     const apply = (next: Size) => {
         const current = size.getValue()
         if (current.width === next.width && current.height === next.height) {return}
-        body.style.width = `${next.width}px`
-        body.style.height = `${next.height}px`
         size.setValue(next)
+        layout()
         if (zoomable) {resizeWindow(next.width, next.height)}
     }
     const negotiate = () => {
@@ -189,8 +223,9 @@ export const FloatingWindow = ({
             resizeWindow(target.width, target.height)
             return
         }
-        move(Math.min(origin.x, window.innerWidth - target.width),
-            Math.min(origin.y, window.innerHeight - target.height - header.offsetHeight))
+        // a new size moves the window into view as far as it fits, from the top left
+        move(Math.max(0, Math.min(origin.x, window.innerWidth - target.width)),
+            Math.max(0, Math.min(origin.y, window.innerHeight - target.height - header.offsetHeight)))
         resize(target.width, target.height)
     }
     const requestSize = (requestedWidth: int, requestedHeight: int) => {
@@ -199,14 +234,12 @@ export const FloatingWindow = ({
             apply({width: Math.max(minimum.width, Math.round(requestedWidth)), height: Math.max(minimum.height, Math.round(requestedHeight))})
             return
         }
-        move(Math.min(origin.x, window.innerWidth - requestedWidth),
-            Math.min(origin.y, window.innerHeight - requestedHeight - header.offsetHeight))
-        apply({
-            width: Math.round(clamp(requestedWidth, minimum.width, Math.max(minimum.width, window.innerWidth - origin.x))),
-            height: Math.round(clamp(requestedHeight, minimum.height,
-                Math.max(minimum.height, window.innerHeight - origin.y - header.offsetHeight)))
-        })
+        // a new size moves the window into view as far as it fits, from the top left
+        move(Math.max(0, Math.min(origin.x, window.innerWidth - requestedWidth)),
+            Math.max(0, Math.min(origin.y, window.innerHeight - requestedHeight - header.offsetHeight)))
+        apply({width: Math.max(minimum.width, Math.round(requestedWidth)), height: Math.max(minimum.height, Math.round(requestedHeight))})
     }
+    const scrollBy = (deltaX: number, deltaY: number) => body.scrollBy(deltaX, deltaY)
     const toFront = () => {
         if (popout.nonEmpty() || stack.at(-1) === element) {return}
         const index = stack.indexOf(element)
@@ -235,10 +268,14 @@ export const FloatingWindow = ({
                 popped.ground.appendChild(element)
                 owner.setValue(popped.owner)
                 popped.own({terminate: () => {if (popout.contains(popped)) {dockIn()}}})
-                if (resizable !== false) {
-                    popped.own(Events.subscribe(popped.owner, "resize", () =>
-                        resize(popped.owner.innerWidth, popped.owner.innerHeight - header.offsetHeight)))
-                }
+                // the popout window may come out smaller than asked (screen size): the body scrolls in what it got
+                popped.own(Events.subscribe(popped.owner, "resize", () => {
+                    if (resizable !== false) {
+                        resize(popped.owner.innerWidth, popped.owner.innerHeight - header.offsetHeight)
+                    }
+                    layout()
+                }))
+                layout()
             }
         })
     }
@@ -291,6 +328,6 @@ export const FloatingWindow = ({
     surface.floating.appendChild(element)
     toFront()
     move(origin.x, origin.y)
-    if (isDefined(adjust)) {request({width: bodyWidth, height: bodyHeight})}
-    return {size, owner, togglePopout, resetSize, requestSize, toFront, close}
+    if (isDefined(adjust)) {request(size.getValue())}
+    return {size, owner, togglePopout, resetSize, requestSize, scrollBy, toFront, close}
 }
