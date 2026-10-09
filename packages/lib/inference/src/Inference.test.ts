@@ -79,11 +79,6 @@ const oneByteWithKnownSha = async (): Promise<{bytes: Uint8Array, sha: string}> 
     return {bytes, sha}
 }
 
-// `tempo-detection`'s real model has a hardcoded production sha256 that no fake byte buffer can
-// match, so these tests swap its registry entry for a trivial single-call fake task (restored after
-// each test) rather than driving the real DSP/model. This exercises the actual `Inference.*` public
-// functions under test (the bug was specifically that they bypass EngineHost's queue), not a
-// reimplementation of the fix.
 const registryBackdoor = TaskRegistry as Record<string, TaskDefinition<TempoDetectionInput, TempoDetectionOutput>>
 const originalTempoTask = registryBackdoor["tempo-detection"]
 
@@ -124,7 +119,6 @@ describe("Inference", () => {
 
         const preloadPromise = Inference.preload("tempo-detection", {executionProvider: "webgpu"})
         await new Promise(resolve => setTimeout(resolve, 0))
-        // The reload must wait behind the in-flight run, not race in and release the session under it.
         expect(worker.received.filter(message => message.kind === "release")).toHaveLength(0)
 
         worker.emit({kind: "result", id: runMessages[0].id, output: {}})

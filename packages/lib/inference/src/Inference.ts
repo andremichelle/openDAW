@@ -137,8 +137,6 @@ export namespace Inference {
         requireInferenceConfig()
         const engineHost = requireHost()
         const task = lookupTask(key)
-        // Routed through the same queue as run(), so a reload can't release the session out from
-        // under an in-flight run() of the same (or any other) task.
         await engineHost.enqueue(() => engineHost.ensureLoaded(
             task.key, task.model, resolveProviders(task.executionProviders, options?.executionProvider), {
                 progress: options?.progress,

@@ -10,8 +10,6 @@ export interface ModelDescriptor {
 
 export type ExecutionProvider = "webgpu" | "wasm"
 
-// The worker always appends this as a fallback when creating a session (see inference.worker.ts),
-// so a provider list that already ends in it and one that doesn't build the identical ORT session.
 export const WASM_FALLBACK_PROVIDER: ExecutionProvider = "wasm"
 
 export interface TaskEnvironment {
