@@ -65,9 +65,9 @@ export namespace ValuesClipboard {
             },
             paste: (entry: ClipboardEntry): void => {
                 if (entry.type !== "values" || !getEnabled()) {return}
-                const position = getPosition()
+                const pastePosition = Math.max(0, Math.floor(getPosition()))
                 const {min, max} = decodeMetadata(ClipboardUtils.extractMetadata(entry.data))
-                const positionOffset = Math.max(0, position) - min
+                const positionOffset = pastePosition - min
                 const pastedMin = min + positionOffset
                 const pastedMax = max + positionOffset
                 editing.modify(() => {

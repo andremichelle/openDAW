@@ -5,6 +5,7 @@ import {
     Option,
     panic,
     Exec,
+    RuntimeNotifier,
     Subscription,
     Terminable,
     Terminator,
@@ -12,7 +13,7 @@ import {
 } from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
 import {Peaks} from "@opendaw/lib-fusion"
-import {Communicator, Messenger} from "@opendaw/lib-runtime"
+import {Communicator, Messenger, Promises} from "@opendaw/lib-runtime"
 import {
     mergeChunkPlanes,
     RecordingProcessorChannel,
@@ -130,11 +131,23 @@ export class RecordingWorklet extends AudioWorkletNode implements Terminable, Sa
         const audioData = AudioData.create(this.context.sampleRate, totalSamples, this.channelCount)
         mergedFrames.forEach((frame, index) => audioData.frames[index].set(frame))
         this.#data = Option.wrap(audioData)
-        const sample = await this.#sampleService
+        const bpm = this.#bpm.unwrapOrElse(120)
+        const imported = await Promises.tryCatch(this.#sampleService
             .unwrap("SampleService not set")
-            .importRecording(this.uuid, audioData, this.#bpm.unwrapOrElse(120))
-        this.#peaks = Option.wrap(await SampleStorage.get().loadPeaks(this.uuid, audioData))
-        this.#meta = Option.wrap(sample)
+            .importRecording(this.uuid, audioData, bpm))
+        if (imported.status === "resolved") {
+            this.#peaks = Option.wrap(await SampleStorage.get().loadPeaks(this.uuid, audioData))
+            this.#meta = Option.wrap(imported.value)
+        } else {
+            const {sampleRate} = this.context
+            this.#meta = Option.wrap({
+                name: "Recording", bpm, duration: totalSamples / sampleRate, sample_rate: sampleRate, origin: "recording"
+            })
+            RuntimeNotifier.info({
+                headline: "Storage Unavailable",
+                message: `The recording could not be saved to local storage (${String(imported.error)}). It stays playable until you close the tab.`
+            }).finally()
+        }
         this.#output.length = 0
         this.#onSaved.ifSome(callback => callback())
         this.#setState({type: "loaded"})

@@ -71,9 +71,9 @@ export namespace NotesClipboard {
             },
             paste: (entry: ClipboardEntry): void => {
                 if (entry.type !== "notes" || !getEnabled()) {return}
-                const position = getPosition()
+                const pastePosition = Math.max(0, Math.floor(getPosition()))
                 const {min, max} = decodeMetadata(ClipboardUtils.extractMetadata(entry.data))
-                const positionOffset = Math.max(0, position) - min
+                const positionOffset = pastePosition - min
                 editing.modify(() => {
                     selection.deselectAll()
                     const boxes = ClipboardUtils.deserializeBoxes(
@@ -92,7 +92,7 @@ export namespace NotesClipboard {
                     )
                     const noteEventBoxes = boxes.filter((box): box is NoteEventBox => box instanceof NoteEventBox)
                     selection.select(...noteEventBoxes.map(box => boxAdapters.adapterFor(box, NoteEventBoxAdapter)))
-                    setPosition(Math.max(0, position) + (max - min))
+                    setPosition(pastePosition + (max - min))
                 })
             }
         }
