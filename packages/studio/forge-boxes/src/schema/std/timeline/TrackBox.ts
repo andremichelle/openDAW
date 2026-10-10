@@ -18,7 +18,8 @@ export const TrackBox: BoxSchema<Pointers> = {
                 }, unit: ""
             },
             20: {type: "boolean", name: "enabled", value: true},
-            30: {type: "boolean", name: "exclude-piano-mode", value: false}
+            30: {type: "boolean", name: "exclude-piano-mode", value: false},
+            31: {type: "int32", name: "height", value: 0, constraints: {min: 0, max: 480}, unit: "px"}
         }
     }, pointerRules: {accepts: [Pointers.Selection, Pointers.PianoMode, Pointers.MetaData], mandatory: false}
 }
