@@ -176,6 +176,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                 service.panelLayout.showIfAvailable(PanelType.ContentEditor)
             } else if (target.type === "track") {
                 editing.modify(() => {
+                    const trackBoxAdapter = target.track.trackBoxAdapter
                     const clipIndex = target.clipIndex
                     switch (trackBoxAdapter.type) {
                         case TrackType.Audio:
