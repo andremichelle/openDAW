@@ -1,14 +1,48 @@
 # Standalone chromatic tuner
 
-User request: implement an Ableton-like tuner using openDAW conventions, with live feedback and saved settings. After initially trying a black semicircular needle dial, the user requested returning to the original Ableton-style shallow arc, hollow center target, moving ball and large note/deviation readout. They explicitly requested small view buttons at the bottom and slowly fading values.
+## Current implementation
 
-Feature reference: https://www.ableton.com/en/manual/live-audio-effect-reference/#tuner — classic target/strobe, history with auto/pan/zoom, Hz/cents, note spelling, A4 reference 410–480 Hz. The current UI follows the original Ableton screenshots; no simulated-pitch slider is included in the real device.
+User request: a standalone chromatic tuner with live feedback and saved settings, integrated with openDAW's existing device architecture and visual conventions. The final meter is an original straight scale with a downward triangle, not the early arc/ball or semicircular dial prototypes. Meter offers Target/Strobe; Histogram offers Auto/Manual pitch history with a labeled note-key axis. The footer uses Gate-style buttons and Revamp's reference-value interaction. Readings hold for 120ms and fade over 1000ms. Octaves match openDAW (MIDI 60 = C3).
+
+Feature reference: https://www.ableton.com/en/manual/live-audio-effect-reference/#tuner — target/strobe, history with auto/pan/zoom, Hz/cents, and reference 410–480 Hz. This informed functionality; the final artwork uses openDAW styling. There is no simulated-pitch slider in the real device. The user manual is `packages/app/manual/public/devices/audio/tuner.md`.
 
 Implementation: standalone audio-effect schema/adapters/factory/editor, fixed-storage Rust YIN detector in a transparent WASM side module, and three-float live telemetry at address.append(0). Audio is copied unchanged. Analysis runs at <=12 kHz and 30 frames/sec; automatic channel choice avoids stereo cancellation. Persistent view settings use box fields and Editing transactions. Subscriptions and animation belong to the editor lifecycle.
 
 Verification: four native detector tests pass (bass/treble, common sample rates, stereo phase/right-only input, gating, silence, and noise/nonfinite input). Three full-engine/project tests pass (bit-identical transparent audio including bypass changes, three-float live telemetry, and persisted settings). Existing device live-data tests (2) and Studio tests (59) pass. Full workspace build/typecheck passes. Chrome inspection confirmed factory discoverability, editor rendering, and switching to History. Automated reloads intermittently fail with ERR_BLOCKED_BY_CLIENT; live instrument and final post-reload styling checks need a manual browser trial. Initial visual inspection found clipping; controls were compacted into two-column selectors/toggles and smaller standard knobs.
 
 AI-assisted implementation: Codex researched the manual, inspected existing device registration and Autotune telemetry patterns, and implemented the schema, engine module, editor, manual, and tests. Detector range/accuracy claims are bounded by the synthetic tests; real instrument trials remain useful for ambiguous harmonic signals.
+
+## Contribution scope and remaining review
+
+This contribution is one audio-effect device, not a new plugin framework, instrument, pitch-correction effect, or change to the existing Autotune device. Cross-package edits register its schema, adapter, processor and editor in the existing architecture; tests and documentation accompany the feature. Most implementation was committed together, followed by style/documentation fixes. That history is not an incremental implementation series and the overall size remains a concern under the README's small-PR guidance. Before proposing it upstream, agree on a smaller submission or reorganization with the maintainer; do not treat this explanation as a waiver of that requirement.
+
+The human contributor has supplied design direction, screenshots and interactive feedback. This does not establish that they have reviewed or understand every submitted line. That review remains required by README.md before upstream submission. Automated checks do not replace it. Remaining manual coverage includes sustained real-instrument signals, harmonic-rich inputs, all view/interaction combinations, bypass/silence release, and save/reopen behavior in the browser. Earlier browser inspections were partial, not a complete sign-off.
+
+## Reproducible verification
+
+After completing the development setup/build prerequisites in README.md, run from the repository root with the supported Node and Rust tools on PATH:
+
+```sh
+npm run build --workspace=@opendaw/app-studio
+npm test --workspace=@opendaw/app-studio
+cargo test --manifest-path crates/Cargo.toml -p device-tuner
+npm run test:vitest --workspace=@opendaw/studio-core-wasm -- test/tuner-device.test.ts
+```
+
+The engine integration tests require built WASM modules; the Studio build uses built workspace dependencies. These are focused checks, not a claim that every repository-wide test suite has passed.
+
+Manual test procedure:
+
+1. Insert Tuner after an instrument, or on an audio track with input monitoring enabled. Play sustained single notes; compare the readout with the piano roll and known frequencies.
+2. Switch Meter between Target and Strobe; check flat/sharp direction, zero, and green feedback within ±5 cents.
+3. Toggle ct/Hz and adjust Reference by dragging and double-click text entry. Confirm recalibration without changing the audio.
+4. Switch to Histogram; check note-axis highlight, Auto following, Manual freeze, drag/arrow-key pan/zoom, and double-click return to Auto. Confirm the footer does not jump.
+5. Stop the signal and check hold/fade and history gaps; bypass and confirm immediate clearing and unchanged audio.
+6. Save/reopen a project and confirm view, reference and manual range persist while history starts empty.
+
+## Historical implementation and design log
+
+The entries below record intermediate states and checks at the time of each revision; they do not describe the final UI or prove that later changes still pass.
 
 Design revision verification: Studio build and two visual-state tests pass. Chrome inspection verified Target/Strobe/History bottom tabs, keyboard switching, selected-state feedback and synchronized footer ct/Hz toggle. The visual release uses a smoothstep envelope (120ms hold + 800ms fade); invalid data leaves gaps in history, and bypass resets immediately. The isolated visual-state model permits deterministic testing without DOM/audio mocks.
 
