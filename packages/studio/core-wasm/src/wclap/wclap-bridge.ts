@@ -419,20 +419,19 @@ export class WclapBridges {
         const params: Array<WclapParamInfo> = []
         for (let index = 0; index < count; index++) {
             if (this.#call(loaded, loaded.params + ClapAbi.Params.GET_INFO, loaded.plugin, index, info) === 0) {continue}
+            // the info is read before get_value: a call may grow the memory, which detaches the view
             const view = new DataView(loaded.memory.buffer)
             const id = view.getUint32(info + ClapAbi.ParamInfo.ID, true)
             const defaultValue = view.getFloat64(info + ClapAbi.ParamInfo.DEFAULT_VALUE, true)
+            const flags = view.getUint32(info + ClapAbi.ParamInfo.FLAGS, true)
+            const min = view.getFloat64(info + ClapAbi.ParamInfo.MIN_VALUE, true)
+            const max = view.getFloat64(info + ClapAbi.ParamInfo.MAX_VALUE, true)
+            const name = this.#cstr(loaded.memory, info + ClapAbi.ParamInfo.NAME)
+            const module = this.#cstr(loaded.memory, info + ClapAbi.ParamInfo.MODULE)
             const value = this.#call(loaded, loaded.params + ClapAbi.Params.GET_VALUE, loaded.plugin, id, valueOut) === 0
-                ? defaultValue : view.getFloat64(valueOut, true)
+                ? defaultValue : this.#view(loaded).getFloat64(valueOut, true)
             loaded.reported.set(id, Math.fround(value))
-            params.push({
-                id, defaultValue, value,
-                flags: view.getUint32(info + ClapAbi.ParamInfo.FLAGS, true),
-                name: this.#cstr(loaded.memory, info + ClapAbi.ParamInfo.NAME),
-                module: this.#cstr(loaded.memory, info + ClapAbi.ParamInfo.MODULE),
-                min: view.getFloat64(info + ClapAbi.ParamInfo.MIN_VALUE, true),
-                max: view.getFloat64(info + ClapAbi.ParamInfo.MAX_VALUE, true)
-            })
+            params.push({id, defaultValue, value, flags, name, module, min, max})
         }
         return params
     }
@@ -591,15 +590,18 @@ export class WclapBridges {
                 loaded.writeChunks.push(new Uint8Array(memory.buffer, bufferPtr, count).slice())
                 return BigInt(count)
             }))
+        // allocated before the view is taken: malloc may grow the memory, which detaches every earlier view
+        const [name, vendor, url, version] =
+            ["openDAW", "openDAW", "https://opendaw.studio", "0.1"].map(text => this.#alloc(loaded, text))
         const view = this.#view(loaded)
         view.setUint32(host, ClapAbi.VERSION.major, true)
         view.setUint32(host + 4, ClapAbi.VERSION.minor, true)
         view.setUint32(host + 8, ClapAbi.VERSION.revision, true)
         view.setUint32(host + ClapAbi.Host.HOST_DATA, 0, true)
-        view.setUint32(host + ClapAbi.Host.NAME, this.#alloc(loaded, "openDAW"), true)
-        view.setUint32(host + ClapAbi.Host.VENDOR, this.#alloc(loaded, "openDAW"), true)
-        view.setUint32(host + ClapAbi.Host.URL, this.#alloc(loaded, "https://opendaw.studio"), true)
-        view.setUint32(host + ClapAbi.Host.VERSION, this.#alloc(loaded, "0.1"), true)
+        view.setUint32(host + ClapAbi.Host.NAME, name, true)
+        view.setUint32(host + ClapAbi.Host.VENDOR, vendor, true)
+        view.setUint32(host + ClapAbi.Host.URL, url, true)
+        view.setUint32(host + ClapAbi.Host.VERSION, version, true)
         this.#setFn(loaded, host + ClapAbi.Host.GET_EXTENSION, trampoline(["i32", "i32"], ["i32"],
             (_host: number, idPtr: number) => extensions.get(this.#cstr(memory, idPtr)) ?? 0))
         this.#setFn(loaded, host + ClapAbi.Host.REQUEST_RESTART, trampoline(["i32"], [], () => {}))
@@ -649,7 +651,10 @@ export class WclapBridges {
         const inEvents = malloc(ClapAbi.InputEvents.SIZE)
         const outEvents = malloc(ClapAbi.OutputEvents.SIZE)
         loaded.transportPtr = malloc(ClapAbi.TransportEvent.SIZE)
-        const view = this.#view(loaded)
+        loaded.eventsPtr = malloc(EVENT_SLOTS * EVENT_SLOT_SIZE)
+        // taken after the allocations, and again after the loop's below: malloc may grow the memory, which detaches
+        // every earlier view
+        let view = this.#view(loaded)
         view.setUint32(inData, loaded.inputs[0], true)
         view.setUint32(inData + 4, loaded.inputs[1], true)
         view.setUint32(outData, loaded.outputs[0], true)
@@ -680,6 +685,7 @@ export class WclapBridges {
             ports.setBigUint64(buffer + ClapAbi.AudioBuffer.CONSTANT_MASK, 0n, true)
             loaded.auxInputs.push(channels)
         }
+        view = this.#view(loaded)
         loaded.auxFed = loaded.auxInputs.map(() => false)
         loaded.auxSilent = loaded.auxInputs.map(() => true)
         new Uint8Array(loaded.memory.buffer, loaded.transportPtr, ClapAbi.TransportEvent.SIZE).fill(0)
@@ -687,7 +693,6 @@ export class WclapBridges {
         view.setUint16(loaded.transportPtr + ClapAbi.EventHeader.TYPE, ClapAbi.EventType.TRANSPORT, true)
         view.setUint16(loaded.transportPtr + ClapAbi.TransportEvent.TSIG_NUM, 4, true)
         view.setUint16(loaded.transportPtr + ClapAbi.TransportEvent.TSIG_DENOM, 4, true)
-        loaded.eventsPtr = malloc(EVENT_SLOTS * EVENT_SLOT_SIZE)
         view.setUint32(inEvents + ClapAbi.InputEvents.CTX, 0, true)
         this.#setFn(loaded, inEvents + ClapAbi.InputEvents.SIZE_FN, trampoline(["i32"], ["i32"], () => loaded.eventCount))
         this.#setFn(loaded, inEvents + ClapAbi.InputEvents.GET_FN, trampoline(["i32", "i32"], ["i32"],
@@ -803,14 +808,13 @@ export class WclapBridges {
             loaded.pollRemaining = 0
             return
         }
-        const view = this.#view(loaded)
         const count = Math.min(POLL_PER_CHUNK, loaded.pollRemaining)
         loaded.pollRemaining -= count
         for (let index = 0; index < count; index++) {
             const id = paramIds[loaded.pollCursor]
             loaded.pollCursor = (loaded.pollCursor + 1) % paramIds.length
             if (this.#call(loaded, loaded.params + ClapAbi.Params.GET_VALUE, loaded.plugin, id, loaded.sizePtr) === 0) {continue}
-            const value = view.getFloat64(loaded.sizePtr, true)
+            const value = this.#view(loaded).getFloat64(loaded.sizePtr, true) // after the call, which may grow the memory
             if (loaded.reported.get(id) === Math.fround(value)) {continue}
             loaded.reported.set(id, Math.fround(value))
             this.#host.sendParam(plugin.uuid, id, value, 0)
