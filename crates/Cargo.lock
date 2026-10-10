@@ -452,8 +452,7 @@ name = "device-tuner"
 version = "0.0.0"
 dependencies = [
  "abi",
- "libm",
- "math",
+ "dsp",
 ]
 
 [[package]]

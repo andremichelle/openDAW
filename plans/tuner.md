@@ -2,31 +2,39 @@
 
 ## Current implementation
 
-User request: a standalone chromatic tuner with live feedback and saved settings, integrated with openDAW's existing device architecture and visual conventions. The final meter is an original straight scale with a downward triangle, not the early arc/ball or semicircular dial prototypes. Meter offers Target/Strobe; Histogram offers Auto/Manual pitch history with a labeled note-key axis. The footer uses Gate-style buttons and Revamp's reference-value interaction. Readings hold for 120ms and fade over 1000ms. Octaves match openDAW (MIDI 60 = C3).
+User request: a standalone chromatic tuner with live feedback and saved settings, integrated with openDAW's existing device architecture and visual conventions. The final meter is an original straight scale with a downward triangle, not the early arc/ball or semicircular dial prototypes. Meter offers Target/Strobe; Histogram offers Auto/Manual pitch history with a labeled note-key axis. The top row uses native equal-width toggle buttons; Reference uses Revamp's value interaction. Readings hold for 120ms and fade over 1000ms. Octaves match openDAW (MIDI 60 = C3).
 
 Feature reference: https://www.ableton.com/en/manual/live-audio-effect-reference/#tuner — target/strobe, history with auto/pan/zoom, Hz/cents, and reference 410–480 Hz. This informed functionality; the final artwork uses openDAW styling. There is no simulated-pitch slider in the real device. The user manual is `packages/app/manual/public/devices/audio/tuner.md`.
 
-Implementation: standalone audio-effect schema/adapters/factory/editor, fixed-storage Rust YIN detector in a transparent WASM side module, and three-float live telemetry at address.append(0). Audio is copied unchanged. Analysis runs at <=12 kHz and 30 frames/sec; automatic channel choice avoids stereo cancellation. Persistent view settings use box fields and Editing transactions. Subscriptions and animation belong to the editor lifecycle.
+Implementation: standalone audio-effect schema/adapters/factory/editor and transparent WASM side module. Tuner and Autotune share the fixed-storage YIN primitive in `crates/dsp/src/yin.rs`; Tuner's stereo capture/refinement is in `crates/dsp/src/pitch_detector.rs`. Analysis is decimated to <=12 kHz, starts at 30 Hz, and is limited to 192 sample-pair comparisons per input sample (24,576 per 128-sample quantum). The snapshot remains fixed while analysis spans several quanta. Stronger-channel selection avoids stereo cancellation. Telemetry is `[frequencyHz, confidence, levelDbFS]` at `address.append(0)`; audio is copied unchanged.
 
-Verification: four native detector tests pass (bass/treble, common sample rates, stereo phase/right-only input, gating, silence, and noise/nonfinite input). Three full-engine/project tests pass (bit-identical transparent audio including bypass changes, three-float live telemetry, and persisted settings). Existing device live-data tests (2) and Studio tests (59) pass. Full workspace build/typecheck passes. Chrome inspection confirmed factory discoverability, editor rendering, and switching to History. Automated reloads intermittently fail with ERR_BLOCKED_BY_CLIENT; live instrument and final post-reload styling checks need a manual browser trial. Initial visual inspection found clipping; controls were compacted into two-column selectors/toggles and smaller standard knobs.
+Current UI: equal-width top controls use the same shared ToggleButton as Compressor's ParameterToggleButton: Meter, Hist (Histogram), ct/Hz and Target/Strobe or Auto/Manual. Reference remains a native editable ParameterLabel. The transparent display retains the line/triangle meter, note-key histogram axis, 120ms hold and 1000ms fade. View and Strobe persist separately; unused threshold/channel/smooth/spelling fields have been removed before release. Histogram gestures preview locally and commit one undo step on release; cancellation saves nothing. CanvasPainter repaint requests come from changed telemetry, fields, gestures or active fade/scroll/strobe timers. An empty idle display does not repaint continuously.
+
+Verification for this review revision is recorded below; earlier test counts and browser observations describe historical revisions only. Browser verification of this revised UI remains a separate manual check.
 
 AI-assisted implementation: Codex researched the manual, inspected existing device registration and Autotune telemetry patterns, and implemented the schema, engine module, editor, manual, and tests. Detector range/accuracy claims are bounded by the synthetic tests; real instrument trials remain useful for ambiguous harmonic signals.
 
 ## Contribution scope and remaining review
 
-This contribution is one audio-effect device, not a new plugin framework, instrument, pitch-correction effect, or change to the existing Autotune device. Cross-package edits register its schema, adapter, processor and editor in the existing architecture; tests and documentation accompany the feature. Most implementation was committed together, followed by style/documentation fixes. That history is not an incremental implementation series and the overall size remains a concern under the README's small-PR guidance. Before proposing it upstream, agree on a smaller submission or reorganization with the maintainer; do not treat this explanation as a waiver of that requirement.
+This contribution is one audio-effect device, not a new plugin framework, instrument, pitch-correction effect, or change to Autotune's correction behavior. Autotune now calls the extracted shared YIN primitive; its golden decision sequence remains unchanged. Cross-package edits register its schema, adapter, processor and editor in the existing architecture; tests and documentation accompany the feature. Most implementation was committed together, followed by style/documentation fixes. That history is not an incremental implementation series and the overall size remains a concern under the README's small-PR guidance. Upstream PR #450 is under review; the maintainer must settle whether a smaller submission or reorganization is needed. This explanation is not a waiver of that requirement.
 
-The human contributor has supplied design direction, screenshots and interactive feedback. This does not establish that they have reviewed or understand every submitted line. That review remains required by README.md before upstream submission. Automated checks do not replace it. Remaining manual coverage includes sustained real-instrument signals, harmonic-rich inputs, all view/interaction combinations, bypass/silence release, and save/reopen behavior in the browser. Earlier browser inspections were partial, not a complete sign-off.
+The human contributor has supplied design direction, screenshots and interactive feedback. This does not establish that they have reviewed or understand every submitted line. README.md requires that review; automated checks do not replace it. Remaining manual coverage for this revision includes sustained real-instrument signals, harmonic-rich inputs, all view/interaction combinations, bypass/silence release, and save/reopen behavior in the browser. Earlier browser inspections were partial, not a complete sign-off of this revision.
 
 ## Reproducible verification
+
+Review revision verification: the Studio/dependency build passed all 25 tasks; Studio passed 72 tests, full-engine tuner/live-data tests passed 5 tests, and shared DSP passed 107 tests (4 existing diagnostic/performance tests ignored). This includes Autotune's unchanged golden decision sequence, chunk-budget equivalence, analysis spanning more than eight render quanta, live range preview, cancellation, single-step undo/redo, signal-loss gaps and idle animation shutdown. Studio `tsc --noEmit` passed. Focused ESLint completed with no errors; its only warnings are the project's required JSX `createElement` imports. The external bot's missing-registry-package install failure did not reproduce with root workspace installation.
+
+Browser automation cannot open the isolated localhost preview (`ERR_BLOCKED_BY_CLIENT`), so no browser sign-off is claimed for this revision. The maintainer's requested comment-free editor conflicts with CodeRabbit's default 80% docstring warning; the editor follows the maintainer's style, while shared Rust APIs retain concise documentation. That bot policy needs maintainer confirmation rather than disabling checks or inventing a passing coverage result.
+
+Review cleanup: fork-only AGENTS additions, the `.firecrawl` ignore and screenshot files are absent from the upstream diff. Existing PR screenshot links point to their historical commit. Imports and original EOF formatting were restored; the schema registry and WASM engine were rebuilt together. This pre-release schema revision is not a compatibility promise for projects saved by the earlier prototype.
 
 After completing the development setup/build prerequisites in README.md, run from the repository root with the supported Node and Rust tools on PATH:
 
 ```sh
 npm run build --workspace=@opendaw/app-studio
 npm test --workspace=@opendaw/app-studio
-cargo test --manifest-path crates/Cargo.toml -p device-tuner
-npm run test:vitest --workspace=@opendaw/studio-core-wasm -- test/tuner-device.test.ts
+cargo test --manifest-path crates/Cargo.toml -p dsp --lib
+npm run test:vitest --workspace=@opendaw/studio-core-wasm -- test/tuner-device.test.ts test/device-live-data.test.ts
 ```
 
 The engine integration tests require built WASM modules; the Studio build uses built workspace dependencies. These are focused checks, not a claim that every repository-wide test suite has passed.
@@ -36,7 +44,7 @@ Manual test procedure:
 1. Insert Tuner after an instrument, or on an audio track with input monitoring enabled. Play sustained single notes; compare the readout with the piano roll and known frequencies.
 2. Switch Meter between Target and Strobe; check flat/sharp direction, zero, and green feedback within ±5 cents.
 3. Toggle ct/Hz and adjust Reference by dragging and double-click text entry. Confirm recalibration without changing the audio.
-4. Switch to Histogram; check note-axis highlight, Auto following, Manual freeze, drag/arrow-key pan/zoom, and double-click return to Auto. Confirm the footer does not jump.
+4. Switch to Hist (Histogram); check note-axis highlight, Auto following, Manual freeze, live drag pan/zoom, Escape cancellation, single-step undo/redo and double-click return to Auto. Confirm the top controls remain equal-width across views and modes.
 5. Stop the signal and check hold/fade and history gaps; bypass and confirm immediate clearing and unchanged audio.
 6. Save/reopen a project and confirm view, reference and manual range persist while history starts empty.
 

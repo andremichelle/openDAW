@@ -6,7 +6,6 @@ import {
     AudioEffectCompositeBox,
     AudioSinkDeviceBox,
     AutotuneDeviceBox,
-    TunerDeviceBox,
     FrequencySplitBox,
     StereoCompositeBox,
     BoxVisitor,
@@ -35,6 +34,7 @@ import {
     StereoToolDeviceBox,
     TapeDeviceBox,
     TidalDeviceBox,
+    TunerDeviceBox,
     UnknownAudioEffectDeviceBox,
     UnknownMidiEffectDeviceBox,
     NeonDeviceBox,
@@ -58,7 +58,6 @@ import {
     AudioEffectCompositeBoxAdapter,
     AudioSinkDeviceBoxAdapter,
     AutotuneDeviceBoxAdapter,
-    TunerDeviceBoxAdapter,
     FrequencySplitBoxAdapter,
     StereoCompositeBoxAdapter,
     CompressorDeviceBoxAdapter,
@@ -87,6 +86,7 @@ import {
     StereoToolDeviceBoxAdapter,
     TapeDeviceBoxAdapter,
     TidalDeviceBoxAdapter,
+    TunerDeviceBoxAdapter,
     UnknownAudioEffectDeviceBoxAdapter,
     UnknownMidiEffectDeviceBoxAdapter,
     NeonDeviceBoxAdapter,
@@ -127,12 +127,12 @@ import {MaximizerDeviceEditor} from "@/ui/devices/audio-effects/MaximizerDeviceE
 import {CompressorDeviceEditor} from "@/ui/devices/audio-effects/CompressorDeviceEditor"
 import {GateDeviceEditor} from "@/ui/devices/audio-effects/GateDeviceEditor"
 import {AutotuneDeviceEditor} from "@/ui/devices/audio-effects/AutotuneDeviceEditor"
-import {TunerDeviceEditor} from "@/ui/devices/audio-effects/TunerDeviceEditor"
 import {CrusherDeviceEditor} from "@/ui/devices/audio-effects/CrusherDeviceEditor"
 import {FoldDeviceEditor} from "@/ui/devices/audio-effects/FoldDeviceEditor"
 import {MIDIOutputDeviceEditor} from "@/ui/devices/instruments/MIDIOutputDeviceEditor"
 import {VelocityDeviceEditor} from "@/ui/devices/midi-effects/VelocityDeviceEditor"
 import {TidalDeviceEditor} from "@/ui/devices/audio-effects/TidalDeviceEditor"
+import {TunerDeviceEditor} from "@/ui/devices/audio-effects/TunerDeviceEditor"
 import {ConvolverDeviceEditor} from "@/ui/devices/audio-effects/ConvolverDeviceEditor"
 import {DattorroReverbDeviceEditor} from "@/ui/devices/audio-effects/DattorroReverbDeviceEditor"
 import {NeuralAmpDeviceEditor} from "@/ui/devices/audio-effects/NeuralAmpDeviceEditor"

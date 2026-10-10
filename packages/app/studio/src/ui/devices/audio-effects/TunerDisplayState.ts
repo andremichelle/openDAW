@@ -1,4 +1,5 @@
-/** Visual release only: retained readings never enter the live pitch history. */
+import {clamp} from "@opendaw/lib-std"
+
 export class TunerDisplayState {
     midi = NaN
     opacity = 0
@@ -7,7 +8,7 @@ export class TunerDisplayState {
     #live = false
 
     update(midi: number, now: number, damping: number): void {
-        const dt = Number.isFinite(this.#lastFrame) ? Math.max(0, Math.min((now - this.#lastFrame) / 1000, 0.1)) : 0
+        const dt = Number.isFinite(this.#lastFrame) ? clamp((now - this.#lastFrame) / 1000, 0, 0.1) : 0
         this.#lastFrame = now
         if (Number.isFinite(midi)) {
             if (!this.#live || !Number.isFinite(this.midi) || Math.abs(midi - this.midi) > 0.75) {this.midi = midi}
@@ -17,7 +18,7 @@ export class TunerDisplayState {
             this.#live = true
         } else {
             this.#live = false
-            const progress = Math.max(0, Math.min(1, (now - this.#lastSignal - 120) / 1000))
+            const progress = clamp((now - this.#lastSignal - 120) / 1000, 0, 1)
             this.opacity = 1 - progress * progress * (3 - 2 * progress)
             if (this.opacity === 0) {this.midi = NaN}
         }

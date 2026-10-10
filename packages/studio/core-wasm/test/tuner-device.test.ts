@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {UUID} from "@opendaw/lib-std"
+import {asDefined, asInstanceOf, UUID} from "@opendaw/lib-std"
 import {TunerDeviceBox} from "@opendaw/studio-boxes"
 import {ProjectSkeleton} from "@opendaw/studio-adapters"
 import {buildEffectProject, peakOf, renderEffect, renderEffectToggling} from "./helpers/effect-harness"
@@ -11,46 +11,39 @@ describe("Tuner", () => {
         const source = buildEffectProject(0.5, (graph, unit) => TunerDeviceBox.create(graph, UUID.generate(), box => {
             box.host.refer(unit.audioEffects)
             box.reference.setValue(432)
-            box.threshold.setValue(-60)
-            box.channel.setValue(2)
-            box.smooth.setValue(0.7)
-            box.view.setValue(2)
-            box.spelling.setValue(1)
+            box.view.setValue(1)
+            box.strobe.setValue(true)
             box.showFrequency.setValue(true)
             box.autoFollow.setValue(false)
             box.historyCenter.setValue(57)
             box.historySpan.setValue(12)
         }))
-        const restored = ProjectSkeleton.decode(ProjectSkeleton.encode(source)).boxGraph.boxes()
-            .find(box => box instanceof TunerDeviceBox) as TunerDeviceBox
-        expect(restored).toBeDefined()
-        expect([restored.reference.getValue(), restored.threshold.getValue(), restored.channel.getValue(),
-            restored.view.getValue(), restored.spelling.getValue(), restored.showFrequency.getValue(),
+        const restored = asInstanceOf(asDefined(ProjectSkeleton.decode(ProjectSkeleton.encode(source)).boxGraph.boxes()
+            .find(box => box instanceof TunerDeviceBox)), TunerDeviceBox)
+        expect([restored.reference.getValue(), restored.view.getValue(), restored.strobe.getValue(), restored.showFrequency.getValue(),
             restored.autoFollow.getValue(), restored.historyCenter.getValue(), restored.historySpan.getValue()])
-            .toEqual([432, -60, 2, 2, 1, true, false, 57, 12])
-        expect(restored.smooth.getValue()).toBeCloseTo(0.7)
+            .toEqual([432, 1, true, true, false, 57, 12])
     })
 
     it("passes audio unchanged, including when bypass changes during playback", async () => {
         const baseline = await renderEffect(buildEffectProject(0.5, (_source, unit) => unit), 120)
-        let tuner!: TunerDeviceBox
-        const source = buildEffectProject(0.5, (graph, unit) => tuner = TunerDeviceBox.create(graph, UUID.generate(), box => {
+        const source = buildEffectProject(0.5, (graph, unit) => TunerDeviceBox.create(graph, UUID.generate(), box => {
             box.host.refer(unit.audioEffects)
             box.index.setValue(0)
             box.reference.setValue(410)
-            box.threshold.setValue(-80)
         }))
+        const tuner = asInstanceOf(asDefined(source.boxes().find(box => box instanceof TunerDeviceBox)), TunerDeviceBox)
         const measured = await renderEffectToggling(source, () => tuner.enabled.setValue(false), {quanta: 120, toggleAt: 80})
         expect(peakOf(baseline)).toBeGreaterThan(0.01)
         expect(measured).toEqual(baseline)
     }, 120000)
 
     it("registers and broadcasts the detected frequency, confidence and level", async () => {
-        let tuner!: TunerDeviceBox
-        const source = buildEffectProject(0.05, (graph, unit) => tuner = TunerDeviceBox.create(graph, UUID.generate(), box => {
+        const source = buildEffectProject(0.05, (graph, unit) => TunerDeviceBox.create(graph, UUID.generate(), box => {
             box.host.refer(unit.audioEffects)
             box.index.setValue(0)
         }))
+        const tuner = asInstanceOf(asDefined(source.boxes().find(box => box instanceof TunerDeviceBox)), TunerDeviceBox)
         const {engine, memory} = await loadFullEngine()
         const sync = connectSyncToEngine(engine, memory, source)
         await sync.settle(); engine.bind(); await sync.settle()
@@ -76,12 +69,7 @@ describe("Tuner", () => {
         expect(confidence).toBeGreaterThan(0.95)
         expect(level).toBeGreaterThan(-40)
         expect(level).toBeLessThan(-20)
-        source.beginTransaction(); tuner.threshold.setValue(-20); source.endTransaction()
-        await sync.settle()
-        for (let quantum = 0; quantum < 40; quantum++) {engine.render()}
-        expect(Array.from(new Float32Array(memory.buffer, dataPtr, 2))).toEqual([0, 0])
-        // Reference is a display/calibration parameter, not an audio pitch shifter.
-        source.beginTransaction(); tuner.threshold.setValue(-55); tuner.reference.setValue(480); source.endTransaction()
+        source.beginTransaction(); tuner.reference.setValue(480); source.endTransaction()
         await sync.settle()
         for (let quantum = 0; quantum < 40; quantum++) {engine.render()}
         expect(new Float32Array(memory.buffer, dataPtr, 3)[0]).toBeCloseTo(frequency, 1)

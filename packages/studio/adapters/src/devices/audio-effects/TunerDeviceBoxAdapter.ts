@@ -18,7 +18,7 @@ export class TunerDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     readonly #box: TunerDeviceBox
 
     readonly #parametric: ParameterAdapterSet
-    readonly namedParameter // let typescript infer the type
+    readonly namedParameter
 
     constructor(context: BoxAdaptersContext, box: TunerDeviceBox) {
         this.#context = context
@@ -54,13 +54,7 @@ export class TunerDeviceBoxAdapter implements AudioEffectDeviceAdapter {
     #wrapParameters(box: TunerDeviceBox) {
         return {
             reference: this.#parametric.createParameter(box.reference, ValueMapping.linear(410, 480),
-                StringMapping.numeric({unit: "Hz"}), "Reference"),
-            threshold: this.#parametric.createParameter(box.threshold, ValueMapping.linear(-80, -20),
-                StringMapping.numeric({unit: "dB"}), "Threshold"),
-            channel: this.#parametric.createParameter(box.channel, ValueMapping.linearInteger(0, 2),
-                StringMapping.indices("", ["Auto", "Left", "Right"]), "Input"),
-            smooth: this.#parametric.createParameter(box.smooth, ValueMapping.unipolar(),
-                StringMapping.percent(), "Smooth")
+                StringMapping.numeric({unit: "Hz"}), "Reference")
         } as const
     }
 }
