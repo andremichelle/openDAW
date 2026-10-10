@@ -448,6 +448,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-tuner"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "libm",
+ "math",
+]
+
+[[package]]
 name = "device-vaporisateur"
 version = "0.0.0"
 dependencies = [

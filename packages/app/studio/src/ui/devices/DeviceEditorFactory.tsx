@@ -6,6 +6,7 @@ import {
     AudioEffectCompositeBox,
     AudioSinkDeviceBox,
     AutotuneDeviceBox,
+    TunerDeviceBox,
     FrequencySplitBox,
     StereoCompositeBox,
     BoxVisitor,
@@ -57,6 +58,7 @@ import {
     AudioEffectCompositeBoxAdapter,
     AudioSinkDeviceBoxAdapter,
     AutotuneDeviceBoxAdapter,
+    TunerDeviceBoxAdapter,
     FrequencySplitBoxAdapter,
     StereoCompositeBoxAdapter,
     CompressorDeviceBoxAdapter,
@@ -125,6 +127,7 @@ import {MaximizerDeviceEditor} from "@/ui/devices/audio-effects/MaximizerDeviceE
 import {CompressorDeviceEditor} from "@/ui/devices/audio-effects/CompressorDeviceEditor"
 import {GateDeviceEditor} from "@/ui/devices/audio-effects/GateDeviceEditor"
 import {AutotuneDeviceEditor} from "@/ui/devices/audio-effects/AutotuneDeviceEditor"
+import {TunerDeviceEditor} from "@/ui/devices/audio-effects/TunerDeviceEditor"
 import {CrusherDeviceEditor} from "@/ui/devices/audio-effects/CrusherDeviceEditor"
 import {FoldDeviceEditor} from "@/ui/devices/audio-effects/FoldDeviceEditor"
 import {MIDIOutputDeviceEditor} from "@/ui/devices/instruments/MIDIOutputDeviceEditor"
@@ -343,6 +346,11 @@ export namespace DeviceEditorFactory {
                 <TidalDeviceEditor lifecycle={lifecycle}
                                    service={service}
                                    adapter={service.project.boxAdapters.adapterFor(box, TidalDeviceBoxAdapter)}
+                                   deviceHost={deviceHost}/>
+            ),
+            visitTunerDeviceBox: (box: TunerDeviceBox) => (
+                <TunerDeviceEditor lifecycle={lifecycle} service={service}
+                                   adapter={service.project.boxAdapters.adapterFor(box, TunerDeviceBoxAdapter)}
                                    deviceHost={deviceHost}/>
             ),
             visitAutotuneDeviceBox: (box: AutotuneDeviceBox) => (

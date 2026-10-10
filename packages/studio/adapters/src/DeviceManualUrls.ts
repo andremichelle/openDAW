@@ -11,6 +11,7 @@ export namespace DeviceManualUrls {
 
     // Audio Effects
     export const Autotune = "manuals/devices/audio/autotune"
+    export const Tuner = "manuals/devices/audio/tuner"
     export const StereoTool = "manuals/devices/audio/stereotool"
     export const Sink = "manuals/devices/audio/sink"
     export const Delay = "manuals/devices/audio/delay"
