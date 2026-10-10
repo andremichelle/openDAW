@@ -67,8 +67,26 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const {parameters: parametersField} = adapter.box
     const nameLabel: HTMLElement = <span className="name"/>
     const vendorLabel: HTMLElement = <span className="vendor"/>
-    const state: { info: Optional<WclapPluginInfo>, ready: boolean, inputs: ReadonlyArray<WclapAudioPort> } =
-        {info: undefined, ready: false, inputs: []}
+    const state: {
+        info: Optional<WclapPluginInfo>, ready: boolean, inputs: ReadonlyArray<WclapAudioPort>, credits: string
+    } = {info: undefined, ready: false, inputs: [], credits: ""}
+    const pluginBox: HTMLElement = (
+        <div className="plugin" onclick={() => {
+            if (state.credits.length > 0) {window.open(state.credits, "_blank", "noopener")}
+        }}>{nameLabel}{vendorLabel}</div>
+    )
+    const showCredits = (url: string): void => {
+        state.credits = ""
+        pluginBox.classList.remove("linked")
+        pluginBox.title = ""
+        if (!WclapStorage.isLocal(url)) {return}
+        OpenWclapAPI.get().find(WclapStorage.idOf(url)).then(entry => entry.ifSome(({credits}) => {
+            if (adapter.urlField.getValue() !== url || credits.length === 0) {return}
+            state.credits = credits
+            pluginBox.classList.add("linked")
+            pluginBox.title = credits
+        }))
+    }
     const describe = (url: string): Promise<ReadonlyArray<WclapPluginInfo>> =>
         url.length === 0 ? Promise.resolve([]) : engine.wclapDescribe(url)
     const select = (url: string, clapId: string): void => {
@@ -89,6 +107,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         vendorLabel.textContent = ""
         vendorLabel.classList.remove("failed")
         showName()
+        showCredits(url)
         if (clapId.length === 0) {return}
         describe(url).then(plugins => {
             if (adapter.clapIdField.getValue() !== clapId) {return}
@@ -392,10 +411,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                       }}
                       populateControls={() => (
                           <div className={className}>
-                              <div className="plugin">
-                                  {nameLabel}
-                                  {vendorLabel}
-                              </div>
+                              {pluginBox}
                               <div className="buttons">
                                   <div className="group">
                                       <MenuButton root={pluginMenu}

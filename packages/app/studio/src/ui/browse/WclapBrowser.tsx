@@ -10,7 +10,7 @@ import {WclapPluginInfo} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
-import {OpenWclapAPI, WclapIndexFolder} from "@/opendaw-api"
+import {OpenWclapAPI, WclapIndexEntry, WclapIndexFolder} from "@/opendaw-api"
 import {AssetLocation} from "@/ui/browse/AssetLocation"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 import {ResourceFolderItem} from "@/ui/browse/ResourceFolderItem"
@@ -27,24 +27,26 @@ type Construct = {
     service: StudioService
 }
 
-type Entry = {
-    id: string, name: string, bundle: string, type: string, vendor: string, license: string, size: number, local: boolean
-}
+type Credits = Pick<WclapIndexEntry, "license" | "credits">
+
+type Entry = Credits & {id: string, name: string, bundle: string, type: string, vendor: string, size: number, local: boolean}
+
+const NoCredits: Credits = {license: "", credits: ""}
 
 const {describe, kindOf, shortKind} = WclapDescriber
 
 const location = new DefaultObservableValue(AssetLocation.OpenDAW)
 
-const toEntries = (id: string, size: number, local: boolean, license: string,
+const toEntries = (id: string, size: number, local: boolean, {license, credits}: Credits,
                    plugins: ReadonlyArray<WclapPluginInfo>): ReadonlyArray<Entry> => {
     if (plugins.length === 0) {
         const name = `Unknown bundle ${id.substring(0, 8)}`
-        return [{id, size, local, license, name, bundle: name, type: "", vendor: ""}]
+        return [{id, size, local, license, credits, name, bundle: name, type: "", vendor: ""}]
     }
     const bundle = plugins.map(({name}) => name).join(", ")
     const shortNames = WclapNames.distinct(plugins.map(({name}) => name))
     return plugins.map((plugin, index) => ({
-        id, size, local, license, bundle, name: shortNames[index], type: shortKind(kindOf(plugin)), vendor: plugin.vendor
+        id, size, local, license, credits, bundle, name: shortNames[index], type: shortKind(kindOf(plugin)), vendor: plugin.vendor
     }))
 }
 
@@ -55,13 +57,13 @@ const byName = (a: Entry, b: Entry): number => StringComparator(a.name.toLowerCa
 const loadLocal = async (): Promise<ResourceFolder<Entry>> => {
     const [ids, cloud] = await Promise.all([WclapStorage.list(), OpenWclapAPI.get().all()])
     // a bundle imported from disk carries no license we know of, one from the cloud carries the published one
-    const licenses = new Map(cloud.map(({uuid, license}) => [uuid, license]))
+    const published = new Map(cloud.map(({uuid, license, credits}) => [uuid, {license, credits}]))
     const items = await Promise.all(ids.map(async id => {
         const [archive, plugins] = await Promise.all([
             WclapStorage.loadId(id),
             describe(WclapStorage.urlOf(id)).catch(() => [])
         ])
-        return toEntries(id, archive.byteLength, true, licenses.get(id) ?? "", plugins)
+        return toEntries(id, archive.byteLength, true, published.get(id) ?? NoCredits, plugins)
     }))
     return {name: "", folders: [], items: items.flat().toSorted(byName)}
 }
@@ -71,7 +73,7 @@ const loadCloud = async (): Promise<ResourceFolder<Entry>> => {
     const toFolder = (folder: WclapIndexFolder): ResourceFolder<Entry> => ({
         name: folder.name,
         folders: folder.folders?.map(toFolder) ?? [],
-        items: folder.wclaps?.flatMap(({uuid, size, license, plugins}) => toEntries(uuid, size, false, license, plugins)) ?? []
+        items: folder.wclaps?.flatMap(entry => toEntries(entry.uuid, entry.size, false, entry, entry.plugins)) ?? []
     })
     return {name: "", folders: (await OpenWclapAPI.get().tree()).folders.map(toFolder), items: []}
 }
@@ -99,7 +101,9 @@ export const WclapBrowser = ({lifecycle}: Construct) => {
             <div className="entry">
                 <span className="name"><Icon symbol={IconSymbol.WebClap}/>{entry.name}</span>
                 <span>{entry.type}</span>
-                <span>{entry.vendor}</span>
+                <span>{entry.credits.length > 0
+                    ? <a href={entry.credits} target="_blank" rel="noopener" title={entry.credits}>{entry.vendor}</a>
+                    : entry.vendor}</span>
                 <span>{entry.license.length > 0 ? entry.license : "-"}</span>
                 <span className="right">{Bytes.toString(entry.size)}</span>
             </div>
