@@ -7,4 +7,12 @@ AI-assisted implementation requested by the user: resize individual timeline tra
 - Double-clicking empty background in the left control header also restores the default height. Child controls and labels keep their existing interactions.
 - Drag updates use the project's editing transaction with a single undo mark on completion. Cancellation restores the original value. Subscriptions and pointer handlers belong to the track lifecycle.
 - The row's height changes directly, preserving the shared `--lane-height` token used for clip column widths. Track hit testing reads actual element dimensions, and CanvasPainter observes canvas resizing.
-- Validation: Studio TypeScript check, existing Studio unit tests, and compilation of the track Sass. The user tested the UI locally. The rebuilt WASM engine passed synchronization/checksum tests (initial sync plus 263 transactions). Further reviewer checks: audio/MIDI/automation lanes, scrolling and editing clips below resized lanes, undo/redo, cancellation with Escape, double-click reset, and reopening a saved project.
+- Validation: Studio TypeScript check, existing Studio unit tests, and compilation of the track Sass. Browser interaction remains to be checked manually: resize audio/MIDI/automation lanes, scroll and edit clips below them, undo/redo, cancel with Escape, reset with double-click, and reopen a saved project.
+
+## Review follow-up
+
+- Clip cells stay at the default lane height and align to the top of taller tracks.
+- The resize handle starts 36 pixels into the header, leaving the automation-collapse button clear.
+- Clip lanes and the launch header share a pixel scroll offset. Horizontal trackpad gestures and Shift+wheel scroll continuously; vertical wheel input keeps scrolling tracks. Capture, rectangle selection, moving clips, and drop previews account for the offset. Extra columns include one empty destination after the last clip.
+- Code style follows the maintainer feedback: checked header lookup, field-derived maximum, import placement, custom properties before the handle styles, and preserved original file endings.
+- Keyboard resizing was explicitly deferred by the user.

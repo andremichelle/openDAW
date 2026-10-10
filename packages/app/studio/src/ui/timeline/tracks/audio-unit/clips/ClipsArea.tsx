@@ -35,6 +35,8 @@ import {AnyDragData} from "@/ui/AnyDragData"
 import {Dialogs} from "@/ui/components/dialogs"
 import {ElementCapturing} from "@opendaw/studio-core"
 
+import {clipScrollPosition, installClipScroll} from "./ClipScroll"
+
 const className = Html.adoptStyleSheet(css, "ClipsArea")
 
 type Construct = {
@@ -57,6 +59,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
             fy: vertex => ClipAdapters.for(boxAdapters, vertex.box)
         }))
 
+    installClipScroll(lifecycle, service, element)
     const capturing: ElementCapturing<ClipCaptureTarget> = ClipCapturing.create(element, manager)
     const locator: TimelineSelectableLocator<AnyClipBoxAdapter> = createClipSelectableLocator(capturing, manager)
     const dragAndDrop = new ClipDragAndDrop(service, capturing)
@@ -77,8 +80,8 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
             }}/>
     )
     const xAxis: ValueAxis = {
-        valueToAxis: (index: int): number => index * ClipWidth + element.getBoundingClientRect().left,
-        axisToValue: (axis: number): int => Math.floor(Math.max(0, axis - element.getBoundingClientRect().left) / ClipWidth)
+        valueToAxis: (index: int): number => index * ClipWidth - service.timeline.clips.scroll.getValue() + element.getBoundingClientRect().left,
+        axisToValue: (axis: number): int => Math.floor(Math.max(0, axis - element.getBoundingClientRect().left + service.timeline.clips.scroll.getValue()) / ClipWidth)
     }
     const yAxis: ValueAxis = {
         valueToAxis: (index: int): number => manager.indexToGlobal(index),
@@ -115,10 +118,10 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                     y = trackBoxAdapter.listIndex * ClipWidth - scrollContainer.scrollTop
                 } else {
                     const rect = element.getBoundingClientRect()
-                    x = quantizeFloor(event.clientX - rect.left, ClipWidth)
+                    x = quantizeFloor(event.clientX - rect.left + service.timeline.clips.scroll.getValue(), ClipWidth)
                     y = manager.tracksLocalBottom() - scrollContainer.scrollTop
                 }
-                style.transform = `translate(${x}px, ${y}px)`
+                style.transform = `translate(${x - service.timeline.clips.scroll.getValue()}px, ${y}px)`
                 style.display = "block"
                 return true
             },
@@ -130,7 +133,14 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
             enter: (_allowDrop: boolean) => {},
             leave: () => style.display = "none"
         }),
-        installAutoScroll(element, (_deltaX, deltaY) => {if (deltaY !== 0) {scrollModel.moveBy(deltaY)}},
+        installAutoScroll(element, (deltaX, deltaY) => {
+            if (deltaY !== 0) {scrollModel.moveBy(deltaY)}
+            if (deltaX !== 0) {
+                const clips = service.timeline.clips
+                clips.scroll.setValue(clipScrollPosition(clips.scroll.getValue() + deltaX,
+                    Math.max(clips.columns.getValue(), clips.count.getValue()), element.clientWidth))
+            }
+        },
             {dragPadding: Config.AutoScrollDragPaddingVertical}),
         clipSelection.catchupAndSubscribe({
             onSelected: (selectable: AnyClipBoxAdapter) => selectable.onSelected(),

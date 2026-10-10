@@ -7,6 +7,8 @@ import {IconSymbol} from "@opendaw/studio-enums"
 import {deferNextFrame, Dragging, Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
 
+import {installClipScroll} from "./ClipScroll"
+
 const className = Html.adoptStyleSheet(css, "ClipsHeader")
 
 type Construct = {
@@ -27,9 +29,11 @@ export const ClipsHeader = ({lifecycle, service}: Construct) => {
     const {project, timeline} = service
     const {engine, rootBoxAdapter} = project
     const clips = timeline.clips
+    installClipScroll(lifecycle, service, element)
     const cells: Array<Cell> = []
     const {request: requestRebuild} = deferNextFrame(() => {
-        const count = clips.count.getValue()
+        if (!clips.visible.getValue()) {return}
+        const count = Math.max(clips.count.getValue(), clips.columns.getValue())
         for (let index = cells.length; index < count; index++) {
             const isPlaying = new DefaultObservableValue(false)
             const terminator = lifecycle.spawn()
@@ -72,8 +76,17 @@ export const ClipsHeader = ({lifecycle, service}: Construct) => {
                     terminator.terminate()
                 })
         }
+        element.scrollLeft = clips.scroll.getValue()
     })
     lifecycle.ownAll(
+        clips.columns.catchupAndSubscribe(owner => {
+            element.style.setProperty("--clip-columns", String(owner.getValue()))
+            if (clips.visible.getValue()) {requestRebuild()}
+        }),
+        clips.scroll.catchupAndSubscribe(owner => {
+            element.scrollLeft = owner.getValue()
+            resizer.style.right = `${-owner.getValue()}px`
+        }),
         clips.visible.catchupAndSubscribe(owner => {
             runtime.terminate()
             if (owner.getValue()) {

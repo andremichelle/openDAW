@@ -1,4 +1,3 @@
-import {installTrackResize} from "./TrackResize"
 import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
 import {createElement} from "@opendaw/lib-jsx"
@@ -8,6 +7,7 @@ import {AudioUnitBoxAdapter, TrackBoxAdapter} from "@opendaw/studio-adapters"
 import {ClipLane} from "@/ui/timeline/tracks/audio-unit/clips/ClipLane.tsx"
 import {RegionLane} from "@/ui/timeline/tracks/audio-unit/regions/RegionLane.tsx"
 import {TracksManager} from "@/ui/timeline/tracks/audio-unit/TracksManager.ts"
+import {installTrackResize} from "./TrackResize"
 
 type Construct = {
     lifecycle: Lifecycle

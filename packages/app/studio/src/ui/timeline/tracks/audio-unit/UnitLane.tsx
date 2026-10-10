@@ -82,6 +82,7 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
     const audioUnitEditing = project.userEditingManager.audioUnit
     const clipCellsLifecycle = lifecycle.own(new Terminator())
     lifecycle.ownAll(
+        service.timeline.clips.scroll.catchupAndSubscribe(owner => clipArea.scrollLeft = owner.getValue()),
         // A sample dropped on an audio-accepting unit's synthetic lane creates the real audio track plus the
         // region at the drop position — the content track mounts and this lane disappears.
         DragAndDrop.installTarget(element, {
@@ -127,13 +128,15 @@ export const UnitLane = ({lifecycle, service, audioUnitBoxAdapter}: Construct) =
             clipCellsLifecycle.terminate()
             Html.empty(clipArea)
             if (visibleOwner.getValue()) {
-                clipCellsLifecycle.own(service.timeline.clips.count.catchupAndSubscribe(countOwner => {
+                clipCellsLifecycle.own(service.timeline.clips.columns.catchupAndSubscribe(countOwner => {
+                    clipArea.style.setProperty("--clip-columns", String(countOwner.getValue()))
                     Html.empty(clipArea)
                     Arrays.create(index => (
                         <div style={{gridColumn: `${index + 1} / ${index + 2}`}}>
                             <div className="placeholder"/>
                         </div>
                     ), countOwner.getValue()).forEach(cell => clipArea.appendChild(cell))
+                    clipArea.scrollLeft = service.timeline.clips.scroll.getValue()
                 }))
             }
         }),

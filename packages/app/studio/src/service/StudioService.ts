@@ -109,6 +109,8 @@ export class StudioService implements ProjectEnv {
         snapping,
         clips: {
             count: new DefaultObservableValue(3),
+            columns: new DefaultObservableValue(8),
+            scroll: new DefaultObservableValue(0),
             visible: StudioPreferences.createMutableObservableValue("timeline", "clips")
         },
         followCursor: StudioPreferences.createMutableObservableValue("timeline", "follow-cursor"),
@@ -463,6 +465,8 @@ export class StudioService implements ProjectEnv {
                     .reduce((max, unit) => Math.max(max, unit.tracks.values()
                         .reduce((max, track) => Math.max(max, track.clips.collection
                             .getMinFreeIndex()), 0)), 0)
+                this.timeline.clips.scroll.setValue(0)
+                this.timeline.clips.columns.setValue(Math.max(8, maxClipIndex + 1))
                 if (maxClipIndex > 0) {
                     this.timeline.clips.count.setValue(Math.max(maxClipIndex + 1, 3))
                     this.timeline.clips.visible.setValue(true)

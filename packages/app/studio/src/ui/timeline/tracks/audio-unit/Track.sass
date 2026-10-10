@@ -5,9 +5,16 @@ component
   height: var(--lane-height)
   position: relative
 
+  // Tree-guide geometry, consumed by the header's pseudo elements: the vertical drop starts below the device
+  // name on a group's first lane, passes through on followers, and stops at the label on the last lane.
+  --guide-top: calc(50% + 1px)
+  --guide-bottom: 0px
+  --stub-top: calc(50% + 7px)
+  --guide-display: block
+
   > div > .track-resizer
     position: absolute
-    left: 0
+    left: 36px
     right: 0
     bottom: 0
     height: 5px
@@ -29,12 +36,6 @@ component
 
     &:hover::after
       opacity: 0.5
-  // Tree-guide geometry, consumed by the header's pseudo elements: the vertical drop starts below the device
-  // name on a group's first lane, passes through on followers, and stops at the label on the last lane.
-  --guide-top: calc(50% + 1px)
-  --guide-bottom: 0px
-  --stub-top: calc(50% + 7px)
-  --guide-display: block
 
   // An automation lane whose unit is collapsed: out of flow (grid skips it).
   &.collapsed-away

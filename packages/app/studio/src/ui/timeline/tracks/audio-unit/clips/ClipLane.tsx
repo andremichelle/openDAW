@@ -116,12 +116,21 @@ export const ClipLane = ({lifecycle, service, trackManager, adapter}: Construct)
         })
     const clipsCount = clips.count
     const {request: requestRebuild} = deferNextFrame(() => {
-        const count = clipsCount.getValue()
+        if (!clips.visible.getValue()) {return}
+        const count = Math.max(clipsCount.getValue(), clips.columns.getValue(),
+            ...adapter.clips.collection.adapters().map(clip => clip.indexField.getValue() + 2))
+        clips.columns.setValue(count)
         restockPlaceholders(count)
         populatePlaceholder()
         depletePlaceholders(count)
+        container.scrollLeft = clips.scroll.getValue()
     })
-    lifecycle.own(
+    lifecycle.ownAll(
+        clips.columns.catchupAndSubscribe(owner => {
+            container.style.setProperty("--clip-columns", String(owner.getValue()))
+            if (clips.visible.getValue()) {requestRebuild()}
+        }),
+        clips.scroll.catchupAndSubscribe(owner => container.scrollLeft = owner.getValue()),
         clips.visible.catchupAndSubscribe(owner => {
             runtime.terminate()
             if (owner.getValue()) {
