@@ -105,7 +105,6 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                 let y: number
                 const target = capturing.captureEvent(event)
                 if (isNotNull(target)) {
-                    const trackBoxAdapter = target.track.trackBoxAdapter
                     if (target.type === "track") {
                         const clipIndex = target.clipIndex
                         x = clipIndex * ClipWidth
@@ -115,7 +114,7 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                     } else {
                         return Unhandled(target)
                     }
-                    y = trackBoxAdapter.listIndex * ClipWidth - scrollContainer.scrollTop
+                    y = target.track.position - scrollContainer.scrollTop
                 } else {
                     const rect = element.getBoundingClientRect()
                     x = quantizeFloor(event.clientX - rect.left + service.timeline.clips.scroll.getValue(), ClipWidth)
@@ -177,7 +176,6 @@ export const ClipsArea = ({lifecycle, service, manager, scrollModel, scrollConta
                 service.panelLayout.showIfAvailable(PanelType.ContentEditor)
             } else if (target.type === "track") {
                 editing.modify(() => {
-                    const trackBoxAdapter = target.track.trackBoxAdapter
                     const clipIndex = target.clipIndex
                     switch (trackBoxAdapter.type) {
                         case TrackType.Audio:
