@@ -11,18 +11,18 @@ export class OpenWclapAPI {
     @Lazy
     static get(): OpenWclapAPI {return new OpenWclapAPI()}
 
-    // a missing or broken index is an empty catalogue, unlike samples nothing waits for it
+    // only a fetched index is kept: a failed fetch (memoizeAsync forgets rejections) is tried again next time
     readonly #memoized: () => Promise<WclapIndex> = Promises.memoizeAsync(() =>
         retryTransient(() => fetch(`${OpenWclapAPI.IndexFile}?v=${Date.now()}`, {...OpenDAWHeaders, cache: "no-cache"})
             .then(response => response.ok ? response.json() : Promise.reject(new HttpStatus(response.status))), 3)
-            .then(json => WclapIndex.schema.parse(json))
-            .catch(() => WclapIndex.Empty))
+            .then(json => WclapIndex.schema.parse(json)))
 
     private constructor() {}
 
-    tree(): Promise<WclapIndex> {return this.#memoized()}
+    // a missing or broken index is an empty catalogue for now, unlike samples nothing waits for it
+    tree(): Promise<WclapIndex> {return this.#memoized().catch(() => WclapIndex.Empty)}
 
-    async all(): Promise<ReadonlyArray<WclapIndexEntry>> {return WclapIndex.flatten(await this.#memoized())}
+    async all(): Promise<ReadonlyArray<WclapIndexEntry>> {return WclapIndex.flatten(await this.tree())}
 
     async find(uuid: string): Promise<Option<WclapIndexEntry>> {
         return Option.wrap((await this.all()).find(entry => entry.uuid === uuid))

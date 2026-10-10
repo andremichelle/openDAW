@@ -257,22 +257,26 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         }, EmptyExec)
     }
     const cloud: { root: CloudFolder, plugins: ReadonlyArray<CloudPlugin> } = {root: EmptyCloudFolder, plugins: []}
-    OpenWclapAPI.get().tree().then(({folders}) => {
-        const toFolder = ({name, folders, wclaps}: WclapIndexFolder): CloudFolder => ({
-            name,
-            folders: (folders ?? []).map(toFolder).filter(folder => folder.folders.length > 0 || folder.plugins.length > 0),
-            plugins: (wclaps ?? [])
-                .flatMap(({uuid, name, plugins}) => {
-                    const shortNames = WclapNames.distinct(plugins.map(info => info.name))
-                    return plugins.map((info, index) => ({uuid, label: plugins.length > 1 ? shortNames[index] : name, info}))
-                })
-                .filter(({info}) => kindOf(info) === adapter.type)
-                .toSorted(byLabel)
-        })
-        cloud.root = toFolder({name: "", folders})
-        const collect = ({folders, plugins}: CloudFolder): ReadonlyArray<CloudPlugin> => [...plugins, ...folders.flatMap(collect)]
-        cloud.plugins = collect(cloud.root)
-    }, EmptyExec)
+    // asked again while the catalogue is empty (it could not be fetched): the next menu then lists it
+    const refreshCloud = (): void => {
+        OpenWclapAPI.get().tree().then(({folders}) => {
+            const toFolder = ({name, folders, wclaps}: WclapIndexFolder): CloudFolder => ({
+                name,
+                folders: (folders ?? []).map(toFolder).filter(folder => folder.folders.length > 0 || folder.plugins.length > 0),
+                plugins: (wclaps ?? [])
+                    .flatMap(({uuid, name, plugins}) => {
+                        const shortNames = WclapNames.distinct(plugins.map(info => info.name))
+                        return plugins.map((info, index) => ({uuid, label: plugins.length > 1 ? shortNames[index] : name, info}))
+                    })
+                    .filter(({info}) => kindOf(info) === adapter.type)
+                    .toSorted(byLabel)
+            })
+            cloud.root = toFolder({name: "", folders})
+            const collect = ({folders, plugins}: CloudFolder): ReadonlyArray<CloudPlugin> => [...plugins, ...folders.flatMap(collect)]
+            cloud.plugins = collect(cloud.root)
+        }, EmptyExec)
+    }
+    refreshCloud()
     const populateCloud = (parent: MenuItem, {folders, plugins}: CloudFolder): void => {
         parent.addMenuItem(...folders.map(folder => MenuItem.default({label: folder.name, icon: IconSymbol.Folder})
             .setRuntimeChildrenProcedure(sub => populateCloud(sub, folder))))
@@ -281,6 +285,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 .setTriggerProcedure(() => useCloud(uuid, info))))
     }
     const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
+        if (cloud.plugins.length === 0) {refreshCloud()}
         // a cloud plugin picked once is stored too, it stays listed under Cloud only
         const cloudUrls = new Set(cloud.plugins.map(({uuid}) => WclapStorage.urlOf(uuid)))
         const local = stored.plugins.filter(({url}) => !cloudUrls.has(url))

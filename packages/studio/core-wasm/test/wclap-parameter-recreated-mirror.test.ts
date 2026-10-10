@@ -1,5 +1,6 @@
-// A WebCLAP parameter box deleted by undo and created again by redo (same address: WclapParameters derives the
-// uuid from the device and the clap id) must get a fresh parameter adapter. The old one stayed registered in the
+// A WebCLAP parameter box deleted and created again (same address: WclapParameters derives the uuid from the
+// device and the clap id, so a plugin that drops a parameter and reports it again gets the same box address)
+// must get a fresh parameter adapter. The old one stayed registered in the
 // project's ParameterFieldAdapters, and the plugin's next value report went through it: written to the deleted
 // field, sent to the engine for the live box, the engine mirror diverged (box-graph checksum mismatch).
 
@@ -38,7 +39,7 @@ type EngineExports = {
     apply_updates(len: number): number
 }
 
-describe("WebCLAP parameter after undo and redo", () => {
+describe("WebCLAP parameter box created again at the same address", () => {
     it("keeps the engine mirror in sync", async () => {
         const memory = new WebAssembly.Memory({initial: 256})
         const table = new WebAssembly.Table({initial: 512, element: "anyfunc"})
@@ -74,11 +75,11 @@ describe("WebCLAP parameter after undo and redo", () => {
         const inSync = (): Promise<void> => syncSource.checksum(project.boxGraph.checksum())
         engine.bind()
 
-        WclapParameters.reconcile(project, uuid, [{id: 7, name: "Cutoff", module: "", min: 0, max: 1, defaultValue: 0, value: 0.1, flags: 0}])
+        const cutoff = {id: 7, name: "Cutoff", module: "", min: 0, max: 1, defaultValue: 0, value: 0.1, flags: 0}
+        WclapParameters.reconcile(project, uuid, [cutoff])
         await expect(inSync()).resolves.toBeUndefined()
-        project.editing.mark()
-        project.editing.undo()
-        project.editing.redo()
+        WclapParameters.reconcile(project, uuid, []) // the plugin drops it
+        WclapParameters.reconcile(project, uuid, [cutoff]) // and reports it again
         await expect(inSync()).resolves.toBeUndefined()
         WclapParameters.apply(project, uuid, 7, 0.5, 0)
         const paramBox = device.parameters.pointerHub.incoming()[0].box as WclapParameterBox
