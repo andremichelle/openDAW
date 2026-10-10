@@ -1,3 +1,4 @@
+import {installTrackResize} from "./TrackResize"
 import {DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService.ts"
 import {createElement} from "@opendaw/lib-jsx"
@@ -38,5 +39,6 @@ export const Track = ({lifecycle, service, trackManager, audioUnitBoxAdapter, tr
     )
     const {box: {enabled}} = trackBoxAdapter
     lifecycle.own(enabled.catchupAndSubscribe(owner => element.classList.toggle("mute", !owner.getValue())))
+    installTrackResize(lifecycle, service, trackBoxAdapter, element)
     return element
 }

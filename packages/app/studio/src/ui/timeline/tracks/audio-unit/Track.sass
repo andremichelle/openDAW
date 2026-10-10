@@ -3,6 +3,32 @@ component
   grid-template-columns: subgrid
   grid-column: 1 / -1
   height: var(--lane-height)
+  position: relative
+
+  > div > .track-resizer
+    position: absolute
+    left: 0
+    right: 0
+    bottom: 0
+    height: 5px
+    z-index: 4
+    cursor: ns-resize
+    pointer-events: all
+    touch-action: none
+
+    &::after
+      content: ""
+      position: absolute
+      left: 0
+      right: 0
+      bottom: 0
+      height: 1px
+      background-color: var(--color-green)
+      opacity: 0
+      pointer-events: none
+
+    &:hover::after
+      opacity: 0.5
   // Tree-guide geometry, consumed by the header's pseudo elements: the vertical drop starts below the device
   // name on a group's first lane, passes through on followers, and stops at the label on the last lane.
   --guide-top: calc(50% + 1px)

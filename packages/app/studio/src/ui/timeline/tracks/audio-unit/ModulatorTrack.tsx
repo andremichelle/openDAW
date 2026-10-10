@@ -1,3 +1,4 @@
+import {installTrackResize} from "./TrackResize"
 import {Lifecycle} from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
 import {TrackBoxAdapter} from "@opendaw/studio-adapters"
@@ -31,5 +32,6 @@ export const ModulatorTrack = ({lifecycle, service, trackManager, trackBoxAdapte
     )
     const {box: {enabled}} = trackBoxAdapter
     lifecycle.own(enabled.catchupAndSubscribe(owner => element.classList.toggle("mute", !owner.getValue())))
+    installTrackResize(lifecycle, service, trackBoxAdapter, element)
     return element
 }
