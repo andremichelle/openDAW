@@ -67,8 +67,8 @@ fn every_exact_case_hashes_to_the_dexed_render() {
 #[test]
 fn the_output_filter_matches_within_an_ulp() {
     for (label, args) in [
-        ("filter", "cutoff=0.3 reso=0.5 60,100,0,4096"),
-        ("filter-hot", "cutoff=0.8 reso=0.95 48,127,0,4096 55,127,0,4096")
+        ("filter", "engine=mki cutoff=0.3 reso=0.5 60,100,0,4096"),
+        ("filter-hot", "engine=mki cutoff=0.8 reso=0.95 48,127,0,4096 55,127,0,4096")
     ] {
         let reference = fs::read(fixtures_dir().join(format!("{label}.f32"))).expect(label);
         let expected: Vec<f32> = reference.chunks(4).map(|bytes| f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])).collect();

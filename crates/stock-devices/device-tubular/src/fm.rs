@@ -17,19 +17,13 @@ pub const OUT_BUS_ADD: u8 = 1 << 2;
 pub const FB_IN: u8 = 1 << 6;
 pub const FB_OUT: u8 = 1 << 7;
 
-/// The operator kernel: Dexed's Mark I (its default, hardware-like 10-bit log tables) or the msfa
-/// "Modern" kernel (interpolated 24-bit tables).
+/// The operator kernel: the msfa "Modern" kernel (interpolated 24-bit tables) the device runs, or Dexed's
+/// Mark I (hardware-like 10-bit log tables) kept for the parity harness.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum Engine {
-    #[default]
     MarkI,
+    #[default]
     Modern
-}
-
-impl Engine {
-    pub fn from_index(index: i32) -> Self {
-        if index == 1 {Engine::Modern} else {Engine::MarkI}
-    }
 }
 
 pub const ALGORITHMS: [[u8; 6]; 32] = [
