@@ -124,11 +124,15 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         nameLabel.classList.remove("empty")
         nameLabel.textContent = info.name
         vendorLabel.classList.remove("failed")
-        vendorLabel.textContent = "Downloading…"
-        OpenWclapAPI.get().load(uuid, progress => {
-            if (current()) {vendorLabel.textContent = `Downloading… ${Math.round(progress * 100)}%`}
-        })
-            .then(archive => WclapStorage.store(archive))
+        // cloud ids are the archive's hash: a stored one is this very version, a newer version has another id
+        WclapStorage.exists(uuid)
+            .then(stored => {
+                if (stored) {return WclapStorage.urlOf(uuid)}
+                vendorLabel.textContent = "Downloading…"
+                return OpenWclapAPI.get().load(uuid, progress => {
+                    if (current()) {vendorLabel.textContent = `Downloading… ${Math.round(progress * 100)}%`}
+                }).then(archive => WclapStorage.store(archive))
+            })
             .then(local => {
                 if (local !== WclapStorage.urlOf(uuid)) {throw new Error("the download does not match its id")}
                 if (!current()) {return}
