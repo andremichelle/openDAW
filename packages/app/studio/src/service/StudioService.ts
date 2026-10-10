@@ -24,6 +24,7 @@ import {
 import {ChainedSampleProvider, ChainedSoundfontProvider, ChainedWclapProvider, TrafficMeter} from "@opendaw/studio-p2p"
 import {populateStudioMenu} from "@/service/StudioMenu"
 import {Snapping} from "@/ui/timeline/Snapping.ts"
+import {ClipsView} from "@/ui/timeline/ClipsView"
 import {PanelContents} from "@/ui/workspace/PanelContents.tsx"
 import {createPanelFactory} from "@/ui/workspace/PanelFactory.tsx"
 import {SpotlightDataSupplier} from "@/ui/spotlight/SpotlightDataSupplier.ts"
@@ -107,10 +108,7 @@ export class StudioService implements ProjectEnv {
     readonly timeline = {
         range,
         snapping,
-        clips: {
-            count: new DefaultObservableValue(3),
-            visible: StudioPreferences.createMutableObservableValue("timeline", "clips")
-        },
+        clips: new ClipsView(StudioPreferences.createMutableObservableValue("timeline", "clips")),
         followCursor: StudioPreferences.createMutableObservableValue("timeline", "follow-cursor"),
         primaryVisibility: {
             markers: StudioPreferences.createMutableObservableValue("timeline", "markers"),
@@ -459,16 +457,12 @@ export class StudioService implements ProjectEnv {
                     this.timeline.primaryVisibility.signature.setValue(true)
                 }
                 // Clips
-                const maxClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()
-                    .reduce((max, unit) => Math.max(max, unit.tracks.values()
-                        .reduce((max, track) => Math.max(max, track.clips.collection
-                            .getMinFreeIndex()), 0)), 0)
-                if (maxClipIndex > 0) {
-                    this.timeline.clips.count.setValue(Math.max(maxClipIndex + 1, 3))
-                    this.timeline.clips.visible.setValue(true)
-                } else {
-                    this.timeline.clips.count.setValue(3)
-                }
+                const highestClipIndex: int = project.rootBoxAdapter.audioUnits.adapters()
+                    .reduce((max, unit) => unit.tracks.values()
+                        .reduce((max, track) => track.clips.collection.adapters()
+                            .reduce((max, clip) => Math.max(max, clip.indexField.getValue()), max), max), -1)
+                this.timeline.clips.reset(highestClipIndex)
+                if (highestClipIndex >= 0) {this.timeline.clips.visible.setValue(true)}
                 let screen: Nullable<Workspace.ScreenKeys> = null
                 const restart: RestartWorklet = {
                     unload: async (event: unknown) => {

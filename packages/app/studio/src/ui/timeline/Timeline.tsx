@@ -10,6 +10,7 @@ import {AudioUnitsTimeline} from "./tracks/audio-unit/AudioUnitsTimeline.tsx"
 import {ClipsHeader} from "@/ui/timeline/tracks/audio-unit/clips/ClipsHeader.tsx"
 import {ppqn} from "@opendaw/lib-dsp"
 import {deferNextFrame, Html} from "@opendaw/lib-dom"
+import {getClipColumnFit} from "@/ui/timeline/tracks/audio-unit/clips/constants"
 
 const className = Html.adoptStyleSheet(css, "Timeline")
 
@@ -42,6 +43,8 @@ export const Timeline = ({lifecycle, service}: Construct) => {
         element.classList.toggle("primary-tracks-visible", markers.getValue() || tempo.getValue() || signature.getValue())))
     lifecycle.ownAll(
         Html.watchResize(element, () => {
+            const fit = getClipColumnFit(element.clientWidth - timelineHeader.clientWidth - 1)
+            clips.setCount(clips.count.getValue(), fit)
             const cursorHeight = element.clientHeight
                 - timelineHeader.clientHeight
                 - tracksFooter.clientHeight
