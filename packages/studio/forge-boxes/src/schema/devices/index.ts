@@ -18,6 +18,7 @@ import {UnknownMidiEffectDevice} from "./midi-effects/UnknownMidiEffectDevice"
 import {SoundfontDeviceBox} from "./instruments/SoundfontDeviceBox"
 import {MaximizerDeviceBox} from "./audio-effects/MaximizerDeviceBox"
 import {CompressorDeviceBox} from "./audio-effects/CompressorDeviceBox"
+import {TunerDeviceBox} from "./audio-effects/TunerDeviceBox"
 import {AutotuneDeviceBox} from "./audio-effects/AutotuneDeviceBox"
 import {CrusherDeviceBox} from "./audio-effects/CrusherDeviceBox"
 import {FoldDeviceBox} from "./audio-effects/FoldDeviceBox"
@@ -60,6 +61,7 @@ export const DeviceDefinitions = [
     GateDeviceBox,
     DelayDeviceBox,
     AutotuneDeviceBox,
+    TunerDeviceBox,
     CrusherDeviceBox,
     DattorroReverbDeviceBox,
     ConvolverDeviceBox,

@@ -28,6 +28,8 @@ opt-level = 3
 # The Cubed voice is a per-sample DSP loop (ladder + tanh + table reads); at the workspace default
 # of opt-level="z" it is compiled for SIZE, which costs real CPU on the audio thread. Same reason
 # engine/dsp/math are already pinned to 3.
+[profile.release.package.device-tuner]
+opt-level = 3
 [profile.release.package.device-autotune]
 opt-level = 3
 [profile.release.package.device-compressor]

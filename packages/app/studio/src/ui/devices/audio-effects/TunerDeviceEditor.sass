@@ -1,0 +1,67 @@
+@use "@/mixins"
+
+component
+  @include mixins.Control
+  width: 21em
+  display: block
+
+  .display
+    height: 100%
+    display: flex
+    flex-direction: column
+    min-height: 0
+
+  canvas
+    display: block
+    width: 100%
+    flex: 1 1 0
+    min-height: 0
+    height: 0
+    touch-action: none
+
+  .display-footer
+    display: flex
+    align-items: center
+    flex: 0 0 28px
+    gap: 4px
+    font-size: 0.75em
+    padding: 3px 5px 3px var(--plot-left, 30px)
+
+    button
+      border: none
+      min-width: 18px
+      padding: 0 4px
+
+      &:focus-visible
+        outline: 1px solid var(--color-blue)
+        outline-offset: 2px
+
+    .mode
+      width: 40px
+      flex: 0 0 40px
+
+    .unit
+      width: 22px
+      flex: 0 0 22px
+
+    .reference
+      display: flex
+      align-items: center
+      gap: 4px
+      margin-left: auto
+      padding-right: 6px
+      color: var(--color-shadow)
+      white-space: nowrap
+
+      > span
+        font-size: 9px
+        font-weight: 400
+        letter-spacing: 0.5px
+
+  .view-tabs
+    display: flex
+    gap: 4px
+
+    [role="tab"]:focus-visible
+      outline: 1px solid var(--color-blue)
+      outline-offset: 2px
