@@ -64,4 +64,3 @@ export class TunerDeviceBoxAdapter implements AudioEffectDeviceAdapter {
         } as const
     }
 }
-
