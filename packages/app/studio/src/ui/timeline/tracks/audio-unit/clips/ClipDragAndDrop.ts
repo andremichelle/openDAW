@@ -12,8 +12,12 @@ export class ClipDragAndDrop extends TimelineDragAndDrop<ClipCaptureTarget> {
     handleSample({event, trackBoxAdapter, audioFileBox, sample, type}: CreateParameters): void {
         const x = event.clientX - this.capturing.element.getBoundingClientRect().left
         const index = Math.floor(x / ClipWidth)
-        trackBoxAdapter.clips.collection.getAdapterByIndex(index)
-            .ifSome(adapter => adapter.box.delete())
+        trackBoxAdapter.clips.collection.getAdapterByIndex(index).ifSome(adapter => {
+            // the replaced clip may be the last user of the dropped file, which must outlive it
+            if (adapter.type === "audio-clip" && adapter.box.file.targetAddress
+                .mapOr(address => address.equals(audioFileBox.address), false)) {adapter.box.file.defer()}
+            adapter.box.delete()
+        })
         const {boxGraph} = this.project
         if (type === "file" || sample.bpm === 0) {
             AudioContentFactory.createNotStretchedClip({

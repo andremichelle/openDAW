@@ -7,6 +7,8 @@ export const testFeatures = async (): Promise<void> => {
     requireProperty(window, "WebAssembly")
     requireProperty(window, "AudioWorkletNode")
     requireProperty(window, "SharedArrayBuffer")
+    requireProperty(window, "RTCPeerConnection")
+    requireProperty(Element.prototype, "requestFullscreen")
     requireProperty(navigator, "storage")
     requireProperty(navigator.storage, "getDirectory")
     requireProperty(crypto, "randomUUID")
