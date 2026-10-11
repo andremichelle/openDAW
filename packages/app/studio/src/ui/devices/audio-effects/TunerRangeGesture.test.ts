@@ -7,6 +7,18 @@ import {TunerRangeGesture} from "./TunerRangeGesture"
 import {TunerViewState} from "./TunerViewState"
 
 describe("tuner range gesture", () => {
+    it.each([[0, 240], [480, 0], [0, 0]])("does not preview or commit a canvas sized %s by %s", (width, height) => {
+        const state = new TunerViewState(69, 6)
+        const commits: number[] = []
+        const gesture = new TunerRangeGesture(state, width, height, range => commits.push(range.center))
+        for (const displacement of [0, 10, -10]) {
+            gesture.move(displacement, displacement)
+            expect(state.preview).toBeUndefined()
+        }
+        gesture.approve()
+        expect([state.center, state.span]).toEqual([69, 6])
+        expect(commits).toEqual([])
+    })
     it("previews all movements and commits pan, zoom and Manual in a single undo step", () => {
         const {boxGraph, mandatoryBoxes: {rootBox, primaryAudioBusBox}} =
             ProjectSkeleton.empty({createOutputMaximizer: false, createDefaultUser: false})

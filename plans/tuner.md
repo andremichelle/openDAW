@@ -22,6 +22,8 @@ The human contributor has supplied design direction, screenshots and interactive
 
 ## Reproducible verification
 
+PR feedback follow-up: histogram gestures ignore movement when the canvas has no layout width or height, so hidden/collapsed canvases cannot preview or commit a non-finite range. Regression tests cover zero width, zero height and both zero, including zero and signed displacement. Fresh verification for this follow-up: all 75 Studio tests and Studio `tsc --noEmit` passed.
+
 Review revision verification: the Studio/dependency build passed all 25 tasks; Studio passed 72 tests, full-engine tuner/live-data tests passed 5 tests, and shared DSP passed 107 tests (4 existing diagnostic/performance tests ignored). This includes Autotune's unchanged golden decision sequence, chunk-budget equivalence, analysis spanning more than eight render quanta, live range preview, cancellation, single-step undo/redo, signal-loss gaps and idle animation shutdown. Studio `tsc --noEmit` passed. Focused ESLint completed with no errors; its only warnings are the project's required JSX `createElement` imports. The external bot's missing-registry-package install failure did not reproduce with root workspace installation.
 
 Browser automation cannot open the isolated localhost preview (`ERR_BLOCKED_BY_CLIENT`), so no browser sign-off is claimed for this revision. The maintainer's requested comment-free editor conflicts with CodeRabbit's default 80% docstring warning; the editor follows the maintainer's style, while shared Rust APIs retain concise documentation. That bot policy needs maintainer confirmation rather than disabling checks or inventing a passing coverage result.

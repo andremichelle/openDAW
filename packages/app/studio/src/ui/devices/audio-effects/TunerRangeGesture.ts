@@ -19,6 +19,7 @@ export class TunerRangeGesture {
     }
 
     move(horizontal: number, vertical: number): void {
+        if (this.#width <= 0 || this.#height <= 0) {return}
         this.#state.preview = {
             center: clamp(this.#range.center + vertical / this.#height * this.#range.span, 12, 120),
             span: clamp(this.#range.span * Math.exp(horizontal / this.#width * 2), 2, 24)
