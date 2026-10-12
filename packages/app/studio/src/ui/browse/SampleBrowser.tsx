@@ -1,6 +1,6 @@
 import css from "./SampleBrowser.sass?inline"
-import {Arrays, DefaultObservableValue, Lifecycle} from "@opendaw/lib-std"
-import {createElement} from "@opendaw/lib-jsx"
+import {Arrays, Bytes, DefaultObservableValue, int, Lifecycle, MutableObservableOption} from "@opendaw/lib-std"
+import {createElement, LocalLink} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {SampleStorage} from "@opendaw/studio-core"
 import {OpenSampleAPI} from "@/opendaw-api"
@@ -16,6 +16,7 @@ import {SampleIndex, SampleIndexFolder} from "@/opendaw-api/SampleIndex"
 import {ResourceBrowserConfig} from "@/ui/browse/ResourceBrowserConfig"
 import {ResourceFolder} from "@/ui/browse/ResourceFolder"
 import {LocalTree} from "@/ui/browse/LocalTree"
+import {StorageInspector} from "@/storage/StorageInspector"
 
 const className = Html.adoptStyleSheet(css, "Samples")
 
@@ -37,6 +38,11 @@ const expandedKeys = new Set<string>()
 
 export const SampleBrowser = ({lifecycle, service, background, fontSize}: Construct) => {
     const linearVolume = service.samplePlayback.linearVolume
+    const storedSize = new MutableObservableOption<int>()
+    const measure = (): void => {
+        StorageInspector.folderSize(SampleStorage.Folder)
+            .then(size => storedSize.wrap(size), () => storedSize.clear())
+    }
     const config: ResourceBrowserConfig<Sample> = {
         name: "samples",
         headers: [
@@ -80,12 +86,22 @@ export const SampleBrowser = ({lifecycle, service, background, fontSize}: Constr
         importFiles: files => service.sampleService.importFiles(files),
         footer: ({lifecycle: footerLifecycle}) => (
             <div className="footer">
+                <LocalLink href="/storage" className="stored">
+                    <span onInit={element => footerLifecycle.own(storedSize.catchupAndSubscribe(option =>
+                        element.textContent = option.match({
+                            none: () => "Storage",
+                            some: size => `Stored samples: ${Bytes.toString(size)}`
+                        })))}/>
+                </LocalLink>
                 <label>Volume:</label>
                 <NumberInput lifecycle={footerLifecycle} maxChars={3} step={1} model={linearVolume}/>
                 <label>dB</label>
             </div>
         ),
-        onReload: () => service.samplePlayback.eject(),
+        onReload: () => {
+            service.samplePlayback.eject()
+            measure()
+        },
         onTerminate: () => service.samplePlayback.eject()
     }
     return (

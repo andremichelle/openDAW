@@ -149,6 +149,10 @@ export const populateStudioMenu = (service: StudioService) => {
                         icon: IconSymbol.System
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/preferences")),
                     MenuItem.default({
+                        label: "Storage",
+                        icon: IconSymbol.Folder
+                    }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/storage")),
+                    MenuItem.default({
                         label: "Statistics",
                         icon: IconSymbol.Charts
                     }).setTriggerProcedure(() => RouteLocation.get().navigateTo("/stats")),
