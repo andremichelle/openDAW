@@ -2,7 +2,7 @@ import {AudioBusBox, AudioUnitBox, AuxSendBox, TrackBox} from "@opendaw/studio-b
 import {Box, Field, IndexedBox} from "@opendaw/lib-box"
 import {AudioSendRouting, AudioUnitType, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {AudioUnitFactory, InstrumentFactories, ProjectQueries, TrackType} from "@opendaw/studio-adapters"
-import {asInstanceOf, bipolar, float, int, isDefined, isNull, Nullable, Option, Optional, panic, Strings, UUID} from "@opendaw/lib-std"
+import {asInstanceOf, bipolar, float, int, isDefined, isInstanceOf, isNull, Nullable, Option, Optional, panic, Strings, UUID} from "@opendaw/lib-std"
 import {
     AnyAudioEffect,
     AnyAudioUnit,
@@ -61,7 +61,9 @@ export abstract class AudioUnitFacade extends Facade<AudioUnitBox> implements Au
 
     get output(): Nullable<OutputAudioUnit | GroupAudioUnit | AuxAudioUnit> {
         return this.box.output.targetVertex.mapOr(vertex => {
-            const busBox = asInstanceOf(vertex.box, AudioBusBox)
+            // the output unit feeds the root's output device, not a bus
+            if (!isInstanceOf(vertex.box, AudioBusBox)) {return null}
+            const busBox = vertex.box
             const unitField = busBox.output.targetVertex.unwrap("bus has no audio unit")
             return AudioUnitImpls.wrap(this.context, asInstanceOf(unitField.box, AudioUnitBox)) as OutputAudioUnit | GroupAudioUnit | AuxAudioUnit
         }, null)

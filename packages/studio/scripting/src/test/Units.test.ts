@@ -51,6 +51,12 @@ describe("Audio units", () => {
         expect(() => project.addInstrumentUnit("Vaporisateur", {}, {bogus: 1} as any)).toThrow(TypeError)
     })
 
+    it("reports no output for the output unit", () => {
+        const {project} = createFixture()
+        expect(project.output.output).toBeNull()
+        expect(project.audioUnits.map(unit => unit.output?.kind ?? null)).toEqual([null])
+    })
+
     it("creates bus units and routes outputs", () => {
         const {project} = createFixture()
         const synth = project.addInstrumentUnit("Vaporisateur")
