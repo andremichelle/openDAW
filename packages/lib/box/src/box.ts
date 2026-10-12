@@ -119,7 +119,7 @@ export abstract class Box<P extends PointerTypes = PointerTypes, F extends Field
     isBox(): this is Box {return true}
     asBox<T extends Box>(type: Class<T>): T {return asInstanceOf(this, type)}
     isField(): this is Field {return false}
-    isAttached(): boolean {return this.#graph.findBox(this.address.uuid).nonEmpty()}
+    isAttached(): boolean {return this.#graph.findBox(this.address.uuid).mapOr(box => box === this, false)}
     read(input: DataInput): void {Serializer.readFields(input, this.#fields)}
     write(output: DataOutput): void {Serializer.writeFields(output, this.#fields)}
     serialize(): ArrayBufferLike {
