@@ -52,7 +52,7 @@ describe("Schema parity", () => {
             MIDIOutput: [],
             Tape: [],
             Neon: [],
-            Tubular: ["voiceLoad", "engine"],
+            Tubular: ["voiceLoad"],
             // patterns are exposed as CubedPattern objects (length + unpacked steps), not through the field binder
             Cubed: Array.from({length: 16}, (_, pattern) => [
                 `patterns.${pattern}.length`,
