@@ -89,6 +89,11 @@ export class EngineHost {
         return panic(`Session names not available for task: ${taskKey}`)
     }
 
+    loadedProvidersFor(taskKey: string): Option<ReadonlyArray<ExecutionProvider>> {
+        const providerKey = this.#loadedTasks.get(taskKey)
+        return isDefined(providerKey) ? Option.wrap(providerKey.split(",") as Array<ExecutionProvider>) : Option.None
+    }
+
     sessionRunFor(taskKey: string, signal: Option<AbortSignal>): SessionRun {
         return async (feeds: TensorMap): Promise<TensorMap> => {
             this.#throwIfAborted(signal.unwrapOrUndefined())

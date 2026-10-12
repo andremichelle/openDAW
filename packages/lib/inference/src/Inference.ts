@@ -159,7 +159,11 @@ export namespace Inference {
         requireInferenceConfig()
         const engineHost = requireHost()
         const task = lookupTask(key)
-        const executionProviders = resolveProviders(task.executionProviders, options?.executionProvider)
+        const fallbackProviders = engineHost.loadedProvidersFor(task.key).match({
+            none: () => task.executionProviders,
+            some: providers => providers
+        })
+        const executionProviders = resolveProviders(fallbackProviders, options?.executionProvider)
         return engineHost
             .enqueue(() => engineHost.ensureLoaded(task.key, task.model, executionProviders))
             .then(() => new class implements TaskHandle<K> {
@@ -175,7 +179,7 @@ export namespace Inference {
                         input,
                         progress,
                         signal,
-                        executionProviders: resolveProviders(task.executionProviders, options?.executionProvider)
+                        executionProviders: resolveProviders(executionProviders, options?.executionProvider)
                     }))
                 }
 

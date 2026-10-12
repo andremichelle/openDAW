@@ -22,6 +22,7 @@ class FakeOpfs implements OpfsProtocol {
         }
     }
     async list(): Promise<ReadonlyArray<OpfsProtocol.Entry>> {return []}
+    async isAvailable(): Promise<boolean> {return true}
 }
 
 class FakeWorker {
@@ -79,7 +80,7 @@ const oneByteWithKnownSha = async (): Promise<{bytes: Uint8Array, sha: string}> 
     return {bytes, sha}
 }
 
-const registryBackdoor = TaskRegistry as Record<string, TaskDefinition<TempoDetectionInput, TempoDetectionOutput>>
+const registryBackdoor = TaskRegistry as unknown as Record<string, TaskDefinition<TempoDetectionInput, TempoDetectionOutput>>
 const originalTempoTask = registryBackdoor["tempo-detection"]
 
 describe("Inference", () => {
@@ -131,6 +132,27 @@ describe("Inference", () => {
     it("acquire() with a matching executionProvider reuses an already-preloaded session", async () => {
         await Inference.preload("tempo-detection", {executionProvider: "webgpu"})
         const handle = await Inference.acquire("tempo-detection", {executionProvider: "webgpu"})
+        expect(worker.received.filter(message => message.kind === "load")).toHaveLength(1)
+        expect(worker.received.filter(message => message.kind === "release")).toHaveLength(0)
+        handle.terminate()
+    })
+
+    it("acquire() reuses an already-preloaded session's provider when no override is given", async () => {
+        await Inference.preload("tempo-detection", {executionProvider: "webgpu"})
+        const handle = await Inference.acquire("tempo-detection")
+        expect(worker.received.filter(message => message.kind === "load")).toHaveLength(1)
+        expect(worker.received.filter(message => message.kind === "release")).toHaveLength(0)
+        handle.terminate()
+    })
+
+    it("handle.run() reuses the acquired session's provider when no override is given", async () => {
+        const handle = await Inference.acquire("tempo-detection", {executionProvider: "webgpu"})
+        const runPromise = handle.run({audio: new Float32Array(0), sampleRate: 11025})
+        await new Promise(resolve => setTimeout(resolve, 0))
+        const runMessages = worker.received.filter(message => message.kind === "run")
+        expect(runMessages).toHaveLength(1)
+        worker.emit({kind: "result", id: runMessages[0].id, output: {}})
+        await expect(runPromise).resolves.toEqual({bpm: 120, confidence: 1, topCandidates: []})
         expect(worker.received.filter(message => message.kind === "load")).toHaveLength(1)
         expect(worker.received.filter(message => message.kind === "release")).toHaveLength(0)
         handle.terminate()
