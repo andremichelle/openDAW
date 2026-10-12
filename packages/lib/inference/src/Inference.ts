@@ -159,13 +159,16 @@ export namespace Inference {
         requireInferenceConfig()
         const engineHost = requireHost()
         const task = lookupTask(key)
-        const fallbackProviders = engineHost.loadedProvidersFor(task.key).match({
-            none: () => task.executionProviders,
-            some: providers => providers
-        })
-        const executionProviders = resolveProviders(fallbackProviders, options?.executionProvider)
+        let executionProviders: ReadonlyArray<ExecutionProvider> = task.executionProviders
         return engineHost
-            .enqueue(() => engineHost.ensureLoaded(task.key, task.model, executionProviders))
+            .enqueue(() => {
+                const fallbackProviders = engineHost.loadedProvidersFor(task.key).match({
+                    none: () => task.executionProviders,
+                    some: providers => providers
+                })
+                executionProviders = resolveProviders(fallbackProviders, options?.executionProvider)
+                return engineHost.ensureLoaded(task.key, task.model, executionProviders)
+            })
             .then(() => new class implements TaskHandle<K> {
                 #released: boolean = false
                 run(input: TaskInput<K>, options?: RunOptions): Promise<TaskOutput<K>> {

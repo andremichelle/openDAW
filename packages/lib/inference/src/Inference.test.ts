@@ -145,6 +145,15 @@ describe("Inference", () => {
         handle.terminate()
     })
 
+    it("acquire() fired while a matching preload is still queued waits for it instead of reading stale state", async () => {
+        const preloadPromise = Inference.preload("tempo-detection", {executionProvider: "webgpu"})
+        const handle = await Inference.acquire("tempo-detection")
+        await preloadPromise
+        expect(worker.received.filter(message => message.kind === "load")).toHaveLength(1)
+        expect(worker.received.filter(message => message.kind === "release")).toHaveLength(0)
+        handle.terminate()
+    })
+
     it("handle.run() reuses the acquired session's provider when no override is given", async () => {
         const handle = await Inference.acquire("tempo-detection", {executionProvider: "webgpu"})
         const runPromise = handle.run({audio: new Float32Array(0), sampleRate: 11025})
