@@ -25,8 +25,14 @@ export namespace WclapParameters {
                 paramBox.label.setValue(info.name)
                 paramBox.module.setValue(info.module)
                 paramBox.flags.setValue(info.flags)
-                paramBox.min.setValue(info.min)
-                paramBox.max.setValue(info.max)
+                // each bound write rebuilds the adapter's mapping, so the range must never invert in between
+                if (info.min >= paramBox.max.getValue()) {
+                    paramBox.max.setValue(info.max)
+                    paramBox.min.setValue(info.min)
+                } else {
+                    paramBox.min.setValue(info.min)
+                    paramBox.max.setValue(info.max)
+                }
                 paramBox.defaultValue.setValue(info.defaultValue)
             }
             for (const info of wanted.values()) {
