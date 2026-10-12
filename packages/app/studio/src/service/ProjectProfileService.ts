@@ -145,17 +145,30 @@ export class ProjectProfileService {
 
     async load(uuid: UUID.Bytes, meta: ProjectMeta) {
         if (!await this.approveLosingChanges()) {return}
+        const start = performance.now()
+        const trace = (stage: string) =>
+            console.debug(`[ProjectLoad] ${stage} (${(performance.now() - start).toFixed(0)}ms)`)
+        trace(`start '${meta.name}'`)
         const {status, value: project, error} = await Promises.tryCatch(
-            ProjectStorage.loadProject(uuid).then(buffer => Project.loadAnyVersion(this.#env, buffer)))
+            ProjectStorage.loadProject(uuid)
+                .then(buffer => {
+                    trace(`read ${buffer.byteLength} bytes`)
+                    return Project.loadAnyVersion(this.#env, buffer)
+                }))
         if (status === "rejected") {
             console.warn(error)
             RuntimeNotifier.notify({message: "Could not load project.", icon: "Warning"})
             return
         }
+        trace("decoded and migrated")
         await this.#sampleService.replaceMissingFiles(project.boxGraph, this.#sampleManager)
+        trace("samples checked")
         await this.#soundfontService.replaceMissingFiles(project.boxGraph, this.#soundfontManager)
+        trace("soundfonts checked")
         const cover = await ProjectStorage.loadCover(uuid)
+        trace("cover loaded")
         this.#setProfile(uuid, project, meta, cover, true)
+        trace("profile installed")
     }
 
     async exportBundle() {
