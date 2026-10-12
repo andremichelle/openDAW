@@ -109,6 +109,7 @@ class Plugin {
     dirtyCountdown: number = -1
     receivedSinceProcess: boolean = false
     flushRequested: boolean = false
+    callbackRequested: boolean = false
     // host-side values per clap id, kept before the plugin is up and pushed with its first process call
     readonly pendingParams = new Map<number, PendingParam>()
 
@@ -164,6 +165,7 @@ export class WclapBridges {
             plugin.dirtyCountdown = SAVE_DELAY_CHUNKS
             plugin.receivedSinceProcess = true
             if (!loaded.emitsParams) {loaded.pollRemaining = loaded.paramIds.length}
+            this.#runCallback(plugin, loaded)
         })
     }
 
@@ -606,7 +608,7 @@ export class WclapBridges {
             (_host: number, idPtr: number) => extensions.get(this.#cstr(memory, idPtr)) ?? 0))
         this.#setFn(loaded, host + ClapAbi.Host.REQUEST_RESTART, trampoline(["i32"], [], () => {}))
         this.#setFn(loaded, host + ClapAbi.Host.REQUEST_PROCESS, trampoline(["i32"], [], () => {}))
-        this.#setFn(loaded, host + ClapAbi.Host.REQUEST_CALLBACK, trampoline(["i32"], [], () => {}))
+        this.#setFn(loaded, host + ClapAbi.Host.REQUEST_CALLBACK, trampoline(["i32"], [], () => {plugin.callbackRequested = true}))
         this.#setFn(loaded, webviewExt + ClapAbi.HostWebview.SEND, trampoline(["i32", "i32", "i32"], ["i32"],
             (_host: number, bufferPtr: number, size: number) => {
                 if (!plugin.guiOpen) {return 0}
@@ -789,6 +791,7 @@ export class WclapBridges {
             loaded.eventCount = 0
             plugin.receivedSinceProcess = false
             plugin.flushRequested = false
+            this.#runCallback(plugin, loaded)
             if (loaded.pollRemaining > 0) {this.#pollParams(plugin, loaded)}
             if (plugin.dirtyCountdown > 0 && --plugin.dirtyCountdown === 0) {
                 plugin.dirtyCountdown = -1
@@ -799,6 +802,13 @@ export class WclapBridges {
             new Float32Array(engine, out1, frames).set(afterRight.subarray(0, frames))
             return 1
         })
+    }
+
+    // clap request_callback: on_main_thread between render quanta, at most once per quantum
+    #runCallback(plugin: Plugin, loaded: Loaded): void {
+        if (!plugin.callbackRequested) {return}
+        plugin.callbackRequested = false
+        this.#call(loaded, loaded.plugin + ClapAbi.Plugin.ON_MAIN_THREAD, loaded.plugin)
     }
 
     // Cmajor emits no parameter events for page edits, so its values are swept a slice per quantum

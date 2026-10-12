@@ -256,7 +256,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                 .toSorted(byLabel)
         }, EmptyExec)
     }
-    const cloud: { root: CloudFolder, plugins: ReadonlyArray<CloudPlugin> } = {root: EmptyCloudFolder, plugins: []}
+    const cloud: { root: CloudFolder, plugins: ReadonlyArray<CloudPlugin>, loaded: boolean } =
+        {root: EmptyCloudFolder, plugins: [], loaded: false}
     // asked again while the catalogue is empty (it could not be fetched): the next menu then lists it
     const refreshCloud = (): void => {
         OpenWclapAPI.get().tree().then(({folders}) => {
@@ -274,6 +275,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             cloud.root = toFolder({name: "", folders})
             const collect = ({folders, plugins}: CloudFolder): ReadonlyArray<CloudPlugin> => [...plugins, ...folders.flatMap(collect)]
             cloud.plugins = collect(cloud.root)
+            cloud.loaded = true
         }, EmptyExec)
     }
     refreshCloud()
@@ -290,8 +292,10 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         const cloudUrls = new Set(cloud.plugins.map(({uuid}) => WclapStorage.urlOf(uuid)))
         const local = stored.plugins.filter(({url}) => !cloudUrls.has(url))
         parent.addMenuItem(
-            MenuItem.default({label: "Cloud", icon: IconSymbol.CloudFolder, selectable: cloud.plugins.length > 0})
-                .setRuntimeChildrenProcedure(sub => populateCloud(sub, cloud.root)),
+            MenuItem.default({label: "Cloud", icon: IconSymbol.CloudFolder, selectable: !cloud.loaded || cloud.plugins.length > 0})
+                .setRuntimeChildrenProcedure(sub => cloud.loaded
+                    ? populateCloud(sub, cloud.root)
+                    : sub.addMenuItem(MenuItem.default({label: "Loading...", selectable: false}))),
             MenuItem.default({label: "Local", icon: IconSymbol.UserFolder, selectable: local.length > 0})
                 .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...local.map(({url, label, info}) =>
                     MenuItem.default({label, checked: isCurrent(url, info)})
