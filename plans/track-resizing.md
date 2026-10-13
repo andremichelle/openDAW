@@ -20,3 +20,9 @@ AI-assisted implementation requested by the user: resize individual timeline tra
 ## Full-height clip review revision
 
 The maintainer requested full-area clip cells with centered circular content and play/pause controls. The clip cell now fills the row height; its content overlays keep their default square size, centered below the label. Column widths and scroll/hit-test coordinates remain shared across rows. Fresh checks: all 62 Studio tests, Studio `tsc --noEmit`, Sass compilation with the app alias resolver and `git diff --check` passed. Browser security policy blocked the visual test page, so visual verification of this revision remains outstanding.
+
+## Scroll edge-case review revision
+
+Header and timeline auto-scrollers both arm during pointerdown capture, before the resize handle can stop propagation. Both now exclude resize handles, keeping the viewport stationary throughout resizing instead of continuing to scroll at the maximum height. Ordinary pointer drags and native file drags retain auto-scroll. Regression tests cover both ancestor exclusions and ordinary scroll/release behavior.
+
+Sample-drop mutations now add the shared horizontal clip scroll offset before calculating the destination column, matching capture. Tests verify that file and tempo-aware sample drops replace the scrolled column rather than an earlier clip. Fresh checks: all 66 Studio tests, Studio `tsc --noEmit` and `git diff --check` passed. Live Chrome verification of the many-track resize/release case remains outstanding.

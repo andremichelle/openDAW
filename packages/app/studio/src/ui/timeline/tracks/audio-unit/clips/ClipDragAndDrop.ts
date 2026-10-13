@@ -11,7 +11,7 @@ export class ClipDragAndDrop extends TimelineDragAndDrop<ClipCaptureTarget> {
 
     handleSample({event, trackBoxAdapter, audioFileBox, sample, type}: CreateParameters): void {
         const x = event.clientX - this.capturing.element.getBoundingClientRect().left
-        const index = Math.floor(x / ClipWidth)
+        const index = Math.floor((x + this.service.timeline.clips.scroll.getValue()) / ClipWidth)
         trackBoxAdapter.clips.collection.getAdapterByIndex(index)
             .ifSome(adapter => adapter.box.delete())
         const {boxGraph} = this.project

@@ -256,7 +256,8 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
         Events.subscribe(element, "wheel", (event: WheelEvent) => scrollModel.position += event.deltaY, {passive: false}),
         scrollModel.subscribe(() => scrollContainer.scrollTop = scrollModel.position),
         Events.subscribe(scrollContainer, "scroll", () => scrollModel.position = scrollContainer.scrollTop),
-        installAutoScroll(scrollContainer, (_deltaX, deltaY) => scrollModel.position += deltaY, {padding: [24, 0, 24, 0]})
+        installAutoScroll(scrollContainer, (_deltaX, deltaY) => scrollModel.position += deltaY,
+            {padding: [24, 0, 24, 0], ignorePointerSelector: ".track-resizer"})
     )
     element.style.setProperty("--extra-space", `${ExtraSpace}px`)
     return element

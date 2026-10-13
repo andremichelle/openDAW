@@ -1,10 +1,11 @@
-import {AABB, Client, Option, Padding, Provider, Terminable, Terminator} from "@opendaw/lib-std"
+import {AABB, Client, isDefined, Option, Padding, Provider, Terminable, Terminator} from "@opendaw/lib-std"
 import {Surface} from "@/ui/surface/Surface.tsx"
 import {AnimationFrame, Events} from "@opendaw/lib-dom"
 
 export type AutoScroller = (deltaX: number, deltaY: number) => void
 
 export type Options = {
+    ignorePointerSelector?: string
     measure?: Provider<AABB>
     padding?: Padding
     dragPadding?: Padding // for a native drag entering the target, defaults to `padding`
@@ -69,7 +70,11 @@ export const installAutoScroll = (target: Element, autoScroller: AutoScroller, o
     }
     // A native drag from elsewhere (browser panel, OS files) never presses the pointer down on the target.
     return Terminable.many(
-        Events.subscribe(target, "pointerdown", () => arm("pointer"), {capture: true}),
+        Events.subscribe(target, "pointerdown", (event: PointerEvent) => {
+            if (isDefined(options?.ignorePointerSelector) && event.target instanceof Element
+                && isDefined(event.target.closest(options.ignorePointerSelector))) {return}
+            arm("pointer")
+        }, {capture: true}),
         Events.subscribe(target, "dragenter", () => {if (lifeTime.isEmpty()) {arm("drag")}}, {capture: true}),
         lifeTime
     )
