@@ -11,8 +11,12 @@ AI-assisted implementation requested by the user: resize individual timeline tra
 
 ## Review follow-up
 
-- Clip cells stay at the default lane height and align to the top of taller tracks.
+- Following the agreed review layout, clip cells fill the entire track height while retaining shared column widths. The circular preview, progress ring and play/pause control retain their default size and center vertically beneath the label, so taller rows do not stretch or crop the content.
 - The resize handle starts 36 pixels into the header, leaving the automation-collapse button clear.
 - Clip lanes and the launch header share a pixel scroll offset. Horizontal trackpad gestures and Shift+wheel scroll continuously; vertical wheel input keeps scrolling tracks. Capture, rectangle selection, moving clips, and drop previews account for the offset. Extra columns include one empty destination after the last clip.
 - Code style follows the maintainer feedback: checked header lookup, field-derived maximum, import placement, custom properties before the handle styles, and preserved original file endings.
 - Keyboard resizing was explicitly deferred by the user.
+
+## Full-height clip review revision
+
+The maintainer requested full-area clip cells with centered circular content and play/pause controls. The clip cell now fills the row height; its content overlays keep their default square size, centered below the label. Column widths and scroll/hit-test coordinates remain shared across rows. Fresh checks: all 62 Studio tests, Studio `tsc --noEmit`, Sass compilation with the app alias resolver and `git diff --check` passed. Browser security policy blocked the visual test page, so visual verification of this revision remains outstanding.

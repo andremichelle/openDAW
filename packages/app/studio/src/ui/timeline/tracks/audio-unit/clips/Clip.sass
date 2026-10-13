@@ -2,10 +2,9 @@
 
 component
   width: var(--lane-height)
-  height: var(--lane-height)
+  height: 100%
   display: grid
   grid-template-rows: 13.5px 1fr
-  align-self: start
   grid-row: 1 / -1
   justify-items: center
   position: relative
@@ -68,8 +67,9 @@ component
     > *
       grid-area: 1 / -1
       aspect-ratio: 1 / 1
-      top: 1px
-      height: calc(100% - 2px)
+      top: 50%
+      height: calc(var(--lane-height) - 13.5px - 2px)
+      transform: translateY(-50%)
       position: absolute
 
     > div.progress
