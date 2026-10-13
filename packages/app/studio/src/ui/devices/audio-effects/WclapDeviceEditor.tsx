@@ -68,8 +68,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     const nameLabel: HTMLElement = <span className="name"/>
     const vendorLabel: HTMLElement = <span className="vendor"/>
     const state: {
-        info: Optional<WclapPluginInfo>, ready: boolean, inputs: ReadonlyArray<WclapAudioPort>, credits: string
-    } = {info: undefined, ready: false, inputs: [], credits: ""}
+        info: Optional<WclapPluginInfo>, ready: boolean, editor: boolean, inputs: ReadonlyArray<WclapAudioPort>, credits: string
+    } = {info: undefined, ready: false, editor: false, inputs: [], credits: ""}
     const pluginBox: HTMLElement = (
         <div className="plugin" onclick={() => {
             if (state.credits.length > 0) {window.open(state.credits, "_blank", "noopener")}
@@ -152,7 +152,10 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
     }
     const browse = async (): Promise<void> => {
         const files = await Files.open({
-            types: [{description: "WebCLAP bundle", accept: {"application/gzip": [".gz", ".tgz"]}}], multiple: false
+            types: [{
+                description: "WebCLAP bundle or module",
+                accept: {"application/gzip": [".gz", ".tgz"], "application/wasm": [".wasm"]}
+            }], multiple: false
         }).catch(() => [])
         if (files.length === 0) {return}
         const file = files[0]
@@ -378,8 +381,9 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         lifecycle.ownAll(...adapter.audioInputs.map(field => field.subscribe(showAudioIn)))
     }
     const showStatus = (): void => {
-        openLabel.textContent = WclapWindows.isOpen(uuidString) ? "Close UI" : "Open UI"
-        openButton.classList.toggle("disabled", !state.ready)
+        // a plugin without a window of its own is played through the Parameters menu
+        openLabel.textContent = WclapWindows.isOpen(uuidString) ? "Close UI" : state.ready && !state.editor ? "No UI" : "Open UI"
+        openButton.classList.toggle("disabled", !state.ready || !state.editor)
         parametersButton.classList.toggle("disabled", !state.ready)
     }
     lifecycle.ownAll(
@@ -398,6 +402,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         adapter.urlField.subscribe(showPlugin),
         engine.subscribeWclapStatus(uuidString, status => {
             state.ready = status.state === "ready"
+            state.editor = status.editor === true
             vendorLabel.classList.toggle("failed", status.state === "failed")
             vendorLabel.textContent = status.state === "ready"
                 ? state.info?.vendor ?? ""
@@ -442,7 +447,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                                   Hosts a <a href="https://github.com/free-audio/web-clap" target="_blank"
                                              rel="noopener">WebCLAP</a> bundle,
                                   a CLAP plugin compiled to WebAssembly. Pick one from the openDAW cloud or import a
-                                  .wclap.tar.gz from disk.
+                                  .wclap.tar.gz or a bare .wasm from disk.
                               </p>
                           </div>)}
                       populateMeter={() => (

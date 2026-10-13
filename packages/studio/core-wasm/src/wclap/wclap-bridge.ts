@@ -306,7 +306,8 @@ export class WclapBridges {
                 plugin.loaded = loaded
                 plugin.loading = false
                 this.#publishParams(plugin, loaded)
-                this.#host.sendStatus(plugin.uuid, {state: "ready", message: "", inputs: loaded.inputPortInfos})
+                this.#host.sendStatus(plugin.uuid,
+                    {state: "ready", message: "", inputs: loaded.inputPortInfos, editor: loaded.webview !== 0})
             }, error => {
                 if (plugin.generation !== generation) {return}
                 plugin.loading = false
@@ -457,11 +458,14 @@ export class WclapBridges {
         const memory = exports.memory ?? imported
         if (!isDefined(memory)) {throw new Error("module neither imports nor exports a memory")}
         memoryRef.memory = memory
-        if (!isDefined(exports.__indirect_function_table) || !isDefined(exports.malloc) || !isDefined(exports.clap_entry)) {
-            throw new Error("module lacks __indirect_function_table, malloc or clap_entry")
+        // wasm-ld names the table `__indirect_function_table`, other toolchains export it under their own name
+        const table = exports.__indirect_function_table
+            ?? Object.values(instance.exports).find((value): value is WebAssembly.Table => value instanceof WebAssembly.Table)
+        if (!isDefined(table) || !isDefined(exports.malloc) || !isDefined(exports.clap_entry)) {
+            throw new Error("module lacks a function table, malloc or clap_entry")
         }
         exports._initialize?.()
-        return {memory, table: exports.__indirect_function_table, malloc: exports.malloc, entry: exports.clap_entry.value}
+        return {memory, table, malloc: exports.malloc, entry: exports.clap_entry.value}
     }
 
     #emptyLoaded(memory: WebAssembly.Memory, table: WebAssembly.Table, malloc: (size: number) => number): Loaded {
