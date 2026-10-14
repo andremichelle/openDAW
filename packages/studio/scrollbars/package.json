@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"src/**/*.tsx\"",
-    "test": "echo \"No tests to run\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@opendaw/lib-dom": "^0.0.91",

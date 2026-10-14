@@ -88,7 +88,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                             trackBoxAdapter={trackBoxAdapter}/>
         )
     }
-    const manager: TracksManager = lifecycle.own(new TracksManager(service, scrollContainer, factory))
+    const manager: TracksManager = lifecycle.own(new TracksManager(service, scrollContainer, scrollModel, factory))
     const insertLine: HTMLElement = <div className="unit-insert-line"/>
     // The insert slot among a device group's lanes for a pointer y: before the first lane whose vertical
     // center lies below it, else after the last.

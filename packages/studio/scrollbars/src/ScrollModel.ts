@@ -47,10 +47,11 @@ export class ScrollModel implements Terminable {
     // The size of the underlying content
     set contentSize(value: number) {
         if (this.#contentSize === value) {return}
+        const previousOverflow = Math.max(0.0, this.overflow)
         this.#contentSize = value
         this.#normalized = !this.scrollable()
             ? 0.0
-            : Math.max(0.0, Math.min(1.0, this.#normalized * this.overflow / (this.#contentSize - this.#visibleSize)))
+            : Math.max(0.0, Math.min(1.0, this.#normalized * previousOverflow / this.overflow))
         this.#onChanged()
     }
     get contentSize(): number {return this.#contentSize}
@@ -68,7 +69,7 @@ export class ScrollModel implements Terminable {
         if (!this.scrollable()) {return}
         this.normalized = value / (this.overflow)
     }
-    get position() {return !this.scrollable() ? 0.0 : Math.floor(this.#normalized * this.overflow)}
+    get position() {return !this.scrollable() ? 0.0 : Math.round(this.#normalized * this.overflow)}
 
     get overflow() {return this.#contentSize - this.#visibleSize}
     get thumbPosition() {return this.#normalized * (this.#trackSize - this.#minThumbSize())}

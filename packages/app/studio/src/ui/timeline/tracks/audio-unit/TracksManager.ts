@@ -35,6 +35,7 @@ import {TrackOrder} from "@/ui/timeline/tracks/audio-unit/TrackOrder"
 import {UnitLane} from "@/ui/timeline/tracks/audio-unit/UnitLane.tsx"
 import {ModulatorLanes} from "@/ui/timeline/tracks/audio-unit/ModulatorLanes.tsx"
 import {ModulatorsLane} from "@/ui/timeline/tracks/audio-unit/ModulatorsLane.tsx"
+import {ScrollModel} from "@/ui/components/ScrollModel.ts"
 
 export interface TrackFactory {
     create(manager: TracksManager,
@@ -51,6 +52,7 @@ export interface TrackFactory {
 export class TracksManager implements Terminable {
     readonly #service: StudioService
     readonly #scrollContainer: Element
+    readonly #scrollModel: ScrollModel
     readonly #factory: TrackFactory
 
     readonly #terminator: Terminator
@@ -67,9 +69,10 @@ export class TracksManager implements Terminable {
     #currentRegionModifier: Option<RegionModifier> = Option.None
     #orderedByIndex: Option<ReadonlyArray<TrackContext>> = Option.None
 
-    constructor(service: StudioService, scrollContainer: Element, factory: TrackFactory) {
+    constructor(service: StudioService, scrollContainer: Element, scrollModel: ScrollModel, factory: TrackFactory) {
         this.#service = service
         this.#scrollContainer = scrollContainer
+        this.#scrollModel = scrollModel
         this.#factory = factory
 
         this.#terminator = new Terminator()
@@ -163,6 +166,7 @@ export class TracksManager implements Terminable {
     }
 
     get scrollableContainer(): Element {return this.#scrollContainer}
+    get scrollModel(): ScrollModel {return this.#scrollModel}
 
     unitTracks(uuid: UUID.Bytes): Option<HTMLElement> {return this.#audioUnits.opt(uuid).map(({unitTracks}) => unitTracks)}
 

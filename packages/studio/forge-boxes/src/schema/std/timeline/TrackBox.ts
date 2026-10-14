@@ -1,5 +1,5 @@
 import {BoxSchema} from "@opendaw/lib-box-forge"
-import {Pointers} from "@opendaw/studio-enums"
+import {MaxTrackHeight, Pointers} from "@opendaw/studio-enums"
 import {IndexConstraints} from "../Defaults"
 
 export const TrackBox: BoxSchema<Pointers> = {
@@ -19,7 +19,7 @@ export const TrackBox: BoxSchema<Pointers> = {
             },
             20: {type: "boolean", name: "enabled", value: true},
             30: {type: "boolean", name: "exclude-piano-mode", value: false},
-            31: {type: "int32", name: "height", value: 0, constraints: {min: 0, max: 480}, unit: "px"}
+            31: {type: "int32", name: "height", value: 0, constraints: {min: 0, max: MaxTrackHeight}, unit: "px"}
         }
     }, pointerRules: {accepts: [Pointers.Selection, Pointers.PianoMode, Pointers.MetaData], mandatory: false}
 }

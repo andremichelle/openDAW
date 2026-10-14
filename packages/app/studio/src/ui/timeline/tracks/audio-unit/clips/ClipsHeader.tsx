@@ -6,7 +6,6 @@ import {Icon} from "@/ui/components/Icon.tsx"
 import {IconSymbol} from "@opendaw/studio-enums"
 import {deferNextFrame, Dragging, Events, Html} from "@opendaw/lib-dom"
 import {TextTooltip} from "@/ui/surface/TextTooltip"
-
 import {installClipScroll} from "./ClipScroll"
 
 const className = Html.adoptStyleSheet(css, "ClipsHeader")
