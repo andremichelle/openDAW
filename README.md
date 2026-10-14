@@ -15,6 +15,8 @@ a strong focus on **education** and data-privacy.
 
 Subscribe to our [Newsletter](https://buttondown.com/opendaw) for regular updates.
 
+How do we use AI, and why will openDAW never generate your music? [opendaw.studio/manuals/ai](https://opendaw.studio/manuals/ai) gives the honest answer.
+
 New to the codebase? [introduction.md](introduction.md) maps every component of this repository and how they depend on
 each other.
 
