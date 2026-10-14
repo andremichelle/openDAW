@@ -9,7 +9,9 @@ This experimental feature runs locally and needs a browser with WebGPU and FP16 
 2. Pick an audio file. openDAW adds it to a source audio track.
 3. Read the model information and choose **Convert**.
 
-The first conversion downloads approximately 616 MB of model files. They are cached in the browser for later conversions.
+Before conversion, a prominent **Model download: 616.3 MB** notice shows the first-use download size.
+The files download from Hugging Face and are cached in this browser for later conversions.
+Download progress also shows the total size in MB; cached loading is labeled separately.
 Your audio is processed on your computer and is not uploaded. Progress shows downloading, model loading and transcription.
 
 ## Convert an existing clip

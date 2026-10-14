@@ -34,6 +34,8 @@ Revision `18b368334ddaeafed4446377eb7d0b63d14ccc1f` is pinned in `muscriptor/Mod
 The four assets total 616274526 bytes and are cached through the existing SHA-256-verified
 `ModelStore`/OPFS infrastructure. No weights are committed. The initial dialog discloses download
 size, local processing, experimental output and CC BY-NC 4.0 (non-commercial) weight licensing.
+The first-use size is displayed prominently in decimal megabytes (**616.3 MB**), including in
+download/cache progress messages, with the Hugging Face source and browser cache behavior explained.
 Official [source code](https://github.com/muscriptor/muscriptor) is MIT; weights have separate terms.
 Do not describe this as an unrestricted commercial model or redistribute weights under openDAW's AGPL.
 

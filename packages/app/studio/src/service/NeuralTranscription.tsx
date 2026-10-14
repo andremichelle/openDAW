@@ -1,5 +1,5 @@
 import {createElement} from "@opendaw/lib-jsx"
-import {Bytes, RuntimeNotifier, UUID} from "@opendaw/lib-std"
+import {RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Files} from "@opendaw/lib-dom"
 import {AudioContentFactory, InstrumentTranscription, Project, TranscriptionSource} from "@opendaw/studio-core"
 import {AudioRegionBoxAdapter, InstrumentFactories} from "@opendaw/studio-adapters"
@@ -60,11 +60,14 @@ export class NeuralTranscription {
             await ensureInference()
             const {MuScriptor} = await import("@opendaw/lib-inference")
             await MuScriptor.checkSupport()
+            const modelSizeMB = (MuScriptor.downloadBytes / 1_000_000).toFixed(1)
             try {
                 await Dialogs.show({headline: "Convert Instruments to MIDI", okText: "Convert", cancelable: true,
                     content: <div style={{maxWidth: "380px"}}>
                         <p>Detects instruments in this audio and creates a separate MIDI track and clip for each instrument group.</p>
-                        <p>MuScriptor Medium runs on your computer. Audio stays here. The model is a {Bytes.toString(MuScriptor.downloadBytes)} download, cached for later use.</p>
+                        <p><strong>Model download: {modelSizeMB} MB</strong><br/>
+                            Downloaded from Hugging Face on first use and cached in this browser for later conversions.</p>
+                        <p>MuScriptor Medium runs on your computer. Your audio is not uploaded.</p>
                         <p>Experimental transcription; notes and instrument labels may need editing. New tracks use Neon for audition; choose your own instruments afterward.</p>
                         <p>Model weights: <a href="https://huggingface.co/cursedhelm/cubaser-muscriptor-medium-onnx" target="_blank" rel="noopener noreferrer">CC BY-NC 4.0 (non-commercial)</a>.</p>
                     </div>})
@@ -72,8 +75,8 @@ export class NeuralTranscription {
             await InstrumentTranscription.convert(project, source, async (data, range, {signal, progress, message}) => {
                 const notes = await MuScriptor.run({channels: data.frames, sampleRate: data.sampleRate, ...range}, {
                     signal, progress: ({phase, value}) => {
-                        message(phase === "download" ? "Downloading model (cached for later use)"
-                            : phase === "cache" ? "Reading cached model"
+                        message(phase === "download" ? `Downloading model (${modelSizeMB} MB total)`
+                            : phase === "cache" ? `Reading cached model (${modelSizeMB} MB)`
                             : phase === "load" ? "Loading MuScriptor on the GPU" : "Detecting notes and instruments")
                         progress(phase === "download" || phase === "cache" ? value * 0.4
                             : phase === "load" ? 0.4 + value * 0.05 : 0.45 + value * 0.55)
