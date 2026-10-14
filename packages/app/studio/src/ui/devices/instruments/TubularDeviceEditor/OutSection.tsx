@@ -2,7 +2,6 @@ import css from "./OutSection.sass?inline"
 import {Html} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {Colors} from "@opendaw/studio-enums"
-import {Tubular} from "@opendaw/studio-adapters"
 import {EditWrapper} from "@/ui/wrapper/EditWrapper"
 import {band, display, labelControl, labelRadio, SectionConstruct} from "./SectionControls"
 import {TubularFilterDisplay} from "./TubularFilterDisplay"
@@ -26,7 +25,6 @@ export const OutSection = (construct: SectionConstruct) => {
             {display([3, 4], [1, 5], <TubularFilterDisplay lifecycle={lifecycle} cutoff={cutoff} resonance={resonance}/>)}
             <div className="centered" style={{gridColumn: "5 / 8"}}>
                 {labelRadio(lifecycle, "Play-Mode", EditWrapper.forAutomatableParameter(editing, voicingMode), ["MONO", "POLY"])}
-                {labelRadio(lifecycle, "Engine", EditWrapper.forValue(editing, adapter.box.engine), Tubular.Engines)}
             </div>
             {labelControl(construct, volume)}
             {labelControl(construct, transpose)}

@@ -42,6 +42,7 @@ export class PanelContent {
 
     #placeholder: Option<PlaceHolder> = Option.None
     #popoutBuilt: boolean = false
+    #opening: boolean = false
 
     constructor(factory: PanelContentFactory, panelType: PanelType) {
         this.#factory = factory
@@ -93,18 +94,27 @@ export class PanelContent {
             console.debug("Cannot togglePopout. No Placeholder available.")
             return
         }
-        const {panelState, container, listener} = this.#placeholder.unwrap()
+        const placeholder = this.#placeholder.unwrap()
+        const {panelState, container, listener} = placeholder
         if (!panelState.popoutable) {return}
         if (this.isPopout) {
             this.#closePopout()
         } else {
+            if (this.#opening) {return}
+            this.#opening = true
             Surface.get()
                 .new(640, 480, this.#id, panelState.name)
-                .match({
+                .then(result => result.match({
                     none: () => {
+                        this.#opening = false
                         Dialogs.info({message: "Could not open window. Check popup blocker?"}).finally()
                     },
                     some: surface => {
+                        this.#opening = false
+                        if (!this.#placeholder.contains(placeholder)) {
+                            surface.close()
+                            return
+                        }
                         this.#terminator.terminate()
                         Html.empty(container)
                         replaceChildren(surface.ground, this.#createContent())
@@ -119,7 +129,7 @@ export class PanelContent {
                             }
                         })
                     }
-                })
+                }))
         }
     }
 

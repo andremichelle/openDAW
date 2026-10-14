@@ -11,9 +11,9 @@ import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@
 import {RegionModifierSelection} from "./RegionModifierSelection"
 
 // Live error 1095. A region drag was in flight when the user pressed Delete and then Undo: the modifier still
-// holds the ORPHANED adapter, and `Box.isAttached()` is uuid-based, so it answers true for it once undo has
-// re-created the region under the same uuid. `RegionClipResolver.fromSelection` then hard-unwraps the orphan's
-// `trackBoxAdapter` and the session crashes.
+// holds the ORPHANED adapter, while undo has re-created the region as a new instance under the same uuid.
+// `RegionClipResolver.fromSelection` then hard-unwraps the orphan's `trackBoxAdapter` and the session crashes.
+// `Box.isAttached()` compares instance identity, so the orphan reports detached.
 
 if (!isDefined(Reflect.get(globalThis, "AudioWorkletNode"))) {
     Reflect.set(globalThis, "AudioWorkletNode", class {})
@@ -78,9 +78,9 @@ const buildOrphanedRegion = async () => {
 }
 
 describe("a region modifier must drop what its drag outlived (1095)", () => {
-    it("an orphaned adapter still reports isAttached, so that guard cannot be the filter", async () => {
+    it("an orphaned adapter reports detached although its uuid is live again", async () => {
         const {captured} = await buildOrphanedRegion()
-        expect(captured.box.isAttached()).toBe(true)
+        expect(captured.box.isAttached()).toBe(false)
         expect(captured.trackBoxAdapter.isEmpty()).toBe(true)
     })
 

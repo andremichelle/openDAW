@@ -84,8 +84,11 @@ export class SoundfontService extends AssetService<Soundfont, void> {
     }
 
     protected async collectAllFiles(): Promise<ReadonlyArray<Soundfont>> {
+        console.debug("[ProjectLoad] soundfont catalogue requested")
         const stock = await FactoryCatalog.get().soundfonts()
+        console.debug(`[ProjectLoad] soundfont catalogue received (${stock.length})`)
         const local = await SoundfontStorage.get().list()
+        console.debug(`[ProjectLoad] local soundfonts listed (${local.length})`)
         return Arrays.merge(stock, local, (a, b) => a.uuid === b.uuid)
     }
 }

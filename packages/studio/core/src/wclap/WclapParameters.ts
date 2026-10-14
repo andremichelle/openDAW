@@ -11,7 +11,7 @@ export namespace WclapParameters {
         const hub = parametersOf(project, uuid)
         if (!isDefined(hub)) {return}
         const wanted = new Map(params.filter(isAutomatable).map(param => [param.id, param]))
-        project.editing.modify(() => {
+        outsideHistory(project, () => {
             const existing = new Map<number, WclapParameterBox>()
             for (const {box} of hub.pointerHub.incoming()) {
                 const paramBox = asInstanceOf(box, WclapParameterBox)
@@ -25,8 +25,14 @@ export namespace WclapParameters {
                 paramBox.label.setValue(info.name)
                 paramBox.module.setValue(info.module)
                 paramBox.flags.setValue(info.flags)
-                paramBox.min.setValue(info.min)
-                paramBox.max.setValue(info.max)
+                // each bound write rebuilds the adapter's mapping, so the range must never invert in between
+                if (info.min >= paramBox.max.getValue()) {
+                    paramBox.max.setValue(info.max)
+                    paramBox.min.setValue(info.min)
+                } else {
+                    paramBox.min.setValue(info.min)
+                    paramBox.max.setValue(info.max)
+                }
                 paramBox.defaultValue.setValue(info.defaultValue)
             }
             for (const info of wanted.values()) {
@@ -43,7 +49,21 @@ export namespace WclapParameters {
                     paramBox.value.setValue(info.value)
                 })
             }
-        }, false)
+        })
+    }
+
+    // The parameter boxes mirror what the loaded plugin reports, so they stay out of the undo history: an undo
+    // would delete them while the plugin stays loaded, and it reports them again only when it loads again.
+    // They reach the engine and a live room like any other change of the graph.
+    const outsideHistory = (project: Project, exec: () => void): void => {
+        const graph = project.boxGraph
+        if (graph.inTransaction()) {
+            exec()
+            return
+        }
+        graph.beginTransaction()
+        exec()
+        graph.endTransaction()
     }
 
     export const apply = (project: Project, uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void => {

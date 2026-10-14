@@ -26,7 +26,6 @@ miniature under the tab buttons always shows the current algorithm and jumps to 
 The display shows the output spectrum with the low-pass response beneath it.
 
 - **Play-Mode**: _Mono_ plays one voice with legato retriggering, _Poly_ up to 16 voices.
-- **Engine**: _Mark I_ or _Modern_ operator kernel, see section 7.
 - **Volume**, **Transpose** (in semitones, C3 = unchanged), **Tune** (±100 cents).
 - **Cutoff** and **Resonance** of the output low-pass. Fully open, the filter is bypassed.
 
@@ -90,14 +89,6 @@ the pitch envelope.
   **R Depth** along **L Curve** and **R Curve** (-LIN, -EXP, +EXP, +LIN). The display shows the resulting
   level across the keyboard, its three handles drag the break point and the two depths. Dragging a depth
   through the centre line flips its curve between - and +.
-
----
-
-## 6. Engine
-
-The device menu offers two operator kernels. _Modern_ (default) is the interpolated 24-bit msfa kernel,
-clean and a little quieter in the top end. _Mark I_ (Dexed's default) reads 10-bit log-sine and exponent
-tables like the original hardware, which adds its characteristic grit.
 
 ## Credits
 

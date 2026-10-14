@@ -85,6 +85,7 @@ export const FloatingWindow = ({
     const zoom = lifecycle.own(new DefaultObservableValue<number>(fitScale))
     const owner = lifecycle.own(new DefaultObservableValue<Window>(window))
     const popout = new MutableObservableOption<Surface>()
+    const opening = {active: false}
     const origin = isDefined(position)
         ? {x: position.x, y: position.y}
         : {x: (window.innerWidth - bodyWidth) * 0.5, y: (window.innerHeight - bodyHeight) * 0.5}
@@ -253,12 +254,22 @@ export const FloatingWindow = ({
         restack()
     }
     const popOut = () => {
+        if (opening.active) {return}
+        opening.active = true
         const {width, height} = size.getValue()
         const {left, top} = element.getBoundingClientRect()
         const position: Point = {x: window.screenX + left, y: window.screenY + window.outerHeight - window.innerHeight + top}
-        surface.new(width, height + header.offsetHeight, UUID.toString(UUID.generate()), title, position).match({
-            none: () => {Dialogs.info({message: "Could not open window. Check popup blocker?"}).finally()},
+        surface.new(width, height + header.offsetHeight, UUID.toString(UUID.generate()), title, position).then(result => result.match({
+            none: () => {
+                opening.active = false
+                if (!adjusting.closed) {Dialogs.info({message: "Could not open window. Check popup blocker?"}).finally()}
+            },
             some: popped => {
+                opening.active = false
+                if (adjusting.closed) {
+                    popped.close()
+                    return
+                }
                 popout.wrap(popped)
                 removeFromStack()
                 element.classList.remove("inactive")
@@ -277,7 +288,7 @@ export const FloatingWindow = ({
                 }))
                 layout()
             }
-        })
+        }))
     }
     const dockIn = () => popout.ifSome(popped => {
         popout.clear()

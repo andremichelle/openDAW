@@ -116,6 +116,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         soundfonts: () => OpenSoundfontAPI.get().all(),
         presets: () => OpenPresetAPI.get().list()
     })
+    OpenWclapAPI.get().tree().finally()
     const chainedSampleProvider = new ChainedSampleProvider({
         fetch: async (uuid: UUID.Bytes, progress: Progress.Handler): Promise<[AudioData, SampleMetaData]> =>
             OpenSampleAPI.get().load(uuid, progress)
@@ -161,10 +162,6 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         Surface.forEach(surface => initializeColors(surface.owner.document.documentElement))
     }, "appearance")
     document.querySelector("#preloader")?.remove()
-    replaceChildren(surface.ground, App(service))
-    Tour.install(service)
-    AnimationFrame.start(window)
-    installCursors()
     RuntimeNotifier.install({
         info: (request) => Dialogs.info(request),
         approve: (request) => Dialogs.approve({...request, reverse: true}),
@@ -172,6 +169,10 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         notify: ({message, icon, origin}) => Surface.get(origin)
             .toast(message, isDefined(icon) ? IconSymbol.fromName(icon) : IconSymbol.Notification)
     })
+    replaceChildren(surface.ground, App(service))
+    Tour.install(service)
+    AnimationFrame.start(window)
+    installCursors()
     const opfsProbe = await Promises.tryCatch(Workers.Opfs.isAvailable())
     if (opfsProbe.status === "rejected" || !opfsProbe.value) {
         Dialogs.info({

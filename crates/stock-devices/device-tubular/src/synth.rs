@@ -54,7 +54,7 @@ impl Synth {
         self.rates = NoteRates {sr_multiplier: env::sr_multiplier(sample_rate), pitchenv_unit: pitchenv::unit(sample_rate)};
         self.controllers = Controllers::default();
         self.core = FmCore::default();
-        self.engine = Engine::MarkI;
+        self.engine = Engine::Modern;
         for voice in self.voices.iter_mut() {
             *voice = ProcessorVoice {key: -1, midi_note: -1, keydown_seq: -1, ..ProcessorVoice::default()};
         }

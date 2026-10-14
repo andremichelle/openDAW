@@ -6,7 +6,7 @@ import {createElement, JsxValue, replaceChildren} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
-import {DeviceHost, Dx7Sysex, InstrumentFactories, Tubular, TubularDeviceBoxAdapter, TubularPreset} from "@opendaw/studio-adapters"
+import {DeviceHost, Dx7Sysex, InstrumentFactories, TubularDeviceBoxAdapter, TubularPreset} from "@opendaw/studio-adapters"
 import {StudioService} from "@/service/StudioService"
 import {MenuItem} from "@opendaw/studio-core"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -102,10 +102,6 @@ export const TubularDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                       adapter={adapter}
                       populateMenu={parent => {
                           MenuItems.forAudioUnitInput(parent, service, deviceHost)
-                          parent.addMenuItem(MenuItem.default({label: "Engine", separatorBefore: true})
-                              .setRuntimeChildrenProcedure(parent => parent.addMenuItem(...Tubular.Engines.map((label, index) =>
-                                  MenuItem.default({label, checked: box.engine.getValue() === index})
-                                      .setTriggerProcedure(() => editing.modify(() => box.engine.setValue(index)))))))
                           if (Browser.isLocalHost() || location.origin.includes("dev.opendaw.studio")) {
                               parent.addMenuItem(MenuItem.default({label: "Audition cartridges…", separatorBefore: true, selectable: cartridges.loaded.nonEmpty()})
                                   .setTriggerProcedure(audition))

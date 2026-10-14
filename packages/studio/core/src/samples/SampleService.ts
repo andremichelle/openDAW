@@ -90,8 +90,11 @@ export class SampleService extends AssetService<Sample, AudioData> {
     }
 
     protected async collectAllFiles(): Promise<ReadonlyArray<Sample>> {
+        console.debug("[ProjectLoad] sample catalogue requested")
         const stock = await FactoryCatalog.get().samples()
+        console.debug(`[ProjectLoad] sample catalogue received (${stock.length})`)
         const local = await SampleStorage.get().list()
+        console.debug(`[ProjectLoad] local samples listed (${local.length})`)
         // Cleanup migration: a historical bug let zero-length audio become a duration-0 sample, which then
         // created duration-0 regions that crash validateTrack. The import guard stops new ones; purge any
         // already saved (and any with a NaN/negative duration) so they can never be dropped again. Self-heals

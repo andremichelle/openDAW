@@ -22,8 +22,9 @@ export type WclapParamInfo = {
 // one audio input port of a loaded plugin (clap.audio-ports), in port order
 export type WclapAudioPort = { name: string, channels: number }
 // inputs: the loaded plugin's audio input ports, empty until ready
+// editor: once ready, whether the plugin offers a window of its own (clap.webview)
 export type WclapStatus = {
-    state: "loading" | "ready" | "failed", message: string, inputs: ReadonlyArray<WclapAudioPort>
+    state: "loading" | "ready" | "failed", message: string, inputs: ReadonlyArray<WclapAudioPort>, editor?: boolean
 }
 // a parameter change the plugin reports (its GUI, a preset): 0 = value, 1 = gesture begin, 2 = gesture end
 export type WclapParamGesture = 0 | 1 | 2

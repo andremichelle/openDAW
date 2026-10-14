@@ -189,7 +189,7 @@ export class Surface implements TerminableOwner {
         }
     }
 
-    new(width: int, height: int, id: string, name: string = "untitled", position?: Point): Option<Surface> {
+    async new(width: int, height: int, id: string, name: string = "untitled", position?: Point): Promise<Option<Surface>> {
         const existing = Surface.#surfaceById.get(id)
         if (isDefined(existing)) {return panic(`${id} is already open`)}
         width = Math.min(this.#owner.innerWidth, width)
@@ -201,8 +201,8 @@ export class Surface implements TerminableOwner {
             toolbar: 0, location: 0, directories: 0, status: 0,
             menubar: 0, titlebar: 0, scrollbars: 0, resizable: 1
         }
-        const owner = this.#owner.open(undefined, id, stringifyFeatures(features))
-        if (owner === null) {return Option.None}
+        const owner = this.#owner.open(POPOUT_URL, id, stringifyFeatures(features))
+        if (owner === null || !await whenLoaded(owner)) {return Option.None}
         owner.name = name
         owner.document.title = name
         this.#copyHeadElements(owner)
@@ -358,6 +358,22 @@ type WindowFeatures = {
     location: number
     status: number
 }
+
+// a real document, not about:blank: Firefox skips the service worker for workers of cross-origin frames in about:blank
+const POPOUT_URL = `${import.meta.env.BASE_URL}popout.html`
+
+const whenLoaded = (owner: WindowProxy): Promise<boolean> => new Promise(resolve => {
+    const check = () => {
+        if (owner.closed) {
+            resolve(false)
+        } else if (owner.location.href !== "about:blank" && owner.document.readyState === "complete") {
+            resolve(true)
+        } else {
+            setTimeout(check, 10)
+        }
+    }
+    check()
+})
 
 const stringifyFeatures = (features: WindowFeatures): string =>
     Object.entries(features).map(([key, value]: [string, number]) => `${key}=${value}`).join(",")

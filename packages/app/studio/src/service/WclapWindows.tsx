@@ -77,7 +77,7 @@ export namespace WclapWindows {
         const uuidString = UUID.toString(uuid)
         const gui = await engine.wclapOpenGui(uuid)
         if (gui.uri.length === 0) {
-            RuntimeNotifier.notify({message: "The plugin is not ready yet", icon: "Warning"})
+            RuntimeNotifier.notify({message: `${title} has not loaded yet or has no window of its own`, icon: "Warning"})
             return
         }
         const bundle = await WclapBundles.fetch(adapter.urlField.getValue())

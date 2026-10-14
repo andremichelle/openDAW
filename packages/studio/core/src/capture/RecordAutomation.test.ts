@@ -643,4 +643,35 @@ describe("RecordAutomation", () => {
             expect(audioUnit.tracks.values().length).toBe(0)
         })
     })
+
+    // Live error 1174: the user deleted the take while recording, then undid. Undo restores the region as a NEW
+    // instance under the same uuid, while the recorder still holds the old one. `isAttached` only asks for the
+    // uuid, so closing the take acted on the stale instance: "Could not remove <uuid>" on delete.
+    describe("a take deleted and restored by undo while recording (1174)", () => {
+        it("closes without throwing when the take ended where it started", async () => {
+            const {project, record, write, stop, regions} = await setup()
+            record(true)
+            write(0.25)
+            const box = regions()[0].box
+            project.editing.mark()
+            project.editing.modify(() => box.delete())
+            project.editing.undo()
+            expect(regions()[0].box).not.toBe(box)
+            expect(() => stop()).not.toThrow()
+        })
+
+        it("keeps the restored take in sync with the graph", async () => {
+            const {project, record, seek, write, stop, regions} = await setup()
+            record(true)
+            write(0.25)
+            const box = regions()[0].box
+            project.editing.mark()
+            project.editing.modify(() => box.delete())
+            project.editing.undo()
+            seek(PPQN.Quarter + 1)
+            expect(() => stop()).not.toThrow()
+            expect(regions().length).toBe(1)
+            expect(regions()[0].box.isAttached()).toBe(true)
+        })
+    })
 })

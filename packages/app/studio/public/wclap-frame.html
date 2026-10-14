@@ -28,8 +28,12 @@
         post({type: "wclap-error", message})
     }
 
+    // the service worker passes the URL's path, percent-encoded ("Bright%20Ambience.srgfx"), the bundle has file names
+    const decoded = path => {
+        try {return decodeURIComponent(path)} catch {return path}
+    }
     const resolve = path => {
-        const clean = path.split("?")[0].replace(/^\/+/, "")
+        const clean = decoded(path.split("?")[0]).replace(/^\/+/, "")
         const file = files.get(clean) ?? files.get(`${state.pageDirectory}${clean}`)
         if (file === undefined) {return null}
         const extension = clean.split(".").pop()?.toLowerCase() ?? ""

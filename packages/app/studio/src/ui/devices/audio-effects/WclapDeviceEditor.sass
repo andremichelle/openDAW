@@ -20,6 +20,12 @@ component
     outline: 0.5px solid rgba(white, 0.2)
     box-shadow: 0 0 3px -1px rgba(white, 0.2)
 
+    &.linked
+      cursor: pointer
+
+      &:hover
+        outline-color: var(--color-blue)
+
     > span.name, > span.vendor
       display: block
       height: 1.4em

@@ -13,6 +13,7 @@ export type WclapIndexEntry = {
     readonly name: string
     readonly size: number
     readonly url: string
+    readonly credits: string
     readonly license: string
     readonly plugins: ReadonlyArray<WclapIndexPlugin>
 }
@@ -39,6 +40,7 @@ export namespace WclapIndex {
         name: z.string(),
         size: z.number(),
         url: z.string(),
+        credits: z.string().default(""),
         license: z.string(),
         plugins: z.array(Plugin)
     })

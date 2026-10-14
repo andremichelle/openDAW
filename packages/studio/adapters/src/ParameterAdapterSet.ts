@@ -45,7 +45,11 @@ export class ParameterAdapterSet implements Terminable {
         return adapter
     }
 
+    // Terminated as well: it stays registered in the project's ParameterFieldAdapters until then, where a box
+    // created again at the same address (undo, redo) would find the old adapter and write to the deleted field
     removeParameter<T extends PrimitiveValues>(address: Address): AutomatableParameterFieldAdapter<T> {
-        return this.#parameters.removeByKey(address)
+        const adapter = this.#parameters.removeByKey(address)
+        adapter.terminate()
+        return adapter as AutomatableParameterFieldAdapter<T>
     }
 }

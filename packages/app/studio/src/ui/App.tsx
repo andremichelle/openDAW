@@ -21,6 +21,7 @@ import {DashboardPage} from "@/ui/pages/stats/DashboardPage"
 import {PrivacyPage} from "@/ui/pages/PrivacyPage"
 import {ManifestoPage} from "@/ui/pages/ManifestoPage"
 import {PreferencesPage} from "@/ui/pages/PreferencesPage"
+import {StoragePage} from "@/ui/pages/StoragePage"
 import {TestPage} from "@/ui/pages/TestPage"
 import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
 import {PerformancePage} from "@/ui/pages/PerformancePage"
@@ -50,6 +51,7 @@ export const App = (service: StudioService) => {
                     {path: "/", factory: WorkspacePage, reuse: true},
                     {path: "/create", factory: WorkspacePage, reuse: true},
                     {path: "/preferences", factory: PreferencesPage},
+                    {path: "/storage", factory: StoragePage},
                     {path: "/imprint", factory: ImprintPage},
                     {path: "/privacy", factory: PrivacyPage},
                     {path: "/manifesto", factory: ManifestoPage},
