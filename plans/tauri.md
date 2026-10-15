@@ -31,14 +31,14 @@ openDAW.app / .exe / AppImage          (shell, Rust, ~10 MB, self-updating)
 4. The window navigates to that origin's `/index.html`.
 
 ### Serving: a stable origin
-With the file storage strategy (see Platform strategies), user data lives in the shell's data dir, not in OPFS, so the origin no longer guards projects. A stable origin is still required for anything the webview itself keys by origin (permissions such as microphone and MIDI, the WCLAP service worker). Every version is served at `/` of the same origin, and the build uuid is never part of the origin or the path.
+With the file storage strategy (see Platform strategies), user data lives in the shell's data dir, not in OPFS, so the origin no longer guards projects. A stable origin is still required for anything the webview itself keys by origin (permissions such as microphone). Every version is served at `/` of the same origin, and the build uuid is never part of the origin or the path.
 
 Two options. The spike (phase 0) decides between them.
 
-- **A: Tauri custom protocol** (`register_asynchronous_uri_scheme_protocol`, `opendaw://localhost` on macOS/Linux and `http://opendaw.localhost` on Windows). The origin is stable by construction and needs no port. Risks: WKWebView and WebKitGTK may not treat a custom scheme as a secure context, which means no SAB and no `crossOriginIsolated`. Service workers are not supported on custom schemes, which breaks `wclap-sw.js`.
-- **B: Loopback HTTP server** on a fixed port (`http://127.0.0.1:<fixed>`, inside the shell via `tiny_http`/`axum`). `http://localhost` is a secure context in all three engines, and service workers work. A second fixed port gives the separate WCLAP frame origin. Risk: the port can be taken. In that case the app must refuse to start with a clear message and must never fall back to another port, because a different port means a different origin and lost permissions and service worker state. Bind to loopback only and require a per-launch token, so other local processes cannot read user data through the `/fs` endpoints.
+- **A: Tauri custom protocol** (`register_asynchronous_uri_scheme_protocol`, `opendaw://localhost` on macOS/Linux and `http://opendaw.localhost` on Windows). The origin is stable by construction and needs no port. Risks: WKWebView and WebKitGTK may not treat a custom scheme as a secure context, which means no SAB and no `crossOriginIsolated`.
+- **B: Loopback HTTP server** on a fixed port (`http://127.0.0.1:<fixed>`, inside the shell via `tiny_http`/`axum`). `http://localhost` is a secure context in all three engines. Risk: the port can be taken. In that case the app must refuse to start with a clear message and must never fall back to another port, because a different port means a different origin and lost permissions. Bind to loopback only and require a per-launch token, so other local processes cannot read user data through the `/fs` endpoints.
 
-My current lean is **B**, because WCLAP needs both a service worker and a second origin. The spike confirms this.
+My current lean is **B**, because workers reach the `/fs` endpoints over plain HTTP. WCLAP no longer needs a service worker or a second port (see WCLAP plugin windows), so A is viable if it passes the secure-context check. The spike decides.
 
 ## Version flow (web build)
 
@@ -79,6 +79,7 @@ Every feature that talks to the browser goes through a strategy interface. The b
    - Tauri: popouts are real native windows that stay scriptable by the opener (see Popout windows below). Auth popups and other URLs follow the external-link rule.
    - Sites: `Surface.tsx` popouts, `FloatingWindow.tsx:256` (pop out), `WclapWindows.tsx`, `CloudAuthManager.ts:86,177`, `NamTone3000.ts:145`.
    - `PanelPlaceholder.tsx:141` currently hides "Popout" when `Browser.isTauriApp()`. That gate goes once popouts work.
+   - WCLAP plugin GUIs are not popouts. They get their own OS windows, see below.
 2. **External links** (manuals, docs, GitHub, sponsors, credits)
    - Browser: `window.open(url, "_blank")` and `<a target="_blank">`.
    - Tauri: the system browser via `tauri-plugin-opener`. In-app paths (`/docs/scripting/`, manuals) open in a Tauri window when bundled, otherwise go to the online URL.
@@ -134,6 +135,26 @@ In-window DOM windows are not an option, so every popout must be a native window
 - Each native window boots its own studio UI realm, which binds to the main window's project through the existing sync machinery: the box graph sync already used for live rooms, plus the engine attachment.
 - Each window becomes a full client of the same project, not a remote DOM.
 - This is much more work than the primary strategy, and it is only worth it if a platform fails the spike.
+
+### WCLAP plugin windows
+- **The rule:** every WCLAP plugin GUI opens in its own OS window with its own webview. It is never part of the studio DOM: no `FloatingWindow`, no `<iframe>`, no `wclap-frame.html` relay.
+- **Serving and isolation**
+  - The shell serves the plugin's bundle files straight from the data dir on a plugin-only origin (`wclap://<sha256>/…`, or the plugin port when serving option B is used).
+  - Bundles are content-addressed, so each plugin gets its own origin and is isolated from the studio and from other plugins.
+  - `wclap-sw.js` and the second-origin deploy (`VITE_WCLAP_ORIGIN`) are not needed on desktop.
+- **Messaging**
+  - Today the frame and studio talk over a `MessagePort`: `wclap-open`, `wclap-message`, `wclap-key`, `wclap-contextmenu`, `wclap-wheel`, `wclap-dblclick`, `wclap-pointer-enable`, `wclap-error`.
+  - Desktop keeps the same message set over a shell-routed channel: plugin window ↔ shell ↔ studio main window ↔ engine. With the native engine it becomes plugin window ↔ shell ↔ engine.
+  - The plugin page gets a small injected bridge script that exposes the same API the frame provides today, so plugin code is unchanged.
+- **Window duties**
+  - Size comes from the plugin.
+  - The title is the device name. The window is a child of the main window: it stays on top of it and minimises with it.
+  - Frames are persisted per device.
+  - The window closes when the device is deleted or the project closes.
+- **Keys and menus**
+  - Keys the plugin does not consume (transport, undo, save) are forwarded as today.
+  - `wclap-contextmenu` opens a *native* context menu built from the studio's menu items over IPC, because the studio DOM is not in that window.
+- **Cost:** a small layer between `WclapWindows.tsx` and the shell. The browser path stays as is.
 
 ### Sample storage on OS file paths (later phase)
 - Samples are no longer copied into internal storage. A sample references its original OS file path, and only `meta.json` and `peaks.bin` stay in the data dir.
@@ -342,7 +363,7 @@ All app-written files must sit under the shell's own identifier directories: dow
 | `DecompressionStream("deflate-raw")` | `/open-project` payload | replaced by deep link anyway |
 | `navigator.clipboard.readText` | restricted in WebKit | clipboard strategy |
 | `playbackStats` | underrun detector off | fine, optional |
-| Service workers | none on custom schemes | serving option B (loopback), two fixed ports for the WCLAP frame origin |
+| Service workers | none on custom schemes | not needed: WCLAP GUIs are served by the shell in their own OS windows |
 | Background throttling | occluded windows throttle rAF and timers | `backgroundThrottling: disabled` per window |
 
 ### G. Storage details for the file storage strategy
@@ -381,7 +402,7 @@ All app-written files must sit under the shell's own identifier directories: dow
      - `crossOriginIsolated`, SAB, AudioWorklet plus the wasm engine;
      - **a Werkstatt script on JSC**;
      - module workers, the `/fs` round-trip from a worker;
-     - the WCLAP frame plus service worker;
+     - a WCLAP plugin GUI in its own OS window, served by the shell, with the message bridge;
      - mic permission, the 48 kHz context on 44.1 kHz hardware;
      - WebCodecs, MP3 `decodeAudioData` on WebKitGTK;
      - accelerator suppression, `dragDropEnabled: false` HTML5 file drops, background throttling off.
