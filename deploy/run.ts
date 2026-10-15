@@ -14,8 +14,10 @@ const sftp = new SftpClient()
 const distDir = "./packages/app/studio/dist"
 const manualDistDir = "./packages/app/manual/dist"
 const docsDistDir = "./packages/studio/docs"
+const desktopDistDir = "./packages/app/studio/dist-desktop"
 const docsOnly = process.env.DOCS_ONLY === "true"
-const buildInfoPath = "./packages/app/studio/public/build-info.json"
+// public/build-info.json is rewritten by every vite build, the desktop build included
+const buildInfoPath = `${distDir}/build-info.json`
 const branchName = process.env.BRANCH_NAME || "main"
 const envFolder = process.env.DEPLOY_ENV || (branchName === "main" ? "main" : "dev")
 const isMainEnv = envFolder === "main"
@@ -70,8 +72,8 @@ const createRootHtaccess = (mainReleaseDir: string, devReleaseDir: string) => `#
 RewriteEngine On
 RewriteBase /
 
-# Dynamic CORS: Allow opendaw.studio, dev.opendaw.studio, and localhost:8080-8089
-RewriteCond %{HTTP:Origin} ^(https://opendaw\\.studio|https://dev\\.opendaw\\.studio|https://localhost:808[0-9])$ [NC]
+# Dynamic CORS: Allow opendaw.studio, dev.opendaw.studio, localhost:8080-8089 and the desktop app (fixed loopback port)
+RewriteCond %{HTTP:Origin} ^(https://opendaw\\.studio|https://dev\\.opendaw\\.studio|https://localhost:808[0-9]|http://127\\.0\\.0\\.1:47110)$ [NC]
 RewriteRule .* - [E=ORIGIN_ALLOWED:%{HTTP:Origin}]
 
 # --------------------------------------------------
@@ -91,6 +93,13 @@ RewriteRule ^extract\\.php$ - [L]
 # This allows existing sessions to continue fetching from their version
 RewriteCond %{REQUEST_URI} ^/(main|dev)/releases/ [NC]
 RewriteRule ^ - [L]
+
+# Desktop app builds (DEV only): the shell downloads /tauri/build-info.json and /tauri/releases/{uuid}/manifest.json
+RewriteCond %{REQUEST_URI} ^/dev/tauri/ [NC]
+RewriteRule ^ - [L]
+
+RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
+RewriteRule ^tauri/(.*)$ /dev/tauri/$1 [L]
 
 # Documentation: the manuals app and the generated scripting docs live in one fixed folder each per
 # environment, deployed with the studio or alone (DOCS_ONLY=true)
@@ -175,6 +184,22 @@ const deployFixed = async (localDir: string, name: string): Promise<string> => {
     await uploadDist(localDir, remoteDir)
     await pruneRemote(localDir, remoteDir)
     return remoteDir
+}
+
+const desktopPointerHtaccess = `<Files "build-info.json">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+</Files>
+`
+
+// The desktop build goes to DEV only. The pointer is written last, so the shell never sees a partial release.
+const deployDesktop = async (): Promise<void> => {
+    if (isMainEnv) {throw new Error("desktop builds deploy to DEV only")}
+    const {uuid} = JSON.parse(fs.readFileSync(`${desktopDistDir}/build-info.json`, "utf8"))
+    const releaseDir = `/${envFolder}/tauri/releases/${uuid}`
+    await uploadDist(desktopDistDir, releaseDir)
+    await sftp.put(Buffer.from(desktopPointerHtaccess), `/${envFolder}/tauri/.htaccess`)
+    await sftp.put(`${desktopDistDir}/build-info.json`, `/${envFolder}/tauri/build-info.json`)
+    console.log(`✅ Desktop release uploaded and activated: ${releaseDir}`)
 }
 
 const deployDocs = async (): Promise<ReadonlyArray<string>> => [
@@ -262,6 +287,7 @@ const updateRootHtaccess = async (newReleaseDir: string | null): Promise<void> =
     await uploadDist(distDir, releaseDir)
     await deployDocs()
     await updateRootHtaccess(releaseDir)
+    if (!isMainEnv && fs.existsSync(`${desktopDistDir}/manifest.json`)) {await deployDesktop()}
 
     await sftp.put(Buffer.from(`${currentCommit}\n`), lastCommitFile)
     await sftp.end()

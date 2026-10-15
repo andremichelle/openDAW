@@ -8,7 +8,7 @@ use std::time::UNIX_EPOCH;
 
 use serde::Deserialize;
 use tauri::Manager;
-use tauri_plugin_dialog::{DialogExt, FileDialogBuilder};
+use tauri_plugin_dialog::{DialogExt, FileDialogBuilder, MessageDialogBuilder, MessageDialogButtons, MessageDialogKind};
 
 use crate::{mime, APP, HEADERS};
 
@@ -183,13 +183,19 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
         "alert" => {
             let mut message = String::new();
             let _ = std::io::Read::read_to_string(request.as_reader(), &mut message);
-            let app = APP.get().expect("app not ready");
-            let mut dialog = app.dialog().message(message).title("openDAW");
-            if let Some(window) = app.get_webview_window("main") {
-                dialog = dialog.parent(&window);
-            }
-            dialog.blocking_show();
+            message_dialog(message, "openDAW").blocking_show();
             empty(request, 204)
+        }
+        "confirm" => {
+            let mut message = String::new();
+            let _ = std::io::Read::read_to_string(request.as_reader(), &mut message);
+            let title = query.get("title").map(String::as_str).unwrap_or("openDAW");
+            let ok = query.get("ok").cloned().unwrap_or_else(|| "OK".to_string());
+            let approved = message_dialog(message, title)
+                .kind(MessageDialogKind::Warning)
+                .buttons(MessageDialogButtons::OkCancelCustom(ok, "Cancel".to_string()))
+                .blocking_show();
+            text(request, 200, approved.to_string())
         }
         "guard" => {
             crate::CLOSE_GUARDED.store(true, Ordering::SeqCst);
@@ -224,6 +230,19 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
             empty(request, 204)
         }
         _ => empty(request, 404),
+    }
+}
+
+// macOS: unparented, an app-modal alert sits above the floating plugin windows (a sheet would stay below them).
+// Windows/Linux: owned by the main window, the plugin windows are owned too and the active dialog comes first.
+fn message_dialog(message: String, title: &str) -> MessageDialogBuilder<tauri::Wry> {
+    let dialog = APP.get().expect("app not ready").dialog().message(message).title(title);
+    #[cfg(target_os = "macos")]
+    return dialog;
+    #[cfg(not(target_os = "macos"))]
+    match APP.get().and_then(|app| app.get_webview_window("main")) {
+        Some(window) => dialog.parent(&window),
+        None => dialog,
     }
 }
 

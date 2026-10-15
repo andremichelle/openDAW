@@ -13,6 +13,11 @@ use tauri::{AppHandle, Manager, WindowEvent};
 // Bump when a primitive is added or changed; a build's build-info.json shellApi must not exceed it
 pub const SHELL_API: u64 = 1;
 const PORT: u16 = 47110;
+// Where the shell looks for studio builds; DEV until the public release builds with OPENDAW_UPDATE_ORIGIN=https://opendaw.studio
+pub const UPDATE_ORIGIN: &str = match option_env!("OPENDAW_UPDATE_ORIGIN") {
+    Some(origin) => origin,
+    None => "https://dev.opendaw.studio",
+};
 const DEFAULT_DIST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../studio/dist-desktop");
 
 pub static APP: OnceLock<AppHandle> = OnceLock::new();
@@ -214,7 +219,7 @@ fn required_shell_api(root: &Path) -> Option<u64> {
 
 fn main() {
     let root = Arc::new(PathBuf::from(std::env::var("OPENDAW_DIST").unwrap_or_else(|_| DEFAULT_DIST.into())));
-    println!("[openDAW] serving {} (shell api {SHELL_API})", root.display());
+    println!("[openDAW] serving {} (shell api {SHELL_API}, updates from {UPDATE_ORIGIN})", root.display());
     match required_shell_api(&root) {
         Some(required) if required > SHELL_API => eprintln!("[openDAW] build needs shell api {required}, this shell has {SHELL_API}"),
         Some(_) => {}

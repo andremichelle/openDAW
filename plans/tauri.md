@@ -97,6 +97,13 @@ My current lean is **B**, because workers reach the `/fs` endpoints over plain H
 - The build writes `manifest.json` into the release with `{uuid, date, shellApi, files: [{path, size, sha256}]}`. It excludes `*.map` and `*.br`.
 - `BuildInfo` gains `shellApi: number`, the minimum shell API the build needs.
 - CI uploads the variant to `/tauri/releases/{uuid}/` and updates a stable pointer `https://opendaw.studio/tauri/build-info.json` (same `.htaccess` mechanism as `main`/`dev`). The browser deploy is unchanged.
+- **For now DEV only** (2026-10-16): desktop work deploys to `dev.opendaw.studio`, PROD stays untouched.
+  - `deploy.yml` builds the desktop variant whenever the deploy targets DEV (`to_dev` or a branch other than `main`).
+  - `deploy/run.ts` then uploads `dist-desktop` to `/dev/tauri/releases/{uuid}/`, and writes `/dev/tauri/build-info.json` last (no-cache via `/dev/tauri/.htaccess`), so the pointer never names a partial release. `deployDesktop` refuses the main environment.
+  - The root `.htaccess` routes `https://dev.opendaw.studio/tauri/…` to `/dev/tauri/…`. PROD routing is unchanged.
+  - The web deploy now reads its uuid from `dist/build-info.json`, because `public/build-info.json` is rewritten by the desktop build.
+  - Shell URLs: `https://dev.opendaw.studio/tauri/build-info.json` and `https://dev.opendaw.studio/tauri/releases/{uuid}/manifest.json`.
+  - Old desktop releases are not pruned yet.
 
 ### Shell side, at every launch
 1. Fetch `tauri/build-info.json` with a short timeout (about 3 s).
@@ -186,6 +193,7 @@ Every feature that talks to the browser goes through a strategy interface. The b
   - On macOS the webview has no reload, zoom or find accelerators of its own. Turning them off is a WebView2 (Windows) task.
 - Close guard (browser-unverified): `platform/desktop/DesktopLifecycle.ts` implements `guardClose`. It registers `window.__OPENDAW_SHELL__.close` and calls `/__shell/guard`.
   - Quit (`Cmd+Q`, now a custom menu item) and closing the main window go to `request_quit` in the shell. Once guarded, the shell asks the page, which quits through `/__shell/quit` directly or after an in-app "Quit anyway?" dialog when the project has unsaved changes. Before the page is guarded, the shell quits at once.
+  - The "Quit anyway?" question and `alert` are native message dialogs (`/__shell/confirm`, `/__shell/alert`), so plugin windows never cover them. macOS: unparented app-modal alert (a sheet would sit below the floating plugin windows). Windows and Linux: owned by the main window like the plugin windows, the active dialog comes first (uncompiled: `cargo check --target x86_64-pc-windows-msvc` needs `llvm-rc`, untested until the machines arrive).
   - Open: Dock "Quit" and logout go through `NSApp terminate:` and bypass the guard. A frozen page cannot answer, so only Force Quit ends the app.
 - Alerts (browser-unverified): wry implements no `runJavaScriptAlertPanel`, so `window.alert` did nothing on macOS. `DesktopLifecycle` installs `alert`, which posts the message to `/__shell/alert` for a native message dialog. The `ShortcutValidator` conflict alert runs at module load, before strategies install, and stays silent on desktop (dev-only check). `location.reload()` works as is in the webview. It becomes a shell restart with the update flow.
 - Window title (browser-unverified): `platform/desktop/DesktopTitle.ts` sets the main window title to the project name ("openDAW" without a project, "Untitled" for an empty name) via `/__shell/title`.
@@ -300,6 +308,14 @@ In-window DOM windows are not an option, so every popout must be a native window
   - **Linux**: AppImage supports the updater, `.deb` does not. A Flatpak would be updated by Flathub instead.
 - `SHELL_API` is bumped only when the IPC surface or the serving contract changes. Most studio releases never need a new shell.
 
+### Two versions, two deploys (2026-10-16)
+- **Studio build for desktop** (`dist-desktop`): versioned by its build uuid in `tauri/build-info.json`. It changes with every studio change, ships with the regular studio deploy (DEV only for now), and the installed shell fetches and switches to it at launch (Phase 3). Users never download it.
+- **Shell** (the Tauri app): versioned by `version` in `tauri.conf.json` and the updater's `latest.json`. It changes rarely, only with native code. Its own workflow `desktop.yml` runs on a tag `desktop-v*` (macOS, Windows, Linux), never on a studio deploy. It updates through the Tauri updater, independently of the studio.
+- `shellApi` links them: a studio build needing a newer shell waits until the shell has updated.
+- **Download:** the tag workflow publishes a GitHub Release. Later a download page on opendaw.studio links to the latest release.
+- **Update origin:** `UPDATE_ORIGIN` in `main.rs` (done) is the server the shell checks, `<origin>/tauri/build-info.json`. It defaults to `https://dev.opendaw.studio`. The release build sets `OPENDAW_UPDATE_ORIGIN=https://opendaw.studio` at compile time, no code edit. The updater's `latest.json` follows the same origin.
+- **Public release:** PROD then needs the same `/tauri/` deploy as DEV (today `deployDesktop` refuses the main environment).
+
 ## Uninstall: delete everything
 
 All app-written files must sit under the shell's own identifier directories: downloaded builds in `app_local_data_dir/web`, user data (the file storage strategy) in `app_local_data_dir/data`, key-value storage in `app_local_data_dir/store.json`, and the webview's own data dir set explicitly to a subfolder of the same root. Linked samples (later phase) are the user's own files and are never deleted.
@@ -398,7 +414,7 @@ All app-written files must sit under the shell's own identifier directories: dow
    - Autoplay policy must be off, so the click-to-resume hack (`boot.ts:104`) becomes moot.
 
 ### B. Silent hangs offline (worst class)
-1. **`IndexFetch.fetchIndex` retries forever**
+1. **`IndexFetch.fetchIndex` retries forever** (mitigated today by `OpenDAWCloud.disable()`, the proper fix is in Audit D)
    - It is used for the sample and soundfont indexes (`OpenSampleAPI`, `OpenSoundfontAPI`). `FactoryCatalog` waits on it, so on desktop these never resolve:
      - `SampleService.ts:94`
      - `SoundfontService.ts:27,88`
@@ -425,6 +441,10 @@ All app-written files must sit under the shell's own identifier directories: dow
 ### D. Online features in the desktop app (later, after a working app)
 Nothing is hidden because it is the desktop app. An online feature stays and works while the network is up, and fails fast with a clear message while offline. What blocks them today is the origin `http://127.0.0.1:47110`, which the servers do not accept yet. The fixed port is part of this contract: it must never change.
 - **Catalogues, samples, soundfonts, presets, WCLAP:** `assets.opendaw.studio` and the API servers reject the loopback origin (CORS). Allow `http://127.0.0.1:47110` on the servers. `OpenDAWCloud.disable()` exists only because of this. It becomes an "openDAW servers reachable right now" check.
+  - Checked 2026-10-16: `assets.opendaw.studio` sends `Access-Control-Allow-Origin` for `https://opendaw.studio`, `https://dev.opendaw.studio` and `https://localhost:808x`, nothing for the loopback origin.
+  - Done (not uploaded): the root `.htaccess` template in `deploy/run.ts` allows `http://127.0.0.1:47110`. Uploaded once by hand, it takes effect without a deploy. Assumed to cover `assets.` too (identical headers, no separate assets `.htaccess` found locally). Verify with `curl -sI -H "Origin: http://127.0.0.1:47110" https://assets.opendaw.studio/samples/index.json`.
+  - Open: the api repo (`../api.opendaw.studio`): `is_allowed_origin` in `samples/connect.php` (sample metadata `get.php`, uploads) and the allow-lists in `latency`, `rooms`, `soundfonts` and `users` `.htaccess`.
+  - Open: studio code. Drop `OpenDAWCloud.disable()` from `main-desktop.ts`. On desktop an index fetch gives up after a few attempts and resolves to an empty index (offline), the browser keeps its indefinite retry unchanged. A cloud sample offline loads as missing through the existing path. `OpenDAWCloud.test.ts` covers the fallback instead of the disabled mode.
 - **Dropbox and Google Drive:** OAuth redirects to `location.origin/auth-callback.html` and the result returns through a `BroadcastChannel`. Register `http://127.0.0.1:47110/auth-callback.html` with both providers (both accept loopback redirects). Verify the `BroadcastChannel` reaches the main window from the linked auth window. Nextcloud needs nothing.
 - **Tone3000:** same as Dropbox/Drive with `tone3000-callback.html`.
 - **Publish, live rooms, `/join/*`, uploads (`/upload`, `AccessKey`):** most likely the same CORS change. Test each, including WebRTC STUN/TURN in WKWebView.
