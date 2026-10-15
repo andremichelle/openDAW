@@ -1,4 +1,4 @@
-import {isDefined, RuntimeNotifier} from "@opendaw/lib-std"
+import {isDefined, RuntimeNotifier, tryCatch} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 
 export namespace Fullscreen {
@@ -13,7 +13,9 @@ export namespace Fullscreen {
             })
             return false
         }
-        const result = await Promises.tryCatch(element.requestFullscreen())
+        // extensions may replace requestFullscreen with a wrapper that throws instead of rejecting
+        const call = tryCatch(() => element.requestFullscreen())
+        const result = call.status === "success" ? await Promises.tryCatch(call.value) : call
         if (result.status === "resolved") {return true}
         await RuntimeNotifier.info({
             headline: "Fullscreen Error",
