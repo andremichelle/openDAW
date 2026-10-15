@@ -22,7 +22,11 @@ export const installTrackResize = (lifecycle: Lifecycle, service: StudioService,
     lifecycle.ownAll(
         height.catchupAndSubscribe(owner => {
             const value = owner.getValue()
-            if (value === 0) {element.style.removeProperty("height")} else {element.style.height = `${value}px`}
+            if (value === 0) {
+                element.style.removeProperty("--track-height")
+            } else {
+                element.style.setProperty("--track-height", `${value}px`)
+            }
         }),
         Dragging.attach(resizer, event => {
             event.stopPropagation()

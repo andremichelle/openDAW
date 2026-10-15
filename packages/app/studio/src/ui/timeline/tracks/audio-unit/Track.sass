@@ -2,12 +2,12 @@ component
   display: grid
   grid-template-columns: subgrid
   grid-column: 1 / -1
-  height: var(--lane-height)
+  height: var(--track-height, var(--track-min-height))
   position: relative
 
   // Tree-guide geometry, consumed by the header's pseudo elements: the vertical drop starts below the device
   // name on a group's first lane, passes through on followers, and stops at the label on the last lane.
-  --head-center: calc(var(--lane-height) / 2)
+  --head-center: calc(var(--track-min-height) / 2)
   --guide-top: calc(var(--head-center) + 1px)
   --guide-bottom: 0px
   --stub-top: calc(var(--head-center) + 7px)

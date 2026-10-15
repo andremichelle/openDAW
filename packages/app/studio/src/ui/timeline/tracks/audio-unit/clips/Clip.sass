@@ -1,7 +1,7 @@
 @use "@/colors"
 
 component
-  width: var(--lane-height)
+  width: var(--clips-width)
   height: 100%
   display: grid
   grid-template-rows: 13.5px 1fr
@@ -47,7 +47,7 @@ component
   > span.label
     padding: 0 0.25em
     line-height: 13.5px
-    width: var(--lane-height)
+    width: var(--clips-width)
     text-align: center
     font-size: 9px
     white-space: nowrap
@@ -68,7 +68,7 @@ component
       grid-area: 1 / -1
       aspect-ratio: 1 / 1
       top: 50%
-      height: calc(var(--lane-height) - 13.5px - 2px)
+      height: calc(var(--clips-width) - 13.5px - 2px)
       transform: translateY(-50%)
       position: absolute
 
