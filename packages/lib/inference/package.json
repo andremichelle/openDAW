@@ -24,7 +24,8 @@
     "@opendaw/lib-fusion": "^0.0.105",
     "@opendaw/lib-runtime": "^0.0.87",
     "@opendaw/lib-std": "^0.0.86",
-    "onnxruntime-web": "^1.25.1"
+    "onnxruntime-web": "^1.25.1",
+    "@opendaw/lib-dsp": "^0.0.95"
   },
   "devDependencies": {
     "@opendaw/eslint-config": "^0.0.28",

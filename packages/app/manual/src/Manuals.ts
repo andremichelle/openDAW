@@ -34,6 +34,7 @@ export const Manuals: ReadonlyArray<Manual> = [
             {type: "page", label: "Introduction", path: "/manuals/"},
             {type: "page", label: "AI", path: "/manuals/ai"},
             {type: "page", label: "Audio Bus", path: "/manuals/audio-bus"},
+            {type: "page", label: "Audio to MIDI", path: "/manuals/audio-to-midi"},
             {type: "page", label: "Automation", path: "/manuals/automation"},
             {type: "page", label: "Browser Support", path: "/manuals/browser-support"},
             {type: "page", label: "Capture MIDI", path: "/manuals/capture-midi"},

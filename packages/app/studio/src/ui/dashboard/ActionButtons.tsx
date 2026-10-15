@@ -7,6 +7,7 @@ import {Icon} from "@/ui/components/Icon"
 import {StudioService} from "@/service/StudioService"
 import {connectRoom} from "@/service/StudioLiveRoomConnect"
 import {NeuralDemux} from "@/service/NeuralDemux.tsx"
+import {NeuralTranscription} from "@/service/NeuralTranscription"
 
 const className = Html.adoptStyleSheet(css, "ActionButtons")
 
@@ -32,6 +33,10 @@ export const ActionButtons = ({service}: Construct) => (
         <button className="action" title="Split a music file into drums, bass, vocals and other."
                 onclick={() => NeuralDemux.explain(service).catch(EmptyExec)}>
             <Icon symbol={IconSymbol.Robot}/><span>Neural Demux</span>
+        </button>
+        <button className="action" title="Convert a music file into MIDI tracks for each detected instrument."
+                onclick={() => NeuralTranscription.browse(service).catch(EmptyExec)}>
+            <Icon symbol={IconSymbol.Robot}/><span>Audio to MIDI</span>
         </button>
     </div>
 )

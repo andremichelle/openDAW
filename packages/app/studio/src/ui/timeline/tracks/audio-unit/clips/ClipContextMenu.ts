@@ -8,6 +8,7 @@ import {DebugMenus} from "@/ui/menu/debug"
 import {AudioRegionBox, NoteRegionBox, ValueRegionBox} from "@opendaw/studio-boxes"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
 import {Promises} from "@opendaw/lib-runtime"
+import {instrumentTranscriptionMenuItem} from "@/ui/timeline/InstrumentTranscriptionMenu"
 
 type Creation = {
     element: HTMLElement
@@ -168,5 +169,6 @@ export const installClipContextMenu = ({element, project, selection, capturing}:
                     }
                 }),
                 DebugMenus.debugBox(clip.box))
+            if (clip.type === "audio-clip") {collector.addItems(instrumentTranscriptionMenuItem(project, clip))}
         }
     })

@@ -1,4 +1,6 @@
 export {Inference} from "./Inference"
+export {MuScriptor} from "./MuScriptor"
+export type {MuScriptorInput, MuScriptorNote, MuScriptorProgress} from "./muscriptor/types"
 export type {RunOptions, TaskHandle} from "./Inference"
 export type {InferenceConfig} from "./InferenceConfig"
 export type {TaskKey, TaskInput, TaskOutput} from "./registry"
