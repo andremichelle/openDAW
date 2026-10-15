@@ -340,9 +340,17 @@ All app-written files must sit under the shell's own identifier directories: dow
 - Audio goes through `cpal`: CoreAudio, WASAPI, ASIO, ALSA and JACK.
 - MIDI goes through `midir`. This also replaces Web MIDI, which WKWebView and WebKitGTK do not have.
 
-**Engine hosting**
-- The existing wasm engine and devices run inside the shell with `wasmtime`, driven by the audio callback. It is the same binary as in the browser, so behaviour is bit-identical and the device ABI is untouched.
-- macOS needs the `allow-jit` entitlement.
+**Engine hosting (revised 2026-10-16: V8, not wasmtime)**
+- The shell embeds V8 (`rusty_v8` / `deno_core`) and runs the existing engine host JS as is: the engine wasm, the device side-modules and all three JS bridges. V8 runs WebAssembly itself, so no bridge is ported to Rust and behaviour stays that of Chrome.
+- The `cpal` audio callback drives the render function, the way `offline-worker.ts` drives the engine today.
+- Why not `wasmtime`: three devices depend on JS, not only the scriptable ones.
+  - Werkstatt, Apparat, Spielwerk: `script-bridge.ts`, 9 `host_script_*` imports carrying only numbers and memory offsets, user code arrives as a wrapped string (`ScriptCompiler.wrap`) that fills `globalThis.openDAW.<registry>`.
+  - NeuralAmp: `nam-bridge.ts` hosts its own Emscripten module from JS.
+  - WCLAP: `wclap-bridge.ts` hosts the plugin wasm modules from JS (WASI shim, trampolines).
+  - With `wasmtime` all three need Rust ports plus V8 for the scripts anyway.
+- Proof it leaves the worklet: `offline-worker.ts` already runs the full engine with the script bridge in a plain Worker. It sets the `sampleRate` global itself and loads scripts with `new Function(code)` instead of `addModule`.
+- Needed: a shim for the worklet globals (`sampleRate`, `self`/`location` as in `worklet-scope.ts`, `registerProcessor` is not used), and the new UI and engine link (below), since the processor talks over `MessagePort` and SAB rings today.
+- Cost: about 30 MB of binary and a V8 build or prebuilt in CI. macOS needs the `allow-jit` entitlement.
 - Compiling the engine natively is a possible later optimisation, not the first step.
 
 **UI and engine link**
@@ -356,6 +364,7 @@ All app-written files must sit under the shell's own identifier directories: dow
 - Mixdown, stems and video audio render natively.
 
 **Scriptable devices (Werkstatt, Apparat, Spielwerk)**
+- Resolved by the V8 engine host above: the bridge runs unchanged in the shell's isolate. The analysis below led there.
 - Today these run user JavaScript as DSP on the audio thread. The engine calls synchronous `host_script_*` imports (`core-wasm/src/script-bridge.ts`, `plans/wasm-audio/scriptable-devices.md`).
   - The script is compiled in the worklet realm at setup and runs JIT'd in V8, with zero-copy `Float32Array` views on engine memory.
   - The offline render worker uses the same bridges.
