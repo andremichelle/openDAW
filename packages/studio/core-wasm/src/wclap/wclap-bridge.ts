@@ -296,6 +296,17 @@ export class WclapBridges {
         plugin.clapId = clapId
         this.#destroy(plugin)
         if (url.length === 0 || clapId.length === 0) {return}
+        this.#start(plugin)
+    }
+
+    retry(url: string): void {
+        for (const plugin of this.#plugins.values()) {
+            if (plugin.url === url && plugin.clapId.length > 0 && isNull(plugin.loaded) && !plugin.loading) {this.#start(plugin)}
+        }
+    }
+
+    #start(plugin: Plugin): void {
+        const {url} = plugin
         const generation = ++plugin.generation
         plugin.loading = true
         this.#host.sendStatus(plugin.uuid, {state: "loading", message: "", inputs: []})

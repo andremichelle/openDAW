@@ -297,6 +297,7 @@ Communicator.executor<OfflineEngineProtocol>(
                 wclapReceive: (_uuid: UUID.Bytes, _bytes: ArrayBuffer): void => {},
                 wclapSaveState: (_uuid: UUID.Bytes): void => {},
                 wclapDescribe: (_url: string): Promise<ReadonlyArray<WclapPluginInfo>> => Promise.resolve([]),
+                wclapRetry: (_url: string): void => {},
                 terminate: (): void => {}
             })
             enginePort.start()

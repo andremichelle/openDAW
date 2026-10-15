@@ -162,6 +162,7 @@ export class OfflineEngineRenderer {
                 wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void { dispatcher.dispatchAndForget(this.wclapReceive, uuid, bytes) }
                 wclapSaveState(uuid: UUID.Bytes): void { dispatcher.dispatchAndForget(this.wclapSaveState, uuid) }
                 wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> { return dispatcher.dispatchAndReturn(this.wclapDescribe, url) }
+                wclapRetry(url: string): void { dispatcher.dispatchAndForget(this.wclapRetry, url) }
                 terminate(): void { dispatcher.dispatchAndForget(this.terminate) }
             }
         )

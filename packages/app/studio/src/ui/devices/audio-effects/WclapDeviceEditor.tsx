@@ -23,7 +23,7 @@ import {AnimationFrame, Events, Files, Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {PointerField} from "@opendaw/lib-box"
 import {WclapParameterBox} from "@opendaw/studio-boxes"
-import {EffectFactories, MenuItem, WclapBundles, WclapStorage} from "@opendaw/studio-core"
+import {EffectFactories, FilePickerAcceptTypes, MenuItem, WclapBundles, WclapStorage} from "@opendaw/studio-core"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {parameterContextItems} from "@/ui/menu/automation.ts"
@@ -136,6 +136,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             .then(local => {
                 if (local !== WclapStorage.urlOf(uuid)) {throw new Error("the download does not match its id")}
                 if (!current()) {return}
+                engine.wclapRetry(local)
                 if (isCurrent(local, info)) {
                     showPlugin()
                     return
@@ -151,12 +152,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
             })
     }
     const browse = async (): Promise<void> => {
-        const files = await Files.open({
-            types: [{
-                description: "WebCLAP bundle or module",
-                accept: {"application/gzip": [".gz", ".tgz"], "application/wasm": [".wasm"]}
-            }], multiple: false
-        }).catch(() => [])
+        const files = await Files.open({...FilePickerAcceptTypes.WclapFiles, multiple: false}).catch(() => [])
         if (files.length === 0) {return}
         const file = files[0]
         const archive = await file.arrayBuffer()
@@ -186,6 +182,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         if (chosen.isEmpty()) {return}
         await WclapStorage.store(archive)
         refreshStored()
+        engine.wclapRetry(url)
         select(url, chosen.unwrap().clapId)
     }
     // The hub notifies per child, so an earlier child's notification sees later children without an adapter yet
@@ -304,6 +301,7 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
                     MenuItem.default({label, checked: isCurrent(url, info)})
                         .setTriggerProcedure(() => {
                             pick.generation++
+                            engine.wclapRetry(url)
                             select(url, info.clapId)
                         })))),
             MenuItem.default({label: "Import WebCLAP...", separatorBefore: true})

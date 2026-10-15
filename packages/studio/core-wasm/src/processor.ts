@@ -244,6 +244,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                     this.#guarded(() => this.#wclap.receive(UUID.toString(uuid), bytes)),
                 wclapSaveState: (uuid: UUID.Bytes): void => this.#guarded(() => this.#wclap.saveState(UUID.toString(uuid))),
                 wclapDescribe: (url: string): Promise<ReadonlyArray<WclapPluginInfo>> => this.#wclap.describe(url),
+                wclapRetry: (url: string): void => this.#wclap.retry(url),
                 loadClickSound: (index: 0 | 1, data: AudioData): void => this.#guarded(() => {
                     // Tiny PCM (<1s), so the worklet copies it directly (no main-thread staging like frozen).
                     const {frames, numberOfFrames, numberOfChannels, sampleRate} = data

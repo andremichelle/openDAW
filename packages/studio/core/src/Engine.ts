@@ -37,6 +37,7 @@ export interface Engine extends Terminable {
     wclapReceive(uuid: UUID.Bytes, bytes: ArrayBuffer): void
     wclapSaveState(uuid: UUID.Bytes): void
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>>
+    wclapRetry(url: string): void
     noteSignal(signal: NoteSignal): void
     subscribeNotes(observer: Observer<NoteSignal>): Subscription
     ignoreNoteRegion(uuid: UUID.Bytes): void

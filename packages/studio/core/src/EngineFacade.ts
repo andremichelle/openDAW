@@ -141,6 +141,7 @@ export class EngineFacade implements Engine {
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>> {
         return this.#worklet.mapOr(worklet => worklet.wclapDescribe(url), Promise.resolve([]))
     }
+    wclapRetry(url: string): void {this.#worklet.ifSome(worklet => worklet.wclapRetry(url))}
     subscribeClipNotification(observer: Observer<ClipNotification>): Subscription {
         return this.#worklet.unwrap("No worklet to subscribeClipNotification").subscribeClipNotification(observer)
     }

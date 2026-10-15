@@ -11,6 +11,12 @@ export namespace FilePickerAcceptTypes {
             accept: {"audio/x-soundfont": [".sf2"]}
         }]
     }
+    export const WclapFiles: FilePickerOptions = {
+        types: [{
+            description: "WebCLAP bundle or module",
+            accept: {"application/gzip": [".gz", ".tgz"], "application/wasm": [".wasm"]}
+        }]
+    }
     export const ProjectSyncLog: FilePickerOptions = {
         types: [{
             description: "openDAW sync-log-file",

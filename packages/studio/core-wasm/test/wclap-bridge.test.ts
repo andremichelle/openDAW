@@ -244,6 +244,35 @@ describe("wclap bridge", () => {
         expect(attempts.count).toBe(2)
     })
 
+    it("reloads a failed plugin on retry of its url once the bundle is back (re-import of a deleted bundle)", async () => {
+        const attempts = {count: 0}
+        const host = createHost(() => {
+            attempts.count++
+            return attempts.count === 1 ? Promise.reject(new Error("not stored")) : Promise.resolve(basics)
+        })
+        const handle = load(host)
+        await Promise.all(host.loads)
+        expect(host.statuses.at(-1)?.state).toBe("failed")
+        host.bridges.retry("elsewhere")
+        await Promise.all(host.loads)
+        expect(attempts.count).toBe(1)
+        expect(host.statuses.at(-1)?.state).toBe("failed")
+        host.bridges.retry("basics")
+        await ready(host, handle)
+        expect(attempts.count).toBe(2)
+    })
+
+    it("leaves a loaded plugin alone on retry", async () => {
+        const host = createHost()
+        const handle = load(host)
+        await ready(host, handle)
+        const statuses = host.statuses.length
+        host.bridges.retry("basics")
+        await Promise.all(host.loads)
+        expect(host.statuses.length).toBe(statuses)
+        expect(process(host, handle)).toBe(1)
+    })
+
     it("keeps a loaded plugin when the same url and id arrive again", async () => {
         const host = createHost()
         const handle = load(host)

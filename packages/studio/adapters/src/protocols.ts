@@ -62,6 +62,8 @@ export interface EngineCommands extends Terminable {
     wclapSaveState(uuid: UUID.Bytes): void
     // the plugins a bundle offers (fetches and instantiates the module once, cached per url)
     wclapDescribe(url: string): Promise<ReadonlyArray<WclapPluginInfo>>
+    // loads every failed plugin of this url again (its bundle became available)
+    wclapRetry(url: string): void
 }
 
 export interface EngineToClient {

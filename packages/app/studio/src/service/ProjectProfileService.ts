@@ -30,6 +30,7 @@ import {
 import {ProjectSkeleton, SampleLoaderManager, SoundfontLoaderManager} from "@opendaw/studio-adapters"
 import {BoxGraph} from "@opendaw/lib-box"
 import {BoxIO} from "@opendaw/studio-boxes"
+import {WclapMissing} from "@/service/WclapMissing"
 
 export class ProjectProfileService {
     readonly #profile: MutableObservableOption<ProjectProfile>
@@ -139,6 +140,7 @@ export class ProjectProfileService {
         }
         await this.#sampleService.replaceMissingFiles(project.boxGraph, this.#sampleManager)
         await this.#soundfontService.replaceMissingFiles(project.boxGraph, this.#soundfontManager)
+        await WclapMissing.resolve(project.boxGraph)
         const cover = await TemplateStorage.loadCover(uuid)
         this.#setProfile(UUID.generate(), project, ProjectMeta.copy(meta), cover)
     }
@@ -165,6 +167,8 @@ export class ProjectProfileService {
         trace("samples checked")
         await this.#soundfontService.replaceMissingFiles(project.boxGraph, this.#soundfontManager)
         trace("soundfonts checked")
+        await WclapMissing.resolve(project.boxGraph)
+        trace("plugins checked")
         const cover = await ProjectStorage.loadCover(uuid)
         trace("cover loaded")
         this.#setProfile(uuid, project, meta, cover, true)
