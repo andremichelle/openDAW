@@ -103,6 +103,30 @@ describe("metronome + signature track", () => {
         assertClickTrain(clicks, [[0, gain], [480, 0.5 * gain], [960, 0.5 * gain], [1440, 0.5 * gain], [1920, gain]])
     }, 60000)
 
+    // issue #463: the master analysis taps (analysis_ptr) must not see the metronome, while output_ptr still carries it
+    it("the analysis mix excludes the metronome", async () => {
+        const {source} = build(false)
+        const {engine, memory} = await loadFullEngine()
+        const sync = connectSyncToEngine(engine, memory, source)
+        await sync.settle(); engine.bind(); await sync.settle()
+        engine.set_metronome_enabled(1)
+        engine.set_metronome_gain(0.0)
+        uploadImpulseClicks(engine, memory)
+        engine.play()
+        const len = engine.output_len() >>> 0
+        let outputClicks = 0
+        let analysisNonZero = 0
+        for (let quantum = 0; quantum < Math.floor(sampleOf(2000) / 128); quantum++) {
+            engine.render()
+            const output = new Float32Array(memory.buffer, engine.output_ptr(), len)
+            const analysis = new Float32Array(memory.buffer, engine.analysis_ptr(), len)
+            output.forEach(value => {if (value !== 0.0) {outputClicks++}})
+            analysis.forEach(value => {if (value !== 0.0) {analysisNonZero++}})
+        }
+        expect(outputClicks, "the audible output still clicks").toBeGreaterThan(0)
+        expect(analysisNonZero, "the analysis mix is silent").toBe(0)
+    }, 60000)
+
     it("the count-in offset uses the signature at the recording start", async () => {
         const {source} = build(true)
         const {engine, memory} = await loadFullEngine()

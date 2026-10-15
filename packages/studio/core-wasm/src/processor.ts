@@ -408,8 +408,9 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
         const right = new Float32Array(buffer, pointer + frames * Float32Array.BYTES_PER_ELEMENT, frames)
         mainOutput[0].set(left)
         if (mainOutput.length > 1) {mainOutput[1].set(right)}
-        const chLeft = mainOutput[0]
-        const chRight = mainOutput[1] ?? mainOutput[0]
+        const analysisPointer = engine.analysis_ptr()
+        const chLeft = new Float32Array(buffer, analysisPointer, frames)
+        const chRight = new Float32Array(buffer, analysisPointer + frames * Float32Array.BYTES_PER_ELEMENT, frames)
         this.#peaks.process(chLeft, chRight)
         if (this.#spectrumActive || this.#waveformActive) {
             this.#analyser.process(chLeft, chRight, 0, RenderQuantum)

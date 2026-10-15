@@ -492,6 +492,9 @@ shared_static! {
     static OUTPUT: [f32; RENDER_QUANTUM * 2] = [0.0; RENDER_QUANTUM * 2];
 }
 shared_static! {
+    static ANALYSIS: [f32; RENDER_QUANTUM * 2] = [0.0; RENDER_QUANTUM * 2];
+}
+shared_static! {
     static ENGINE_STATE: [u8; ENGINE_STATE_LEN] = [0; ENGINE_STATE_LEN];
 }
 // The pull context the `host_pull_events` export reads. It is set up by the audio node (PluginInstrument)
@@ -1512,7 +1515,7 @@ impl Engine {
     }
 
     /// Render one quantum into `output` (planar L|R) and write the transport state into `state`.
-    fn render(&mut self, output: &mut [f32], state: &mut [u8]) {
+    fn render(&mut self, output: &mut [f32], analysis: &mut [f32], state: &mut [u8]) {
         for sample in output.iter_mut() {
             *sample = 0.0
         }
@@ -1645,12 +1648,6 @@ impl Engine {
         // messages and emit the 24-ppq Clock ticks over the transporting blocks, gated by the registered
         // MIDIOutputBoxes. Off-graph like the metronome.
         midi_output::process_transport_clock(midi_out, blocks.as_slice(), sample_rate);
-        // The metronome into the main mix. Identical to when it wrote into `output` directly (both mixes are
-        // additive into a cleared buffer), and it stays unconditional: a stems render never reads `output`
-        // (the worker takes the stem staging and returns early), so there is nothing to gate it on.
-        for index in 0..RENDER_QUANTUM * 2 {
-            output[index] += metronome_staging[index];
-        }
         audio_unit::advance_shared_clips(audio_units, clip_sequencer, blocks.as_slice());
         // drive the processor graph over the quantum's blocks (advancing or static), then mix the output bus in
         context.process(&ProcessInfo {blocks: blocks.as_slice()});
@@ -1660,6 +1657,11 @@ impl Engine {
                 output[index] += buffer.left[index];
                 output[RENDER_QUANTUM + index] += buffer.right[index];
             }
+        }
+        // the master analysis taps read the mix without the metronome (summing order is bit-identical: 0 + a + b)
+        analysis.copy_from_slice(output);
+        for index in 0..RENDER_QUANTUM * 2 {
+            output[index] += metronome_staging[index];
         }
         write_engine_state(transport, state, *is_recording, *is_counting_in, recording_start, denominator);
     }
@@ -2542,6 +2544,12 @@ pub extern "C" fn output_ptr() -> *const f32 {
     unsafe { OUTPUT.get().as_ptr() }
 }
 
+/// The master mix WITHOUT the metronome (same layout as `output_ptr`), for the analysis taps.
+#[no_mangle]
+pub extern "C" fn analysis_ptr() -> *const f32 {
+    unsafe { ANALYSIS.get().as_ptr() }
+}
+
 #[no_mangle]
 pub extern "C" fn output_len() -> usize {
     RENDER_QUANTUM * 2
@@ -2612,7 +2620,7 @@ pub extern "C" fn init(sample_rate: f32) {
 pub extern "C" fn render() {
     unsafe {
         if let Some(engine) = ENGINE.get().as_mut() {
-            engine.render(OUTPUT.get(), ENGINE_STATE.get());
+            engine.render(OUTPUT.get(), ANALYSIS.get(), ENGINE_STATE.get());
             engine.copy_monitor_outputs();
             engine.copy_stem_outputs();
         }

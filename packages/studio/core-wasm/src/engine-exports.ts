@@ -25,6 +25,7 @@ export type EngineExports = {
     bind: () => number
     render: () => void
     output_ptr: () => number
+    analysis_ptr: () => number // the master mix without the metronome
     output_len: () => number
     heap_used: () => number
     heap_claimed: () => number

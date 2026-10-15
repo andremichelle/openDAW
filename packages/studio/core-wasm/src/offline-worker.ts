@@ -103,8 +103,11 @@ const renderQuantum = (engineState: EngineState, out: Float32Array[]): void => {
     // Feed the master analyser + peak meter and flush the live stream every quantum, exactly like the realtime
     // processor, so an offline live-stream consumer (the video export's shadertoy) receives PEAKS (`iPeaks`,
     // zero without this and shaders scaling by it render black), SPECTRUM and WAVEFORM.
-    analyser.process(out[0], out[1] ?? out[0], 0, RenderQuantum)
-    peaks.process(out[0], out[1] ?? out[0], 0, RenderQuantum)
+    const analysisPointer = engine.analysis_ptr()
+    const analysisLeft = new Float32Array(buffer, analysisPointer, RenderQuantum)
+    const analysisRight = new Float32Array(buffer, analysisPointer + RenderQuantum * Float32Array.BYTES_PER_ELEMENT, RenderQuantum)
+    analyser.process(analysisLeft, analysisRight, 0, RenderQuantum)
+    peaks.process(analysisLeft, analysisRight, 0, RenderQuantum)
     broadcaster.flush()
 }
 
