@@ -39,11 +39,11 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
             const render = () => {
                 const states = awareness.awareness.getStates()
                 const localId = awareness.clientID
-                const users: Array<{ name: string, color: string, self: boolean }> = []
+                const users: Array<{ name: string, color: string, follow: boolean, self: boolean }> = []
                 states.forEach((state, clientId) => {
                     const user: Optional<AwarenessUserState> = state.user
                     if (isDefined(user)) {
-                        users.push({name: user.name, color: user.color, self: clientId === localId})
+                        users.push({name: user.name, color: user.color, follow: user.follow ?? false, self: clientId === localId})
                     }
                 })
                 users.sort((first, second) => first.self === second.self ? 0 : first.self ? -1 : 1)
@@ -53,6 +53,8 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                     <div className={user.self ? "user self" : "user"}>
                         <span className="dot" style={{backgroundColor: user.color}}/>
                         <span>{user.name}</span>
+                        {user.follow && <Icon symbol={IconSymbol.Headphone} className="follow-icon"
+                                               onInit={element => element.setAttribute("title", "Following room playback")}/>}
                     </div>
                 )), trafficWatch)
             }
