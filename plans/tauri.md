@@ -116,6 +116,24 @@ My current lean is **B**, because workers reach the `/fs` endpoints over plain H
 5. A failed or interrupted download leaves `.partial` behind and it is retried or wiped on the next launch. The active build is never touched before the switch.
 6. If the new build fails to boot (no ready signal within N seconds), roll back to the previous build and mark the failed uuid as bad.
 
+### Shell side, progress (2026-10-16, `src/update.rs`, uncommitted)
+- Done: steps 1 to 6 above.
+  - Builds live in `<app data>/web/{uuid}/` (macOS `~/Library/Application Support/studio.opendaw/web`). Next to them are `current`, `previous` (written atomically), `pending` and `bad`.
+  - The download goes to `{uuid}.partial/`. Each file is verified by size and sha256. A partial file left by an earlier attempt that verifies is kept, and a file whose sha256 exists in the current build is copied locally. On success the folder is renamed, `current` and `previous` are switched and every other build is deleted.
+  - Boot signal: the studio's first `/__shell/guard` call clears `pending`. If `pending` is still set at the next launch, or 90 s after a switch in the same session, the build goes on `bad` and `previous` becomes current again. A bad uuid is never downloaded again.
+  - The dummy splash (`/__splash`) shows progress, "Start current version" while downloading over an installed build, and Retry when offline on first launch or after an error. The main window opens on the splash and moves to `/` once a build is chosen. Until then the studio paths answer 503.
+  - Development: `OPENDAW_DIST`, or a debug build without `OPENDAW_UPDATE`, serves the local `dist-desktop` and skips all of this, so `npm run desktop` is unchanged.
+  - Tested locally against a fake origin (`OPENDAW_UPDATE_ORIGIN=http://127.0.0.1:8099 OPENDAW_UPDATE=1`): first install (221 files, 82 MB), update with one changed file (only that file fetched), rollback after a failed boot, offline first launch.
+  - Open: a real splash design, the periodic recheck and "Update available, restart?" while running, pruning old releases on the server.
+
+### Optional component: Neural Demux (2026-10-16, planned)
+- The user decides at installation whether Neural Demux is installed: the ONNX runtime (27 MB) plus the models (stems 250 MB, tempo 304 MB). The first-launch splash shows the choice with the size, and Preferences can change it later. We pick no default for them.
+- The desktop manifest marks those files as `component: "neural"`. The core download skips them unless the component is chosen. A chosen component is kept up to date with every studio update.
+- Not installed and used: online, the shell downloads it on demand with progress. Offline, a dialog says Neural Demux needs an internet connection to download its components.
+- The models are cached in OPFS by the web side today (`inference/models/`), which the shell cannot write. A shell-installed model must be served by the shell (e.g. `/__components/models/...`) and the studio's model loader must look there first.
+- Size today: the ONNX runtime wasm ships twice (main-thread bundle and inference worker, also in the web `dist`), 54 of the 78.5 MB. Fix the duplicate first. Downloading the existing `.br` files would roughly halve the JS.
+- The browser is unchanged.
+
 ### Web side (`VITE_TARGET === "tauri"`)
 - The 5 s `build-info.json` poll, the cache guard and the extensions check are skipped. The shell owns updates.
 - The shell exposes a small IPC surface with `shellVersion`, `shellApi`, `checkForUpdates()`, and `restart()`. The studio uses it for an "Update available, restart?" message during long sessions, so the shell can recheck periodically while the studio is running.

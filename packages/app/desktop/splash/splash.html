@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>openDAW</title>
+<style>
+    @font-face { font-family: Rubik; font-weight: 300; src: url("/__splash/rubik-300.woff2") format("woff2"); }
+    @font-face { font-family: Rubik; font-weight: 400; src: url("/__splash/rubik-400.woff2") format("woff2"); }
+    :root {
+        --background: hsl(200, 9%, 9%);
+        --surface: hsl(200, 9%, 14%);
+        --track: hsl(200, 9%, 18%);
+        --text: hsl(200, 6%, 86%);
+        --dim: hsl(200, 6%, 52%);
+        --accent: hsl(197, 90%, 62%);
+    }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    body {
+        background: var(--background); color: var(--dim);
+        font: 400 12px Rubik, system-ui, sans-serif;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        user-select: none; -webkit-user-select: none; cursor: default;
+    }
+    main { display: flex; flex-direction: column; align-items: center; gap: 28px; animation: appear 0.6s ease-out both; }
+    .brand { display: flex; align-items: center; gap: 18px; }
+    .brand svg { width: 52px; height: 52px; }
+    .brand h1 { margin: 0; color: var(--text); font-weight: 300; font-size: 44px; letter-spacing: 0.02em; }
+    .progress { width: 280px; display: flex; flex-direction: column; gap: 10px; }
+    .bar { position: relative; height: 2px; background: var(--track); border-radius: 1px; overflow: hidden; }
+    .bar > .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); transition: width 0.25s ease-out; }
+    .bar.indeterminate > .fill { width: 30%; animation: sweep 1.2s ease-in-out infinite; }
+    .status { display: flex; justify-content: space-between; min-height: 15px; }
+    .status .amount { font-variant-numeric: tabular-nums; }
+    .actions { display: flex; gap: 8px; min-height: 26px; }
+    button {
+        background: var(--surface); color: var(--text); border: none; border-radius: 3px;
+        padding: 6px 14px; font: inherit; cursor: pointer;
+    }
+    button:hover { background: var(--track); }
+    footer { position: absolute; bottom: 18px; font-size: 11px; color: hsl(200, 6%, 34%); }
+    .error { color: hsl(10, 70%, 64%); }
+    .hidden { display: none; }
+    @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+    @keyframes appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<main>
+    <div class="brand">{LOGO}<h1>openDAW</h1></div>
+    <div class="progress">
+        <div class="bar indeterminate" id="bar"><div class="fill" id="fill"></div></div>
+        <div class="status"><span id="message">Starting</span><span class="amount" id="amount"></span></div>
+    </div>
+    <div class="actions">
+        <button id="skip" class="hidden">Start current version</button>
+        <button id="retry" class="hidden">Retry</button>
+    </div>
+</main>
+<footer>Desktop {VERSION}</footer>
+<script>
+    const element = id => document.getElementById(id)
+    const bar = element("bar"), fill = element("fill"), message = element("message"), amount = element("amount")
+    const skip = element("skip"), retry = element("retry")
+    skip.onclick = () => fetch("/__update/skip")
+    retry.onclick = () => fetch("/__update/retry")
+    const megabytes = bytes => (bytes / 1048576).toFixed(1)
+    const poll = async () => {
+        const status = await fetch("/__update/status").then(response => response.json()).catch(() => null)
+        if (status !== null) {
+            if (status.phase === "ready") {
+                message.textContent = "Starting"
+                return location.replace("/")
+            }
+            const downloading = status.phase === "downloading" && status.total > 0
+            const failed = status.phase === "offline" || status.phase === "error"
+            message.textContent = status.message
+            message.classList.toggle("error", failed)
+            amount.textContent = downloading ? `${megabytes(status.done)} / ${megabytes(status.total)} MB` : ""
+            bar.classList.toggle("indeterminate", status.phase === "checking")
+            bar.classList.toggle("hidden", failed)
+            fill.style.width = downloading ? `${100 * status.done / status.total}%` : ""
+            skip.classList.toggle("hidden", !(status.phase === "downloading" && status.installed))
+            retry.classList.toggle("hidden", !failed)
+        }
+        setTimeout(poll, 150)
+    }
+    poll()
+</script>
+</body>
+</html>

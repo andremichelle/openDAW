@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 
 use crate::{mime, HEADERS};
 
@@ -78,13 +78,13 @@ fn urlencoding_decode(value: &str) -> String {
 }
 
 // The plugin-only origin: the studio's wclap-frame.html plus the uploaded bundles, nothing else of the studio
-pub fn run_plugin_server(root: Arc<PathBuf>) {
+pub fn run_plugin_server() {
     let server = tiny_http::Server::http(("127.0.0.1", PLUGIN_PORT)).expect("plugin port taken");
     for request in server.incoming_requests() {
-        let root = root.clone();
         std::thread::spawn(move || {
             let Some(request) = handle(request) else { return };
-            if request.url().split('?').next() == Some("/wclap-frame.html") {
+            let root = crate::root();
+            if let (Some(root), Some("/wclap-frame.html")) = (root, request.url().split('?').next()) {
                 let path = root.join("wclap-frame.html");
                 let mut response = tiny_http::Response::from_data(std::fs::read(&path).unwrap_or_default());
                 response.add_header(tiny_http::Header::from_bytes("Content-Type", mime(&path)).unwrap());

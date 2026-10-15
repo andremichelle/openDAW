@@ -1,10 +1,11 @@
 mod files;
 mod menu;
+mod update;
 mod wclap;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use tauri::utils::config::{BackgroundThrottlingPolicy, WebviewUrl};
 use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewWindowBuilder};
@@ -138,6 +139,22 @@ fn popout_script(label: &str) -> String {
     }})()"#)
 }
 
+static ROOT: RwLock<Option<Arc<PathBuf>>> = RwLock::new(None);
+
+pub fn root() -> Option<Arc<PathBuf>> {
+    ROOT.read().unwrap().clone()
+}
+
+pub fn set_root(root: PathBuf) {
+    println!("[openDAW] serving {} (shell api {SHELL_API})", root.display());
+    match required_shell_api(&root) {
+        Some(required) if required > SHELL_API => eprintln!("[openDAW] build needs shell api {required}, this shell has {SHELL_API}"),
+        Some(_) => {}
+        None => eprintln!("[openDAW] build-info.json has no shellApi"),
+    }
+    *ROOT.write().unwrap() = Some(Arc::new(root));
+}
+
 fn resolve(root: &Path, url_path: &str) -> (PathBuf, u16) {
     let clean = url_path.split(['?', '#']).next().unwrap_or("/").trim_start_matches('/');
     let clean = if clean.is_empty() { "index.html" } else { clean };
@@ -172,8 +189,9 @@ fn popout(url: &str) -> Option<tauri::WebviewWindow> {
     APP.get().and_then(|app| app.get_webview_window(&query_value(url, "label")?))
 }
 
-fn serve(root: &Path, request: tiny_http::Request) {
+fn serve(request: tiny_http::Request) {
     let Some(request) = files::handle(request) else { return };
+    let Some(request) = update::handle(request) else { return };
     let url = request.url().to_string();
     if url.starts_with("/__drag") {
         if let Some(window) = popout(&url) {
@@ -195,20 +213,21 @@ fn serve(root: &Path, request: tiny_http::Request) {
             let _ = window.destroy();
         }
         let _ = request.respond(tiny_http::Response::empty(204));
-    } else {
-        let (path, status) = resolve(root, &url);
+    } else if let Some(root) = root() {
+        let (path, status) = resolve(&root, &url);
         if status != 200 {
             println!("[serve] {status} {url}");
         }
         respond(request, std::fs::read(&path).unwrap_or_default(), status, mime(&path));
+    } else {
+        let _ = request.respond(tiny_http::Response::empty(503));
     }
 }
 
-fn run_server(root: Arc<PathBuf>) {
+fn run_server() {
     let server = tiny_http::Server::http(("127.0.0.1", PORT)).expect("port taken");
     for request in server.incoming_requests() {
-        let root = root.clone();
-        std::thread::spawn(move || serve(&root, request));
+        std::thread::spawn(move || serve(request));
     }
 }
 
@@ -218,18 +237,15 @@ fn required_shell_api(root: &Path) -> Option<u64> {
 }
 
 fn main() {
-    let root = Arc::new(PathBuf::from(std::env::var("OPENDAW_DIST").unwrap_or_else(|_| DEFAULT_DIST.into())));
-    println!("[openDAW] serving {} (shell api {SHELL_API}, updates from {UPDATE_ORIGIN})", root.display());
-    match required_shell_api(&root) {
-        Some(required) if required > SHELL_API => eprintln!("[openDAW] build needs shell api {required}, this shell has {SHELL_API}"),
-        Some(_) => {}
-        None => eprintln!("[openDAW] build-info.json has no shellApi"),
+    // OPENDAW_DIST, or a debug build without OPENDAW_UPDATE, serves a local build and skips the update flow
+    let local = std::env::var("OPENDAW_DIST").ok().map(PathBuf::from)
+        .or_else(|| (cfg!(debug_assertions) && std::env::var("OPENDAW_UPDATE").is_err()).then(|| PathBuf::from(DEFAULT_DIST)));
+    let updating = local.is_none();
+    if let Some(local) = local {
+        set_root(local);
     }
-    {
-        let (studio_root, plugin_root) = (root.clone(), root.clone());
-        std::thread::spawn(move || run_server(studio_root));
-        std::thread::spawn(move || wclap::run_plugin_server(plugin_root));
-    }
+    std::thread::spawn(run_server);
+    std::thread::spawn(wclap::run_plugin_server);
     let shell_info = format!("window.__OPENDAW_SHELL__ = {{token: \"{}\", api: {SHELL_API}}}", files::token());
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -238,10 +254,14 @@ fn main() {
             let handle = app.handle().clone();
             let _ = APP.set(handle.clone());
             let counter = Arc::new(AtomicUsize::new(0));
-            let url = format!("http://127.0.0.1:{PORT}/");
+            if updating {
+                update::start(app.path().app_data_dir()?);
+            }
+            let url = format!("http://127.0.0.1:{PORT}/{}", if updating { "__splash" } else { "" });
             let main = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
                 .title("openDAW")
                 .inner_size(1400.0, 900.0)
+                .background_color(tauri::window::Color(21, 23, 25, 255))
                 .disable_drag_drop_handler()
                 .background_throttling(BackgroundThrottlingPolicy::Disabled)
                 .devtools(true)

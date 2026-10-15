@@ -199,6 +199,7 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
         }
         "guard" => {
             crate::CLOSE_GUARDED.store(true, Ordering::SeqCst);
+            crate::update::booted();
             empty(request, 204)
         }
         "quit" => {
