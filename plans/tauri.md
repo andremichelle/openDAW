@@ -312,7 +312,9 @@ In-window DOM windows are not an option, so every popout must be a native window
 - **Studio build for desktop** (`dist-desktop`): versioned by its build uuid in `tauri/build-info.json`. It changes with every studio change, ships with the regular studio deploy (DEV only for now), and the installed shell fetches and switches to it at launch (Phase 3). Users never download it.
 - **Shell** (the Tauri app): versioned by `version` in `tauri.conf.json` and the updater's `latest.json`. It changes rarely, only with native code. Its own workflow `desktop.yml` runs on a tag `desktop-v*` (macOS, Windows, Linux), never on a studio deploy. It updates through the Tauri updater, independently of the studio.
 - `shellApi` links them: a studio build needing a newer shell waits until the shell has updated.
-- **Download:** the tag workflow publishes a GitHub Release. Later a download page on opendaw.studio links to the latest release.
+- **Download:** the tag workflow publishes a GitHub Release. A `/download` subpage on opendaw.studio offers macOS, Windows and Linux, linking each to the latest release asset (detected platform first).
+  - The page explains the size: the installer is only the shell, small because it uses the system webview (WebKit on macOS and Linux, WebView2 on Windows) instead of bundling a browser. On first launch the shell downloads the studio itself (about 82 MB today, the same files as the web app) and keeps it for offline use. Later updates fetch only changed files. The native engine phase adds embedded V8 (about 30 MB) to the installer.
+  - Exact numbers are measured from the release artifacts and the manifest when the page is written.
 - **Update origin:** `UPDATE_ORIGIN` in `main.rs` (done) is the server the shell checks, `<origin>/tauri/build-info.json`. It defaults to `https://dev.opendaw.studio`. The release build sets `OPENDAW_UPDATE_ORIGIN=https://opendaw.studio` at compile time, no code edit. The updater's `latest.json` follows the same origin.
 - **Public release:** PROD then needs the same `/tauri/` deploy as DEV (today `deployDesktop` refuses the main environment).
 
