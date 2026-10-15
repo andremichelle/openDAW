@@ -273,6 +273,12 @@ export class StudioService implements ProjectEnv {
     }
 
     async exportDawproject() {
+        const approved = await Dialogs.approve({
+            headline: "Export DAWproject",
+            message: "DAWproject is an experimental exchange format by Bitwig.\nDevices and their settings may not survive the conversion, so the exported file is not a reliable copy of your project. Do not use it as a backup. To back up your work or send it to another user, use 'Save Bundle File to Disk...' instead.",
+            approveText: "Export"
+        })
+        if (!approved) {return}
         return this.#projectProfileService.getValue().ifSome(profile => DawProjectService.exportDawproject(profile))
     }
 
