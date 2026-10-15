@@ -302,6 +302,36 @@ describe("OpfsWorker", () => {
         })
     })
 
+    describe("lock wait warnings", () => {
+        it("names the holder and the step it hangs at", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            // a sync access handle that never opens, holding the path lock forever
+            const hangingRoot = {getFileHandle: async () => ({createSyncAccessHandle: () => new Promise(() => {})})}
+            vi.stubGlobal("navigator", {storage: {getDirectory: async () => hangingRoot}})
+            void protocol.read("stuck.json")
+            void protocol.read("stuck.json")
+            await vi.advanceTimersByTimeAsync(1900)
+            expect(warn).not.toHaveBeenCalled()
+            await vi.advanceTimersByTimeAsync(200)
+            expect(warn).toHaveBeenCalledTimes(1)
+            expect(warn.mock.calls[0][0]).toMatch(
+                /^\[OPFS] read 'stuck\.json' waits \d+\.\ds for read held for \d+\.\ds at 'create sync access handle'$/)
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
+        it("stays silent when the holder finishes in time", async () => {
+            vi.useFakeTimers()
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+            await protocol.write("quick.bin", new Uint8Array([1]))
+            await Promise.all([protocol.read("quick.bin"), protocol.read("quick.bin"), protocol.write("quick.bin", new Uint8Array([2]))])
+            await vi.advanceTimersByTimeAsync(5000)
+            expect(warn).not.toHaveBeenCalled()
+            warn.mockRestore()
+            vi.useRealTimers()
+        })
+    })
+
     describe("path parsing", () => {
         it("should handle leading and trailing slashes", async () => {
             await protocol.write("/slashed/file.bin/", new Uint8Array([1]))

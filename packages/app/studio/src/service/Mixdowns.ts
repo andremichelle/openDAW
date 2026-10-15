@@ -1,20 +1,31 @@
-import {assert, DefaultObservableValue, Errors, Option, RuntimeNotifier} from "@opendaw/lib-std"
+import {assert, DefaultObservableValue, Errors, Option, RuntimeNotifier, Terminator} from "@opendaw/lib-std"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
-import {
-    ExternalLib,
-    FFmpegConverter,
-    FFmpegWorker,
-    OfflineEngineRenderer,
-    ProjectMeta,
-    ProjectProfile
-} from "@opendaw/studio-core"
+import {ExternalLib, OfflineEngineRenderer, ProjectMeta, ProjectProfile} from "@opendaw/studio-core"
 import {Files} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {ExportConfiguration} from "@opendaw/studio-adapters"
 import {Dialogs} from "@/ui/components/dialogs"
+import {AudioFormatSelector} from "@/ui/components/AudioFormatSelector"
+import {AudioFormats} from "@/audio/AudioFormats"
 
 export namespace Mixdowns {
+    const mixdownFormat = new DefaultObservableValue<AudioFormats.Format>(AudioFormats.All[0])
+
     export const exportMixdown = async ({project: source, meta}: ProjectProfile): Promise<void> => {
+        const formats = await AudioFormats.available()
+        if (!formats.includes(mixdownFormat.getValue())) {mixdownFormat.setValue(formats[0])}
+        const lifecycle = new Terminator()
+        const {status: dialogStatus, error: dialogError} = await Promises.tryCatch(Dialogs.show({
+            headline: "Export Mixdown",
+            content: AudioFormatSelector({lifecycle, formats, model: mixdownFormat}),
+            okText: "Export"
+        }))
+        lifecycle.terminate()
+        if (dialogStatus === "rejected") {
+            if (Errors.isAbort(dialogError)) {return}
+            throw dialogError
+        }
+        const format = mixdownFormat.getValue()
         const project = source.copy()
         const abortController = new AbortController()
         const progress = new DefaultObservableValue(0.0)
@@ -24,7 +35,7 @@ export namespace Mixdowns {
             cancel: () => abortController.abort()
         })
         const result = await Promises.tryCatch(OfflineEngineRenderer
-            .start(project, Option.None, progress, abortController.signal, 48_000))
+            .start(project, Option.None, progress, abortController.signal, format.sampleRate))
         dialog.terminate()
         if (result.status === "rejected") {
             if (!Errors.isAbort(result.error)) {
@@ -32,36 +43,12 @@ export namespace Mixdowns {
             }
             return
         }
-        const audioData: AudioData = result.value
-        const {resolve, reject, promise} = Promise.withResolvers<void>()
-        const {status, error} = await Promises.tryCatch(Dialogs.show({
-            headline: "Encode Mixdown",
-            content: "openDAW will download FFmpeg (30MB) once to encode your mixdown unless you choose 'Wav'.",
-            excludeOk: true,
-            buttons: [
-                {
-                    text: "Mp3", onClick: handler => {
-                        handler.close()
-                        saveMp3File(audioData, meta).then(resolve, reject)
-                    }, primary: false
-                }, {
-                    text: "Flac", onClick: handler => {
-                        handler.close()
-                        saveFlacFile(audioData, meta).then(resolve, reject)
-                    }, primary: false
-                }, {
-                    text: "Wav", onClick: handler => {
-                        handler.close()
-                        saveWavFile(audioData, meta).then(resolve, reject)
-                    }, primary: true
-                }
-            ]
-        }))
-        if (status === "rejected" && !Errors.isAbort(error)) {
-            reject(error)
-            return
-        }
-        return promise
+        const buffer = await format.encode(result.value)
+        return Files.saveWithApproval({
+            buffer,
+            headline: `Save ${format.label}`,
+            suggestedName: `${meta.name}.${format.extension}`
+        })
     }
 
     export const exportStems = async ({project: source, meta}: ProjectProfile,
@@ -90,55 +77,6 @@ export namespace Mixdowns {
             RuntimeNotifier.notify({message: "Export failed.", icon: "Warning"})
             return
         }
-    }
-
-    const saveWavFile = async (audioData: AudioData, meta: ProjectMeta) => {
-        return Files.saveWithApproval({
-            buffer: WavFile.encodeFloats(audioData),
-            headline: "Save Wav",
-            suggestedName: `${meta.name}.wav`
-        })
-    }
-
-    const saveMp3File = async (audioData: AudioData, meta: ProjectMeta) => {
-        const ffmpeg = await loadFFmepg()
-        return encodeAndSaveFile({
-            converter: ffmpeg.mp3Converter(),
-            fileExtension: "mp3",
-            fileType: "Mp3",
-            fileName: meta.name,
-            audioData
-        })
-    }
-
-    const saveFlacFile = async (audioData: AudioData, meta: ProjectMeta) => {
-        const ffmpeg = await loadFFmepg()
-        return encodeAndSaveFile({
-            converter: ffmpeg.flacConverter(),
-            fileExtension: "flac",
-            fileType: "Flac",
-            fileName: meta.name,
-            audioData
-        })
-    }
-
-    const encodeAndSaveFile = async ({audioData, converter, fileType, fileExtension, fileName}: {
-        audioData: AudioData,
-        converter: FFmpegConverter<unknown>,
-        fileType: string,
-        fileExtension: string,
-        fileName: string
-    }) => {
-        const progress = new DefaultObservableValue(0.0)
-        const progressDialog = RuntimeNotifier.progress({headline: `Encoding ${fileType}...`, progress})
-        const flac = await converter.convert(new Blob([WavFile.encodeFloats(audioData)]),
-            value => progress.setValue(value))
-        progressDialog.terminate()
-        return Files.saveWithApproval({
-            buffer: flac,
-            headline: `Save ${fileType}`,
-            suggestedName: `${fileName}.${fileExtension}`
-        })
     }
 
     const saveZipFile = async (audioData: AudioData, meta: ProjectMeta, trackNames: ReadonlyArray<string>) => {
@@ -181,20 +119,5 @@ export namespace Mixdowns {
             message: `Size: ${arrayBuffer.byteLength >> 20}M`,
             suggestedName: `${meta.name}.zip`
         })
-    }
-
-    const loadFFmepg = async (): Promise<FFmpegWorker> => {
-        const {FFmpegWorker} = await Promises.guardedRetry(() =>
-            import("@opendaw/studio-core/FFmpegWorker"), (_, count) => count < 60)
-        const progress = new DefaultObservableValue(0.0)
-        const progressDialog = RuntimeNotifier.progress({headline: "Loading FFmpeg...", progress})
-        const {status, value, error} = await Promises.tryCatch(FFmpegWorker.load(value => progress.setValue(value)))
-        progressDialog.terminate()
-        if (status === "rejected") {
-            console.warn(error)
-            RuntimeNotifier.notify({message: "Could not load FFmpeg.", icon: "Warning"})
-            throw error
-        }
-        return value
     }
 }
