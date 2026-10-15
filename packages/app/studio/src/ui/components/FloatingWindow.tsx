@@ -30,6 +30,8 @@ type Construct = {
     minHeight?: int
     adjust?: Func<Size, Promise<Size>>
     popoutable?: boolean
+    // opens straight into its own utility window (frameless, in front of the studio), closes with it, never lives in the studio page
+    popoutOnly?: boolean
     onClose?: Exec
 }
 
@@ -66,7 +68,7 @@ const restack = () => stack.forEach((entry, index) => {
 
 export const FloatingWindow = ({
                                    title, icon, width, height, position, scale, resizable, zoomLevels, minWidth, minHeight, adjust,
-                                   popoutable, onClose
+                                   popoutable, popoutOnly, onClose
                                }: Construct, children: JsxValue): FloatingWindowHandle => {
     const lifecycle = new Terminator()
     const surface = Surface.get()
@@ -104,7 +106,7 @@ export const FloatingWindow = ({
                     {zoomLabel}
                 </MenuButton>
             )}
-            {popoutable !== false && (
+            {popoutable !== false && popoutOnly !== true && (
                 <Button lifecycle={lifecycle} onClick={() => togglePopout()}
                         appearance={{color: Colors.shadow, tooltip: () => popout.nonEmpty() ? "Back into the studio" : "Popout into new browser window"}}>
                     <Icon symbol={IconSymbol.Popout}/>
@@ -121,6 +123,7 @@ export const FloatingWindow = ({
             </Button>
         </header>
     )
+    if (popoutOnly === true) {header.setAttribute("data-window-drag", "")}
     const body: HTMLElement = <div className="body">{children}<div className="shield"/></div>
     const grips: ReadonlyArray<[HTMLElement, ResizeAxis]> = resizable === false ? [] : [
         [<div className="grip right"/>, {x: true, y: false}],
@@ -257,12 +260,13 @@ export const FloatingWindow = ({
         if (opening.active) {return}
         opening.active = true
         const {width, height} = size.getValue()
-        const {left, top} = element.getBoundingClientRect()
+        const {left, top} = element.isConnected ? element.getBoundingClientRect() : {left: origin.x, top: origin.y}
         const position: Point = {x: window.screenX + left, y: window.screenY + window.outerHeight - window.innerHeight + top}
-        surface.new(width, height + header.offsetHeight, UUID.toString(UUID.generate()), title, position).then(result => result.match({
+        surface.new(width, height + header.offsetHeight, UUID.toString(UUID.generate()), title, position, popoutOnly === true).then(result => result.match({
             none: () => {
                 opening.active = false
                 if (!adjusting.closed) {Dialogs.info({message: "Could not open window. Check popup blocker?"}).finally()}
+                if (popoutOnly === true) {close()}
             },
             some: popped => {
                 opening.active = false
@@ -278,7 +282,17 @@ export const FloatingWindow = ({
                 element.style.removeProperty("top")
                 popped.ground.appendChild(element)
                 owner.setValue(popped.owner)
-                popped.own({terminate: () => {if (popout.contains(popped)) {dockIn()}}})
+                popped.own({
+                    terminate: () => {
+                        if (!popout.contains(popped)) {return}
+                        if (popoutOnly === true) {
+                            popout.clear()
+                            close()
+                        } else {
+                            dockIn()
+                        }
+                    }
+                })
                 // the popout window may come out smaller than asked (screen size): the body scrolls in what it got
                 popped.own(Events.subscribe(popped.owner, "resize", () => {
                     if (resizable !== false) {
@@ -287,6 +301,8 @@ export const FloatingWindow = ({
                     layout()
                 }))
                 layout()
+                // a window opened before the header was ever laid out lacks its height
+                if (popoutOnly === true) {resizeWindow(width, height)}
             }
         }))
     }
@@ -336,9 +352,13 @@ export const FloatingWindow = ({
     lifecycle.own(Events.subscribe(window, "resize", () => move(origin.x, origin.y)))
     body.style.width = `${bodyWidth}px`
     body.style.height = `${bodyHeight}px`
-    surface.floating.appendChild(element)
-    toFront()
-    move(origin.x, origin.y)
+    if (popoutOnly === true) {
+        popOut()
+    } else {
+        surface.floating.appendChild(element)
+        toFront()
+        move(origin.x, origin.y)
+    }
     if (isDefined(adjust)) {request(size.getValue())}
     return {size, owner, togglePopout, resetSize, requestSize, scrollBy, toFront, close}
 }

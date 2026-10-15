@@ -23,7 +23,7 @@ const SAVE_DELAY_MS = 250
 const MAX_MESSAGE_BYTES = 16 << 20
 // separate plugin origin isolates third-party pages from the studio, empty = studio origin (dev only)
 const FRAME_ORIGIN: string = import.meta.env.VITE_WCLAP_ORIGIN ?? ""
-const FRAME_URL = `${FRAME_ORIGIN}${import.meta.env.BASE_URL}wclap-frame.html`
+const FRAME_URL = `${FRAME_ORIGIN}${import.meta.env.BASE_URL}wclap-frame.html${import.meta.env.VITE_WCLAP_FRAME_QUERY ?? ""}`
 
 // `file:///bundle/html/index.html?x` and `/ui/index.html` both name a bundle-root path (query kept)
 const pagePath = (uri: string): string =>
@@ -49,6 +49,10 @@ export namespace WclapWindows {
     const windows = new Map<string, Entry>()
     const opening = new Set<string>()
     const changes = new Notifier<string>()
+    const options = {popoutOnly: false}
+
+    // a host with native windows (the desktop app) shows plugin GUIs only in their own window
+    export const openAsPopout = (): void => {options.popoutOnly = true}
 
     export const isOpen = (uuid: string): boolean => windows.has(uuid)
 
@@ -214,7 +218,7 @@ export namespace WclapWindows {
         const handle = FloatingWindow({
             title, icon: IconSymbol.WebClap, width, height,
             scale: StudioPreferences.settings.webclap["default-zoom"] / 100, resizable: false,
-            zoomLevels: gui.resizable ? WclapZoomOptions.map(value => value / 100) : undefined,
+            zoomLevels: gui.resizable ? WclapZoomOptions.map(value => value / 100) : undefined, popoutOnly: options.popoutOnly,
             adjust: ({width, height}) => engine.wclapResizeGui(uuid, width, height), onClose: () => session.terminate()
         }, iframe)
         session.own(WclapGuis.subscribeResize(uuidString, ({width, height}) => handle.requestSize(width, height)))

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+    <defs>
+        <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#2a3033"/>
+            <stop offset="1" stop-color="#121516"/>
+        </linearGradient>
+        <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+            <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.04"/>
+            <stop offset="1" stop-color="#ffffff" stop-opacity="0.10"/>
+        </linearGradient>
+        <linearGradient id="glyph" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#ececec"/>
+            <stop offset="1" stop-color="#c4c4c4"/>
+        </linearGradient>
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.45"/>
+        </filter>
+    </defs>
+    <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#tile)" filter="url(#shadow)"/>
+    <rect x="102" y="102" width="820" height="820" rx="184" fill="none" stroke="url(#rim)" stroke-width="4"/>
+    <g transform="translate(248 248) scale(22)" fill="url(#glyph)">
+        <path d="M8,3L8,21C8,22.104 7.104,23 6,23L3,23C1.896,23 1,22.104 1,21L1,3C1,1.896 1.896,1 3,1L6,1C7.104,1 8,1.896 8,3Z"/>
+        <path fill-rule="evenodd" d="M23,3L23,11C23,12.104 22.104,13 21,13L12,13C10.896,13 10,12.104 10,11L10,3C10,1.896 10.896,1 12,1L21,1C22.104,1 23,1.896 23,3ZM22,3C22,2.448 21.552,2 21,2L12,2C11.448,2 11,2.448 11,3L11,11C11,11.552 11.448,12 12,12L21,12C21.552,12 22,11.552 22,11L22,3Z"/>
+        <path d="M23,17L23,21C23,22.104 22.104,23 21,23L12,23C10.896,23 10,22.104 10,21L10,17C10,15.896 10.896,15 12,15L21,15C22.104,15 23,15.896 23,17Z"/>
+    </g>
+</svg>

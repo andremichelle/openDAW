@@ -42,6 +42,7 @@ import {ChainedSampleProvider, ChainedSoundfontProvider, ChainedWclapProvider} f
 import {IconSymbol, initializeColors, setColorScheme} from "@opendaw/studio-enums"
 import {StudioPreferences, WclapStorage} from "@opendaw/studio-core"
 import {StudioShortcutManager} from "@/service/StudioShortcutManager"
+import {NativeMenu} from "@/service/NativeMenu"
 import {Tour} from "@/ui/tour/Tour"
 import {Menu} from "@/ui/components/Menu"
 import {TouchContextMenu} from "@/ui/TouchContextMenu"
@@ -139,6 +140,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         sampleManager, soundfontManager, chainedSampleProvider, chainedSoundfontProvider, chainedWclapProvider,
         cloudAuthManager, buildInfo)
     StudioShortcutManager.install(service)
+    NativeMenu.attach(service)
     if (isDefined(context.playbackStats)) {
         new BufferUnderrunDetector(context.playbackStats, service.engine)
     }

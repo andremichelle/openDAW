@@ -8,6 +8,7 @@ import {RadioGroup} from "@/ui/components/RadioGroup.tsx"
 import {createElement, Group} from "@opendaw/lib-jsx"
 import {StudioService} from "@/service/StudioService"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
+import {NativeMenu} from "@/service/NativeMenu"
 import {Workspace} from "@/ui/workspace/Workspace.ts"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {Html} from "@opendaw/lib-dom"
@@ -70,7 +71,10 @@ export const Header = ({lifecycle, service}: Construct) => {
     return (
         <header className={className}>
             <MenuButton root={service.menu}
-                        onInit={element => TourAnchors.register(lifecycle, element, "menu")}
+                        onInit={element => {
+                            TourAnchors.register(lifecycle, element, "menu")
+                            element.classList.toggle("hidden", NativeMenu.isActive())
+                        }}
                         appearance={{color: Colors.gray, activeColor: Colors.bright, tinyTriangle: true}}>
                 <h5>openDAW</h5>
             </MenuButton>

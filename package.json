@@ -11,6 +11,8 @@
     "clean": "bash ./scripts/clean.sh",
     "build": "turbo build --output-logs=full",
     "build-wasm": "npm run build:wasm -w @opendaw/studio-core-wasm",
+    "build:desktop": "npm run build:desktop -w @opendaw/app-studio",
+    "desktop": "cargo run --manifest-path packages/app/desktop/Cargo.toml",
     "dev:studio": "turbo run dev --filter=@opendaw/app-studio",
     "dev:lab": "turbo run dev --filter=@opendaw/lab",
     "dev:manual": "turbo run dev --filter=@opendaw/manual",

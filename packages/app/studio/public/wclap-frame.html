@@ -21,6 +21,14 @@
     // the studio side of the channel arrives with wclap-frame-ready, only the embedding window receives it
     const channel = new MessageChannel()
     const state = {uuid: "", pageDirectory: "", inner: null, pointer: false}
+    // the desktop shell serves the bundle on this origin itself, a browser needs the service worker
+    const shellHosted = new URLSearchParams(location.search).get("host") === "shell"
+    const uploadToShell = async (uuid, list) => {
+        const encode = encodeURIComponent
+        await Promise.all(list.map(({path, bytes}) => fetch(`./__wclap/file/${uuid}/${path.split("/").map(encode).join("/")}`,
+            {method: "POST", body: bytes})))
+        window.addEventListener("pagehide", () => fetch(`./__wclap/release/${uuid}`, {method: "POST", keepalive: true}))
+    }
 
     const post = message => channel.port1.postMessage(message)
     const fail = message => {
@@ -130,7 +138,7 @@
         state.pageDirectory = path.includes("/") ? path.substring(0, path.lastIndexOf("/") + 1) : ""
         files.clear()
         for (const {path, bytes} of list) {files.set(path, bytes)}
-        await registerWorker()
+        if (shellHosted) {await uploadToShell(uuid, list)} else {await registerWorker()}
         const inner = document.createElement("iframe")
         inner.addEventListener("load", () => {
             forwardInput(inner)

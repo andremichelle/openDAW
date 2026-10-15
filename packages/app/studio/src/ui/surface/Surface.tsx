@@ -189,7 +189,8 @@ export class Surface implements TerminableOwner {
         }
     }
 
-    async new(width: int, height: int, id: string, name: string = "untitled", position?: Point): Promise<Option<Surface>> {
+    async new(width: int, height: int, id: string, name: string = "untitled", position?: Point,
+              utility: boolean = false): Promise<Option<Surface>> {
         const existing = Surface.#surfaceById.get(id)
         if (isDefined(existing)) {return panic(`${id} is already open`)}
         width = Math.min(this.#owner.innerWidth, width)
@@ -201,7 +202,8 @@ export class Surface implements TerminableOwner {
             toolbar: 0, location: 0, directories: 0, status: 0,
             menubar: 0, titlebar: 0, scrollbars: 0, resizable: 1
         }
-        const owner = this.#owner.open(POPOUT_URL, id, stringifyFeatures(features))
+        // a desktop shell opens a utility window frameless and in front of the studio, browsers ignore the query
+        const owner = this.#owner.open(utility ? `${POPOUT_URL}?utility` : POPOUT_URL, id, stringifyFeatures(features))
         if (owner === null || !await whenLoaded(owner)) {return Option.None}
         owner.name = name
         owner.document.title = name

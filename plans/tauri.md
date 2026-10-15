@@ -112,7 +112,7 @@ My current lean is **B**, because workers reach the `/fs` endpoints over plain H
 ### Web side (`VITE_TARGET === "tauri"`)
 - The 5 s `build-info.json` poll, the cache guard and the extensions check are skipped. The shell owns updates.
 - The shell exposes a small IPC surface with `shellVersion`, `shellApi`, `checkForUpdates()`, and `restart()`. The studio uses it for an "Update available, restart?" message during long sessions, so the shell can recheck periodically while the studio is running.
-- Cloud features are hidden or disabled: cloud sample and soundfont browsers, the cloud preset and WCLAP catalogue, Dropbox/Drive, publish, live rooms. `OpenSampleAPI`/`OpenSoundfontAPI` lookups fail fast with "not available offline" instead of hanging. A project referencing a cloud sample that is not stored locally loads with that sample marked missing, which is the existing missing-sample path.
+- Online features stay (see Audit D). While offline, `OpenSampleAPI`/`OpenSoundfontAPI` lookups fail fast with "not available offline" instead of hanging. A project referencing a cloud sample that is not stored locally loads with that sample marked missing, which is the existing missing-sample path.
 - Error reporting to `logs.opendaw.studio` stays when online (needs your decision, see open questions).
 
 ## Platform strategies
@@ -158,7 +158,46 @@ Every feature that talks to the browser goes through a strategy interface. The b
   - The update poll needs no seam: on desktop it reads the installed build's own `build-info.json`, so it never fires.
   - Note: `ShortcutValidator` runs at module load, before a desktop entry installs strategies, so its alert stays the browser one. This is a dev-only conflict check.
   - 4 new tests.
-- **Step 1 complete.** Next: step 2 (shell in `packages/app/desktop/`).
+- **Step 1 complete.** Committed as `43bc963d6` on `tauri-desktop-app`.
+- Step 2 started: the spike moved to `packages/app/desktop/`.
+  - It contains a Cargo crate `opendaw`, `tauri.conf.json`, the icons, `src/main.rs` (loopback server, linked popouts with close handling) and `src/wclap.rs` with `wclap-frame-desktop.html`.
+  - Probes and the custom-protocol mode are dropped.
+  - It serves `../studio/dist-desktop` by default; `OPENDAW_DIST` overrides it.
+  - It deliberately has **no `package.json`** yet. The root workspace glob `packages/**/*` would make it an npm workspace, which changes the lockfile and pulls it into turbo builds and lerna.
+- Manifest done: `build:desktop` writes `dist-desktop/manifest.json` with `{uuid, date, shellApi, files: [{path, size, sha256}]}`.
+  - It excludes `*.map`, `*.br` and dotfiles (`.htaccess`, `.DS_Store`). That leaves about 220 files and 82 MB.
+  - `BuildInfo` gains an optional `shellApi`. Only the desktop build writes it, so the web `build-info.json` is unchanged.
+  - The minimum shell API is `DESKTOP_SHELL_API = 1` in `vite.config.ts`.
+- The shell has `SHELL_API = 1` in `main.rs`. At launch it reads `shellApi` from the served `build-info.json` and logs when the build needs a newer shell. It still launches that build, since there is no installed-build switch yet.
+- Root scripts: `npm run build:desktop` and `npm run desktop` (`cargo run` of the shell).
+- Desktop files strategy (browser-unverified): `src/platform/desktop/DesktopFiles.ts`, installed by `main-desktop.ts`, implements `saveFile`, `openFiles`, `canSaveStream` and `saveStream`.
+  - Transport is the loopback server, not Tauri IPC: `POST /__shell/{save,open,read,stream,write,seek,truncate,close,abort}` in `src/files.rs`. It needs no remote-URL capability, streams large bodies and also works from workers.
+  - Every call carries `X-Shell-Token`, a random token the shell injects into the main window as `window.__OPENDAW_SHELL__ = {token, api}`. Other origins cannot read it.
+  - Dialogs come from `tauri-plugin-dialog` and are parented to the main window. A cancelled save or open rejects with `AbortError`, as in the browser. A cancelled stream save returns `Option.None`.
+  - The stream accepts mediabunny's `{type: "write", data, position}` chunks, plus seek and truncate. Abort deletes the partial file.
+  - Only files the user picked can be read, each once, by id.
+- Native menu bar (browser-unverified): `DesktopStudioMenu.ts` (next to `StudioMenu.ts`) defines the layout: openDAW, File, Edit, View, Tools, Window, Help, built from `MenuItem` plus native roles.
+  - `platform/desktop/DesktopMenu.ts` turns it into a description and posts it to `/__shell/menu`. `src/menu.rs` builds the Tauri menu. Clicks come back via `window.__OPENDAW_SHELL__.menu(id)`.
+  - The bar is rebuilt after every click and on every project profile change, which keeps enabled and checked state current. Toggling the MIDI keyboard by shortcut leaves the check stale until the next rebuild.
+  - `NativeMenu` (`src/service/NativeMenu.ts`, web-safe) is the hook. `boot.ts` attaches it after the service exists, and `Header.tsx` hides the in-page menu button while it is active. In the browser it is never installed.
+  - Neural Demux moved from Import to Tools.
+  - Measured 2026-10-15 (macOS): WKWebView gives a Cmd key to the page first. Cmd+M toggles the metronome despite Minimize, Cmd+A selects regions, Cmd+C/V copy regions. A menu accelerator only fires where the page leaves the key alone.
+  - So studio items show their shortcut as a native accelerator (`DesktopStudioMenu.shortcuts`): Preferences, Open, Save, Save As, Show MIDI-Keyboard. Only Cmd/Ctrl shortcuts qualify, so plain-key shortcuts (Shift+digit screens) never take keys away from text fields. Undo and Redo carry none, so Cmd+Z stays with text fields. Custom shortcuts show after the next menu rebuild.
+  - On macOS the webview has no reload, zoom or find accelerators of its own. Turning them off is a WebView2 (Windows) task.
+- Close guard (browser-unverified): `platform/desktop/DesktopLifecycle.ts` implements `guardClose`. It registers `window.__OPENDAW_SHELL__.close` and calls `/__shell/guard`.
+  - Quit (`Cmd+Q`, now a custom menu item) and closing the main window go to `request_quit` in the shell. Once guarded, the shell asks the page, which quits through `/__shell/quit` directly or after an in-app "Quit anyway?" dialog when the project has unsaved changes. Before the page is guarded, the shell quits at once.
+  - Open: Dock "Quit" and logout go through `NSApp terminate:` and bypass the guard. A frozen page cannot answer, so only Force Quit ends the app.
+- Alerts (browser-unverified): wry implements no `runJavaScriptAlertPanel`, so `window.alert` did nothing on macOS. `DesktopLifecycle` installs `alert`, which posts the message to `/__shell/alert` for a native message dialog. The `ShortcutValidator` conflict alert runs at module load, before strategies install, and stays silent on desktop (dev-only check). `location.reload()` works as is in the webview. It becomes a shell restart with the update flow.
+- Window title (browser-unverified): `platform/desktop/DesktopTitle.ts` sets the main window title to the project name ("openDAW" without a project, "Untitled" for an empty name) via `/__shell/title`.
+  - Unsaved changes show as the macOS `documentEdited` dot (`objc2-app-kit`, already in the tree), and as a trailing `*` on Windows and Linux.
+  - Unsaved state has no notification, so it is sampled every 500 ms and sent only on change. A notification in `Editing` would avoid that but changes SDK behaviour.
+  - `NativeMenu.install` in `main-desktop.ts` now attaches both the menu and the title.
+- WCLAP windows (browser-unverified), option B: `main-desktop.ts` calls `WclapWindows.openAsPopout()`, so the plugin `FloatingWindow` is created with `popoutOnly`.
+  - `popoutOnly` (web never sets it): no in-page phase, no popout toggle, closing the popout closes the window, a failed popout closes too. `Surface.new` gains `utility`, which opens `popout.html?utility`.
+  - The shell opens `?utility` popouts without decorations and in front of the studio, as plugin windows in other DAWs: on macOS at floating level with `hidesOnDeactivate` (they vanish while another app is active), on Windows and Linux owned by the main window (that branch is not compiled yet, no Windows target installed). Every popout accepts the first click (`accept_first_mouse`), so a dial in an unfocused plugin window turns on the first click. Utility windows are never user-resizable (macOS cannot exclude single edges, and the top must stay free for dragging). Zoom still resizes them through `resizeBy`. A future resizable popout-only window would need FloatingWindow's right, bottom and corner grips shown in popout mode, routed through `resizeBy`. Its popout script now also routes `window.resizeBy` to `/__resize` and pointerdown on `[data-window-drag]` (the popout-only header) to `/__drag` (`start_dragging`).
+  - The desktop build defines `VITE_WCLAP_ORIGIN = http://127.0.0.1:47111` and `VITE_WCLAP_FRAME_QUERY = ?host=shell`. With `host=shell`, `wclap-frame.html` uploads the bundle to `/__wclap/file` instead of registering the service worker, and releases it on `pagehide`.
+  - The plugin port serves only `wclap-frame.html`, the uploads and `/wclap/{uuid}/…`. The studio port no longer handles `/__wclap`. The earlier relay (`open`, `send`, `poll`, `close`, injected bridge, `DesktopWclap.ts`, `WclapNativeWindows.ts`) is removed.
+  - Resize, context menu, double-click entry, keys, wheel and zoom go through the unchanged browser code.
 
 ### Strategies and their current call sites
 
@@ -225,7 +264,7 @@ In-window DOM windows are not an option, so every popout must be a native window
 - This is much more work than the primary strategy, and it is only worth it if a platform fails the spike.
 
 ### WCLAP plugin windows
-- **The rule:** every WCLAP plugin GUI opens in its own OS window with its own webview. It is never part of the studio DOM: no `FloatingWindow`, no `<iframe>`, no `wclap-frame.html` relay.
+- **The rule (revised 2026-10-15):** every WCLAP plugin GUI opens in its own OS window and is never part of the studio page. That window is a popout-only `FloatingWindow` (frameless, its header is the thin title bar) with the plugin in `wclap-frame.html` on the plugin-only origin.
 - **Serving and isolation**
   - The shell serves the plugin's bundle files straight from the data dir on a plugin-only origin (`wclap://<sha256>/…`, or the plugin port when serving option B is used).
   - Bundles are content-addressed, so each plugin gets its own origin and is isolated from the studio and from other plugins.
@@ -383,13 +422,15 @@ All app-written files must sit under the shell's own identifier directories: dow
 | VU meter font | Google Fonts CSS (`VUMeter.tsx:21`) | bundle |
 | Absolute `/…` fetches (`/tubular`, `/cover.png`, `/fonts`, `/images`, `/sponsors.json`) | assume the site root | fine with `base "/"`. The server needs an SPA fallback for router paths (`/stats` reload) |
 
-### D. Cloud-only features hidden in the desktop app (phase 1)
-- **Publish and live rooms:** publish music, live rooms and `/join/*`, WebRTC STUN/TURN, room telemetry, chat.
-- **Cloud backup:** Dropbox and Google Drive. OAuth redirects to `location.origin/auth-callback.html`, which cannot work on a local origin without a deep-link or loopback redirect registered with each provider. Nextcloud could stay, because the server is user-supplied.
-- **Tone3000 browser:** same OAuth problem. Local `.nam` import stays.
-- **Uploads:** sample and preset upload (`/upload`, `AccessKey`).
-- **Dashboard and stats pages:** stats, errors, sponsors, contributors, demo projects, `/open-bundle/*`.
-- **Telemetry and updates:** visitor beacon, error POSTs (keep when online, open question), and the update poll, which the shell owns.
+### D. Online features in the desktop app (later, after a working app)
+Nothing is hidden because it is the desktop app. An online feature stays and works while the network is up, and fails fast with a clear message while offline. What blocks them today is the origin `http://127.0.0.1:47110`, which the servers do not accept yet. The fixed port is part of this contract: it must never change.
+- **Catalogues, samples, soundfonts, presets, WCLAP:** `assets.opendaw.studio` and the API servers reject the loopback origin (CORS). Allow `http://127.0.0.1:47110` on the servers. `OpenDAWCloud.disable()` exists only because of this. It becomes an "openDAW servers reachable right now" check.
+- **Dropbox and Google Drive:** OAuth redirects to `location.origin/auth-callback.html` and the result returns through a `BroadcastChannel`. Register `http://127.0.0.1:47110/auth-callback.html` with both providers (both accept loopback redirects). Verify the `BroadcastChannel` reaches the main window from the linked auth window. Nextcloud needs nothing.
+- **Tone3000:** same as Dropbox/Drive with `tone3000-callback.html`.
+- **Publish, live rooms, `/join/*`, uploads (`/upload`, `AccessKey`):** most likely the same CORS change. Test each, including WebRTC STUN/TURN in WKWebView.
+- **Dashboard pages:** stats, errors, sponsors, contributors, demo projects, `/open-bundle/*`. Same CORS change, test each.
+- **Telemetry:** visitor beacon and error POSTs stay when online (open question 4).
+- **Only hidden:** the update poll, because the shell owns updates.
 
 ### E. Desktop behaviour
 1. **Native menu bar**
@@ -460,6 +501,7 @@ All app-written files must sit under the shell's own identifier directories: dow
 | `playbackStats` | underrun detector off | fine, optional |
 | Service workers | none on custom schemes | not needed: WCLAP GUIs are served by the shell in their own OS windows |
 | Background throttling | occluded windows throttle rAF and timers | `backgroundThrottling: disabled` per window |
+| Output latency (macOS, seen 2026-10-15) | audible latency far above the shown 15.4 ms, and much worse after loading a bundle. Same machine and project are fine in the browser, so it is WKWebView. Output device runs at 48 kHz, no resampling | open. Measure first: `outputLatency`, `currentTime - getOutputTimestamp().contextTime` over time, engine load. Long term: native engine |
 
 ### G. Storage details for the file storage strategy
 - `OpfsProtocol` consumers:
@@ -501,7 +543,7 @@ All app-written files must sit under the shell's own identifier directories: dow
 - The GUI runs in its own child OS window on a plugin-only origin (`127.0.0.1:<plugin port>`), served by the shell from the uploaded bundle.
 - An injected bridge replaces `window.parent.postMessage` and the incoming `message` events.
 - Traffic flowed both ways through the shell, and window close was detected.
-- Open item: the studio still opens its in-page `FloatingWindow` placeholder. `WclapWindows.tsx` must skip it on desktop.
+- Done 2026-10-15: the in-page `FloatingWindow` placeholder is gone on desktop (see Progress).
 
 **WKWebView capabilities**
 - Missing: `setSinkId`, Web MIDI, FS Access pickers, `playbackStats`.
@@ -539,7 +581,7 @@ All app-written files must sit under the shell's own identifier directories: dow
      - accelerator suppression, `dragDropEnabled: false` HTML5 file drops, background throttling off.
    - Output: the serving choice and a confirmed gap list (Audit F).
 1. **Strategy seams (browser only)**: introduce `Platform` with browser strategies and move every call site listed above behind it. This lands on `main` before any Tauri code and must be behaviour-neutral (existing tests untouched).
-2. **Web target**: `build:tauri`, `manifest.json`, `shellApi` in `BuildInfo`, cloud features gated by `VITE_TARGET`, update poll skipped. Deploy to `/tauri/releases/`.
+2. **Web target**: `build:tauri`, `manifest.json`, `shellApi` in `BuildInfo`, update poll skipped (online features stay, see Audit D). Deploy to `/tauri/releases/`.
 3. **Shell core**: splash, version check, verified incremental download, atomic switch, rollback, local server with headers and `/fs` endpoints, IPC surface.
 4. **Tauri strategies**: windows, popouts, external links, files, key-value store, file storage, catalogue (offline index), MIDI (`midir`), decode, clipboard, fullscreen, lifecycle.
 4b. **Desktop behaviour**: native menu bar with Edit menu, accelerator suppression, close-requested flow, window title, file associations, deep link, single instance, web wording, `isLocalHost` replaced by `Platform.isDevelopment`, FFmpeg core, manuals and docs bundled (Audit A to E).

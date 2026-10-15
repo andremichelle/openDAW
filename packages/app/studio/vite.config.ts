@@ -1,10 +1,14 @@
 import {readdirSync, readFileSync, statSync, writeFileSync} from "fs"
-import {extname, resolve} from "path"
+import {createHash} from "crypto"
+import {extname, relative, resolve} from "path"
 import {defineConfig} from "vite"
 import crossOriginIsolation from "vite-plugin-cross-origin-isolation"
 import viteCompression from "vite-plugin-compression"
 import {BuildInfo} from "./src/BuildInfo"
 import {existsSync} from "node:fs"
+
+// Minimum desktop shell API (SHELL_API in packages/app/desktop) the desktop build needs
+const DESKTOP_SHELL_API = 1
 
 export default defineConfig(({command, mode}) => {
     const uuid = generateUUID()
@@ -25,7 +29,12 @@ export default defineConfig(({command, mode}) => {
     return {
         base,
         define: {
-            "import.meta.env.BUILD_UUID": JSON.stringify(uuid)
+            "import.meta.env.BUILD_UUID": JSON.stringify(uuid),
+            // the desktop shell serves WCLAP plugin files on its plugin-only port (PLUGIN_PORT in wclap.rs)
+            ...(desktop ? {
+                "import.meta.env.VITE_WCLAP_ORIGIN": JSON.stringify("http://127.0.0.1:47111"),
+                "import.meta.env.VITE_WCLAP_FRAME_QUERY": JSON.stringify("?host=shell")
+            } : {})
         },
         resolve: {
             alias: {
@@ -113,10 +122,31 @@ export default defineConfig(({command, mode}) => {
                 name: "generate-date-json",
                 buildStart() {
                     const outputPath = resolve(__dirname, "public", "build-info.json")
-                    writeFileSync(outputPath, JSON.stringify({date, uuid, env} satisfies BuildInfo, null, 2))
+                    const info: BuildInfo = desktop ? {date, uuid, env, shellApi: DESKTOP_SHELL_API} : {date, uuid, env}
+                    writeFileSync(outputPath, JSON.stringify(info, null, 2))
                     console.debug(`Build info written to: ${outputPath}`)
                 }
             },
+            ...(desktop ? [{
+                name: "desktop-manifest",
+                closeBundle() {
+                    const outDir = resolve(__dirname, "dist-desktop")
+                    const walk = (dir: string): ReadonlyArray<string> =>
+                        readdirSync(dir, {withFileTypes: true}).filter(entry => !entry.name.startsWith(".")).flatMap(entry => entry.isDirectory()
+                            ? walk(resolve(dir, entry.name)) : [resolve(dir, entry.name)])
+                    const files = walk(outDir)
+                        .map(file => relative(outDir, file).split("\\").join("/"))
+                        .filter(path => !path.endsWith(".map") && !path.endsWith(".br") && path !== "manifest.json")
+                        .sort()
+                        .map(path => {
+                            const bytes = readFileSync(resolve(outDir, path))
+                            return {path, size: bytes.byteLength, sha256: createHash("sha256").update(bytes).digest("hex")}
+                        })
+                    const manifest: DesktopManifest = {uuid, date, shellApi: DESKTOP_SHELL_API, files}
+                    writeFileSync(resolve(outDir, "manifest.json"), JSON.stringify(manifest, null, 2))
+                    console.debug(`Desktop manifest written with ${files.length} files`)
+                }
+            }] : []),
             {
                 // The WASM engine binaries (built by @opendaw/studio-core-wasm's build-wasm.sh into its
                 // dist/wasm/) served under /wasm-engine/: live from the package dist in dev (so a Rust rebuild
@@ -200,6 +230,13 @@ export default defineConfig(({command, mode}) => {
         ]
     }
 })
+
+type DesktopManifest = {
+    uuid: string
+    date: number
+    shellApi: number
+    files: ReadonlyArray<{ path: string, size: number, sha256: string }>
+}
 
 // The artifacts live under public/wasm/ (engine.wasm + sine.wasm) and public/wasm/plugins/ (device_*.wasm).
 const isWasmEngineAsset = (name: string): boolean =>
