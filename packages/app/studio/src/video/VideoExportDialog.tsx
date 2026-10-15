@@ -2,7 +2,8 @@ import {Dialog} from "@/ui/components/Dialog"
 import {Surface} from "@/ui/surface/Surface"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {createElement} from "@opendaw/lib-jsx"
-import {DefaultObservableValue, Errors, isDefined, isInstanceOf, Terminator} from "@opendaw/lib-std"
+import {DefaultObservableValue, Errors, isInstanceOf, Terminator} from "@opendaw/lib-std"
+import {Files} from "@opendaw/lib-dom"
 import {Button} from "@/ui/components/Button"
 import {RadioGroup} from "@/ui/components/RadioGroup"
 import {NumberInput} from "@/ui/components/NumberInput"
@@ -151,7 +152,7 @@ export const showVideoExportDialog = async (sampleRate: number): Promise<VideoEx
                         <Icon symbol={IconSymbol.Checkbox}/>
                     </Checkbox>
                 </div>
-                {!isDefined(window.showSaveFilePicker) && (
+                {!Files.canSaveStream() && (
                     <div style={{
                         fontSize: "0.875em",
                         opacity: "0.8",

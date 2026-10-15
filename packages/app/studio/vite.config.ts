@@ -6,7 +6,7 @@ import viteCompression from "vite-plugin-compression"
 import {BuildInfo} from "./src/BuildInfo"
 import {existsSync} from "node:fs"
 
-export default defineConfig(({command}) => {
+export default defineConfig(({command, mode}) => {
     const uuid = generateUUID()
     console.debug(uuid)
 
@@ -17,9 +17,10 @@ export default defineConfig(({command}) => {
 
     // Determine base path for production CI builds
     const isCI = process.env.CI === "true"
+    const desktop = mode === "desktop"
     const branchName = process.env.BRANCH_NAME || "main"
     const envFolder = process.env.DEPLOY_ENV || (branchName === "main" ? "main" : "dev")
-    const base = (command === "build" && isCI) ? `/${envFolder}/releases/${uuid}/` : "/"
+    const base = (command === "build" && isCI && !desktop) ? `/${envFolder}/releases/${uuid}/` : "/"
 
     return {
         base,
@@ -40,6 +41,7 @@ export default defineConfig(({command}) => {
             minify: true,
             sourcemap: true,
             modulePreload: false, // Disable modulepreload polyfill injection
+            outDir: desktop ? "dist-desktop" : "dist",
             rollupOptions: {
                 input: {
                     main: resolve(__dirname, "index.html"),
@@ -94,6 +96,13 @@ export default defineConfig(({command}) => {
             }
         },
         plugins: [
+            ...(desktop ? [{
+                name: "desktop-entry",
+                transformIndexHtml: {
+                    order: "pre" as const,
+                    handler: (html: string) => html.replace(`src="/src/main.ts"`, `src="/src/main-desktop.ts"`)
+                }
+            }] : []),
             crossOriginIsolation(),
             viteCompression({
                 algorithm: "brotliCompress",

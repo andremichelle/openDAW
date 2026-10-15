@@ -1,6 +1,7 @@
 // noinspection PlatformDetectionJS
 
 import {isDefined, UUID} from "@opendaw/lib-std"
+import {Platform} from "./platform"
 
 export namespace Browser {
     const hasLocation = typeof self !== "undefined" && "location" in self && typeof self.location !== undefined
@@ -28,12 +29,12 @@ export namespace Browser {
     // for user-initiated features only (e.g. cloud-backup lock), never for tracking or analytics.
     // "browser-id", not the legacy "__id__" key: that one carried the visitor-counting uuid and is purged at boot.
     export const id = () => {
-        if (!hasLocation || typeof localStorage === "undefined") {return ""}
+        if (!hasLocation || !Platform.hasStorage()) {return ""}
         const key = "browser-id"
-        const id = localStorage.getItem(key)
+        const id = Platform.storage().getItem(key)
         if (isDefined(id)) {return id}
         const newID = UUID.toString(UUID.generate())
-        localStorage.setItem(key, newID)
+        Platform.storage().setItem(key, newID)
         return newID
     }
 }

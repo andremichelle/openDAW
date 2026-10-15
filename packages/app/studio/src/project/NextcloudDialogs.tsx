@@ -1,6 +1,7 @@
 import {createElement} from "@opendaw/lib-jsx"
 import {DefaultObservableValue, Errors, Option, RuntimeNotifier, Terminator, unitValue, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
+import {Platform} from "@opendaw/lib-dom"
 import {
     NextcloudCredentials,
     NextcloudHandler,
@@ -215,7 +216,7 @@ export namespace NextcloudDialogs {
     export const showCredentialsDialog = async (headline: string): Promise<NextcloudCredentials> => {
         const {resolve, reject, promise} = Promise.withResolvers<NextcloudCredentials>()
         const inputUrl: HTMLInputElement =
-            <input className="default" type="text" autocomplete="url" value={localStorage.getItem(ServerUrlKey) ?? ""}
+            <input className="default" type="text" autocomplete="url" value={Platform.storage().getItem(ServerUrlKey) ?? ""}
                    placeholder="https://your-nextcloud"/>
         const inputUser: HTMLInputElement =
             <input className="default" type="text" autocomplete="username" placeholder="Username"/>
@@ -232,7 +233,7 @@ export namespace NextcloudDialogs {
                 }).finally()
                 return false
             }
-            localStorage.setItem(ServerUrlKey, baseUrl)
+            Platform.storage().setItem(ServerUrlKey, baseUrl)
             resolve({baseUrl, username, appPassword})
             return true
         }

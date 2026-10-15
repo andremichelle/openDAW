@@ -1,5 +1,6 @@
 import {Shortcut} from "./shortcut-manager"
 import {isAbsent, JSONValue} from "@opendaw/lib-std"
+import {Platform} from "./platform"
 
 export type ShortcutDefinition = { shortcut: Shortcut, description: string }
 
@@ -44,7 +45,7 @@ export namespace ShortcutValidator {
         for (let i = 0; i < entries.length; i++) {
             for (let j = i + 1; j < entries.length; j++) {
                 if (entries[i][1].shortcut.equals(entries[j][1].shortcut)) {
-                    alert(`Shortcut conflict: '${entries[i][0]}' and '${entries[j][0]}' both use ${entries[i][1].shortcut.format()}`)
+                    Platform.alert(`Shortcut conflict: '${entries[i][0]}' and '${entries[j][0]}' both use ${entries[i][1].shortcut.format()}`)
                 }
             }
         }

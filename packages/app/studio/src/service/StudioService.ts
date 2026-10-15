@@ -40,7 +40,7 @@ import {StudioSignal} from "./StudioSignal"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {FooterLabel} from "@/service/FooterLabel"
 import {PPQN} from "@opendaw/lib-dsp"
-import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files} from "@opendaw/lib-dom"
+import {AnimationFrame, Browser, ConsoleCommands, Dragging, Files, Platform} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {ExportConfiguration, InstrumentFactories} from "@opendaw/studio-adapters"
 import {Address} from "@opendaw/lib-box"
@@ -565,13 +565,8 @@ export class StudioService implements ProjectEnv {
     }
 
     #configBeforeUnload(): void {
-        if (Browser.isLocalHost()) {return}
-        window.addEventListener("beforeunload", (event: Event) => {
-            if (!navigator.onLine) {event.preventDefault()}
-            if (this.hasProfile && this.profile.hasUnsavedChanges()) {
-                event.preventDefault()
-            }
-        })
+        if (Platform.isDevelopment()) {return}
+        Platform.guardClose(() => this.hasProfile && this.profile.hasUnsavedChanges())
     }
 
     #checkRecovery(): void {

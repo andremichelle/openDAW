@@ -1,5 +1,5 @@
 import css from "./UpdateMessage.sass?inline"
-import {Html} from "@opendaw/lib-dom"
+import {Html, Platform} from "@opendaw/lib-dom"
 import {createElement} from "@opendaw/lib-jsx"
 import {TextButton} from "@/ui/components/TextButton"
 import {StudioService} from "@/service/StudioService"
@@ -12,7 +12,7 @@ export const UpdateMessage = ({service}: { service: StudioService }) => {
         await profileService.save()
         const unsaved = profileService.getValue().mapOr(profile => profile.hasUnsavedChanges(), false)
         if (unsaved) {return}
-        location.reload()
+        Platform.reload()
     }
     return (
         <div className={className}>

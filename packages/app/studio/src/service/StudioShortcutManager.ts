@@ -9,7 +9,7 @@ import {
     Terminable,
     tryCatch
 } from "@opendaw/lib-std"
-import {ShortcutDefinitions, ShortcutManager} from "@opendaw/lib-dom"
+import {Platform, ShortcutDefinitions, ShortcutManager} from "@opendaw/lib-dom"
 import {GlobalShortcuts, GlobalShortcutsFactory} from "@/ui/shortcuts/GlobalShortcuts"
 import {StudioService} from "@/service/StudioService"
 import {DefaultWorkspace} from "@/ui/workspace/Default"
@@ -59,7 +59,7 @@ export namespace StudioShortcutManager {
     export const store = (): void => {
         const shortcuts: ShortcutsMap = {}
         Objects.entries(Contexts).forEach(([key, {workingDefinition}]) => shortcuts[key] = workingDefinition)
-        toJSONString(shortcuts).ifSome(jsonString => localStorage.setItem(localStorageKey, jsonString))
+        toJSONString(shortcuts).ifSome(jsonString => Platform.storage().setItem(localStorageKey, jsonString))
     }
 
     export const install = (service: StudioService): Subscription => {
@@ -76,7 +76,7 @@ export namespace StudioShortcutManager {
             }
         } = service
         const gs = GlobalShortcuts
-        const storedShortcuts = localStorage.getItem(localStorageKey)
+        const storedShortcuts = Platform.storage().getItem(localStorageKey)
         if (isDefined(storedShortcuts)) {
             const {status, value: stored, error} = tryCatch(() => JSON.parse(storedShortcuts))
             if (status === "success") {

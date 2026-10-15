@@ -3,6 +3,7 @@ import {Soundfont, SoundfontMetaData} from "@opendaw/studio-adapters"
 import {OpenDAWHeaders} from "./OpenDAWHeaders"
 import {SoundfontIndex} from "./SoundfontIndex"
 import {fetchIndex} from "./IndexFetch"
+import {OpenDAWCloud} from "./OpenDAWCloud"
 import {Promises} from "@opendaw/lib-runtime"
 
 export class OpenSoundfontAPI {
@@ -13,8 +14,9 @@ export class OpenSoundfontAPI {
     @Lazy
     static get(): OpenSoundfontAPI {return new OpenSoundfontAPI()}
 
-    readonly #memoized: () => Promise<SoundfontIndex> = Promises.memoizeAsync(() =>
-        fetchIndex(OpenSoundfontAPI.IndexFile, OpenDAWHeaders).then(json => SoundfontIndex.schema.parse(json)))
+    readonly #memoized: () => Promise<SoundfontIndex> = Promises.memoizeAsync(() => OpenDAWCloud.isAvailable()
+        ? fetchIndex(OpenSoundfontAPI.IndexFile, OpenDAWHeaders).then(json => SoundfontIndex.schema.parse(json))
+        : Promise.resolve(SoundfontIndex.Empty))
 
     private constructor() {}
 

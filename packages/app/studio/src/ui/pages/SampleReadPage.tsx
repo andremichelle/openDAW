@@ -1,6 +1,6 @@
 import css from "./SampleReadPage.sass?inline"
 import {createElement, PageFactory} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html, Platform} from "@opendaw/lib-dom"
 import {isDefined} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors} from "@opendaw/studio-enums"
@@ -202,7 +202,7 @@ export const SampleReadPage: PageFactory<StudioService> = ({lifecycle}) => {
             return
         }
         const json = JSON.stringify(buildJsonReport(), null, 2)
-        const result = await Promises.tryCatch(navigator.clipboard.writeText(json))
+        const result = await Promises.tryCatch(Platform.writeClipboardText(json))
         statusEl.textContent = result.status === "resolved"
             ? `Copied ${rows.length} rows to clipboard (${json.length} chars).`
             : "Copy failed: clipboard access denied."

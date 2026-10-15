@@ -44,7 +44,7 @@ import {
 import {RegionReader} from "@/ui/timeline/editors/RegionReader.ts"
 import {Colors, Pointers} from "@opendaw/studio-enums"
 import {ParameterValueEditing} from "@/ui/timeline/editors/value/ParameterValueEditing.ts"
-import {Browser, deferNextFrame, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {deferNextFrame, Html, Platform, ShortcutManager} from "@opendaw/lib-dom"
 import {ContentEditorShortcuts} from "@/ui/shortcuts/ContentEditorShortcuts"
 import {RegionModifyContext} from "@/ui/timeline/editors/RegionModifyContext.ts"
 
@@ -79,7 +79,7 @@ export const ContentEditor = ({lifecycle, service}: Construct) => {
             }).setTriggerProcedure(zoomToLoopDuration),
             MenuItem.default({
                 label: "Exit",
-                hidden: !Browser.isLocalHost(),
+                hidden: !Platform.isDevelopment(),
                 selectable: editingSubject.get().nonEmpty()
             }).setTriggerProcedure(() => editingSubject.clear())
         )

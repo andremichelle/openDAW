@@ -4,6 +4,7 @@ import {
 import {network, Promises} from "@opendaw/lib-runtime"
 import {AccessKey} from "./AccessKey"
 import {base64Credentials, OpenDAWHeaders} from "./OpenDAWHeaders"
+import {OpenDAWCloud} from "./OpenDAWCloud"
 import {PresetMeta} from "@opendaw/studio-core"
 
 export class OpenPresetAPI {
@@ -17,6 +18,7 @@ export class OpenPresetAPI {
 
     @Lazy
     async list(): Promise<ReadonlyArray<PresetMeta>> {
+        if (!OpenDAWCloud.isAvailable()) {return []}
         const url = `${OpenPresetAPI.FileRoot}/index.json?t=${Date.now()}`
         const result = await Promises.tryCatch(Promises.retry(() =>
             network.defaultFetch(url, OpenDAWHeaders).then(response => response.json())))
@@ -35,6 +37,7 @@ export class OpenPresetAPI {
     async load(uuid: UUID.Bytes,
                progress?: Procedure<unitValue>,
                signal?: AbortSignal): Promise<ArrayBuffer> {
+        if (!OpenDAWCloud.isAvailable()) {return OpenDAWCloud.unavailable(`Preset ${UUID.toString(uuid)}`)}
         const url = `${OpenPresetAPI.FileRoot}/${UUID.toString(uuid)}.odp`
         // Cancellable fetches skip the auto-retry: a user-cancelled download
         // must not silently retry after the dialog has already closed.

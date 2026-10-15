@@ -1,6 +1,6 @@
 import {CaptureAudio, MenuItem, Project} from "@opendaw/studio-core"
 import {MonitoringDialog} from "@/ui/monitoring/MonitoringDialog"
-import {Browser} from "@opendaw/lib-dom"
+import {Platform} from "@opendaw/lib-dom"
 import {isInstanceOf, Option, Procedure} from "@opendaw/lib-std"
 import {
     AudioUnitBoxAdapter,
@@ -129,7 +129,7 @@ export const installTrackHeaderMenu = (service: StudioService,
             .forEach(region => selection.select(region.box))))),
         MenuItem.default({
             label: "Compact Tracks",
-            hidden: !Browser.isLocalHost(),
+            hidden: !Platform.isDevelopment(),
             selectable: !isFrozen,
             separatorBefore: true
         }).setTriggerProcedure(guarded(() => editing.modify(() =>

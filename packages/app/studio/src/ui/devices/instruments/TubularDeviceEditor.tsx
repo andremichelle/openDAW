@@ -1,6 +1,6 @@
 import css from "./TubularDeviceEditor.sass?inline"
 import {DefaultObservableValue, int, Lifecycle, Terminator, tryCatch} from "@opendaw/lib-std"
-import {Browser, Files, Html} from "@opendaw/lib-dom"
+import {Files, Html, Platform} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {createElement, JsxValue, replaceChildren} from "@opendaw/lib-jsx"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
@@ -102,7 +102,7 @@ export const TubularDeviceEditor = ({lifecycle, service, adapter, deviceHost}: C
                       adapter={adapter}
                       populateMenu={parent => {
                           MenuItems.forAudioUnitInput(parent, service, deviceHost)
-                          if (Browser.isLocalHost() || location.origin.includes("dev.opendaw.studio")) {
+                          if (Platform.isDevelopment() || location.origin.includes("dev.opendaw.studio")) {
                               parent.addMenuItem(MenuItem.default({label: "Audition cartridges…", separatorBefore: true, selectable: cartridges.loaded.nonEmpty()})
                                   .setTriggerProcedure(audition))
                           }

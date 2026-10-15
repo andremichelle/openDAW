@@ -6,6 +6,7 @@
 *.local
 node_modules
 dist
+dist-desktop
 dist-ssr
 server/dist
 public/dist

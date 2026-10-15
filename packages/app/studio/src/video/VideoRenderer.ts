@@ -1,7 +1,6 @@
 import {
     asInstanceOf,
     DefaultObservableValue,
-    isDefined,
     Option,
     panic,
     RuntimeNotifier,
@@ -21,6 +20,7 @@ import {
     WebCodecsVideoExporter
 } from "@/video"
 import {Promises} from "@opendaw/lib-runtime"
+import {Files} from "@opendaw/lib-dom"
 
 const RENDER_TAIL_SECONDS = 12   // max audio rendered past the last region when no explicit duration is set
 const FADE_OUT_SECONDS = 4       // fade the audio to zero over the final stretch approaching the tail cap
@@ -39,14 +39,11 @@ export namespace VideoRenderer {
         const {width, height, frameRate, duration, overlay: overlayEnabled, videoBitrate} = config
         const exportConfig = {width, height, frameRate, sampleRate, numberOfChannels: 2, videoBitrate}
         let exporter: VideoExporter
-        if (isDefined(window.showSaveFilePicker)) {
-            const result = await Promises.tryCatch(
-                window.showSaveFilePicker({suggestedName: "opendaw-video.mp4"})
-            )
-            if (result.status === "rejected") {return}
-            const writable = await result.value.createWritable()
+        if (Files.canSaveStream()) {
+            const target = await Files.saveStream({suggestedName: "opendaw-video.mp4"})
+            if (target.isEmpty()) {return}
             exporter = await Promises.timeout(
-                StreamVideoExporter.create(exportConfig, writable), TimeSpan.seconds(10))
+                StreamVideoExporter.create(exportConfig, target.unwrap()), TimeSpan.seconds(10))
         } else {
             exporter = await Promises.timeout(
                 BufferVideoExporter.create(exportConfig), TimeSpan.seconds(10))

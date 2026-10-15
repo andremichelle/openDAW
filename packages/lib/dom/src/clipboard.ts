@@ -1,9 +1,10 @@
 import {RuntimeNotifier} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
+import {Platform} from "./platform"
 
 export namespace Clipboard {
     export const writeText = async (text: string): Promise<void> => {
-        const result = await Promises.tryCatch(navigator.clipboard.writeText(text))
+        const result = await Promises.tryCatch(Platform.writeClipboardText(text))
         if (result.status === "rejected") {
             await RuntimeNotifier.info({
                 headline: "Clipboard Error",
@@ -12,7 +13,7 @@ export namespace Clipboard {
         }
     }
     export const readText = async (): Promise<string> => {
-        const result = await Promises.tryCatch(navigator.clipboard.readText())
+        const result = await Promises.tryCatch(Platform.readClipboardText())
         if (result.status === "resolved") {return result.value}
         await RuntimeNotifier.info({
             headline: "Clipboard Error",

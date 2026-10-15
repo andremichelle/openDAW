@@ -1,5 +1,5 @@
 import {DefaultObservableValue, MutableObservableValue, Nullable, Terminable, Terminator} from "@opendaw/lib-std"
-import {deferNextFrame} from "@opendaw/lib-dom"
+import {deferNextFrame, Platform} from "@opendaw/lib-dom"
 import type {Awareness} from "y-protocols/awareness"
 
 const StorageKeyName = "opendaw:user:name"
@@ -17,20 +17,20 @@ export type AwarenessUserState = {
 }
 
 export const readIdentity = (): { name: string, color: string } => {
-    const name = localStorage.getItem(StorageKeyName) ?? ""
-    let color = localStorage.getItem(StorageKeyColor)
+    const name = Platform.storage().getItem(StorageKeyName) ?? ""
+    let color = Platform.storage().getItem(StorageKeyColor)
     if (color === null) {
         const bytes = new Uint8Array(1)
         crypto.getRandomValues(bytes)
         color = UserColors[bytes[0] % UserColors.length]
-        localStorage.setItem(StorageKeyColor, color)
+        Platform.storage().setItem(StorageKeyColor, color)
     }
     return {name, color}
 }
 
 export const writeIdentity = (name: string, color: string): void => {
-    localStorage.setItem(StorageKeyName, name)
-    localStorage.setItem(StorageKeyColor, color)
+    Platform.storage().setItem(StorageKeyName, name)
+    Platform.storage().setItem(StorageKeyColor, color)
 }
 
 export const userColors = (): ReadonlyArray<string> => UserColors

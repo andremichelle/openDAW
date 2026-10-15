@@ -2,7 +2,7 @@ import css from "./TubularAudition.sass?inline"
 import {
     byte, DefaultObservableValue, Errors, Exec, int, isDefined, Procedure, RuntimeNotifier, tryCatch, unitValue, UUID
 } from "@opendaw/lib-std"
-import {Files, Html} from "@opendaw/lib-dom"
+import {Files, Html, Platform} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
 import {PPQN} from "@opendaw/lib-dsp"
 import {createElement, replaceChildren} from "@opendaw/lib-jsx"
@@ -37,14 +37,14 @@ export namespace TubularAudition {
     const keeperKey = (cartridge: TubularCartridge, index: int): string => `${cartridge.file}#${index}`
 
     const loadKeepers = (): Set<string> => {
-        const stored = tryCatch(() => localStorage.getItem(STORAGE_KEY))
+        const stored = tryCatch(() => Platform.storage().getItem(STORAGE_KEY))
         if (stored.status === "failure" || !isDefined(stored.value)) {return new Set()}
         const parsed = tryCatch(() => JSON.parse(stored.value as string) as ReadonlyArray<string>)
         return parsed.status === "success" && Array.isArray(parsed.value) ? new Set(parsed.value) : new Set()
     }
 
     const storeKeepers = (keepers: ReadonlySet<string>): void => {
-        tryCatch(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(keepers))))
+        tryCatch(() => Platform.storage().setItem(STORAGE_KEY, JSON.stringify(Array.from(keepers))))
     }
 
     export const open = async ({service, adapter, cartridges, applyVoice, start}: Construct): Promise<void> => {

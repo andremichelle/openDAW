@@ -33,6 +33,8 @@ export namespace SampleIndex {
         folders: z.array(folderSchema)
     })
 
+    export const Empty: SampleIndex = {version: 1, folders: []}
+
     export const asSample = (entry: SampleIndexEntry): Sample => ({...entry, origin: "openDAW"})
 
     export const flatten = (index: SampleIndex): ReadonlyArray<Sample> => {

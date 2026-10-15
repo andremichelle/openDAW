@@ -2,14 +2,14 @@ import "./style.sass"
 import {createElement, Frag, replaceChildren} from "@opendaw/lib-jsx"
 import {EmptyExec, isRecord, Terminator, tryCatch} from "@opendaw/lib-std"
 import {ColorScheme, DefaultColorScheme, initializeColors, setColorScheme} from "@opendaw/studio-enums"
-import {loadFont} from "@opendaw/lib-dom"
+import {loadFont, Platform} from "@opendaw/lib-dom"
 import {IconLibrary} from "@opendaw/studio-icons"
 import {App} from "./App"
 import {preloadMarkdown} from "./ManualPage"
 import {ToastLayer} from "./Toast"
 
 const readColorScheme = (): ColorScheme => {
-    const {status, value} = tryCatch(() => JSON.parse(localStorage.getItem("preferences") ?? "{}"))
+    const {status, value} = tryCatch(() => JSON.parse(Platform.storage().getItem("preferences") ?? "{}"))
     if (status === "failure" || !isRecord(value) || !isRecord(value.appearance)) {return DefaultColorScheme}
     const {"neutral-hue": hue, "neutral-saturation": saturation} = value.appearance
     return typeof hue === "number" && typeof saturation === "number"

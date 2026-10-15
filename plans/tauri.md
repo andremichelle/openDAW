@@ -40,6 +40,56 @@ Two options. The spike (phase 0) decides between them.
 
 My current lean is **B**, because workers reach the `/fs` endpoints over plain HTTP. WCLAP no longer needs a service worker or a second port (see WCLAP plugin windows), so A is viable if it passes the secure-context check. The spike decides.
 
+## SDK consumer notes (to report when step 1 ships)
+
+**Required action: none.**
+- Every existing export keeps its signature and default behaviour.
+- All new behaviour is opt-in.
+
+**New, optional APIs**
+- **`@opendaw/lib-dom` `Platform`:** `install(partial)` replaces host strategies:
+  - `isDevelopment`;
+  - `hasStorage` and `storage` (key-value store, default `localStorage`);
+  - `saveFile`, `openFiles`, `canSaveStream` and `saveStream`;
+  - `writeClipboardText` and `readClipboardText`;
+  - `isFullscreenAvailable`, `requestFullscreen`, `fullscreenElement` and `exitFullscreen`;
+  - `alert`, `reload` and `guardClose`. `guardClose` registers the unsaved-work guard; the browser default prompts on unsaved work or when offline.
+
+  The defaults are the previous browser code, so nothing changes for consumers who don't call `install`.
+- **`@opendaw/lib-dom` `Files.canSaveStream()` and `Files.saveStream(options)`:** stream a large export straight into a user-picked file. `Option.None` means the picker was cancelled or refused.
+- **`@opendaw/studio-core` `Workers.installOpfs(protocol)`:** supplies an own `OpfsProtocol` implementation (file storage) instead of the OPFS worker.
+
+**Behaviour notes, only relevant for consumers who use the new APIs**
+- Call `Platform.install` before importing or using `lib-fusion` `Preferences`. `Preferences` checks once, at module load, whether storage exists (as it did before with `localStorage`).
+- Call `Workers.installOpfs` before the first `Workers.Opfs` access. A later call throws, so storage cannot switch midway.
+- `lib-dom` now exports a symbol named `Platform`. A consumer with its own `Platform` identifier imported in the same scope would need an alias.
+
+**Internal, no effect on consumers**
+- `Browser.isLocalHost()` is unchanged. The studio app now asks `Platform.isDevelopment()`, whose default is `Browser.isLocalHost()`.
+- `Preferences`, `Browser.id()`, `Clipboard`, `Fullscreen`, `Files`, `ShortcutValidator` and the `lib-jsx` `Router` route through `Platform`, with identical defaults.
+
+## Split: thin shell, desktop entry in the studio build
+
+**Goal:** the Tauri app rarely needs an update. Studio releases, including menu and strategy changes, never require a new shell unless the shell contract changes.
+
+**Shell (Rust): generic primitives only, no studio policy**
+- Downloads, verifies and switches studio builds, with rollback.
+- Serves them on loopback with COOP/COEP, plus `/fs` for the file storage strategy.
+- Window primitives: linked popouts through `on_new_window`, URL routing to app windows or the system browser, WCLAP plugin windows and their message relay, close handling.
+- File dialogs and writable file handles.
+- `setMenu(description)`: builds the native menu from a serialisable description received over IPC, and sends back the id of the clicked item.
+- Key-value store, single instance, file associations and deep links (forwarded to the page), self-update.
+- Exposes `SHELL_API`, an integer that is bumped only when a primitive is added or changed.
+
+**Desktop entry: in `packages/app/studio`, downloaded with every studio build**
+- `index-desktop.html` plus `src/main-desktop.ts` is a second Vite entry, built only by `build:desktop`.
+  - It runs first: it installs the `Platform` strategies (storage, files, catalogue, lifecycle and so on, under `src/platform/desktop/`), builds `DesktopStudioMenu` and sends it to the shell, subscribes to menu clicks, and only then calls the shared `boot()`.
+  - The strategies must be installed before `boot.ts` evaluates, because its unload-guard check reads storage at module load.
+- The web `index.html` and `main.ts` never import anything from `src/platform/desktop/` or `main-desktop.ts`, so the web bundle and its behaviour are unchanged.
+- `build-info.json` of the desktop build carries `shellApi`. If it is above the running shell's `SHELL_API`, the shell keeps the installed build and updates itself first.
+
+**Rule of thumb:** if a desktop change can be expressed with existing primitives, it ships with the studio build. Only a new primitive costs a shell release.
+
 ## Version flow (web build)
 
 ### Build side
@@ -72,15 +122,53 @@ Every feature that talks to the browser goes through a strategy interface. The b
 - **Where it lives:** a `Platform` namespace in `@opendaw/lib-dom` with an `install(strategies)` call once at boot (`main.ts`). The browser strategies are the default, so tests and other apps (`app/manual`) need no setup. The Tauri strategies live in the studio under `src/platform/tauri/` and talk to the shell via `@tauri-apps/api` IPC.
 - **Selection:** at build time via `VITE_TARGET`, so the browser bundle contains no Tauri code.
 
+### Progress (step 1, browser-only, on `main`, uncommitted)
+- Done: `Platform` in `lib-dom` (`platform.ts`, `platform.test.ts`).
+  - `Platform.isDevelopment()` replaces all 11 `Browser.isLocalHost()` call sites.
+  - `Platform.storage()` and `hasStorage()` replace every `localStorage` access: `Preferences`, `Browser.id`, boot, shortcuts, access key, room awareness, Tone3000, Nextcloud, Tubular audition, and the manual app.
+  - Browser defaults are the previous code. All suites stay green: lib-dom, lib-fusion, studio-core, app-studio, app-manual.
+- Done: catalogue slice. `OpenDAWCloud` in the app's `opendaw-api` folder is enabled by default. Once disabled, the sample, soundfont, preset and WebCLAP indexes are empty at once, and remote loads fail fast (`OpenDAWCloud.test.ts`, 7 tests). `FactoryCatalog` and the SDK are untouched.
+- Done: minimal desktop entry.
+  - `vite build --mode desktop` (`npm run build:desktop`) builds the same `index.html` into `dist-desktop/`, with the entry swapped to `src/main-desktop.ts` by a `pre` `transformIndexHtml` hook.
+  - The body of `main.ts` moved unchanged into `start()` (`src/start.ts`). The web `main.ts` calls `start()`; `main-desktop.ts` calls `OpenDAWCloud.disable()` first, then `start()`.
+  - The order is explicit, because Rollup merges both entries' modules into one chunk.
+  - Verified in the shell: zero `assets.opendaw.studio` requests.
+- Done: files slice.
+  - Platform strategies `saveFile`, `openFiles`, `canSaveStream` and `saveStream`. The browser defaults are the former `Files` code, moved unchanged into the internal `files-browser.ts` (verified identical).
+  - `Files` keeps every export and signature, and gains `canSaveStream()` and `saveStream()`. The re-entry guard applies to every strategy.
+  - Video export uses the stream seam instead of `window.showSaveFilePicker`, with the same semantics.
+  - SyncLog (debug menu) stays browser-only: it relies on handle permissions and append seeks, and it is already disabled where the picker API is missing.
+  - 6 new tests.
+- Done: clipboard and fullscreen slice.
+  - New strategies: `writeClipboardText`, `readClipboardText`, `isFullscreenAvailable`, `requestFullscreen`, `fullscreenElement` and `exitFullscreen`.
+  - Browser defaults are the exact former calls.
+  - `Clipboard` and `Fullscreen` keep the dialogs and the synchronous-throw guard.
+  - The two diagnostic pages no longer call `navigator.clipboard` directly.
+  - 3 new tests.
+- Done: file storage seam.
+  - `studio-core` `Workers.installOpfs(protocol)` is an additive SDK API. Without it, `Workers.Opfs` is the OPFS worker as before; installing after first use is refused.
+  - `StorageInspector` has app-level strategies (`scan`, `folderSize`, `estimate`), with the old code as default. `StoragePage` no longer calls `navigator.storage.estimate()` directly.
+  - Kept as is: `features.ts` (the webviews provide OPFS and IndexedDB) and the Firefox-only persist dialog.
+  - 5 new tests.
+- Done: lifecycle slice.
+  - New strategies `alert`, `reload` and `guardClose(hasUnsavedWork)`.
+    - The browser `guardClose` is the former `beforeunload` listener, including the offline rule.
+    - `StudioService` passes only its unsaved-changes predicate.
+  - All 5 `alert()` and 4 `location.reload()` sites are routed, including `lib-jsx` `Router` and `lib-dom` `ShortcutValidator`.
+  - The update poll needs no seam: on desktop it reads the installed build's own `build-info.json`, so it never fires.
+  - Note: `ShortcutValidator` runs at module load, before a desktop entry installs strategies, so its alert stays the browser one. This is a dev-only conflict check.
+  - 4 new tests.
+- **Step 1 complete.** Next: step 2 (shell in `packages/app/desktop/`).
+
 ### Strategies and their current call sites
 
-1. **Windows** (popouts, auth popups, WCLAP plugin windows)
+1. **Windows** (popouts, auth popups, WCLAP plugin windows). **No web-side strategy:** every `window.open` and `target="_blank"` reaches the shell's `on_new_window` handler, which routes by URL (same-origin `popout.html` gets a linked window, manuals and docs get an app window, the rest goes to the system browser). The bullets below describe the routing.
    - Browser: `window.open`.
    - Tauri: popouts are real native windows that stay scriptable by the opener (see Popout windows below). Auth popups and other URLs follow the external-link rule.
    - Sites: `Surface.tsx` popouts, `FloatingWindow.tsx:256` (pop out), `WclapWindows.tsx`, `CloudAuthManager.ts:86,177`, `NamTone3000.ts:145`.
    - `PanelPlaceholder.tsx:141` currently hides "Popout" when `Browser.isTauriApp()`. That gate goes once popouts work.
    - WCLAP plugin GUIs are not popouts. They get their own OS windows, see below.
-2. **External links** (manuals, docs, GitHub, sponsors, credits)
+2. **External links** (manuals, docs, GitHub, sponsors, credits). **No web-side strategy** either: routed by the same `on_new_window` handler.
    - Browser: `window.open(url, "_blank")` and `<a target="_blank">`.
    - Tauri: the system browser via `tauri-plugin-opener`. In-app paths (`/docs/scripting/`, manuals) open in a Tauri window when bundled, otherwise go to the online URL.
    - Sites: `manuals.ts`, `dialogs.tsx:375`, `CodeEditorPage.tsx:321`, `WclapDeviceEditor.tsx:75`, plus every `target="_blank"` anchor in `ui/dashboard/*`, `WclapBrowser.tsx` and `DashboardPage.tsx`, which become a shared `ExternalLink` component.
@@ -313,7 +401,14 @@ All app-written files must sit under the shell's own identifier directories: dow
      - Help (manuals).
    - Without an Edit menu, `Cmd+C/V` does not work in WKWebView text fields.
    - The menu reflects the studio's enabled and checked state through IPC.
-   - The in-page `MenuButton` header menu stays for Windows and Linux, or goes, which needs a decision.
+   - **Decided: the openDAW menu moves into the native menu bar on every platform.** The in-page `MenuButton` header menu (`Header.tsx:72`) is hidden on the desktop target.
+   - The desktop menu is structured differently from the web menu, so it gets its own definition: a separate `DesktopStudioMenu` next to `StudioMenu.ts`, built from the same `MenuItem` API and the same service actions, but arranged in native menus. `StudioMenu.ts` stays unchanged for the web.
+   - A menu strategy turns that `MenuItem` tree into a Tauri `Menu`: labels, separators, submenus, checked state (for example "Show MIDI-Keyboard"), enabled state and accelerators from `Shortcut.format()`.
+   - The tree is rebuilt or patched whenever it changes (the project opens or closes, checked state flips). Native clicks come back over IPC and call the item's trigger procedure.
+   - Menu layout is defined in `DesktopStudioMenu` (to be designed). Platform conventions still apply:
+     - macOS: the app menu holds About, Preferences and Quit; Edit and Window are standard.
+     - Windows and Linux: a window menu bar.
+   - Native accelerators replace the browser-reserved shortcut handling for menu actions, and stay in sync with the user's custom shortcuts (`localStorage["shortcuts"]`, via the key-value strategy).
 2. **Shortcuts**
    - The webview's own accelerators must be off: reload `Cmd/Ctrl+R` and `F5`, zoom `Cmd/Ctrl +/-/0`, find, print, devtools in production. On WebView2 this is `AreBrowserAcceleratorKeysEnabled=false`.
    - Collisions:
@@ -388,6 +483,42 @@ All app-written files must sit under the shell's own identifier directories: dow
   - `opendaw-suppress-unload-guard`.
 - `sessionStorage` is used only by the stats page (hidden on desktop).
 
+## Spike results (macOS, 2026-10-15, Tauri 2.12.4, `spike/tauri/`, uncommitted)
+
+**Serving**
+- Loopback `http://127.0.0.1:<port>`: the studio boots (145 ms), with `crossOriginIsolated`, SAB, AudioWorklet, WASM SIMD and OPFS all working.
+- Custom protocol `opendaw://`: `crossOriginIsolated` reports true, but SAB is undefined, so the studio is dead. **Option B is decided.**
+
+**Popouts**
+- Opener-linked native windows work (`on_new_window` plus `window_features`).
+- A real panel popout from the studio's own menu works: full panel, styles, 61 fps, and live edits in both directions (one realm).
+- Panels dock back on close.
+- Required shell fixes:
+  - wry ignores `window.close()` on linked windows, so the shell replaces `close` in each popout to fire `beforeunload` and destroy the window;
+  - the native close button is routed through the same path (`CloseRequested`, `prevent_close`, then `beforeunload`, then destroy).
+
+**WCLAP**
+- The GUI runs in its own child OS window on a plugin-only origin (`127.0.0.1:<plugin port>`), served by the shell from the uploaded bundle.
+- An injected bridge replaces `window.parent.postMessage` and the incoming `message` events.
+- Traffic flowed both ways through the shell, and window close was detected.
+- Open item: the studio still opens its in-page `FloatingWindow` placeholder. `WclapWindows.tsx` must skip it on desktop.
+
+**WKWebView capabilities**
+- Missing: `setSinkId`, Web MIDI, FS Access pickers, `playbackStats`.
+- `outputLatency` is 0.
+- Present: WebCodecs (Opus, AVC), `deflate-raw`, pointer lock.
+- The native file open dialog (`<input type=file>`) works.
+
+**Cloud from the desktop origin**
+- `assets.opendaw.studio` sends no CORS header for `127.0.0.1:<port>`, so catalogues never resolve. This confirms the need for the catalogue strategy (empty or offline content).
+
+**Still open:**
+- a Werkstatt script on JSC;
+- the mic permission prompt (needs the Info.plist key);
+- HTML5 file drop;
+- accelerator suppression;
+- Windows and Linux.
+
 ## Repo layout
 
 - `packages/app/desktop/` holds the Tauri project (`src-tauri/` plus the splash page). It is **outside** the root Cargo workspace, because the workspace targets wasm32 devices and Tauri pulls in a native dependency tree.
@@ -428,5 +559,4 @@ All app-written files must sit under the shell's own identifier directories: dow
 5. **Linux packaging**: is Flatpak plus AppImage acceptable, or is a `.deb` required?
 6. **Data portability**: browser OPFS and the desktop data dir are separate, so there is no automatic migration. Project export/import is the bridge. Is that enough?
 7. **Project model**: keep the internal project library (as in the browser) or move to project files and folders on disk with Save, Recent and double-click open?
-8. **Header menu**: does the in-page studio menu stay next to the native menu bar on Windows and Linux?
-9. **Script engine for the native engine**: is a V8 embed (about 30 MB) acceptable for scriptable devices?
+8. **Script engine for the native engine**: is a V8 embed (about 30 MB) acceptable for scriptable devices?

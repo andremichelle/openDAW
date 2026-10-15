@@ -17,6 +17,7 @@ import {AccessKey} from "./AccessKey"
 import {base64Credentials, OpenDAWHeaders} from "./OpenDAWHeaders"
 import {SampleIndex} from "./SampleIndex"
 import {fetchIndex} from "./IndexFetch"
+import {OpenDAWCloud} from "./OpenDAWCloud"
 import {z} from "zod"
 import {AudioData, WavFile} from "@opendaw/lib-dsp"
 
@@ -31,8 +32,9 @@ export class OpenSampleAPI implements SampleAPI {
     @Lazy
     static get(): OpenSampleAPI {return new OpenSampleAPI()}
 
-    readonly #memoized: () => Promise<SampleIndex> = Promises.memoizeAsync(() =>
-        fetchIndex(OpenSampleAPI.IndexFile, OpenDAWHeaders).then(json => SampleIndex.schema.parse(json)))
+    readonly #memoized: () => Promise<SampleIndex> = Promises.memoizeAsync(() => OpenDAWCloud.isAvailable()
+        ? fetchIndex(OpenSampleAPI.IndexFile, OpenDAWHeaders).then(json => SampleIndex.schema.parse(json))
+        : Promise.resolve(SampleIndex.Empty))
 
     private constructor() {}
 
@@ -44,6 +46,7 @@ export class OpenSampleAPI implements SampleAPI {
         const uuidAsString = UUID.toString(uuid)
         const known = (await this.all()).find(sample => sample.uuid === uuidAsString)
         if (isDefined(known)) {return known}
+        if (!OpenDAWCloud.isAvailable()) {return OpenDAWCloud.unavailable(`Sample ${uuidAsString}`)}
         const url = `${OpenSampleAPI.ApiRoot}/get.php?uuid=${uuidAsString}`
         const response = await Promises.retry(() => network.limitFetch(url, OpenDAWHeaders))
         if (!response.ok) {

@@ -20,7 +20,7 @@ import {Box, BoxGraph} from "@opendaw/lib-box"
 import {BoxDebugView} from "./BoxDebugView"
 import {BoxesDebugView} from "@/ui/components/BoxesDebugView.tsx"
 import {ProgressBar} from "@/ui/components/ProgressBar.tsx"
-import {Browser, Clipboard} from "@opendaw/lib-dom"
+import {Clipboard, Platform} from "@opendaw/lib-dom"
 import {installScrollbars} from "@/ui/components/Scrollbars"
 import {DropDown} from "@/ui/composite/DropDown"
 
@@ -358,15 +358,15 @@ export namespace Dialogs {
                         text: "Recover",
                         onClick: () => {
                             const command = backupCommand.unwrap()
-                            command().then(() => location.reload())
+                            command().then(() => Platform.reload())
                         }
                     }, {
                         text: "Dismiss",
                         onClick: () => {
-                            if (Browser.isLocalHost()) {
+                            if (Platform.isDevelopment()) {
                                 dialog.close()
                             } else {
-                                location.reload()
+                                Platform.reload()
                             }
                         }
                     }, {
@@ -407,7 +407,7 @@ export namespace Dialogs {
                     icon={IconSymbol.Robot}
                     buttons={[{
                         text: "Reload",
-                        onClick: () => location.reload()
+                        onClick: () => Platform.reload()
                     }]}
                     cancelable={false}
                     error>

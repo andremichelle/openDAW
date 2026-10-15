@@ -2,7 +2,7 @@ import "./main.sass"
 
 // Escape hatch for AUTOMATED browser sessions (set `localStorage["opendaw-suppress-unload-guard"]`):
 // swallow every beforeunload prompt so scripted reloads never hang on the native dialog.
-if (localStorage.getItem("opendaw-suppress-unload-guard") !== null) {
+if (Platform.storage().getItem("opendaw-suppress-unload-guard") !== null) {
     window.addEventListener("beforeunload", event => event.stopImmediatePropagation(), {capture: true})
 }
 import {App} from "@/ui/App.tsx"
@@ -32,7 +32,7 @@ import {MissingFeature} from "@/ui/MissingFeature.tsx"
 import {UpdateMessage} from "@/ui/UpdateMessage.tsx"
 import {showStoragePersistDialog} from "@/AppDialogs"
 import {Promises} from "@opendaw/lib-runtime"
-import {AnimationFrame, Browser, Html, ShortcutManager} from "@opendaw/lib-dom"
+import {AnimationFrame, Browser, Html, Platform, ShortcutManager} from "@opendaw/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
 import {reportVisitor} from "@/VisitorReporter"
 import {FontLoader} from "@/ui/FontLoader"
@@ -61,7 +61,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     console.debug(location.origin)
     const {status, value: buildInfo} = await Promises.tryCatch(loadBuildInfo())
     if (status === "rejected") {
-        alert("Error loading build info. Please reload the page.")
+        Platform.alert("Error loading build info. Please reload the page.")
         return
     }
     console.debug("buildInfo", JSON.stringify(buildInfo, null, 2))
@@ -74,7 +74,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         replaceChildren(document.body, MissingFeature({error: testFeaturesResult.error}))
         return
     }
-    console.debug("isLocalHost", Browser.isLocalHost())
+    console.debug("isDevelopment", Platform.isDevelopment())
     console.debug("agent", Browser.userAgent)
     const sampleRate = Browser.isFirefox() ? undefined : 48000
     console.debug("requesting custom sampleRate", sampleRate ?? "'No (Firefox)'")
@@ -82,8 +82,8 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
     console.debug(`AudioContext state: ${context.state}, sampleRate: ${context.sampleRate}`)
     console.debug(`Error.stackTraceLimit: ${Error.stackTraceLimit ?? "N/A"}`)
     // purge identifiers written by the old client-side counting (§25 TDDDG)
-    localStorage.removeItem("__id__")
-    localStorage.removeItem("reported-latencies")
+    Platform.storage().removeItem("__id__")
+    Platform.storage().removeItem("reported-latencies")
     reportVisitor()
     const audioWorklets = await Promises.tryCatch(AudioWorklets.createFor(context))
     if (audioWorklets.status === "rejected") {
@@ -181,7 +181,7 @@ export const boot = async ({workersUrl, workletsUrl, wasmProcessorUrl, wasmOffli
         }).finally()
         return
     }
-    if (buildInfo.env === "production" && !Browser.isLocalHost()) {
+    if (buildInfo.env === "production" && !Platform.isDevelopment()) {
         if (import.meta.env.BUILD_UUID !== buildInfo.uuid) {
             console.warn("Cache issue:")
             console.warn("expected uuid", buildInfo.uuid)

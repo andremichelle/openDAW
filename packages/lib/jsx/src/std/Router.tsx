@@ -2,6 +2,7 @@ import {createElement, replaceChildren} from "../create-element"
 import {Exec, isDefined, Option, Provider, safeExecute, Terminable, TerminableOwner, Terminator} from "@opendaw/lib-std"
 import {JsxValue} from "../types"
 import {RouteLocation, RouteMatcher} from "../routes"
+import {Platform} from "@opendaw/lib-dom"
 
 export type PageContext<SERVICE = never> = {
     service: SERVICE
@@ -85,7 +86,7 @@ export const Router = <SERVICE = never>({
             if (isDefined(error)) {
                 return fetchPage(error, path)
             } else {
-                alert(`Could not load page (${reason})`)
+                Platform.alert(`Could not load page (${reason})`)
             }
         }
         if (request.state === "cancelled") {

@@ -2,7 +2,7 @@ import {isDefined, panic, RuntimeNotifier, RuntimeSignal} from "@opendaw/lib-std
 import {MenuItem, ProjectSignals, StudioPreferences, Workers} from "@opendaw/studio-core"
 import {Promises} from "@opendaw/lib-runtime"
 import {RouteLocation} from "@opendaw/lib-jsx"
-import {Browser} from "@opendaw/lib-dom"
+import {Platform} from "@opendaw/lib-dom"
 import {CodecsUtils} from "@/CodecsUtils"
 import {StudioService} from "@/service/StudioService"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -55,11 +55,11 @@ export const createDebugMenu = (service: StudioService) => MenuItem.default({
     MenuItem.default({
         label: "Throw an error in main-thread 💣",
         separatorBefore: true,
-        hidden: !Browser.isLocalHost() && location.hash !== "#admin"
+        hidden: !Platform.isDevelopment() && location.hash !== "#admin"
     }).setTriggerProcedure(() => panic("An error has been emulated")),
     MenuItem.default({
         label: "Throw an error in audio-worklet 💣",
-        hidden: !Browser.isLocalHost()
+        hidden: !Platform.isDevelopment()
     }).setTriggerProcedure(() => service.panicEngine()),
     MenuItem.default({label: "List Supported Codecs...", separatorBefore: true})
         .setTriggerProcedure(() => CodecsUtils.listSupportedCodecs()),

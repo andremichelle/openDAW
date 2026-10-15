@@ -1,5 +1,5 @@
 import {EmptyExec} from "@opendaw/lib-std"
-import {Browser, Files} from "@opendaw/lib-dom"
+import {Files, Platform} from "@opendaw/lib-dom"
 import {RouteLocation} from "@opendaw/lib-jsx"
 import {Promises} from "@opendaw/lib-runtime"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
@@ -77,7 +77,7 @@ export const populateStudioMenu = (service: StudioService) => {
                             MenuItem.default({
                                 label: "JSON...",
                                 selectable: service.hasProfile,
-                                hidden: !Browser.isLocalHost()
+                                hidden: !Platform.isDevelopment()
                             }).setTriggerProcedure(async () => {
                                 const arrayBuffer = new TextEncoder().encode(JSON.stringify(
                                     service.project.boxGraph.toJSON(), null, 2)).buffer

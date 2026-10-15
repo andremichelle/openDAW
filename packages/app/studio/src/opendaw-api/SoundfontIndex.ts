@@ -32,6 +32,8 @@ export namespace SoundfontIndex {
         folders: z.array(folderSchema)
     })
 
+    export const Empty: SoundfontIndex = {version: 1, folders: []}
+
     export const asSoundfont = (entry: SoundfontIndexEntry): Soundfont => ({...entry, origin: "openDAW"})
 
     export const flatten = (index: SoundfontIndex): ReadonlyArray<Soundfont> => {

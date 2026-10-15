@@ -2,6 +2,7 @@ import {Lazy, Option, Progress} from "@opendaw/lib-std"
 import {network, Promises} from "@opendaw/lib-runtime"
 import {OpenDAWHeaders} from "./OpenDAWHeaders"
 import {WclapIndex, WclapIndexEntry} from "./WclapIndex"
+import {OpenDAWCloud} from "./OpenDAWCloud"
 
 // openDAW-hosted bundles at `<FileRoot>/<uuid>.wclap`, gzip without .gz (the host would send Content-Encoding)
 export class OpenWclapAPI {
@@ -12,10 +13,11 @@ export class OpenWclapAPI {
     static get(): OpenWclapAPI {return new OpenWclapAPI()}
 
     // only a fetched index is kept: a failed fetch (memoizeAsync forgets rejections) is tried again next time
-    readonly #memoized: () => Promise<WclapIndex> = Promises.memoizeAsync(() =>
-        retryTransient(() => fetch(`${OpenWclapAPI.IndexFile}?v=${Date.now()}`, {...OpenDAWHeaders, cache: "no-cache"})
+    readonly #memoized: () => Promise<WclapIndex> = Promises.memoizeAsync(() => OpenDAWCloud.isAvailable()
+        ? retryTransient(() => fetch(`${OpenWclapAPI.IndexFile}?v=${Date.now()}`, {...OpenDAWHeaders, cache: "no-cache"})
             .then(response => response.ok ? response.json() : Promise.reject(new HttpStatus(response.status))), 3)
-            .then(json => WclapIndex.schema.parse(json)))
+            .then(json => WclapIndex.schema.parse(json))
+        : Promise.resolve(WclapIndex.Empty))
 
     private constructor() {}
 
@@ -30,6 +32,7 @@ export class OpenWclapAPI {
 
     // the body is read inside the attempt, a stream the host breaks halfway (HTTP/2 protocol error) is retried too
     load(uuid: string, progress: Progress.Handler = Progress.Empty): Promise<ArrayBuffer> {
+        if (!OpenDAWCloud.isAvailable()) {return Promise.reject(new Error(`WebCLAP ${uuid} is not available without the openDAW cloud`))}
         return retryTransient(() => fetch(`${OpenWclapAPI.FileRoot}/${uuid}.wclap`, OpenDAWHeaders)
             .then(response => response.ok
                 ? network.progress(progress)(response).arrayBuffer()

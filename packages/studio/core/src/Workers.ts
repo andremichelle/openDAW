@@ -44,8 +44,18 @@ export class Workers {
                 })
     }
 
+    static #installedOpfs: Option<OpfsProtocol> = Option.None
+    static #opfsResolved: boolean = false
+
+    static installOpfs(protocol: OpfsProtocol): void {
+        assert(!this.#opfsResolved, "Opfs is already in use")
+        this.#installedOpfs = Option.wrap(protocol)
+    }
+
     @Lazy
     static get Opfs(): OpfsProtocol {
+        this.#opfsResolved = true
+        if (this.#installedOpfs.nonEmpty()) {return this.#installedOpfs.unwrap()}
         return Communicator
             .sender<OpfsProtocol>(this.messenger.unwrap("Workers are not installed").channel("opfs"),
                 router => new class implements OpfsProtocol {

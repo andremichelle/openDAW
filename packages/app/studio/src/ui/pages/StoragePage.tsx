@@ -161,7 +161,7 @@ export const StoragePage: PageFactory<StudioService> = ({lifecycle, service}: Pa
             <Button lifecycle={reportTerminator} onClick={() => scan()} appearance={{color: Colors.blue, framed: true}}>
                 <span>Rescan</span>
             </Button>)
-        navigator.storage.estimate().then(({usage, quota}) => {
+        StorageInspector.estimate().then(({usage, quota}) => {
             const estimate = summary.querySelector("span.estimate")
             if (estimate !== null && usage !== undefined && quota !== undefined) {
                 estimate.textContent = `all site data: ${Bytes.toString(usage)} of ${Bytes.toString(quota)} allowed`

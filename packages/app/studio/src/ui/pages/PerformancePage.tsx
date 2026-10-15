@@ -1,6 +1,6 @@
 import css from "./PerformancePage.sass?inline"
 import {createElement, PageFactory} from "@opendaw/lib-jsx"
-import {Html} from "@opendaw/lib-dom"
+import {Html, Platform} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {
     BenchmarkCategory,
@@ -221,7 +221,7 @@ export const PerformancePage: PageFactory<StudioService> = ({service, lifecycle}
             return
         }
         const json = JSON.stringify(buildJsonReport(), null, 2)
-        const result = await Promises.tryCatch(navigator.clipboard.writeText(json))
+        const result = await Promises.tryCatch(Platform.writeClipboardText(json))
         statusEl.textContent = result.status === "resolved"
             ? `Copied ${results.length} results to clipboard (${json.length} chars).`
             : "Copy failed: clipboard access denied."

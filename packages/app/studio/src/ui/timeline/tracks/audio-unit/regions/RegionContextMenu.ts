@@ -17,7 +17,7 @@ import {RegionTransformer} from "@/ui/timeline/tracks/audio-unit/regions/RegionT
 import {NameValidator} from "@/ui/validator/name.ts"
 import {DebugMenus} from "@/ui/menu/debug"
 import {ColorMenu} from "@/ui/timeline/ColorMenu"
-import {Browser} from "@opendaw/lib-dom"
+import {Platform} from "@opendaw/lib-dom"
 import {StudioService} from "@/service/StudioService"
 import {Promises} from "@opendaw/lib-runtime"
 import {RegionsShortcuts} from "@/ui/shortcuts/RegionsShortcuts"
@@ -192,7 +192,7 @@ export const installRegionContextMenu =
                 )),
                 MenuItem.default({
                     label: "Detect BPM (AI)...",
-                    hidden: region.type !== "audio-region" || !Browser.isLocalHost()
+                    hidden: region.type !== "audio-region" || !Platform.isDevelopment()
                 }).setTriggerProcedure(() => {
                     if (region.type === "audio-region") {
                         region.file.data.ifSome(async data => {
@@ -205,7 +205,7 @@ export const installRegionContextMenu =
                 }),
                 MenuItem.default({
                     label: "Analyze Material...",
-                    hidden: region.type !== "audio-region" || !Browser.isLocalHost()
+                    hidden: region.type !== "audio-region" || !Platform.isDevelopment()
                 }).setTriggerProcedure(() => {
                     if (region.type === "audio-region") {
                         region.file.data.ifSome(async data => {

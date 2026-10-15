@@ -1,5 +1,6 @@
 import {Editing, Errors, isDefined, isNull, Nullable, RuntimeNotifier, UUID} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
+import {Platform} from "@opendaw/lib-dom"
 import {NeuralAmpModelBox} from "@opendaw/studio-boxes"
 import {BoxGraph} from "@opendaw/lib-box"
 import {NeuralAmpDeviceBoxAdapter} from "@opendaw/studio-adapters"
@@ -50,18 +51,18 @@ const createPkceCodes = async (): Promise<{ codeVerifier: string, codeChallenge:
 }
 
 const storeSession = ({access_token, refresh_token, expires_in}: Session): void => {
-    localStorage.setItem(AccessTokenKey, access_token)
-    localStorage.setItem(RefreshTokenKey, refresh_token)
-    localStorage.setItem(ExpiresAtKey, String(Date.now() + expires_in * 1000))
+    Platform.storage().setItem(AccessTokenKey, access_token)
+    Platform.storage().setItem(RefreshTokenKey, refresh_token)
+    Platform.storage().setItem(ExpiresAtKey, String(Date.now() + expires_in * 1000))
 }
 
 const clearSession = (): void => {
-    localStorage.removeItem(AccessTokenKey)
-    localStorage.removeItem(RefreshTokenKey)
-    localStorage.removeItem(ExpiresAtKey)
+    Platform.storage().removeItem(AccessTokenKey)
+    Platform.storage().removeItem(RefreshTokenKey)
+    Platform.storage().removeItem(ExpiresAtKey)
 }
 
-export const hasSession = (): boolean => isDefined(localStorage.getItem(RefreshTokenKey))
+export const hasSession = (): boolean => isDefined(Platform.storage().getItem(RefreshTokenKey))
 
 const requestToken = async (params: Record<string, string>): Promise<Session> => {
     const response = await fetch(TokenEndpoint, {
@@ -76,10 +77,10 @@ const requestToken = async (params: Record<string, string>): Promise<Session> =>
 }
 
 const accessToken = async (): Promise<string> => {
-    const token = localStorage.getItem(AccessTokenKey)
-    const expiresAt = parseInt(localStorage.getItem(ExpiresAtKey) ?? "0", 10)
+    const token = Platform.storage().getItem(AccessTokenKey)
+    const expiresAt = parseInt(Platform.storage().getItem(ExpiresAtKey) ?? "0", 10)
     if (isDefined(token) && Date.now() < expiresAt - ExpiryMargin) {return token}
-    const refreshToken = localStorage.getItem(RefreshTokenKey)
+    const refreshToken = Platform.storage().getItem(RefreshTokenKey)
     if (!isDefined(refreshToken)) {throw new Error("Not signed in to TONE3000 — re-select pack")}
     const result = await Promises.tryCatch(requestToken({grant_type: "refresh_token", refresh_token: refreshToken}))
     if (result.status === "rejected") {
