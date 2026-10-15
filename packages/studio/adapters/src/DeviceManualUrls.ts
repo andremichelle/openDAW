@@ -23,6 +23,7 @@ export namespace DeviceManualUrls {
     export const Crusher = "manuals/devices/audio/crusher"
     export const Fold = "manuals/devices/audio/fold"
     export const Tidal = "manuals/devices/audio/tidal"
+    export const Tuner = "manuals/devices/audio/tuner"
     export const Revamp = "manuals/devices/audio/revamp"
     export const Modular = "manuals/devices/audio/modular"
     export const NeuralAmp = "manuals/devices/audio/neural-amp"

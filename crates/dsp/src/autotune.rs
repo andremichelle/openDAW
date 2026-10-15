@@ -10,6 +10,8 @@
 //! points and deterministic tie-breaks, so the note sequence for a given input is reproducible —
 //! the golden-fixture test below pins it against regressions.
 
+use crate::yin::Yin;
+
 const DECIMATION: usize = 2; // box-average pairs: detection runs at sample_rate / 2
 const RING_SIZE: usize = 2048;
 const RING_MASK: u32 = (RING_SIZE - 1) as u32;
@@ -82,7 +84,7 @@ pub const SCALE_MASKS: [u32; 8] = [0xFFF, 0xAB5, 0x5AD, 0x295, 0x4A9, 0x4E9, 0x6
 pub struct Autotune {
     ring: [f32; RING_SIZE],
     scratch: [f32; SPAN],
-    dprime: [f64; TAU_MAX + 1],
+    detector: Yin<{TAU_MAX + 1}>,
     write: u32,
     filled: bool,
     hop_count: usize,
@@ -197,7 +199,7 @@ impl Autotune {
     pub fn reset(&mut self) {
         self.ring.fill(0.0);
         self.scratch.fill(0.0);
-        self.dprime.fill(0.0);
+        self.detector.reset();
         self.write = 0;
         self.filled = false;
         self.hop_count = 0;
@@ -351,45 +353,9 @@ impl Autotune {
         let rms = libm::sqrt(energy / SPAN as f64);
         // below the floor the frame is unvoiced whatever YIN would find: skip the O(WINDOW × TAU_MAX) pass
         let (in_band, clarity, f0) = if rms > RMS_FLOOR {
-            let mut running = 0.0f64;
-            self.dprime[0] = 1.0;
-            for tau in 1..=TAU_MAX {
-                let mut acc = 0.0f64;
-                for index in 0..WINDOW {
-                    let difference = self.scratch[index] as f64 - self.scratch[index + tau] as f64;
-                    acc += difference * difference;
-                }
-                running += acc;
-                self.dprime[tau] = if running > 0.0 {acc * tau as f64 / running} else {1.0};
-            }
-            let mut best_tau = 0usize;
-            for tau in self.tau_min..TAU_MAX {
-                if self.dprime[tau] < YIN_THRESHOLD
-                    && self.dprime[tau] <= self.dprime[tau - 1]
-                    && self.dprime[tau] <= self.dprime[tau + 1] {
-                    best_tau = tau;
-                    break;
-                }
-            }
-            if best_tau == 0 {
-                let mut minimum = f64::INFINITY;
-                for tau in self.tau_min..TAU_MAX {
-                    if self.dprime[tau] < minimum {
-                        minimum = self.dprime[tau];
-                        best_tau = tau;
-                    }
-                }
-            }
-            let clarity = self.dprime[best_tau];
-            let below = self.dprime[best_tau - 1];
-            let above = self.dprime[best_tau + 1];
-            let denominator = below - 2.0 * clarity + above;
-            let delta = if libm::fabs(denominator) > 1.0e-12 {
-                math::clamp(0.5 * (below - above) / denominator, -0.5, 0.5)
-            } else {
-                0.0
-            };
-            let period = best_tau as f64 + delta;
+            self.detector.reset();
+            self.detector.advance(&self.scratch, WINDOW, TAU_MAX, WINDOW * TAU_MAX);
+            let (period, clarity) = self.detector.estimate(self.tau_min, TAU_MAX - 1, YIN_THRESHOLD);
             let f0 = self.detect_rate / period;
             self.last_f0 = f0;
             (f0.is_finite() && f0 >= F0_MIN_HZ && f0 <= F0_MAX_HZ, clarity, f0)
