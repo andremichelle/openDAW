@@ -1002,9 +1002,9 @@ impl Engine {
             unit.wired = wired;
         }
         // A plain FIELD edit (knob drag): the value cells are already updated by their subscriptions, so a
-        // single refresh pushes exactly the changed values — no unsubscribe / re-observe churn. Skipped when a
-        // heavier path already ran (a rebuild / re-bind pushes on its own).
-        if params_changed && !unit_dirty && !automation_changed {
+        // single refresh pushes exactly the changed values — no unsubscribe / re-observe churn. Skipped after an
+        // automation re-bind (it pushes on its own), NOT after a chain reconcile: that leaves survivors untouched.
+        if params_changed && !automation_changed {
             self.refresh_unit_params(unit);
         }
         set_params_signal(None);

@@ -624,6 +624,67 @@ fn a_disabled_effect_is_bypassed_and_re_enabling_re_wires_it_edge_only() {
 }
 
 #[test]
+fn a_parameter_write_in_the_same_transaction_as_an_enabled_toggle_reaches_the_device() {
+    // Issue #459: an `enabled` toggle re-wires the chain (unit dirty), which skipped the plain parameter push,
+    // so a value written in the SAME transaction stayed in the box but never reached the surviving device.
+    use super::{DeviceParams, ParamNode};
+    const PATH: u16 = 11;
+    let mut engine = engine_with_devices();
+    engine.graph = BoxGraph::from_boxes(vec![
+        graph_box(UNIT, "AudioUnitBox", &[
+            (UNIT_TRACKS_KEY, FieldValue::Hook), (UNIT_MIDI_KEY, FieldValue::Hook),
+            (UNIT_INPUT_KEY, FieldValue::Hook), (UNIT_AUDIO_KEY, FieldValue::Hook)
+        ]),
+        graph_box(INSTR, "TestInstrument", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_INPUT_KEY])))), (PATH, FieldValue::Float32(0.5))
+        ]),
+        graph_box(FX_A, "TestEffect", &[
+            (HOST_KEY, FieldValue::Pointer(Some(Address::of(UNIT, vec![UNIT_AUDIO_KEY])))), (EFFECT_INDEX_KEY, FieldValue::Int32(0)),
+            (DEVICE_ENABLED_KEY, FieldValue::Boolean(false))
+        ])
+    ]);
+    let mut unit = engine.build_unit(UNIT);
+    engine.reconcile_one(&mut unit);
+    // The native stub instrument declares no params, so bind one by hand on the surviving instrument member.
+    struct StubSink;
+    impl crate::param_automation::ParamSink for StubSink {
+        fn set_params(&mut self, _: alloc::vec::Vec<crate::param_automation::ParamHandle>, _: bool) {}
+        fn state_ptr(&self) -> u32 { 0 }
+    }
+    super::params::set_params_signal(Some(super::params::params_invalidate(&unit)));
+    let invalidate = super::params::automation_invalidate(&unit);
+    let (handles, field_subs, collections, _armed) = engine.observe_params(INSTR, &[alloc::vec![PATH]], &invalidate);
+    super::params::set_params_signal(None);
+    let reg = stub_device(DEVICE_KIND_INSTRUMENT);
+    super::params::refresh_params(&handles, reg, 0, 0.0);
+    let last = handles[0].last.clone();
+    match unit.wired.as_mut().expect("wired") {
+        Wired::Leaf(chain) => chain.instrument.params = Some(DeviceParams {
+            device_uuid: INSTR, reg, state_ptr: 0, sink: ParamNode::Audio(Rc::new(RefCell::new(StubSink))),
+            paths: alloc::vec![alloc::vec![PATH]], handles, field_subs, collections,
+            observe_subs: Vec::new(), pointer_field_subs: Vec::new(), sidechain_paths: Vec::new(),
+            param_hub_sub: None, sample_hub_sub: None, broadcast_slots: Vec::new()
+        }),
+        _ => panic!("expected a leaf chain")
+    }
+    unit.params_dirty.set(false);
+    unit.automation_dirty.set(false);
+    assert_eq!(last.get(), 0.5, "the initial value is pushed");
+    let flip = |engine: &mut Engine, enabled: (bool, bool), value: (f32, f32)| engine.graph.transaction(&[
+        Update::Primitive {address: Address::of(FX_A, vec![DEVICE_ENABLED_KEY]), old: FieldValue::Boolean(enabled.0), new: FieldValue::Boolean(enabled.1)},
+        Update::Primitive {address: Address::of(INSTR, vec![PATH]), old: FieldValue::Float32(value.0), new: FieldValue::Float32(value.1)}
+    ], &engine.registry).expect("flip enabled + write param");
+    flip(&mut engine, (false, true), (0.5, 2.5));
+    engine.reconcile_one(&mut unit);
+    assert!(node_in_path(&leaf_edges(&unit), leaf_nodes(&unit).1[0]), "FX_A is wired in");
+    assert_eq!(last.get(), 2.5, "enabling + writing in one transaction pushes the new value");
+    flip(&mut engine, (true, false), (2.5, 0.5));
+    engine.reconcile_one(&mut unit);
+    assert!(!node_in_path(&leaf_edges(&unit), leaf_nodes(&unit).1[0]), "FX_A is bypassed");
+    assert_eq!(last.get(), 0.5, "disabling + writing in one transaction pushes the new value");
+}
+
+#[test]
 fn a_disabled_note_track_contributes_no_regions_and_re_enabling_restores_it() {
     const TRACK: Uuid = [20u8; 16];
     let mut engine = engine_with_devices();
