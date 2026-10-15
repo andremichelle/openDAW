@@ -17,7 +17,8 @@ type Construct = {
 export const AddLayerButton = ({select}: Construct) => (
     <div className={className}>
         <MenuButton root={MenuItem.root().setRuntimeChildrenProcedure(parent => parent
-            .addMenuItem(...Object.values(InstrumentFactories.Named)
+            .addMenuItem(...InstrumentFactories.Sorted
+                .map(([, factory]) => factory)
                 .filter(factory => InstrumentFactories.isLayerInstrument(factory))
                 .map(factory => MenuItem.default({label: factory.defaultName, icon: factory.defaultIcon})
                     .setTriggerProcedure(() => select(factory)))))}

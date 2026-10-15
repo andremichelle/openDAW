@@ -49,7 +49,7 @@ export const AudioUnitsTimeline = ({lifecycle, service}: Construct) => {
                 <div className="create-instrument">
                     <MenuButton root={MenuItem.root()
                         .setRuntimeChildrenProcedure(parent => parent
-                            .addMenuItem(...Object.entries(InstrumentFactories.Named).map(([_key, factory]) =>
+                            .addMenuItem(...InstrumentFactories.Sorted.map(([_key, factory]) =>
                                 MenuItem.default({
                                     label: factory.defaultName,
                                     icon: factory.defaultIcon

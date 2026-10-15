@@ -1,4 +1,4 @@
-import {StorageScan} from "@opendaw/studio-adapters"
+import {StorageScan} from "./StorageScan"
 
 export namespace StorageReport {
     export type Tab = "projects" | "assets" | "templates" | "presets" | "scripts" | "models" | "other"

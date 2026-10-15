@@ -2,8 +2,7 @@ import {ByteArrayInput, int, isDefined, Nullable, Option, Procedure, tryCatch, u
 import {Box, BoxGraph} from "@opendaw/lib-box"
 import {StorageWalk} from "@opendaw/lib-fusion"
 import {AudioFileBox, BoxIO, SoundfontFileBox, WclapDeviceBox, WclapInstrumentBox} from "@opendaw/studio-boxes"
-import {ProjectSkeleton} from "../project/ProjectSkeleton"
-import {PresetHeader} from "../preset/PresetHeader"
+import {PresetHeader, ProjectSkeleton} from "@opendaw/studio-adapters"
 
 export namespace StorageScan {
     export type AssetKind = "sample" | "soundfont" | "wclap"

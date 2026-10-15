@@ -1,7 +1,8 @@
 import {int, Procedure, unitValue} from "@opendaw/lib-std"
 import {Communicator, Messenger} from "@opendaw/lib-runtime"
 import {StorageWalk} from "@opendaw/lib-fusion"
-import {StorageInspectorProtocol, StorageScan} from "@opendaw/studio-adapters"
+import {StorageInspectorProtocol} from "./StorageInspectorProtocol"
+import {StorageScan} from "./StorageScan"
 
 const read = (root: FileSystemDirectoryHandle) => async (path: string): Promise<Uint8Array> => {
     const segments = path.split("/")

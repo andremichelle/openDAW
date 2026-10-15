@@ -5,7 +5,7 @@ import {
 import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
 import {Events, Html} from "@opendaw/lib-dom"
 import {Promises} from "@opendaw/lib-runtime"
-import {StorageScan} from "@opendaw/studio-adapters"
+import {StorageScan} from "@/storage/StorageScan"
 import {Colors, IconSymbol} from "@opendaw/studio-enums"
 import {StudioService} from "@/service/StudioService.ts"
 import {BackButton} from "@/ui/pages/BackButton"

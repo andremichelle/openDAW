@@ -112,7 +112,7 @@ describe("Schema parity", () => {
         expect(assertMirrored(project.addMarker())).toEqual([])
         expect(assertMirrored(project.groove)).toEqual([])
         const value = unit.addValueTrack(unit, "volume")
-        expect(assertMirrored(value)).toEqual(["type"])
+        expect(assertMirrored(value)).toEqual(["type", "height"])
         const valueRegion = value.addRegion()
         expect(assertMirrored(valueRegion)).toEqual([])
         expect(assertMirrored(valueRegion.addEvent())).toEqual(["interpolation"])

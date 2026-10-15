@@ -26,9 +26,9 @@ import {TrackType} from "../timeline/TrackType"
 
 export namespace InstrumentFactories {
     export const Tape: InstrumentFactory<void, TapeDeviceBox> = {
-        defaultName: "Tape",
+        defaultName: "Audio Track",
         defaultIcon: IconSymbol.Tape,
-        briefDescription: "Audio Player",
+        briefDescription: "Audio Playback",
         description: "Plays audio regions & clips",
         manualPage: DeviceManualUrls.Tape,
         trackType: TrackType.Audio,
@@ -312,6 +312,8 @@ export namespace InstrumentFactories {
 
     export const Named = {Apparat, Cubed, InstrumentComposite, Neon, Tubular, MIDIOutput, Nano, Playfield, Soundfont, Tape, Vaporisateur, Wclap}
     export type Keys = keyof typeof Named
+    export const Sorted: ReadonlyArray<[Keys, InstrumentFactory]> = (Object.entries(Named) as Array<[Keys, InstrumentFactory]>)
+        .sort(([, a], [, b]) => a.defaultName.localeCompare(b.defaultName))
 
     export const keyOfBox = (box: Box): Optional<Keys> => {
         const stripped = box.name.replace(/(Device|Instrument)?Box$/, "")

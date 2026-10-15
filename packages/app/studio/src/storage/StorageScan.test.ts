@@ -6,9 +6,7 @@ import {
     AudioClipBox, AudioFileBox, AudioUnitBox, SoundfontDeviceBox, SoundfontFileBox, TrackBox, ValueEventCollectionBox, WclapDeviceBox
 } from "@opendaw/studio-boxes"
 import {AudioUnitType} from "@opendaw/studio-enums"
-import {TrackType} from "../timeline/TrackType"
-import {ProjectSkeleton} from "../project/ProjectSkeleton"
-import {PresetHeader} from "../preset/PresetHeader"
+import {PresetHeader, ProjectSkeleton, TrackType} from "@opendaw/studio-adapters"
 import {StorageScan} from "./StorageScan"
 
 const json = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value))

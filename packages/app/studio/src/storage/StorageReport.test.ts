@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest"
-import {StorageScan} from "@opendaw/studio-adapters"
+import {StorageScan} from "./StorageScan"
 import {StorageReport} from "./StorageReport"
 
 const asset = (id: string, usedBy: ReadonlyArray<StorageScan.ItemRef>): StorageScan.Asset => ({
