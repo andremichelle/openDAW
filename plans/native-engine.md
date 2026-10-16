@@ -46,6 +46,23 @@ The desktop shell runs the audio engine in its own scope, outside the webview, a
 - Garbage collection stress (`STRESS=2000`: 2000 objects with a `Float64Array` each per quantum, roughly 1 GB/s of garbage): 30 s with a 128 frame ring, zero underruns, average 1 ms and worst 2.1 ms per quantum against the 2.67 ms budget. V8's collector keeps up even under absurd allocation.
 - **Go.** Total output latency with a 128 frame ring: 2.7 ms ring + 4.9 ms CoreAudio = about 7.6 ms on the built-in speakers.
 
+## Step 2 progress (2026-10-16, uncommitted, app-untested)
+
+- `packages/app/desktop/engine/` (`opendaw-engine`): V8 runs `engine-host.js` from the served build (source `studio/src/platform/desktop/engine/EngineHost.ts`, an AudioWorkletGlobalScope stand-in: `registerProcessor`, `AudioWorkletProcessor` with `port`, `sampleRate`, `currentFrame`, `currentTime`, plus `setTimeout`, `queueMicrotask`, `TextDecoder`, `performance`, `fetch` shims) and then the unchanged `wasm-processor.*.js` from the served build (`import.meta.url` rewritten to `self.location.href`). The wasm modules are compiled once per process and shared by all engine instances.
+- Transport: one loopback WebSocket per studio engine instance on `127.0.0.1:47112`, token checked. `BridgeCodec` (studio `platform/desktop/bridge/`, tested) encodes structured-clone-like values. SharedArrayBuffers travel as ids, each side keeps its own copy (`BridgeShared`, studio even ids, engine odd).
+- Relays: the engine state stream (engine copies when WRITTEN, the studio marks it WRITTEN), the sleep flag (studio polls and sends changes), the live stream (lock READ on the engine sends the data buffer, lock WRITE on the studio returns it with the subscription flags). MIDI ports arrive as inert stand-ins (step 4).
+- Studio: `EngineWorkletVariant.port` (optional, additive in studio-core) makes `EngineWorklet` talk through the returned port. `NativeEngine.attach` installs a variant with a silent placeholder processor in the webview and `NativeEnginePort`. The browser never sets `port`.
+- Shell: `OPENDAW_NATIVE_ENGINE=1` starts the engine (`OPENDAW_ENGINE` overrides the binary path) with the shell token and the served root, and tells the page `engine: {port, token}`. The engine exits when its stdin pipe from the shell closes.
+- Two relay bugs found with a Node test client and fixed: the state relay pushed states faster than the studio's reader could consume them (it starved, so the transport never updated), and tungstenite's default 16 MB frame limit dropped the connection on the first decoded sample. The engine now logs why a connection ends.
+- Verified by André (2026-10-16): a real bundle plays through the native engine, transport and meters work, WCLAP plugins run in it, and the output latency stays constant across repeated opens.
+- Not yet: audio input (monitoring, recording), MIDI, the high-resolution clock (DSP load measurement), output device selection, packaging the engine binary into the app.
+
+## Updates: the app stays a wrapper
+
+- Everything the engine runs comes from the installed web build: `engine.wasm`, the device wasm files, `wasm-processor.js` and `engine-host.js` (bridge relays and worklet stand-in). An engine change ships with a studio deploy, the user does nothing.
+- The `opendaw-engine` binary holds only V8, the audio driver (`cpal`) and the loopback WebSocket server. Only native changes (driver features, device selection, `midir`) need an app update through the Tauri updater.
+- A studio build that needs a newer native layer raises `shellApi`, so it waits for the app update (the existing mechanism).
+
 ## Desktop audio duties
 
 - Disable App Nap while the engine runs (macOS).

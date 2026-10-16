@@ -145,7 +145,36 @@ pub fn root() -> Option<Arc<PathBuf>> {
     ROOT.read().unwrap().clone()
 }
 
+const ENGINE_PORT: u16 = 47112;
+static ENGINE: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+
+fn native_engine() -> bool {
+    std::env::var("OPENDAW_NATIVE_ENGINE").is_ok()
+}
+
+// The native engine process serves the build in root; it is started once, with the shell token
+fn start_engine(root: &Path) {
+    let mut engine = ENGINE.lock().unwrap();
+    if !native_engine() || engine.is_some() { return; }
+    let binary = std::env::var("OPENDAW_ENGINE").map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/engine/target/release/opendaw-engine")));
+    // the engine exits when this pipe closes, so it never outlives the shell
+    let command = std::process::Command::new(&binary).env("OPENDAW_ENGINE_TOKEN", files::token()).env("OPENDAW_DIST", root)
+        .stdin(std::process::Stdio::piped()).spawn();
+    match command {
+        Ok(child) => *engine = Some(child),
+        Err(error) => eprintln!("[openDAW] cannot start the engine {} ({error})", binary.display()),
+    }
+}
+
+fn stop_engine() {
+    if let Some(mut child) = ENGINE.lock().unwrap().take() {
+        let _ = child.kill();
+    }
+}
+
 pub fn set_root(root: PathBuf) {
+    start_engine(&root);
     println!("[openDAW] serving {} (shell api {SHELL_API})", root.display());
     match required_shell_api(&root) {
         Some(required) if required > SHELL_API => eprintln!("[openDAW] build needs shell api {required}, this shell has {SHELL_API}"),
@@ -246,7 +275,8 @@ fn main() {
     }
     std::thread::spawn(run_server);
     std::thread::spawn(wclap::run_plugin_server);
-    let shell_info = format!("window.__OPENDAW_SHELL__ = {{token: \"{}\", api: {SHELL_API}}}", files::token());
+    let engine_info = if native_engine() { format!(", engine: {{port: {ENGINE_PORT}, token: \"{}\"}}", files::token()) } else { String::new() };
+    let shell_info = format!("window.__OPENDAW_SHELL__ = {{token: \"{}\", api: {SHELL_API}{engine_info}}}", files::token());
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .on_menu_event(|app, event| menu::clicked(app, event.id().as_ref()))
@@ -309,6 +339,11 @@ fn main() {
             });
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("tauri run");
+        .build(tauri::generate_context!())
+        .expect("tauri build")
+        .run(|_, event| {
+            if let tauri::RunEvent::Exit = event {
+                stop_engine();
+            }
+        });
 }

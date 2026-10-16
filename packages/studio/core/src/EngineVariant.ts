@@ -1,6 +1,7 @@
 import {Func, Nullable, Option, Provider, Terminable, UUID} from "@opendaw/lib-std"
 import {AudioData} from "@opendaw/lib-dsp"
-import {Messenger} from "@opendaw/lib-runtime"
+import {Messenger, Port} from "@opendaw/lib-runtime"
+import {EngineProcessorAttachment} from "@opendaw/studio-adapters"
 import type {Project} from "./project"
 
 // A main-thread replacement for the `EngineCommands.setFrozenAudio` transfer (null = unfreeze).
@@ -20,6 +21,9 @@ export type EngineWorkletVariant = {
     // freeze PCM itself (the wasm engine writes it into its shared memory from the MAIN thread — bulk
     // copying inside the worklet's message handler would stall the audio thread).
     readonly connectFrozenAudio?: Func<Messenger, FrozenAudioWriter>
+    // Optional: the engine runs elsewhere (the desktop app's native engine process). The node's own processor is
+    // then only a placeholder and every message goes through the returned port instead.
+    readonly port?: (options: EngineProcessorAttachment, context: BaseAudioContext) => Port
 }
 
 // The injection point for THE engine. studio-core cannot import studio-core-wasm (that package depends on this

@@ -2,7 +2,7 @@ import {asDefined, Exec, Nullable, Procedure} from "@opendaw/lib-std"
 
 declare global {
     interface Window {
-        __OPENDAW_SHELL__?: { token: string, api: number, menu?: Procedure<string>, close?: Exec }
+        __OPENDAW_SHELL__?: { token: string, api: number, engine?: { port: number, token: string }, menu?: Procedure<string>, close?: Exec }
     }
 }
 

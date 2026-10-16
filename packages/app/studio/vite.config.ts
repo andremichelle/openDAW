@@ -2,6 +2,7 @@ import {readdirSync, readFileSync, statSync, writeFileSync} from "fs"
 import {createHash} from "crypto"
 import {extname, relative, resolve} from "path"
 import {defineConfig} from "vite"
+import {buildSync} from "esbuild"
 import crossOriginIsolation from "vite-plugin-cross-origin-isolation"
 import viteCompression from "vite-plugin-compression"
 import {BuildInfo} from "./src/BuildInfo"
@@ -131,6 +132,12 @@ export default defineConfig(({command, mode}) => {
                 name: "desktop-manifest",
                 closeBundle() {
                     const outDir = resolve(__dirname, "dist-desktop")
+                    // the native engine process runs this next to the unchanged wasm-processor bundle
+                    buildSync({
+                        entryPoints: [resolve(__dirname, "src/platform/desktop/engine/EngineHost.ts")],
+                        outfile: resolve(outDir, "engine-host.js"),
+                        bundle: true, format: "iife", platform: "neutral", mainFields: ["module", "main"], minify: true, logLevel: "warning"
+                    })
                     const walk = (dir: string): ReadonlyArray<string> =>
                         readdirSync(dir, {withFileTypes: true}).filter(entry => !entry.name.startsWith(".")).flatMap(entry => entry.isDirectory()
                             ? walk(resolve(dir, entry.name)) : [resolve(dir, entry.name)])

@@ -121,24 +121,25 @@ export class EngineWorklet extends AudioWorkletNode implements Engine {
         // processor to drop to, so an absent provider is a boot error rather than a silent downgrade.
         const variant: EngineWorkletVariant = EngineVariant.current()
 
+        const processorOptions: EngineProcessorAttachment = {
+            syncStreamBuffer: reader.buffer,
+            controlFlagsBuffer: controlFlagsSAB,
+            hrClockBuffer: HRClockWorker.get().sab,
+            project: project.toArrayBuffer(),
+            exportConfiguration,
+            options,
+            variant: variant.attachment
+        }
         super(context, variant.processorName, {
                 numberOfInputs: 1,
                 numberOfOutputs: 2,
                 outputChannelCount: [numberOfChannels, 8],
-                processorOptions: {
-                    syncStreamBuffer: reader.buffer,
-                    controlFlagsBuffer: controlFlagsSAB,
-                    hrClockBuffer: HRClockWorker.get().sab,
-                    project: project.toArrayBuffer(),
-                    exportConfiguration,
-                    options,
-                    variant: variant.attachment
-                } satisfies EngineProcessorAttachment
+                processorOptions
             }
         )
 
         const {resolve, promise: isReady} = Promise.withResolvers<void>()
-        const messenger = Messenger.for(this.port)
+        const messenger = Messenger.for(isDefined(variant.port) ? variant.port(processorOptions, context) : this.port)
         this.#project = project
         this.#isReady = isReady
         this.#notifyClipNotification = this.#terminator.own(new Notifier<ClipNotification>())
