@@ -1,8 +1,9 @@
 import {isDefined, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
 import {Wait} from "@opendaw/lib-runtime"
-import {EngineVariant, EngineWorkletVariant} from "@opendaw/studio-core"
+import {CaptureAudioBackend, EngineVariant, EngineWorkletVariant} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {OutputLatency} from "@/audio/OutputLatency"
+import {NativeCapture} from "@/platform/desktop/NativeCapture"
 import {Shell} from "@/platform/desktop/Shell"
 import {NativeEnginePort} from "@/platform/desktop/bridge/NativeEnginePort"
 
@@ -51,8 +52,15 @@ export namespace NativeEngine {
             processorName: PlaceholderName,
             attachment: {wasmUrl: "/wasm-engine"},
             connectSync: wasm.connectSync,
-            port: (options, context) => new NativeEnginePort(url, context.sampleRate, options, seconds => latency.seconds = seconds)
+            port: (options, context) => {
+                const port = new NativeEnginePort(url, context.sampleRate, options,
+                    seconds => latency.seconds = seconds, info => NativeCapture.updateInfo(info),
+                    (uuid, peaks) => NativeCapture.deliverPeaks(uuid, peaks))
+                NativeCapture.attachPort(port)
+                return port
+            }
         }))
+        CaptureAudioBackend.install(NativeCapture.backend)
         console.debug(`[NativeEngine] engine process on port ${engine.port}`)
     }
 }

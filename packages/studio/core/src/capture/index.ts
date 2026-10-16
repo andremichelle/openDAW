@@ -1,5 +1,6 @@
 export * from "./Capture"
 export * from "./CaptureAudio"
+export * from "./CaptureAudioBackend"
 export * from "./CaptureMidi"
 export * from "./CaptureDevices"
 export * from "./InputLatency"

@@ -12,6 +12,7 @@ use tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tungstenite::Message;
 
 const QUANTUM: usize = 128;
+const INPUT_CHANNELS: usize = 8;
 const PORT: u16 = 47112;
 const PRELUDE: &str = r#"
     globalThis.self = globalThis
@@ -60,12 +61,22 @@ static STARTED: OnceLock<Instant> = OnceLock::new();
 // output latency parts in microseconds: the ring's depth and what the device reports between callback and playback
 static RING_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static DEVICE_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static INPUT_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+// the main thread owns the cpal input stream (not Send) and opens it on request
+static INPUT_REQUESTS: Mutex<Option<Sender<bool>>> = Mutex::new(None);
+static INPUT_INFO: Mutex<Option<(String, usize)>> = Mutex::new(None);
 static OUTBOX: OnceLock<Mutex<HashMap<i32, Sender<Option<Vec<u8>>>>>> = OnceLock::new();
 
 enum Event {
     Open(i32),
     Receive(i32, Vec<u8>),
     Close(i32),
+    Input(Option<(rtrb::Consumer<f32>, usize)>),
+}
+
+struct Input {
+    consumer: rtrb::Consumer<f32>,
+    channels: usize,
 }
 
 fn outbox() -> &'static Mutex<HashMap<i32, Sender<Option<Vec<u8>>>>> {
@@ -109,6 +120,26 @@ fn send(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::
 fn output_latency(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
     let ordering = std::sync::atomic::Ordering::Relaxed;
     rv.set_double((RING_LATENCY_US.load(ordering) + DEVICE_LATENCY_US.load(ordering)) as f64 / 1_000_000.0);
+}
+
+fn request_input(open: bool) {
+    if let Some(sender) = INPUT_REQUESTS.lock().unwrap().as_ref() {
+        let _ = sender.send(open);
+    }
+}
+
+fn open_input(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {request_input(true)}
+
+fn close_input(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {request_input(false)}
+
+// "name\tchannels" of the open input, or an empty string
+fn input_info(scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+    let info = INPUT_INFO.lock().unwrap().as_ref().map(|(name, channels)| format!("{name}\t{channels}")).unwrap_or_default();
+    rv.set(v8::String::new(scope, &info).unwrap().into());
+}
+
+fn input_latency(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+    rv.set_double(INPUT_LATENCY_US.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1_000_000.0);
 }
 
 fn close(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
@@ -164,6 +195,10 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
     native!("__send", send);
     native!("__close", close);
     native!("__outputLatency", output_latency);
+    native!("__openInput", open_input);
+    native!("__closeInput", close_input);
+    native!("__inputInfo", input_info);
+    native!("__inputLatency", input_latency);
     let context = v8::Context::new(handle_scope, v8::ContextOptions { global_template: Some(global), ..Default::default() });
     let scope = &mut v8::ContextScope::new(handle_scope, context);
     run(scope, PRELUDE, "prelude").expect("prelude");
@@ -182,6 +217,11 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
     let out = v8::Local::<v8::Float32Array>::try_from(run(scope, "new Float32Array(256)", "out").unwrap()).unwrap();
     let out_store = out.buffer(scope).unwrap().get_backing_store();
     let out_ptr = out_store.data().unwrap().as_ptr() as *const f32;
+    let input_array = v8::Local::<v8::Float32Array>::try_from(run(scope, &format!("new Float32Array({})", INPUT_CHANNELS * QUANTUM), "input").unwrap()).unwrap();
+    let input_store = input_array.buffer(scope).unwrap().get_backing_store();
+    let input_ptr = input_store.data().unwrap().as_ptr() as *mut f32;
+    let mut input: Option<Input> = None;
+    let mut interleaved = vec![0.0f32; INPUT_CHANNELS * QUANTUM];
     let receiver: v8::Local<v8::Value> = v8::undefined(scope).into();
     let _priority = audio_thread_priority::promote_current_thread_to_real_time(QUANTUM as u32, sample_rate)
         .map_err(|error| println!("[engine] real-time priority failed: {error:?}")).ok();
@@ -203,10 +243,14 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
                     let id = v8::Integer::new(scope, id).into();
                     close.call(scope, receiver, &[id]);
                 }
+                Event::Input(next) => input = next.map(|(consumer, channels)| Input { consumer, channels }),
             }
         }
         while producer.slots() >= QUANTUM * 2 {
-            render.call(scope, receiver, &[out.into()]);
+            let planar = unsafe { std::slice::from_raw_parts_mut(input_ptr, INPUT_CHANNELS * QUANTUM) };
+            let channels = pull_input(&mut input, &mut interleaved, planar);
+            let channels = v8::Integer::new(scope, channels as i32).into();
+            render.call(scope, receiver, &[out.into(), input_array.into(), channels]);
             let samples = unsafe { std::slice::from_raw_parts(out_ptr, QUANTUM * 2) };
             producer.write_chunk_uninit(QUANTUM * 2).unwrap().fill_from_iter(samples.iter().copied());
         }
@@ -214,6 +258,64 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
         timers.call(scope, receiver, &[]);
         scope.perform_microtask_checkpoint();
         std::thread::park_timeout(Duration::from_millis(1));
+    }
+}
+
+// Moves one quantum from the input ring into planar channels. A ring that ran ahead (clock drift between the
+// input and output devices) is trimmed to keep the input latency bounded; an empty one yields silence.
+fn pull_input(input: &mut Option<Input>, interleaved: &mut [f32], planar: &mut [f32]) -> usize {
+    planar.fill(0.0);
+    let Some(Input { consumer, channels }) = input.as_mut() else { return 0 };
+    let channels = *channels;
+    let quantum = QUANTUM * channels;
+    while consumer.slots() >= quantum * 4 {
+        if let Ok(chunk) = consumer.read_chunk(quantum) { chunk.commit_all(); }
+    }
+    if consumer.slots() < quantum { return channels.min(INPUT_CHANNELS); }
+    if let Ok(chunk) = consumer.read_chunk(quantum) {
+        let (first, second) = chunk.as_slices();
+        interleaved[..first.len()].copy_from_slice(first);
+        interleaved[first.len()..quantum].copy_from_slice(second);
+        chunk.commit_all();
+    }
+    for frame in 0..QUANTUM {
+        for channel in 0..channels.min(INPUT_CHANNELS) {
+            planar[channel * QUANTUM + frame] = interleaved[frame * channels + channel];
+        }
+    }
+    channels.min(INPUT_CHANNELS)
+}
+
+// Opens the default input at the engine's rate; the stream lives as long as the returned value
+fn open_input_stream(events: &Sender<Event>, sample_rate: u32) -> Option<cpal::Stream> {
+    let device = cpal::default_host().default_input_device()?;
+    let channels = device.default_input_config().ok()?.channels() as usize;
+    let name = device.description().map(|description| description.name().to_string()).unwrap_or_default();
+    let (mut producer, consumer) = rtrb::RingBuffer::<f32>::new(QUANTUM * channels * 16);
+    let config = cpal::StreamConfig { channels: channels as u16, sample_rate, buffer_size: cpal::BufferSize::Fixed(QUANTUM as u32) };
+    let stream = device.build_input_stream(config, move |data: &[f32], info: &cpal::InputCallbackInfo| {
+        let timestamp = info.timestamp();
+        INPUT_LATENCY_US.store(timestamp.callback.duration_since(timestamp.capture).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
+        let count = producer.slots().min(data.len());
+        if let Ok(chunk) = producer.write_chunk_uninit(count) {
+            chunk.fill_from_iter(data[..count].iter().copied());
+        }
+    }, |error| eprintln!("[engine] input {error}"), None);
+    match stream {
+        Ok(stream) => {
+            if let Err(error) = cpal::traits::StreamTrait::play(&stream) {
+                eprintln!("[engine] input {error}");
+                return None;
+            }
+            println!("[engine] input {name}, {channels} channels");
+            *INPUT_INFO.lock().unwrap() = Some((name, channels));
+            let _ = events.send(Event::Input(Some((consumer, channels))));
+            Some(stream)
+        }
+        Err(error) => {
+            eprintln!("[engine] cannot open input {name} at {sample_rate} Hz: {error}");
+            None
+        }
     }
 }
 
@@ -291,6 +393,7 @@ fn main() {
     println!("[engine] output {:?}, buffer {buffer}, ring {ring_frames}", device.description().map(|description| description.name().to_string()));
     let (producer, mut consumer) = rtrb::RingBuffer::<f32>::new(ring_frames * 2);
     let (events, inbox) = channel();
+    let input_events = events.clone();
     std::thread::spawn(move || serve(events, token));
     let engine = std::thread::Builder::new().name("engine".into())
         .spawn(move || engine_thread(inbox, producer, sample_rate)).unwrap();
@@ -310,5 +413,17 @@ fn main() {
         waker.unpark();
     }, |error| eprintln!("[engine] audio {error}"), None).expect("output stream");
     stream.play().expect("play");
-    engine.join().unwrap();
+    let (requests, incoming) = channel::<bool>();
+    *INPUT_REQUESTS.lock().unwrap() = Some(requests);
+    let mut input_stream: Option<cpal::Stream> = None;
+    for open in incoming {
+        if open && input_stream.is_none() {
+            input_stream = open_input_stream(&input_events, sample_rate);
+        } else if !open && input_stream.is_some() {
+            input_stream = None;
+            *INPUT_INFO.lock().unwrap() = None;
+            let _ = input_events.send(Event::Input(None));
+            println!("[engine] input closed");
+        }
+    }
 }

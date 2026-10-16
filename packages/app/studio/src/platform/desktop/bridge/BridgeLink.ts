@@ -7,12 +7,16 @@ export type ToEngine =
     | { type: "message", data: unknown }
     | { type: "control", value: int }
     | { type: "live-return", lock: int, data: int, bytes: Uint8Array }
+    | { type: "capture", uuid: Uint8Array, channels: int, gain: number, mode: string, volume: number, pan: number }
+    | { type: "capture-close", uuid: Uint8Array }
 
 export type ToStudio =
     | { type: "message", data: unknown }
     | { type: "state", bytes: Uint8Array }
     | { type: "live", lock: int, data: int, bytes: Uint8Array }
     | { type: "latency", seconds: number }
+    | { type: "input", name: string, channels: int }
+    | { type: "input-peaks", uuid: Uint8Array, peaks: Float32Array }
 
 export const enum LiveLock {WRITE = 0, READ = 1}
 export const enum SyncState {READING = 0, READ = 1, WRITING = 2, WRITTEN = 3}

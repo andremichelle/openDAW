@@ -1,6 +1,6 @@
 // The native engine host, shipped in the desktop web build as engine-host.js and run by the engine process:
 // an AudioWorkletGlobalScope stand-in for the unchanged wasm-processor bundle, one processor per studio connection.
-import {int, isDefined, Nullable, Optional, Procedure, tryCatch} from "@opendaw/lib-std"
+import {int, isDefined, Nullable, Optional, Procedure, tryCatch, UUID} from "@opendaw/lib-std"
 import {Port} from "@opendaw/lib-runtime"
 import {loadEngineModules} from "../../../../../../studio/core-wasm/src/engine-modules"
 import {WASM_ENGINE_PROCESSOR_NAME} from "../../../../../../studio/core-wasm/src/protocol"
@@ -9,6 +9,9 @@ import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "../bridge/B
 declare const __send: (connection: int, bytes: ArrayBuffer) => void
 declare const __close: (connection: int) => void
 declare const __outputLatency: () => number
+declare const __openInput: () => void
+declare const __closeInput: () => void
+declare const __inputInfo: () => string
 
 const RenderQuantum = 128
 const TickQuanta = 4
@@ -37,6 +40,43 @@ scope.currentTime = 0
 
 const modules = new Map<string, ReturnType<typeof loadEngineModules>>()
 
+type CaptureState = { uuid: Uint8Array, channels: int, gain: number, mode: string, volume: number, pan: number, peaks: Float32Array }
+
+type InputState = { channels: int, info: string, views: Array<Float32Array>, buffer: Nullable<Float32Array> }
+
+const input: InputState = {channels: 0, info: "", views: [], buffer: null}
+
+// hardware input channels of a capture: the first one or two, a mono device feeds both sides
+const captureChannels = (capture: CaptureState): Array<int> =>
+    capture.channels === 1 ? [0] : [0, Math.min(1, Math.max(0, input.channels - 1))]
+
+// the StereoPannerNode equal-power law, mono and stereo
+const mixPanned = (target: Array<Float32Array>, left: Float32Array, right: Float32Array, stereo: boolean, volume: number, pan: number): void => {
+    const [outLeft, outRight] = target
+    if (!stereo) {
+        const angle = (pan + 1.0) * 0.25 * Math.PI
+        const gainLeft = Math.cos(angle) * volume, gainRight = Math.sin(angle) * volume
+        for (let index = 0; index < RenderQuantum; index++) {
+            outLeft[index] += left[index] * gainLeft
+            outRight[index] += left[index] * gainRight
+        }
+    } else if (pan <= 0.0) {
+        const angle = (pan + 1.0) * 0.5 * Math.PI
+        const cos = Math.cos(angle), sin = Math.sin(angle)
+        for (let index = 0; index < RenderQuantum; index++) {
+            outLeft[index] += (left[index] + right[index] * cos) * volume
+            outRight[index] += right[index] * sin * volume
+        }
+    } else {
+        const angle = pan * 0.5 * Math.PI
+        const cos = Math.cos(angle), sin = Math.sin(angle)
+        for (let index = 0; index < RenderQuantum; index++) {
+            outLeft[index] += left[index] * cos * volume
+            outRight[index] += (right[index] + left[index] * sin) * volume
+        }
+    }
+}
+
 class EnginePort implements Port {
     onmessage: Nullable<Procedure<MessageEvent>> = null
     onmessageerror: Nullable<Procedure<MessageEvent>> = null
@@ -56,6 +96,7 @@ class Connection {
     control: Nullable<Int32Array> = null
     alive = true
     ticks = 0
+    readonly captures = new Map<string, CaptureState>()
 
     constructor(readonly id: int) {}
 
@@ -78,14 +119,48 @@ class Connection {
     render(): void {
         if (!this.alive || this.processor === null) {return}
         this.main.forEach(channel => channel.fill(0.0))
-        const {status, value, error} = tryCatch(() => this.processor?.process([[]], [this.main, this.monitor]) ?? false)
+        const inputs = [input.views.slice(0, input.channels)]
+        const {status, value, error} = tryCatch(() => this.processor?.process(inputs, [this.main, this.monitor]) ?? false)
         if (status === "failure") {console.error(`[host] engine ${this.id} threw`, (error as Error)?.stack ?? error)}
         this.alive = status === "success" && value
-        if (!this.alive) {this.close()}
+        if (!this.alive) {
+            this.close()
+            return
+        }
+        this.captures.forEach(capture => {
+            if (input.channels > 0) {
+                captureChannels(capture).forEach((channel, index) => {
+                    const samples = input.views[channel]
+                    let peak = capture.peaks[index]
+                    for (let frame = 0; frame < RenderQuantum; frame++) {peak = Math.max(peak, Math.abs(samples[frame]))}
+                    capture.peaks[index] = peak
+                })
+            }
+            if (capture.volume === 0.0 || input.channels === 0 || (capture.mode !== "direct" && capture.mode !== "effects")) {return}
+            const [first, second] = captureChannels(capture)
+            const source = capture.mode === "direct" ? input.views : this.monitor
+            mixPanned(this.main, source[first], source[second ?? first], capture.channels === 2, capture.volume, capture.pan)
+        })
+    }
+
+    // effects monitoring renders the input through the unit's chain; the engine reads the mapped hardware channels
+    updateMonitoringMap(): void {
+        const map = Array.from(this.captures.values())
+            .filter(capture => capture.mode === "effects" && input.channels > 0)
+            .map(capture => ({uuid: capture.uuid, channels: captureChannels(capture)}))
+        this.port.onmessage?.({data: {__id__: "42", channel: "engine-commands", message: {
+            type: "send", returnId: false, func: "updateMonitoringMap", args: [{value: map}]
+        }}} as MessageEvent)
     }
 
     tick(): void {
         if (this.ticks++ % 100 === 0) {this.send({type: "latency", seconds: __outputLatency()})}
+        if (this.ticks % 2 === 0) {
+            this.captures.forEach(capture => {
+                this.send({type: "input-peaks", uuid: capture.uuid, peaks: capture.peaks.map(peak => peak * capture.gain)})
+                capture.peaks.fill(0.0)
+            })
+        }
         if (this.sync !== null && Atomics.load(this.sync, 0) === SyncState.WRITTEN) {
             this.send({type: "state", bytes: this.sync.slice(1)})
             Atomics.store(this.sync, 0, SyncState.READ)
@@ -129,6 +204,15 @@ class Connection {
             this.port.onmessage?.({data: envelope.data} as MessageEvent)
         } else if (envelope.type === "control" && this.control !== null) {
             Atomics.store(this.control, 0, envelope.value)
+        } else if (envelope.type === "capture") {
+            const {uuid, channels, gain, mode, volume, pan} = envelope
+            this.captures.set(UUID.toString(uuid as UUID.Bytes), {uuid, channels, gain, mode, volume, pan, peaks: new Float32Array(channels)})
+            refreshInput()
+            this.updateMonitoringMap()
+        } else if (envelope.type === "capture-close") {
+            this.captures.delete(UUID.toString(envelope.uuid as UUID.Bytes))
+            refreshInput()
+            this.updateMonitoringMap()
         } else if (envelope.type === "live-return") {
             const data = this.shared.get(envelope.data)
             const lock = this.shared.get(envelope.lock)
@@ -141,9 +225,34 @@ class Connection {
 }
 
 const connections = new Map<int, Connection>()
+
+const refreshInput = (): void => {
+    const wanted = Array.from(connections.values()).some(connection => connection.alive && connection.captures.size > 0)
+    if (wanted) {__openInput()} else {__closeInput()}
+}
+
+const sendInput = (connection: Connection): void => {
+    const [name, channels] = input.info.length > 0 ? input.info.split("\t") : ["", "0"]
+    connection.send({type: "input", name, channels: Number(channels)})
+}
+
+const announceInput = (): void => {
+    const info = __inputInfo()
+    if (info === input.info) {return}
+    input.info = info
+    connections.forEach(connection => {
+        sendInput(connection)
+        connection.updateMonitoringMap()
+    })
+}
 const state = {quanta: 0}
 
-const render = (out: Float32Array): void => {
+const render = (out: Float32Array, buffer: Float32Array, channels: int): void => {
+    if (input.buffer !== buffer) {
+        input.buffer = buffer
+        input.views = Array.from({length: 8}, (_, channel) => buffer.subarray(channel * RenderQuantum, (channel + 1) * RenderQuantum))
+    }
+    input.channels = channels
     out.fill(0.0)
     connections.forEach(connection => {
         connection.render()
@@ -156,12 +265,22 @@ const render = (out: Float32Array): void => {
     })
     scope.currentFrame = (scope.currentFrame as number) + RenderQuantum
     scope.currentTime = (scope.currentFrame as number) / (scope.sampleRate as number)
-    if (++state.quanta % TickQuanta === 0) {connections.forEach(connection => connection.tick())}
+    if (++state.quanta % TickQuanta === 0) {
+        connections.forEach(connection => connection.tick())
+        announceInput()
+    }
 }
 
 scope.__bridge = {
-    open: (id: int): void => {connections.set(id, new Connection(id))},
+    open: (id: int): void => {
+        const connection = new Connection(id)
+        connections.set(id, connection)
+        if (input.info.length > 0) {sendInput(connection)}
+    },
     receive: (id: int, bytes: ArrayBuffer): void => connections.get(id)?.receive(bytes),
-    close: (id: int): void => {connections.delete(id)},
+    close: (id: int): void => {
+        connections.delete(id)
+        refreshInput()
+    },
     render
 }

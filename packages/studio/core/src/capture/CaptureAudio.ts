@@ -3,10 +3,13 @@ import {
     isDefined,
     isUndefined,
     MutableObservableOption,
+    Notifier,
     Nullable,
+    Observer,
     Option,
     Optional,
     RuntimeNotifier,
+    Subscription,
     Terminable,
     tryCatch,
     UUID,
@@ -23,6 +26,7 @@ import {RecordAudio} from "./RecordAudio"
 import {AudioDevices} from "../AudioDevices"
 import {RecordingWorklet} from "../RecordingWorklet"
 import {MonitoringMode} from "./MonitoringMode"
+import {CaptureAudioBackend} from "./CaptureAudioBackend"
 
 // Ring capacity in render-quantum chunks (~3s at 48kHz). The reader worker keeps the ring drained in real time;
 // the headroom only needs to cover the worker's async boot and transient stalls. See issue #290.
@@ -52,6 +56,10 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     #monitorOutputDeviceId: Option<string> = Option.None
     #monitorAudioElement: Nullable<HTMLAudioElement> = null
     #monitorStreamDest: Nullable<MediaStreamAudioDestinationNode> = null
+    #native: Nullable<CaptureAudioBackend.Input> = null
+    #nativeChannels: Optional<1 | 2> = undefined
+    #nativePeaks: Nullable<Subscription> = null
+    readonly #inputPeaks: Notifier<Float32Array> = new Notifier<Float32Array>()
 
     constructor(manager: CaptureDevices, audioUnitBox: AudioUnitBox, captureAudioBox: CaptureAudioBox) {
         super(manager, audioUnitBox, captureAudioBox)
@@ -64,6 +72,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         this.#stream = new MutableObservableOption<MediaStream>()
         this.#streamGenerator = Promises.sequentialize(() => this.#updateStream())
         this.#vitalSigns = this.own(new VitalSigns())
+        this.own(this.#inputPeaks)
         this.ownAll(
             Terminable.create(() => {
                 this.#discardPreparedWorklet()
@@ -79,12 +88,14 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
                 const channels = owner.getValue()
                 this.#requestChannels = channels === 1 || channels === 2 ? Option.wrap(channels) : Option.None
                 this.#stream.ifSome(stream => this.#rebuildAudioChain(stream))
+                if (isDefined(this.#native)) {void this.#streamGenerator()}
             }),
             captureAudioBox.gainDb.catchupAndSubscribe(owner => {
                 this.#gainDb = owner.getValue()
                 if (isDefined(this.#audioChain)) {
                     this.#audioChain.recordGainNode.gain.value = dbToGain(this.#gainDb)
                 }
+                this.#native?.setGain(dbToGain(this.#gainDb))
             }),
             captureAudioBox.deviceId.catchupAndSubscribe(async () => {
                 if (this.armed.getValue()) {
@@ -114,35 +125,47 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         this.#connectMonitoring()
     }
     get gainDb(): number {return this.#gainDb}
+    // input peaks measured outside the Web Audio graph (a backend input); an empty array when that input stops
+    subscribeInputPeaks(observer: Observer<Float32Array>): Subscription {return this.#inputPeaks.subscribe(observer)}
     get requestChannels(): Option<1 | 2> {return this.#requestChannels}
     set requestChannels(value: 1 | 2) {this.captureBox.requestChannels.setValue(value)}
     get stream(): MutableObservableOption<MediaStream> {return this.#stream}
     get streamDeviceId(): Option<string> {
+        if (isDefined(this.#native)) {return Option.wrap(this.#native.deviceId)}
         return this.streamMediaTrack.map(settings => settings.getSettings().deviceId ?? "")
     }
-    get label(): string {return this.streamMediaTrack.mapOr(track => track.label, "Default")}
-    get deviceLabel(): Option<string> {return this.streamMediaTrack.map(track => track.label ?? "")}
+    get label(): string {
+        if (isDefined(this.#native)) {return this.#native.label}
+        return this.streamMediaTrack.mapOr(track => track.label, "Default")
+    }
+    get deviceLabel(): Option<string> {
+        if (isDefined(this.#native)) {return Option.wrap(this.#native.label)}
+        return this.streamMediaTrack.map(track => track.label ?? "")
+    }
     get streamMediaTrack(): Option<MediaStreamTrack> {
         return this.#stream.flatMap(stream => Option.wrap(stream.getAudioTracks().at(0)))
     }
     get outputNode(): Option<AudioNode> {return Option.wrap(this.#audioChain?.recordGainNode)}
-    get effectiveChannelCount(): number {return this.#audioChain?.channelCount ?? 1}
+    get effectiveChannelCount(): number {return this.#native?.channelCount ?? this.#audioChain?.channelCount ?? 1}
     get monitorGainNode(): GainNode {return this.#monitorGainNode}
     get monitorPanNode(): StereoPannerNode {return this.#monitorPanNode}
     get monitorVolumeDb(): number {return this.#monitorVolumeDb}
     set monitorVolumeDb(value: number) {
         this.#monitorVolumeDb = value
         this.#monitorGainNode.gain.value = this.#monitorMuted ? 0 : dbToGain(this.#monitorVolumeDb)
+        this.#updateNativeMonitoring()
     }
     get monitorPan(): number {return this.#monitorPan}
     set monitorPan(value: number) {
         this.#monitorPan = value
         this.#monitorPanNode.pan.value = value
+        this.#updateNativeMonitoring()
     }
     get monitorMuted(): boolean {return this.#monitorMuted}
     set monitorMuted(value: boolean) {
         this.#monitorMuted = value
         this.#monitorGainNode.gain.value = value ? 0 : dbToGain(this.#monitorVolumeDb)
+        this.#updateNativeMonitoring()
     }
     get monitorOutputDeviceId(): Option<string> {return this.#monitorOutputDeviceId}
 
@@ -184,6 +207,9 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
 
     async prepareRecording(): Promise<void> {
+        if (CaptureAudioBackend.current().nonEmpty()) {
+            return Promise.reject("Recording with the native audio engine is not available yet.")
+        }
         const {project} = this.manager
         const {env: {audioContext, audioWorklets, sampleManager, sampleService}} = project
         // a prepared worklet that startRecording never consumed stays connected and buffering forever
@@ -262,6 +288,8 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
 
     async #updateStream(): Promise<void> {
         if (!this.#wantsStream()) {return}
+        const backend = CaptureAudioBackend.current()
+        if (backend.nonEmpty()) {return this.#updateNativeInput(backend.unwrap())}
         const namedDeviceId = this.deviceId.getValue().unwrapOrUndefined()
         if (this.#stream.nonEmpty()) {
             const openTrack = this.#stream.unwrap().getAudioTracks().at(0)
@@ -316,7 +344,37 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     // getUserMedia cannot be cancelled, so this is checked when an update starts and, with the device, when it resolves
     #wantsStream(): boolean {return this.armed.getValue() && !this.#vitalSigns.isTerminated}
 
+    async #updateNativeInput(backend: CaptureAudioBackend): Promise<void> {
+        const deviceId = this.deviceId.getValue().unwrapOrUndefined()
+        const channels = this.#requestChannels.unwrapOrElse(2)
+        if (isDefined(this.#native) && this.#nativeChannels === channels) {return}
+        this.#stopStream()
+        const input = await backend.open({uuid: this.audioUnitBox.address.uuid, deviceId, channels})
+        if (!this.#wantsStream()) {
+            input.terminate()
+            return
+        }
+        this.#native = input
+        this.#nativeChannels = channels
+        this.#nativePeaks = input.subscribePeaks(peaks => this.#inputPeaks.notify(peaks))
+        input.setGain(dbToGain(this.#gainDb))
+        this.#updateNativeMonitoring()
+    }
+
+    #updateNativeMonitoring(): void {
+        this.#native?.setMonitoring(this.#monitoringMode,
+            this.#monitorMuted ? 0.0 : dbToGain(this.#monitorVolumeDb), this.#monitorPan)
+    }
+
     #stopStream(): void {
+        if (isDefined(this.#native)) {
+            this.#nativePeaks?.terminate()
+            this.#nativePeaks = null
+            this.#native.terminate()
+            this.#native = null
+            this.#nativeChannels = undefined
+            this.#inputPeaks.notify(new Float32Array(0))
+        }
         this.#disconnectMonitoring()
         this.#destroyAudioChain()
         this.#stream.clear(stream => stream.getAudioTracks().forEach(track => track.stop()))
@@ -367,6 +425,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
 
     #connectMonitoring(): void {
+        this.#updateNativeMonitoring()
         if (!isDefined(this.#audioChain)) {return}
         const {sourceNode, channelCount} = this.#audioChain
         switch (this.#monitoringMode) {

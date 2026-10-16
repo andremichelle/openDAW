@@ -100,6 +100,12 @@ export const AudioUnitChannelControls = ({lifecycle, service, adapter}: Construc
                     })
                 }
                 return Terminable.many(
+                    capture.subscribeInputPeaks(peaks => {
+                        streamRunning = peaks.length > 0
+                        if (!streamRunning) {return}
+                        peaksInDb[0] = gainToDb(peaks[0])
+                        peaksInDb[1] = gainToDb(peaks[1] ?? peaks[0])
+                    }),
                     capture.stream.catchupAndSubscribe(() => connectMeter()),
                     capture.captureBox.requestChannels.subscribe(() => connectMeter())
                 )
