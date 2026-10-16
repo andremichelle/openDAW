@@ -13,7 +13,7 @@ import {NativeComponents} from "@/platform/desktop/NativeComponents"
 import {NativeMenu} from "@/service/NativeMenu"
 import {WclapWindows} from "@/service/WclapWindows"
 
-OpenDAWCloud.disable()
+OpenDAWCloud.followNetwork()
 DesktopFiles.install()
 NativeMenu.install(service => {
     DesktopMenu.attach(service)

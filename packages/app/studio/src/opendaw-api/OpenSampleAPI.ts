@@ -32,15 +32,14 @@ export class OpenSampleAPI implements SampleAPI {
     @Lazy
     static get(): OpenSampleAPI {return new OpenSampleAPI()}
 
-    readonly #memoized: () => Promise<SampleIndex> = Promises.memoizeAsync(() => OpenDAWCloud.isAvailable()
-        ? fetchIndex(OpenSampleAPI.IndexFile, OpenDAWHeaders).then(json => SampleIndex.schema.parse(json))
-        : Promise.resolve(SampleIndex.Empty))
+    readonly #memoized: () => Promise<SampleIndex> = Promises.memoizeAsync(() =>
+        fetchIndex(OpenSampleAPI.IndexFile, OpenDAWHeaders).then(json => SampleIndex.schema.parse(json)))
 
     private constructor() {}
 
-    async tree(): Promise<SampleIndex> {return this.#memoized()}
+    async tree(): Promise<SampleIndex> {return OpenDAWCloud.isAvailable() ? this.#memoized() : SampleIndex.Empty}
 
-    async all(): Promise<ReadonlyArray<Sample>> {return SampleIndex.flatten(await this.#memoized())}
+    async all(): Promise<ReadonlyArray<Sample>> {return SampleIndex.flatten(await this.tree())}
 
     async get(uuid: UUID.Bytes): Promise<Sample> {
         const uuidAsString = UUID.toString(uuid)

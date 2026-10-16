@@ -14,15 +14,14 @@ export class OpenSoundfontAPI {
     @Lazy
     static get(): OpenSoundfontAPI {return new OpenSoundfontAPI()}
 
-    readonly #memoized: () => Promise<SoundfontIndex> = Promises.memoizeAsync(() => OpenDAWCloud.isAvailable()
-        ? fetchIndex(OpenSoundfontAPI.IndexFile, OpenDAWHeaders).then(json => SoundfontIndex.schema.parse(json))
-        : Promise.resolve(SoundfontIndex.Empty))
+    readonly #memoized: () => Promise<SoundfontIndex> = Promises.memoizeAsync(() =>
+        fetchIndex(OpenSoundfontAPI.IndexFile, OpenDAWHeaders).then(json => SoundfontIndex.schema.parse(json)))
 
     private constructor() {}
 
-    async tree(): Promise<SoundfontIndex> {return this.#memoized()}
+    async tree(): Promise<SoundfontIndex> {return OpenDAWCloud.isAvailable() ? this.#memoized() : SoundfontIndex.Empty}
 
-    async all(): Promise<ReadonlyArray<Soundfont>> {return SoundfontIndex.flatten(await this.#memoized())}
+    async all(): Promise<ReadonlyArray<Soundfont>> {return SoundfontIndex.flatten(await this.tree())}
 
     async get(uuid: UUID.Bytes): Promise<Soundfont> {
         const uuidAsString = UUID.toString(uuid)

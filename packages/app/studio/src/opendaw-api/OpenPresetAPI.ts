@@ -1,5 +1,6 @@
 import {
-    asDefined, DefaultObservableValue, isDefined, Lazy, panic, Procedure, RuntimeNotifier, tryCatch, unitValue, UUID
+    asDefined, DefaultObservableValue, isDefined, Lazy, panic, Procedure, Provider, RuntimeNotifier, tryCatch, unitValue,
+    UUID
 } from "@opendaw/lib-std"
 import {network, Promises} from "@opendaw/lib-runtime"
 import {AccessKey} from "./AccessKey"
@@ -14,11 +15,13 @@ export class OpenPresetAPI {
     @Lazy
     static get(): OpenPresetAPI {return new OpenPresetAPI()}
 
+    readonly #fetched: Provider<Promise<ReadonlyArray<PresetMeta>>> = Promises.memoizeAsync(() => this.#fetchList())
+
     private constructor() {}
 
-    @Lazy
-    async list(): Promise<ReadonlyArray<PresetMeta>> {
-        if (!OpenDAWCloud.isAvailable()) {return []}
+    list(): Promise<ReadonlyArray<PresetMeta>> {return OpenDAWCloud.isAvailable() ? this.#fetched() : Promise.resolve([])}
+
+    async #fetchList(): Promise<ReadonlyArray<PresetMeta>> {
         const url = `${OpenPresetAPI.FileRoot}/index.json?t=${Date.now()}`
         const result = await Promises.tryCatch(Promises.retry(() =>
             network.defaultFetch(url, OpenDAWHeaders).then(response => response.json())))

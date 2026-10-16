@@ -1,9 +1,9 @@
 import {afterEach, describe, expect, it, vi} from "vitest"
 import {UUID} from "@opendaw/lib-std"
 
-// The web app must keep fetching every catalogue exactly as before; only a host that disables the cloud
-// (the desktop app) gets empty catalogues without a single request. Fresh modules per test, because the
-// APIs are lazy singletons with memoized indexes.
+// The web app must keep fetching every catalogue exactly as before; only a host that follows the network
+// (the desktop app) gets empty catalogues without a single request while offline, and fetches them once online.
+// Fresh modules per test, because the APIs are lazy singletons with memoized indexes.
 const freshApi = async () => {
     vi.resetModules()
     return import("./index")
@@ -20,7 +20,8 @@ const requestedUrls = (fetchMock: ReturnType<typeof stubFetch>): ReadonlyArray<s
 
 describe("OpenDAWCloud available (web default)", () => {
     afterEach(() => vi.unstubAllGlobals())
-    it("is available unless disabled", async () => {
+    it("is available even offline unless it follows the network", async () => {
+        vi.stubGlobal("navigator", {onLine: false})
         const {OpenDAWCloud} = await freshApi()
         expect(OpenDAWCloud.isAvailable()).toBe(true)
     })
@@ -50,16 +51,18 @@ describe("OpenDAWCloud available (web default)", () => {
     })
 })
 
-describe("OpenDAWCloud disabled (desktop)", () => {
+describe("OpenDAWCloud follows the network (desktop)", () => {
     afterEach(() => vi.unstubAllGlobals())
-    const disabledApi = async () => {
+    const networkApi = async (onLine: boolean) => {
+        const network = {onLine}
+        vi.stubGlobal("navigator", network)
         const fetchMock = stubFetch({version: 1, folders: []})
         const api = await freshApi()
-        api.OpenDAWCloud.disable()
-        return {fetchMock, ...api}
+        api.OpenDAWCloud.followNetwork()
+        return {network, fetchMock, ...api}
     }
-    it("returns empty catalogues without any request", async () => {
-        const {fetchMock, OpenSampleAPI, OpenSoundfontAPI, OpenPresetAPI, OpenWclapAPI, OpenDAWCloud} = await disabledApi()
+    it("returns empty catalogues offline without any request", async () => {
+        const {fetchMock, OpenSampleAPI, OpenSoundfontAPI, OpenPresetAPI, OpenWclapAPI, OpenDAWCloud} = await networkApi(false)
         expect(OpenDAWCloud.isAvailable()).toBe(false)
         expect(await OpenSampleAPI.get().all()).toEqual([])
         expect(await OpenSoundfontAPI.get().all()).toEqual([])
@@ -67,8 +70,8 @@ describe("OpenDAWCloud disabled (desktop)", () => {
         expect(await OpenWclapAPI.get().all()).toEqual([])
         expect(fetchMock).not.toHaveBeenCalled()
     })
-    it("fails remote loads at once without any request", async () => {
-        const {fetchMock, OpenSampleAPI, OpenSoundfontAPI, OpenPresetAPI, OpenWclapAPI} = await disabledApi()
+    it("fails remote loads offline at once without any request", async () => {
+        const {fetchMock, OpenSampleAPI, OpenSoundfontAPI, OpenPresetAPI, OpenWclapAPI} = await networkApi(false)
         const uuid = UUID.generate()
         await expect(OpenSampleAPI.get().get(uuid)).rejects.toThrow()
         await expect(OpenSampleAPI.get().load(uuid, () => {})).rejects.toThrow()
@@ -76,5 +79,26 @@ describe("OpenDAWCloud disabled (desktop)", () => {
         await expect(OpenPresetAPI.get().load(uuid)).rejects.toThrow()
         await expect(OpenWclapAPI.get().load(UUID.toString(uuid))).rejects.toThrow()
         expect(fetchMock).not.toHaveBeenCalled()
+    })
+    it("fetches the catalogues online", async () => {
+        const {fetchMock, OpenSampleAPI, OpenSoundfontAPI, OpenPresetAPI, OpenWclapAPI} = await networkApi(true)
+        await OpenSampleAPI.get().all()
+        await OpenSoundfontAPI.get().all()
+        await OpenPresetAPI.get().list()
+        await OpenWclapAPI.get().all()
+        const urls = requestedUrls(fetchMock)
+        expect([OpenSampleAPI.IndexFile, OpenSoundfontAPI.IndexFile, `${OpenPresetAPI.FileRoot}/index.json`, OpenWclapAPI.IndexFile]
+            .every(file => urls.some(url => url.startsWith(file)))).toBe(true)
+    })
+    it("fetches a catalogue on its next use once back online", async () => {
+        const {network, fetchMock, OpenSampleAPI, OpenPresetAPI} = await networkApi(false)
+        expect(await OpenSampleAPI.get().all()).toEqual([])
+        expect(await OpenPresetAPI.get().list()).toEqual([])
+        network.onLine = true
+        fetchMock.mockImplementation(async (input: unknown) => new Response(JSON.stringify(String(input).includes("/presets/")
+            ? [] : {version: 1, folders: [{name: "Drums", samples: []}]}), {status: 200}))
+        expect((await OpenSampleAPI.get().tree()).folders.map(folder => folder.name)).toEqual(["Drums"])
+        await OpenPresetAPI.get().list()
+        expect(requestedUrls(fetchMock).some(url => url.startsWith(`${OpenPresetAPI.FileRoot}/index.json`))).toBe(true)
     })
 })
