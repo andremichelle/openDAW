@@ -112,7 +112,7 @@ My current lean is **B**, because workers reach the `/fs` endpoints over plain H
 4. **Newer uuid**:
    - If `shellApi > SHELL_API`, keep the installed build, and the shell update (below) must happen first.
    - Otherwise download `manifest.json` into `web/{uuid}.partial/`. Files whose sha256 already exists in the current build are copied locally (fonts, images, unchanged wasm devices), and only the rest are fetched. Every file is verified by size and hash. Then rename to `web/{uuid}/`, write `web/current` atomically, and delete every build except current and previous.
-   - The splash shows progress. When a build is already installed, a "Start current version" button skips the update for this launch.
+   - The splash shows progress. When a build is already installed, a "Skip Update" button stops the download and starts the installed build; the download resumes on the next launch.
 5. A failed or interrupted download leaves `.partial` behind and it is retried or wiped on the next launch. The active build is never touched before the switch.
 6. If the new build fails to boot (no ready signal within N seconds), roll back to the previous build and mark the failed uuid as bad.
 
@@ -121,7 +121,7 @@ My current lean is **B**, because workers reach the `/fs` endpoints over plain H
   - Builds live in `<app data>/web/{uuid}/` (macOS `~/Library/Application Support/studio.opendaw/web`). Next to them are `current`, `previous` (written atomically), `pending` and `bad`.
   - The download goes to `{uuid}.partial/`. Each file is verified by size and sha256. A partial file left by an earlier attempt that verifies is kept, and a file whose sha256 exists in the current build is copied locally. On success the folder is renamed, `current` and `previous` are switched and every other build is deleted.
   - Boot signal: the studio's first `/__shell/guard` call clears `pending`. If `pending` is still set at the next launch, or 90 s after a switch in the same session, the build goes on `bad` and `previous` becomes current again. A bad uuid is never downloaded again.
-  - The dummy splash (`/__splash`) shows progress, "Start current version" while downloading over an installed build, and Retry when offline on first launch or after an error. The main window opens on the splash and moves to `/` once a build is chosen. Until then the studio paths answer 503.
+  - The dummy splash (`/__splash`) shows progress, "Skip Update" while downloading over an installed build, and Retry when offline on first launch or after an error. The main window opens on the splash and moves to `/` once a build is chosen. Until then the studio paths answer 503.
   - Development: `OPENDAW_DIST`, or a debug build without `OPENDAW_UPDATE`, serves the local `dist-desktop` and skips all of this, so `npm run desktop` is unchanged.
   - Tested locally against a fake origin (`OPENDAW_UPDATE_ORIGIN=http://127.0.0.1:8099 OPENDAW_UPDATE=1`): first install (221 files, 82 MB), update with one changed file (only that file fetched), rollback after a failed boot, offline first launch.
   - Open: a real splash design, the periodic recheck and "Update available, restart?" while running, pruning old releases on the server.
