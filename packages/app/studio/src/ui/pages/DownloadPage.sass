@@ -1,0 +1,66 @@
+@use "@/colors"
+
+component
+  flex: 1
+  padding: 2em
+  display: flex
+  flex-direction: column
+  row-gap: 0.75em
+  overflow: hidden auto
+  @include colors.panel-background
+
+  h1
+    margin: 0
+    color: var(--color-cream)
+
+  h3
+    margin: 1em 0 0 0
+    color: var(--color-orange)
+
+  p, ol
+    margin: 0
+    max-width: 40em
+    line-height: 1.4em
+
+  ol
+    padding-left: 1.25em
+
+  li + li
+    margin-top: 0.5em
+
+  .lead
+    color: var(--color-bright)
+
+  .platforms
+    display: flex
+    flex-wrap: wrap
+    gap: 1em
+    margin: 1em 0
+
+    .platform
+      width: 11em
+      padding: 1.25em
+      display: flex
+      flex-direction: column
+      align-items: center
+      row-gap: 0.75em
+      border-radius: 4px
+      @include colors.panel-background-bright
+
+      h2
+        margin: 0
+        color: var(--color-cream)
+
+      .download
+        padding: 0.5em 1.5em
+        border-radius: 3px
+        color: var(--color-black)
+        background-color: var(--color-blue)
+        text-decoration: none
+
+      .size
+        color: var(--color-dark)
+
+      &.unavailable .download
+        color: var(--color-dark)
+        background-color: transparent

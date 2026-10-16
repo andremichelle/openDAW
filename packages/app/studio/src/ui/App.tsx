@@ -26,6 +26,7 @@ import {TestPage} from "@/ui/pages/TestPage"
 import {JoinRoomPage} from "@/ui/pages/JoinRoomPage"
 import {PerformancePage} from "@/ui/pages/PerformancePage"
 import {SampleReadPage} from "@/ui/pages/SampleReadPage"
+import {DownloadPage} from "@/ui/pages/DownloadPage"
 
 export const App = (service: StudioService) => {
     const terminator = new Terminator()
@@ -54,6 +55,7 @@ export const App = (service: StudioService) => {
                     {path: "/imprint", factory: ImprintPage},
                     {path: "/privacy", factory: PrivacyPage},
                     {path: "/manifesto", factory: ManifestoPage},
+                    {path: "/download", factory: DownloadPage},
                     {path: "/icons", factory: IconsPage},
                     {path: "/code", factory: CodeEditorPage},
                     {path: "/scripting", factory: CodeEditorPage},
