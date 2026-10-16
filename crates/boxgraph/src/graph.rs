@@ -6,6 +6,7 @@
 //! edges (a pointer may target a box loaded earlier or later).
 
 use alloc::boxed::Box;
+use core::cell::RefCell;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use crate::address::{Address, Uuid};
@@ -36,6 +37,8 @@ pub struct BoxGraph {
     affected: BTreeSet<Address>,                // targets whose incoming set changed THIS transaction (drives hub dispatch)
     next_index: i32,                            // creation index for boxes created via updates
     subscriptions: Subscriptions,               // change listeners notified during a transaction
+    // each box's own checksum fold and length; a big field (a plugin state) is folded once, not on every verification
+    checksums: RefCell<BTreeMap<Uuid, ([u8; 32], usize)>>,
 }
 
 impl BoxGraph {
@@ -47,7 +50,7 @@ impl BoxGraph {
         let next_index = map.values().map(|graph_box| graph_box.creation_index).max().map_or(0, |max| max + 1);
         let mut graph = Self {
             boxes: map, outgoing: BTreeMap::new(), incoming: BTreeMap::new(), unresolved: BTreeMap::new(),
-            affected: BTreeSet::new(), next_index, subscriptions: Subscriptions::new()
+            affected: BTreeSet::new(), next_index, subscriptions: Subscriptions::new(), checksums: RefCell::new(BTreeMap::new())
         };
         graph.rebuild_edges();
         graph
@@ -110,9 +113,15 @@ impl BoxGraph {
 
     /// 32-byte rolling XOR checksum over every box's fields (uuid order), matching `BoxGraph.checksum`.
     pub fn checksum(&self) -> [u8; 32] {
+        let mut cache = self.checksums.borrow_mut();
         let mut checksum = Checksum::new();
-        for graph_box in self.boxes.values() {
-            checksum_fields(&mut checksum, &graph_box.fields);
+        for (uuid, graph_box) in &self.boxes {
+            let (fold, length) = cache.entry(*uuid).or_insert_with(|| {
+                let mut own = Checksum::new();
+                checksum_fields(&mut own, &graph_box.fields);
+                (own.result(), own.position())
+            });
+            checksum.append(fold, *length);
         }
         checksum.result()
     }
@@ -304,7 +313,7 @@ impl BoxGraph {
     fn apply(&mut self, update: &Update, registry: &Registry) -> Result<(), Error> {
         match update {
             Update::New {uuid, name, settings} => self.create_box(*uuid, name, settings, registry),
-            Update::Delete {uuid, ..} => {self.boxes.remove(uuid); Ok(())}
+            Update::Delete {uuid, ..} => {self.remove_box(uuid); Ok(())}
             Update::Primitive {address, new, ..} => self.set_field(address, new.clone()),
             Update::Pointer {address, new, ..} => self.set_field(address, FieldValue::Pointer(new.clone()))
         }
@@ -312,7 +321,7 @@ impl BoxGraph {
 
     fn revert(&mut self, update: &Update, registry: &Registry) -> Result<(), Error> {
         match update {
-            Update::New {uuid, ..} => {self.boxes.remove(uuid); Ok(())}
+            Update::New {uuid, ..} => {self.remove_box(uuid); Ok(())}
             Update::Delete {uuid, name, settings} => self.create_box(*uuid, name, settings, registry),
             Update::Primitive {address, old, ..} => self.set_field(address, old.clone()),
             Update::Pointer {address, old, ..} => self.set_field(address, FieldValue::Pointer(old.clone()))
@@ -325,11 +334,18 @@ impl BoxGraph {
         let fields = read_fields(&mut reader, schema)?;
         let creation_index = self.next_index;
         self.next_index += 1;
+        self.checksums.get_mut().remove(&uuid);
         self.boxes.insert(uuid, GraphBox {creation_index, name: name.to_string(), uuid, fields});
         Ok(())
     }
 
+    fn remove_box(&mut self, uuid: &Uuid) {
+        self.checksums.get_mut().remove(uuid);
+        self.boxes.remove(uuid);
+    }
+
     fn set_field(&mut self, address: &Address, value: FieldValue) -> Result<(), Error> {
+        self.checksums.get_mut().remove(&address.uuid);
         let graph_box = self.boxes.get_mut(&address.uuid).ok_or(Error::AddressNotFound)?;
         let (first, rest) = address.field_keys.split_first().ok_or(Error::AddressNotFound)?;
         let target = graph_box.fields
