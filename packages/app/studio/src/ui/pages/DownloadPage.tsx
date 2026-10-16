@@ -1,7 +1,7 @@
 import css from "./DownloadPage.sass?inline"
 import {createElement, PageContext, PageFactory} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
-import {Optional} from "@opendaw/lib-std"
+import {isDefined, Optional} from "@opendaw/lib-std"
 import {StudioService} from "@/service/StudioService"
 import {installScrollbars} from "@/ui/components/Scrollbars"
 import {PlatformIcons} from "@/ui/pages/PlatformIcons"
@@ -22,8 +22,9 @@ const detectPlatform = (): Optional<PlatformKey> => {
     return undefined
 }
 
-const Platform = ({platform, name, icon, note, size, downloads}: {
+const Platform = ({platform, name, icon, note, size, downloads, alternative}: {
     platform: PlatformKey, name: string, icon: string, note: string, size: string, downloads: ReadonlyArray<Download>
+    alternative?: Download
 }) => (
     <div className={Html.buildClassList("platform", detectPlatform() === platform && "detected")}>
         <svg viewBox="0 0 24 24" className="icon">
@@ -35,6 +36,7 @@ const Platform = ({platform, name, icon, note, size, downloads}: {
         </div>
         <span className="note">{note}</span>
         <span className="size">({size})</span>
+        {isDefined(alternative) && (<a className="alternative" href={`${ReleaseUrl}/${alternative.file}`}>{alternative.label}</a>)}
     </div>
 )
 
@@ -45,8 +47,9 @@ export const DownloadPage: PageFactory<StudioService> = ({lifecycle}: PageContex
             <p>The full studio as an app on your computer. It runs offline and keeps itself up to date.</p>
         </header>
         <div className="platforms">
-            <Platform platform="macos" name="macOS" icon={PlatformIcons.Apple} note="Apple Silicon and Intel" size="about 40 MB"
-                      downloads={[{label: "Download", file: "openDAW-macos.dmg"}]}/>
+            <Platform platform="macos" name="macOS" icon={PlatformIcons.Apple} note="Apple Silicon (M1 and later)" size="about 20 MB"
+                      downloads={[{label: "Download", file: "openDAW-macos-arm64.dmg"}]}
+                      alternative={{label: "Download for Intel Mac", file: "openDAW-macos-intel.dmg"}}/>
             <Platform platform="windows" name="Windows" icon={PlatformIcons.Windows} note="Windows 10 and 11, 64-bit"
                       size="about 20 MB"
                       downloads={[{label: "Download", file: "openDAW-windows-setup.exe"}]}/>

@@ -8,7 +8,7 @@ export namespace DesktopTitle {
     export const attach = (service: StudioService): void => {
         setInterval(() => {
             const profile = service.projectProfileService.getValue()
-            const title = profile.mapOr(({meta: {name}}) => name.trim().length > 0 ? name : "Untitled", "openDAW")
+            const title = profile.mapOr(({meta: {name}}) => name.trim().length > 0 ? name : "Untitled", "")
             const edited = profile.mapOr(current => current.hasUnsavedChanges(), false)
             const key = `${edited}:${title}`
             if (key === state.sent) {return}

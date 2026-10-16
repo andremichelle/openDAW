@@ -25,7 +25,9 @@ const DEFAULT_DIST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../studio/dist-
 pub static APP: OnceLock<AppHandle> = OnceLock::new();
 pub static CLOSE_GUARDED: AtomicBool = AtomicBool::new(false);
 
+// An empty title (no project): macOS shows the app's name in the menu bar already, elsewhere the window carries it
 pub fn set_title(window: &tauri::WebviewWindow, title: &str, edited: bool) {
+    let title = if title.is_empty() && cfg!(not(target_os = "macos")) { "openDAW Studio" } else { title };
     let _ = window.set_title(title);
     #[cfg(target_os = "macos")]
     {
@@ -313,7 +315,7 @@ fn main() {
             }
             let url = format!("http://127.0.0.1:{PORT}/{}", if updating { "__splash" } else { "" });
             let main = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
-                .title("openDAW")
+                .title(if cfg!(target_os = "macos") { "" } else { "openDAW Studio" })
                 .inner_size(1400.0, 900.0)
                 .maximized(true)
                 .background_color(tauri::window::Color(21, 23, 25, 255))

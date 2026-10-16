@@ -232,7 +232,7 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
         }
         "title" => {
             if let Some(window) = APP.get().and_then(|app| app.get_webview_window("main")) {
-                crate::set_title(&window, query.get("title").map(String::as_str).unwrap_or("openDAW"),
+                crate::set_title(&window, query.get("title").map(String::as_str).unwrap_or(""),
                     query.get("edited").is_some_and(|edited| edited == "true"));
             }
             empty(request, 204)

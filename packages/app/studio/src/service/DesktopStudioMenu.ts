@@ -26,8 +26,8 @@ export namespace DesktopStudioMenu {
     export const create = (service: StudioService): ReadonlyArray<Menu> => {
         const item = (label: string, trigger: () => unknown, selectable: boolean = true) =>
             MenuItem.default({label, selectable}).setTriggerProcedure(() => {trigger()})
-        const screen = (label: string, key: Workspace.ScreenKeys) =>
-            item(label, () => service.runIfProject(() => service.switchScreen(key)), service.hasProfile)
+        const screen = (label: string, key: Workspace.ScreenKeys, shortcut: keyof typeof GlobalShortcuts) =>
+            withShortcut(item(label, () => service.runIfProject(() => service.switchScreen(key)), service.hasProfile), shortcut)
         const navigate = (label: string, path: string) => item(label, () => RouteLocation.get().navigateTo(path))
         const withShortcut = (menuItem: MenuItem, key: keyof typeof GlobalShortcuts): MenuItem => {
             shortcuts.set(menuItem, GlobalShortcuts[key].shortcut)
@@ -45,7 +45,7 @@ export namespace DesktopStudioMenu {
             },
             {
                 label: "File", entries: [
-                    item("Dashboard", () => service.closeProject()),
+                    withShortcut(item("Dashboard", () => service.closeProject()), "workspace-screen-dashboard"),
                     item("New", () => service.newProject()).addSeparatorBefore(),
                     withShortcut(item("Open...", () => service.browseLocalProjects()), "project-open"),
                     withShortcut(item("Save", () => service.projectProfileService.save(), service.hasProfile), "project-save"),
@@ -94,13 +94,13 @@ export namespace DesktopStudioMenu {
                 label: "View", entries: [
                     withShortcut(MenuItem.default({label: "Show MIDI-Keyboard", checked: service.isSoftwareKeyboardVisible()})
                         .setTriggerProcedure(() => service.toggleSoftwareKeyboard()), "toggle-software-keyboard"),
-                    screen("Arrangement", "default").addSeparatorBefore(),
-                    screen("Mixer", "mixer"),
-                    screen("Piano Roll", "piano"),
-                    screen("Project", "project"),
-                    screen("Shader Visualizer", "shadertoy"),
-                    screen("Modulation", "modulation"),
-                    screen("Tap Tempo", "tap"),
+                    screen("Arrangement", "default", "workspace-screen-default").addSeparatorBefore(),
+                    screen("Mixer", "mixer", "workspace-screen-mixer"),
+                    screen("Piano Roll", "piano", "workspace-screen-piano"),
+                    screen("Project", "project", "workspace-screen-project"),
+                    screen("Shader Visualizer", "shadertoy", "workspace-screen-shadertoy"),
+                    screen("Modulation", "modulation", "workspace-screen-modulation"),
+                    screen("Tap Tempo", "tap", "workspace-screen-tap"),
                     "separator", "fullscreen"
                 ]
             },

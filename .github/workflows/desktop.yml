@@ -21,11 +21,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos
+          - platform: macos-arm64
             runner: macos-latest
-            target: universal-apple-darwin
-            rust-targets: aarch64-apple-darwin x86_64-apple-darwin
+            target: aarch64-apple-darwin
+            rust-targets: aarch64-apple-darwin
             bundles: dmg
+            arch: arm64
+          - platform: macos-intel
+            runner: macos-latest
+            target: x86_64-apple-darwin
+            rust-targets: x86_64-apple-darwin
+            bundles: dmg
+            arch: x86_64
           - platform: windows
             runner: windows-latest
             target: x86_64-pc-windows-msvc
@@ -78,12 +85,26 @@ jobs:
         working-directory: packages/app/desktop
         run: cargo tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
+      - name: 🔍 Check the architecture
+        if: startsWith(matrix.platform, 'macos')
+        working-directory: packages/app/desktop/target/${{ matrix.target }}/release/bundle/macos
+        run: |
+          for binary in "openDAW Studio.app/Contents/MacOS/"*; do
+            archs=$(lipo -archs "$binary")
+            echo "$binary: $archs"
+            if [ "$archs" != "${{ matrix.arch }}" ]; then
+              echo "expected ${{ matrix.arch }} only"
+              exit 1
+            fi
+          done
+
       - name: 📁 Collect
         working-directory: packages/app/desktop/target/${{ matrix.target }}/release/bundle
         run: |
           mkdir -p "$GITHUB_WORKSPACE/dist"
           case "${{ matrix.platform }}" in
-            macos) cp dmg/*.dmg "$GITHUB_WORKSPACE/dist/openDAW-macos.dmg" ;;
+            macos-arm64) cp dmg/*.dmg "$GITHUB_WORKSPACE/dist/openDAW-macos-arm64.dmg" ;;
+            macos-intel) cp dmg/*.dmg "$GITHUB_WORKSPACE/dist/openDAW-macos-intel.dmg" ;;
             windows) cp nsis/*.exe "$GITHUB_WORKSPACE/dist/openDAW-windows-setup.exe" ;;
             linux)
               cp appimage/*.AppImage "$GITHUB_WORKSPACE/dist/openDAW-linux.AppImage"

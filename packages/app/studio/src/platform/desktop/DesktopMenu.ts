@@ -18,14 +18,13 @@ export namespace DesktopMenu {
 
     const KeyNames: Record<string, string> = {Comma: ",", Period: ".", Slash: "/", Minus: "-", Equal: "=", Space: "Space"}
 
-    // only shortcuts with Cmd/Ctrl become accelerators, a plain key must keep reaching text fields
+    // DesktopStudioMenu picks which shortcuts are shown as accelerators
     const toAccelerator = (shortcut: Shortcut): Optional<string> => {
-        if (!shortcut.ctrl) {return undefined}
         const {code} = shortcut
         const key = code.startsWith("Key") || code.startsWith("Arrow") ? code
             : code.startsWith("Digit") ? code.slice("Digit".length) : KeyNames[code]
         if (!isDefined(key)) {return undefined}
-        return ["CmdOrCtrl", ...(shortcut.shift ? ["Shift"] : []), ...(shortcut.alt ? ["Alt"] : []), key].join("+")
+        return [...(shortcut.ctrl ? ["CmdOrCtrl"] : []), ...(shortcut.shift ? ["Shift"] : []), ...(shortcut.alt ? ["Alt"] : []), key].join("+")
     }
 
     const convert = (item: MenuItem): ReadonlyArray<ShellNode> => {
