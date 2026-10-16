@@ -131,7 +131,7 @@ My current lean is **B**, because workers reach the `/fs` endpoints over plain H
 - The desktop manifest marks those files as `component: "neural"`. The core download skips them unless the component is chosen. A chosen component is kept up to date with every studio update.
 - Not installed and used: online, the shell downloads it on demand with progress. Offline, a dialog says Neural Demux needs an internet connection to download its components.
 - The models are cached in OPFS by the web side today (`inference/models/`), which the shell cannot write. A shell-installed model must be served by the shell (e.g. `/__components/models/...`) and the studio's model loader must look there first.
-- Size today: the ONNX runtime wasm ships twice (main-thread bundle and inference worker, also in the web `dist`), 54 of the 78.5 MB. Fix the duplicate first. Downloading the existing `.br` files would roughly halve the JS.
+- Size: the ONNX runtime wasm shipped twice (the `/spike-test` research page imported it on the main thread). The page is deleted, the build went from 78.5 MB to 51.1 MB and the inference worker keeps the one copy (27 MB). Downloading the existing `.br` files would roughly halve the JS.
 - The browser is unchanged.
 
 ### Web side (`VITE_TARGET === "tauri"`)
