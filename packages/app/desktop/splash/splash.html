@@ -39,6 +39,14 @@
     button:hover { background: var(--track); }
     footer { position: absolute; bottom: 18px; font-size: 11px; color: hsl(200, 6%, 34%); }
     .error { color: hsl(10, 70%, 64%); }
+    .choice { width: 360px; display: flex; flex-direction: column; gap: 10px; }
+    .choice label { display: grid; grid-template-columns: 18px 1fr auto; column-gap: 10px; align-items: start; cursor: pointer; }
+    .choice label.required { cursor: default; }
+    .choice input { margin: 2px 0 0 0; accent-color: var(--accent); }
+    .choice .name { color: var(--text); }
+    .choice .description { grid-column: 2; font-size: 11px; }
+    .choice .amount { font-variant-numeric: tabular-nums; }
+    .choice .total { display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--track); color: var(--text); }
     .hidden { display: none; }
     @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
     @keyframes appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -51,19 +59,44 @@
         <div class="bar indeterminate" id="bar"><div class="fill" id="fill"></div></div>
         <div class="status"><span id="message">Starting</span><span class="amount" id="amount"></span></div>
     </div>
+    <div class="choice hidden" id="choice"></div>
     <div class="actions">
         <button id="skip" class="hidden">Skip Update</button>
         <button id="retry" class="hidden">Retry</button>
+        <button id="install" class="hidden">Install</button>
     </div>
 </main>
 <footer>Desktop {VERSION}</footer>
 <script>
     const element = id => document.getElementById(id)
     const bar = element("bar"), fill = element("fill"), message = element("message"), amount = element("amount")
-    const skip = element("skip"), retry = element("retry")
+    const skip = element("skip"), retry = element("retry"), install = element("install"), choice = element("choice")
+    const progressBox = document.querySelector(".progress")
     skip.onclick = () => fetch("/__update/skip")
     retry.onclick = () => fetch("/__update/retry")
     const megabytes = bytes => (bytes / 1048576).toFixed(1)
+    const state = {choiceShown: false}
+    const showChoice = status => {
+        state.choiceShown = true
+        const row = (name, description, size, checked, required) => `<label class="${required ? "required" : ""}">
+            <input type="checkbox" ${checked ? "checked" : ""} ${required ? "disabled" : ""} data-size="${size}" data-name="${name}">
+            <span class="name">${name === "" ? "Studio" : description[0]}</span><span class="amount">${megabytes(size)} MB</span>
+            <span class="description">${description[1]}</span></label>`
+        choice.innerHTML = row("", ["Studio", "Required"], status.core, true, true)
+            + status.components.map(component => row(component.name, [component.label, component.description], component.size, component.selected, false)).join("")
+            + `<div class="total"><span>Download</span><span class="amount" id="total"></span></div>`
+        const boxes = Array.from(choice.querySelectorAll("input"))
+        const updateTotal = () => element("total").textContent =
+            `${megabytes(boxes.filter(box => box.checked).reduce((sum, box) => sum + Number(box.dataset.size), 0))} MB`
+        boxes.forEach(box => box.onchange = updateTotal)
+        updateTotal()
+        install.onclick = () => {
+            const selected = boxes.filter(box => box.checked && box.dataset.name !== "").map(box => box.dataset.name)
+            state.chosen = true
+            install.classList.add("hidden")
+            fetch(`/__update/choose?selected=${selected.join(",")}`)
+        }
+    }
     const poll = async () => {
         const status = await fetch("/__update/status").then(response => response.json()).catch(() => null)
         if (status !== null) {
@@ -71,6 +104,11 @@
                 message.textContent = "Starting"
                 return location.replace("/")
             }
+            const choosing = status.phase === "choose"
+            if (choosing && !state.choiceShown) {showChoice(status)}
+            choice.classList.toggle("hidden", !choosing)
+            progressBox.classList.toggle("hidden", choosing)
+            install.classList.toggle("hidden", !choosing || state.chosen)
             const downloading = status.phase === "downloading" && status.total > 0
             const failed = status.phase === "offline" || status.phase === "error"
             message.textContent = status.message

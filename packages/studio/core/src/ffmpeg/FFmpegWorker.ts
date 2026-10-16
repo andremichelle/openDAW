@@ -43,6 +43,14 @@ export class FFmpegWorker {
     }
 }
 
+// Where the FFmpeg core files come from. A host that ships them (the desktop app) installs its own source and may
+// make sure they are there first.
+export type FFmpegSource = { readonly baseURL: string, readonly prepare?: () => Promise<void> }
+
+const source: { current: FFmpegSource } = {current: {baseURL: "https://package.opendaw.studio"}} // mirror of https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm
+
+export const installFFmpegSource = (value: FFmpegSource): void => {source.current = value}
+
 class Loader {
     static async loadOrAttach(progress: Progress.Handler): Promise<FFmpegWorker> {
         if (this.#loader === null) {
@@ -65,7 +73,8 @@ class Loader {
         ffmpeg.on("progress", event => {
             this.#progressNotifier.notify(event.progress)
         })
-        const baseURL = "https://package.opendaw.studio" // mirror of https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm
+        await source.current.prepare?.()
+        const {baseURL} = source.current
         console.debug("[FFmpeg] Downloading core files...")
         const downloadWithProgress = async (url: string): Promise<ArrayBuffer> => {
             const response = await fetch(url)

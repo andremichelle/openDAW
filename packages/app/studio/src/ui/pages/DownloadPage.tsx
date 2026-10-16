@@ -67,11 +67,8 @@ export const DownloadPage: PageFactory<StudioService> = ({lifecycle}: PageContex
             <section>
                 <h3>What happens on the first launch?</h3>
                 <ol>
-                    <li>The app downloads the complete studio once (about 33 MB), including the parts this website only
-                        loads when you use them, like the script editor and Neural Demux. It keeps them on your computer,
-                        so it works without internet from then on.</li>
-                    <li>It asks whether you also want the models for Neural Demux, the AI stem separation and tempo
-                        detection (about 580 MB). You can skip them and add them later.</li>
+                    <li>The app downloads the studio (at least 6 MB). You can choose more parts for offline use.</li>
+                    <li>Everything stays on your computer, so it works without internet from then on.</li>
                     <li>Later updates only download the files that changed.</li>
                 </ol>
             </section>

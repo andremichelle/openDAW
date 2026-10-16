@@ -29,6 +29,8 @@ struct Entry {
     sha256: String,
     // bytes on the wire (the .br file where one exists); older manifests have none
     download: Option<u64>,
+    // an optional component's file, downloaded only once the component is installed
+    component: Option<String>,
 }
 
 impl Entry {
@@ -40,6 +42,31 @@ struct Manifest {
     files: Vec<Entry>,
 }
 
+#[derive(Deserialize)]
+struct ComponentInfo {
+    name: String,
+    label: String,
+    description: String,
+    selected: bool,
+}
+
+#[derive(Deserialize)]
+struct ComponentsManifest {
+    #[serde(default)]
+    components: Vec<ComponentInfo>,
+    files: Vec<Entry>,
+}
+
+// a component the installer offers, with its download size
+#[derive(Serialize, Clone)]
+struct Choice {
+    name: String,
+    label: String,
+    description: String,
+    size: u64,
+    selected: bool,
+}
+
 #[derive(Serialize, Clone)]
 struct Status {
     phase: &'static str,
@@ -47,9 +74,14 @@ struct Status {
     done: u64,
     total: u64,
     installed: bool,
+    core: u64,
+    components: Vec<Choice>,
 }
 
-static STATUS: Mutex<Status> = Mutex::new(Status { phase: "checking", message: String::new(), done: 0, total: 0, installed: false });
+static STATUS: Mutex<Status> = Mutex::new(Status {
+    phase: "checking", message: String::new(), done: 0, total: 0, installed: false, core: 0, components: Vec::new()
+});
+static CHOICE: Mutex<Option<Vec<String>>> = Mutex::new(None);
 static SKIP: AtomicBool = AtomicBool::new(false);
 static RETRY: AtomicBool = AtomicBool::new(false);
 static WEB: Mutex<Option<PathBuf>> = Mutex::new(None);
@@ -191,11 +223,12 @@ fn download(web: &Path, uuid: &str, current: Option<&str>) -> Result<(), String>
         })
         .unwrap_or_default();
     let partial = web.join(format!("{uuid}.partial"));
-    let total = manifest.files.iter().map(Entry::transfer).sum();
     let mut done = 0u64;
     let mut transferred = 0u64;
+    let wanted = |entry: &&Entry| entry.component.as_deref().map_or(true, crate::components::is_selected);
+    let total = manifest.files.iter().filter(wanted).map(Entry::transfer).sum();
     progress(0, total);
-    for entry in &manifest.files {
+    for entry in manifest.files.iter().filter(wanted) {
         if SKIP.load(Ordering::SeqCst) {
             return Err("skipped".into());
         }
@@ -243,6 +276,31 @@ fn switch(web: &Path, uuid: &str, previous: Option<&str>) -> std::io::Result<()>
     Ok(())
 }
 
+// First launch: the installer lists the optional components with their sizes and waits for the user's choice
+fn ask_components(uuid: &str) {
+    let url = format!("{UPDATE_ORIGIN}/tauri/releases/{uuid}/manifest.json");
+    let Ok(manifest) = agent().get(&url).call().map_err(|error| error.to_string())
+        .and_then(|response| response.into_json::<ComponentsManifest>().map_err(|error| error.to_string())) else { return };
+    if manifest.components.is_empty() { return; }
+    let size_of = |name: Option<&str>| manifest.files.iter().filter(|entry| entry.component.as_deref() == name).map(Entry::transfer).sum::<u64>();
+    let choices: Vec<Choice> = manifest.components.iter().map(|info| Choice {
+        name: info.name.clone(), label: info.label.clone(), description: info.description.clone(),
+        size: size_of(Some(&info.name)), selected: info.selected
+    }).collect();
+    {
+        let mut status = STATUS.lock().unwrap();
+        status.core = size_of(None);
+        status.components = choices;
+    }
+    status("choose", "");
+    *CHOICE.lock().unwrap() = None;
+    let names = loop {
+        if let Some(names) = CHOICE.lock().unwrap().take() { break names; }
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    crate::components::select(&names);
+}
+
 fn choose(web: &Path) -> Option<PathBuf> {
     status("checking", "Checking for updates");
     let mut current = installed(web);
@@ -261,6 +319,7 @@ fn choose(web: &Path) -> Option<PathBuf> {
             } else if is_bad(web, &pointer.uuid) {
                 eprintln!("[update] build {} is marked bad", pointer.uuid);
             } else {
+                if current.is_none() && !crate::components::choice_made() {ask_components(&pointer.uuid);}
                 status("downloading", "Downloading the studio");
                 match download(web, &pointer.uuid, current.as_deref()).and_then(|_| switch(web, &pointer.uuid, current.as_deref()).map_err(|error| error.to_string())) {
                     Ok(_) => {
@@ -354,6 +413,11 @@ pub fn handle(request: tiny_http::Request) -> Option<tiny_http::Request> {
         }
         "/__update/skip" => {
             SKIP.store(true, Ordering::SeqCst);
+            reply(request, Vec::new(), "text/plain")
+        }
+        "/__update/choose" => {
+            let selected = request.url().split_once("selected=").map(|(_, names)| names.split('&').next().unwrap_or("").to_string()).unwrap_or_default();
+            *CHOICE.lock().unwrap() = Some(selected.split(',').filter(|name| !name.is_empty()).map(String::from).collect());
             reply(request, Vec::new(), "text/plain")
         }
         "/__update/retry" => {

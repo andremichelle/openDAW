@@ -73,7 +73,7 @@ const NO_PROGRESS: Procedure<unitValue> = () => {}
 
 export namespace Inference {
     export const install = (config: InstallOptions): void => {
-        installInferenceConfig({opfs: config.opfs})
+        installInferenceConfig({opfs: config.opfs, modelSource: config.modelSource, modelHosted: config.modelHosted})
         host.match({
             none: () => {},
             some: existing => {existing.shutdown().catch(() => {})}
@@ -117,6 +117,8 @@ export namespace Inference {
      * for formatting download-size messages in confirmation dialogs without
      * duplicating the bytes/version values in the consumer.
      */
+    export const taskKeys = (): ReadonlyArray<TaskKey> => Object.keys(TaskRegistry) as Array<TaskKey>
+
     export const modelDescriptor = <K extends TaskKey>(key: K): ModelDescriptor =>
         lookupTask(key).model
 

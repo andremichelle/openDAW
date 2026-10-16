@@ -1,3 +1,4 @@
+import {openScriptingDocs} from "@/ui/manuals"
 import css from "./CodeEditorPage.sass?inline"
 import {Events, Files, Html, Key, Keyboard, Shortcut} from "@opendaw/lib-dom"
 import {MonacoFactory} from "@/monaco/factory"
@@ -318,7 +319,7 @@ export const CodeEditorPage: PageFactory<StudioService> = ({lifecycle, service}:
                         MenuItem.default({label: "Export Script..."})
                             .setTriggerProcedure(exportScript),
                         MenuItem.default({label: "Manual", icon: IconSymbol.Help, separatorBefore: true})
-                            .setTriggerProcedure(() => window.open("/docs/scripting/", "_blank"))
+                            .setTriggerProcedure(() => openScriptingDocs())
                     ))
                     const onKeyDown = (event: KeyboardEvent) => {
                         if (!Keyboard.isControlKey(event)) {return}

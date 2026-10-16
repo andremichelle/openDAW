@@ -29,7 +29,14 @@ export namespace ModelStore {
     export const ensure = async (taskKey: string,
                                  model: ModelDescriptor,
                                  options?: FetchOptions): Promise<Uint8Array> => {
-        const {opfs} = requireInferenceConfig()
+        const {opfs, modelSource} = requireInferenceConfig()
+        if (isDefined(modelSource)) {
+            const hosted = await modelSource(taskKey, model)
+            if (hosted.nonEmpty()) {
+                options?.progress?.(1.0)
+                return hosted.unwrap()
+            }
+        }
         const cached = await readCached(opfs, taskKey, model)
         if (cached.nonEmpty()) {
             options?.progress?.(1.0)
@@ -58,7 +65,8 @@ export namespace ModelStore {
     }
 
     export const isCached = async (taskKey: string, model: ModelDescriptor): Promise<boolean> => {
-        const {opfs} = requireInferenceConfig()
+        const {opfs, modelHosted} = requireInferenceConfig()
+        if (isDefined(modelHosted) && await modelHosted(taskKey, model)) {return true}
         const meta = await readMeta(opfs, taskKey, model.version)
         if (meta.isEmpty() || meta.unwrap().sha256 !== model.sha256) {return false}
         // Trust meta.json's recorded sha; avoid reading 300+ MB just to probe.

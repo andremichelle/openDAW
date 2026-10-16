@@ -1,4 +1,5 @@
-import {readdirSync, readFileSync, statSync, writeFileSync} from "fs"
+import {cpSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync} from "fs"
+import {brotliCompressSync} from "zlib"
 import {createHash} from "crypto"
 import {extname, relative, resolve} from "path"
 import {defineConfig} from "vite"
@@ -128,6 +129,20 @@ export default defineConfig(({command, mode}) => {
                 }
             },
             ...(desktop ? [{
+                name: "desktop-components",
+                async writeBundle() {
+                    const outDir = resolve(__dirname, "dist-desktop")
+                    await copyFFmpeg(resolve(outDir, "ffmpeg"))
+                    for (const [source, target] of [["../manual/dist", "manuals"], ["../../studio/docs/scripting", "docs/scripting"]]) {
+                        const from = resolve(__dirname, source)
+                        if (existsSync(from)) {
+                            cpSync(from, resolve(outDir, target), {recursive: true})
+                        } else {
+                            console.warn(`desktop build without ${target}: ${from} is missing (build it first)`)
+                        }
+                    }
+                }
+            }, {
                 name: "desktop-manifest",
                 async closeBundle() {
                     const outDir = resolve(__dirname, "dist-desktop")
@@ -156,9 +171,11 @@ export default defineConfig(({command, mode}) => {
                     // the server answers with the .br file where one exists, so that is what the shell downloads
                     const entries = files.map(entry => {
                         const compressed = resolve(outDir, `${entry.path}.br`)
-                        return {...entry, download: existsSync(compressed) ? statSync(compressed).size : entry.size}
+                        const download = existsSync(compressed) ? statSync(compressed).size : entry.size
+                        const component = componentOf(entry.path)
+                        return component === undefined ? {...entry, download} : {...entry, download, component}
                     })
-                    const manifest: DesktopManifest = {uuid, date, shellApi: DESKTOP_SHELL_API, files: entries}
+                    const manifest: DesktopManifest = {uuid, date, shellApi: DESKTOP_SHELL_API, components: DesktopComponents, files: entries}
                     writeFileSync(resolve(outDir, "manifest.json"), JSON.stringify(manifest, null, 2))
                     console.debug(`Desktop manifest written with ${files.length} files`)
                 }
@@ -247,15 +264,64 @@ export default defineConfig(({command, mode}) => {
     }
 })
 
+type DesktopComponent = { name: string, label: string, description: string, selected: boolean }
+
 type DesktopManifest = {
     uuid: string
     date: number
     shellApi: number
-    files: ReadonlyArray<{ path: string, size: number, sha256: string, download: number }>
+    components: ReadonlyArray<DesktopComponent>
+    files: ReadonlyArray<{ path: string, size: number, sha256: string, download: number, component?: string }>
 }
 
-// the onnx runtime (Neural Demux) is left out, too large to brotli at every build
-const isCompressible = (file: string): boolean => /\.(js|mjs|json|css|html|wasm)$/i.test(file) && !/ort-wasm.*\.wasm$/i.test(file)
+// Optional parts of the desktop build: the installer lists them, the shell downloads only the chosen ones
+// and offers the others when they are first used. Neural Demux also downloads its models, from their own URLs.
+const DesktopComponents: ReadonlyArray<DesktopComponent> = [
+    {name: "ffmpeg", label: "FFmpeg", description: "MP3 and FLAC export", selected: true},
+    {name: "manuals", label: "Manuals", description: "The built-in help", selected: true},
+    {name: "docs", label: "Scripting Documentation", description: "The reference for the scripting API", selected: true},
+    {name: "neural", label: "Neural Demux", description: "AI stem separation and tempo detection, plus about 570 MB of models", selected: false}
+]
+
+const componentOf = (file: string): string | undefined =>
+    /ort-wasm.*\.wasm$/i.test(file) ? "neural"
+        : file.startsWith("ffmpeg/") ? "ffmpeg"
+            : file.startsWith("manuals/") ? "manuals"
+                : file.startsWith("docs/") ? "docs" : undefined
+
+// @ffmpeg/core 0.12.6 (dist/esm), mirrored on package.opendaw.studio; fetched once into .cache, pinned by sha256
+const FFmpegCore = {
+    version: "0.12.6",
+    files: [
+        {name: "ffmpeg-core.js", sha256: "c972f5abeafcd5f3949e54edfbdc74a9badb27025809feb1945d468ffbcfb7f1"},
+        {name: "ffmpeg-core.wasm", sha256: "2390efa7fb66e7e42dbae15427571a5ffc96b829480904c30f471f0a78967f61"}
+    ]
+}
+
+const copyFFmpeg = async (target: string): Promise<void> => {
+    const cache = resolve(__dirname, ".cache", `ffmpeg-${FFmpegCore.version}`)
+    mkdirSync(cache, {recursive: true})
+    mkdirSync(target, {recursive: true})
+    for (const {name, sha256} of FFmpegCore.files) {
+        const file = resolve(cache, name)
+        if (!existsSync(file) || createHash("sha256").update(readFileSync(file)).digest("hex") !== sha256) {
+            const response = await fetch(`https://package.opendaw.studio/${name}`)
+            const bytes = Buffer.from(await response.arrayBuffer())
+            if (!response.ok || createHash("sha256").update(bytes).digest("hex") !== sha256) {
+                throw new Error(`FFmpeg core ${name} could not be fetched or does not match its sha256`)
+            }
+            writeFileSync(file, bytes)
+        }
+        // the wasm is too large to brotli at every build, so its .br is made once and kept in the cache
+        if (name.endsWith(".wasm") && !existsSync(`${file}.br`)) {writeFileSync(`${file}.br`, brotliCompressSync(readFileSync(file)))}
+        cpSync(file, resolve(target, name))
+        if (existsSync(`${file}.br`)) {cpSync(`${file}.br`, resolve(target, `${name}.br`))}
+    }
+}
+
+// the onnx runtime (Neural Demux) is left out, too large to brotli at every build; the ffmpeg wasm brings its own .br
+const isCompressible = (file: string): boolean => /\.(js|mjs|json|css|html|wasm)$/i.test(file)
+    && !/ort-wasm.*\.wasm$/i.test(file) && !/ffmpeg-core\.wasm$/i.test(file)
 // vite-plugin-compression skips files up to this size
 const CompressionThreshold = 1025
 

@@ -197,6 +197,30 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
                 .blocking_show();
             text(request, 200, approved.to_string())
         }
+        "component-status" => text(request, 200, crate::components::status_json(query.get("name").map(String::as_str).unwrap_or(""))),
+        "component-install" => {
+            #[derive(Deserialize)]
+            struct Install {
+                name: String,
+                models: Vec<crate::components::Model>,
+            }
+            let mut body = Vec::new();
+            let _ = std::io::Read::read_to_end(request.as_reader(), &mut body);
+            match serde_json::from_slice::<Install>(&body) {
+                Ok(Install { name, models }) => {
+                    crate::components::install(name, models);
+                    empty(request, 204)
+                }
+                Err(error) => text(request, 400, error.to_string()),
+            }
+        }
+        "component-model" => {
+            let (name, path) = (query.get("name").cloned().unwrap_or_default(), query.get("path").cloned().unwrap_or_default());
+            match crate::components::model(&name, &path) {
+                Some(bytes) => respond(request, 200, bytes, "application/octet-stream"),
+                None => empty(request, 404),
+            }
+        }
         "guard" => {
             crate::CLOSE_GUARDED.store(true, Ordering::SeqCst);
             crate::update::booted();

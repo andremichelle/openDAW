@@ -1,3 +1,4 @@
+mod components;
 mod files;
 mod menu;
 mod update;
@@ -205,8 +206,17 @@ fn resolve(root: &Path, url_path: &str) -> (PathBuf, u16) {
         return (root.join("index.html"), 403);
     }
     let candidate = root.join(clean);
+    let html = root.join(format!("{}.html", clean.trim_end_matches('/')));
+    // the manuals and the scripting docs are sites of their own: folder index pages and extensionless pages
+    let own_site = clean.starts_with("manuals/") || clean == "manuals" || clean.starts_with("docs/");
     if candidate.is_file() {
         (candidate, 200)
+    } else if candidate.join("index.html").is_file() {
+        (candidate.join("index.html"), 200)
+    } else if html.is_file() {
+        (html, 200)
+    } else if own_site {
+        (candidate, 404)
     } else if Path::new(clean).extension().is_none() {
         (root.join("index.html"), 200)
     } else {
