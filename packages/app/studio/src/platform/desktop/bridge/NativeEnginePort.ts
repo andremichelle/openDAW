@@ -19,7 +19,7 @@ export class NativeEnginePort implements Port {
     #pendingState: Nullable<Uint8Array> = null
     #stateApplied = false
 
-    constructor(url: string, sampleRate: number, options: Record<string, unknown>) {
+    constructor(url: string, sampleRate: number, options: Record<string, unknown>, readonly onLatency: Procedure<number>) {
         this.#sync = new Uint8Array(options.syncStreamBuffer as SharedArrayBuffer)
         this.#control = new Int32Array(options.controlFlagsBuffer as SharedArrayBuffer)
         this.#lastControl = Atomics.load(this.#control, 0)
@@ -51,6 +51,8 @@ export class NativeEnginePort implements Port {
         } else if (envelope.type === "state") {
             this.#pendingState = envelope.bytes
             this.#applyState()
+        } else if (envelope.type === "latency") {
+            this.onLatency(envelope.seconds)
         } else if (envelope.type === "live") {
             const data = this.#shared.get(envelope.data)
             const lock = this.#shared.get(envelope.lock)

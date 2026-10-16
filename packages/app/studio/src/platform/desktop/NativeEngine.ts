@@ -2,6 +2,7 @@ import {isDefined, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
 import {Wait} from "@opendaw/lib-runtime"
 import {EngineVariant, EngineWorkletVariant} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
+import {OutputLatency} from "@/audio/OutputLatency"
 import {Shell} from "@/platform/desktop/Shell"
 import {NativeEnginePort} from "@/platform/desktop/bridge/NativeEnginePort"
 
@@ -43,12 +44,14 @@ export namespace NativeEngine {
         const placeholder = URL.createObjectURL(new Blob([PlaceholderSource], {type: "text/javascript"}))
         await service.audioContext.audioWorklet.addModule(placeholder)
         URL.revokeObjectURL(placeholder)
+        const latency = {seconds: 0.0}
+        OutputLatency.install(() => latency.seconds)
         const wasm = EngineVariant.current()
         EngineVariant.install((): EngineWorkletVariant => ({
             processorName: PlaceholderName,
             attachment: {wasmUrl: "/wasm-engine"},
             connectSync: wasm.connectSync,
-            port: (options, context) => new NativeEnginePort(url, context.sampleRate, options)
+            port: (options, context) => new NativeEnginePort(url, context.sampleRate, options, seconds => latency.seconds = seconds)
         }))
         console.debug(`[NativeEngine] engine process on port ${engine.port}`)
     }

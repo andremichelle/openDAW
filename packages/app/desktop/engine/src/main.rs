@@ -57,6 +57,9 @@ const PRELUDE: &str = r#"
 
 static DIST: OnceLock<PathBuf> = OnceLock::new();
 static STARTED: OnceLock<Instant> = OnceLock::new();
+// output latency parts in microseconds: the ring's depth and what the device reports between callback and playback
+static RING_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static DEVICE_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static OUTBOX: OnceLock<Mutex<HashMap<i32, Sender<Option<Vec<u8>>>>>> = OnceLock::new();
 
 enum Event {
@@ -101,6 +104,11 @@ fn send(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::
     if let Some(sender) = outbox().lock().unwrap().get(&id) {
         let _ = sender.send(Some(bytes));
     }
+}
+
+fn output_latency(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+    let ordering = std::sync::atomic::Ordering::Relaxed;
+    rv.set_double((RING_LATENCY_US.load(ordering) + DEVICE_LATENCY_US.load(ordering)) as f64 / 1_000_000.0);
 }
 
 fn close(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
@@ -155,6 +163,7 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
     native!("__read", read);
     native!("__send", send);
     native!("__close", close);
+    native!("__outputLatency", output_latency);
     let context = v8::Context::new(handle_scope, v8::ContextOptions { global_template: Some(global), ..Default::default() });
     let scope = &mut v8::ContextScope::new(handle_scope, context);
     run(scope, PRELUDE, "prelude").expect("prelude");
@@ -275,6 +284,7 @@ fn main() {
     DIST.set(dist).unwrap();
     let token = std::env::var("OPENDAW_ENGINE_TOKEN").unwrap_or_default();
     let ring_frames: usize = std::env::var("RING").ok().and_then(|value| value.parse().ok()).unwrap_or(256);
+    RING_LATENCY_US.store(ring_frames as u64 * 1_000_000 / 48_000, std::sync::atomic::Ordering::Relaxed);
     let buffer: u32 = std::env::var("BUFFER").ok().and_then(|value| value.parse().ok()).unwrap_or(128);
     let sample_rate = 48_000;
     let device = cpal::default_host().default_output_device().expect("no output device");
@@ -286,7 +296,9 @@ fn main() {
         .spawn(move || engine_thread(inbox, producer, sample_rate)).unwrap();
     let waker = engine.thread().clone();
     let config = cpal::StreamConfig { channels: 2, sample_rate, buffer_size: cpal::BufferSize::Fixed(buffer) };
-    let stream = device.build_output_stream(config, move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
+    let stream = device.build_output_stream(config, move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
+        let timestamp = info.timestamp();
+        DEVICE_LATENCY_US.store(timestamp.playback.duration_since(timestamp.callback).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
         let available = consumer.slots().min(data.len());
         if let Ok(chunk) = consumer.read_chunk(available) {
             let (first, second) = chunk.as_slices();

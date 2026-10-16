@@ -8,6 +8,7 @@ import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "../bridge/B
 
 declare const __send: (connection: int, bytes: ArrayBuffer) => void
 declare const __close: (connection: int) => void
+declare const __outputLatency: () => number
 
 const RenderQuantum = 128
 const TickQuanta = 4
@@ -54,6 +55,7 @@ class Connection {
     sync: Nullable<Uint8Array> = null
     control: Nullable<Int32Array> = null
     alive = true
+    ticks = 0
 
     constructor(readonly id: int) {}
 
@@ -83,6 +85,7 @@ class Connection {
     }
 
     tick(): void {
+        if (this.ticks++ % 100 === 0) {this.send({type: "latency", seconds: __outputLatency()})}
         if (this.sync !== null && Atomics.load(this.sync, 0) === SyncState.WRITTEN) {
             this.send({type: "state", bytes: this.sync.slice(1)})
             Atomics.store(this.sync, 0, SyncState.READ)

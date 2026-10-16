@@ -153,16 +153,18 @@ fn native_engine() -> bool {
     std::env::var("OPENDAW_NATIVE_ENGINE").map_or(true, |value| value != "0")
 }
 
-// The bundled sidecar sits next to the shell executable; a development build uses the engine crate's release build
+// A bundle runs its sidecar next to the shell executable. A debug build always runs the engine crate's release
+// build, since tauri-build also copies a possibly stale sidecar next to the debug executable.
 fn engine_binary() -> PathBuf {
     if let Ok(path) = std::env::var("OPENDAW_ENGINE") {
         return PathBuf::from(path);
     }
-    let sidecar = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join("opendaw-engine")));
-    match sidecar {
-        Some(path) if path.is_file() => path,
-        _ => PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/engine/target/release/opendaw-engine")),
+    let development = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/engine/target/release/opendaw-engine"));
+    if cfg!(debug_assertions) {
+        return development;
     }
+    std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join("opendaw-engine"))).filter(|path| path.is_file())
+        .unwrap_or(development)
 }
 
 // The native engine process serves the build in root; it is started once, with the shell token

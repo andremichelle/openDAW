@@ -12,6 +12,7 @@ import {AudioData} from "@opendaw/lib-dsp"
 import {FooterItem} from "@/ui/FooterItem"
 import {EngineAddresses} from "@opendaw/studio-adapters"
 import {LatencyWarning} from "@/ui/LatencyWarning"
+import {OutputLatency} from "@/audio/OutputLatency"
 
 const className = Html.adoptStyleSheet(css, "footer")
 
@@ -78,7 +79,7 @@ export const Footer = ({lifecycle, service}: Construct) => {
                             }
                             lifecycle.ownAll(
                                 Runtime.scheduleInterval(() => {
-                                    const outputLatency = audioContext.outputLatency
+                                    const outputLatency = OutputLatency.of(audioContext)
                                     if (outputLatency > 0.0) {
                                         value.textContent = `${(outputLatency * 1000.0).toFixed(1)}ms`
                                         value.style.color = outputLatency > threshold()
