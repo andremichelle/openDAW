@@ -22,8 +22,31 @@ const certConfig = isDev ? {
 const corsAllowedOrigins = [
     'https://opendaw.studio',
     'https://dev.opendaw.studio',
-    'https://localhost:8080'
+    'https://localhost:8080',
+    'http://127.0.0.1:47110'
 ]
+
+const MAX_CONNECTIONS_PER_IP = 32
+const MESSAGE_BURST = 2000
+const MESSAGES_PER_SECOND = 500
+const RATE_LIMITED = 4429
+
+const connectionsPerIp = new Map()
+
+// closes (never drops) a connection that sends faster than the token bucket allows, the client reconnects
+const limitRate = (ws) => {
+    let tokens = MESSAGE_BURST
+    let last = Date.now()
+    ws.on('message', () => {
+        const now = Date.now()
+        tokens = Math.min(MESSAGE_BURST, tokens + (now - last) * MESSAGES_PER_SECOND / 1000)
+        last = now
+        if (--tokens < 0) {
+            console.warn('Closing a connection that exceeds the message rate')
+            ws.close(RATE_LIMITED, 'rate limit')
+        }
+    })
+}
 
 const server = https.createServer(certConfig, (req, res) => {
     const origin = req.headers.origin
@@ -157,17 +180,34 @@ signalingWss.on('connection', (conn, req) => {
 server.on("upgrade", (req, socket, head) => {
     const url = req.url || '/'
     console.log("HTTP upgrade request from", req.headers.origin, url)
+    const ip = req.socket.remoteAddress || ''
+    const count = connectionsPerIp.get(ip) || 0
+    if (count >= MAX_CONNECTIONS_PER_IP) {
+        console.warn(`Rejected upgrade from ${ip}: ${count} connections open`)
+        socket.end('HTTP/1.1 429 Too Many Requests\r\n\r\n')
+        return
+    }
+    const track = ws => {
+        connectionsPerIp.set(ip, (connectionsPerIp.get(ip) || 0) + 1)
+        ws.on('close', () => {
+            const remaining = (connectionsPerIp.get(ip) || 1) - 1
+            if (remaining === 0) {connectionsPerIp.delete(ip)} else {connectionsPerIp.set(ip, remaining)}
+        })
+        limitRate(ws)
+    }
 
     // Route to signaling server if path starts with /signaling
     if (url.startsWith('/signaling')) {
         signalingWss.handleUpgrade(req, socket, head, ws => {
             console.log('Signaling upgrade success')
+            track(ws)
             signalingWss.emit("connection", ws, req)
         })
     } else {
         // All other paths go to Yjs sync (including room names)
         wss.handleUpgrade(req, socket, head, ws => {
             console.log('Yjs sync upgrade success')
+            track(ws)
             wss.emit("connection", ws, req)
         })
     }
