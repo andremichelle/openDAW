@@ -1,0 +1,11 @@
+[package]
+name = "opendaw-engine-spike"
+version = "0.0.1"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+v8 = "152"
+cpal = "0.18"
+rtrb = "0.4"
