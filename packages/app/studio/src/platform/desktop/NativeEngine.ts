@@ -1,9 +1,9 @@
 import {isDefined, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
 import {Wait} from "@opendaw/lib-runtime"
-import {CaptureAudioBackend, EngineVariant, EngineWorkletVariant} from "@opendaw/studio-core"
+import {AudioInputs, EngineVariant, EngineWorkletVariant, WebAudioInputs} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {OutputLatency} from "@/audio/OutputLatency"
-import {NativeCapture} from "@/platform/desktop/NativeCapture"
+import {NativeAudioInputs} from "@/platform/desktop/NativeAudioInputs"
 import {Shell} from "@/platform/desktop/Shell"
 import {NativeEnginePort} from "@/platform/desktop/bridge/NativeEnginePort"
 
@@ -36,6 +36,7 @@ export namespace NativeEngine {
         const url = `ws://127.0.0.1:${engine.port}/?token=${engine.token}`
         if (!await connect(url)) {
             console.warn("[NativeEngine] the engine process is not reachable, the engine runs in the webview")
+            AudioInputs.install(WebAudioInputs)
             await RuntimeNotifier.info({
                 headline: "Audio Engine Unavailable",
                 message: "The native audio engine did not start. openDAW uses the built-in engine instead, which has higher and less steady latency. Restarting the app may help."
@@ -47,7 +48,7 @@ export namespace NativeEngine {
         URL.revokeObjectURL(placeholder)
         const latency = {seconds: 0.0}
         OutputLatency.install(() => latency.seconds)
-        NativeCapture.outputLatency(() => latency.seconds)
+        NativeAudioInputs.outputLatency(() => latency.seconds)
         const wasm = EngineVariant.current()
         EngineVariant.install((): EngineWorkletVariant => ({
             processorName: PlaceholderName,
@@ -55,16 +56,15 @@ export namespace NativeEngine {
             connectSync: wasm.connectSync,
             port: (options, context) => {
                 const port = new NativeEnginePort(url, context.sampleRate, options,
-                    seconds => latency.seconds = seconds, info => NativeCapture.updateInfo(info),
-                    (uuid, peaks) => NativeCapture.deliverPeaks(uuid, peaks),
-                    devices => NativeCapture.updateDevices(devices),
-                    (uuid, first, planes) => NativeCapture.deliverRecording(uuid, first, planes),
-                    seconds => NativeCapture.updateInputLatency(seconds))
-                NativeCapture.attachPort(port)
+                    seconds => latency.seconds = seconds, info => NativeAudioInputs.updateInfo(info),
+                    (uuid, peaks) => NativeAudioInputs.deliverPeaks(uuid, peaks),
+                    devices => NativeAudioInputs.updateDevices(devices),
+                    (uuid, first, planes) => NativeAudioInputs.deliverRecording(uuid, first, planes),
+                    seconds => NativeAudioInputs.updateInputLatency(seconds))
+                NativeAudioInputs.attachPort(port)
                 return port
             }
         }))
-        CaptureAudioBackend.install(NativeCapture.backend)
         console.debug(`[NativeEngine] engine process on port ${engine.port}`)
     }
 }

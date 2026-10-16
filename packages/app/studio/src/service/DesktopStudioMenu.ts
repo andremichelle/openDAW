@@ -35,7 +35,7 @@ export namespace DesktopStudioMenu {
         }
         return [
             {
-                label: "openDAW", entries: [
+                label: "openDAW Studio", entries: [
                     "about", "separator",
                     withShortcut(navigate("Preferences...", "/preferences"), "show-preferences"),
                     item("Audio Settings...", () => openAudioOutputSettings(service.audioDevices)),

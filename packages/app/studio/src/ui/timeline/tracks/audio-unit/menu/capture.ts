@@ -1,4 +1,4 @@
-import {AudioDevices, Capture, CaptureAudio, CaptureAudioBackend, CaptureMidi, MenuItem, MidiDevices, Recording} from "@opendaw/studio-core"
+import {AudioInputs, Capture, CaptureAudio, CaptureMidi, MenuItem, MidiDevices, Recording} from "@opendaw/studio-core"
 import {Arrays, Editing, int, isInstanceOf, Option} from "@opendaw/lib-std"
 import {CaptureAudioBox} from "@opendaw/studio-boxes"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -26,15 +26,14 @@ export namespace MenuCapture {
                 icon: IconSymbol.AudioDevice,
                 selectable: !Recording.isRecording
             }))
-            const backend = CaptureAudioBackend.current()
-            const devices: ReadonlyArray<{ deviceId: string, label: string }> =
-                backend.mapOr(installed => installed.devices(), AudioDevices.inputs)
-            if (devices.length === 0 && backend.nonEmpty()) {
-                parent.addMenuItem(MenuItem.default({label: "No audio inputs found", selectable: false}))
-            } else if (devices.length === 0) {
+            const inputs = AudioInputs.current()
+            const devices = inputs.devices()
+            if (inputs.requiresPermission) {
                 parent.addMenuItem(
                     MenuItem.default({label: "Click to access external devices..."})
-                        .setTriggerProcedure(() => AudioDevices.requestPermission()))
+                        .setTriggerProcedure(() => inputs.requestPermission()))
+            } else if (devices.length === 0) {
+                parent.addMenuItem(MenuItem.default({label: "No audio inputs found", selectable: false}))
             } else {
                 parent.addMenuItem(...devices
                     .map(device => MenuItem.default({

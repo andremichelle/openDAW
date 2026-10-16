@@ -38,7 +38,7 @@ fn append(app: &AppHandle, parent: &Submenu<Wry>, node: &Node) -> tauri::Result<
         }
         Node::Separator => parent.append(&PredefinedMenuItem::separator(app)?),
         Node::Native { role } if role == "quit" =>
-            parent.append(&MenuItem::with_id(app, QUIT_ID, "Quit openDAW", true, Some("CmdOrCtrl+Q"))?),
+            parent.append(&MenuItem::with_id(app, QUIT_ID, "Quit openDAW Studio", true, Some("CmdOrCtrl+Q"))?),
         Node::Native { role } => {
             let item = match role.as_str() {
                 "about" => PredefinedMenuItem::about(app, None, None)?,

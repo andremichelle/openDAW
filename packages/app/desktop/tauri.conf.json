@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "openDAW",
+  "productName": "openDAW Studio",
   "version": "0.0.1",
   "identifier": "studio.opendaw",
   "build": {
