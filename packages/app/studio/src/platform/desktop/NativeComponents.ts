@@ -97,13 +97,4 @@ export namespace NativeComponents {
         })
         interceptLinks()
     }
-
-    // Neural Demux chosen in the installer: its runtime came with the build, the models follow once the studio runs
-    export const resume = async (): Promise<void> => {
-        const current = await status(Neural)
-        if (!current.selected || current.installed) {return}
-        const inference = await import("@opendaw/lib-inference").then(module => module.Inference)
-        const models = neuralModels(inference)
-        await download(Neural, "Neural Demux", models.reduce((sum, model) => sum + model.bytes, 0), models).catch(() => {})
-    }
 }

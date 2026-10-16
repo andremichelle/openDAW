@@ -12,6 +12,7 @@ import {connectRoom} from "@/service/StudioLiveRoomConnect"
 import {NeuralDemux} from "@/service/NeuralDemux.tsx"
 import {NextcloudDialogs} from "@/project/NextcloudDialogs"
 import {openManual} from "@/ui/manuals"
+import {openAudioOutputSettings} from "@/ui/mixer/AudioOutputSelector"
 
 export namespace DesktopStudioMenu {
     export type NativeRole = "about" | "services" | "hide" | "hide-others" | "show-all" | "quit"
@@ -37,6 +38,7 @@ export namespace DesktopStudioMenu {
                 label: "openDAW", entries: [
                     "about", "separator",
                     withShortcut(navigate("Preferences...", "/preferences"), "show-preferences"),
+                    item("Audio Settings...", () => openAudioOutputSettings(service.audioDevices)),
                     navigate("Storage", "/storage"),
                     "separator", "services", "separator", "hide", "hide-others", "show-all", "separator", "quit"
                 ]

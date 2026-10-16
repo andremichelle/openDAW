@@ -39,6 +39,8 @@ impl Entry {
 
 #[derive(Deserialize)]
 struct Manifest {
+    #[serde(default)]
+    components: Vec<ComponentInfo>,
     files: Vec<Entry>,
 }
 
@@ -48,13 +50,9 @@ struct ComponentInfo {
     label: String,
     description: String,
     selected: bool,
-}
-
-#[derive(Deserialize)]
-struct ComponentsManifest {
+    // downloaded from their own URLs into the app data, not part of the build
     #[serde(default)]
-    components: Vec<ComponentInfo>,
-    files: Vec<Entry>,
+    models: Vec<crate::components::Model>,
 }
 
 // a component the installer offers, with its download size
@@ -226,7 +224,12 @@ fn download(web: &Path, uuid: &str, current: Option<&str>) -> Result<(), String>
     let mut done = 0u64;
     let mut transferred = 0u64;
     let wanted = |entry: &&Entry| entry.component.as_deref().map_or(true, crate::components::is_selected);
-    let total = manifest.files.iter().filter(wanted).map(Entry::transfer).sum();
+    let models: Vec<(String, crate::components::Model)> = manifest.components.iter()
+        .filter(|component| crate::components::is_selected(&component.name))
+        .flat_map(|component| component.models.iter().filter(|model| !crate::components::has_model(&component.name, model))
+            .map(|model| (component.name.clone(), model.clone())))
+        .collect();
+    let total = manifest.files.iter().filter(wanted).map(Entry::transfer).sum::<u64>() + models.iter().map(|(_, model)| model.bytes).sum::<u64>();
     progress(0, total);
     for entry in manifest.files.iter().filter(wanted) {
         if SKIP.load(Ordering::SeqCst) {
@@ -249,6 +252,20 @@ fn download(web: &Path, uuid: &str, current: Option<&str>) -> Result<(), String>
         }
         done += entry.transfer();
         progress(done, total);
+    }
+    for (name, model) in &models {
+        if SKIP.load(Ordering::SeqCst) {
+            return Err("skipped".into());
+        }
+        let target = crate::components::model_path(name, model).ok_or_else(|| format!("unsafe model path {}", model.path))?;
+        crate::components::fetch(&agent, &model.url, &target, &model.sha256, None, &mut |count| {
+            done += count;
+            progress(done.min(total), total);
+        })?;
+        transferred += model.bytes;
+    }
+    for component in manifest.components.iter().filter(|component| !component.models.is_empty() && crate::components::is_selected(&component.name)) {
+        crate::components::mark_models_installed(&component.name)?;
     }
     let files: u64 = manifest.files.iter().map(|entry| entry.size).sum();
     println!("[update] {uuid}: {:.1} MB of files, {:.1} MB downloaded", files as f64 / 1048576.0, transferred as f64 / 1048576.0);
@@ -280,12 +297,12 @@ fn switch(web: &Path, uuid: &str, previous: Option<&str>) -> std::io::Result<()>
 fn ask_components(uuid: &str) {
     let url = format!("{UPDATE_ORIGIN}/tauri/releases/{uuid}/manifest.json");
     let Ok(manifest) = agent().get(&url).call().map_err(|error| error.to_string())
-        .and_then(|response| response.into_json::<ComponentsManifest>().map_err(|error| error.to_string())) else { return };
+        .and_then(|response| response.into_json::<Manifest>().map_err(|error| error.to_string())) else { return };
     if manifest.components.is_empty() { return; }
     let size_of = |name: Option<&str>| manifest.files.iter().filter(|entry| entry.component.as_deref() == name).map(Entry::transfer).sum::<u64>();
     let choices: Vec<Choice> = manifest.components.iter().map(|info| Choice {
         name: info.name.clone(), label: info.label.clone(), description: info.description.clone(),
-        size: size_of(Some(&info.name)), selected: info.selected
+        size: size_of(Some(&info.name)) + info.models.iter().map(|model| model.bytes).sum::<u64>(), selected: info.selected
     }).collect();
     {
         let mut status = STATUS.lock().unwrap();

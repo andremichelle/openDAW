@@ -17,7 +17,6 @@ NativeMenu.install(service => {
     DesktopMenu.attach(service)
     DesktopTitle.attach(service)
     NativeEngine.attach(service).catch(error => console.warn("[NativeEngine]", error))
-    NativeComponents.resume().catch(error => console.warn("[NativeComponents]", error))
 })
 DesktopLifecycle.install()
 NativeMidi.install()

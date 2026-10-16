@@ -15,10 +15,10 @@ use crate::{root, APP, UPDATE_ORIGIN};
 
 #[derive(Deserialize, Clone)]
 pub struct Model {
-    path: String,
-    url: String,
-    sha256: String,
-    bytes: u64,
+    pub path: String,
+    pub url: String,
+    pub sha256: String,
+    pub bytes: u64,
 }
 
 #[derive(Deserialize)]
@@ -109,8 +109,22 @@ pub fn status_json(name: &str) -> String {
     serde_json::to_string(&Status { installed: is_installed(name), selected: is_selected(name), ..status }).unwrap()
 }
 
+pub fn model_path(name: &str, model: &Model) -> Option<PathBuf> {
+    safe(&model.path).then(|| directory(name).map(|dir| dir.join("models").join(&model.path))).flatten()
+}
+
+pub fn has_model(name: &str, model: &Model) -> bool {
+    model_path(name, model).and_then(|path| sha256_of(&path)).as_deref() == Some(model.sha256.as_str())
+}
+
+pub fn mark_models_installed(name: &str) -> Result<(), String> {
+    let directory = directory(name).ok_or("no app data folder")?;
+    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    fs::write(directory.join("models-installed"), "").map_err(|error| error.to_string())
+}
+
 // Streams url into target, verified by sha256 (and size when known); progress reports bytes on the wire
-fn fetch(agent: &ureq::Agent, url: &str, target: &Path, sha256: &str, size: Option<u64>, progress: &mut dyn FnMut(u64)) -> Result<(), String> {
+pub fn fetch(agent: &ureq::Agent, url: &str, target: &Path, sha256: &str, size: Option<u64>, progress: &mut dyn FnMut(u64)) -> Result<(), String> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }

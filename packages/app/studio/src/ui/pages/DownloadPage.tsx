@@ -58,10 +58,9 @@ export const DownloadPage: PageFactory<StudioService> = ({lifecycle}: PageContex
             <section>
                 <h3>What is in the download?</h3>
                 <p>
-                    A small app that hosts the studio and talks to your sound card directly for low and steady
-                    latency. It uses the web view your system already has instead of bringing its own browser. The
-                    studio, its audio engine, instruments and effects are downloaded on the first launch and update
-                    on their own, without a new app download.
+                    A small app that hosts the studio and talks to your audio and MIDI devices directly, for low and
+                    steady latency. The studio, its instruments and effects update themselves inside the app, so you
+                    only download the app once.
                 </p>
             </section>
             <section>

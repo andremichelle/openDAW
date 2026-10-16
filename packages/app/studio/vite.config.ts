@@ -1,5 +1,6 @@
 import {cpSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync} from "fs"
 import {brotliCompressSync} from "zlib"
+import {createRequire} from "module"
 import {createHash} from "crypto"
 import {extname, relative, resolve} from "path"
 import {defineConfig} from "vite"
@@ -175,7 +176,8 @@ export default defineConfig(({command, mode}) => {
                         const component = componentOf(entry.path)
                         return component === undefined ? {...entry, download} : {...entry, download, component}
                     })
-                    const manifest: DesktopManifest = {uuid, date, shellApi: DESKTOP_SHELL_API, components: DesktopComponents, files: entries}
+                    const components = DesktopComponents.map(component => component.name === "neural" ? {...component, models: neuralModels()} : component)
+                    const manifest: DesktopManifest = {uuid, date, shellApi: DESKTOP_SHELL_API, components, files: entries}
                     writeFileSync(resolve(outDir, "manifest.json"), JSON.stringify(manifest, null, 2))
                     console.debug(`Desktop manifest written with ${files.length} files`)
                 }
@@ -264,7 +266,8 @@ export default defineConfig(({command, mode}) => {
     }
 })
 
-type DesktopComponent = { name: string, label: string, description: string, selected: boolean }
+type DesktopModel = { path: string, url: string, sha256: string, bytes: number }
+type DesktopComponent = { name: string, label: string, description: string, selected: boolean, models?: ReadonlyArray<DesktopModel> }
 
 type DesktopManifest = {
     uuid: string
@@ -280,8 +283,20 @@ const DesktopComponents: ReadonlyArray<DesktopComponent> = [
     {name: "ffmpeg", label: "FFmpeg", description: "MP3 and FLAC export", selected: true},
     {name: "manuals", label: "Manuals", description: "The built-in help", selected: true},
     {name: "docs", label: "Scripting Documentation", description: "The reference for the scripting API", selected: true},
-    {name: "neural", label: "Neural Demux", description: "AI stem separation and tempo detection, plus about 570 MB of models", selected: false}
+    {name: "neural", label: "Neural Demux", description: "AI stem separation and tempo detection", selected: false}
 ]
+
+// Neural Demux's models, read from lib-inference's task registry (bundled for node, its dist does not load in node)
+const neuralModels = (): ReadonlyArray<DesktopModel> => {
+    const {outputFiles: [output]} = buildSync({
+        entryPoints: [resolve(__dirname, "../../lib/inference/src/registry.ts")],
+        bundle: true, write: false, format: "cjs", platform: "node", logLevel: "warning"
+    })
+    const module: { exports: { TaskRegistry?: Record<string, { model: { url: string, sha256: string, bytes: number, version: string } }> } } = {exports: {}}
+    new Function("module", "exports", "require", output.text)(module, module.exports, createRequire(import.meta.url))
+    return Object.entries(module.exports.TaskRegistry ?? {}).map(([taskKey, {model}]) =>
+        ({path: `${taskKey}/${model.version}/model.onnx`, url: model.url, sha256: model.sha256, bytes: model.bytes}))
+}
 
 const componentOf = (file: string): string | undefined =>
     /ort-wasm.*\.wasm$/i.test(file) ? "neural"

@@ -45,35 +45,41 @@ export const AudioOutputSelector = ({lifecycle, output}: Construct) => {
         <div className={className} onpointerdown={(event) => {
             event.preventDefault()
             event.stopPropagation()
-            if (output.backend.nonEmpty()) {return openBackendDialog(output.backend.unwrap())}
-            const dialog: HTMLDialogElement = (
-                <Dialog headline="Select Audio Output Device"
-                        icon={IconSymbol.AudioDevice}
-                        cancelable={true}
-                        buttons={[{
-                            text: "Cancel",
-                            primary: false,
-                            onClick: handler => handler.close()
-                        }]}>
-                    <AudioOutputDevices output={output}
-                                        provider={async device => {
-                                            const {status, error} = await Promises.tryCatch(output.setOutput(device))
-                                            dialog.close()
-                                            if (status === "rejected") {
-                                                await Dialogs.info({
-                                                    headline: "Could Not Change Audio-Output",
-                                                    message: String(error)
-                                                })
-                                            }
-                                        }}/>
-                </Dialog>
-            )
-            Surface.get().body.appendChild(dialog)
-            dialog.showModal()
+            openAudioOutputSettings(output)
         }}>{label}</div>
     )
     return element
 }
+
+// the mixer's output label and the app menu open the same dialog
+export const openAudioOutputSettings = (output: AudioOutputDevice): void => {
+    if (output.backend.nonEmpty()) {return openBackendDialog(output.backend.unwrap())}
+    const dialog: HTMLDialogElement = (
+        <Dialog headline="Select Audio Output Device"
+                icon={IconSymbol.AudioDevice}
+                cancelable={true}
+                buttons={[{
+                    text: "Cancel",
+                    primary: false,
+                    onClick: handler => handler.close()
+                }]}>
+            <AudioOutputDevices output={output}
+                                provider={async device => {
+                                    const {status, error} = await Promises.tryCatch(output.setOutput(device))
+                                    dialog.close()
+                                    if (status === "rejected") {
+                                        await Dialogs.info({
+                                            headline: "Could Not Change Audio-Output",
+                                            message: String(error)
+                                        })
+                                    }
+                                }}/>
+        </Dialog>
+    )
+    Surface.get().body.appendChild(dialog)
+    dialog.showModal()
+}
+
 // an output with a buffer size (the desktop app's native engine): both are chosen and applied with Ok
 const openBackendDialog = (backend: AudioOutputBackend): void => {
     const lifecycle = new Terminator()

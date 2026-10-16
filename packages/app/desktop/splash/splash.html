@@ -105,10 +105,17 @@
                 return location.replace("/")
             }
             const choosing = status.phase === "choose"
-            if (choosing && !state.choiceShown) {showChoice(status)}
-            choice.classList.toggle("hidden", !choosing)
-            progressBox.classList.toggle("hidden", choosing)
-            install.classList.toggle("hidden", !choosing || state.chosen)
+            if (choosing && !state.choiceShown) {
+                showChoice(status)
+                choice.classList.remove("hidden")
+                install.classList.remove("hidden")
+                progressBox.classList.add("hidden")
+            } else if (!choosing && state.choiceShown && !state.choiceDone) {
+                state.choiceDone = true
+                choice.classList.add("hidden")
+                install.classList.add("hidden")
+                progressBox.classList.remove("hidden")
+            }
             const downloading = status.phase === "downloading" && status.total > 0
             const failed = status.phase === "offline" || status.phase === "error"
             message.textContent = status.message
