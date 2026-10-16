@@ -1,9 +1,9 @@
 import {isDefined, Nullable, Procedure, Provider} from "@opendaw/lib-std"
-import {MidiDevices} from "@opendaw/studio-core"
+import {MidiAccess, MidiDevices} from "@opendaw/studio-core"
 import {Shell} from "@/platform/desktop/Shell"
 
-// Web MIDI for the desktop app (WKWebView has none), backed by the native engine's midir devices.
-// It installs navigator.requestMIDIAccess and the MIDIInput / MIDIOutput classes, so the studio's MIDI code runs as is.
+// MIDI for the desktop app (WKWebView has no Web MIDI): the native engine's midir devices behind the Web MIDI
+// interfaces, installed as the studio's MidiAccess
 export namespace NativeMidi {
     type Port = { id: string, name: string }
     type FromEngine =
@@ -31,7 +31,7 @@ export namespace NativeMidi {
         close(): Promise<this> {return Promise.resolve(this)}
     }
 
-    class NativeMIDIInput extends NativeMIDIPort {
+    class NativeMIDIInput extends NativeMIDIPort implements MIDIInput {
         readonly type: MIDIPortType = "input"
         #onmidimessage: Nullable<Procedure<Event>> = null
 
@@ -45,7 +45,7 @@ export namespace NativeMidi {
         }
     }
 
-    class NativeMIDIOutput extends NativeMIDIPort {
+    class NativeMIDIOutput extends NativeMIDIPort implements MIDIOutput {
         readonly type: MIDIPortType = "output"
 
         constructor(id: string, name: string, readonly socket: Provider<Nullable<WebSocket>>) {super(id, name)}
@@ -60,7 +60,7 @@ export namespace NativeMidi {
         clear(): void {}
     }
 
-    class NativeMIDIAccess extends EventTarget {
+    class NativeMIDIAccess extends EventTarget implements MIDIAccess {
         readonly inputs = new Map<string, NativeMIDIInput>()
         readonly outputs = new Map<string, NativeMIDIOutput>()
         readonly sysexEnabled = false
@@ -122,8 +122,12 @@ export namespace NativeMidi {
             }
             connect(0)
         })
-        Object.assign(globalThis, {MIDIInput: NativeMIDIInput, MIDIOutput: NativeMIDIOutput, MIDIAccess: NativeMIDIAccess})
-        Object.defineProperty(navigator, "requestMIDIAccess", {value: () => ready, configurable: true})
+        MidiAccess.install({
+            requiresPermission: false,
+            available: true,
+            request: () => ready,
+            isInput: (value: unknown): value is MIDIInput => value instanceof NativeMIDIInput
+        })
         // no permission prompt to wait for, the devices are there from the start
         void MidiDevices.requestPermission()
     }

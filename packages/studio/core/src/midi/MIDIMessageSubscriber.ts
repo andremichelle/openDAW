@@ -1,6 +1,7 @@
-import {byte, isDefined, isInstanceOf, Nullable, Observer, Subscription} from "@opendaw/lib-std"
+import {byte, isDefined, Nullable, Observer, Subscription} from "@opendaw/lib-std"
 import {Events} from "@opendaw/lib-dom"
 import {MidiData} from "@opendaw/lib-midi"
+import {MidiAccess} from "./MidiAccess"
 
 export class MIDIMessageSubscriber {
     static subscribeMessageEvents(access: MIDIAccess, observer: Observer<MIDIMessageEvent>, channel?: byte): Subscription {
@@ -13,7 +14,7 @@ export class MIDIMessageSubscriber {
             .map(input => ([input, listenToMIDIMessages(input)]))
         const stateSubscription = Events.subscribe(access, "statechange", (event: MIDIConnectionEvent) => {
             const port: Nullable<MIDIPort> = event.port
-            if (!isInstanceOf(port, MIDIInput)) {return}
+            if (!MidiAccess.current().isInput(port)) {return}
             for (const [input, subscription] of connections) {
                 if (input === port) {
                     // Well, this seems odd, but if you start listening to a midi-input initially,

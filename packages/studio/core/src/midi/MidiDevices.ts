@@ -20,9 +20,12 @@ import {MidiData} from "@opendaw/lib-midi"
 import {Promises} from "@opendaw/lib-runtime"
 import {MIDIMessageSubscriber} from "./MIDIMessageSubscriber"
 import {SoftwareMIDIInput} from "./SoftwareMIDIInput"
+import {MidiAccess} from "./MidiAccess"
 
 export class MidiDevices {
-    static canRequestMidiAccess(): boolean {return "requestMIDIAccess" in navigator}
+    static canRequestMidiAccess(): boolean {return MidiAccess.current().available}
+    static get requiresPermission(): boolean {return MidiAccess.current().requiresPermission}
+    static isInput(value: unknown): value is MIDIInput {return MidiAccess.current().isInput(value)}
 
     static readonly softwareMIDIInput: SoftwareMIDIInput = new SoftwareMIDIInput()
 
@@ -59,7 +62,7 @@ export class MidiDevices {
     }
 
     static #memoizedRequest = Promises.memoizeAsync(async () => {
-        const result = await navigator.requestMIDIAccess({sysex: false})
+        const result = await MidiAccess.current().request()
         if (isAbsent(result)) {
             return panic("You browser does not support MIDI.")
         }

@@ -83,7 +83,7 @@ export class MIDILearning implements Terminable {
         learnLifecycle.own(MidiDevices.subscribeMessageEvents((event: MIDIMessageEvent) => {
             const data = event.data
             if (data === null) {return}
-            const deviceId = event.target instanceof MIDIInput ? event.target.id : ""
+            const deviceId = MidiDevices.isInput(event.target) ? event.target.id : ""
             if (MidiData.isController(data)) {
                 learnLifecycle.terminate()
                 abortController.abort(Errors.AbortError)
@@ -130,7 +130,7 @@ export class MIDILearning implements Terminable {
         const handleEvent = (event: MIDIMessageEvent) => {
             const data = event.data
             if (data === null) {return}
-            const id = event.target instanceof MIDIInput ? event.target.id : ""
+            const id = MidiDevices.isInput(event.target) ? event.target.id : ""
             if (MidiData.isController(data)
                 && MidiData.readParam1(data) === controlId.getValue() && (!respectDeviceID || id === deviceId.getValue())) {
                 const value = MidiData.asValue(data)

@@ -50,15 +50,23 @@ pub fn serve(mut socket: WebSocket<TcpStream>) {
     let mut outputs: HashMap<String, MidiOutputConnection> = HashMap::new();
     let mut scheduled: BinaryHeap<Reverse<(Instant, u64, String, Vec<u8>)>> = BinaryHeap::new();
     let mut order = 0u64;
-    let mut known: (Vec<Port>, Vec<Port>) = (Vec::new(), Vec::new());
+    // None until the first scan, so the page always gets a first list, even an empty one
+    let mut known: Option<(Vec<Port>, Vec<Port>)> = None;
     let mut next_scan = Instant::now();
     println!("[midi] page connected");
     loop {
         if Instant::now() >= next_scan {
             next_scan = Instant::now() + Duration::from_secs(2);
+            // CoreMIDI updates its device list only for threads that run their run loop
+            #[cfg(target_os = "macos")]
+            unsafe {
+                core_foundation::runloop::CFRunLoop::run_in_mode(
+                    core_foundation::runloop::kCFRunLoopDefaultMode, Duration::from_millis(10), false);
+            }
             let current = list();
-            if current != known {
-                known = current;
+            if known.as_ref() != Some(&current) {
+                let known = known.insert(current);
+                println!("[midi] inputs: {}", known.0.iter().map(|port| port.name.as_str()).collect::<Vec<_>>().join(", "));
                 connections.retain(|id, _| known.0.iter().any(|port| port.id == *id));
                 outputs.retain(|id, _| known.1.iter().any(|port| port.id == *id));
                 for port in &known.0 {

@@ -85,8 +85,10 @@ export namespace MenuCapture {
             MidiDevices.externalInputDevices().match({
                 none: () => {
                     parent.addMenuItem(
-                        MenuItem.default({label: "Click to access external devices..."})
-                            .setTriggerProcedure(() => MidiDevices.requestPermission()),
+                        MidiDevices.requiresPermission
+                            ? MenuItem.default({label: "Click to access external devices..."})
+                                .setTriggerProcedure(() => MidiDevices.requestPermission())
+                            : MenuItem.default({label: "No external devices found", selectable: false}),
                         createMIDIInputMenuItem(MidiDevices.softwareMIDIInput, 0, true))
                 },
                 some: inputs => {

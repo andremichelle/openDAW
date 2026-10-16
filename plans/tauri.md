@@ -373,6 +373,7 @@ All app-written files must sit under the shell's own identifier directories: dow
 **Audio and MIDI I/O**
 - Audio goes through `cpal`: CoreAudio, WASAPI, ASIO, ALSA and JACK.
 - MIDI goes through `midir`. This also replaces Web MIDI, which WKWebView and WebKitGTK do not have.
+  - Done 2026-10-16: studio-core `MidiAccess` strategy (Web MIDI by default), `NativeMidi` installs the desktop one. The engine always sends a first device list (also empty) and pumps the CoreMIDI run loop, so devices plugged in while the app runs appear within 2 seconds.
 
 **Engine hosting (revised 2026-10-16: V8, not wasmtime)**
 - The shell embeds V8 (`rusty_v8` / `deno_core`) and runs the existing engine host JS as is: the engine wasm, the device side-modules and all three JS bridges. V8 runs WebAssembly itself, so no bridge is ported to Rust and behaviour stays that of Chrome.
