@@ -57,6 +57,14 @@ The desktop shell runs the audio engine in its own scope, outside the webview, a
 - Verified by André (2026-10-16): a real bundle plays through the native engine, transport and meters work, WCLAP plugins run in it, and the output latency stays constant across repeated opens.
 - Not yet: audio input (monitoring, recording), MIDI, the high-resolution clock (DSP load measurement), output device selection, packaging the engine binary into the app.
 
+## Default and packaging (2026-10-16, uncommitted)
+
+- The native engine is the desktop default. `OPENDAW_NATIVE_ENGINE=0` keeps the engine in the webview.
+- Fallback: `NativeEngine.attach` first checks that the engine accepts a connection (20 tries, 250 ms apart). If it cannot connect, the studio keeps the webview engine and warns in the console. A build without `engine-host.js` (anything deployed before this) makes the engine exit at start, so it falls back the same way.
+- Packaging: `opendaw-engine` is a Tauri sidecar (`bundle.externalBin`). `scripts/sidecar.sh` runs as `beforeBuildCommand`, builds the engine for the bundle's target (the host architecture reuses the plain release build, a universal bundle lipos aarch64 and x86_64) and places it in `binaries/` (ignored). The shell finds it next to its own executable, a development build falls back to `engine/target/release`.
+- Sizes: the stripped engine is 44 MB (V8), the aarch64 app 53 MB, the aarch64 dmg 20 MB, so the universal dmg is about 40 MB. The download page says so.
+- A project opened within the few seconds before the engine is reachable boots in the webview.
+
 ## Updates: the app stays a wrapper
 
 - Everything the engine runs comes from the installed web build: `engine.wasm`, the device wasm files, `wasm-processor.js` and `engine-host.js` (bridge relays and worklet stand-in). An engine change ships with a studio deploy, the user does nothing.

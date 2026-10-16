@@ -16,7 +16,7 @@ export const DownloadPage: PageFactory<StudioService> = ({lifecycle}: PageContex
             <div className="platform">
                 <h2>macOS</h2>
                 <a className="download" href={`${ReleaseUrl}/openDAW-macos.dmg`}>Download</a>
-                <span className="size">about 9 MB, Apple Silicon and Intel</span>
+                <span className="size">about 40 MB, Apple Silicon and Intel</span>
             </div>
             <div className="platform unavailable">
                 <h2>Windows</h2>
@@ -27,10 +27,11 @@ export const DownloadPage: PageFactory<StudioService> = ({lifecycle}: PageContex
                 <span className="download">Coming soon</span>
             </div>
         </div>
-        <h3>Why is it so small?</h3>
+        <h3>What is in the download?</h3>
         <p>
-            The download is only the app around the studio. It uses the web view your system already has instead of
-            bringing its own browser, which keeps it at a few megabytes.
+            The app around the studio and its own audio engine, which talks to your sound card directly for low and
+            steady latency. It uses the web view your system already has instead of bringing its own browser. The
+            studio itself is downloaded on the first launch.
         </p>
         <h3>What happens on the first launch?</h3>
         <ol>

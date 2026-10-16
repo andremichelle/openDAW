@@ -11,3 +11,6 @@ cpal = "0.18"
 rtrb = "0.4"
 audio_thread_priority = "0.38"
 tungstenite = "0.30"
+
+[profile.release]
+strip = true

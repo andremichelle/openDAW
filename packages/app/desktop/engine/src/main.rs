@@ -158,7 +158,11 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
     let context = v8::Context::new(handle_scope, v8::ContextOptions { global_template: Some(global), ..Default::default() });
     let scope = &mut v8::ContextScope::new(handle_scope, context);
     run(scope, PRELUDE, "prelude").expect("prelude");
-    let host = std::fs::read_to_string(DIST.get().unwrap().join("engine-host.js")).expect("no engine-host.js in the served build");
+    // a build from before the native engine has no host; exiting lets the studio keep its webview engine
+    let Ok(host) = std::fs::read_to_string(DIST.get().unwrap().join("engine-host.js")) else {
+        eprintln!("[engine] the served build has no engine-host.js, exiting");
+        std::process::exit(1);
+    };
     run(scope, &host, "engine-host.js").expect("engine host");
     run(scope, &processor_source(DIST.get().unwrap()), "wasm-processor.js").expect("wasm-processor");
     let open = bridge_function(scope, "open");

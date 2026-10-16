@@ -148,16 +148,28 @@ pub fn root() -> Option<Arc<PathBuf>> {
 const ENGINE_PORT: u16 = 47112;
 static ENGINE: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
 
+// The native engine is the default; OPENDAW_NATIVE_ENGINE=0 keeps the engine in the webview
 fn native_engine() -> bool {
-    std::env::var("OPENDAW_NATIVE_ENGINE").is_ok()
+    std::env::var("OPENDAW_NATIVE_ENGINE").map_or(true, |value| value != "0")
+}
+
+// The bundled sidecar sits next to the shell executable; a development build uses the engine crate's release build
+fn engine_binary() -> PathBuf {
+    if let Ok(path) = std::env::var("OPENDAW_ENGINE") {
+        return PathBuf::from(path);
+    }
+    let sidecar = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join("opendaw-engine")));
+    match sidecar {
+        Some(path) if path.is_file() => path,
+        _ => PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/engine/target/release/opendaw-engine")),
+    }
 }
 
 // The native engine process serves the build in root; it is started once, with the shell token
 fn start_engine(root: &Path) {
     let mut engine = ENGINE.lock().unwrap();
     if !native_engine() || engine.is_some() { return; }
-    let binary = std::env::var("OPENDAW_ENGINE").map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/engine/target/release/opendaw-engine")));
+    let binary = engine_binary();
     // the engine exits when this pipe closes, so it never outlives the shell
     let command = std::process::Command::new(&binary).env("OPENDAW_ENGINE_TOKEN", files::token()).env("OPENDAW_DIST", root)
         .stdin(std::process::Stdio::piped()).spawn();
