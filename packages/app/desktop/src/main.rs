@@ -305,6 +305,7 @@ fn main() {
             let main = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
                 .title("openDAW")
                 .inner_size(1400.0, 900.0)
+                .maximized(true)
                 .background_color(tauri::window::Color(21, 23, 25, 255))
                 .disable_drag_drop_handler()
                 .background_throttling(BackgroundThrottlingPolicy::Disabled)

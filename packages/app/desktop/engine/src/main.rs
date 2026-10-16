@@ -7,6 +7,8 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+mod midi;
+
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tungstenite::Message;
@@ -352,7 +354,9 @@ fn serve(events: Sender<Event>, token: String) {
         next += 1;
         let (events, token) = (events.clone(), token.clone());
         std::thread::spawn(move || {
+            let mut path = String::new();
             let check = |request: &Request, response: Response| -> Result<Response, ErrorResponse> {
+                path = request.uri().path().to_string();
                 let query = request.uri().query().unwrap_or("");
                 if query.split('&').any(|pair| pair == format!("token={token}")) {
                     Ok(response)
@@ -363,6 +367,9 @@ fn serve(events: Sender<Event>, token: String) {
             // decoded samples arrive as single messages of any size
             let config = tungstenite::protocol::WebSocketConfig::default().max_message_size(None).max_frame_size(None);
             let Ok(mut socket) = tungstenite::accept_hdr_with_config(stream, check, Some(config)) else { return };
+            if path == "/midi" {
+                return midi::serve(socket);
+            }
             let _ = socket.get_ref().set_read_timeout(Some(Duration::from_millis(2)));
             let (sender, outgoing) = channel::<Option<Vec<u8>>>();
             outbox().lock().unwrap().insert(id, sender);

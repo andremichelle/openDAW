@@ -11,6 +11,9 @@ cpal = "0.18"
 rtrb = "0.4"
 audio_thread_priority = "0.38"
 tungstenite = "0.30"
+midir = "0.11"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [profile.release]
 strip = true
