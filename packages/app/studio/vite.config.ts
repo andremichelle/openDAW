@@ -36,7 +36,8 @@ export default defineConfig(({command, mode}) => {
             // the desktop shell serves WCLAP plugin files on its plugin-only port (PLUGIN_PORT in wclap.rs)
             ...(desktop ? {
                 "import.meta.env.VITE_WCLAP_ORIGIN": JSON.stringify("http://127.0.0.1:47111"),
-                "import.meta.env.VITE_WCLAP_FRAME_QUERY": JSON.stringify("?host=shell")
+                "import.meta.env.VITE_WCLAP_FRAME_QUERY": JSON.stringify("?host=shell"),
+                "import.meta.env.VITE_SHARE_ORIGIN": JSON.stringify("https://opendaw.studio")
             } : {})
         },
         resolve: {

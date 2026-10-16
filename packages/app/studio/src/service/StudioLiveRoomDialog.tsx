@@ -10,6 +10,11 @@ import {readIdentity, userColors} from "@/service/RoomAwareness"
 
 const className = Html.adoptStyleSheet(css, "StudioLiveRoomDialog")
 
+// the desktop app serves from a loopback origin nobody else can open
+const SHARE_ORIGIN: string = import.meta.env.VITE_SHARE_ORIGIN ?? location.origin
+
+export const joinUrl = (roomName: string): string => `${SHARE_ORIGIN}/join/${roomName}`
+
 const randomRoomName = (length: number = 11): string => {
     const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
     const values = crypto.getRandomValues(new Uint8Array(length))
@@ -54,7 +59,7 @@ export const showConnectRoomDialog = (prefillRoomName?: Optional<string>): Promi
               }}/>
     )
     const updateUrlPreview = () => {
-        urlPreview.textContent = `${location.origin}/join/${roomInput.value}`
+        urlPreview.textContent = joinUrl(roomInput.value)
         const copyable = roomInput.value.trim().length > 0 && roomInput.checkValidity()
         urlPreview.classList.toggle("copyable", copyable)
     }

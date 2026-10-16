@@ -5,6 +5,7 @@ import {Clipboard, Html} from "@opendaw/lib-dom"
 import {Surface} from "@/ui/surface/Surface"
 import {StudioService} from "@/service/StudioService"
 import {AwarenessUserState, RoomAwareness} from "@/service/RoomAwareness"
+import {joinUrl} from "@/service/StudioLiveRoomDialog"
 import {Promises} from "@opendaw/lib-runtime"
 import {Icon} from "@/ui/components/Icon"
 import {IconSymbol} from "@opendaw/studio-enums"
@@ -28,8 +29,7 @@ export const RoomStatus = ({lifecycle, service}: Construct) => {
                     <span className="room-name"
                           title="Click to copy join link"
                           onclick={async () => {
-                              const joinUrl = `${location.origin}/join/${awareness.roomName}`
-                              const {status} = await Promises.tryCatch(Clipboard.writeText(joinUrl))
+                              const {status} = await Promises.tryCatch(Clipboard.writeText(joinUrl(awareness.roomName)))
                               if (status === "resolved") {
                                   Surface.get(element).toast("Join link copied to clipboard", IconSymbol.Copy)
                               }
