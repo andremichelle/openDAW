@@ -342,7 +342,9 @@ fn open_input_stream(events: &Sender<Event>, sample_rate: u32, requested: &str) 
     let channels = device.default_input_config().ok()?.channels() as usize;
     let name = device_name(&device);
     let (mut producer, consumer) = rtrb::RingBuffer::<f32>::new(QUANTUM * channels * 16);
-    let config = cpal::StreamConfig { channels: channels as u16, sample_rate, buffer_size: cpal::BufferSize::Fixed(QUANTUM as u32) };
+    let buffer_size = device.default_input_config().map(|config| buffer_size_for(config.buffer_size(), QUANTUM as u32))
+        .unwrap_or(cpal::BufferSize::Default);
+    let config = cpal::StreamConfig { channels: channels as u16, sample_rate, buffer_size };
     let stream = device.build_input_stream(config, move |data: &[f32], info: &cpal::InputCallbackInfo| {
         let timestamp = info.timestamp();
         INPUT_LATENCY_US.store(timestamp.callback.duration_since(timestamp.capture).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
@@ -369,6 +371,18 @@ fn open_input_stream(events: &Sender<Event>, sample_rate: u32, requested: &str) 
     }
 }
 
+// A fixed size the device does not support (WASAPI in shared mode) falls back to the device's own buffer
+fn buffer_size_for(supported: &cpal::SupportedBufferSize, frames: u32) -> cpal::BufferSize {
+    match supported {
+        cpal::SupportedBufferSize::Range { min, max } if (*min..=*max).contains(&frames) => cpal::BufferSize::Fixed(frames),
+        cpal::SupportedBufferSize::Range { .. } => {
+            eprintln!("[engine] buffer size {frames} unsupported, using the device default");
+            cpal::BufferSize::Default
+        }
+        cpal::SupportedBufferSize::Unknown => cpal::BufferSize::Fixed(frames),
+    }
+}
+
 fn list_output_devices() -> String {
     let Ok(devices) = cpal::default_host().output_devices() else { return String::new() };
     devices.map(|device| device_name(&device)).filter(|name| !name.is_empty()).collect::<Vec<_>>().join("\n")
@@ -381,7 +395,9 @@ fn open_output_stream(requested: &str, buffer: u32, sample_rate: u32, consumer: 
     let chosen = host.output_devices().ok().and_then(|mut devices| devices.find(|device| !requested.is_empty() && device_name(device) == requested));
     let device = chosen.or_else(|| host.default_output_device())?;
     let name = device_name(&device);
-    let config = cpal::StreamConfig { channels: 2, sample_rate, buffer_size: cpal::BufferSize::Fixed(buffer) };
+    let buffer_size = device.default_output_config().map(|config| buffer_size_for(config.buffer_size(), buffer))
+        .unwrap_or(cpal::BufferSize::Default);
+    let config = cpal::StreamConfig { channels: 2, sample_rate, buffer_size };
     let stream = device.build_output_stream(config, move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
         let timestamp = info.timestamp();
         DEVICE_LATENCY_US.store(timestamp.playback.duration_since(timestamp.callback).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);

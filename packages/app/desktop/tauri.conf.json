@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "identifier": "studio.opendaw",
   "build": {
-    "beforeBuildCommand": "sh desktop/scripts/sidecar.sh"
+    "beforeBuildCommand": "bash desktop/scripts/sidecar.sh"
   },
   "app": {
     "windows": [],

@@ -27,6 +27,12 @@ struct Entry {
     path: String,
     size: u64,
     sha256: String,
+    // bytes on the wire (the .br file where one exists); older manifests have none
+    download: Option<u64>,
+}
+
+impl Entry {
+    fn transfer(&self) -> u64 {self.download.unwrap_or(self.size)}
 }
 
 #[derive(Deserialize)]
@@ -143,6 +149,7 @@ fn safe_path(path: &str) -> bool {
     !path.is_empty() && !path.starts_with('/') && !path.contains('\\') && path.split('/').all(|segment| segment != ".." && !segment.is_empty())
 }
 
+// The server answers with the brotli file where one exists; ureq decodes it, the checks run on the decoded bytes
 fn download_file(agent: &ureq::Agent, url: &str, target: &Path, entry: &Entry) -> Result<(), String> {
     let temporary = target.with_extension("download");
     let response = agent.get(url).call().map_err(|error| format!("{url}: {error}"))?;
@@ -184,8 +191,9 @@ fn download(web: &Path, uuid: &str, current: Option<&str>) -> Result<(), String>
         })
         .unwrap_or_default();
     let partial = web.join(format!("{uuid}.partial"));
-    let total = manifest.files.iter().map(|entry| entry.size).sum();
+    let total = manifest.files.iter().map(Entry::transfer).sum();
     let mut done = 0u64;
+    let mut transferred = 0u64;
     progress(0, total);
     for entry in &manifest.files {
         if SKIP.load(Ordering::SeqCst) {
@@ -203,11 +211,14 @@ fn download(web: &Path, uuid: &str, current: Option<&str>) -> Result<(), String>
                 .is_some_and(|source| fs::copy(source, &target).is_ok() && matches(&target, entry));
             if !copied {
                 download_file(&agent, &format!("{base}/{}", entry.path), &target, entry)?;
+                transferred += entry.transfer();
             }
         }
-        done += entry.size;
+        done += entry.transfer();
         progress(done, total);
     }
+    let files: u64 = manifest.files.iter().map(|entry| entry.size).sum();
+    println!("[update] {uuid}: {:.1} MB of files, {:.1} MB downloaded", files as f64 / 1048576.0, transferred as f64 / 1048576.0);
     fs::write(partial.join("manifest.json"), manifest_bytes).map_err(|error| error.to_string())?;
     let complete = web.join(uuid);
     if complete.exists() {

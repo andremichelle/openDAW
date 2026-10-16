@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Builds the native engine for the bundle's target and places it where Tauri's externalBin expects it
 set -e
 cd "$(dirname "$0")/.."

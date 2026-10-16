@@ -1,8 +1,8 @@
 # .github/workflows/desktop.yml
 name: Build openDAW desktop app
 
-# A tag desktop-v<version> builds the app and publishes it as the latest GitHub Release (the /download page links it).
-# A manual run only builds and keeps the files as a workflow artifact.
+# A tag desktop-v<version> builds macOS, Windows and Linux and publishes them as the latest GitHub Release
+# (the /download page links the files). A manual run only builds and keeps the files as workflow artifacts.
 on:
   push:
     tags: ["desktop-v*"]
@@ -11,23 +11,56 @@ on:
 permissions:
   contents: write
 
+env:
+  # the server the app installs and updates the studio from, DEV until the public release
+  OPENDAW_UPDATE_ORIGIN: https://dev.opendaw.studio
+
 jobs:
-  macos:
-    runs-on: macos-latest
-    env:
-      # the server the app installs and updates the studio from, DEV until the public release
-      OPENDAW_UPDATE_ORIGIN: https://dev.opendaw.studio
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            runner: macos-latest
+            target: universal-apple-darwin
+            rust-targets: aarch64-apple-darwin x86_64-apple-darwin
+            bundles: dmg
+          - platform: windows
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            rust-targets: x86_64-pc-windows-msvc
+            bundles: nsis
+          - platform: linux
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            rust-targets: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: ⬇️ Checkout
         uses: actions/checkout@v5
 
+      - name: 🐧 Install Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev \
+            librsvg2-dev libasound2-dev libdbus-1-dev patchelf file
+
       - name: 🦀 Install Rust targets
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+        run: rustup target add ${{ matrix.rust-targets }}
 
       - name: 📦 Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: packages/app/desktop
+          workspaces: |
+            packages/app/desktop
+            packages/app/desktop/engine
+          key: ${{ matrix.platform }}
 
       - name: 🔧 Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
@@ -41,23 +74,44 @@ jobs:
             exit 1
           fi
 
-      - name: 🏗️ Build universal dmg
+      - name: 🏗️ Build
         working-directory: packages/app/desktop
+        run: cargo tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: 📁 Collect
+        working-directory: packages/app/desktop/target/${{ matrix.target }}/release/bundle
         run: |
-          cargo tauri build --target universal-apple-darwin --bundles dmg
-          cp target/universal-apple-darwin/release/bundle/dmg/*.dmg "$GITHUB_WORKSPACE/openDAW-macos.dmg"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          case "${{ matrix.platform }}" in
+            macos) cp dmg/*.dmg "$GITHUB_WORKSPACE/dist/openDAW-macos.dmg" ;;
+            windows) cp nsis/*.exe "$GITHUB_WORKSPACE/dist/openDAW-windows-setup.exe" ;;
+            linux)
+              cp appimage/*.AppImage "$GITHUB_WORKSPACE/dist/openDAW-linux.AppImage"
+              cp deb/*.deb "$GITHUB_WORKSPACE/dist/openDAW-linux.deb" ;;
+          esac
+          ls -la "$GITHUB_WORKSPACE/dist"
 
       - name: 📤 Keep as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openDAW-macos
-          path: openDAW-macos.dmg
+          name: openDAW-${{ matrix.platform }}
+          path: dist/*
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Collect the builds
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: 🚀 Publish release
-        if: startsWith(github.ref, 'refs/tags/desktop-v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" openDAW-macos.dmg --latest \
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --latest \
             --title "openDAW Desktop ${GITHUB_REF_NAME#desktop-v}" \
-            --notes "macOS app. It installs and updates the studio from $OPENDAW_UPDATE_ORIGIN on first launch. Download page: https://opendaw.studio/download"
+            --notes "macOS, Windows and Linux. The app installs and updates the studio from $OPENDAW_UPDATE_ORIGIN on first launch. Download page: https://opendaw.studio/download"

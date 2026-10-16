@@ -116,8 +116,7 @@ export default defineConfig(({command, mode}) => {
             crossOriginIsolation(),
             viteCompression({
                 algorithm: "brotliCompress",
-                // the onnx runtime (Neural Demux) is left out, too large to brotli at every build
-                filter: (file: string) => /\.(js|mjs|json|css|html|wasm)$/i.test(file) && !/ort-wasm.*\.wasm$/i.test(file)
+                filter: isCompressible
             }),
             {
                 name: "generate-date-json",
@@ -130,7 +129,7 @@ export default defineConfig(({command, mode}) => {
             },
             ...(desktop ? [{
                 name: "desktop-manifest",
-                closeBundle() {
+                async closeBundle() {
                     const outDir = resolve(__dirname, "dist-desktop")
                     // the native engine process runs this next to the unchanged wasm-processor bundle
                     buildSync({
@@ -149,7 +148,17 @@ export default defineConfig(({command, mode}) => {
                             const bytes = readFileSync(resolve(outDir, path))
                             return {path, size: bytes.byteLength, sha256: createHash("sha256").update(bytes).digest("hex")}
                         })
-                    const manifest: DesktopManifest = {uuid, date, shellApi: DESKTOP_SHELL_API, files}
+                    // the compression plugin also runs in closeBundle; wait for every .br it is going to write
+                    const expected = files.filter(({path, size}) => isCompressible(path) && size > CompressionThreshold)
+                    for (let attempt = 0; attempt < 600 && !expected.every(({path}) => existsSync(resolve(outDir, `${path}.br`))); attempt++) {
+                        await new Promise(resolve => setTimeout(resolve, 100))
+                    }
+                    // the server answers with the .br file where one exists, so that is what the shell downloads
+                    const entries = files.map(entry => {
+                        const compressed = resolve(outDir, `${entry.path}.br`)
+                        return {...entry, download: existsSync(compressed) ? statSync(compressed).size : entry.size}
+                    })
+                    const manifest: DesktopManifest = {uuid, date, shellApi: DESKTOP_SHELL_API, files: entries}
                     writeFileSync(resolve(outDir, "manifest.json"), JSON.stringify(manifest, null, 2))
                     console.debug(`Desktop manifest written with ${files.length} files`)
                 }
@@ -242,8 +251,13 @@ type DesktopManifest = {
     uuid: string
     date: number
     shellApi: number
-    files: ReadonlyArray<{ path: string, size: number, sha256: string }>
+    files: ReadonlyArray<{ path: string, size: number, sha256: string, download: number }>
 }
+
+// the onnx runtime (Neural Demux) is left out, too large to brotli at every build
+const isCompressible = (file: string): boolean => /\.(js|mjs|json|css|html|wasm)$/i.test(file) && !/ort-wasm.*\.wasm$/i.test(file)
+// vite-plugin-compression skips files up to this size
+const CompressionThreshold = 1025
 
 // The artifacts live under public/wasm/ (engine.wasm + sine.wasm) and public/wasm/plugins/ (device_*.wasm).
 const isWasmEngineAsset = (name: string): boolean =>
