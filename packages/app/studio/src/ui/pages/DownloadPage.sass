@@ -9,6 +9,8 @@
   to
     --download-angle: 360deg
 
+$rainbow: conic-gradient(from var(--download-angle), hsl(0, 90%, 62%), hsl(50, 95%, 58%), hsl(120, 75%, 52%), hsl(190, 90%, 55%), hsl(240, 85%, 66%), hsl(300, 80%, 62%), hsl(360, 90%, 62%))
+
 component
   flex: 1
   padding: 3em 2em
@@ -37,6 +39,7 @@ component
     flex-wrap: wrap
     justify-content: center
     gap: 3em
+    isolation: isolate
 
     .platform
       position: relative
@@ -54,16 +57,24 @@ component
       &:hover
         box-shadow: inset 0 1px 0 rgba(white, 0.16), inset 0 0 0 1px rgba(white, 0.08), 0 14px 32px rgba(black, 0.45)
 
-      &.detected::before
+      &.detected::before, &.detected::after
         content: ""
         position: absolute
-        inset: -2px
-        padding: 2px
-        border-radius: 12px
         pointer-events: none
-        background: conic-gradient(from var(--download-angle), hsl(0, 90%, 62%), hsl(50, 95%, 58%), hsl(120, 75%, 52%), hsl(190, 90%, 55%), hsl(240, 85%, 66%), hsl(300, 80%, 62%), hsl(360, 90%, 62%))
-        mask: linear-gradient(black 0 0) content-box exclude, linear-gradient(black 0 0)
+        background: $rainbow
         animation: download-rotate 4s linear infinite
+
+      &.detected::before
+        inset: -2px
+        border-radius: 12px
+        z-index: -1
+
+      &.detected::after
+        inset: -4px
+        border-radius: 14px
+        filter: blur(16px)
+        opacity: 0.15
+        z-index: -2
 
       .icon
         width: 3.5em
