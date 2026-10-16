@@ -856,6 +856,10 @@ struct Slot {
     changes: HashMap<ParamID, f64>,
     // what the plugin's editor last set, its box writing it back is no change
     reported: HashMap<ParamID, f32>,
+    // the latest modulation of each parameter (plain units), added to an edit from the plugin's editor
+    modulation: HashMap<ParamID, f64>,
+    // an edit from the plugin's editor is the base until its box confirms it, host values with the old base use it
+    edits: HashMap<ParamID, (f64, Instant)>,
 }
 
 thread_local! {
@@ -872,7 +876,7 @@ pub fn create_slot(uuid: String) -> u32 {
     SLOTS.with(|slots| slots.borrow_mut().insert(handle, Slot {
         uuid, generation: 0, format: String::new(), id: String::new(), shared: None, notes: Vec::new(),
         state: None, known_state: None, inbox: None, ranges: HashMap::new(), pending: HashMap::new(),
-        changes: HashMap::new(), reported: HashMap::new()
+        changes: HashMap::new(), reported: HashMap::new(), modulation: HashMap::new(), edits: HashMap::new()
     }));
     handle
 }
@@ -890,6 +894,8 @@ pub fn load(handle: u32, format: String, id: String, sample_rate: f64) {
         slot.ranges.clear();
         slot.changes.clear();
         slot.reported.clear();
+        slot.modulation.clear();
+        slot.edits.clear();
         if format.is_empty() || id.is_empty() { return; }
         let (generation, uuid) = (slot.generation, slot.uuid.clone());
         let state = slot.state.clone().filter(|state| !state.is_empty());
@@ -917,10 +923,20 @@ pub fn param(handle: u32, id: ParamID, kind: u32, value: f32, modulation: f32) {
     });
 }
 
+const EDIT_CONFIRM: std::time::Duration = std::time::Duration::from_secs(1);
+
 fn queue_param(slot: &mut Slot, id: ParamID, kind: u32, raw: f32, sum: f32) {
     let Some(max) = slot.ranges.get(&id).copied() else { return };
-    let base = if kind == PARAM_KIND_UNIT { raw as f64 * max } else { raw as f64 };
+    let mut base = if kind == PARAM_KIND_UNIT { raw as f64 * max } else { raw as f64 };
     let modulation = if sum.is_nan() { 0.0 } else { sum as f64 * max };
+    slot.modulation.insert(id, modulation);
+    if let Some((edited, at)) = slot.edits.get(&id).copied() {
+        if base as f32 == edited as f32 || at.elapsed() >= EDIT_CONFIRM {
+            slot.edits.remove(&id);
+        } else {
+            base = edited;
+        }
+    }
     if modulation == 0.0 && slot.reported.get(&id) == Some(&(base as f32)) { return; }
     slot.changes.insert(id, ((base + modulation) / max).clamp(0.0, 1.0));
     if let Some(inbox) = slot.inbox.as_ref() {
@@ -1029,8 +1045,11 @@ pub unsafe fn process(handle: u32, left: *mut f32, right: *mut f32, frames: usiz
             if let Ok(mut inbox) = inbox.try_lock() {
                 for (id, normalized) in inbox.edits.drain(..) {
                     let max = slot.ranges.get(&id).copied().unwrap_or(1.0);
-                    slot.reported.insert(id, (normalized * max) as f32);
-                    slot.changes.insert(id, normalized);
+                    let base = normalized * max;
+                    let modulation = slot.modulation.get(&id).copied().unwrap_or(0.0);
+                    slot.reported.insert(id, base as f32);
+                    slot.edits.insert(id, (base, Instant::now()));
+                    slot.changes.insert(id, ((base + modulation) / max).clamp(0.0, 1.0));
                 }
             }
         }
