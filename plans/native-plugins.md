@@ -57,6 +57,12 @@ Default folders, plus user folders in the settings:
 7. Windows and Linux windows, CLAP via `clack-host`.
 8. Sandbox process per plugin (optional).
 
+## To test
+
+- A VST3 audio effect: audio in and out through the effect chain (only instruments are hosted so far, effects need
+  their own device and box, audio input buses and bypass).
+- A VST3 MIDI effect: notes in and notes out (output events from `ProcessData.outputEvents` back into the chain).
+
 ## Progress
 - 2026-10-16 phase 0 (scratchpad spike, `vst3` 0.3 + libloading + objc2-app-kit, ~300 lines): ABL3x loads
   (`bundleEntry` with a CFBundle, `GetPluginFactory`, separate controller class, connection points), takes note
