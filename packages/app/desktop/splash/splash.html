@@ -29,7 +29,7 @@
     .bar { position: relative; height: 2px; background: var(--track); border-radius: 1px; overflow: hidden; }
     .bar > .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); transition: width 0.25s ease-out; }
     .bar.indeterminate > .fill { width: 30%; animation: sweep 1.2s ease-in-out infinite; }
-    .status { display: flex; justify-content: space-between; min-height: 15px; }
+    .status { display: flex; justify-content: space-between; gap: 16px; min-height: 15px; white-space: nowrap; align-self: center; width: max-content; min-width: 100%; }
     .status .amount { font-variant-numeric: tabular-nums; }
     .actions { display: flex; gap: 8px; min-height: 26px; }
     button {

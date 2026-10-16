@@ -103,14 +103,26 @@ fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(5)).timeout_read(Duration::from_secs(30)).build()
 }
 
-fn fetch_pointer() -> Option<Pointer> {
+enum Unavailable {
+    Offline,
+    NoBuild,
+}
+
+fn fetch_pointer() -> Result<Pointer, Unavailable> {
     let agent = ureq::AgentBuilder::new().timeout(POINTER_TIMEOUT).build();
     let url = format!("{UPDATE_ORIGIN}/tauri/build-info.json");
     match agent.get(&url).call() {
-        Ok(response) => response.into_json().ok(),
+        Ok(response) => response.into_json().map_err(|error| {
+            eprintln!("[update] {url} is no build info: {error}");
+            Unavailable::NoBuild
+        }),
+        Err(ureq::Error::Status(code, _)) => {
+            eprintln!("[update] {url}: status {code}");
+            Err(Unavailable::NoBuild)
+        }
         Err(error) => {
             eprintln!("[update] {url}: {error}");
-            None
+            Err(Unavailable::Offline)
         }
     }
 }
@@ -228,7 +240,7 @@ fn choose(web: &Path) -> Option<PathBuf> {
     }
     STATUS.lock().unwrap().installed = current.is_some();
     match fetch_pointer() {
-        Some(pointer) if Some(&pointer.uuid) != current.as_ref() => {
+        Ok(pointer) if Some(&pointer.uuid) != current.as_ref() => {
             let required = pointer.shell_api.unwrap_or(SHELL_API);
             if required > SHELL_API {
                 eprintln!("[update] build {} needs shell api {required}, this shell has {SHELL_API}", pointer.uuid);
@@ -253,9 +265,13 @@ fn choose(web: &Path) -> Option<PathBuf> {
                 }
             }
         }
-        Some(_) => {}
-        None if current.is_none() => status("offline", "The first launch needs an internet connection."),
-        None => {}
+        Ok(_) => {}
+        Err(Unavailable::Offline) if current.is_none() => status("offline", "The first launch needs an internet connection."),
+        Err(Unavailable::NoBuild) if current.is_none() => {
+            let host = UPDATE_ORIGIN.split("://").nth(1).unwrap_or(UPDATE_ORIGIN);
+            status("error", format!("No desktop build is available yet ({host})."))
+        }
+        Err(_) => {}
     }
     current.map(|uuid| web.join(uuid))
 }
