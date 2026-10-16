@@ -47,6 +47,7 @@ export namespace NativeEngine {
         URL.revokeObjectURL(placeholder)
         const latency = {seconds: 0.0}
         OutputLatency.install(() => latency.seconds)
+        NativeCapture.outputLatency(() => latency.seconds)
         const wasm = EngineVariant.current()
         EngineVariant.install((): EngineWorkletVariant => ({
             processorName: PlaceholderName,
@@ -56,7 +57,9 @@ export namespace NativeEngine {
                 const port = new NativeEnginePort(url, context.sampleRate, options,
                     seconds => latency.seconds = seconds, info => NativeCapture.updateInfo(info),
                     (uuid, peaks) => NativeCapture.deliverPeaks(uuid, peaks),
-                    devices => NativeCapture.updateDevices(devices))
+                    devices => NativeCapture.updateDevices(devices),
+                    (uuid, first, planes) => NativeCapture.deliverRecording(uuid, first, planes),
+                    seconds => NativeCapture.updateInputLatency(seconds))
                 NativeCapture.attachPort(port)
                 return port
             }

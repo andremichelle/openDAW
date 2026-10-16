@@ -22,7 +22,9 @@ export class NativeEnginePort implements Port {
     constructor(url: string, sampleRate: number, options: Record<string, unknown>,
                 readonly onLatency: Procedure<number>, readonly onInput: Procedure<{ name: string, channels: int }>,
                 readonly onInputPeaks: (uuid: Uint8Array, peaks: Float32Array) => void,
-                readonly onInputDevices: Procedure<ReadonlyArray<{ name: string, channels: int }>>) {
+                readonly onInputDevices: Procedure<ReadonlyArray<{ name: string, channels: int }>>,
+                readonly onRecordData: (uuid: Uint8Array, first: number, planes: ReadonlyArray<Float32Array>) => void,
+                readonly onInputLatency: Procedure<number>) {
         this.#sync = new Uint8Array(options.syncStreamBuffer as SharedArrayBuffer)
         this.#control = new Int32Array(options.controlFlagsBuffer as SharedArrayBuffer)
         this.#lastControl = Atomics.load(this.#control, 0)
@@ -64,6 +66,10 @@ export class NativeEnginePort implements Port {
             this.onInputPeaks(envelope.uuid, envelope.peaks)
         } else if (envelope.type === "input-devices") {
             this.onInputDevices(envelope.devices)
+        } else if (envelope.type === "record-data") {
+            this.onRecordData(envelope.uuid, envelope.first, envelope.planes)
+        } else if (envelope.type === "input-latency") {
+            this.onInputLatency(envelope.seconds)
         } else if (envelope.type === "live") {
             const data = this.#shared.get(envelope.data)
             const lock = this.#shared.get(envelope.lock)

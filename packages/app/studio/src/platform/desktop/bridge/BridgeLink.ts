@@ -9,6 +9,7 @@ export type ToEngine =
     | { type: "live-return", lock: int, data: int, bytes: Uint8Array }
     | { type: "capture", uuid: Uint8Array, deviceId: string, channels: int, gain: number, mode: string, volume: number, pan: number }
     | { type: "capture-close", uuid: Uint8Array }
+    | { type: "record", uuid: Uint8Array, record: boolean }
 
 export type ToStudio =
     | { type: "message", data: unknown }
@@ -18,6 +19,8 @@ export type ToStudio =
     | { type: "input", name: string, channels: int }
     | { type: "input-peaks", uuid: Uint8Array, peaks: Float32Array }
     | { type: "input-devices", devices: Array<{ name: string, channels: int }> }
+    | { type: "record-data", uuid: Uint8Array, first: number, planes: Array<Float32Array> }
+    | { type: "input-latency", seconds: number }
 
 export const enum LiveLock {WRITE = 0, READ = 1}
 export const enum SyncState {READING = 0, READ = 1, WRITING = 2, WRITTEN = 3}

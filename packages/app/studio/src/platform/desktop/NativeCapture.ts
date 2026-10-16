@@ -1,14 +1,18 @@
-import {int, Notifier, Nullable, Option, Procedure, Subscription, TimeSpan, UUID} from "@opendaw/lib-std"
+import {int, isDefined, Notifier, Nullable, Option, Procedure, Provider, Subscription, Terminable, TimeSpan, UUID} from "@opendaw/lib-std"
 import {Wait} from "@opendaw/lib-runtime"
-import {CaptureAudioBackend, MonitoringMode} from "@opendaw/studio-core"
+import {CaptureAudioBackend, MonitoringMode, RecordingTake} from "@opendaw/studio-core"
 import {NativeEnginePort} from "@/platform/desktop/bridge/NativeEnginePort"
 
 // Audio input through the native engine: the engine opens the device, monitors and (later) records on its own clock
 export namespace NativeCapture {
     type InputInfo = { name: string, channels: int }
 
-    const state: { port: Nullable<NativeEnginePort>, info: Option<InputInfo>, devices: ReadonlyArray<InputInfo> } =
-        {port: null, info: Option.None, devices: []}
+    const RenderQuantum = 128
+
+    const state: {
+        port: Nullable<NativeEnginePort>, info: Option<InputInfo>, devices: ReadonlyArray<InputInfo>
+        inputLatency: number, outputLatency: Provider<number>
+    } = {port: null, info: Option.None, devices: [], inputLatency: 0.0, outputLatency: () => 0.0}
     const inputs = new Set<NativeInput>()
 
     class NativeInput implements CaptureAudioBackend.Input {
@@ -17,6 +21,7 @@ export namespace NativeCapture {
         volume = 1.0
         pan = 0.0
         readonly peaks = new Notifier<Float32Array>()
+        take: Nullable<RecordingTake> = null
 
         constructor(readonly uuid: UUID.Bytes, readonly requestedDevice: string, readonly channelCount: 1 | 2) {}
 
@@ -37,6 +42,18 @@ export namespace NativeCapture {
         }
 
         subscribePeaks(observer: Procedure<Float32Array>): Subscription {return this.peaks.subscribe(observer)}
+
+        record(take: RecordingTake): Terminable {
+            this.take = take
+            state.port?.send({type: "record", uuid: this.uuid, record: true})
+            return Terminable.create(() => {
+                if (this.take !== take) {return}
+                this.take = null
+                state.port?.send({type: "record", uuid: this.uuid, record: false})
+            })
+        }
+
+        latency(): { output: number, input: number } {return {output: state.outputLatency(), input: state.inputLatency}}
 
         send(): void {
             state.port?.send({
@@ -60,6 +77,21 @@ export namespace NativeCapture {
 
     export const deliverPeaks = (uuid: Uint8Array, peaks: Float32Array): void =>
         inputs.forEach(input => {if (UUID.equals(input.uuid, uuid as UUID.Bytes)) {input.peaks.notify(peaks)}})
+
+    // the engine sends the input after the gain in planes of whole render quanta, stamped once with its first quantum
+    export const deliverRecording = (uuid: Uint8Array, first: number, planes: ReadonlyArray<Float32Array>): void =>
+        inputs.forEach(input => {
+            const take = input.take
+            if (!isDefined(take) || !UUID.equals(input.uuid, uuid as UUID.Bytes)) {return}
+            if (take.firstQuantumTime.isEmpty() && first >= 0.0) {take.firstQuantum(first)}
+            const quanta = (planes[0]?.length ?? 0) / RenderQuantum
+            for (let index = 0; index < quanta; index++) {
+                take.append(planes.map(plane => plane.slice(index * RenderQuantum, (index + 1) * RenderQuantum)))
+            }
+        })
+
+    export const updateInputLatency = (seconds: number): void => {state.inputLatency = seconds}
+    export const outputLatency = (provider: Provider<number>): void => {state.outputLatency = provider}
 
     export const updateDevices = (devices: ReadonlyArray<InputInfo>): void => {state.devices = devices}
 

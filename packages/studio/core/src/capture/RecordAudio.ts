@@ -13,7 +13,7 @@ import {ppqn, PPQN, RenderQuantum, TimeBase} from "@opendaw/lib-dsp"
 import {AudioFileBox, AudioRegionBox, TrackBox, ValueEventCollectionBox} from "@opendaw/studio-boxes"
 import {ColorCodes, SampleLoaderManager, TrackType, UnionBoxTypes} from "@opendaw/studio-adapters"
 import {Project} from "../project"
-import {RecordingWorklet} from "../RecordingWorklet"
+import {RecordingSource} from "../RecordingTake"
 import {Capture} from "./Capture"
 import {Recording} from "./Recording"
 import {RecordTrack} from "./RecordTrack"
@@ -24,9 +24,10 @@ export namespace RecordAudio {
         inputLatency: number
     }
 
-    type RecordAudioContext = {
-        recordingWorklet: RecordingWorklet
-        sourceNode: AudioNode
+    // the recording in progress and what feeds it (a Web Audio node feeds a RecordingWorklet)
+    type RecordAudioContext<RECORDING extends RecordingSource> = {
+        recordingWorklet: RECORDING
+        sourceNode: { disconnect(destination: RECORDING): void }
         sampleManager: SampleLoaderManager
         project: Project
         capture: Capture
@@ -40,8 +41,8 @@ export namespace RecordAudio {
 
     const ANCHOR_WAIT_SECONDS = 0.25
 
-    export const start = (
-        {recordingWorklet, sourceNode, sampleManager, project, capture, readLatency}: RecordAudioContext)
+    export const start = <RECORDING extends RecordingSource>(
+        {recordingWorklet, sourceNode, sampleManager, project, capture, readLatency}: RecordAudioContext<RECORDING>)
         : Terminable => {
         const startLatency = readLatency()
         console.debug("[RecordAudio] start", startLatency)

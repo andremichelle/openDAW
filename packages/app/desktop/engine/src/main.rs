@@ -64,6 +64,8 @@ static STARTED: OnceLock<Instant> = OnceLock::new();
 static RING_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static DEVICE_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static INPUT_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+// what waits in the input ring after a pull, in microseconds
+static INPUT_RING_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 // the main thread owns the cpal input stream (not Send) and opens it on request
 // Some(name) opens that input ("" = the default), None closes it
 static INPUT_REQUESTS: Mutex<Option<Sender<Option<String>>>> = Mutex::new(None);
@@ -163,7 +165,8 @@ fn input_info(scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mu
 }
 
 fn input_latency(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
-    rv.set_double(INPUT_LATENCY_US.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1_000_000.0);
+    let ordering = std::sync::atomic::Ordering::Relaxed;
+    rv.set_double((INPUT_LATENCY_US.load(ordering) + INPUT_RING_US.load(ordering)) as f64 / 1_000_000.0);
 }
 
 fn close(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
@@ -308,6 +311,8 @@ fn pull_input(input: &mut Option<Input>, interleaved: &mut [f32], planar: &mut [
             planar[channel * QUANTUM + frame] = interleaved[frame * channels + channel];
         }
     }
+    let waiting = (consumer.slots() / channels + QUANTUM) as u64;
+    INPUT_RING_US.store(waiting * 1_000_000 / 48_000, std::sync::atomic::Ordering::Relaxed);
     channels.min(INPUT_CHANNELS)
 }
 

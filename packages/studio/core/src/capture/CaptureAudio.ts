@@ -27,6 +27,7 @@ import {AudioDevices} from "../AudioDevices"
 import {RecordingWorklet} from "../RecordingWorklet"
 import {MonitoringMode} from "./MonitoringMode"
 import {CaptureAudioBackend} from "./CaptureAudioBackend"
+import {RecordingTake} from "../RecordingTake"
 
 // Ring capacity in render-quantum chunks (~3s at 48kHz). The reader worker keeps the ring drained in real time;
 // the headroom only needs to cover the worker's async boot and transient stalls. See issue #290.
@@ -60,6 +61,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     #nativeChannels: Optional<1 | 2> = undefined
     #nativeDeviceId: Optional<string> = undefined
     #nativePeaks: Nullable<Subscription> = null
+    #preparedTake: Nullable<{ take: RecordingTake, feed: Terminable }> = null
     readonly #inputPeaks: Notifier<Float32Array> = new Notifier<Float32Array>()
 
     constructor(manager: CaptureDevices, audioUnitBox: AudioUnitBox, captureAudioBox: CaptureAudioBox) {
@@ -208,9 +210,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
 
     async prepareRecording(): Promise<void> {
-        if (CaptureAudioBackend.current().nonEmpty()) {
-            return Promise.reject("Recording with the native audio engine is not available yet.")
-        }
+        if (CaptureAudioBackend.current().nonEmpty()) {return this.#prepareNativeRecording()}
         const {project} = this.manager
         const {env: {audioContext, audioWorklets, sampleManager, sampleService}} = project
         // a prepared worklet that startRecording never consumed stays connected and buffering forever
@@ -245,6 +245,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     }
 
     startRecording(): Terminable {
+        if (CaptureAudioBackend.current().nonEmpty()) {return this.#startNativeRecording()}
         const {project} = this.manager
         const {env: {audioContext, sampleManager}, engine} = project
         const audioChain = this.#audioChain
@@ -404,7 +405,60 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         this.#connectMonitoring()
     }
 
+    async #prepareNativeRecording(): Promise<void> {
+        this.#discardPreparedWorklet()
+        await this.#streamGenerator()
+        const input = this.#native
+        if (!isDefined(input)) {return Promise.reject("No audio input available for recording.")}
+        const {project} = this.manager
+        const {env: {audioContext, sampleManager, sampleService}} = project
+        const feed: { current: Terminable } = {current: Terminable.Empty}
+        const take = new RecordingTake(UUID.generate(), audioContext.sampleRate, input.channelCount, () => feed.current.terminate())
+        take.bpm = project.timelineBox.bpm.getValue()
+        take.sampleService = sampleService
+        sampleManager.record(take)
+        feed.current = input.record(take)
+        this.#preparedTake = {take, feed: feed.current}
+    }
+
+    #startNativeRecording(): Terminable {
+        const input = this.#native
+        const prepared = this.#preparedTake
+        if (!isDefined(input) || !isDefined(prepared)) {
+            console.warn("No native input or take available for recording.")
+            this.#discardPreparedWorklet()
+            return Terminable.Empty
+        }
+        this.#preparedTake = null
+        const {project} = this.manager
+        const {env: {sampleManager}, engine} = project
+        const readLatency = (): RecordAudio.Latency => {
+            const {output, input: measuredInput} = input.latency()
+            return {
+                outputLatency: output,
+                inputLatency: InputLatency.resolve(
+                    this.captureBox.inputLatency.getValue(), engine.preferences.settings.recording.inputLatency, measuredInput)
+            }
+        }
+        console.debug("[CaptureAudio] native latency report", readLatency())
+        return RecordAudio.start({
+            recordingWorklet: prepared.take,
+            sourceNode: {disconnect: () => prepared.feed.terminate()},
+            sampleManager,
+            project,
+            capture: this,
+            readLatency
+        })
+    }
+
     #discardPreparedWorklet(): void {
+        const prepared = this.#preparedTake
+        if (isDefined(prepared)) {
+            this.#preparedTake = null
+            prepared.feed.terminate()
+            this.manager.project.env.sampleManager.remove(prepared.take.uuid)
+            prepared.take.terminate()
+        }
         const recordingWorklet = this.#preparedWorklet
         if (!isDefined(recordingWorklet)) {return}
         this.#preparedWorklet = null

@@ -13,6 +13,7 @@ declare const __openInput: (device: string) => void
 declare const __closeInput: () => void
 declare const __inputInfo: () => string
 declare const __inputDevices: () => string
+declare const __inputLatency: () => number
 
 const RenderQuantum = 128
 const TickQuanta = 4
@@ -41,7 +42,10 @@ scope.currentTime = 0
 
 const modules = new Map<string, ReturnType<typeof loadEngineModules>>()
 
-type CaptureState = { uuid: Uint8Array, deviceId: string, channels: int, gain: number, mode: string, volume: number, pan: number, peaks: Float32Array }
+type CaptureState = {
+    uuid: Uint8Array, deviceId: string, channels: int, gain: number, mode: string, volume: number, pan: number, peaks: Float32Array
+    recording: boolean, first: number, planes: Array<Array<Float32Array>>
+}
 
 type InputState = { channels: int, info: string, devices: string, requested: string, views: Array<Float32Array>, buffer: Nullable<Float32Array> }
 
@@ -137,11 +141,28 @@ class Connection {
                     capture.peaks[index] = peak
                 })
             }
+            if (capture.recording && input.channels > 0) {
+                if (capture.first < 0.0) {capture.first = (scope.currentFrame as number) / (scope.sampleRate as number)}
+                capture.planes.push(captureChannels(capture).map(channel => input.views[channel].map(sample => sample * capture.gain)))
+            }
             if (capture.volume === 0.0 || input.channels === 0 || (capture.mode !== "direct" && capture.mode !== "effects")) {return}
             const [first, second] = captureChannels(capture)
             const source = capture.mode === "direct" ? input.views : this.monitor
             mixPanned(this.main, source[first], source[second ?? first], capture.channels === 2, capture.volume, capture.pan)
         })
+    }
+
+    // sends the collected quanta as one plane per channel; the first message carries the first quantum's engine time
+    flushRecording(capture: CaptureState): void {
+        if (capture.planes.length === 0) {return}
+        const quanta = capture.planes
+        const planes = quanta[0].map((_, channel) => {
+            const plane = new Float32Array(quanta.length * RenderQuantum)
+            quanta.forEach((quantum, index) => plane.set(quantum[channel], index * RenderQuantum))
+            return plane
+        })
+        this.send({type: "record-data", uuid: capture.uuid, first: capture.first, planes})
+        capture.planes = []
     }
 
     // effects monitoring renders the input through the unit's chain; the engine reads the mapped hardware channels
@@ -156,6 +177,8 @@ class Connection {
 
     tick(): void {
         if (this.ticks++ % 100 === 0) {this.send({type: "latency", seconds: __outputLatency()})}
+        this.captures.forEach(capture => {if (capture.recording) {this.flushRecording(capture)}})
+        if (this.ticks % 100 === 50) {this.send({type: "input-latency", seconds: __inputLatency()})}
         if (this.ticks % 2 === 0) {
             this.captures.forEach(capture => {
                 this.send({type: "input-peaks", uuid: capture.uuid, peaks: capture.peaks.map(peak => peak * capture.gain)})
@@ -210,9 +233,20 @@ class Connection {
             const key = UUID.toString(uuid as UUID.Bytes)
             const peaks = this.captures.get(key)?.peaks ?? new Float32Array(channels)
             if (this.captures.get(key)?.deviceId !== deviceId) {input.requested = deviceId}
-            this.captures.set(key, {uuid, deviceId, channels, gain, mode, volume, pan, peaks: peaks.length === channels ? peaks : new Float32Array(channels)})
+            const previous = this.captures.get(key)
+            this.captures.set(key, {
+                uuid, deviceId, channels, gain, mode, volume, pan, peaks: peaks.length === channels ? peaks : new Float32Array(channels),
+                recording: previous?.recording ?? false, first: previous?.first ?? -1.0, planes: previous?.planes ?? []
+            })
             refreshInput()
             this.updateMonitoringMap()
+        } else if (envelope.type === "record") {
+            const capture = this.captures.get(UUID.toString(envelope.uuid as UUID.Bytes))
+            if (!isDefined(capture)) {return}
+            if (!envelope.record) {this.flushRecording(capture)}
+            capture.recording = envelope.record
+            capture.first = -1.0
+            capture.planes = []
         } else if (envelope.type === "capture-close") {
             this.captures.delete(UUID.toString(envelope.uuid as UUID.Bytes))
             refreshInput()

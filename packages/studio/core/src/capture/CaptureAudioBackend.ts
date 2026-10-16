@@ -1,5 +1,6 @@
 import {Option, Optional, Procedure, Subscription, Terminable, UUID} from "@opendaw/lib-std"
 import {MonitoringMode} from "./MonitoringMode"
+import {RecordingTake} from "../RecordingTake"
 
 // An audio input outside the Web Audio graph (the desktop app's native engine). Without an installed backend,
 // CaptureAudio opens its input with getUserMedia as before.
@@ -21,6 +22,10 @@ export namespace CaptureAudioBackend {
         setMonitoring(mode: MonitoringMode, volume: number, pan: number): void
         // linear peaks per channel after the gain
         subscribePeaks(observer: Procedure<Float32Array>): Subscription
+        // feeds the take with the input after the gain from now on, on the clock of the engine's recordingStarted
+        record(take: RecordingTake): Terminable
+        // seconds, measured by the backend
+        latency(): { output: number, input: number }
     }
 
     const state: { backend: Option<CaptureAudioBackend> } = {backend: Option.None}
