@@ -1,5 +1,6 @@
 import {asDefined, Errors, isDefined, isNull, Maps, panic, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
+import {Platform} from "@opendaw/lib-dom"
 import {CloudService} from "./CloudService"
 import {CloudHandler} from "./CloudHandler"
 import {DropboxHandler} from "./DropboxHandler"
@@ -83,7 +84,7 @@ export class CloudAuthManager {
         })
         const authUrl = `${config.authUrlBase}?${params.toString()}`
         console.debug("[CloudAuth] Opening auth window:", authUrl)
-        const authWindow = window.open(authUrl, "cloudAuth")
+        const authWindow = Platform.openAuthWindow(authUrl, "cloudAuth")
         if (isNull(authWindow)) {
             return Errors.warn("Failed to open authentication window. Please check popup blockers.")
         }
@@ -174,7 +175,7 @@ export class CloudAuthManager {
         })
         const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
         console.debug("[CloudAuth] Opening auth window:", authUrl)
-        const authWindow = window.open(authUrl, "cloudAuth")
+        const authWindow = Platform.openAuthWindow(authUrl, "cloudAuth")
         if (isNull(authWindow)) {
             return Errors.warn("Failed to open authentication window. Please check popup blockers.")
         }

@@ -143,7 +143,7 @@ const selectTone = async (): Promise<string> => {
         menubar: "true",
         preview: "true"
     })
-    const authWindow = window.open(`${AuthorizeEndpoint}?${params}`, "tone3000")
+    const authWindow = Platform.openAuthWindow(`${AuthorizeEndpoint}?${params}`, "tone3000")
     if (isNull(authWindow)) {return Errors.warn("Failed to open TONE3000 window. Please check popup blockers.")}
     const {resolve, reject, promise} = Promise.withResolvers<string>()
     const channel = new BroadcastChannel(ChannelName)

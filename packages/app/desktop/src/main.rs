@@ -142,6 +142,67 @@ fn popout_script(label: &str) -> String {
     }})()"#)
 }
 
+fn open_window(handle: &AppHandle, counter: &Arc<AtomicUsize>, url: tauri::Url, features: tauri::webview::NewWindowFeatures,
+               from_main: bool) -> NewWindowResponse<tauri::Wry> {
+    let label = format!("popout-{}", counter.fetch_add(1, Ordering::SeqCst));
+    let utility = url.query_pairs().any(|(key, _)| key == "utility");
+    let close = popout_script(&label);
+    let builder = WebviewWindowBuilder::new(handle, label, WebviewUrl::External("about:blank".parse().unwrap()));
+    let builder = match (features.size(), features.position()) {
+        (None, None) => builder.inner_size(1000.0, 800.0).center(),
+        (None, Some(_)) => builder.inner_size(1000.0, 800.0),
+        _ => builder,
+    };
+    let (nested_handle, nested_counter) = (handle.clone(), counter.clone());
+    let builder = builder
+        .window_features(features)
+        .decorations(!utility)
+        .accept_first_mouse(true)
+        .disable_drag_drop_handler()
+        .background_throttling(BackgroundThrottlingPolicy::Disabled)
+        .on_new_window(move |url, features| open_window(&nested_handle, &nested_counter, url, features, false))
+        .on_document_title_changed(|window, title| {
+            let _ = window.set_title(&title);
+        })
+        .on_page_load(move |window, payload| {
+            if matches!(payload.event(), PageLoadEvent::Finished) {
+                let _ = window.eval(&close);
+            }
+        });
+    let builder = if utility { in_front(builder, handle) } else { builder };
+    let window = builder.build().unwrap();
+    #[cfg(target_os = "macos")]
+    if utility {
+        hide_on_deactivate(&window);
+    }
+    let (closing, app) = (window.clone(), handle.clone());
+    window.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            // a foreign page (an OAuth login) cannot reach the shell to close itself
+            if closing.url().is_ok_and(|url| is_foreign(&url)) {
+                if from_main {
+                    // what the callback pages send on unload, so the studio stops waiting
+                    if let Some(main) = app.get_webview_window("main") {
+                        let _ = main.eval(r#"for (const name of ["auth-callback", "tone3000-callback"]) {
+                            const channel = new BroadcastChannel(name)
+                            channel.postMessage({type: "closed"})
+                            channel.close()
+                        }"#);
+                    }
+                }
+                return;
+            }
+            api.prevent_close();
+            let _ = closing.eval("window.__shellClose__ ? window.__shellClose__() : null");
+        }
+    });
+    NewWindowResponse::Create { window }
+}
+
+fn is_foreign(url: &tauri::Url) -> bool {
+    matches!(url.scheme(), "http" | "https") && !(url.host_str() == Some("127.0.0.1") && url.port() == Some(PORT))
+}
+
 static ROOT: RwLock<Option<Arc<PathBuf>>> = RwLock::new(None);
 
 pub fn root() -> Option<Arc<PathBuf>> {
@@ -244,9 +305,40 @@ fn popout(url: &str) -> Option<tauri::WebviewWindow> {
     APP.get().and_then(|app| app.get_webview_window(&query_value(url, "label")?))
 }
 
+pub fn open_in_browser(url: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = std::process::Command::new("rundll32");
+        command.arg("url.dll,FileProtocolHandler");
+        command
+    };
+    #[cfg(target_os = "linux")]
+    let mut command = std::process::Command::new("xdg-open");
+    command.arg(url).spawn().map(|_| ())
+}
+
+// only the same-origin callback page may post, so another site cannot slip its own login into the studio
+fn auth_callback(request: &mut tiny_http::Request, url: &str) -> u16 {
+    let channel = query_value(url, "channel").filter(|name| name == "auth-callback" || name == "tone3000-callback");
+    let same_origin = request.headers().iter()
+        .any(|header| header.field.equiv("Origin") && header.value.as_str() == format!("http://127.0.0.1:{PORT}"));
+    let (Some(channel), true) = (channel, same_origin && request.method() == &tiny_http::Method::Post) else { return 403 };
+    let mut body = Vec::new();
+    let _ = std::io::Read::read_to_end(request.as_reader(), &mut body);
+    let Ok(message) = serde_json::from_slice::<serde_json::Value>(&body) else { return 400 };
+    let Some(main) = APP.get().and_then(|app| app.get_webview_window("main")) else { return 503 };
+    let _ = main.eval(&format!("{{const channel = new BroadcastChannel({}); channel.postMessage({message}); channel.close()}}",
+        serde_json::Value::String(channel)));
+    let _ = main.unminimize();
+    let _ = main.set_focus();
+    204
+}
+
 fn serve(request: tiny_http::Request) {
     let Some(request) = files::handle(request) else { return };
-    let Some(request) = update::handle(request) else { return };
+    let Some(mut request) = update::handle(request) else { return };
     let url = request.url().to_string();
     if url.starts_with("/__drag") {
         if let Some(window) = popout(&url) {
@@ -262,6 +354,9 @@ fn serve(request: tiny_http::Request) {
             }
         }
         let _ = request.respond(tiny_http::Response::empty(204));
+    } else if url.starts_with("/__auth-callback") {
+        let status = auth_callback(&mut request, &url);
+        let _ = request.respond(tiny_http::Response::empty(status));
     } else if url.starts_with("/__close") {
         let label = url.split('?').nth(1).unwrap_or("");
         if let Some(window) = APP.get().and_then(|app| app.get_webview_window(label)) {
@@ -323,39 +418,7 @@ fn main() {
                 .background_throttling(BackgroundThrottlingPolicy::Disabled)
                 .devtools(true)
                 .initialization_script(&shell_info)
-                .on_new_window(move |url, features| {
-                    let label = format!("popout-{}", counter.fetch_add(1, Ordering::SeqCst));
-                    let utility = url.query_pairs().any(|(key, _)| key == "utility");
-                    let close = popout_script(&label);
-                    let builder = WebviewWindowBuilder::new(&handle, label, WebviewUrl::External("about:blank".parse().unwrap()))
-                        .window_features(features)
-                        .decorations(!utility)
-                        .accept_first_mouse(true)
-                        .disable_drag_drop_handler()
-                        .background_throttling(BackgroundThrottlingPolicy::Disabled)
-                        .on_document_title_changed(|window, title| {
-                            let _ = window.set_title(&title);
-                        })
-                        .on_page_load(move |window, payload| {
-                            if matches!(payload.event(), PageLoadEvent::Finished) {
-                                let _ = window.eval(&close);
-                            }
-                        });
-                    let builder = if utility { in_front(builder, &handle) } else { builder };
-                    let window = builder.build().unwrap();
-                    #[cfg(target_os = "macos")]
-                    if utility {
-                        hide_on_deactivate(&window);
-                    }
-                    let closing = window.clone();
-                    window.on_window_event(move |event| {
-                        if let WindowEvent::CloseRequested { api, .. } = event {
-                            api.prevent_close();
-                            let _ = closing.eval("window.__shellClose__ ? window.__shellClose__() : null");
-                        }
-                    });
-                    NewWindowResponse::Create { window }
-                })
+                .on_new_window(move |url, features| open_window(&handle, &counter, url, features, true))
                 .build()?;
             let quitting = app.handle().clone();
             main.on_window_event(move |event| {

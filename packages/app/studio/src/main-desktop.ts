@@ -3,6 +3,7 @@ import {start} from "@/start"
 import {DesktopFiles} from "@/platform/desktop/DesktopFiles"
 import {DesktopMenu} from "@/platform/desktop/DesktopMenu"
 import {DesktopLifecycle} from "@/platform/desktop/DesktopLifecycle"
+import {DesktopBrowser} from "@/platform/desktop/DesktopBrowser"
 import {DesktopTitle} from "@/platform/desktop/DesktopTitle"
 import {NativeEngine} from "@/platform/desktop/NativeEngine"
 import {NativeMidi} from "@/platform/desktop/NativeMidi"
@@ -20,6 +21,7 @@ NativeMenu.install(service => {
     NativeEngine.attach(service).catch(error => console.warn("[NativeEngine]", error))
 })
 DesktopLifecycle.install()
+DesktopBrowser.install()
 NativeMidi.install()
 NativeAudioInputs.install()
 NativeOutput.install()

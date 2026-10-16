@@ -59,7 +59,30 @@
     const channel = new BroadcastChannel('auth-callback');
     window.onbeforeunload = () => channel.postMessage({type: 'closed'})
 
+    // opened in the system browser by the desktop app, which forwards the message to the studio
+    const inSystemBrowser = location.origin === 'http://127.0.0.1:47110' && window.opener === null
+
     function postAndClose(message) {
+        if (inSystemBrowser) {
+            window.onbeforeunload = null
+            fetch('/__auth-callback?channel=auth-callback', {method: 'POST', body: JSON.stringify(message)})
+                .then(response => {
+                    if (!response.ok) {throw new Error(`status ${response.status}`)}
+                    container.innerHTML = `
+                    <div class="success">✓</div>
+                    <h1>Signed in</h1>
+                    <p>You can close this tab and return to openDAW.</p>
+                `;
+                })
+                .catch(error => {
+                    container.innerHTML = `
+                    <div class="error">⚠️</div>
+                    <h1>Communication Error</h1>
+                    <p>${error}</p>
+                `;
+                });
+            return;
+        }
         try {
             channel.postMessage(message);
             channel.close();

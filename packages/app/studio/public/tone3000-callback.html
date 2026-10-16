@@ -37,10 +37,21 @@
     } else {
         status.textContent = "Sending NAM to device..."
     }
-    channel.postMessage(message)
-    channel.close()
     window.onbeforeunload = null
-    if (!failed) {window.close()}
+    // opened in the system browser by the desktop app, which forwards the message to the studio
+    if (location.origin === "http://127.0.0.1:47110" && window.opener === null) {
+        channel.close()
+        fetch("/__auth-callback?channel=tone3000-callback", {method: "POST", body: JSON.stringify(message)})
+            .then(response => {
+                if (!response.ok) {throw new Error(`status ${response.status}`)}
+                if (!failed && !message.canceled) {status.textContent = "Tone sent. You can close this tab and return to openDAW."}
+            })
+            .catch(error => {status.textContent = `Error: ${error}`})
+    } else {
+        channel.postMessage(message)
+        channel.close()
+        if (!failed) {window.close()}
+    }
 </script>
 </body>
 </html>

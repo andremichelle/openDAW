@@ -22,6 +22,7 @@ export namespace Platform {
         alert(message: string): void
         reload(): void
         guardClose(hasUnsavedWork: Provider<boolean>): void
+        openAuthWindow(url: string, target: string): Nullable<Pick<Window, "close">>
     }
 
     const browser: Strategies = {
@@ -44,7 +45,8 @@ export namespace Platform {
         // offline, a reload would not bring the page back
         guardClose: (hasUnsavedWork: Provider<boolean>) => window.addEventListener("beforeunload", (event: Event) => {
             if (!navigator.onLine || hasUnsavedWork()) {event.preventDefault()}
-        })
+        }),
+        openAuthWindow: (url: string, target: string) => window.open(url, target)
     }
 
     const installed: Strategies = {...browser}
@@ -69,4 +71,6 @@ export namespace Platform {
     export const alert = (message: string): void => installed.alert(message)
     export const reload = (): void => installed.reload()
     export const guardClose = (hasUnsavedWork: Provider<boolean>): void => installed.guardClose(hasUnsavedWork)
+    export const openAuthWindow = (url: string, target: string): Nullable<Pick<Window, "close">> =>
+        installed.openAuthWindow(url, target)
 }
