@@ -9,9 +9,10 @@ import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "../bridge/B
 declare const __send: (connection: int, bytes: ArrayBuffer) => void
 declare const __close: (connection: int) => void
 declare const __outputLatency: () => number
-declare const __openInput: () => void
+declare const __openInput: (device: string) => void
 declare const __closeInput: () => void
 declare const __inputInfo: () => string
+declare const __inputDevices: () => string
 
 const RenderQuantum = 128
 const TickQuanta = 4
@@ -40,11 +41,11 @@ scope.currentTime = 0
 
 const modules = new Map<string, ReturnType<typeof loadEngineModules>>()
 
-type CaptureState = { uuid: Uint8Array, channels: int, gain: number, mode: string, volume: number, pan: number, peaks: Float32Array }
+type CaptureState = { uuid: Uint8Array, deviceId: string, channels: int, gain: number, mode: string, volume: number, pan: number, peaks: Float32Array }
 
-type InputState = { channels: int, info: string, views: Array<Float32Array>, buffer: Nullable<Float32Array> }
+type InputState = { channels: int, info: string, devices: string, requested: string, views: Array<Float32Array>, buffer: Nullable<Float32Array> }
 
-const input: InputState = {channels: 0, info: "", views: [], buffer: null}
+const input: InputState = {channels: 0, info: "", devices: "", requested: "", views: [], buffer: null}
 
 // hardware input channels of a capture: the first one or two, a mono device feeds both sides
 const captureChannels = (capture: CaptureState): Array<int> =>
@@ -205,8 +206,11 @@ class Connection {
         } else if (envelope.type === "control" && this.control !== null) {
             Atomics.store(this.control, 0, envelope.value)
         } else if (envelope.type === "capture") {
-            const {uuid, channels, gain, mode, volume, pan} = envelope
-            this.captures.set(UUID.toString(uuid as UUID.Bytes), {uuid, channels, gain, mode, volume, pan, peaks: new Float32Array(channels)})
+            const {uuid, deviceId, channels, gain, mode, volume, pan} = envelope
+            const key = UUID.toString(uuid as UUID.Bytes)
+            const peaks = this.captures.get(key)?.peaks ?? new Float32Array(channels)
+            if (this.captures.get(key)?.deviceId !== deviceId) {input.requested = deviceId}
+            this.captures.set(key, {uuid, deviceId, channels, gain, mode, volume, pan, peaks: peaks.length === channels ? peaks : new Float32Array(channels)})
             refreshInput()
             this.updateMonitoringMap()
         } else if (envelope.type === "capture-close") {
@@ -228,7 +232,7 @@ const connections = new Map<int, Connection>()
 
 const refreshInput = (): void => {
     const wanted = Array.from(connections.values()).some(connection => connection.alive && connection.captures.size > 0)
-    if (wanted) {__openInput()} else {__closeInput()}
+    if (wanted) {__openInput(input.requested)} else {__closeInput()}
 }
 
 const sendInput = (connection: Connection): void => {
@@ -236,7 +240,15 @@ const sendInput = (connection: Connection): void => {
     connection.send({type: "input", name, channels: Number(channels)})
 }
 
+const parseDevices = (text: string): Array<{ name: string, channels: int }> => text.length === 0 ? []
+    : text.split("\n").map(line => line.split("\t")).map(([name, channels]) => ({name, channels: Number(channels)}))
+
 const announceInput = (): void => {
+    const devices = __inputDevices()
+    if (devices !== input.devices) {
+        input.devices = devices
+        connections.forEach(connection => connection.send({type: "input-devices", devices: parseDevices(devices)}))
+    }
     const info = __inputInfo()
     if (info === input.info) {return}
     input.info = info
@@ -276,6 +288,7 @@ scope.__bridge = {
         const connection = new Connection(id)
         connections.set(id, connection)
         if (input.info.length > 0) {sendInput(connection)}
+        connection.send({type: "input-devices", devices: parseDevices(input.devices)})
     },
     receive: (id: int, bytes: ArrayBuffer): void => connections.get(id)?.receive(bytes),
     close: (id: int): void => {

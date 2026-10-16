@@ -5,10 +5,12 @@ import {MonitoringMode} from "./MonitoringMode"
 // CaptureAudio opens its input with getUserMedia as before.
 export interface CaptureAudioBackend {
     open(request: CaptureAudioBackend.Request): Promise<CaptureAudioBackend.Input>
+    devices(): ReadonlyArray<CaptureAudioBackend.Device>
 }
 
 export namespace CaptureAudioBackend {
     export type Request = { uuid: UUID.Bytes, deviceId: Optional<string>, channels: 1 | 2 }
+    export type Device = { deviceId: string, label: string }
 
     export interface Input extends Terminable {
         readonly label: string

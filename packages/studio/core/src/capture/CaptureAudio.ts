@@ -58,6 +58,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     #monitorStreamDest: Nullable<MediaStreamAudioDestinationNode> = null
     #native: Nullable<CaptureAudioBackend.Input> = null
     #nativeChannels: Optional<1 | 2> = undefined
+    #nativeDeviceId: Optional<string> = undefined
     #nativePeaks: Nullable<Subscription> = null
     readonly #inputPeaks: Notifier<Float32Array> = new Notifier<Float32Array>()
 
@@ -347,7 +348,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
     async #updateNativeInput(backend: CaptureAudioBackend): Promise<void> {
         const deviceId = this.deviceId.getValue().unwrapOrUndefined()
         const channels = this.#requestChannels.unwrapOrElse(2)
-        if (isDefined(this.#native) && this.#nativeChannels === channels) {return}
+        if (isDefined(this.#native) && this.#nativeChannels === channels && this.#nativeDeviceId === deviceId) {return}
         this.#stopStream()
         const input = await backend.open({uuid: this.audioUnitBox.address.uuid, deviceId, channels})
         if (!this.#wantsStream()) {
@@ -356,6 +357,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
         }
         this.#native = input
         this.#nativeChannels = channels
+        this.#nativeDeviceId = deviceId
         this.#nativePeaks = input.subscribePeaks(peaks => this.#inputPeaks.notify(peaks))
         input.setGain(dbToGain(this.#gainDb))
         this.#updateNativeMonitoring()
@@ -373,6 +375,7 @@ export class CaptureAudio extends Capture<CaptureAudioBox> {
             this.#native.terminate()
             this.#native = null
             this.#nativeChannels = undefined
+            this.#nativeDeviceId = undefined
             this.#inputPeaks.notify(new Float32Array(0))
         }
         this.#disconnectMonitoring()

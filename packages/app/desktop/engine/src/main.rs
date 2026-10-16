@@ -63,7 +63,10 @@ static RING_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomic
 static DEVICE_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static INPUT_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 // the main thread owns the cpal input stream (not Send) and opens it on request
-static INPUT_REQUESTS: Mutex<Option<Sender<bool>>> = Mutex::new(None);
+// Some(name) opens that input ("" = the default), None closes it
+static INPUT_REQUESTS: Mutex<Option<Sender<Option<String>>>> = Mutex::new(None);
+// "name\tchannels" lines of the available inputs, refreshed in the background
+static INPUT_DEVICES: Mutex<String> = Mutex::new(String::new());
 static INPUT_INFO: Mutex<Option<(String, usize)>> = Mutex::new(None);
 static OUTBOX: OnceLock<Mutex<HashMap<i32, Sender<Option<Vec<u8>>>>>> = OnceLock::new();
 
@@ -122,15 +125,34 @@ fn output_latency(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArgument
     rv.set_double((RING_LATENCY_US.load(ordering) + DEVICE_LATENCY_US.load(ordering)) as f64 / 1_000_000.0);
 }
 
-fn request_input(open: bool) {
+fn request_input(request: Option<String>) {
     if let Some(sender) = INPUT_REQUESTS.lock().unwrap().as_ref() {
-        let _ = sender.send(open);
+        let _ = sender.send(request);
     }
 }
 
-fn open_input(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {request_input(true)}
+fn open_input(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+    request_input(Some(args.get(0).to_rust_string_lossy(scope)))
+}
 
-fn close_input(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {request_input(false)}
+fn close_input(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {request_input(None)}
+
+fn input_devices(scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+    let devices = INPUT_DEVICES.lock().unwrap().clone();
+    rv.set(v8::String::new(scope, &devices).unwrap().into());
+}
+
+fn device_name(device: &cpal::Device) -> String {
+    device.description().map(|description| description.name().to_string()).unwrap_or_default()
+}
+
+fn list_input_devices() -> String {
+    let Ok(devices) = cpal::default_host().input_devices() else { return String::new() };
+    devices.filter_map(|device| {
+        let channels = device.default_input_config().ok()?.channels();
+        Some(format!("{}\t{channels}", device_name(&device)))
+    }).collect::<Vec<_>>().join("\n")
+}
 
 // "name\tchannels" of the open input, or an empty string
 fn input_info(scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
@@ -199,6 +221,7 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
     native!("__closeInput", close_input);
     native!("__inputInfo", input_info);
     native!("__inputLatency", input_latency);
+    native!("__inputDevices", input_devices);
     let context = v8::Context::new(handle_scope, v8::ContextOptions { global_template: Some(global), ..Default::default() });
     let scope = &mut v8::ContextScope::new(handle_scope, context);
     run(scope, PRELUDE, "prelude").expect("prelude");
@@ -287,10 +310,12 @@ fn pull_input(input: &mut Option<Input>, interleaved: &mut [f32], planar: &mut [
 }
 
 // Opens the default input at the engine's rate; the stream lives as long as the returned value
-fn open_input_stream(events: &Sender<Event>, sample_rate: u32) -> Option<cpal::Stream> {
-    let device = cpal::default_host().default_input_device()?;
+fn open_input_stream(events: &Sender<Event>, sample_rate: u32, requested: &str) -> Option<cpal::Stream> {
+    let host = cpal::default_host();
+    let chosen = host.input_devices().ok().and_then(|mut devices| devices.find(|device| !requested.is_empty() && device_name(device) == requested));
+    let device = chosen.or_else(|| host.default_input_device())?;
     let channels = device.default_input_config().ok()?.channels() as usize;
-    let name = device.description().map(|description| description.name().to_string()).unwrap_or_default();
+    let name = device_name(&device);
     let (mut producer, consumer) = rtrb::RingBuffer::<f32>::new(QUANTUM * channels * 16);
     let config = cpal::StreamConfig { channels: channels as u16, sample_rate, buffer_size: cpal::BufferSize::Fixed(QUANTUM as u32) };
     let stream = device.build_input_stream(config, move |data: &[f32], info: &cpal::InputCallbackInfo| {
@@ -413,17 +438,27 @@ fn main() {
         waker.unpark();
     }, |error| eprintln!("[engine] audio {error}"), None).expect("output stream");
     stream.play().expect("play");
-    let (requests, incoming) = channel::<bool>();
+    std::thread::spawn(|| loop {
+        *INPUT_DEVICES.lock().unwrap() = list_input_devices();
+        std::thread::sleep(Duration::from_secs(2));
+    });
+    let (requests, incoming) = channel::<Option<String>>();
     *INPUT_REQUESTS.lock().unwrap() = Some(requests);
-    let mut input_stream: Option<cpal::Stream> = None;
-    for open in incoming {
-        if open && input_stream.is_none() {
-            input_stream = open_input_stream(&input_events, sample_rate);
-        } else if !open && input_stream.is_some() {
-            input_stream = None;
-            *INPUT_INFO.lock().unwrap() = None;
-            let _ = input_events.send(Event::Input(None));
-            println!("[engine] input closed");
+    let mut input_stream: Option<(cpal::Stream, String)> = None;
+    for request in incoming {
+        match request {
+            Some(requested) => {
+                if input_stream.as_ref().is_some_and(|(_, current)| *current == requested) { continue; }
+                drop(input_stream.take());
+                input_stream = open_input_stream(&input_events, sample_rate, &requested).map(|stream| (stream, requested));
+            }
+            None if input_stream.is_some() => {
+                input_stream = None;
+                *INPUT_INFO.lock().unwrap() = None;
+                let _ = input_events.send(Event::Input(None));
+                println!("[engine] input closed");
+            }
+            None => {}
         }
     }
 }

@@ -55,7 +55,8 @@ export namespace NativeEngine {
             port: (options, context) => {
                 const port = new NativeEnginePort(url, context.sampleRate, options,
                     seconds => latency.seconds = seconds, info => NativeCapture.updateInfo(info),
-                    (uuid, peaks) => NativeCapture.deliverPeaks(uuid, peaks))
+                    (uuid, peaks) => NativeCapture.deliverPeaks(uuid, peaks),
+                    devices => NativeCapture.updateDevices(devices))
                 NativeCapture.attachPort(port)
                 return port
             }
