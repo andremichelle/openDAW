@@ -114,6 +114,8 @@ pub(crate) fn deliver_field_value(value: &FieldValue, field_changed_index: u32, 
         call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_BOOL, value as u32, 0);
     } else if let Some(value) = value.as_str() {
         call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_STRING, value.as_ptr() as u32, value.len() as u32);
+    } else if let FieldValue::Bytes(bytes) = value {
+        call_device_field_changed(field_changed_index, state_ptr, id, FIELD_KIND_BYTES, bytes.as_ptr() as u32, bytes.len() as u32);
     } else if let FieldValue::Array(elements) = value {
         // The graph holds an array as boxed elements, so it is flattened into one contiguous buffer that
         // stays alive for the synchronous call - the same borrow contract as a string's bytes.

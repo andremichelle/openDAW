@@ -8,6 +8,7 @@ import {ArpeggioDeviceBox} from "./midi-effects/ArpeggioDeviceBox"
 import {PitchDeviceBox} from "./midi-effects/PitchDeviceBox"
 import {NeonDeviceBox} from "./instruments/NeonDeviceBox"
 import {WclapInstrumentBox} from "./instruments/WclapInstrumentBox"
+import {NativeInstrumentBox} from "./instruments/NativeInstrumentBox"
 import {TubularDeviceBox} from "./instruments/TubularDeviceBox"
 import {NanoDeviceBox} from "./instruments/NanoDeviceBox"
 import {PlayfieldDeviceBox, PlayfieldSampleBox} from "./instruments/PlayfieldDeviceBox"
@@ -75,6 +76,7 @@ export const DeviceDefinitions = [
     SoundfontDeviceBox,
     NeonDeviceBox,
     WclapInstrumentBox,
+    NativeInstrumentBox,
     TubularDeviceBox,
     NanoDeviceBox,
     PlayfieldDeviceBox,

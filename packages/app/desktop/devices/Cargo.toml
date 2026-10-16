@@ -1,0 +1,10 @@
+# Desktop-only engine devices: built by build.sh into dist/, copied into the desktop build only
+[workspace]
+resolver = "2"
+members = ["native-instrument"]
+
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"
+strip = true

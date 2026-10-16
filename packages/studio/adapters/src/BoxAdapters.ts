@@ -58,6 +58,7 @@ import {
     NeuralAmpDeviceBox,
     WclapDeviceBox,
     WclapInstrumentBox,
+    NativeInstrumentBox,
     NeuralAmpModelBox,
     NoteClipBox,
     NoteEventBox,
@@ -178,6 +179,7 @@ import {DattorroReverbDeviceBoxAdapter} from "./devices/audio-effects/DattorroRe
 import {NeuralAmpDeviceBoxAdapter} from "./devices/audio-effects/NeuralAmpDeviceBoxAdapter"
 import {WclapDeviceBoxAdapter} from "./devices/audio-effects/WclapDeviceBoxAdapter"
 import {WclapInstrumentBoxAdapter} from "./devices/instruments/WclapInstrumentBoxAdapter"
+import {NativeInstrumentBoxAdapter} from "./devices/instruments/NativeInstrumentBoxAdapter"
 import {WaveshaperDeviceBoxAdapter} from "./devices/audio-effects/WaveshaperDeviceBoxAdapter"
 import {WerkstattDeviceBoxAdapter} from "./devices/audio-effects/WerkstattDeviceBoxAdapter"
 import {NeuralAmpModelBoxAdapter} from "./nam/NeuralAmpModelBoxAdapter"
@@ -289,6 +291,7 @@ export class BoxAdapters implements Terminable {
             visitNeuralAmpDeviceBox: (box: NeuralAmpDeviceBox) => new NeuralAmpDeviceBoxAdapter(this.#context, box),
             visitWclapDeviceBox: (box: WclapDeviceBox) => new WclapDeviceBoxAdapter(this.#context, box),
             visitWclapInstrumentBox: (box: WclapInstrumentBox) => new WclapInstrumentBoxAdapter(this.#context, box),
+            visitNativeInstrumentBox: (box: NativeInstrumentBox) => new NativeInstrumentBoxAdapter(this.#context, box),
             visitNeuralAmpModelBox: (box: NeuralAmpModelBox) => new NeuralAmpModelBoxAdapter(this.#context, box),
             visitNoteClipBox: (box: NoteClipBox) => new NoteClipBoxAdapter(this.#context, box),
             visitNoteEventBox: (box: NoteEventBox) => new NoteEventBoxAdapter(this.#context, box),

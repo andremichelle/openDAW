@@ -4,6 +4,7 @@ import {
     MutableObservableOption,
     Observer,
     Option,
+    Provider,
     RuntimeNotifier,
     RuntimeSignal,
     Terminable,
@@ -40,6 +41,7 @@ export class ProjectProfileService {
     readonly #sampleManager: SampleLoaderManager
     readonly #soundfontService: SoundfontService
     readonly #soundfontManager: SoundfontLoaderManager
+    readonly #beforeSave: Array<Provider<Promise<void>>> = []
 
     constructor({env, sampleService, sampleManager, soundfontService, soundfontManager}: {
         env: ProjectEnv,
@@ -66,9 +68,15 @@ export class ProjectProfileService {
         return this.#profile.subscribe(observer)
     }
 
+    // a host that keeps state outside the box graph writes it into the project first
+    addBeforeSave(provider: Provider<Promise<void>>): void {this.#beforeSave.push(provider)}
+
+    async #prepareSave(): Promise<void> {await Promise.all(this.#beforeSave.map(provider => provider()))}
+
     async save(): Promise<void> {
         return this.#profile.ifSome(async profile => {
             if (!profile.saved()) {return this.saveAs()}
+            await this.#prepareSave()
             // OPFS can go unavailable AFTER a successful boot probe (Safari/Firefox flakiness, storage eviction),
             // so the write can reject even though startup passed. Fail soft and retryable: the profile and its
             // unsaved changes stay intact, the user can save again.
@@ -99,6 +107,7 @@ export class ProjectProfileService {
                 meta: profile.meta
             }))
             if (status === "rejected") {return}
+            await this.#prepareSave()
             const {status: saveStatus, value: optProfile, error} = await Promises.tryCatch(profile.saveAs(meta))
             if (saveStatus === "rejected") {
                 console.warn(error)
@@ -117,6 +126,7 @@ export class ProjectProfileService {
             const {status, value: name} = await Promises.tryCatch(
                 ProjectDialogs.showTemplateNameDialog(profile.meta.name))
             if (status === "rejected") {return}
+            await this.#prepareSave()
             const {status: saveStatus, error} = await Promises.tryCatch(TemplateStorage.saveAsTemplate(profile, name))
             if (saveStatus === "rejected") {
                 console.warn(error)
@@ -179,6 +189,7 @@ export class ProjectProfileService {
         return this.#profile.ifSome(async profile => {
             const progressValue = new DefaultObservableValue(0.0)
             const processDialog = RuntimeNotifier.progress({headline: "Bundling Project...", progress: progressValue})
+            await this.#prepareSave()
             const {status, value: arrayBuffer, error} = await Promises.tryCatch(
                 ProjectBundle.encode(profile, progress => progressValue.setValue(progress)))
             processDialog.terminate()

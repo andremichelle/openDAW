@@ -1,14 +1,11 @@
 import css from "./WclapDeviceEditor.sass?inline"
 import {
-    AutomatableParameterFieldAdapter,
     DeviceHost,
     InstrumentFactories,
     WclapAudioPort,
     WclapPluginInfo
 } from "@opendaw/studio-adapters"
 import {
-    asInstanceOf,
-    clamp,
     EmptyExec,
     isDefined,
     Lifecycle,
@@ -19,18 +16,14 @@ import {
     UUID
 } from "@opendaw/lib-std"
 import {createElement} from "@opendaw/lib-jsx"
-import {AnimationFrame, Events, Files, Html} from "@opendaw/lib-dom"
+import {Files, Html} from "@opendaw/lib-dom"
 import {Colors, IconSymbol, Pointers} from "@opendaw/studio-enums"
 import {PointerField} from "@opendaw/lib-box"
-import {WclapParameterBox} from "@opendaw/studio-boxes"
 import {EffectFactories, FilePickerAcceptTypes, MenuItem, WclapBundles, WclapStorage} from "@opendaw/studio-core"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
 import {MenuItems} from "@/ui/devices/menu-items.ts"
-import {parameterContextItems} from "@/ui/menu/automation.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {Button} from "@/ui/components/Button.tsx"
-import {FloatingTextInput} from "@/ui/components/FloatingTextInput.tsx"
-import {Layers} from "@/ui/surface/Layers.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
 import {Dialogs} from "@/ui/components/dialogs.tsx"
 import {StudioService} from "@/service/StudioService"
@@ -38,7 +31,7 @@ import {WclapAdapter, WclapWindows} from "@/service/WclapWindows"
 import {StoredWclapPlugin, WclapDescriber} from "@/service/WclapDescriber"
 import {WclapNames} from "@/service/WclapNames"
 import {OpenWclapAPI, WclapIndexFolder} from "@/opendaw-api"
-import {ParameterTree, WclapParameterTree} from "@/ui/devices/audio-effects/WclapParameterTree"
+import {ParametersMenu} from "@/ui/devices/ParametersMenu"
 import {populateSidechainMenu} from "@/ui/devices/SidechainButton"
 
 const className = Html.adoptStyleSheet(css, "WclapDeviceEditor")
@@ -61,7 +54,7 @@ const EmptyCloudFolder: CloudFolder = {name: "", folders: [], plugins: []}
 
 export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Construct) => {
     const {project, engine} = service
-    const {editing, midiLearning} = project
+    const {editing} = project
     const uuid = adapter.uuid
     const uuidString = UUID.toString(uuid)
     const {parameters: parametersField} = adapter.box
@@ -185,56 +178,6 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         engine.wclapRetry(url)
         select(url, chosen.unwrap().clapId)
     }
-    // The hub notifies per child, so an earlier child's notification sees later children without an adapter yet
-    const parameterOf = (paramBox: WclapParameterBox): Optional<AutomatableParameterFieldAdapter> =>
-        adapter.parameters.parameters().find(parameter => parameter.address.equals(paramBox.value.address))
-    // the input waits for the closing menu, which restores focus and would swallow the typed text
-    const pointer = {x: 0, y: 0}
-    const enterPercentage = (parameter: AutomatableParameterFieldAdapter): void => {
-        const layers = Layers.get(parametersButton)
-        const budget = {frames: 30}
-        const open = (): void => {
-            if (layers.hasFlyout && budget.frames-- > 0) {
-                AnimationFrame.once(open)
-                return
-            }
-            const origin = layers.flyout.getBoundingClientRect()
-            const resolvers = Promise.withResolvers<string>()
-            resolvers.promise.then(text => {
-                const value = parseFloat(text)
-                if (!isFinite(value)) {return}
-                editing.modify(() => parameter.setUnitValue(clamp(value / 100.0, 0.0, 1.0)))
-                editing.mark()
-            }, EmptyExec)
-            layers.flyout.appendChild(
-                <FloatingTextInput position={{x: pointer.x - origin.left, y: pointer.y - origin.top}}
-                                   value={(parameter.getUnitValue() * 100.0).toFixed(1)}
-                                   unit="%"
-                                   numeric
-                                   resolvers={resolvers}/>
-            )
-        }
-        AnimationFrame.once(open)
-    }
-    const parameterItems = (parameter: AutomatableParameterFieldAdapter): ReadonlyArray<MenuItem> => [
-        MenuItem.default({label: "Enter Percentage..."}).setTriggerProcedure(() => enterPercentage(parameter)),
-        ...parameterContextItems(editing, midiLearning, adapter.deviceHost().audioUnitBoxAdapter().tracks, parameter)
-    ]
-    const parametersMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
-        const entries = parametersField.pointerHub.incoming().flatMap(({box}) => {
-            const paramBox = asInstanceOf(box, WclapParameterBox)
-            const parameter = parameterOf(paramBox)
-            return isDefined(parameter)
-                ? [{module: paramBox.module.getValue(), name: paramBox.label.getValue(), value: parameter}] : []
-        })
-        const populate = (parent: MenuItem, tree: ParameterTree<AutomatableParameterFieldAdapter>): void => {
-            parent.addMenuItem(...tree.groups.map(({label, tree: child}) =>
-                MenuItem.default({label}).setRuntimeChildrenProcedure(sub => populate(sub, child))))
-            parent.addMenuItem(...tree.items.map(({label, value}) => MenuItem.default({label})
-                .setRuntimeChildrenProcedure(leaf => leaf.addMenuItem(...parameterItems(value)))))
-        }
-        populate(parent, WclapParameterTree.build(entries))
-    })
     const byLabel = (a: { label: string }, b: { label: string }): number =>
         StringComparator(a.label.toLowerCase(), b.label.toLowerCase())
     const isCurrent = (url: string, {clapId}: WclapPluginInfo): boolean =>
@@ -326,15 +269,8 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         </Button>
     )
     const parametersButton: HTMLElement = (
-        <MenuButton root={parametersMenu}
-                    appearance={{
-                        framed: true,
-                        color: Colors.shadow,
-                        activeColor: Colors.white,
-                        tooltip: "Automate, modulate or MIDI learn a parameter"
-                    }}>
-            <span className="button-label">Parameters</span>
-        </MenuButton>
+        <ParametersMenu lifecycle={lifecycle} project={project} parametersField={parametersField}
+                        parameters={adapter.parameters} tracks={() => adapter.deviceHost().audioUnitBoxAdapter().tracks}/>
     )
     const pluginButtons: HTMLElement = <div className="group plugin">{openButton}{parametersButton}</div>
     const audioInMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => {
@@ -385,14 +321,6 @@ export const WclapDeviceEditor = ({lifecycle, service, adapter, deviceHost}: Con
         parametersButton.classList.toggle("disabled", !state.ready)
     }
     lifecycle.ownAll(
-        Events.subscribe(globalThis, "pointermove", (event: PointerEvent) => {
-            pointer.x = event.clientX
-            pointer.y = event.clientY
-        }, {capture: true}),
-        Events.subscribe(globalThis, "pointerdown", (event: PointerEvent) => {
-            pointer.x = event.clientX
-            pointer.y = event.clientY
-        }, {capture: true}),
         adapter.clapIdField.catchupAndSubscribe(field => {
             pluginButtons.classList.toggle("hidden", field.getValue().length === 0)
             showPlugin()

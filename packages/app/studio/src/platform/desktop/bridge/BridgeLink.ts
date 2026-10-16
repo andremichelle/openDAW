@@ -1,5 +1,6 @@
 import {int, isDefined, Optional} from "@opendaw/lib-std"
 import {BridgeCodec} from "./BridgeCodec"
+import type {NativePluginInfo} from "../engine/NativePlugins"
 
 // The envelopes between the studio (UI) and the native engine process, one WebSocket per engine instance
 export type ToEngine =
@@ -10,6 +11,9 @@ export type ToEngine =
     | { type: "capture", uuid: Uint8Array, deviceId: string, channels: int, gain: number, mode: string, volume: number, pan: number }
     | { type: "capture-close", uuid: Uint8Array }
     | { type: "record", uuid: Uint8Array, record: boolean }
+    | { type: "native-scan" }
+    | { type: "native-save" }
+    | { type: "native-gui", uuid: string, open: boolean }
 
 export type ToStudio =
     | { type: "message", data: unknown }
@@ -21,6 +25,7 @@ export type ToStudio =
     | { type: "input-devices", devices: Array<{ name: string, channels: int }> }
     | { type: "record-data", uuid: Uint8Array, first: number, planes: Array<Float32Array> }
     | { type: "input-latency", seconds: number }
+    | { type: "native-plugins", plugins: Array<NativePluginInfo> }
 
 export const enum LiveLock {WRITE = 0, READ = 1}
 export const enum SyncState {READING = 0, READ = 1, WRITING = 2, WRITTEN = 3}

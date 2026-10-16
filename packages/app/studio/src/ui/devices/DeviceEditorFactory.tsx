@@ -23,6 +23,7 @@ import {
     NeuralAmpDeviceBox,
     WclapDeviceBox,
     WclapInstrumentBox,
+    NativeInstrumentBox,
     PitchDeviceBox,
     InstrumentCompositeBox,
     PlayfieldDeviceBox,
@@ -74,6 +75,7 @@ import {
     NeuralAmpDeviceBoxAdapter,
     WclapDeviceBoxAdapter,
     WclapInstrumentBoxAdapter,
+    NativeInstrumentBoxAdapter,
     PitchDeviceBoxAdapter,
     InstrumentCompositeBoxAdapter,
     PlayfieldDeviceBoxAdapter,
@@ -119,6 +121,7 @@ import {AudioSinkDeviceEditor} from "./audio-effects/AudioSinkDeviceEditor"
 import {PlayfieldSampleEditor} from "./instruments/PlayfieldSampleEditor"
 import {ZeitgeistDeviceEditor} from "@/ui/devices/midi-effects/ZeitgeistDeviceEditor"
 import {UnknownEffectDeviceEditor} from "@/ui/devices/UnknownEffectDeviceEditor"
+import {NativeDeviceEditors} from "@/ui/devices/NativeDeviceEditors"
 import {StudioService} from "@/service/StudioService"
 import {SoundfontDeviceEditor} from "@/ui/devices/instruments/SoundfontDeviceEditor"
 import {MaximizerDeviceEditor} from "@/ui/devices/audio-effects/MaximizerDeviceEditor"
@@ -222,6 +225,9 @@ export namespace DeviceEditorFactory {
                                    adapter={service.project.boxAdapters.adapterFor(box, WclapInstrumentBoxAdapter)}
                                    deviceHost={deviceHost}/>
             ),
+            visitNativeInstrumentBox: (box: NativeInstrumentBox): JsxValue => NativeDeviceEditors.create({
+                lifecycle, service, adapter: service.project.boxAdapters.adapterFor(box, NativeInstrumentBoxAdapter), deviceHost
+            }),
             visitTubularDeviceBox: (box: TubularDeviceBox): JsxValue => (
                 <TubularDeviceEditor lifecycle={lifecycle}
                                      service={service}

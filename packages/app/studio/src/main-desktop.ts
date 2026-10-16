@@ -4,6 +4,8 @@ import {DesktopFiles} from "@/platform/desktop/DesktopFiles"
 import {DesktopMenu} from "@/platform/desktop/DesktopMenu"
 import {DesktopLifecycle} from "@/platform/desktop/DesktopLifecycle"
 import {DesktopBrowser} from "@/platform/desktop/DesktopBrowser"
+import {NativeDeviceEditors} from "@/ui/devices/NativeDeviceEditors"
+import {NativeInstrumentEditor} from "@/platform/desktop/NativeInstrumentEditor"
 import {DesktopTitle} from "@/platform/desktop/DesktopTitle"
 import {NativeEngine} from "@/platform/desktop/NativeEngine"
 import {NativeMidi} from "@/platform/desktop/NativeMidi"
@@ -22,6 +24,7 @@ NativeMenu.install(service => {
 })
 DesktopLifecycle.install()
 DesktopBrowser.install()
+NativeDeviceEditors.install(NativeInstrumentEditor)
 NativeMidi.install()
 NativeAudioInputs.install()
 NativeOutput.install()

@@ -6,6 +6,7 @@ import {OutputLatency} from "@/audio/OutputLatency"
 import {NativeAudioInputs} from "@/platform/desktop/NativeAudioInputs"
 import {Shell} from "@/platform/desktop/Shell"
 import {NativeEnginePort} from "@/platform/desktop/bridge/NativeEnginePort"
+import {NativePluginHost} from "@/platform/desktop/NativePluginHost"
 
 // The engine runs in the native engine process. The webview node only holds a silent placeholder processor.
 export namespace NativeEngine {
@@ -43,6 +44,7 @@ export namespace NativeEngine {
             })
             return
         }
+        NativePluginHost.attachService(service)
         const placeholder = URL.createObjectURL(new Blob([PlaceholderSource], {type: "text/javascript"}))
         await service.audioContext.audioWorklet.addModule(placeholder)
         URL.revokeObjectURL(placeholder)
@@ -60,8 +62,10 @@ export namespace NativeEngine {
                     (uuid, peaks) => NativeAudioInputs.deliverPeaks(uuid, peaks),
                     devices => NativeAudioInputs.updateDevices(devices),
                     (uuid, first, planes) => NativeAudioInputs.deliverRecording(uuid, first, planes),
-                    seconds => NativeAudioInputs.updateInputLatency(seconds))
+                    seconds => NativeAudioInputs.updateInputLatency(seconds),
+                    plugins => NativePluginHost.deliverPlugins(plugins))
                 NativeAudioInputs.attachPort(port)
+                NativePluginHost.attachPort(port)
                 return port
             }
         }))

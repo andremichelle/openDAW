@@ -135,7 +135,8 @@ export default defineConfig(({command, mode}) => {
                 async writeBundle() {
                     const outDir = resolve(__dirname, "dist-desktop")
                     await copyFFmpeg(resolve(outDir, "ffmpeg"))
-                    for (const [source, target] of [["../manual/dist", "manuals"], ["../../studio/docs/scripting", "docs/scripting"]]) {
+                    for (const [source, target] of [["../manual/dist", "manuals"], ["../../studio/docs/scripting", "docs/scripting"],
+                        ["../desktop/devices/dist", "wasm-engine/wasm/desktop"]]) {
                         const from = resolve(__dirname, source)
                         if (existsSync(from)) {
                             cpSync(from, resolve(outDir, target), {recursive: true})

@@ -1,4 +1,5 @@
 import type {CompositeSpec, EffectCompositeSpec} from "./engine-modules"
+import type {BridgeImports} from "./device-linker"
 
 // The structured-clonable extras the wasm engine processor receives as `processorOptions.variant`.
 // The engine memory is NOT here: non-shared memories cannot be cloned, the processor creates its own.
@@ -8,6 +9,8 @@ export type WasmEngineAttachment = {
     deviceBoxTypes: ReadonlyArray<string>
     composites: ReadonlyArray<CompositeSpec>
     effectComposites: ReadonlyArray<EffectCompositeSpec>
+    // more device imports from a host that runs the processor itself (never cloned into a worklet)
+    hostImports?: (memory: WebAssembly.Memory) => BridgeImports
 }
 
 // main -> worklet: the SyncSource's transaction bytes (serialized on the main thread against the source

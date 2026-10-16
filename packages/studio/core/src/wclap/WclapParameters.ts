@@ -9,7 +9,11 @@ import {Project} from "../project"
 export namespace WclapParameters {
     export const reconcile = (project: Project, uuid: string, params: ReadonlyArray<WclapParamInfo>): void => {
         const hub = parametersOf(project, uuid)
-        if (!isDefined(hub)) {return}
+        if (isDefined(hub)) {reconcileHub(project, hub, params)}
+    }
+
+    // any device whose parameters hub holds WclapParameterBoxes
+    export const reconcileHub = (project: Project, hub: Field<Pointers.Parameter>, params: ReadonlyArray<WclapParamInfo>): void => {
         const wanted = new Map(params.filter(isAutomatable).map(param => [param.id, param]))
         outsideHistory(project, () => {
             const existing = new Map<number, WclapParameterBox>()
@@ -69,7 +73,10 @@ export namespace WclapParameters {
     export const apply = (project: Project, uuid: string, paramId: number, value: number, gesture: WclapParamGesture): void => {
         if (gesture !== 0) {return}
         const hub = parametersOf(project, uuid)
-        if (!isDefined(hub)) {return}
+        if (isDefined(hub)) {applyHub(project, hub, paramId, value)}
+    }
+
+    export const applyHub = (project: Project, hub: Field<Pointers.Parameter>, paramId: number, value: number): void => {
         const paramBox = hub.pointerHub.incoming()
             .map(({box}) => asInstanceOf(box, WclapParameterBox))
             .find(paramBox => (paramBox.clapId.getValue() >>> 0) === paramId)

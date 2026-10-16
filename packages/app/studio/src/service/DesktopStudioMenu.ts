@@ -13,6 +13,7 @@ import {NeuralDemux} from "@/service/NeuralDemux.tsx"
 import {NextcloudDialogs} from "@/project/NextcloudDialogs"
 import {openManual} from "@/ui/manuals"
 import {openAudioOutputSettings} from "@/ui/mixer/AudioOutputSelector"
+import {NativePluginHost} from "@/platform/desktop/NativePluginHost"
 
 export namespace DesktopStudioMenu {
     export type NativeRole = "about" | "services" | "hide" | "hide-others" | "show-all" | "quit"
@@ -110,6 +111,13 @@ export namespace DesktopStudioMenu {
                     item("Join Live Room...", () => connectRoom(service)),
                     item("Neural Demux...", () => NeuralDemux.run(service).catch(EmptyExec)),
                     navigate("Statistics", "/stats").addSeparatorBefore()
+                ]
+            },
+            {
+                label: "Plugins", entries: [
+                    ...NativePluginHost.plugins().filter(plugin => plugin.kind === "instrument").map(plugin =>
+                        item(plugin.name, () => NativePluginHost.createInstrument(service, plugin), service.hasProfile)),
+                    item("Rescan", () => NativePluginHost.rescan()).addSeparatorBefore()
                 ]
             },
             {label: "Window", role: "window", entries: ["minimize", "zoom"]},

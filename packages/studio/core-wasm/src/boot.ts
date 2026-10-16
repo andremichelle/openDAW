@@ -5,7 +5,7 @@ import {isDefined, Procedure, Provider, tryCatch, UUID} from "@opendaw/lib-std"
 import {EngineToClient} from "@opendaw/studio-adapters"
 import {EngineExports, readPanicMessage} from "./engine-exports"
 import {CompositeSpec, EffectCompositeSpec} from "./engine-modules"
-import {linkDevice, registerComposite, registerEffectComposite} from "./device-linker"
+import {BridgeImports, linkDevice, registerComposite, registerEffectComposite} from "./device-linker"
 import {ScriptBridges, ScriptEngine} from "./script-bridge"
 import {NamBridges} from "./nam-bridge"
 import {WclapBridges} from "./wclap/wclap-bridge"
@@ -19,6 +19,7 @@ export type WasmEngineModules = {
     deviceBoxTypes: ReadonlyArray<string>
     composites: ReadonlyArray<CompositeSpec>
     effectComposites: ReadonlyArray<EffectCompositeSpec>
+    hostImports?: (memory: WebAssembly.Memory) => BridgeImports
 }
 
 // A wasm trap surfaces as an anonymous "RuntimeError: unreachable" (panic=abort strips the message);
@@ -58,7 +59,8 @@ export const instantiateWasmEngine = (modules: WasmEngineModules, memory: WebAss
     const scriptBridges = new ScriptBridges(memory, engine as unknown as ScriptEngine, sampleRate,
         (uuid, message) => engineToClient.deviceMessage(uuid, message))
     const namBridges = new NamBridges(memory, () => engineToClient.fetchNamWasm(), sampleRate)
-    const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports()}
+    const bridgeImports = {...scriptBridges.imports(), ...namBridges.imports(), ...wclapBridges.imports(),
+        ...modules.hostImports?.(memory)}
     modules.deviceModules.forEach((deviceModule, index) =>
         linkDevice(engine, memory, table, deviceModule, modules.deviceBoxTypes[index], sampleRate, bridgeImports))
     modules.composites.forEach(composite => registerComposite(engine, memory, composite))

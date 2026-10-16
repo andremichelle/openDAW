@@ -5,6 +5,7 @@ import {Port} from "@opendaw/lib-runtime"
 import {loadEngineModules} from "../../../../../../studio/core-wasm/src/engine-modules"
 import {WASM_ENGINE_PROCESSOR_NAME} from "../../../../../../studio/core-wasm/src/protocol"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "../bridge/BridgeLink"
+import {NativeInstrumentBoxType, NativePlugins} from "./NativePlugins"
 
 declare const __send: (connection: int, bytes: ArrayBuffer) => void
 declare const __close: (connection: int) => void
@@ -16,6 +17,17 @@ declare const __inputDevices: () => string
 declare const __inputLatency: () => number
 
 const RenderQuantum = 128
+const SlowMessageMillis = 2
+
+// drop-out diagnostics: the called function and the size of its payload
+const describeMessage = (data: unknown, depth: int = 0): string => {
+    if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {return `${data.byteLength} bytes`}
+    if (typeof data !== "object" || data === null || depth > 4) {return ""}
+    const record = data as Record<string, unknown>
+    const name = typeof record.func === "string" ? record.func : ""
+    const inner = Object.values(record).map(value => describeMessage(value, depth + 1)).filter(text => text.length > 0).join(" ")
+    return [name, inner].filter(text => text.length > 0).join(" ")
+}
 const TickQuanta = 4
 
 type Processor = { process(inputs: Array<Array<Float32Array>>, outputs: Array<Array<Float32Array>>): boolean }
@@ -210,13 +222,24 @@ class Connection {
         const loading = modules.get(variant.wasmUrl) ?? loadEngineModules(variant.wasmUrl)
         modules.set(variant.wasmUrl, loading)
         const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} = await loading
+        const nativeModule = await NativePlugins.deviceModule(variant.wasmUrl).catch(error => {
+            console.warn("[host] no native plugin device", error)
+            return null
+        })
         this.sync = new Uint8Array(options.syncStreamBuffer as SharedArrayBuffer)
         this.control = new Int32Array(options.controlFlagsBuffer as SharedArrayBuffer)
         const processorClass = processorClasses.get(WASM_ENGINE_PROCESSOR_NAME)
         if (!isDefined(processorClass)) {throw new Error("wasm-processor bundle not loaded")}
         construction.port = this.port
         this.processor = new processorClass({
-            processorOptions: {...options, variant: {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites}}
+            processorOptions: {
+                ...options, variant: nativeModule === null
+                    ? {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites}
+                    : {
+                        engineModule, composites, effectComposites, hostImports: NativePlugins.imports,
+                        deviceModules: [...deviceModules, nativeModule], deviceBoxTypes: [...deviceBoxTypes, NativeInstrumentBoxType]
+                    }
+            }
         })
         construction.port = undefined
         this.queue.splice(0).forEach(envelope => this.#handle(envelope))
@@ -225,7 +248,10 @@ class Connection {
 
     #handle(envelope: ToEngine): void {
         if (envelope.type === "message") {
+            const started = performance.now()
             this.port.onmessage?.({data: envelope.data} as MessageEvent)
+            const elapsed = performance.now() - started
+            if (elapsed > SlowMessageMillis) {console.log(`[host] slow message ${describeMessage(envelope.data)} ${elapsed.toFixed(1)} ms`)}
         } else if (envelope.type === "control" && this.control !== null) {
             Atomics.store(this.control, 0, envelope.value)
         } else if (envelope.type === "capture") {
@@ -251,6 +277,12 @@ class Connection {
             this.captures.delete(UUID.toString(envelope.uuid as UUID.Bytes))
             refreshInput()
             this.updateMonitoringMap()
+        } else if (envelope.type === "native-scan") {
+            this.send({type: "native-plugins", plugins: NativePlugins.scan()})
+        } else if (envelope.type === "native-save") {
+            NativePlugins.saveAll()
+        } else if (envelope.type === "native-gui") {
+            NativePlugins.openGui(envelope.uuid, envelope.open)
         } else if (envelope.type === "live-return") {
             const data = this.shared.get(envelope.data)
             const lock = this.shared.get(envelope.lock)

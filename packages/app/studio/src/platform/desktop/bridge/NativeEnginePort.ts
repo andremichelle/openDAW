@@ -1,6 +1,7 @@
 import {int, isDefined, Nullable, Procedure} from "@opendaw/lib-std"
 import {Port} from "@opendaw/lib-runtime"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "./BridgeLink"
+import type {NativePluginInfo} from "../engine/NativePlugins"
 
 // A MessagePort stand-in that carries one engine instance's messages to the native engine process.
 // It also relays the engine state stream, the sleep flag and the live stream buffers.
@@ -24,7 +25,8 @@ export class NativeEnginePort implements Port {
                 readonly onInputPeaks: (uuid: Uint8Array, peaks: Float32Array) => void,
                 readonly onInputDevices: Procedure<ReadonlyArray<{ name: string, channels: int }>>,
                 readonly onRecordData: (uuid: Uint8Array, first: number, planes: ReadonlyArray<Float32Array>) => void,
-                readonly onInputLatency: Procedure<number>) {
+                readonly onInputLatency: Procedure<number>,
+                readonly onNativePlugins: Procedure<ReadonlyArray<NativePluginInfo>>) {
         this.#sync = new Uint8Array(options.syncStreamBuffer as SharedArrayBuffer)
         this.#control = new Int32Array(options.controlFlagsBuffer as SharedArrayBuffer)
         this.#lastControl = Atomics.load(this.#control, 0)
@@ -70,6 +72,9 @@ export class NativeEnginePort implements Port {
             this.onRecordData(envelope.uuid, envelope.first, envelope.planes)
         } else if (envelope.type === "input-latency") {
             this.onInputLatency(envelope.seconds)
+        } else if (envelope.type === "native-plugins") {
+            this.onNativePlugins(envelope.plugins)
+
         } else if (envelope.type === "live") {
             const data = this.#shared.get(envelope.data)
             const lock = this.#shared.get(envelope.lock)

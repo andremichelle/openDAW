@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 mod audio;
 mod midi;
+mod plugins;
+mod stats;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tungstenite::handshake::server::{ErrorResponse, Request, Response};
@@ -61,6 +63,7 @@ const PRELUDE: &str = r#"
 
 static DIST: OnceLock<PathBuf> = OnceLock::new();
 static STARTED: OnceLock<Instant> = OnceLock::new();
+static SAMPLE_RATE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(48_000);
 // output latency parts in microseconds: the ring's depth and what the device reports between callback and playback
 static RING_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static DEVICE_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -74,6 +77,8 @@ pub enum MainRequest {
     Input(Option<String>),
     // device name ("" = the default) and buffer size in frames
     Output(String, u32),
+    // work that must run on the main thread (native plugins and their windows)
+    Run(Box<dyn FnOnce() + Send>),
 }
 
 static MAIN_REQUESTS: Mutex<Option<Sender<MainRequest>>> = Mutex::new(None);
@@ -186,6 +191,88 @@ fn input_latency(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments
     rv.set_double((INPUT_LATENCY_US.load(ordering) + INPUT_RING_US.load(ordering)) as f64 / 1_000_000.0);
 }
 
+fn arg_u32(scope: &mut v8::PinScope, args: &v8::FunctionCallbackArguments, index: i32) -> u32 {
+    args.get(index).uint32_value(scope).unwrap_or(0)
+}
+
+fn arg_string(scope: &mut v8::PinScope, args: &v8::FunctionCallbackArguments, index: i32) -> String {
+    args.get(index).to_rust_string_lossy(scope)
+}
+
+fn native_scan(scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+    let json = plugins::scan();
+    rv.set(v8::String::new(scope, &json).unwrap().into());
+}
+
+fn native_create(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+    let uuid = arg_string(scope, &args, 0);
+    rv.set_uint32(plugins::create_slot(uuid));
+}
+
+fn native_load(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+    let (handle, format, id) = (arg_u32(scope, &args, 0), arg_string(scope, &args, 1), arg_string(scope, &args, 2));
+    plugins::load(handle, format, id, SAMPLE_RATE.load(std::sync::atomic::Ordering::Relaxed) as f64);
+}
+
+// (handle, memory buffer, left pointer, right pointer, frames, bpm, position, flags) -> 1 when the plugin wrote output
+fn native_process(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+    let handle = arg_u32(scope, &args, 0);
+    let Ok(buffer) = v8::Local::<v8::ArrayBuffer>::try_from(args.get(1)) else { return rv.set_uint32(0) };
+    let (left, right, frames) = (arg_u32(scope, &args, 2) as usize, arg_u32(scope, &args, 3) as usize, arg_u32(scope, &args, 4) as usize);
+    let bpm = args.get(5).number_value(scope).unwrap_or(120.0) as f32;
+    let position = args.get(6).number_value(scope).unwrap_or(0.0);
+    let flags = arg_u32(scope, &args, 7);
+    let store = buffer.get_backing_store();
+    let Some(base) = store.data() else { return rv.set_uint32(0) };
+    let length = store.byte_length();
+    if left + frames * 4 > length || right + frames * 4 > length { return rv.set_uint32(0); }
+    let base = base.as_ptr() as *mut u8;
+    let wrote = unsafe { plugins::process(handle, base.add(left) as *mut f32, base.add(right) as *mut f32, frames, bpm, position, flags) };
+    rv.set_uint32(wrote as u32);
+}
+
+fn native_note(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+    let (handle, on, key) = (arg_u32(scope, &args, 0), arg_u32(scope, &args, 1) != 0, arg_u32(scope, &args, 2) as i16);
+    let velocity = args.get(3).number_value(scope).unwrap_or(1.0) as f32;
+    plugins::note(handle, on, key, velocity);
+}
+
+fn native_param(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+    let (handle, id, kind) = (arg_u32(scope, &args, 0), arg_u32(scope, &args, 1), arg_u32(scope, &args, 2));
+    let value = args.get(3).number_value(scope).unwrap_or(0.0) as f32;
+    let modulation = args.get(4).number_value(scope).unwrap_or(f64::NAN) as f32;
+    plugins::param(handle, id, kind, value, modulation);
+}
+
+fn native_state(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+    let handle = arg_u32(scope, &args, 0);
+    let Ok(buffer) = v8::Local::<v8::ArrayBuffer>::try_from(args.get(1)) else { return };
+    let store = buffer.get_backing_store();
+    let state = store.data().map(|data| unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u8, store.byte_length()) }.to_vec())
+        .unwrap_or_default();
+    plugins::set_state(handle, state);
+}
+
+fn native_reset(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+    plugins::reset(arg_u32(scope, &args, 0));
+}
+
+fn native_release(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+    plugins::release(arg_u32(scope, &args, 0));
+}
+
+fn native_open_gui(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+    if let Some(handle) = plugins::handle_of(&arg_string(scope, &args, 0)) { plugins::open_gui(handle); }
+}
+
+fn native_close_gui(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+    if let Some(handle) = plugins::handle_of(&arg_string(scope, &args, 0)) { plugins::close_gui(handle); }
+}
+
+fn native_save_all(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+    plugins::save_all();
+}
+
 fn close(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
     let id = args.get(0).int32_value(scope).unwrap_or(-1);
     if let Some(sender) = outbox().lock().unwrap().remove(&id) {
@@ -244,6 +331,18 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
     native!("__inputInfo", input_info);
     native!("__inputLatency", input_latency);
     native!("__inputDevices", input_devices);
+    native!("__nativeScan", native_scan);
+    native!("__nativeCreate", native_create);
+    native!("__nativeLoad", native_load);
+    native!("__nativeProcess", native_process);
+    native!("__nativeNote", native_note);
+    native!("__nativeState", native_state);
+    native!("__nativeParam", native_param);
+    native!("__nativeReset", native_reset);
+    native!("__nativeRelease", native_release);
+    native!("__nativeOpenGui", native_open_gui);
+    native!("__nativeCloseGui", native_close_gui);
+    native!("__nativeSaveAll", native_save_all);
     let context = v8::Context::new(handle_scope, v8::ContextOptions { global_template: Some(global), ..Default::default() });
     let scope = &mut v8::ContextScope::new(handle_scope, context);
     run(scope, PRELUDE, "prelude").expect("prelude");
@@ -272,6 +371,7 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
         .map_err(|error| println!("[engine] real-time priority failed: {error:?}")).ok();
     println!("[engine] ready, listening on 127.0.0.1:{PORT}");
     loop {
+        let received = Instant::now();
         while let Ok(event) = events.try_recv() {
             match event {
                 Event::Open(id) => {
@@ -291,18 +391,24 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
                 Event::Input(next) => input = next.map(|(consumer, channels)| Input { consumer, channels }),
             }
         }
+        stats::record_max(&stats::MAX_RECEIVE_US, received);
         let capacity = producer.buffer().capacity();
         while capacity - producer.slots() < RING_TARGET_FRAMES.load(std::sync::atomic::Ordering::Relaxed) * 2 {
             let planar = unsafe { std::slice::from_raw_parts_mut(input_ptr, INPUT_CHANNELS * QUANTUM) };
             let channels = pull_input(&mut input, &mut interleaved, planar);
             let channels = v8::Integer::new(scope, channels as i32).into();
+            let started = Instant::now();
             render.call(scope, receiver, &[out.into(), input_array.into(), channels]);
+            stats::record_max(&stats::MAX_RENDER_US, started);
             let samples = unsafe { std::slice::from_raw_parts(out_ptr, QUANTUM * 2) };
             producer.write_chunk_uninit(QUANTUM * 2).unwrap().fill_from_iter(samples.iter().copied());
         }
+        stats::report();
+        let idle = Instant::now();
         while v8::Platform::pump_message_loop(&platform, scope, false) {}
         timers.call(scope, receiver, &[]);
         scope.perform_microtask_checkpoint();
+        stats::record_max(&stats::MAX_TIMERS_US, idle);
         std::thread::park_timeout(Duration::from_millis(1));
     }
 }
@@ -415,6 +521,7 @@ fn open_output_stream(requested: &str, buffer: u32, sample_rate: u32, consumer: 
             }
             Err(_) => 0,
         };
+        if available < data.len() { stats::count(&stats::UNDERRUNS); }
         data[available..].fill(0.0);
         waker.unpark();
     }, |error| eprintln!("[engine] audio {error}"), None);
@@ -462,6 +569,9 @@ fn serve(events: Sender<Event>, token: String) {
             if path == "/midi" {
                 return midi::serve(socket);
             }
+            if path == "/native" {
+                return plugins::serve_notices(socket);
+            }
             if path == "/audio" {
                 return audio::serve(socket);
             }
@@ -503,9 +613,16 @@ fn serve(events: Sender<Event>, token: String) {
 
 fn main() {
     STARTED.set(Instant::now()).unwrap();
-    // the shell holds our stdin; when it goes away, so do we
+    // the shell holds our stdin and sends commands on it; when it goes away, so do we
     std::thread::spawn(|| {
-        let _ = std::io::copy(&mut std::io::stdin(), &mut std::io::sink());
+        use std::io::BufRead;
+        for line in std::io::stdin().lock().lines() {
+            match line.as_deref() {
+                Ok("cycle") => plugins::cycle_in(),
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
         std::process::exit(0);
     });
     let dist = std::env::var("OPENDAW_DIST").map(PathBuf::from)
@@ -522,7 +639,7 @@ fn main() {
     let engine = std::thread::Builder::new().name("engine".into())
         .spawn(move || engine_thread(inbox, producer, sample_rate)).unwrap();
     let waker = engine.thread().clone();
-    let mut output_stream = open_output_stream("", buffer, sample_rate, consumer.clone(), waker.clone()).expect("no output device");
+    let mut output_stream = Some(open_output_stream("", buffer, sample_rate, consumer.clone(), waker.clone()).expect("no output device"));
     std::thread::spawn(|| loop {
         *INPUT_DEVICES.lock().unwrap() = list_input_devices();
         *OUTPUT_DEVICES.lock().unwrap() = list_output_devices();
@@ -531,21 +648,22 @@ fn main() {
     let (requests, incoming) = channel::<MainRequest>();
     *MAIN_REQUESTS.lock().unwrap() = Some(requests);
     let mut input_stream: Option<(cpal::Stream, String)> = None;
-    for request in incoming {
+    let mut handle = move |request: MainRequest| {
         let request = match request {
             MainRequest::Output(device, size) => {
-                if *OUTPUT_CURRENT.lock().unwrap() == (device.clone(), size) { continue; }
-                drop(output_stream);
-                output_stream = open_output_stream(&device, size, sample_rate, consumer.clone(), waker.clone())
+                if *OUTPUT_CURRENT.lock().unwrap() == (device.clone(), size) { return; }
+                drop(output_stream.take());
+                output_stream = Some(open_output_stream(&device, size, sample_rate, consumer.clone(), waker.clone())
                     .or_else(|| open_output_stream("", 128, sample_rate, consumer.clone(), waker.clone()))
-                    .expect("no output device");
-                continue;
+                    .expect("no output device"));
+                return;
             }
+            MainRequest::Run(work) => return work(),
             MainRequest::Input(request) => request,
         };
         match request {
             Some(requested) => {
-                if input_stream.as_ref().is_some_and(|(_, current)| *current == requested) { continue; }
+                if input_stream.as_ref().is_some_and(|(_, current)| *current == requested) { return; }
                 drop(input_stream.take());
                 input_stream = open_input_stream(&input_events, sample_rate, &requested).map(|stream| (stream, requested));
             }
@@ -557,5 +675,32 @@ fn main() {
             }
             None => {}
         }
+    };
+    #[cfg(target_os = "macos")]
+    run_main_loop(move || {
+        while let Ok(request) = incoming.try_recv() { handle(request); }
+        plugins::tick();
+    });
+    #[cfg(not(target_os = "macos"))]
+    for request in incoming { handle(request); }
+}
+
+// plugin windows need the main thread's run loop, the requests are handled from a timer on it
+#[cfg(target_os = "macos")]
+fn run_main_loop(tick: impl FnMut() + 'static) {
+    use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopTimer, CFRunLoopTimerRef};
+    use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+    thread_local! {
+        static TICK: std::cell::RefCell<Option<Box<dyn FnMut()>>> = std::cell::RefCell::new(None);
     }
+    extern "C" fn fire(_timer: CFRunLoopTimerRef, _info: *mut std::ffi::c_void) {
+        TICK.with(|tick| if let Some(tick) = tick.borrow_mut().as_mut() { tick() });
+    }
+    TICK.with(|slot| *slot.borrow_mut() = Some(Box::new(tick)));
+    let mtm = objc2::MainThreadMarker::new().expect("main thread");
+    let app = NSApplication::sharedApplication(mtm);
+    app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+    let timer = CFRunLoopTimer::new(0.0, 0.005, 0, 0, fire, std::ptr::null_mut());
+    unsafe { CFRunLoop::get_main().add_timer(&timer, kCFRunLoopCommonModes); }
+    app.run();
 }

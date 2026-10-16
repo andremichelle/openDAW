@@ -4,6 +4,7 @@ import {MenuItem} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {DesktopStudioMenu} from "@/service/DesktopStudioMenu"
 import {Shell} from "@/platform/desktop/Shell"
+import {NativePluginHost} from "@/platform/desktop/NativePluginHost"
 
 type ShellNode =
     | { type: "item", id: string, label: string, enabled: boolean, accelerator?: string }
@@ -72,5 +73,6 @@ export namespace DesktopMenu {
             schedule()
         }
         service.projectProfileService.catchupAndSubscribe(schedule)
+        NativePluginHost.subscribeCatalogue(schedule)
     }
 }

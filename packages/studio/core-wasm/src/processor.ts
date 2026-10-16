@@ -99,7 +99,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
     constructor({processorOptions}: {processorOptions: EngineProcessorAttachment} & AudioNodeOptions) {
         super()
         const {syncStreamBuffer, controlFlagsBuffer, hrClockBuffer, variant} = processorOptions
-        const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} = variant as WasmEngineAttachment
+        const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites, hostImports} = variant as WasmEngineAttachment
         this.#memory = createEngineMemory()
         const messenger = Messenger.for(this.port)
         this.#engineToClient = Communicator.sender<EngineToClient>(
@@ -138,7 +138,7 @@ class WasmEngineProcessor extends AudioWorkletProcessor {
                 ready() {dispatcher.dispatchAndForget(this.ready)}
             })
         this.#wclap = createWclapBridges(this.#memory, sampleRate, this.#engineToClient, promise => this.#trackResource(promise))
-        const engine = instantiateWasmEngine({engineModule, deviceModules, deviceBoxTypes, composites, effectComposites},
+        const engine = instantiateWasmEngine({engineModule, deviceModules, deviceBoxTypes, composites, effectComposites, hostImports},
             this.#memory, sampleRate, this.#engineToClient, this.#wclap)
         this.#engine = engine
         this.#controlFlags = new Int32Array<SharedArrayBuffer>(controlFlagsBuffer)

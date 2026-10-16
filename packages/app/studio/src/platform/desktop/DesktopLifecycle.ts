@@ -29,5 +29,17 @@ export namespace DesktopLifecycle {
         Shell.request("alert", {}, message).catch(error => console.warn("[DesktopLifecycle]", error, message))
     }
 
-    export const install = (): void => Platform.install({guardClose, alert})
+    // WebKit goes back in history on Backspace (the Mac Delete key), which would leave the project
+    const blockBackNavigation = (): void => window.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key !== "Backspace") {return}
+        const target = event.target
+        const editable = target instanceof HTMLElement && (target.isContentEditable
+            || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)
+        if (!editable) {event.preventDefault()}
+    }, {capture: true})
+
+    export const install = (): void => {
+        Platform.install({guardClose, alert})
+        blockBackNavigation()
+    }
 }

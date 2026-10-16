@@ -245,6 +245,52 @@ fn start_engine(root: &Path) {
     }
 }
 
+// a key a plugin window left unhandled, replayed in the studio so its shortcuts work while the plugin is in front
+fn replay_key(url: &str) {
+    let text = |key: &str| serde_json::Value::String(query_value(url, key).unwrap_or_default());
+    let flag = |key: &str| query_value(url, key).as_deref() == Some("1");
+    let kind = if query_value(url, "type").as_deref() == Some("keyup") { "keyup" } else { "keydown" };
+    let script = format!("document.body.dispatchEvent(new KeyboardEvent(\"{kind}\", {{code: {}, key: {}, shiftKey: {}, ctrlKey: {}, \
+        altKey: {}, metaKey: {}, repeat: {}, bubbles: true, cancelable: true}}))",
+        text("code"), text("key"), flag("shift"), flag("ctrl"), flag("alt"), flag("meta"), flag("repeat"));
+    if let Some(window) = APP.get().and_then(|app| app.get_webview_window("main")) {
+        let _ = window.eval(script);
+    }
+}
+
+// Cmd+` cycles the studio's windows, then the plugin windows of the engine process, which hands back to the main window
+fn cycle_windows(app: &AppHandle) {
+    let mut windows: Vec<tauri::WebviewWindow> = app.webview_windows().into_values()
+        .filter(|window| window.is_visible().unwrap_or(false)).collect();
+    windows.sort_by_key(|window| (window.label() != "main", window.label().to_string()));
+    let focused = windows.iter().position(|window| window.is_focused().unwrap_or(false));
+    if let Some(next) = focused.and_then(|index| windows.get(index + 1)) {
+        let _ = next.set_focus();
+        return;
+    }
+    let passed = ENGINE.lock().unwrap().as_mut().and_then(|child| child.stdin.as_mut())
+        .is_some_and(|stdin| std::io::Write::write_all(stdin, b"cycle\n").is_ok());
+    if !passed {
+        if let Some(first) = windows.first() { let _ = first.set_focus(); }
+    }
+}
+
+// the key left of 1 (US) or left of Y (ISO), macOS cycles windows with it
+#[cfg(target_os = "macos")]
+fn install_cycle_monitor(app: AppHandle) {
+    use objc2_app_kit::{NSEvent, NSEventMask, NSEventModifierFlags};
+    const CYCLE_KEY: u16 = 50;
+    let handler = block2::RcBlock::new(move |event: std::ptr::NonNull<NSEvent>| -> *mut NSEvent {
+        let event_ref = unsafe { event.as_ref() };
+        if event_ref.modifierFlags().contains(NSEventModifierFlags::Command) && event_ref.keyCode() == CYCLE_KEY {
+            cycle_windows(&app);
+            return std::ptr::null_mut();
+        }
+        event.as_ptr()
+    });
+    std::mem::forget(unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &handler) });
+}
+
 fn stop_engine() {
     if let Some(mut child) = ENGINE.lock().unwrap().take() {
         let _ = child.kill();
@@ -357,6 +403,14 @@ fn serve(request: tiny_http::Request) {
     } else if url.starts_with("/__auth-callback") {
         let status = auth_callback(&mut request, &url);
         let _ = request.respond(tiny_http::Response::empty(status));
+    } else if url.starts_with("/__key") {
+        replay_key(&url);
+        let _ = request.respond(tiny_http::Response::empty(204));
+    } else if url.starts_with("/__cycle-home") {
+        if let Some(window) = APP.get().and_then(|app| app.get_webview_window("main")) {
+            let _ = window.set_focus();
+        }
+        let _ = request.respond(tiny_http::Response::empty(204));
     } else if url.starts_with("/__close") {
         let label = url.split('?').nth(1).unwrap_or("");
         if let Some(window) = APP.get().and_then(|app| app.get_webview_window(label)) {
@@ -404,6 +458,8 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle().clone();
             let _ = APP.set(handle.clone());
+            #[cfg(target_os = "macos")]
+            install_cycle_monitor(handle.clone());
             let counter = Arc::new(AtomicUsize::new(0));
             if updating {
                 update::start(app.path().app_data_dir()?);
