@@ -63,6 +63,34 @@ Default folders, plus user folders in the settings:
   their own device and box, audio input buses and bypass).
 - A VST3 MIDI effect: notes in and notes out (output events from `ProcessData.outputEvents` back into the chain).
 
+## Before testers (DEV)
+
+1. The DEV deploy builds the desktop devices (`packages/app/desktop/devices/build.sh`, nightly + rust-src in CI),
+   else the desktop build has no native device and every plugin stays silent. Rerun the failed DEV deploy.
+2. First run of `desktop.yml`: installers have never been built, Windows and Linux have never compiled.
+3. A small macOS group gets unsigned builds with instructions (Gatekeeper blocks or calls the app damaged).
+
+## Gaps that change things
+
+1. **Signing vs. plugins (macOS):** a signed, notarized app runs with the hardened runtime, which refuses third-party
+   code unless the engine carries `com.apple.security.cs.disable-library-validation`. Signing, notarization and that
+   entitlement decide whether plugins load at all in a public build. Windows: SmartScreen trust.
+2. **Export is silent for plugins:** mixdown and stems render in the webview engine, which has no native plugins.
+   Export must render in the native engine (phase 6) before plugins are usable.
+3. **A plugin crash kills the engine, no recovery:** the studio must notice, restart the engine and mark the plugin
+   that crashed. Much earlier than the optional sandbox (phase 8).
+4. **Plugins without `moduleinfo.json` are invisible:** older VST3 bundles ship none, a scan process that loads them
+   safely is needed (phase 1).
+5. **Intel-only plugins on Apple Silicon:** an arm64 engine cannot load x86_64-only binaries, the scan checks the
+   architecture and reports "not compatible" instead of failing silently.
+6. **No plugin windows on Windows and Linux:** loading is written but untested there, "Open UI" does nothing.
+7. **Latency compensation:** plugins with latency (effects) play late, the engine has no delay compensation for them.
+8. **Effects and MIDI effects** (see "To test").
+
+Order: devices in the deploy + `desktop.yml` + unsigned macOS builds for a small group, in parallel signing and
+notarization with the entitlement and engine crash recovery; native render for export is the biggest feature gap
+before a wider test.
+
 ## Progress
 - 2026-10-16 phase 0 (scratchpad spike, `vst3` 0.3 + libloading + objc2-app-kit, ~300 lines): ABL3x loads
   (`bundleEntry` with a CFBundle, `GetPluginFactory`, separate controller class, connection points), takes note
@@ -135,9 +163,9 @@ Default folders, plus user folders in the settings:
   (ASCII units are (0, byte), 16 chars per 32-byte block), other bytes fold block-wise, strings serialize and decode
   in one pass with an ASCII fast path, `ByteReader::take` is overflow safe. A 1.1 MB state folds in 0.88 ms instead
   of 8.9 ms (native). `tests/checksum_cache.rs` checks against a naive byte-by-byte reference and round-trips strings.
-- Open: an editor edit reaches the processor at once but the engine modulates around the OLD base until the box
-  echo arrives (a few to tens of ms); proposed: the edit becomes the base at once with the current modulation, host
-  values with the old base are overridden until the echo confirms (1 s fallback).
+- 2026-10-16 an editor edit of a modulated parameter: the edit becomes the base at once with the parameter's latest
+  modulation added (`Slot.modulation`), host values that still carry the old base use the edited base until its box
+  confirms it, at most 1 s (`Slot.edits`). Before, the engine modulated around the old base until the box echo arrived.
 - 2026-10-16 the plugin state is a bytes field (`NativeInstrumentBox.state`, ByteArrayField), raw end to end:
   abi `FIELD_KIND_BYTES` + `FieldValue::Bytes` (additive), the engine delivers bytes fields to devices, the device
   passes pointer + length, the host copies the ArrayBuffer, saved states reach the studio as binary messages on
