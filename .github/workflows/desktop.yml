@@ -1,0 +1,63 @@
+# .github/workflows/desktop.yml
+name: Build openDAW desktop app
+
+# A tag desktop-v<version> builds the app and publishes it as the latest GitHub Release (the /download page links it).
+# A manual run only builds and keeps the files as a workflow artifact.
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    env:
+      # the server the app installs and updates the studio from, DEV until the public release
+      OPENDAW_UPDATE_ORIGIN: https://dev.opendaw.studio
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v5
+
+      - name: 🦀 Install Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: 📦 Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/app/desktop
+
+      - name: 🔧 Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: 🏷️ Check version
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        run: |
+          version=$(node -p "require('./packages/app/desktop/tauri.conf.json').version")
+          if [ "desktop-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match tauri.conf.json version $version"
+            exit 1
+          fi
+
+      - name: 🏗️ Build universal dmg
+        working-directory: packages/app/desktop
+        run: |
+          cargo tauri build --target universal-apple-darwin --bundles dmg
+          cp target/universal-apple-darwin/release/bundle/dmg/*.dmg "$GITHUB_WORKSPACE/openDAW-macos.dmg"
+
+      - name: 📤 Keep as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openDAW-macos
+          path: openDAW-macos.dmg
+
+      - name: 🚀 Publish release
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" openDAW-macos.dmg --latest \
+            --title "openDAW Desktop ${GITHUB_REF_NAME#desktop-v}" \
+            --notes "macOS app. It installs and updates the studio from $OPENDAW_UPDATE_ORIGIN on first launch. Download page: https://opendaw.studio/download"

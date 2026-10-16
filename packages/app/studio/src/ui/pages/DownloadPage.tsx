@@ -16,7 +16,7 @@ export const DownloadPage: PageFactory<StudioService> = ({lifecycle}: PageContex
             <div className="platform">
                 <h2>macOS</h2>
                 <a className="download" href={`${ReleaseUrl}/openDAW-macos.dmg`}>Download</a>
-                <span className="size">about 5 MB</span>
+                <span className="size">about 9 MB, Apple Silicon and Intel</span>
             </div>
             <div className="platform unavailable">
                 <h2>Windows</h2>
