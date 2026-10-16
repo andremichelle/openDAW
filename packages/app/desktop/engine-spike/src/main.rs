@@ -70,6 +70,8 @@ fn engine_thread(mut producer: rtrb::Producer<f32>, sample_rate: u32, stats: Arc
     let context = v8::Context::new(handle_scope, v8::ContextOptions { global_template: Some(global), ..Default::default() });
     let scope = &mut v8::ContextScope::new(handle_scope, context);
     run(scope, PRELUDE, "prelude");
+    let stress: u32 = std::env::var("STRESS").ok().and_then(|value| value.parse().ok()).unwrap_or(0);
+    run(scope, &format!("globalThis.__stress = {stress}"), "stress");
     run(scope, HOST, "host.js");
     let started = Instant::now();
     run(scope, &format!("globalThis.__init = 0; spike.init({sample_rate}).then(() => __init = 1, error => {{__init = 2; console.error(error?.stack ?? error)}})"), "init");
@@ -89,6 +91,19 @@ fn engine_thread(mut producer: rtrb::Producer<f32>, sample_rate: u32, stats: Arc
     let render = v8::Local::<v8::Function>::try_from(run(scope, "spike.render", "render")).unwrap();
     let receiver: v8::Local<v8::Value> = v8::undefined(scope).into();
     let args = [out.into()];
+    let _priority = match std::env::var("NO_RT") {
+        Ok(_) => None,
+        Err(_) => match audio_thread_priority::promote_current_thread_to_real_time(QUANTUM as u32, sample_rate) {
+            Ok(handle) => {
+                println!("[engine] real-time priority on");
+                Some(handle)
+            }
+            Err(error) => {
+                println!("[engine] real-time priority failed: {error:?}");
+                None
+            }
+        },
+    };
     let (mut count, mut total, mut worst) = (0u64, Duration::ZERO, Duration::ZERO);
     let mut report = Instant::now();
     loop {
@@ -106,10 +121,10 @@ fn engine_thread(mut producer: rtrb::Producer<f32>, sample_rate: u32, stats: Arc
         if report.elapsed() >= Duration::from_secs(1) {
             let budget = Duration::from_secs_f64(QUANTUM as f64 / sample_rate as f64);
             let callbacks = stats.callbacks.swap(0, Ordering::Relaxed).max(1);
-            println!("[engine] quanta {count} avg {:?} worst {:?} (budget {budget:?}) | ring {} frames | callback {} frames, output latency {:.2} ms | underruns {}",
+            println!("[engine] quanta {count} avg {:?} worst {:?} (budget {budget:?}) | ring {} frames | callback {} frames, output latency {:.2} ms | underruns this second {}",
                 total / count.max(1) as u32, worst, (producer.buffer().capacity() - producer.slots()) / 2,
                 stats.callback_frames.load(Ordering::Relaxed) / callbacks.min(1).max(1),
-                stats.latency_us.load(Ordering::Relaxed) as f64 / 1000.0, stats.underruns.load(Ordering::Relaxed));
+                stats.latency_us.load(Ordering::Relaxed) as f64 / 1000.0, stats.underruns.swap(0, Ordering::Relaxed));
             (count, total, worst) = (0, Duration::ZERO, Duration::ZERO);
             report = Instant::now();
         }

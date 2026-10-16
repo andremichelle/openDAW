@@ -17,7 +17,7 @@ const engineToClient = new Proxy({}, {
     }
 }) as EngineToClient
 
-const state: { engine?: EngineExports, memory?: WebAssembly.Memory } = {}
+const state: { engine?: EngineExports, memory?: WebAssembly.Memory, garbage?: unknown } = {}
 
 const init = async (sampleRate: number): Promise<void> => {
     ;(globalThis as unknown as { sampleRate: number }).sampleRate = sampleRate
@@ -43,6 +43,8 @@ const render = (out: Float32Array): void => {
     const {engine, memory} = state
     if (engine === undefined || memory === undefined) {return}
     engine.render()
+    const stress = (globalThis as unknown as { __stress: number }).__stress
+    for (let index = 0; index < stress; index++) {state.garbage = {index, values: new Float64Array(64), text: `garbage ${index}`}}
     const pointer = engine.output_ptr()
     const left = new Float32Array(memory.buffer, pointer, RenderQuantum)
     const right = new Float32Array(memory.buffer, pointer + RenderQuantum * 4, RenderQuantum)

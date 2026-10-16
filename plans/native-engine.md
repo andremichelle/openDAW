@@ -42,6 +42,9 @@ The desktop shell runs the audio engine in its own scope, outside the webview, a
 - CoreAudio reports 4.9 ms output latency (callback to playback). The ring adds its fill on top: 512 frames = 10.7 ms, 256 = 5.3 ms, 128 = 2.7 ms.
 - Underruns after startup: none with a 512-frame ring, a few with 256, more with 128 (one quantum took 3 ms). The engine thread runs at normal priority and wakes through `park_timeout`/`unpark`, so scheduling jitter decides. Next: real-time priority for the engine thread, then retest 256 and 128, and a longer run that forces V8 garbage collection.
 - Alternative to measure: render directly on the audio callback thread (V8 `Locker`), which removes the ring.
+- Real-time priority (`audio_thread_priority` 0.38, time-constraint policy on macOS, MMCSS on Windows, rtkit on Linux): 20 s runs with a 256 and a 128 frame ring had zero underruns after startup, worst quantum about 90 µs. The same 128 frame run at normal priority dropped out repeatedly.
+- Garbage collection stress (`STRESS=2000`: 2000 objects with a `Float64Array` each per quantum, roughly 1 GB/s of garbage): 30 s with a 128 frame ring, zero underruns, average 1 ms and worst 2.1 ms per quantum against the 2.67 ms budget. V8's collector keeps up even under absurd allocation.
+- **Go.** Total output latency with a 128 frame ring: 2.7 ms ring + 4.9 ms CoreAudio = about 7.6 ms on the built-in speakers.
 
 ## Desktop audio duties
 
