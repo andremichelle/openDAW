@@ -6,6 +6,7 @@ import {DesktopLifecycle} from "@/platform/desktop/DesktopLifecycle"
 import {DesktopTitle} from "@/platform/desktop/DesktopTitle"
 import {NativeEngine} from "@/platform/desktop/NativeEngine"
 import {NativeMidi} from "@/platform/desktop/NativeMidi"
+import {NativeOutput} from "@/platform/desktop/NativeOutput"
 import {NativeMenu} from "@/service/NativeMenu"
 import {WclapWindows} from "@/service/WclapWindows"
 
@@ -18,5 +19,6 @@ NativeMenu.install(service => {
 })
 DesktopLifecycle.install()
 NativeMidi.install()
+NativeOutput.install()
 WclapWindows.openAsPopout()
 start()

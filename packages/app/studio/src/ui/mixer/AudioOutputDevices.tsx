@@ -2,20 +2,19 @@ import css from "./AudioOutputDevices.sass?inline"
 import {Procedure} from "@opendaw/lib-std"
 import {Await, createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
-import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
-import {AudioDevices} from "@/audio/AudioDevices"
+import {AudioOutputDevice, OutputDevice} from "@/audio/AudioOutputDevice"
 
 const className = Html.adoptStyleSheet(css, "AudioOutputDevices")
 
 type Construct = {
     output: AudioOutputDevice
-    provider: Procedure<MediaDeviceInfo>
+    provider: Procedure<OutputDevice>
 }
 
 export const AudioOutputDevices = ({output, provider}: Construct) => {
     return (
         <div className={className} style={{padding: "1em 0"}}>
-            <Await factory={() => AudioDevices.queryListOutputDevices()}
+            <Await factory={() => output.listDevices()}
                    loading={() => (
                        <div>Please allow access to list audio-devices...</div>
                    )}
@@ -38,11 +37,12 @@ export const AudioOutputDevices = ({output, provider}: Construct) => {
                            </div>
                        )
                        output.resolveOutput()
-                           .then(output => list.querySelector(`div[deviceId="${output.deviceId}"]`)
+                           .then(output => list.querySelector(`div[deviceId="${CSS.escape(output.deviceId)}"]`)
                                ?.classList.add("active"), reason => console.debug(reason))
                        return list
                    }}
             />
+
         </div>
     )
 }

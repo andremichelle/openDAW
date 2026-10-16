@@ -1,4 +1,5 @@
 import css from "./OutputSelector.sass?inline"
+import settingsCss from "./AudioOutputSettings.sass?inline"
 import {createElement} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
 import {AudioOutputDevice} from "@/audio/AudioOutputDevice"
@@ -9,9 +10,12 @@ import {AudioOutputDevices} from "@/ui/mixer/AudioOutputDevices"
 import {Promises} from "@opendaw/lib-runtime"
 import {Dialogs} from "@/ui/components/dialogs"
 import {TextScroller} from "@/ui/TextScroller"
-import {Lifecycle} from "@opendaw/lib-std"
+import {DefaultObservableValue, int, Lifecycle, Terminator} from "@opendaw/lib-std"
+import {AudioOutputBackend, OutputDevice} from "@/audio/AudioOutputDevice"
+import {DropDown} from "@/ui/composite/DropDown"
 
 const className = Html.adoptStyleSheet(css, "OutputSelector")
+const settingsClassName = Html.adoptStyleSheet(settingsCss, "AudioOutputSettings")
 
 type Construct = {
     lifecycle: Lifecycle
@@ -41,6 +45,7 @@ export const AudioOutputSelector = ({lifecycle, output}: Construct) => {
         <div className={className} onpointerdown={(event) => {
             event.preventDefault()
             event.stopPropagation()
+            if (output.backend.nonEmpty()) {return openBackendDialog(output.backend.unwrap())}
             const dialog: HTMLDialogElement = (
                 <Dialog headline="Select Audio Output Device"
                         icon={IconSymbol.AudioDevice}
@@ -68,4 +73,45 @@ export const AudioOutputSelector = ({lifecycle, output}: Construct) => {
         }}>{label}</div>
     )
     return element
+}
+// an output with a buffer size (the desktop app's native engine): both are chosen and applied with Ok
+const openBackendDialog = (backend: AudioOutputBackend): void => {
+    const lifecycle = new Terminator()
+    const devices = backend.devices()
+    const currentId = backend.current.getValue().mapOr(current => current.deviceId, "")
+    const device = new DefaultObservableValue<OutputDevice>(
+        devices.find(candidate => candidate.deviceId === currentId) ?? devices[0] ?? {deviceId: "", label: "Default"})
+    const frames = new DefaultObservableValue<int>(backend.bufferSize.getValue())
+    const dialog: HTMLDialogElement = (
+        <Dialog headline="Audio Output"
+                icon={IconSymbol.AudioDevice}
+                cancelable={true}
+                style={{minWidth: "0", width: "max-content"}}
+                buttons={[{
+                    text: "Ok",
+                    primary: true,
+                    onClick: handler => {
+                        backend.choose(device.getValue(), frames.getValue())
+                        handler.close()
+                    }
+                }]}>
+            <div className={settingsClassName}>
+                <span>Device</span>
+                <DropDown lifecycle={lifecycle}
+                          owner={device}
+                          provider={() => devices}
+                          mapping={value => value.label}
+                          width="16em"/>
+                <span>Buffer Size</span>
+                <DropDown lifecycle={lifecycle}
+                          owner={frames}
+                          provider={() => backend.bufferSizes}
+                          mapping={value => `${value} samples (${(value / 48).toFixed(1)} ms)`}
+                          width="16em"/>
+            </div>
+        </Dialog>
+    )
+    dialog.addEventListener("close", () => lifecycle.terminate())
+    Surface.get().body.appendChild(dialog)
+    dialog.showModal()
 }

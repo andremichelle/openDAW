@@ -1,15 +1,30 @@
-import {asDefined, DefaultObservableValue, Option, Strings} from "@opendaw/lib-std"
+import {asDefined, DefaultObservableValue, int, ObservableValue, Option, Strings} from "@opendaw/lib-std"
 import {Promises} from "@opendaw/lib-runtime"
 import {AudioDevices} from "@/audio/AudioDevices"
 
+export type OutputDevice = { readonly deviceId: string, readonly label: string }
+
+// An output outside this AudioContext (the desktop app's native engine), with a selectable buffer size
+export interface AudioOutputBackend {
+    readonly current: ObservableValue<Option<OutputDevice>>
+    readonly bufferSize: ObservableValue<int>
+    readonly bufferSizes: ReadonlyArray<int>
+    devices(): ReadonlyArray<OutputDevice>
+    choose(device: OutputDevice, frames: int): void
+}
+
 export class AudioOutputDevice {
+    static #backend: Option<AudioOutputBackend> = Option.None
+
+    static install(backend: AudioOutputBackend): void {this.#backend = Option.wrap(backend)}
+
     static async create(context: AudioContext): Promise<AudioOutputDevice> {
         return new AudioOutputDevice(context)
     }
 
     readonly #context: AudioContext
     readonly #switchable: boolean
-    readonly #value: DefaultObservableValue<Option<MediaDeviceInfo>>
+    readonly #value: DefaultObservableValue<Option<OutputDevice>>
 
     private constructor(context: AudioContext) {
         this.#context = context
@@ -19,20 +34,37 @@ export class AudioOutputDevice {
             console.debug(`New Device: ${status === "resolved" ? value.label : ""}`)
         })
         this.#switchable = "setSinkId" in AudioContext.prototype && "sinkId" in AudioContext.prototype
-        this.#value = new DefaultObservableValue<Option<MediaDeviceInfo>>(Option.None)
+        this.#value = new DefaultObservableValue<Option<OutputDevice>>(Option.None)
+        AudioOutputDevice.#backend.ifSome(backend => backend.current.catchupAndSubscribe(owner => this.#value.setValue(owner.getValue())))
     }
 
-    get value(): DefaultObservableValue<Option<MediaDeviceInfo>> {return this.#value}
+    get value(): DefaultObservableValue<Option<OutputDevice>> {return this.#value}
 
-    get switchable(): boolean {return this.#switchable}
+    get switchable(): boolean {return AudioOutputDevice.#backend.nonEmpty() || this.#switchable}
 
-    async setOutput(device: MediaDeviceInfo) {
+    get backend(): Option<AudioOutputBackend> {return AudioOutputDevice.#backend}
+
+    listDevices(): Promise<ReadonlyArray<OutputDevice>> {
+        return AudioOutputDevice.#backend.match({
+            none: () => AudioDevices.queryListOutputDevices(),
+            some: backend => Promise.resolve(backend.devices())
+        })
+    }
+
+    async setOutput(device: OutputDevice) {
+        if (AudioOutputDevice.#backend.nonEmpty()) {
+            const backend = AudioOutputDevice.#backend.unwrap()
+            return backend.choose(device, backend.bufferSize.getValue())
+        }
         if (!this.#switchable || device.deviceId === "default") {return}
         const {status} = await Promises.tryCatch(this.#context.setSinkId(device.deviceId))
         console.debug("AudioContext.setSinkId", status)
     }
 
-    async resolveOutput(): Promise<MediaDeviceInfo> {
+    async resolveOutput(): Promise<OutputDevice> {
+        if (AudioOutputDevice.#backend.nonEmpty()) {
+            return AudioOutputDevice.#backend.unwrap().current.getValue().unwrap("No output device")
+        }
         const sinkId = this.#resolveSinkId()
         return AudioDevices.queryListOutputDevices()
             .then((devices) => asDefined(devices

@@ -4,9 +4,10 @@ use std::collections::HashMap;
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+mod audio;
 mod midi;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -67,8 +68,22 @@ static INPUT_LATENCY_US: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomi
 // what waits in the input ring after a pull, in microseconds
 static INPUT_RING_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 // the main thread owns the cpal input stream (not Send) and opens it on request
-// Some(name) opens that input ("" = the default), None closes it
-static INPUT_REQUESTS: Mutex<Option<Sender<Option<String>>>> = Mutex::new(None);
+// requests for the main thread, which owns the cpal streams (not Send)
+pub enum MainRequest {
+    // Some(name) opens that input ("" = the default), None closes it
+    Input(Option<String>),
+    // device name ("" = the default) and buffer size in frames
+    Output(String, u32),
+}
+
+static MAIN_REQUESTS: Mutex<Option<Sender<MainRequest>>> = Mutex::new(None);
+const RING_CAPACITY_FRAMES: usize = 8192;
+// the engine keeps this many frames rendered ahead of the output callback
+static RING_TARGET_FRAMES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(256);
+// "\n"-separated output device names, refreshed in the background, and the open output with its buffer size
+pub static OUTPUT_DEVICES: Mutex<String> = Mutex::new(String::new());
+pub static OUTPUT_CURRENT: Mutex<(String, u32)> = Mutex::new((String::new(), 128));
+pub static OUTPUT_NAME: Mutex<String> = Mutex::new(String::new());
 // "name\tchannels" lines of the available inputs, refreshed in the background
 static INPUT_DEVICES: Mutex<String> = Mutex::new(String::new());
 static INPUT_INFO: Mutex<Option<(String, usize)>> = Mutex::new(None);
@@ -129,11 +144,13 @@ fn output_latency(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArgument
     rv.set_double((RING_LATENCY_US.load(ordering) + DEVICE_LATENCY_US.load(ordering)) as f64 / 1_000_000.0);
 }
 
-fn request_input(request: Option<String>) {
-    if let Some(sender) = INPUT_REQUESTS.lock().unwrap().as_ref() {
+pub fn request_main(request: MainRequest) {
+    if let Some(sender) = MAIN_REQUESTS.lock().unwrap().as_ref() {
         let _ = sender.send(request);
     }
 }
+
+fn request_input(request: Option<String>) {request_main(MainRequest::Input(request))}
 
 fn open_input(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
     request_input(Some(args.get(0).to_rust_string_lossy(scope)))
@@ -274,7 +291,8 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
                 Event::Input(next) => input = next.map(|(consumer, channels)| Input { consumer, channels }),
             }
         }
-        while producer.slots() >= QUANTUM * 2 {
+        let capacity = producer.buffer().capacity();
+        while capacity - producer.slots() < RING_TARGET_FRAMES.load(std::sync::atomic::Ordering::Relaxed) * 2 {
             let planar = unsafe { std::slice::from_raw_parts_mut(input_ptr, INPUT_CHANNELS * QUANTUM) };
             let channels = pull_input(&mut input, &mut interleaved, planar);
             let channels = v8::Integer::new(scope, channels as i32).into();
@@ -351,6 +369,59 @@ fn open_input_stream(events: &Sender<Event>, sample_rate: u32, requested: &str) 
     }
 }
 
+fn list_output_devices() -> String {
+    let Ok(devices) = cpal::default_host().output_devices() else { return String::new() };
+    devices.map(|device| device_name(&device)).filter(|name| !name.is_empty()).collect::<Vec<_>>().join("\n")
+}
+
+// Opens the named output ("" or unknown = the default) at the given buffer size; the ring target follows it
+fn open_output_stream(requested: &str, buffer: u32, sample_rate: u32, consumer: Arc<Mutex<rtrb::Consumer<f32>>>,
+                      waker: std::thread::Thread) -> Option<cpal::Stream> {
+    let host = cpal::default_host();
+    let chosen = host.output_devices().ok().and_then(|mut devices| devices.find(|device| !requested.is_empty() && device_name(device) == requested));
+    let device = chosen.or_else(|| host.default_output_device())?;
+    let name = device_name(&device);
+    let config = cpal::StreamConfig { channels: 2, sample_rate, buffer_size: cpal::BufferSize::Fixed(buffer) };
+    let stream = device.build_output_stream(config, move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
+        let timestamp = info.timestamp();
+        DEVICE_LATENCY_US.store(timestamp.playback.duration_since(timestamp.callback).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
+        // the main thread holds the lock only while it swaps streams
+        let available = match consumer.try_lock() {
+            Ok(mut consumer) => {
+                let available = consumer.slots().min(data.len());
+                if let Ok(chunk) = consumer.read_chunk(available) {
+                    let (first, second) = chunk.as_slices();
+                    data[..first.len()].copy_from_slice(first);
+                    data[first.len()..first.len() + second.len()].copy_from_slice(second);
+                    chunk.commit_all();
+                }
+                available
+            }
+            Err(_) => 0,
+        };
+        data[available..].fill(0.0);
+        waker.unpark();
+    }, |error| eprintln!("[engine] audio {error}"), None);
+    let stream = match stream {
+        Ok(stream) => stream,
+        Err(error) => {
+            eprintln!("[engine] cannot open output {name} with buffer {buffer}: {error}");
+            return None;
+        }
+    };
+    if let Err(error) = stream.play() {
+        eprintln!("[engine] output {error}");
+        return None;
+    }
+    let target = (buffer as usize * 2).max(256);
+    RING_TARGET_FRAMES.store(target, std::sync::atomic::Ordering::Relaxed);
+    RING_LATENCY_US.store(target as u64 * 1_000_000 / sample_rate as u64, std::sync::atomic::Ordering::Relaxed);
+    println!("[engine] output {name}, buffer {buffer}, {target} frames ahead");
+    *OUTPUT_CURRENT.lock().unwrap() = (requested.to_string(), buffer);
+    *OUTPUT_NAME.lock().unwrap() = name;
+    Some(stream)
+}
+
 fn serve(events: Sender<Event>, token: String) {
     let listener = TcpListener::bind(("127.0.0.1", PORT)).expect("engine port taken");
     let mut next = 1;
@@ -374,6 +445,9 @@ fn serve(events: Sender<Event>, token: String) {
             let Ok(mut socket) = tungstenite::accept_hdr_with_config(stream, check, Some(config)) else { return };
             if path == "/midi" {
                 return midi::serve(socket);
+            }
+            if path == "/audio" {
+                return audio::serve(socket);
             }
             let _ = socket.get_ref().set_read_timeout(Some(Duration::from_millis(2)));
             let (sender, outgoing) = channel::<Option<Vec<u8>>>();
@@ -422,42 +496,37 @@ fn main() {
         .unwrap_or_else(|_| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../studio/dist-desktop")));
     DIST.set(dist).unwrap();
     let token = std::env::var("OPENDAW_ENGINE_TOKEN").unwrap_or_default();
-    let ring_frames: usize = std::env::var("RING").ok().and_then(|value| value.parse().ok()).unwrap_or(256);
-    RING_LATENCY_US.store(ring_frames as u64 * 1_000_000 / 48_000, std::sync::atomic::Ordering::Relaxed);
     let buffer: u32 = std::env::var("BUFFER").ok().and_then(|value| value.parse().ok()).unwrap_or(128);
     let sample_rate = 48_000;
-    let device = cpal::default_host().default_output_device().expect("no output device");
-    println!("[engine] output {:?}, buffer {buffer}, ring {ring_frames}", device.description().map(|description| description.name().to_string()));
-    let (producer, mut consumer) = rtrb::RingBuffer::<f32>::new(ring_frames * 2);
+    let (producer, consumer) = rtrb::RingBuffer::<f32>::new(RING_CAPACITY_FRAMES * 2);
+    let consumer = Arc::new(Mutex::new(consumer));
     let (events, inbox) = channel();
     let input_events = events.clone();
     std::thread::spawn(move || serve(events, token));
     let engine = std::thread::Builder::new().name("engine".into())
         .spawn(move || engine_thread(inbox, producer, sample_rate)).unwrap();
     let waker = engine.thread().clone();
-    let config = cpal::StreamConfig { channels: 2, sample_rate, buffer_size: cpal::BufferSize::Fixed(buffer) };
-    let stream = device.build_output_stream(config, move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
-        let timestamp = info.timestamp();
-        DEVICE_LATENCY_US.store(timestamp.playback.duration_since(timestamp.callback).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-        let available = consumer.slots().min(data.len());
-        if let Ok(chunk) = consumer.read_chunk(available) {
-            let (first, second) = chunk.as_slices();
-            data[..first.len()].copy_from_slice(first);
-            data[first.len()..first.len() + second.len()].copy_from_slice(second);
-            chunk.commit_all();
-        }
-        data[available..].fill(0.0);
-        waker.unpark();
-    }, |error| eprintln!("[engine] audio {error}"), None).expect("output stream");
-    stream.play().expect("play");
+    let mut output_stream = open_output_stream("", buffer, sample_rate, consumer.clone(), waker.clone()).expect("no output device");
     std::thread::spawn(|| loop {
         *INPUT_DEVICES.lock().unwrap() = list_input_devices();
+        *OUTPUT_DEVICES.lock().unwrap() = list_output_devices();
         std::thread::sleep(Duration::from_secs(2));
     });
-    let (requests, incoming) = channel::<Option<String>>();
-    *INPUT_REQUESTS.lock().unwrap() = Some(requests);
+    let (requests, incoming) = channel::<MainRequest>();
+    *MAIN_REQUESTS.lock().unwrap() = Some(requests);
     let mut input_stream: Option<(cpal::Stream, String)> = None;
     for request in incoming {
+        let request = match request {
+            MainRequest::Output(device, size) => {
+                if *OUTPUT_CURRENT.lock().unwrap() == (device.clone(), size) { continue; }
+                drop(output_stream);
+                output_stream = open_output_stream(&device, size, sample_rate, consumer.clone(), waker.clone())
+                    .or_else(|| open_output_stream("", 128, sample_rate, consumer.clone(), waker.clone()))
+                    .expect("no output device");
+                continue;
+            }
+            MainRequest::Input(request) => request,
+        };
         match request {
             Some(requested) => {
                 if input_stream.as_ref().is_some_and(|(_, current)| *current == requested) { continue; }
