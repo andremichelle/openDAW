@@ -9,5 +9,18 @@ export namespace DesktopBrowser {
         return {close: () => {}}
     }
 
-    export const install = (): void => Platform.install({openAuthWindow})
+    // a link meant for a new tab opens in the system browser, a webview window is no browser
+    const openLinksInBrowser = (event: MouseEvent): void => {
+        if (event.button > 1 || !(event.target instanceof Element)) {return}
+        const anchor = event.target.closest("a[target=_blank]")
+        if (!(anchor instanceof HTMLAnchorElement) || !anchor.href.startsWith("http")) {return}
+        event.preventDefault()
+        Shell.request("browse", {url: anchor.href}).catch(error => console.warn("[DesktopBrowser]", error))
+    }
+
+    export const install = (): void => {
+        Platform.install({openAuthWindow})
+        document.addEventListener("click", openLinksInBrowser, {capture: true})
+        document.addEventListener("auxclick", openLinksInBrowser, {capture: true})
+    }
 }

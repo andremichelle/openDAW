@@ -225,7 +225,7 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
                 None => empty(request, 404),
             }
         }
-        "browse" => match query.get("url").filter(|url| url.starts_with("https://")) {
+        "browse" => match query.get("url").filter(|url| url.starts_with("https://") || url.starts_with("http://")) {
             Some(url) => match crate::open_in_browser(url) {
                 Ok(()) => empty(request, 204),
                 Err(error) => text(request, 500, error.to_string()),
