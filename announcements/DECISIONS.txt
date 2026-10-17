@@ -23,7 +23,7 @@ Per channel
   thing is, then "### " sublines in Title Case, each followed by one or two plain sentences, then a
   blank line and "Enjoy :heart:". No other emoji. Lines are not wrapped.
   No blank lines anywhere inside the post, not even before "Enjoy :heart:". Several items (plugins,
-  collections) go into a "- " list.
+  collections) go into a "* " list.
 • Never say a feature or collection is "free" or "shipped". openDAW is free, that is understood.
 • Do not repeat a fact in two paragraphs.
 • Complete sentences only, everywhere. No fragments like "A convolution reverb." or a bare link
