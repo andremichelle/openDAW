@@ -26,13 +26,13 @@ jobs:
             runner: macos-latest
             target: aarch64-apple-darwin
             rust-targets: aarch64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg # the dmg alone removes the .app the architecture check reads
             arch: arm64
           - platform: macos-intel
             runner: macos-latest
             target: x86_64-apple-darwin
             rust-targets: x86_64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
             arch: x86_64
           - platform: windows
             runner: windows-latest
