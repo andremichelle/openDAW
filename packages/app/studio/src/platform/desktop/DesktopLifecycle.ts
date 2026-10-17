@@ -15,7 +15,8 @@ export namespace DesktopLifecycle {
                     return false
                 })
             state.closing = false
-            if (quit) {await Shell.request("quit", {})}
+            // a logout or restart macOS asked for waits for this answer
+            await Shell.request(quit ? "quit" : "quit-cancel", {})
         }
         Shell.request("guard", {}).catch(error => console.warn("[DesktopLifecycle]", error))
     }

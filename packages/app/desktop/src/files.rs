@@ -239,7 +239,11 @@ fn route(mut request: tiny_http::Request, command: &str, query: &HashMap<String,
         }
         "quit" => {
             empty(request, 204);
-            APP.get().expect("app not ready").exit(0)
+            crate::quit_approved(APP.get().expect("app not ready"))
+        }
+        "quit-cancel" => {
+            crate::quit_cancelled();
+            empty(request, 204)
         }
         "title" => {
             if let Some(window) = APP.get().and_then(|app| app.get_webview_window("main")) {

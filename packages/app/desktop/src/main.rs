@@ -76,6 +76,67 @@ fn hide_on_deactivate(window: &tauri::WebviewWindow) {
     });
 }
 
+// macOS asks before Dock "Quit", logout, restart and shutdown; tao does not answer, which would mean "terminate now".
+// Once the page guards its work it is asked like for Cmd+Q, and macOS waits for its answer.
+#[cfg(target_os = "macos")]
+mod terminate {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use objc2::runtime::{AnyClass, AnyObject, Imp, Sel};
+    use objc2::{sel, MainThreadMarker};
+    use objc2_app_kit::NSApplication;
+
+    const NOW: usize = 1;
+    const LATER: usize = 2;
+
+    static PENDING: AtomicBool = AtomicBool::new(false);
+    pub static APPROVED: AtomicBool = AtomicBool::new(false);
+
+    extern "C-unwind" fn should_terminate(_delegate: &AnyObject, _selector: Sel, _sender: *mut AnyObject) -> usize {
+        if APPROVED.load(Ordering::SeqCst) || !super::CLOSE_GUARDED.load(Ordering::SeqCst) { return NOW; }
+        let Some(app) = super::APP.get() else { return NOW };
+        PENDING.store(true, Ordering::SeqCst);
+        super::request_quit(app);
+        LATER
+    }
+
+    pub fn install() {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        let Some(delegate) = NSApplication::sharedApplication(mtm).delegate() else { return };
+        let object: &AnyObject = delegate.as_ref();
+        let class: &AnyClass = object.class();
+        let imp: Imp = unsafe { std::mem::transmute(should_terminate as extern "C-unwind" fn(&AnyObject, Sel, *mut AnyObject) -> usize) };
+        let added = unsafe { objc2::ffi::class_addMethod(class as *const AnyClass as *mut AnyClass, sel!(applicationShouldTerminate:), imp, c"Q@:@".as_ptr()) };
+        if !added.as_bool() { eprintln!("[openDAW] could not answer applicationShouldTerminate"); }
+    }
+
+    // the page's answer to a quit macOS asked for; false when macOS did not ask
+    pub fn reply(quit: bool) -> bool {
+        if !PENDING.swap(false, Ordering::SeqCst) { return false; }
+        if let Some(app) = super::APP.get() {
+            let _ = app.run_on_main_thread(move || {
+                if let Some(mtm) = MainThreadMarker::new() { NSApplication::sharedApplication(mtm).replyToApplicationShouldTerminate(quit); }
+            });
+        }
+        true
+    }
+}
+
+// the page decided to quit: macOS goes on with a quit it asked for, any other quit exits here
+pub fn quit_approved(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        terminate::APPROVED.store(true, Ordering::SeqCst);
+        if terminate::reply(true) { return; }
+    }
+    app.exit(0)
+}
+
+// the page kept the app open: a logout or restart macOS asked for is cancelled
+pub fn quit_cancelled() {
+    #[cfg(target_os = "macos")]
+    terminate::reply(false);
+}
+
 // Quit and closing the main window ask the page first once it has installed its unsaved-work guard
 pub fn request_quit(app: &AppHandle) {
     match app.get_webview_window("main") {
@@ -496,6 +557,8 @@ fn main() {
             let _ = APP.set(handle.clone());
             #[cfg(target_os = "macos")]
             install_cycle_monitor(handle.clone());
+            #[cfg(target_os = "macos")]
+            terminate::install();
             let counter = Arc::new(AtomicUsize::new(0));
             if updating {
                 update::start(app.path().app_data_dir()?);
