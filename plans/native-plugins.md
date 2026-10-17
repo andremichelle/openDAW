@@ -142,6 +142,12 @@ Default folders, plus user folders in the settings:
     eight outputs of Microtonic Multi, drum machines and samplers in general) play only their main bus, the others
     write into a scratch buffer (`Buses`). Wanted at some point: route each extra output to its own channel in the
     mixer. Same for WebCLAP (`plans/webclap.md`).
+13. **Next format: native CLAP, once the current build is reported stable.** Estimate about 2 hours, most of it follows
+    the VST3 host. Reused: the plugin boxes' `format` field (projects and UI need almost nothing), slots, state glue,
+    crash marker, scan process and cache, the plugin window code. New, in this order: scan `.clap` files and list their
+    plugins; the host core (`clap_entry`, factory, process with note/param/transport events, extensions params, state,
+    gui, audio-ports, note-ports, latency, timer-support, thread-check, log, request_callback); plugin windows on the
+    existing window modules; Linux `timer-support` and `posix-fd-support` in the Linux main loop.
 
 Order: devices in the deploy + `desktop.yml` + unsigned macOS builds for a small group, in parallel signing and
 notarization with the entitlement and engine crash recovery; native render for export is the biggest feature gap
