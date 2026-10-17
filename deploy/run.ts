@@ -101,6 +101,13 @@ RewriteRule ^ - [L]
 RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
 RewriteRule ^tauri/(.*)$ /dev/tauri/$1 [L]
 
+# Desktop installers for testers (DEV only), uploaded by the desktop workflow
+RewriteCond %{REQUEST_URI} ^/dev/install/ [NC]
+RewriteRule ^ - [L]
+
+RewriteCond %{HTTP_HOST} ^dev\\.opendaw\\.studio$ [NC]
+RewriteRule ^install/?(.*)$ /dev/install/$1 [L]
+
 # Documentation: the manuals app and the generated scripting docs live in one fixed folder each per
 # environment, deployed with the studio or alone (DOCS_ONLY=true)
 RewriteCond %{REQUEST_URI} ^/(main|dev)/(manuals|docs)(/|$) [NC]

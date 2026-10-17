@@ -120,6 +120,52 @@ jobs:
           path: dist/*
           retention-days: 14
 
+  # a test build replaces the installers on dev.opendaw.studio/install, the link testers have stays the same
+  install:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/desktop-test-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Collect the builds
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 📄 Write the download page
+        run: |
+          cat > dist/index.html <<EOF
+          <!doctype html>
+          <html lang="en">
+          <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>openDAW Desktop</title>
+          <style>body{font-family:system-ui,sans-serif;background:#151719;color:#ddd;max-width:40em;margin:3em auto;padding:0 1em;line-height:1.5}a{color:#6ab0ff}li{margin:.4em 0}small{color:#888}</style></head>
+          <body>
+          <h1>openDAW Desktop</h1>
+          <p>Test build ${GITHUB_REF_NAME}, $(date -u +"%Y-%m-%d %H:%M UTC"). The app installs the studio from dev.opendaw.studio and keeps it up to date.</p>
+          <ul>
+          <li><a href="openDAW-macos-arm64.dmg">macOS, Apple Silicon</a></li>
+          <li><a href="openDAW-macos-intel.dmg">macOS, Intel</a></li>
+          <li><a href="openDAW-windows-setup.exe">Windows</a></li>
+          <li><a href="openDAW-linux.AppImage">Linux, AppImage</a></li>
+          <li><a href="openDAW-linux.deb">Linux, .deb</a></li>
+          </ul>
+          <p><small>The macOS app is not signed yet: open it with right-click and Open the first time.</small></p>
+          </body>
+          </html>
+          EOF
+          ls -la dist
+
+      - name: 🚚 Upload to dev.opendaw.studio/install
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y lftp
+          lftp -e "set sftp:auto-confirm yes; mkdir -p -f /dev/install; mirror -R --overwrite --delete dist /dev/install; bye" \
+            -u "$SFTP_USERNAME" --env-password -p "$SFTP_PORT" "sftp://$SFTP_HOST"
+
   release:
     needs: build
     if: startsWith(github.ref, 'refs/tags/desktop-v')
