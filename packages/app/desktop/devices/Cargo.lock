@@ -10,6 +10,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "device-native-effect"
+version = "0.0.0"
+dependencies = [
+ "abi",
+]
+
+[[package]]
 name = "device-native-instrument"
 version = "0.0.0"
 dependencies = [

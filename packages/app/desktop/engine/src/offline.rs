@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use tungstenite::{Message, WebSocket};
 
-use crate::{arg_string, dist, native_load, native_note, native_param, native_process, native_release, native_reset, native_state, now,
+use crate::{arg_string, dist, native_load, native_note, native_param, native_process, native_process_effect, native_release, native_reset, native_state, now,
             platform, plugins, print, read, run, PRELUDE};
 
 const TICK: Duration = Duration::from_millis(8);
@@ -92,6 +92,7 @@ pub fn serve(mut socket: WebSocket<TcpStream>, query: &str) {
     native!("__nativeCreate", native_create);
     native!("__nativeLoad", native_load);
     native!("__nativeProcess", native_process);
+    native!("__nativeProcessEffect", native_process_effect);
     native!("__nativeNote", native_note);
     native!("__nativeState", native_state);
     native!("__nativeParam", native_param);

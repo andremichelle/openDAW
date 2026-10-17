@@ -224,7 +224,25 @@ pub(crate) fn native_process(scope: &mut v8::PinScope, args: v8::FunctionCallbac
     let length = store.byte_length();
     if left + frames * 4 > length || right + frames * 4 > length { return rv.set_uint32(0); }
     let base = base.as_ptr() as *mut u8;
-    let wrote = unsafe { plugins::process(handle, base.add(left) as *mut f32, base.add(right) as *mut f32, frames, bpm, position, flags) };
+    let wrote = unsafe { plugins::process(handle, None, base.add(left) as *mut f32, base.add(right) as *mut f32, frames, bpm, position, flags) };
+    rv.set_uint32(wrote as u32);
+}
+
+// (handle, memory buffer, input left, input right, output left, output right, frames, bpm, position, flags) -> 1 when
+// the plugin wrote output
+pub(crate) fn native_process_effect(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+    let handle = arg_u32(scope, &args, 0);
+    let Ok(buffer) = v8::Local::<v8::ArrayBuffer>::try_from(args.get(1)) else { return rv.set_uint32(0) };
+    let pointers = [2, 3, 4, 5].map(|index| arg_u32(scope, &args, index) as usize);
+    let frames = arg_u32(scope, &args, 6) as usize;
+    let bpm = args.get(7).number_value(scope).unwrap_or(120.0) as f32;
+    let position = args.get(8).number_value(scope).unwrap_or(0.0);
+    let flags = arg_u32(scope, &args, 9);
+    let store = buffer.get_backing_store();
+    let Some(base) = store.data() else { return rv.set_uint32(0) };
+    if pointers.iter().any(|pointer| pointer + frames * 4 > store.byte_length()) { return rv.set_uint32(0); }
+    let [in_left, in_right, out_left, out_right] = pointers.map(|pointer| unsafe { (base.as_ptr() as *mut u8).add(pointer) as *mut f32 });
+    let wrote = unsafe { plugins::process(handle, Some((in_left, in_right)), out_left, out_right, frames, bpm, position, flags) };
     rv.set_uint32(wrote as u32);
 }
 
@@ -343,6 +361,7 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
     native!("__nativeCreate", native_create);
     native!("__nativeLoad", native_load);
     native!("__nativeProcess", native_process);
+    native!("__nativeProcessEffect", native_process_effect);
     native!("__nativeNote", native_note);
     native!("__nativeState", native_state);
     native!("__nativeParam", native_param);

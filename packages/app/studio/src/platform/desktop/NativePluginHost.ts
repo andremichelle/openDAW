@@ -20,6 +20,8 @@ export namespace NativePluginHost {
     } = {port: null, service: null, plugins: [], notices: null, scanning: false}
     const statuses = new Map<string, NativeStatus>()
     const openWindows = new Set<string>()
+    // plugins that return without processing (an unlicensed plugin)
+    const inactive = new Set<string>()
     // plugins just added open their window once ready, as in other hosts (some apply their default preset only then)
     const openWhenReady = new Set<string>()
 
@@ -112,6 +114,7 @@ export namespace NativePluginHost {
         socket.onclose = () => {
             state.notices = null
             statuses.clear()
+            inactive.clear()
             openWindows.clear()
             notifier.notify()
             setTimeout(connect, 250)
@@ -125,6 +128,8 @@ export namespace NativePluginHost {
     export const status = (uuid: string): NativeStatus => statuses.get(uuid) ?? "loading"
 
     export const isOpen = (uuid: string): boolean => openWindows.has(uuid)
+
+    export const isProcessing = (uuid: string): boolean => !inactive.has(uuid)
 
     export const toggleWindow = (uuid: string): void => state.port?.send({type: "native-gui", uuid, open: !openWindows.has(uuid)})
 
@@ -145,6 +150,8 @@ export namespace NativePluginHost {
                 if (value !== "loading" && openWhenReady.delete(uuid) && value === "ready" && !openWindows.has(uuid)) {
                     state.port?.send({type: "native-gui", uuid, open: true})
                 }
+            } else if (type === "processing") {
+                if (value === "inactive") {inactive.add(uuid)} else {inactive.delete(uuid)}
             } else if (type === "gui") {
                 if (value === "open") {openWindows.add(uuid)} else {openWindows.delete(uuid)}
             } else if (type === "params") {

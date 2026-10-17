@@ -3,7 +3,7 @@
 import {int, isDefined, Nullable, Optional, Procedure} from "@opendaw/lib-std"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "../bridge/BridgeLink"
 import type {EngineModules} from "../../../../../../studio/core-wasm/src/engine-modules"
-import {NativeInstrumentBoxType, NativePlugins} from "./NativePlugins"
+import {NativePlugins} from "./NativePlugins"
 
 declare const __offlineSend: (bytes: ArrayBuffer) => void
 
@@ -47,13 +47,13 @@ scope.postMessage = (data: unknown): void => send({type: "message", data})
 
 // the render plays native plugins like the realtime engine, each through a copy of its own
 scope.extendEngineModules = async (modules: Modules, base: string): Promise<Modules> => {
-    const nativeModule = await NativePlugins.deviceModule(base).catch(error => {
+    const nativeModules = await NativePlugins.deviceModules(base).catch(error => {
         console.warn("[offline] no native plugin device", error)
         return null
     })
-    return nativeModule === null ? modules : {
+    return nativeModules === null ? modules : {
         ...modules, hostImports: NativePlugins.imports,
-        deviceModules: [...modules.deviceModules, nativeModule], deviceBoxTypes: [...modules.deviceBoxTypes, NativeInstrumentBoxType]
+        deviceModules: [...modules.deviceModules, ...nativeModules.modules], deviceBoxTypes: [...modules.deviceBoxTypes, ...nativeModules.boxTypes]
     }
 }
 

@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")"
 TARGET=wasm32-unknown-unknown
 FLAGS="-C relocation-model=pic -C target-feature=+simd128 -C link-arg=--experimental-pic -C link-arg=-shared -C link-arg=--no-check-features -Zunstable-options -Cpanic=immediate-abort -Zdefault-visibility=hidden"
-CRATES="device-native-instrument"
+CRATES="device-native-instrument device-native-effect"
 for crate in $CRATES; do
   RUSTFLAGS="$FLAGS" cargo "+${DEVICE_TOOLCHAIN:-nightly}" build -p "$crate" --release --target "$TARGET" -Zbuild-std=core
 done

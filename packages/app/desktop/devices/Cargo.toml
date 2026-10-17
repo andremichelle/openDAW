@@ -1,7 +1,7 @@
 # Desktop-only engine devices: built by build.sh into dist/, copied into the desktop build only
 [workspace]
 resolver = "2"
-members = ["native-instrument"]
+members = ["native-instrument", "native-effect"]
 
 [profile.release]
 opt-level = 3

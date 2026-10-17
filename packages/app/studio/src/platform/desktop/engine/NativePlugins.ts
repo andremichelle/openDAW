@@ -3,6 +3,8 @@ import {int, UUID} from "@opendaw/lib-std"
 declare const __nativeCreate: (uuid: string) => int
 declare const __nativeLoad: (handle: int, format: string, id: string) => void
 declare const __nativeProcess: (handle: int, memory: ArrayBuffer, left: int, right: int, frames: int, bpm: number, position: number, flags: int) => int
+declare const __nativeProcessEffect: (handle: int, memory: ArrayBuffer, inLeft: int, inRight: int, outLeft: int, outRight: int,
+                                      frames: int, bpm: number, position: number, flags: int) => int
 declare const __nativeNote: (handle: int, on: int, key: int, velocity: number) => void
 declare const __nativeState: (handle: int, state: ArrayBuffer) => void
 declare const __nativeParam: (handle: int, id: int, kind: int, value: number, modulation: number) => void
@@ -16,21 +18,28 @@ export type NativePluginInfo = {
     format: string, id: string, name: string, vendor: string, kind: "instrument" | "effect" | "", path: string
     status: "ok" | "failed" | "incompatible" | "crashed"
 }
-export type NativeNotice = { uuid: string, type: "status" | "gui" | "saved" | "params" | "param" | "plugins", value: string }
+export type NativeNotice = { uuid: string, type: "status" | "gui" | "saved" | "params" | "param" | "plugins" | "processing", value: string }
 
 export const NativeInstrumentBoxType = "NativeInstrumentBox"
+export const NativeEffectBoxType = "NativeEffectBox"
 
 export namespace NativePlugins {
     const decoder = new TextDecoder()
     const modules = new Map<string, Promise<WebAssembly.Module>>()
 
-    export const deviceModule = (base: string): Promise<WebAssembly.Module> => {
-        const url = `${base}/wasm/desktop/device_native_instrument.wasm`
+    const deviceModule = (base: string, name: string): Promise<WebAssembly.Module> => {
+        const url = `${base}/wasm/desktop/${name}.wasm`
         const loading = modules.get(url) ?? fetch(url)
             .then(response => response.ok ? response.arrayBuffer() : Promise.reject(new Error(`${url}: ${response.status}`)))
             .then(bytes => WebAssembly.compile(bytes))
         modules.set(url, loading)
         return loading
+    }
+
+    // the desktop devices the engine links next to the stock ones, with the box types they realize
+    export const deviceModules = async (base: string): Promise<{ modules: Array<WebAssembly.Module>, boxTypes: Array<string> }> => {
+        const [instrument, effect] = await Promise.all([deviceModule(base, "device_native_instrument"), deviceModule(base, "device_native_effect")])
+        return {modules: [instrument, effect], boxTypes: [NativeInstrumentBoxType, NativeEffectBoxType]}
     }
 
     // the device's host_native_* imports, bound to the engine memory
@@ -43,6 +52,9 @@ export namespace NativePlugins {
                 __nativeLoad(handle, text(formatPtr, formatLen), text(idPtr, idLen)),
             host_native_process: (handle: int, left: int, right: int, frames: int, bpm: number, position: number, flags: int): int =>
                 __nativeProcess(handle, memory.buffer as ArrayBuffer, left, right, frames, bpm, position, flags),
+            host_native_process_effect: (handle: int, inLeft: int, inRight: int, outLeft: int, outRight: int, frames: int,
+                                         bpm: number, position: number, flags: int): int =>
+                __nativeProcessEffect(handle, memory.buffer as ArrayBuffer, inLeft, inRight, outLeft, outRight, frames, bpm, position, flags),
             host_native_note: (handle: int, on: int, key: int, velocity: number): void => __nativeNote(handle, on, key, velocity),
             host_native_param: (handle: int, id: int, kind: int, value: number, modulation: number): void =>
                 __nativeParam(handle, id >>> 0, kind, value, modulation),

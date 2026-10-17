@@ -653,8 +653,11 @@ pub struct Processing {
     outputs_changes: ComWrapper<OutputChanges>,
     output_list: ComPtr<IParameterChanges>,
     context: ProcessContext,
+    inputs: i32,
     outputs: i32,
     mode: i32,
+    // the input of a plugin that takes audio but is played as an instrument
+    silence: Vec<f32>,
 }
 
 pub struct Loaded {
@@ -820,6 +823,7 @@ unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_ra
     let mut inputs = vec![SpeakerArr::kStereo; audio_ins as usize];
     let mut outputs = vec![SpeakerArr::kStereo; audio_outs as usize];
     processor.setBusArrangements(inputs.as_mut_ptr(), audio_ins, outputs.as_mut_ptr(), audio_outs);
+    if audio_ins > 0 { component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32, 0, 1); }
     if audio_outs > 0 { component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32, 0, 1); }
     if event_ins > 0 { component.activateBus(MediaTypes_::kEvent as i32, BusDirections_::kInput as i32, 0, 1); }
     let mode = if offline { ProcessModes_::kOffline } else { ProcessModes_::kRealtime } as i32;
@@ -846,7 +850,7 @@ unsafe fn instantiate(handle: u32, uuid: &str, format: &str, id: &str, sample_ra
     let output_list = outputs_changes.to_com_ptr::<IParameterChanges>()?;
     let shared = Arc::new(Mutex::new(Processing {
         component: component.clone(), processor, events, event_list, output_events, output_event_list, params, param_list, outputs_changes, output_list, context,
-        outputs: audio_outs.min(1), mode
+        inputs: audio_ins.min(1), outputs: audio_outs.min(1), mode, silence: vec![0.0; MAX_BLOCK]
     }));
     let infos = read_params(&controller);
     let ranges: HashMap<ParamID, f64> = infos.iter().map(|param| (param.id, param.max)).collect();
@@ -1047,6 +1051,9 @@ struct Slot {
     // the sample rate of an offline render, its copy loads on the first block once fields and state are known
     offline: Option<f64>,
     tried: bool,
+    // blocks in a row the plugin left unwritten (an unlicensed plugin returns without processing)
+    unwritten: u32,
+    inactive: bool,
 }
 
 // every thread keeps its own slots (the engine thread, each offline render), the handles are unique process wide
@@ -1068,7 +1075,7 @@ fn create_any_slot(uuid: String, offline: Option<f64>) -> u32 {
         uuid, generation: 0, format: String::new(), id: String::new(), shared: None, notes: Vec::new(),
         state: None, known_state: None, inbox: None, ranges: HashMap::new(), pending: HashMap::new(),
         changes: HashMap::new(), reported: HashMap::new(), modulation: HashMap::new(), edits: HashMap::new(),
-        offline, tried: false
+        offline, tried: false, unwritten: 0, inactive: false
     }));
     handle
 }
@@ -1239,6 +1246,45 @@ pub fn close_gui(handle: u32) {
 }
 
 const FLAG_PLAYING: u32 = 1 << 2;
+// a NaN no plugin writes: still in the output after a block, the plugin did not process it
+const UNWRITTEN: u32 = 0x7FC0_DEAD;
+const INACTIVE_AFTER: u32 = 16;
+
+// marks the channels before a block
+unsafe fn mark_unwritten(channels: &[*mut f32], frames: usize) {
+    for channel in channels { std::slice::from_raw_parts_mut(*channel, frames).fill(f32::from_bits(UNWRITTEN)); }
+}
+
+// after a block: false when the plugin left the output unwritten; a marker left in a partly written channel becomes
+// silence, so it never reaches the engine
+unsafe fn take_written(channels: &[*mut f32], frames: usize, silent: bool) -> bool {
+    let mut written = false;
+    for channel in channels {
+        let samples = std::slice::from_raw_parts_mut(*channel, frames);
+        let mut untouched = 0;
+        for sample in samples.iter_mut() {
+            if sample.to_bits() == UNWRITTEN {
+                *sample = 0.0;
+                untouched += 1;
+            }
+        }
+        written |= untouched < frames;
+    }
+    written || silent
+}
+
+fn track_unwritten(slot: &mut Slot, written: bool) {
+    let inactive = if written {
+        slot.unwritten = 0;
+        false
+    } else {
+        slot.unwritten = slot.unwritten.saturating_add(1);
+        slot.unwritten >= INACTIVE_AFTER
+    };
+    if inactive == slot.inactive || (!written && !inactive) { return; }
+    slot.inactive = inactive;
+    if slot.offline.is_none() { notify(&slot.uuid, "processing", if inactive { "inactive" } else { "active" }); }
+}
 
 fn take_loaded() {
     let loaded = std::mem::take(&mut *LOADED.lock().unwrap());
@@ -1265,14 +1311,16 @@ fn take_loaded() {
     });
 }
 
-// writes `frames` into the two channel pointers; false while the plugin is not ready (the device adds nothing)
-pub unsafe fn process(handle: u32, left: *mut f32, right: *mut f32, frames: usize, bpm: f32, position: f64, flags: u32) -> bool {
+// writes `frames` into the two channel pointers, an effect reads its input from `input`; false while the plugin is not
+// ready (an instrument adds nothing, an effect passes its input through)
+pub unsafe fn process(handle: u32, input: Option<(*mut f32, *mut f32)>, left: *mut f32, right: *mut f32, frames: usize, bpm: f32,
+                      position: f64, flags: u32) -> bool {
     take_loaded();
     SLOTS.with(|slots| {
         let mut slots = slots.borrow_mut();
         let Some(slot) = slots.get_mut(&handle) else { return false };
         if let Some(sample_rate) = slot.offline.filter(|_| !slot.tried) { load_offline(handle, slot, sample_rate); }
-        let Some(shared) = slot.shared.as_ref() else { return false };
+        let Some(shared) = slot.shared.clone() else { return false };
         if let Some(inbox) = slot.inbox.as_ref() {
             if let Ok(mut inbox) = inbox.try_lock() {
                 for (id, normalized) in inbox.edits.drain(..) {
@@ -1330,13 +1378,19 @@ pub unsafe fn process(handle: u32, left: *mut f32, right: *mut f32, frames: usiz
         let mut channels = [left, right];
         let mut output = AudioBusBuffers { numChannels: 2, silenceFlags: 0, __field0: std::mem::zeroed() };
         output.__field0.channelBuffers32 = channels.as_mut_ptr();
+        let silence = processing.silence.as_mut_ptr();
+        let mut input_channels = match input { Some((in_left, in_right)) => [in_left, in_right], None => [silence, silence] };
+        let mut input_bus = AudioBusBuffers { numChannels: 2, silenceFlags: 0, __field0: std::mem::zeroed() };
+        input_bus.__field0.channelBuffers32 = input_channels.as_mut_ptr();
+        let frames = frames.min(MAX_BLOCK);
+        mark_unwritten(&channels, frames);
         let mut data = ProcessData {
             processMode: processing.mode,
             symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
-            numSamples: frames.min(MAX_BLOCK) as i32,
-            numInputs: 0,
+            numSamples: frames as i32,
+            numInputs: processing.inputs,
             numOutputs: processing.outputs,
-            inputs: ptr::null_mut(),
+            inputs: if processing.inputs > 0 { &mut input_bus } else { ptr::null_mut() },
             outputs: &mut output,
             inputParameterChanges: processing.param_list.as_ptr(),
             outputParameterChanges: processing.output_list.as_ptr(),
@@ -1344,9 +1398,12 @@ pub unsafe fn process(handle: u32, left: *mut f32, right: *mut f32, frames: usiz
             outputEvents: processing.output_event_list.as_ptr(),
             processContext: &mut processing.context,
         };
-        let wrote = processing.processor.process(&mut data) == kResultOk && processing.outputs > 0;
+        let processed = processing.processor.process(&mut data) == kResultOk && processing.outputs > 0;
+        let silent = output.silenceFlags & 0b11 == 0b11;
+        let written = take_written(&channels, frames, silent);
         crate::stats::record_max(&crate::stats::MAX_PLUGIN_US, started);
-        wrote
+        track_unwritten(slot, processed && written);
+        processed && written
     })
 }
 

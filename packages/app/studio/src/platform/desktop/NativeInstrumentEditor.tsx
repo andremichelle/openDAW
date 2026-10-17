@@ -54,8 +54,10 @@ export const NativeInstrumentEditor = (construct: NativeDeviceEditors.Construct)
         const name = adapter.pluginNameField.getValue()
         nameLabel.textContent = name.length > 0 ? name : "No plugin loaded"
         nameLabel.classList.toggle("empty", name.length === 0)
-        vendorLabel.textContent = status === "ready" ? adapter.vendorField.getValue() : StatusText[status]
-        vendorLabel.classList.toggle("failed", status === "failed")
+        const processing = NativePluginHost.isProcessing(uuid)
+        vendorLabel.textContent = status !== "ready" ? StatusText[status]
+            : processing ? adapter.vendorField.getValue() : "Not processing audio, it may need a license or activation"
+        vendorLabel.classList.toggle("failed", status === "failed" || (status === "ready" && !processing))
         openLabel.textContent = NativePluginHost.isOpen(uuid) ? "Close UI" : "Open UI"
         openButton.classList.toggle("disabled", status !== "ready")
         parametersButton.classList.toggle("disabled", status !== "ready")

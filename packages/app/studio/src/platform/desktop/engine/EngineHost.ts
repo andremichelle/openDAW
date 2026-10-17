@@ -5,7 +5,7 @@ import {Port} from "@opendaw/lib-runtime"
 import {loadEngineModules} from "../../../../../../studio/core-wasm/src/engine-modules"
 import {WASM_ENGINE_PROCESSOR_NAME} from "../../../../../../studio/core-wasm/src/protocol"
 import {BridgeShared, LiveLock, SyncState, ToEngine, ToStudio} from "../bridge/BridgeLink"
-import {NativeInstrumentBoxType, NativePlugins} from "./NativePlugins"
+import {NativePlugins} from "./NativePlugins"
 
 declare const __send: (connection: int, bytes: ArrayBuffer) => void
 declare const __close: (connection: int) => void
@@ -222,7 +222,7 @@ class Connection {
         const loading = modules.get(variant.wasmUrl) ?? loadEngineModules(variant.wasmUrl)
         modules.set(variant.wasmUrl, loading)
         const {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites} = await loading
-        const nativeModule = await NativePlugins.deviceModule(variant.wasmUrl).catch(error => {
+        const nativeModules = await NativePlugins.deviceModules(variant.wasmUrl).catch(error => {
             console.warn("[host] no native plugin device", error)
             return null
         })
@@ -233,11 +233,11 @@ class Connection {
         construction.port = this.port
         this.processor = new processorClass({
             processorOptions: {
-                ...options, variant: nativeModule === null
+                ...options, variant: nativeModules === null
                     ? {engineModule, deviceModules, deviceBoxTypes, composites, effectComposites}
                     : {
                         engineModule, composites, effectComposites, hostImports: NativePlugins.imports,
-                        deviceModules: [...deviceModules, nativeModule], deviceBoxTypes: [...deviceBoxTypes, NativeInstrumentBoxType]
+                        deviceModules: [...deviceModules, ...nativeModules.modules], deviceBoxTypes: [...deviceBoxTypes, ...nativeModules.boxTypes]
                     }
             }
         })
