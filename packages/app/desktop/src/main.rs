@@ -3,6 +3,8 @@
 
 mod components;
 mod files;
+#[cfg(target_os = "linux")]
+mod isolation;
 mod log;
 mod menu;
 mod update;
@@ -623,7 +625,9 @@ fn main() {
                 update::start(app.path().app_data_dir()?);
             }
             let url = format!("http://127.0.0.1:{PORT}/{}", if updating { "__splash" } else { "" });
-            let main = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
+            // Linux loads the studio once the webview can isolate it
+            let start = if cfg!(target_os = "linux") { "about:blank" } else { url.as_str() };
+            let main = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(start.parse().unwrap()))
                 .title(if cfg!(target_os = "macos") { "" } else { "openDAW Studio" })
                 .inner_size(1400.0, 900.0)
                 .maximized(true)
@@ -636,6 +640,8 @@ fn main() {
                 .initialization_script(&shell_info)
                 .on_new_window(move |url, features| open_window(&handle, &counter, url, features, true))
                 .build()?;
+            #[cfg(target_os = "linux")]
+            main.with_webview(move |webview| isolation::load(&webview.inner(), &url))?;
             let quitting = app.handle().clone();
             main.on_window_event(move |event| {
                 if let WindowEvent::CloseRequested { api, .. } = event {

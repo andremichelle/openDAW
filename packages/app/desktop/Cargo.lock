@@ -2156,6 +2156,7 @@ dependencies = [
  "tiny_http",
  "ureq",
  "url",
+ "webkit2gtk",
 ]
 
 [[package]]
