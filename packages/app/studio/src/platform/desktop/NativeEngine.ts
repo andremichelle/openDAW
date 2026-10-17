@@ -1,11 +1,12 @@
 import {isDefined, RuntimeNotifier, TimeSpan} from "@opendaw/lib-std"
 import {Wait} from "@opendaw/lib-runtime"
-import {AudioInputs, EngineVariant, EngineWorkletVariant, WebAudioInputs} from "@opendaw/studio-core"
+import {AudioInputs, EngineVariant, EngineWorkletVariant, OfflineEngineRenderer, WebAudioInputs} from "@opendaw/studio-core"
 import {StudioService} from "@/service/StudioService"
 import {OutputLatency} from "@/audio/OutputLatency"
 import {NativeAudioInputs} from "@/platform/desktop/NativeAudioInputs"
 import {Shell} from "@/platform/desktop/Shell"
 import {NativeEnginePort} from "@/platform/desktop/bridge/NativeEnginePort"
+import {NativeOfflineWorker} from "@/platform/desktop/bridge/NativeOfflineWorker"
 import {NativePluginHost} from "@/platform/desktop/NativePluginHost"
 
 // The engine runs in the native engine process. The webview node only holds a silent placeholder processor.
@@ -45,6 +46,8 @@ export namespace NativeEngine {
             return
         }
         NativePluginHost.attachService(service)
+        OfflineEngineRenderer.installWorkerFactory(workerUrl => new NativeOfflineWorker(
+            `ws://127.0.0.1:${engine.port}/offline?token=${engine.token}&worker=${encodeURIComponent(workerUrl)}`))
         const placeholder = URL.createObjectURL(new Blob([PlaceholderSource], {type: "text/javascript"}))
         await service.audioContext.audioWorklet.addModule(placeholder)
         URL.revokeObjectURL(placeholder)

@@ -155,6 +155,12 @@ export default defineConfig(({command, mode}) => {
                         outfile: resolve(outDir, "engine-host.js"),
                         bundle: true, format: "iife", platform: "neutral", mainFields: ["module", "main"], minify: true, logLevel: "warning"
                     })
+                    // and this next to the unchanged wasm-offline-worker bundle, for offline renders
+                    buildSync({
+                        entryPoints: [resolve(__dirname, "src/platform/desktop/engine/OfflineHost.ts")],
+                        outfile: resolve(outDir, "offline-host.js"),
+                        bundle: true, format: "iife", platform: "neutral", mainFields: ["module", "main"], minify: true, logLevel: "warning"
+                    })
                     const walk = (dir: string): ReadonlyArray<string> =>
                         readdirSync(dir, {withFileTypes: true}).filter(entry => !entry.name.startsWith(".")).flatMap(entry => entry.isDirectory()
                             ? walk(resolve(dir, entry.name)) : [resolve(dir, entry.name)])

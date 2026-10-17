@@ -58,4 +58,17 @@ describe("BridgeCodec", () => {
         expect(engine.idOf(new SharedArrayBuffer(1)) % 2).toBe(1)
         expect(engine.own().length).toBe(1)
     })
+
+    it("relays message ports when both sides link them, else a port arrives inert", () => {
+        const {port1} = new MessageChannel()
+        const relay = {name: "relay"}
+        const studio = new BridgeShared("studio", {idOfPort: () => 6, portOf: () => undefined})
+        const engine = new BridgeShared("engine", {idOfPort: () => 0, portOf: id => id === 6 ? relay : undefined})
+        const linked = roundTrip({port: port1}, studio, engine) as { data: { port: unknown } }
+        expect(linked.data.port).toBe(relay)
+        const inert = roundTrip({port: port1}) as { data: { port: { postMessage: unknown } } }
+        expect(inert.data.port).not.toBe(relay)
+        expect(typeof inert.data.port.postMessage).toBe("function")
+        port1.close()
+    })
 })

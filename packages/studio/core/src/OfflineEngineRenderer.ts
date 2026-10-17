@@ -14,7 +14,7 @@ import {
 } from "@opendaw/lib-std"
 import {AudioData, ppqn} from "@opendaw/lib-dsp"
 import {ApparatDeviceBox, SpielwerkDeviceBox, WerkstattDeviceBox} from "@opendaw/studio-boxes"
-import {Communicator, Messenger, Promises, Wait} from "@opendaw/lib-runtime"
+import {Communicator, Messenger, Port, Promises, Wait} from "@opendaw/lib-runtime"
 import {AnimationFrame} from "@opendaw/lib-dom"
 import {
     EngineCommands,
@@ -39,6 +39,11 @@ import type {SoundFont2} from "soundfont2"
 // attachment are injected here rather than imported.
 let engineWorker: Option<{url: string, attachment: Record<string, unknown>}> = Option.None
 
+// What an offline render talks to: a Worker, or a stand-in that runs the same worker elsewhere
+export type OfflineEngineWorker = Port & {terminate(): void}
+
+let workerFactory: Option<(url: string) => OfflineEngineWorker> = Option.None
+
 export class OfflineEngineRenderer {
     // `attachment` travels to the worker as `config.variant` (the wasm artifacts base url).
     static install(url: string, attachment: Record<string, unknown>): void {
@@ -47,6 +52,11 @@ export class OfflineEngineRenderer {
     }
 
     static isInstalled(): boolean {return engineWorker.nonEmpty()}
+
+    // Optional: the desktop app runs the offline worker in its native engine process
+    static installWorkerFactory(factory: (url: string) => OfflineEngineWorker): void {
+        workerFactory = Option.wrap(factory)
+    }
 
     static async create(source: Project,
                         optExportConfiguration: Option<ExportConfiguration>,
@@ -59,7 +69,10 @@ export class OfflineEngineRenderer {
 
         const numberOfChannels = numStems * 2
         const engine = engineWorker.unwrap("No engine worker installed (WasmEngine.install must run first)")
-        const worker = new Worker(engine.url, {type: "module"})
+        const worker: OfflineEngineWorker = workerFactory.match({
+            none: () => new Worker(engine.url, {type: "module"}),
+            some: factory => factory(engine.url)
+        })
         const messenger = Messenger.for(worker)
         const protocol = Communicator.sender<OfflineEngineProtocol>(
             messenger.channel("offline-engine"),
@@ -271,7 +284,7 @@ export class OfflineEngineRenderer {
         return result.value
     }
 
-    readonly #worker: Worker
+    readonly #worker: OfflineEngineWorker
     readonly #protocol: OfflineEngineProtocol
     readonly #engineCommands: EngineCommands
     readonly #terminator: Terminator
@@ -283,7 +296,7 @@ export class OfflineEngineRenderer {
     #totalFrames: int = 0
 
     private constructor(
-        worker: Worker,
+        worker: OfflineEngineWorker,
         protocol: OfflineEngineProtocol,
         engineCommands: EngineCommands,
         terminator: Terminator,

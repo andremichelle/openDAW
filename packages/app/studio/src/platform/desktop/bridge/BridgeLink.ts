@@ -12,6 +12,7 @@ export type ToEngine =
     | { type: "record", uuid: Uint8Array, record: boolean }
     | { type: "native-save" }
     | { type: "native-gui", uuid: string, open: boolean }
+    | { type: "port", id: int, data: unknown }
 
 export type ToStudio =
     | { type: "message", data: unknown }
@@ -23,18 +24,29 @@ export type ToStudio =
     | { type: "input-devices", devices: Array<{ name: string, channels: int }> }
     | { type: "record-data", uuid: Uint8Array, first: number, planes: Array<Float32Array> }
     | { type: "input-latency", seconds: number }
+    | { type: "port", id: int, data: unknown }
+    | { type: "sync", id: int, bytes: Uint8Array }
 
 export const enum LiveLock {WRITE = 0, READ = 1}
 export const enum SyncState {READING = 0, READ = 1, WRITING = 2, WRITTEN = 3}
+
+export type BridgePorts = { idOfPort(port: MessagePort): int, portOf(id: int): unknown }
 
 // Each side numbers the buffers it sends (UI even, engine odd) and creates its own copy of a buffer it receives
 export class BridgeShared implements BridgeCodec.SharedBuffers {
     readonly #byId = new Map<int, SharedArrayBuffer>()
     readonly #ids = new WeakMap<SharedArrayBuffer, int>()
     readonly #received = new Set<int>()
+    readonly #ports: Optional<BridgePorts>
     #next: int
 
-    constructor(side: "studio" | "engine") {this.#next = side === "studio" ? 2 : 1}
+    constructor(side: "studio" | "engine", ports?: BridgePorts) {
+        this.#next = side === "studio" ? 2 : 1
+        this.#ports = ports
+    }
+
+    idOfPort(port: MessagePort): Optional<int> {return this.#ports?.idOfPort(port)}
+    portOf(id: int): unknown {return this.#ports?.portOf(id)}
 
     idOf(buffer: SharedArrayBuffer): int {
         const known = this.#ids.get(buffer)

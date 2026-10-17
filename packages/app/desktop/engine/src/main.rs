@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 mod audio;
 mod midi;
+mod offline;
 mod plugins;
 mod scan;
 mod stats;
@@ -20,7 +21,7 @@ use tungstenite::Message;
 const QUANTUM: usize = 128;
 const INPUT_CHANNELS: usize = 8;
 const PORT: u16 = 47112;
-const PRELUDE: &str = r#"
+pub(crate) const PRELUDE: &str = r#"
     globalThis.self = globalThis
     globalThis.location = {href: "/"}
     globalThis.console = {log: (...args) => __print(args.join(" ")), debug: () => {}, info: (...args) => __print(args.join(" ")),
@@ -111,16 +112,16 @@ fn outbox() -> &'static Mutex<HashMap<i32, Sender<Option<Vec<u8>>>>> {
     OUTBOX.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn print(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
+pub(crate) fn print(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8::ReturnValue) {
     let parts: Vec<String> = (0..args.length()).map(|index| args.get(index).to_rust_string_lossy(scope)).collect();
     println!("[js] {}", parts.join(" "));
 }
 
-fn now(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+pub(crate) fn now(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
     rv.set_double(STARTED.get().unwrap().elapsed().as_secs_f64() * 1000.0);
 }
 
-fn read(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+pub(crate) fn read(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
     let url = args.get(0).to_rust_string_lossy(scope);
     let path = url.split(['?', '#']).next().unwrap_or("").trim_start_matches('/');
     match std::fs::read(DIST.get().unwrap().join(path)) {
@@ -276,7 +277,7 @@ fn close(scope: &mut v8::PinScope, args: v8::FunctionCallbackArguments, _rv: v8:
     }
 }
 
-fn run<'s>(scope: &mut v8::PinScope<'s, '_>, source: &str, name: &str) -> Option<v8::Local<'s, v8::Value>> {
+pub(crate) fn run<'s>(scope: &mut v8::PinScope<'s, '_>, source: &str, name: &str) -> Option<v8::Local<'s, v8::Value>> {
     v8::tc_scope!(let try_catch, scope);
     let code = v8::String::new(try_catch, source).unwrap();
     let origin_name = v8::String::new(try_catch, name).unwrap();
@@ -304,10 +305,22 @@ fn processor_source(dist: &PathBuf) -> String {
     std::fs::read_to_string(entry.path()).unwrap().replace("import.meta.url", "self.location.href")
 }
 
+static PLATFORM: OnceLock<v8::SharedRef<v8::Platform>> = OnceLock::new();
+
+// V8 is initialised once per process, the engine thread and every offline render share the platform
+pub(crate) fn platform() -> &'static v8::SharedRef<v8::Platform> {
+    PLATFORM.get_or_init(|| {
+        let platform = v8::new_default_platform(0, false).make_shared();
+        v8::V8::initialize_platform(platform.clone());
+        v8::V8::initialize();
+        platform
+    })
+}
+
+pub(crate) fn dist() -> &'static PathBuf {DIST.get().unwrap()}
+
 fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sample_rate: u32) {
-    let platform = v8::new_default_platform(0, false).make_shared();
-    v8::V8::initialize_platform(platform.clone());
-    v8::V8::initialize();
+    let platform = platform();
     let isolate = &mut v8::Isolate::new(v8::CreateParams::default());
     v8::scope!(let handle_scope, isolate);
     let global = v8::ObjectTemplate::new(handle_scope);
@@ -400,7 +413,7 @@ fn engine_thread(events: Receiver<Event>, mut producer: rtrb::Producer<f32>, sam
         }
         stats::report();
         let idle = Instant::now();
-        while v8::Platform::pump_message_loop(&platform, scope, false) {}
+        while v8::Platform::pump_message_loop(platform, scope, false) {}
         timers.call(scope, receiver, &[]);
         scope.perform_microtask_checkpoint();
         stats::record_max(&stats::MAX_TIMERS_US, idle);
@@ -549,9 +562,10 @@ fn serve(events: Sender<Event>, token: String) {
         let (events, token) = (events.clone(), token.clone());
         std::thread::spawn(move || {
             let mut path = String::new();
+            let mut query = String::new();
             let check = |request: &Request, response: Response| -> Result<Response, ErrorResponse> {
                 path = request.uri().path().to_string();
-                let query = request.uri().query().unwrap_or("");
+                query = request.uri().query().unwrap_or("").to_string();
                 if query.split('&').any(|pair| pair == format!("token={token}")) {
                     Ok(response)
                 } else {
@@ -569,6 +583,9 @@ fn serve(events: Sender<Event>, token: String) {
             }
             if path == "/audio" {
                 return audio::serve(socket);
+            }
+            if path == "/offline" {
+                return offline::serve(socket, &query);
             }
             let _ = socket.get_ref().set_read_timeout(Some(Duration::from_millis(2)));
             let (sender, outgoing) = channel::<Option<Vec<u8>>>();

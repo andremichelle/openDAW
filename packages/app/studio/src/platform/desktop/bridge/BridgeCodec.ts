@@ -1,4 +1,4 @@
-import {ByteArrayInput, ByteArrayOutput, int, isDefined, panic} from "@opendaw/lib-std"
+import {ByteArrayInput, ByteArrayOutput, int, isDefined, Optional, panic} from "@opendaw/lib-std"
 
 // Structured-clone-like binary codec for messages between the studio and the native engine process.
 // SharedArrayBuffers travel as ids. Each side keeps its own copy, the relays keep them in step.
@@ -6,9 +6,12 @@ export namespace BridgeCodec {
     export interface SharedBuffers {
         idOf(buffer: SharedArrayBuffer): int
         bufferOf(id: int, byteLength: int): SharedArrayBuffer
+        // ports relayed as messages (the offline render), without them a port arrives inert
+        idOfPort?(port: MessagePort): Optional<int>
+        portOf?(id: int): unknown
     }
 
-    const enum Tag {Undefined, Null, False, True, Number, String, Array, Object, ArrayBuffer, Typed, Shared, Error, Map, Set, BigInt, Port}
+    const enum Tag {Undefined, Null, False, True, Number, String, Array, Object, ArrayBuffer, Typed, Shared, Error, Map, Set, BigInt, Port, LinkedPort}
 
     const TypedKinds = [Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array,
         Float32Array, Float64Array, BigInt64Array, BigUint64Array] as const
@@ -64,7 +67,13 @@ export namespace BridgeCodec {
             output.writeByte(kind)
             writeBytes(output, new Uint8Array(value.buffer, value.byteOffset, value.byteLength))
         } else if (typeof MessagePort !== "undefined" && value instanceof MessagePort) {
-            output.writeByte(Tag.Port)
+            const id = shared.idOfPort?.(value)
+            if (isDefined(id)) {
+                output.writeByte(Tag.LinkedPort)
+                output.writeInt(id)
+            } else {
+                output.writeByte(Tag.Port)
+            }
         } else if (value instanceof Error) {
             output.writeByte(Tag.Error)
             output.writeString(value.message)
@@ -140,6 +149,10 @@ export namespace BridgeCodec {
             }
             case Tag.Port:
                 return InertPort
+            case Tag.LinkedPort: {
+                const id = input.readInt()
+                return shared.portOf?.(id) ?? InertPort
+            }
             case Tag.Object: {
                 const object: Record<string, unknown> = {}
                 const size = input.readInt()
