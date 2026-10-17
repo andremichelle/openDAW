@@ -15,6 +15,7 @@ import {openManual} from "@/ui/manuals"
 import {openAudioOutputSettings} from "@/ui/mixer/AudioOutputSelector"
 import {NativePluginHost} from "@/platform/desktop/NativePluginHost"
 import {openNativePluginsDialog} from "@/platform/desktop/NativePluginsDialog"
+import type {NativePluginInfo} from "@/platform/desktop/engine/NativePlugins"
 
 export namespace DesktopStudioMenu {
     export type NativeRole = "about" | "services" | "hide" | "hide-others" | "show-all" | "quit"
@@ -35,6 +36,21 @@ export namespace DesktopStudioMenu {
             shortcuts.set(menuItem, GlobalShortcuts[key].shortcut)
             return menuItem
         }
+        // grouped by vendor, a plugin is added to the open project
+        const pluginsMenu = (label: string, kind: NativePluginInfo["kind"], create: (plugin: NativePluginInfo) => void): MenuItem =>
+            MenuItem.default({label}).setRuntimeChildrenProcedure(parent => {
+                const plugins = NativePluginHost.plugins().filter(plugin => plugin.kind === kind && plugin.status === "ok")
+                if (plugins.length === 0) {
+                    parent.addMenuItem(MenuItem.default({
+                        label: NativePluginHost.isScanning() ? "Scanning…" : `No ${label.toLowerCase()} found`, selectable: false
+                    }))
+                    return
+                }
+                const vendors = Array.from(new Set(plugins.map(plugin => plugin.vendor)))
+                parent.addMenuItem(...vendors.map(vendor => MenuItem.default({label: vendor.length > 0 ? vendor : "Unknown"})
+                    .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...plugins.filter(plugin => plugin.vendor === vendor)
+                        .map(plugin => item(plugin.name, () => create(plugin), service.hasProfile))))))
+            })
         return [
             {
                 label: "openDAW Studio", entries: [
@@ -116,19 +132,8 @@ export namespace DesktopStudioMenu {
             },
             {
                 label: "Plugins", entries: [
-                    MenuItem.default({label: "Instruments"}).setRuntimeChildrenProcedure(parent => {
-                        const instruments = NativePluginHost.plugins().filter(plugin => plugin.kind === "instrument" && plugin.status === "ok")
-                        if (instruments.length === 0) {
-                            parent.addMenuItem(MenuItem.default({
-                                label: NativePluginHost.isScanning() ? "Scanning…" : "No instruments found", selectable: false
-                            }))
-                            return
-                        }
-                        const vendors = Array.from(new Set(instruments.map(plugin => plugin.vendor)))
-                        parent.addMenuItem(...vendors.map(vendor => MenuItem.default({label: vendor.length > 0 ? vendor : "Unknown"})
-                            .setRuntimeChildrenProcedure(sub => sub.addMenuItem(...instruments.filter(plugin => plugin.vendor === vendor)
-                                .map(plugin => item(plugin.name, () => NativePluginHost.createInstrument(service, plugin), service.hasProfile))))))
-                    }),
+                    pluginsMenu("Instruments", "instrument", plugin => NativePluginHost.createInstrument(service, plugin)),
+                    pluginsMenu("Effects", "effect", plugin => NativePluginHost.createEffect(service, plugin)),
                     item("Manage Plugins…", () => openNativePluginsDialog()).addSeparatorBefore()
                 ]
             },

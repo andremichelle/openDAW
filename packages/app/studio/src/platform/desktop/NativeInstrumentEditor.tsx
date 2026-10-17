@@ -2,10 +2,9 @@ import css from "./NativeInstrumentEditor.sass?inline"
 import {UUID} from "@opendaw/lib-std"
 import {createElement, JsxValue} from "@opendaw/lib-jsx"
 import {Html} from "@opendaw/lib-dom"
-import {Colors, IconSymbol} from "@opendaw/studio-enums"
+import {Colors} from "@opendaw/studio-enums"
 import {MenuItem} from "@opendaw/studio-core"
 import {DeviceEditor} from "@/ui/devices/DeviceEditor.tsx"
-import {MenuItems} from "@/ui/devices/menu-items.ts"
 import {DevicePeakMeter} from "@/ui/devices/panel/DevicePeakMeter.tsx"
 import {Button} from "@/ui/components/Button.tsx"
 import {MenuButton} from "@/ui/components/MenuButton.tsx"
@@ -17,8 +16,10 @@ const className = Html.adoptStyleSheet(css, "NativeInstrumentEditor")
 
 const StatusText = {loading: "Loading…", failed: "Could not load the plugin"} as const
 
-export const NativeInstrumentEditor = ({lifecycle, service, adapter, deviceHost}: NativeDeviceEditors.Construct): JsxValue => {
+export const NativeInstrumentEditor = (construct: NativeDeviceEditors.Construct): JsxValue => {
+    const {lifecycle, service, adapter} = construct
     const {project} = service
+    const kind = adapter.type === "instrument" ? "instrument" : "effect"
     const uuid = UUID.toString(adapter.uuid)
     const nameLabel: HTMLElement = <span className="name"/>
     const vendorLabel: HTMLElement = <span className="vendor"/>
@@ -35,7 +36,7 @@ export const NativeInstrumentEditor = ({lifecycle, service, adapter, deviceHost}
                         parameters={adapter.parameters} tracks={() => adapter.deviceHost().audioUnitBoxAdapter().tracks}/>
     )
     const pluginMenu = MenuItem.root().setRuntimeChildrenProcedure(parent => parent.addMenuItem(
-        ...NativePluginHost.plugins().filter(plugin => plugin.kind === "instrument" && plugin.status === "ok").map(plugin =>
+        ...NativePluginHost.plugins().filter(plugin => plugin.kind === kind && plugin.status === "ok").map(plugin =>
             MenuItem.default({label: plugin.name, checked: plugin.id === adapter.pluginIdField.getValue()})
                 .setTriggerProcedure(() => {
                     if (plugin.id === adapter.pluginIdField.getValue()) {return}
@@ -69,7 +70,7 @@ export const NativeInstrumentEditor = ({lifecycle, service, adapter, deviceHost}
         <DeviceEditor lifecycle={lifecycle}
                       service={service}
                       adapter={adapter}
-                      populateMenu={parent => MenuItems.forAudioUnitInput(parent, service, deviceHost)}
+                      populateMenu={parent => NativeDeviceEditors.populateMenu(construct, parent)}
                       populateControls={() => (
                           <div className={className}>
                               <div className="plugin">{nameLabel}{vendorLabel}</div>
@@ -93,6 +94,6 @@ export const NativeInstrumentEditor = ({lifecycle, service, adapter, deviceHost}
                                            receiver={project.liveStreamReceiver}
                                            address={adapter.address}/>
                       )}
-                      icon={IconSymbol.Piano}/>
+                      icon={NativeDeviceEditors.iconOf(adapter)}/>
     )
 }

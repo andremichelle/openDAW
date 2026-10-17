@@ -24,6 +24,7 @@ import {
     WclapDeviceBox,
     WclapInstrumentBox,
     NativeInstrumentBox,
+    NativeEffectBox,
     PitchDeviceBox,
     InstrumentCompositeBox,
     PlayfieldDeviceBox,
@@ -76,6 +77,7 @@ import {
     WclapDeviceBoxAdapter,
     WclapInstrumentBoxAdapter,
     NativeInstrumentBoxAdapter,
+    NativeEffectBoxAdapter,
     PitchDeviceBoxAdapter,
     InstrumentCompositeBoxAdapter,
     PlayfieldDeviceBoxAdapter,
@@ -405,6 +407,9 @@ export namespace DeviceEditorFactory {
                                        adapter={service.project.boxAdapters.adapterFor(box, NeuralAmpDeviceBoxAdapter)}
                                        deviceHost={deviceHost}/>
             ),
+            visitNativeEffectBox: (box: NativeEffectBox): JsxValue => NativeDeviceEditors.create({
+                lifecycle, service, adapter: service.project.boxAdapters.adapterFor(box, NativeEffectBoxAdapter), deviceHost
+            }),
             visitWclapDeviceBox: (box: WclapDeviceBox) => (
                 <WclapDeviceEditor lifecycle={lifecycle}
                                    service={service}

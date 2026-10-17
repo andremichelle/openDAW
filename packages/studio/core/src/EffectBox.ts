@@ -15,6 +15,7 @@ import {
     ModularDeviceBox,
     NeuralAmpDeviceBox,
     WclapDeviceBox,
+    NativeEffectBox,
     PitchDeviceBox,
     RevampDeviceBox,
     ReverbDeviceBox,
@@ -35,6 +36,6 @@ export type EffectBox =
     | SpielwerkDeviceBox
     | MaximizerDeviceBox | DelayDeviceBox | ReverbDeviceBox | RevampDeviceBox | StereoToolDeviceBox | TidalDeviceBox
     | ModularDeviceBox | UnknownAudioEffectDeviceBox | CompressorDeviceBox | GateDeviceBox
-    | AutotuneDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox | WclapDeviceBox | VocoderDeviceBox
+    | AutotuneDeviceBox | ConvolverDeviceBox | CrusherDeviceBox | FoldDeviceBox | DattorroReverbDeviceBox | NeuralAmpDeviceBox | WclapDeviceBox | NativeEffectBox | VocoderDeviceBox
     | AudioSinkDeviceBox
     | WaveshaperDeviceBox | WerkstattDeviceBox | AudioEffectCompositeBox | StereoCompositeBox

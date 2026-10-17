@@ -1,9 +1,9 @@
-import {Arrays, Exec, isDefined, Notifier, Nullable, Observer, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
+import {Arrays, Exec, isDefined, Notifier, Nullable, Observer, RuntimeNotifier, Subscription, tryCatch, UUID} from "@opendaw/lib-std"
 import {Platform} from "@opendaw/lib-dom"
-import {BoxGraph, Field} from "@opendaw/lib-box"
-import {BoxIO, NativeInstrumentBox} from "@opendaw/studio-boxes"
+import {Box, BoxGraph, Field} from "@opendaw/lib-box"
+import {BoxIO, NativeEffectBox, NativeInstrumentBox} from "@opendaw/studio-boxes"
 import {IconSymbol, Pointers} from "@opendaw/studio-enums"
-import {InstrumentFactory, TrackType} from "@opendaw/studio-adapters"
+import {DeviceHost, Devices, InstrumentFactory, TrackType} from "@opendaw/studio-adapters"
 import {Project, WclapParameters} from "@opendaw/studio-core"
 import {NativeEnginePort} from "@/platform/desktop/bridge/NativeEnginePort"
 import {Shell} from "@/platform/desktop/Shell"
@@ -161,9 +161,12 @@ export namespace NativePluginHost {
         notifier.notify()
     }
 
+    const isNativeBox = (box: Box): box is NativeInstrumentBox | NativeEffectBox =>
+        box instanceof NativeInstrumentBox || box instanceof NativeEffectBox
+
     const withHub = (uuid: string, procedure: (project: Project, hub: Field<Pointers.Parameter>) => void): void =>
         state.service?.optProject.ifSome(project => project.boxGraph.findBox(UUID.parse(uuid)).ifSome(box => {
-            if (box instanceof NativeInstrumentBox) {procedure(project, box.parameters)}
+            if (isNativeBox(box)) {procedure(project, box.parameters)}
         }))
 
     const UuidLength = 36
@@ -171,7 +174,7 @@ export namespace NativePluginHost {
     const storeState = (uuid: string, bytes: Int8Array): void => {
         const project = state.service?.optProject
         project?.ifSome(project => project.boxGraph.findBox(UUID.parse(uuid)).ifSome(box => {
-            if (!(box instanceof NativeInstrumentBox) || Arrays.equals(box.state.getValue(), bytes)) {return}
+            if (!isNativeBox(box) || Arrays.equals(box.state.getValue(), bytes)) {return}
             project.editing.modify(() => box.state.setValue(bytes), false)
         }))
     }
@@ -200,4 +203,28 @@ export namespace NativePluginHost {
         service.runIfProject(project => project.editing.modify(() => project.api.createInstrument(factory, {name: info.name, attachment: info}))
             .ifSome(({instrumentBox}) => openOnceReady(UUID.toString(instrumentBox.address.uuid))))
     }
+
+    // into the audio effects of the unit the studio is editing, at the end of its chain
+    export const createEffect = (service: StudioService, info: NativePluginInfo): void => {service.runIfProject(project => {
+        const editing = project.userEditingManager.audioUnit.get()
+        if (editing.isEmpty()) {
+            RuntimeNotifier.notify({message: "Create an instrument or select an audio-bus first.", icon: "Info"})
+            return
+        }
+        const deviceHost = project.boxAdapters.adapterFor(editing.unwrap().box, Devices.isHost)
+        if (!DeviceHost.takesEffect(deviceHost, "audio")) {
+            RuntimeNotifier.notify({message: "The selected target does not accept audio effects.", icon: "Info"})
+            return
+        }
+        const field = DeviceHost.chainFieldOf(deviceHost, "audio").unwrap("audio chain")
+        project.editing.modify(() => NativeEffectBox.create(project.boxGraph, UUID.generate(), box => {
+            box.label.setValue(info.name)
+            box.format.setValue(info.format)
+            box.pluginId.setValue(info.id)
+            box.pluginName.setValue(info.name)
+            box.vendor.setValue(info.vendor)
+            box.index.setValue(field.pointerHub.incoming().length)
+            box.host.refer(field)
+        })).ifSome(box => openOnceReady(UUID.toString(box.address.uuid)))
+    })}
 }
