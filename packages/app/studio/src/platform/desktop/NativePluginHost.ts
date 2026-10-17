@@ -26,6 +26,23 @@ export namespace NativePluginHost {
     const openWhenReady = new Set<string>()
 
     export const openOnceReady = (uuid: string): void => {openWhenReady.add(uuid)}
+
+    // A new device's undo step stays open until its plugin reported the parameters: their boxes join the step, so an
+    // undo removes them with the device (boxes created outside the history would block it). Sealed on failure or late.
+    const SealTimeoutMillis = 10_000
+    const unsealed = new Map<string, { project: Project, timeout: ReturnType<typeof setTimeout> }>()
+
+    const keepOpen = (project: Project, uuid: string): void => {
+        unsealed.set(uuid, {project, timeout: setTimeout(() => seal(uuid), SealTimeoutMillis)})
+    }
+
+    const seal = (uuid: string): void => {
+        const entry = unsealed.get(uuid)
+        if (!isDefined(entry)) {return}
+        clearTimeout(entry.timeout)
+        unsealed.delete(uuid)
+        entry.project.editing.mark()
+    }
     const notifier = new Notifier<void>()
     const catalogue = new Notifier<void>()
 
@@ -112,6 +129,7 @@ export namespace NativePluginHost {
         }
         // the engine process went away: its plugins and windows are gone, the restarted one is reached again
         socket.onclose = () => {
+            Array.from(unsealed.keys()).forEach(seal)
             state.notices = null
             statuses.clear()
             inactive.clear()
@@ -147,6 +165,7 @@ export namespace NativePluginHost {
         notices.forEach(({uuid, type, value}) => {
             if (type === "status") {
                 statuses.set(uuid, value as NativeStatus)
+                if (value === "failed") {seal(uuid)}
                 if (value !== "loading" && openWhenReady.delete(uuid) && value === "ready" && !openWindows.has(uuid)) {
                     state.port?.send({type: "native-gui", uuid, open: true})
                 }
@@ -155,12 +174,20 @@ export namespace NativePluginHost {
             } else if (type === "gui") {
                 if (value === "open") {openWindows.add(uuid)} else {openWindows.delete(uuid)}
             } else if (type === "params") {
-                withHub(uuid, (project, hub) => WclapParameters.reconcileHub(project, hub, JSON.parse(value)))
+                const entry = unsealed.get(uuid)
+                if (isDefined(entry)) {
+                    withHub(uuid, (project, hub) => project.editing.modify(() => WclapParameters.reconcileHub(project, hub, JSON.parse(value)), false))
+                    seal(uuid)
+                } else {
+                    withHub(uuid, (project, hub) => WclapParameters.reconcileHub(project, hub, JSON.parse(value)))
+                }
             } else if (type === "param") {
                 const [id, paramValue] = value.split(":")
                 withHub(uuid, (project, hub) => WclapParameters.applyHub(project, hub, Number(id) >>> 0, Number(paramValue)))
             } else if (type === "plugins") {
                 deliverPlugins(JSON.parse(value))
+            } else if (type === "gesture") {
+                state.service?.optProject.ifSome(project => project.editing.mark())
             } else if (type === "saved") {
                 saving.splice(0).forEach(done => done())
             }
@@ -207,8 +234,12 @@ export namespace NativePluginHost {
     }
 
     export const createInstrument = (service: StudioService, info: NativePluginInfo): void => {
-        service.runIfProject(project => project.editing.modify(() => project.api.createInstrument(factory, {name: info.name, attachment: info}))
-            .ifSome(({instrumentBox}) => openOnceReady(UUID.toString(instrumentBox.address.uuid))))
+        service.runIfProject(project => project.editing.modify(() => project.api.createInstrument(factory, {name: info.name, attachment: info}), false)
+            .ifSome(({instrumentBox}) => {
+                const uuid = UUID.toString(instrumentBox.address.uuid)
+                keepOpen(project, uuid)
+                openOnceReady(uuid)
+            }))
     }
 
     // into the audio effects of the unit the studio is editing, at the end of its chain
@@ -232,6 +263,10 @@ export namespace NativePluginHost {
             box.vendor.setValue(info.vendor)
             box.index.setValue(field.pointerHub.incoming().length)
             box.host.refer(field)
-        })).ifSome(box => openOnceReady(UUID.toString(box.address.uuid)))
+        }), false).ifSome(box => {
+            const uuid = UUID.toString(box.address.uuid)
+            keepOpen(project, uuid)
+            openOnceReady(uuid)
+        })
     })}
 }

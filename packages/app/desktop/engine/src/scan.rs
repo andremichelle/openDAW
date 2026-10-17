@@ -366,7 +366,7 @@ pub fn scan_process(bundle: &str) -> ! {
     std::process::exit(0)
 }
 
-unsafe fn load_and_describe(bundle: &Path) -> Option<Vec<PluginInfo>> {
+pub(crate) unsafe fn load_and_describe(bundle: &Path) -> Option<Vec<PluginInfo>> {
     let module = crate::plugins::module(bundle)?;
     let factory = &module.factory;
     let mut factory_info: PFactoryInfo = std::mem::zeroed();

@@ -438,6 +438,8 @@ impl IComponentHandlerTrait for ComponentHandler {
         guarded("endEdit", || {
             self.gestures.set((self.gestures.get() - 1).max(0));
             self.last_edit.set(Some(Instant::now()));
+            // a gesture in the plugin's window ended: the studio seals its undo step, like after a knob turn
+            if self.gestures.get() == 0 && !self.offline { notify(&self.uuid, "gesture", "end"); }
         });
         kResultOk
     }
@@ -2159,55 +2161,98 @@ mod tests {
         LOADED.lock().unwrap().retain(|(handle, _, _)| *handle != 9_999);
     }
 
+    // loads a plugin and processes one block the way the engine does, printing its buses
+    unsafe fn process_block(path: &Path, id: &str) -> tresult {
+        let module = module(path).expect("module");
+        let component: ComPtr<IComponent> = create(&module.factory, &parse_cid(id).unwrap()).expect("component");
+        let host = ComWrapper::new(Host);
+        assert_eq!(component.initialize(host.to_com_ptr::<IHostApplication>().unwrap().into_raw() as *mut FUnknown), kResultOk);
+        for (media, direction, label) in [(MediaTypes_::kAudio, BusDirections_::kInput, "audio in"), (MediaTypes_::kAudio, BusDirections_::kOutput, "audio out"),
+                                          (MediaTypes_::kEvent, BusDirections_::kInput, "event in")] {
+            let count = component.getBusCount(media as i32, direction as i32);
+            for index in 0..count {
+                let mut info: BusInfo = std::mem::zeroed();
+                component.getBusInfo(media as i32, direction as i32, index, &mut info);
+                println!("{label} {index}: {} channels, type {}, flags {}", info.channelCount, info.busType, info.flags);
+            }
+        }
+        let processor = component.cast::<IAudioProcessor>().unwrap();
+        let ins = component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32);
+        let outs = component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32);
+        let mut in_arrangements = vec![SpeakerArr::kStereo; ins as usize];
+        let mut out_arrangements = vec![SpeakerArr::kStereo; outs as usize];
+        processor.setBusArrangements(in_arrangements.as_mut_ptr(), ins, out_arrangements.as_mut_ptr(), outs);
+        if ins > 0 { component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32, 0, 1); }
+        if outs > 0 { component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32, 0, 1); }
+        let mut setup = ProcessSetup { processMode: ProcessModes_::kRealtime as i32, symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
+            maxSamplesPerBlock: MAX_BLOCK as i32, sampleRate: 48_000.0 };
+        processor.setupProcessing(&mut setup);
+        component.setActive(1);
+        processor.setProcessing(1);
+        let mut left = vec![0f32; MAX_BLOCK];
+        let mut right = vec![0f32; MAX_BLOCK];
+        let mut scratch = vec![0f32; MAX_BLOCK];
+        let mut silence = vec![0f32; MAX_BLOCK];
+        let mut inputs = Buses::new(&component, BusDirections_::kInput as BusDirections, silence.as_mut_ptr());
+        let mut outputs = Buses::new(&component, BusDirections_::kOutput as BusDirections, scratch.as_mut_ptr());
+        let mut context: ProcessContext = std::mem::zeroed();
+        context.sampleRate = 48_000.0;
+        let mut data = ProcessData { processMode: ProcessModes_::kRealtime as i32, symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
+            numSamples: 128, numInputs: inputs.count(), numOutputs: outputs.count(),
+            inputs: inputs.main(silence.as_mut_ptr(), silence.as_mut_ptr()), outputs: outputs.main(left.as_mut_ptr(), right.as_mut_ptr()),
+            inputParameterChanges: ptr::null_mut(), outputParameterChanges: ptr::null_mut(), inputEvents: ptr::null_mut(),
+            outputEvents: ptr::null_mut(), processContext: &mut context };
+        let result = processor.process(&mut data);
+        component.setActive(0);
+        component.terminate();
+        result
+    }
+
     // OPENDAW_PROBE="<bundle>|<class id>" cargo test probe_a_plugin -- --ignored --nocapture
     #[test]
     #[ignore]
     fn probe_a_plugin() {
         let probe = std::env::var("OPENDAW_PROBE").expect("OPENDAW_PROBE");
         let (path, id) = probe.split_once('|').unwrap();
-        unsafe {
-            let module = module(Path::new(path)).expect("module");
-            let component: ComPtr<IComponent> = create(&module.factory, &parse_cid(id).unwrap()).expect("component");
-            let host = ComWrapper::new(Host);
-            assert_eq!(component.initialize(host.to_com_ptr::<IHostApplication>().unwrap().into_raw() as *mut FUnknown), kResultOk);
-            for (media, direction, label) in [(MediaTypes_::kAudio, BusDirections_::kInput, "audio in"), (MediaTypes_::kAudio, BusDirections_::kOutput, "audio out"),
-                                              (MediaTypes_::kEvent, BusDirections_::kInput, "event in")] {
-                let count = component.getBusCount(media as i32, direction as i32);
-                for index in 0..count {
-                    let mut info: BusInfo = std::mem::zeroed();
-                    component.getBusInfo(media as i32, direction as i32, index, &mut info);
-                    println!("{label} {index}: {} channels, type {}, flags {}", info.channelCount, info.busType, info.flags);
-                }
-            }
-            let processor = component.cast::<IAudioProcessor>().unwrap();
-            let ins = component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32);
-            let outs = component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32);
-            let mut in_arrangements = vec![SpeakerArr::kStereo; ins as usize];
-            let mut out_arrangements = vec![SpeakerArr::kStereo; outs as usize];
-            processor.setBusArrangements(in_arrangements.as_mut_ptr(), ins, out_arrangements.as_mut_ptr(), outs);
-            if ins > 0 { component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32, 0, 1); }
-            if outs > 0 { component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32, 0, 1); }
-            let mut setup = ProcessSetup { processMode: ProcessModes_::kRealtime as i32, symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
-                maxSamplesPerBlock: MAX_BLOCK as i32, sampleRate: 48_000.0 };
-            processor.setupProcessing(&mut setup);
-            component.setActive(1);
-            processor.setProcessing(1);
-            let mut left = vec![0f32; MAX_BLOCK];
-            let mut right = vec![0f32; MAX_BLOCK];
-            let mut scratch = vec![0f32; MAX_BLOCK];
-            let mut silence = vec![0f32; MAX_BLOCK];
-            let mut inputs = Buses::new(&component, BusDirections_::kInput as BusDirections, silence.as_mut_ptr());
-            let mut outputs = Buses::new(&component, BusDirections_::kOutput as BusDirections, scratch.as_mut_ptr());
-            let mut context: ProcessContext = std::mem::zeroed();
-            context.sampleRate = 48_000.0;
-            let mut data = ProcessData { processMode: ProcessModes_::kRealtime as i32, symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
-                numSamples: 128, numInputs: inputs.count(), numOutputs: outputs.count(),
-                inputs: inputs.main(silence.as_mut_ptr(), silence.as_mut_ptr()), outputs: outputs.main(left.as_mut_ptr(), right.as_mut_ptr()),
-                inputParameterChanges: ptr::null_mut(), outputParameterChanges: ptr::null_mut(), inputEvents: ptr::null_mut(),
-                outputEvents: ptr::null_mut(), processContext: &mut context };
-            assert_eq!(processor.process(&mut data), kResultOk);
-            component.setActive(0);
-            component.terminate();
-        }
+        assert_eq!(unsafe { process_block(Path::new(path), id) }, kResultOk);
+    }
+
+    // our own plugin (test-plugin/bundle.sh), built once per test run
+    fn test_plugin() -> (std::path::PathBuf, String) {
+        static BUILT: std::sync::OnceLock<(std::path::PathBuf, String)> = std::sync::OnceLock::new();
+        BUILT.get_or_init(|| {
+            let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("../test-plugin");
+            let output = std::process::Command::new("bash").arg(folder.join("bundle.sh")).output().expect("bash");
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            let bundle = folder.join(String::from_utf8_lossy(&output.stdout).lines().last().unwrap().trim());
+            let plugins = unsafe { crate::scan::load_and_describe(&bundle) }.expect("describe");
+            assert_eq!(plugins.len(), 1);
+            assert_eq!((plugins[0].name.as_str(), plugins[0].kind.as_str()), ("openDAW Test Synth", "instrument"));
+            (bundle, plugins[0].id.clone())
+        }).clone()
+    }
+
+    // the switches are read from the environment, tests that set them take turns
+    static SWITCHES: Mutex<()> = Mutex::new(());
+
+    fn with_switches<R>(switches: &str, run: impl FnOnce() -> R) -> R {
+        let _guard = SWITCHES.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        std::env::set_var("OPENDAW_TEST_PLUGIN", switches);
+        let result = run();
+        std::env::remove_var("OPENDAW_TEST_PLUGIN");
+        result
+    }
+
+    #[test]
+    fn the_test_plugin_processes_a_block() {
+        let (bundle, id) = test_plugin();
+        assert_eq!(with_switches("", || unsafe { process_block(&bundle, &id) }), kResultOk);
+    }
+
+    // it writes every bus it declares like Microtonic did, a host passing buffers for the first only crashes
+    #[test]
+    fn a_plugin_writing_its_second_output_bus_gets_buffers_for_it() {
+        let (bundle, id) = test_plugin();
+        assert_eq!(with_switches("aux", || unsafe { process_block(&bundle, &id) }), kResultOk);
     }
 }

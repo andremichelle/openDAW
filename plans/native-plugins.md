@@ -148,6 +148,28 @@ Default folders, plus user folders in the settings:
     plugins; the host core (`clap_entry`, factory, process with note/param/transport events, extensions params, state,
     gui, audio-ports, note-ports, latency, timer-support, thread-check, log, request_callback); plugin windows on the
     existing window modules; Linux `timer-support` and `posix-fd-support` in the Linux main loop.
+14. **Undo past a plugin device's creation (seen 2026-10-17 with Serum 2).** A plugin's parameter boxes are created
+    outside the history (`WclapParameters.reconcileHub`, `outsideHistory`) and point at the device, so undoing the
+    device's creation fails: toast "History changed by another participant". Worse, `BoxGraph.unstageBox` removes the
+    box before `unwatchVerticesOf` throws, the rollback has no DeleteUpdate to restore: the source graph loses the
+    device, the engine keeps it, the next redo reports "checksum mismatch". Same for WebCLAP, on main. No clean
+    VST-only hook (the moment the undo disconnects the device is also a delete or a move). Options: fix only the
+    rollback in lib-box (check before removing, failure path only, toast stays, no desync), or tag parameter boxes
+    `outside-history` and remove them with their device in `NewUpdate.inverse`. Both tried with tests, reverted
+    (old code). Related, fixed VST-only: knob turns in a plugin window now seal the undo step at `endEdit` (notice
+    `gesture`), a recording no longer folds into the next action.
+    Fixed VST-only (2026-10-17, uncommitted): `NativePluginHost` keeps a new device's undo step open until its plugin
+    reported the parameters, their boxes are created inside it, then the step is sealed (also on a failed load, after
+    10 s, or when the engine goes away). Undo removes them with the device. Limit: an action inside that window joins
+    the device's step, parameters reported later (renamed or added while running) are still outside the history.
+    Test `studio/core/src/wclap/PluginInstrumentUndo.test.ts`: Vaporisateur, a native instrument with its parameters
+    in the device's step, and the remaining failure with parameters outside the history.
+15. **Our own test plugin.** A minimal VST3 plugin of our own (Rust, the `vst3` crate the engine already uses, a
+    cdylib bundled as `.vst3`), built in CI on macOS, Windows and Linux, loaded by engine tests. Each behaviour a
+    real plugin showed becomes a switch: extra output buses (Microtonic), a crash on the first block (crash marker,
+    trial), output left unwritten (unlicensed Ping Pong Delay), state save and load, parameter changes with
+    beginEdit/performEdit/endEdit (the gesture seal), restartComponent with values or titles changed, latency, a slow
+    load. The first tests for Windows and Linux without a machine.
 
 Order: devices in the deploy + `desktop.yml` + unsigned macOS builds for a small group, in parallel signing and
 notarization with the entitlement and engine crash recovery; native render for export is the biggest feature gap
