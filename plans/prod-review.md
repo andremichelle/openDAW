@@ -84,6 +84,19 @@ Recommended, by value:
   the ScriptCompiler loader, the EngineWorklet port hook, the zero-box early return in `replaceMissingFiles`, the odd
   cursor path of `write_ascii_units`.
 
+## Done after the blockers (2026-10-17, uncommitted)
+
+- Output reserve follows the card's callback size (`raised_ring_target`, test): WASAPI/ALSA callbacks larger than the
+  requested buffer no longer underrun every time.
+- Single-file Windows `.vst3` plugins: `scan::windows_binary` and a PE machine check (`pe_machine`, test) in
+  `compatible`.
+- One openDAW at a time: the shell binds its port first, a second start asks the running one to show its window
+  (`/__show`) and ends, before the engine or anything else starts.
+- Deploy: dists go up in 16 MB chunks, each unpacked before the next under the one name `extract.php` accepts, a failed
+  chunk is sent again up to 3 times (`deploy/chunks.ts`, test; local pack/unpack of dist-desktop identical, 12 chunks).
+  The server's `tar` exit 9 (killed) stays unexplained: `extract.php` sends `2>&1` only for `rm`, tar's own message is
+  lost.
+
 ## Refactoring
 
 - `plugins.rs` (2056 lines) into `plugins/{com, handler, instance, slots, process, notices, window/{macos, windows,

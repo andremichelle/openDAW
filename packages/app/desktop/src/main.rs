@@ -505,7 +505,18 @@ fn serve(request: tiny_http::Request) {
         let _ = request.respond(tiny_http::Response::empty(403));
         return;
     }
-    if url.starts_with("/__drag") {
+    if url.starts_with("/__show") {
+        if let Some(app) = APP.get() {
+            let main = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                if let Some(window) = main.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            });
+        }
+        let _ = request.respond(tiny_http::Response::empty(204));
+    } else if url.starts_with("/__drag") {
         if let Some(window) = popout(&url) {
             let _ = window.start_dragging();
         }
@@ -556,8 +567,8 @@ fn serve(request: tiny_http::Request) {
     }
 }
 
-fn run_server() {
-    let server = tiny_http::Server::http(("127.0.0.1", PORT)).expect("port taken");
+fn run_server(listener: std::net::TcpListener) {
+    let server = tiny_http::Server::from_listener(listener, None).expect("shell server");
     for request in server.incoming_requests() {
         std::thread::spawn(move || serve(request));
     }
@@ -568,7 +579,20 @@ fn required_shell_api(root: &Path) -> Option<u64> {
     serde_json::from_slice::<serde_json::Value>(&bytes).ok()?.get("shellApi")?.as_u64()
 }
 
+// another openDAW holds the shell's port: it shows its window, this start ends
+fn show_running() {
+    use std::io::Write;
+    if let Ok(mut stream) = std::net::TcpStream::connect(("127.0.0.1", PORT)) {
+        let _ = stream.write_all(b"GET /__show HTTP/1.0\r\n\r\n");
+    }
+}
+
 fn main() {
+    // one openDAW at a time: the shell's port is the lock, before anything else (the engine) starts
+    let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", PORT)) else {
+        show_running();
+        return;
+    };
     // OPENDAW_DIST, or a debug build without OPENDAW_UPDATE, serves a local build and skips the update flow
     let local = std::env::var("OPENDAW_DIST").ok().map(PathBuf::from)
         .or_else(|| (cfg!(debug_assertions) && std::env::var("OPENDAW_UPDATE").is_err()).then(|| PathBuf::from(DEFAULT_DIST)));
@@ -576,7 +600,7 @@ fn main() {
     if let Some(local) = local {
         set_root(local);
     }
-    std::thread::spawn(run_server);
+    std::thread::spawn(move || run_server(listener));
     std::thread::spawn(wclap::run_plugin_server);
     let engine_info = if native_engine() { format!(", engine: {{port: {ENGINE_PORT}, token: \"{}\"}}", files::token()) } else { String::new() };
     let shell_info = format!("window.__OPENDAW_SHELL__ = {{token: \"{}\", api: {SHELL_API}{engine_info}}}", files::token());

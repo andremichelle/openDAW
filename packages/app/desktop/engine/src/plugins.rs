@@ -760,7 +760,7 @@ fn check(label: &str, result: tresult) -> bool {
 
 pub(crate) unsafe fn module(path: &Path) -> Option<Rc<Module>> {
     if let Some(module) = MODULES.with(|modules| modules.borrow().get(path).cloned()) { return Some(module); }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     let name = path.file_stem()?.to_string_lossy().to_string();
     #[cfg(target_os = "macos")]
     let (binary, bundle) = {
@@ -769,7 +769,7 @@ pub(crate) unsafe fn module(path: &Path) -> Option<Rc<Module>> {
         (crate::scan::bundle_binary(path), bundle)
     };
     #[cfg(target_os = "windows")]
-    let binary = path.join("Contents").join(if cfg!(target_arch = "aarch64") { "arm64-win" } else { "x86_64-win" }).join(format!("{name}.vst3"));
+    let binary = crate::scan::windows_binary(path);
     #[cfg(target_os = "linux")]
     let binary = path.join("Contents").join(format!("{}-linux", std::env::consts::ARCH)).join(format!("{name}.so"));
     let library = libloading::Library::new(&binary).map_err(|error| eprintln!("[plugins] {}: {error}", binary.display())).ok()?;

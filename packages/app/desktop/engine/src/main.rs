@@ -152,6 +152,7 @@ fn output_latency(_scope: &mut v8::PinScope, _args: v8::FunctionCallbackArgument
 }
 
 // a request to the shell's own endpoints, which want the token the shell gave us
+#[cfg(target_os = "macos")]
 pub(crate) fn tell_shell(path: String) {
     let token = std::env::var("OPENDAW_ENGINE_TOKEN").unwrap_or_default();
     let separator = if path.contains('?') { '&' } else { '?' };
@@ -583,6 +584,12 @@ fn build_output(device: &cpal::Device, sample_rate: u32, buffer_size: cpal::Buff
                 waker: std::thread::Thread) -> Result<cpal::Stream, cpal::Error> {
     let config = cpal::StreamConfig { channels: 2, sample_rate, buffer_size };
     device.build_output_stream(config, move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
+        // a card may ask for more per callback than requested (WASAPI and ALSA often do), the reserve follows it
+        let current = RING_TARGET_FRAMES.load(std::sync::atomic::Ordering::Relaxed);
+        if let Some(target) = raised_ring_target(current, data.len() / 2) {
+            RING_TARGET_FRAMES.store(target, std::sync::atomic::Ordering::Relaxed);
+            RING_LATENCY_US.store(target as u64 * 1_000_000 / sample_rate as u64, std::sync::atomic::Ordering::Relaxed);
+        }
         let timestamp = info.timestamp();
         DEVICE_LATENCY_US.store(timestamp.playback.duration_since(timestamp.callback).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
         // the main thread holds the lock only while it swaps streams
@@ -603,6 +610,12 @@ fn build_output(device: &cpal::Device, sample_rate: u32, buffer_size: cpal::Buff
         data[available..].fill(0.0);
         waker.unpark();
     }, |error| eprintln!("[engine] audio {error}"), None)
+}
+
+// the frames kept ready: two of the card's callbacks, within the ring
+fn raised_ring_target(current: usize, callback_frames: usize) -> Option<usize> {
+    let wanted = (callback_frames * 2).min(RING_CAPACITY_FRAMES / 2);
+    (wanted > current).then_some(wanted)
 }
 
 // only the studio's pages connect: its origin and the token the shell gave both of us
@@ -829,6 +842,15 @@ fn run_main_loop(tick: impl FnMut() + 'static) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_reserve_follows_the_cards_callback_size() {
+        assert_eq!(raised_ring_target(256, 128), None);
+        assert_eq!(raised_ring_target(256, 480), Some(960));
+        assert_eq!(raised_ring_target(960, 480), None);
+        assert_eq!(raised_ring_target(256, 1056), Some(2112));
+        assert_eq!(raised_ring_target(256, 16_384), Some(RING_CAPACITY_FRAMES / 2));
+    }
 
     #[test]
     fn only_the_studio_with_the_token_connects() {

@@ -183,9 +183,32 @@ fn compatible(bundle: &Path) -> bool {
         }
     }
     #[cfg(target_os = "windows")]
-    { bundle.join("Contents").join(if cfg!(target_arch = "aarch64") { "arm64-win" } else { "x86_64-win" }).is_dir() }
+    {
+        if bundle.is_file() { return std::fs::read(bundle).is_ok_and(|bytes| pe_machine(&bytes) == Some(WINDOWS_MACHINE)); }
+        bundle.join("Contents").join(if cfg!(target_arch = "aarch64") { "arm64-win" } else { "x86_64-win" }).is_dir()
+    }
     #[cfg(target_os = "linux")]
     { bundle.join("Contents").join(format!("{}-linux", std::env::consts::ARCH)).is_dir() }
+}
+
+// older Windows plugins are a single .vst3 file (the DLL itself) instead of a bundle folder
+#[cfg(target_os = "windows")]
+pub(crate) fn windows_binary(bundle: &Path) -> PathBuf {
+    if bundle.is_file() { return bundle.to_path_buf(); }
+    let name = bundle.file_stem().map(|stem| stem.to_string_lossy().to_string()).unwrap_or_default();
+    bundle.join("Contents").join(if cfg!(target_arch = "aarch64") { "arm64-win" } else { "x86_64-win" }).join(format!("{name}.vst3"))
+}
+
+#[cfg(target_os = "windows")]
+const WINDOWS_MACHINE: u16 = if cfg!(target_arch = "aarch64") { 0xAA64 } else { 0x8664 };
+
+// the machine type in a DLL's PE header
+#[cfg(any(target_os = "windows", test))]
+fn pe_machine(bytes: &[u8]) -> Option<u16> {
+    if bytes.get(0..2)? != b"MZ" { return None; }
+    let header = u32::from_le_bytes(bytes.get(0x3C..0x40)?.try_into().ok()?) as usize;
+    if bytes.get(header..header + 4)? != b"PE\0\0" { return None; }
+    Some(u16::from_le_bytes(bytes.get(header + 4..header + 6)?.try_into().ok()?))
 }
 
 fn from_scan_process(bundle: &Path) -> Option<Vec<PluginInfo>> {
@@ -340,4 +363,27 @@ unsafe fn load_and_describe(bundle: &Path) -> Option<Vec<PluginInfo>> {
             kind: kind_of(&categories).into(), path: bundle.to_string_lossy().into(), status: "ok".into()
         })
     }).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pe_machine;
+
+    fn dll(machine: u16) -> Vec<u8> {
+        let mut bytes = vec![0u8; 0x100];
+        bytes[0..2].copy_from_slice(b"MZ");
+        bytes[0x3C..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+        bytes[0x80..0x84].copy_from_slice(b"PE\0\0");
+        bytes[0x84..0x86].copy_from_slice(&machine.to_le_bytes());
+        bytes
+    }
+
+    #[test]
+    fn reads_the_machine_of_a_single_file_plugin() {
+        assert_eq!(pe_machine(&dll(0x8664)), Some(0x8664));
+        assert_eq!(pe_machine(&dll(0xAA64)), Some(0xAA64));
+        assert_eq!(pe_machine(&dll(0x014C)), Some(0x014C));
+        assert_eq!(pe_machine(b"not a dll"), None);
+        assert_eq!(pe_machine(&dll(0x8664)[..0x60]), None);
+    }
 }
