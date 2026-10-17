@@ -314,7 +314,8 @@ unsafe fn load_and_describe(bundle: &Path) -> Option<Vec<PluginInfo>> {
     factory.getFactoryInfo(&mut factory_info);
     let factory_vendor = CStr::from_ptr(factory_info.vendor.as_ptr()).to_string_lossy().to_string();
     let factory2 = factory.cast::<IPluginFactory2>();
-    let text = |chars: &[i8]| CStr::from_ptr(chars.as_ptr()).to_string_lossy().to_string();
+    // C's char is signed on x86 and macOS, unsigned on ARM Linux
+    let text = |chars: &[std::ffi::c_char]| CStr::from_ptr(chars.as_ptr()).to_string_lossy().to_string();
     let hex = |cid: &TUID| cid.iter().map(|byte| format!("{:02X}", *byte as u8)).collect::<String>();
     Some((0..factory.countClasses()).filter_map(|index| {
         let (category, name, vendor, categories, cid) = match factory2.as_ref() {
